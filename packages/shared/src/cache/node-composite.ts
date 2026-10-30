@@ -14,7 +14,6 @@ import {
 	fileBlobs,
 	localSettings,
 	mirrors,
-	nodeChangeLog,
 	nodeContent,
 	nodeEmbeddings,
 	nodeInternalMetadata,
@@ -86,7 +85,6 @@ export const NON_NODE_TABLES: Readonly<Record<string, string>> = {
 	[getTableName(accountState)]: "account-level key-value state",
 	[getTableName(localSettings)]: "durable local copy of settings written to workflowy.com",
 	[getTableName(fileBlobs)]: "local copies of attachment bytes, kept after the attachment's node ends",
-	[getTableName(nodeChangeLog)]: "commit-ordered change feed bookkeeping, kept after the changed node ends",
 };
 
 /** Columns named like node ids that hold something else, with the reason. */

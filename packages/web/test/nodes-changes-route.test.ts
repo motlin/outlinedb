@@ -18,8 +18,20 @@ function apiNode(id: string, parentId: string | null, priority: number): Workflo
 	return {id, name: id, note: null, parent_id: parentId, priority, createdAt: 100, modifiedAt: 200, completed: false};
 }
 
-/** Home holds `parents` parents P0.., each with two children. */
+/** When `setup` seeds the tree; tests move the clock relative to it. */
+const T0 = Date.parse("2026-10-29T12:00:00.000Z");
+
+/** The temporal timestamp `ms` after {@link T0}. */
+function stamp(ms: number): string {
+	return new Date(T0 + ms).toISOString().replace("T", " ").replace("Z", "");
+}
+
+/**
+ * Home holds `parents` parents P0.., each with two children, seeded at {@link T0}. The clock then stands two
+ * transaction timeouts later, so the seeding falls behind every watermark the test sees.
+ */
 function setup(parents: number) {
+	vi.useFakeTimers({toFake: ["Date"], now: T0});
 	const sqlite = new DatabaseConstructor(":memory:");
 	let statements = 0;
 	const db = drizzle(sqlite, {
@@ -38,6 +50,7 @@ function setup(parents: number) {
 			cacheService.insertNode(apiNode(`P${p}c${k}`, `P${p}`, k), `P${p}`);
 		}
 	}
+	vi.setSystemTime(T0 + 120_000);
 	const ctx = {db, cacheService} as unknown as ServerContext;
 	const app = new Hono<AppEnv>();
 	app.use("*", async (c, next) => {
@@ -72,14 +85,14 @@ describe("GET /api/v1/nodes/changes", () => {
 		vi.useRealTimers();
 	});
 
-	it("without since answers only the high-water mark", async () => {
+	it("without since answers only the watermark: now less the transaction timeout", async () => {
 		const {changes} = setup(1);
 
 		const {status, body} = await changes(null);
 
-		expect({status, latest: body.latest.length > 0, ...shape(body)}).toStrictEqual({
+		expect({status, latest: body.latest, ...shape(body)}).toStrictEqual({
 			status: 200,
-			latest: true,
+			latest: stamp(60_000),
 			reset: false,
 			changedIds: new Set(),
 			deletedIds: new Set(),
@@ -90,17 +103,18 @@ describe("GET /api/v1/nodes/changes", () => {
 	it("answers a created node with its parent's refreshed children", async () => {
 		const {cacheService, changes} = setup(2);
 		const seeded = await changes(null);
+		vi.setSystemTime(T0 + 130_000);
 		cacheService.insertNode(apiNode("New", "P1", 5), "P1");
 
 		const {body} = await changes(seeded.body.latest);
 
-		expect(shape(body)).toStrictEqual({
+		expect({latest: body.latest, ...shape(body)}).toStrictEqual({
+			latest: stamp(70_000),
 			reset: false,
 			changedIds: new Set(["New"]),
 			deletedIds: new Set(),
 			children: {P1: ["P1c0", "P1c1", "New"]},
 		});
-		expect(Number(body.latest) > Number(seeded.body.latest)).toBe(true);
 	});
 
 	it("answers a moved node with both its old and new parents' children", async () => {
@@ -133,37 +147,54 @@ describe("GET /api/v1/nodes/changes", () => {
 		});
 	});
 
-	it("delivers changes that share a millisecond or commit after a later-stamped change", async () => {
-		const t0 = Date.parse("2026-10-29T12:00:00.000Z");
-		vi.useFakeTimers({toFake: ["Date"], now: t0});
+	it("delivers a change stamped before an earlier poll's watermark that commits after it", async () => {
 		const {cacheService, changes} = setup(2);
 		const seeded = await changes(null);
-		vi.setSystemTime(t0 + 60_000);
+		vi.setSystemTime(T0 + 130_000);
 		cacheService.insertNode(apiNode("Later", "P0", 5), "P0");
 		const first = await changes(seeded.body.latest);
-		cacheService.insertNode(apiNode("SameMs", "P0", 6), "P0");
-		// A unit that read the clock before "Later" and committed after it: its system time is behind the mark.
-		vi.setSystemTime(t0 + 30_000);
+		// A unit that read the clock before "Later" and committed after the first poll, within the timeout.
+		vi.setSystemTime(T0 + 100_000);
 		cacheService.insertNode(apiNode("Earlier", "P1", 5), "P1");
-
+		vi.setSystemTime(T0 + 140_000);
 		const second = await changes(first.body.latest);
+		// Past the timeout window, the re-reads stop.
+		vi.setSystemTime(T0 + 300_000);
 		const third = await changes(second.body.latest);
+		const fourth = await changes(third.body.latest);
 
-		expect({first: shape(first.body), second: shape(second.body), third: shape(third.body)}).toStrictEqual({
+		const reduce = ({body}: {body: NodeChangesResponse}) => ({latest: body.latest, ...shape(body)});
+		expect({
+			first: reduce(first),
+			second: reduce(second),
+			third: reduce(third),
+			fourth: reduce(fourth),
+		}).toStrictEqual({
 			first: {
+				latest: stamp(70_000),
 				reset: false,
 				changedIds: new Set(["Later"]),
 				deletedIds: new Set(),
 				children: {P0: ["P0c0", "P0c1", "Later"]},
 			},
+			// The last timeout window is read again, so "Later" repeats, once, beside "Earlier".
 			second: {
+				latest: stamp(80_000),
 				reset: false,
-				changedIds: new Set(["SameMs", "Earlier"]),
+				changedIds: new Set(["Later", "Earlier"]),
 				deletedIds: new Set(),
-				children: {P0: ["P0c0", "P0c1", "Later", "SameMs"], P1: ["P1c0", "P1c1", "Earlier"]},
+				children: {P0: ["P0c0", "P0c1", "Later"], P1: ["P1c0", "P1c1", "Earlier"]},
 			},
-			third: {reset: false, changedIds: new Set(), deletedIds: new Set(), children: {}},
+			third: {
+				latest: stamp(240_000),
+				reset: false,
+				changedIds: new Set(["Later", "Earlier"]),
+				deletedIds: new Set(),
+				children: {P0: ["P0c0", "P0c1", "Later"], P1: ["P1c0", "P1c1", "Earlier"]},
+			},
+			fourth: {latest: stamp(240_000), reset: false, changedIds: new Set(), deletedIds: new Set(), children: {}},
 		});
+		expect(second.body.changedIds).toStrictEqual([...new Set(second.body.changedIds)]);
 	});
 
 	it("answers reset for a cursor it never issued", async () => {
@@ -171,7 +202,7 @@ describe("GET /api/v1/nodes/changes", () => {
 		const seeded = await changes(null);
 
 		const resets = await Promise.all(
-			["2026-10-29 12:00:00.000", String(Number(seeded.body.latest) + 1)].map(async (since) => {
+			["42", stamp(60_001)].map(async (since) => {
 				const {body} = await changes(since);
 				return {reset: body.reset, latest: body.latest};
 			}),
@@ -187,6 +218,7 @@ describe("GET /api/v1/nodes/changes", () => {
 		const run = async (parents: number) => {
 			const {cacheService, changes} = setup(parents);
 			const seeded = await changes(null);
+			vi.setSystemTime(T0 + 130_000);
 			for (let p = 0; p < parents; p++) {
 				cacheService.insertNode(apiNode(`New${p}`, `P${p}`, 5), `P${p}`);
 			}

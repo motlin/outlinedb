@@ -29,7 +29,7 @@ import type {ServerContext} from "../context.js";
 import type {MirrorInstance} from "../../mirror-path.js";
 import {childInstance, expansionId} from "../../mirror-path.js";
 import {INTERNAL_API_NOT_CONFIGURED} from "../internal-api.js";
-import {changesAfter, latestChangeSeq, liveParents, readConsistently} from "../system-changes.js";
+import {changeWatermark, changesAfter, liveParents, readConsistently} from "../system-changes.js";
 import {defineOp, fail, ok, toJson} from "./define.js";
 import {
 	AncestorsResponseSchema,
@@ -115,14 +115,15 @@ export const nodesChildren = defineOp({
 const CHANGES_LIMIT = 500;
 
 /**
- * What changed after the cursor `since` (none: only the cursor): the changed ids, which of them are gone, and the
- * refreshed children of every parent they sit under now or left. The cursor is a `node_change_log` seq, exact under
- * repeated and out-of-order system times (see `latestChangeSeq`). One consistent read, and every concern is read once
+ * What changed after the watermark `since` (none: only the watermark): the changed ids, which of them are gone, and
+ * the refreshed children of every parent they sit under now or left. The watermark trails the clock by the
+ * transaction timeout, so a late-committing unit stamped before an earlier poll still reaches the client (see
+ * `changeWatermark`). One consistent read, and every concern is read once
  * for the whole id set, so the statement count does not grow with how much changed.
  */
 function readNodeChanges(ctx: ServerContext, since: string | undefined): NodeChangesResponse {
 	return readConsistently(ctx.db, () => {
-		const latest = latestChangeSeq(ctx.db);
+		const latest = changeWatermark();
 		const none = {latest, reset: false, changedIds: [], deletedIds: [], children: []};
 		if (since === undefined) {
 			return none;

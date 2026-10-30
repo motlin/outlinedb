@@ -101,10 +101,11 @@ export type FetchChanges = (since: string | undefined) => Promise<NodeChangesRes
 export type PrepareList = (parentId: string | null, nodes: NodeResponse[]) => NodeResponse[] | undefined;
 
 /**
- * The client's global high-water mark over the node tree: the server's commit-ordered change cursor, a decimal seq.
- * After a write, `sync` asks for everything changed since the mark and patches the cache with it, so a write costs one
+ * The client's global high-water mark over the node tree: the watermark the server last returned, a system time
+ * trailing its clock by the transaction timeout, sent back as `since` on the next poll. After a write, `sync` asks for everything changed since the mark and patches the cache with it, so a write costs one
  * small request instead of a refetch of every node query. Syncs run one at a time, and the mark only ever advances,
- * except that a reset (a mark the server never issued or no longer holds) takes the server's mark as is.
+ * except that a reset (a mark the server never issued) takes the server's mark as is. Marks are temporal timestamps, so
+ * they compare as strings.
  */
 export class ChangeFeed {
 	#mark: string | undefined;
@@ -169,7 +170,7 @@ export class ChangeFeed {
 	}
 
 	#advance(latest: string): void {
-		if (this.#mark === undefined || Number(latest) > Number(this.#mark)) {
+		if (this.#mark === undefined || latest > this.#mark) {
 			this.#mark = latest;
 		}
 	}

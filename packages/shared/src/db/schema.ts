@@ -374,23 +374,6 @@ export const fileBlobs = sqliteTable("file_blobs", {
 });
 
 /**
- * node_change_log: which nodes changed, in commit order, for the nodes changes
- * feed (`GET /api/v1/nodes/changes`). Triggers on node_content, node_metadata,
- * mirrors, references_roots and ai_metadata append one row per row written, so
- * every writer records its changes. `seq` is the feed's cursor: SQLite runs one
- * write transaction at a time, so seq order is commit order, unlike system
- * times, which repeat and need not be monotonic. `left_parent` is 1 when
- * `parent_id` is a parent the node sat under before a node_content row closed.
- * The newest ~10000 rows are kept (see migration 0039). Bookkeeping, not data.
- */
-export const nodeChangeLog = sqliteTable("node_change_log", {
-	seq: integer("seq").primaryKey({autoIncrement: true}),
-	nodeId: text("node_id").notNull(),
-	parentId: text("parent_id"),
-	leftParent: integer("left_parent").notNull().default(0),
-});
-
-/**
  * node_internal_metadata: item metadata the public API does not return,
  * imported from the internal API's `/get_tree_data/` (see
  * `importInternalMetadata` in `cache/importer.ts`). `metadata_json` holds only

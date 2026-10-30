@@ -151,14 +151,14 @@ describe("ChangeFeed", () => {
 		});
 	});
 
-	it("compares marks as numbers and takes the server's mark after a reset", async () => {
+	it("compares watermarks as timestamps and takes the server's mark after a reset", async () => {
 		const client = new QueryClient();
 		const asked: (string | undefined)[] = [];
 		const answers = [
-			changes({latest: "9"}),
-			changes({latest: "10"}),
-			changes({latest: "3", reset: true}),
-			changes({latest: "4"}),
+			changes({latest: "2026-10-29 12:00:09.000"}),
+			changes({latest: "2026-10-29 12:00:10.000"}),
+			changes({latest: "2026-10-29 12:00:03.000", reset: true}),
+			changes({latest: "2026-10-29 12:00:04.000"}),
 		];
 		const feed = new ChangeFeed(async (since) => {
 			asked.push(since);
@@ -170,9 +170,14 @@ describe("ChangeFeed", () => {
 		await feed.sync(client);
 		await feed.sync(client);
 
-		// A reset answers a cursor the server never issued or no longer holds (a recreated cache), so its mark replaces
-		// the client's even when lower.
-		expect(asked).toStrictEqual([undefined, "9", "10", "3"]);
+		// A reset answers a watermark the server never issued (its clock went back), so its mark replaces the client's
+		// even when lower.
+		expect(asked).toStrictEqual([
+			undefined,
+			"2026-10-29 12:00:09.000",
+			"2026-10-29 12:00:10.000",
+			"2026-10-29 12:00:03.000",
+		]);
 	});
 
 	it("refetches every node query when it has no mark yet or the server answers reset", async () => {

@@ -5,20 +5,13 @@
  * exactly those with `system_from` or a closing `system_to` after the cache's last system time.
  */
 
+import {TRANSACTION_TIMEOUT_MS} from "@workflowy/shared/cache";
 import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@workflowy/shared/temporal";
 import {sql} from "drizzle-orm";
 import type {SQL} from "drizzle-orm";
-import {nodeChangeLog} from "@workflowy/shared/db";
 import type {AppDatabase} from "@workflowy/shared/db";
 
 type Database = AppDatabase;
-
-/**
- * How far before a cache's last system time to look again for changes. A writer in another process can
- * take its system time before it commits, so a cache built between the two would otherwise miss that write.
- * Re-reading a few seconds of changes is cheap and patching a row twice is harmless.
- */
-const LOOKBACK_MS = 5000;
 
 /**
  * Closed rows, as a literal so the partial `*_closed_at_idx` indexes (whose WHERE is this same term) apply;
@@ -48,10 +41,14 @@ export function latestSystemTime(database: Database): string {
 	return latest;
 }
 
-/** The system time to read changes from for a cache built at `latest`. */
+/**
+ * The system time to read changes from for a cache built at `latest`. A writer can take its system time up to
+ * {@link TRANSACTION_TIMEOUT_MS} before it commits, so a cache built between the two would otherwise miss that write.
+ * Re-reading that window is cheap and patching a row twice is harmless.
+ */
 export function changesSince(latest: string): string {
 	const ms = Date.parse(`${latest.replace(" ", "T")}Z`);
-	return Number.isNaN(ms) ? "" : formatTemporalTimestamp(new Date(ms - LOOKBACK_MS));
+	return Number.isNaN(ms) ? "" : formatTemporalTimestamp(new Date(ms - TRANSACTION_TIMEOUT_MS));
 }
 
 /**
@@ -103,57 +100,42 @@ export function readConsistently<T>(database: Database, read: () => T): T {
 }
 
 /**
- * The nodes changes feed's cursor: the newest `node_change_log` seq, "0" before any change. Unlike a system time it
- * is exact: SQLite runs one write transaction at a time and triggers assign seqs inside it, so a reader that has seen
- * seq N has seen every change at or below N, however the changes' system times repeat or interleave.
+ * The nodes changes feed's watermark, following Reladomo's change notification: the clock less
+ * {@link TRANSACTION_TIMEOUT_MS}. A unit of work that would commit later than that after reading its system time rolls
+ * back, so every row stamped at or before the watermark has already committed or never will; a reader that next asks
+ * for rows opened or closed after it cannot miss a late commit. The price is re-reading the last timeout window.
  */
-export function latestChangeSeq(database: Database): string {
-	const {seq} = database.get<{seq: number | null}>(
-		sql`SELECT max(${nodeChangeLog.seq}) AS seq FROM ${nodeChangeLog}`,
-	);
-	return String(seq ?? 0);
+export function changeWatermark(): string {
+	return formatTemporalTimestamp(new Date(Date.now() - TRANSACTION_TIMEOUT_MS));
 }
 
-/** What changed after a {@link latestChangeSeq} cursor. */
+/** A temporal timestamp as {@link changeWatermark} formats it. */
+const WATERMARK = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$/u;
+
+/** What changed after a {@link changeWatermark}. */
 export interface ChangesAfter {
-	/** The changed node ids, plus live mirrors of a changed original (a mirror shows its original's text). */
+	/** The changed node ids, each once, plus live mirrors of a changed original (a mirror shows its original's text). */
 	ids: Set<string>;
-	/** The parents changed node_content rows had before they closed: what a move or delete left. */
+	/** The parents of changed node_content versions closed after the watermark: what a move or delete left. */
 	formerParents: Set<string | null>;
 }
 
 /**
- * {@link ChangesAfter} the cursor `after`, or undefined when the client must refetch everything instead: the cursor is
- * not one this database issued (unparsable, or past its newest seq), the log was pruned past it, or more than `limit`
- * nodes changed.
+ * {@link ChangesAfter} the watermark `after`, or undefined when the client must refetch everything instead: the
+ * watermark is not one this server issued (not a timestamp, or past the current watermark), or more than `limit`
+ * nodes changed. Rows re-read from the last timeout window repeat across polls; the id set reports each node once.
  */
 export function changesAfter(database: Database, after: string, limit: number): ChangesAfter | undefined {
-	const cursor = /^\d+$/u.test(after) ? Number(after) : Number.NaN;
-	const {oldest, newest} = database.get<{oldest: number | null; newest: number | null}>(
-		sql`SELECT min(${nodeChangeLog.seq}) AS oldest, max(${nodeChangeLog.seq}) AS newest FROM ${nodeChangeLog}`,
-	);
-	if (Number.isNaN(cursor) || cursor > (newest ?? 0) || (oldest !== null && cursor < oldest - 1)) {
+	if (!WATERMARK.test(after) || after > changeWatermark()) {
 		return undefined;
 	}
-	const changed = sql`SELECT DISTINCT ${nodeChangeLog.nodeId} AS node_id FROM ${nodeChangeLog} WHERE ${nodeChangeLog.seq} > ${cursor}`;
-	const ids = new Set<string>();
-	for (const query of [
-		changed,
-		sql`
-			SELECT mirror_id AS node_id FROM mirrors
-			WHERE system_to = ${FAR_FUTURE_DATE} AND original_id IN (${changed})
-		`,
-	]) {
-		for (const {node_id} of database.all<{node_id: string}>(sql`${query} LIMIT ${limit + 1}`)) {
-			ids.add(node_id);
-		}
-		if (ids.size > limit) {
-			return undefined;
-		}
+	const ids = changedNodeIds(database, after, limit);
+	if (ids === undefined) {
+		return undefined;
 	}
 	const former = database.all<{parent_id: string | null}>(sql`
-		SELECT DISTINCT ${nodeChangeLog.parentId} AS parent_id FROM ${nodeChangeLog}
-		WHERE ${nodeChangeLog.seq} > ${cursor} AND ${nodeChangeLog.leftParent} = 1
+		SELECT DISTINCT parent_id FROM node_content
+		WHERE ${CLOSED} AND system_to > ${after} AND id IN (SELECT value FROM json_each(${JSON.stringify([...ids])}))
 	`);
 	return {ids, formerParents: new Set(former.map((row) => row.parent_id))};
 }
