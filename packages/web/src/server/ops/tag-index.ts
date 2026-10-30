@@ -12,16 +12,25 @@
  * `fallback=0`.
  */
 
-import {nodeContent, nodeMetadata} from "@workflowy/shared/db";
+import {nodeContent, nodeMetadata, nodeTags} from "@workflowy/shared/db";
+import {itemTags} from "@workflowy/shared/tags";
+import type {TaggedText} from "@workflowy/shared/tags";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
 import {and, eq, sql} from "drizzle-orm";
+import type {SQL} from "drizzle-orm";
 import {z} from "zod";
 import type {ServerContext} from "../context.js";
-import {mergeFallback, rankCounts, rankTags, swapItemText, wholeTreeTagCounts} from "../tag-index.js";
-import type {TagCount, TagRow} from "../tag-index.js";
 import {defineOp, ok} from "./define.js";
 
 const DEFAULT_LIMIT = 8;
+
+export interface TagCount {
+	tag: string;
+	count: number;
+}
+
+/** Each tag's count keyed by its lowercase form: once per item, keeping its first-seen casing. */
+type TagCounts = ReadonlyMap<string, TagCount>;
 
 interface LiveText {
 	id: string;
@@ -29,37 +38,91 @@ interface LiveText {
 	note: string | undefined;
 }
 
-type IdRow = TagRow & {id: string};
-
-function withLive(rows: IdRow[], live: LiveText | null): TagRow[] {
-	if (live === null) {
-		return rows;
-	}
-	return rows.map((row) =>
-		row.id === live.id ? {...row, name: live.name ?? row.name, note: live.note ?? row.note} : row,
-	);
+/**
+ * The `node_tags` rows whose tag starts with `prefix` (case-insensitively), as a range on `tag_key` so its index
+ * applies: every key with the prefix sorts at or after it and before it followed by the highest code point.
+ */
+function prefixRange(prefix: string): SQL {
+	const key = prefix.toLowerCase();
+	return sql`${nodeTags.tagKey} >= ${key} AND ${nodeTags.tagKey} < ${`${key}\u{10FFFF}`}`;
 }
 
-function subtreeRows(ctx: ServerContext, rootId: string): IdRow[] {
-	return ctx.db.all<IdRow>(sql`
-		WITH RECURSIVE subtree(id, name, note, layoutMode) AS (
-			SELECT c.id, c.name, c.note, m.layout_mode FROM node_content c
-			LEFT JOIN node_metadata m ON m.node_id = c.id AND m.system_to = ${FAR_FUTURE_DATE}
-			WHERE c.id = ${rootId}
-			AND c.system_to = ${FAR_FUTURE_DATE}
+/**
+ * Count the live `node_tags` rows of `tagged` (a FROM clause ending in `node_tags`) by tag, keeping
+ * each tag's casing from the item with the lowest `node_content` rowid: the first one a rowid-order scan would see.
+ * SQLite takes a bare column from the row that holds the group's `min()`.
+ */
+function countTags(ctx: ServerContext, withClause: SQL, tagged: SQL, prefix: string): TagCounts {
+	const rows = ctx.db.all<{key: string; tag: string; count: number}>(sql`
+		${withClause}
+		SELECT ${nodeTags.tagKey} AS key, ${nodeTags.tag} AS tag, min(c.rowid) AS first, count(*) AS count
+		FROM ${tagged}
+		INNER JOIN node_content c ON c.id = ${nodeTags.nodeId} AND c.system_to = ${FAR_FUTURE_DATE}
+		WHERE ${prefixRange(prefix)}
+		GROUP BY ${nodeTags.tagKey}
+	`);
+	return new Map(rows.map(({key, tag, count}) => [key, {tag, count}]));
+}
+
+function wholeTreeTagCounts(ctx: ServerContext, prefix: string): TagCounts {
+	return countTags(ctx, sql``, sql`${nodeTags}`, prefix);
+}
+
+function subtreeTagCounts(ctx: ServerContext, rootId: string, prefix: string): TagCounts {
+	const withClause = sql`
+		WITH RECURSIVE subtree(id) AS (
+			SELECT id FROM node_content WHERE id = ${rootId} AND system_to = ${FAR_FUTURE_DATE}
 			UNION ALL
-			SELECT n.id, n.name, n.note, m.layout_mode FROM node_content n
-			LEFT JOIN node_metadata m ON m.node_id = n.id AND m.system_to = ${FAR_FUTURE_DATE}
+			SELECT n.id FROM node_content n
 			INNER JOIN subtree s ON n.parent_id = s.id
 			WHERE n.system_to = ${FAR_FUTURE_DATE}
 		)
-		SELECT id, name, note, layoutMode FROM subtree
-	`);
+	`;
+	return countTags(ctx, withClause, sql`subtree s INNER JOIN ${nodeTags} ON ${nodeTags.nodeId} = s.id`, prefix);
 }
 
-/** The whole live tree's tag counts, with the edited item's saved text swapped for its live text. */
-function wholeTreeCounts(ctx: ServerContext, live: LiveText | null): ReturnType<typeof wholeTreeTagCounts> {
-	const counts = wholeTreeTagCounts(ctx.db);
+/** Whether `itemId` is `rootId` or one of its live descendants, walking up from the item. */
+function inSubtree(ctx: ServerContext, rootId: string, itemId: string): boolean {
+	const found = ctx.db.all(sql`
+		WITH RECURSIVE up(id, parent) AS (
+			SELECT id, parent_id FROM node_content WHERE id = ${itemId} AND system_to = ${FAR_FUTURE_DATE}
+			UNION ALL
+			SELECT c.id, c.parent_id FROM node_content c
+			INNER JOIN up ON c.id = up.parent
+			WHERE c.system_to = ${FAR_FUTURE_DATE}
+		)
+		SELECT 1 FROM up WHERE id = ${rootId} LIMIT 1
+	`);
+	return found.length > 0;
+}
+
+function addItem(counts: Map<string, TagCount>, row: TaggedText): void {
+	for (const [lower, tag] of itemTags(row)) {
+		const entry = counts.get(lower);
+		counts.set(lower, entry ? {tag: entry.tag, count: entry.count + 1} : {tag, count: 1});
+	}
+}
+
+/** `counts` with one item's `saved` text swapped for its `live` text. */
+function swapItemText(counts: TagCounts, saved: TaggedText, live: TaggedText): TagCounts {
+	const swapped = new Map(counts);
+	for (const lower of itemTags(saved).keys()) {
+		const entry = swapped.get(lower);
+		if (entry === undefined) {
+			continue;
+		}
+		if (entry.count > 1) {
+			swapped.set(lower, {tag: entry.tag, count: entry.count - 1});
+		} else {
+			swapped.delete(lower);
+		}
+	}
+	addItem(swapped, live);
+	return swapped;
+}
+
+/** `counts` with the edited item's saved text swapped for its live text, when it has a live row. */
+function withLive(ctx: ServerContext, counts: TagCounts, live: LiveText | null): TagCounts {
 	if (live === null) {
 		return counts;
 	}
@@ -80,6 +143,41 @@ function wholeTreeCounts(ctx: ServerContext, live: LiveText | null): ReturnType<
 		note: live.note ?? saved.note,
 		layoutMode: saved.layoutMode,
 	});
+}
+
+function startsWithDigit(tag: string): boolean {
+	return /^\d$/u.test(tag.charAt(1));
+}
+
+/** Count desc; on a tie a tag with a digit at index 1 goes last; else plain `<` on the tag. */
+function compareTags(a: TagCount, b: TagCount): number {
+	if (a.count !== b.count) {
+		return b.count - a.count;
+	}
+	const digitOrder = Number(startsWithDigit(a.tag)) - Number(startsWithDigit(b.tag));
+	if (digitOrder !== 0) {
+		return digitOrder;
+	}
+	if (a.tag === b.tag) {
+		return 0;
+	}
+	return a.tag < b.tag ? -1 : 1;
+}
+
+/** Upstream's `AppTagIndex.autocomplete` ranking: the tags matching `prefix`, most used first, capped at `limit`. */
+export function rankCounts(counts: TagCounts, {prefix, limit}: {prefix: string; limit: number}): TagCount[] {
+	const prefixLower = prefix.toLowerCase();
+	return [...counts.values()]
+		.filter(({tag}) => tag.toLowerCase().startsWith(prefixLower))
+		.toSorted(compareTags)
+		.slice(0, limit);
+}
+
+/** Fill `primary` up to `limit` from `fallback`, skipping tags already listed. */
+export function mergeFallback(primary: TagCount[], fallback: TagCount[], limit: number): TagCount[] {
+	const listed = new Set(primary.map(({tag}) => tag.toLowerCase()));
+	const extra = fallback.filter(({tag}) => !listed.has(tag.toLowerCase()));
+	return [...primary, ...extra].slice(0, limit);
 }
 
 function parseLimit(raw: string | undefined): number {
@@ -117,15 +215,16 @@ export const tagIndexAutocomplete = defineOp({
 			rawItem === "" ? null : {id: ctx.cacheService.resolveShortIdToUuid(rawItem) ?? rawItem, name, note};
 
 		if (rawRoot === "") {
-			return ok({tags: plain(rankCounts(wholeTreeCounts(ctx, live), {prefix, limit}))});
+			return ok({tags: plain(rankCounts(withLive(ctx, wholeTreeTagCounts(ctx, prefix), live), {prefix, limit}))});
 		}
 
 		const rootId = ctx.cacheService.resolveShortIdToUuid(rawRoot) ?? rawRoot;
-		const tags = rankTags(withLive(subtreeRows(ctx, rootId), live), {prefix, limit});
+		const subtreeLive = live !== null && inSubtree(ctx, rootId, live.id) ? live : null;
+		const tags = rankCounts(withLive(ctx, subtreeTagCounts(ctx, rootId, prefix), subtreeLive), {prefix, limit});
 		if (tags.length >= limit || fallback === "0") {
 			return ok({tags: plain(tags)});
 		}
-		const global = rankCounts(wholeTreeCounts(ctx, live), {prefix, limit: limit * 2});
+		const global = rankCounts(withLive(ctx, wholeTreeTagCounts(ctx, prefix), live), {prefix, limit: limit * 2});
 		return ok({tags: plain(mergeFallback(tags, global, limit))});
 	},
 });

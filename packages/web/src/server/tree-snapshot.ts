@@ -205,15 +205,6 @@ function changeState(database: Database): ChangeState {
 	return {dataVersion, changes};
 }
 
-/**
- * Changes whenever any connection commits to the file (`data_version`) or this connection writes
- * (`total_changes()`), so a snapshot never outlives a write however it was made.
- */
-export function changeToken(database: Database): string {
-	const {dataVersion, changes} = changeState(database);
-	return `${dataVersion}:${changes}`;
-}
-
 const ROW_FIELDS = [
 	"id",
 	"parentId",

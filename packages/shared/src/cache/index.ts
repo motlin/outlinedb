@@ -95,6 +95,7 @@ export {
 	runUnitOfWork,
 	type UnitOfWork,
 } from "./node-composite.js";
+export {ensureNodeTags, rebuildNodeTags} from "./node-tags.js";
 export {
 	assertWithinTransactionTimeout,
 	newSystemTime,

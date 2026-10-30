@@ -1,3 +1,4 @@
+import {rebuildNodeTags} from "@workflowy/shared/cache";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
 import {Command, Flags} from "@oclif/core";
 import {sql} from "drizzle-orm";
@@ -160,6 +161,8 @@ export default class TemporalRollback extends Command {
 					),
 				);
 			}
+			// node_tags is derived from the live content this just rewound, outside any unit of work.
+			rebuildNodeTags(tx);
 		});
 
 		this.log(

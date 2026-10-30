@@ -374,6 +374,23 @@ export const fileBlobs = sqliteTable("file_blobs", {
 });
 
 /**
+ * node_tags: each live item's distinct tags, derived from its live `node_content`
+ * name and note (and `node_metadata.layout_mode`: a code block has none) by
+ * `itemTags`. `tag_key` is the tag's lowercase form, `tag` its first-seen
+ * casing in that item. Derived and rebuildable, so not bitemporal: every unit
+ * of work rewrites the rows of the nodes it touched (see `cache/node-tags.ts`).
+ */
+export const nodeTags = sqliteTable(
+	"node_tags",
+	{
+		nodeId: text("node_id").notNull(),
+		tagKey: text("tag_key").notNull(),
+		tag: text("tag").notNull(),
+	},
+	(table) => [primaryKey({columns: [table.nodeId, table.tagKey]}), index("node_tags_tag_key_idx").on(table.tagKey)],
+);
+
+/**
  * node_internal_metadata: item metadata the public API does not return,
  * imported from the internal API's `/get_tree_data/` (see
  * `importInternalMetadata` in `cache/importer.ts`). `metadata_json` holds only

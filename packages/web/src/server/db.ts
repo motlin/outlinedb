@@ -2,6 +2,7 @@ import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import Database from "better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
+import {ensureNodeTags} from "@workflowy/shared/cache";
 import * as schema from "@workflowy/shared/db";
 import {join} from "node:path";
 import {nodeTreeHost} from "./node-host.js";
@@ -34,6 +35,7 @@ export function getDatabase() {
 	if (process.env.WORKFLOWY_SKIP_MIGRATIONS !== "true") {
 		const migrationsFolder = join(import.meta.dirname, "../../../shared/dist/db/migrations");
 		migrate(dbInstance, {migrationsFolder});
+		ensureNodeTags(dbInstance);
 	}
 
 	if (process.env.WORKFLOWY_TEST_DISABLE_FK !== "true") {

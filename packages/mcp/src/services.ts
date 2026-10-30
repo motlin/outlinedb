@@ -1,6 +1,6 @@
 import {WorkflowyApiClient} from "@workflowy/shared/api";
 import type {InternalAuth} from "@workflowy/shared/api";
-import {CacheService, WorkflowyWriteThroughClient} from "@workflowy/shared/cache";
+import {CacheService, ensureNodeTags, WorkflowyWriteThroughClient} from "@workflowy/shared/cache";
 import * as schema from "@workflowy/shared/db";
 import type {WorkflowyInternalAdapter} from "@workflowy/shared/internal";
 import {internalAdapter, readInternalAuth} from "@workflowy/shared/node";
@@ -28,6 +28,7 @@ export function getDatabase(): ReturnType<typeof drizzle<typeof schema>> {
 		if (process.env.WORKFLOWY_SKIP_MIGRATIONS !== "true") {
 			const migrationsFolder = join(import.meta.dirname, "../../shared/dist/db/migrations");
 			migrate(database, {migrationsFolder});
+			ensureNodeTags(database);
 		}
 
 		sqlite.pragma("foreign_keys = ON");

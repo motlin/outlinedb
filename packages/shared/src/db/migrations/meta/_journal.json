@@ -281,6 +281,13 @@
 			"when": 1780012800000,
 			"tag": "0040_drop_node_change_log",
 			"breakpoints": true
+		},
+		{
+			"idx": 41,
+			"version": "6",
+			"when": 1780099200000,
+			"tag": "0041_add_node_tags",
+			"breakpoints": true
 		}
 	]
 }

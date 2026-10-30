@@ -1,4 +1,5 @@
 import {DurableObject} from "cloudflare:workers";
+import {ensureNodeTags} from "@workflowy/shared/cache";
 import * as schema from "@workflowy/shared/db";
 import {
 	LadderEventBus,
@@ -51,6 +52,7 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 			this.treeSnapshotEnabled = readWorkerConfig(env).features.treeSnapshot;
 			const before = countApplied(ctx);
 			await migrate(db, doMigrationConfig);
+			ensureNodeTags(db);
 			this.appliedOnBoot = countApplied(ctx) - before;
 			bindTreeHost(db, {
 				// Only this object writes its database, so no other connection can bump the version.

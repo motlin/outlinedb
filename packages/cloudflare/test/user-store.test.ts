@@ -26,7 +26,7 @@ describe("user store Durable Object behind the Worker", () => {
 
 		// The probe path is not routed by the Worker, so reach the DO directly.
 		const {names, migrations} = await probeStore(harness.mf);
-		expect(migrations).toBe(40);
+		expect(migrations).toBe(41);
 		const wanted = ["local_settings", "node_content", "node_fts"];
 		expect(names.filter((name) => wanted.includes(name))).toStrictEqual(wanted);
 	});
@@ -57,6 +57,23 @@ describe("user store Durable Object behind the Worker", () => {
 		await expect(readJson(response)).resolves.toStrictEqual({nodes: []});
 	});
 
+	it("keeps node_tags in step with a write, so tag autocomplete drops a removed tag", async () => {
+		const tags = async () => {
+			const response = await harness.mf.dispatchFetch(
+				"http://localhost/api/v1/tags/autocomplete?prefix=%23doTag",
+			);
+			return readJson(response);
+		};
+		await probeStore(harness.mf, `/__seed?name=${encodeURIComponent("seeded #doTag")}`);
+		const tagged = await tags();
+		await probeStore(harness.mf, "/__seed?name=seeded");
+
+		expect({tagged, untagged: await tags()}).toStrictEqual({
+			tagged: {tags: [{tag: "#doTag", count: 1}]},
+			untagged: {tags: []},
+		});
+	});
+
 	it("serves the SPA index.html for a client route", async () => {
 		const response = await harness.mf.dispatchFetch("http://localhost/some/client/route", {
 			headers: {"sec-fetch-mode": "navigate", accept: "text/html"},
@@ -72,11 +89,11 @@ describe("user store restart", () => {
 		const first = await startHarness("./probe-entry.ts", "ProbeStore");
 		const persistDir = first.persistDir;
 		try {
-			await expect(probe(first)).resolves.toMatchObject({migrations: 40, appliedOnBoot: 40});
+			await expect(probe(first)).resolves.toMatchObject({migrations: 41, appliedOnBoot: 41});
 			await first.dispose(true);
 			const second = await startHarness("./probe-entry.ts", "ProbeStore", persistDir);
 			try {
-				await expect(probe(second)).resolves.toMatchObject({migrations: 40, appliedOnBoot: 0});
+				await expect(probe(second)).resolves.toMatchObject({migrations: 41, appliedOnBoot: 0});
 			} finally {
 				await second.dispose();
 			}

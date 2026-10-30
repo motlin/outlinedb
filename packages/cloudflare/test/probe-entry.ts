@@ -98,7 +98,7 @@ export class ProbeStore extends UserStore {
 			new CacheService(drizzle(this.ctx.storage, {schema: dbSchema})).insertNode(
 				{
 					id: "seed-node",
-					name: "seeded",
+					name: url.searchParams.get("name") ?? "seeded",
 					note: null,
 					parent_id: null,
 					priority: 100,

@@ -5,21 +5,36 @@ import {nodeTreeHost} from "../src/server/node-host.js";
 import {bindTreeHost} from "../src/server/tree-snapshot.js";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
-import {CacheService} from "@workflowy/shared/cache";
+import {CacheService, ensureNodeTags} from "@workflowy/shared/cache";
 import * as schema from "@workflowy/shared/db";
 import {nodeContent, nodeMetadata} from "@workflowy/shared/db";
-import {and, eq} from "drizzle-orm";
+import {itemTags} from "@workflowy/shared/tags";
+import type {TaggedText} from "@workflowy/shared/tags";
+import {eq, sql} from "drizzle-orm";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
 import type {ServerContext} from "../src/server/context.js";
-import {
-	mergeFallback,
-	peekWholeTreeTagCountsBuild,
-	rankCounts,
-	rankTags,
-	wholeTreeTagCounts,
-} from "../src/server/tag-index.js";
-import type {TagCount} from "../src/server/tag-index.js";
+import {mergeFallback, rankCounts} from "../src/server/ops/tag-index.js";
+import type {TagCount} from "../src/server/ops/tag-index.js";
 import {httpAppFor} from "./http-app-for.js";
+
+/**
+ * The tag counts the server computed in JS before node_tags: every item's distinct tags, counted once per item in
+ * the order given, keeping each tag's first-seen casing. The reference the SQL autocomplete must match.
+ */
+function jsCounts(rows: Iterable<TaggedText>): Map<string, TagCount> {
+	const counts = new Map<string, TagCount>();
+	for (const row of rows) {
+		for (const [lower, tag] of itemTags(row)) {
+			const entry = counts.get(lower);
+			counts.set(lower, entry ? {tag: entry.tag, count: entry.count + 1} : {tag, count: 1});
+		}
+	}
+	return counts;
+}
+
+function rankTags(rows: Iterable<TaggedText>, options: {prefix: string; limit: number}): TagCount[] {
+	return rankCounts(jsCounts(rows), options);
+}
 
 const FIXTURE_NAMES = [
 	"Alpha #taZebra item",
@@ -145,6 +160,7 @@ function setupDb() {
 	for (const {id, parentId, name, systemTo = FAR_FUTURE_DATE} of rows) {
 		db.insert(nodeContent).values({id, name, note: null, parentId, systemFrom: seededAt, systemTo}).run();
 	}
+	ensureNodeTags(db);
 	return db;
 }
 
@@ -209,6 +225,8 @@ describe("GET /api/v1/tags/autocomplete and code blocks", () => {
 		db.insert(nodeMetadata)
 			.values({nodeId: "code", layoutMode: "code-block", systemFrom: at, systemTo: FAR_FUTURE_DATE})
 			.run();
+		db.run(sql`DELETE FROM node_tags`);
+		ensureNodeTags(db);
 		expect([
 			await getTags(setup(db), "prefix=%23taC"),
 			await getTags(setup(db), "root=root&prefix=%23taC&fallback=0"),
@@ -240,83 +258,76 @@ describe("GET /api/v1/tags/autocomplete with the edited item's live text", () =>
 	});
 });
 
-describe("wholeTreeTagCounts", () => {
-	it("reuses one whole-tree count across autocompletes until a write, so per-keystroke requests do not stall saves", async () => {
-		const db = setupDb();
-		const app = setup(db);
-		const first = wholeTreeTagCounts(db);
-
-		await expect(getTags(app, "prefix=%23taZ")).resolves.toStrictEqual(["#taZebra:4"]);
-		expect(wholeTreeTagCounts(db)).toBe(first);
-
-		db.insert(nodeContent)
-			.values({
-				id: "added",
-				name: "Added #taZebra",
-				note: null,
-				parentId: null,
-				systemFrom: "2026-03-01 00:00:00.000",
-				systemTo: FAR_FUTURE_DATE,
-			})
-			.run();
-
-		expect(wholeTreeTagCounts(db)).not.toBe(first);
-		await expect(getTags(app, "prefix=%23taZ")).resolves.toStrictEqual(["#taZebra:5"]);
-	});
-});
-
-describe("wholeTreeTagCounts patches", () => {
-	function liveRows(db: ReturnType<typeof setupDb>) {
+describe("GET /api/v1/tags/autocomplete over node_tags", () => {
+	/** Live rows in rowid order with their layout mode, the order the JS whole-tree count read them in. */
+	function liveRows(db: ReturnType<typeof setupDb>, ids?: Set<string>): TaggedText[] {
 		return db
-			.select({name: nodeContent.name, note: nodeContent.note})
+			.select({
+				id: nodeContent.id,
+				name: nodeContent.name,
+				note: nodeContent.note,
+				layoutMode: nodeMetadata.layoutMode,
+			})
 			.from(nodeContent)
+			.leftJoin(nodeMetadata, eq(nodeMetadata.nodeId, nodeContent.id))
 			.where(eq(nodeContent.systemTo, FAR_FUTURE_DATE))
-			.all();
+			.orderBy(sql`${nodeContent}.rowid`)
+			.all()
+			.filter((row) => ids === undefined || ids.has(row.id));
 	}
 
-	function rename(db: ReturnType<typeof setupDb>, id: string, name: string, at: string) {
-		const live = and(eq(nodeContent.id, id), eq(nodeContent.systemTo, FAR_FUTURE_DATE));
-		const current = db.select().from(nodeContent).where(live).get();
-		db.update(nodeContent).set({systemTo: at}).where(live).run();
-		if (current !== undefined && name !== "") {
+	it("matches the JS counts at Home and zoomed, with code-block and #use-template tags", async () => {
+		const db = setupDb();
+		const at = "2026-01-02 00:00:00.000";
+		const extra = [
+			{id: "code", name: "#taCode #taZebra", parentId: "root"},
+			{id: "template", name: "Uses #use-template:daily #taApple", parentId: "root"},
+			{id: "casing", name: "#TAAPPLE again", parentId: "outside"},
+		];
+		for (const {id, name, parentId} of extra) {
 			db.insert(nodeContent)
-				.values({...current, name, systemFrom: at, systemTo: FAR_FUTURE_DATE})
+				.values({id, name, note: null, parentId, systemFrom: at, systemTo: FAR_FUTURE_DATE})
 				.run();
 		}
-	}
-
-	it("patches the counts after each write to equal a full recount", () => {
-		const db = setupDb();
-		wholeTreeTagCounts(db);
-		expect(peekWholeTreeTagCountsBuild(db)).toBe("full");
-		const writes: [step: string, write: () => void][] = [
-			[
-				"drop a tag",
-				() => {
-					rename(db, "child-0", "Alpha item", "2026-03-01 00:00:00.001");
-				},
-			],
-			[
-				"add a tag",
-				() => {
-					rename(db, "child-7", "Type here #taNew #taApple", "2026-03-01 00:00:00.002");
-				},
-			],
-			[
-				"delete a tagged item",
-				() => {
-					rename(db, "child-1", "", "2026-03-01 00:00:00.003");
-				},
-			],
-		];
+		db.insert(nodeMetadata)
+			.values({nodeId: "code", layoutMode: "code-block", systemFrom: at, systemTo: FAR_FUTURE_DATE})
+			.run();
+		db.run(sql`DELETE FROM node_tags`);
+		ensureNodeTags(db);
+		const app = setup(db);
 		const all = {prefix: "#", limit: 100};
-		for (const [step, write] of writes) {
-			write();
-			expect({step, tags: rankCounts(wholeTreeTagCounts(db), all)}).toStrictEqual({
-				step,
-				tags: rankTags(liveRows(db), all),
-			});
-			expect({step, build: peekWholeTreeTagCountsBuild(db)}).toStrictEqual({step, build: "patch"});
-		}
+		const subtree = new Set(["root", "code", "template", ...FIXTURE_NAMES.map((_, index) => `child-${index}`)]);
+		const pairs = (rows: TaggedText[]) => asPairs(rankTags(rows, all));
+
+		expect({
+			home: await getTags(app, "prefix=%23&limit=100"),
+			zoomed: await getTags(app, "root=root&prefix=%23&limit=100&fallback=0"),
+		}).toStrictEqual({home: pairs(liveRows(db)), zoomed: pairs(liveRows(db, subtree))});
+	});
+
+	it("drops a tag from node_tags and the counts when an edit removes it", async () => {
+		const db = setupDb();
+		const cache = new CacheService(db);
+		const app = setup(db);
+		const before = await getTags(app, "prefix=%23taO");
+
+		cache.insertNode(
+			{
+				id: "outside",
+				name: "Outside #taZebra",
+				note: null,
+				parent_id: null,
+				priority: 1,
+				createdAt: 1,
+				modifiedAt: 1,
+			},
+			null,
+		);
+
+		expect({
+			before,
+			after: await getTags(app, "prefix=%23taO"),
+			rows: db.all(sql`SELECT tag FROM node_tags WHERE node_id = 'outside' ORDER BY tag`),
+		}).toStrictEqual({before: ["#taOutside:1"], after: [], rows: [{tag: "#taZebra"}]});
 	});
 });

@@ -18,6 +18,7 @@ import {
 	nodeEmbeddings,
 	nodeInternalMetadata,
 	nodeMetadata,
+	nodeTags,
 	referencesRoots,
 	s3Files,
 	virtualRootIds,
@@ -25,6 +26,7 @@ import {
 import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 import {assertWithinTransactionTimeout, startUnitOfWork} from "./system-time.js";
 import type {UnitOfWorkStart} from "./system-time.js";
+import {syncNodeTags} from "./node-tags.js";
 import {closeCurrentVersions} from "./temporal-merge.js";
 import type {TemporalTransaction} from "./temporal-merge.js";
 
@@ -75,6 +77,8 @@ export const NODE_COMPOSITE_PARTS: readonly CompositePart[] = [
 		endsWithReferences: [mirrors.originalId],
 	},
 	{table: nodeInternalMetadata, owner: nodeInternalMetadata.nodeId, references: [], hardDelete: true},
+	// Derived from the live content and rewritten by every unit of work; ending the node drops its tags too.
+	{table: nodeTags, owner: nodeTags.nodeId, references: [], hardDelete: true},
 ];
 
 /** Tables outside every node composite, with the reason. */
@@ -106,7 +110,8 @@ export interface UnitOfWork {
 /**
  * Run `work` as one unit of work: one transaction, one system time read once
  * from the application's UTC clock (or `start` when given, for a unit split
- * across several transactions). A throw rolls back every composite the work
+ * across several transactions). Before committing it rewrites the derived
+ * `node_tags` of every node it touched. A throw rolls back every composite the work
  * touched, and so does finishing past {@link TRANSACTION_TIMEOUT_MS} after the
  * start, which throws {@link TransactionTimeoutError}.
  */
@@ -117,6 +122,7 @@ export function runUnitOfWork<T>(
 ): T {
 	return database.transaction((tx) => {
 		const result = work({tx, systemTime: start.systemTime});
+		syncNodeTags(tx, start.systemTime);
 		assertWithinTransactionTimeout(start);
 		return result;
 	});
