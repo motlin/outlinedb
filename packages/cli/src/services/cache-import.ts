@@ -7,7 +7,7 @@ import {
 	emptyItemRelationships,
 	endOrphanedParts,
 	mergeItemRelationships,
-	newSystemTime,
+	startUnitOfWork,
 	runUnitOfWork,
 } from "@workflowy/shared/cache";
 import type {
@@ -771,8 +771,9 @@ export async function importBackup(
 	const changesMetadataRows: NormalizedChangesMetadataRow[] = changesMetadataRecords;
 	const referencesRootsRows: NormalizedReferencesRootsRow[] = relationships.referencesRoots;
 
-	const importTimestamp = timestamp ?? newSystemTime();
-	const importTimestampStr = formatTemporalTimestamp(importTimestamp);
+	// The timeout counts from here, after the parse, so only the merge itself is timed.
+	const unitStart = startUnitOfWork(timestamp);
+	const importTimestamp = timestamp ?? new Date(unitStart.startedAt);
 	// One unit of work: the node-keyed merge, the relationship merges and the
 	// orphan sweep commit together at the import time, or not at all.
 	runUnitOfWork(
@@ -817,7 +818,7 @@ export async function importBackup(
 
 			logTiming(`Closed ${nodesDeleted} orphaned nodes (deleted from Workflowy)`);
 		},
-		importTimestampStr,
+		unitStart,
 	);
 
 	logTiming("Transaction complete");

@@ -1,4 +1,11 @@
-import {applyApiBatch, beginApiImport, finishApiImport, importInternalMetadata} from "@workflowy/shared/cache";
+import {
+	applyApiBatch,
+	beginApiImport,
+	finishApiImport,
+	importInternalMetadata,
+	TRANSACTION_TIMEOUT_MS,
+	unitOfWorkSignal,
+} from "@workflowy/shared/cache";
 import type {ApiImportState, ImportApiResult} from "@workflowy/shared/cache";
 import type {TreeSnapshot} from "@workflowy/shared/api";
 import type {AppDatabase} from "@workflowy/shared/db";
@@ -10,6 +17,11 @@ const DEFAULT_INTERVAL_MINUTES = 30;
 const RATE_LIMIT_BACKOFF_MS = 60_000;
 const SEED_KEY = "seedRequested";
 const SEED_HINT = "On the Worker, POST /api/admin/seed instead.";
+/**
+ * An alarm run stops applying batches, and leaves the finish to a fresh run, once this much of its transaction
+ * timeout is spent, so the rest of the run commits well inside it.
+ */
+const RUN_BUDGET_MS = TRANSACTION_TIMEOUT_MS / 2;
 
 /** Bindings the sync job reads; all but the bucket are optional. */
 export interface SyncEnv {
@@ -30,16 +42,19 @@ export interface SyncDeps {
 	env: SyncEnv;
 	/**
 	 * Reads the whole internal tree (about 54 MB live) when internal auth exists; undefined when it does not.
-	 * Only a run started by {@link SyncJob.seed} calls it.
+	 * Only a run started by {@link SyncJob.seed} calls it. `signal` aborts when the run's transaction timeout runs out.
 	 */
-	readTreeSnapshot?: () => Promise<TreeSnapshot> | undefined;
+	readTreeSnapshot?: (signal: AbortSignal) => Promise<TreeSnapshot> | undefined;
 	/**
 	 * Brings the edge tables up to the tree's latest transaction with one pure poll from the stored transaction id,
 	 * when internal auth exists; undefined when it does not. Every run that is not a seed calls it.
 	 */
 	catchUp?: () => Promise<void> | undefined;
-	/** Reads the account's Workflowy epoch when internal auth exists; undefined when it does not. */
-	readEpoch?: () => Promise<number> | undefined;
+	/**
+	 * Reads the account's Workflowy epoch when internal auth exists; undefined when it does not. `signal` aborts when
+	 * the run's transaction timeout runs out.
+	 */
+	readEpoch?: (signal: AbortSignal) => Promise<number> | undefined;
 	now?: () => number;
 }
 
@@ -50,7 +65,6 @@ interface Job {
 	exportKey: string;
 	/** Nodes of the export already applied; the stream resumes after them. */
 	applied: number;
-	importTimestamp: string;
 	totals: Pick<
 		ApiImportState,
 		"totalNodes" | "nodesAdded" | "nodesUpdated" | "nodesUnchanged" | "contentUpdated" | "metadataUpdated"
@@ -140,7 +154,6 @@ export class SyncJob {
 				phase: "fetching",
 				exportKey: "",
 				applied: 0,
-				importTimestamp: "",
 				totals: {
 					totalNodes: 0,
 					nodesAdded: 0,
@@ -173,13 +186,13 @@ export class SyncJob {
 	}
 
 	/** Store config.workflowy_epoch once, when internal auth exists; a failure leaves it for the next run. */
-	private async fillEpoch(): Promise<void> {
+	private async fillEpoch(signal: AbortSignal): Promise<void> {
 		const have = this.sql.exec("SELECT 1 FROM config WHERE key = 'workflowy_epoch'").toArray().length > 0;
 		if (have) {
 			return;
 		}
 		try {
-			const epoch = await this.deps.readEpoch?.();
+			const epoch = await this.deps.readEpoch?.(signal);
 			if (epoch !== undefined) {
 				const stamp = new Date(this.now()).toISOString();
 				this.sql.exec(
@@ -239,13 +252,14 @@ export class SyncJob {
 		} else {
 			await env.SNAPSHOTS.put(exportKey, await response.arrayBuffer());
 		}
-		const next: Job = {...job, phase: "importing", exportKey, importTimestamp: new Date(this.now()).toISOString()};
+		const next: Job = {...job, phase: "importing", exportKey};
 		this.write("job", next);
 		return next;
 	}
 
+	/** This alarm run's import: a fresh system time, so the run is its own unit of work, resuming the run's totals. */
 	private importState(job: Job): ApiImportState {
-		const state = beginApiImport(this.deps.db, {timestamp: new Date(job.importTimestamp)});
+		const state = beginApiImport(this.deps.db);
 		Object.assign(state, job.totals);
 		for (const row of this.sql.exec("SELECT id FROM sync_seen").toArray()) {
 			if (typeof row.id === "string") {
@@ -266,12 +280,13 @@ export class SyncJob {
 		const limit = Number.isFinite(perTick) && perTick > 0 ? perTick : Infinity;
 		let batches = 0;
 		let yielded = false;
+		const overBudget = () => Date.now() - state.start.startedAt >= RUN_BUDGET_MS;
 		// oxlint-disable-next-line typescript/no-unsafe-argument -- the workers types declare R2ObjectBody.body as ReadableStream<any>
 		for await (const batch of nodeBatches(object.body, {
 			size: BATCH_SIZE,
 			skip: job.applied,
 		})) {
-			if (batches >= limit) {
+			if (batches >= limit || (batches > 0 && overBudget())) {
 				yielded = true;
 				break;
 			}
@@ -299,7 +314,7 @@ export class SyncJob {
 			});
 			batches++;
 		}
-		if (yielded) {
+		if (yielded || (batches > 0 && overBudget())) {
 			const delay = Number(env.SYNC_TICK_DELAY_MS);
 			await storage.setAlarm(this.now() + (Number.isFinite(delay) && delay > 0 ? delay : 0));
 			return;
@@ -311,7 +326,7 @@ export class SyncJob {
 		if (seeding) {
 			this.write(SEED_KEY, null);
 			try {
-				snapshot = await this.deps.readTreeSnapshot?.();
+				snapshot = await this.deps.readTreeSnapshot?.(unitOfWorkSignal(state.start));
 				if (snapshot === undefined) {
 					internalSyncError = "A seed needs internal auth (WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD)";
 				}
@@ -321,7 +336,7 @@ export class SyncJob {
 				internalSyncError = errorMessage(error);
 			}
 		}
-		await this.fillEpoch();
+		await this.fillEpoch(unitOfWorkSignal(state.start));
 		const result = finishApiImport(state, snapshot?.items);
 		if (snapshot !== undefined) {
 			importInternalMetadata(this.deps.db, snapshot, this.now());

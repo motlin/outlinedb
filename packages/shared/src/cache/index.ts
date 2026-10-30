@@ -95,6 +95,15 @@ export {
 	runUnitOfWork,
 	type UnitOfWork,
 } from "./node-composite.js";
-export {newSystemTime, newSystemTimestamp} from "./system-time.js";
+export {
+	assertWithinTransactionTimeout,
+	newSystemTime,
+	newSystemTimestamp,
+	startUnitOfWork,
+	TRANSACTION_TIMEOUT_MS,
+	TransactionTimeoutError,
+	unitOfWorkSignal,
+} from "./system-time.js";
+export type {UnitOfWorkStart} from "./system-time.js";
 export {WorkflowyWriteThroughClient} from "./workflowy-write-through-client.js";
 export type {ExactMover} from "./workflowy-write-through-client.js";

@@ -24,7 +24,8 @@ import {
 	virtualRootIds,
 } from "../db/schema.js";
 import {FAR_FUTURE_DATE} from "../temporal/constants.js";
-import {newSystemTimestamp} from "./system-time.js";
+import {assertWithinTransactionTimeout, startUnitOfWork} from "./system-time.js";
+import type {UnitOfWorkStart} from "./system-time.js";
 import {closeCurrentVersions} from "./temporal-merge.js";
 import type {TemporalTransaction} from "./temporal-merge.js";
 
@@ -106,16 +107,21 @@ export interface UnitOfWork {
 
 /**
  * Run `work` as one unit of work: one transaction, one system time read once
- * from the application's UTC clock (or `systemTime` when given, for a unit split
+ * from the application's UTC clock (or `start` when given, for a unit split
  * across several transactions). A throw rolls back every composite the work
- * touched.
+ * touched, and so does finishing past {@link TRANSACTION_TIMEOUT_MS} after the
+ * start, which throws {@link TransactionTimeoutError}.
  */
 export function runUnitOfWork<T>(
 	database: TemporalTransaction,
 	work: (unitOfWork: UnitOfWork) => T,
-	systemTime?: string,
+	start: UnitOfWorkStart = startUnitOfWork(),
 ): T {
-	return database.transaction((tx) => work({tx, systemTime: systemTime ?? newSystemTimestamp()}));
+	return database.transaction((tx) => {
+		const result = work({tx, systemTime: start.systemTime});
+		assertWithinTransactionTimeout(start);
+		return result;
+	});
 }
 
 const ID_BATCH_SIZE = 500;

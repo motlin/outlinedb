@@ -23,7 +23,7 @@ describe("applyRows on a large table", () => {
 			database,
 			(unitOfWork) =>
 				applyRows(unitOfWork, {nodeContent: rows.map((row) => ({...row, note: null, parentId: null}))}),
-			"2026-10-28 00:00:00",
+			{systemTime: "2026-10-28 00:00:00", startedAt: Date.now()},
 		);
 
 		expect(result).toStrictEqual({nodeContent: {inserted: 0, phasedOut: 0, unchanged: ROW_COUNT}});

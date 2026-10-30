@@ -8,9 +8,9 @@ import {readFileSync} from "node:fs";
 import {join} from "node:path";
 import * as schema from "@workflowy/shared/db";
 import {mirrors, nodeContent} from "@workflowy/shared/db";
-import {applyRows, normalizeLayoutMode, runUnitOfWork} from "@workflowy/shared/cache";
+import {applyRows, normalizeLayoutMode, runUnitOfWork, startUnitOfWork} from "@workflowy/shared/cache";
 import type {ApplyRowsResult, NormalizedRowsByTable} from "@workflowy/shared/cache";
-import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@workflowy/shared/temporal";
+import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
 import type {Node, WorkflowyNode} from "@workflowy/shared/types";
 import {ApiResponseSchema} from "@workflowy/shared/types";
 import {uuidToShortId} from "@workflowy/shared/workflowy";
@@ -312,7 +312,7 @@ export function bulkImportWithWatermarkGuard(
 	const mergeResult = runUnitOfWork(
 		database,
 		(unitOfWork) => applyRows(unitOfWork, rowsByTable),
-		formatTemporalTimestamp(importedAt),
+		startUnitOfWork(importedAt),
 	);
 	return {skipped: false, mergeResult};
 }
@@ -330,9 +330,5 @@ export function restImport(
 	importedAt: Date,
 ): ApplyRowsResult {
 	const rowsByTable = normalizeRestNodes(nodes);
-	return runUnitOfWork(
-		database,
-		(unitOfWork) => applyRows(unitOfWork, rowsByTable),
-		formatTemporalTimestamp(importedAt),
-	);
+	return runUnitOfWork(database, (unitOfWork) => applyRows(unitOfWork, rowsByTable), startUnitOfWork(importedAt));
 }

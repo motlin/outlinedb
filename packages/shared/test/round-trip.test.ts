@@ -189,11 +189,10 @@ describe("round-trip equivalence", () => {
 			// current, the temporal merge must insert nothing and phase out
 			// nothing — the whole point of the round-trip safety net.
 			const reimportRows = restDtoToNormalizedRows(dtos);
-			const reapplied = runUnitOfWork(
-				database,
-				(unitOfWork) => applyRows(unitOfWork, reimportRows),
-				"2026-05-22 11:00:00",
-			);
+			const reapplied = runUnitOfWork(database, (unitOfWork) => applyRows(unitOfWork, reimportRows), {
+				systemTime: "2026-05-22 11:00:00",
+				startedAt: Date.now(),
+			});
 			expect(reapplied.nodeContent?.inserted).toBe(0);
 			expect(reapplied.nodeContent?.phasedOut).toBe(0);
 			expect(reapplied.nodeContent?.unchanged).toBe(4);

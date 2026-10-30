@@ -3,7 +3,7 @@ import type {InternalTreeItem} from "../api/workflowy-internal-client.js";
 import {nodeContent, nodeMetadata} from "../db/schema.js";
 import type {NodeContentType, NodeMetadataType} from "../db/schema.js";
 import type {AppDatabase} from "../db/types.js";
-import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "../temporal/index.js";
+import {FAR_FUTURE_DATE} from "../temporal/index.js";
 import {WorkflowyNodeSchema} from "../types/index.js";
 import type {WorkflowyNode} from "../types/index.js";
 import {uuidToShortId} from "../workflowy/index.js";
@@ -15,7 +15,8 @@ import type {ItemRelationships} from "./item-relationships.js";
 import {endNodeComposites, endOrphanedParts, runUnitOfWork} from "./node-composite.js";
 import type {UnitOfWork} from "./node-composite.js";
 import type {NormalizedNodeContentRow, NormalizedNodeMetadataRow} from "./normalized-rows.js";
-import {newSystemTime} from "./system-time.js";
+import {startUnitOfWork} from "./system-time.js";
+import type {UnitOfWorkStart} from "./system-time.js";
 
 /** Bound-parameter chunk for `id IN (...)` lookups; Durable Object SQLite caps a statement at 100. */
 const LOOKUP_CHUNK_SIZE = 90;
@@ -69,6 +70,8 @@ export interface ApiImportState {
 	readonly database: AppDatabase;
 	readonly logger: ImportLogger | undefined;
 	readonly importTimestamp: Date;
+	/** The import's system time and start; the transaction timeout counts from it. */
+	readonly start: UnitOfWorkStart;
 	readonly seenIds: Set<string>;
 	totalNodes: number;
 	nodesAdded: number;
@@ -117,18 +120,24 @@ function processNodes(state: ApiImportState, apiNodes: WorkflowyNode[]): Process
 	return processed;
 }
 
-/** Start a batched import. The system time is fixed here so every batch lands at the same instant. */
+/**
+ * Start a batched import. The system time is fixed here so every batch lands at
+ * the same instant, and the transaction timeout counts from here: every batch
+ * and the finish must commit within it.
+ */
 export function beginApiImport(
 	database: AppDatabase,
 	options: {logger?: ImportLogger; timestamp?: Date} = {},
 ): ApiImportState {
-	const startTime = Date.now();
+	const start = startUnitOfWork(options.timestamp);
+	const startTime = start.startedAt;
 	options.logger?.debug("[IMPORT-API] Starting import");
 	metadataComparisonStats.reset();
 	return {
 		database,
 		logger: options.logger,
-		importTimestamp: options.timestamp ?? newSystemTime(),
+		importTimestamp: options.timestamp ?? new Date(start.startedAt),
+		start,
 		seenIds: new Set(),
 		totalNodes: 0,
 		nodesAdded: 0,
@@ -305,7 +314,7 @@ export function applyApiBatch(state: ApiImportState, apiNodes: WorkflowyNode[]):
 		(unitOfWork) => {
 			applyBatchIn(unitOfWork, state, apiNodes);
 		},
-		formatTemporalTimestamp(state.importTimestamp),
+		state.start,
 	);
 }
 
@@ -359,11 +368,7 @@ export function finishApiImport(state: ApiImportState, treeItems?: InternalTreeI
 	if (state.validationErrors > 0) {
 		state.logger?.warn(`Encountered ${state.validationErrors} validation errors during import`);
 	}
-	return runUnitOfWork(
-		state.database,
-		(unitOfWork) => finishIn(unitOfWork, state, treeItems),
-		formatTemporalTimestamp(state.importTimestamp),
-	);
+	return runUnitOfWork(state.database, (unitOfWork) => finishIn(unitOfWork, state, treeItems), state.start);
 }
 
 /**
@@ -384,7 +389,7 @@ export function importFromApi(
 			applyBatchIn(unitOfWork, state, apiNodes);
 			return finishIn(unitOfWork, state, options.treeItems);
 		},
-		formatTemporalTimestamp(state.importTimestamp),
+		state.start,
 	);
 	metadataComparisonStats.log();
 	if (state.validationErrors > 0) {

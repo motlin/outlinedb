@@ -566,8 +566,7 @@ export class CacheService {
 	 * @param parentId The parent ID these nodes belong to (null for root)
 	 */
 	storeApiResponse(apiNodes: WorkflowyNode[], parentId: string | null): void {
-		const systemTime = newSystemTimestamp();
-		this.database.transaction((tx) => {
+		runUnitOfWork(this.database, ({tx, systemTime}) => {
 			storeChildren(tx, apiNodes, parentId, systemTime);
 		});
 	}
@@ -625,8 +624,9 @@ export class CacheService {
 	 * @param parentId The parent ID this node belongs to (null for root)
 	 */
 	insertNode(node: WorkflowyNode, parentId: string | null): void {
-		const systemTime = newSystemTimestamp();
-		upsertNodeVersion(this.database, node, parentId, systemTime);
+		runUnitOfWork(this.database, ({tx, systemTime}) => {
+			upsertNodeVersion(tx, node, parentId, systemTime);
+		});
 	}
 
 	/**

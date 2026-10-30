@@ -80,6 +80,14 @@ async function liveIds(h: Harness): Promise<string[]> {
 	return response.json();
 }
 
+/** How many node_content rows share each system time, in system-time order. */
+async function rowsPerSystemTime(h: Harness): Promise<unknown> {
+	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
+	const ns = (await h.mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace;
+	const response = await ns.get(ns.idFromName("dev")).fetch("http://localhost/__system-froms");
+	return response.json();
+}
+
 async function configRows(h: Harness): Promise<unknown> {
 	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
 	const ns = (await h.mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace;
@@ -242,7 +250,7 @@ describe("sync from a fake upstream", () => {
 		await stop(h);
 	}, 120_000);
 
-	it("resumes after the object restarts between batches", async () => {
+	it("resumes after the object restarts between batches, stamping each alarm run with its own system time", async () => {
 		current = makeNodes(5000);
 		const first = await start(undefined, {SYNC_BATCHES_PER_TICK: "1", SYNC_TICK_DELAY_MS: "600000"});
 		const persistDir = first.persistDir;
@@ -272,6 +280,8 @@ describe("sync from a fake upstream", () => {
 		expect(done?.lastResult).toMatchObject({status: "ok", totalNodes: 5000, nodesAdded: 5000, nodesPhasedOut: 0});
 		expect(exportCalls).toBe(callsBefore);
 		await expect(liveIds(second)).resolves.toHaveLength(5000);
+		// Each alarm run is its own unit of work with a fresh system time, so no stamp outlives one run.
+		await expect(rowsPerSystemTime(second)).resolves.toStrictEqual([2000, 2000, 1000]);
 		await stop(second);
 		rmSync(persistDir, {recursive: true, force: true});
 	}, 180_000);

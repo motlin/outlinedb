@@ -77,8 +77,13 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 				db,
 				env,
 				readTreeSnapshot:
-					internalAuth && (async () => new WorkflowyInternalClient(internalAuth).getTreeSnapshot()),
-				readEpoch: internalAuth && (async () => new WorkflowyInternalClient(internalAuth).getEpoch()),
+					internalAuth &&
+					(async (signal) =>
+						new WorkflowyInternalClient({...internalAuth, fetch: signalled(signal)}).getTreeSnapshot()),
+				readEpoch:
+					internalAuth &&
+					(async (signal) =>
+						new WorkflowyInternalClient({...internalAuth, fetch: signalled(signal)}).getEpoch()),
 				catchUp: internalAuth && (async () => serverContext.internalAdapter?.()?.catchUp()),
 			});
 		});
@@ -188,4 +193,9 @@ function countApplied(ctx: DurableObjectState): number {
 		return 0;
 	}
 	return Number(ctx.storage.sql.exec("SELECT count(*) AS n FROM __drizzle_migrations").one().n);
+}
+
+/** A fetch whose every request aborts with `signal`. */
+function signalled(signal: AbortSignal): typeof fetch {
+	return async (input, init) => fetch(input, {...init, signal});
 }

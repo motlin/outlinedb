@@ -256,7 +256,7 @@ describe("ending node composites", () => {
 			(unitOfWork) => {
 				endNodeComposites(unitOfWork, ["doomed"]);
 			},
-			UOW_TIME,
+			{systemTime: UOW_TIME, startedAt: Date.now()},
 		);
 
 		const snap = snapshot();
@@ -299,7 +299,7 @@ describe("ending node composites", () => {
 			(unitOfWork) => {
 				endOrphanedParts(unitOfWork);
 			},
-			UOW_TIME,
+			{systemTime: UOW_TIME, startedAt: Date.now()},
 		);
 
 		const snap = snapshot();
