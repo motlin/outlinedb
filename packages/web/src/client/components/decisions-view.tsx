@@ -1,10 +1,11 @@
 /**
  * A decision page: a review agent stages questions under a slug, the user
- * answers each one here, and every change is saved as it happens. The page
+ * answers them here one card at a time, and every change is saved as it
+ * happens, so an interrupted walk leaves its partial answers on disk. The page
  * only records choices; the agent reads the answers back and does the writes.
  */
 
-import {useEffect, useRef, useState} from "react";
+import {useEffect, useMemo, useRef, useState} from "react";
 import {useParams} from "react-router-dom";
 import type {DecisionItem, DecisionPage} from "../../server/decisions.js";
 import "../decisions.css";
@@ -26,6 +27,17 @@ interface ItemState {
 }
 
 type SubmitState = {kind: "idle"} | {kind: "submitting"} | {kind: "submitted"} | {kind: "error"; message: string};
+
+/** The outcome of the most recent save, shown in the footer because the card that made it may be gone. */
+type LastSave = {card: number; error: string | null} | null;
+
+type Group = DecisionPage["groups"][number];
+
+/** One card in walk order: an item with the group it belongs to. */
+interface Card {
+	group: Group;
+	item: Group["items"][number];
+}
 
 async function errorOf(response: FetchedText): Promise<string> {
 	try {
@@ -57,20 +69,54 @@ async function loadPage(url: string, signal: AbortSignal): Promise<{page: Decisi
 	}
 }
 
+function cardsOf(page: DecisionPage): Card[] {
+	return page.groups.flatMap((group) => group.items.map((item) => ({group, item})));
+}
+
 function initialItems(page: DecisionPage): Record<string, ItemState> {
 	return Object.fromEntries(
-		page.groups
-			.flatMap((group) => group.items)
-			.map((item) => [
-				item.id,
-				{
-					choice: item.answer?.choice ?? null,
-					note: item.answer?.note ?? "",
-					answered: item.answer !== null,
-					status: {kind: "idle"},
-				},
-			]),
+		cardsOf(page).map(({item}) => [
+			item.id,
+			{
+				choice: item.answer?.choice ?? null,
+				note: item.answer?.note ?? "",
+				answered: item.answer !== null,
+				status: {kind: "idle"},
+			},
+		]),
 	);
+}
+
+/**
+ * The first unanswered card after `from`, wrapping around to the start, or
+ * `from` itself when every other card is answered.
+ */
+function nextUnanswered(cards: Card[], items: Record<string, ItemState>, from: number): number {
+	for (let step = 1; step < cards.length; step++) {
+		const index = (from + step) % cards.length;
+		const card = cards[index];
+		if (card !== undefined && items[card.item.id]?.answered !== true) {
+			return index;
+		}
+	}
+	return from;
+}
+
+/** Where a fresh load starts: the first unanswered card, or the first card when all are answered. */
+function resumeIndex(cards: Card[], items: Record<string, ItemState>): number {
+	const index = cards.findIndex((card) => items[card.item.id]?.answered !== true);
+	return Math.max(index, 0);
+}
+
+/** Whether a key press belongs to a text field rather than to the page's shortcuts. */
+function isTyping(target: EventTarget | null): boolean {
+	if (!(target instanceof HTMLElement)) {
+		return false;
+	}
+	if (target.isContentEditable || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) {
+		return true;
+	}
+	return target instanceof HTMLInputElement && target.type !== "radio" && target.type !== "checkbox";
 }
 
 /** The `/decisions/:slug` route. */
@@ -84,10 +130,15 @@ export function DecisionPageView({slug}: {slug: string}) {
 	const [page, setPage] = useState<DecisionPage | null>(null);
 	const [loadError, setLoadError] = useState<string | null>(null);
 	const [items, setItems] = useState<Record<string, ItemState>>({});
+	const [index, setIndex] = useState(0);
+	const [lastSave, setLastSave] = useState<LastSave>(null);
 	const [submit, setSubmit] = useState<SubmitState>({kind: "idle"});
+	const cards = useMemo(() => (page === null ? [] : cardsOf(page)), [page]);
 	// Mirrors `items` so a debounced save sends the choice and note current when it fires.
 	const itemsRef = useRef<Record<string, ItemState>>({});
 	const noteTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+	// The latest render's key handler, so the window listener never sees stale state.
+	const onKeyRef = useRef<(event: KeyboardEvent) => void>(() => {});
 
 	// Only the outline view dismisses the boot screen; this route never mounts it.
 	useEffect(() => {
@@ -108,6 +159,7 @@ export function DecisionPageView({slug}: {slug: string}) {
 			}
 			itemsRef.current = initialItems(result.page);
 			setItems(itemsRef.current);
+			setIndex(resumeIndex(cardsOf(result.page), itemsRef.current));
 			setPage(result.page);
 			setSubmit(result.page.submittedAt === null ? {kind: "idle"} : {kind: "submitted"});
 		})();
@@ -118,6 +170,16 @@ export function DecisionPageView({slug}: {slug: string}) {
 			}
 		};
 	}, [base]);
+
+	useEffect(() => {
+		function onKey(event: KeyboardEvent): void {
+			onKeyRef.current(event);
+		}
+		window.addEventListener("keydown", onKey);
+		return () => {
+			window.removeEventListener("keydown", onKey);
+		};
+	}, []);
 
 	function update(id: string, patch: Partial<ItemState>): ItemState {
 		const current = itemsRef.current[id];
@@ -130,21 +192,44 @@ export function DecisionPageView({slug}: {slug: string}) {
 		return next;
 	}
 
-	async function save(id: string): Promise<void> {
+	function cardNumber(id: string): number {
+		return cards.findIndex((card) => card.item.id === id) + 1;
+	}
+
+	/** Saves the item's current choice and note; resolves whether the server kept them. */
+	async function save(id: string): Promise<boolean> {
 		const {choice, note} = update(id, {status: {kind: "saving"}});
+		let error: string;
 		try {
 			const response = await fetchThroughRestarts(`${base}/${encodeURIComponent(id)}`, {
 				method: "PUT",
 				headers: {"content-type": "application/json"},
 				body: JSON.stringify({choice, note}),
 			});
-			if (!response.ok) {
-				update(id, {status: {kind: "error", message: await errorOf(response)}});
-				return;
+			if (response.ok) {
+				update(id, {answered: true, status: {kind: "saved"}});
+				setLastSave({card: cardNumber(id), error: null});
+				return true;
 			}
-			update(id, {answered: true, status: {kind: "saved"}});
-		} catch (error) {
-			update(id, {status: {kind: "error", message: messageOf(error)}});
+			error = await errorOf(response);
+		} catch (caught) {
+			error = messageOf(caught);
+		}
+		update(id, {status: {kind: "error", message: error}});
+		setLastSave({card: cardNumber(id), error});
+		return false;
+	}
+
+	/** Moves on to the next unanswered card, unless the user already left the card that was saved. */
+	function advanceFrom(id: string): void {
+		const from = cardNumber(id) - 1;
+		const next = nextUnanswered(cards, itemsRef.current, from);
+		setIndex((current) => (current === from ? next : current));
+	}
+
+	async function saveAndAdvance(id: string): Promise<void> {
+		if (await save(id)) {
+			advanceFrom(id);
 		}
 	}
 
@@ -156,7 +241,12 @@ export function DecisionPageView({slug}: {slug: string}) {
 	function choose(id: string, choice: string): void {
 		cancelNoteSave(id);
 		update(id, {choice});
-		void save(id);
+		void saveAndAdvance(id);
+	}
+
+	function saveNoteAndNext(id: string): void {
+		cancelNoteSave(id);
+		void saveAndAdvance(id);
 	}
 
 	function editNote(id: string, note: string): void {
@@ -171,6 +261,10 @@ export function DecisionPageView({slug}: {slug: string}) {
 		);
 	}
 
+	function goTo(target: number): void {
+		setIndex(Math.min(Math.max(target, 0), cards.length - 1));
+	}
+
 	async function submitPage(): Promise<void> {
 		setSubmit({kind: "submitting"});
 		try {
@@ -180,6 +274,28 @@ export function DecisionPageView({slug}: {slug: string}) {
 			setSubmit({kind: "error", message: messageOf(error)});
 		}
 	}
+
+	const current = cards[index];
+
+	// Runs after every render so the window listener always acts on the card on screen.
+	useEffect(() => {
+		onKeyRef.current = (event) => {
+			if (current === undefined || event.altKey || event.ctrlKey || event.metaKey || isTyping(event.target)) {
+				return;
+			}
+			if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+				// A focused radio would otherwise move its own selection, which saves an answer.
+				event.preventDefault();
+				goTo(index + (event.key === "ArrowLeft" ? -1 : 1));
+				return;
+			}
+			const option = /^[1-9]$/u.test(event.key) ? current.item.options[Number(event.key) - 1] : undefined;
+			if (option !== undefined) {
+				event.preventDefault();
+				choose(current.item.id, option.value);
+			}
+		};
+	});
 
 	if (loadError !== null) {
 		return (
@@ -194,8 +310,9 @@ export function DecisionPageView({slug}: {slug: string}) {
 		return <main className="decisions-page" aria-busy="true" />;
 	}
 
-	const states = Object.values(items);
-	const answered = states.filter((state) => state.answered).length;
+	const currentState = current === undefined ? undefined : items[current.item.id];
+	const unanswered = cards.flatMap((card, position) => (items[card.item.id]?.answered === true ? [] : [position]));
+	const answered = cards.length - unanswered.length;
 
 	return (
 		<main className="decisions-page">
@@ -204,42 +321,96 @@ export function DecisionPageView({slug}: {slug: string}) {
 					<h1>{page.title}</h1>
 					{page.intro === undefined ? null : <p className="decisions-intro">{page.intro}</p>}
 				</header>
-				{page.groups.map((group) => (
-					<section className="decisions-group" key={group.heading}>
+				{unanswered.length === 0 ? (
+					<p className="decisions-all-answered">All {cards.length} answered. Submit when ready.</p>
+				) : (
+					<nav aria-label="Unanswered cards" className="decisions-jump">
+						<span className="decisions-jump-label">Unanswered</span>
+						{unanswered.map((position) => (
+							<button
+								aria-current={position === index}
+								key={position}
+								onClick={() => {
+									goTo(position);
+								}}
+								title={cards[position]?.item.title}
+								type="button"
+							>
+								{position + 1}
+							</button>
+						))}
+					</nav>
+				)}
+				{current === undefined || currentState === undefined ? null : (
+					<section className="decisions-group" key={current.item.id}>
+						<p className="decisions-position">
+							Card {index + 1} of {cards.length}
+						</p>
 						<h2 className="decisions-group-heading">
-							{group.link === undefined ? (
-								group.heading
+							{current.group.link === undefined ? (
+								current.group.heading
 							) : (
-								<a href={group.link} rel="noopener noreferrer" target="_blank">
-									{group.heading}
+								<a href={current.group.link} rel="noopener noreferrer" target="_blank">
+									{current.group.heading}
 								</a>
 							)}
 						</h2>
-						{group.items.map((item) => {
-							// Every item gets its state in the same commit as the page, so this is never undefined.
-							const state = items[item.id];
-							return state === undefined ? null : (
-								<DecisionCard
-									item={item}
-									key={item.id}
-									onChoose={(choice) => {
-										choose(item.id, choice);
-									}}
-									onNote={(note) => {
-										editNote(item.id, note);
-									}}
-									state={state}
-								/>
-							);
-						})}
+						<DecisionCard
+							item={current.item}
+							onChoose={(choice) => {
+								choose(current.item.id, choice);
+							}}
+							onNote={(note) => {
+								editNote(current.item.id, note);
+							}}
+							state={currentState}
+						/>
+						<div className="decisions-nav">
+							<button
+								className="decisions-nav-button"
+								disabled={index === 0}
+								onClick={() => {
+									goTo(index - 1);
+								}}
+								type="button"
+							>
+								Back
+							</button>
+							<button
+								className="decisions-nav-button decisions-note-next"
+								onClick={() => {
+									saveNoteAndNext(current.item.id);
+								}}
+								type="button"
+							>
+								Save note &amp; next
+							</button>
+							<button
+								className="decisions-nav-button"
+								disabled={index === cards.length - 1}
+								onClick={() => {
+									goTo(index + 1);
+								}}
+								type="button"
+							>
+								Next
+							</button>
+						</div>
 					</section>
-				))}
+				)}
 			</div>
 			<footer className="decisions-footer">
 				<span className="decisions-progress">
-					{answered} of {states.length} answered
+					{answered} of {cards.length} answered
 				</span>
 				<span aria-live="polite" className="decisions-submit-state">
+					{lastSave === null ? null : (
+						<span className="decisions-last-save" data-error={lastSave.error !== null}>
+							{lastSave.error === null
+								? `Saved card ${lastSave.card}`
+								: `Card ${lastSave.card} not saved: ${lastSave.error}`}
+						</span>
+					)}
 					{submit.kind === "submitted" ? (
 						<span className="decisions-submitted">{"Submitted. Tell Claude you're done."}</span>
 					) : null}
@@ -247,6 +418,7 @@ export function DecisionPageView({slug}: {slug: string}) {
 				</span>
 				<button
 					className="decisions-submit"
+					data-ready={unanswered.length === 0}
 					disabled={submit.kind === "submitting"}
 					onClick={() => {
 						void submitPage();
@@ -297,7 +469,7 @@ function DecisionCard({item, state, onChoose, onNote}: DecisionCardProps) {
 				</ul>
 			) : null}
 			<div className="decisions-options">
-				{item.options.map((option) => (
+				{item.options.map((option, index) => (
 					<label className="decisions-option" key={option.value}>
 						<input
 							checked={state.choice === option.value}
@@ -309,6 +481,11 @@ function DecisionCard({item, state, onChoose, onNote}: DecisionCardProps) {
 							value={option.value}
 						/>
 						<span className="decisions-option-text">
+							{index < 9 ? (
+								<kbd aria-hidden="true" className="decisions-option-key">
+									{index + 1}
+								</kbd>
+							) : null}
 							<span className="decisions-option-label">{option.label}</span>
 							{item.default === option.value ? (
 								<span className="decisions-suggested">suggested</span>
@@ -321,7 +498,7 @@ function DecisionCard({item, state, onChoose, onNote}: DecisionCardProps) {
 				))}
 			</div>
 			<label className="decisions-note-label" htmlFor={noteId}>
-				Other / note
+				Other / note (type it before picking an option to save both)
 			</label>
 			<textarea
 				className="decisions-note"

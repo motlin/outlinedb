@@ -21,7 +21,7 @@ Every UI a review depends on must have checked-in source, a reproducible generat
 
 ### Decision page
 
-The local web app's generic decision page is the long-walk surface. It renders any staged list of questions at `/decisions/<slug>` and saves each answer as the user makes it. Use it in this order:
+The local web app's generic decision page is the long-walk surface. It renders any staged list of questions at `/decisions/<slug>` one card at a time ("Card 7 of 55"), saves each answer as the user makes it, advances to the next unanswered card, and resumes at the first unanswered card on reload. Because every answer is on disk the moment it is made, `answers <slug>` shows partial progress if the user is interrupted before submitting. Use it in this order:
 
 - Stage `.llm/gtd/review/decisions/<slug>.json` (create the directory first). Shape: `{"slug", "title", "intro"?, "groups": [{"heading", "link"?, "items": [{"id", "title", "body": ["plain text line"], "links": [{"label", "href"}], "options": [{"value", "label", "description"?}], "default": "<option value>" | null}]}]}`. The `slug` must match the file name and `[a-z0-9-]+`; item ids must be unique and must not be `submittedAt`. Body lines render as plain text, never HTML. `default` only marks an option as suggested; it is not an answer.
 - Get the URL from `node plugins/gtd/scripts/decision-page.mts url <slug>` and put it inside the `AskUserQuestion` that tells the user to open the page and answer.

@@ -275,3 +275,112 @@
 	outline: 2px solid var(--accent);
 	outline-offset: 2px;
 }
+
+/* One card at a time: position, jump strip, and the Back / Next row. */
+
+.decisions-position {
+	font-family: "IBM Plex Mono", ui-monospace, monospace;
+	font-size: 12.5px;
+	font-variant-numeric: tabular-nums;
+	color: var(--muted);
+	margin: 0 0 4px;
+}
+
+.decisions-jump {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px;
+	margin: 0 0 18px;
+}
+
+.decisions-jump-label {
+	font-size: 12.5px;
+	color: var(--muted);
+	margin-right: 4px;
+}
+
+.decisions-jump button {
+	min-width: 32px;
+	min-height: 32px;
+	padding: 2px 6px;
+	font:
+		600 12.5px/1 "IBM Plex Mono",
+		ui-monospace,
+		monospace;
+	font-variant-numeric: tabular-nums;
+	color: var(--ink-2);
+	background: var(--surface);
+	border: 1px solid var(--line-strong);
+	border-radius: 6px;
+	cursor: pointer;
+}
+
+.decisions-jump button[aria-current="true"] {
+	color: var(--paper);
+	background: var(--accent);
+	border-color: var(--accent);
+}
+
+.decisions-all-answered {
+	margin: 0 0 18px;
+	padding: 10px 12px;
+	border: 1px solid var(--saved);
+	border-radius: 6px;
+	color: var(--saved);
+	font-weight: 600;
+}
+
+.decisions-option-key {
+	font:
+		600 11px/1.4 "IBM Plex Mono",
+		ui-monospace,
+		monospace;
+	color: var(--muted);
+	border: 1px solid var(--line-strong);
+	border-radius: 4px;
+	padding: 0 5px;
+}
+
+.decisions-nav {
+	display: flex;
+	gap: 8px;
+	margin-top: 4px;
+}
+
+.decisions-nav-button {
+	flex: 1;
+	min-height: 44px;
+	font: inherit;
+	font-weight: 600;
+	color: var(--ink);
+	background: var(--surface);
+	border: 1px solid var(--line-strong);
+	border-radius: 6px;
+	cursor: pointer;
+}
+
+.decisions-nav-button:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
+.decisions-nav-button:focus-visible,
+.decisions-jump button:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+.decisions-last-save {
+	color: var(--muted);
+	margin-right: 10px;
+}
+
+.decisions-last-save[data-error="true"] {
+	color: var(--error);
+}
+
+.decisions-submit[data-ready="true"] {
+	background: var(--accent);
+	border-color: var(--accent);
+}
