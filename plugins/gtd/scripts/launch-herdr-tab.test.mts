@@ -121,9 +121,15 @@ test("runWhenReady waits for the prompt before running", async () => {
 	assert.deepStrictEqual(calls, ["sleep", "sleep", "run echo hi", "sleep"]);
 });
 
+test("runWhenReady leaves a slow command alone while its first output is still pending", async () => {
+	const {io, calls} = fakePane(["~ %", "~ % sweep", "~ % sweep", "~ % sweep", "~ % sweep\nPassword:"]);
+	await runWhenReady(io, "sweep");
+	assert.deepStrictEqual(calls, ["run sweep", "sleep", "sleep", "sleep", "sleep"]);
+});
+
 test("runWhenReady presses Enter once when the command is stuck at the prompt", async () => {
-	const {io, calls} = fakePane(["~ %", "~ % echo hi", "~ % echo hi\nhi\n~ %"]);
-	await runWhenReady(io, "echo hi");
+	const {io, calls} = fakePane(["~ %", "~ % echo hi", "~ % echo hi", "~ % echo hi\nhi\n~ %"]);
+	await runWhenReady(io, "echo hi", {startAttempts: 2});
 	assert.deepStrictEqual(
 		calls.filter((c) => c === "enter"),
 		["enter"],

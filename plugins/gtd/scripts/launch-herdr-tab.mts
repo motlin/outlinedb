@@ -131,14 +131,33 @@ export function commandIsStuckAtPrompt(text: string, command: string): boolean {
 	return line.endsWith(command) && line.length > command.length;
 }
 
+/** Poll until the command leaves the prompt line; false when it is still there after every attempt. */
+async function waitForStart(io: PaneIo, command: string, attempts: number, intervalMs: number): Promise<boolean> {
+	for (let attempt = 0; attempt < attempts; attempt += 1) {
+		await io.sleep(intervalMs);
+		if (!commandIsStuckAtPrompt(io.read(), command)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 /**
  * Wait for the shell prompt, run the command, verify it started, and press Enter once more
  * if the text is still sitting at the prompt.
+ *
+ * A command that runs but prints nothing yet looks identical to one typed and never executed,
+ * so the check polls for several seconds before pressing Enter: an Enter sent into a running
+ * command lands on whatever it reads next, such as a sudo password prompt.
  */
 export async function runWhenReady(
 	io: PaneIo,
 	command: string,
-	{promptAttempts = 50, intervalMs = 200}: {promptAttempts?: number; intervalMs?: number} = {},
+	{
+		promptAttempts = 50,
+		startAttempts = 15,
+		intervalMs = 200,
+	}: {promptAttempts?: number; startAttempts?: number; intervalMs?: number} = {},
 ): Promise<void> {
 	let ready = false;
 	for (let attempt = 0; attempt < promptAttempts && !ready; attempt += 1) {
@@ -152,13 +171,11 @@ export async function runWhenReady(
 		throw new Error("shell prompt never appeared in the new pane");
 	}
 	io.run(command);
-	await io.sleep(intervalMs);
-	if (!commandIsStuckAtPrompt(io.read(), command)) {
+	if (await waitForStart(io, command, startAttempts, intervalMs)) {
 		return;
 	}
 	io.pressEnter();
-	await io.sleep(intervalMs);
-	if (commandIsStuckAtPrompt(io.read(), command)) {
+	if (!(await waitForStart(io, command, startAttempts, intervalMs))) {
 		throw new Error("command did not start after retry");
 	}
 }
