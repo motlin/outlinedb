@@ -64,6 +64,7 @@ import {usePaneClickRouting} from "./hooks/use-pane-click-routing.js";
 import {useSearchEscape} from "./hooks/use-search-escape.js";
 import {usePreferences} from "./hooks/use-preferences.js";
 import {useLatestColorSync} from "./latest-color.js";
+import {useSearchForChangesAfterSync} from "./search-for-changes-after.js";
 import {useTagColors} from "./hooks/use-tag-colors.js";
 import {useCustomTree} from "./hooks/use-custom-tree.js";
 import {useShowKeyboardShortcutsSync, useThemeSync} from "./hooks/use-right-bar-sync.js";
@@ -376,6 +377,12 @@ function LatestColorSync() {
 	return null;
 }
 
+/** Starts the account's change tracking (`searchForChangesAfter`) on load, as upstream does. */
+function SearchForChangesAfterSync() {
+	useSearchForChangesAfterSync();
+	return null;
+}
+
 /** Keeps show/hide completed in step with the account's `show_completed` setting. */
 function ShowCompletedSync() {
 	useShowCompletedSync();
@@ -413,6 +420,7 @@ export function App() {
 				<WindowBlurredClass />
 				<ShowCompletedSync />
 				<LatestColorSync />
+				<SearchForChangesAfterSync />
 				<FeatureFlagsSync />
 				<ShowKeyboardShortcutsSync />
 				<ExpansionSync />

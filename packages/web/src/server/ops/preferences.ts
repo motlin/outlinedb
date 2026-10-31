@@ -62,6 +62,8 @@ const PreferencesPatchSchema = z
 		unsubscribeFromCommentsEmails: z.boolean(),
 		weeklyReportOn: z.boolean(),
 		latestColor: LatestColorSchema.nullable(),
+		/** When the account's change tracking started (upstream's `searchForChangesAfter`), as an ISO date. */
+		searchForChangesAfter: z.iso.datetime().nullable(),
 	})
 	.partial()
 	.strict();
@@ -90,6 +92,24 @@ const PATHS: Record<(typeof KEYS)[number], string[]> = {
 
 /** Upstream's `WF.CoreKv` `latestColor`, kept whole in root metadata. */
 const LATEST_COLOR_PATH = ["latestColor"];
+
+/** Upstream's `WF.CoreKv` `searchForChangesAfter`: a client timestamp (whole seconds since the join date). */
+const SEARCH_FOR_CHANGES_AFTER_PATH = ["searchForChangesAfter"];
+
+/** A stored client timestamp as an ISO date, or null when it is not a number. */
+async function searchForChangesAfterFrom(adapter: WorkflowyInternalAdapter, raw: unknown): Promise<string | null> {
+	if (typeof raw !== "number") {
+		return null;
+	}
+	const {joinedAt} = await adapter.getAccount();
+	return new Date(joinedAt.getTime() + raw * 1000).toISOString();
+}
+
+/** Upstream's `getClientTimestampForTimestamp`: whole seconds from the join date to `iso`. */
+async function searchForChangesAfterTo(adapter: WorkflowyInternalAdapter, iso: string): Promise<number> {
+	const {joinedAt} = await adapter.getAccount();
+	return Math.floor((Date.parse(iso) - joinedAt.getTime()) / 1000);
+}
 
 /** Flag preferences kept in upstream's account settings rather than root metadata. */
 const SETTINGS = {
@@ -132,9 +152,10 @@ function asString(value: unknown): string | null {
 
 /** Read the preferences, treating missing or mistyped values as null (false for the flag). */
 async function readPreferences(adapter: WorkflowyInternalAdapter): Promise<Preferences> {
-	const [rootValues, latestColor, flagValues, theme, username, email] = await Promise.all([
+	const [rootValues, latestColor, searchForChangesAfter, flagValues, theme, username, email] = await Promise.all([
 		Promise.all(KEYS.map(async (key) => adapter.getRootMeta(PATHS[key]))),
 		adapter.getRootMeta(LATEST_COLOR_PATH),
+		adapter.getRootMeta(SEARCH_FOR_CHANGES_AFTER_PATH).then(async (raw) => searchForChangesAfterFrom(adapter, raw)),
 		Promise.all(FLAG_KEYS.map(async (key) => adapter.getSetting(SETTINGS[key]))),
 		adapter.getSetting(STRING_SETTINGS.theme),
 		adapter.getSetting("username"),
@@ -152,6 +173,7 @@ async function readPreferences(adapter: WorkflowyInternalAdapter): Promise<Prefe
 		notesRootId: asString(root.notesRootId),
 		weeklyReportOn: root.weeklyReportOn === true,
 		latestColor: latestColorFrom(latestColor),
+		searchForChangesAfter,
 		showCompleted: flag("showCompleted"),
 		showKeyboardShortcuts: flag("showKeyboardShortcuts"),
 		sameColorForLinks: flag("sameColorForLinks"),
@@ -200,6 +222,15 @@ export const preferencesPatch = defineOp({
 			changes.push({
 				path: LATEST_COLOR_PATH,
 				value: patch.latestColor === null ? undefined : latestColorTo(patch.latestColor),
+			});
+		}
+		if (patch.searchForChangesAfter !== undefined) {
+			changes.push({
+				path: SEARCH_FOR_CHANGES_AFTER_PATH,
+				value:
+					patch.searchForChangesAfter === null
+						? undefined
+						: await searchForChangesAfterTo(adapter, patch.searchForChangesAfter),
 			});
 		}
 		if (changes.length > 0) {

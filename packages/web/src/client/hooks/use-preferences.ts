@@ -47,6 +47,7 @@ export const EMPTY_PREFERENCES: Preferences = {
 	unsubscribeFromCommentsEmails: false,
 	weeklyReportOn: false,
 	latestColor: null,
+	searchForChangesAfter: null,
 	account: null,
 };
 

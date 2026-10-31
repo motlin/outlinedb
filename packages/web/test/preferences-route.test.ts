@@ -96,6 +96,7 @@ const EMPTY = {
 	unsubscribeFromCommentsEmails: false,
 	weeklyReportOn: false,
 	latestColor: null,
+	searchForChangesAfter: null,
 	account: null,
 };
 
@@ -220,12 +221,22 @@ describe("GET /api/v1/preferences", () => {
 		});
 	});
 
+	it("answers searchForChangesAfter as the join date plus the stored client-timestamp seconds", async () => {
+		const {request} = setup({searchForChangesAfter: 100});
+
+		await expect(request("GET", "/preferences")).resolves.toStrictEqual({
+			status: 200,
+			body: {...EMPTY, searchForChangesAfter: "2017-07-14T02:41:40.000Z"},
+		});
+	});
+
 	it("answers nulls and false for missing or mistyped values", async () => {
 		const {request} = setup({
 			dateFormat: 7,
 			weekStartDay: "1",
 			slash: "yes",
 			latestColor: {attribute: 13, value: 2},
+			searchForChangesAfter: "100",
 		});
 
 		await expect(request("GET", "/preferences")).resolves.toStrictEqual({status: 200, body: EMPTY});
@@ -360,6 +371,33 @@ describe("PATCH /api/v1/preferences", () => {
 		const {adapter, request} = setup({});
 
 		const response = await request("PATCH", "/preferences", {latestColor: {kind: "text", color: "magenta"}});
+
+		expect({status: response.status, writes: adapter.setRootMetaValues.mock.calls}).toStrictEqual({
+			status: 400,
+			writes: [],
+		});
+	});
+
+	it("writes searchForChangesAfter as seconds since the join date and removes it with null", async () => {
+		const {adapter, request} = setup({});
+
+		const written = await request("PATCH", "/preferences", {searchForChangesAfter: "2017-07-14T02:41:40.900Z"});
+		const removed = await request("PATCH", "/preferences", {searchForChangesAfter: null});
+
+		expect({written, removed, metadata: adapter.setRootMetaValues.mock.calls}).toStrictEqual({
+			written: {status: 200, body: {...EMPTY, searchForChangesAfter: "2017-07-14T02:41:40.000Z"}},
+			removed: {status: 200, body: EMPTY},
+			metadata: [
+				[[{path: ["searchForChangesAfter"], value: 100}]],
+				[[{path: ["searchForChangesAfter"], value: undefined}]],
+			],
+		});
+	});
+
+	it("rejects a searchForChangesAfter that is not an ISO date", async () => {
+		const {adapter, request} = setup({});
+
+		const response = await request("PATCH", "/preferences", {searchForChangesAfter: "yesterday"});
 
 		expect({status: response.status, writes: adapter.setRootMetaValues.mock.calls}).toStrictEqual({
 			status: 400,

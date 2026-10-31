@@ -4,6 +4,7 @@ import {useState} from "react";
 import {useSearchParams} from "react-router-dom";
 import {diffChars} from "diff";
 import type {ChangesResponse} from "../../node-types.js";
+import {usePreferences} from "../hooks/use-preferences.js";
 import {readJson} from "../read-json.js";
 
 type NodeChange = ChangesResponse["changes"][number];
@@ -189,6 +190,9 @@ export function ChangesView() {
 		setSearchParams({since: sinceInput});
 	};
 
+	/** When the account's change tracking started (upstream's `searchForChangesAfter`). */
+	const updatesStart = usePreferences().preferences.searchForChangesAfter;
+
 	return (
 		<div className="changes-page">
 			<div className="changes-header">
@@ -205,6 +209,18 @@ export function ChangesView() {
 						value={sinceInput}
 					/>
 					<button type="submit">Update</button>
+					{updatesStart !== null && (
+						<button
+							onClick={() => {
+								setSinceInput(updatesStart);
+								setSearchParams({since: updatesStart});
+							}}
+							title={`Changes since ${new Date(updatesStart).toLocaleString()}, when change tracking started`}
+							type="button"
+						>
+							Since updates start
+						</button>
+					)}
 				</form>
 			</div>
 
