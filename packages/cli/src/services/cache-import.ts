@@ -3,6 +3,7 @@ import {backupImports, config, nodeContent, nodeMetadata} from "@workflowy/share
 import type {NodeContentType, NodeMetadataType, AppDatabase} from "@workflowy/shared/db";
 import {
 	applyRows,
+	calendarRows,
 	collectItemRelationships,
 	emptyItemRelationships,
 	endOrphanedParts,
@@ -438,23 +439,8 @@ export async function importBackup(
 		isDeleted: number | null;
 	}[] = [];
 	const changesMetadataRecords: {nodeId: string; ctBy: number}[] = [];
-	const calendarMetadataRecords: {
-		nodeId: string;
-		root: number | null;
-		level: string | null;
-		value: string | null;
-		dateId: number | null;
-		timestamp: number | null;
-		foundDates: number | null;
-		dayPrefix: number | null;
-	}[] = [];
-	const calendarLevelsRecords: {
-		nodeId: string;
-		day: number | null;
-		week: number | null;
-		month: number | null;
-		year: number | null;
-	}[] = [];
+	const calendarMetadataRecords: NormalizedCalendarMetadataRow[] = [];
+	const calendarLevelsRecords: NormalizedCalendarLevelsRow[] = [];
 
 	let validationErrors = 0;
 
@@ -506,25 +492,10 @@ export async function importBackup(
 			}
 
 			if (validatedNode.metadata.calendar) {
-				const cal = validatedNode.metadata.calendar;
-				calendarMetadataRecords.push({
-					nodeId: validatedNode.id,
-					root: cal.root ? 1 : cal.root === false ? 0 : null,
-					level: cal.level ?? null,
-					value: cal.value ?? null,
-					dateId: cal.dateId ?? null,
-					timestamp: cal.timestamp ?? null,
-					foundDates: cal.found_dates ? 1 : cal.found_dates === false ? 0 : null,
-					dayPrefix: optionalBooleanToInt(cal.day_prefix),
-				});
-				if (cal.levels) {
-					calendarLevelsRecords.push({
-						nodeId: validatedNode.id,
-						day: optionalBooleanToInt(cal.levels.day),
-						week: optionalBooleanToInt(cal.levels.week),
-						month: optionalBooleanToInt(cal.levels.month),
-						year: optionalBooleanToInt(cal.levels.year),
-					});
+				const rows = calendarRows(validatedNode.id, validatedNode.metadata.calendar);
+				calendarMetadataRecords.push(rows.calendarMetadata);
+				if (rows.calendarLevels !== undefined) {
+					calendarLevelsRecords.push(rows.calendarLevels);
 				}
 			}
 		} catch (error) {
@@ -808,8 +779,6 @@ export async function importBackup(
 		completedAt: timestampToDate(node.completedAt),
 		layoutMode: node.layoutMode,
 	}));
-	const calendarMetadataRows: NormalizedCalendarMetadataRow[] = calendarMetadataRecords;
-	const calendarLevelsRows: NormalizedCalendarLevelsRow[] = calendarLevelsRecords;
 	const aiMetadataRows: NormalizedAiMetadataRow[] = aiMetadataRecords;
 	const s3FileRows: NormalizedS3FileRow[] = s3FileRecords;
 	const changesMetadataRows: NormalizedChangesMetadataRow[] = changesMetadataRecords;
@@ -832,8 +801,8 @@ export async function importBackup(
 				{
 					nodeContent: nodeContentRows,
 					nodeMetadata: nodeMetadataRows,
-					calendarMetadata: calendarMetadataRows,
-					calendarLevels: calendarLevelsRows,
+					calendarMetadata: calendarMetadataRecords,
+					calendarLevels: calendarLevelsRecords,
 					aiMetadata: aiMetadataRows,
 					s3Files: s3FileRows,
 					changesMetadata: changesMetadataRows,
@@ -887,12 +856,4 @@ export async function importBackup(
 		localWatermark,
 		incomingWatermark,
 	};
-}
-
-// Record lookups on the backup schema type as `boolean`, but absent keys must stay null.
-function optionalBooleanToInt(value: boolean | undefined): 0 | 1 | null {
-	if (value === undefined) {
-		return null;
-	}
-	return value ? 1 : 0;
 }

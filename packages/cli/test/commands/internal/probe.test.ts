@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {calendarNodeId} from "@workflowy/shared/internal";
-import {nodeInternalMetadata} from "@workflowy/shared/db";
+import {storeInternalMetadata} from "@workflowy/shared/cache";
 import {createDatabase} from "../../../src/db/index.js";
 import Probe, {SANDBOX_ID, assertUnderSandbox, expectedMove, typeShape} from "../../../src/commands/internal/probe.js";
 
@@ -947,17 +947,16 @@ describe("internal probe calendar-ids", () => {
 			[calendarNodeId("k", "month", 20_261_000), "month", 20_261_000],
 			[`${OTHER_ID}3`, "year", 20_260_000],
 		];
-		createDatabase()
-			.insert(nodeInternalMetadata)
-			.values([
-				...rows.map(([nodeId, level, dateId]) => ({
+		storeInternalMetadata(
+			createDatabase(),
+			new Map<string, Record<string, unknown>>([
+				...rows.map(([nodeId, level, dateId]): [string, Record<string, unknown>] => [
 					nodeId,
-					metadataJson: JSON.stringify({calendar: {level, value: "x", dateId, timestamp: 0}}),
-					fetchedAt: 0,
-				})),
-				{nodeId: `${OTHER_ID}4`, metadataJson: JSON.stringify({layoutMode: "board"}), fetchedAt: 0},
-			])
-			.run();
+					{calendar: {level, value: "x", dateId, timestamp: 0}},
+				]),
+				[`${OTHER_ID}4`, {layoutMode: "board"}],
+			]),
+		);
 	}
 
 	function userDataFetch(recorded: Recorded[], user: Record<string, unknown>) {
@@ -993,7 +992,7 @@ describe("internal probe calendar-ids", () => {
 				"",
 				"- `entropyKey`: present in `/get_user_data/` `user` (1 chars, value not recorded)",
 				"- Formula: ``uuidv5(`${entropyKey}-calendar-${level}-${dateId}`, 3e19dffe-1c3b-4d76-8e57-0de20e69bdae)``",
-				"- Sample: the 5 most recent cached day nodes by `dateId` (`node_internal_metadata`, read only)",
+				"- Sample: the 5 most recent cached day nodes by `dateId` (`calendar_metadata`, read only)",
 				"  - `20261013`: MATCH",
 				"  - `20261012`: MATCH",
 				"  - `20261009`: MISMATCH",

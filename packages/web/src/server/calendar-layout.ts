@@ -6,8 +6,9 @@
  * read in full, since dated nodes are searched for inside them.
  */
 
-import {eq} from "drizzle-orm";
-import {nodeInternalMetadata} from "@workflowy/shared/db";
+import {and, eq} from "drizzle-orm";
+import {calendarLevels} from "@workflowy/shared/db";
+import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
 import type {
 	CalendarLayoutLevels,
 	CalendarLayoutSnapshot,
@@ -15,23 +16,26 @@ import type {
 	WorkflowyInternalAdapter,
 } from "@workflowy/shared/internal";
 import type {Node} from "@workflowy/shared/types";
-import {z} from "zod";
 import {findTaggedCalendarRoot, loadCalendarInfo} from "./calendar-day.js";
 import type {CalendarDayDeps} from "./calendar-day.js";
 import type {ServerContext} from "./context.js";
 
-const RootLevelsSchema = z.object({
-	calendar: z.object({levels: z.record(z.string(), z.boolean()).optional()}).loose(),
-});
-
 function rootLevels(deps: Pick<CalendarDayDeps, "db">, rootId: string): CalendarLayoutLevels | undefined {
 	const row = deps.db
-		.select({metadataJson: nodeInternalMetadata.metadataJson})
-		.from(nodeInternalMetadata)
-		.where(eq(nodeInternalMetadata.nodeId, rootId))
+		.select()
+		.from(calendarLevels)
+		.where(and(eq(calendarLevels.nodeId, rootId), eq(calendarLevels.systemTo, FAR_FUTURE_DATE)))
 		.get();
-	const parsed = row === undefined ? undefined : RootLevelsSchema.safeParse(JSON.parse(row.metadataJson));
-	return parsed?.success === true ? parsed.data.calendar.levels : undefined;
+	if (row === undefined) {
+		return undefined;
+	}
+	const levels: CalendarLayoutLevels = {};
+	for (const level of ["day", "week", "month", "year"] as const) {
+		if (row[level] !== null) {
+			levels[level] = row[level] === 1;
+		}
+	}
+	return levels;
 }
 
 /**

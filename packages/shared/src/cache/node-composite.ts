@@ -16,8 +16,9 @@ import {
 	mirrors,
 	nodeContent,
 	nodeEmbeddings,
-	nodeInternalMetadata,
+	nodeDisplayMetadata,
 	nodeMetadata,
+	nodeTableCellSizes,
 	nodeTags,
 	referencesRoots,
 	s3Files,
@@ -63,6 +64,8 @@ export const NODE_COMPOSITE_PARTS: readonly CompositePart[] = [
 	{table: nodeMetadata, owner: nodeMetadata.nodeId, references: []},
 	{table: calendarMetadata, owner: calendarMetadata.nodeId, references: []},
 	{table: calendarLevels, owner: calendarLevels.nodeId, references: []},
+	{table: nodeDisplayMetadata, owner: nodeDisplayMetadata.nodeId, references: []},
+	{table: nodeTableCellSizes, owner: nodeTableCellSizes.nodeId, references: [nodeTableCellSizes.cellId]},
 	{table: nodeEmbeddings, owner: nodeEmbeddings.nodeId, references: []},
 	{table: aiMetadata, owner: aiMetadata.nodeId, references: []},
 	{table: s3Files, owner: s3Files.nodeId, references: []},
@@ -76,7 +79,6 @@ export const NODE_COMPOSITE_PARTS: readonly CompositePart[] = [
 		references: [mirrors.originalId],
 		endsWithReferences: [mirrors.originalId],
 	},
-	{table: nodeInternalMetadata, owner: nodeInternalMetadata.nodeId, references: [], hardDelete: true},
 	// Derived from the live content and rewritten by every unit of work; ending the node drops its tags too.
 	{table: nodeTags, owner: nodeTags.nodeId, references: [], hardDelete: true},
 ];

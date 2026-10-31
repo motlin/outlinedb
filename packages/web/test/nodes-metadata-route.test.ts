@@ -25,7 +25,7 @@ vi.mock("@workflowy/shared/cache", async (importOriginal) => {
 	};
 });
 
-const {CacheService} = await import("@workflowy/shared/cache");
+const {CacheService, storeInternalMetadata} = await import("@workflowy/shared/cache");
 
 const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 const NOT_CONFIGURED =
@@ -88,12 +88,10 @@ function setup(configured: boolean, rootLayoutMode?: string) {
 	migrate(db, {migrationsFolder});
 	const cacheService = new CacheService(db);
 	cacheService.insertNode(apiNode("n1"), null);
-	const writeMetadata = (id: string, metadata: Record<string, unknown>) =>
-		sqlite
-			.prepare(
-				"INSERT INTO node_internal_metadata (node_id, metadata_json, fetched_at) VALUES (?, ?, 0) ON CONFLICT(node_id) DO UPDATE SET metadata_json = excluded.metadata_json",
-			)
-			.run(id, JSON.stringify(metadata));
+	const writeMetadata = (id: string, metadata: Record<string, unknown>) => {
+		const layoutMode = cacheService.getNode(id)?.layoutMode;
+		storeInternalMetadata(db, new Map([[id, layoutMode == null ? metadata : {...metadata, layoutMode}]]));
+	};
 	const adapter: FakeAdapter = {
 		setNodeMetaValues: vi.fn<WorkflowyInternalAdapter["setNodeMetaValues"]>(async (id, changes) => {
 			if (id !== "home") {

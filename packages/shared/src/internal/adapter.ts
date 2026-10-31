@@ -4,14 +4,14 @@ import {z} from "zod";
 import type {CreateMirrorResult} from "../api/workflowy-client.js";
 import type {InternalSession, VisibleFeature, WorkflowyInternalClient} from "../api/workflowy-internal-client.js";
 import type {WorkflowyWriteThroughClient} from "../cache/workflowy-write-through-client.js";
-import {keptInternalMetadata} from "../cache/importer.js";
+import {keptInternalMetadata, readNodeInternalMetadata, storeInternalMetadata} from "../cache/internal-metadata.js";
 import {collectItemRelationships, emptyItemRelationships} from "../cache/item-relationships.js";
 import {runUnitOfWork} from "../cache/node-composite.js";
 import {applyRelationshipOps, isReplayable} from "../cache/relationship-log.js";
 import {applyExpansionDelta, expansionVersion, readExpansion} from "../cache/expansion-store.js";
 import {advanceTreeTxId, readTreeTxId} from "../cache/tree-transaction.js";
 import type {ItemRelationships} from "../cache/item-relationships.js";
-import {accountState, localSettings, mirrors as mirrorsTable, nodeContent, nodeInternalMetadata} from "../db/schema.js";
+import {accountState, calendarMetadata, localSettings, mirrors as mirrorsTable, nodeContent} from "../db/schema.js";
 import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 import {HOME_TARGET} from "../types/targets.js";
 import {hasInternalLink, internalLinkShortIds} from "../workflowy/internal-links.js";
@@ -611,11 +611,11 @@ export class WorkflowyInternalAdapter {
 		if (id === undefined) {
 			throw new Error("bulk_create produced no id");
 		}
+		await tree.refreshChildren([parent]);
 		const kept = keptInternalMetadata(input.metadata);
 		if (kept !== undefined) {
-			this.writeNodeMetadata(id, kept);
+			this.writeNodesMetadata(new Map([[id, kept]]));
 		}
-		await tree.refreshChildren([parent]);
 		if (hasInternalLink(`${input.name} ${input.note ?? ""}`)) {
 			await this.syncBacklinks([id]);
 		}
@@ -649,20 +649,22 @@ export class WorkflowyInternalAdapter {
 		});
 		const linkOps = await this.mirrorLinkOps(trees, session.dateJoinedSec);
 		await this.pusher.pushAndPoll({ops: [op, ...linkOps]});
-		const writeKept = (nodes: NewTree[]) => {
-			for (const node of nodes) {
-				const kept = keptInternalMetadata(node.metadata);
-				if (node.id !== undefined && kept !== undefined) {
-					this.writeNodeMetadata(node.id, kept);
-				}
-				writeKept(node.children ?? []);
-			}
-		};
-		writeKept(trees);
 		await tree.refreshChildren(
 			[parent],
 			trees.flatMap((node) => (node.id !== undefined && (node.children?.length ?? 0) > 0 ? [node.id] : [])),
 		);
+		const kept = new Map<string, Record<string, unknown>>();
+		const collectKept = (nodes: NewTree[]) => {
+			for (const node of nodes) {
+				const metadata = keptInternalMetadata(node.metadata);
+				if (node.id !== undefined && metadata !== undefined) {
+					kept.set(node.id, metadata);
+				}
+				collectKept(node.children ?? []);
+			}
+		};
+		collectKept(trees);
+		this.writeNodesMetadata(kept);
 		tree.recordRelationships(createdRelationships(trees));
 		return {ids};
 	}
@@ -1129,11 +1131,9 @@ export class WorkflowyInternalAdapter {
 			generateId: this.generateId,
 		});
 		await this.pusher.pushAndPoll({ops: [op]});
-		for (const node of chain) {
-			this.writeNodeMetadata(node.id, keptInternalMetadata(node.metadata));
-		}
 		const parents = childId === undefined ? chain.slice(0, -1) : chain;
 		await this.tree().refreshChain([parentId, ...parents.map((node) => node.id)]);
+		this.writeNodesMetadata(new Map(chain.map((node) => [node.id, keptInternalMetadata(node.metadata)])));
 	}
 
 	/**
@@ -1356,11 +1356,13 @@ export class WorkflowyInternalAdapter {
 	private async refreshLayout(touchedParents: string[], metadata: ReadonlyMap<string, Metadata>): Promise<void> {
 		// Parents come first-touched first, so a created level node is cached before the days moved into it.
 		await this.tree().refreshChildren(touchedParents);
-		for (const [id, value] of metadata) {
-			if (this.isCached(id)) {
-				this.writeNodeMetadata(id, keptInternalMetadata(value));
-			}
-		}
+		this.writeNodesMetadata(
+			new Map(
+				[...metadata].flatMap(([id, value]) =>
+					this.isCached(id) ? [[id, keptInternalMetadata(value)] as const] : [],
+				),
+			),
+		);
 	}
 
 	private storeAccountValue(key: string, value: unknown): void {
@@ -1374,24 +1376,23 @@ export class WorkflowyInternalAdapter {
 	}
 
 	private findCalendarRoot(): {id: string; levels: Record<string, boolean> | undefined} {
-		const rows = this.db
-			.select({nodeId: nodeInternalMetadata.nodeId, metadataJson: nodeInternalMetadata.metadataJson})
-			.from(nodeInternalMetadata)
-			.innerJoin(nodeContent, eq(nodeContent.id, nodeInternalMetadata.nodeId))
+		const row = this.db
+			.select({nodeId: calendarMetadata.nodeId})
+			.from(calendarMetadata)
+			.innerJoin(nodeContent, eq(nodeContent.id, calendarMetadata.nodeId))
 			.where(
 				and(
+					eq(calendarMetadata.root, 1),
+					eq(calendarMetadata.systemTo, FAR_FUTURE_DATE),
 					eq(nodeContent.systemTo, FAR_FUTURE_DATE),
-					like(nodeInternalMetadata.metadataJson, '%"root":true%'),
 				),
 			)
-			.all();
-		for (const row of rows) {
-			const parsed = CalendarMetadataSchema.safeParse(JSON.parse(row.metadataJson));
-			if (parsed.success && parsed.data.calendar.root === true) {
-				return {id: row.nodeId, levels: parsed.data.calendar.levels};
-			}
+			.get();
+		if (row === undefined) {
+			throw new CalendarRootMissing();
 		}
-		throw new CalendarRootMissing();
+		const parsed = CalendarMetadataSchema.safeParse(this.readNodeMetadata(row.nodeId));
+		return {id: row.nodeId, levels: parsed.success ? parsed.data.calendar.levels : undefined};
 	}
 
 	/** A node's cached calendar level and dateId, if it has both. */
@@ -1620,8 +1621,8 @@ export class WorkflowyInternalAdapter {
 	 * with one `edit`; `HOME` goes to {@link setRootMetaValues}. Patches are
 	 * built against the node's fresh public-API `data` (which carries only keys
 	 * such as `layoutMode`) overlaid with its cached internal metadata, and once
-	 * the server accepts the edit the patched result is written back to
-	 * `node_internal_metadata`.
+	 * the server accepts the edit and the parent is re-read, the patched result
+	 * is written back to the typed metadata tables.
 	 */
 	async setNodeMetaValues(id: string, changes: MetadataChange[]): Promise<void> {
 		if (id === HOME) {
@@ -1644,30 +1645,17 @@ export class WorkflowyInternalAdapter {
 			dateJoinedSec: session.dateJoinedSec,
 		});
 		await this.pusher.pushAndPoll({ops: [op]});
-		this.writeNodeMetadata(id, keptInternalMetadata(applyMetadataPatches(base, patches)));
 		await tree.refreshChildren([node.parent_id ?? null]);
+		this.writeNodesMetadata(new Map([[id, keptInternalMetadata(applyMetadataPatches(base, patches))]]));
 	}
 
 	private readNodeMetadata(id: string): Metadata {
-		const row = this.db
-			.select({metadataJson: nodeInternalMetadata.metadataJson})
-			.from(nodeInternalMetadata)
-			.where(eq(nodeInternalMetadata.nodeId, id))
-			.get();
-		return row === undefined ? {} : MetadataSchema.parse(JSON.parse(row.metadataJson));
+		return readNodeInternalMetadata(this.db, id);
 	}
 
-	private writeNodeMetadata(id: string, metadata: Metadata | undefined): void {
-		if (metadata === undefined) {
-			this.db.delete(nodeInternalMetadata).where(eq(nodeInternalMetadata.nodeId, id)).run();
-			return;
-		}
-		const row = {metadataJson: JSON.stringify(metadata), fetchedAt: this.now()};
-		this.db
-			.insert(nodeInternalMetadata)
-			.values({nodeId: id, ...row})
-			.onConflictDoUpdate({target: nodeInternalMetadata.nodeId, set: row})
-			.run();
+	/** Store each node's kept metadata (undefined: none) in the typed tables, in one unit of work. */
+	private writeNodesMetadata(metadataById: ReadonlyMap<string, Metadata | undefined>): void {
+		storeInternalMetadata(this.db, metadataById);
 	}
 
 	private tree(): WorkflowyWriteThroughClient {

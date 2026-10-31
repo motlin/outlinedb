@@ -4,7 +4,7 @@ import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
 import {afterEach, describe, expect, it, vi} from "vite-plus/test";
 import {z} from "zod";
-import {CacheService} from "@workflowy/shared/cache";
+import {CacheService, storeInternalMetadata} from "@workflowy/shared/cache";
 import * as schema from "@workflowy/shared/db";
 import {calendarNodeId} from "@workflowy/shared/internal";
 import type {CalendarLayoutSnapshot, LayoutTimings, WorkflowyInternalAdapter} from "@workflowy/shared/internal";
@@ -29,7 +29,7 @@ const TREE: [string, string | null, string][] = [
 	["call", "notes", `Call ${time(2026, 9, 11)}`],
 ];
 
-const METADATA: Record<string, unknown> = {
+const METADATA: Record<string, Record<string, unknown>> = {
 	cal: {calendar: {root: true, levels: {year: true, month: true, day: true}}},
 	y2026: {calendar: {level: "year", value: "2026", timestamp: 1, dateId: 20_260_000}},
 	m09: {calendar: {level: "month", value: "9", timestamp: 1, dateId: 20_260_900}},
@@ -73,9 +73,7 @@ function app({
 	}
 	for (const [nodeId, metadata] of Object.entries(METADATA)) {
 		if (nodeId !== "cal" || rootTagged) {
-			db.insert(schema.nodeInternalMetadata)
-				.values({nodeId, metadataJson: JSON.stringify(metadata), fetchedAt: 1})
-				.run();
+			storeInternalMetadata(db, new Map([[nodeId, metadata]]));
 		}
 	}
 	const calls: string[] = [];

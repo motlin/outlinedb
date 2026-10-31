@@ -288,6 +288,13 @@
 			"when": 1780099200000,
 			"tag": "0041_add_node_tags",
 			"breakpoints": true
+		},
+		{
+			"idx": 42,
+			"version": "6",
+			"when": 1780185600000,
+			"tag": "0042_replace_node_internal_metadata",
+			"breakpoints": true
 		}
 	]
 }

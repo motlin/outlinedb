@@ -3,7 +3,7 @@ import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
 import {afterEach, describe, expect, it} from "vite-plus/test";
-import {CacheService} from "@workflowy/shared/cache";
+import {CacheService, storeInternalMetadata} from "@workflowy/shared/cache";
 import * as schema from "@workflowy/shared/db";
 import type {WorkflowyInternalAdapter} from "@workflowy/shared/internal";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
@@ -30,9 +30,7 @@ function app(
 	db.insert(schema.nodeContent)
 		.values({id: "cal", name: "📆 Calendar", parentId: null, systemFrom: "2026-01-01", systemTo: FAR_FUTURE_DATE})
 		.run();
-	db.insert(schema.nodeInternalMetadata)
-		.values({nodeId: "cal", metadataJson: JSON.stringify({calendar: {root: true, levels}}), fetchedAt: 1})
-		.run();
+	storeInternalMetadata(db, new Map([["cal", {calendar: {root: true, levels}}]]));
 	const meta: Record<string, unknown> = weekStartDay === undefined ? {} : {weekStartDay};
 	const applied: unknown[] = [];
 	const adapter = {

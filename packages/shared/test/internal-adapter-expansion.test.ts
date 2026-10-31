@@ -6,7 +6,7 @@ import {afterEach, describe, expect, it, vi} from "vite-plus/test";
 import {WorkflowyInternalClient} from "../src/api/workflowy-internal-client.js";
 import {CacheService} from "../src/cache/cache-service.js";
 import {expansionVersion, readExpansion, replaceExpansion} from "../src/cache/expansion-store.js";
-import {importInternalMetadata} from "../src/cache/importer.js";
+import {importInternalMetadata} from "../src/cache/internal-metadata.js";
 import {replaceTreeTxId} from "../src/cache/tree-transaction.js";
 import * as schema from "../src/db/schema.js";
 import {WorkflowyInternalAdapter} from "../src/internal/adapter.js";

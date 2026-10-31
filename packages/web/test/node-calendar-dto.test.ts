@@ -4,7 +4,7 @@ import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {Hono} from "hono";
 import {join} from "node:path";
 import {afterEach, describe, expect, it} from "vite-plus/test";
-import {CacheService} from "@workflowy/shared/cache";
+import {CacheService, storeInternalMetadata} from "@workflowy/shared/cache";
 import * as schema from "@workflowy/shared/db";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
@@ -17,8 +17,8 @@ function time(year: number, month: number, day: number): string {
 }
 
 /**
- * [id, parent, name]: a 📆 Calendar whose root carries fresh internal metadata,
- * a day tagged only by a backup import, a day with both (internal wins), a day
+ * [id, parent, name]: a 📆 Calendar whose root carries stored calendar metadata,
+ * a day tagged only by a backup import, a day tagged by `/get_tree_data/`, a day
  * known only by its name, and `<time>` names that are not day nodes.
  */
 const TREE: [string, string | null, string][] = [
@@ -37,16 +37,14 @@ const TREE: [string, string | null, string][] = [
 const ROOT_METADATA = {
 	calendar: {root: true, levels: {day: true, month: true, year: true}, found_dates: true, day_prefix: false},
 };
-const INTERNAL: Record<string, unknown> = {
+const INTERNAL: Record<string, Record<string, unknown>> = {
 	cal: ROOT_METADATA,
 	d0930: {layoutMode: "bullets"},
 	d1002: {restorableUniqueNode: true, calendar: {level: "day", value: "2", dateId: 20_261_002, timestamp: 0}},
 };
 
-const BACKUP: {nodeId: string; level: string; dateId: number}[] = [
-	{nodeId: "d0930", level: "day", dateId: 20_260_930},
-	{nodeId: "d1002", level: "day", dateId: 99},
-];
+/** A day tagged only by a backup import, written without a tagged root (a `/get_tree_data/` import would phase it out). */
+const BACKUP: {nodeId: string; level: string; dateId: number}[] = [{nodeId: "d0930", level: "day", dateId: 20_260_930}];
 
 const open: DatabaseConstructor.Database[] = [];
 afterEach(() => {
@@ -71,11 +69,9 @@ function setup({taggedRoot = true}: {taggedRoot?: boolean} = {}) {
 		if (!taggedRoot && (nodeId === "cal" || nodeId === "d0930")) {
 			continue;
 		}
-		db.insert(schema.nodeInternalMetadata)
-			.values({nodeId, metadataJson: JSON.stringify(metadata), fetchedAt: 0})
-			.run();
+		storeInternalMetadata(db, new Map([[nodeId, metadata]]));
 	}
-	for (const row of BACKUP) {
+	for (const row of taggedRoot ? [] : BACKUP) {
 		db.insert(schema.calendarMetadata)
 			.values({...row, systemFrom: "2026-01-01", systemTo: FAR_FUTURE_DATE})
 			.run();
@@ -109,7 +105,7 @@ describe("node DTO calendar info", () => {
 		});
 	});
 
-	it("tags day nodes by internal metadata, then backup metadata, then the year > month > <time> name walk without a tagged root", async () => {
+	it("tags day nodes by stored calendar metadata (from /get_tree_data/ or a backup), then the year > month > <time> name walk without a tagged root", async () => {
 		const get = setup({taggedRoot: false});
 
 		const body = (await get("/nodes?parent_id=m10")) as {nodes: {id: string; calendar: unknown}[]};
@@ -129,7 +125,7 @@ describe("node DTO calendar info", () => {
 		});
 	});
 
-	it("trusts only internal metadata once the calendar root is tagged", async () => {
+	it("trusts only stored calendar metadata, never the name walk, once the calendar root is tagged", async () => {
 		const get = setup();
 
 		const body = (await get("/nodes?parent_id=m10")) as {nodes: {id: string; calendar: unknown}[]};

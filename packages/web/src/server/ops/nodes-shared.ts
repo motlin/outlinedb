@@ -14,22 +14,23 @@ import type {
 	TableMetadata,
 	UpdateNodeResponse,
 } from "../../node-types.js";
-import {NodeReader, NodeTreeReader, WorkflowyWriteThroughClient} from "@workflowy/shared/cache";
+import {NodeReader, NodeTreeReader, WorkflowyWriteThroughClient, readInternalMetadata} from "@workflowy/shared/cache";
 import type {ExactMover, SlotPlan} from "@workflowy/shared/cache";
 import {MAX_COPY_ITEMS} from "../copy-tree.js";
-import {mirrors as mirrorsTable, nodeInternalMetadata, s3Files} from "@workflowy/shared/db";
+import {mirrors as mirrorsTable, s3Files} from "@workflowy/shared/db";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
 import type {RestoreInput, WorkflowyInternalAdapter, NewTree} from "@workflowy/shared/internal";
 import type {Node} from "@workflowy/shared/types";
 import {HOME_TARGET} from "@workflowy/shared/types";
 import {internalLinkShortIds, isShortId, parseVirtualShortId} from "@workflowy/shared/workflowy";
-import {and, eq, inArray, sql} from "drizzle-orm";
+import {and, eq, inArray} from "drizzle-orm";
 import {childFlags, referencesRootLabel} from "../backlinks.js";
 import {loadCalendarInfo} from "../calendar-day.js";
 import {timesDiffer} from "../calendar-found.js";
 import type {ServerContext} from "../context.js";
 import type {MirrorInstance} from "../../mirror-path.js";
 import {INTERNAL_API_NOT_CONFIGURED} from "../internal-api.js";
+import {TableMetadataSchema} from "./schemas.js";
 
 /**
  * Resolve an ID parameter that could be a short ID (12 hex chars) or a full UUID.
@@ -176,19 +177,6 @@ export function loadAttachments(ctx: ServerContext, nodeIds: string[]): Map<stri
 	return map;
 }
 
-/** `json_extract` returns an object as JSON text; anything but a JSON object is no table metadata. */
-function parseTableMetadata(raw: unknown): TableMetadata | null {
-	if (typeof raw !== "string") {
-		return null;
-	}
-	try {
-		const parsed: unknown = JSON.parse(raw);
-		return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? parsed : null;
-	} catch {
-		return null;
-	}
-}
-
 /** The node DTO fields read from the cached internal metadata. */
 export interface InternalMetadataFields {
 	numberedStart: number | null;
@@ -206,22 +194,17 @@ export function loadInternalMetadataFields(ctx: ServerContext, nodeIds: string[]
 	if (nodeIds.length === 0) {
 		return map;
 	}
-	const rows = ctx.db
-		.select({
-			nodeId: nodeInternalMetadata.nodeId,
-			numberedStart: sql<unknown>`json_extract(${nodeInternalMetadata.metadataJson}, '$.numbered_start')`,
-			defaultToBottom: sql<unknown>`json_extract(${nodeInternalMetadata.metadataJson}, '$.priority.defaultToBottom')`,
-			table: sql<unknown>`json_extract(${nodeInternalMetadata.metadataJson}, '$.table')`,
-		})
-		.from(nodeInternalMetadata)
-		.where(inArray(nodeInternalMetadata.nodeId, nodeIds))
-		.all();
-	for (const row of rows) {
-		map.set(row.nodeId, {
-			numberedStart: typeof row.numberedStart === "number" ? row.numberedStart : null,
-			// SQLite's json_extract returns a JSON true as 1.
-			defaultToBottom: row.defaultToBottom === 1,
-			table: parseTableMetadata(row.table),
+	for (const [nodeId, metadata] of readInternalMetadata(ctx.db, nodeIds)) {
+		const {numbered_start: numberedStart, priority, table} = metadata;
+		if (numberedStart === undefined && priority === undefined && table === undefined) {
+			continue;
+		}
+		const parsedTable = TableMetadataSchema.safeParse(table);
+		map.set(nodeId, {
+			numberedStart: typeof numberedStart === "number" ? numberedStart : null,
+			defaultToBottom:
+				typeof priority === "object" && priority !== null && Reflect.get(priority, "defaultToBottom") === true,
+			table: parsedTable.success ? parsedTable.data : null,
 		});
 	}
 	return map;

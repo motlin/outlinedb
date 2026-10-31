@@ -1,6 +1,6 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from "vite-plus/test";
 import {captureOutput} from "@oclif/test";
-import * as schema from "@workflowy/shared/db";
+import {storeInternalMetadata} from "@workflowy/shared/cache";
 import {WorkflowyInternalAdapter} from "@workflowy/shared/internal";
 import fs from "node:fs";
 import os from "node:os";
@@ -48,18 +48,13 @@ describe("calendar audit command", () => {
 				createTestNode({id: "inner", name: JAN15, parentId: "outer"}),
 			]),
 		});
-		const metadata: [string, unknown][] = [
+		const metadata: [string, Record<string, unknown>][] = [
 			["cal", {calendar: {root: true, levels: {year: true, month: true, day: true}}}],
 			["y2026", {calendar: {level: "year", value: "2026", timestamp: 0, dateId: 20_260_000}}],
 			["m01", {calendar: {level: "month", value: "1", timestamp: 0, dateId: 20_260_100}}],
 			["inner", {calendar: jan15Tag}],
 		];
-		for (const [nodeId, value] of metadata) {
-			testDatabase.db
-				.insert(schema.nodeInternalMetadata)
-				.values({nodeId, metadataJson: JSON.stringify(value), fetchedAt: 0})
-				.run();
-		}
+		storeInternalMetadata(testDatabase.db, new Map(metadata));
 	}
 
 	it("reports the untagged day and its nested tagged child", async () => {
@@ -98,10 +93,7 @@ describe("calendar audit command", () => {
 
 	it("prints [] for a clean calendar", async () => {
 		seedTestData(testDatabase, nodeFixtures([createTestNode({id: "cal", name: "📆 Calendar", parentId: null})]));
-		testDatabase.db
-			.insert(schema.nodeInternalMetadata)
-			.values({nodeId: "cal", metadataJson: JSON.stringify({calendar: {root: true}}), fetchedAt: 0})
-			.run();
+		storeInternalMetadata(testDatabase.db, new Map([["cal", {calendar: {root: true}}]]));
 
 		const {stdout} = await captureOutput(async () => {
 			await CalendarAudit.run(["--json"]);

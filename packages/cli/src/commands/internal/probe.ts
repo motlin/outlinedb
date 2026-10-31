@@ -16,11 +16,11 @@ import {isDeepStrictEqual} from "node:util";
 import {
 	WorkflowyWriteThroughClient,
 	keptInternalMetadata,
+	readNodeInternalMetadata,
 	normalizeLayoutMode,
 	replaceTreeTxId,
 } from "@workflowy/shared/cache";
-import {nodeInternalMetadata} from "@workflowy/shared/db";
-import {eq, sql} from "drizzle-orm";
+import {sql} from "drizzle-orm";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
 import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";
@@ -662,12 +662,7 @@ export default class Probe extends Command {
 			const live = await api.getNode(fixtureId);
 			const item = (await client.getTreeSnapshot()).items.find((candidate) => candidate.id === fixtureId);
 			const imported = keptInternalMetadata(item?.metadata) ?? {};
-			const row = db
-				.select({metadataJson: nodeInternalMetadata.metadataJson})
-				.from(nodeInternalMetadata)
-				.where(eq(nodeInternalMetadata.nodeId, fixtureId))
-				.get();
-			const cachedMeta: unknown = row === undefined ? {} : JSON.parse(row.metadataJson);
+			const cachedMeta = readNodeInternalMetadata(db, fixtureId);
 			const cachedLayout = cache.getNode(fixtureId)?.layoutMode ?? null;
 			const pick = (source: unknown) =>
 				Object.fromEntries(Object.keys(expected).map((key) => [key, Reflect.get(Object(source), key) ?? null]));
@@ -678,7 +673,7 @@ export default class Probe extends Command {
 				`- ${label}: expected \`${JSON.stringify(want)}\``,
 				`  - Public API \`data.layoutMode\`: \`${JSON.stringify(publicLayout)}\` (${normalizeLayoutMode(publicLayout) === want.layoutMode ? "MATCH" : "MISMATCH"}, "bullets" read as absent); \`data\` keys ${codeList(objectKeys(live.data))}`,
 				`  - \`/get_tree_data/\` (import): \`${JSON.stringify(pick(imported))}\` (${verdict(pick(imported))}); item ${item === undefined ? "ABSENT" : "present"}`,
-				`  - Cache: \`node_internal_metadata\` \`${JSON.stringify(pick(cachedMeta))}\` (${verdict(pick(cachedMeta))}); node \`layoutMode\` \`${JSON.stringify(cachedLayout)}\``,
+				`  - Cache: typed metadata tables \`${JSON.stringify(pick(cachedMeta))}\` (${verdict(pick(cachedMeta))}); node \`layoutMode\` \`${JSON.stringify(cachedLayout)}\``,
 			);
 		};
 		try {
@@ -824,7 +819,7 @@ export default class Probe extends Command {
 			];
 		}
 		const cached = createDatabase().all<{nodeId: string; level: string; dateId: number}>(
-			sql`SELECT node_id AS nodeId, json_extract(metadata_json, '$.calendar.level') AS level, json_extract(metadata_json, '$.calendar.dateId') AS dateId FROM node_internal_metadata WHERE json_type(metadata_json, '$.calendar.dateId') = 'integer' ORDER BY dateId DESC`,
+			sql`SELECT node_id AS nodeId, level, date_id AS dateId FROM calendar_metadata WHERE system_to = ${FAR_FUTURE_DATE} AND date_id IS NOT NULL ORDER BY date_id DESC`,
 		);
 		const rows = cached.filter((row): row is {nodeId: string; level: CalendarIdLevel; dateId: number} =>
 			CALENDAR_LEVELS.some((level) => level === row.level),
@@ -839,7 +834,7 @@ export default class Probe extends Command {
 		return [
 			`- \`entropyKey\`: present in ${sourceName} (${entropyKey.length} chars, value not recorded)`,
 			`- Formula: \`\`uuidv5(\`\${entropyKey}-calendar-\${level}-\${dateId}\`, ${CALENDAR_ID_NAMESPACE})\`\``,
-			`- Sample: the ${CALENDAR_SAMPLE} most recent cached day nodes by \`dateId\` (\`node_internal_metadata\`, read only)`,
+			`- Sample: the ${CALENDAR_SAMPLE} most recent cached day nodes by \`dateId\` (\`calendar_metadata\`, read only)`,
 			...sample.map((row) => `  - \`${row.dateId}\`: ${matches(row) ? "MATCH" : "MISMATCH"}`),
 			`- Sample result: ${sample.filter(matches).length} of ${sample.length} match`,
 			`- All cached calendar nodes: ${totals.join(", ")} match`,
@@ -860,7 +855,7 @@ export default class Probe extends Command {
 		const adapter = new WorkflowyInternalAdapter({client, db, writeThrough});
 		const ensured = await adapter.ensureCalendarDay(ADOPT_DATE_ID);
 		const [root] = db.all<{nodeId: string}>(
-			sql`SELECT node_id AS nodeId FROM node_internal_metadata WHERE json_extract(metadata_json, '$.calendar.root') = 1`,
+			sql`SELECT node_id AS nodeId FROM calendar_metadata WHERE root = 1 AND system_to = ${FAR_FUTURE_DATE}`,
 		);
 		if (root === undefined) {
 			this.error("No cached calendar root after ensure");

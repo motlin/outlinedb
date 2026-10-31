@@ -4,11 +4,11 @@
  * ids and calendar metadata; older days only carry a `<time>` name.
  */
 
-import {and, eq, exists, inArray, like, sql} from "drizzle-orm";
-import {z} from "zod";
+import {and, between, eq, exists, inArray, sql} from "drizzle-orm";
+import type {SQL} from "drizzle-orm";
 import {parseTimeAttrs} from "../dates/date-markup.js";
 import type {AppDatabase} from "../db/types.js";
-import {nodeContent, nodeInternalMetadata} from "../db/schema.js";
+import {calendarLevels, calendarMetadata, nodeContent} from "../db/schema.js";
 import {CALENDAR_LEVELS, DEFAULT_CALENDAR_LEVELS, calendarDateId, parseDateId} from "../internal/calendar-day.js";
 import type {CalendarDate, CalendarLevel} from "../internal/calendar-day.js";
 import {auditCalendarMonth, auditCalendarRoot} from "../internal/calendar-adopt.js";
@@ -27,15 +27,6 @@ export interface CalendarDayDeps {
 }
 
 export const CALENDAR_ROOT_NAME = "📆 Calendar";
-const CalendarSchema = z.object({
-	calendar: z
-		.object({root: z.boolean().optional(), level: z.string().optional(), dateId: z.number().optional()})
-		.loose(),
-});
-const CalendarTagSchema = z
-	.object({root: z.boolean().optional(), level: z.string().optional(), dateId: z.number().optional()})
-	.loose();
-const LevelsSchema = z.record(z.string(), z.boolean());
 const DAY_NAME = /^<time\b([^>]*)>[^<]*<\/time>$/iu;
 
 /**
@@ -69,7 +60,10 @@ export function findCalendarDay(deps: CalendarDayDeps, dateId: number, level: Ca
 			return id;
 		}
 	}
-	const tagged = calendarRows(deps, `%"dateId":${levelDateId}%`).find(
+	const tagged = calendarRows(
+		deps,
+		and(eq(calendarMetadata.dateId, levelDateId), eq(calendarMetadata.level, level)),
+	).find(
 		({id, calendar}) =>
 			calendar.level === level && calendar.dateId === levelDateId && isUnder(deps.cache, id, root),
 	);
@@ -84,35 +78,23 @@ function levelPath(levels: Readonly<Record<CalendarLevel, boolean>>, level: Cale
 
 /** The levels the tagged root enables, upstream's defaults when it sets none. */
 function rootLevels(deps: Pick<CalendarDayDeps, "db">, root: string): Readonly<Record<CalendarLevel, boolean>> {
-	const [row] = deps.db
-		.select({levels: sql<string | null>`json_extract(${nodeInternalMetadata.metadataJson}, '$.calendar.levels')`})
-		.from(nodeInternalMetadata)
-		.where(eq(nodeInternalMetadata.nodeId, root))
-		.all();
-	const parsed = row?.levels == null ? undefined : LevelsSchema.safeParse(JSON.parse(row.levels));
-	return parsed?.success === true
-		? {year: false, month: false, week: false, day: false, ...parsed.data}
-		: DEFAULT_CALENDAR_LEVELS;
+	const row = deps.db
+		.select()
+		.from(calendarLevels)
+		.where(and(eq(calendarLevels.nodeId, root), eq(calendarLevels.systemTo, FAR_FUTURE_DATE)))
+		.get();
+	return row === undefined
+		? DEFAULT_CALENDAR_LEVELS
+		: {year: row.year === 1, month: row.month === 1, week: row.week === 1, day: row.day === 1};
 }
 
 /** The `level` and `dateId` of each id's cached `metadata.calendar`; ids without one are absent. */
 function calendarTags(deps: Pick<CalendarDayDeps, "db">, ids: readonly string[]): Map<string, CalendarTag> {
 	const tags = new Map<string, CalendarTag>();
-	if (ids.length === 0) {
-		return tags;
-	}
-	const rows = deps.db
-		.select({
-			nodeId: nodeInternalMetadata.nodeId,
-			calendar: sql<string | null>`json_extract(${nodeInternalMetadata.metadataJson}, '$.calendar')`,
-		})
-		.from(nodeInternalMetadata)
-		.where(inArray(nodeInternalMetadata.nodeId, ids))
-		.all();
-	for (const {nodeId, calendar} of rows) {
-		const parsed = calendar === null ? undefined : CalendarTagSchema.safeParse(JSON.parse(calendar));
-		if (parsed?.success === true) {
-			tags.set(nodeId, {root: parsed.data.root, level: parsed.data.level, dateId: parsed.data.dateId});
+	for (let start = 0; start < ids.length; start += ID_CHUNK) {
+		const chunk = ids.slice(start, start + ID_CHUNK);
+		for (const {id, calendar} of calendarRows(deps, inArray(calendarMetadata.nodeId, chunk), {liveOnly: false})) {
+			tags.set(id, calendar);
 		}
 	}
 	return tags;
@@ -282,7 +264,10 @@ function taggedDaysInMonth(
 	under: (parentId: string | null) => boolean,
 	monthKey: number,
 ): Map<number, string> {
-	const rows = calendarRows(deps, `%"dateId":${monthKey}%`).filter(
+	const rows = calendarRows(
+		deps,
+		and(eq(calendarMetadata.level, "day"), between(calendarMetadata.dateId, monthKey * 100, monthKey * 100 + 99)),
+	).filter(
 		({calendar}) =>
 			calendar.level === "day" && calendar.dateId !== undefined && Math.floor(calendar.dateId / 100) === monthKey,
 	);
@@ -321,38 +306,50 @@ export function findCalendarRoot(deps: Pick<CalendarDayDeps, "db" | "cache">): s
  * root's whole `calendar` object.
  */
 export function findTaggedCalendarRoot(deps: Pick<CalendarDayDeps, "db">): string | undefined {
-	return calendarRows(deps, '%"root":true%').find(({calendar}) => calendar.root === true)?.id;
+	return calendarRows(deps, eq(calendarMetadata.root, 1)).find(({calendar}) => calendar.root === true)?.id;
 }
 
-/** Live nodes whose metadata JSON matches `pattern` and parses as calendar metadata. */
-function calendarRows(deps: Pick<CalendarDayDeps, "db">, pattern: string) {
-	return (
-		deps.db
-			.select({id: nodeInternalMetadata.nodeId, metadataJson: nodeInternalMetadata.metadataJson})
-			.from(nodeInternalMetadata)
-			// EXISTS keeps SQLite on the small metadata table; a join scans every node_content version first.
-			.where(
-				and(
-					like(nodeInternalMetadata.metadataJson, pattern),
-					exists(
-						deps.db
-							.select({live: sql`1`})
-							.from(nodeContent)
-							.where(
-								and(
-									eq(nodeContent.id, nodeInternalMetadata.nodeId),
-									eq(nodeContent.systemTo, FAR_FUTURE_DATE),
+/** Durable Object SQLite caps a statement at 100 bound parameters. */
+const ID_CHUNK = 90;
+
+/** Nodes (only live ones unless `liveOnly` is false) whose stored calendar matches `where`, with that calendar's tag. */
+function calendarRows(deps: Pick<CalendarDayDeps, "db">, where: SQL | undefined, {liveOnly = true} = {}) {
+	return deps.db
+		.select({
+			id: calendarMetadata.nodeId,
+			root: calendarMetadata.root,
+			level: calendarMetadata.level,
+			dateId: calendarMetadata.dateId,
+		})
+		.from(calendarMetadata)
+		.where(
+			and(
+				eq(calendarMetadata.systemTo, FAR_FUTURE_DATE),
+				where,
+				liveOnly
+					? exists(
+							deps.db
+								.select({live: sql`1`})
+								.from(nodeContent)
+								.where(
+									and(
+										eq(nodeContent.id, calendarMetadata.nodeId),
+										eq(nodeContent.systemTo, FAR_FUTURE_DATE),
+									),
 								),
-							),
-					),
-				),
-			)
-			.all()
-			.flatMap(({id, metadataJson}) => {
-				const parsed = CalendarSchema.safeParse(JSON.parse(metadataJson));
-				return parsed.success ? [{id, calendar: parsed.data.calendar}] : [];
-			})
-	);
+						)
+					: undefined,
+			),
+		)
+		.all()
+		.map(({id, root, level, dateId}) => ({
+			id,
+			calendar: {
+				root: root === null ? undefined : root === 1,
+				level: level ?? undefined,
+				dateId: dateId ?? undefined,
+			},
+		}));
 }
 
 /** Whether `id` is a cached node strictly below `ancestor`. */

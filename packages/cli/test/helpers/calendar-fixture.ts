@@ -1,4 +1,4 @@
-import * as schema from "@workflowy/shared/db";
+import {storeInternalMetadata} from "@workflowy/shared/cache";
 import {createTestNode} from "./node-fixtures.js";
 import {nodeFixtures, seedTestData} from "../db/migration-helper.js";
 import type {TestDatabase} from "../db/migration-helper.js";
@@ -31,16 +31,11 @@ export function seedTaggedCalendar(testDatabase: TestDatabase): void {
 			createTestNode({id: "stray", name: dayTime(2026, 10, 21), parentId: null, priority: 500}),
 		]),
 	});
-	const metadata: [string, unknown][] = [
+	const metadata: [string, Record<string, unknown>][] = [
 		["cal", {calendar: {root: true, levels: {year: true, month: true, day: true}}}],
 		["y2026", {calendar: {level: "year", value: "2026", timestamp: 0, dateId: 20_260_000}}],
 		["m10", {calendar: {level: "month", value: "10", timestamp: 0, dateId: 20_261_000}}],
 		["d1005", {calendar: {level: "day", value: "5", timestamp: 0, dateId: 20_261_005}}],
 	];
-	for (const [nodeId, value] of metadata) {
-		testDatabase.db
-			.insert(schema.nodeInternalMetadata)
-			.values({nodeId, metadataJson: JSON.stringify(value), fetchedAt: 0})
-			.run();
-	}
+	storeInternalMetadata(testDatabase.db, new Map(metadata));
 }

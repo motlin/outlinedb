@@ -75,7 +75,9 @@ export class ProbeStore extends UserStore {
 		if (url.pathname === "/__internal-metadata") {
 			return Response.json(
 				this.ctx.storage.sql
-					.exec("SELECT node_id, metadata_json FROM node_internal_metadata ORDER BY node_id")
+					.exec(
+						"SELECT node_id, numbered_start FROM node_display_metadata WHERE system_to = '9999-12-31 23:59:59' ORDER BY node_id",
+					)
 					.toArray(),
 			);
 		}

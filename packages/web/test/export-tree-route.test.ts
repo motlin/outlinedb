@@ -10,7 +10,7 @@ import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
 import {httpAppFor} from "./http-app-for.js";
 
-const {CacheService} = await import("@workflowy/shared/cache");
+const {CacheService, storeInternalMetadata} = await import("@workflowy/shared/cache");
 
 const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 
@@ -64,10 +64,8 @@ function setup() {
 			.prepare("INSERT INTO mirrors (mirror_id, original_id, system_from, system_to) VALUES (?, ?, ?, ?)")
 			.run(mirrorId, originalId, "2000-01-01T00:00:00.000Z", FAR_FUTURE_DATE);
 	};
-	const metadata = (nodeId: string, json: unknown) => {
-		sqlite
-			.prepare("INSERT INTO node_internal_metadata (node_id, metadata_json, fetched_at) VALUES (?, ?, 0)")
-			.run(nodeId, JSON.stringify(json));
+	const metadata = (nodeId: string, json: Record<string, unknown>) => {
+		storeInternalMetadata(db, new Map([[nodeId, json]]));
 	};
 	return {insert, post, mirror, metadata};
 }

@@ -4,7 +4,7 @@ import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {Hono} from "hono";
 import {join} from "node:path";
 import {afterEach, describe, expect, it} from "vite-plus/test";
-import {CacheService} from "@workflowy/shared/cache";
+import {CacheService, storeInternalMetadata} from "@workflowy/shared/cache";
 import * as schema from "@workflowy/shared/db";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
 import type {FoundDatesResponse} from "../src/node-types.js";
@@ -64,9 +64,7 @@ function setup(rootMetadata?: Record<string, unknown>) {
 	}
 	cacheService.insertMirror("due", "mirror");
 	if (rootMetadata !== undefined) {
-		db.insert(schema.nodeInternalMetadata)
-			.values({nodeId: "cal", metadataJson: JSON.stringify({calendar: rootMetadata}), fetchedAt: 0})
-			.run();
+		storeInternalMetadata(db, new Map([["cal", {calendar: rootMetadata}]]));
 	}
 	const ctx = {db, cacheService} as unknown as ServerContext;
 	const app = new Hono<AppEnv>();

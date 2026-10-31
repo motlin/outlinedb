@@ -3,29 +3,17 @@
  * this module adds the node DTO's calendar role and the root's picker settings.
  */
 
-import {and, eq, inArray, sql} from "drizzle-orm";
+import {and, eq, inArray} from "drizzle-orm";
 import {dayNameDate, findCalendarRoot, findTaggedCalendarRoot} from "@workflowy/shared/calendar-lookup";
 import type {CalendarDayDeps} from "@workflowy/shared/calendar-lookup";
 import type {CacheService} from "@workflowy/shared/cache";
-import {calendarMetadata, nodeInternalMetadata} from "@workflowy/shared/db";
+import {calendarMetadata, nodeDisplayMetadata} from "@workflowy/shared/db";
 import type {CalendarDate} from "@workflowy/shared/internal";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
-import {z} from "zod";
 import type {CalendarInfo} from "../node-types.js";
 
 export {findCalendarDay, findCalendarDays, findTaggedCalendarRoot} from "@workflowy/shared/calendar-lookup";
 export type {CalendarDayDeps} from "@workflowy/shared/calendar-lookup";
-
-/** The `metadata.calendar` fields the node DTO carries. */
-const CalendarInfoSchema = z
-	.object({
-		root: z.boolean().optional(),
-		level: z.string().optional(),
-		dateId: z.number().optional(),
-		found_dates: z.boolean().optional(),
-		day_prefix: z.boolean().optional(),
-	})
-	.loose();
 
 /** The 📆 Calendar root's picker settings (upstream `T10`/`k10`): each is true unless the root sets it false. */
 interface CalendarSettings {
@@ -44,8 +32,8 @@ export function readCalendarSettings(deps: Pick<CalendarDayDeps, "db" | "cache">
 /**
  * Each node's 📆 Calendar role for the node DTO; nodes with none are absent.
  * Once the calendar root's internal metadata is cached it alone decides, as it
- * does upstream. Otherwise tried in order: the internal-API metadata (fresh), the backup-imported
- * `calendar_metadata` row, then for days created since the last backup a
+ * does upstream. Otherwise tried in order: the stored `calendar_metadata` row (from `/get_tree_data/`
+ * or a backup), then for days created since the last import a
  * date-only `<time>` name under root > `YYYY` > `MM` (or `M`) unless
  * `fromNames` is false.
  */
@@ -59,51 +47,38 @@ export function loadCalendarInfo(
 	if (ids.length === 0) {
 		return map;
 	}
-	const internalRows = deps.db
-		.select({
-			nodeId: nodeInternalMetadata.nodeId,
-			calendar: sql<string | null>`json_extract(${nodeInternalMetadata.metadataJson}, '$.calendar')`,
-			restorable: sql<
-				number | null
-			>`json_extract(${nodeInternalMetadata.metadataJson}, '$.restorableUniqueNode')`,
-		})
-		.from(nodeInternalMetadata)
-		.where(inArray(nodeInternalMetadata.nodeId, ids))
-		.all();
-	for (const {nodeId, calendar, restorable} of internalRows) {
-		const parsed = calendar === null ? undefined : CalendarInfoSchema.safeParse(JSON.parse(calendar));
-		if (parsed?.success === true) {
-			const {root, level, dateId, found_dates: foundDates, day_prefix: dayPrefix} = parsed.data;
-			map.set(nodeId, {
-				level: level ?? null,
-				dateId: dateId ?? null,
-				root: root === true,
-				foundDates: foundDates ?? null,
-				dayPrefix: dayPrefix ?? null,
-				restorableUniqueNode: restorable === 1,
-			});
-		}
-	}
-	if (findTaggedCalendarRoot(deps) !== undefined) {
-		// Upstream's metadata is authoritative once imported: a node without it is no calendar node.
-		return map;
-	}
-	const backupRows = deps.db
+	const restorable = new Set(
+		deps.db
+			.select({nodeId: nodeDisplayMetadata.nodeId})
+			.from(nodeDisplayMetadata)
+			.where(
+				and(
+					inArray(nodeDisplayMetadata.nodeId, ids),
+					eq(nodeDisplayMetadata.systemTo, FAR_FUTURE_DATE),
+					eq(nodeDisplayMetadata.restorableUniqueNode, 1),
+				),
+			)
+			.all()
+			.map((row) => row.nodeId),
+	);
+	const calendarRows = deps.db
 		.select()
 		.from(calendarMetadata)
 		.where(and(inArray(calendarMetadata.nodeId, ids), eq(calendarMetadata.systemTo, FAR_FUTURE_DATE)))
 		.all();
-	for (const row of backupRows) {
-		if (!map.has(row.nodeId)) {
-			map.set(row.nodeId, {
-				level: row.level,
-				dateId: row.dateId,
-				root: row.root === 1,
-				foundDates: intToBoolean(row.foundDates),
-				dayPrefix: intToBoolean(row.dayPrefix),
-				restorableUniqueNode: false,
-			});
-		}
+	for (const row of calendarRows) {
+		map.set(row.nodeId, {
+			level: row.level,
+			dateId: row.dateId,
+			root: row.root === 1,
+			foundDates: intToBoolean(row.foundDates),
+			dayPrefix: intToBoolean(row.dayPrefix),
+			restorableUniqueNode: restorable.has(row.nodeId),
+		});
+	}
+	if (findTaggedCalendarRoot(deps) !== undefined) {
+		// Upstream's metadata is authoritative once imported: a node without it is no calendar node.
+		return map;
 	}
 	if (!fromNames) {
 		return map;

@@ -1,12 +1,13 @@
 import DatabaseConstructor from "better-sqlite3";
-import {eq} from "drizzle-orm";
 import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
 import {afterEach, describe, expect, it, vi} from "vite-plus/test";
 import type {InternalSession, WorkflowyInternalClient} from "../src/api/workflowy-internal-client.js";
 import type {WorkflowyWriteThroughClient} from "../src/cache/workflowy-write-through-client.js";
+import {readInternalMetadata, storeInternalMetadata} from "../src/cache/internal-metadata.js";
 import {replaceTreeTxId} from "../src/cache/tree-transaction.js";
+import {z} from "zod";
 import * as schema from "../src/db/schema.js";
 import {WorkflowyInternalAdapter} from "../src/internal/adapter.js";
 import type {MoveToInput} from "../src/internal/adapter.js";
@@ -64,7 +65,7 @@ function pushedTrees(json: string): PushedTree[] {
 /**
  * A fake adapter world: `children` is the live tree the public API would
  * return, `cached` (default `children`) the cache's copy, and
- * `node_internal_metadata` holds cached calendar metadata. Live reads, pushes
+ * the typed metadata tables hold cached calendar metadata. Live reads, pushes
  * (applied to the live tree), cache refreshes and `moveTo` are recorded in
  * `calls`.
  */
@@ -94,11 +95,15 @@ function setup(options: {
 				.run();
 		}
 	}
-	for (const [nodeId, metadata] of Object.entries(options.metadata)) {
-		db.insert(schema.nodeInternalMetadata)
-			.values({nodeId, metadataJson: JSON.stringify(metadata), fetchedAt: 0})
-			.run();
-	}
+	storeInternalMetadata(
+		db,
+		new Map(
+			Object.entries(options.metadata).map(([nodeId, metadata]) => [
+				nodeId,
+				z.record(z.string(), z.unknown()).parse(metadata),
+			]),
+		),
+	);
 	const cached = new Map(
 		Object.entries(options.cached ?? options.children).map(([parent, ids]) => [parent, [...ids]]),
 	);
@@ -163,14 +168,7 @@ function setup(options: {
 		}
 		return Promise.resolve();
 	});
-	const cachedMetadata = (nodeId: string): unknown => {
-		const row = db
-			.select({json: schema.nodeInternalMetadata.metadataJson})
-			.from(schema.nodeInternalMetadata)
-			.where(eq(schema.nodeInternalMetadata.nodeId, nodeId))
-			.get();
-		return row === undefined ? undefined : JSON.parse(row.json);
-	};
+	const cachedMetadata = (nodeId: string): unknown => readInternalMetadata(db, [nodeId]).get(nodeId);
 	return {sqlite, adapter, calls, children, cachedMetadata};
 }
 

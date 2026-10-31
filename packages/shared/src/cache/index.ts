@@ -31,15 +31,19 @@ export {
 	normalizeLayoutMode,
 	systemFromToDate,
 } from "./cache-temporal.js";
+export {type ApplyRowsResult, applyNodeRowsBatch, applyRows, type NormalizedRowsByTable} from "./importer.js";
 export {
-	type ApplyRowsResult,
-	applyNodeRowsBatch,
-	applyRows,
+	calendarRows,
 	type ImportInternalMetadataResult,
 	importInternalMetadata,
+	type InternalMetadata,
 	keptInternalMetadata,
-	type NormalizedRowsByTable,
-} from "./importer.js";
+	readInternalMetadata,
+	readNodeInternalMetadata,
+	storeInternalMetadata,
+	type UpstreamCalendar,
+	writeInternalMetadata,
+} from "./internal-metadata.js";
 export {
 	collectItemRelationships,
 	emptyItemRelationships,

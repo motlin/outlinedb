@@ -3,7 +3,7 @@ import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
 import {afterEach, describe, expect, it} from "vite-plus/test";
-import {CacheService} from "@workflowy/shared/cache";
+import {CacheService, storeInternalMetadata} from "@workflowy/shared/cache";
 import * as schema from "@workflowy/shared/db";
 import {calendarNodeId} from "@workflowy/shared/internal";
 import type {WorkflowyInternalAdapter} from "@workflowy/shared/internal";
@@ -23,7 +23,7 @@ function time(year: number, month: number, day: number): string {
 }
 
 /** [id, parent, name, metadata?]: a 📆 Calendar root with legacy, metadata-tagged and deterministic days, and month-level entries that mention a date. */
-const TREE: [string, string | null, string, unknown?][] = [
+const TREE: [string, string | null, string, Record<string, unknown>?][] = [
 	["cal", null, "📆 Calendar", {calendar: {root: true, levels: {year: true, month: true, day: true}}}],
 	["other", null, "Other"],
 	[D1005_ELSEWHERE, "other", time(2026, 10, 5)],
@@ -76,9 +76,7 @@ function setup(onStatement: (sql: string) => void = () => {}, {taggedRoot = true
 			.values({id, name, parentId, systemFrom: "2026-01-01", systemTo: FAR_FUTURE_DATE})
 			.run();
 		if (metadata !== undefined && (taggedRoot || id !== "cal")) {
-			db.insert(schema.nodeInternalMetadata)
-				.values({nodeId: id, metadataJson: JSON.stringify(metadata), fetchedAt: 0})
-				.run();
+			storeInternalMetadata(db, new Map([[id, metadata]]));
 		}
 	}
 	for (const [id, priority, kind] of D1017_CHILDREN) {
@@ -176,7 +174,7 @@ describe("findCalendarDays", () => {
 		);
 	});
 
-	it("scans the metadata table with LIKE once for the root, not per day", () => {
+	it("scans the calendar metadata table unkeyed once for the root, not per day", () => {
 		const scans: string[] = [];
 		const deps = {
 			...setup((sql) => {
@@ -188,7 +186,7 @@ describe("findCalendarDays", () => {
 
 		findCalendarDays(deps, SEPT_OCT);
 
-		expect(scans.filter((sql) => sql.includes('"node_internal_metadata"') && sql.includes("like"))).toHaveLength(1);
+		expect(scans.filter(isCalendarScan)).toHaveLength(1);
 	});
 });
 
@@ -258,3 +256,8 @@ describe("GET /api/v1/calendar/day/:dateId", () => {
 		]);
 	});
 });
+
+/** A query that reads calendar_metadata without naming node ids: a scan by root, level or dateId, not a lookup by id. */
+function isCalendarScan(sql: string): boolean {
+	return sql.includes('from "calendar_metadata"') && !sql.includes('"calendar_metadata"."node_id" in');
+}

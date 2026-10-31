@@ -2,7 +2,7 @@ import {afterAll, afterEach, beforeAll, describe, expect, inject, it, vi} from "
 import {Client} from "@modelcontextprotocol/sdk/client/index.js";
 import {InMemoryTransport} from "@modelcontextprotocol/sdk/inMemory.js";
 import {McpServer} from "@modelcontextprotocol/sdk/server/mcp.js";
-import {nodeInternalMetadata} from "@workflowy/shared/db";
+import {storeInternalMetadata} from "@workflowy/shared/cache";
 import {WorkflowyInternalAdapter} from "@workflowy/shared/internal";
 import fs from "node:fs";
 import os from "node:os";
@@ -34,10 +34,7 @@ beforeAll(() => {
 	const insert = (id: string, name: string, parentId: string | null, calendar?: unknown) => {
 		cache.insertNode({id, name, note: null, priority: 0, createdAt: 0, modifiedAt: 0, completedAt: null}, parentId);
 		if (calendar !== undefined) {
-			getDatabase()
-				.insert(nodeInternalMetadata)
-				.values({nodeId: id, metadataJson: JSON.stringify({calendar}), fetchedAt: 0})
-				.run();
+			storeInternalMetadata(getDatabase(), new Map([[id, {calendar}]]));
 		}
 	};
 	insert("cal", "📆 Calendar", null, {root: true, levels: {year: true, month: true, day: true}});

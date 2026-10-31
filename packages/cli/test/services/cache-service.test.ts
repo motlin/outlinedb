@@ -8,7 +8,7 @@ import {
 	mirrors,
 	nodeContent,
 	nodeEmbeddings,
-	nodeInternalMetadata,
+	nodeDisplayMetadata,
 	nodeMetadata,
 	referencesRoots,
 	s3Files,
@@ -890,7 +890,9 @@ describe("CacheService (shared)", () => {
 			db.insert(calendarLevels)
 				.values({nodeId: "child", day: 1, week: null, month: null, year: null, ...temporal})
 				.run();
-			db.insert(nodeInternalMetadata).values({nodeId: "child", metadataJson: "{}", fetchedAt: 1}).run();
+			db.insert(nodeDisplayMetadata)
+				.values({nodeId: "child", numberedStart: 3, ...temporal})
+				.run();
 
 			cacheService.deleteNode("parent");
 
@@ -900,6 +902,7 @@ describe("CacheService (shared)", () => {
 				nodeEmbeddings,
 				calendarMetadata,
 				calendarLevels,
+				nodeDisplayMetadata,
 				aiMetadata,
 				s3Files,
 				changesMetadata,
@@ -908,8 +911,7 @@ describe("CacheService (shared)", () => {
 			const contentSystemTo = db.select().from(nodeContent).where(eq(nodeContent.id, "parent")).get()!.systemTo;
 			expect({
 				systemTos: [...new Set(systemTos.map((row) => row.systemTo))],
-				internal: db.select().from(nodeInternalMetadata).all(),
-			}).toStrictEqual({systemTos: [contentSystemTo], internal: []});
+			}).toStrictEqual({systemTos: [contentSystemTo]});
 			expect(contentSystemTo).not.toBe(FAR_FUTURE_DATE);
 		});
 

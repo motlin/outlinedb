@@ -5,7 +5,7 @@ import {join} from "node:path";
 import {afterEach, describe, expect, it} from "vite-plus/test";
 import {WorkflowyInternalClient} from "../src/api/workflowy-internal-client.js";
 import type {InternalTreeItem} from "../src/api/workflowy-internal-client.js";
-import {importInternalMetadata, keptInternalMetadata} from "../src/cache/importer.js";
+import {importInternalMetadata, keptInternalMetadata, readInternalMetadata} from "../src/cache/internal-metadata.js";
 import {readTreeTxId} from "../src/cache/tree-transaction.js";
 import * as schema from "../src/db/schema.js";
 import {FAR_FUTURE_DATE} from "../src/temporal/index.js";
@@ -36,20 +36,22 @@ function setup(cachedIds: string[]) {
 				systemTo: FAR_FUTURE_DATE,
 			})
 			.run();
+		db.insert(schema.nodeMetadata)
+			.values({nodeId: id, systemFrom: "2026-01-01 00:00:00", systemTo: FAR_FUTURE_DATE})
+			.run();
 	}
 	const rows = () =>
-		db
-			.select()
-			.from(schema.nodeInternalMetadata)
-			.all()
-			.map((row) => ({
-				nodeId: row.nodeId,
-				metadata: JSON.parse(row.metadataJson) as unknown,
-				fetchedAt: row.fetchedAt,
-			}))
+		[...readInternalMetadata(db, [...cachedIds, "missing"])]
+			.map(([nodeId, metadata]) => ({nodeId, metadata}))
 			.toSorted((a, b) => a.nodeId.localeCompare(b.nodeId));
 	const content = () => db.select().from(schema.nodeContent).all();
-	return {sqlite, db, rows, content};
+	const metadataRows = () =>
+		db
+			.select()
+			.from(schema.nodeMetadata)
+			.all()
+			.map(({nodeId, layoutMode, systemFrom, systemTo}) => ({nodeId, layoutMode, systemFrom, systemTo}));
+	return {sqlite, db, rows, content, metadataRows};
 }
 
 describe("importInternalMetadata", () => {
@@ -86,12 +88,8 @@ describe("importInternalMetadata", () => {
 		expect({result, rows: rows(), content: content()}).toStrictEqual({
 			result: {written: 2, skipped: 1},
 			rows: [
-				{nodeId: "a", metadata: {numbered_start: 5, layoutMode: "numbered"}, fetchedAt: FETCHED_AT},
-				{
-					nodeId: "b",
-					metadata: {calendar: CALENDAR, priority: {defaultToBottom: true}},
-					fetchedAt: FETCHED_AT,
-				},
+				{nodeId: "a", metadata: {numbered_start: 5, layoutMode: "numbered"}},
+				{nodeId: "b", metadata: {calendar: CALENDAR, priority: {defaultToBottom: true}}},
 			],
 			content: contentBefore,
 		});
@@ -112,8 +110,144 @@ describe("importInternalMetadata", () => {
 
 		expect({result, rows: rows()}).toStrictEqual({
 			result: {written: 1, skipped: 0},
-			rows: [{nodeId: "a", metadata: {numbered_start: 7}, fetchedAt: FETCHED_AT}],
+			rows: [{nodeId: "a", metadata: {numbered_start: 7}}],
 		});
+	});
+
+	it("versions calendar_metadata and calendar_levels from a snapshot item's calendar, closing the earlier version on a change", () => {
+		const {db} = tracked(["root", "day"]);
+		const day = {level: "day", value: "5", timestamp: 1, dateId: 20_261_005};
+		importInternalMetadata(
+			db,
+			snapshot([
+				{id: "root", metadata: {calendar: {...CALENDAR, found_dates: true}}},
+				{id: "day", metadata: {calendar: day, restorableUniqueNode: true}},
+			]),
+			1,
+		);
+		importInternalMetadata(
+			db,
+			snapshot([
+				{id: "root", metadata: {calendar: {...CALENDAR, found_dates: true}}},
+				{id: "day", metadata: {calendar: {...day, value: "6", dateId: 20_261_006}, restorableUniqueNode: true}},
+			]),
+			FETCHED_AT,
+		);
+
+		const calendarRows = db
+			.select()
+			.from(schema.calendarMetadata)
+			.all()
+			.map(({nodeId, root, level, value, dateId, foundDates, systemTo}) => ({
+				nodeId,
+				root,
+				level,
+				value,
+				dateId,
+				foundDates,
+				live: systemTo === FAR_FUTURE_DATE,
+			}));
+		const levelRows = db
+			.select()
+			.from(schema.calendarLevels)
+			.all()
+			.map(({nodeId, day: dayFlag, week, month, year, systemTo}) => ({
+				nodeId,
+				day: dayFlag,
+				week,
+				month,
+				year,
+				live: systemTo === FAR_FUTURE_DATE,
+			}));
+		expect({calendarRows, levelRows}).toStrictEqual({
+			calendarRows: [
+				{nodeId: "root", root: 1, level: null, value: null, dateId: null, foundDates: 1, live: true},
+				{
+					nodeId: "day",
+					root: null,
+					level: "day",
+					value: "5",
+					dateId: 20_261_005,
+					foundDates: null,
+					live: false,
+				},
+				{nodeId: "day", root: null, level: "day", value: "6", dateId: 20_261_006, foundDates: null, live: true},
+			],
+			levelRows: [{nodeId: "root", day: 1, week: 0, month: 1, year: 1, live: true}],
+		});
+	});
+
+	it("round-trips restorableUniqueNode, table settings and column sizes through the typed tables", () => {
+		const {db, rows} = tracked(["day", "grid"]);
+		const table = {headers: true, skipHeaders: false, bg: "blue", sizes: {c1: 200, c2: 80.5}};
+
+		importInternalMetadata(
+			db,
+			snapshot([
+				{id: "day", metadata: {restorableUniqueNode: true, calendar: {level: "day", dateId: 20_261_005}}},
+				{id: "grid", metadata: {layoutMode: "table", table}},
+			]),
+			FETCHED_AT,
+		);
+
+		expect(rows()).toStrictEqual([
+			{nodeId: "day", metadata: {restorableUniqueNode: true, calendar: {level: "day", dateId: 20_261_005}}},
+			{nodeId: "grid", metadata: {layoutMode: "table", table}},
+		]);
+	});
+
+	it("drops only a malformed calendar field, keeping the rest of the calendar", () => {
+		const {db, rows} = tracked(["day"]);
+
+		importInternalMetadata(
+			db,
+			snapshot([{id: "day", metadata: {calendar: {level: 5, value: 6, dateId: 20_261_005, found_dates: "yes"}}}]),
+			FETCHED_AT,
+		);
+
+		expect(rows()).toStrictEqual([{nodeId: "day", metadata: {calendar: {value: "6", dateId: 20_261_005}}}]);
+	});
+
+	it("stores layoutMode bullets as NULL without a new node_metadata version, and re-versions a changed layoutMode", () => {
+		const {db, metadataRows} = tracked(["a", "b"]);
+
+		importInternalMetadata(
+			db,
+			snapshot([
+				{id: "a", metadata: {layoutMode: "bullets"}},
+				{id: "b", metadata: {layoutMode: "todo"}},
+			]),
+			FETCHED_AT,
+		);
+
+		const rowsAfter = metadataRows().map(({nodeId, layoutMode, systemTo}) => ({
+			nodeId,
+			layoutMode,
+			live: systemTo === FAR_FUTURE_DATE,
+		}));
+		expect(rowsAfter).toStrictEqual([
+			{nodeId: "a", layoutMode: null, live: true},
+			{nodeId: "b", layoutMode: null, live: false},
+			{nodeId: "b", layoutMode: "todo", live: true},
+		]);
+	});
+
+	it("keeps the earlier numbered_start as a closed version, so a temporal read as of then still sees it", () => {
+		const {db} = tracked(["a"]);
+		importInternalMetadata(db, snapshot([{id: "a", metadata: {numbered_start: 5}}]), 1);
+		importInternalMetadata(db, snapshot([{id: "a", metadata: {numbered_start: 7}}]), FETCHED_AT);
+
+		const versions = db
+			.select()
+			.from(schema.nodeDisplayMetadata)
+			.all()
+			.toSorted((a, b) => a.systemFrom.localeCompare(b.systemFrom));
+		const [first, second] = versions;
+		expect({
+			numbers: versions.map((row) => row.numberedStart),
+			contiguous: first?.systemTo === second?.systemFrom,
+			live: second?.systemTo === FAR_FUTURE_DATE,
+		}).toStrictEqual({numbers: [5, 7], contiguous: true, live: true});
 	});
 
 	it("stores the snapshot's transaction id and expanded keys, replacing a newer stored id", () => {

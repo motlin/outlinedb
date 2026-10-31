@@ -9,6 +9,7 @@ import {WorkflowyInternalClient} from "../src/api/workflowy-internal-client.js";
 import {CacheService} from "../src/cache/cache-service.js";
 import {emptyItemRelationships} from "../src/cache/item-relationships.js";
 import {WorkflowyWriteThroughClient} from "../src/cache/workflowy-write-through-client.js";
+import {readInternalMetadata} from "../src/cache/internal-metadata.js";
 import {replaceTreeTxId} from "../src/cache/tree-transaction.js";
 import * as schema from "../src/db/schema.js";
 import {WorkflowyInternalAdapter} from "../src/internal/adapter.js";
@@ -389,7 +390,7 @@ describe("WorkflowyInternalAdapter tree writes", () => {
 		expect({
 			trees: pushes.map((ops) => ops.map((op) => JSON.parse(String(op.data.project_trees)) as unknown)),
 			order: order("a"),
-			cached: sqlite.prepare("SELECT node_id, metadata_json FROM node_internal_metadata").all(),
+			cached: cachedMetadata(sqlite, ["day-id"]),
 		}).toStrictEqual({
 			trees: [
 				[
@@ -406,7 +407,7 @@ describe("WorkflowyInternalAdapter tree writes", () => {
 				],
 			],
 			order: ["day-id", "x"],
-			cached: [{node_id: "day-id", metadata_json: JSON.stringify({calendar, restorableUniqueNode: true})}],
+			cached: {"day-id": {calendar, restorableUniqueNode: true}},
 		});
 	});
 
@@ -531,7 +532,7 @@ describe("WorkflowyInternalAdapter tree writes", () => {
 
 		expect({
 			pushes: pushes.map((ops) => ops.map((op) => [op.type, op.data])),
-			cached: sqlite.prepare("SELECT node_id, metadata_json FROM node_internal_metadata").all(),
+			cached: cachedMetadata(sqlite, ["a"]),
 		}).toStrictEqual({
 			pushes: [
 				[
@@ -551,7 +552,7 @@ describe("WorkflowyInternalAdapter tree writes", () => {
 					],
 				],
 			],
-			cached: [{node_id: "a", metadata_json: JSON.stringify({numbered_start: 5, layoutMode: "numbered"})}],
+			cached: {a: {numbered_start: 5, layoutMode: "numbered"}},
 		});
 	});
 
@@ -576,24 +577,31 @@ describe("WorkflowyInternalAdapter tree writes", () => {
 
 	it("patches the cached internal metadata after each accepted node metadata edit", async () => {
 		const {adapter, sqlite} = await tracked();
-		const cachedMetadata = () =>
-			sqlite.prepare("SELECT node_id, metadata_json, fetched_at FROM node_internal_metadata").all();
+		const display = () =>
+			sqlite
+				.prepare(
+					"SELECT numbered_start, priority_default_to_bottom, system_to FROM node_display_metadata WHERE node_id = 'a' ORDER BY system_from",
+				)
+				.all()
+				.map((row) => ({
+					...z.record(z.string(), z.unknown()).parse(row),
+					system_to: Reflect.get(Object(row), "system_to") === "9999-12-31 23:59:59" ? "live" : "closed",
+				}));
 
 		await adapter.setNodeMeta("a", ["numbered_start"], 5);
 		await adapter.setNodeMeta("a", ["priority", "defaultToBottom"], true);
-		const afterSet = cachedMetadata();
+		const afterSet = cachedMetadata(sqlite, ["a"]);
 		await adapter.setNodeMeta("a", ["numbered_start"], undefined);
 		await adapter.setNodeMeta("a", ["priority", "defaultToBottom"], undefined);
 
-		expect({afterSet, afterRemove: cachedMetadata()}).toStrictEqual({
-			afterSet: [
-				{
-					node_id: "a",
-					metadata_json: JSON.stringify({numbered_start: 5, priority: {defaultToBottom: true}}),
-					fetched_at: START_MS,
-				},
+		expect({afterSet, afterRemove: cachedMetadata(sqlite, ["a"]), versions: display()}).toStrictEqual({
+			afterSet: {a: {numbered_start: 5, priority: {defaultToBottom: true}}},
+			afterRemove: {},
+			versions: [
+				{numbered_start: 5, priority_default_to_bottom: null, system_to: "closed"},
+				{numbered_start: 5, priority_default_to_bottom: 1, system_to: "closed"},
+				{numbered_start: null, priority_default_to_bottom: 1, system_to: "closed"},
 			],
-			afterRemove: [],
 		});
 	});
 
@@ -621,6 +629,11 @@ describe("WorkflowyInternalAdapter tree writes", () => {
 				server_expanded_projects_list: [],
 			}),
 		);
+	}
+
+	/** The kept metadata stored for `ids`, keyed by id; ids with none are absent. */
+	function cachedMetadata(sqlite: DatabaseConstructor.Database, ids: string[]): Record<string, unknown> {
+		return Object.fromEntries(readInternalMetadata(drizzle(sqlite, {schema}), ids));
 	}
 
 	function mirrorRows(sqlite: DatabaseConstructor.Database): unknown[] {

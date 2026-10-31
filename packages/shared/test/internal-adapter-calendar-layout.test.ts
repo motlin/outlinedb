@@ -1,5 +1,4 @@
 import DatabaseConstructor from "better-sqlite3";
-import {eq} from "drizzle-orm";
 import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
@@ -10,7 +9,7 @@ import {WorkflowyInternalClient} from "../src/api/workflowy-internal-client.js";
 import {CacheService} from "../src/cache/cache-service.js";
 import {WorkflowyWriteThroughClient} from "../src/cache/workflowy-write-through-client.js";
 import * as schema from "../src/db/schema.js";
-import {importInternalMetadata} from "../src/cache/importer.js";
+import {importInternalMetadata, readNodeInternalMetadata} from "../src/cache/internal-metadata.js";
 import {WorkflowyInternalAdapter} from "../src/internal/adapter.js";
 import type {CalendarLayoutSnapshot} from "../src/internal/adapter.js";
 import {calendarLayoutWrites, layoutWriteParents} from "../src/internal/calendar-layout-apply.js";
@@ -269,14 +268,7 @@ async function setup(initial: [string, ServerNode][]) {
 	const parents = [...new Set(initial.map(([, value]) => value.parent))];
 	await writeThrough.refreshChildren(parents.map((parent) => (parent === ROOT ? null : parent)));
 	importInternalMetadata(db, {items: server.treeData(), txId: "4567", expandedKeys: []}, 0);
-	const metadataOf = (id: string): Record<string, unknown> => {
-		const row = db
-			.select({metadataJson: schema.nodeInternalMetadata.metadataJson})
-			.from(schema.nodeInternalMetadata)
-			.where(eq(schema.nodeInternalMetadata.nodeId, id))
-			.get();
-		return row === undefined ? {} : z.record(z.string(), z.unknown()).parse(JSON.parse(row.metadataJson));
-	};
+	const metadataOf = (id: string): Record<string, unknown> => readNodeInternalMetadata(db, id);
 	/** The calendar snapshot under `rootId` from the cache, as the web route's loader builds it. */
 	const cachedSnapshot = (rootId: string): CalendarLayoutSnapshot => {
 		const toLayout = (parentId: string): LayoutNode[] =>

@@ -10,6 +10,8 @@ const TEMPORAL_TABLES = [
 	"node_metadata",
 	"calendar_metadata",
 	"calendar_levels",
+	"node_display_metadata",
+	"node_table_cell_sizes",
 	"node_embeddings",
 	"mirrors",
 	"backlinks",

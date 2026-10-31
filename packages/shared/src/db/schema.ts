@@ -1,6 +1,6 @@
 import type {InferInsertModel, InferSelectModel} from "drizzle-orm";
 import {relations, sql} from "drizzle-orm";
-import {blob, index, integer, primaryKey, sqliteTable, text, uniqueIndex} from "drizzle-orm/sqlite-core";
+import {blob, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex} from "drizzle-orm/sqlite-core";
 
 /**
  * node_content: Fields that affect embeddings (name, note, parentId)
@@ -391,19 +391,64 @@ export const nodeTags = sqliteTable(
 );
 
 /**
- * node_internal_metadata: item metadata the public API does not return,
- * imported from the internal API's `/get_tree_data/` (see
- * `importInternalMetadata` in `cache/importer.ts`). `metadata_json` holds only
- * the keys the app uses: `numbered_start`, `calendar`,
- * `priority.defaultToBottom` and `layoutMode`. `fetched_at` is Unix ms of the
- * import or accepted write that produced the row. A write-through cache, so
- * non-bitemporal and excluded from temporal rollback.
+ * node_display_metadata: a node's display settings from upstream item
+ * metadata that the public API does not return, imported from the internal
+ * API's `/get_tree_data/` and written after accepted metadata edits. One row
+ * only while any field is set; booleans are 0/1.
+ *   - `numbered_start`: `metadata.numbered_start`, a numbered list's first number.
+ *   - `restorable_unique_node`: `metadata.restorableUniqueNode`, set on calendar level nodes.
+ *   - `table_headers`, `table_skip_headers`, `table_bg`: `metadata.table.headers`,
+ *     `.skipHeaders` and `.bg`; `.sizes` lives in `node_table_cell_sizes`.
+ *   - `priority_default_to_bottom`: `metadata.priority.defaultToBottom`.
+ * Separate from `node_metadata`, which versions on every priority or modified
+ * change, while these rarely change.
  */
-export const nodeInternalMetadata = sqliteTable("node_internal_metadata", {
-	nodeId: text("node_id").primaryKey(),
-	metadataJson: text("metadata_json").notNull(),
-	fetchedAt: integer("fetched_at").notNull(),
-});
+export const nodeDisplayMetadata = sqliteTable(
+	"node_display_metadata",
+	{
+		nodeId: text("node_id").notNull(),
+
+		numberedStart: integer("numbered_start"),
+		restorableUniqueNode: integer("restorable_unique_node"),
+		tableHeaders: integer("table_headers"),
+		tableSkipHeaders: integer("table_skip_headers"),
+		tableBg: text("table_bg"),
+		priorityDefaultToBottom: integer("priority_default_to_bottom"),
+
+		systemFrom: text("system_from").notNull(),
+		systemTo: text("system_to").notNull(),
+	},
+	(table) => [
+		primaryKey({columns: [table.nodeId, table.systemFrom]}),
+		uniqueIndex("node_display_metadata_system_to_idx").on(table.nodeId, table.systemTo),
+		index("node_display_metadata_closed_at_idx")
+			.on(table.systemTo)
+			.where(sql`system_to < '9999-12-31 23:59:59'`),
+	],
+);
+
+/**
+ * node_table_cell_sizes: a table node's column widths, upstream's
+ * `metadata.table.sizes` map of header cell (a node id) to width, one row per entry.
+ */
+export const nodeTableCellSizes = sqliteTable(
+	"node_table_cell_sizes",
+	{
+		nodeId: text("node_id").notNull(),
+		cellId: text("cell_id").notNull(),
+		size: real("size").notNull(),
+
+		systemFrom: text("system_from").notNull(),
+		systemTo: text("system_to").notNull(),
+	},
+	(table) => [
+		primaryKey({columns: [table.nodeId, table.cellId, table.systemFrom]}),
+		uniqueIndex("node_table_cell_sizes_system_to_idx").on(table.nodeId, table.cellId, table.systemTo),
+		index("node_table_cell_sizes_closed_at_idx")
+			.on(table.systemTo)
+			.where(sql`system_to < '9999-12-31 23:59:59'`),
+	],
+);
 
 export const nodeContentRelations = relations(nodeContent, ({one, many}) => ({
 	metadata: one(nodeMetadata, {
@@ -558,3 +603,7 @@ export type CalendarMetadata = InferSelectModel<typeof calendarMetadata>;
 export type NewCalendarMetadata = InferInsertModel<typeof calendarMetadata>;
 export type CalendarLevels = InferSelectModel<typeof calendarLevels>;
 export type NewCalendarLevels = InferInsertModel<typeof calendarLevels>;
+export type NodeDisplayMetadata = InferSelectModel<typeof nodeDisplayMetadata>;
+export type NewNodeDisplayMetadata = InferInsertModel<typeof nodeDisplayMetadata>;
+export type NodeTableCellSize = InferSelectModel<typeof nodeTableCellSizes>;
+export type NewNodeTableCellSize = InferInsertModel<typeof nodeTableCellSizes>;

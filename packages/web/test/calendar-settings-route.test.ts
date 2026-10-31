@@ -3,7 +3,7 @@ import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
 import {afterEach, describe, expect, it} from "vite-plus/test";
-import {CacheService} from "@workflowy/shared/cache";
+import {CacheService, storeInternalMetadata} from "@workflowy/shared/cache";
 import * as schema from "@workflowy/shared/db";
 import type {WorkflowyInternalAdapter} from "@workflowy/shared/internal";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
@@ -66,13 +66,7 @@ function app({rootMetadata = ROOT_METADATA, adapter = true}: SetupOptions = {}) 
 			.run();
 	}
 	const tag = (id: string, level: string, value: string, dateId: number) => {
-		db.insert(schema.nodeInternalMetadata)
-			.values({
-				nodeId: id,
-				metadataJson: JSON.stringify({calendar: {level, value, timestamp: 0, dateId}}),
-				fetchedAt: 1,
-			})
-			.run();
+		storeInternalMetadata(db, new Map([[id, {calendar: {level, value, timestamp: 0, dateId}}]]));
 	};
 	tag("y2026", "year", "2026", 20_260_000);
 	tag("m09", "month", "9", 20_260_900);
@@ -80,11 +74,7 @@ function app({rootMetadata = ROOT_METADATA, adapter = true}: SetupOptions = {}) 
 		tag(`d09${day}`, "day", String(day), 20_260_900 + day);
 	}
 	const writeRoot = (metadata: Record<string, unknown>) => {
-		const row = {metadataJson: JSON.stringify(metadata), fetchedAt: 1};
-		db.insert(schema.nodeInternalMetadata)
-			.values({nodeId: "cal", ...row})
-			.onConflictDoUpdate({target: schema.nodeInternalMetadata.nodeId, set: row})
-			.run();
+		storeInternalMetadata(db, new Map([["cal", metadata]]));
 	};
 	if (rootMetadata !== null) {
 		writeRoot(rootMetadata);

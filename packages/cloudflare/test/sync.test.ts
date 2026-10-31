@@ -303,9 +303,7 @@ describe("sync from a fake upstream", () => {
 		expect(seeded.lastResult).toMatchObject({status: "ok", totalNodes: 100});
 		expect(seeded.lastResult?.internalSyncError).toBeUndefined();
 		expect(internalCalls.filter((path) => path === "/get_tree_data/")).toStrictEqual(["/get_tree_data/"]);
-		await expect(internalMetadata(h)).resolves.toStrictEqual([
-			{node_id: uuid(1), metadata_json: JSON.stringify({numbered_start: 7})},
-		]);
+		await expect(internalMetadata(h)).resolves.toStrictEqual([{node_id: uuid(1), numbered_start: 7}]);
 		await expect(treeLog(h)).resolves.toStrictEqual({txId: "1", mirrors: []});
 
 		const mirrored = JSON.stringify({
@@ -384,7 +382,7 @@ describe("sync from a fake upstream", () => {
 		await stop(h);
 	}, 60_000);
 
-	it("resolves a calendar day from node_internal_metadata.calendar when calendar_metadata and calendar_levels are empty", async () => {
+	it("resolves a calendar day from the calendar metadata a /get_tree_data/ import stores, with no backup import", async () => {
 		const node = (n: number, name: string, parent: number | null) => ({
 			id: uuid(n),
 			name,

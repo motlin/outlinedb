@@ -95,7 +95,7 @@ describe("GET /api/v1/calendar/days", () => {
 
 		await expect(get("year=2026&month=10&found=1")).resolves.toStrictEqual({status: 200, body: {days: [1]}});
 		// Only root lookups (the settings, the days, the Found Dates' calendar info, twice each for the node role); the strict walk reads children by id, not by scanning.
-		expect(scans.filter((sql) => sql.includes('"node_internal_metadata"') && sql.includes("like"))).toHaveLength(6);
+		expect(scans.filter(isCalendarScan)).toHaveLength(6);
 	});
 
 	it("rejects a missing or out-of-range year or month", async () => {
@@ -135,7 +135,7 @@ describe("GET /api/v1/calendar/dots", () => {
 			status: 200,
 			body: {dateIds: [20_260_928, 20_260_929, 20_260_930, 20_261_001]},
 		});
-		expect(scans.filter((sql) => sql.includes('"node_internal_metadata"') && sql.includes("like"))).toHaveLength(3);
+		expect(scans.filter(isCalendarScan)).toHaveLength(3);
 	});
 
 	it("rejects a missing, invalid, reversed or over-long range", async () => {
@@ -156,3 +156,8 @@ describe("GET /api/v1/calendar/dots", () => {
 		);
 	});
 });
+
+/** A query that reads calendar_metadata without naming node ids: a scan by root, level or dateId, not a lookup by id. */
+function isCalendarScan(sql: string): boolean {
+	return sql.includes('from "calendar_metadata"') && !sql.includes('"calendar_metadata"."node_id" in');
+}

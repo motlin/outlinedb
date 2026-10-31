@@ -177,7 +177,15 @@ describe("ending node composites", () => {
 			.insert(schema.backlinks)
 			.values({nodeId: id, sourceId: "source", targetId: "target", ...temporal})
 			.run();
-		database.insert(schema.nodeInternalMetadata).values({nodeId: id, metadataJson: "{}", fetchedAt: 1}).run();
+		database
+			.insert(schema.nodeDisplayMetadata)
+			.values({nodeId: id, numberedStart: 1, ...temporal})
+			.run();
+		database
+			.insert(schema.nodeTableCellSizes)
+			.values({nodeId: id, cellId: "cell", size: 100, ...temporal})
+			.run();
+		database.insert(schema.nodeTags).values({nodeId: id, tagKey: "#tag", tag: "#tag"}).run();
 	}
 
 	/** Each owned table's rows as sorted `owner@systemTo`; the hard-delete table reports `owner@present`. */
@@ -202,6 +210,8 @@ describe("ending node composites", () => {
 		"node_metadata",
 		"calendar_metadata",
 		"calendar_levels",
+		"node_display_metadata",
+		"node_table_cell_sizes",
 		"node_embeddings",
 		"ai_metadata",
 		"s3_files",
@@ -266,7 +276,7 @@ describe("ending node composites", () => {
 			mirrors: sqlite
 				.prepare("SELECT original_id || '>' || mirror_id || '@' || system_to AS row FROM mirrors ORDER BY row")
 				.all(),
-			internal: snap.node_internal_metadata,
+			tags: snap.node_tags,
 		}).toStrictEqual({
 			owned: expected([
 				{owner: "doomed", systemTo: UOW_TIME, node: true, parts: true},
@@ -276,7 +286,7 @@ describe("ending node composites", () => {
 			]),
 			backlinks: [`doomed@${UOW_TIME}`, `survivor@${FAR_FUTURE_DATE}`, `survivor@${FAR_FUTURE_DATE}`],
 			mirrors: [{row: `doomed>mirror-of-doomed@${UOW_TIME}`}, {row: `original-of-doomed>doomed@${UOW_TIME}`}],
-			internal: ["survivor@present"],
+			tags: ["survivor@present"],
 		});
 	});
 
@@ -309,7 +319,7 @@ describe("ending node composites", () => {
 			mirrors: sqlite
 				.prepare("SELECT original_id || '>' || mirror_id || '@' || system_to AS row FROM mirrors ORDER BY row")
 				.all(),
-			internal: snap.node_internal_metadata,
+			tags: snap.node_tags,
 		}).toStrictEqual({
 			owned: expected([
 				{owner: "live", systemTo: FAR_FUTURE_DATE, node: true, parts: true},
@@ -318,7 +328,7 @@ describe("ending node composites", () => {
 			]),
 			backlinks: [`ghost@${UOW_TIME}`, `live@${FAR_FUTURE_DATE}`],
 			mirrors: [{row: `ghost>live-mirror@${UOW_TIME}`}, {row: `live>live-mirror@${FAR_FUTURE_DATE}`}],
-			internal: ["live@present"],
+			tags: ["live@present"],
 		});
 	});
 
