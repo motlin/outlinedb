@@ -1,5 +1,5 @@
 import {afterEach, beforeEach, describe, expect, it} from "vite-plus/test";
-import {fileBlobs, localSettings} from "@workflowy/shared/db";
+import {apiImportTimestamp, fileBlobs, tagColors} from "@workflowy/shared/db";
 import {captureOutput} from "@oclif/test";
 import fs from "node:fs";
 import os from "node:os";
@@ -36,12 +36,21 @@ describe("cache:import-local-state command", () => {
 		fs.rmSync(tempDir, {recursive: true, force: true});
 	});
 
-	it("copies every local_settings and file_blobs row from the old database, replacing rows with the same key", async () => {
+	it("copies every version of the account tables, their import times and every file_blobs row from the old database", async () => {
+		const closed = {systemFrom: "2026-01-01 00:00:00.000", systemTo: "2026-02-01 00:00:00.000"};
+		const live = {systemFrom: "2026-02-01 00:00:00.000", systemTo: "9999-12-31 23:59:59"};
 		source.db
-			.insert(localSettings)
+			.insert(tagColors)
 			.values([
-				{key: "root:layout", json: "{}", updatedAt: 222},
-				{key: "setting:theme", json: '"dark"', updatedAt: 111},
+				{tag: "#a", colorIndex: 1, ...closed},
+				{tag: "#a", colorIndex: 2, ...live},
+			])
+			.run();
+		source.db
+			.insert(apiImportTimestamp)
+			.values([
+				{name: "account", timestamp: new Date(1_000_000), ...live},
+				{name: "other-pipeline", timestamp: new Date(2_000_000), ...live},
 			])
 			.run();
 		source.db
@@ -69,20 +78,24 @@ describe("cache:import-local-state command", () => {
 				},
 			])
 			.run();
-		target.db.insert(localSettings).values({key: "setting:theme", json: '"light"', updatedAt: 1}).run();
 
 		const {stdout} = await captureOutput(async () => ImportLocalState.run(["--from", sourcePath, "--json"]));
 
+		const result = JSON.parse(stdout) as {accountTables: Record<string, number>; fileBlobs: number};
 		expect({
-			result: JSON.parse(stdout) as unknown,
-			localSettings: target.db.select().from(localSettings).orderBy(localSettings.key).all(),
+			copied: Object.entries(result.accountTables).filter(([, count]) => count > 0),
+			fileBlobsCopied: result.fileBlobs,
+			tagColors: target.db.select().from(tagColors).orderBy(tagColors.systemFrom).all(),
+			importTimes: target.db.select().from(apiImportTimestamp).all(),
 			fileBlobs: target.db.select().from(fileBlobs).orderBy(fileBlobs.nodeId).all(),
 		}).toStrictEqual({
-			result: {localSettings: 2, fileBlobs: 2},
-			localSettings: [
-				{key: "root:layout", json: "{}", updatedAt: 222},
-				{key: "setting:theme", json: '"dark"', updatedAt: 111},
+			copied: [["tag_colors", 2]],
+			fileBlobsCopied: 2,
+			tagColors: [
+				{tag: "#a", colorIndex: 1, ...closed},
+				{tag: "#a", colorIndex: 2, ...live},
 			],
+			importTimes: [{name: "account", timestamp: new Date(1_000_000), ...live}],
 			fileBlobs: [
 				{
 					nodeId: "node-1",
@@ -105,6 +118,26 @@ describe("cache:import-local-state command", () => {
 					fetchedAt: 444,
 				},
 			],
+		});
+	});
+
+	it("refuses, copying nothing, when the account tables already hold rows", async () => {
+		const live = {systemFrom: "2026-02-01 00:00:00.000", systemTo: "9999-12-31 23:59:59"};
+		source.db
+			.insert(tagColors)
+			.values({tag: "#a", colorIndex: 1, ...live})
+			.run();
+		target.db
+			.insert(tagColors)
+			.values({tag: "#b", colorIndex: 2, ...live})
+			.run();
+
+		const {error} = await captureOutput(async () => ImportLocalState.run(["--from", sourcePath]));
+
+		expect({message: error?.message, tagColors: target.db.select().from(tagColors).all()}).toStrictEqual({
+			message:
+				"The account tables already hold rows (tag_colors); run import-local-state on a new database, before import-api and import-account",
+			tagColors: [{tag: "#b", colorIndex: 2, ...live}],
 		});
 	});
 

@@ -37,16 +37,24 @@ describe("round-trip test infrastructure", () => {
 
 			expect(tableNames).toStrictEqual([
 				"__drizzle_migrations",
+				"account",
+				"account_settings",
 				"account_state",
+				"ai_assistants",
 				"ai_metadata",
+				"ai_prompt_buttons",
+				"api_import_timestamp",
 				"backlinks",
 				"backup_imports",
 				"calendar_levels",
 				"calendar_metadata",
+				"changelog_reads",
 				"changes_metadata",
 				"config",
+				"enabled_features",
+				"expanded_nodes",
 				"file_blobs",
-				"local_settings",
+				"location_renames",
 				"mirrors",
 				"node_content",
 				"node_display_metadata",
@@ -61,9 +69,17 @@ describe("round-trip test infrastructure", () => {
 				"node_table_cell_sizes",
 				"node_tags",
 				"references_roots",
+				"root_preferences",
 				"s3_files",
+				"saved_views",
 				"sqlite_sequence",
+				"star_order",
+				"stars",
+				"surveys",
+				"tag_colors",
+				"tree_transactions",
 				"virtual_root_ids",
+				"visible_features",
 			]);
 
 			sqlite.close();
@@ -74,7 +90,7 @@ describe("round-trip test infrastructure", () => {
 
 			const result = database.get<{count: number}>(sql`SELECT COUNT(*) AS count FROM __drizzle_migrations`);
 
-			expect(result.count).toBe(42);
+			expect(result.count).toBe(43);
 
 			sqlite.close();
 		});

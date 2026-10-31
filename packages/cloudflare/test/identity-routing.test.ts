@@ -7,7 +7,29 @@ import type {UserStore} from "../src/user-store";
 
 const teamDomain = "team.example.com";
 const audience = "aud-routing";
-const url = "http://localhost/api/admin/local-settings";
+const url = "http://localhost/api/admin/account-state";
+
+const TABLES = [
+	"account",
+	"rootPreferences",
+	"accountSettings",
+	"tagColors",
+	"stars",
+	"starOrder",
+	"locationRenames",
+	"enabledFeatures",
+	"visibleFeatures",
+	"changelogReads",
+	"surveys",
+	"savedViews",
+	"aiAssistants",
+	"aiPromptButtons",
+];
+
+/** An account state holding only `tagColors`. */
+function stateWith(tagColors: unknown[]) {
+	return {rows: {...Object.fromEntries(TABLES.map((name) => [name, []])), tagColors}, expandedKeys: null};
+}
 
 describe("worker routes each Access email to its own Durable Object", () => {
 	let h: Harness;
@@ -57,20 +79,20 @@ describe("worker routes each Access email to its own Durable Object", () => {
 	async function named(name: string): Promise<unknown> {
 		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
 		const ns = (await h.mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace<UserStore>;
-		return ns.get(ns.idFromName(name)).listLocalSettings();
+		return ns.get(ns.idFromName(name)).getAccountState();
 	}
 
 	it("stores a valid token's writes in the DO named by the lowercased email, not dev, and keeps emails separate", async () => {
-		await as("ALICE@example.com", {
-			method: "PUT",
-			body: JSON.stringify([{key: "setting:theme", json: '"dark"', updatedAt: 1}]),
-		});
+		const alice = stateWith([{tag: "#a", colorIndex: 1}]);
+		await as("ALICE@example.com", {method: "PUT", body: JSON.stringify(alice)});
 
-		const row = {key: "setting:theme", json: '"dark"', updatedAt: 1};
-		await expect(named("alice@example.com")).resolves.toStrictEqual([row]);
-		await expect(named("dev")).resolves.toStrictEqual([]);
-		await expect(as("bob@example.com")).resolves.toStrictEqual([]);
-		await expect(as("alice@example.com")).resolves.toStrictEqual([row]);
+		// The RPC result is built in another realm, so compare it as JSON.
+		await expect(named("alice@example.com").then((state) => JSON.stringify(state))).resolves.toBe(
+			JSON.stringify(alice),
+		);
+		await expect(named("dev").then((state) => JSON.stringify(state))).resolves.toBe(JSON.stringify(stateWith([])));
+		await expect(as("bob@example.com")).resolves.toStrictEqual(stateWith([]));
+		await expect(as("alice@example.com")).resolves.toStrictEqual(alice);
 	});
 
 	it("reaches a migrated op over RPC under the Access identity, and the DO answers the op itself", async () => {
@@ -100,7 +122,7 @@ describe("worker routes each Access email to its own Durable Object", () => {
 		const ns = (await h.mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace;
 		const stub = ns.get(ns.idFromName("alice@example.com"));
 		const viaDo = await Promise.all(
-			["status", "sync", "local-settings"].map(
+			["status", "sync", "account-state"].map(
 				async (name) => (await stub.fetch(`http://localhost/api/admin/${name}`)).status,
 			),
 		);

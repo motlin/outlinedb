@@ -1,5 +1,12 @@
 import {DurableObject} from "cloudflare:workers";
-import {ensureNodeTags} from "@workflowy/shared/cache";
+import {
+	accountRowTotal,
+	ensureNodeTags,
+	readAccountState,
+	runUnitOfWork,
+	writeAccountState,
+} from "@workflowy/shared/cache";
+import type {AccountState} from "@workflowy/shared/cache";
 import * as schema from "@workflowy/shared/db";
 import {
 	LadderEventBus,
@@ -133,27 +140,22 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 		};
 	}
 
-	/** The durable local settings rows, ordered by key. */
+	/** The account tables' live rows and the expanded keys. */
 	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
-	listLocalSettings(): LocalSettingRow[] {
-		return this.db.select().from(schema.localSettings).orderBy(schema.localSettings.key).all();
+	getAccountState(): AccountState {
+		return readAccountState(this.db);
 	}
 
-	/** Upsert rows by key, keeping their timestamps. */
+	/** Merge a seed into the account tables in one unit of work; rows already equal keep their versions. */
 	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
-	putLocalSettings(rows: LocalSettingRow[]): {upserted: number} {
-		this.db.transaction((tx) => {
-			for (const row of rows) {
-				tx.insert(schema.localSettings)
-					.values(row)
-					.onConflictDoUpdate({
-						target: schema.localSettings.key,
-						set: {json: row.json, updatedAt: row.updatedAt},
-					})
-					.run();
-			}
+	putAccountState(state: AccountState): {rows: number; expandedKeys: number | null} {
+		runUnitOfWork(this.db, (unitOfWork) => {
+			writeAccountState(unitOfWork, state, Date.now());
 		});
-		return {upserted: rows.length};
+		return {
+			rows: accountRowTotal(state.rows),
+			expandedKeys: state.expandedKeys?.length ?? null,
+		};
 	}
 
 	override async alarm(): Promise<void> {
@@ -172,12 +174,6 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 		}
 		return new Response("Not found", {status: 404});
 	}
-}
-
-export interface LocalSettingRow {
-	key: string;
-	json: string;
-	updatedAt: number;
 }
 
 export interface AdminStatus {

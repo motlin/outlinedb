@@ -621,6 +621,8 @@ function rootMetaFetch(recorded: Recorded[], metadata: Meta) {
 		const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
 		const body = typeof init?.body === "string" ? init.body : undefined;
 		recorded.push({path: url.pathname, body});
+		// Each response takes a millisecond, as a network round trip would, so the adapter's units of work get distinct times.
+		vi.setSystemTime(Date.now() + 1);
 		if (url.pathname === "/get_initialization_data") {
 			const initBody = structuredClone(INIT_BODY);
 			initBody.projectTreeData.rootProjectMetadata = structuredClone(state.metadata);
@@ -816,6 +818,8 @@ function settingsFetch(recorded: Recorded[], settings: Meta) {
 		const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
 		const body = typeof init?.body === "string" ? init.body : undefined;
 		recorded.push({path: url.pathname, body});
+		// Each response takes a millisecond, as a network round trip would, so the adapter's units of work get distinct times.
+		vi.setSystemTime(Date.now() + 1);
 		if (url.pathname === "/get_initialization_data") {
 			const initBody = structuredClone(INIT_BODY);
 			initBody.settings = structuredClone(state.settings);

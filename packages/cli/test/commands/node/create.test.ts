@@ -9,7 +9,7 @@ import path from "node:path";
 import type {MockInstance} from "vite-plus/test";
 import {z} from "zod";
 import {WorkflowyInternalAdapter} from "@workflowy/shared/internal";
-import {replaceTreeTxId} from "@workflowy/shared/cache";
+import {storeTreeTxId} from "@workflowy/shared/cache";
 import Create from "../../../src/commands/node/create.js";
 import {cleanupTestDatabase, createTestDatabase, nodeFixtures, seedTestData} from "../../db/migration-helper.js";
 import type {TestDatabase} from "../../db/migration-helper.js";
@@ -277,7 +277,7 @@ describe("node create command", () => {
 				testDatabase,
 				nodeFixtures([createTestNode({id: "parent-id", name: "Parent", parentId: null})]),
 			);
-			replaceTreeTxId(testDatabase.db, "1234567", 0);
+			storeTreeTxId(testDatabase.db, "1234567");
 			fakeCreates("new-id");
 			const publicApi = fetchStub.getMockImplementation()!;
 			fetchStub.mockImplementation(async (url: RequestInfo | URL, init?: RequestInit) => {

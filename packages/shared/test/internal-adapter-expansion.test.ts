@@ -6,8 +6,9 @@ import {afterEach, describe, expect, it, vi} from "vite-plus/test";
 import {WorkflowyInternalClient} from "../src/api/workflowy-internal-client.js";
 import {CacheService} from "../src/cache/cache-service.js";
 import {expansionVersion, readExpansion, replaceExpansion} from "../src/cache/expansion-store.js";
+import {runUnitOfWork} from "../src/cache/node-composite.js";
 import {importInternalMetadata} from "../src/cache/internal-metadata.js";
-import {replaceTreeTxId} from "../src/cache/tree-transaction.js";
+import {storeTreeTxId} from "../src/cache/tree-transaction.js";
 import * as schema from "../src/db/schema.js";
 import {WorkflowyInternalAdapter} from "../src/internal/adapter.js";
 import {ExpansionNotSeeded, TreeResyncRequired} from "../src/internal/errors.js";
@@ -33,7 +34,7 @@ function setup() {
 	const db = drizzle(sqlite, {schema});
 	migrate(db, {migrationsFolder});
 	// A whole-tree import seeded the transaction-log position at the fake init's id.
-	replaceTreeTxId(db, "4567", 0);
+	storeTreeTxId(db, "4567");
 	const cacheService = new CacheService(db);
 	for (const id of [ALPHA, BRAVO, ALPHA_TWIN, CHARLIE]) {
 		cacheService.insertNode(cachedNode(id), null);
@@ -54,7 +55,11 @@ function setup() {
 		});
 	const forbidden = forbidTreeData(api);
 	/** Seed the expanded keys as a whole-tree import does. */
-	const seed = (keys: string[]) => replaceExpansion(db, keys, clock.ms);
+	const seed = (keys: string[]) => {
+		runUnitOfWork(db, (unitOfWork) => {
+			replaceExpansion(unitOfWork, keys, clock.ms);
+		});
+	};
 	return {sqlite, db, api, adapter: newAdapter(), newAdapter, clock, forbidden, seed};
 }
 
@@ -239,7 +244,7 @@ describe("WorkflowyInternalAdapter expansion", () => {
 
 		await adapter.setExpanded({[CHARLIE]: true, [ALPHA]: false});
 
-		expect({ids: adapter.getExpandedIds(), stored: readExpansion(db)?.keys}).toStrictEqual({
+		expect({ids: adapter.getExpandedIds(), stored: readExpansion(db)}).toStrictEqual({
 			ids: [CHARLIE],
 			stored: new Set(["9c9c9c9c"]),
 		});
@@ -276,18 +281,42 @@ describe("WorkflowyInternalAdapter expansion", () => {
 		]);
 	});
 
-	it("keeps a durable local copy of every pushed expansion key", async () => {
-		const {adapter, seed} = tracked();
-		seed(["1a2b3c4d"]);
+	it("keeps every pushed expansion change as a version of the delta's keys only", async () => {
+		const {db, adapter, seed} = tracked();
+		seed(["1a2b3c4d", "9c9c9c9c"]);
 
-		await adapter.setExpanded({[ALPHA]: true, [BRAVO]: false});
+		await adapter.setExpanded({[ALPHA]: false, [BRAVO]: true});
 		await adapter.setRawExpansionKeys({"leftbar__home__None/x/__abcdefgh": true});
-		await adapter.setExpanded({[BRAVO]: true});
+		await adapter.setExpanded({[ALPHA]: true});
 
-		expect(adapter.localSettings()).toStrictEqual({
-			"expansion:1a2b3c4d": true,
-			"expansion:5e6f7a8b": true,
-			"expansion:leftbar__home__None/x/__abcdefgh": true,
+		const history = db
+			.select({
+				shortKey: schema.expandedNodes.shortKey,
+				systemFrom: schema.expandedNodes.systemFrom,
+				systemTo: schema.expandedNodes.systemTo,
+			})
+			.from(schema.expandedNodes)
+			.orderBy(schema.expandedNodes.shortKey, schema.expandedNodes.systemFrom)
+			.all();
+		const live = (row: {systemTo: string}) => row.systemTo === "9999-12-31 23:59:59";
+		expect({
+			stored: readExpansion(db),
+			versions: Object.fromEntries(
+				[...new Set(history.map((row) => row.shortKey))].map((key) => [
+					key,
+					history.filter((row) => row.shortKey === key).map(live),
+				]),
+			),
+			untouched: new Set(history.filter((row) => row.shortKey === "9c9c9c9c").map((row) => row.systemFrom)).size,
+		}).toStrictEqual({
+			stored: new Set(["1a2b3c4d", "5e6f7a8b", "9c9c9c9c", "leftbar__home__None/x/__abcdefgh"]),
+			versions: {
+				"1a2b3c4d": [false, true],
+				"5e6f7a8b": [true],
+				"9c9c9c9c": [true],
+				"leftbar__home__None/x/__abcdefgh": [true],
+			},
+			untouched: 1,
 		});
 	});
 

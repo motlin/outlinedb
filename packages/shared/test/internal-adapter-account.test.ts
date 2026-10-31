@@ -2,12 +2,12 @@ import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
-import {eq} from "drizzle-orm";
 import {afterEach, describe, expect, it} from "vite-plus/test";
 import {WorkflowyInternalClient} from "../src/api/workflowy-internal-client.js";
-import {replaceTreeTxId} from "../src/cache/tree-transaction.js";
+import {storeTreeTxId} from "../src/cache/tree-transaction.js";
+import {readAccountRows, readImportTime} from "../src/cache/account-store.js";
+import {ACCOUNT_COMPOSITE_TABLES} from "../src/cache/node-composite.js";
 import * as schema from "../src/db/schema.js";
-import {accountState, localSettings} from "../src/db/schema.js";
 import {WorkflowyInternalAdapter} from "../src/internal/adapter.js";
 import {OperationRejected} from "../src/internal/errors.js";
 import {createFakeInternalApi, FAKE_CLIENT_ID, initializationData, json} from "./helpers/fake-internal-api.js";
@@ -35,7 +35,7 @@ function setup() {
 	const db = drizzle(sqlite, {schema});
 	migrate(db, {migrationsFolder});
 	// A whole-tree import seeded the transaction-log position at the fake init's id.
-	replaceTreeTxId(db, "4567", 0);
+	storeTreeTxId(db, "4567");
 	const api = createFakeInternalApi();
 	const client = new WorkflowyInternalClient({
 		credentials: {username: "alice@example.com", password: "hunter2"},
@@ -51,6 +51,11 @@ function setup() {
 		pushAndPoll: {randomId: () => "pollid01", timezone: "America/New_York", sleep: async () => {}},
 	});
 	return {sqlite, db, api, adapter, clock};
+}
+
+/** Every version of every account table and of the import times: a write that changes nothing leaves this equal. */
+function accountHistory(db: ReturnType<typeof setup>["db"]) {
+	return [...ACCOUNT_COMPOSITE_TABLES, schema.apiImportTimestamp].map((table) => db.select().from(table).all());
 }
 
 function network(requests: RecordedRequest[]) {
@@ -138,10 +143,10 @@ describe("WorkflowyInternalAdapter account state", () => {
 		expect(api.requests).toHaveLength(requestsBefore);
 	});
 
-	it("leaves account_state unchanged when the push is rejected", async () => {
+	it("leaves the account tables unchanged when the push is rejected", async () => {
 		const {api, adapter, db, clock} = tracked();
 		await adapter.getRootMeta([]);
-		const before = db.select().from(accountState).all();
+		const before = accountHistory(db);
 		clock.ms += 31_000;
 		api.respond("/push_and_poll", () =>
 			json({results: [{new_most_recent_operation_transaction_id: "4568", error: "bad op"}]}),
@@ -149,7 +154,7 @@ describe("WorkflowyInternalAdapter account state", () => {
 
 		await expect(adapter.setRootMeta(["color", "tags", "alice"], 3)).rejects.toBeInstanceOf(OperationRejected);
 
-		expect(db.select().from(accountState).all()).toStrictEqual(before);
+		expect(accountHistory(db)).toStrictEqual(before);
 	});
 
 	it("serves reads from the cache for 30s, then answers from the cache while one initialization GET refreshes it in the background", async () => {
@@ -209,7 +214,7 @@ describe("WorkflowyInternalAdapter account state", () => {
 		await expect(adapter.getRootMeta(["color", "tags"])).resolves.toStrictEqual({alice: 3});
 	});
 
-	it("reads the entropy key from the initialization data once, then serves it from account_state", async () => {
+	it("reads the entropy key from the initialization data once, then serves it from the account row", async () => {
 		const {api, adapter, db, clock} = tracked();
 		api.respond("/get_initialization_data", () =>
 			json(
@@ -235,7 +240,7 @@ describe("WorkflowyInternalAdapter account state", () => {
 		expect(api.requests.slice(requestsBefore)).toStrictEqual([]);
 	});
 
-	it("refreshes every account_state part with one initialization GET, even when the cache is fresh", async () => {
+	it("refreshes every account table with one initialization GET, even when the cache is fresh", async () => {
 		const {api, adapter, db, clock} = tracked();
 		await adapter.getSetting("theme");
 		api.respond("/get_initialization_data", () =>
@@ -251,36 +256,73 @@ describe("WorkflowyInternalAdapter account state", () => {
 		const requestsBefore = api.requests.length;
 		clock.ms += 1000;
 
-		const keys = await adapter.refreshAccountState();
+		const counts = await adapter.refreshAccountState();
 
+		const {account, rootPreferences, accountSettings, stars} = readAccountRows(db);
 		expect({
-			keys,
-			rows: db
-				.select({key: accountState.key, json: accountState.json, fetchedAt: accountState.fetchedAt})
-				.from(accountState)
-				.orderBy(accountState.key)
-				.all(),
+			counts,
+			account,
+			rootPreferences: rootPreferences.map((row) => Object.entries(row).filter(([, value]) => value !== null)),
+			theme: accountSettings.map((row) => row.theme),
+			stars,
+			fetchedAt: readImportTime(db, "account"),
 			network: network(api.requests.slice(requestsBefore)),
 		}).toStrictEqual({
-			keys: ["account", "root_metadata", "settings", "visible_features", "entropy_key"],
-			rows: [
+			counts: {
+				account: 1,
+				root_preferences: 1,
+				account_settings: 1,
+				tag_colors: 0,
+				stars: 1,
+				star_order: 0,
+				location_renames: 0,
+				enabled_features: 0,
+				visible_features: 0,
+				changelog_reads: 0,
+				surveys: 0,
+				saved_views: 0,
+				ai_assistants: 0,
+				ai_prompt_buttons: 0,
+			},
+			account: [
 				{
-					key: "account",
-					json: JSON.stringify({userId: 123, dateJoinedSec: 1_500_000_000}),
-					fetchedAt: START_MS + 1000,
+					userId: 123,
+					fullName: null,
+					dateJoinedSec: 1_500_000_000,
+					entropyKey: "k".repeat(64),
+					username: null,
+					email: null,
 				},
-				{key: "entropy_key", json: JSON.stringify("k".repeat(64)), fetchedAt: START_MS + 1000},
-				{
-					key: "root_metadata",
-					json: JSON.stringify({starring: {locations: {abc: "None"}}}),
-					fetchedAt: START_MS + 1000,
-				},
-				{key: "settings", json: JSON.stringify({theme: "light"}), fetchedAt: START_MS + 1000},
-				{key: "tree_tx_id", json: JSON.stringify("4567"), fetchedAt: 0},
-				{key: "visible_features", json: JSON.stringify([]), fetchedAt: START_MS + 1000},
 			],
+			rootPreferences: [[["userId", 123]]],
+			theme: ["light"],
+			stars: [{locationKey: "abc", treeRoot: "None"}],
+			fetchedAt: START_MS + 1000,
 			network: [["GET", "/get_initialization_data"]],
 		});
+	});
+
+	it("keeps the account's history: an import, a local write and a re-import each add a version", async () => {
+		const {api, adapter, db, clock} = tracked();
+		await adapter.getSetting("theme");
+		clock.ms += 1000;
+		await adapter.setSetting("theme", "light");
+		api.respond("/get_initialization_data", () =>
+			json({...initializationData(), settings: {theme: "solarized"}}, {headers: {wfclientid: FAKE_CLIENT_ID}}),
+		);
+		clock.ms += 1000;
+		await adapter.refreshAccountState();
+
+		const versions = db
+			.select({theme: schema.accountSettings.theme, systemTo: schema.accountSettings.systemTo})
+			.from(schema.accountSettings)
+			.orderBy(schema.accountSettings.systemFrom)
+			.all();
+		expect(versions.map((row) => [row.theme, row.systemTo === "9999-12-31 23:59:59"])).toStrictEqual([
+			["dark", false],
+			["light", false],
+			["solarized", true],
+		]);
 	});
 
 	it("answers undefined for the entropy key when the account data has none", async () => {
@@ -308,12 +350,12 @@ describe("WorkflowyInternalAdapter account state", () => {
 	it("leaves the cached setting unchanged when the settings POST fails", async () => {
 		const {api, adapter, db} = tracked();
 		await adapter.getSetting("theme");
-		const before = db.select().from(accountState).all();
+		const before = accountHistory(db);
 		api.respond("/change_settings", () => new Response("boom", {status: 500}));
 
 		await expect(adapter.setSetting("theme", "light")).rejects.toThrow("/change_settings returned 500");
 
-		expect(db.select().from(accountState).all()).toStrictEqual(before);
+		expect(accountHistory(db)).toStrictEqual(before);
 	});
 	it("serves the visible feature list from the account cache, with no network for a second adapter", async () => {
 		const {api, adapter, db, clock} = tracked();
@@ -341,14 +383,6 @@ describe("WorkflowyInternalAdapter account state", () => {
 		expect(api.requests).toHaveLength(requestsBefore);
 	});
 
-	it("answers an empty visible feature list from a cache written before the list existed", async () => {
-		const {adapter, db} = tracked();
-		await adapter.getSetting("theme");
-		db.delete(accountState).where(eq(accountState.key, "visible_features")).run();
-
-		await expect(adapter.visibleFeatures()).resolves.toStrictEqual([]);
-	});
-
 	it("reads the enabled feature dict, keeping only true or yes entries", async () => {
 		const {api, adapter} = tracked();
 		api.respond("/get_initialization_data", () =>
@@ -361,8 +395,8 @@ describe("WorkflowyInternalAdapter account state", () => {
 		await expect(adapter.enabledFeatures()).resolves.toStrictEqual({bdl: true, a: true});
 	});
 
-	it("enables a feature: posts the codename and client id, caches the dict, and keeps the local_settings copy", async () => {
-		const {api, adapter} = tracked();
+	it("enables a feature: posts the codename and client id, then caches the dict in enabled_features", async () => {
+		const {api, adapter, db} = tracked();
 		api.respond("/get_initialization_data", () =>
 			json(
 				{...initializationData(), settings: {features: {dates: true}}},
@@ -380,11 +414,14 @@ describe("WorkflowyInternalAdapter account state", () => {
 		});
 		expect(next).toStrictEqual({dates: true, dashboards: true});
 		await expect(adapter.enabledFeatures()).resolves.toStrictEqual({dates: true, dashboards: true});
-		expect(adapter.localSettings()["setting:features"]).toStrictEqual({dates: true, dashboards: true});
+		expect(readAccountRows(db).enabledFeatures).toStrictEqual([
+			{codename: "dates", enabled: 1},
+			{codename: "dashboards", enabled: 1},
+		]);
 	});
 
 	it("disables a feature by dropping its key", async () => {
-		const {api, adapter} = tracked();
+		const {api, adapter, db} = tracked();
 		api.respond("/get_initialization_data", () =>
 			json(
 				{...initializationData(), settings: {features: {dates: true, table: true}}},
@@ -398,19 +435,18 @@ describe("WorkflowyInternalAdapter account state", () => {
 			"/features/disable/dates",
 		]);
 		expect(next).toStrictEqual({table: true});
-		expect(adapter.localSettings()["setting:features"]).toStrictEqual({table: true});
+		expect(readAccountRows(db).enabledFeatures).toStrictEqual([{codename: "table", enabled: 1}]);
 	});
 
-	it("leaves the cache and local_settings unchanged when the feature POST fails", async () => {
+	it("leaves the account tables unchanged when the feature POST fails", async () => {
 		const {api, adapter, db} = tracked();
 		await adapter.getSetting("theme");
-		const before = db.select().from(accountState).all();
+		const before = accountHistory(db);
 		api.respond("/features/enable/dashboards", () => new Response("boom", {status: 500}));
 
 		await expect(adapter.setFeature("dashboards", true)).rejects.toThrow("returned 500");
 
-		expect(db.select().from(accountState).all()).toStrictEqual(before);
-		expect(adapter.localSettings()).toStrictEqual({});
+		expect(accountHistory(db)).toStrictEqual(before);
 	});
 
 	it("rejects a codename that could escape the path and sends nothing", async () => {
@@ -421,13 +457,12 @@ describe("WorkflowyInternalAdapter account state", () => {
 		expect(api.requests).toStrictEqual([]);
 	});
 
-	it("keeps a durable local copy of each written setting that a server refresh does not overwrite", async () => {
+	it("keeps every written setting as a version a later server refresh supersedes but never erases", async () => {
 		const {api, adapter, db, clock} = tracked();
-		await adapter.setSetting("theme", "dark");
+		await adapter.setSetting("theme", "light");
 		await adapter.setSetting("ignore_loom", true);
-		adapter.saveLocalSettings({"root:weekStartDay": 1, "root:dateFormat": null});
 		api.respond("/get_initialization_data", () =>
-			json({...initializationData(), settings: {theme: "light"}}, {headers: {wfclientid: FAKE_CLIENT_ID}}),
+			json({...initializationData(), settings: {theme: "solarized"}}, {headers: {wfclientid: FAKE_CLIENT_ID}}),
 		);
 		clock.ms += 31_000;
 		await adapter.getSetting("theme");
@@ -435,36 +470,27 @@ describe("WorkflowyInternalAdapter account state", () => {
 
 		expect({
 			cached: await adapter.getSetting("theme"),
-			local: adapter.localSettings(),
-			rows: db
-				.select()
-				.from(localSettings)
-				.all()
-				.map((row) => [row.key, row.json])
-				.toSorted(([a], [b]) => String(a).localeCompare(String(b))),
+			versions: db
+				.select({theme: schema.accountSettings.theme, ignoreLoom: schema.accountSettings.ignoreLoom})
+				.from(schema.accountSettings)
+				.orderBy(schema.accountSettings.systemFrom)
+				.all(),
 		}).toStrictEqual({
-			cached: "light",
-			local: {
-				"setting:theme": "dark",
-				"setting:ignore_loom": true,
-				"root:weekStartDay": 1,
-				"root:dateFormat": null,
-			},
-			rows: [
-				["root:dateFormat", "null"],
-				["root:weekStartDay", "1"],
-				["setting:ignore_loom", "true"],
-				["setting:theme", '"dark"'],
+			cached: "solarized",
+			versions: [
+				{theme: "light", ignoreLoom: null},
+				{theme: "light", ignoreLoom: 1},
+				{theme: "solarized", ignoreLoom: null},
 			],
 		});
 	});
 
-	it("does not touch the local copy when the settings POST fails", async () => {
+	it("writes no account row when the settings POST fails on an empty cache", async () => {
 		const {api, adapter, db} = tracked();
 		api.respond("/change_settings", () => new Response("boom", {status: 500}));
 
 		await expect(adapter.setSetting("theme", "light")).rejects.toThrow("/change_settings returned 500");
 
-		expect(db.select().from(localSettings).all()).toStrictEqual([]);
+		expect(accountHistory(db).flat()).toStrictEqual([]);
 	});
 });

@@ -6,7 +6,7 @@ import {afterEach, describe, expect, it, vi} from "vite-plus/test";
 import type {InternalSession, WorkflowyInternalClient} from "../src/api/workflowy-internal-client.js";
 import type {WorkflowyWriteThroughClient} from "../src/cache/workflowy-write-through-client.js";
 import {readInternalMetadata, storeInternalMetadata} from "../src/cache/internal-metadata.js";
-import {replaceTreeTxId} from "../src/cache/tree-transaction.js";
+import {storeTreeTxId} from "../src/cache/tree-transaction.js";
 import {z} from "zod";
 import * as schema from "../src/db/schema.js";
 import {WorkflowyInternalAdapter} from "../src/internal/adapter.js";
@@ -79,7 +79,7 @@ function setup(options: {
 	const db = drizzle(sqlite, {schema});
 	migrate(db, {migrationsFolder});
 	// A whole-tree import seeded the transaction-log position at the fake init's id.
-	replaceTreeTxId(db, "4567", 0);
+	storeTreeTxId(db, "4567");
 	const children = new Map(Object.entries(options.children).map(([parent, ids]) => [parent, [...ids]]));
 	const parentOf = (id: string) => [...children].find(([, ids]) => ids.includes(id))?.[0];
 	for (const [parent, ids] of children) {

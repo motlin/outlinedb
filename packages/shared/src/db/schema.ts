@@ -285,7 +285,9 @@ export const backupImports = sqliteTable(
 /**
  * api_import_timestamp: Tracks direct API import wall-clock times
  * Unlike backup_imports which tracks backup file high watermarks (filename + date),
- * this table tracks timestamps for API-driven ingestion pipelines.
+ * this table tracks timestamps for API-driven ingestion pipelines:
+ *   - `account`: when the account tables were last refreshed or written (the 30s staleness check).
+ *   - `expanded_nodes`: when a whole-tree import last seeded `expanded_nodes` (absent until then).
  */
 export const apiImportTimestamp = sqliteTable(
 	"api_import_timestamp",
@@ -298,7 +300,10 @@ export const apiImportTimestamp = sqliteTable(
 	},
 	(table) => [
 		primaryKey({columns: [table.name, table.systemFrom]}),
-		index("api_import_timestamp_system_to_idx").on(table.name, table.systemTo),
+		uniqueIndex("api_import_timestamp_system_to_idx").on(table.name, table.systemTo),
+		index("api_import_timestamp_closed_at_idx")
+			.on(table.systemTo)
+			.where(sql`system_to < '9999-12-31 23:59:59'`),
 	],
 );
 
@@ -328,13 +333,10 @@ export const config = sqliteTable("config", {
 });
 
 /**
- * account_state: Workflowy account state cached from the internal API (see
- * `internal/adapter.ts`), one JSON document per key: `account`, `root_metadata`,
- * `settings`, `expanded_keys`, and `tree_tx_id`, the main tree's transaction
- * id the edge tables are current to, which every `/push_and_poll` starts from
- * (see `cache/tree-transaction.ts`). `fetched_at` is Unix ms of the refresh or
- * accepted write that produced the row. A write-through cache, so non-bitemporal and excluded from
- * temporal rollback.
+ * account_state: the last applied calendar layout's undo writes, as one JSON
+ * document under `calendar_layout_undo` (see `internal/adapter.ts`). Every other
+ * account value lives in the typed temporal account tables below; deriving the
+ * undo from temporal history removes this table.
  */
 export const accountState = sqliteTable("account_state", {
 	key: text("key").primaryKey(),
@@ -343,17 +345,391 @@ export const accountState = sqliteTable("account_state", {
 });
 
 /**
- * local_settings: the app's own durable copy of every setting written to
- * workflowy.com (account settings and root-metadata preferences). Unlike
- * `account_state`, which is a cache that a re-import overwrites, this table is
- * never refreshed from the server, so the values survive when the app later runs
- * without workflowy.com. `json` is the JSON-encoded value; `updated_at` is Unix ms.
+ * account: the signed-in Workflowy account, from the initialization data: `date_joined_sec` (the epoch upstream's relative timestamps count from), `entropy_key` (the salt of deterministic ids), and `username`/`email` from its settings.
  */
-export const localSettings = sqliteTable("local_settings", {
-	key: text("key").primaryKey(),
-	json: text("json").notNull(),
-	updatedAt: integer("updated_at").notNull(),
-});
+export const account = sqliteTable(
+	"account",
+	{
+		userId: integer("user_id").notNull(),
+		fullName: text("full_name"),
+		dateJoinedSec: integer("date_joined_sec").notNull(),
+		entropyKey: text("entropy_key"),
+		username: text("username"),
+		email: text("email"),
+
+		systemFrom: text("system_from").notNull(),
+		systemTo: text("system_to").notNull(),
+	},
+	(table) => [
+		primaryKey({columns: [table.userId, table.systemFrom]}),
+		uniqueIndex("account_system_to_idx").on(table.userId, table.systemTo),
+		index("account_closed_at_idx")
+			.on(table.systemTo)
+			.where(sql`system_to < '9999-12-31 23:59:59'`),
+	],
+);
+
+/**
+ * root_preferences: the scalar values of upstream's root (Home) metadata, one column per key path (`slash.discovered` is `slash_discovered`, `weekly-report.on` is `weekly_report_on`, `layoutMode` is `home_layout_mode`). Booleans are 0/1; NULL means the key is absent.
+ */
+export const rootPreferences = sqliteTable(
+	"root_preferences",
+	{
+		userId: integer("user_id").notNull(),
+		dateFormat: text("date_format"),
+		timeFormat: text("time_format"),
+		weekStartDay: integer("week_start_day"),
+		slashDiscovered: integer("slash_discovered"),
+		notesRootId: text("notes_root_id"),
+		weeklyReportOn: integer("weekly_report_on"),
+		homeLayoutMode: text("home_layout_mode"),
+		latestColorAttribute: integer("latest_color_attribute"),
+		latestColorValue: integer("latest_color_value"),
+		searchForChangesAfter: integer("search_for_changes_after"),
+		starringIsSynced: integer("starring_is_synced"),
+		aiEmbeddingStatus: text("ai_embedding_status"),
+		aiEmbeddingTooltipDismissed: integer("ai_embedding_tooltip_dismissed"),
+		aiMailboxId: text("ai_mailbox_id"),
+		cmdMetricsFailed: integer("cmd_metrics_failed"),
+		calendarRootId: text("calendar_root_id"),
+		calendarTsAddedV2: integer("calendar_ts_added_v2"),
+		calendarTooltipSeen: integer("calendar_tooltip_seen"),
+		calendarDateIdAddedV1: integer("calendar_date_id_added_v1"),
+		emojiSelected: text("emoji_selected"),
+		inboxId: text("inbox_id"),
+
+		systemFrom: text("system_from").notNull(),
+		systemTo: text("system_to").notNull(),
+	},
+	(table) => [
+		primaryKey({columns: [table.userId, table.systemFrom]}),
+		uniqueIndex("root_preferences_system_to_idx").on(table.userId, table.systemTo),
+		index("root_preferences_closed_at_idx")
+			.on(table.systemTo)
+			.where(sql`system_to < '9999-12-31 23:59:59'`),
+	],
+);
+
+/**
+ * account_settings: the account's scalar server settings. Flags are 0/1 (upstream sends booleans or `"yes"`/`"no"`); NULL means the setting is absent.
+ */
+export const accountSettings = sqliteTable(
+	"account_settings",
+	{
+		userId: integer("user_id").notNull(),
+		theme: text("theme"),
+		font: text("font"),
+		timezone: text("timezone"),
+		showCompleted: integer("show_completed"),
+		showKeyboardShortcuts: integer("show_keyboard_shortcuts"),
+		sameColorForLinks: integer("same_color_for_links"),
+		displayImagePreviewsAsThumbnails: integer("display_image_previews_as_thumbnails"),
+		ignoreYoutube: integer("ignore_youtube"),
+		ignoreYtShort: integer("ignore_yt_short"),
+		ignoreTwitter: integer("ignore_twitter"),
+		ignoreLoom: integer("ignore_loom"),
+		unsubscribeFromSummaryEmails: integer("unsubscribe_from_summary_emails"),
+		unsubscribeFromCommentsEmails: integer("unsubscribe_from_comments_emails"),
+		backupToDropbox: integer("backup_to_dropbox"),
+		mfaEnabled: integer("mfa_enabled"),
+		aiDefaultAgentId: text("ai_default_agent_id"),
+		aiContextLimit: integer("ai_context_limit"),
+
+		systemFrom: text("system_from").notNull(),
+		systemTo: text("system_to").notNull(),
+	},
+	(table) => [
+		primaryKey({columns: [table.userId, table.systemFrom]}),
+		uniqueIndex("account_settings_system_to_idx").on(table.userId, table.systemTo),
+		index("account_settings_closed_at_idx")
+			.on(table.systemTo)
+			.where(sql`system_to < '9999-12-31 23:59:59'`),
+	],
+);
+
+/**
+ * tag_colors: root metadata `color.tags`: each tag's color index, keyed by the tag as upstream writes it (`#tag` or `@person`).
+ */
+export const tagColors = sqliteTable(
+	"tag_colors",
+	{
+		tag: text("tag").notNull(),
+		colorIndex: integer("color_index").notNull(),
+
+		systemFrom: text("system_from").notNull(),
+		systemTo: text("system_to").notNull(),
+	},
+	(table) => [
+		primaryKey({columns: [table.tag, table.systemFrom]}),
+		uniqueIndex("tag_colors_system_to_idx").on(table.tag, table.systemTo),
+		index("tag_colors_closed_at_idx")
+			.on(table.systemTo)
+			.where(sql`system_to < '9999-12-31 23:59:59'`),
+	],
+);
+
+/**
+ * stars: root metadata `starring.locations`: each starred location key and the tree root it belongs to (`"None"` for the main tree).
+ */
+export const stars = sqliteTable(
+	"stars",
+	{
+		locationKey: text("location_key").notNull(),
+		treeRoot: text("tree_root").notNull(),
+
+		systemFrom: text("system_from").notNull(),
+		systemTo: text("system_to").notNull(),
+	},
+	(table) => [
+		primaryKey({columns: [table.locationKey, table.systemFrom]}),
+		uniqueIndex("stars_system_to_idx").on(table.locationKey, table.systemTo),
+		index("stars_closed_at_idx")
+			.on(table.systemTo)
+			.where(sql`system_to < '9999-12-31 23:59:59'`),
+	],
+);
+
+/**
+ * star_order: root metadata `starring.order`, one row per comma-separated entry (`<treeRoot>/<nodeId>/<query>`) at its position; no rows when upstream sends no order. The entries are kept verbatim rather than as a position on `stars`, since upstream does not keep the two in step.
+ */
+export const starOrder = sqliteTable(
+	"star_order",
+	{
+		position: integer("position").notNull(),
+		entry: text("entry").notNull(),
+
+		systemFrom: text("system_from").notNull(),
+		systemTo: text("system_to").notNull(),
+	},
+	(table) => [
+		primaryKey({columns: [table.position, table.systemFrom]}),
+		uniqueIndex("star_order_system_to_idx").on(table.position, table.systemTo),
+		index("star_order_closed_at_idx")
+			.on(table.systemTo)
+			.where(sql`system_to < '9999-12-31 23:59:59'`),
+	],
+);
+
+/**
+ * location_renames: root metadata `location.renamed`: a star's custom name, keyed by its order entry.
+ */
+export const locationRenames = sqliteTable(
+	"location_renames",
+	{
+		locationKey: text("location_key").notNull(),
+		name: text("name").notNull(),
+
+		systemFrom: text("system_from").notNull(),
+		systemTo: text("system_to").notNull(),
+	},
+	(table) => [
+		primaryKey({columns: [table.locationKey, table.systemFrom]}),
+		uniqueIndex("location_renames_system_to_idx").on(table.locationKey, table.systemTo),
+		index("location_renames_closed_at_idx")
+			.on(table.systemTo)
+			.where(sql`system_to < '9999-12-31 23:59:59'`),
+	],
+);
+
+/**
+ * enabled_features: settings `features`: each feature flag upstream reports, 0/1.
+ */
+export const enabledFeatures = sqliteTable(
+	"enabled_features",
+	{
+		codename: text("codename").notNull(),
+		enabled: integer("enabled").notNull(),
+
+		systemFrom: text("system_from").notNull(),
+		systemTo: text("system_to").notNull(),
+	},
+	(table) => [
+		primaryKey({columns: [table.codename, table.systemFrom]}),
+		uniqueIndex("enabled_features_system_to_idx").on(table.codename, table.systemTo),
+		index("enabled_features_closed_at_idx")
+			.on(table.systemTo)
+			.where(sql`system_to < '9999-12-31 23:59:59'`),
+	],
+);
+
+/**
+ * visible_features: the server's visible feature list (one Settings > Features row each), in server order.
+ */
+export const visibleFeatures = sqliteTable(
+	"visible_features",
+	{
+		codename: text("codename").notNull(),
+		name: text("name").notNull(),
+		label: text("label"),
+		description: text("description"),
+		position: integer("position").notNull(),
+
+		systemFrom: text("system_from").notNull(),
+		systemTo: text("system_to").notNull(),
+	},
+	(table) => [
+		primaryKey({columns: [table.codename, table.systemFrom]}),
+		uniqueIndex("visible_features_system_to_idx").on(table.codename, table.systemTo),
+		index("visible_features_closed_at_idx")
+			.on(table.systemTo)
+			.where(sql`system_to < '9999-12-31 23:59:59'`),
+	],
+);
+
+/**
+ * expanded_nodes: the account's expanded-node keys (the first 8 chars of each id, plus `v_` mirror-instance and `leftbar__` keys), one row per expanded key; see `cache/expansion-store.ts`.
+ */
+export const expandedNodes = sqliteTable(
+	"expanded_nodes",
+	{
+		shortKey: text("short_key").notNull(),
+
+		systemFrom: text("system_from").notNull(),
+		systemTo: text("system_to").notNull(),
+	},
+	(table) => [
+		primaryKey({columns: [table.shortKey, table.systemFrom]}),
+		uniqueIndex("expanded_nodes_system_to_idx").on(table.shortKey, table.systemTo),
+		index("expanded_nodes_closed_at_idx")
+			.on(table.systemTo)
+			.where(sql`system_to < '9999-12-31 23:59:59'`),
+	],
+);
+
+/**
+ * changelog_reads: root metadata `changelog.read`: each changelog entry's read flag, 0/1.
+ */
+export const changelogReads = sqliteTable(
+	"changelog_reads",
+	{
+		entry: text("entry").notNull(),
+		read: integer("read").notNull(),
+
+		systemFrom: text("system_from").notNull(),
+		systemTo: text("system_to").notNull(),
+	},
+	(table) => [
+		primaryKey({columns: [table.entry, table.systemFrom]}),
+		uniqueIndex("changelog_reads_system_to_idx").on(table.entry, table.systemTo),
+		index("changelog_reads_closed_at_idx")
+			.on(table.systemTo)
+			.where(sql`system_to < '9999-12-31 23:59:59'`),
+	],
+);
+
+/**
+ * surveys: root metadata `surveys`: each in-app survey's status and when it was set (Unix ms).
+ */
+export const surveys = sqliteTable(
+	"surveys",
+	{
+		survey: text("survey").notNull(),
+		status: text("status"),
+		at: integer("at"),
+
+		systemFrom: text("system_from").notNull(),
+		systemTo: text("system_to").notNull(),
+	},
+	(table) => [
+		primaryKey({columns: [table.survey, table.systemFrom]}),
+		uniqueIndex("surveys_system_to_idx").on(table.survey, table.systemTo),
+		index("surveys_closed_at_idx")
+			.on(table.systemTo)
+			.where(sql`system_to < '9999-12-31 23:59:59'`),
+	],
+);
+
+/**
+ * saved_views: settings `saved_views_json`, one row per saved view at its position: the zoomed project, its auxiliary tree root, and the search query.
+ */
+export const savedViews = sqliteTable(
+	"saved_views",
+	{
+		position: integer("position").notNull(),
+		projectId: text("project_id"),
+		auxiliaryRootProjectId: text("auxiliary_root_project_id"),
+		searchQuery: text("search_query"),
+
+		systemFrom: text("system_from").notNull(),
+		systemTo: text("system_to").notNull(),
+	},
+	(table) => [
+		primaryKey({columns: [table.position, table.systemFrom]}),
+		uniqueIndex("saved_views_system_to_idx").on(table.position, table.systemTo),
+		index("saved_views_closed_at_idx")
+			.on(table.systemTo)
+			.where(sql`system_to < '9999-12-31 23:59:59'`),
+	],
+);
+
+/**
+ * ai_assistants: settings `ai.assistants`: each AI assistant upstream offers, in its order.
+ */
+export const aiAssistants = sqliteTable(
+	"ai_assistants",
+	{
+		assistantId: text("assistant_id").notNull(),
+		name: text("name"),
+		model: text("model"),
+		systemUserId: integer("system_user_id"),
+		position: integer("position").notNull(),
+
+		systemFrom: text("system_from").notNull(),
+		systemTo: text("system_to").notNull(),
+	},
+	(table) => [
+		primaryKey({columns: [table.assistantId, table.systemFrom]}),
+		uniqueIndex("ai_assistants_system_to_idx").on(table.assistantId, table.systemTo),
+		index("ai_assistants_closed_at_idx")
+			.on(table.systemTo)
+			.where(sql`system_to < '9999-12-31 23:59:59'`),
+	],
+);
+
+/**
+ * ai_prompt_buttons: settings `ai.prompt_buttons`: each prompt button of each kind (`draft`, `reply`) at its position.
+ */
+export const aiPromptButtons = sqliteTable(
+	"ai_prompt_buttons",
+	{
+		kind: text("kind").notNull(),
+		position: integer("position").notNull(),
+		buttonId: text("button_id"),
+		name: text("name"),
+		icon: text("icon"),
+
+		systemFrom: text("system_from").notNull(),
+		systemTo: text("system_to").notNull(),
+	},
+	(table) => [
+		primaryKey({columns: [table.kind, table.position, table.systemFrom]}),
+		uniqueIndex("ai_prompt_buttons_system_to_idx").on(table.kind, table.position, table.systemTo),
+		index("ai_prompt_buttons_closed_at_idx")
+			.on(table.systemTo)
+			.where(sql`system_to < '9999-12-31 23:59:59'`),
+	],
+);
+
+/**
+ * tree_transactions: the transaction id a tree's edge tables are current to, which every `/push_and_poll` starts from (see `cache/tree-transaction.ts`); `tree_id` is `"main"` for the main tree.
+ */
+export const treeTransactions = sqliteTable(
+	"tree_transactions",
+	{
+		treeId: text("tree_id").notNull(),
+		transactionId: text("transaction_id").notNull(),
+
+		systemFrom: text("system_from").notNull(),
+		systemTo: text("system_to").notNull(),
+	},
+	(table) => [
+		primaryKey({columns: [table.treeId, table.systemFrom]}),
+		uniqueIndex("tree_transactions_system_to_idx").on(table.treeId, table.systemTo),
+		index("tree_transactions_closed_at_idx")
+			.on(table.systemTo)
+			.where(sql`system_to < '9999-12-31 23:59:59'`),
+	],
+);
 
 /**
  * file_blobs: local copies of attachment bytes downloaded by `files mirror`.

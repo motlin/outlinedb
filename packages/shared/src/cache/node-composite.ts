@@ -2,17 +2,24 @@ import {getTableName, inArray, sql} from "drizzle-orm";
 import type {SQL} from "drizzle-orm";
 import type {SQLiteColumn, SQLiteTable} from "drizzle-orm/sqlite-core";
 import {
+	account,
+	accountSettings,
 	accountState,
+	aiAssistants,
 	aiMetadata,
+	aiPromptButtons,
 	apiImportTimestamp,
 	backlinks,
 	backupImports,
 	calendarLevels,
 	calendarMetadata,
+	changelogReads,
 	changesMetadata,
 	config,
+	enabledFeatures,
+	expandedNodes,
 	fileBlobs,
-	localSettings,
+	locationRenames,
 	mirrors,
 	nodeContent,
 	nodeEmbeddings,
@@ -21,8 +28,16 @@ import {
 	nodeTableCellSizes,
 	nodeTags,
 	referencesRoots,
+	rootPreferences,
 	s3Files,
+	savedViews,
+	starOrder,
+	stars,
+	surveys,
+	tagColors,
+	treeTransactions,
 	virtualRootIds,
+	visibleFeatures,
 } from "../db/schema.js";
 import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 import {assertWithinTransactionTimeout, startUnitOfWork} from "./system-time.js";
@@ -83,14 +98,38 @@ export const NODE_COMPOSITE_PARTS: readonly CompositePart[] = [
 	{table: nodeTags, owner: nodeTags.nodeId, references: [], hardDelete: true},
 ];
 
+/**
+ * The account composite: every temporal table holding the Workflowy account's
+ * state (see `cache/account-store.ts` and `cache/expansion-store.ts`). Temporal
+ * rollback rolls them back with the tree.
+ */
+export const ACCOUNT_COMPOSITE_TABLES: readonly SQLiteTable[] = [
+	account,
+	rootPreferences,
+	accountSettings,
+	tagColors,
+	stars,
+	starOrder,
+	locationRenames,
+	enabledFeatures,
+	visibleFeatures,
+	expandedNodes,
+	changelogReads,
+	surveys,
+	savedViews,
+	aiAssistants,
+	aiPromptButtons,
+];
+
 /** Tables outside every node composite, with the reason. */
 export const NON_NODE_TABLES: Readonly<Record<string, string>> = {
 	[getTableName(backupImports)]: "import bookkeeping keyed by backup filename",
 	[getTableName(apiImportTimestamp)]: "import bookkeeping keyed by pipeline name",
+	[getTableName(treeTransactions)]: "the transaction id each tree's edge rows are current to",
 	[getTableName(config)]: "local key-value settings",
-	[getTableName(accountState)]: "account-level key-value state",
-	[getTableName(localSettings)]: "durable local copy of settings written to workflowy.com",
+	[getTableName(accountState)]: "the last calendar layout's undo writes, until undo derives from history",
 	[getTableName(fileBlobs)]: "local copies of attachment bytes, kept after the attachment's node ends",
+	...Object.fromEntries(ACCOUNT_COMPOSITE_TABLES.map((table) => [getTableName(table), "the account composite"])),
 };
 
 /** Columns named like node ids that hold something else, with the reason. */

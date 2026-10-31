@@ -7,7 +7,8 @@ import {afterEach, describe, expect, it, vi} from "vite-plus/test";
 import {z} from "zod";
 import {WorkflowyInternalClient} from "../src/api/workflowy-internal-client.js";
 import {CacheService} from "../src/cache/cache-service.js";
-import {advanceTreeTxId, readTreeTxId, replaceTreeTxId} from "../src/cache/tree-transaction.js";
+import {runUnitOfWork} from "../src/cache/node-composite.js";
+import {advanceTreeTxId, readTreeTxId, storeTreeTxId} from "../src/cache/tree-transaction.js";
 import * as schema from "../src/db/schema.js";
 import {WorkflowyInternalAdapter} from "../src/internal/adapter.js";
 import {
@@ -130,7 +131,7 @@ describe("WorkflowyInternalAdapter transaction log", () => {
 
 	it("catches up from the stored id: a remote leaf add becomes a mirror row and the id advances, with no tree read", async () => {
 		const {db, api, adapter, edges} = tracked();
-		replaceTreeTxId(db, "100", 0);
+		storeTreeTxId(db, "100");
 		api.respondOnce("/push_and_poll", poll("105", [transaction(103, [leafAdd("orig", "mirrorRootIds", "m1")])]));
 
 		await adapter.catchUp();
@@ -150,7 +151,7 @@ describe("WorkflowyInternalAdapter transaction log", () => {
 
 	it("records bulk_create metadata in the REST log format: mirror roots, references roots and backlink items", async () => {
 		const {db, api, adapter, edges} = tracked();
-		replaceTreeTxId(db, "100", 0);
+		storeTreeTxId(db, "100");
 		const restTrees = `[{"id": "m3", "nm": "", "no": "", "ct": 1, "metadata": {"mirror": {"originalId": "o3", "isMirrorRoot": true}}}]`;
 		api.respondOnce(
 			"/push_and_poll",
@@ -204,7 +205,7 @@ describe("WorkflowyInternalAdapter transaction log", () => {
 
 	it("merges a whole-map REST add instead of replacing it, then applies the leaf remove", async () => {
 		const {db, api, adapter, cache, edges} = tracked();
-		replaceTreeTxId(db, "100", 0);
+		storeTreeTxId(db, "100");
 		cache.recordRelationships({
 			mirrors: [{mirrorId: "m2", originalId: "o2"}],
 			backlinks: [],
@@ -243,7 +244,7 @@ describe("WorkflowyInternalAdapter transaction log", () => {
 
 	it("ends every mirror row of a node on remove [mirror], and backlink and references-root rows on their removes", async () => {
 		const {db, api, adapter, cache, edges} = tracked();
-		replaceTreeTxId(db, "100", 0);
+		storeTreeTxId(db, "100");
 		cache.recordRelationships({
 			mirrors: [
 				{mirrorId: "m3", originalId: "o3"},
@@ -278,7 +279,7 @@ describe("WorkflowyInternalAdapter transaction log", () => {
 
 	it("ends the mirror, backlink and references-root rows a deleted node and its subtree own, including nodes created earlier in the batch", async () => {
 		const {db, api, adapter, cache, edges} = tracked();
-		replaceTreeTxId(db, "100", 0);
+		storeTreeTxId(db, "100");
 		for (const [id, parentId] of [
 			["p", null],
 			["c", "p"],
@@ -336,7 +337,7 @@ describe("WorkflowyInternalAdapter transaction log", () => {
 
 	it("applies a transaction the poll repeats from our own push only once", async () => {
 		const {db, api, adapter, edges} = tracked();
-		replaceTreeTxId(db, "100", 0);
+		storeTreeTxId(db, "100");
 		const own = [leafAdd("orig", "mirrorRootIds", "m1")];
 		api.respondOnce(
 			"/push_and_poll",
@@ -365,9 +366,11 @@ describe("WorkflowyInternalAdapter transaction log", () => {
 
 	it("starts adapter writes from the stored id and keeps a larger id another process stored meanwhile", async () => {
 		const {db, api, adapter} = tracked();
-		replaceTreeTxId(db, "100", 0);
+		storeTreeTxId(db, "100");
 		api.respondOnce("/push_and_poll", () => {
-			advanceTreeTxId(db, "200", 0);
+			runUnitOfWork(db, (unitOfWork) => {
+				advanceTreeTxId(unitOfWork, "200");
+			});
 			return poll("150", [])();
 		});
 
@@ -398,7 +401,7 @@ describe("WorkflowyInternalAdapter transaction log", () => {
 
 	it("fails loudly on need_refreshed_project_tree, applying nothing and keeping the stored id", async () => {
 		const {db, api, adapter, edges} = tracked();
-		replaceTreeTxId(db, "100", 0);
+		storeTreeTxId(db, "100");
 		const logged = vi.spyOn(console, "error").mockImplementation(() => {});
 		api.respondOnce(
 			"/push_and_poll",
@@ -445,7 +448,7 @@ describe("WorkflowyInternalAdapter transaction log", () => {
 		},
 	])("fails loudly on $name, naming the transaction, applying nothing and keeping the stored id", async ({op}) => {
 		const {db, api, adapter, edges} = tracked();
-		replaceTreeTxId(db, "100", 0);
+		storeTreeTxId(db, "100");
 		const logged = vi.spyOn(console, "error").mockImplementation(() => {});
 		api.respondOnce(
 			"/push_and_poll",

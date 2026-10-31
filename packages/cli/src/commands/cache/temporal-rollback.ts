@@ -5,7 +5,7 @@ import {sql} from "drizzle-orm";
 import * as readline from "node:readline/promises";
 import {createDatabase} from "../../db/index.js";
 
-const TEMPORAL_TABLES = [
+export const TEMPORAL_TABLES = [
 	"node_content",
 	"node_metadata",
 	"calendar_metadata",
@@ -22,6 +22,23 @@ const TEMPORAL_TABLES = [
 	"references_roots",
 	"backup_imports",
 	"api_import_timestamp",
+	"tree_transactions",
+	// The account composite (ACCOUNT_COMPOSITE_TABLES): a rollback reverts settings with the tree.
+	"account",
+	"root_preferences",
+	"account_settings",
+	"tag_colors",
+	"stars",
+	"star_order",
+	"location_renames",
+	"enabled_features",
+	"visible_features",
+	"expanded_nodes",
+	"changelog_reads",
+	"surveys",
+	"saved_views",
+	"ai_assistants",
+	"ai_prompt_buttons",
 ] as const;
 
 interface RollbackCounts {

@@ -1,6 +1,5 @@
-import {eq} from "drizzle-orm";
 import {z} from "zod";
-import {localSettings} from "@workflowy/shared/db";
+import {readEnabledFeatures} from "@workflowy/shared/cache";
 import {INTERNAL_API_NOT_CONFIGURED} from "../internal-api-error.js";
 import {defineOp, fail, ok, toJson} from "./define.js";
 
@@ -21,7 +20,7 @@ export const FeaturesResponseSchema = z.strictObject({
 /** The enabled dict after a toggle. */
 export const FeatureSetResponseSchema = z.strictObject({enabled: EnabledSchema});
 
-/** The server's visible feature list and enabled dict; without the internal API, the durable `setting:features` copy with `available: false`. */
+/** The server's visible feature list and enabled dict; without the internal API, the stored `enabled_features` with `available: false`. */
 export const featuresGet = defineOp({
 	input: z.object({}),
 	output: FeaturesResponseSchema,
@@ -36,9 +35,12 @@ export const featuresGet = defineOp({
 				}),
 			);
 		}
-		const row = ctx.db.select().from(localSettings).where(eq(localSettings.key, "setting:features")).get();
-		const stored = row ? EnabledSchema.safeParse(JSON.parse(row.json)) : undefined;
-		return ok({visible: [], enabled: stored?.success ? stored.data : {}, available: false});
+		const enabled = Object.fromEntries(
+			Object.entries(readEnabledFeatures(ctx.db)).flatMap(([codename, on]) =>
+				on ? [[codename, true as const]] : [],
+			),
+		);
+		return ok({visible: [], enabled, available: false});
 	},
 });
 

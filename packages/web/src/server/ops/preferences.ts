@@ -161,12 +161,6 @@ export const preferencesPatch = defineOp({
 		}));
 		if (changes.length > 0) {
 			await adapter.setRootMetaValues(changes);
-			// The durable local copy, so the value outlives workflowy.com.
-			adapter.saveLocalSettings(
-				Object.fromEntries(
-					KEYS.filter((key) => key in patch).map((key) => [`root:${key}`, patch[key] ?? null]),
-				),
-			);
 		}
 		for (const key of FLAG_KEYS) {
 			const value = patch[key];

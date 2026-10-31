@@ -43,7 +43,6 @@ function setup(meta: Record<string, unknown> | undefined, settings: Record<strin
 			settings[name] = value;
 			return Promise.resolve();
 		}),
-		saveLocalSettings: vi.fn<WorkflowyInternalAdapter["saveLocalSettings"]>(),
 		getRootMeta: vi.fn<WorkflowyInternalAdapter["getRootMeta"]>(async (path) =>
 			Promise.resolve(path.reduce<unknown>((value, key) => (isRecord(value) ? value[key] : undefined), meta)),
 		),
@@ -319,28 +318,6 @@ describe("PATCH /api/v1/preferences", () => {
 			settings: [["ignore_loom", true]],
 			metadata: [[[{path: ["weekly-report", "on"], value: true}]]],
 		});
-	});
-
-	it("keeps a durable local copy of the root metadata preferences it writes, and null for a removed one", async () => {
-		const {adapter, request} = setup({notesRootId: NOTES});
-
-		await request("PATCH", "/preferences", {dateFormat: "MMM D", notesRootId: null, theme: "dark"});
-
-		expect(adapter.saveLocalSettings.mock.calls).toStrictEqual([
-			[{"root:dateFormat": "MMM D", "root:notesRootId": null}],
-		]);
-	});
-
-	it("does not save a local copy when the write to workflowy.com fails", async () => {
-		const {adapter, request} = setup({});
-		adapter.setRootMetaValues.mockRejectedValueOnce(new Error("boom"));
-
-		await expect(request("PATCH", "/preferences", {dateFormat: "MMM D"})).resolves.toStrictEqual({
-			status: 500,
-			body: "Internal Server Error",
-		});
-
-		expect(adapter.saveLocalSettings.mock.calls).toStrictEqual([]);
 	});
 
 	it("rejects the read-only account field", async () => {

@@ -77,10 +77,10 @@ cf-build: build-shared
 cf-smoke: build-shared
     node packages/cloudflare/smoke/run-smoke.ts
 
-# Seed the local_settings rows into a Worker's Durable Object (post-deploy step; pass the Worker URL)
+# Seed the account state (account tables and expanded keys) into a Worker's Durable Object (post-deploy step; pass the Worker URL)
 [group('web')]
-cf-seed-settings url:
-    ./bin/run.js cache seed-local-settings --url {{ url }}
+cf-seed-account url:
+    ./bin/run.js cache seed-account-state --url {{ url }}
 
 # Deploy the Worker to Cloudflare; refuses unless CONFIRM_DEPLOY=1 and is never part of verify
 [group('web')]

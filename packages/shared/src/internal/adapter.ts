@@ -7,11 +7,21 @@ import type {WorkflowyWriteThroughClient} from "../cache/workflowy-write-through
 import {keptInternalMetadata, readNodeInternalMetadata, storeInternalMetadata} from "../cache/internal-metadata.js";
 import {collectItemRelationships, emptyItemRelationships} from "../cache/item-relationships.js";
 import {runUnitOfWork} from "../cache/node-composite.js";
+import {
+	ACCOUNT_IMPORT_NAME,
+	accountRowCounts,
+	accountRows,
+	readAccountSnapshot,
+	readImportTime,
+	stampImportTime,
+	writeAccountSnapshot,
+} from "../cache/account-store.js";
+import type {AccountSnapshot, StoredAccount} from "../cache/account-store.js";
 import {applyRelationshipOps, isReplayable} from "../cache/relationship-log.js";
 import {applyExpansionDelta, expansionVersion, readExpansion} from "../cache/expansion-store.js";
 import {advanceTreeTxId, readTreeTxId} from "../cache/tree-transaction.js";
 import type {ItemRelationships} from "../cache/item-relationships.js";
-import {accountState, calendarMetadata, localSettings, mirrors as mirrorsTable, nodeContent} from "../db/schema.js";
+import {accountState, calendarMetadata, mirrors as mirrorsTable, nodeContent} from "../db/schema.js";
 import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 import {HOME_TARGET} from "../types/targets.js";
 import {hasInternalLink, internalLinkShortIds} from "../workflowy/internal-links.js";
@@ -89,7 +99,6 @@ export interface Account {
 	fullName: string | null;
 }
 
-const StoredAccountSchema = z.object({userId: z.number(), dateJoinedSec: z.number(), fullName: z.string().nullish()});
 const MetadataSchema = z.record(z.string(), z.unknown());
 const SucceededSchema = z.object({succeeded: z.boolean()});
 const CalendarMetadataSchema = z.object({
@@ -116,34 +125,12 @@ function enabledDict(value: unknown): Record<string, true> {
 	return dict;
 }
 
-type StoredAccount = z.infer<typeof StoredAccountSchema>;
 type Metadata = z.infer<typeof MetadataSchema>;
-
-interface AccountSnapshot {
-	account: StoredAccount;
-	rootMetadata: Metadata;
-	settings: Metadata;
-	visibleFeatures: VisibleFeature[];
-}
-
-const VisibleFeaturesSchema = z.array(
-	z.object({
-		codename: z.string(),
-		name: z.string(),
-		label: z.string().nullable(),
-		description: z.string().nullable(),
-	}),
-);
 
 /** Codenames go into `/features/<enable|disable>/<codename>`, so only slug characters pass. */
 const FEATURE_CODENAME = /^[a-z0-9_-]+$/u;
 
 const KEYS = {
-	account: "account",
-	rootMetadata: "root_metadata",
-	settings: "settings",
-	visibleFeatures: "visible_features",
-	entropyKey: "entropy_key",
 	calendarLayoutUndo: "calendar_layout_undo",
 } as const;
 
@@ -482,7 +469,8 @@ function linkedIdsInSubtree(db: AdapterDatabase, rootId: string): string[] {
  * module that speaks in upstream ops and `/push_and_poll`; callers see account
  * state, root metadata and settings.
  *
- * Account state is cached in `account_state`; a read of state older than 30s
+ * Account state is cached in the typed temporal account tables (see
+ * `cache/account-store.ts`); a read of state older than 30s
  * answers from the cache and refreshes it (one initialization GET) in the
  * background, so changes made on workflowy.com show up locally without
  * stalling the read.
@@ -573,7 +561,7 @@ export class WorkflowyInternalAdapter {
 		}
 		runUnitOfWork(this.db, (unitOfWork) => {
 			applyRelationshipOps(unitOfWork, ops);
-			advanceTreeTxId(unitOfWork.tx, result.txId, this.now());
+			advanceTreeTxId(unitOfWork, result.txId);
 		});
 	}
 
@@ -1716,12 +1704,12 @@ export class WorkflowyInternalAdapter {
 	}
 
 	/** The stored expansion, or a loud {@link ExpansionNotSeeded} before any import seeded it. */
-	private storedExpansion(): {keys: Set<string>; mark: number} {
-		const stored = readExpansion(this.db);
-		if (stored === undefined) {
+	private storedExpansion(): {keys: Set<string>} {
+		const keys = readExpansion(this.db);
+		if (keys === undefined) {
 			throw loud(new ExpansionNotSeeded());
 		}
-		return stored;
+		return {keys};
 	}
 
 	private resolveExpandedIds(keys: Set<string>): string[] {
@@ -1835,33 +1823,27 @@ export class WorkflowyInternalAdapter {
 
 	private async pushExpansionsDelta(expansionsDelta: Record<string, boolean>): Promise<void> {
 		await this.pusher.pushAndPoll({expansionsDelta});
-		this.saveLocalSettings(
-			Object.fromEntries(
-				Object.entries(expansionsDelta).map(([key, expanded]) => [`expansion:${key}`, expanded]),
-			),
-		);
-		applyExpansionDelta(this.db, expansionsDelta, this.now());
+		runUnitOfWork(this.db, (unitOfWork) => applyExpansionDelta(unitOfWork, expansionsDelta));
 	}
 
 	/**
 	 * The account's `entropyKey`, which upstream mixes into deterministic node
-	 * ids (`calendarNodeId`). It never changes, so it is cached in
-	 * `account_state` with no expiry; undefined when the account data has none.
+	 * ids (`calendarNodeId`). It never changes, so it is read from the cached
+	 * `account` row with no expiry; undefined when the account data has none.
 	 */
 	async getEntropyKey(): Promise<string | undefined> {
-		const row = this.db.select().from(accountState).where(eq(accountState.key, KEYS.entropyKey)).get();
-		const cached = row && z.string().safeParse(JSON.parse(row.json)).data;
-		if (cached !== undefined) {
-			return cached;
+		const cached = readAccountSnapshot(this.db);
+		if (cached?.account.entropyKey !== undefined) {
+			return cached.account.entropyKey;
 		}
-		const {entropyKey} = await this.session();
+		const session = await this.session();
+		const {entropyKey} = session;
 		if (entropyKey !== undefined) {
-			const json = JSON.stringify(entropyKey);
-			this.db
-				.insert(accountState)
-				.values({key: KEYS.entropyKey, json, fetchedAt: this.now()})
-				.onConflictDoUpdate({target: accountState.key, set: {json, fetchedAt: this.now()}})
-				.run();
+			this.store(
+				cached === undefined
+					? this.fromSession(session)
+					: {...cached, account: {...cached.account, entropyKey}},
+			);
 		}
 		return entropyKey;
 	}
@@ -1934,7 +1916,7 @@ export class WorkflowyInternalAdapter {
 	/**
 	 * Enable or disable one account feature like upstream's `WF.Features.toggle`: POST
 	 * `/features/<enable|disable>/<codename>`, then cache the new dict (a disabled flag drops
-	 * out) and keep the durable copy in `local_settings` under `setting:features`.
+	 * out) in `enabled_features`.
 	 * A failed POST changes nothing.
 	 */
 	async setFeature(codename: string, on: boolean): Promise<Record<string, true>> {
@@ -1946,14 +1928,13 @@ export class WorkflowyInternalAdapter {
 			`/features/${on ? "enable" : "disable"}/${codename}`,
 			new URLSearchParams({clientId: session.clientId}),
 		);
-		const current = await this.snapshot();
+		const current = await this.snapshotToWrite();
 		const next: Record<string, true> = on
 			? {...enabledDict(current.settings.features), [codename]: true}
 			: Object.fromEntries(
 					Object.entries(enabledDict(current.settings.features)).filter(([name]) => name !== codename),
 				);
 		this.store({...current, settings: {...current.settings, features: next}});
-		this.saveLocalSettings({"setting:features": next});
 		return next;
 	}
 
@@ -1965,39 +1946,8 @@ export class WorkflowyInternalAdapter {
 		const session = await this.session();
 		const wireValue = typeof value === "boolean" ? (value ? "yes" : "no") : value;
 		await this.postOk("/change_settings", new URLSearchParams({[name]: wireValue, clientId: session.clientId}));
-		const current = await this.snapshot();
+		const current = await this.snapshotToWrite();
 		this.store({...current, settings: {...current.settings, [name]: value}});
-		this.saveLocalSettings({[`setting:${name}`]: value});
-	}
-
-	/**
-	 * Keep the app's own durable copy of settings written to workflowy.com, in `local_settings`.
-	 * Unlike the account cache this is never refreshed from the server, so the values outlive
-	 * the upstream account. Keys are `setting:<name>` for account settings and `root:<key>`
-	 * for root-metadata preferences.
-	 */
-	saveLocalSettings(values: Record<string, unknown>): void {
-		const updatedAt = this.now();
-		this.db.transaction((tx) => {
-			for (const [key, value] of Object.entries(values)) {
-				const json = JSON.stringify(value ?? null);
-				tx.insert(localSettings)
-					.values({key, json, updatedAt})
-					.onConflictDoUpdate({target: localSettings.key, set: {json, updatedAt}})
-					.run();
-			}
-		});
-	}
-
-	/** Every durable local setting, by key. */
-	localSettings(): Record<string, unknown> {
-		return Object.fromEntries(
-			this.db
-				.select()
-				.from(localSettings)
-				.all()
-				.map((row) => [row.key, JSON.parse(row.json) as unknown]),
-		);
 	}
 
 	/**
@@ -2021,6 +1971,15 @@ export class WorkflowyInternalAdapter {
 		return cached.snapshot;
 	}
 
+	/**
+	 * The account state a local write patches and then stores once: the cached
+	 * snapshot, or a fresh bootstrap's when nothing is cached. Unlike
+	 * {@link snapshot} it stores nothing itself, so the write is one unit of work.
+	 */
+	private async snapshotToWrite(): Promise<AccountSnapshot> {
+		return this.load()?.snapshot ?? this.fromSession(await this.client.bootstrap());
+	}
+
 	/** One background bootstrap at a time; its result is dropped if a write stored a newer snapshot meanwhile. */
 	private async refreshAccount(): Promise<void> {
 		this.accountRefresh ??= (async () => {
@@ -2039,19 +1998,14 @@ export class WorkflowyInternalAdapter {
 
 	/**
 	 * Re-read the whole account state with one bootstrap, however fresh the
-	 * cache is, and store every part (plus the entropy key when the account has
-	 * one). A rebuilt database calls it once to seed `account_state`.
-	 * @returns the `account_state` keys written
+	 * cache is, and store every part, the entropy key included. A rebuilt
+	 * database calls it once to seed the account tables.
+	 * @returns each account table's live row count after the refresh
 	 */
-	async refreshAccountState(): Promise<string[]> {
-		const session = await this.client.bootstrap();
-		this.store(this.fromSession(session));
-		const keys: string[] = [KEYS.account, KEYS.rootMetadata, KEYS.settings, KEYS.visibleFeatures];
-		if (session.entropyKey !== undefined) {
-			this.storeAccountValue(KEYS.entropyKey, session.entropyKey);
-			keys.push(KEYS.entropyKey);
-		}
-		return keys;
+	async refreshAccountState(): Promise<Record<string, number>> {
+		const fresh = this.fromSession(await this.client.bootstrap());
+		this.store(fresh);
+		return accountRowCounts(accountRows(fresh));
 	}
 
 	/** Settles once the in-flight account refresh, if any, has finished. */
@@ -2065,52 +2019,26 @@ export class WorkflowyInternalAdapter {
 				userId: session.userId,
 				dateJoinedSec: session.dateJoinedSec,
 				...(session.fullName === undefined ? {} : {fullName: session.fullName}),
-			},
+				...(session.entropyKey === undefined ? {} : {entropyKey: session.entropyKey}),
+			} satisfies StoredAccount,
 			rootMetadata: session.rootMetadata,
 			settings: session.settings,
 			visibleFeatures: session.visibleFeatures,
 		};
 	}
 
-	/** The cached snapshot with the fetch time of its oldest part, if every part is cached. */
+	/** The cached snapshot with the time of its last refresh or accepted write, if an account import stored one. */
 	private load(): {snapshot: AccountSnapshot; fetchedAt: number} | undefined {
-		const rows = this.db.select().from(accountState).all();
-		const byKey = new Map(rows.map((row) => [row.key, row]));
-		let fetchedAt = Number.POSITIVE_INFINITY;
-		const read = <T>(key: string, schema: z.ZodType<T>): T | undefined => {
-			const row = byKey.get(key);
-			if (!row) {
-				return undefined;
-			}
-			fetchedAt = Math.min(fetchedAt, row.fetchedAt);
-			return schema.safeParse(JSON.parse(row.json)).data;
-		};
-		const account = read(KEYS.account, StoredAccountSchema);
-		const rootMetadata = read(KEYS.rootMetadata, MetadataSchema);
-		const settings = read(KEYS.settings, MetadataSchema);
-		if (!account || !rootMetadata || !settings) {
-			return undefined;
-		}
-		const visibleFeatures = read(KEYS.visibleFeatures, VisibleFeaturesSchema) ?? [];
-		return {snapshot: {account, rootMetadata, settings, visibleFeatures}, fetchedAt};
+		const snapshot = readAccountSnapshot(this.db);
+		return snapshot && {snapshot, fetchedAt: readImportTime(this.db, ACCOUNT_IMPORT_NAME) ?? 0};
 	}
 
 	private store(snapshot: AccountSnapshot): void {
 		this.accountStores += 1;
 		const fetchedAt = this.now();
-		const rows = [
-			{key: KEYS.account, json: JSON.stringify(snapshot.account), fetchedAt},
-			{key: KEYS.rootMetadata, json: JSON.stringify(snapshot.rootMetadata), fetchedAt},
-			{key: KEYS.settings, json: JSON.stringify(snapshot.settings), fetchedAt},
-			{key: KEYS.visibleFeatures, json: JSON.stringify(snapshot.visibleFeatures), fetchedAt},
-		];
-		this.db.transaction((tx) => {
-			for (const row of rows) {
-				tx.insert(accountState)
-					.values(row)
-					.onConflictDoUpdate({target: accountState.key, set: {json: row.json, fetchedAt}})
-					.run();
-			}
+		runUnitOfWork(this.db, (unitOfWork) => {
+			writeAccountSnapshot(unitOfWork, snapshot);
+			stampImportTime(unitOfWork, ACCOUNT_IMPORT_NAME, fetchedAt);
 		});
 	}
 }

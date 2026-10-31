@@ -18,7 +18,7 @@ import {
 	keptInternalMetadata,
 	readNodeInternalMetadata,
 	normalizeLayoutMode,
-	replaceTreeTxId,
+	storeTreeTxId,
 } from "@workflowy/shared/cache";
 import {sql} from "drizzle-orm";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
@@ -887,7 +887,7 @@ export default class Probe extends Command {
 		const db = createDatabase(":memory:");
 		const txId = client.session?.txId;
 		if (txId !== undefined) {
-			replaceTreeTxId(db, txId, Date.now());
+			storeTreeTxId(db, txId);
 		}
 		return new WorkflowyInternalAdapter({client, db});
 	}

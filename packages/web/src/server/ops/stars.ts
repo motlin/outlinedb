@@ -31,8 +31,6 @@ async function readStars(ctx: ServerContext, adapter: WorkflowyInternalAdapter) 
 	return starsFromRootMeta(await adapter.getRootMeta([]), starNodes(ctx));
 }
 
-const RecordSchema = z.record(z.string(), z.unknown());
-
 const StarSchema = z.strictObject({
 	nodeId: z.string().nullable(),
 	query: z.string().nullable(),
@@ -40,24 +38,6 @@ const StarSchema = z.strictObject({
 	name: z.string().nullable(),
 	position: z.number(),
 });
-
-function getIn(meta: unknown, path: string[]): unknown {
-	return path.reduce<unknown>((current, key) => RecordSchema.safeParse(current).data?.[key], meta);
-}
-
-/**
- * The app's own durable copy of the star state, in `local_settings`: upstream's raw starring metadata, so the
- * stars outlive workflowy.com and a re-import never overwrites them.
- */
-async function saveStarsLocally(adapter: WorkflowyInternalAdapter): Promise<unknown> {
-	const meta = await adapter.getRootMeta([]);
-	adapter.saveLocalSettings({
-		"root:starring.locations": getIn(meta, ["starring", "locations"]) ?? null,
-		"root:starring.order": getIn(meta, ["starring", "order"]) ?? null,
-		"root:location.renamed": getIn(meta, ["location", "renamed"]) ?? null,
-	});
-	return meta;
-}
 
 /** Each starred node once, in star order, skipping Home and nodes the cache no longer holds. */
 async function starredNodes(ctx: ServerContext, stars: readonly Star[], readNode: ReadNode): Promise<NodeResponse[]> {
@@ -100,7 +80,6 @@ export const starsOrder = defineOp({
 	async run(ctx, {keys}) {
 		return withAdapter(ctx, async (adapter) => {
 			await adapter.setRootMetaValues(orderChanges(keys));
-			await saveStarsLocally(adapter);
 			return ok(null);
 		});
 	},
@@ -119,7 +98,7 @@ export const starsSet = defineOp({
 				return fail(404, {error: `Node not found: ${nodeId}`});
 			}
 			await adapter.setRootMetaValues(starChanges(await adapter.getRootMeta([]), key));
-			const star = starsFromRootMeta(await saveStarsLocally(adapter), starNodes(ctx)).find((s) => s.key === key);
+			const star = (await readStars(ctx, adapter)).find((s) => s.key === key);
 			return ok(toJson(star ?? null), {created: true});
 		});
 	},
@@ -131,7 +110,6 @@ export const starsRemove = defineOp({
 	async run(ctx, {key}) {
 		return withAdapter(ctx, async (adapter) => {
 			await adapter.setRootMetaValues(unstarChanges(await adapter.getRootMeta([]), key));
-			await saveStarsLocally(adapter);
 			return ok(null);
 		});
 	},
@@ -143,7 +121,6 @@ export const starsRename = defineOp({
 	async run(ctx, {key, name}) {
 		return withAdapter(ctx, async (adapter) => {
 			await adapter.setRootMetaValues(renameChanges(key, name));
-			await saveStarsLocally(adapter);
 			return ok(null);
 		});
 	},

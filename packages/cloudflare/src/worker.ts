@@ -1,3 +1,4 @@
+import {parseAccountState} from "@workflowy/shared/cache";
 import {createHttpApp} from "@workflowy/web/server-app";
 import type {StoreClient} from "@workflowy/web/server-app";
 import {Hono} from "hono";
@@ -5,7 +6,7 @@ import {createMiddleware} from "hono/factory";
 import {resolveIdentity} from "./access";
 import type {AccessEnv} from "./access";
 import {storeClient} from "./store-client";
-import type {LocalSettingRow, UserStore} from "./user-store";
+import type {UserStore} from "./user-store";
 
 export {UserStore} from "./user-store";
 
@@ -82,30 +83,16 @@ app.all("/api/admin/sync", methodNotAllowed);
 app.post("/api/admin/seed", async (c) => c.json(await c.var.stub.seedTree(), 202));
 app.all("/api/admin/seed", methodNotAllowed);
 
-app.get("/api/admin/local-settings", async (c) => c.json(await c.var.stub.listLocalSettings()));
-// PUT upserts a JSON array of `{key, json, updatedAt}` rows by key.
-app.put("/api/admin/local-settings", async (c) => {
-	const body: unknown = await c.req.json().catch(() => {});
-	const rows = Array.isArray(body) ? body.map(parseLocalSettingRow) : undefined;
-	if (!rows || !rows.every((row) => row !== undefined)) {
-		return new Response("Expected a JSON array of {key, json, updatedAt} rows", {status: 400});
+app.get("/api/admin/account-state", async (c) => c.json(await c.var.stub.getAccountState()));
+// PUT merges a JSON `{rows, expandedKeys}` account state (see `parseAccountState`) into the account tables.
+app.put("/api/admin/account-state", async (c) => {
+	const state = parseAccountState(await c.req.json().catch(() => {}));
+	if (!state) {
+		return new Response("Expected a JSON {rows, expandedKeys} account state", {status: 400});
 	}
-	return c.json(await c.var.stub.putLocalSettings(rows));
+	return c.json(await c.var.stub.putAccountState(state));
 });
-app.all("/api/admin/local-settings", methodNotAllowed);
-
-function parseLocalSettingRow(value: unknown): LocalSettingRow | undefined {
-	if (typeof value !== "object" || value === null) {
-		return undefined;
-	}
-	if (!("key" in value && "json" in value && "updatedAt" in value)) {
-		return undefined;
-	}
-	const {key, json, updatedAt} = value;
-	return typeof key === "string" && typeof json === "string" && typeof updatedAt === "number"
-		? {key, json, updatedAt}
-		: undefined;
-}
+app.all("/api/admin/account-state", methodNotAllowed);
 
 // The one HTTP surface the DO keeps: a WebSocket cannot cross RPC, and hibernation needs the DO to accept it.
 app.get("/api/v1/ladder/events", async (c) => {

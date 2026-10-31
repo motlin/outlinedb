@@ -1,5 +1,5 @@
 import {afterEach, beforeEach, describe, expect, it} from "vite-plus/test";
-import {accountState} from "@workflowy/shared/db";
+import {ACCOUNT_COMPOSITE_TABLES} from "@workflowy/shared/cache";
 import {captureOutput} from "@oclif/test";
 import fs from "node:fs";
 import os from "node:os";
@@ -39,12 +39,12 @@ describe("cache:import-account command", () => {
 		fs.rmSync(tempDir, {recursive: true, force: true});
 	});
 
-	it("fails without touching account_state when no internal-API credentials or session are configured", async () => {
+	it("fails without touching the account tables when no internal-API credentials or session are configured", async () => {
 		const {error} = await captureOutput(async () => ImportAccount.run([]));
 
 		expect({
 			message: error?.message,
-			rows: testDatabase.db.select().from(accountState).all(),
+			rows: ACCOUNT_COMPOSITE_TABLES.flatMap((table) => testDatabase.db.select().from(table).all()),
 		}).toStrictEqual({
 			message:
 				"Importing account state needs the internal API: set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD (e.g. via op run)",

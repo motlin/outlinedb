@@ -3,7 +3,10 @@ import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
 import {afterEach, describe, expect, it} from "vite-plus/test";
+import {readImportTime} from "../src/cache/account-store.js";
 import {applyExpansionDelta, expansionVersion, readExpansion, replaceExpansion} from "../src/cache/expansion-store.js";
+import {runUnitOfWork} from "../src/cache/node-composite.js";
+import {startUnitOfWork} from "../src/cache/system-time.js";
 import * as schema from "../src/db/schema.js";
 
 const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
@@ -23,45 +26,97 @@ describe("expansion store", () => {
 		migrate(db, {migrationsFolder});
 		return db;
 	}
+	type Db = ReturnType<typeof database>;
+
+	function at(db: Db, time: string, work: Parameters<typeof runUnitOfWork>[1]) {
+		return runUnitOfWork(db, work, startUnitOfWork(new Date(`${time}Z`)));
+	}
+
+	function rows(db: Db) {
+		return db
+			.select({
+				shortKey: schema.expandedNodes.shortKey,
+				systemFrom: schema.expandedNodes.systemFrom,
+				systemTo: schema.expandedNodes.systemTo,
+			})
+			.from(schema.expandedNodes)
+			.orderBy(schema.expandedNodes.shortKey, schema.expandedNodes.systemFrom)
+			.all();
+	}
 
 	it("reads nothing before any import seeds the keys", () => {
 		expect(readExpansion(database())).toBeUndefined();
 	});
 
-	it("replaces the keys and marks them with the change time", () => {
+	it("replaces the keys, one row per key, and records the seed time", () => {
 		const db = database();
 
-		const mark = replaceExpansion(db, ["b", "a", "a"], 1000);
+		at(db, "2026-01-01 00:00:00.000", (unitOfWork) => {
+			replaceExpansion(unitOfWork, ["b", "a", "a"], 1_000_000);
+		});
 
-		expect({mark, stored: readExpansion(db)}).toStrictEqual({
-			mark: 1000,
-			stored: {keys: new Set(["a", "b"]), mark: 1000},
+		expect({
+			stored: readExpansion(db),
+			seededAt: readImportTime(db, "expanded_nodes"),
+			rows: rows(db),
+		}).toStrictEqual({
+			stored: new Set(["a", "b"]),
+			seededAt: 1_000_000,
+			rows: [
+				{shortKey: "a", systemFrom: "2026-01-01 00:00:00.000", systemTo: "9999-12-31 23:59:59"},
+				{shortKey: "b", systemFrom: "2026-01-01 00:00:00.000", systemTo: "9999-12-31 23:59:59"},
+			],
 		});
 	});
 
-	it("applies a delta onto the stored keys and advances the mark", () => {
+	it("reads a seeded store with no keys as empty, not unseeded", () => {
 		const db = database();
-		replaceExpansion(db, ["a", "b"], 1000);
 
-		const applied = applyExpansionDelta(db, {a: false, c: true}, 2000);
+		at(db, "2026-01-01 00:00:00.000", (unitOfWork) => {
+			replaceExpansion(unitOfWork, [], 1000);
+		});
 
-		expect({applied, stored: readExpansion(db)}).toStrictEqual({
-			applied: {keys: new Set(["b", "c"]), mark: 2000},
-			stored: {keys: new Set(["b", "c"]), mark: 2000},
+		expect(readExpansion(db)).toStrictEqual(new Set());
+	});
+
+	it("applies a delta touching only its keys, closing removed rows and keeping the others' versions", () => {
+		const db = database();
+		at(db, "2026-01-01 00:00:00.000", (unitOfWork) => {
+			replaceExpansion(unitOfWork, ["a", "b"], 1000);
+		});
+
+		const applied = at(db, "2026-01-02 00:00:00.000", (unitOfWork) =>
+			applyExpansionDelta(unitOfWork, {a: false, c: true, d: false}),
+		);
+
+		expect({applied, stored: readExpansion(db), rows: rows(db)}).toStrictEqual({
+			applied: new Set(["b", "c"]),
+			stored: new Set(["b", "c"]),
+			rows: [
+				{shortKey: "a", systemFrom: "2026-01-01 00:00:00.000", systemTo: "2026-01-02 00:00:00.000"},
+				{shortKey: "b", systemFrom: "2026-01-01 00:00:00.000", systemTo: "9999-12-31 23:59:59"},
+				{shortKey: "c", systemFrom: "2026-01-02 00:00:00.000", systemTo: "9999-12-31 23:59:59"},
+			],
 		});
 	});
 
-	it("marks each change with its own time, even when it equals or precedes the stored mark", () => {
+	it("re-seeds by merging: unchanged keys keep their versions", () => {
 		const db = database();
-		replaceExpansion(db, ["a"], 5000);
+		at(db, "2026-01-01 00:00:00.000", (unitOfWork) => {
+			replaceExpansion(unitOfWork, ["a", "b"], 1000);
+		});
 
-		const sameTime = applyExpansionDelta(db, {b: true}, 5000);
-		const earlier = replaceExpansion(db, ["c"], 10);
+		at(db, "2026-01-02 00:00:00.000", (unitOfWork) => {
+			replaceExpansion(unitOfWork, ["b", "c"], 2000);
+		});
 
-		expect({sameTime: sameTime?.mark, earlier, stored: readExpansion(db)}).toStrictEqual({
-			sameTime: 5000,
-			earlier: 10,
-			stored: {keys: new Set(["c"]), mark: 10},
+		expect({rows: rows(db), seededAt: readImportTime(db, "expanded_nodes")}).toStrictEqual({
+			rows: [
+				{shortKey: "a", systemFrom: "2026-01-01 00:00:00.000", systemTo: "2026-01-02 00:00:00.000"},
+				{shortKey: "b", systemFrom: "2026-01-01 00:00:00.000", systemTo: "9999-12-31 23:59:59"},
+				{shortKey: "c", systemFrom: "2026-01-02 00:00:00.000", systemTo: "9999-12-31 23:59:59"},
+			],
+			seededAt: 2000,
 		});
 	});
 
@@ -83,8 +138,12 @@ describe("expansion store", () => {
 	it("leaves an unseeded store unseeded on a delta", () => {
 		const db = database();
 
-		const applied = applyExpansionDelta(db, {a: true}, 1000);
+		const applied = runUnitOfWork(db, (unitOfWork) => applyExpansionDelta(unitOfWork, {a: true}));
 
-		expect({applied, stored: readExpansion(db)}).toStrictEqual({applied: undefined, stored: undefined});
+		expect({applied, stored: readExpansion(db), rows: rows(db)}).toStrictEqual({
+			applied: undefined,
+			stored: undefined,
+			rows: [],
+		});
 	});
 });

@@ -1,22 +1,31 @@
 import DatabaseConstructor from "better-sqlite3";
 import {Command, Flags} from "@oclif/core";
+import {ACCOUNT_COMPOSITE_TABLES, ACCOUNT_IMPORT_NAME, EXPANDED_NODES_IMPORT_NAME} from "@workflowy/shared/cache";
 import * as schema from "@workflowy/shared/db";
-import {fileBlobs, localSettings} from "@workflowy/shared/db";
-import {sql} from "drizzle-orm";
+import {account, apiImportTimestamp, fileBlobs} from "@workflowy/shared/db";
+import {getTableName, inArray, sql} from "drizzle-orm";
+import type {SQLiteTable} from "drizzle-orm/sqlite-core";
 import {drizzle} from "drizzle-orm/better-sqlite3";
 import fs from "node:fs";
 import {createDatabase} from "../../db/index.js";
 
 export interface ImportLocalStateResult {
-	localSettings: number;
+	/** Rows copied per account table (every version, so the account's history carries over). */
+	accountTables: Record<string, number>;
 	fileBlobs: number;
 }
+
+/** The `api_import_timestamp` rows that belong to the account tables. */
+const ACCOUNT_IMPORT_NAMES = [ACCOUNT_IMPORT_NAME, EXPANDED_NODES_IMPORT_NAME];
+
+/** Keeps each statement well under SQLite's bound-parameter limit. */
+const ROWS_PER_INSERT = 50;
 
 export default class ImportLocalState extends Command {
 	static override enableJsonFlag = true;
 
 	static override description =
-		"Copy the local-only state no Workflowy source can rebuild (local_settings, file_blobs) from an old cache database, opened read-only, into this one";
+		"Copy the state no Workflowy backup can rebuild from an old cache database, opened read-only, into this one: every version of the account tables (so their history carries over) and file_blobs. Run it on a new database before import-api and import-account, which then merge the current values on top";
 
 	static override examples = ["<%= config.bin %> cache:import-local-state --from workflowy.pre-rebuild.sqlite"];
 
@@ -29,28 +38,53 @@ export default class ImportLocalState extends Command {
 		if (!fs.existsSync(flags.from)) {
 			this.error(`Old database not found: ${flags.from}`);
 		}
+		const database = createDatabase();
+		const occupied = ACCOUNT_COMPOSITE_TABLES.filter(
+			(table) => database.select().from(table).limit(1).all().length > 0,
+		);
+		if (occupied.length > 0) {
+			this.error(
+				`The account tables already hold rows (${occupied.map((table) => getTableName(table)).join(", ")}); run import-local-state on a new database, before import-api and import-account`,
+			);
+		}
 
 		const sqlite = new DatabaseConstructor(flags.from, {readonly: true, fileMustExist: true});
-		let settingsRows: (typeof localSettings.$inferSelect)[];
+		const migrated = sqlite
+			.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?")
+			.get(getTableName(account));
+		if (migrated === undefined) {
+			sqlite.close();
+			this.error(
+				`${flags.from} predates the account tables; migrate it first by opening it once: WORKFLOWY_DB_PATH=${flags.from} ./bin/run.js cache status`,
+			);
+		}
+		let accountRows: [SQLiteTable, Record<string, unknown>[]][];
+		let importRows: (typeof apiImportTimestamp.$inferSelect)[];
 		let blobRows: (typeof fileBlobs.$inferSelect)[];
 		try {
 			const old = drizzle(sqlite, {schema});
-			settingsRows = old.select().from(localSettings).all();
+			accountRows = ACCOUNT_COMPOSITE_TABLES.map((table) => [table, old.select().from(table).all()]);
+			importRows = old
+				.select()
+				.from(apiImportTimestamp)
+				.where(inArray(apiImportTimestamp.name, ACCOUNT_IMPORT_NAMES))
+				.all();
 			blobRows = old.select().from(fileBlobs).all();
 		} finally {
 			sqlite.close();
 		}
 
-		const database = createDatabase();
 		database.transaction((tx) => {
-			for (const row of settingsRows) {
-				tx.insert(localSettings)
-					.values(row)
-					.onConflictDoUpdate({
-						target: localSettings.key,
-						set: {json: sql`excluded.json`, updatedAt: sql`excluded.updated_at`},
-					})
-					.run();
+			for (const [table, rows] of accountRows) {
+				for (let start = 0; start < rows.length; start += ROWS_PER_INSERT) {
+					tx.insert(table)
+						.values(rows.slice(start, start + ROWS_PER_INSERT))
+						.run();
+				}
+			}
+			tx.delete(apiImportTimestamp).where(inArray(apiImportTimestamp.name, ACCOUNT_IMPORT_NAMES)).run();
+			if (importRows.length > 0) {
+				tx.insert(apiImportTimestamp).values(importRows).run();
 			}
 			for (const row of blobRows) {
 				tx.insert(fileBlobs)
@@ -71,8 +105,12 @@ export default class ImportLocalState extends Command {
 			}
 		});
 
-		const result = {localSettings: settingsRows.length, fileBlobs: blobRows.length};
-		this.log(`Carried over ${result.localSettings} local_settings and ${result.fileBlobs} file_blobs rows`);
+		const result = {
+			accountTables: Object.fromEntries(accountRows.map(([table, rows]) => [getTableName(table), rows.length])),
+			fileBlobs: blobRows.length,
+		};
+		const accountTotal = Object.values(result.accountTables).reduce((sum, count) => sum + count, 0);
+		this.log(`Carried over ${accountTotal} account-table rows and ${result.fileBlobs} file_blobs rows`);
 		return result;
 	}
 }

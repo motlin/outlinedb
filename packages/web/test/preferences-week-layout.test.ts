@@ -36,7 +36,6 @@ function app(
 	const adapter = {
 		getSetting: async () => Promise.resolve(undefined),
 		setSetting: async () => Promise.resolve(),
-		saveLocalSettings: () => {},
 		getRootMeta: async (path: string[]) => Promise.resolve(meta[path[0] ?? ""]),
 		setRootMetaValues: async (changes: {path: string[]; value: unknown}[]) => {
 			for (const {path, value} of changes) {

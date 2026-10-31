@@ -5,7 +5,7 @@ import {McpServer} from "@modelcontextprotocol/sdk/server/mcp.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import {replaceTreeTxId} from "@workflowy/shared/cache";
+import {storeTreeTxId} from "@workflowy/shared/cache";
 import {registerNodeTools} from "../src/tools/node-tools.js";
 import {getCacheService, getDatabase} from "../src/services.js";
 
@@ -135,7 +135,7 @@ const SYNCED = ["POST /ajax_login", "GET /get_initialization_data", "POST /push_
 describe("MCP node tools backlinks", () => {
 	beforeEach(() => {
 		fs.rmSync(path.join(tempDir, "workflowy-session"), {force: true});
-		replaceTreeTxId(getDatabase(), "1234567", 0);
+		storeTreeTxId(getDatabase(), "1234567");
 	});
 
 	it("syncs a created node's backlinks when its text links to a node", async () => {

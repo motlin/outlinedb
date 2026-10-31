@@ -52,10 +52,15 @@ describe("/api/v1/features", () => {
 		});
 	});
 
-	it("GET without the adapter answers from the durable local_settings copy", async () => {
+	it("GET without the adapter answers the enabled flags stored in enabled_features", async () => {
 		const {request, db} = setup(false);
-		db.insert(schema.localSettings)
-			.values({key: "setting:features", json: JSON.stringify({table: true}), updatedAt: 1})
+		const live = {systemFrom: "2026-01-01 00:00:00.000", systemTo: "9999-12-31 23:59:59"};
+		db.insert(schema.enabledFeatures)
+			.values([
+				{codename: "table", enabled: 1, ...live},
+				{codename: "dates", enabled: 0, ...live},
+				{codename: "old", enabled: 1, systemFrom: "2025-01-01 00:00:00.000", systemTo: live.systemFrom},
+			])
 			.run();
 
 		await expect(request("GET", "")).resolves.toStrictEqual({

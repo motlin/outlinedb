@@ -51,7 +51,25 @@ export {
 	mergeItemRelationships,
 	type MergeItemRelationshipsResult,
 } from "./item-relationships.js";
-export {advanceTreeTxId, readTreeTxId, replaceTreeTxId} from "./tree-transaction.js";
+export {advanceTreeTxId, readTreeTxId, replaceTreeTxId, storeTreeTxId} from "./tree-transaction.js";
+export {
+	ACCOUNT_IMPORT_NAME,
+	accountRowTotal,
+	type AccountRows,
+	type AccountSnapshot,
+	type AccountState,
+	parseAccountState,
+	stampImportTime,
+	readAccountRows,
+	readAccountSnapshot,
+	readEnabledFeatures,
+	readImportTime,
+	type StoredAccount,
+	writeAccountRows,
+	writeAccountSnapshot,
+} from "./account-store.js";
+export {EXPANDED_NODES_IMPORT_NAME, readExpansion, replaceExpansion} from "./expansion-store.js";
+export {readAccountState, writeAccountState} from "./account-seed.js";
 export {effectiveCompletedAt} from "./effective-completion.js";
 export {applyMirrorText, loadMirrorOriginals, notAMirror, withMirrorText} from "./mirror-text.js";
 export {NodeReader} from "./node-reader.js";
@@ -89,6 +107,7 @@ export {
 } from "./delete-plan.js";
 export {planBlockSlot, planSlot, type SlotPlan} from "./slot-plan.js";
 export {
+	ACCOUNT_COMPOSITE_TABLES,
 	type CompositeEntry,
 	type CompositePart,
 	endNodeComposites,

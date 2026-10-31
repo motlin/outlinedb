@@ -295,6 +295,13 @@
 			"when": 1780185600000,
 			"tag": "0042_replace_node_internal_metadata",
 			"breakpoints": true
+		},
+		{
+			"idx": 43,
+			"version": "6",
+			"when": 1780272000000,
+			"tag": "0043_replace_account_state",
+			"breakpoints": true
 		}
 	]
 }

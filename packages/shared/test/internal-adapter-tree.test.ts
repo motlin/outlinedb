@@ -10,7 +10,7 @@ import {CacheService} from "../src/cache/cache-service.js";
 import {emptyItemRelationships} from "../src/cache/item-relationships.js";
 import {WorkflowyWriteThroughClient} from "../src/cache/workflowy-write-through-client.js";
 import {readInternalMetadata} from "../src/cache/internal-metadata.js";
-import {replaceTreeTxId} from "../src/cache/tree-transaction.js";
+import {storeTreeTxId} from "../src/cache/tree-transaction.js";
 import * as schema from "../src/db/schema.js";
 import {WorkflowyInternalAdapter} from "../src/internal/adapter.js";
 import {OperationRejected} from "../src/internal/errors.js";
@@ -207,7 +207,7 @@ function setup(generateId: () => string = () => "new") {
 	const db = drizzle(sqlite, {schema});
 	migrate(db, {migrationsFolder});
 	// A whole-tree import seeded the transaction-log position at the fake init's id.
-	replaceTreeTxId(db, "4567", 0);
+	storeTreeTxId(db, "4567");
 	const server = createServer();
 	const publicCalls: string[] = [];
 	vi.stubGlobal(

@@ -1,6 +1,6 @@
 import {it, vi, afterEach, expect, describe, beforeEach} from "vite-plus/test";
 import {captureOutput} from "@oclif/test";
-import {replaceTreeTxId} from "@workflowy/shared/cache";
+import {storeTreeTxId} from "@workflowy/shared/cache";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
 import fs from "node:fs";
 import os from "node:os";
@@ -128,7 +128,7 @@ describe("node update command", () => {
 			process.env.WORKFLOWY_USERNAME = "alice@example.com";
 			process.env.WORKFLOWY_PASSWORD = "hunter2";
 			process.env.WORKFLOWY_SESSION_FILE = path.join(tempDir, "workflowy-session");
-			replaceTreeTxId(testDatabase.db, "1234567", 0);
+			storeTreeTxId(testDatabase.db, "1234567");
 		});
 
 		it("syncs the source's backlinks through the internal API when the new text links to a node", async () => {

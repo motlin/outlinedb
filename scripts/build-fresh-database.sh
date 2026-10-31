@@ -76,6 +76,14 @@ else
     "$run" cache config --fetch-epoch
 fi
 
+if [ -n "$backup" ]; then
+    # Before import-api and import-account, which merge the current values on top as new versions.
+    step "Carrying over the account tables' history and file_blobs from the previous database"
+    # Opening the backup migrates it, so an old schema's account state reaches the typed account tables first.
+    WORKFLOWY_DB_PATH="$backup" "$run" cache status >/dev/null
+    "$run" cache import-local-state --from "$backup"
+fi
+
 step "Importing every backup oldest-first, each stamped with its own time and taken verbatim"
 if $offline; then
     "$run" cache import-backups --no-download --no-archive --backup-system-time --force --no-embeddings
@@ -88,13 +96,8 @@ if $offline; then
 else
     step "Catching up past the last backup from the API (also item metadata, tree transaction id, expanded keys)"
     "$run" cache import-api
-    step "Fetching account state (settings, root metadata incl. tag colors, visible features, entropy key)"
+    step "Fetching account state (account incl. entropy key, root metadata incl. tag colors and stars, settings, visible features)"
     "$run" cache import-account
-fi
-
-if [ -n "$backup" ]; then
-    step "Carrying over local-only state from the previous database"
-    "$run" cache import-local-state --from "$backup"
 fi
 
 step "Generating embeddings and the full-text index"

@@ -5,14 +5,15 @@ import {Command} from "@oclif/core";
 import {createDatabase} from "../../db/index.js";
 
 export interface ImportAccountResult {
-	keys: string[];
+	/** Each account table's live row count after the refresh. */
+	tables: Record<string, number>;
 }
 
 export default class ImportAccount extends Command {
 	static override enableJsonFlag = true;
 
 	static override description =
-		"Fetch the account state (account, root metadata incl. tag colors, settings, visible features, entropy key) from the internal API into account_state";
+		"Fetch the account state (account incl. entropy key, root metadata incl. tag colors and stars, settings, visible features) from the internal API into the typed temporal account tables";
 
 	static override examples = ["<%= config.bin %> cache:import-account"];
 
@@ -25,8 +26,12 @@ export default class ImportAccount extends Command {
 			);
 		}
 		const adapter = new WorkflowyInternalAdapter({client: new WorkflowyInternalClient(auth), db: createDatabase()});
-		const keys = await adapter.refreshAccountState();
-		this.log(`Account state: ${keys.join(", ")}`);
-		return {keys};
+		const tables = await adapter.refreshAccountState();
+		this.log(
+			`Account state: ${Object.entries(tables)
+				.map(([table, rows]) => `${table} ${rows}`)
+				.join(", ")}`,
+		);
+		return {tables};
 	}
 }

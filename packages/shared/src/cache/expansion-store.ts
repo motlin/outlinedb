@@ -1,36 +1,38 @@
-import {eq} from "drizzle-orm";
-import type {BaseSQLiteDatabase} from "drizzle-orm/sqlite-core";
-import {z} from "zod";
-import {accountState} from "../db/schema.js";
-
-// oxlint-disable-next-line @typescript-eslint/no-explicit-any
-type Database = BaseSQLiteDatabase<"sync", any, any>;
+import {eq, inArray} from "drizzle-orm";
+import {expandedNodes} from "../db/schema.js";
+import {FAR_FUTURE_DATE} from "../temporal/constants.js";
+import {readImportTime, stampImportTime} from "./account-store.js";
+import type {UnitOfWork} from "./node-composite.js";
+import {closeCurrentVersions, temporalMerge} from "./temporal-merge.js";
+import type {TemporalTransaction} from "./temporal-merge.js";
 
 /**
  * Our store of the account's expanded-node keys (the first 8 chars of each id, plus `v_` mirror-instance and
- * `leftbar__` keys), the source of truth for expansion. A whole-tree import seeds it and every local change applies
- * to it; nothing re-reads workflowy.com's list on a request path.
+ * `leftbar__` keys), the source of truth for expansion: one temporal `expanded_nodes` row per expanded key. A
+ * whole-tree import seeds it and every local change applies to it; nothing re-reads workflowy.com's list on a
+ * request path.
  *
- * Each change records its unit of work's own time as the mark. Times may repeat or go backward (the CLI and web
- * processes share the cache on separate clocks), so a poller compares content versions ({@link expansionVersion}),
- * never marks. The keys live in one `account_state` row today (its `fetched_at` is the mark); only this module touches
- * that row, so moving the storage elsewhere stays local to it.
+ * The seed is recorded as the `expanded_nodes` row of `api_import_timestamp`, so an account with no expanded keys
+ * still reads as seeded. A poller compares content versions ({@link expansionVersion}), never times.
  */
-export const EXPANDED_KEYS_KEY = "expanded_keys";
+export const EXPANDED_NODES_IMPORT_NAME = "expanded_nodes";
 
-/** The stored keys and the mark of their last change. */
-export interface StoredExpansion {
-	keys: Set<string>;
-	mark: number;
-}
-
-const KeysSchema = z.array(z.string());
+/** Durable Object SQLite caps a statement at 100 bound parameters. */
+const KEY_CHUNK = 90;
 
 /** The stored keys, or undefined before any import seeded them. */
-export function readExpansion(database: Database): StoredExpansion | undefined {
-	const row = database.select().from(accountState).where(eq(accountState.key, EXPANDED_KEYS_KEY)).get();
-	const keys = row && KeysSchema.safeParse(JSON.parse(row.json)).data;
-	return row && keys ? {keys: new Set(keys), mark: row.fetchedAt} : undefined;
+export function readExpansion(tx: TemporalTransaction): Set<string> | undefined {
+	if (readImportTime(tx, EXPANDED_NODES_IMPORT_NAME) === undefined) {
+		return undefined;
+	}
+	return new Set(
+		tx
+			.select({shortKey: expandedNodes.shortKey})
+			.from(expandedNodes)
+			.where(eq(expandedNodes.systemTo, FAR_FUTURE_DATE))
+			.all()
+			.map((row) => row.shortKey),
+	);
 }
 
 /**
@@ -62,50 +64,71 @@ function canonicalJson(keys: Iterable<string>): string {
 	return JSON.stringify([...new Set(keys)].toSorted());
 }
 
-/** Store `keys` marked with `at`, the unit of work's own time. */
-function write(database: Database, keys: Iterable<string>, at: number): number {
-	const json = canonicalJson(keys);
-	database
-		.insert(accountState)
-		.values({key: EXPANDED_KEYS_KEY, json, fetchedAt: at})
-		.onConflictDoUpdate({target: accountState.key, set: {json, fetchedAt: at}})
-		.run();
-	return at;
+function liveKeys(tx: TemporalTransaction): {shortKey: string}[] {
+	return tx
+		.select({shortKey: expandedNodes.shortKey})
+		.from(expandedNodes)
+		.where(eq(expandedNodes.systemTo, FAR_FUTURE_DATE))
+		.all();
 }
 
-/** Replace the stored keys, as a whole-tree import does; returns the new mark. */
-export function replaceExpansion(database: Database, keys: Iterable<string>, at: number): number {
-	return database.transaction((tx) => write(tx, keys, at));
+const byKey = (row: {shortKey: string}) => row.shortKey;
+
+/** Replace the stored keys and record the seed at `at` (Unix ms), as a whole-tree import does, in the caller's unit of work. */
+export function replaceExpansion(unitOfWork: UnitOfWork, keys: Iterable<string>, at: number): void {
+	temporalMerge(
+		unitOfWork.tx,
+		{
+			table: expandedNodes,
+			keyColumn: expandedNodes.shortKey,
+			incomingKey: byKey,
+			currentKey: byKey,
+			contentMatches: () => true,
+			buildInsertRow: (row) => ({shortKey: row.shortKey}),
+		},
+		[...new Set(keys)].map((shortKey) => ({shortKey})),
+		liveKeys(unitOfWork.tx),
+		unitOfWork.systemTime,
+	);
+	stampImportTime(unitOfWork, EXPANDED_NODES_IMPORT_NAME, at);
 }
 
 /**
- * Apply an expansion delta (`true` adds a key, `false` removes it) to the stored keys and return the result; an
- * unseeded store stays unseeded (undefined), since a partial set would read as the whole account's.
+ * Apply an expansion delta (`true` adds a key, `false` removes it) to the stored keys, touching only the delta's
+ * keys, and return the result; an unseeded store stays unseeded (undefined), since a partial set would read as the
+ * whole account's.
  */
-export function applyExpansionDelta(
-	database: Database,
-	delta: Record<string, boolean>,
-	at: number,
-): StoredExpansion | undefined {
-	return database.transaction((tx) => {
-		const stored = readExpansion(tx);
-		return stored === undefined ? undefined : writeDelta(tx, stored.keys, delta, at);
-	});
-}
-
-function writeDelta(
-	database: Database,
-	stored: Set<string>,
-	delta: Record<string, boolean>,
-	at: number,
-): StoredExpansion {
-	const keys = new Set(stored);
-	for (const [key, expanded] of Object.entries(delta)) {
-		if (expanded) {
-			keys.add(key);
-		} else {
-			keys.delete(key);
-		}
+export function applyExpansionDelta(unitOfWork: UnitOfWork, delta: Record<string, boolean>): Set<string> | undefined {
+	const {tx, systemTime} = unitOfWork;
+	const stored = readExpansion(tx);
+	if (stored === undefined) {
+		return undefined;
 	}
-	return {keys, mark: write(database, keys, at)};
+	const added = Object.entries(delta).flatMap(([key, expanded]) => (expanded && !stored.has(key) ? [key] : []));
+	const removed = Object.entries(delta).flatMap(([key, expanded]) => (!expanded && stored.has(key) ? [key] : []));
+	for (let start = 0; start < removed.length; start += KEY_CHUNK) {
+		closeCurrentVersions(
+			tx,
+			expandedNodes,
+			systemTime,
+			inArray(expandedNodes.shortKey, removed.slice(start, start + KEY_CHUNK)),
+		);
+	}
+	for (let start = 0; start < added.length; start += KEY_CHUNK) {
+		tx.insert(expandedNodes)
+			.values(
+				added
+					.slice(start, start + KEY_CHUNK)
+					.map((shortKey) => ({shortKey, systemFrom: systemTime, systemTo: FAR_FUTURE_DATE})),
+			)
+			.run();
+	}
+	const keys = new Set(stored);
+	for (const key of removed) {
+		keys.delete(key);
+	}
+	for (const key of added) {
+		keys.add(key);
+	}
+	return keys;
 }

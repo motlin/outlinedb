@@ -7,6 +7,8 @@ import {WorkflowyInternalClient} from "../src/api/workflowy-internal-client.js";
 import type {InternalTreeItem} from "../src/api/workflowy-internal-client.js";
 import {importInternalMetadata, keptInternalMetadata, readInternalMetadata} from "../src/cache/internal-metadata.js";
 import {readTreeTxId} from "../src/cache/tree-transaction.js";
+import {readImportTime} from "../src/cache/account-store.js";
+import {readExpansion} from "../src/cache/expansion-store.js";
 import * as schema from "../src/db/schema.js";
 import {FAR_FUTURE_DATE} from "../src/temporal/index.js";
 import {createFakeInternalApi, json} from "./helpers/fake-internal-api.js";
@@ -258,13 +260,12 @@ describe("importInternalMetadata", () => {
 
 		expect({
 			txId: readTreeTxId(db),
-			accountState: db.select().from(schema.accountState).all(),
+			expansion: readExpansion(db),
+			seededAt: readImportTime(db, "expanded_nodes"),
 		}).toStrictEqual({
 			txId: "4000",
-			accountState: [
-				{key: "tree_tx_id", json: JSON.stringify("4000"), fetchedAt: FETCHED_AT},
-				{key: "expanded_keys", json: JSON.stringify(["1a1a1a1a", "2b2b2b2b"]), fetchedAt: FETCHED_AT},
-			],
+			expansion: new Set(["1a1a1a1a", "2b2b2b2b"]),
+			seededAt: Math.floor(FETCHED_AT / 1000) * 1000,
 		});
 	});
 });

@@ -584,8 +584,8 @@ export function importInternalMetadata(
 	const result: ImportInternalMetadataResult = {written: 0, skipped: 0};
 	runUnitOfWork(database, (unitOfWork) => {
 		const {tx} = unitOfWork;
-		replaceTreeTxId(tx, txId, fetchedAt);
-		replaceExpansion(tx, expandedKeys, fetchedAt);
+		replaceTreeTxId(unitOfWork, txId);
+		replaceExpansion(unitOfWork, expandedKeys, fetchedAt);
 		const cached = new Set(
 			tx
 				.select({id: nodeContent.id})
