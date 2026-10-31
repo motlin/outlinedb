@@ -1,7 +1,7 @@
 import {useQueries, useQueryClient} from "@tanstack/react-query";
 import {stripHtmlTags} from "@workflowy/shared/html";
 import {useEffect, useMemo, useState} from "react";
-import {usePreferences} from "../hooks/use-preferences.js";
+import {useAiEmbeddingStage, usePreferences} from "../hooks/use-preferences.js";
 import {fetchAncestors, useCreateNode} from "../hooks/use-nodes.js";
 import {readLastViewed, useStarredLocations} from "../hooks/use-starred.js";
 import {
@@ -166,7 +166,9 @@ function LocationPickerSession({picker}: {picker: LocationPickerState}) {
 					ancestors: [],
 				}));
 
-	const relatedHits = useRelatedHits(picker.relatedToId);
+	// Upstream gates its AI search on `ai.embeddingStatus`; ask for semantic neighbours only once it is ready.
+	const aiReady = useAiEmbeddingStage() === "ready";
+	const relatedHits = useRelatedHits(aiReady ? picker.relatedToId : undefined);
 
 	const nameOf = (id: string): string =>
 		readNode(queryClient, id)?.name ?? stars.find((star) => star.nodeId === id)?.name ?? "";

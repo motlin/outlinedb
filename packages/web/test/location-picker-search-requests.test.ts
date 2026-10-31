@@ -13,11 +13,15 @@ const {QueryClient, QueryClientProvider} = await import("@tanstack/react-query")
 const {LocationPickerHost} = await import("../src/client/components/location-picker-host.js");
 const {useOutlineStore} = await import("../src/client/stores/outline.js");
 const {nodeKeys} = await import("../src/client/node-cache.js");
+const {EMPTY_PREFERENCES} = await import("../src/client/hooks/use-preferences.js");
 
 /** Each `/api/search/locations` request in order, with a resolver to answer it later. */
 let searches: {query: string; answer: (label?: string) => void}[];
 
 let relatedRequests: {nodeId: string; type: string}[];
+
+/** Root metadata `ai.embeddingStatus` the stubbed preferences answer. */
+let aiEmbeddingStatus: string | null;
 
 let root: Root | undefined;
 
@@ -25,6 +29,7 @@ beforeEach(() => {
 	globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 	searches = [];
 	relatedRequests = [];
+	aiEmbeddingStatus = "finished";
 	sessionStorage.clear();
 	vi.stubGlobal(
 		"fetch",
@@ -59,6 +64,9 @@ beforeEach(() => {
 			}
 			if (url.endsWith("/ancestors")) {
 				return Response.json({ancestors: []});
+			}
+			if (url === "/api/v1/preferences") {
+				return Response.json({...EMPTY_PREFERENCES, aiEmbeddingStatus});
 			}
 			if (url === "/api/v1/stars") {
 				return Response.json({stars: [], nodes: []});
@@ -189,7 +197,7 @@ describe("Location picker options", () => {
 });
 
 describe("Location picker related nodes", () => {
-	it("lists semantically related nodes for relatedToId when the filter is empty", async () => {
+	async function openRelated(): Promise<string[]> {
 		const queryClient = new QueryClient({defaultOptions: {queries: {retry: false, staleTime: 60_000}}});
 		const container = document.createElement("div");
 		document.body.append(container);
@@ -205,15 +213,33 @@ describe("Location picker related nodes", () => {
 		});
 		await flush();
 		await flush();
-		const items = [...document.querySelectorAll("a.menuItem")];
-		expect({
-			requests: relatedRequests,
-			labels: items.map((item) => item.querySelector("[data-menu-item-label]")?.textContent),
-		}).toStrictEqual({
+		return [...document.querySelectorAll("a.menuItem")].map(
+			(item) => item.querySelector("[data-menu-item-label]")?.textContent ?? "",
+		);
+	}
+
+	it("lists semantically related nodes for relatedToId when the filter is empty", async () => {
+		const labels = await openRelated();
+
+		expect({requests: relatedRequests, labels}).toStrictEqual({
 			requests: [{nodeId: "row", type: "link-targets", limit: 8, threshold: 0.6}],
 			labels: ["Related One", 'New "" in: Notes', 'New "" in…'],
 		});
 	});
+
+	it.each([null, "requested"])(
+		"asks for no related nodes until ai.embeddingStatus is finished (%s)",
+		async (status) => {
+			aiEmbeddingStatus = status;
+
+			const labels = await openRelated();
+
+			expect({requests: relatedRequests, labels}).toStrictEqual({
+				requests: [],
+				labels: ['New "" in: Notes', 'New "" in…'],
+			});
+		},
+	);
 });
 
 describe("Location picker labels, pending state and reveal", () => {

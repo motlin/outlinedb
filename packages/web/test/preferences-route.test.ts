@@ -84,6 +84,8 @@ const EMPTY = {
 	slashDiscovered: false,
 	calendarTooltipSeen: false,
 	emojiSelected: null,
+	aiEmbeddingStatus: null,
+	aiEmbeddingTooltipDismissed: false,
 	notesRootId: null,
 	showCompleted: false,
 	showKeyboardShortcuts: false,
@@ -141,6 +143,17 @@ describe("GET /api/v1/preferences", () => {
 		await expect(request("GET", "/preferences")).resolves.toStrictEqual({
 			status: 200,
 			body: {...EMPTY, emojiSelected: "noto"},
+		});
+	});
+
+	it("reads the AI embedding onboarding state from ai.embeddingStatus and ai.embedding_tooltip_dismissed", async () => {
+		const {request} = setup({
+			ai: {embeddingStatus: "finished", embedding_tooltip_dismissed: true, mailboxId: "mb"},
+		});
+
+		await expect(request("GET", "/preferences")).resolves.toStrictEqual({
+			status: 200,
+			body: {...EMPTY, aiEmbeddingStatus: "finished", aiEmbeddingTooltipDismissed: true},
 		});
 	});
 
@@ -307,6 +320,32 @@ describe("PATCH /api/v1/preferences", () => {
 			response: {status: 200, body: {...EMPTY, emojiSelected: "noto"}},
 			writes: [[[{path: ["emoji", "options", "selected"], value: "noto"}]]],
 			meta: {emoji: {options: {selected: "noto"}}},
+		});
+	});
+
+	it("writes aiEmbeddingStatus and aiEmbeddingTooltipDismissed under ai, keeping the rest of ai", async () => {
+		const meta: Record<string, unknown> = {ai: {mailboxId: "mb"}};
+		const {adapter, request} = setup(meta);
+
+		const response = await request("PATCH", "/preferences", {
+			aiEmbeddingStatus: "requested",
+			aiEmbeddingTooltipDismissed: true,
+		});
+
+		expect({response, writes: adapter.setRootMetaValues.mock.calls, meta}).toStrictEqual({
+			response: {
+				status: 200,
+				body: {...EMPTY, aiEmbeddingStatus: "requested", aiEmbeddingTooltipDismissed: true},
+			},
+			writes: [
+				[
+					[
+						{path: ["ai", "embeddingStatus"], value: "requested"},
+						{path: ["ai", "embedding_tooltip_dismissed"], value: true},
+					],
+				],
+			],
+			meta: {ai: {mailboxId: "mb", embeddingStatus: "requested", embedding_tooltip_dismissed: true}},
 		});
 	});
 

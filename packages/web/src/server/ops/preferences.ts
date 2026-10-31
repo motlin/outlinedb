@@ -52,6 +52,10 @@ const PreferencesPatchSchema = z
 		calendarTooltipSeen: z.boolean(),
 		/** Upstream's `emoji.options.selected`: the emoji style (`system`, `noto`), applied as body class `emoji-<name>`. */
 		emojiSelected: z.string().nullable(),
+		/** Upstream's `ai.embeddingStatus`: unset until "Enable AI", then "requested" until the server indexes the notes ("finished"). */
+		aiEmbeddingStatus: z.string().nullable(),
+		/** Upstream's `ai.embedding_tooltip_dismissed`: set the first time the ready AI panel opens. */
+		aiEmbeddingTooltipDismissed: z.boolean(),
 		notesRootId: z.string().nullable(),
 		showCompleted: z.boolean(),
 		showKeyboardShortcuts: z.boolean(),
@@ -89,6 +93,8 @@ const KEYS = [
 	"slashDiscovered",
 	"calendarTooltipSeen",
 	"emojiSelected",
+	"aiEmbeddingStatus",
+	"aiEmbeddingTooltipDismissed",
 	"notesRootId",
 	"weeklyReportOn",
 ] as const;
@@ -101,6 +107,8 @@ const PATHS: Record<(typeof KEYS)[number], string[]> = {
 	slashDiscovered: ["slash", "discovered"],
 	calendarTooltipSeen: ["calendar", "tooltip_seen"],
 	emojiSelected: ["emoji", "options", "selected"],
+	aiEmbeddingStatus: ["ai", "embeddingStatus"],
+	aiEmbeddingTooltipDismissed: ["ai", "embedding_tooltip_dismissed"],
 	notesRootId: ["notesRootId"],
 	weeklyReportOn: ["weekly-report", "on"],
 };
@@ -187,6 +195,8 @@ async function readPreferences(adapter: WorkflowyInternalAdapter): Promise<Prefe
 		slashDiscovered: root.slashDiscovered === true,
 		calendarTooltipSeen: root.calendarTooltipSeen === true,
 		emojiSelected: asString(root.emojiSelected),
+		aiEmbeddingStatus: asString(root.aiEmbeddingStatus),
+		aiEmbeddingTooltipDismissed: root.aiEmbeddingTooltipDismissed === true,
 		notesRootId: asString(root.notesRootId),
 		weeklyReportOn: root.weeklyReportOn === true,
 		latestColor: latestColorFrom(latestColor),

@@ -35,6 +35,8 @@ export const EMPTY_PREFERENCES: Preferences = {
 	slashDiscovered: false,
 	calendarTooltipSeen: false,
 	emojiSelected: null,
+	aiEmbeddingStatus: null,
+	aiEmbeddingTooltipDismissed: false,
 	notesRootId: null,
 	showCompleted: false,
 	showKeyboardShortcuts: false,
@@ -131,6 +133,41 @@ export function useCalendarTooltipSeen(): boolean | null {
 export async function markCalendarTooltipSeen(queryClient: QueryClient): Promise<void> {
 	if (calendarTooltipSeenFrom(queryClient.getQueryData<PreferencesState>(preferenceKeys.all)) === false) {
 		await setPreferences(queryClient, {calendarTooltipSeen: true});
+	}
+}
+
+/**
+ * Where upstream's AI embedding onboarding stands (root metadata `ai.embeddingStatus`): `onboarding` shows the
+ * Enable AI prompt, `requested` waits for the server to index the notes, and `ready` allows AI/semantic UI. Loading
+ * gates everything; an unavailable internal API, where the status can never be read or saved, counts as ready.
+ */
+export type AiEmbeddingStage = "loading" | "onboarding" | "requested" | "ready";
+
+export function aiEmbeddingStageFrom(state: PreferencesState | undefined): AiEmbeddingStage {
+	if (state === undefined) {
+		return "loading";
+	}
+	if (!state.available) {
+		return "ready";
+	}
+	const status = state.preferences.aiEmbeddingStatus;
+	if (status === null) {
+		return "onboarding";
+	}
+	return status === "requested" ? "requested" : "ready";
+}
+
+/** The account's AI embedding onboarding stage. */
+export function useAiEmbeddingStage(): AiEmbeddingStage {
+	const {data} = useQuery({queryKey: preferenceKeys.all, queryFn: fetchPreferences});
+	return aiEmbeddingStageFrom(data);
+}
+
+/** Upstream's chat mount: `WF.CoreKv.get("ai.embedding_tooltip_dismissed") || WF.CoreKv.set(..., true)`. */
+export async function markAiEmbeddingTooltipDismissed(queryClient: QueryClient): Promise<void> {
+	const state = queryClient.getQueryData<PreferencesState>(preferenceKeys.all);
+	if (state?.available === true && !state.preferences.aiEmbeddingTooltipDismissed) {
+		await setPreferences(queryClient, {aiEmbeddingTooltipDismissed: true});
 	}
 }
 
