@@ -1,6 +1,5 @@
-import {newSystemTimestamp} from "@workflowy/shared/cache";
 import {backupImports} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@workflowy/shared/temporal";
 import {Command, Flags} from "@oclif/core";
 import {and, desc, eq} from "drizzle-orm";
 import {logger} from "../../services/logger.js";
@@ -21,6 +20,7 @@ export default class ImportBackup extends Command {
 		"<%= config.bin %> cache:import-backup --file /path/to/backup.workflowy.backup",
 		"<%= config.bin %> cache:import-backup --file backup.json --no-embeddings",
 		"<%= config.bin %> cache:import-backup --latest",
+		"<%= config.bin %> cache:import-backup --file backups/Data/(me@example.com).2025-10-28.workflowy.backup.zst --backup-system-time",
 	];
 
 	static override flags = {
@@ -51,6 +51,11 @@ export default class ImportBackup extends Command {
 		force: Flags.boolean({
 			description:
 				"Take the snapshot verbatim: do not protect cached nodes newer than it, tombstoning anything it omits",
+			default: false,
+		}),
+		"backup-system-time": Flags.boolean({
+			description:
+				"Stamp the import with a system time taken from the backup (its newest change, or noon UTC on the filename date) instead of the clock, for replaying historical backups",
 			default: false,
 		}),
 	};
@@ -89,6 +94,9 @@ export default class ImportBackup extends Command {
 		}
 
 		const parsedBackupInfo = parseBackupFilename(filePath);
+		if (flags["backup-system-time"] && !parsedBackupInfo) {
+			this.error(`--backup-system-time needs a dated backup filename: ${filePath}`);
+		}
 
 		const stats = fs.statSync(filePath);
 		const fileSizeMB = (stats.size / (1024 * 1024)).toFixed(2);
@@ -158,6 +166,10 @@ export default class ImportBackup extends Command {
 				generateEmbeddings: flags.embeddings,
 				embeddingBatchSize: flags["batch-size"],
 				force: flags.force,
+				systemTime:
+					flags["backup-system-time"] && parsedBackupInfo
+						? {backupDate: parsedBackupInfo.backupDate}
+						: undefined,
 				onProgress: handleProgress,
 			});
 
@@ -186,9 +198,9 @@ export default class ImportBackup extends Command {
 				);
 			}
 
-			const recordBackupInfo = parseBackupFilename(filePath);
-			if (recordBackupInfo) {
-				this.recordBackupImport(db, recordBackupInfo);
+			if (parsedBackupInfo) {
+				// Stamp the record with the import's own system time, so it matches the unit it records.
+				this.recordBackupImport(db, parsedBackupInfo, importStats.importTimestamp);
 			}
 		} catch (error) {
 			if (error instanceof SyntaxError) {
@@ -262,12 +274,13 @@ export default class ImportBackup extends Command {
 	private recordBackupImport(
 		db: ReturnType<typeof createDatabase>,
 		backupInfo: {filename: string; backupDate: Date},
+		systemTime: Date,
 	): void {
 		db.insert(backupImports)
 			.values({
 				filename: backupInfo.filename,
 				backupDate: formatDate(backupInfo.backupDate),
-				systemFrom: newSystemTimestamp(),
+				systemFrom: formatTemporalTimestamp(systemTime),
 				systemTo: FAR_FUTURE_DATE,
 			})
 			.run();

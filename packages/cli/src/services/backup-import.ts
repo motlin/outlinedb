@@ -1,6 +1,7 @@
 import {BackupFileSchema} from "@workflowy/shared/schemas";
 import type {createDatabase} from "../db/index.js";
 import {CacheService} from "./cache.js";
+import type {BackupSystemTime} from "./cache-import.js";
 import {EmbeddingGeneratorService} from "./embedding-generator.js";
 import {readBackupFile} from "../utils/backup-archive.js";
 import path from "node:path";
@@ -39,6 +40,8 @@ export interface BackupImportOptions {
 	generateEmbeddings?: boolean;
 	embeddingBatchSize?: number;
 	force?: boolean;
+	/** Stamp the import from the backup instead of the clock (historical replay). */
+	systemTime?: BackupSystemTime;
 	onProgress?: (progress: BackupImportProgress) => void;
 }
 
@@ -52,7 +55,14 @@ export class BackupImportService {
 	}
 
 	async importBackup(options: BackupImportOptions): Promise<BackupImportStats> {
-		const {filePath, generateEmbeddings = false, embeddingBatchSize = 20, force = false, onProgress} = options;
+		const {
+			filePath,
+			generateEmbeddings = false,
+			embeddingBatchSize = 20,
+			force = false,
+			systemTime,
+			onProgress,
+		} = options;
 
 		const fileContent = readBackupFile(filePath);
 		const rootNodes = BackupFileSchema.parse(JSON.parse(fileContent));
@@ -72,7 +82,7 @@ export class BackupImportService {
 		});
 
 		const filename = path.basename(filePath);
-		const stats = await this.cacheService.importBackup(filePath, filename, false, force);
+		const stats = await this.cacheService.importBackup(filePath, filename, false, force, systemTime);
 
 		if (generateEmbeddings && !stats.skipped) {
 			await this.generateEmbeddingsForImport(embeddingBatchSize, onProgress);

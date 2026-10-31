@@ -1,7 +1,7 @@
 import {CacheService as BaseCacheService} from "@workflowy/shared/cache";
 import type {Node} from "@workflowy/shared/types";
 import {importBackup} from "./cache-import.js";
-import type {ImportBackupResult} from "./cache-import.js";
+import type {BackupSystemTime, ImportBackupResult} from "./cache-import.js";
 import {logger} from "./logger.js";
 
 /**
@@ -16,14 +16,16 @@ export class CacheService extends BaseCacheService {
 	 * @param backupImportFilename Filename of the backup being imported
 	 * @param verbose Show detailed timing information
 	 * @param force Bypass the stale-snapshot watermark guard
+	 * @param systemTime Stamp the import from the backup instead of the clock
 	 */
 	async importBackup(
 		filePath: string,
 		backupImportFilename: string,
 		verbose = false,
 		force = false,
+		systemTime?: BackupSystemTime,
 	): Promise<ImportBackupResult> {
-		return importBackup(this.database, filePath, backupImportFilename, verbose, undefined, force);
+		return importBackup(this.database, filePath, backupImportFilename, verbose, systemTime, force);
 	}
 
 	getNode(nodeId: string): Node | undefined {

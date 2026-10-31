@@ -248,16 +248,12 @@ daily: build backup-db
     # Reclaim dead pages so the db file does not regrow unbounded (full VACUUM; logs before/after sizes)
     ./bin/run.js cache vacuum
 
-# Delete database and run full workflow from scratch
+# Delete database and rebuild it by replaying every backup oldest-first, each stamped with its own time
 [group('workflow')]
 fresh: install
-    #!/usr/bin/env bash
-    set -euo pipefail
-    rm -f workflowy.sqlite
-    just download-backups
-    find backups -type f \( -name "*.workflowy.backup" -o -name "workflowy-backup-*.json" \) | sort | while read file; do
-        ./bin/run.js cache import-backup --file "$file" --yes
-    done
+    rm -f workflowy.sqlite workflowy.sqlite-wal workflowy.sqlite-shm
+    ./bin/run.js cache import-backups --backup-system-time --no-embeddings
+    ./bin/run.js ai embed
 
 # Demo CLI commands - comprehensive exploration of all CLI functionality
 [group('demo')]

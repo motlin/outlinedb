@@ -1,5 +1,5 @@
 import {fetchWorkflowyEpoch} from "@workflowy/shared/api";
-import {config, nodeContent, nodeMetadata} from "@workflowy/shared/db";
+import {backupImports, config, nodeContent, nodeMetadata} from "@workflowy/shared/db";
 import type {NodeContentType, NodeMetadataType, AppDatabase} from "@workflowy/shared/db";
 import {
 	applyRows,
@@ -25,7 +25,7 @@ import {BackupFileSchema, BackupNodeSchema} from "@workflowy/shared/schemas";
 import type {BackupNode} from "@workflowy/shared/schemas";
 import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@workflowy/shared/temporal";
 import {backupToUnixTime, uuidToShortId} from "@workflowy/shared/workflowy";
-import {eq} from "drizzle-orm";
+import {eq, max} from "drizzle-orm";
 import type {BetterSQLite3Database} from "drizzle-orm/better-sqlite3";
 import {formatError, ZodError} from "zod";
 import {readBackupFile} from "../utils/backup-archive.js";
@@ -274,6 +274,50 @@ function toUnixSeconds(value: Date | null): number | null {
 	return value ? Math.floor(value.getTime() / 1000) : null;
 }
 
+/**
+ * Stamp the import with a system time taken from the backup instead of the clock,
+ * for replaying historical backups. See {@link resolveBackupSystemTime}.
+ */
+export interface BackupSystemTime {
+	/** The date in the backup's filename. */
+	backupDate: Date;
+}
+
+/** Hour (UTC) on the filename date used when a backup carries no timestamps. */
+const BACKUP_FALLBACK_UTC_HOUR = 12;
+
+/**
+ * The system time for replaying a backup. A backup is a plain array of nodes
+ * with no snapshot time of its own, so the best in-file evidence of when it was
+ * taken is its high watermark: the newest createdAt/modifiedAt/completedAt.
+ * The snapshot was taken at or after that instant. A backup with no timestamps
+ * falls back to noon UTC on its filename date. Either way the stamp lands at
+ * least 1 ms after the previous import's (`floor`), because a backup that only
+ * deletes nodes keeps (or lowers) the watermark, and a unit must never close a
+ * version stamped after itself.
+ */
+function resolveBackupSystemTime(incomingWatermarkMs: number | null, backupDate: Date, floor: string | null): Date {
+	const fallback = Date.UTC(
+		backupDate.getUTCFullYear(),
+		backupDate.getUTCMonth(),
+		backupDate.getUTCDate(),
+		BACKUP_FALLBACK_UTC_HOUR,
+	);
+	const candidate = incomingWatermarkMs ?? fallback;
+	const floorMs = floor === null ? null : Date.parse(`${floor.replace(" ", "T")}Z`);
+	return new Date(floorMs === null || candidate > floorMs ? candidate : floorMs + 1);
+}
+
+/** The newest system_from among current backup_imports rows, or null when none. */
+function latestBackupImportStamp(database: AppDatabase): string | null {
+	const row = database
+		.select({latest: max(backupImports.systemFrom)})
+		.from(backupImports)
+		.where(eq(backupImports.systemTo, FAR_FUTURE_DATE))
+		.get();
+	return row?.latest ?? null;
+}
+
 export interface ImportBackupResult {
 	totalNodes: number;
 	nodesAdded: number;
@@ -309,7 +353,7 @@ export interface ImportBackupResult {
  * @param filePath Path to the backup JSON file
  * @param backupImportFilename Filename of the backup being imported
  * @param verbose Show detailed timing information
- * @param timestamp Override the import (system_from) timestamp
+ * @param timestamp Override the import (system_from) timestamp, or derive it from the backup
  * @param force Bypass the stale-snapshot watermark guard
  */
 export async function importBackup(
@@ -317,7 +361,7 @@ export async function importBackup(
 	filePath: string,
 	backupImportFilename: string,
 	verbose = false,
-	timestamp?: Date,
+	timestamp?: Date | BackupSystemTime,
 	force = false,
 ): Promise<ImportBackupResult> {
 	const startTime = Date.now();
@@ -772,8 +816,12 @@ export async function importBackup(
 	const referencesRootsRows: NormalizedReferencesRootsRow[] = relationships.referencesRoots;
 
 	// The timeout counts from here, after the parse, so only the merge itself is timed.
-	const unitStart = startUnitOfWork(timestamp);
-	const importTimestamp = timestamp ?? new Date(unitStart.startedAt);
+	const stamp =
+		timestamp === undefined || timestamp instanceof Date
+			? timestamp
+			: resolveBackupSystemTime(incomingWatermarkMs, timestamp.backupDate, latestBackupImportStamp(database));
+	const unitStart = startUnitOfWork(stamp);
+	const importTimestamp = stamp ?? new Date(unitStart.startedAt);
 	// One unit of work: the node-keyed merge, the relationship merges and the
 	// orphan sweep commit together at the import time, or not at all.
 	runUnitOfWork(

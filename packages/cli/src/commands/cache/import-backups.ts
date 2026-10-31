@@ -15,6 +15,7 @@ export default class ImportBackups extends Command {
 		"<%= config.bin %> cache:import-backups",
 		"<%= config.bin %> cache:import-backups --no-embeddings",
 		"<%= config.bin %> cache:import-backups --batch-size 50",
+		"<%= config.bin %> cache:import-backups --no-download --no-archive --backup-system-time",
 	];
 
 	static override flags = {
@@ -27,6 +28,20 @@ export default class ImportBackups extends Command {
 			char: "b",
 			description: "Number of nodes to process in each embedding batch",
 			default: 20,
+		}),
+		download: Flags.boolean({
+			description: "Download missing backups from Dropbox first",
+			default: true,
+			allowNo: true,
+		}),
+		archive: Flags.boolean({
+			description: "Compress and archive local backups before importing",
+			default: true,
+			allowNo: true,
+		}),
+		"backup-system-time": Flags.boolean({
+			description: "Stamp each import with a system time taken from its backup (see cache:import-backup)",
+			default: false,
 		}),
 	};
 
@@ -45,11 +60,15 @@ export default class ImportBackups extends Command {
 			.get();
 		logger.logSqlResult("import-backups.mostRecentImport", mostRecentImport);
 
-		this.log("📥 Downloading any missing backups from Dropbox...");
-		await this.runCommand(import("../dropbox/download-backup.js"), []);
+		if (flags.download) {
+			this.log("📥 Downloading any missing backups from Dropbox...");
+			await this.runCommand(import("../dropbox/download-backup.js"), []);
+		}
 
-		this.log("🗜️  Compressing and archiving local backups...");
-		await this.runCommand(import("../backups/archive.js"), []);
+		if (flags.archive) {
+			this.log("🗜️  Compressing and archiving local backups...");
+			await this.runCommand(import("../backups/archive.js"), []);
+		}
 
 		const localBackups = listBackups(backupsDirectory);
 
@@ -96,7 +115,10 @@ export default class ImportBackups extends Command {
 		this.log("\n✅ Import complete!");
 	}
 
-	private async importBackup(backup: BackupEntry, flags: {embeddings: boolean; "batch-size": number}): Promise<void> {
+	private async importBackup(
+		backup: BackupEntry,
+		flags: {embeddings: boolean; "batch-size": number; "backup-system-time": boolean},
+	): Promise<void> {
 		// Archived backups live inside a solid `.tar.zst`; materializeBackup extracts
 		// them to a temp file so the path-based cache:import-backup command can run.
 		const {filePath, cleanup} = materializeBackup(backup.location);
@@ -105,6 +127,9 @@ export default class ImportBackups extends Command {
 			const importArgs = ["--file", filePath, "--yes", "--batch-size", flags["batch-size"].toString()];
 			if (!flags.embeddings) {
 				importArgs.push("--no-embeddings");
+			}
+			if (flags["backup-system-time"]) {
+				importArgs.push("--backup-system-time");
 			}
 			await this.runCommand(import("./import-backup.js"), importArgs);
 		} finally {
