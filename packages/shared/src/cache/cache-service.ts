@@ -240,15 +240,18 @@ function upsertNodeVersion(
 /**
  * Store one parent's full child list as the API returned it, at `systemTime`:
  * upsert each child, then phase out cached children missing from the list.
- * A parent missing from the cache gets a blank placeholder row.
+ * A parent missing from the cache gets a blank placeholder row, unless it is in
+ * `storedInUnit`, the nodes another list in this unit of work stores, since
+ * replacing the placeholder there would overwrite a version of this unit.
  */
 function storeChildren(
 	tx: TemporalTransaction,
 	apiNodes: WorkflowyNode[],
 	parentId: string | null,
 	systemTime: string,
+	storedInUnit: ReadonlySet<string> = new Set(),
 ): void {
-	if (parentId !== null) {
+	if (parentId !== null && !storedInUnit.has(parentId)) {
 		const parentExists = tx
 			.select({id: nodeContent.id})
 			.from(nodeContent)
@@ -573,9 +576,10 @@ export class CacheService {
 
 	/** {@link storeApiResponse} for several parents, as one unit of work: one transaction and one system time. */
 	storeApiResponses(batches: {nodes: WorkflowyNode[]; parentId: string | null}[]): void {
+		const storedInUnit = new Set(batches.flatMap(({nodes}) => nodes.map((node) => node.id)));
 		runUnitOfWork(this.database, ({tx, systemTime}) => {
 			for (const {nodes, parentId} of batches) {
-				storeChildren(tx, nodes, parentId, systemTime);
+				storeChildren(tx, nodes, parentId, systemTime, storedInUnit);
 			}
 		});
 	}

@@ -221,6 +221,7 @@ describe("WorkflowyWriteThroughClient.createNode priorities", () => {
 
 describe("WorkflowyWriteThroughClient positional writes after a server renumbering", () => {
 	afterEach(() => {
+		vi.useRealTimers();
 		vi.unstubAllGlobals();
 	});
 
@@ -229,6 +230,22 @@ describe("WorkflowyWriteThroughClient positional writes after a server renumberi
 		["existing1", "home", 1],
 		["existing2", "home", 100],
 	];
+
+	it("caches a created node and a moved node once each, from the sibling re-read, so a request inside one millisecond never overwrites its own version", async () => {
+		vi.useFakeTimers({toFake: ["Date"], now: new Date("2026-02-01T00:00:00.000Z")});
+		const {client, cached} = setup(crowded);
+
+		await client.createNode({parent_id: "home", name: "n", position: "top"});
+		vi.setSystemTime(new Date("2026-02-01T00:00:00.001Z"));
+		await client.moveNode("existing2", "home", -1);
+
+		expect(cached()).toStrictEqual([
+			{id: "existing1", parentId: "home", priority: 100},
+			{id: "existing2", parentId: "home", priority: 25},
+			{id: "home", parentId: null, priority: 0},
+			{id: "n-id", parentId: "home", priority: 50},
+		]);
+	});
 
 	it("re-reads every sibling after a top create, so the renumbered siblings stay in server order", async () => {
 		const {client, cached} = setup(crowded);

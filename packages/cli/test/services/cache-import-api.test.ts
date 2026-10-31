@@ -9,6 +9,7 @@ import {
 	virtualRootIds,
 } from "@workflowy/shared/db";
 import type {InternalTreeItem} from "@workflowy/shared/api";
+import {SameMillisecondOverwriteError} from "@workflowy/shared/cache";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
 import type {WorkflowyNode} from "@workflowy/shared/types";
 import {eq} from "drizzle-orm";
@@ -803,12 +804,14 @@ describe("cache-import-api service", () => {
 			vi.useRealTimers();
 		});
 
-		it("lets the later of two imports changing a node within one millisecond replace the earlier's version", () => {
+		it("fails the later of two imports changing a node within one millisecond and keeps the earlier's version", () => {
 			vi.useFakeTimers({toFake: ["Date"], now: new Date("2026-02-01T00:00:00.000Z")});
 
 			importFromApi(testDatabase.db, [createApiNode({id: "node-1", name: "Original Name", priority: 0})]);
-			importFromApi(testDatabase.db, [createApiNode({id: "node-1", name: "Updated Name", priority: 0})]);
 
+			expect(() =>
+				importFromApi(testDatabase.db, [createApiNode({id: "node-1", name: "Updated Name", priority: 0})]),
+			).toThrow(new SameMillisecondOverwriteError("node_content", "id=node-1", "2026-02-01 00:00:00.000"));
 			expect(
 				testDatabase.db
 					.select({
@@ -818,7 +821,9 @@ describe("cache-import-api service", () => {
 					})
 					.from(nodeContent)
 					.all(),
-			).toStrictEqual([{name: "Updated Name", systemFrom: "2026-02-01 00:00:00.000", systemTo: FAR_FUTURE_DATE}]);
+			).toStrictEqual([
+				{name: "Original Name", systemFrom: "2026-02-01 00:00:00.000", systemTo: FAR_FUTURE_DATE},
+			]);
 		});
 	});
 
@@ -827,6 +832,7 @@ describe("cache-import-api service", () => {
 		const DATE_LATER = new Date("2026-04-10T00:00:00Z");
 		const T_EARLIER = Math.floor(DATE_EARLIER.getTime() / 1000);
 		const T_LATER = Math.floor(DATE_LATER.getTime() / 1000);
+		const DATE_REIMPORT = new Date("2026-04-11T00:00:00Z");
 
 		it("imports even when incoming timestamps predate the local cache", () => {
 			// Seed the cache with a write timestamped at T_LATER.
@@ -840,7 +846,7 @@ describe("cache-import-api service", () => {
 			const staleNodes: WorkflowyNode[] = [
 				createApiNode({id: "node-2", name: "Stale", createdAt: T_EARLIER, modifiedAt: T_EARLIER}),
 			];
-			const result = importFromApi(testDatabase.db, staleNodes, false, DATE_LATER);
+			const result = importFromApi(testDatabase.db, staleNodes, false, DATE_REIMPORT);
 
 			expect(result.nodesAdded).toBe(1);
 			const node2 = testDatabase.db.select().from(nodeContent).where(eq(nodeContent.id, "node-2")).get()!;

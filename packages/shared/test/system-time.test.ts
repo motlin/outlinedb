@@ -10,6 +10,7 @@ import * as schema from "../src/db/schema.js";
 import {nodeContent} from "../src/db/schema.js";
 import type {WorkflowyNode} from "../src/types/workflowy.js";
 import {FAR_FUTURE_DATE} from "../src/temporal/constants.js";
+import {SameMillisecondOverwriteError} from "../src/cache/temporal-merge.js";
 
 const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
 
@@ -72,16 +73,46 @@ describe("one application UTC system time per unit of work", () => {
 		]);
 	});
 
-	it("lets the later of two units closing one row in the same millisecond replace the earlier's version, as Reladomo does", () => {
+	it("stores a child list ahead of the list naming its uncached parent in one unit, with no placeholder version for the parent", () => {
+		vi.useFakeTimers({toFake: ["Date"], now: new Date("2026-02-01T00:00:00.000Z")});
+		const database = openDatabase();
+
+		new CacheService(database).storeApiResponses([
+			{nodes: [apiNode("node-2", "Child")], parentId: "node-1"},
+			{nodes: [apiNode("node-1", "Parent")], parentId: null},
+		]);
+
+		expect(database.select().from(nodeContent).all()).toStrictEqual([
+			{
+				id: "node-2",
+				name: "Child",
+				note: null,
+				parentId: "node-1",
+				systemFrom: "2026-02-01 00:00:00.000",
+				systemTo: FAR_FUTURE_DATE,
+			},
+			{
+				id: "node-1",
+				name: "Parent",
+				note: null,
+				parentId: null,
+				systemFrom: "2026-02-01 00:00:00.000",
+				systemTo: FAR_FUTURE_DATE,
+			},
+		]);
+	});
+
+	it("fails a unit closing a version stamped at its own millisecond, naming the table, key and system time, and rolls the unit back", () => {
 		vi.useFakeTimers({toFake: ["Date"], now: new Date("2026-02-01T00:00:00.000Z")});
 		const first = openDatabase();
 		const second = openDatabase();
 		new CacheService(first).insertNode(apiNode("node-1", "Original"), null);
 		vi.setSystemTime(new Date("2026-02-01T00:00:05.000Z"));
-
 		new CacheService(first).insertNode(apiNode("node-1", "Renamed"), null);
-		new CacheService(second).insertNode(apiNode("node-1", "Renamed again"), null);
 
+		expect(() => {
+			new CacheService(second).insertNode(apiNode("node-1", "Renamed again"), null);
+		}).toThrow(new SameMillisecondOverwriteError("node_content", "id=node-1", "2026-02-01 00:00:05.000"));
 		expect(first.select().from(nodeContent).all()).toStrictEqual([
 			{
 				id: "node-1",
@@ -93,7 +124,7 @@ describe("one application UTC system time per unit of work", () => {
 			},
 			{
 				id: "node-1",
-				name: "Renamed again",
+				name: "Renamed",
 				note: null,
 				parentId: null,
 				systemFrom: "2026-02-01 00:00:05.000",

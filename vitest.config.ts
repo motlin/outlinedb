@@ -15,6 +15,7 @@ export default defineConfig({
 		reporters: ["verbose"],
 		allowOnly: !process.env.CI,
 		disableConsoleIntercept: true,
+		// strictly-increasing-clock: a fake API answers in microseconds, so back-to-back units of work would share a millisecond and fail as a same-millisecond overwrite.
 		// Files stay module-isolated, so every setup file is re-imported per test file: only the packages that run oclif commands or copy the migrated database pay for @oclif/core and the template.
 		projects: [
 			{
@@ -22,7 +23,10 @@ export default defineConfig({
 				test: {
 					name: "cli",
 					include: ["packages/cli/test/**/*.test.ts", "packages/mcp/test/**/*.test.ts"],
-					setupFiles: ["packages/cli/test/setup/oclif-root.ts"],
+					setupFiles: [
+						"packages/shared/test/setup/strictly-increasing-clock.ts",
+						"packages/cli/test/setup/oclif-root.ts",
+					],
 					globalSetup: ["packages/cli/test/setup/migrated-template.ts"],
 				},
 			},
@@ -31,6 +35,7 @@ export default defineConfig({
 				test: {
 					name: "unit",
 					include: ["packages/shared/test/**/*.test.ts", "scripts/**/*.test.mjs"],
+					setupFiles: ["packages/shared/test/setup/strictly-increasing-clock.ts"],
 				},
 			},
 			{
@@ -39,7 +44,10 @@ export default defineConfig({
 					name: "web",
 					include: ["packages/web/test/**/*.test.{ts,tsx}"],
 					// Parses every op's value against its output schema; production never does.
-					setupFiles: ["packages/web/test/setup/check-op-outputs.ts"],
+					setupFiles: [
+						"packages/shared/test/setup/strictly-increasing-clock.ts",
+						"packages/web/test/setup/check-op-outputs.ts",
+					],
 				},
 			},
 			{

@@ -282,7 +282,6 @@ const PROJECTS_PLAN = {
 describe("WorkflowyWriteThroughClient.deleteNode with mirrors", () => {
 	afterEach(() => {
 		vi.unstubAllGlobals();
-		vi.useRealTimers();
 	});
 
 	it("removes a mirror through the mirror endpoint, which also drops it from its original", async () => {
@@ -394,25 +393,6 @@ describe("WorkflowyWriteThroughClient.deleteNode with mirrors", () => {
 				},
 				mirrors: [{originalId: "task-a1", mirrorId: "mirror-a1"}],
 			},
-		});
-	});
-
-	it("caches each version of a node rewritten within the same millisecond, so a fast delete does not collide with itself", async () => {
-		vi.useFakeTimers({toFake: ["Date"], now: new Date("2026-02-01T00:00:00.000Z")});
-		const {client, cacheState} = setup({
-			serverOutline: {agendas: ["agenda-1", "agenda-2", "mirror-out", "agenda-3"]},
-		});
-
-		await client.deleteNode("projects");
-
-		expect(cacheState()).toStrictEqual({
-			outline: {
-				root: ["agendas", "other"],
-				agendas: ["agenda-1", "agenda-2", "task-a", "agenda-3"],
-				"task-a": ["task-a1", "task-y"],
-				other: ["other-original", "mirror-a1"],
-			},
-			mirrors: [{originalId: "task-a1", mirrorId: "mirror-a1"}],
 		});
 	});
 

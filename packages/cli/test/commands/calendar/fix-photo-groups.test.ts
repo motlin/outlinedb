@@ -105,13 +105,16 @@ describe("calendar:fix-photo-groups command", () => {
 			});
 			const parentId = searchParams.get("parent_id");
 			if (method === "GET" && parentId !== null) {
-				// The cache already holds each move, so its children are what Workflowy would list.
-				const nodes = testDatabase.db
+				// Workflowy lists the cached children with every move applied: a moved node leaves its old parent for "entry".
+				const cached = testDatabase.db
 					.select({id: nodeContent.id})
 					.from(nodeContent)
 					.where(and(eq(nodeContent.parentId, parentId), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
 					.all()
-					.map(({id}) => apiNode(id, parentId));
+					.map(({id}) => id)
+					.filter((id) => !movedToBottom.includes(id));
+				const ids = parentId === "entry" ? [...cached, ...movedToBottom] : cached;
+				const nodes = ids.map((id) => apiNode(id, parentId));
 				return Promise.resolve(Response.json({nodes}, {status: 200}));
 			}
 			if (method === "GET") {

@@ -109,9 +109,8 @@ function server(): Hono<AppEnv> {
 	migrate(db, {migrationsFolder});
 	const cacheService = new CacheService(db);
 	for (const [index, id] of ["alpha", "bravo", "charlie", "echo", "foxtrot"].entries()) {
-		cacheService.insertNode(apiNode(id, null, index), null);
+		cacheService.insertNode({...apiNode(id, null, index), ...(id === "echo" ? {name: ""} : {})}, null);
 	}
-	cacheService.insertNode({...apiNode("echo", null, 3), name: ""}, null);
 	cacheService.insertMirror("charlie", "echo");
 	cacheService.insertNode(apiNode("alpha1", "alpha", 0), "alpha");
 	cacheService.insertNode(apiNode("alpha2", "alpha", 1), "alpha");

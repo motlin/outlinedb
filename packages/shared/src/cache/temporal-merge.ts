@@ -1,5 +1,6 @@
-import {sql} from "drizzle-orm";
+import {getTableName, sql} from "drizzle-orm";
 import type {SQL} from "drizzle-orm";
+import {getTableConfig} from "drizzle-orm/sqlite-core";
 import type {BaseSQLiteDatabase, SQLiteColumn, SQLiteTable} from "drizzle-orm/sqlite-core";
 import {FAR_FUTURE_DATE} from "../temporal/index.js";
 
@@ -107,16 +108,38 @@ export interface TemporalMergeConfig<TIncoming, TCurrent> {
 export type TemporalTransaction = BaseSQLiteDatabase<"sync", any, any, any>;
 
 /**
+ * A unit of work tried to close a current version whose `system_from` is the
+ * unit's own system time. Closing it would leave an empty interval and block
+ * the new version's key, and deleting it (Reladomo's "changed too fast") would
+ * erase history and strand derived rows, so the unit fails and rolls back. Two
+ * writes to one row in one unit should be merged before writing; two units in
+ * one millisecond should retry.
+ */
+export class SameMillisecondOverwriteError extends Error {
+	constructor(tableName: string, key: string, systemTime: string) {
+		super(
+			`Unit of work at system time ${systemTime} would overwrite the ${tableName} version (${key}) it started in the same millisecond; rolled back instead of deleting history`,
+		);
+		this.name = "SameMillisecondOverwriteError";
+	}
+}
+
+/** The names of the non-temporal primary-key columns of `table`, which name one row's history. */
+function historyKeyColumnNames(table: SQLiteTable): string[] {
+	const tableConfig = getTableConfig(table);
+	const columns = tableConfig.primaryKeys[0]?.columns ?? tableConfig.columns.filter((column) => column.primary);
+	return columns.map((column): string => column.name).filter((name) => name !== "system_from");
+}
+
+/**
  * Close the current versions of `table` matching `where` at `systemTime`, the
  * unit of work's system time. A current version that already starts at
- * `systemTime` would close to an empty interval and block the new version's
- * `(id, system_from)` key, so it is deleted instead: it was written earlier in
- * this unit, or by another unit in the same millisecond, and the later write
- * replaces it. Reladomo's audit-only temporal director does the same ("changed
- * too fast. Deleting, instead of inactivating"). A current version starting
- * after `systemTime`, left by a unit that read the clock later but landed
- * first, is closed like any other, so its interval ends before it starts and
- * no as-of read sees it.
+ * `systemTime` throws {@link SameMillisecondOverwriteError}: it was written
+ * earlier in this unit, or by another unit in the same millisecond, and closing
+ * it would leave an empty interval. A current version starting after
+ * `systemTime`, left by a unit that read the clock later but landed first, is
+ * closed like any other, so its interval ends before it starts and no as-of
+ * read sees it.
  */
 export function closeCurrentVersions(
 	tx: TemporalTransaction,
@@ -127,9 +150,17 @@ export function closeCurrentVersions(
 	const systemFrom = sql.identifier("system_from");
 	const systemTo = sql.identifier("system_to");
 	const matching = where ?? sql`1`;
-	tx.run(
-		sql`DELETE FROM ${table} WHERE ${systemTo} = ${FAR_FUTURE_DATE} AND ${systemFrom} = ${systemTime} AND (${matching})`,
+	const keyColumnNames = historyKeyColumnNames(table);
+	const collision = tx.get<Record<string, unknown> | undefined>(
+		sql`SELECT ${sql.join(
+			keyColumnNames.map((name) => sql.identifier(name)),
+			sql`, `,
+		)} FROM ${table} WHERE ${systemTo} = ${FAR_FUTURE_DATE} AND ${systemFrom} = ${systemTime} AND (${matching}) LIMIT 1`,
 	);
+	if (collision !== undefined) {
+		const key = keyColumnNames.map((name) => `${name}=${String(collision[name])}`).join(", ");
+		throw new SameMillisecondOverwriteError(getTableName(table), key, systemTime);
+	}
 	tx.run(
 		sql`UPDATE ${table} SET ${systemTo} = ${systemTime} WHERE ${systemTo} = ${FAR_FUTURE_DATE} AND (${matching})`,
 	);

@@ -6,8 +6,8 @@ import {formatTemporalTimestamp} from "../temporal/constants.js";
  * `system_to` a unit writes takes this one value, even when the unit spans
  * several transactions. Two units may share a millisecond and need not be
  * monotonic: a unit that lands after another but read the clock earlier is
- * normal. {@link closeCurrentVersions} handles a unit closing a version stamped
- * at its own millisecond.
+ * normal. A unit closing a version stamped at its own millisecond fails with
+ * `SameMillisecondOverwriteError` and rolls back.
  */
 export function newSystemTime(): Date {
 	return new Date(Date.now());

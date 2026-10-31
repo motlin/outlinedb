@@ -70,6 +70,7 @@ export type {
 export {
 	closeCurrentVersions,
 	joinKey,
+	SameMillisecondOverwriteError,
 	type TemporalMergeConfig,
 	type TemporalMergeResult,
 	temporalMerge,

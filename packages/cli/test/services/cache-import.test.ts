@@ -1357,7 +1357,8 @@ describe("cache-import service", () => {
 			await importBackup(testDatabase.db, seedPath, "backup.json", false, DATE_LATER);
 
 			const stalePath = writeBackupFile([{id: "node-2", nm: "Stale", ct: T_EARLIER, lm: T_EARLIER}]);
-			const result = await importBackup(testDatabase.db, stalePath, "backup.json", false, DATE_LATER, true);
+			const reimportDate = new Date("2026-04-11T00:00:00Z");
+			const result = await importBackup(testDatabase.db, stalePath, "backup.json", false, reimportDate, true);
 
 			expect(result).toStrictEqual({
 				totalNodes: 1,
@@ -1369,7 +1370,7 @@ describe("cache-import service", () => {
 				contentUpdated: 0,
 				metadataUpdated: 0,
 				priorityUpdated: 0,
-				importTimestamp: DATE_LATER,
+				importTimestamp: reimportDate,
 				nodesPreserved: 0,
 				skipped: false,
 				localWatermark: "2026-04-10 00:00:00.000",

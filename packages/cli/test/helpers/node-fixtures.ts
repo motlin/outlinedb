@@ -27,7 +27,8 @@ export function getShortId(id: string): string {
 }
 
 export function createTestNode(overrides: Partial<TestNode> = {}): TestNode {
-	const now = new Date();
+	// Date.now(), not new Date(): the strictly increasing test clock then keeps a command's first unit of work out of the seed's millisecond.
+	const now = new Date(Date.now());
 	const id = overrides.id ?? generateTestId();
 	const systemFrom = overrides.systemFrom ?? formatTemporalTimestamp(now);
 

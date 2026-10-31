@@ -80,11 +80,9 @@ export class WorkflowyWriteThroughClient {
 			priority: fetched.priority,
 			parent_id: options.parent_id && isSystemTarget(options.parent_id) ? fetched.parent_id : created.parent_id,
 		};
-		const parentId = node.parent_id ?? null;
-		await this.ensureParentInCache(parentId);
-		this.cacheService.insertNode(node, parentId);
-		// A top insert can make Workflowy renumber every sibling, so re-read them all.
-		await this.refreshChildren([parentId]);
+		// A top insert can make Workflowy renumber every sibling, so re-read them all;
+		// the re-read caches the new node too, in the same unit of work as its siblings.
+		await this.refreshChildren([node.parent_id ?? null]);
 		return node;
 	}
 
@@ -314,9 +312,8 @@ export class WorkflowyWriteThroughClient {
 		const movedNode = await this.apiClient.getNode(nodeId);
 		const parentId =
 			newParentId !== null && isSystemTarget(newParentId) ? (movedNode.parent_id ?? null) : newParentId;
-		await this.ensureParentInCache(parentId);
-		this.cacheService.insertNode(movedNode, parentId);
-		// A top move can make Workflowy renumber every sibling, so re-read them all.
+		// A top move can make Workflowy renumber every sibling, so re-read them all;
+		// the re-read caches the moved node too, in the same unit of work as its siblings.
 		await this.refreshChildren([parentId]);
 		return movedNode;
 	}

@@ -365,6 +365,11 @@ describe("node create command", () => {
 			process.env.WORKFLOWY_PASSWORD = "hunter2";
 			process.env.WORKFLOWY_SESSION_FILE = path.join(tempDir, "workflowy-session");
 		};
+		// The fake clock stands still between its 20 ms steps, so step past the seed's millisecond before the command re-reads a seeded row.
+		const seedCalendar = () => {
+			seedTaggedCalendar(testDatabase);
+			vi.setSystemTime(Date.now() + 1);
+		};
 		const noInternalAuth = () => {
 			delete process.env.WORKFLOWY_USERNAME;
 			delete process.env.WORKFLOWY_PASSWORD;
@@ -372,7 +377,7 @@ describe("node create command", () => {
 		};
 
 		it("tags a dated row created under a calendar month as that day", async () => {
-			seedTaggedCalendar(testDatabase);
+			seedCalendar();
 			useInternalAuth();
 			fakeCreates("new-id");
 			const setMeta = vi.spyOn(WorkflowyInternalAdapter.prototype, "setNodeMetaValues").mockResolvedValue();
@@ -400,7 +405,7 @@ describe("node create command", () => {
 		});
 
 		it("makes no metadata call under a non-calendar parent", async () => {
-			seedTaggedCalendar(testDatabase);
+			seedCalendar();
 			seedTestData(testDatabase, nodeFixtures([createTestNode({id: "plain", name: "Plain", parentId: null})]));
 			useInternalAuth();
 			fakeCreates("new-id");
@@ -414,7 +419,7 @@ describe("node create command", () => {
 		});
 
 		it("warns on stderr and exits 0 without internal auth", async () => {
-			seedTaggedCalendar(testDatabase);
+			seedCalendar();
 			noInternalAuth();
 			fakeCreates("new-id");
 
@@ -429,7 +434,7 @@ describe("node create command", () => {
 		});
 
 		it("ensures a missing calendar month for --create-path instead of creating a name-only one", async () => {
-			seedTaggedCalendar(testDatabase);
+			seedCalendar();
 			useInternalAuth();
 			const ensure = vi
 				.spyOn(WorkflowyInternalAdapter.prototype, "ensureCalendarDay")
