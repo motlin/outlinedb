@@ -6,6 +6,7 @@
  */
 
 import {useEffect, useMemo, useRef, useState} from "react";
+import type {ReactNode} from "react";
 import {useParams} from "react-router-dom";
 import type {DecisionItem, DecisionPage} from "../../server/decisions.js";
 import "../decisions.css";
@@ -321,6 +322,12 @@ export function DecisionPageView({slug}: {slug: string}) {
 					<h1>{page.title}</h1>
 					{page.intro === undefined ? null : <p className="decisions-intro">{page.intro}</p>}
 				</header>
+				<div className="decisions-progress-row">
+					<p className="decisions-position">
+						Card {index + 1} of {cards.length}
+					</p>
+					<progress aria-label="Answered" className="decisions-bar" max={cards.length} value={answered} />
+				</div>
 				{unanswered.length === 0 ? (
 					<p className="decisions-all-answered">All {cards.length} answered. Submit when ready.</p>
 				) : (
@@ -343,19 +350,8 @@ export function DecisionPageView({slug}: {slug: string}) {
 				)}
 				{current === undefined || currentState === undefined ? null : (
 					<section className="decisions-group" key={current.item.id}>
-						<p className="decisions-position">
-							Card {index + 1} of {cards.length}
-						</p>
-						<h2 className="decisions-group-heading">
-							{current.group.link === undefined ? (
-								current.group.heading
-							) : (
-								<a href={current.group.link} rel="noopener noreferrer" target="_blank">
-									{current.group.heading}
-								</a>
-							)}
-						</h2>
 						<DecisionCard
+							group={current.group}
 							item={current.item}
 							onChoose={(choice) => {
 								choose(current.item.id, choice);
@@ -364,38 +360,39 @@ export function DecisionPageView({slug}: {slug: string}) {
 								editNote(current.item.id, note);
 							}}
 							state={currentState}
-						/>
-						<div className="decisions-nav">
-							<button
-								className="decisions-nav-button"
-								disabled={index === 0}
-								onClick={() => {
-									goTo(index - 1);
-								}}
-								type="button"
-							>
-								Back
-							</button>
-							<button
-								className="decisions-nav-button decisions-note-next"
-								onClick={() => {
-									saveNoteAndNext(current.item.id);
-								}}
-								type="button"
-							>
-								Save note &amp; next
-							</button>
-							<button
-								className="decisions-nav-button"
-								disabled={index === cards.length - 1}
-								onClick={() => {
-									goTo(index + 1);
-								}}
-								type="button"
-							>
-								Next
-							</button>
-						</div>
+						>
+							<div className="decisions-nav">
+								<button
+									className="decisions-nav-button"
+									disabled={index === 0}
+									onClick={() => {
+										goTo(index - 1);
+									}}
+									type="button"
+								>
+									Back
+								</button>
+								<button
+									className="decisions-nav-button decisions-note-next"
+									onClick={() => {
+										saveNoteAndNext(current.item.id);
+									}}
+									type="button"
+								>
+									Save note &amp; next
+								</button>
+								<button
+									className="decisions-nav-button"
+									disabled={index === cards.length - 1}
+									onClick={() => {
+										goTo(index + 1);
+									}}
+									type="button"
+								>
+									Next
+								</button>
+							</div>
+						</DecisionCard>
 					</section>
 				)}
 			</div>
@@ -433,19 +430,32 @@ export function DecisionPageView({slug}: {slug: string}) {
 }
 
 interface DecisionCardProps {
+	group: Group;
 	item: DecisionItem;
 	state: ItemState;
 	onChoose: (choice: string) => void;
 	onNote: (note: string) => void;
+	/** The card's footer: the Back / Next row. */
+	children: ReactNode;
 }
 
-function DecisionCard({item, state, onChoose, onNote}: DecisionCardProps) {
+function DecisionCard({group, item, state, onChoose, onNote, children}: DecisionCardProps) {
 	const noteId = `decision-note-${item.id}`;
+	const titleId = `decision-title-${item.id}`;
 	return (
-		<fieldset className="decisions-card" data-item-id={item.id} data-status={state.status.kind}>
-			<legend>
-				<h3>{item.title}</h3>
-			</legend>
+		<article className="decisions-card" data-item-id={item.id} data-status={state.status.kind}>
+			<p className="decisions-group-heading">
+				{group.link === undefined ? (
+					group.heading
+				) : (
+					<a href={group.link} rel="noopener noreferrer" target="_blank">
+						{group.heading}
+					</a>
+				)}
+			</p>
+			<h2 className="decisions-card-title" id={titleId}>
+				{item.title}
+			</h2>
 			{item.body.length > 0 ? (
 				<div className="decisions-body">
 					{item.body.map((line, index) => (
@@ -468,7 +478,7 @@ function DecisionCard({item, state, onChoose, onNote}: DecisionCardProps) {
 					))}
 				</ul>
 			) : null}
-			<div className="decisions-options">
+			<div aria-labelledby={titleId} className="decisions-options" role="radiogroup">
 				{item.options.map((option, index) => (
 					<label className="decisions-option" key={option.value}>
 						<input
@@ -512,6 +522,7 @@ function DecisionCard({item, state, onChoose, onNote}: DecisionCardProps) {
 			<span aria-live="polite" className="decisions-status">
 				{statusText(state.status)}
 			</span>
-		</fieldset>
+			{children}
+		</article>
 	);
 }

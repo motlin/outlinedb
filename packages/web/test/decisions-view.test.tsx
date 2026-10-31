@@ -246,7 +246,15 @@ describe("DecisionPageView", () => {
 			cards: shownCards(),
 			heading: text(".decisions-group-heading"),
 			headingLink: host?.querySelector(".decisions-group-heading a")?.getAttribute("href"),
-			cardTitle: text("h3", first),
+			cardTitle: text("h2.decisions-card-title", first),
+			headingInCard: text(".decisions-group-heading", first),
+			legends: host?.querySelectorAll("legend").length,
+			radioGroupLabel: document.getElementById(
+				first.querySelector("[role=radiogroup]")?.getAttribute("aria-labelledby") ?? "",
+			)?.textContent,
+			bar: ["value", "max", "aria-label"].map((name) =>
+				host?.querySelector("progress.decisions-bar")?.getAttribute(name),
+			),
 			body: text(".decisions-body-line", first),
 			bodyHtmlElements: first.querySelectorAll(".decisions-body-line b").length,
 			links: [...first.querySelectorAll(".decisions-links a")].map((link) => [
@@ -272,6 +280,10 @@ describe("DecisionPageView", () => {
 			heading: ["1:1 Alice - Mon Oct 26"],
 			headingLink: "https://example.com/meeting",
 			cardTitle: ["Send the deck"],
+			headingInCard: ["1:1 Alice - Mon Oct 26"],
+			legends: 0,
+			radioGroupLabel: "Send the deck",
+			bar: ["1", "3", "Answered"],
 			body: ["Alice asked for the deck", "<b>not html</b>"],
 			bodyHtmlElements: 0,
 			links: [["Meeting", "https://example.com/meeting", "_blank", "noopener noreferrer"]],
