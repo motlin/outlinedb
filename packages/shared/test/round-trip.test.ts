@@ -87,7 +87,7 @@ describe("round-trip test infrastructure", () => {
 
 			const result = database.get<{count: number}>(sql`SELECT COUNT(*) AS count FROM __drizzle_migrations`);
 
-			expect(result.count).toBe(48);
+			expect(result.count).toBe(49);
 
 			sqlite.close();
 		});

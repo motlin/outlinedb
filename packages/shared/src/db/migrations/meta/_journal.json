@@ -337,6 +337,13 @@
 			"when": 1780704000000,
 			"tag": "0048_add_survey_rating",
 			"breakpoints": true
+		},
+		{
+			"idx": 49,
+			"version": "6",
+			"when": 1780790400000,
+			"tag": "0049_index_calendar_metadata_lookups",
+			"breakpoints": true
 		}
 	]
 }

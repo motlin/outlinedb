@@ -99,6 +99,8 @@ export const calendarMetadata = sqliteTable(
 	(table) => [
 		primaryKey({columns: [table.nodeId, table.systemFrom]}),
 		index("calendar_metadata_system_to_idx").on(table.nodeId, table.systemTo),
+		index("calendar_metadata_root_idx").on(table.root, table.systemTo),
+		index("calendar_metadata_level_idx").on(table.level, table.systemTo, table.dateId),
 	],
 );
 

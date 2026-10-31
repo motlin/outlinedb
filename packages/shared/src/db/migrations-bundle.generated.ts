@@ -339,6 +339,13 @@ export const journal = {
 			tag: "0048_add_survey_rating",
 			breakpoints: true,
 		},
+		{
+			idx: 49,
+			version: "6",
+			when: 1_780_790_400_000,
+			tag: "0049_index_calendar_metadata_lookups",
+			breakpoints: true,
+		},
 	],
 } as const;
 
@@ -391,4 +398,5 @@ export const migrations: Record<string, string> = {
 	m0046: "-- Make file_blobs temporal: a retry phases out the error version and inserts the new one, so failure history is\n-- kept. fetched_at (Unix ms) becomes each existing row's system_from.\nCREATE TABLE file_blobs_temporal (\n\tnode_id TEXT NOT NULL,\n\tstatus TEXT NOT NULL,\n\tsha256 TEXT,\n\tsize INTEGER,\n\tcontent_type TEXT,\n\tlocal_path TEXT,\n\terror TEXT,\n\tsystem_from TEXT NOT NULL,\n\tsystem_to TEXT NOT NULL,\n\tPRIMARY KEY (node_id, system_from)\n);\n--> statement-breakpoint\nINSERT INTO file_blobs_temporal (node_id, status, sha256, size, content_type, local_path, error, system_from, system_to)\nSELECT node_id, status, sha256, size, content_type, local_path, error,\n\tstrftime('%Y-%m-%d %H:%M:%f', fetched_at / 1000.0, 'unixepoch'), '9999-12-31 23:59:59'\nFROM file_blobs;\n--> statement-breakpoint\nDROP TABLE file_blobs;\n--> statement-breakpoint\nALTER TABLE file_blobs_temporal RENAME TO file_blobs;\n--> statement-breakpoint\nCREATE UNIQUE INDEX file_blobs_system_to_idx ON file_blobs (node_id, system_to);\n--> statement-breakpoint\nCREATE INDEX file_blobs_closed_at_idx ON file_blobs (system_to) WHERE system_to < '9999-12-31 23:59:59';\n",
 	m0047: "-- Drop virtual_root_ids (a flipped copy of mirrors) and backlinks (derived from mirrors + references_roots: a backlink\n-- item is a live mirror whose parent is a references root, its source the mirror's original, its target that root's\n-- parent). The rows that did not match mirrors were stale, so nothing is backfilled.\nDROP TABLE virtual_root_ids;\n--> statement-breakpoint\nDROP TABLE backlinks;\n",
 	m0048: '-- Model upstream\'s survey rating: a submitted survey records `{status: "submitted", rating, at}` (rating 1-5).\n-- Existing rows predate the column, so their rating stays null until the next account refresh.\nALTER TABLE surveys ADD COLUMN rating INTEGER;\n',
+	m0049: "-- Index the live calendar_metadata lookups: the calendar root (root = 1) and a month's day nodes\n-- (level = 'day' AND date_id BETWEEN ...), both filtered to system_to = the far-future sentinel.\nCREATE INDEX calendar_metadata_root_idx ON calendar_metadata (root, system_to);\n--> statement-breakpoint\nCREATE INDEX calendar_metadata_level_idx ON calendar_metadata (level, system_to, date_id);\n",
 };
