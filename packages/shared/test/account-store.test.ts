@@ -9,6 +9,8 @@ import {
 	readAccountRows,
 	readAccountSnapshot,
 	readImportTime,
+	readWorkflowyEpoch,
+	seedAccount,
 	writeAccountSnapshot,
 } from "../src/cache/account-store.js";
 import {replaceExpansion} from "../src/cache/expansion-store.js";
@@ -45,6 +47,44 @@ describe("account store", () => {
 
 	it("reads nothing before any account import", () => {
 		expect(readAccountSnapshot(database())).toBeUndefined();
+	});
+
+	it("reads the Workflowy epoch from the live account row's join date", () => {
+		const db = database();
+		const before = readWorkflowyEpoch(db);
+		write(db, snapshot({}));
+		expect({before, after: readWorkflowyEpoch(db)}).toStrictEqual({before: undefined, after: 1_324_752_241});
+	});
+
+	it("seeds only the account row, which a later full account write replaces", () => {
+		const db = database();
+		runUnitOfWork(db, (unitOfWork) => {
+			seedAccount(unitOfWork, {userId: 0, dateJoinedSec: 1_324_752_241});
+		});
+		const seeded = readAccountRows(db);
+		write(db, {...snapshot({}), account: {userId: 107, dateJoinedSec: 1_324_752_241, fullName: "Alice Smith"}});
+		expect({seeded: seeded.account, written: readAccountRows(db).account}).toStrictEqual({
+			seeded: [
+				{
+					userId: 0,
+					fullName: null,
+					dateJoinedSec: 1_324_752_241,
+					entropyKey: null,
+					username: null,
+					email: null,
+				},
+			],
+			written: [
+				{
+					userId: 107,
+					fullName: "Alice Smith",
+					dateJoinedSec: 1_324_752_241,
+					entropyKey: null,
+					username: null,
+					email: null,
+				},
+			],
+		});
 	});
 
 	it("round-trips the stars with an order, one star_order row per entry, unordered stars kept", () => {

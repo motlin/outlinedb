@@ -531,6 +531,32 @@ export function writeAccountSnapshot(unitOfWork: UnitOfWork, snapshot: AccountSn
 	writeAccountRows(unitOfWork, accountRows(snapshot));
 }
 
+/**
+ * Merge only the account row (its join date is the Workflowy epoch), in the caller's unit of work: for a cache with no
+ * account import yet. Every other account table stays as is; the next full account write replaces the row.
+ */
+export function seedAccount(unitOfWork: UnitOfWork, stored: StoredAccount): void {
+	mergeTable(unitOfWork, TABLES.account, [
+		{
+			userId: stored.userId,
+			fullName: stored.fullName ?? null,
+			dateJoinedSec: stored.dateJoinedSec,
+			entropyKey: stored.entropyKey ?? null,
+			username: null,
+			email: null,
+		},
+	]);
+}
+
+/** The Workflowy epoch (the account's join date in Unix seconds) from the live account row, if any. */
+export function readWorkflowyEpoch(tx: TemporalTransaction): number | undefined {
+	return tx
+		.select({dateJoinedSec: account.dateJoinedSec})
+		.from(account)
+		.where(eq(account.systemTo, FAR_FUTURE_DATE))
+		.get()?.dateJoinedSec;
+}
+
 /** Every account table's live rows. */
 export function readAccountRows(tx: TemporalTransaction): AccountRows {
 	const read = <K extends keyof AccountRows>(name: K): RowsOf<K>[] =>

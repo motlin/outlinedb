@@ -309,6 +309,13 @@
 			"when": 1780358400000,
 			"tag": "0044_add_calendar_layout_applies",
 			"breakpoints": true
+		},
+		{
+			"idx": 45,
+			"version": "6",
+			"when": 1780444800000,
+			"tag": "0045_drop_config",
+			"breakpoints": true
 		}
 	]
 }

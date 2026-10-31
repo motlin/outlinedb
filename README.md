@@ -39,7 +39,6 @@ USAGE
 - [`workflowy ai qmd-search`](#workflowy-ai-qmd-search)
 - [`workflowy ai search`](#workflowy-ai-search)
 - [`workflowy backups archive`](#workflowy-backups-archive)
-- [`workflowy cache config`](#workflowy-cache-config)
 - [`workflowy cache import-api`](#workflowy-cache-import-api)
 - [`workflowy cache import-backup`](#workflowy-cache-import-backup)
 - [`workflowy cache import-backups`](#workflowy-cache-import-backups)
@@ -211,31 +210,6 @@ EXAMPLES
   $ workflowy backups:archive --keep-days 60
 
   $ workflowy backups:archive --source Data
-```
-
-## `workflowy cache config`
-
-Manage cache configuration settings like the Workflowy epoch
-
-```text
-USAGE
-  $ workflowy cache config [-g <value>] [-s <value>] [--fetch-epoch]
-
-FLAGS
-  -g, --get=<value>  Get a configuration value (e.g., "epoch")
-  -s, --set=<value>  Set a configuration value (e.g., "epoch=1324752241")
-      --fetch-epoch  Fetch and store the Workflowy epoch from internal API (requires WORKFLOWY_USERNAME and
-                     WORKFLOWY_PASSWORD)
-
-DESCRIPTION
-  Manage cache configuration settings like the Workflowy epoch
-
-EXAMPLES
-  $ workflowy cache:config --get epoch
-
-  $ workflowy cache:config --set epoch=1324752241
-
-  $ workflowy cache:config --fetch-epoch
 ```
 
 ## `workflowy cache import-api`

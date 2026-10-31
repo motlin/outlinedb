@@ -3,10 +3,13 @@ import {
 	beginApiImport,
 	finishApiImport,
 	importInternalMetadata,
+	readWorkflowyEpoch,
+	runUnitOfWork,
+	seedAccount,
 	TRANSACTION_TIMEOUT_MS,
 	unitOfWorkSignal,
 } from "@workflowy/shared/cache";
-import type {ApiImportState, ImportApiResult} from "@workflowy/shared/cache";
+import type {ApiImportState, ImportApiResult, StoredAccount} from "@workflowy/shared/cache";
 import type {TreeSnapshot} from "@workflowy/shared/api";
 import type {AppDatabase} from "@workflowy/shared/db";
 import {TreeResyncRequired} from "@workflowy/shared/internal";
@@ -51,10 +54,10 @@ export interface SyncDeps {
 	 */
 	catchUp?: () => Promise<void> | undefined;
 	/**
-	 * Reads the account's Workflowy epoch when internal auth exists; undefined when it does not. `signal` aborts when
-	 * the run's transaction timeout runs out.
+	 * Reads the account (its join date is the Workflowy epoch) when internal auth exists; undefined when it does not.
+	 * `signal` aborts when the run's transaction timeout runs out.
 	 */
-	readEpoch?: (signal: AbortSignal) => Promise<number> | undefined;
+	readAccount?: (signal: AbortSignal) => Promise<StoredAccount> | undefined;
 	now?: () => number;
 }
 
@@ -185,22 +188,17 @@ export class SyncJob {
 		}
 	}
 
-	/** Store config.workflowy_epoch once, when internal auth exists; a failure leaves it for the next run. */
-	private async fillEpoch(signal: AbortSignal): Promise<void> {
-		const have = this.sql.exec("SELECT 1 FROM config WHERE key = 'workflowy_epoch'").toArray().length > 0;
-		if (have) {
+	/** Seed the account row once, when internal auth exists and none is live; a failure leaves it for the next run. */
+	private async seedAccountRow(signal: AbortSignal): Promise<void> {
+		if (readWorkflowyEpoch(this.deps.db) !== undefined) {
 			return;
 		}
 		try {
-			const epoch = await this.deps.readEpoch?.(signal);
-			if (epoch !== undefined) {
-				const stamp = new Date(this.now()).toISOString();
-				this.sql.exec(
-					"INSERT OR IGNORE INTO config (key, value, created_at, updated_at) VALUES ('workflowy_epoch', ?, ?, ?)",
-					String(epoch),
-					stamp,
-					stamp,
-				);
+			const stored = await this.deps.readAccount?.(signal);
+			if (stored !== undefined) {
+				runUnitOfWork(this.deps.db, (unitOfWork) => {
+					seedAccount(unitOfWork, stored);
+				});
 			}
 		} catch {
 			// The epoch only serves backup imports; the sync itself does not depend on it.
@@ -336,7 +334,7 @@ export class SyncJob {
 				internalSyncError = errorMessage(error);
 			}
 		}
-		await this.fillEpoch(unitOfWorkSignal(state.start));
+		await this.seedAccountRow(unitOfWorkSignal(state.start));
 		const result = finishApiImport(state, snapshot?.items);
 		if (snapshot !== undefined) {
 			importInternalMetadata(this.deps.db, snapshot, this.now());

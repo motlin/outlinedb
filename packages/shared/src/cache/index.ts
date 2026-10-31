@@ -64,6 +64,8 @@ export {
 	readAccountSnapshot,
 	readEnabledFeatures,
 	readImportTime,
+	readWorkflowyEpoch,
+	seedAccount,
 	type StoredAccount,
 	writeAccountRows,
 	writeAccountSnapshot,

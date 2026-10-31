@@ -88,10 +88,10 @@ async function rowsPerSystemTime(h: Harness): Promise<unknown> {
 	return response.json();
 }
 
-async function configRows(h: Harness): Promise<unknown> {
+async function accountRows(h: Harness): Promise<unknown> {
 	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
 	const ns = (await h.mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace;
-	const response = await ns.get(ns.idFromName("dev")).fetch("http://localhost/__config");
+	const response = await ns.get(ns.idFromName("dev")).fetch("http://localhost/__account");
 	return response.json();
 }
 
@@ -428,22 +428,22 @@ describe("sync from a fake upstream", () => {
 		await stop(h);
 	}, 60_000);
 
-	it("fills config.workflowy_epoch from the initialization data when internal auth exists and the row is missing", async () => {
+	it("seeds the account row (its join date is the epoch) from the initialization data when internal auth exists and none is live", async () => {
 		current = makeNodes(100);
 		treeData = () => Response.json({items: [], most_recent_operation_transaction_id: "1"});
 		const h = await start(undefined, internalAuthBindings);
-		await expect(configRows(h)).resolves.toStrictEqual([]);
+		await expect(accountRows(h)).resolves.toStrictEqual([]);
 		const done = await runToIdle(h);
 		expect(done.lastResult).toMatchObject({status: "ok"});
-		await expect(configRows(h)).resolves.toStrictEqual([{key: "workflowy_epoch", value: "1400000000"}]);
+		await expect(accountRows(h)).resolves.toStrictEqual([{user_id: 123, date_joined_sec: 1_400_000_000}]);
 		await stop(h);
 	}, 60_000);
 
-	it("leaves config empty when no internal auth exists", async () => {
+	it("leaves the account table empty when no internal auth exists", async () => {
 		current = makeNodes(100);
 		const h = await start();
 		await runToIdle(h);
-		await expect(configRows(h)).resolves.toStrictEqual([]);
+		await expect(accountRows(h)).resolves.toStrictEqual([]);
 		await stop(h);
 	}, 60_000);
 

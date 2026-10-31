@@ -6,7 +6,7 @@
 #
 # The database rebuilt is $WORKFLOWY_DB_PATH, or workflowy.sqlite in the repo root.
 # --offline skips every step that needs credentials or the network (Dropbox
-# download, epoch fetch, import-api, account state) and needs WORKFLOWY_EPOCH;
+# download, account state, import-api) and needs WORKFLOWY_EPOCH;
 # it exists to rehearse the pipeline against a scratch copy.
 set -euo pipefail
 
@@ -32,7 +32,7 @@ building="$base.rebuilding.sqlite"
 backup="$base.pre-rebuild-$stamp.sqlite"
 
 if $offline && [ -z "${WORKFLOWY_EPOCH:-}" ]; then
-    echo "--offline needs WORKFLOWY_EPOCH (the epoch fetch needs credentials)" >&2
+    echo "--offline needs WORKFLOWY_EPOCH (the account import, which stores the join date, needs credentials)" >&2
     exit 2
 fi
 
@@ -69,19 +69,20 @@ fi
 sqlite3 "$building" "pragma journal_mode=wal" >/dev/null
 export WORKFLOWY_DB_PATH="$building"
 
-step "Seeding the Workflowy epoch"
-if [ -n "${WORKFLOWY_EPOCH:-}" ]; then
-    "$run" cache config --set "epoch=$WORKFLOWY_EPOCH"
-else
-    "$run" cache config --fetch-epoch
-fi
-
 if [ -n "$backup" ]; then
-    # Before import-api and import-account, which merge the current values on top as new versions.
+    # Before import-account and import-api, which merge the current values on top as new versions.
     step "Carrying over the account tables' history and file_blobs from the previous database"
     # Opening the backup migrates it, so an old schema's account state reaches the typed account tables first.
     WORKFLOWY_DB_PATH="$backup" "$run" cache status >/dev/null
     "$run" cache import-local-state --from "$backup"
+fi
+
+# The backups' timestamps count from the account's join date: WORKFLOWY_EPOCH when set, else account.date_joined_sec.
+if $offline; then
+    step "Skipping account state (--offline); the backups use WORKFLOWY_EPOCH"
+else
+    step "Fetching account state (account incl. join date and entropy key, root metadata incl. tag colors and stars, settings, visible features)"
+    "$run" cache import-account
 fi
 
 step "Importing every backup oldest-first, each stamped with its own time and taken verbatim"
@@ -92,12 +93,10 @@ else
 fi
 
 if $offline; then
-    step "Skipping import-api and account state (--offline)"
+    step "Skipping import-api (--offline)"
 else
     step "Catching up past the last backup from the API (also item metadata, tree transaction id, expanded keys)"
     "$run" cache import-api
-    step "Fetching account state (account incl. entropy key, root metadata incl. tag colors and stars, settings, visible features)"
-    "$run" cache import-account
 fi
 
 step "Generating embeddings and the full-text index"

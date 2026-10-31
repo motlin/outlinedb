@@ -15,7 +15,6 @@ import {
 	calendarMetadata,
 	changelogReads,
 	changesMetadata,
-	config,
 	enabledFeatures,
 	expandedNodes,
 	fileBlobs,
@@ -126,7 +125,6 @@ export const NON_NODE_TABLES: Readonly<Record<string, string>> = {
 	[getTableName(backupImports)]: "import bookkeeping keyed by backup filename",
 	[getTableName(apiImportTimestamp)]: "import bookkeeping keyed by pipeline name",
 	[getTableName(treeTransactions)]: "the transaction id each tree's edge rows are current to",
-	[getTableName(config)]: "local key-value settings",
 	[getTableName(calendarLayoutApplies)]:
 		"each calendar root's last applied layout, as the system time undo reads the subtree's history at",
 	[getTableName(fileBlobs)]: "local copies of attachment bytes, kept after the attachment's node ends",

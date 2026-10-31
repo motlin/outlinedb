@@ -1,4 +1,5 @@
 import {afterEach, beforeEach, describe, expect, it} from "vite-plus/test";
+import {runUnitOfWork, seedAccount} from "@workflowy/shared/cache";
 import {backupImports, nodeContent} from "@workflowy/shared/db";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
 import {captureOutput} from "@oclif/test";
@@ -90,6 +91,20 @@ describe("cache:import-backup --backup-system-time", () => {
 				systemFrom: "2024-01-02 01:00:00.000",
 				systemTo: FAR_FUTURE_DATE,
 			},
+		]);
+	});
+
+	it("reads the epoch from the account row's join date when WORKFLOWY_EPOCH is unset", async () => {
+		Reflect.deleteProperty(process.env, "WORKFLOWY_EPOCH");
+		runUnitOfWork(testDatabase.db, (unitOfWork) => {
+			seedAccount(unitOfWork, {userId: 107, dateJoinedSec: Number(EPOCH)});
+		});
+		const filePath = writeBackup("2024-01-02", [{id: "node-1", nm: "One", ct: 3600, lm: 7200}]);
+
+		await importWithBackupTime(filePath);
+
+		expect(contentStamps()).toStrictEqual([
+			{id: "node-1", systemFrom: "2024-01-01 02:00:00.000", systemTo: FAR_FUTURE_DATE},
 		]);
 	});
 

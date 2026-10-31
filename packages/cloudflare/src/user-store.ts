@@ -89,10 +89,15 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 					internalAuth &&
 					(async (signal) =>
 						new WorkflowyInternalClient({...internalAuth, fetch: signalled(signal)}).getTreeSnapshot()),
-				readEpoch:
+				readAccount:
 					internalAuth &&
-					(async (signal) =>
-						new WorkflowyInternalClient({...internalAuth, fetch: signalled(signal)}).getEpoch()),
+					(async (signal) => {
+						const session = await new WorkflowyInternalClient({
+							...internalAuth,
+							fetch: signalled(signal),
+						}).bootstrap();
+						return {userId: session.userId, dateJoinedSec: session.dateJoinedSec};
+					}),
 				catchUp: internalAuth && (async () => serverContext.internalAdapter?.()?.catchUp()),
 			});
 		});

@@ -449,46 +449,4 @@ export class WorkflowyInternalClient {
 			redirect: "manual",
 		});
 	}
-
-	/**
-	 * Fetch the initialization data which contains the user's epoch timestamp.
-	 * Requires authentication via login() first.
-	 */
-	async getInitializationData(): Promise<{dateJoinedTimestampInSeconds: number}> {
-		const {body} = await this.getJson(initializationPath(DEFAULT_CLIENT_VERSION));
-		const parsed = InitializationDataSchema.parse(body);
-
-		return {
-			dateJoinedTimestampInSeconds: parsed.projectTreeData.mainProjectTreeInfo.dateJoinedTimestampInSeconds,
-		};
-	}
-
-	/**
-	 * Get the user's Workflowy epoch (dateJoinedTimestampInSeconds).
-	 * This is a convenience method that handles login and data fetching.
-	 */
-	async getEpoch(): Promise<number> {
-		await this.login();
-		const data = await this.getInitializationData();
-		return data.dateJoinedTimestampInSeconds;
-	}
-}
-
-/**
- * Fetch the Workflowy epoch for a user using their credentials.
- * This is a standalone function for one-off usage.
- *
- * The internal API returns `dateJoinedTimestampInSeconds` which is the epoch
- * value needed for converting backup file timestamps to Unix timestamps.
- *
- * Formula: unixTimestamp = backupTimestamp + epoch
- *
- * This epoch produces timestamps that match what the Workflowy Export API returns.
- *
- * @param credentials - Username and password for Workflowy
- * @returns The user's epoch for backup timestamp conversion
- */
-export async function fetchWorkflowyEpoch(credentials: WorkflowyCredentials): Promise<number> {
-	const client = new WorkflowyInternalClient({credentials});
-	return client.getEpoch();
 }

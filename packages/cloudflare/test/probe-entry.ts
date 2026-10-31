@@ -95,8 +95,12 @@ export class ProbeStore extends UserStore {
 				.toArray();
 			return Response.json({txId: txId[0] ?? null, mirrors});
 		}
-		if (url.pathname === "/__config") {
-			return Response.json(this.ctx.storage.sql.exec("SELECT key, value FROM config ORDER BY key").toArray());
+		if (url.pathname === "/__account") {
+			return Response.json(
+				this.ctx.storage.sql
+					.exec("SELECT user_id, date_joined_sec FROM account WHERE system_to = '9999-12-31 23:59:59'")
+					.toArray(),
+			);
 		}
 		if (url.pathname === "/__seed") {
 			new CacheService(drizzle(this.ctx.storage, {schema: dbSchema})).insertNode(

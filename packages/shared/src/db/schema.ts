@@ -308,31 +308,6 @@ export const apiImportTimestamp = sqliteTable(
 );
 
 /**
- * config: Local key-value store (e.g. the Workflowy epoch used for timestamp math).
- *
- * ⚙️ Temporal-pattern exemption — intentional.
- * Unlike every other table in this schema, `config` carries no `system_from`/`system_to`
- * columns and is not bitemporal. Rationale:
- *   - It is local-only. Values are set by the operator via `cache:config --set`; nothing
- *     here is ingested from Workflowy.com, so there is no upstream history to mirror.
- *   - It is a mutable key-value store with upsert (`onConflictDoUpdate`) semantics. There
- *     is no audit value in retaining superseded settings — the current value is the only
- *     value that matters. `created_at`/`updated_at` text columns cover the modest "when
- *     did this change" need without the cost of full bitemporal versioning.
- *   - It is excluded from `cache:temporal-rollback` for the same reason: rolling the cache
- *     back to an earlier system time must not revert local configuration.
- *
- * (The former `node_collapsed` table was the other exemption; it was ephemeral UI state
- * that was never populated and has been dropped — see migration 0025_drop_dead_columns.sql.)
- */
-export const config = sqliteTable("config", {
-	key: text("key").primaryKey(),
-	value: text("value").notNull(),
-	createdAt: text("created_at").notNull(),
-	updatedAt: text("updated_at").notNull(),
-});
-
-/**
  * calendar_layout_applies: the last Calendar Layout applied under each calendar root, as the system time just
  * before its push. Undo diffs the root's subtree as of just before `applied_at_system_time` against the subtree
  * now, so no undo writes are stored; undoing phases the row out.

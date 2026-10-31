@@ -108,7 +108,7 @@ Authentication: a Dropbox refresh token plus app key and secret, or a short-live
 
 Payload shape (`BackupNodeSchema`): a nested array of `{id, nm, no, ct, lm, cp, ch, metadata}`. The metadata schema is strict, which has repeatedly aborted whole imports when Workflowy added a field. Four commits added accepted-but-ignored keys to cope: `table.skipHeaders`, `video`, `calendar.day_prefix` and `isDeleted` on `s3File`. Fields in metadata: `layoutMode`, `isReferencesRoot`, `mirror` (`originalId`+`isMirrorRoot`, or `mirrorRootIds`, or `backlinkMirrorRootIds`), `backlink` (`sourceID`, `targetID`), `isVirtualRoot`, `virtualRootIds`, `changes` (`ct.by`, `cp.by`, `mn`), `ai`, `s3File`, `calendar`, `numbered_start`, `restorableUniqueNode`, `integrations`, `table`, `video`.
 
-Timestamps (`ct`, `lm`, `cp`) are seconds since the account join date. `getOrFetchWorkflowyEpoch` resolves the epoch from `WORKFLOWY_EPOCH`, then the `config` table, then the internal API (`fetchWorkflowyEpoch`).
+Timestamps (`ct`, `lm`, `cp`) are seconds since the account join date. `getOrFetchWorkflowyEpoch` resolves the epoch from `WORKFLOWY_EPOCH`, then the live `account.date_joined_sec`, then the internal API (bootstrapping the account and seeding its row).
 
 Ordering: there is no priority field. Position is the array index inside `ch`, and `calculatePriorities` infers the stored priority from it.
 

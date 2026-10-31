@@ -1,5 +1,5 @@
-import {fetchWorkflowyEpoch} from "@workflowy/shared/api";
-import {backupImports, config, nodeContent, nodeMetadata} from "@workflowy/shared/db";
+import {WorkflowyInternalClient} from "@workflowy/shared/api";
+import {backupImports, nodeContent, nodeMetadata} from "@workflowy/shared/db";
 import type {NodeContentType, NodeMetadataType, AppDatabase} from "@workflowy/shared/db";
 import {
 	applyRows,
@@ -9,7 +9,9 @@ import {
 	endOrphanedParts,
 	mergeItemRelationships,
 	startUnitOfWork,
+	readWorkflowyEpoch,
 	runUnitOfWork,
+	seedAccount,
 } from "@workflowy/shared/cache";
 import type {
 	TemporalTransaction,
@@ -35,9 +37,6 @@ import {contentMatches, metadataComparisonStats, metadataMatches, normalizeLayou
 import {logger} from "./logger.js";
 import {nonEmpty} from "../utils/non-empty.js";
 
-// Config key for storing the user's Workflowy epoch
-const WORKFLOWY_EPOCH_CONFIG_KEY = "workflowy_epoch";
-
 // Backups write 0 for unknown image dimensions and timestamps.
 function nonZeroOrNull(value: number | undefined): number | null {
 	return value === undefined || value === 0 ? null : value;
@@ -48,84 +47,45 @@ function backupTimeOrNull(backupTime: number | undefined, workflowyEpoch: number
 }
 
 /**
- * Get the Workflowy epoch from environment variable or config table.
- * Throws if no epoch is configured and credentials are not available.
- *
- * Priority: WORKFLOWY_EPOCH env var > config table
+ * The Workflowy epoch: the WORKFLOWY_EPOCH env var, else the live account row's join date.
  */
-function getWorkflowyEpoch(tx: TemporalTransaction): number | null {
-	// Check environment variable first
+function getWorkflowyEpoch(tx: TemporalTransaction): number | undefined {
 	const envEpoch = process.env.WORKFLOWY_EPOCH;
 	const envParsed = envEpoch ? parseStrictInteger(envEpoch) : undefined;
-	if (envParsed !== undefined) {
-		return envParsed;
-	}
-
-	// Check config table
-	try {
-		const configRow = tx.select().from(config).where(eq(config.key, WORKFLOWY_EPOCH_CONFIG_KEY)).get();
-		const parsed = configRow ? parseStrictInteger(configRow.value) : undefined;
-		if (parsed !== undefined) {
-			return parsed;
-		}
-	} catch {
-		// Config table might not exist yet
-	}
-
-	return null;
+	return envParsed ?? readWorkflowyEpoch(tx);
 }
 
 /**
- * Store the Workflowy epoch in the config table.
- */
-function setWorkflowyEpoch(tx: TemporalTransaction, epoch: number): void {
-	const now = formatTemporalTimestamp(new Date());
-	tx.insert(config)
-		.values({
-			key: WORKFLOWY_EPOCH_CONFIG_KEY,
-			value: String(epoch),
-			createdAt: now,
-			updatedAt: now,
-		})
-		.onConflictDoUpdate({
-			target: config.key,
-			set: {
-				value: String(epoch),
-				updatedAt: now,
-			},
-		})
-		.run();
-}
-
-/**
- * Get or fetch the Workflowy epoch.
- * If not configured, attempts to fetch from Workflowy internal API using credentials.
+ * Get the Workflowy epoch, or, without one, fetch the account from the internal API and seed its row.
  *
- * @param tx - Database transaction
- * @returns The epoch value
- * @throws Error if epoch is not configured and cannot be fetched
+ * @throws Error if no epoch is known and no credentials are set
  */
 async function getOrFetchWorkflowyEpoch(tx: TemporalTransaction): Promise<number> {
-	// Check existing configuration first
 	const existingEpoch = getWorkflowyEpoch(tx);
-	if (existingEpoch !== null) {
+	if (existingEpoch !== undefined) {
 		return existingEpoch;
 	}
 
-	// Try to fetch from Workflowy internal API
 	const username = process.env.WORKFLOWY_USERNAME;
 	const password = process.env.WORKFLOWY_PASSWORD;
 
 	if (username && password) {
-		logger.debug("Fetching Workflowy epoch from internal API...");
-		const epoch = await fetchWorkflowyEpoch({username, password});
-		setWorkflowyEpoch(tx, epoch);
-		logger.debug(`Workflowy epoch fetched and stored: ${epoch}`);
-		return epoch;
+		logger.debug("Fetching the Workflowy account (its join date is the epoch) from the internal API...");
+		const session = await new WorkflowyInternalClient({credentials: {username, password}}).bootstrap();
+		runUnitOfWork(tx, (unitOfWork) => {
+			seedAccount(unitOfWork, {
+				userId: session.userId,
+				dateJoinedSec: session.dateJoinedSec,
+				...(session.fullName === undefined ? {} : {fullName: session.fullName}),
+				...(session.entropyKey === undefined ? {} : {entropyKey: session.entropyKey}),
+			});
+		});
+		logger.debug(`Workflowy epoch fetched and stored on the account row: ${session.dateJoinedSec}`);
+		return session.dateJoinedSec;
 	}
 
 	throw new Error(
-		"Workflowy epoch not configured. Set WORKFLOWY_EPOCH env var, " +
+		"Workflowy epoch not configured. Set WORKFLOWY_EPOCH env var, run cache:import-account, " +
 			"or provide WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD to fetch automatically.",
 	);
 }
@@ -408,7 +368,7 @@ export async function importBackup(
 	logTiming(`Traverse tree (${allNodes.length} total nodes)`);
 
 	// Get the Workflowy epoch (user-specific timestamp offset for backup files)
-	// Priority: WORKFLOWY_EPOCH env var > config table > auto-fetch from internal API
+	// Priority: WORKFLOWY_EPOCH env var > account.date_joined_sec > auto-fetch from internal API
 	const workflowyEpoch = await getOrFetchWorkflowyEpoch(database);
 	logTiming(`Using Workflowy epoch: ${workflowyEpoch}`);
 
