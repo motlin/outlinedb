@@ -175,7 +175,8 @@ Legend: has = the source returns it and the importer stores it. partial = return
 Notes on the cells that matter:
 
 - The internal payload includes ids, names, notes and timestamps, but `InternalTreeItemSchema` keeps only `id` and `metadata` and `keptInternalMetadata` keeps only `numbered_start`, `calendar`, `layoutMode`, `table`, `restorableUniqueNode` and `priority.defaultToBottom`. That is a deliberate narrowing, and each dropped field is a potential gap if the other sources ever disappear.
-- Mirrors, backlinks, virtual roots and references roots go through one normalizer, `collectItemRelationships` in `packages/shared/src/cache/item-relationships.ts`, so source 2 and source 3 produce identical rows.
+- Mirrors and references roots go through one normalizer, `collectItemRelationships` in `packages/shared/src/cache/item-relationships.ts`, so source 2 and source 3 produce identical rows. A `backlink.sourceID` is stored as a mirror of the source. `virtualRootIds` is a flipped copy of `mirrors` and is not stored.
+- Backlinks are not stored. A backlink item is a live `mirrors` row whose mirror's parent is a live references root: its source is the original, and its target is the root's parent (`currentBacklinkItems`). `upstreamRelationshipMetadata` rebuilds `backlinkMirrorRootIds` and `backlink{sourceID, targetID}` from that join.
 - The tables only backups fill today are `ai_metadata`, `s3_files`, `changes_metadata`, `calendar_metadata` and `calendar_levels`. Tree data does not write them.
 
 ## The mirror data model
@@ -187,7 +188,7 @@ Mirrors are the single most confusing part of the data and the main reason a RES
 - `backlinkMirrorRootIds` is the same relationship for backlink items under a generated references root.
 - The cache stores one row per pair in `mirrors(mirror_id, original_id)` plus the bitemporal columns. Completion is also derived: a mirror is completed exactly when its original is (`effective-completion.ts`).
 - Both directions are client-maintained upstream. The web app creates a mirror by `bulk_create` of a node with `mirror.originalId` and an `edit` patch that adds the id to the original's `mirrorRootIds`. The server does not clean up after a REST-side delete, which is why dead ids occur.
-- `import-api` does not touch the `mirrors` table by itself. Without tree data, only backup imports fill and repair it. With tree data, `importFromApi` merges `mirrors`, `backlinks`, `virtual_root_ids` and `references_roots` in the same unit of work. Mirror rows close when either node is gone (the merge keeps only rows whose both sides are live). Tests: `packages/cli/test/services/cache-import-api.test.ts`, describe blocks "mirror rows of deleted nodes" and the tree-data tests.
+- `import-api` does not touch the `mirrors` table by itself. Without tree data, only backup imports fill and repair it. With tree data, `importFromApi` merges `mirrors` and `references_roots` in the same unit of work. Mirror rows close when either node is gone (the merge keeps only rows whose both sides are live). Tests: `packages/cli/test/services/cache-import-api.test.ts`, describe blocks "mirror rows of deleted nodes" and the tree-data tests.
 - To repair mirror rows, re-import a backup, then run `import-api` for current content.
 
 ## How the importers merge the sources today
@@ -207,7 +208,7 @@ flowchart LR
   C --> IB[import-backup]
   D -.->|archived, not read| ARC[backups/History]
   IA --> NC[node_content / node_metadata]
-  IA --> REL[mirrors, backlinks, virtual_root_ids, references_roots]
+  IA --> REL[mirrors, references_roots]
   IB --> NC
   IB --> REL
   IB --> ATTR[ai, s3, changes, calendar tables]
@@ -235,12 +236,12 @@ Code: `packages/cli/src/services/cache-import.ts`. Tests: `packages/cli/test/ser
 - Downloads missing files, then imports each backup in date order.
 - Validates with the strict zod schema, converts epoch-relative timestamps, infers sibling priorities from tree position.
 - Writes content, metadata, and every attribute table (`ai_metadata`, `s3_files`, `changes_metadata`, `calendar_*`) globally through the shared `applyRows`.
-- Merges `mirrors`, `backlinks` and `virtual_root_ids` globally, and filters out any row whose either side is not a live node.
+- Merges `mirrors` globally, and filters out any row whose either side is not a live node.
 - Applies the stale-snapshot protection and the corrupt-backup guard described above.
 
 ### Per-node refresh (`sync-node`, write-through read-backs)
 
-Code: `packages/cli/src/services/node-sync.ts`, `storeChildren` in `cache-service.ts`. Reads one level of children from the REST API at a time, upserts them, and phases out cached children that are missing from that list. After the recursive pass it merges backlinks and references roots from tree data, filtered to nodes the cache already holds, so a partial sync neither invents rows nor closes rows it cannot see. Test: `packages/cli/test/services/node-sync-relationships.test.ts`.
+Code: `packages/cli/src/services/node-sync.ts`, `storeChildren` in `cache-service.ts`. Reads one level of children from the REST API at a time, upserts them, and phases out cached children that are missing from that list. After the recursive pass it merges mirrors (backlink items included) and references roots from tree data, filtered to nodes the cache already holds, so a partial sync neither invents rows nor closes rows it cannot see. Test: `packages/cli/test/services/node-sync-relationships.test.ts`.
 
 ### Account state refresh
 
@@ -258,7 +259,7 @@ Every table is bitemporal on `system_from` and `system_to` (`FAR_FUTURE_DATE` ma
 
 - Node text, parent, order, completion: the most recent importer wins. In practice that is REST (live), because it runs daily and per write. A backup only wins for nodes newer than the cache cannot contradict: the watermark guard protects nodes that postdate the snapshot, and the backup never overrides a newer REST write.
 - Mirror text: always the original's, whatever any source says.
-- Relationships (mirrors, backlinks, virtual roots, references roots): the latest import that carries them, from source 2 or 3, is the full desired state. Rows outside it are closed, never deleted. An `import-api` run without tree data leaves them alone.
+- Relationships (mirrors, references roots): the latest import that carries them, from source 2 or 3, is the full desired state. Rows outside it are closed, never deleted. An `import-api` run without tree data leaves them alone.
 - Attribute tables (`ai`, `s3`, `changes`): backups only. `calendar_*`: backups and `import-api` with tree data, whichever ran last.
 - Item metadata that only the internal API holds (`numbered_start`, `restorableUniqueNode`, `table`, `priority.defaultToBottom`): `node_display_metadata` and `node_table_cell_sizes`, merged on each `import-api` with tree data.
 - Account-level state: internal API and our own accepted writes, merged as new versions into the account tables.

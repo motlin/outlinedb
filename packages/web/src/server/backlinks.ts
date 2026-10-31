@@ -1,5 +1,5 @@
-import {effectiveCompletedAt} from "@workflowy/shared/cache";
-import {aiMetadata, backlinks, nodeContent, nodeMetadata, referencesRoots} from "@workflowy/shared/db";
+import {backlinkItemParent, currentBacklinkItems, effectiveCompletedAt} from "@workflowy/shared/cache";
+import {aiMetadata, mirrors, nodeContent, nodeMetadata, referencesRoots} from "@workflowy/shared/db";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
 import {and, eq, inArray, sql} from "drizzle-orm";
 import type {SQL} from "drizzle-orm";
@@ -172,29 +172,20 @@ export function findReferencesRoots(db: ServerDatabase, targetIds: string[]): Ma
  * checked, matching upstream's count.
  */
 export function currentBacklinkSources(db: ServerDatabase, rootId: string): Map<string, string> {
-	const rows = db
-		.select({nodeId: backlinks.nodeId, sourceId: backlinks.sourceId})
-		.from(backlinks)
-		.innerJoin(nodeContent, and(eq(nodeContent.id, backlinks.nodeId), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
-		.where(
-			and(
-				eq(nodeContent.parentId, rootId),
-				eq(backlinks.systemTo, FAR_FUTURE_DATE),
-				sql`${backlinks.sourceId} IN (SELECT ${nodeContent.id} FROM ${nodeContent} WHERE ${nodeContent.systemTo} = ${FAR_FUTURE_DATE})`,
-			),
-		)
-		.all();
-	return new Map(rows.map((row) => [row.nodeId, row.sourceId]));
+	const items = currentBacklinkItems(
+		db,
+		and(
+			eq(backlinkItemParent, rootId),
+			sql`${mirrors.originalId} IN (SELECT ${nodeContent.id} FROM ${nodeContent} WHERE ${nodeContent.systemTo} = ${FAR_FUTURE_DATE})`,
+		),
+	);
+	return new Map(items.map((item) => [item.nodeId, item.sourceId]));
 }
 
 /** The target of every current backlink item made from `sourceId`, keyed by the item's id. */
 export function backlinkTargetsOfSource(db: ServerDatabase, sourceId: string): Map<string, string> {
-	const rows = db
-		.select({nodeId: backlinks.nodeId, targetId: backlinks.targetId})
-		.from(backlinks)
-		.where(and(eq(backlinks.sourceId, sourceId), eq(backlinks.systemTo, FAR_FUTURE_DATE)))
-		.all();
-	return new Map(rows.map((row) => [row.nodeId, row.targetId]));
+	const items = currentBacklinkItems(db, eq(mirrors.originalId, sourceId));
+	return new Map(items.map((item) => [item.nodeId, item.targetId]));
 }
 
 /**
@@ -214,18 +205,8 @@ export function backlinksNeedSync(
 	if (before.size !== after.size || [...after].some((id) => !before.has(id))) {
 		return true;
 	}
-	const present = new Set(
-		[...backlinkTargetsOfSource(ctx.db, sourceId).entries()]
-			.filter(([itemId]) => {
-				const row = ctx.db
-					.select({parentId: nodeContent.parentId})
-					.from(nodeContent)
-					.where(and(eq(nodeContent.id, itemId), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
-					.get();
-				return row?.parentId != null && findReferencesRootId(ctx.db, row.parentId) !== null;
-			})
-			.map(([, targetId]) => targetId),
-	);
+	// Every derived backlink item already sits under a current references root.
+	const present = new Set(backlinkTargetsOfSource(ctx.db, sourceId).values());
 	for (const shortId of after) {
 		const resolved = ctx.cacheService.resolveShortIdToUuid(shortId);
 		if (resolved === null) {

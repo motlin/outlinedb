@@ -1,7 +1,8 @@
 import {WorkflowyApiClient} from "@workflowy/shared/api";
 import type {InternalTreeItem} from "@workflowy/shared/api";
 import type {WorkflowyNode} from "@workflowy/shared/types";
-import {backlinks, referencesRoots} from "@workflowy/shared/db";
+import {currentBacklinkItems} from "@workflowy/shared/cache";
+import {referencesRoots} from "@workflowy/shared/db";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
 import {randomUUID} from "node:crypto";
 import os from "node:os";
@@ -24,13 +25,8 @@ describe("NodeSyncService relationships", () => {
 			[createApiNode({id: "target", name: "Target"}), createApiNode({id: "source", name: "Links to Target"})],
 			null,
 		);
-		cacheService.storeApiResponse(
-			[
-				createApiNode({id: "refs", name: "", parent_id: "target"}),
-				createApiNode({id: "item", name: "", parent_id: "refs"}),
-			],
-			"target",
-		);
+		cacheService.storeApiResponse([createApiNode({id: "refs", name: "", parent_id: "target"})], "target");
+		cacheService.storeApiResponse([createApiNode({id: "item", name: "", parent_id: "refs"})], "refs");
 	});
 
 	afterEach(() => {
@@ -67,14 +63,11 @@ describe("NodeSyncService relationships", () => {
 				.select({nodeId: referencesRoots.nodeId, systemTo: referencesRoots.systemTo})
 				.from(referencesRoots)
 				.all(),
-			backlinks: testDatabase.db
-				.select({nodeId: backlinks.nodeId, sourceId: backlinks.sourceId, targetId: backlinks.targetId})
-				.from(backlinks)
-				.all(),
+			backlinks: currentBacklinkItems(testDatabase.db, undefined),
 		};
 	}
 
-	it("inserts the references root and backlink rows carried by the tree data", async () => {
+	it("inserts the references root and backlink mirror rows carried by the tree data", async () => {
 		await syncService(treeItems).syncNode({nodeId: "target", recursive: true});
 
 		expect(rows()).toStrictEqual({

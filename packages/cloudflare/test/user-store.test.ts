@@ -26,7 +26,7 @@ describe("user store Durable Object behind the Worker", () => {
 
 		// The probe path is not routed by the Worker, so reach the DO directly.
 		const {names, migrations} = await probeStore(harness.mf);
-		expect(migrations).toBe(46);
+		expect(migrations).toBe(47);
 		const wanted = [
 			"account",
 			"calendar_layout_applies",
@@ -97,11 +97,11 @@ describe("user store restart", () => {
 		const first = await startHarness("./probe-entry.ts", "ProbeStore");
 		const persistDir = first.persistDir;
 		try {
-			await expect(probe(first)).resolves.toMatchObject({migrations: 46, appliedOnBoot: 46});
+			await expect(probe(first)).resolves.toMatchObject({migrations: 47, appliedOnBoot: 47});
 			await first.dispose(true);
 			const second = await startHarness("./probe-entry.ts", "ProbeStore", persistDir);
 			try {
-				await expect(probe(second)).resolves.toMatchObject({migrations: 46, appliedOnBoot: 0});
+				await expect(probe(second)).resolves.toMatchObject({migrations: 47, appliedOnBoot: 0});
 			} finally {
 				await second.dispose();
 			}

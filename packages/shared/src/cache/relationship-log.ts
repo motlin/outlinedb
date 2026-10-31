@@ -1,12 +1,14 @@
 /**
  * Replays the relationship part of `/push_and_poll` transaction-log ops onto
- * the bitemporal edge tables (`mirrors`, `backlinks`, `references_roots`), so
- * the cache stays current with upstream without a whole-tree read.
+ * the bitemporal edge tables (`mirrors`, `references_roots`), so the cache
+ * stays current with upstream without a whole-tree read. A backlink item is a
+ * mirror of its source under a references root, so `backlink` patches replay
+ * as that mirror.
  *
  * Only metadata is replayed: `bulk_create` trees (each new node's own
  * `mirror.originalId`, `backlink` and `isReferencesRoot`), `edit` metadata
  * patches, and `delete`s, which end the rows each node of the deleted subtree
- * owns as a mirror, backlink item or references root. Patches follow upstream's semantics with two deliberate
+ * owns as a mirror or references root. Patches follow upstream's semantics with two deliberate
  * differences, both from the 2026-10-29 probes (P1, P2b):
  * - a leaf `add` needs no parent object (the server creates missing parents);
  * - an object-valued `add` of `mirror`, `mirror.mirrorRootIds` or
@@ -18,9 +20,9 @@
 
 import {and, eq, inArray, or} from "drizzle-orm";
 import {z} from "zod";
-import {backlinks, mirrors, nodeContent, referencesRoots} from "../db/schema.js";
+import {mirrors, nodeContent, referencesRoots} from "../db/schema.js";
 import {FAR_FUTURE_DATE} from "../temporal/index.js";
-import {collectItemRelationships, emptyItemRelationships} from "./item-relationships.js";
+import {collectItemRelationships, currentBacklinkItems, emptyItemRelationships} from "./item-relationships.js";
 import type {UnitOfWork} from "./node-composite.js";
 import {closeCurrentVersions, joinKey} from "./temporal-merge.js";
 
@@ -82,14 +84,7 @@ interface MirrorRow {
 	originalId: string;
 }
 
-interface BacklinkRow {
-	nodeId: string;
-	sourceId: string;
-	targetId: string;
-}
-
 const mirrorKey = (row: MirrorRow): string => joinKey(row.mirrorId, row.originalId);
-const backlinkKey = (row: BacklinkRow): string => joinKey(row.nodeId, row.sourceId, row.targetId);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -101,7 +96,8 @@ const ID_BATCH_SIZE = 40;
 /** The current edge rows of the nodes an op batch touches, edited in memory and diffed back once. */
 class EdgeModel {
 	readonly mirrors = new Map<string, MirrorRow>();
-	readonly backlinks = new Map<string, BacklinkRow>();
+	/** The mirrors that are backlink items, which a whole `backlinkMirrorRootIds` remove ends. */
+	readonly backlinkItems = new Set<string>();
 	readonly roots = new Set<string>();
 
 	addMirror(mirrorId: string, originalId: string): void {
@@ -117,21 +113,11 @@ class EdgeModel {
 		}
 	}
 
-	isBacklinkItem(nodeId: string): boolean {
-		return [...this.backlinks.values()].some((row) => row.nodeId === nodeId);
-	}
-
-	setBacklink(row: BacklinkRow): void {
-		this.removeBacklinks(row.nodeId);
-		this.backlinks.set(backlinkKey(row), row);
-	}
-
-	removeBacklinks(nodeId: string): void {
-		for (const [key, row] of this.backlinks) {
-			if (row.nodeId === nodeId) {
-				this.backlinks.delete(key);
-			}
-		}
+	/** A backlink item mirrors exactly its source. */
+	setBacklink(nodeId: string, sourceId: string): void {
+		this.removeMirrors((row) => row.mirrorId === nodeId);
+		this.addMirror(nodeId, sourceId);
+		this.backlinkItems.add(nodeId);
 	}
 }
 
@@ -258,21 +244,18 @@ export function isReplayable(op: LoggedOp): boolean {
 function loadModel(unitOfWork: UnitOfWork, ids: readonly string[]): EdgeModel {
 	const {tx} = unitOfWork;
 	const model = new EdgeModel();
-	const backlinkOwners = new Set(ids);
 	for (let start = 0; start < ids.length; start += ID_BATCH_SIZE) {
 		const batch = ids.slice(start, start + ID_BATCH_SIZE);
+		const touches = or(inArray(mirrors.mirrorId, batch), inArray(mirrors.originalId, batch));
 		for (const row of tx
 			.select({mirrorId: mirrors.mirrorId, originalId: mirrors.originalId})
 			.from(mirrors)
-			.where(
-				and(
-					or(inArray(mirrors.mirrorId, batch), inArray(mirrors.originalId, batch)),
-					eq(mirrors.systemTo, FAR_FUTURE_DATE),
-				),
-			)
+			.where(and(touches, eq(mirrors.systemTo, FAR_FUTURE_DATE)))
 			.all()) {
 			model.addMirror(row.mirrorId, row.originalId);
-			backlinkOwners.add(row.mirrorId);
+		}
+		for (const item of currentBacklinkItems(tx, touches)) {
+			model.backlinkItems.add(item.nodeId);
 		}
 		for (const row of tx
 			.select({nodeId: referencesRoots.nodeId})
@@ -280,17 +263,6 @@ function loadModel(unitOfWork: UnitOfWork, ids: readonly string[]): EdgeModel {
 			.where(and(inArray(referencesRoots.nodeId, batch), eq(referencesRoots.systemTo, FAR_FUTURE_DATE)))
 			.all()) {
 			model.roots.add(row.nodeId);
-		}
-	}
-	const owners = [...backlinkOwners];
-	for (let start = 0; start < owners.length; start += ID_BATCH_SIZE) {
-		const batch = owners.slice(start, start + ID_BATCH_SIZE);
-		for (const row of tx
-			.select({nodeId: backlinks.nodeId, sourceId: backlinks.sourceId, targetId: backlinks.targetId})
-			.from(backlinks)
-			.where(and(inArray(backlinks.nodeId, batch), eq(backlinks.systemTo, FAR_FUTURE_DATE)))
-			.all()) {
-			model.backlinks.set(backlinkKey(row), row);
 		}
 	}
 	return model;
@@ -304,13 +276,13 @@ function applyBulkCreate(model: EdgeModel, op: LoggedOp): void {
 		for (const tree of trees) {
 			created.add(tree.id);
 			collectItemRelationships(relationships, tree.id, tree.metadata);
+			if (isRecord(tree.metadata) && isRecord(tree.metadata.backlink)) {
+				model.backlinkItems.add(tree.id);
+			}
 			visit(tree.ch ?? []);
 		}
 	};
 	visit(createdTrees(op));
-	for (const row of relationships.backlinks) {
-		model.setBacklink(row);
-	}
 	for (const row of relationships.mirrors.filter((mirror) => created.has(mirror.mirrorId))) {
 		model.addMirror(row.mirrorId, row.originalId);
 	}
@@ -359,7 +331,9 @@ function applyMirrorPatch(model: EdgeModel, nodeId: string, {op, path, value}: P
 		}
 	} else if (op === "remove") {
 		const backlinkMap = field === "backlinkMirrorRootIds";
-		model.removeMirrors((row) => row.originalId === nodeId && model.isBacklinkItem(row.mirrorId) === backlinkMap);
+		model.removeMirrors(
+			(row) => row.originalId === nodeId && model.backlinkItems.has(row.mirrorId) === backlinkMap,
+		);
 	}
 }
 
@@ -375,15 +349,10 @@ function applyEdit(model: EdgeModel, op: LoggedOp): void {
 			applyMirrorPatch(model, nodeId, patch);
 		} else if (head === "backlink" && patch.path.length === 1) {
 			const {value} = patch;
-			if (
-				patch.op === "add" &&
-				isRecord(value) &&
-				typeof value.sourceID === "string" &&
-				typeof value.targetID === "string"
-			) {
-				model.setBacklink({nodeId, sourceId: value.sourceID, targetId: value.targetID});
+			if (patch.op === "add" && isRecord(value) && typeof value.sourceID === "string" && value.sourceID !== "") {
+				model.setBacklink(nodeId, value.sourceID);
 			} else if (patch.op === "remove") {
-				model.removeBacklinks(nodeId);
+				model.backlinkItems.delete(nodeId);
 			}
 		} else if (head === "isReferencesRoot" && patch.path.length === 1) {
 			if (patch.op === "add" && patch.value === true) {
@@ -400,7 +369,7 @@ function applyDelete(model: EdgeModel, subtree: readonly string[]): void {
 	const ids = new Set(subtree);
 	model.removeMirrors((row) => ids.has(row.mirrorId));
 	for (const id of ids) {
-		model.removeBacklinks(id);
+		model.backlinkItems.delete(id);
 		model.roots.delete(id);
 	}
 }
@@ -421,27 +390,6 @@ function writeDiff(unitOfWork: UnitOfWork, before: EdgeModel, after: EdgeModel):
 	for (const [key, row] of after.mirrors) {
 		if (!before.mirrors.has(key)) {
 			tx.insert(mirrors)
-				.values({...row, ...current})
-				.run();
-		}
-	}
-	for (const [key, row] of before.backlinks) {
-		if (!after.backlinks.has(key)) {
-			closeCurrentVersions(
-				tx,
-				backlinks,
-				systemTime,
-				and(
-					eq(backlinks.nodeId, row.nodeId),
-					eq(backlinks.sourceId, row.sourceId),
-					eq(backlinks.targetId, row.targetId),
-				),
-			);
-		}
-	}
-	for (const [key, row] of after.backlinks) {
-		if (!before.backlinks.has(key)) {
-			tx.insert(backlinks)
 				.values({...row, ...current})
 				.run();
 		}

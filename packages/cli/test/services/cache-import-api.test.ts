@@ -1,15 +1,7 @@
 import {assert, beforeEach, vi, afterEach, describe, expect, it} from "vite-plus/test";
-import {
-	backlinks,
-	mirrors,
-	nodeContent,
-	nodeEmbeddings,
-	nodeMetadata,
-	referencesRoots,
-	virtualRootIds,
-} from "@workflowy/shared/db";
+import {mirrors, nodeContent, nodeEmbeddings, nodeMetadata, referencesRoots} from "@workflowy/shared/db";
 import type {InternalTreeItem} from "@workflowy/shared/api";
-import {SameMillisecondOverwriteError} from "@workflowy/shared/cache";
+import {currentBacklinkItems, SameMillisecondOverwriteError} from "@workflowy/shared/cache";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
 import type {WorkflowyNode} from "@workflowy/shared/types";
 import {eq} from "drizzle-orm";
@@ -567,12 +559,8 @@ describe("cache-import-api service", () => {
 			);
 			const temporal = {systemFrom: SEEDED, systemTo: FAR_FUTURE_DATE};
 			testDatabase.db
-				.insert(backlinks)
-				.values([
-					{nodeId: "doomed", sourceId: "source", targetId: "target", ...temporal},
-					// The survivor's backlink merely references the doomed node, so it stays.
-					{nodeId: "survivor", sourceId: "doomed", targetId: "target", ...temporal},
-				])
+				.insert(mirrors)
+				.values({mirrorId: "doomed", originalId: "survivor", ...temporal})
 				.run();
 			testDatabase.db
 				.insert(referencesRoots)
@@ -587,11 +575,7 @@ describe("cache-import-api service", () => {
 		function ownedRows() {
 			const {db} = testDatabase;
 			return {
-				backlinks: db
-					.select({nodeId: backlinks.nodeId, systemTo: backlinks.systemTo})
-					.from(backlinks)
-					.orderBy(backlinks.nodeId)
-					.all(),
+				mirrors: db.select({mirrorId: mirrors.mirrorId, systemTo: mirrors.systemTo}).from(mirrors).all(),
 				referencesRoots: db
 					.select({nodeId: referencesRoots.nodeId, systemTo: referencesRoots.systemTo})
 					.from(referencesRoots)
@@ -615,10 +599,7 @@ describe("cache-import-api service", () => {
 
 			const ended = "2024-01-01 00:01:00.000";
 			expect(ownedRows()).toStrictEqual({
-				backlinks: [
-					{nodeId: "doomed", systemTo: ended},
-					{nodeId: "survivor", systemTo: FAR_FUTURE_DATE},
-				],
+				mirrors: [{mirrorId: "doomed", systemTo: ended}],
 				referencesRoots: [{nodeId: "doomed", systemTo: ended}],
 				embeddings: [{nodeId: "doomed", systemTo: ended}],
 				content: [
@@ -656,22 +637,20 @@ describe("cache-import-api service", () => {
 			createApiNode({id: "source", name: "Links to Target"}),
 			createApiNode({id: "original", name: "Original"}),
 			createApiNode({id: "mirror", name: ""}),
-			createApiNode({id: "virtual", name: "Virtual"}),
 		];
 
 		const treeItems: InternalTreeItem[] = [
-			{id: "target", metadata: {mirror: {backlinkMirrorRootIds: {item: true}}}},
+			{id: "source", metadata: {mirror: {backlinkMirrorRootIds: {item: true}}}},
 			{id: "refs", metadata: {isReferencesRoot: true}},
 			{
 				id: "item",
 				metadata: {
-					mirror: {originalId: "target", isMirrorRoot: true},
+					mirror: {originalId: "source", isMirrorRoot: true},
 					backlink: {sourceID: "source", targetID: "target"},
 				},
 			},
 			{id: "original", metadata: {mirror: {mirrorRootIds: {mirror: true}}}},
 			{id: "mirror", metadata: {mirror: {originalId: "original", isMirrorRoot: true}}},
-			{id: "virtual", metadata: {virtualRootIds: {source: true}}},
 			// Items the export does not carry get no rows.
 			{id: "ghost", metadata: {isReferencesRoot: true, backlink: {sourceID: "source", targetID: "target"}}},
 		];
@@ -689,16 +668,7 @@ describe("cache-import-api service", () => {
 					.from(mirrors)
 					.orderBy(mirrors.mirrorId)
 					.all(),
-				backlinks: db
-					.select({
-						nodeId: backlinks.nodeId,
-						sourceId: backlinks.sourceId,
-						targetId: backlinks.targetId,
-						systemFrom: backlinks.systemFrom,
-						systemTo: backlinks.systemTo,
-					})
-					.from(backlinks)
-					.all(),
+				backlinks: currentBacklinkItems(db, undefined),
 				referencesRoots: db
 					.select({
 						nodeId: referencesRoots.nodeId,
@@ -707,39 +677,19 @@ describe("cache-import-api service", () => {
 					})
 					.from(referencesRoots)
 					.all(),
-				virtualRootIds: db
-					.select({
-						nodeId: virtualRootIds.nodeId,
-						virtualRootId: virtualRootIds.virtualRootId,
-						systemFrom: virtualRootIds.systemFrom,
-						systemTo: virtualRootIds.systemTo,
-					})
-					.from(virtualRootIds)
-					.all(),
 			};
 		}
 
-		it("inserts mirrors, backlinks, references roots and virtual roots from the tree data", () => {
+		it("inserts mirrors and references roots from the tree data, from which backlinks derive", () => {
 			importFromApi(testDatabase.db, apiNodes, false, T0, treeItems);
 
 			expect(relationshipRows()).toStrictEqual({
 				mirrors: [
-					{mirrorId: "item", originalId: "target", systemFrom: AT_T0, systemTo: FAR_FUTURE_DATE},
+					{mirrorId: "item", originalId: "source", systemFrom: AT_T0, systemTo: FAR_FUTURE_DATE},
 					{mirrorId: "mirror", originalId: "original", systemFrom: AT_T0, systemTo: FAR_FUTURE_DATE},
 				],
-				backlinks: [
-					{
-						nodeId: "item",
-						sourceId: "source",
-						targetId: "target",
-						systemFrom: AT_T0,
-						systemTo: FAR_FUTURE_DATE,
-					},
-				],
+				backlinks: [{nodeId: "item", sourceId: "source", targetId: "target"}],
 				referencesRoots: [{nodeId: "refs", systemFrom: AT_T0, systemTo: FAR_FUTURE_DATE}],
-				virtualRootIds: [
-					{nodeId: "virtual", virtualRootId: "source", systemFrom: AT_T0, systemTo: FAR_FUTURE_DATE},
-				],
 			});
 		});
 
@@ -747,21 +697,18 @@ describe("cache-import-api service", () => {
 			importFromApi(testDatabase.db, apiNodes, false, T0, treeItems);
 
 			const laterItems: InternalTreeItem[] = [
-				{id: "item", metadata: {mirror: {originalId: "target", isMirrorRoot: true}}},
+				{id: "item", metadata: {mirror: {originalId: "source", isMirrorRoot: true}}},
 				{id: "mirror", metadata: {mirror: {originalId: "original", isMirrorRoot: true}}},
 			];
 			importFromApi(testDatabase.db, apiNodes, false, T1, laterItems);
 
 			expect(relationshipRows()).toStrictEqual({
 				mirrors: [
-					{mirrorId: "item", originalId: "target", systemFrom: AT_T0, systemTo: FAR_FUTURE_DATE},
+					{mirrorId: "item", originalId: "source", systemFrom: AT_T0, systemTo: FAR_FUTURE_DATE},
 					{mirrorId: "mirror", originalId: "original", systemFrom: AT_T0, systemTo: FAR_FUTURE_DATE},
 				],
-				backlinks: [
-					{nodeId: "item", sourceId: "source", targetId: "target", systemFrom: AT_T0, systemTo: AT_T1},
-				],
+				backlinks: [],
 				referencesRoots: [{nodeId: "refs", systemFrom: AT_T0, systemTo: AT_T1}],
-				virtualRootIds: [{nodeId: "virtual", virtualRootId: "source", systemFrom: AT_T0, systemTo: AT_T1}],
 			});
 		});
 

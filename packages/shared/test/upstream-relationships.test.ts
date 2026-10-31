@@ -6,6 +6,7 @@ import {afterEach, describe, expect, it} from "vite-plus/test";
 import {CacheService} from "../src/cache/cache-service.js";
 import {collectItemRelationships, emptyItemRelationships} from "../src/cache/item-relationships.js";
 import * as schema from "../src/db/schema.js";
+import {FAR_FUTURE_DATE} from "../src/temporal/index.js";
 
 const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
 
@@ -15,6 +16,16 @@ const TARGET = "target";
 const REFS = "refs";
 const ITEM = "item";
 const PLAIN = "plain";
+
+/** Each sample item's parent: the backlink item sits under the target's references root. */
+const PARENTS: [id: string, parentId: string | null][] = [
+	[ORIGINAL, null],
+	[MIRROR, null],
+	[TARGET, null],
+	[REFS, TARGET],
+	[ITEM, REFS],
+	[PLAIN, null],
+];
 
 /** The upstream `/get_tree_data/` relationship shapes from the no-whole-tree-downloads plan. */
 const SAMPLE_ITEMS: {id: string; metadata: Record<string, unknown>}[] = [
@@ -46,6 +57,11 @@ describe("CacheService upstream relationship view", () => {
 		open.push(sqlite);
 		const db = drizzle(sqlite, {schema});
 		migrate(db, {migrationsFolder});
+		for (const [id, parentId] of PARENTS) {
+			db.insert(schema.nodeContent)
+				.values({id, name: "", parentId, systemFrom: "2026-01-01 00:00:00.000", systemTo: FAR_FUTURE_DATE})
+				.run();
+		}
 		const cacheService = new CacheService(db);
 		const relationships = emptyItemRelationships();
 		for (const item of SAMPLE_ITEMS) {
@@ -57,7 +73,7 @@ describe("CacheService upstream relationship view", () => {
 		return {cacheService, relationships, count};
 	}
 
-	it("rebuilds each node's upstream mirror, backlink and isReferencesRoot objects from the edge tables", () => {
+	it("rebuilds each node's upstream mirror, backlink and isReferencesRoot objects from mirrors and references roots", () => {
 		const {cacheService} = seeded();
 
 		expect(cacheService.relationshipMetadata(SAMPLE_ITEMS.map((item) => item.id))).toStrictEqual(
@@ -70,11 +86,10 @@ describe("CacheService upstream relationship view", () => {
 
 		cacheService.recordRelationships(relationships);
 
-		expect({
-			mirrors: count("mirrors"),
-			backlinks: count("backlinks"),
-			referencesRoots: count("references_roots"),
-		}).toStrictEqual({mirrors: {n: 2}, backlinks: {n: 1}, referencesRoots: {n: 1}});
+		expect({mirrors: count("mirrors"), referencesRoots: count("references_roots")}).toStrictEqual({
+			mirrors: {n: 2},
+			referencesRoots: {n: 1},
+		});
 	});
 
 	it("leaves out relationships whose rows have ended", () => {
@@ -90,15 +105,23 @@ describe("CacheService upstream relationship view", () => {
 		);
 	});
 
-	it("lists a backlink item under its source's backlinkMirrorRootIds even without a mirrors row", () => {
-		const {cacheService} = seeded();
-		cacheService.recordRelationships({
-			...emptyItemRelationships(),
-			backlinks: [{nodeId: "gap", sourceId: PLAIN, targetId: TARGET}],
-		});
+	it("records a backlink item that carries only its backlink as a mirror of its source", () => {
+		const relationships = emptyItemRelationships();
 
-		expect(cacheService.relationshipMetadata([PLAIN])).toStrictEqual(
-			new Map([[PLAIN, {mirror: {backlinkMirrorRootIds: {gap: true}}}]]),
+		collectItemRelationships(relationships, ITEM, {backlink: {sourceID: ORIGINAL, targetID: TARGET}});
+
+		expect(relationships).toStrictEqual({mirrors: [{mirrorId: ITEM, originalId: ORIGINAL}], referencesRoots: []});
+	});
+
+	it("reads a mirror whose references root ended as a plain mirror", () => {
+		const {cacheService} = seeded();
+		cacheService.recordBacklinkSync({deleted: [REFS], children: [], referencesRoots: [], backlinks: []});
+
+		expect(cacheService.relationshipMetadata([ORIGINAL, ITEM])).toStrictEqual(
+			new Map([
+				[ORIGINAL, {mirror: {mirrorRootIds: {[MIRROR]: true, [ITEM]: true}}}],
+				[ITEM, {mirror: {originalId: ORIGINAL, isMirrorRoot: true}}],
+			]),
 		);
 	});
 });

@@ -1530,11 +1530,11 @@ export class WorkflowyInternalAdapter {
 	 * {@link linkedSourcesInSubtree} read before the delete.
 	 *
 	 * A source left the tree when the cache, after the write-through delete, no
-	 * longer has it. Its items come from the `backlinks` rows naming it, caught
-	 * up from the transaction log first (the delete leaves the rows of surviving
-	 * items alone), plus each surviving cached mirror in `linked.mirrors` with no
-	 * `backlinks` row: the delete ended that `mirrors` row, and a non-backlink
-	 * mirror would have been promoted into the source's place instead. Each
+	 * longer has it. Its items are the backlink items still listed on it after
+	 * catching up from the transaction log, plus each surviving cached mirror in
+	 * `linked.mirrors` that no longer names a source: the delete ended that
+	 * `mirrors` row, and a non-backlink mirror would have been promoted into the
+	 * source's place instead. Each
 	 * item's slot comes from live public reads, so the whole tree is never read.
 	 * An item already gone upstream is skipped.
 	 */

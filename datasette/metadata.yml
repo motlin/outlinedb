@@ -21,10 +21,7 @@ databases:
 
       mirrors:
         description: >-
-          Mirror relationships. originalId holds the real text; the mirror node is empty and points back via originalId. See backlinks for links.
-
-      backlinks:
-        description: Link relationships between nodes (nodeId, sourceId, targetId).
+          Mirror relationships. originalId holds the real text; the mirror node is empty and points back via originalId. A mirror whose parent is a references_roots node is a backlink item: its original is the linking source and the root's parent is the target.
       tags:
         description: >-
           Tag color assignments (name, color). Non-bitemporal (plain created/updated timestamps).

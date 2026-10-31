@@ -7,7 +7,7 @@ import {z} from "zod";
 import {WorkflowyApiClient} from "../src/api/workflowy-client.js";
 import {WorkflowyInternalClient} from "../src/api/workflowy-internal-client.js";
 import {CacheService} from "../src/cache/cache-service.js";
-import {emptyItemRelationships} from "../src/cache/item-relationships.js";
+import {currentBacklinkItems, emptyItemRelationships} from "../src/cache/item-relationships.js";
 import {WorkflowyWriteThroughClient} from "../src/cache/workflowy-write-through-client.js";
 import {readInternalMetadata} from "../src/cache/internal-metadata.js";
 import {storeTreeTxId} from "../src/cache/tree-transaction.js";
@@ -1040,16 +1040,16 @@ describe("WorkflowyInternalAdapter tree writes", () => {
 
 		expect({
 			mirrors: mirrorRows(sqlite),
-			backlinks: sqlite.prepare("SELECT node_id, source_id, target_id FROM backlinks").all(),
+			backlinks: currentBacklinkItems(drizzle(sqlite), undefined),
 			referencesRoots: sqlite.prepare("SELECT node_id FROM references_roots").all(),
 			systemTimes: sqlite
 				.prepare(
-					"SELECT COUNT(DISTINCT system_from) AS n FROM (SELECT system_from FROM mirrors UNION ALL SELECT system_from FROM backlinks UNION ALL SELECT system_from FROM references_roots)",
+					"SELECT COUNT(DISTINCT system_from) AS n FROM (SELECT system_from FROM mirrors UNION ALL SELECT system_from FROM references_roots)",
 				)
 				.get(),
 		}).toStrictEqual({
 			mirrors: [{original_id: "b", mirror_id: "t3"}],
-			backlinks: [{node_id: "t3", source_id: "b", target_id: "t1"}],
+			backlinks: [{nodeId: "t3", sourceId: "b", targetId: "t1"}],
 			referencesRoots: [{node_id: "t2"}],
 			systemTimes: {n: 1},
 		});

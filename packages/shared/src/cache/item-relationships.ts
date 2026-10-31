@@ -1,41 +1,35 @@
 /**
  * Item relationships carried only in Workflowy's per-item `metadata` (a backup
  * file or the internal `/get_tree_data/` read), never by the public REST API:
- * mirrors, backlinks, virtual roots and references roots.
+ * mirrors and references roots. Backlinks are not stored: a backlink item is a
+ * live mirror whose parent is a references root (see {@link currentBacklinkItems}).
  *
  * Both import adapters normalize item metadata through
- * {@link collectItemRelationships} and merge the composite-key tables through
+ * {@link collectItemRelationships} and merge the `mirrors` table through
  * {@link mergeItemRelationships}, so the parse and the merge live in one place.
  */
 
-import {and, eq, inArray, or} from "drizzle-orm";
-import {backlinks, mirrors, referencesRoots, virtualRootIds} from "../db/schema.js";
+import {and, eq, inArray, or, sql} from "drizzle-orm";
+import type {SQL} from "drizzle-orm";
+import {alias} from "drizzle-orm/sqlite-core";
+import {mirrors, nodeContent, referencesRoots} from "../db/schema.js";
 import {FAR_FUTURE_DATE} from "../temporal/index.js";
 import type {UnitOfWork} from "./node-composite.js";
-import type {
-	NormalizedBacklinkRow,
-	NormalizedMirrorRow,
-	NormalizedReferencesRootsRow,
-	NormalizedVirtualRootIdRow,
-} from "./normalized-rows.js";
+import type {NormalizedMirrorRow, NormalizedReferencesRootsRow} from "./normalized-rows.js";
 import {joinKey, temporalMerge} from "./temporal-merge.js";
 import type {TemporalMergeResult, TemporalTransaction} from "./temporal-merge.js";
 
 export interface ItemRelationships {
 	mirrors: NormalizedMirrorRow[];
-	backlinks: NormalizedBacklinkRow[];
-	virtualRootIds: NormalizedVirtualRootIdRow[];
 	referencesRoots: NormalizedReferencesRootsRow[];
 }
 
 export interface MergeItemRelationshipsResult {
 	mirrors: TemporalMergeResult;
-	backlinks: TemporalMergeResult;
-	virtualRootIds: TemporalMergeResult;
 }
 
 export function emptyItemRelationships(): ItemRelationships {
-	return {mirrors: [], backlinks: [], virtualRootIds: [], referencesRoots: []};
+	return {mirrors: [], referencesRoots: []};
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -69,11 +63,9 @@ export function collectItemRelationships(into: ItemRelationships, id: string, me
 			into.mirrors.push({mirrorId, originalId: id});
 		}
 	}
-	if (isRecord(backlink) && typeof backlink.sourceID === "string" && typeof backlink.targetID === "string") {
-		into.backlinks.push({nodeId: id, sourceId: backlink.sourceID, targetId: backlink.targetID});
-	}
-	for (const virtualRootId of keysOf(metadata.virtualRootIds)) {
-		into.virtualRootIds.push({nodeId: id, virtualRootId});
+	// A backlink item mirrors its source; its target is derived from where it sits.
+	if (isRecord(backlink) && typeof backlink.sourceID === "string" && backlink.sourceID !== "") {
+		into.mirrors.push({mirrorId: id, originalId: backlink.sourceID});
 	}
 }
 
@@ -82,16 +74,12 @@ function dedupe<T>(rows: T[], key: (row: T) => string): T[] {
 }
 
 const mirrorKey = (m: NormalizedMirrorRow): string => joinKey(m.mirrorId, m.originalId);
-const backlinkKey = (b: NormalizedBacklinkRow): string => joinKey(b.nodeId, b.sourceId, b.targetId);
-const virtualRootKey = (r: NormalizedVirtualRootIdRow): string => joinKey(r.nodeId, r.virtualRootId);
 
 /**
- * Globally merge `mirrors`, `backlinks` and `virtual_root_ids` to the desired
- * state in `relationships`, in the caller's unit of work. Only rows whose nodes
- * are in `liveNodeIds` are kept: a mirror needs both sides (Workflowy keeps a
- * mirror's `originalId` after deleting its original, and an original's
- * `mirrorRootIds` after deleting a mirror), and a backlink or virtual-root row
- * needs its owning node.
+ * Globally merge `mirrors` to the desired state in `relationships`, in the
+ * caller's unit of work. Only rows with both sides in `liveNodeIds` are kept:
+ * Workflowy keeps a mirror's `originalId` after deleting its original, and an
+ * original's `mirrorRootIds` after deleting a mirror.
  */
 export function mergeItemRelationships(
 	unitOfWork: UnitOfWork,
@@ -119,53 +107,11 @@ export function mergeItemRelationships(
 		systemTime,
 	);
 
-	const backlinkRows = dedupe(
-		relationships.backlinks.filter((b) => liveNodeIds.has(b.nodeId)),
-		backlinkKey,
-	);
-	const backlinkResult = temporalMerge(
-		tx,
-		{
-			table: backlinks,
-			keyColumns: [backlinks.nodeId, backlinks.sourceId, backlinks.targetId],
-			incomingKey: backlinkKey,
-			currentKey: backlinkKey,
-			contentMatches: () => true, // the key is the whole row
-			buildInsertRow: (b: NormalizedBacklinkRow) => ({
-				nodeId: b.nodeId,
-				sourceId: b.sourceId,
-				targetId: b.targetId,
-			}),
-		},
-		backlinkRows,
-		tx.select().from(backlinks).where(eq(backlinks.systemTo, FAR_FUTURE_DATE)).all(),
-		systemTime,
-	);
-
-	const virtualRootRows = dedupe(
-		relationships.virtualRootIds.filter((r) => liveNodeIds.has(r.nodeId)),
-		virtualRootKey,
-	);
-	const virtualRootResult = temporalMerge(
-		tx,
-		{
-			table: virtualRootIds,
-			keyColumns: [virtualRootIds.nodeId, virtualRootIds.virtualRootId],
-			incomingKey: virtualRootKey,
-			currentKey: virtualRootKey,
-			contentMatches: () => true, // the key is the whole row
-			buildInsertRow: (r: NormalizedVirtualRootIdRow) => ({nodeId: r.nodeId, virtualRootId: r.virtualRootId}),
-		},
-		virtualRootRows,
-		tx.select().from(virtualRootIds).where(eq(virtualRootIds.systemTo, FAR_FUTURE_DATE)).all(),
-		systemTime,
-	);
-
-	return {mirrors: mirrorResult, backlinks: backlinkResult, virtualRootIds: virtualRootResult};
+	return {mirrors: mirrorResult};
 }
 
 /**
- * Insert the `mirrors`, `backlinks` and `references_roots` rows in
+ * Insert the `mirrors` and `references_roots` rows in
  * `relationships` that are not already current, in the caller's unit of work.
  * Unlike {@link mergeItemRelationships} it ends nothing: it records what an
  * accepted push created.
@@ -188,25 +134,6 @@ export function recordItemRelationships(unitOfWork: UnitOfWork, relationships: I
 		if (exists === undefined) {
 			tx.insert(mirrors)
 				.values({mirrorId: row.mirrorId, originalId: row.originalId, ...current})
-				.run();
-		}
-	}
-	for (const row of dedupe(relationships.backlinks, backlinkKey)) {
-		const exists = tx
-			.select({id: backlinks.nodeId})
-			.from(backlinks)
-			.where(
-				and(
-					eq(backlinks.nodeId, row.nodeId),
-					eq(backlinks.sourceId, row.sourceId),
-					eq(backlinks.targetId, row.targetId),
-					eq(backlinks.systemTo, FAR_FUTURE_DATE),
-				),
-			)
-			.get();
-		if (exists === undefined) {
-			tx.insert(backlinks)
-				.values({nodeId: row.nodeId, sourceId: row.sourceId, targetId: row.targetId, ...current})
 				.run();
 		}
 	}
@@ -238,13 +165,56 @@ export interface UpstreamRelationshipMetadata {
 
 const ID_BATCH_SIZE = 500;
 
+/** A backlink item: a mirror of `sourceId` under `targetId`'s references root. */
+export interface BacklinkItem {
+	nodeId: string;
+	sourceId: string;
+	targetId: string;
+}
+
+const itemContent = alias(nodeContent, "backlink_item");
+const rootContent = alias(nodeContent, "backlink_root");
+
+/**
+ * The current backlink items matching `where`, derived from the edge tables: a
+ * live `mirrors` row whose mirror's parent is a live references root. The
+ * source is the mirror's original and the target the root's parent. `where`
+ * may filter on `mirrors.mirrorId`, `mirrors.originalId` or
+ * {@link backlinkItemParent}.
+ */
+export function currentBacklinkItems(tx: TemporalTransaction, where: SQL | undefined): BacklinkItem[] {
+	return tx
+		.select({nodeId: mirrors.mirrorId, sourceId: mirrors.originalId, targetId: rootContent.parentId})
+		.from(mirrors)
+		.innerJoin(itemContent, and(eq(itemContent.id, mirrors.mirrorId), eq(itemContent.systemTo, FAR_FUTURE_DATE)))
+		.innerJoin(
+			referencesRoots,
+			and(eq(referencesRoots.nodeId, itemContent.parentId), eq(referencesRoots.systemTo, FAR_FUTURE_DATE)),
+		)
+		.innerJoin(
+			rootContent,
+			and(eq(rootContent.id, itemContent.parentId), eq(rootContent.systemTo, FAR_FUTURE_DATE)),
+		)
+		.where(and(eq(mirrors.systemTo, FAR_FUTURE_DATE), where))
+		.all()
+		.flatMap(({nodeId, sourceId, targetId}) => (targetId === null ? [] : [{nodeId, sourceId, targetId}]));
+}
+
+/** The parent column of a backlink item in {@link currentBacklinkItems}, for filtering by references root. */
+export const backlinkItemParent = itemContent.parentId;
+
+/** A `mirrors` condition: the mirror is not a backlink item (its parent is not a current references root). */
+export function notBacklinkItem(): SQL {
+	return sql`NOT EXISTS (SELECT 1 FROM ${nodeContent} c JOIN ${referencesRoots} r ON r.node_id = c.parent_id AND r.system_to = ${FAR_FUTURE_DATE} WHERE c.id = ${mirrors.mirrorId} AND c.system_to = ${FAR_FUTURE_DATE})`;
+}
+
 /**
  * Each node's upstream `mirror`, `backlink` and `isReferencesRoot` objects,
- * rebuilt from the current `mirrors`, `backlinks` and `references_roots` rows
- * (the inverse of {@link collectItemRelationships}). A mirror that is a backlink
- * item is listed under its original's `backlinkMirrorRootIds`, any other under
- * `mirrorRootIds`; a `backlinks` row also lists its item under its source's
- * `backlinkMirrorRootIds`. A node with no relationships maps to `{}`.
+ * rebuilt from the current `mirrors` and `references_roots` rows (the inverse
+ * of {@link collectItemRelationships}). A mirror that is a backlink item is
+ * listed under its original's `backlinkMirrorRootIds` and carries
+ * `backlink{sourceID, targetID}`; any other mirror is listed under
+ * `mirrorRootIds`. A node with no relationships maps to `{}`.
  */
 export function upstreamRelationshipMetadata(
 	tx: TemporalTransaction,
@@ -254,64 +224,27 @@ export function upstreamRelationshipMetadata(
 	const ids = [...result.keys()];
 	for (let start = 0; start < ids.length; start += ID_BATCH_SIZE) {
 		const batch = ids.slice(start, start + ID_BATCH_SIZE);
+		const touches = or(inArray(mirrors.mirrorId, batch), inArray(mirrors.originalId, batch));
 		const mirrorRows = tx
 			.select({mirrorId: mirrors.mirrorId, originalId: mirrors.originalId})
 			.from(mirrors)
-			.where(
-				and(
-					or(inArray(mirrors.mirrorId, batch), inArray(mirrors.originalId, batch)),
-					eq(mirrors.systemTo, FAR_FUTURE_DATE),
-				),
-			)
+			.where(and(touches, eq(mirrors.systemTo, FAR_FUTURE_DATE)))
 			.all();
-		const backlinkItemIds = new Set(
-			tx
-				.select({nodeId: backlinks.nodeId})
-				.from(backlinks)
-				.where(
-					and(
-						inArray(
-							backlinks.nodeId,
-							mirrorRows.map((row) => row.mirrorId),
-						),
-						eq(backlinks.systemTo, FAR_FUTURE_DATE),
-					),
-				)
-				.all()
-				.map((row) => row.nodeId),
-		);
+		const backlinkItems = new Map(currentBacklinkItems(tx, touches).map((item) => [item.nodeId, item]));
 		for (const {mirrorId, originalId} of mirrorRows) {
+			const item = backlinkItems.get(mirrorId);
 			const asMirror = result.get(mirrorId);
 			if (asMirror !== undefined) {
 				asMirror.mirror = {...asMirror.mirror, originalId, isMirrorRoot: true};
+				if (item !== undefined) {
+					asMirror.backlink = {sourceID: item.sourceId, targetID: item.targetId};
+				}
 			}
 			const asOriginal = result.get(originalId);
 			if (asOriginal !== undefined) {
 				const mirror = (asOriginal.mirror ??= {});
-				const field = backlinkItemIds.has(mirrorId) ? "backlinkMirrorRootIds" : "mirrorRootIds";
+				const field = item === undefined ? "mirrorRootIds" : "backlinkMirrorRootIds";
 				mirror[field] = {...mirror[field], [mirrorId]: true};
-			}
-		}
-		const backlinkRows = tx
-			.select({nodeId: backlinks.nodeId, sourceId: backlinks.sourceId, targetId: backlinks.targetId})
-			.from(backlinks)
-			.where(
-				and(
-					or(inArray(backlinks.nodeId, batch), inArray(backlinks.sourceId, batch)),
-					eq(backlinks.systemTo, FAR_FUTURE_DATE),
-				),
-			)
-			.all();
-		for (const {nodeId, sourceId, targetId} of backlinkRows) {
-			const metadata = result.get(nodeId);
-			if (metadata !== undefined) {
-				metadata.backlink = {sourceID: sourceId, targetID: targetId};
-			}
-			// Some backlink items have no mirrors row; the backlinks row alone lists them on their source.
-			const source = result.get(sourceId);
-			if (source !== undefined) {
-				const mirror = (source.mirror ??= {});
-				mirror.backlinkMirrorRootIds = {...mirror.backlinkMirrorRootIds, [nodeId]: true};
 			}
 		}
 		const rootRows = tx

@@ -1,12 +1,12 @@
 import type * as schema from "../db/schema.js";
 import type {AppDatabase} from "../db/types.js";
-import {backlinks, mirrors, nodeContent, nodeMetadata, referencesRoots, virtualRootIds} from "../db/schema.js";
+import {mirrors, nodeContent, nodeMetadata, referencesRoots} from "../db/schema.js";
 import {stripHtmlTags} from "../html/strip-tags.js";
 import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 import type {Node} from "../types/node.js";
 import type {WorkflowyNode} from "../types/workflowy.js";
 import {uuidToShortId} from "../workflowy/constants.js";
-import {and, eq, inArray, isNull, like, notExists, notInArray, or, sql} from "drizzle-orm";
+import {and, eq, inArray, isNull, like, notInArray, or, sql} from "drizzle-orm";
 import {
 	contentMatches,
 	currentVersion,
@@ -15,8 +15,8 @@ import {
 	normalizeLayoutMode,
 	systemFromToDate,
 } from "./cache-temporal.js";
-import {recordItemRelationships, upstreamRelationshipMetadata} from "./item-relationships.js";
-import type {ItemRelationships, UpstreamRelationshipMetadata} from "./item-relationships.js";
+import {notBacklinkItem, recordItemRelationships, upstreamRelationshipMetadata} from "./item-relationships.js";
+import type {BacklinkItem, ItemRelationships, UpstreamRelationshipMetadata} from "./item-relationships.js";
 import {loadMirrorOriginals, notAMirror} from "./mirror-text.js";
 import {endNodeComposites, runUnitOfWork} from "./node-composite.js";
 import {NodeReader} from "./node-reader.js";
@@ -70,7 +70,7 @@ function metadataFields(metadata: NodeMetadataRow | null) {
  * This is the raw result type returned by getChildrenWithMergedData.
  *
  * Distinct from the canonical `Node` DTO: it carries the joined relation
- * tables (mirrors, backlinks, calendar, etc.) that the canonical type
+ * tables (mirrors, calendar, etc.) that the canonical type
  * deliberately excludes, and keeps `priority` nullable as stored in the DB.
  */
 export interface NodeWithRelations {
@@ -90,8 +90,6 @@ export interface NodeWithRelations {
 	mirrorsAsOriginal?: {mirrorId: string}[];
 	// Mirrors where this node is the copy (this node mirrors others)
 	mirrorsAsCopy?: {originalId: string}[];
-	backlinks?: {sourceId: string; targetId: string}[];
-	virtualRootIds?: {virtualRootId: string}[];
 	aiMetadata?: {inChat: number} | null;
 	s3File?: {
 		fileName: string;
@@ -284,8 +282,8 @@ function storeChildren(
 		}
 	}
 
-	// The public API carries none of the node's attribute tables (mirrors, backlinks,
-	// virtual roots, references roots, ai, s3, changes), so closing them here would be
+	// The public API carries none of the node's attribute tables (mirrors,
+	// references roots, ai, s3, changes), so closing them here would be
 	// permanent data loss, not a refresh (#1712). import-api's /get_tree_data/ merge,
 	// backup imports and deleteNode() own their lifecycle.
 	for (const apiNode of apiNodes) {
@@ -307,13 +305,6 @@ function storeChildren(
 	const keptContent = apiNodeIds.length > 0 ? notInArray(nodeContent.id, apiNodeIds) : undefined;
 	closeCurrentVersions(tx, nodeMetadata, systemTime, and(keptMetadata, metadataUnderParent));
 	closeCurrentVersions(tx, nodeContent, systemTime, and(eq(nodeContent.parentId, parentId), keptContent));
-}
-
-/** A backlink item: a mirror of `sourceId` under `targetId`'s references root. */
-export interface BacklinkItem {
-	nodeId: string;
-	sourceId: string;
-	targetId: string;
 }
 
 /** What one backlink sync changed upstream, for {@link CacheService.recordBacklinkSync}. */
@@ -338,7 +329,7 @@ export interface SubtreeMirrors {
 	 * The current mirrors, sorted by id, of each non-mirror node in the subtree
 	 * (the root included) that has any, keyed in breadth-first order. Mirrors
 	 * may lie inside or outside the subtree; only cached mirror nodes count, and
-	 * backlink items (mirrors with a current backlink row) never do.
+	 * backlink items (mirrors under a current references root) never do.
 	 */
 	mirrorsOf: Map<string, string[]>;
 }
@@ -418,12 +409,6 @@ export class CacheService {
 					mirrorsAsCopy: {
 						where: currentVersion(mirrors),
 					},
-					backlinks: {
-						where: currentVersion(backlinks),
-					},
-					virtualRootIds: {
-						where: currentVersion(virtualRootIds),
-					},
 					aiMetadata: true,
 					s3File: true,
 					changesMetadata: true,
@@ -460,8 +445,6 @@ export class CacheService {
 			systemTo: result.systemTo,
 			mirrorsAsOriginal: result.mirrorsAsOriginal,
 			mirrorsAsCopy: result.mirrorsAsCopy,
-			backlinks: result.backlinks,
-			virtualRootIds: result.virtualRootIds,
 			aiMetadata: result.aiMetadata,
 			s3File: result.s3File,
 			changesMetadata: result.changesMetadata,
@@ -521,8 +504,6 @@ export class CacheService {
 					metadata: true,
 					mirrorsAsOriginal: {where: currentVersion(mirrors)},
 					mirrorsAsCopy: {where: currentVersion(mirrors)},
-					backlinks: {where: currentVersion(backlinks)},
-					virtualRootIds: {where: currentVersion(virtualRootIds)},
 					aiMetadata: true,
 					s3File: true,
 					changesMetadata: true,
@@ -553,8 +534,6 @@ export class CacheService {
 			systemTo: result.systemTo,
 			mirrorsAsOriginal: result.mirrorsAsOriginal,
 			mirrorsAsCopy: result.mirrorsAsCopy,
-			backlinks: result.backlinks,
-			virtualRootIds: result.virtualRootIds,
 			aiMetadata: result.aiMetadata,
 			s3File: result.s3File,
 			changesMetadata: result.changesMetadata,
@@ -588,8 +567,7 @@ export class CacheService {
 	 * Record a backlink sync the server accepted, as one unit of work at one
 	 * system time: deleted backlink items end their whole composite, the
 	 * changed parents' children are replaced, and each created references root
-	 * and backlink item gets its `references_roots`, `backlinks` and `mirrors`
-	 * row.
+	 * and backlink item gets its `references_roots` or `mirrors` row.
 	 */
 	recordBacklinkSync(record: BacklinkSyncRecord): void {
 		runUnitOfWork(this.database, (unitOfWork) => {
@@ -604,10 +582,7 @@ export class CacheService {
 					.values({nodeId, ...current})
 					.run();
 			}
-			for (const {nodeId, sourceId, targetId} of record.backlinks) {
-				tx.insert(backlinks)
-					.values({nodeId, sourceId, targetId, ...current})
-					.run();
+			for (const {nodeId, sourceId} of record.backlinks) {
 				tx.insert(mirrors)
 					.values({mirrorId: nodeId, originalId: sourceId, ...current})
 					.run();
@@ -733,12 +708,6 @@ export class CacheService {
 					mirrorsAsCopy: {
 						where: currentVersion(mirrors),
 					},
-					backlinks: {
-						where: currentVersion(backlinks),
-					},
-					virtualRootIds: {
-						where: currentVersion(virtualRootIds),
-					},
 					aiMetadata: true,
 					s3File: true,
 					changesMetadata: true,
@@ -789,8 +758,6 @@ export class CacheService {
 					systemTo: child.systemTo,
 					mirrorsAsOriginal: child.mirrorsAsOriginal,
 					mirrorsAsCopy: child.mirrorsAsCopy,
-					backlinks: child.backlinks,
-					virtualRootIds: child.virtualRootIds,
 					aiMetadata: child.aiMetadata,
 					s3File: child.s3File,
 					changesMetadata: child.changesMetadata,
@@ -936,12 +903,7 @@ export class CacheService {
 						currentVersion(mirrors),
 						// A backlink item mirrors its source but is never a promotion target:
 						// deleting the source leaves the item in place, as upstream does.
-						notExists(
-							this.database
-								.select({nodeId: backlinks.nodeId})
-								.from(backlinks)
-								.where(and(eq(backlinks.nodeId, mirrors.mirrorId), currentVersion(backlinks))),
-						),
+						notBacklinkItem(),
 					),
 				)
 				.all();

@@ -170,14 +170,6 @@ describe("ending node composites", () => {
 			.values({nodeId: id, ...temporal})
 			.run();
 		database
-			.insert(schema.virtualRootIds)
-			.values({nodeId: id, virtualRootId: "virtual", ...temporal})
-			.run();
-		database
-			.insert(schema.backlinks)
-			.values({nodeId: id, sourceId: "source", targetId: "target", ...temporal})
-			.run();
-		database
 			.insert(schema.nodeDisplayMetadata)
 			.values({nodeId: id, numberedStart: 1, ...temporal})
 			.run();
@@ -217,7 +209,6 @@ describe("ending node composites", () => {
 		"s3_files",
 		"changes_metadata",
 		"references_roots",
-		"virtual_root_ids",
 	];
 
 	/** The expected snapshot for owners -> systemTo, given which owners have node rows and which have parts. */
@@ -255,11 +246,6 @@ describe("ending node composites", () => {
 			.insert(schema.mirrors)
 			.values({originalId: "original-of-doomed", mirrorId: "doomed", ...temporal})
 			.run();
-		// A surviving backlink item whose source is the doomed node: a reference, never cascaded.
-		database
-			.insert(schema.backlinks)
-			.values({nodeId: "survivor", sourceId: "doomed", targetId: "x", ...temporal})
-			.run();
 
 		runUnitOfWork(
 			database,
@@ -272,7 +258,6 @@ describe("ending node composites", () => {
 		const snap = snapshot();
 		expect({
 			owned: pick(snap),
-			backlinks: snap.backlinks,
 			mirrors: sqlite
 				.prepare("SELECT original_id || '>' || mirror_id || '@' || system_to AS row FROM mirrors ORDER BY row")
 				.all(),
@@ -284,7 +269,6 @@ describe("ending node composites", () => {
 				{owner: "mirror-of-doomed", systemTo: FAR_FUTURE_DATE, node: true, parts: false},
 				{owner: "original-of-doomed", systemTo: FAR_FUTURE_DATE, node: true, parts: false},
 			]),
-			backlinks: [`doomed@${UOW_TIME}`, `survivor@${FAR_FUTURE_DATE}`, `survivor@${FAR_FUTURE_DATE}`],
 			mirrors: [{row: `doomed>mirror-of-doomed@${UOW_TIME}`}, {row: `original-of-doomed>doomed@${UOW_TIME}`}],
 			tags: ["survivor@present"],
 		});
@@ -315,7 +299,6 @@ describe("ending node composites", () => {
 		const snap = snapshot();
 		expect({
 			owned: pick(snap),
-			backlinks: snap.backlinks,
 			mirrors: sqlite
 				.prepare("SELECT original_id || '>' || mirror_id || '@' || system_to AS row FROM mirrors ORDER BY row")
 				.all(),
@@ -326,13 +309,12 @@ describe("ending node composites", () => {
 				{owner: "ghost", systemTo: UOW_TIME, node: false, parts: true},
 				{owner: "live-mirror", systemTo: FAR_FUTURE_DATE, node: true, parts: false},
 			]),
-			backlinks: [`ghost@${UOW_TIME}`, `live@${FAR_FUTURE_DATE}`],
 			mirrors: [{row: `ghost>live-mirror@${UOW_TIME}`}, {row: `live>live-mirror@${FAR_FUTURE_DATE}`}],
 			tags: ["live@present"],
 		});
 	});
 
-	/** Delete an original by promoting it into its mirror's place: the mirror's composite (with its mirror and backlink rows) ends and the original is versioned, in one unit of work. */
+	/** Delete an original by promoting it into its mirror's place: the mirror's composite (with its mirror row) ends and the original is versioned, in one unit of work. */
 	function deleteOriginalAndPromote(unitOfWork: UnitOfWork): void {
 		endNodeComposites(unitOfWork, ["mirror"]);
 		// The original survives as a new version in the mirror's place.
@@ -362,10 +344,6 @@ describe("ending node composites", () => {
 			.insert(schema.mirrors)
 			.values({originalId: "original", mirrorId: "mirror", ...temporal})
 			.run();
-		database
-			.insert(schema.backlinks)
-			.values({nodeId: "mirror", sourceId: "s", targetId: "t", ...temporal})
-			.run();
 
 		const returned = runUnitOfWork(database, (unitOfWork) => {
 			deleteOriginalAndPromote(unitOfWork);
@@ -378,7 +356,6 @@ describe("ending node composites", () => {
 				 UNION SELECT system_from FROM node_content WHERE system_from <> '${SEEDED}'
 				 UNION SELECT system_to FROM node_metadata WHERE system_to <> '${FAR_FUTURE_DATE}'
 				 UNION SELECT system_to FROM mirrors WHERE system_to <> '${FAR_FUTURE_DATE}'
-				 UNION SELECT system_to FROM backlinks WHERE system_to <> '${FAR_FUTURE_DATE}'
 				 UNION SELECT system_to FROM node_embeddings WHERE system_to <> '${FAR_FUTURE_DATE}'
 				 UNION SELECT system_to FROM references_roots WHERE system_to <> '${FAR_FUTURE_DATE}'`,
 			)

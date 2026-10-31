@@ -384,7 +384,7 @@ export async function importBackup(
 		completedAt: number | null;
 		layoutMode: string | null;
 	}[] = [];
-	// Mirrors, backlinks, virtual roots and references roots, parsed by the shared item-metadata normalizer.
+	// Mirrors (backlink items included) and references roots, parsed by the shared item-metadata normalizer.
 	const relationships = emptyItemRelationships();
 	const aiMetadataRecords: {nodeId: string; inChat: number}[] = [];
 	const s3FileRecords: {
@@ -474,9 +474,7 @@ export async function importBackup(
 		console.warn(`Encountered ${validationErrors} validation errors during import`);
 	}
 
-	logTiming(
-		`Prepare data (${nodesToProcess.length} nodes, ${relationships.mirrors.length} mirrors, ${relationships.backlinks.length} backlinks)`,
-	);
+	logTiming(`Prepare data (${nodesToProcess.length} nodes, ${relationships.mirrors.length} mirrors)`);
 
 	// Guard against stale-snapshot data loss from the bulk-export endpoint.
 	// The bulk-export API returns a snapshot taken at a point in time, and the
@@ -721,9 +719,9 @@ export async function importBackup(
 	// Normalize the bulk-export tree into the shared in-DB row shape, then hand
 	// the node-keyed temporal tables to the shared importer. applyRows() owns the
 	// temporal merge and FK-correct insertion order for these tables. The
-	// composite-key tables (mirrors, backlinks, virtual_root_ids) are merged
-	// separately below, in the same unit of work — they are not node-keyed and
-	// applyRows() does not yet support their multi-column natural keys.
+	// composite-key mirrors table is merged separately below, in the same unit
+	// of work — it is not node-keyed and applyRows() does not yet support its
+	// multi-column natural key.
 	const nodeContentRows: NormalizedNodeContentRow[] = nodesToProcess.map((node) => ({
 		id: node.id,
 		name: node.name,
@@ -776,20 +774,18 @@ export async function importBackup(
 			);
 			logTiming(`Content updates: ${contentUpdated}, Metadata updates: ${metadataUpdated}`);
 
-			// Merge mirrors, backlinks and virtual root ids globally: a full backup is the
+			// Merge mirrors globally: a full backup is the
 			// complete desired state. Mirror pairs need both nodes live in this import.
 			const liveNodeIds = new Set([...nodesToProcess.map((n) => n.id), ...protectedIds]);
 			const relationshipResult = mergeItemRelationships(unitOfWork, relationships, liveNodeIds);
 			logTiming(
-				`Processed relationships: mirrors +${relationshipResult.mirrors.inserted}/-${relationshipResult.mirrors.phasedOut}, ` +
-					`backlinks +${relationshipResult.backlinks.inserted}/-${relationshipResult.backlinks.phasedOut}, ` +
-					`virtual root ids +${relationshipResult.virtualRootIds.inserted}/-${relationshipResult.virtualRootIds.phasedOut}`,
+				`Processed relationships: mirrors +${relationshipResult.mirrors.inserted}/-${relationshipResult.mirrors.phasedOut}`,
 			);
 
 			// End every owned row whose node is no longer current: the nodes deleted in
 			// Workflowy (absent from this backup) take their whole composite with them.
 			// applyRows() already closed their node-keyed rows; this sweep covers the
-			// rest (mirrors, backlinks, virtual root ids, embeddings, ...).
+			// rest (mirrors, embeddings, ...).
 			endOrphanedParts(unitOfWork);
 			nodesDeleted = orphanIds.length;
 

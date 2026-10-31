@@ -10,7 +10,6 @@ export {
 } from "./api-import.js";
 export {
 	CacheService,
-	type BacklinkItem,
 	type BacklinkSyncRecord,
 	type SubtreeMirrors,
 	type TextSearchOptions,
@@ -45,7 +44,10 @@ export {
 	writeInternalMetadata,
 } from "./internal-metadata.js";
 export {
+	type BacklinkItem,
+	backlinkItemParent,
 	collectItemRelationships,
+	currentBacklinkItems,
 	emptyItemRelationships,
 	type ItemRelationships,
 	mergeItemRelationships,
@@ -79,7 +81,6 @@ export {PathBuilder} from "./path-builder.js";
 export {type LinkTarget, type NodeTree, NodeTreeReader, type ReadTreeOptions} from "./node-tree-reader.js";
 export type {
 	NormalizedAiMetadataRow,
-	NormalizedBacklinkRow,
 	NormalizedCalendarLevelsRow,
 	NormalizedCalendarMetadataRow,
 	NormalizedChangesMetadataRow,
@@ -88,7 +89,6 @@ export type {
 	NormalizedNodeMetadataRow,
 	NormalizedReferencesRootsRow,
 	NormalizedS3FileRow,
-	NormalizedVirtualRootIdRow,
 	WithoutTemporal,
 } from "./normalized-rows.js";
 export {

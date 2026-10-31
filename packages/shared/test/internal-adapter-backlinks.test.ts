@@ -19,6 +19,14 @@ import {hasInternalLink, internalLinkShortIds} from "../src/workflowy/internal-l
 import {createFakeInternalApi, forbidTreeData, json, treeDataReads} from "./helpers/fake-internal-api.js";
 import type {RecordedRequest} from "./helpers/fake-internal-api.js";
 
+/** The current backlink items, derived as the app derives them: live mirrors under a live references root. */
+const BACKLINKS = `(SELECT m.mirror_id AS node_id, m.original_id AS source_id, p.parent_id AS target_id, m.system_to
+	FROM mirrors m
+	JOIN node_content c ON c.id = m.mirror_id AND c.system_to = '9999-12-31 23:59:59'
+	JOIN references_roots r ON r.node_id = c.parent_id AND r.system_to = '9999-12-31 23:59:59'
+	JOIN node_content p ON p.id = c.parent_id AND p.system_to = '9999-12-31 23:59:59'
+	WHERE m.system_to = '9999-12-31 23:59:59')`;
+
 const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
 const START_MS = 1_800_000_000_000;
 const ROOT = "None";
@@ -274,10 +282,10 @@ describe("WorkflowyInternalAdapter.syncBacklinks", () => {
 			targetChildren: cacheService.getChildren(TARGET).map((child) => child.id),
 			rootChildren: cacheService.getChildren(ID1).map((child) => child.id),
 			relations: rows(
-				`SELECT 'root' AS kind, node_id AS id FROM references_roots WHERE ${current} UNION ALL SELECT 'backlink', node_id || '>' || source_id || '>' || target_id FROM backlinks WHERE ${current} UNION ALL SELECT 'mirror', mirror_id || '>' || original_id FROM mirrors WHERE ${current}`,
+				`SELECT 'root' AS kind, node_id AS id FROM references_roots WHERE ${current} UNION ALL SELECT 'backlink', node_id || '>' || source_id || '>' || target_id FROM ${BACKLINKS} WHERE ${current} UNION ALL SELECT 'mirror', mirror_id || '>' || original_id FROM mirrors WHERE ${current}`,
 			),
 			systemTimes: rows(
-				`SELECT COUNT(DISTINCT system_from) AS n FROM (SELECT system_from FROM references_roots UNION ALL SELECT system_from FROM backlinks UNION ALL SELECT system_from FROM mirrors UNION ALL SELECT system_from FROM node_content WHERE id IN ('${ID1}', '${ID2}'))`,
+				`SELECT COUNT(DISTINCT system_from) AS n FROM (SELECT system_from FROM references_roots UNION ALL SELECT system_from FROM mirrors UNION ALL SELECT system_from FROM node_content WHERE id IN ('${ID1}', '${ID2}'))`,
 			),
 		}).toStrictEqual({
 			result: {created: [{id: ID2, sourceId: SOURCE, targetId: TARGET}], referencesRoots: [ID1], deleted: []},
@@ -360,9 +368,7 @@ describe("WorkflowyInternalAdapter.syncBacklinks", () => {
 			result,
 			pushes: pushes.map((ops) => ops.map((op) => [op.type, op.data.projectid ?? op.data.parentid])),
 			edit: pushes.flat().find((op) => op.type === "edit")?.data.metadataPatches,
-			current: rows(
-				"SELECT node_id, source_id, target_id FROM backlinks WHERE system_to = '9999-12-31 23:59:59' ORDER BY node_id",
-			),
+			current: rows(`SELECT node_id, source_id, target_id FROM ${BACKLINKS} ORDER BY node_id`),
 			oldItemCurrent: rows(
 				`SELECT id FROM node_content WHERE id = '${OLD_ITEM}' AND system_to = '9999-12-31 23:59:59' UNION ALL SELECT mirror_id FROM mirrors WHERE mirror_id = '${OLD_ITEM}' AND system_to = '9999-12-31 23:59:59'`,
 			),
@@ -390,10 +396,15 @@ describe("WorkflowyInternalAdapter.syncBacklinks", () => {
 		const {adapter, pushes, sqlite} = await tracked([
 			[SOURCE, node("plain", ROOT, {mirror: {backlinkMirrorRootIds: {[OLD_ITEM]: true}}})],
 		]);
-		// An earlier import cached the item while it still existed.
-		sqlite.exec(
-			`INSERT INTO backlinks VALUES ('${OLD_ITEM}', '${SOURCE}', '${TARGET}', '${SEEDED}', '9999-12-31 23:59:59');`,
-		);
+		// An earlier import cached the item, under the target's references root, while it still existed.
+		sqlite.exec(`
+			INSERT INTO node_content (id, name, parent_id, system_from, system_to) VALUES
+				('${TARGET}', 'target', NULL, '${SEEDED}', '9999-12-31 23:59:59'),
+				('${OLD_ROOT}', '', '${TARGET}', '${SEEDED}', '9999-12-31 23:59:59'),
+				('${OLD_ITEM}', '', '${OLD_ROOT}', '${SEEDED}', '9999-12-31 23:59:59');
+			INSERT INTO references_roots VALUES ('${OLD_ROOT}', '${SEEDED}', '9999-12-31 23:59:59');
+			INSERT INTO mirrors VALUES ('${OLD_ITEM}', '${SOURCE}', '${SEEDED}', '9999-12-31 23:59:59');
+		`);
 
 		const result = await adapter.syncBacklinks([SOURCE]);
 
@@ -563,7 +574,7 @@ describe("WorkflowyInternalAdapter.syncBacklinks", () => {
 			deleted,
 			pushes: pushes.map((ops) => ops.map((op) => [op.type, op.data.projectid])),
 			referencesChildren: server.children(OLD_ROOT),
-			current: rows("SELECT node_id FROM backlinks WHERE system_to = '9999-12-31 23:59:59' ORDER BY node_id"),
+			current: rows(`SELECT node_id FROM ${BACKLINKS} ORDER BY node_id`),
 			treeDataReads: treeDataReads(api),
 		}).toStrictEqual({
 			linked: {
@@ -598,9 +609,7 @@ describe("WorkflowyInternalAdapter.syncBacklinks", () => {
 		await expect(adapter.syncBacklinks([SOURCE])).rejects.toBeInstanceOf(OperationRejected);
 
 		expect(
-			rows(
-				"SELECT node_id AS id FROM references_roots UNION ALL SELECT node_id FROM backlinks UNION ALL SELECT mirror_id FROM mirrors",
-			),
+			rows("SELECT node_id AS id FROM references_roots UNION ALL SELECT mirror_id FROM mirrors"),
 		).toStrictEqual([]);
 	});
 
@@ -714,7 +723,7 @@ describe("WorkflowyInternalAdapter.syncBacklinks", () => {
 			deleted,
 			pushes,
 			referencesChildren: server.children(OLD_ROOT),
-			current: rows("SELECT node_id FROM backlinks WHERE system_to = '9999-12-31 23:59:59' ORDER BY node_id"),
+			current: rows(`SELECT node_id FROM ${BACKLINKS} ORDER BY node_id`),
 			treeDataReads: treeDataReads(api),
 		}).toStrictEqual({
 			linked: {

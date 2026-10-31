@@ -40,7 +40,7 @@ export interface RelationshipSource {
 }
 
 /**
- * Merge the mirrors, backlinks, virtual roots and references roots in `treeItems` into the cache, through the
+ * Merge the mirrors (backlink items included) and references roots in `treeItems` into the cache, through the
  * same normalizer as `cache import-api`. Only nodes the cache holds take part, so a partial sync neither
  * invents rows for uncached nodes nor closes rows whose nodes it knows nothing about.
  */

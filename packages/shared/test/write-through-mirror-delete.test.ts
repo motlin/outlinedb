@@ -11,7 +11,7 @@ import type {DeletePlan} from "../src/cache/delete-plan.js";
 import {WorkflowyWriteThroughClient} from "../src/cache/workflowy-write-through-client.js";
 import type {ExactMover} from "../src/cache/workflowy-write-through-client.js";
 import * as schema from "../src/db/schema.js";
-import {backlinks, mirrors, nodeContent, nodeEmbeddings, nodeMetadata} from "../src/db/schema.js";
+import {mirrors, nodeContent, nodeEmbeddings, nodeMetadata, referencesRoots} from "../src/db/schema.js";
 import {FAR_FUTURE_DATE} from "../src/temporal/constants.js";
 import {requestBody, requestJson} from "./helpers/request-body.js";
 import {z} from "zod";
@@ -95,14 +95,15 @@ const INITIAL_OUTLINE = {
 function setup({
 	failCall,
 	serverOutline = {},
-	backlinkItems = [],
+	referencesRootIds = [],
 	exactMover = false,
 }: {
 	failCall?: string;
 	/** Give the client an exact-index mover (the internal API), recorded in `calls` as `moveTo <input>`. */
 	exactMover?: boolean;
 	serverOutline?: Record<string, string[]>;
-	backlinkItems?: [nodeId: string, sourceId: string, targetId: string][];
+	/** Nodes to mark as references roots, making their mirror children backlink items. */
+	referencesRootIds?: string[];
 } = {}) {
 	const sqlite = new DatabaseConstructor(":memory:");
 	const database = drizzle(sqlite, {schema});
@@ -143,11 +144,8 @@ function setup({
 			})),
 		)
 		.run();
-	for (const [nodeId, sourceId, targetId] of backlinkItems) {
-		database
-			.insert(backlinks)
-			.values({nodeId, sourceId, targetId, systemFrom: SEEDED_AT, systemTo: FAR_FUTURE_DATE})
-			.run();
+	for (const nodeId of referencesRootIds) {
+		database.insert(referencesRoots).values({nodeId, systemFrom: SEEDED_AT, systemTo: FAR_FUTURE_DATE}).run();
 	}
 
 	// A fake Workflowy that tracks each parent's ordered children, so moves and GETs agree.
@@ -440,8 +438,8 @@ describe("WorkflowyWriteThroughClient.deleteNode with mirrors", () => {
 		});
 	});
 
-	it("deletes a backlink source without promoting it into its backlink item, which keeps its backlink row", async () => {
-		const {client, calls, cacheState, database} = setup({backlinkItems: [["mirror-a1", "task-a1", "other"]]});
+	it("deletes a backlink source without promoting it into its backlink item, which stays in place", async () => {
+		const {client, calls, cacheState} = setup({referencesRootIds: ["other"]});
 
 		const plan = await client.deleteNode("task-a1");
 
@@ -449,7 +447,6 @@ describe("WorkflowyWriteThroughClient.deleteNode with mirrors", () => {
 			plan,
 			calls,
 			cache: cacheState(),
-			backlinks: database.select({nodeId: backlinks.nodeId, systemTo: backlinks.systemTo}).from(backlinks).all(),
 		}).toStrictEqual({
 			plan: {mirrorIds: [], promotions: [], nodeId: "task-a1"},
 			calls: ["DELETE /nodes/task-a1"],
@@ -463,7 +460,6 @@ describe("WorkflowyWriteThroughClient.deleteNode with mirrors", () => {
 					{originalId: "task-y", mirrorId: "mirror-y"},
 				],
 			},
-			backlinks: [{nodeId: "mirror-a1", systemTo: FAR_FUTURE_DATE}],
 		});
 	});
 

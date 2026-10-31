@@ -1,7 +1,6 @@
 import {beforeEach, afterEach, describe, expect, it} from "vite-plus/test";
 import {
 	aiMetadata,
-	backlinks,
 	calendarLevels,
 	calendarMetadata,
 	changesMetadata,
@@ -12,7 +11,6 @@ import {
 	nodeMetadata,
 	referencesRoots,
 	s3Files,
-	virtualRootIds,
 } from "@workflowy/shared/db";
 import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@workflowy/shared/temporal";
 import {eq} from "drizzle-orm";
@@ -475,7 +473,7 @@ describe("CacheService (shared)", () => {
 	});
 
 	describe("storeApiResponse", () => {
-		it("preserves mirror, backlink, and virtualRootId rows on sync (#1712)", () => {
+		it("preserves mirror rows on sync (#1712)", () => {
 			const from = formatTemporalTimestamp(new Date(Date.now() - 1000));
 			seedTestData(testDatabase, {
 				...nodeFixtures([
@@ -484,16 +482,6 @@ describe("CacheService (shared)", () => {
 					createTestNode({id: "orig", name: "Original", parentId: "elsewhere"}),
 				]),
 				mirrors: [{originalId: "orig", mirrorId: "child", systemFrom: from, systemTo: FAR_FUTURE_DATE}],
-				backlinks: [
-					{
-						nodeId: "child",
-						sourceId: "child",
-						targetId: "other",
-						systemFrom: from,
-						systemTo: FAR_FUTURE_DATE,
-					},
-				],
-				virtualRootIds: [{nodeId: "child", virtualRootId: "vr", systemFrom: from, systemTo: FAR_FUTURE_DATE}],
 			});
 
 			// Sync the child back under its parent (a routine cache refresh).
@@ -503,12 +491,6 @@ describe("CacheService (shared)", () => {
 			expect(testDatabase.db.select().from(mirrors).where(eq(mirrors.mirrorId, "child")).get()!.systemTo).toBe(
 				FAR_FUTURE_DATE,
 			);
-			expect(testDatabase.db.select().from(backlinks).where(eq(backlinks.nodeId, "child")).get()!.systemTo).toBe(
-				FAR_FUTURE_DATE,
-			);
-			expect(
-				testDatabase.db.select().from(virtualRootIds).where(eq(virtualRootIds.nodeId, "child")).get()!.systemTo,
-			).toBe(FAR_FUTURE_DATE);
 		});
 
 		it("leaves the attribute rows the public API does not carry current", () => {
@@ -803,35 +785,6 @@ describe("CacheService (shared)", () => {
 			expect(node2?.systemTo).toBe(FAR_FUTURE_DATE);
 		});
 
-		it("closes backlinks and virtualRootIds for the deleted subtree", () => {
-			const from = formatTemporalTimestamp(new Date(Date.now() - 1000));
-			seedTestData(testDatabase, {
-				...nodeFixtures([
-					createTestNode({id: "parent", name: "Parent", parentId: null}),
-					createTestNode({id: "child", name: "Child", parentId: "parent"}),
-				]),
-				backlinks: [
-					{
-						nodeId: "child",
-						sourceId: "child",
-						targetId: "other",
-						systemFrom: from,
-						systemTo: FAR_FUTURE_DATE,
-					},
-				],
-				virtualRootIds: [
-					{nodeId: "parent", virtualRootId: "vroot-1", systemFrom: from, systemTo: FAR_FUTURE_DATE},
-				],
-			});
-
-			cacheService.deleteNode("parent");
-
-			const bl = testDatabase.db.select().from(backlinks).where(eq(backlinks.nodeId, "child")).get()!;
-			expect(bl.systemTo).not.toBe(FAR_FUTURE_DATE);
-			const vr = testDatabase.db.select().from(virtualRootIds).where(eq(virtualRootIds.nodeId, "parent")).get()!;
-			expect(vr.systemTo).not.toBe(FAR_FUTURE_DATE);
-		});
-
 		it("closes mirror rows on both sides of a genuine deletion", () => {
 			const from = formatTemporalTimestamp(new Date(Date.now() - 1000));
 			seedTestData(testDatabase, {
@@ -913,31 +866,6 @@ describe("CacheService (shared)", () => {
 				systemTos: [...new Set(systemTos.map((row) => row.systemTo))],
 			}).toStrictEqual({systemTos: [contentSystemTo]});
 			expect(contentSystemTo).not.toBe(FAR_FUTURE_DATE);
-		});
-
-		it("leaves a surviving node backlink that merely targets the deleted node", () => {
-			const from = formatTemporalTimestamp(new Date(Date.now() - 1000));
-			seedTestData(testDatabase, {
-				...nodeFixtures([
-					createTestNode({id: "survivor", name: "Survivor", parentId: null}),
-					createTestNode({id: "target", name: "Target", parentId: null}),
-				]),
-				// Owned by the survivor (nodeId=survivor), pointing at the deleted node.
-				backlinks: [
-					{
-						nodeId: "survivor",
-						sourceId: "survivor",
-						targetId: "target",
-						systemFrom: from,
-						systemTo: FAR_FUTURE_DATE,
-					},
-				],
-			});
-
-			cacheService.deleteNode("target");
-
-			const bl = testDatabase.db.select().from(backlinks).where(eq(backlinks.nodeId, "survivor")).get()!;
-			expect(bl.systemTo).toBe(FAR_FUTURE_DATE);
 		});
 	});
 

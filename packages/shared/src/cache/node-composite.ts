@@ -8,7 +8,6 @@ import {
 	aiMetadata,
 	aiPromptButtons,
 	apiImportTimestamp,
-	backlinks,
 	backupImports,
 	calendarLayoutApplies,
 	calendarLevels,
@@ -35,7 +34,6 @@ import {
 	surveys,
 	tagColors,
 	treeTransactions,
-	virtualRootIds,
 	visibleFeatures,
 } from "../db/schema.js";
 import {FAR_FUTURE_DATE} from "../temporal/constants.js";
@@ -85,8 +83,6 @@ export const NODE_COMPOSITE_PARTS: readonly CompositePart[] = [
 	{table: s3Files, owner: s3Files.nodeId, references: []},
 	{table: changesMetadata, owner: changesMetadata.nodeId, references: []},
 	{table: referencesRoots, owner: referencesRoots.nodeId, references: []},
-	{table: virtualRootIds, owner: virtualRootIds.nodeId, references: [virtualRootIds.virtualRootId]},
-	{table: backlinks, owner: backlinks.nodeId, references: [backlinks.sourceId, backlinks.targetId]},
 	{
 		table: mirrors,
 		owner: mirrors.mirrorId,

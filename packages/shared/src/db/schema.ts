@@ -147,7 +147,8 @@ export const nodeEmbeddings = sqliteTable(
  * mirrors: Normalized mirror relationships
  * - originalId: The original node being mirrored
  * - mirrorId: The node that is a mirror/copy
- * Backlinks are derived via inverse queries (WHERE originalId = X)
+ * A mirror whose parent is a references root is a backlink item: its original is
+ * the backlink source and the root's parent the target (see `currentBacklinkItems`).
  */
 export const mirrors = sqliteTable(
 	"mirrors",
@@ -162,39 +163,6 @@ export const mirrors = sqliteTable(
 		primaryKey({columns: [table.mirrorId, table.originalId, table.systemFrom]}),
 		index("mirrors_mirror_idx").on(table.mirrorId, table.systemTo),
 		index("mirrors_original_idx").on(table.originalId, table.systemTo),
-	],
-);
-
-export const backlinks = sqliteTable(
-	"backlinks",
-	{
-		nodeId: text("node_id").notNull(),
-		sourceId: text("source_id").notNull(),
-		targetId: text("target_id").notNull(),
-
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
-	},
-	(table) => [
-		primaryKey({columns: [table.nodeId, table.sourceId, table.targetId, table.systemFrom]}),
-		index("backlinks_node_idx").on(table.nodeId, table.systemTo),
-		index("backlinks_source_idx").on(table.sourceId, table.systemTo),
-		index("backlinks_target_idx").on(table.targetId, table.systemTo),
-	],
-);
-
-export const virtualRootIds = sqliteTable(
-	"virtual_root_ids",
-	{
-		nodeId: text("node_id").notNull(),
-		virtualRootId: text("virtual_root_id").notNull(),
-
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
-	},
-	(table) => [
-		primaryKey({columns: [table.nodeId, table.virtualRootId, table.systemFrom]}),
-		index("virtual_root_ids_node_idx").on(table.nodeId, table.systemTo),
 	],
 );
 
@@ -830,12 +798,10 @@ export const nodeContentRelations = relations(nodeContent, ({one, many}) => ({
 		fields: [nodeContent.id, nodeContent.systemTo],
 		references: [nodeMetadata.nodeId, nodeMetadata.systemTo],
 	}),
-	// Mirrors where this node is the original (backlinks = nodes that mirror this one)
+	// Mirrors where this node is the original (other nodes mirror this one)
 	mirrorsAsOriginal: many(mirrors, {relationName: "original"}),
 	// Mirrors where this node is the mirror copy
 	mirrorsAsCopy: many(mirrors, {relationName: "mirror"}),
-	backlinks: many(backlinks),
-	virtualRootIds: many(virtualRootIds),
 	aiMetadata: one(aiMetadata, {
 		fields: [nodeContent.id, nodeContent.systemTo],
 		references: [aiMetadata.nodeId, aiMetadata.systemTo],
@@ -878,20 +844,6 @@ export const mirrorsRelations = relations(mirrors, ({one}) => ({
 		fields: [mirrors.mirrorId],
 		references: [nodeContent.id],
 		relationName: "mirror",
-	}),
-}));
-
-export const backlinksRelations = relations(backlinks, ({one}) => ({
-	content: one(nodeContent, {
-		fields: [backlinks.nodeId],
-		references: [nodeContent.id],
-	}),
-}));
-
-export const virtualRootIdsRelations = relations(virtualRootIds, ({one}) => ({
-	content: one(nodeContent, {
-		fields: [virtualRootIds.nodeId],
-		references: [nodeContent.id],
 	}),
 }));
 
@@ -958,10 +910,6 @@ export type NodeEmbedding = InferSelectModel<typeof nodeEmbeddings>;
 export type NewNodeEmbedding = InferInsertModel<typeof nodeEmbeddings>;
 export type Mirror = InferSelectModel<typeof mirrors>;
 export type NewMirror = InferInsertModel<typeof mirrors>;
-export type Backlink = InferSelectModel<typeof backlinks>;
-export type NewBacklink = InferInsertModel<typeof backlinks>;
-export type VirtualRootId = InferSelectModel<typeof virtualRootIds>;
-export type NewVirtualRootId = InferInsertModel<typeof virtualRootIds>;
 export type AiMetadata = InferSelectModel<typeof aiMetadata>;
 export type NewAiMetadata = InferInsertModel<typeof aiMetadata>;
 export type S3File = InferSelectModel<typeof s3Files>;

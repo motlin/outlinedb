@@ -2,7 +2,6 @@ import {inject} from "vite-plus/test";
 import * as schema from "@workflowy/shared/db";
 import type {
 	NewAiMetadata,
-	NewBacklink,
 	NewBackupImport,
 	NewChangesMetadata,
 	NewMirror,
@@ -10,7 +9,6 @@ import type {
 	NewNodeMetadata,
 	NewReferencesRoot,
 	NewS3File,
-	NewVirtualRootId,
 } from "@workflowy/shared/db";
 import {splitNodeIntoContentAndMetadata} from "../helpers/node-fixtures.js";
 import type {TestNode} from "../helpers/node-fixtures.js";
@@ -29,8 +27,6 @@ export interface TestFixtures {
 	nodeContent?: NewNodeContent[];
 	nodeMetadata?: NewNodeMetadata[];
 	mirrors?: NewMirror[];
-	backlinks?: NewBacklink[];
-	virtualRootIds?: NewVirtualRootId[];
 	aiMetadata?: NewAiMetadata[];
 	s3Files?: NewS3File[];
 	changesMetadata?: NewChangesMetadata[];
@@ -86,8 +82,6 @@ function clearAllTables(testDb: TestDatabase): void {
 	testDb.sqlite.exec("PRAGMA foreign_keys = OFF");
 
 	testDb.db.delete(schema.nodeEmbeddings).run();
-	testDb.db.delete(schema.backlinks).run();
-	testDb.db.delete(schema.virtualRootIds).run();
 	testDb.db.delete(schema.aiMetadata).run();
 	testDb.db.delete(schema.s3Files).run();
 	testDb.db.delete(schema.changesMetadata).run();
@@ -117,14 +111,6 @@ export function seedTestData(testDb: TestDatabase, fixtures: TestFixtures): void
 
 	if (fixtures.mirrors && fixtures.mirrors.length > 0) {
 		testDb.db.insert(schema.mirrors).values(fixtures.mirrors).run();
-	}
-
-	if (fixtures.backlinks && fixtures.backlinks.length > 0) {
-		testDb.db.insert(schema.backlinks).values(fixtures.backlinks).run();
-	}
-
-	if (fixtures.virtualRootIds && fixtures.virtualRootIds.length > 0) {
-		testDb.db.insert(schema.virtualRootIds).values(fixtures.virtualRootIds).run();
 	}
 
 	if (fixtures.aiMetadata && fixtures.aiMetadata.length > 0) {

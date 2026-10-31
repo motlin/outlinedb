@@ -1,5 +1,5 @@
 import {WorkflowyApiClient} from "@workflowy/shared/api";
-import {backlinks, mirrors, nodeContent, nodeMetadata, virtualRootIds} from "@workflowy/shared/db";
+import {mirrors, nodeContent, nodeMetadata} from "@workflowy/shared/db";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
 import {and, eq} from "drizzle-orm";
 import {randomUUID} from "node:crypto";
@@ -336,11 +336,11 @@ describe("API Sync with Cache", () => {
 			});
 		});
 
-		// Mirrors, backlinks, and virtual-root rows are sourced ONLY from backup imports;
+		// Mirror rows (backlink items included) are sourced ONLY from backup imports;
 		// the API (import-api / sync-node) never supplies them. An API sync must therefore
 		// leave them untouched — expiring them on every sync is permanent data loss, not a
 		// refresh, and is what silently blanks mirror nodes after a daily `cache sync-node`.
-		it("preserves live mirror/backlink/virtual-root rows when syncing a node from the API", async () => {
+		it("preserves live mirror rows when syncing a node from the API", async () => {
 			const mirrorNodeId = "mirror-node";
 			const originalNodeId = "original-node";
 			const liveSystemFrom = "2026-01-01 00:00:00.000";
@@ -355,25 +355,6 @@ describe("API Sync with Cache", () => {
 				.values({
 					originalId: originalNodeId,
 					mirrorId: mirrorNodeId,
-					systemFrom: liveSystemFrom,
-					systemTo: FAR_FUTURE_DATE,
-				})
-				.run();
-			testDatabase.db
-				.insert(backlinks)
-				.values({
-					nodeId: mirrorNodeId,
-					sourceId: "source-node",
-					targetId: "target-node",
-					systemFrom: liveSystemFrom,
-					systemTo: FAR_FUTURE_DATE,
-				})
-				.run();
-			testDatabase.db
-				.insert(virtualRootIds)
-				.values({
-					nodeId: mirrorNodeId,
-					virtualRootId: "virtual-root",
 					systemFrom: liveSystemFrom,
 					systemTo: FAR_FUTURE_DATE,
 				})
@@ -406,24 +387,6 @@ describe("API Sync with Cache", () => {
 				.all();
 			expect(liveMirrors.map(({mirrorId, originalId}) => ({mirrorId, originalId}))).toStrictEqual([
 				{mirrorId: mirrorNodeId, originalId: "original-node"},
-			]);
-
-			const liveBacklinks = testDatabase.db
-				.select()
-				.from(backlinks)
-				.where(and(eq(backlinks.nodeId, mirrorNodeId), eq(backlinks.systemTo, FAR_FUTURE_DATE)))
-				.all();
-			expect(liveBacklinks.map(({nodeId, sourceId, targetId}) => ({nodeId, sourceId, targetId}))).toStrictEqual([
-				{nodeId: mirrorNodeId, sourceId: "source-node", targetId: "target-node"},
-			]);
-
-			const liveVirtualRoots = testDatabase.db
-				.select()
-				.from(virtualRootIds)
-				.where(and(eq(virtualRootIds.nodeId, mirrorNodeId), eq(virtualRootIds.systemTo, FAR_FUTURE_DATE)))
-				.all();
-			expect(liveVirtualRoots.map(({nodeId, virtualRootId}) => ({nodeId, virtualRootId}))).toStrictEqual([
-				{nodeId: mirrorNodeId, virtualRootId: "virtual-root"},
 			]);
 		});
 	});

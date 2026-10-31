@@ -45,8 +45,8 @@ export interface ImportFromApiOptions {
 	logger?: ImportLogger;
 	timestamp?: Date;
 	/**
-	 * A full `/get_tree_data/` read. The public API carries no mirrors, backlinks,
-	 * virtual roots or references roots; when given, those merge from its item
+	 * A full `/get_tree_data/` read. The public API carries no mirrors or
+	 * references roots; when given, those merge from its item
 	 * metadata in the same unit of work. Without it their rows are left untouched.
 	 */
 	treeItems?: InternalTreeItem[];

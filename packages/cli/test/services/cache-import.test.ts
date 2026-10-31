@@ -1,4 +1,5 @@
-import {backlinks, mirrors, nodeContent, nodeMetadata} from "@workflowy/shared/db";
+import {currentBacklinkItems} from "@workflowy/shared/cache";
+import {mirrors, nodeContent, nodeMetadata} from "@workflowy/shared/db";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
 import {eq} from "drizzle-orm";
 import fs from "node:fs";
@@ -746,58 +747,42 @@ describe("cache-import service", () => {
 	});
 
 	describe("backlink records", () => {
-		it("imports backlinks correctly", async () => {
-			const backupContent = [
-				{
-					id: "backlink-node",
-					nm: "Has Backlink",
-					metadata: {
-						backlink: {
-							sourceID: "source-node",
-							targetID: "target-node",
-						},
-					},
-				},
-			];
-			const filePath = writeBackupFile(backupContent);
+		/** A target whose references root holds a backlink item carrying `metadata`, and the linking source. */
+		const backlinkBackup = (metadata: Record<string, unknown>) => [
+			{id: "source-node", nm: "Links to Target"},
+			{
+				id: "target-node",
+				nm: "Target",
+				ch: [{id: "refs", nm: "", metadata: {isReferencesRoot: true}, ch: [{id: "bn", nm: "", metadata}]}],
+			},
+		];
 
-			await importBackup(testDatabase.db, filePath, "backup.json");
+		it("imports a backlink item as a mirror of its source, from which the backlink derives", async () => {
+			await importBackup(
+				testDatabase.db,
+				writeBackupFile(backlinkBackup({backlink: {sourceID: "source-node", targetID: "target-node"}})),
+				"backup.json",
+			);
 
-			const backlink = testDatabase.db
-				.select()
-				.from(backlinks)
-				.where(eq(backlinks.nodeId, "backlink-node"))
-				.get()!;
-			expect({sourceId: backlink.sourceId, targetId: backlink.targetId}).toStrictEqual({
-				sourceId: "source-node",
-				targetId: "target-node",
-			});
+			expect(currentBacklinkItems(testDatabase.db, undefined)).toStrictEqual([
+				{nodeId: "bn", sourceId: "source-node", targetId: "target-node"},
+			]);
 		});
 
 		it("closes a backlink globally when it disappears on re-import, even if the node keeps none", async () => {
-			const withBacklink = [
-				{
-					id: "bn",
-					nm: "Has Backlink",
-					metadata: {backlink: {sourceID: "source-node", targetID: "target-node"}},
-				},
-			];
-			await importBackup(testDatabase.db, writeBackupFile(withBacklink), "backup.json");
+			await importBackup(
+				testDatabase.db,
+				writeBackupFile(backlinkBackup({backlink: {sourceID: "source-node", targetID: "target-node"}})),
+				"backup.json",
+				false,
+				T0,
+			);
 
-			// Re-import: the node still exists, but its only backlink is gone. A full
-			// backup is the complete desired state, so the removed backlink must close —
-			// per-node-scoped phase-out would wrongly leave it open (the node has no
-			// incoming backlinks to trigger a scan of its existing ones).
-			const withoutBacklink = [{id: "bn", nm: "Has Backlink"}];
-			await importBackup(testDatabase.db, writeBackupFile(withoutBacklink), "backup.json");
+			// Re-import: the item still exists, but its backlink is gone. A full backup is
+			// the complete desired state, so its mirror row must close.
+			await importBackup(testDatabase.db, writeBackupFile(backlinkBackup({})), "backup.json", false, T1);
 
-			const open = testDatabase.db
-				.select()
-				.from(backlinks)
-				.where(eq(backlinks.nodeId, "bn"))
-				.all()
-				.filter((b) => b.systemTo === FAR_FUTURE_DATE);
-			expect(open).toStrictEqual([]);
+			expect(currentBacklinkItems(testDatabase.db, undefined)).toStrictEqual([]);
 		});
 	});
 
@@ -822,7 +807,7 @@ describe("cache-import service", () => {
 					.all();
 			const before = currentContent();
 			testDatabase.sqlite.exec(
-				"CREATE TRIGGER fail_backlink BEFORE INSERT ON backlinks BEGIN SELECT RAISE(ABORT, 'backlink failed'); END",
+				"CREATE TRIGGER fail_mirror BEFORE INSERT ON mirrors BEGIN SELECT RAISE(ABORT, 'mirror failed'); END",
 			);
 
 			await expect(
@@ -832,14 +817,15 @@ describe("cache-import service", () => {
 						{
 							id: "kept",
 							nm: "Kept, renamed",
-							metadata: {backlink: {sourceID: "source-node", targetID: "target-node"}},
+							metadata: {mirror: {originalId: "doomed", isMirrorRoot: true}},
 						},
+						{id: "doomed", nm: "Doomed"},
 					]),
 					"backup.json",
 					false,
 					T1,
 				),
-			).rejects.toThrow("backlink failed");
+			).rejects.toThrow("mirror failed");
 
 			expect(currentContent()).toStrictEqual(before);
 		});

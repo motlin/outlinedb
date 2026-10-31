@@ -43,7 +43,6 @@ describe("round-trip test infrastructure", () => {
 				"ai_metadata",
 				"ai_prompt_buttons",
 				"api_import_timestamp",
-				"backlinks",
 				"backup_imports",
 				"calendar_layout_applies",
 				"calendar_levels",
@@ -77,7 +76,6 @@ describe("round-trip test infrastructure", () => {
 				"surveys",
 				"tag_colors",
 				"tree_transactions",
-				"virtual_root_ids",
 				"visible_features",
 			]);
 
@@ -89,7 +87,7 @@ describe("round-trip test infrastructure", () => {
 
 			const result = database.get<{count: number}>(sql`SELECT COUNT(*) AS count FROM __drizzle_migrations`);
 
-			expect(result.count).toBe(46);
+			expect(result.count).toBe(47);
 
 			sqlite.close();
 		});

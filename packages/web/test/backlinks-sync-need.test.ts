@@ -5,7 +5,7 @@ import {join} from "node:path";
 import {describe, expect, it} from "vite-plus/test";
 import {CacheService} from "@workflowy/shared/cache";
 import * as schema from "@workflowy/shared/db";
-import {backlinks, nodeContent, nodeMetadata, referencesRoots} from "@workflowy/shared/db";
+import {mirrors, nodeContent, nodeMetadata, referencesRoots} from "@workflowy/shared/db";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
 import {backlinkTargetsOfSource, backlinksNeedSync} from "../src/server/backlinks.js";
 import type {ServerContext} from "../src/server/context.js";
@@ -47,14 +47,8 @@ function setup({withBacklink}: {withBacklink: boolean}) {
 	}
 	db.insert(referencesRoots).values({nodeId: ROOT, systemFrom: SEEDED_AT, systemTo: FAR_FUTURE_DATE}).run();
 	if (withBacklink) {
-		db.insert(backlinks)
-			.values({
-				nodeId: ITEM,
-				sourceId: SOURCE,
-				targetId: TARGET,
-				systemFrom: SEEDED_AT,
-				systemTo: FAR_FUTURE_DATE,
-			})
+		db.insert(mirrors)
+			.values({mirrorId: ITEM, originalId: SOURCE, systemFrom: SEEDED_AT, systemTo: FAR_FUTURE_DATE})
 			.run();
 	}
 	return {ctx: {db, cacheService: new CacheService(db)} as unknown as ServerContext};

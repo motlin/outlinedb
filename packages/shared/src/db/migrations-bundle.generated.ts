@@ -325,6 +325,13 @@ export const journal = {
 			tag: "0046_make_file_blobs_temporal",
 			breakpoints: true,
 		},
+		{
+			idx: 47,
+			version: "6",
+			when: 1_780_617_600_000,
+			tag: "0047_drop_virtual_root_ids_and_backlinks",
+			breakpoints: true,
+		},
 	],
 } as const;
 
@@ -375,4 +382,5 @@ export const migrations: Record<string, string> = {
 	m0044: "-- 📆 Undo a Calendar Layout from temporal history instead of stored JSON undo writes: record the system time\n-- just before each root's last applied layout, and drop account_state with its calendar_layout_undo document.\n-- A stored undo document carries no system time, so it is not carried over.\nCREATE TABLE calendar_layout_applies (\n\troot_id TEXT NOT NULL,\n\tapplied_at_system_time TEXT NOT NULL,\n\tsystem_from TEXT NOT NULL,\n\tsystem_to TEXT NOT NULL,\n\tPRIMARY KEY (root_id, system_from)\n);\n--> statement-breakpoint\nCREATE UNIQUE INDEX calendar_layout_applies_system_to_idx ON calendar_layout_applies (root_id, system_to);\n--> statement-breakpoint\nCREATE INDEX calendar_layout_applies_closed_at_idx ON calendar_layout_applies (system_to) WHERE system_to < '9999-12-31 23:59:59';\n--> statement-breakpoint\nDROP TABLE account_state;\n",
 	m0045: "-- Drop config: its one key, workflowy_epoch, is the account's join date (account.date_joined_sec). Without a live\n-- account row, carry the epoch over as a placeholder row (user_id 0) that the next account import replaces.\nINSERT INTO account (user_id, date_joined_sec, system_from, system_to)\nSELECT 0, CAST(value AS INTEGER), strftime('%Y-%m-%d %H:%M:%f', 'now'), '9999-12-31 23:59:59'\nFROM config\nWHERE key = 'workflowy_epoch'\n\tAND value GLOB '[0-9]*'\n\tAND NOT EXISTS (SELECT 1 FROM account WHERE system_to = '9999-12-31 23:59:59');\n--> statement-breakpoint\nDROP TABLE config;\n",
 	m0046: "-- Make file_blobs temporal: a retry phases out the error version and inserts the new one, so failure history is\n-- kept. fetched_at (Unix ms) becomes each existing row's system_from.\nCREATE TABLE file_blobs_temporal (\n\tnode_id TEXT NOT NULL,\n\tstatus TEXT NOT NULL,\n\tsha256 TEXT,\n\tsize INTEGER,\n\tcontent_type TEXT,\n\tlocal_path TEXT,\n\terror TEXT,\n\tsystem_from TEXT NOT NULL,\n\tsystem_to TEXT NOT NULL,\n\tPRIMARY KEY (node_id, system_from)\n);\n--> statement-breakpoint\nINSERT INTO file_blobs_temporal (node_id, status, sha256, size, content_type, local_path, error, system_from, system_to)\nSELECT node_id, status, sha256, size, content_type, local_path, error,\n\tstrftime('%Y-%m-%d %H:%M:%f', fetched_at / 1000.0, 'unixepoch'), '9999-12-31 23:59:59'\nFROM file_blobs;\n--> statement-breakpoint\nDROP TABLE file_blobs;\n--> statement-breakpoint\nALTER TABLE file_blobs_temporal RENAME TO file_blobs;\n--> statement-breakpoint\nCREATE UNIQUE INDEX file_blobs_system_to_idx ON file_blobs (node_id, system_to);\n--> statement-breakpoint\nCREATE INDEX file_blobs_closed_at_idx ON file_blobs (system_to) WHERE system_to < '9999-12-31 23:59:59';\n",
+	m0047: "-- Drop virtual_root_ids (a flipped copy of mirrors) and backlinks (derived from mirrors + references_roots: a backlink\n-- item is a live mirror whose parent is a references root, its source the mirror's original, its target that root's\n-- parent). The rows that did not match mirrors were stale, so nothing is backfilled.\nDROP TABLE virtual_root_ids;\n--> statement-breakpoint\nDROP TABLE backlinks;\n",
 };

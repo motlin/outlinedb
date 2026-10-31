@@ -14,8 +14,6 @@ export const TEMPORAL_TABLES = [
 	"node_table_cell_sizes",
 	"node_embeddings",
 	"mirrors",
-	"backlinks",
-	"virtual_root_ids",
 	"ai_metadata",
 	"s3_files",
 	"changes_metadata",

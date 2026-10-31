@@ -24,7 +24,6 @@
 
 import type {
 	NewAiMetadata,
-	NewBacklink,
 	NewCalendarLevels,
 	NewCalendarMetadata,
 	NewChangesMetadata,
@@ -33,7 +32,6 @@ import type {
 	NewNodeMetadata,
 	NewReferencesRoot,
 	NewS3File,
-	NewVirtualRootId,
 } from "../db/schema.js";
 
 /**
@@ -71,16 +69,6 @@ export type NormalizedCalendarLevelsRow = WithoutTemporal<NewCalendarLevels>;
  * One `mirrors` row: an `originalId` → `mirrorId` relationship.
  */
 export type NormalizedMirrorRow = WithoutTemporal<NewMirror>;
-
-/**
- * One `backlinks` row.
- */
-export type NormalizedBacklinkRow = WithoutTemporal<NewBacklink>;
-
-/**
- * One `virtual_root_ids` row.
- */
-export type NormalizedVirtualRootIdRow = WithoutTemporal<NewVirtualRootId>;
 
 /**
  * One `s3_files` row.

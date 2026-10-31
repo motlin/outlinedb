@@ -48,15 +48,6 @@ function setup() {
 			.where(eq(schema.mirrors.systemTo, FAR_FUTURE_DATE))
 			.all()
 			.toSorted((a, b) => a.mirrorId.localeCompare(b.mirrorId)),
-		backlinks: db
-			.select({
-				nodeId: schema.backlinks.nodeId,
-				sourceId: schema.backlinks.sourceId,
-				targetId: schema.backlinks.targetId,
-			})
-			.from(schema.backlinks)
-			.where(eq(schema.backlinks.systemTo, FAR_FUTURE_DATE))
-			.all(),
 		referencesRoots: db
 			.select({nodeId: schema.referencesRoots.nodeId})
 			.from(schema.referencesRoots)
@@ -143,7 +134,7 @@ describe("WorkflowyInternalAdapter transaction log", () => {
 			reads: treeDataReads(api),
 		}).toStrictEqual({
 			starts: ["100"],
-			edges: {mirrors: [{mirrorId: "m1", originalId: "orig"}], backlinks: [], referencesRoots: []},
+			edges: {mirrors: [{mirrorId: "m1", originalId: "orig"}], referencesRoots: []},
 			txId: "105",
 			reads: 0,
 		});
@@ -198,7 +189,6 @@ describe("WorkflowyInternalAdapter transaction log", () => {
 				{mirrorId: "bl2", originalId: "s2"},
 				{mirrorId: "m3", originalId: "o3"},
 			],
-			backlinks: [{nodeId: "bl2", sourceId: "s2", targetId: "t2"}],
 			referencesRoots: [{nodeId: "rr2"}],
 		});
 	});
@@ -208,8 +198,6 @@ describe("WorkflowyInternalAdapter transaction log", () => {
 		storeTreeTxId(db, "100");
 		cache.recordRelationships({
 			mirrors: [{mirrorId: "m2", originalId: "o2"}],
-			backlinks: [],
-			virtualRootIds: [],
 			referencesRoots: [],
 		});
 		api.respondOnce(
@@ -242,7 +230,7 @@ describe("WorkflowyInternalAdapter transaction log", () => {
 		expect(edges().mirrors).toStrictEqual([{mirrorId: "m2", originalId: "o2"}]);
 	});
 
-	it("ends every mirror row of a node on remove [mirror], and backlink and references-root rows on their removes", async () => {
+	it("ends every mirror row of a node on remove [mirror] and a references-root row on its remove, keeping a backlink item's mirror on remove [backlink]", async () => {
 		const {db, api, adapter, cache, edges} = tracked();
 		storeTreeTxId(db, "100");
 		cache.recordRelationships({
@@ -250,8 +238,6 @@ describe("WorkflowyInternalAdapter transaction log", () => {
 				{mirrorId: "m3", originalId: "o3"},
 				{mirrorId: "bl", originalId: "src"},
 			],
-			backlinks: [{nodeId: "bl", sourceId: "src", targetId: "tgt"}],
-			virtualRootIds: [],
 			referencesRoots: [{nodeId: "rr"}],
 		});
 		api.respondOnce(
@@ -272,12 +258,11 @@ describe("WorkflowyInternalAdapter transaction log", () => {
 
 		expect(edges()).toStrictEqual({
 			mirrors: [{mirrorId: "bl", originalId: "src"}],
-			backlinks: [],
 			referencesRoots: [],
 		});
 	});
 
-	it("ends the mirror, backlink and references-root rows a deleted node and its subtree own, including nodes created earlier in the batch", async () => {
+	it("ends the mirror and references-root rows a deleted node and its subtree own, including nodes created earlier in the batch", async () => {
 		const {db, api, adapter, cache, edges} = tracked();
 		storeTreeTxId(db, "100");
 		for (const [id, parentId] of [
@@ -297,8 +282,6 @@ describe("WorkflowyInternalAdapter transaction log", () => {
 				{mirrorId: "gc", originalId: "src"},
 				{mirrorId: "m9", originalId: "o9"},
 			],
-			backlinks: [{nodeId: "gc", sourceId: "src", targetId: "tgt"}],
-			virtualRootIds: [],
 			referencesRoots: [{nodeId: "p"}],
 		});
 		api.respondOnce(
@@ -330,7 +313,6 @@ describe("WorkflowyInternalAdapter transaction log", () => {
 
 		expect(edges()).toStrictEqual({
 			mirrors: [{mirrorId: "m9", originalId: "o9"}],
-			backlinks: [],
 			referencesRoots: [],
 		});
 	});

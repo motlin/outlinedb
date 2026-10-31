@@ -7,7 +7,7 @@ import {Hono} from "hono";
 import {join} from "node:path";
 import {CacheService} from "@workflowy/shared/cache";
 import * as schema from "@workflowy/shared/db";
-import {backlinks, mirrors, nodeContent, nodeMetadata, referencesRoots} from "@workflowy/shared/db";
+import {mirrors, nodeContent, nodeMetadata, referencesRoots} from "@workflowy/shared/db";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
 import {notReferencesContent} from "../src/server/backlinks.js";
@@ -24,7 +24,7 @@ const COMPLETED_AT = new Date("2026-02-01T00:00:00Z");
  *     refs            (references root)
  *       bl-1          (backlink item mirroring src-1)
  *       bl-2          (backlink item mirroring src-2)
- *       bl-gone       (backlink item whose source was deleted)
+ *       bl-gone       (backlink item whose source was deleted, ending its mirror row)
  *   lonely
  *     refs-lonely     (references root, its only child)
  * projects
@@ -78,15 +78,6 @@ function setup() {
 	] as const) {
 		db.insert(mirrors).values({mirrorId, originalId, systemFrom: SEEDED_AT, systemTo: FAR_FUTURE_DATE}).run();
 	}
-	for (const [nodeId, sourceId] of [
-		["bl-1", "src-1"],
-		["bl-2", "src-2"],
-		["bl-gone", "gone"],
-	] as const) {
-		db.insert(backlinks)
-			.values({nodeId, sourceId, targetId: "target", systemFrom: SEEDED_AT, systemTo: FAR_FUTURE_DATE})
-			.run();
-	}
 
 	const ctx = {db, cacheService: new CacheService(db)} as unknown as ServerContext;
 	const app = new Hono<AppEnv>();
@@ -111,6 +102,14 @@ describe("references roots in the nodes routes", () => {
 		const body = (await getJson(app, "/api/v1/nodes?parent_id=target")) as {nodes: {id: string}[]};
 
 		expect(body.nodes.map((node) => node.id)).toStrictEqual(["child-a"]);
+	});
+
+	it("never lists an empty references root as a child", async () => {
+		const {app} = setup();
+
+		const body = (await getJson(app, "/api/v1/nodes?parent_id=lonely")) as {nodes: {id: string}[]};
+
+		expect(body.nodes).toStrictEqual([]);
 	});
 
 	it("does not count a references root toward hasChildren", async () => {

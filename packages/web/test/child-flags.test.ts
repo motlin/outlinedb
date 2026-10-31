@@ -4,7 +4,7 @@ import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
 import * as schema from "@workflowy/shared/db";
-import {backlinks, nodeContent, nodeMetadata, referencesRoots} from "@workflowy/shared/db";
+import {mirrors, nodeContent, nodeMetadata, referencesRoots} from "@workflowy/shared/db";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
 import {childFlags, childFlagsFromRows} from "../src/server/backlinks.js";
 
@@ -58,14 +58,8 @@ describe("childFlags with a references root", () => {
 		}
 		db.insert(referencesRoots).values({nodeId: ROOT, systemFrom: SEEDED_AT, systemTo: FAR_FUTURE_DATE}).run();
 		if (withItem) {
-			db.insert(backlinks)
-				.values({
-					nodeId: ITEM,
-					sourceId: SOURCE,
-					targetId: TARGET,
-					systemFrom: SEEDED_AT,
-					systemTo: FAR_FUTURE_DATE,
-				})
+			db.insert(mirrors)
+				.values({mirrorId: ITEM, originalId: SOURCE, systemFrom: SEEDED_AT, systemTo: FAR_FUTURE_DATE})
 				.run();
 		}
 		return db;
