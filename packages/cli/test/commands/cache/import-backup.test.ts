@@ -142,4 +142,21 @@ describe("cache:import-backup --backup-system-time", () => {
 			},
 		]);
 	});
+	it("passes --force through to each import, so a snapshot older than a cached node still tombstones what it omits", async () => {
+		// node-2 changed after the second backup's newest change, so only --force lets that backup end it.
+		writeBackup("2024-01-02", [
+			{id: "node-1", nm: "One", ct: 3600, lm: 3600},
+			{id: "node-2", nm: "Two", ct: 3600, lm: 7200},
+		]);
+		writeBackup("2024-01-03", [{id: "node-1", nm: "One", ct: 3600, lm: 3600}]);
+
+		await captureOutput(async () =>
+			ImportBackups.run(["--no-download", "--no-archive", "--no-embeddings", "--backup-system-time", "--force"]),
+		);
+
+		expect(contentStamps()).toStrictEqual([
+			{id: "node-1", systemFrom: "2024-01-01 02:00:00.000", systemTo: FAR_FUTURE_DATE},
+			{id: "node-2", systemFrom: "2024-01-01 02:00:00.000", systemTo: "2024-01-01 02:00:00.001"},
+		]);
+	});
 });

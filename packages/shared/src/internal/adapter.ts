@@ -2049,6 +2049,23 @@ export class WorkflowyInternalAdapter {
 		return this.accountRefresh;
 	}
 
+	/**
+	 * Re-read the whole account state with one bootstrap, however fresh the
+	 * cache is, and store every part (plus the entropy key when the account has
+	 * one). A rebuilt database calls it once to seed `account_state`.
+	 * @returns the `account_state` keys written
+	 */
+	async refreshAccountState(): Promise<string[]> {
+		const session = await this.client.bootstrap();
+		this.store(this.fromSession(session));
+		const keys: string[] = [KEYS.account, KEYS.rootMetadata, KEYS.settings, KEYS.visibleFeatures];
+		if (session.entropyKey !== undefined) {
+			this.storeAccountValue(KEYS.entropyKey, session.entropyKey);
+			keys.push(KEYS.entropyKey);
+		}
+		return keys;
+	}
+
 	/** Settles once the in-flight account refresh, if any, has finished. */
 	async accountRefreshed(): Promise<void> {
 		await this.accountRefresh?.catch(() => {});

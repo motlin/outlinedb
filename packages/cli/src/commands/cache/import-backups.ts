@@ -16,6 +16,7 @@ export default class ImportBackups extends Command {
 		"<%= config.bin %> cache:import-backups --no-embeddings",
 		"<%= config.bin %> cache:import-backups --batch-size 50",
 		"<%= config.bin %> cache:import-backups --no-download --no-archive --backup-system-time",
+		"<%= config.bin %> cache:import-backups --backup-system-time --force",
 	];
 
 	static override flags = {
@@ -41,6 +42,11 @@ export default class ImportBackups extends Command {
 		}),
 		"backup-system-time": Flags.boolean({
 			description: "Stamp each import with a system time taken from its backup (see cache:import-backup)",
+			default: false,
+		}),
+		force: Flags.boolean({
+			description:
+				"Take each snapshot verbatim: do not protect cached nodes newer than it, tombstoning anything it omits (see cache:import-backup)",
 			default: false,
 		}),
 	};
@@ -117,7 +123,7 @@ export default class ImportBackups extends Command {
 
 	private async importBackup(
 		backup: BackupEntry,
-		flags: {embeddings: boolean; "batch-size": number; "backup-system-time": boolean},
+		flags: {embeddings: boolean; "batch-size": number; "backup-system-time": boolean; force: boolean},
 	): Promise<void> {
 		// Archived backups live inside a solid `.tar.zst`; materializeBackup extracts
 		// them to a temp file so the path-based cache:import-backup command can run.
@@ -130,6 +136,9 @@ export default class ImportBackups extends Command {
 			}
 			if (flags["backup-system-time"]) {
 				importArgs.push("--backup-system-time");
+			}
+			if (flags.force) {
+				importArgs.push("--force");
 			}
 			await this.runCommand(import("./import-backup.js"), importArgs);
 		} finally {

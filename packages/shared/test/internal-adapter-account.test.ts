@@ -235,6 +235,54 @@ describe("WorkflowyInternalAdapter account state", () => {
 		expect(api.requests.slice(requestsBefore)).toStrictEqual([]);
 	});
 
+	it("refreshes every account_state part with one initialization GET, even when the cache is fresh", async () => {
+		const {api, adapter, db, clock} = tracked();
+		await adapter.getSetting("theme");
+		api.respond("/get_initialization_data", () =>
+			json(
+				{
+					...initializationData(),
+					settings: {theme: "light"},
+					user: {id: 123, email: "alice@example.com", entropyKey: "k".repeat(64)},
+				},
+				{headers: {wfclientid: FAKE_CLIENT_ID}},
+			),
+		);
+		const requestsBefore = api.requests.length;
+		clock.ms += 1000;
+
+		const keys = await adapter.refreshAccountState();
+
+		expect({
+			keys,
+			rows: db
+				.select({key: accountState.key, json: accountState.json, fetchedAt: accountState.fetchedAt})
+				.from(accountState)
+				.orderBy(accountState.key)
+				.all(),
+			network: network(api.requests.slice(requestsBefore)),
+		}).toStrictEqual({
+			keys: ["account", "root_metadata", "settings", "visible_features", "entropy_key"],
+			rows: [
+				{
+					key: "account",
+					json: JSON.stringify({userId: 123, dateJoinedSec: 1_500_000_000}),
+					fetchedAt: START_MS + 1000,
+				},
+				{key: "entropy_key", json: JSON.stringify("k".repeat(64)), fetchedAt: START_MS + 1000},
+				{
+					key: "root_metadata",
+					json: JSON.stringify({starring: {locations: {abc: "None"}}}),
+					fetchedAt: START_MS + 1000,
+				},
+				{key: "settings", json: JSON.stringify({theme: "light"}), fetchedAt: START_MS + 1000},
+				{key: "tree_tx_id", json: JSON.stringify("4567"), fetchedAt: 0},
+				{key: "visible_features", json: JSON.stringify([]), fetchedAt: START_MS + 1000},
+			],
+			network: [["GET", "/get_initialization_data"]],
+		});
+	});
+
 	it("answers undefined for the entropy key when the account data has none", async () => {
 		const {adapter} = tracked();
 

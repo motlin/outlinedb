@@ -248,12 +248,10 @@ daily: build backup-db
     # Reclaim dead pages so the db file does not regrow unbounded (full VACUUM; logs before/after sizes)
     ./bin/run.js cache vacuum
 
-# Delete database and rebuild it by replaying every backup oldest-first, each stamped with its own time
+# Rebuild the database from scratch into a new file (download + replay every backup, API catch-up, account state, local state, embeddings, vacuum), then swap it in and keep a backup; run as `op run -- just build-fresh-database`
 [group('workflow')]
-fresh: install
-    rm -f workflowy.sqlite workflowy.sqlite-wal workflowy.sqlite-shm
-    ./bin/run.js cache import-backups --backup-system-time --no-embeddings
-    ./bin/run.js ai embed
+build-fresh-database: build manifest
+    ./scripts/build-fresh-database.sh
 
 # Demo CLI commands - comprehensive exploration of all CLI functionality
 [group('demo')]
