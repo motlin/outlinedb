@@ -260,3 +260,65 @@ describe("notReferencesContent", () => {
 		]);
 	});
 });
+
+const DELETED_AT = "2026-03-01 00:00:00.000";
+
+/**
+ * A references root whose only backlink item outlived both ends of its link:
+ * the original (`src-gone`) was deleted, so its mirror row closed, yet the
+ * item and its root are still current upstream. Upstream draws no Backlinks
+ * section for such a target.
+ *
+ * folder
+ *   stranded
+ *     refs-stranded   (references root, current)
+ *       bl-stranded   (current backlink item; its mirror row and original are closed)
+ */
+function addStrandedBacklink(db: ReturnType<typeof setup>["db"]): void {
+	const rows: [id: string, parentId: string, systemTo: string][] = [
+		["stranded", "folder", FAR_FUTURE_DATE],
+		["refs-stranded", "stranded", FAR_FUTURE_DATE],
+		["bl-stranded", "refs-stranded", FAR_FUTURE_DATE],
+		["src-gone", "projects", DELETED_AT],
+	];
+	for (const [id, parentId, systemTo] of rows) {
+		db.insert(nodeContent).values({id, name: "", note: null, parentId, systemFrom: SEEDED_AT, systemTo}).run();
+		db.insert(nodeMetadata)
+			.values({nodeId: id, priority: 0, completedAt: null, systemFrom: SEEDED_AT, systemTo})
+			.run();
+	}
+	db.insert(referencesRoots)
+		.values({nodeId: "refs-stranded", systemFrom: SEEDED_AT, systemTo: FAR_FUTURE_DATE})
+		.run();
+	db.insert(mirrors)
+		.values({mirrorId: "bl-stranded", originalId: "src-gone", systemFrom: SEEDED_AT, systemTo: DELETED_AT})
+		.run();
+}
+
+describe("a backlink item whose original is deleted", () => {
+	it("stays out of its target's Backlinks section", async () => {
+		const {app, db} = setup();
+		addStrandedBacklink(db);
+
+		await expect(getJson(app, "/api/v1/nodes/stranded/backlinks")).resolves.toStrictEqual({
+			rootId: "refs-stranded",
+			items: [],
+		});
+	});
+
+	it("gives its target no children and no arrow", async () => {
+		const {app, db} = setup();
+		addStrandedBacklink(db);
+
+		const children = (await getJson(app, "/api/v1/nodes?parent_id=stranded")) as {nodes: {id: string}[]};
+		const target = (await getJson(app, "/api/v1/nodes/stranded")) as {
+			node: {hasChildren: boolean; hasUncompletedChildren: boolean};
+		};
+
+		expect({
+			children: children.nodes,
+			hasChildren: target.node.hasChildren,
+			hasUncompletedChildren: target.node.hasUncompletedChildren,
+		}).toStrictEqual({children: [], hasChildren: false, hasUncompletedChildren: false});
+	});
+});
