@@ -307,6 +307,7 @@ export function accountRows(snapshot: AccountSnapshot): AccountRows {
 		surveys: entries(root.surveys).map(([survey, value]) => ({
 			survey,
 			status: asText(getPath(value, ["status"])),
+			rating: asInteger(getPath(value, ["rating"])),
 			at: asInteger(getPath(value, ["at"])),
 		})),
 		savedViews: parseSavedViews(settings.saved_views_json).map((view, position) => ({
@@ -402,6 +403,7 @@ export function snapshotFromRows(rows: AccountRows): AccountSnapshot | undefined
 	for (const row of rows.surveys) {
 		setPath(root, ["surveys", row.survey], {
 			...(row.status === null || row.status === undefined ? {} : {status: row.status}),
+			...(row.rating === null || row.rating === undefined ? {} : {rating: row.rating}),
 			...(row.at === null || row.at === undefined ? {} : {at: row.at}),
 		});
 	}

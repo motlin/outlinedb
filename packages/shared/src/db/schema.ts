@@ -572,13 +572,16 @@ export const changelogReads = sqliteTable(
 );
 
 /**
- * surveys: root metadata `surveys`: each in-app survey's status and when it was set (Unix ms).
+ * surveys: root metadata `surveys`: each in-app survey's status ("submitted" or "dismissed"), its 1-5 rating when
+ * submitted, and when it was set (Unix ms). Upstream never re-shows a survey that has an entry; its only survey trigger
+ * is dev-only (localhost:8000), so we keep these rows for parity and do not port the survey dialog.
  */
 export const surveys = sqliteTable(
 	"surveys",
 	{
 		survey: text("survey").notNull(),
 		status: text("status"),
+		rating: integer("rating"),
 		at: integer("at"),
 
 		systemFrom: text("system_from").notNull(),
