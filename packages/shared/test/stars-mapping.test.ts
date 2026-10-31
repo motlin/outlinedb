@@ -61,7 +61,7 @@ describe("starsFromRootMeta", () => {
 
 describe("starChanges", () => {
 	it("sets the location and appends the uniqueId to an existing order", () => {
-		const meta = {starring: {locations: {[P1]: "None"}, order: `None/${P1}/`}};
+		const meta = {starring: {isSynced: true, locations: {[P1]: "None"}, order: `None/${P1}/`}};
 
 		expect(starChanges(meta, `${P1}_#todo`)).toStrictEqual([
 			{path: ["starring", "locations", `${P1}_#todo`], value: "None"},
@@ -70,11 +70,29 @@ describe("starChanges", () => {
 	});
 
 	it("leaves the order alone when the account has none (never reordered), like upstream", () => {
-		expect(starChanges({}, "None")).toStrictEqual([{path: ["starring", "locations", "None"], value: "None"}]);
+		const meta = {starring: {isSynced: true}};
+
+		expect(starChanges(meta, "None")).toStrictEqual([{path: ["starring", "locations", "None"], value: "None"}]);
+	});
+
+	it("marks a fresh account with no starring metadata as synced, like upstream's first toggle", () => {
+		expect(starChanges({}, P1)).toStrictEqual([
+			{path: ["starring", "locations", P1], value: "None"},
+			{path: ["starring", "isSynced"], value: true},
+		]);
+	});
+
+	it("marks an account whose stars are not yet synced as synced", () => {
+		const meta = {starring: {isSynced: false, locations: {}}};
+
+		expect(starChanges(meta, P1)).toStrictEqual([
+			{path: ["starring", "locations", P1], value: "None"},
+			{path: ["starring", "isSynced"], value: true},
+		]);
 	});
 
 	it("does not duplicate an order entry that is already there", () => {
-		const meta = {starring: {locations: {}, order: `None/${P1}/`}};
+		const meta = {starring: {isSynced: true, locations: {}, order: `None/${P1}/`}};
 
 		expect(starChanges(meta, P1)).toStrictEqual([{path: ["starring", "locations", P1], value: "None"}]);
 	});
@@ -83,7 +101,7 @@ describe("starChanges", () => {
 describe("unstarChanges", () => {
 	it("removes the location and its order entry, and keeps the custom name", () => {
 		const meta = {
-			starring: {locations: {[P1]: "None", [P2]: "None"}, order: `None/${P2}/,None/${P1}/`},
+			starring: {isSynced: true, locations: {[P1]: "None", [P2]: "None"}, order: `None/${P2}/,None/${P1}/`},
 			location: {renamed: {[`None/${P1}/`]: "Alice"}},
 		};
 
@@ -94,7 +112,16 @@ describe("unstarChanges", () => {
 	});
 
 	it("only removes the location when there is no order", () => {
-		expect(unstarChanges({}, P1)).toStrictEqual([{path: ["starring", "locations", P1], value: undefined}]);
+		const meta = {starring: {isSynced: true, locations: {[P1]: "None"}}};
+
+		expect(unstarChanges(meta, P1)).toStrictEqual([{path: ["starring", "locations", P1], value: undefined}]);
+	});
+
+	it("marks a fresh account with no starring metadata as synced", () => {
+		expect(unstarChanges({}, P1)).toStrictEqual([
+			{path: ["starring", "locations", P1], value: undefined},
+			{path: ["starring", "isSynced"], value: true},
+		]);
 	});
 });
 

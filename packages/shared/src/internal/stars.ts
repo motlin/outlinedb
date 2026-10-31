@@ -8,6 +8,9 @@
  * - `starring.order`: comma-joined uniqueIds (`None/<nodeId or None>/<query>`), present only
  *   once the user has reordered; starring appends to it, unstarring removes from it.
  * - `location.renamed`: `{[uniqueId]: name}`.
+ * - `starring.isSynced`: false or absent means upstream still reads stars from a per-browser
+ *   map; its first toggle syncs that map into `starring.locations` and sets it true. Stars here
+ *   always live in `starring.locations`, so every toggle sets it true when it is not already.
  *
  * The DTO speaks location keys; uniqueIds never leave this module.
  */
@@ -23,6 +26,7 @@ const MAIN_TREE = "None";
 const LOCATIONS = ["starring", "locations"];
 const ORDER = ["starring", "order"];
 const RENAMED = ["location", "renamed"];
+const IS_SYNCED = ["starring", "isSynced"];
 
 export interface StarNodes {
 	/** Whether a (non-Home) node is still in the cache. */
@@ -43,6 +47,11 @@ function getIn(meta: unknown, path: string[]): unknown {
 function storedOrder(meta: unknown): string[] | undefined {
 	const order = getIn(meta, ORDER);
 	return typeof order === "string" ? order.split(",") : undefined;
+}
+
+/** Upstream `toggleLocation`: an unsynced account gets `starring.isSynced: true` on its first toggle. */
+function syncedChanges(meta: unknown): MetadataChange[] {
+	return getIn(meta, IS_SYNCED) === true ? [] : [{path: IS_SYNCED, value: true}];
 }
 
 function keyUniqueId(key: string): string {
@@ -108,7 +117,7 @@ export function starChanges(meta: unknown, key: string): MetadataChange[] {
 	if (order && !order.includes(id)) {
 		changes.push({path: ORDER, value: [...order, id].join(",")});
 	}
-	return changes;
+	return [...changes, ...syncedChanges(meta)];
 }
 
 /** Unstar `key`: its location and its order entry (when ordered). Like upstream, a custom name survives. */
@@ -119,7 +128,7 @@ export function unstarChanges(meta: unknown, key: string): MetadataChange[] {
 	if (order?.includes(id)) {
 		changes.push({path: ORDER, value: order.filter((entry) => entry !== id).join(",")});
 	}
-	return changes;
+	return [...changes, ...syncedChanges(meta)];
 }
 
 /** Rename `key`; `null` or `""` clears the rename. */

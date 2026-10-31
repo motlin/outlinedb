@@ -47,7 +47,11 @@ function setup(meta: Record<string, unknown> | undefined) {
 }
 
 const ORDERED = {
-	starring: {locations: {[P1]: "None", [`${P1}_#todo`]: "None"}, order: `None/${P1}/#todo,None/${P1}/`},
+	starring: {
+		isSynced: true,
+		locations: {[P1]: "None", [`${P1}_#todo`]: "None"},
+		order: `None/${P1}/#todo,None/${P1}/`,
+	},
 	location: {renamed: {[`None/${P1}/`]: "Alice"}},
 };
 
@@ -96,9 +100,9 @@ describe("GET /api/v1/stars", () => {
 
 describe("PUT /api/v1/stars/:key", () => {
 	it("stars the location and appends it to the order in one push, answering the new star", async () => {
-		const {adapter, request} = setup({starring: {locations: {[P1]: "None"}, order: `None/${P1}/`}});
+		const {adapter, request} = setup({starring: {isSynced: true, locations: {[P1]: "None"}, order: `None/${P1}/`}});
 		adapter.getRootMeta
-			.mockResolvedValueOnce({starring: {locations: {[P1]: "None"}, order: `None/${P1}/`}})
+			.mockResolvedValueOnce({starring: {isSynced: true, locations: {[P1]: "None"}, order: `None/${P1}/`}})
 			.mockResolvedValueOnce({
 				starring: {locations: {[P1]: "None", [`${P2}_#todo`]: "None"}, order: `None/${P1}/,None/${P2}/#todo`},
 			});
@@ -112,6 +116,27 @@ describe("PUT /api/v1/stars/:key", () => {
 					[
 						{path: ["starring", "locations", `${P2}_#todo`], value: "None"},
 						{path: ["starring", "order"], value: `None/${P1}/,None/${P2}/#todo`},
+					],
+				],
+			],
+		});
+	});
+
+	it("marks a fresh account with no starring metadata as synced in the same push", async () => {
+		const {adapter, request} = setup({});
+		adapter.getRootMeta
+			.mockResolvedValueOnce({})
+			.mockResolvedValueOnce({starring: {isSynced: true, locations: {[P1]: "None"}}});
+
+		const response = await request("PUT", `/${P1}`, {nodeId: P1, query: null});
+
+		expect({response, writes: adapter.setRootMetaValues.mock.calls}).toStrictEqual({
+			response: {status: 201, body: {key: P1, nodeId: P1, query: null, name: null, position: 0}},
+			writes: [
+				[
+					[
+						{path: ["starring", "locations", P1], value: "None"},
+						{path: ["starring", "isSynced"], value: true},
 					],
 				],
 			],
