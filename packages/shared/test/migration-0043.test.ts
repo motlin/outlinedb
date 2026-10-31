@@ -126,7 +126,9 @@ describe("migration 0043_replace_account_state", () => {
 			txId: readTreeTxId(db),
 			accountFetchedAt: readImportTime(db, "account"),
 			expansionSeededAt: readImportTime(db, "expanded_nodes"),
-			accountState: sqlite.prepare("SELECT key FROM account_state").all(),
+			// 0044 then drops account_state with its calendar_layout_undo: undo derives from history.
+			accountState: sqlite.prepare("SELECT name FROM sqlite_master WHERE name = 'account_state'").all(),
+			calendarLayoutApplies: sqlite.prepare("SELECT * FROM calendar_layout_applies").all(),
 			localSettings: sqlite.prepare("SELECT name FROM sqlite_master WHERE name = 'local_settings'").all(),
 		}).toStrictEqual({
 			snapshot: {
@@ -186,7 +188,8 @@ describe("migration 0043_replace_account_state", () => {
 			txId: "1180698978",
 			accountFetchedAt: 1_793_463_618_000,
 			expansionSeededAt: 1_793_463_618_000,
-			accountState: [{key: "calendar_layout_undo"}],
+			accountState: [],
+			calendarLayoutApplies: [],
 			localSettings: [],
 		});
 	});

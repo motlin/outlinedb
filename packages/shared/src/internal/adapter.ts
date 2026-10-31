@@ -7,6 +7,9 @@ import type {WorkflowyWriteThroughClient} from "../cache/workflowy-write-through
 import {keptInternalMetadata, readNodeInternalMetadata, storeInternalMetadata} from "../cache/internal-metadata.js";
 import {collectItemRelationships, emptyItemRelationships} from "../cache/item-relationships.js";
 import {runUnitOfWork} from "../cache/node-composite.js";
+import {readSubtreeAt, systemTimeJustBefore} from "../cache/subtree-history.js";
+import {newSystemTimestamp} from "../cache/system-time.js";
+import {closeCurrentVersions} from "../cache/temporal-merge.js";
 import {
 	ACCOUNT_IMPORT_NAME,
 	accountRowCounts,
@@ -21,7 +24,7 @@ import {applyRelationshipOps, isReplayable} from "../cache/relationship-log.js";
 import {applyExpansionDelta, expansionVersion, readExpansion} from "../cache/expansion-store.js";
 import {advanceTreeTxId, readTreeTxId} from "../cache/tree-transaction.js";
 import type {ItemRelationships} from "../cache/item-relationships.js";
-import {accountState, calendarMetadata, mirrors as mirrorsTable, nodeContent} from "../db/schema.js";
+import {calendarLayoutApplies, calendarMetadata, mirrors as mirrorsTable, nodeContent} from "../db/schema.js";
 import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 import {HOME_TARGET} from "../types/targets.js";
 import {hasInternalLink, internalLinkShortIds} from "../workflowy/internal-links.js";
@@ -39,6 +42,7 @@ import {
 import type {CalendarLevel} from "./calendar-day.js";
 import {calendarNodeId} from "./calendar-ids.js";
 import {calendarLayoutWrites, layoutWriteParents} from "./calendar-layout-apply.js";
+import {calendarLayoutUndoWrites} from "./calendar-layout-undo.js";
 import type {LayoutWrite} from "./calendar-layout-apply.js";
 import {planCalendarLayout} from "./calendar-layout.js";
 import type {CalendarLayoutLevels, LayoutNode} from "./calendar-layout.js";
@@ -129,17 +133,6 @@ type Metadata = z.infer<typeof MetadataSchema>;
 
 /** Codenames go into `/features/<enable|disable>/<codename>`, so only slug characters pass. */
 const FEATURE_CODENAME = /^[a-z0-9_-]+$/u;
-
-const KEYS = {
-	calendarLayoutUndo: "calendar_layout_undo",
-} as const;
-
-/** The writes that undo the last applied calendar layout, with the metadata the edited and restored nodes go back to. */
-const LayoutUndoSchema = z.object({
-	rootId: z.string(),
-	writes: z.array(z.custom<LayoutWrite>()),
-	metadata: z.record(z.string(), MetadataSchema),
-});
 
 /**
  * A change-feed read of expansion: the stored keys' current content version, and the expanded ids when it differs
@@ -1133,8 +1126,9 @@ export class WorkflowyInternalAdapter {
 	 * the snapshot; when one changed, those parents are cached fresh and the
 	 * layout re-planned once. A root tagged `calendar.root` gets the account's
 	 * deterministic ids for new level nodes; any other root (a sandbox copy)
-	 * gets random ones. Every touched parent is then re-read into the cache,
-	 * and the inverse writes are stored for {@link undoCalendarLayout}.
+	 * gets random ones. The system time just before the push is recorded in
+	 * `calendar_layout_applies` for {@link undoCalendarLayout}, and every
+	 * touched parent is then re-read into the cache.
 	 * `timings` (when given) receives each phase's milliseconds.
 	 */
 	async applyCalendarLayout(
@@ -1212,45 +1206,56 @@ export class WorkflowyInternalAdapter {
 			planned = await planFromCache();
 			time("replan");
 		}
-		const {rootId, writes, undo, touchedParents, metadata, metadataById} = planned;
+		const {rootId, writes, touchedParents, metadata} = planned;
 		if (writes.length === 0) {
 			return {rootId, writes: 0};
 		}
+		const appliedAt = newSystemTimestamp();
 		await this.pushLayoutWrites(writes);
 		time("push");
-		const restored = Object.fromEntries(
-			undo.flatMap((write) =>
-				write.op === "edit" || write.op === "undelete" ? [[write.id, metadataById.get(write.id) ?? {}]] : [],
-			),
-		);
-		// Stored before the cache refresh, so a failed read-back still leaves the pushed layout undoable.
-		this.storeAccountValue(KEYS.calendarLayoutUndo, {rootId, writes: undo, metadata: restored});
+		// Recorded before the cache refresh, so a failed read-back still leaves the pushed layout undoable.
+		this.recordLayoutApplied(rootId, appliedAt);
 		await this.refreshLayout(touchedParents, metadata);
 		time("refresh");
 		return {rootId, writes: writes.length};
 	}
 
 	/**
-	 * Undo the last {@link applyCalendarLayout} with the inverse writes it
-	 * stored, in one push; undefined when there is nothing to undo. Once used,
-	 * the undo is cleared. Throws, pushing nothing, when the stored undo was
-	 * applied under another root than `rootId` or would write outside it.
+	 * Undo the last {@link applyCalendarLayout} under `rootId` in one push;
+	 * undefined when no layout applied there is waiting to be undone. The
+	 * writes come from temporal history: the cached subtree as of just before
+	 * the layout's push, compared with the cached subtree now (see
+	 * {@link calendarLayoutUndoWrites}). Once used, the applied layout is
+	 * phased out. Throws, pushing nothing, when a write would land outside
+	 * `rootId`.
 	 */
 	async undoCalendarLayout(rootId: string): Promise<AppliedCalendarLayout | undefined> {
 		requireRootId(rootId);
-		const row = this.db.select().from(accountState).where(eq(accountState.key, KEYS.calendarLayoutUndo)).get();
-		const stored = row && LayoutUndoSchema.safeParse(JSON.parse(row.json)).data;
-		if (!stored) {
+		const applied = this.db
+			.select({appliedAt: calendarLayoutApplies.appliedAtSystemTime})
+			.from(calendarLayoutApplies)
+			.where(and(eq(calendarLayoutApplies.rootId, rootId), eq(calendarLayoutApplies.systemTo, FAR_FUTURE_DATE)))
+			.get();
+		if (applied === undefined) {
 			return undefined;
 		}
-		if (stored.rootId !== rootId) {
-			throw new Error(`calendar layout: the stored undo is for root ${stored.rootId}, not ${rootId}`);
+		const before = readSubtreeAt(this.db, rootId, systemTimeJustBefore(applied.appliedAt));
+		const now = readSubtreeAt(this.db, rootId);
+		const writes = calendarLayoutUndoWrites(rootId, before, now, (id) => this.isCached(id));
+		this.assertLayoutWritesUnder(rootId, writes);
+		if (writes.length > 0) {
+			await this.pushLayoutWrites(writes);
 		}
-		this.assertLayoutWritesUnder(rootId, stored.writes);
-		await this.pushLayoutWrites(stored.writes);
-		this.db.delete(accountState).where(eq(accountState.key, KEYS.calendarLayoutUndo)).run();
-		await this.refreshLayout(layoutWriteParents(stored.writes), new Map(Object.entries(stored.metadata)));
-		return {rootId: stored.rootId, writes: stored.writes.length};
+		this.endLayoutApplied(rootId);
+		const restored = new Map(
+			writes.flatMap((write) =>
+				write.op === "edit" || write.op === "undelete"
+					? [[write.id, before.metadata.get(write.id) ?? {}] as const]
+					: [],
+			),
+		);
+		await this.refreshLayout(layoutWriteParents(writes), restored);
+		return {rootId, writes: writes.length};
 	}
 
 	/**
@@ -1353,14 +1358,21 @@ export class WorkflowyInternalAdapter {
 		);
 	}
 
-	private storeAccountValue(key: string, value: unknown): void {
-		const json = JSON.stringify(value);
-		const fetchedAt = this.now();
-		this.db
-			.insert(accountState)
-			.values({key, json, fetchedAt})
-			.onConflictDoUpdate({target: accountState.key, set: {json, fetchedAt}})
-			.run();
+	/** Record that a layout under `rootId` was pushed at `appliedAt`, replacing any earlier one there. */
+	private recordLayoutApplied(rootId: string, appliedAt: string): void {
+		runUnitOfWork(this.db, ({tx, systemTime}) => {
+			closeCurrentVersions(tx, calendarLayoutApplies, systemTime, eq(calendarLayoutApplies.rootId, rootId));
+			tx.insert(calendarLayoutApplies)
+				.values({rootId, appliedAtSystemTime: appliedAt, systemFrom: systemTime, systemTo: FAR_FUTURE_DATE})
+				.run();
+		});
+	}
+
+	/** Phase out the applied layout under `rootId`, keeping it in history. */
+	private endLayoutApplied(rootId: string): void {
+		runUnitOfWork(this.db, ({tx, systemTime}) => {
+			closeCurrentVersions(tx, calendarLayoutApplies, systemTime, eq(calendarLayoutApplies.rootId, rootId));
+		});
 	}
 
 	private findCalendarRoot(): {id: string; levels: Record<string, boolean> | undefined} {

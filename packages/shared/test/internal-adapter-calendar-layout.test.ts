@@ -305,7 +305,23 @@ async function setup(initial: [string, ServerNode][]) {
 			const below = cachedOutline(child.id);
 			return below.length === 0 ? child.name : {[child.name ?? ""]: below};
 		});
-	return {sqlite, adapter, api, pushes, readsBeforePush, publicReads, server, cachedOutline, loadSnapshot};
+	const appliedLayouts = () =>
+		sqlite
+			.prepare("SELECT root_id AS rootId, system_to = '9999-12-31 23:59:59' AS live FROM calendar_layout_applies")
+			.all();
+	return {
+		sqlite,
+		adapter,
+		api,
+		pushes,
+		readsBeforePush,
+		publicReads,
+		server,
+		writeThrough,
+		cachedOutline,
+		loadSnapshot,
+		appliedLayouts,
+	};
 }
 
 const ORIGINAL_OUTLINE = [{"2026": [{"10": [time(19), {[time(20)]: ["entry"]}]}]}, `Standup ${time(20, 10)}`, "Notes"];
@@ -400,7 +416,7 @@ describe("WorkflowyInternalAdapter.applyCalendarLayout", () => {
 	}
 
 	it("restructures an explicit calendar root in one push, refreshes the cache, and undoes it", async () => {
-		const {adapter, pushes, server, cachedOutline, loadSnapshot} = await tracked(CALENDAR);
+		const {adapter, pushes, server, cachedOutline, loadSnapshot, appliedLayouts} = await tracked(CALENDAR);
 
 		const applied = await adapter.applyCalendarLayout(
 			{year: true, month: false, day: true},
@@ -408,6 +424,7 @@ describe("WorkflowyInternalAdapter.applyCalendarLayout", () => {
 		);
 		const after = {
 			result: applied,
+			appliedLayouts: appliedLayouts(),
 			pushed: pushes.map((ops) => ops.map((op) => `${op.type} ${z.string().parse(op.data.projectid)}`)),
 			server: server.outline(CAL),
 			cache: cachedOutline(CAL),
@@ -420,12 +437,15 @@ describe("WorkflowyInternalAdapter.applyCalendarLayout", () => {
 			after,
 			undone,
 			undoneAgain,
+			appliedLayouts: appliedLayouts(),
+			undoPushed: pushes[1]?.map((op) => `${op.type} ${z.string().parse(op.data.projectid)}`),
 			server: server.outline(CAL),
 			cache: cachedOutline(CAL),
 			levels: server.nodes.get(CAL)?.metadata,
 		}).toStrictEqual({
 			after: {
 				result: {rootId: CAL, writes: 5},
+				appliedLayouts: [{rootId: CAL, live: 1}],
 				pushed: [[`edit ${CAL}`, `move ${D1019}`, `move ${D1020}`, `move ${TIMED}`, `delete ${M10}`]],
 				server: [{"2026": [time(19), {[time(20)]: ["entry", `Standup ${time(20, 10)}`]}]}, "Notes"],
 				cache: [{"2026": [time(19), {[time(20)]: ["entry", `Standup ${time(20, 10)}`]}]}, "Notes"],
@@ -433,6 +453,9 @@ describe("WorkflowyInternalAdapter.applyCalendarLayout", () => {
 			},
 			undone: {rootId: CAL, writes: 5},
 			undoneAgain: undefined,
+			// Undo phases the applied layout out, keeping it in history.
+			appliedLayouts: [{rootId: CAL, live: 0}],
+			undoPushed: [`move ${TIMED}`, `undelete ${M10}`, `move ${D1019}`, `move ${D1020}`, `edit ${CAL}`],
 			server: ORIGINAL_OUTLINE,
 			cache: ORIGINAL_OUTLINE,
 			levels: {},
@@ -569,22 +592,47 @@ describe("WorkflowyInternalAdapter.applyCalendarLayout", () => {
 		expect(pushes).toStrictEqual([]);
 	});
 
-	it("refuses to undo a layout applied under another root, keeping it undoable under its own", async () => {
+	it("has nothing to undo under a root with no applied layout, keeping the layout undoable under its own", async () => {
 		const {adapter, pushes, server, loadSnapshot} = await tracked(CALENDAR);
 		await adapter.applyCalendarLayout(
 			{year: true, month: false, day: true},
 			{rootId: CAL, loadSnapshot: loadSnapshot(CAL)},
 		);
 
-		await expect(adapter.undoCalendarLayout(SANDBOX)).rejects.toThrow(
-			`calendar layout: the stored undo is for root ${CAL}, not ${SANDBOX}`,
-		);
+		const otherRoot = await adapter.undoCalendarLayout(SANDBOX);
 		// @ts-expect-error rootId is required.
 		await expect(adapter.undoCalendarLayout()).rejects.toThrow("calendar layout: rootId is required");
-		expect(pushes).toHaveLength(1);
+		expect({otherRoot, pushes: pushes.length}).toStrictEqual({otherRoot: undefined, pushes: 1});
 		expect({undone: await adapter.undoCalendarLayout(CAL), server: server.outline(CAL)}).toStrictEqual({
 			undone: {rootId: CAL, writes: 5},
 			server: ORIGINAL_OUTLINE,
+		});
+	});
+
+	it("keeps an entry added under a day after the layout when undoing it", async () => {
+		const {adapter, server, writeThrough, cachedOutline, loadSnapshot} = await tracked(CALENDAR);
+		await adapter.applyCalendarLayout(
+			{year: true, month: false, day: true},
+			{rootId: CAL, loadSnapshot: loadSnapshot(CAL)},
+		);
+		server.apply("bulk_create", {
+			parentid: D1019,
+			starting_priority: 0,
+			project_trees: JSON.stringify([{id: LATE, nm: "late"}]),
+		});
+		await writeThrough.refreshChildren([D1019]);
+
+		const undone = await adapter.undoCalendarLayout(CAL);
+
+		const expected = [
+			{"2026": [{"10": [{[time(19)]: ["late"]}, {[time(20)]: ["entry"]}]}]},
+			`Standup ${time(20, 10)}`,
+			"Notes",
+		];
+		expect({undone, server: server.outline(CAL), cache: cachedOutline(CAL)}).toStrictEqual({
+			undone: {rootId: CAL, writes: 5},
+			server: expected,
+			cache: expected,
 		});
 	});
 });

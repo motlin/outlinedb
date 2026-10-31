@@ -302,6 +302,13 @@
 			"when": 1780272000000,
 			"tag": "0043_replace_account_state",
 			"breakpoints": true
+		},
+		{
+			"idx": 44,
+			"version": "6",
+			"when": 1780358400000,
+			"tag": "0044_add_calendar_layout_applies",
+			"breakpoints": true
 		}
 	]
 }

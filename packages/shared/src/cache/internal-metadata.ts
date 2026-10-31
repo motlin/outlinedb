@@ -11,7 +11,8 @@
  * rows, so metadata patches can be built against it.
  */
 
-import {and, eq, inArray} from "drizzle-orm";
+import {and, eq, inArray, sql} from "drizzle-orm";
+import type {SQL} from "drizzle-orm";
 import type {SQLiteColumn, SQLiteTable} from "drizzle-orm/sqlite-core";
 import {z} from "zod";
 import type {TreeSnapshot} from "../api/workflowy-internal-client.js";
@@ -218,15 +219,20 @@ function liveRows<TTable extends SQLiteTable>(
 	ownerColumn: SQLiteColumn,
 	systemToColumn: SQLiteColumn,
 	ownerIds: readonly string[] | undefined,
+	asOf?: string,
 ): TTable["$inferSelect"][] {
+	const version: SQL =
+		asOf === undefined
+			? eq(systemToColumn, FAR_FUTURE_DATE)
+			: sql`${sql.identifier("system_from")} <= ${asOf} AND ${sql.identifier("system_to")} > ${asOf}`;
 	if (ownerIds === undefined) {
-		return tx.select().from(table).where(eq(systemToColumn, FAR_FUTURE_DATE)).all();
+		return tx.select().from(table).where(version).all();
 	}
 	return chunks(ownerIds).flatMap((chunk) =>
 		tx
 			.select()
 			.from(table)
-			.where(and(eq(systemToColumn, FAR_FUTURE_DATE), inArray(ownerColumn, chunk)))
+			.where(and(version, inArray(ownerColumn, chunk)))
 			.all(),
 	);
 }
@@ -441,11 +447,13 @@ function calendarOf(row: typeof calendarMetadata.$inferSelect, levels: typeof ca
 /**
  * Each of `ids`' stored kept metadata in upstream's shape (`layoutMode`,
  * `numbered_start`, `calendar`, `table`, `restorableUniqueNode`,
- * `priority.defaultToBottom`); ids with none are absent.
+ * `priority.defaultToBottom`); ids with none are absent. Live rows by
+ * default, or the rows current at system time `asOf`.
  */
 export function readInternalMetadata(
 	database: TemporalTransaction,
 	ids: readonly string[],
+	asOf?: string,
 ): Map<string, InternalMetadata> {
 	const result = new Map<string, InternalMetadata>();
 	const entry = (id: string): InternalMetadata => {
@@ -457,16 +465,17 @@ export function readInternalMetadata(
 		return metadata;
 	};
 	const unique = [...new Set(ids)];
-	const layoutRows = liveRows(database, nodeMetadata, nodeMetadata.nodeId, nodeMetadata.systemTo, unique);
+	const layoutRows = liveRows(database, nodeMetadata, nodeMetadata.nodeId, nodeMetadata.systemTo, unique, asOf);
 	const calendarRowsIn = liveRows(
 		database,
 		calendarMetadata,
 		calendarMetadata.nodeId,
 		calendarMetadata.systemTo,
 		unique,
+		asOf,
 	);
 	const levelRows = new Map(
-		liveRows(database, calendarLevels, calendarLevels.nodeId, calendarLevels.systemTo, unique).map((row) => [
+		liveRows(database, calendarLevels, calendarLevels.nodeId, calendarLevels.systemTo, unique, asOf).map((row) => [
 			row.nodeId,
 			row,
 		]),
@@ -477,6 +486,7 @@ export function readInternalMetadata(
 		nodeDisplayMetadata.nodeId,
 		nodeDisplayMetadata.systemTo,
 		unique,
+		asOf,
 	);
 	const sizeRows = liveRows(
 		database,
@@ -484,6 +494,7 @@ export function readInternalMetadata(
 		nodeTableCellSizes.nodeId,
 		nodeTableCellSizes.systemTo,
 		unique,
+		asOf,
 	);
 	for (const row of layoutRows) {
 		const layoutMode = normalizeLayoutMode(row.layoutMode);

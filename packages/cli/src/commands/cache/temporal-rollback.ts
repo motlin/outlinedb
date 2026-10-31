@@ -23,6 +23,7 @@ export const TEMPORAL_TABLES = [
 	"backup_imports",
 	"api_import_timestamp",
 	"tree_transactions",
+	"calendar_layout_applies",
 	// The account composite (ACCOUNT_COMPOSITE_TABLES): a rollback reverts settings with the tree.
 	"account",
 	"root_preferences",

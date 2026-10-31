@@ -333,16 +333,27 @@ export const config = sqliteTable("config", {
 });
 
 /**
- * account_state: the last applied calendar layout's undo writes, as one JSON
- * document under `calendar_layout_undo` (see `internal/adapter.ts`). Every other
- * account value lives in the typed temporal account tables below; deriving the
- * undo from temporal history removes this table.
+ * calendar_layout_applies: the last Calendar Layout applied under each calendar root, as the system time just
+ * before its push. Undo diffs the root's subtree as of just before `applied_at_system_time` against the subtree
+ * now, so no undo writes are stored; undoing phases the row out.
  */
-export const accountState = sqliteTable("account_state", {
-	key: text("key").primaryKey(),
-	json: text("json").notNull(),
-	fetchedAt: integer("fetched_at").notNull(),
-});
+export const calendarLayoutApplies = sqliteTable(
+	"calendar_layout_applies",
+	{
+		rootId: text("root_id").notNull(),
+		appliedAtSystemTime: text("applied_at_system_time").notNull(),
+
+		systemFrom: text("system_from").notNull(),
+		systemTo: text("system_to").notNull(),
+	},
+	(table) => [
+		primaryKey({columns: [table.rootId, table.systemFrom]}),
+		uniqueIndex("calendar_layout_applies_system_to_idx").on(table.rootId, table.systemTo),
+		index("calendar_layout_applies_closed_at_idx")
+			.on(table.systemTo)
+			.where(sql`system_to < '9999-12-31 23:59:59'`),
+	],
+);
 
 /**
  * account: the signed-in Workflowy account, from the initialization data: `date_joined_sec` (the epoch upstream's relative timestamps count from), `entropy_key` (the salt of deterministic ids), and `username`/`email` from its settings.
