@@ -25,10 +25,15 @@ Temporal tables store validity periods. We query "what was valid at this point i
 
 ## Timestamp Format
 
-All temporal columns use ISO8601 TEXT format: `YYYY-MM-DD HH:MM:SS`
+All temporal columns use UTC ISO8601 TEXT with millisecond precision: `YYYY-MM-DD HH:MM:SS.sss` (`formatTemporalTimestamp` in `packages/shared/src/temporal/constants.ts`).
 
-- `system_from`: Start of validity period (defaults to current time)
-- `system_to`: End of validity period (defaults to `9999-12-31 23:59:59` for current records)
+- `system_from`: Start of validity period. It has no column default; the writer stamps it with the unit of work's system time (see Composites).
+- `system_to`: End of validity period, `9999-12-31 23:59:59` (`FAR_FUTURE_DATE`) for current records.
+
+## Keys and Indexes
+
+- The primary key is the business key plus one of `system_from` or `system_to`; the other gets a UNIQUE index on the same business key columns. Either choice is equivalent. This repo's convention is PK `(key..., system_from)` plus UNIQUE `(key..., system_to)`.
+- Add a partial closed-at index on `system_to WHERE system_to < '9999-12-31 23:59:59'` when queries look up ended rows; a full `system_to` index would win every live-row lookup.
 
 Example schema:
 
@@ -36,11 +41,18 @@ Example schema:
 CREATE TABLE nodes (
   id TEXT NOT NULL,
   name TEXT,
-  system_from TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now')),
-  system_to TEXT NOT NULL DEFAULT '9999-12-31 23:59:59',
+  system_from TEXT NOT NULL,
+  system_to TEXT NOT NULL,
   PRIMARY KEY (id, system_from)
 );
+CREATE UNIQUE INDEX nodes_system_to_idx ON nodes (id, system_to);
+CREATE INDEX nodes_closed_at_idx ON nodes (system_to) WHERE system_to < '9999-12-31 23:59:59';
 ```
+
+## Which Tables Are Temporal
+
+- Every table is temporal, and no column holds JSON.
+- Exemption: derived data rebuilt from temporal tables may be non-temporal, such as the `node_fts*` full-text tables and `node_tags`. SQLite and migration bookkeeping (`sqlite_sequence`, `__drizzle_migrations`) are also exempt.
 
 Example queries:
 
