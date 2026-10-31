@@ -1,33 +1,23 @@
 /**
- * Upstream's What's New read state (`changelog.read.<id>` in root metadata, served as preferences
- * `changelogRead`): the Help menu's blue dot, each entry's unread dot and the boot-time pre-mark for new accounts.
+ * Our What's New read state: the ids of our entries the user has seen (`/api/v1/whats-new`), which drive the blue
+ * dots on Help, What's New and the kebab, and each entry's unread dot.
  */
 
-import {CHANGELOG_ENTRIES} from "./changelog-entries.js";
+import {WHATS_NEW_ENTRIES} from "./whats-new-entries.js";
 
-export type ChangelogRead = Readonly<Record<string, boolean>> | null;
+export type ChangelogRead = readonly string[];
 
-/** Upstream `Ht0`'s cutoff, `new Date(2025, 4, 26)`: local midnight of 2025-05-26. */
-export const CHANGELOG_PREMARK_JOINED_AFTER = new Date(2025, 4, 26);
+/** The ids of our entries not read yet. */
+export function unreadChangelogEntries(read: ChangelogRead): string[] {
+	return WHATS_NEW_ENTRIES.filter((entry) => !read.includes(entry.id)).map((entry) => entry.id);
+}
 
-/** Upstream What's New `blueDot`: no `changelog.read` at all, or an entry that is missing or false. */
+/** Upstream What's New `blueDot`: one of our entries is not read yet. */
 export function changelogUnread(read: ChangelogRead): boolean {
-	return read === null || CHANGELOG_ENTRIES.some((entry) => read[entry.id] !== true);
+	return unreadChangelogEntries(read).length > 0;
 }
 
-/** Upstream `Ut0`: an entry shows its unread dot only while it has no stored value at all. */
+/** An entry shows its unread dot until it is read. */
 export function changelogEntryUnread(read: ChangelogRead, id: string): boolean {
-	return read?.[id] === undefined;
-}
-
-/** The flags that mark every entry not yet stored as read; empty when all are read. */
-export function unreadChangelogFlags(read: ChangelogRead): Record<string, true> {
-	return Object.fromEntries(
-		CHANGELOG_ENTRIES.filter((entry) => read?.[entry.id] !== true).map((entry) => [entry.id, true] as const),
-	);
-}
-
-/** Upstream `Ht0`: an account that joined after the cutoff and never stored `changelog.read` starts with all read. */
-export function shouldPremarkChangelog(read: ChangelogRead, joinedAt: string): boolean {
-	return read === null && Date.parse(joinedAt) > CHANGELOG_PREMARK_JOINED_AFTER.getTime();
+	return !read.includes(id);
 }

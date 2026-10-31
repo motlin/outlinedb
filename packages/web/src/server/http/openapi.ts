@@ -119,6 +119,8 @@ const BINDINGS: Record<string, Binding> = {
 	"PATCH /api/v1/stars/:key": {op: "stars.rename"},
 	"GET /api/v1/preferences": {op: "preferences.get"},
 	"PATCH /api/v1/preferences": {op: "preferences.patch", body: "patch"},
+	"GET /api/v1/whats-new": {op: "whatsNew.get"},
+	"POST /api/v1/whats-new/read": {op: "whatsNew.markRead"},
 };
 
 interface ObjectSchema {

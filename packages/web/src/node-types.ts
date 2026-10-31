@@ -59,6 +59,7 @@ import type {HelperTagsSchema, LocationResponseSchema} from "./server/ops/search
 import type {StarsResponseSchema} from "./server/ops/stars.js";
 import type {TagAutocompleteResponseSchema} from "./server/ops/tag-index.js";
 import type {TagColorsResponseSchema} from "./server/ops/tags.js";
+import type {WhatsNewReadSchema} from "./server/ops/whats-new.js";
 
 export type NodeAttachment = z.output<typeof NodeAttachmentSchema>;
 export type NodeResponse = z.output<typeof NodeResponseSchema>;
@@ -105,6 +106,8 @@ export type CustomTreeResponse = z.output<typeof CustomTreeResponseSchema>;
 export type FeaturesResponse = z.output<typeof FeaturesResponseSchema>;
 export type FeatureSetResponse = z.output<typeof FeatureSetResponseSchema>;
 export type Preferences = z.output<typeof PreferencesSchema>;
+/** Our What's New read state: `GET /api/v1/whats-new` and `POST /api/v1/whats-new/read`. */
+export type WhatsNewRead = z.output<typeof WhatsNewReadSchema>;
 export type TagColorsResponse = z.output<typeof TagColorsResponseSchema>;
 export type TagAutocompleteResponse = z.output<typeof TagAutocompleteResponseSchema>;
 export type StarsResponse = z.output<typeof StarsResponseSchema>;

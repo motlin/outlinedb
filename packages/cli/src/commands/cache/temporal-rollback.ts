@@ -23,6 +23,7 @@ export const TEMPORAL_TABLES = [
 	"tree_transactions",
 	"calendar_layout_applies",
 	"file_blobs",
+	"whats_new_reads",
 	// The account composite (ACCOUNT_COMPOSITE_TABLES): a rollback reverts settings with the tree.
 	"account",
 	"root_preferences",

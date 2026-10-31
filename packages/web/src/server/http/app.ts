@@ -12,6 +12,7 @@ import {featuresRoutes} from "./routes/features.js";
 import {ladderRoutes} from "./routes/ladder.js";
 import {homeRoutes, nodesRoutes} from "./routes/nodes.js";
 import {preferencesRoutes} from "./routes/preferences.js";
+import {whatsNewRoutes} from "./routes/whats-new.js";
 import {relatedRoutes} from "./routes/related.js";
 import {searchRoutes} from "./routes/search.js";
 import {starsRoutes} from "./routes/stars.js";
@@ -47,6 +48,7 @@ function createHttpRoutes(resolveStore: ResolveStore): Hono {
 	routes.route("/api/search", searchRoutes(resolveStore));
 	routes.route("/api/v1/stars", starsRoutes(resolveStore));
 	routes.route("/api/v1/preferences", preferencesRoutes(resolveStore));
+	routes.route("/api/v1/whats-new", whatsNewRoutes(resolveStore));
 	return routes;
 }
 

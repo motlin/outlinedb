@@ -346,6 +346,13 @@ export const journal = {
 			tag: "0049_index_calendar_metadata_lookups",
 			breakpoints: true,
 		},
+		{
+			idx: 50,
+			version: "6",
+			when: 1_780_876_800_000,
+			tag: "0050_add_whats_new_reads",
+			breakpoints: true,
+		},
 	],
 } as const;
 
@@ -399,4 +406,5 @@ export const migrations: Record<string, string> = {
 	m0047: "-- Drop virtual_root_ids (a flipped copy of mirrors) and backlinks (derived from mirrors + references_roots: a backlink\n-- item is a live mirror whose parent is a references root, its source the mirror's original, its target that root's\n-- parent). The rows that did not match mirrors were stale, so nothing is backfilled.\nDROP TABLE virtual_root_ids;\n--> statement-breakpoint\nDROP TABLE backlinks;\n",
 	m0048: '-- Model upstream\'s survey rating: a submitted survey records `{status: "submitted", rating, at}` (rating 1-5).\n-- Existing rows predate the column, so their rating stays null until the next account refresh.\nALTER TABLE surveys ADD COLUMN rating INTEGER;\n',
 	m0049: "-- Index the live calendar_metadata lookups: the calendar root (root = 1) and a month's day nodes\n-- (level = 'day' AND date_id BETWEEN ...), both filtered to system_to = the far-future sentinel.\nCREATE INDEX calendar_metadata_root_idx ON calendar_metadata (root, system_to);\n--> statement-breakpoint\nCREATE INDEX calendar_metadata_level_idx ON calendar_metadata (level, system_to, date_id);\n",
+	m0050: "-- Our own What's New read state: one live row per entry of ours the user has seen. Upstream's changelog.read\n-- (changelog_reads) stays upstream's key for upstream's entries, so ours never go there.\nCREATE TABLE whats_new_reads (\n\tentry TEXT NOT NULL,\n\tsystem_from TEXT NOT NULL,\n\tsystem_to TEXT NOT NULL,\n\tPRIMARY KEY (entry, system_from)\n);\n--> statement-breakpoint\nCREATE UNIQUE INDEX whats_new_reads_system_to_idx ON whats_new_reads (entry, system_to);\n--> statement-breakpoint\nCREATE INDEX whats_new_reads_closed_at_idx ON whats_new_reads (system_to) WHERE system_to < '9999-12-31 23:59:59';\n",
 };

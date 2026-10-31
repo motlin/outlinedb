@@ -60,6 +60,7 @@ const responses: Partial<Record<string, () => Response>> = {
 			mailboxId: null,
 		}),
 	"/api/v1/tags": () => Response.json({colors: {}}),
+	"/api/v1/whats-new": () => Response.json({read: []}),
 	"/api/v1/features": () => Response.json({visible: [], enabled: {}, available: false}),
 	"/api/v1/custom-tree": () => Response.json({rootId: null, rootChildren: [], watchedIds: [], sections: {}}),
 	"/api/v1/stars": () => Response.json({stars: []}),

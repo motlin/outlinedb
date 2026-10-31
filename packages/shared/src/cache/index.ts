@@ -74,6 +74,7 @@ export {
 	writeAccountSnapshot,
 } from "./account-store.js";
 export {EXPANDED_NODES_IMPORT_NAME, readExpansion, replaceExpansion} from "./expansion-store.js";
+export {markWhatsNewRead, readWhatsNewReads} from "./whats-new-store.js";
 export {readAccountState, writeAccountState} from "./account-seed.js";
 export {effectiveCompletedAt} from "./effective-completion.js";
 export {applyMirrorText, loadMirrorOriginals, notAMirror, withMirrorText} from "./mirror-text.js";

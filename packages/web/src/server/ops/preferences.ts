@@ -76,20 +76,19 @@ const PreferencesPatchSchema = z
 		latestColor: LatestColorSchema.nullable(),
 		/** When the account's change tracking started (upstream's `searchForChangesAfter`), as an ISO date. */
 		searchForChangesAfter: z.iso.datetime().nullable(),
-		/**
-		 * Upstream's `changelog.read.<id>`: which What's New entries were read. A patch merges its flags into the
-		 * stored ones (entries it leaves out are kept); the answer is every stored flag, or null when none were ever set.
-		 */
-		changelogRead: z.record(z.string(), z.boolean()),
 	})
 	.partial()
 	.strict();
 
 /** The full preferences: every patch field present, with `theme` and `font` null when unset. */
 export const PreferencesSchema = z.strictObject({
-	...PreferencesPatchSchema.required().omit({theme: true, font: true, changelogRead: true}).shape,
+	...PreferencesPatchSchema.required().omit({theme: true, font: true}).shape,
 	theme: z.string().nullable(),
 	font: z.string().nullable(),
+	/**
+	 * Upstream's `changelog.read.<id>` (read-only parity data): which of upstream's What's New entries were read, or
+	 * null when none were ever set. Our own entries' read state is `/api/v1/whats-new`, never this key.
+	 */
 	changelogRead: z.record(z.string(), z.boolean()).nullable(),
 	/** The signed-in account's name and email (read-only), null unless both are known. */
 	account: z.strictObject({username: z.string(), email: z.string()}).nullable(),
@@ -310,14 +309,6 @@ export const preferencesPatch = defineOp({
 						? undefined
 						: await searchForChangesAfterTo(adapter, patch.searchForChangesAfter),
 			});
-		}
-		if (patch.changelogRead !== undefined) {
-			const stored = changelogReadFrom(await adapter.getRootMeta(CHANGELOG_READ_PATH)) ?? {};
-			for (const [entry, read] of Object.entries(patch.changelogRead)) {
-				if (stored[entry] !== read) {
-					changes.push({path: [...CHANGELOG_READ_PATH, entry], value: read});
-				}
-			}
 		}
 		if (changes.length > 0) {
 			await adapter.setRootMetaValues(changes);

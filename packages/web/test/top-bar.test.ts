@@ -57,8 +57,8 @@ const changelogUnread = {value: false};
 vi.mock("../src/client/hooks/use-preferences.js", async (importOriginal) => ({
 	...(await importOriginal<typeof UsePreferencesModule>()),
 	useCalendarTooltipSeen: () => tooltipSeen.value,
-	useChangelogUnread: () => changelogUnread.value,
 }));
+vi.mock("../src/client/hooks/use-whats-new.js", () => ({useChangelogUnread: () => changelogUnread.value}));
 
 vi.mock("react-router-dom", () => ({useNavigate: () => () => {}}));
 vi.mock("@tanstack/react-query", () => ({useQueryClient: () => ({}), useQuery: () => ({data: undefined})}));

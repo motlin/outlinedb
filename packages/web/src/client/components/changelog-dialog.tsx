@@ -1,19 +1,15 @@
-import {useQuery, useQueryClient} from "@tanstack/react-query";
+import {useQueryClient} from "@tanstack/react-query";
 import {createElement, useEffect, useState} from "react";
 import type {ReactElement} from "react";
 import {changelogEntryUnread} from "../changelog.js";
 import type {ChangelogRead} from "../changelog.js";
-import {CHANGELOG_ENTRIES} from "../changelog-entries.js";
-import type {ChangelogEntry, ChangelogNode} from "../changelog-entries.js";
-import {useAccount} from "../hooks/use-account.js";
-import {fetchPreferences, markChangelogRead, preferenceKeys, premarkChangelog} from "../hooks/use-preferences.js";
-import type {PreferencesState} from "../hooks/use-preferences.js";
+import {WHATS_NEW_ENTRIES} from "../whats-new-entries.js";
+import type {ChangelogEntry, ChangelogNode} from "../whats-new-entries.js";
+import {markWhatsNewRead, whatsNewKeys} from "../hooks/use-whats-new.js";
+import type {WhatsNewState} from "../hooks/use-whats-new.js";
 import {useOutlineStore} from "../stores/outline.js";
 import {DialogCloseButton, DialogShell, DialogTitle} from "./dialog-shell.js";
 import {FaIcon} from "./fa-icons.js";
-
-/** Upstream `WF.Urls.expand("/discourse/login/")`: the footer's community link. */
-const COMMUNITY_LOGIN_URL = "https://workflowy.com/discourse/login/";
 
 /** Upstream `I3`'s body section class, literal newlines and indents included. */
 const SECTION_CLASS = `
@@ -23,26 +19,11 @@ const SECTION_CLASS = `
         [&_ul]:ml-l
       `;
 
-/** Upstream `a6` images and `Bc` videos add their own attributes; every other element keeps its props as given. */
-function extraProps(tag: string): Record<string, unknown> {
-	if (tag === "img") {
-		return {className: "border border-stone-200 rounded-s"};
-	}
-	if (tag === "video") {
-		return {autoPlay: true, muted: true, loop: true, playsInline: true};
-	}
-	return {};
-}
-
 function renderNode(node: ChangelogNode, key: number): ReactElement | string {
 	if (typeof node === "string") {
 		return node;
 	}
-	return createElement(
-		node.t,
-		{key, ...node.p, ...extraProps(node.t)},
-		...(node.c ?? []).map((child, index) => renderNode(child, index)),
-	);
+	return createElement(node.t, {key, ...node.p}, ...(node.c ?? []).map((child, index) => renderNode(child, index)));
 }
 
 /** Upstream `WF.DomKit.NotificationDot`. */
@@ -77,12 +58,12 @@ export function ChangelogEntryView({entry, unread}: {entry: ChangelogEntry; unre
 }
 
 /**
- * Upstream `Rt0`: the dialog's title, the entries in a scroller and the community footer. `read` is the flags as
- * they were when the dialog opened, so entries marked read on open keep their dot until it closes. The Pro upsell
- * box is left out (there is no Pro subscription flow locally).
+ * Upstream `Rt0`: the dialog's title and the entries in a scroller. `read` is the read entries as they were when the
+ * dialog opened, so entries marked read on open keep their dot until it closes. The Pro upsell box and the Workflowy
+ * Community footer are left out: the entries announce our features, not workflowy.com's.
  */
 export function ChangelogBody({
-	entries = CHANGELOG_ENTRIES,
+	entries = WHATS_NEW_ENTRIES,
 	read,
 }: {
 	entries?: readonly ChangelogEntry[];
@@ -102,28 +83,21 @@ export function ChangelogBody({
 					))}
 				</div>
 			</div>
-			<div className="footer sticky bottom-0 z-1 -mx-xl -mb-xl pt-l text-sm text-center border-t border-solid border-primary bg-primary shrink-0">
-				<p>
-					Questions or feedback? Get in touch on the {" "}
-					<a href={COMMUNITY_LOGIN_URL} className="contentLink !text-tint" target="_blank">
-						Workflowy Community.
-					</a>
-				</p>
-			</div>
 		</div>
 	);
 }
 
-/** The open dialog: snapshots the read flags, then marks every entry read (upstream `Ut0`'s mount effect). */
+/** The open dialog: snapshots the read entries, then marks every entry read (upstream `Ut0`'s mount effect). */
 function OpenChangelog({onClose}: {onClose: () => void}) {
 	const queryClient = useQueryClient();
-	const [read] = useState<ChangelogRead>(() => {
-		const state = queryClient.getQueryData<PreferencesState>(preferenceKeys.all);
-		// Loading or unavailable: nothing can be marked, so show every entry as read.
-		return state?.available === true ? state.preferences.changelogRead : {};
-	});
+	const [read] = useState<ChangelogRead>(
+		// Loading or failed: nothing can be marked, so show every entry as read.
+		() =>
+			queryClient.getQueryData<WhatsNewState>(whatsNewKeys.all)?.read ??
+			WHATS_NEW_ENTRIES.map((entry) => entry.id),
+	);
 	useEffect(() => {
-		void markChangelogRead(queryClient);
+		void markWhatsNewRead(queryClient);
 	}, [queryClient]);
 	return (
 		<DialogShell onClose={onClose}>
@@ -133,22 +107,9 @@ function OpenChangelog({onClose}: {onClose: () => void}) {
 	);
 }
 
-/**
- * Upstream's `gui-changelog`: the What's New dialog (Help > What's New, command `show_changelog`), plus the boot-time
- * pre-mark (`Ht0`) that starts accounts joined after 2025-05-26 with every entry read.
- */
+/** Upstream's `gui-changelog`: the What's New dialog (Help > What's New, command `show_changelog`). */
 export function ChangelogHost() {
-	const queryClient = useQueryClient();
 	const open = useOutlineStore((state) => state.changelogOpen);
 	const close = useOutlineStore((state) => state.closeChangelog);
-	const account = useAccount();
-	const joinedAt = account?.joinedAt ?? null;
-	const {data: preferences} = useQuery({queryKey: preferenceKeys.all, queryFn: fetchPreferences});
-	const read = preferences?.available === true ? preferences.preferences.changelogRead : undefined;
-	useEffect(() => {
-		if (joinedAt !== null && read === null) {
-			void premarkChangelog(queryClient, joinedAt);
-		}
-	}, [queryClient, joinedAt, read]);
 	return open ? <OpenChangelog onClose={close} /> : null;
 }

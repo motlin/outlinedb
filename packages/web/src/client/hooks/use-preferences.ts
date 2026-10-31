@@ -8,7 +8,6 @@ import {useQuery, useQueryClient} from "@tanstack/react-query";
 import type {QueryClient} from "@tanstack/react-query";
 import {useMemo} from "react";
 import type {OpErrorBody, Preferences} from "../../node-types.js";
-import {changelogUnread, shouldPremarkChangelog, unreadChangelogFlags} from "../changelog.js";
 import {resolveDateSettings} from "../date-settings.js";
 import type {DateSettings} from "../date-settings.js";
 import {readJson} from "../read-json.js";
@@ -115,46 +114,6 @@ export async function markSlashDiscovered(queryClient: QueryClient): Promise<voi
 export function useSlashDiscovered(): boolean {
 	const {data} = useQuery({queryKey: preferenceKeys.all, queryFn: fetchPreferences});
 	return slashDiscoveredFrom(data);
-}
-
-/**
- * Whether What's New has unread entries (upstream's Help blue dot): false while loading or when the internal API is
- * unavailable, where the read flags could never be saved.
- */
-export function changelogUnreadFrom(state: PreferencesState | undefined): boolean {
-	return state?.available === true && changelogUnread(state.preferences.changelogRead);
-}
-
-/** Whether What's New has unread entries; false while loading or unavailable. */
-export function useChangelogUnread(): boolean {
-	const {data} = useQuery({queryKey: preferenceKeys.all, queryFn: fetchPreferences});
-	return changelogUnreadFrom(data);
-}
-
-/** The loaded, available preferences' read flags, or undefined while loading or unavailable. */
-function loadedChangelogRead(queryClient: QueryClient): Preferences["changelogRead"] | undefined {
-	const state = queryClient.getQueryData<PreferencesState>(preferenceKeys.all);
-	return state?.available === true ? state.preferences.changelogRead : undefined;
-}
-
-/** Upstream `WF.CoreKv.set("changelog.read.<id>", true)` for every unread entry, once the dialog shows them. */
-export async function markChangelogRead(queryClient: QueryClient): Promise<void> {
-	const read = loadedChangelogRead(queryClient);
-	if (read === undefined) {
-		return;
-	}
-	const flags = unreadChangelogFlags(read);
-	if (Object.keys(flags).length > 0) {
-		await setPreferences(queryClient, {changelogRead: {...read, ...flags}});
-	}
-}
-
-/** Upstream `Ht0`: an account that joined after the cutoff with no `changelog.read` starts with every entry read. */
-export async function premarkChangelog(queryClient: QueryClient, joinedAt: string): Promise<void> {
-	const read = loadedChangelogRead(queryClient);
-	if (read !== undefined && shouldPremarkChangelog(read, joinedAt)) {
-		await setPreferences(queryClient, {changelogRead: unreadChangelogFlags(null)});
-	}
 }
 
 /**

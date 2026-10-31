@@ -10,6 +10,7 @@ import {
 	apiImportTimestamp,
 	backupImports,
 	calendarLayoutApplies,
+	whatsNewReads,
 	calendarLevels,
 	calendarMetadata,
 	changelogReads,
@@ -124,6 +125,7 @@ export const NON_NODE_TABLES: Readonly<Record<string, string>> = {
 	[getTableName(calendarLayoutApplies)]:
 		"each calendar root's last applied layout, as the system time undo reads the subtree's history at",
 	[getTableName(fileBlobs)]: "local copies of attachment bytes, kept after the attachment's node ends",
+	[getTableName(whatsNewReads)]: "our own What's New entries the user has seen, keyed by entry id",
 	...Object.fromEntries(ACCOUNT_COMPOSITE_TABLES.map((table) => [getTableName(table), "the account composite"])),
 };
 

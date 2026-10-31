@@ -426,43 +426,13 @@ describe("PATCH /api/v1/preferences", () => {
 		});
 	});
 
-	it("writes each changed changelogRead flag at changelog.read.<id>, keeping the other entries and changelog keys", async () => {
-		const meta: Record<string, unknown> = {changelog: {read: {may27_2025: true}, liked: {may27_2025: true}}};
-		const {adapter, request} = setup(meta);
-
-		const response = await request("PATCH", "/preferences", {
-			changelogRead: {may27_2025: true, june11_2025: true, june17_2025: true},
-		});
-
-		expect({response, writes: adapter.setRootMetaValues.mock.calls, meta}).toStrictEqual({
-			response: {
-				status: 200,
-				body: {...EMPTY, changelogRead: {may27_2025: true, june11_2025: true, june17_2025: true}},
-			},
-			writes: [
-				[
-					[
-						{path: ["changelog", "read", "june11_2025"], value: true},
-						{path: ["changelog", "read", "june17_2025"], value: true},
-					],
-				],
-			],
-			meta: {
-				changelog: {
-					read: {may27_2025: true, june11_2025: true, june17_2025: true},
-					liked: {may27_2025: true},
-				},
-			},
-		});
-	});
-
-	it("writes nothing when every changelogRead flag is already stored", async () => {
+	it("rejects a changelogRead patch without writing, since upstream's changelog.read is read-only here", async () => {
 		const {adapter, request} = setup({changelog: {read: {may27_2025: true}}});
 
-		const response = await request("PATCH", "/preferences", {changelogRead: {may27_2025: true}});
+		const response = await request("PATCH", "/preferences", {changelogRead: {june11_2025: true}});
 
-		expect({response, writes: adapter.setRootMetaValues.mock.calls}).toStrictEqual({
-			response: {status: 200, body: {...EMPTY, changelogRead: {may27_2025: true}}},
+		expect({status: response.status, writes: adapter.setRootMetaValues.mock.calls}).toStrictEqual({
+			status: 400,
 			writes: [],
 		});
 	});

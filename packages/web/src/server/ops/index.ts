@@ -35,6 +35,7 @@ import {
 } from "./nodes-write.js";
 import {nodesDuplicate, nodesMove, nodesMoveOne, nodesTrees} from "./nodes-tree.js";
 import {preferencesGet, preferencesPatch} from "./preferences.js";
+import {whatsNewGet, whatsNewMarkRead} from "./whats-new.js";
 import {relatedFind} from "./related.js";
 import {searchHelpers, searchLocations, searchSwitcher, searchText, searchTree} from "./search.js";
 import {starsList, starsOrder, starsRemove, starsRename, starsSet} from "./stars.js";
@@ -101,6 +102,8 @@ export const Ops = {
 	"tags.clear": tagsClear,
 	"tags.list": tagsList,
 	"tags.set": tagsSet,
+	"whatsNew.get": whatsNewGet,
+	"whatsNew.markRead": whatsNewMarkRead,
 } satisfies Record<string, OpDefinition<z.ZodType, Json>>;
 
 export type OpRegistry = typeof Ops;

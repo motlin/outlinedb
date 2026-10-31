@@ -3,7 +3,7 @@ import {useEffect, useRef, useState} from "react";
 import {createPortal} from "react-dom";
 import {useNavigate} from "react-router-dom";
 import {useExpandAll} from "../hooks/use-nodes.js";
-import {useChangelogUnread} from "../hooks/use-preferences.js";
+import {useChangelogUnread} from "../hooks/use-whats-new.js";
 import {movePane} from "../navigation.js";
 import {cachedResolvedId} from "../node-cache.js";
 import {useOutlineStore} from "../stores/outline.js";

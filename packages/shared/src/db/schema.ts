@@ -574,6 +574,27 @@ export const changelogReads = sqliteTable(
 );
 
 /**
+ * whats_new_reads: our own What's New entries the user has seen, one live row per entry id. Kept apart from
+ * changelog_reads, which mirrors upstream's `changelog.read` for upstream's entries.
+ */
+export const whatsNewReads = sqliteTable(
+	"whats_new_reads",
+	{
+		entry: text("entry").notNull(),
+
+		systemFrom: text("system_from").notNull(),
+		systemTo: text("system_to").notNull(),
+	},
+	(table) => [
+		primaryKey({columns: [table.entry, table.systemFrom]}),
+		uniqueIndex("whats_new_reads_system_to_idx").on(table.entry, table.systemTo),
+		index("whats_new_reads_closed_at_idx")
+			.on(table.systemTo)
+			.where(sql`system_to < '9999-12-31 23:59:59'`),
+	],
+);
+
+/**
  * surveys: root metadata `surveys`: each in-app survey's status ("submitted" or "dismissed"), its 1-5 rating when
  * submitted, and when it was set (Unix ms). Upstream never re-shows a survey that has an entry; its only survey trigger
  * is dev-only (localhost:8000), so we keep these rows for parity and do not port the survey dialog.
