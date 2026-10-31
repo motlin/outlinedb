@@ -1,4 +1,5 @@
 import {describe, expect, it, vi} from "vite-plus/test";
+import type * as UsePreferencesModule from "../src/client/hooks/use-preferences.js";
 import {readFileSync} from "node:fs";
 import {fileURLToPath} from "node:url";
 import {createElement, useContext} from "react";
@@ -142,6 +143,13 @@ vi.mock("../src/client/components/breadcrumbs.js", () => ({
 		crumbProps.push(props);
 		return createElement("div", {className: "breadcrumbs-mock"});
 	},
+}));
+
+/** The account's calendar.tooltip_seen as the Today controls read it. */
+const tooltipSeen: {value: boolean | null} = {value: true};
+vi.mock("../src/client/hooks/use-preferences.js", async (importOriginal) => ({
+	...(await importOriginal<typeof UsePreferencesModule>()),
+	useCalendarTooltipSeen: () => tooltipSeen.value,
 }));
 
 /** Today in the pane header: records the zoom it targets. */
@@ -331,6 +339,46 @@ describe("SidePanes", () => {
 			narrow: {todayButton: false, kebabHasToday: true},
 			edge: {todayButton: false, kebabHasToday: true},
 			wide: {todayButton: true, kebabHasToday: false},
+		});
+	});
+
+	it("hides the kebab's Today row until calendar.tooltip_seen, like upstream's more-menu.menu.header.today", () => {
+		const seenAs = (value: boolean | null) => {
+			tooltipSeen.value = value;
+			storeState.paneWidths[B] = 350;
+			menuToday.length = 0;
+			try {
+				render();
+				return menuToday.at(-1);
+			} finally {
+				tooltipSeen.value = true;
+				storeState.paneWidths[B] = 540;
+			}
+		};
+		expect({seen: seenAs(true), unseen: seenAs(false), loading: seenAs(null)}).toStrictEqual({
+			seen: true,
+			unseen: false,
+			loading: false,
+		});
+	});
+
+	it("shows the calendar onboarding button in place of the pane's Today until calendar.tooltip_seen", () => {
+		const seenAs = (value: boolean | null) => {
+			tooltipSeen.value = value;
+			try {
+				const html = render();
+				return {
+					onboarding: html.includes('class="shape-circle iconButton lg"'),
+					calendarDay: html.includes("fa-calendar-day "),
+				};
+			} finally {
+				tooltipSeen.value = true;
+			}
+		};
+		expect({seen: seenAs(true), unseen: seenAs(false), loading: seenAs(null)}).toStrictEqual({
+			seen: {onboarding: false, calendarDay: true},
+			unseen: {onboarding: true, calendarDay: true},
+			loading: {onboarding: false, calendarDay: false},
 		});
 	});
 

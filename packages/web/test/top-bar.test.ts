@@ -1,4 +1,5 @@
 import {describe, expect, it, vi} from "vite-plus/test";
+import type * as UsePreferencesModule from "../src/client/hooks/use-preferences.js";
 import {readFileSync} from "node:fs";
 import {fileURLToPath} from "node:url";
 import {createElement} from "react";
@@ -49,6 +50,13 @@ vi.mock("../src/client/hooks/use-starred.js", () => ({
 	useStarredLocations: () => [],
 	useStars: () => ({stars: [], unavailable: false}),
 }));
+/** The account's calendar.tooltip_seen as the Today controls read it. */
+const tooltipSeen: {value: boolean | null} = {value: true};
+vi.mock("../src/client/hooks/use-preferences.js", async (importOriginal) => ({
+	...(await importOriginal<typeof UsePreferencesModule>()),
+	useCalendarTooltipSeen: () => tooltipSeen.value,
+}));
+
 vi.mock("react-router-dom", () => ({useNavigate: () => () => {}}));
 vi.mock("@tanstack/react-query", () => ({useQueryClient: () => ({}), useQuery: () => ({data: undefined})}));
 const toggleState = {toggleCompleted: (): void => {}};
@@ -375,6 +383,26 @@ describe("TopBar right cluster", () => {
 		expect(cluster).toContain(
 			`<div><div role="button" tabindex="0" class="iconButton lg shape-circle">${svg("calendar-day", 448)}</div></div>`,
 		);
+	});
+
+	it("shows the calendar onboarding button in place of Today until calendar.tooltip_seen, and nothing while loading", () => {
+		const seenAs = (value: boolean | null) => {
+			tooltipSeen.value = value;
+			try {
+				const cluster = clusterHtml(renderCluster("alice", true, []));
+				return {
+					onboarding: cluster.includes('class="shape-circle iconButton lg"'),
+					calendarDay: cluster.includes("fa-calendar-day "),
+				};
+			} finally {
+				tooltipSeen.value = true;
+			}
+		};
+		expect({seen: seenAs(true), unseen: seenAs(false), loading: seenAs(null)}).toStrictEqual({
+			seen: {onboarding: false, calendarDay: true},
+			unseen: {onboarding: true, calendarDay: true},
+			loading: {onboarding: false, calendarDay: false},
+		});
 	});
 
 	it("renders no Calendar popover", () => {

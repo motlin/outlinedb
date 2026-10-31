@@ -115,6 +115,8 @@ const HEADER = {
 	Flyout: 1,
 	FlyoutSurface: 1,
 	HeaderMoreMenu: 1,
+	// Today, or the calendar onboarding button until its tooltip is seen.
+	CalendarTodayControl: 1,
 	// The kebab's and the Change layout button's.
 	ButtonMenu: 2,
 	LayoutButtonMenu: 1,
@@ -153,7 +155,12 @@ beforeAll(async () => {
 	// Everything both views read is cached, as after a page load and a bullet click's view load.
 	queryClient.setQueryData(starKeys.all, {stars: [], unavailable: false});
 	queryClient.setQueryData(accountKeys.all, null);
-	queryClient.setQueryData(preferenceKeys.all, {preferences: EMPTY_PREFERENCES, available: true, error: null});
+	// A seen calendar tooltip keeps the plain Today, so the counts cover the header the account usually shows.
+	queryClient.setQueryData(preferenceKeys.all, {
+		preferences: {...EMPTY_PREFERENCES, calendarTooltipSeen: true},
+		available: true,
+		error: null,
+	});
 	queryClient.setQueryData(nodeKeys.children(null), homeRows);
 	queryClient.setQueryData(nodeKeys.children("parent"), childRows);
 	queryClient.setQueryData(nodeKeys.backlinks("parent"), {rootId: "parent", items: []});

@@ -33,6 +33,7 @@ export const EMPTY_PREFERENCES: Preferences = {
 	timeFormat: null,
 	weekStartDay: null,
 	slashDiscovered: false,
+	calendarTooltipSeen: false,
 	notesRootId: null,
 	showCompleted: false,
 	showKeyboardShortcuts: false,
@@ -106,6 +107,30 @@ export async function markSlashDiscovered(queryClient: QueryClient): Promise<voi
 export function useSlashDiscovered(): boolean {
 	const {data} = useQuery({queryKey: preferenceKeys.all, queryFn: fetchPreferences});
 	return slashDiscoveredFrom(data);
+}
+
+/**
+ * The account's `calendarTooltipSeen` (upstream `calendar.tooltip_seen`): null while loading so neither Today nor the
+ * onboarding tooltip flashes, and true when the internal API is unavailable, where the flag could never be saved.
+ */
+export function calendarTooltipSeenFrom(state: PreferencesState | undefined): boolean | null {
+	if (state === undefined) {
+		return null;
+	}
+	return state.available ? state.preferences.calendarTooltipSeen : true;
+}
+
+/** Whether the calendar onboarding tooltip has been seen; null while loading. */
+export function useCalendarTooltipSeen(): boolean | null {
+	const {data} = useQuery({queryKey: preferenceKeys.all, queryFn: fetchPreferences});
+	return calendarTooltipSeenFrom(data);
+}
+
+/** Upstream `WF.CoreKv.set("calendar.tooltip_seen", true)`: dismissing or trying the onboarding tooltip retires it. */
+export async function markCalendarTooltipSeen(queryClient: QueryClient): Promise<void> {
+	if (calendarTooltipSeenFrom(queryClient.getQueryData<PreferencesState>(preferenceKeys.all)) === false) {
+		await setPreferences(queryClient, {calendarTooltipSeen: true});
+	}
 }
 
 export interface UsePreferences extends PreferencesState {

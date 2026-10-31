@@ -48,6 +48,8 @@ const PreferencesPatchSchema = z
 		timeFormat: z.string().nullable(),
 		weekStartDay: z.number().int().min(0).max(6).nullable(),
 		slashDiscovered: z.boolean(),
+		/** Upstream's `calendar.tooltip_seen`: the calendar onboarding tooltip was dismissed or tried, which shows Today. */
+		calendarTooltipSeen: z.boolean(),
 		notesRootId: z.string().nullable(),
 		showCompleted: z.boolean(),
 		showKeyboardShortcuts: z.boolean(),
@@ -78,7 +80,15 @@ export const PreferencesSchema = z.strictObject({
 
 type Preferences = z.output<typeof PreferencesSchema>;
 
-const KEYS = ["dateFormat", "timeFormat", "weekStartDay", "slashDiscovered", "notesRootId", "weeklyReportOn"] as const;
+const KEYS = [
+	"dateFormat",
+	"timeFormat",
+	"weekStartDay",
+	"slashDiscovered",
+	"calendarTooltipSeen",
+	"notesRootId",
+	"weeklyReportOn",
+] as const;
 
 /** Each root-metadata preference's path. */
 const PATHS: Record<(typeof KEYS)[number], string[]> = {
@@ -86,6 +96,7 @@ const PATHS: Record<(typeof KEYS)[number], string[]> = {
 	timeFormat: ["timeFormat"],
 	weekStartDay: ["weekStartDay"],
 	slashDiscovered: ["slash", "discovered"],
+	calendarTooltipSeen: ["calendar", "tooltip_seen"],
 	notesRootId: ["notesRootId"],
 	weeklyReportOn: ["weekly-report", "on"],
 };
@@ -170,6 +181,7 @@ async function readPreferences(adapter: WorkflowyInternalAdapter): Promise<Prefe
 		timeFormat: asString(root.timeFormat),
 		weekStartDay: typeof root.weekStartDay === "number" ? root.weekStartDay : null,
 		slashDiscovered: root.slashDiscovered === true,
+		calendarTooltipSeen: root.calendarTooltipSeen === true,
 		notesRootId: asString(root.notesRootId),
 		weeklyReportOn: root.weeklyReportOn === true,
 		latestColor: latestColorFrom(latestColor),

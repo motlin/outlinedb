@@ -6,6 +6,8 @@ import type {QueryClient} from "@tanstack/react-query";
 import {useNavigate} from "react-router-dom";
 import {stripHtmlTags} from "@workflowy/shared/html";
 import {useNavigateToToday} from "../hooks/use-navigate-to-today.js";
+import {useCalendarTooltipSeen} from "../hooks/use-preferences.js";
+import {CalendarTodayControl} from "./calendar-today-control.js";
 import {movePane} from "../navigation.js";
 import {cachedResolvedId, readNode} from "../node-cache.js";
 import {MAIN_PANE_ID, findPane} from "../pane-ids.js";
@@ -361,6 +363,8 @@ function SidePane({pane, index, isLast, onUndo, onRedo}: SidePaneProps) {
 	);
 	const navigateToToday = useNavigateToToday(context.zoom);
 	const narrow = (width ?? MIN_PANE_WIDTH) < NARROW_PANE_WIDTH;
+	// Upstream hides the more menu's Today row until the calendar onboarding tooltip is seen.
+	const todaySeen = useCalendarTooltipSeen();
 	return (
 		<div
 			id={`pane-${id}`}
@@ -415,17 +419,19 @@ function SidePane({pane, index, isLast, onUndo, onRedo}: SidePaneProps) {
 							query={pane.query}
 						/>
 						{!narrow && (
-							// oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- upstream wraps the Today IconButton in a bare clickable div; the IconButton handles keys
-							<div onClick={() => void navigateToToday()}>
-								<IconButton tooltip="Today">
-									<FaIcon icon="fal:calendar-day" />
-								</IconButton>
-							</div>
+							<CalendarTodayControl onToday={() => void navigateToToday()}>
+								{/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- upstream wraps the Today IconButton in a bare clickable div; the IconButton handles keys */}
+								<div onClick={() => void navigateToToday()}>
+									<IconButton tooltip="Today">
+										<FaIcon icon="fal:calendar-day" />
+									</IconButton>
+								</div>
+							</CalendarTodayControl>
 						)}
 						<HeaderMoreMenu
 							compact
 							onRedo={onRedo}
-							onToday={narrow ? () => void navigateToToday() : undefined}
+							onToday={narrow && todaySeen === true ? () => void navigateToToday() : undefined}
 							paneId={id}
 							onUndo={onUndo}
 							query={pane.query}

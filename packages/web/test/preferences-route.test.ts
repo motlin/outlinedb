@@ -82,6 +82,7 @@ const EMPTY = {
 	timeFormat: null,
 	weekStartDay: null,
 	slashDiscovered: false,
+	calendarTooltipSeen: false,
 	notesRootId: null,
 	showCompleted: false,
 	showKeyboardShortcuts: false,
@@ -121,6 +122,15 @@ describe("GET /api/v1/preferences", () => {
 				slashDiscovered: true,
 				notesRootId: NOTES,
 			},
+		});
+	});
+
+	it("reads calendarTooltipSeen from calendar.tooltip_seen", async () => {
+		const {request} = setup({calendar: {rootId: "cal", tooltip_seen: true}});
+
+		await expect(request("GET", "/preferences")).resolves.toStrictEqual({
+			status: 200,
+			body: {...EMPTY, calendarTooltipSeen: true},
 		});
 	});
 
@@ -261,6 +271,19 @@ describe("PATCH /api/v1/preferences", () => {
 		expect({response, writes: adapter.setRootMetaValues.mock.calls}).toStrictEqual({
 			response: {status: 200, body: {...EMPTY, dateFormat: "YYYY-MM-DD ddd", timeFormat: "HH:mm"}},
 			writes: [[[{path: ["dateFormat"], value: "YYYY-MM-DD ddd"}]]],
+		});
+	});
+
+	it("writes calendarTooltipSeen at calendar.tooltip_seen, keeping the rest of calendar", async () => {
+		const meta: Record<string, unknown> = {calendar: {rootId: "cal"}};
+		const {adapter, request} = setup(meta);
+
+		const response = await request("PATCH", "/preferences", {calendarTooltipSeen: true});
+
+		expect({response, writes: adapter.setRootMetaValues.mock.calls, meta}).toStrictEqual({
+			response: {status: 200, body: {...EMPTY, calendarTooltipSeen: true}},
+			writes: [[[{path: ["calendar", "tooltip_seen"], value: true}]]],
+			meta: {calendar: {rootId: "cal", tooltip_seen: true}},
 		});
 	});
 

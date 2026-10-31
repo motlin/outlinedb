@@ -17,6 +17,7 @@ import {SearchBox} from "./search-box.js";
 import {StarButton} from "./star-button.js";
 import {useFeatureOn} from "../hooks/use-features.js";
 import {useNavigateToToday} from "../hooks/use-navigate-to-today.js";
+import {CalendarTodayControl} from "./calendar-today-control.js";
 import {closeMainPane, stepNav, useNavStackSync} from "../navigation.js";
 import {MAIN_PANE_ID} from "../pane-ids.js";
 import {cachedResolvedId} from "../node-cache.js";
@@ -208,24 +209,26 @@ export function TopBar({onUndo, onRedo}: TopBarProps) {
 				{paneOpen ? <PaneSearchBox compact onCommit={commitMainSearch} query={searchQuery} /> : <SearchBox />}
 
 				{calendarOn ? (
-					paneOpen ? (
-						<IconButton
-							onClick={() => {
-								void navigateToToday();
-							}}
-							shortcut="⌃T"
-							tooltip="Today"
-						>
-							<FaIcon icon="fal:calendar-day" />
-						</IconButton>
-					) : (
-						// oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- upstream wraps the Today IconButton in a bare clickable div; the IconButton handles keys
-						<div onClick={() => void navigateToToday()}>
-							<IconButton shortcut="⌃T" tooltip="Today">
+					<CalendarTodayControl onToday={() => void navigateToToday()}>
+						{paneOpen ? (
+							<IconButton
+								onClick={() => {
+									void navigateToToday();
+								}}
+								shortcut="⌃T"
+								tooltip="Today"
+							>
 								<FaIcon icon="fal:calendar-day" />
 							</IconButton>
-						</div>
-					)
+						) : (
+							// oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- upstream wraps the Today IconButton in a bare clickable div; the IconButton handles keys
+							<div onClick={() => void navigateToToday()}>
+								<IconButton shortcut="⌃T" tooltip="Today">
+									<FaIcon icon="fal:calendar-day" />
+								</IconButton>
+							</div>
+						)}
+					</CalendarTodayControl>
 				) : null}
 
 				{!compact && (
