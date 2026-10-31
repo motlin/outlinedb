@@ -55,6 +55,7 @@ export const EMPTY_PREFERENCES: Preferences = {
 	latestColor: null,
 	searchForChangesAfter: null,
 	account: null,
+	mfa: null,
 };
 
 const LOADING: PreferencesState = {preferences: EMPTY_PREFERENCES, available: true, error: null};

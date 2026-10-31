@@ -87,6 +87,8 @@ export const PreferencesSchema = z.strictObject({
 	font: z.string().nullable(),
 	/** The signed-in account's name and email (read-only), null unless both are known. */
 	account: z.strictObject({username: z.string(), email: z.string()}).nullable(),
+	/** Upstream's `settings.mfa` (read-only; turning it on or off happens on workflowy.com), null when the account has none. */
+	mfa: z.strictObject({enabled: z.boolean()}).nullable(),
 });
 
 type Preferences = z.output<typeof PreferencesSchema>;
@@ -180,9 +182,14 @@ function asString(value: unknown): string | null {
 	return typeof value === "string" ? value : null;
 }
 
+/** Upstream's `settings.mfa` object (a cached row decodes to `{enabled}`), or null when absent. */
+function mfaFrom(raw: unknown): {enabled: boolean} | null {
+	return typeof raw === "object" && raw !== null && "enabled" in raw ? {enabled: asFlag(raw.enabled)} : null;
+}
+
 /** Read the preferences, treating missing or mistyped values as null (false for the flag). */
 async function readPreferences(adapter: WorkflowyInternalAdapter): Promise<Preferences> {
-	const [rootValues, latestColor, searchForChangesAfter, flagValues, theme, font, username, email] =
+	const [rootValues, latestColor, searchForChangesAfter, flagValues, theme, font, username, email, mfa] =
 		await Promise.all([
 			Promise.all(KEYS.map(async (key) => adapter.getRootMeta(PATHS[key]))),
 			adapter.getRootMeta(LATEST_COLOR_PATH),
@@ -194,6 +201,7 @@ async function readPreferences(adapter: WorkflowyInternalAdapter): Promise<Prefe
 			adapter.getSetting(STRING_SETTINGS.font),
 			adapter.getSetting("username"),
 			adapter.getSetting("email"),
+			adapter.getSetting("mfa"),
 		]);
 	const root = Object.fromEntries(KEYS.map((key, index) => [key, rootValues[index]]));
 	const flag = (key: (typeof FLAG_KEYS)[number]): boolean => asFlag(flagValues[FLAG_KEYS.indexOf(key)]);
@@ -226,6 +234,7 @@ async function readPreferences(adapter: WorkflowyInternalAdapter): Promise<Prefe
 		theme: asString(theme),
 		font: asString(font),
 		account: name !== null && address !== null ? {username: name, email: address} : null,
+		mfa: mfaFrom(mfa),
 	};
 }
 

@@ -201,6 +201,32 @@ describe("Settings dialog", () => {
 		});
 	});
 
+	it("shows upstream's Multi-factor authentication block under Account, labelled by the enabled state", async () => {
+		const account = {username: "Alice", email: "alice@example.com"};
+		const mfaBlock = (): string =>
+			collapse(section("Account").querySelector(".flex-1")?.lastElementChild?.outerHTML ?? "");
+		await open({account, mfa: {enabled: true}});
+		const enabled = mfaBlock();
+		await run(() => {
+			root?.unmount();
+		});
+		host?.remove();
+		await open({account, mfa: {enabled: false}});
+		const disabled = section("Account").querySelector("a.button")?.textContent;
+		await run(() => {
+			root?.unmount();
+		});
+		host?.remove();
+		await open({account});
+		expect({enabled, disabled, absent: rowLabels("Account"), patch: patches()}).toStrictEqual({
+			enabled:
+				'<div class="flex flex-col items-start justify-center gap-xs"><div class="text-base leading-s text-primary">Multi-factor authentication</div><div class="text-s leading-xs text-tertiary">Require a code from an authenticator app when you sign in.</div><div class="pt-xs"><a href="https://workflowy.com/" tabindex="0" class=" hover:no-underline button" target="_blank" rel="noreferrer"><span class="">Manage MFA</span></a></div></div>',
+			disabled: "Setup MFA",
+			absent: ["Name", "Email"],
+			patch: [],
+		});
+	});
+
 	it("offers Jump to for every registered section and labels it with the opened section", async () => {
 		await open({}, "Dates");
 		expect(jumpTrigger().textContent).toBe("Dates");

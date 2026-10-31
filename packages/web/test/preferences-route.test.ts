@@ -104,6 +104,7 @@ const EMPTY = {
 	latestColor: null,
 	searchForChangesAfter: null,
 	account: null,
+	mfa: null,
 };
 
 describe("GET /api/v1/preferences", () => {
@@ -253,6 +254,25 @@ describe("GET /api/v1/preferences", () => {
 			body: {...EMPTY, account: {username: "Alice", email: "alice@example.com"}},
 		});
 		await expect(partial.request("GET", "/preferences")).resolves.toStrictEqual({status: 200, body: EMPTY});
+	});
+
+	it("answers upstream's settings.mfa enabled state read-only, null when the account has none", async () => {
+		const on = setup({}, {mfa: {enabled: true}});
+		const off = setup({}, {mfa: {enabled: false}});
+		const absent = setup({}, {});
+
+		const reads = await Promise.all([on, off, absent].map(async ({request}) => request("GET", "/preferences")));
+		const write = await on.request("PATCH", "/preferences", {mfa: {enabled: false}});
+
+		expect({reads, writeStatus: write.status, settings: on.adapter.setSetting.mock.calls}).toStrictEqual({
+			reads: [
+				{status: 200, body: {...EMPTY, mfa: {enabled: true}}},
+				{status: 200, body: {...EMPTY, mfa: {enabled: false}}},
+				{status: 200, body: EMPTY},
+			],
+			writeStatus: 400,
+			settings: [],
+		});
 	});
 
 	it("maps upstream's latestColor attribute and value to a color choice", async () => {

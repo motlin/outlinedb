@@ -205,6 +205,36 @@ interface SectionProps {
 	change: (patch: PreferencesPatch) => void;
 }
 
+/** Upstream manages MFA from its own Settings > Account; the local app only links there. */
+const MANAGE_MFA_URL = "https://workflowy.com/";
+
+/**
+ * Upstream `De4` (`SettingsAccount` order 10): shown only when `settings.mfa` exists, labelled
+ * "Manage MFA" or "Setup MFA" by `mfa.enabled`. Upstream's button opens the disable/recovery
+ * dialog or the TOTP setup via `/api/mfa/*`; locally it is read-only and links to workflowy.com.
+ */
+function MfaBlock({mfa}: {mfa: Preferences["mfa"]}) {
+	if (mfa === null) {
+		return null;
+	}
+	return (
+		<ActionBlock
+			label="Multi-factor authentication"
+			hint="Require a code from an authenticator app when you sign in."
+		>
+			<a
+				href={MANAGE_MFA_URL}
+				tabIndex={0}
+				className=" hover:no-underline button"
+				target="_blank"
+				rel="noreferrer"
+			>
+				<span className="">{mfa.enabled ? "Manage MFA" : "Setup MFA"}</span>
+			</a>
+		</ActionBlock>
+	);
+}
+
 function AccountSection({preferences}: SectionProps) {
 	const {account} = preferences;
 	if (account === null) {
@@ -215,6 +245,7 @@ function AccountSection({preferences}: SectionProps) {
 			<SectionBody>
 				<ReadOnlyField label="Name" value={account.username} />
 				<ReadOnlyField label="Email" value={account.email} />
+				<MfaBlock mfa={preferences.mfa} />
 			</SectionBody>
 		</SettingsSection>
 	);
