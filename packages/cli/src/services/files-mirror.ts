@@ -4,9 +4,9 @@
  * Workflowy keeps attachment bytes on S3 behind short-lived signed URLs that only a
  * logged-in session can mint; no export or backup carries them. This walks the live
  * `s3_files` rows, downloads each original into `<storeDir>/blobs/<ab>/<sha256>`, and
- * records the result in `file_blobs`. A row with status "ok" whose file is still on
- * disk at the recorded size is skipped, so re-running resumes where the last run
- * stopped; failures are recorded as "error" rows and retried next time.
+ * records the result as a new `file_blobs` version. A live "ok" version whose file is
+ * still on disk at the recorded size is skipped, so re-running resumes where the last
+ * run stopped; failures are recorded as "error" versions and retried next time.
  */
 
 import {createHash} from "node:crypto";
@@ -14,6 +14,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {pipeline} from "node:stream/promises";
 import {setTimeout as sleep} from "node:timers/promises";
+import {closeCurrentVersions, runUnitOfWork, startUnitOfWork} from "@workflowy/shared/cache";
 import {fileBlobs, s3Files} from "@workflowy/shared/db";
 import type * as schema from "@workflowy/shared/db";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
@@ -62,8 +63,8 @@ export interface MirrorFilesOptions {
 	maxAttempts?: number;
 	/** Pause before a retry, multiplied by the attempt number. */
 	retryDelayMs?: number;
-	/** Unix ms clock for `fetched_at`. */
-	now?: () => number;
+	/** The clock each recorded version's system time is read from. */
+	now?: () => Date;
 	/** Called once per finished attachment with a one-line progress message. */
 	onProgress?: (line: string) => void;
 }
@@ -121,7 +122,8 @@ function liveFiles(database: MirrorFilesOptions["database"]): LiveFile[] {
 /** Node ids whose recorded blob is still on disk at the recorded size. */
 function mirroredNodeIds(database: MirrorFilesOptions["database"], storeDir: string): Set<string> {
 	const mirrored = new Set<string>();
-	for (const row of database.select().from(fileBlobs).where(eq(fileBlobs.status, "ok")).all()) {
+	const live = and(eq(fileBlobs.status, "ok"), eq(fileBlobs.systemTo, FAR_FUTURE_DATE));
+	for (const row of database.select().from(fileBlobs).where(live).all()) {
 		if (row.localPath === null || row.size === null) {
 			continue;
 		}
@@ -202,13 +204,25 @@ async function downloadWithRetry(
 	throw lastError;
 }
 
-function record(database: MirrorFilesOptions["database"], row: typeof fileBlobs.$inferInsert): void {
-	database.insert(fileBlobs).values(row).onConflictDoUpdate({target: fileBlobs.nodeId, set: row}).run();
+type BlobVersion = Omit<typeof fileBlobs.$inferInsert, "systemFrom" | "systemTo">;
+
+/** Phase out the attachment's live version, if any, and insert `row` as the new one, in one unit of work. */
+function record(database: MirrorFilesOptions["database"], row: BlobVersion, at: Date): void {
+	runUnitOfWork(
+		database,
+		({tx, systemTime}) => {
+			closeCurrentVersions(tx, fileBlobs, systemTime, eq(fileBlobs.nodeId, row.nodeId));
+			tx.insert(fileBlobs)
+				.values({...row, systemFrom: systemTime, systemTo: FAR_FUTURE_DATE})
+				.run();
+		},
+		startUnitOfWork(at),
+	);
 }
 
 export async function mirrorFiles(options: MirrorFilesOptions): Promise<MirrorFilesReport> {
 	const {database, storeDir} = options;
-	const now = options.now ?? Date.now;
+	const now = options.now ?? (() => new Date());
 	const live = liveFiles(database);
 	const mirrored = mirroredNodeIds(database, storeDir);
 	const pending = live.filter((file) => !mirrored.has(file.nodeId));
@@ -241,7 +255,7 @@ export async function mirrorFiles(options: MirrorFilesOptions): Promise<MirrorFi
 			}
 			try {
 				const download = await downloadWithRetry(options, file, tmpDir);
-				record(database, {nodeId: file.nodeId, status: "ok", ...download, error: null, fetchedAt: now()});
+				record(database, {nodeId: file.nodeId, status: "ok", ...download, error: null}, now());
 				report.downloaded++;
 				report.bytes += download.size;
 				options.onProgress?.(
@@ -249,16 +263,19 @@ export async function mirrorFiles(options: MirrorFilesOptions): Promise<MirrorFi
 				);
 			} catch (error) {
 				const message = errorMessage(error);
-				record(database, {
-					nodeId: file.nodeId,
-					status: "error",
-					sha256: null,
-					size: null,
-					contentType: null,
-					localPath: null,
-					error: message,
-					fetchedAt: now(),
-				});
+				record(
+					database,
+					{
+						nodeId: file.nodeId,
+						status: "error",
+						sha256: null,
+						size: null,
+						contentType: null,
+						localPath: null,
+						error: message,
+					},
+					now(),
+				);
 				report.failed++;
 				failures.set(file.nodeId, {nodeId: file.nodeId, fileName: file.fileName, error: message});
 				options.onProgress?.(`error ${file.nodeId} ${file.fileName}: ${message}`);

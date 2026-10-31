@@ -719,21 +719,34 @@ export const treeTransactions = sqliteTable(
 
 /**
  * file_blobs: local copies of attachment bytes downloaded by `files mirror`.
- * One row per attachment node; `local_path` is relative to the mirror's store
- * directory and content-addressed by `sha256`. `status` is "ok" or "error"
- * (with `error` holding the message); error rows are retried on the next run.
- * `fetched_at` is Unix ms. Local state, so not bitemporal.
+ * One live version per attachment node; `local_path` is relative to the
+ * mirror's store directory and content-addressed by `sha256`. `status` is "ok"
+ * or "error" (with `error` holding the message); error versions are retried on
+ * the next run, which phases them out, so failure history is kept. The
+ * download time is the `system_from`.
  */
-export const fileBlobs = sqliteTable("file_blobs", {
-	nodeId: text("node_id").primaryKey(),
-	status: text("status").notNull(),
-	sha256: text("sha256"),
-	size: integer("size"),
-	contentType: text("content_type"),
-	localPath: text("local_path"),
-	error: text("error"),
-	fetchedAt: integer("fetched_at").notNull(),
-});
+export const fileBlobs = sqliteTable(
+	"file_blobs",
+	{
+		nodeId: text("node_id").notNull(),
+		status: text("status").notNull(),
+		sha256: text("sha256"),
+		size: integer("size"),
+		contentType: text("content_type"),
+		localPath: text("local_path"),
+		error: text("error"),
+
+		systemFrom: text("system_from").notNull(),
+		systemTo: text("system_to").notNull(),
+	},
+	(table) => [
+		primaryKey({columns: [table.nodeId, table.systemFrom]}),
+		uniqueIndex("file_blobs_system_to_idx").on(table.nodeId, table.systemTo),
+		index("file_blobs_closed_at_idx")
+			.on(table.systemTo)
+			.where(sql`system_to < '9999-12-31 23:59:59'`),
+	],
+);
 
 /**
  * node_tags: each live item's distinct tags, derived from its live `node_content`

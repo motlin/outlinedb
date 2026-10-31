@@ -3,7 +3,7 @@ import {Command, Flags} from "@oclif/core";
 import {ACCOUNT_COMPOSITE_TABLES, ACCOUNT_IMPORT_NAME, EXPANDED_NODES_IMPORT_NAME} from "@workflowy/shared/cache";
 import * as schema from "@workflowy/shared/db";
 import {account, apiImportTimestamp, fileBlobs} from "@workflowy/shared/db";
-import {getTableName, inArray, sql} from "drizzle-orm";
+import {getTableName, inArray} from "drizzle-orm";
 import type {SQLiteTable} from "drizzle-orm/sqlite-core";
 import {drizzle} from "drizzle-orm/better-sqlite3";
 import fs from "node:fs";
@@ -12,6 +12,7 @@ import {createDatabase} from "../../db/index.js";
 export interface ImportLocalStateResult {
 	/** Rows copied per account table (every version, so the account's history carries over). */
 	accountTables: Record<string, number>;
+	/** file_blobs rows copied, every version. */
 	fileBlobs: number;
 }
 
@@ -25,7 +26,7 @@ export default class ImportLocalState extends Command {
 	static override enableJsonFlag = true;
 
 	static override description =
-		"Copy the state no Workflowy backup can rebuild from an old cache database, opened read-only, into this one: every version of the account tables (so their history carries over) and file_blobs. Run it on a new database before import-api and import-account, which then merge the current values on top";
+		"Copy the state no Workflowy backup can rebuild from an old cache database, opened read-only, into this one: every version of the account tables and file_blobs (so their history carries over). Run it on a new database before import-api and import-account, which then merge the current values on top";
 
 	static override examples = ["<%= config.bin %> cache:import-local-state --from workflowy.pre-rebuild.sqlite"];
 
@@ -39,23 +40,27 @@ export default class ImportLocalState extends Command {
 			this.error(`Old database not found: ${flags.from}`);
 		}
 		const database = createDatabase();
-		const occupied = ACCOUNT_COMPOSITE_TABLES.filter(
+		const occupied = [...ACCOUNT_COMPOSITE_TABLES, fileBlobs].filter(
 			(table) => database.select().from(table).limit(1).all().length > 0,
 		);
 		if (occupied.length > 0) {
 			this.error(
-				`The account tables already hold rows (${occupied.map((table) => getTableName(table)).join(", ")}); run import-local-state on a new database, before import-api and import-account`,
+				`The local-state tables already hold rows (${occupied.map((table) => getTableName(table)).join(", ")}); run import-local-state on a new database, before import-api and import-account`,
 			);
 		}
 
 		const sqlite = new DatabaseConstructor(flags.from, {readonly: true, fileMustExist: true});
-		const migrated = sqlite
-			.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?")
-			.get(getTableName(account));
-		if (migrated === undefined) {
+		const migrated =
+			sqlite
+				.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?")
+				.get(getTableName(account)) !== undefined &&
+			sqlite
+				.prepare("SELECT 1 FROM pragma_table_info(?) WHERE name = 'system_from'")
+				.get(getTableName(fileBlobs)) !== undefined;
+		if (!migrated) {
 			sqlite.close();
 			this.error(
-				`${flags.from} predates the account tables; migrate it first by opening it once: WORKFLOWY_DB_PATH=${flags.from} ./bin/run.js cache status`,
+				`${flags.from} predates the current schema; migrate it first by opening it once: WORKFLOWY_DB_PATH=${flags.from} ./bin/run.js cache status`,
 			);
 		}
 		let accountRows: [SQLiteTable, Record<string, unknown>[]][];
@@ -86,21 +91,9 @@ export default class ImportLocalState extends Command {
 			if (importRows.length > 0) {
 				tx.insert(apiImportTimestamp).values(importRows).run();
 			}
-			for (const row of blobRows) {
+			for (let start = 0; start < blobRows.length; start += ROWS_PER_INSERT) {
 				tx.insert(fileBlobs)
-					.values(row)
-					.onConflictDoUpdate({
-						target: fileBlobs.nodeId,
-						set: {
-							status: sql`excluded.status`,
-							sha256: sql`excluded.sha256`,
-							size: sql`excluded.size`,
-							contentType: sql`excluded.content_type`,
-							localPath: sql`excluded.local_path`,
-							error: sql`excluded.error`,
-							fetchedAt: sql`excluded.fetched_at`,
-						},
-					})
+					.values(blobRows.slice(start, start + ROWS_PER_INSERT))
 					.run();
 			}
 		});

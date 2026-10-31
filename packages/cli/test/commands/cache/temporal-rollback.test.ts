@@ -41,6 +41,17 @@ describe("cache:temporal-rollback command", () => {
 		).toStrictEqual([]);
 	});
 
+	it("rolls back every table with a system_to column", () => {
+		const temporal = testDatabase.sqlite
+			.prepare(
+				"SELECT m.name FROM sqlite_master m JOIN pragma_table_info(m.name) c WHERE m.type = 'table' AND c.name = 'system_to' ORDER BY m.name",
+			)
+			.all()
+			.map((row) => (row as {name: string}).name);
+
+		expect(temporal.filter((name) => !(TEMPORAL_TABLES as readonly string[]).includes(name))).toStrictEqual([]);
+	});
+
 	it("restores a preference to its value as of the target time", async () => {
 		testDatabase.db
 			.insert(rootPreferences)

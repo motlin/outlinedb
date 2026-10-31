@@ -5,6 +5,7 @@ import path from "node:path";
 import {setTimeout as sleep} from "node:timers/promises";
 import {fileBlobs, s3Files} from "@workflowy/shared/db";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {eq} from "drizzle-orm";
 import {afterEach, beforeEach, describe, expect, it} from "vite-plus/test";
 import {defaultStoreDir, mirrorFiles} from "../../src/services/files-mirror.js";
 import type {FileUrlSigner, MirrorFilesOptions} from "../../src/services/files-mirror.js";
@@ -12,7 +13,10 @@ import {cleanupTestDatabase, createTestDatabase} from "../db/migration-helper.js
 import type {TestDatabase} from "../db/migration-helper.js";
 
 const OPEN = {systemFrom: "2026-10-01 00:00:00", systemTo: FAR_FUTURE_DATE};
-const FETCHED_AT = 1_790_000_000_000;
+const FETCHED_AT = new Date(1_790_000_000_000);
+const FETCHED_AT_SYSTEM_TIME = "2026-09-21 14:13:20.000";
+const RETRIED_AT = new Date(1_790_000_060_000);
+const RETRIED_AT_SYSTEM_TIME = "2026-09-21 14:14:20.000";
 
 const BYTES: Record<string, string> = {
 	"node-a": "jpeg bytes of photo a",
@@ -138,11 +142,12 @@ describe("mirrorFiles", () => {
 		return testDb.db
 			.select()
 			.from(fileBlobs)
+			.where(eq(fileBlobs.systemTo, FAR_FUTURE_DATE))
 			.all()
 			.toSorted((x, y) => x.nodeId.localeCompare(y.nodeId));
 	}
 
-	function okRow(nodeId: string, fileType: string) {
+	function okRow(nodeId: string, fileType: string, systemFrom = FETCHED_AT_SYSTEM_TIME) {
 		const body = BYTES[nodeId] ?? "";
 		return {
 			nodeId,
@@ -152,7 +157,8 @@ describe("mirrorFiles", () => {
 			contentType: fileType,
 			localPath: blobPath(body),
 			error: null,
-			fetchedAt: FETCHED_AT,
+			systemFrom,
+			systemTo: FAR_FUTURE_DATE,
 		};
 	}
 
@@ -196,7 +202,7 @@ describe("mirrorFiles", () => {
 		await run(fakeServer());
 		fs.rmSync(path.join(storeDir, blobPath(BYTES["node-b"] ?? "")));
 		const second = fakeServer();
-		const report = await run(second);
+		const report = await run(second, {now: () => RETRIED_AT});
 
 		expect({selected: report.selected, fetched: second.fetched}).toStrictEqual({selected: 1, fetched: ["node-b"]});
 		expect(fs.existsSync(path.join(storeDir, blobPath(BYTES["node-b"] ?? "")))).toBe(true);
@@ -246,6 +252,17 @@ describe("mirrorFiles", () => {
 			},
 		});
 		const report = await run(server, {maxAttempts: 2});
+		const errorRowC = {
+			nodeId: "node-c",
+			status: "error",
+			sha256: null,
+			size: null,
+			contentType: null,
+			localPath: null,
+			error: "HTTP 500 Internal Server Error",
+			systemFrom: FETCHED_AT_SYSTEM_TIME,
+			systemTo: FAR_FUTURE_DATE,
+		};
 
 		expect({
 			downloaded: report.downloaded,
@@ -258,25 +275,28 @@ describe("mirrorFiles", () => {
 			failed: 1,
 			failures: [{nodeId: "node-c", fileName: "document.pdf", error: "HTTP 500 Internal Server Error"}],
 			signedA: 2,
-			rowC: {
-				nodeId: "node-c",
-				status: "error",
-				sha256: null,
-				size: null,
-				contentType: null,
-				localPath: null,
-				error: "HTTP 500 Internal Server Error",
-				fetchedAt: FETCHED_AT,
-			},
+			rowC: errorRowC,
 		});
 
 		const retry = fakeServer();
-		const retryReport = await run(retry);
-		expect({fetched: retry.fetched, row: rows().find((row) => row.nodeId === "node-c")}).toStrictEqual({
+		const retryReport = await run(retry, {now: () => RETRIED_AT});
+		expect({
+			failed: retryReport.failed,
+			fetched: retry.fetched,
+			historyC: testDb.db
+				.select()
+				.from(fileBlobs)
+				.where(eq(fileBlobs.nodeId, "node-c"))
+				.orderBy(fileBlobs.systemFrom)
+				.all(),
+		}).toStrictEqual({
+			failed: 0,
 			fetched: ["node-c"],
-			row: okRow("node-c", "application/pdf"),
+			historyC: [
+				{...errorRowC, systemTo: RETRIED_AT_SYSTEM_TIME},
+				okRow("node-c", "application/pdf", RETRIED_AT_SYSTEM_TIME),
+			],
 		});
-		expect(retryReport.failed).toBe(0);
 	});
 
 	it("rejects a download whose size disagrees with Content-Length", async () => {

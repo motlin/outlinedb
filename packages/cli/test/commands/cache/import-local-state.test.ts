@@ -36,7 +36,7 @@ describe("cache:import-local-state command", () => {
 		fs.rmSync(tempDir, {recursive: true, force: true});
 	});
 
-	it("copies every version of the account tables, their import times and every file_blobs row from the old database", async () => {
+	it("copies every version of the account tables, their import times and every file_blobs version from the old database", async () => {
 		const closed = {systemFrom: "2026-01-01 00:00:00.000", systemTo: "2026-02-01 00:00:00.000"};
 		const live = {systemFrom: "2026-02-01 00:00:00.000", systemTo: "9999-12-31 23:59:59"};
 		source.db
@@ -53,31 +53,27 @@ describe("cache:import-local-state command", () => {
 				{name: "other-pipeline", timestamp: new Date(2_000_000), ...live},
 			])
 			.run();
-		source.db
-			.insert(fileBlobs)
-			.values([
-				{
-					nodeId: "node-1",
-					status: "ok",
-					sha256: "abc",
-					size: 3,
-					contentType: "image/png",
-					localPath: "ab/abc",
-					error: null,
-					fetchedAt: 333,
-				},
-				{
-					nodeId: "node-2",
-					status: "error",
-					sha256: null,
-					size: null,
-					contentType: null,
-					localPath: null,
-					error: "404",
-					fetchedAt: 444,
-				},
-			])
-			.run();
+		const okBlob = {
+			nodeId: "node-1",
+			status: "ok",
+			sha256: "abc",
+			size: 3,
+			contentType: "image/png",
+			localPath: "ab/abc",
+			error: null,
+			...live,
+		};
+		const failedBlob = {
+			nodeId: "node-1",
+			status: "error",
+			sha256: null,
+			size: null,
+			contentType: null,
+			localPath: null,
+			error: "404",
+			...closed,
+		};
+		source.db.insert(fileBlobs).values([failedBlob, okBlob]).run();
 
 		const {stdout} = await captureOutput(async () => ImportLocalState.run(["--from", sourcePath, "--json"]));
 
@@ -87,7 +83,7 @@ describe("cache:import-local-state command", () => {
 			fileBlobsCopied: result.fileBlobs,
 			tagColors: target.db.select().from(tagColors).orderBy(tagColors.systemFrom).all(),
 			importTimes: target.db.select().from(apiImportTimestamp).all(),
-			fileBlobs: target.db.select().from(fileBlobs).orderBy(fileBlobs.nodeId).all(),
+			fileBlobs: target.db.select().from(fileBlobs).orderBy(fileBlobs.systemFrom).all(),
 		}).toStrictEqual({
 			copied: [["tag_colors", 2]],
 			fileBlobsCopied: 2,
@@ -96,28 +92,7 @@ describe("cache:import-local-state command", () => {
 				{tag: "#a", colorIndex: 2, ...live},
 			],
 			importTimes: [{name: "account", timestamp: new Date(1_000_000), ...live}],
-			fileBlobs: [
-				{
-					nodeId: "node-1",
-					status: "ok",
-					sha256: "abc",
-					size: 3,
-					contentType: "image/png",
-					localPath: "ab/abc",
-					error: null,
-					fetchedAt: 333,
-				},
-				{
-					nodeId: "node-2",
-					status: "error",
-					sha256: null,
-					size: null,
-					contentType: null,
-					localPath: null,
-					error: "404",
-					fetchedAt: 444,
-				},
-			],
+			fileBlobs: [failedBlob, okBlob],
 		});
 	});
 
@@ -136,7 +111,7 @@ describe("cache:import-local-state command", () => {
 
 		expect({message: error?.message, tagColors: target.db.select().from(tagColors).all()}).toStrictEqual({
 			message:
-				"The account tables already hold rows (tag_colors); run import-local-state on a new database, before import-api and import-account",
+				"The local-state tables already hold rows (tag_colors); run import-local-state on a new database, before import-api and import-account",
 			tagColors: [{tag: "#b", colorIndex: 2, ...live}],
 		});
 	});
