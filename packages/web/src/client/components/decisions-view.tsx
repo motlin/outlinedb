@@ -9,11 +9,13 @@ import {useEffect, useMemo, useRef, useState} from "react";
 import type {ReactNode} from "react";
 import {useParams} from "react-router-dom";
 import type {DecisionItem, DecisionPage} from "../../server/decisions.js";
+import {bodyTokens} from "../decision-tokens.js";
 import "../decisions.css";
 import {hideLoadingScreenOnce} from "../loading-screen.js";
 import {readJson} from "../read-json.js";
 import {fetchThroughRestarts} from "../restart-retry.js";
 import type {FetchedText} from "../restart-retry.js";
+import {useOutlineStore} from "../stores/outline.js";
 
 const NOTE_DEBOUNCE_MS = 600;
 
@@ -312,15 +314,18 @@ export function DecisionPageView({slug}: {slug: string}) {
 	}
 
 	const currentState = current === undefined ? undefined : items[current.item.id];
-	const unanswered = cards.flatMap((card, position) => (items[card.item.id]?.answered === true ? [] : [position]));
-	const answered = cards.length - unanswered.length;
+	const answered = cards.filter((card) => items[card.item.id]?.answered === true).length;
+	const allAnswered = answered === cards.length;
 
 	return (
 		<main className="decisions-page">
 			<div className="decisions-wrap">
 				<header className="decisions-head">
-					<h1>{page.title}</h1>
-					{page.intro === undefined ? null : <p className="decisions-intro">{page.intro}</p>}
+					<div className="decisions-head-text">
+						<h1>{page.title}</h1>
+						{page.intro === undefined ? null : <p className="decisions-intro">{page.intro}</p>}
+					</div>
+					<ThemeToggle />
 				</header>
 				<div className="decisions-progress-row">
 					<p className="decisions-position">
@@ -328,26 +333,6 @@ export function DecisionPageView({slug}: {slug: string}) {
 					</p>
 					<progress aria-label="Answered" className="decisions-bar" max={cards.length} value={answered} />
 				</div>
-				{unanswered.length === 0 ? (
-					<p className="decisions-all-answered">All {cards.length} answered. Submit when ready.</p>
-				) : (
-					<nav aria-label="Unanswered cards" className="decisions-jump">
-						<span className="decisions-jump-label">Unanswered</span>
-						{unanswered.map((position) => (
-							<button
-								aria-current={position === index}
-								key={position}
-								onClick={() => {
-									goTo(position);
-								}}
-								title={cards[position]?.item.title}
-								type="button"
-							>
-								{position + 1}
-							</button>
-						))}
-					</nav>
-				)}
 				{current === undefined || currentState === undefined ? null : (
 					<section className="decisions-group" key={current.item.id}>
 						<DecisionCard
@@ -401,6 +386,9 @@ export function DecisionPageView({slug}: {slug: string}) {
 					{answered} of {cards.length} answered
 				</span>
 				<span aria-live="polite" className="decisions-submit-state">
+					{allAnswered && submit.kind !== "submitted" ? (
+						<span className="decisions-all-answered">All {cards.length} answered. Submit when ready.</span>
+					) : null}
 					{lastSave === null ? null : (
 						<span className="decisions-last-save" data-error={lastSave.error !== null}>
 							{lastSave.error === null
@@ -415,7 +403,7 @@ export function DecisionPageView({slug}: {slug: string}) {
 				</span>
 				<button
 					className="decisions-submit"
-					data-ready={unanswered.length === 0}
+					data-ready={allAnswered}
 					disabled={submit.kind === "submitting"}
 					onClick={() => {
 						void submitPage();
@@ -462,7 +450,7 @@ function DecisionCard({group, item, state, onChoose, onNote, children}: Decision
 						// Body lines are plain text that may repeat, so their position is their identity.
 						// oxlint-disable-next-line react/no-array-index-key
 						<p className="decisions-body-line" key={index}>
-							{line}
+							<BodyLine line={line} />
 						</p>
 					))}
 				</div>
@@ -471,8 +459,9 @@ function DecisionCard({group, item, state, onChoose, onNote, children}: Decision
 				<ul className="decisions-links">
 					{item.links.map((link) => (
 						<li key={link.href}>
-							<a href={link.href} rel="noopener noreferrer" target="_blank">
-								{link.label}
+							<a href={link.href} rel="noopener noreferrer" target="_blank" title={link.label}>
+								<LinkIcon href={link.href} />
+								<span>{link.label}</span>
 							</a>
 						</li>
 					))}
@@ -524,5 +513,124 @@ function DecisionCard({group, item, state, onChoose, onNote, children}: Decision
 			</span>
 			{children}
 		</article>
+	);
+}
+
+/** A body line as plain text, with its dates, durations and counts wrapped for color. */
+function BodyLine({line}: {line: string}) {
+	return bodyTokens(line).map((token, index) =>
+		token.kind === null ? (
+			token.text
+		) : (
+			// Tokens are positional slices of one line, so their position is their identity.
+			// oxlint-disable-next-line react/no-array-index-key
+			<span className="decisions-num" data-kind={token.kind} key={index}>
+				{token.text}
+			</span>
+		),
+	);
+}
+
+function isWorkflowyLink(href: string): boolean {
+	try {
+		const {hostname} = new URL(href);
+		return hostname === "workflowy.com" || hostname.endsWith(".workflowy.com");
+	} catch {
+		return false;
+	}
+}
+
+const SVG_PROPS = {
+	"aria-hidden": true,
+	fill: "none",
+	height: 16,
+	stroke: "currentColor",
+	strokeLinecap: "round",
+	strokeLinejoin: "round",
+	strokeWidth: 2,
+	viewBox: "0 0 24 24",
+	width: 16,
+} as const;
+
+/** The app's own favicon for Workflowy links, a generic external-link glyph for every other host. */
+function LinkIcon({href}: {href: string}) {
+	if (isWorkflowyLink(href)) {
+		return (
+			<img
+				alt=""
+				className="decisions-link-icon"
+				data-icon="workflowy"
+				height={16}
+				src="/favicon.png"
+				width={16}
+			/>
+		);
+	}
+	return (
+		<svg className="decisions-link-icon" data-icon="external" {...SVG_PROPS}>
+			<path d="M15 3h6v6" />
+			<path d="M10 14 21 3" />
+			<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+		</svg>
+	);
+}
+
+const THEME_CHOICES = [
+	{
+		theme: "default",
+		label: "Light",
+		icon: (
+			<svg {...SVG_PROPS}>
+				<circle cx="12" cy="12" r="4" />
+				<path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+			</svg>
+		),
+	},
+	{
+		theme: "dark",
+		label: "Dark",
+		icon: (
+			<svg {...SVG_PROPS}>
+				<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+			</svg>
+		),
+	},
+	{
+		theme: "system",
+		label: "System",
+		icon: (
+			<svg {...SVG_PROPS}>
+				<rect height="14" rx="2" width="20" x="2" y="3" />
+				<path d="M8 21h8M12 17v4" />
+			</svg>
+		),
+	},
+] as const;
+
+/**
+ * Light / Dark / System, through the app's own theme setting: the same storage key, the same
+ * `data-theme` on the root, and the store's live listener for OS changes while on System.
+ */
+function ThemeToggle() {
+	const theme = useOutlineStore((state) => state.theme);
+	const setTheme = useOutlineStore((state) => state.setTheme);
+	return (
+		<fieldset className="decisions-theme">
+			<legend className="decisions-sr-only">Theme</legend>
+			{THEME_CHOICES.map((choice) => (
+				<button
+					aria-label={`${choice.label} theme`}
+					aria-pressed={theme === choice.theme}
+					key={choice.theme}
+					onClick={() => {
+						setTheme(choice.theme);
+					}}
+					title={choice.label}
+					type="button"
+				>
+					{choice.icon}
+				</button>
+			))}
+		</fieldset>
 	);
 }

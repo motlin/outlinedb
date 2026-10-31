@@ -22,6 +22,9 @@
 	--accent: #f4f4f5;
 	--success: #15803d;
 	--destructive: #dc2626;
+	--count: #2563eb;
+	--duration: #b45309;
+	--warning: #c2410c;
 	--shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
 
 	background: var(--background);
@@ -57,6 +60,9 @@
 		--accent: #27272a;
 		--success: #4ade80;
 		--destructive: #f87171;
+		--count: #60a5fa;
+		--duration: #fbbf24;
+		--warning: #fb923c;
 		--shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 	}
 }
@@ -78,6 +84,9 @@
 	--accent: #27272a;
 	--success: #4ade80;
 	--destructive: #f87171;
+	--count: #60a5fa;
+	--duration: #fbbf24;
+	--warning: #fb923c;
 	--shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
@@ -98,7 +107,72 @@
 /* Header */
 
 .decisions-head {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
 	padding-block: 28px 16px;
+}
+
+.decisions-head-text {
+	min-width: 0;
+}
+
+/* Theme: a segmented control of three icon buttons */
+
+.decisions-sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+	border: 0;
+}
+
+.decisions-theme {
+	flex: none;
+	display: inline-flex;
+	gap: 2px;
+	min-width: 0;
+	margin: 0;
+	border: 0;
+	padding: 3px;
+	background: var(--muted);
+	border-radius: 8px;
+}
+
+.decisions-theme button {
+	display: inline-grid;
+	place-content: center;
+	width: 28px;
+	height: 26px;
+	padding: 0;
+	color: var(--muted-foreground);
+	background: transparent;
+	border: 0;
+	border-radius: 6px;
+	cursor: pointer;
+	transition:
+		background-color 120ms,
+		color 120ms;
+}
+
+.decisions-theme button:hover {
+	color: var(--foreground);
+}
+
+.decisions-theme button[aria-pressed="true"] {
+	color: var(--foreground);
+	background: var(--background);
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.decisions-theme button:focus-visible {
+	outline: 2px solid var(--ring);
+	outline-offset: 1px;
 }
 
 .decisions-head h1 {
@@ -161,61 +235,6 @@
 	border-radius: 999px;
 }
 
-/* Jump strip */
-
-.decisions-jump {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 6px;
-	margin: 0 0 16px;
-}
-
-.decisions-jump-label {
-	font-size: 12px;
-	font-weight: 500;
-	color: var(--muted-foreground);
-	margin-right: 2px;
-}
-
-.decisions-jump button {
-	min-width: 30px;
-	height: 26px;
-	padding: 0 9px;
-	font: inherit;
-	font-size: 12px;
-	font-weight: 500;
-	font-variant-numeric: tabular-nums;
-	color: var(--foreground);
-	background: var(--background);
-	border: 1px solid var(--border);
-	border-radius: 999px;
-	cursor: pointer;
-	transition:
-		background-color 120ms,
-		border-color 120ms;
-}
-
-.decisions-jump button:hover {
-	background: var(--accent);
-}
-
-.decisions-jump button[aria-current="true"] {
-	color: var(--primary-foreground);
-	background: var(--primary);
-	border-color: var(--primary);
-}
-
-.decisions-all-answered {
-	margin: 0 0 16px;
-	padding: 10px 14px;
-	border: 1px solid var(--border);
-	border-radius: 8px;
-	background: var(--muted);
-	color: var(--success);
-	font-weight: 500;
-}
-
 /* Card */
 
 .decisions-card {
@@ -271,6 +290,30 @@
 	overflow-wrap: anywhere;
 }
 
+/* Numbers in body lines: counts in blue, durations in amber, how-overdue in orange, dates in plain ink. */
+
+.decisions-num {
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+.decisions-num[data-kind="count"] {
+	color: var(--count);
+}
+
+.decisions-num[data-kind="duration"] {
+	color: var(--duration);
+}
+
+.decisions-num[data-kind="overdue"] {
+	color: var(--warning);
+}
+
+.decisions-num[data-kind="date"] {
+	color: var(--foreground);
+	font-weight: 500;
+}
+
 .decisions-links {
 	display: flex;
 	flex-wrap: wrap;
@@ -283,6 +326,7 @@
 .decisions-links a {
 	display: inline-flex;
 	align-items: center;
+	gap: 6px;
 	height: 28px;
 	padding: 0 10px;
 	font-size: 13px;
@@ -294,10 +338,15 @@
 	transition: background-color 120ms;
 }
 
-.decisions-links a::after {
-	content: "\2197";
-	margin-left: 4px;
+.decisions-link-icon {
+	flex: none;
+	width: 14px;
+	height: 14px;
 	color: var(--muted-foreground);
+}
+
+img.decisions-link-icon {
+	border-radius: 3px;
 }
 
 .decisions-links a:hover {
@@ -534,7 +583,6 @@
 
 .decisions-nav-button:focus-visible,
 .decisions-submit:focus-visible,
-.decisions-jump button:focus-visible,
 .decisions-links a:focus-visible {
 	outline: 2px solid var(--ring);
 	outline-offset: 2px;
@@ -572,6 +620,12 @@
 .decisions-submit-state {
 	flex: 1;
 	font-size: 13px;
+}
+
+.decisions-all-answered {
+	color: var(--success);
+	font-weight: 500;
+	margin-right: 10px;
 }
 
 .decisions-last-save {

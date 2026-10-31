@@ -14,6 +14,7 @@ vi.mock("../src/client/loading-screen.js", () => ({hideLoadingScreenOnce}));
 const {act, createElement} = await import("react");
 const {createRoot} = await import("react-dom/client");
 const {DecisionPageView} = await import("../src/client/components/decisions-view.js");
+const {useOutlineStore} = await import("../src/client/stores/outline.js");
 
 const PAGE: DecisionPage = {
 	slug: "meetings",
@@ -28,7 +29,10 @@ const PAGE: DecisionPage = {
 					id: "a-1",
 					title: "Send the deck",
 					body: ["Alice asked for the deck", "<b>not html</b>"],
-					links: [{label: "Meeting", href: "https://example.com/meeting"}],
+					links: [
+						{label: "Meeting", href: "https://example.com/meeting"},
+						{label: "Task", href: "https://workflowy.com/#/abc123"},
+					],
 					options: [
 						{value: "inbox", label: "Add to inbox", description: "File it"},
 						{value: "skip", label: "Skip"},
@@ -53,7 +57,7 @@ const PAGE: DecisionPage = {
 				{
 					id: "b-1",
 					title: "Review the PR",
-					body: ["Bob asked for a review"],
+					body: ["Bob asked for a review", "overdue 7d, skipped 1 runs since 2026-10-24"],
 					links: [],
 					options: [
 						{value: "inbox", label: "Add to inbox"},
@@ -101,12 +105,15 @@ beforeAll(() => {
 afterEach(async () => {
 	vi.useRealTimers();
 	vi.unstubAllGlobals();
+	vi.restoreAllMocks();
 	await act(async () => {
 		root?.unmount();
 		await Promise.resolve();
 	});
 	host?.remove();
 	calls = [];
+	useOutlineStore.getState().setTheme("system");
+	localStorage.clear();
 });
 
 /** Stub fetch: GET answers the page, writes answer `write(call)` (default: echo a saved answer). */
@@ -179,6 +186,20 @@ function button(label: string): HTMLButtonElement {
 	return found;
 }
 
+function themeButtons(): HTMLButtonElement[] {
+	return [...(host?.querySelectorAll<HTMLButtonElement>(".decisions-theme button") ?? [])];
+}
+
+function themeButton(label: string): HTMLButtonElement | undefined {
+	return themeButtons().find((element) => element.getAttribute("aria-label") === label);
+}
+
+function pressedThemes(): (string | null)[] {
+	return themeButtons()
+		.filter((element) => element.getAttribute("aria-pressed") === "true")
+		.map((element) => element.getAttribute("aria-label"));
+}
+
 async function click(element: HTMLElement | null | undefined): Promise<void> {
 	if (!element) {
 		throw new Error("nothing to click");
@@ -248,7 +269,7 @@ describe("DecisionPageView", () => {
 			headingLink: host?.querySelector(".decisions-group-heading a")?.getAttribute("href"),
 			cardTitle: text("h2.decisions-card-title", first),
 			headingInCard: text(".decisions-group-heading", first),
-			legends: host?.querySelectorAll("legend").length,
+			legends: first.querySelectorAll("legend").length,
 			radioGroupLabel: document.getElementById(
 				first.querySelector("[role=radiogroup]")?.getAttribute("aria-labelledby") ?? "",
 			)?.textContent,
@@ -262,6 +283,9 @@ describe("DecisionPageView", () => {
 				link.getAttribute("href"),
 				link.getAttribute("target"),
 				link.getAttribute("rel"),
+				link.getAttribute("title"),
+				link.querySelector(".decisions-link-icon")?.getAttribute("data-icon"),
+				link.querySelector("img.decisions-link-icon")?.getAttribute("src"),
 			]),
 			radios: radios("a-1"),
 			optionLabels: text(".decisions-option-label", first),
@@ -270,7 +294,7 @@ describe("DecisionPageView", () => {
 			suggested: text(".decisions-suggested", first),
 			position: text(".decisions-position"),
 			progress: text(".decisions-progress"),
-			jump: text(".decisions-jump button"),
+			jumpStrips: host?.querySelectorAll(".decisions-jump").length,
 			allAnswered: text(".decisions-all-answered"),
 			calls,
 		}).toStrictEqual({
@@ -286,7 +310,26 @@ describe("DecisionPageView", () => {
 			bar: ["1", "3", "Answered"],
 			body: ["Alice asked for the deck", "<b>not html</b>"],
 			bodyHtmlElements: 0,
-			links: [["Meeting", "https://example.com/meeting", "_blank", "noopener noreferrer"]],
+			links: [
+				[
+					"Meeting",
+					"https://example.com/meeting",
+					"_blank",
+					"noopener noreferrer",
+					"Meeting",
+					"external",
+					undefined,
+				],
+				[
+					"Task",
+					"https://workflowy.com/#/abc123",
+					"_blank",
+					"noopener noreferrer",
+					"Task",
+					"workflowy",
+					"/favicon.png",
+				],
+			],
 			radios: [
 				["inbox", false],
 				["skip", false],
@@ -297,7 +340,7 @@ describe("DecisionPageView", () => {
 			suggested: ["suggested"],
 			position: ["Card 1 of 3"],
 			progress: ["1 of 3 answered"],
-			jump: ["1", "3"],
+			jumpStrips: 0,
 			allAnswered: [],
 			calls: [{method: "GET", url: "/api/v1/decisions/meetings", body: undefined}],
 		});
@@ -311,13 +354,21 @@ describe("DecisionPageView", () => {
 			heading: text(".decisions-group-heading"),
 			headingLinks: host?.querySelectorAll(".decisions-group-heading a").length,
 			position: text(".decisions-position"),
-			jump: text(".decisions-jump button"),
+			body: text(".decisions-body-line"),
+			numbers: [...(host?.querySelectorAll<HTMLElement>(".decisions-body-line .decisions-num") ?? [])].map(
+				(element) => [element.textContent, element.dataset.kind],
+			),
 		}).toStrictEqual({
 			cards: ["b-1"],
 			heading: ["Standup - Tue Oct 27"],
 			headingLinks: 0,
 			position: ["Card 3 of 3"],
-			jump: ["3"],
+			body: ["Bob asked for a review", "overdue 7d, skipped 1 runs since 2026-10-24"],
+			numbers: [
+				["7d", "overdue"],
+				["1", "count"],
+				["2026-10-24", "date"],
+			],
 		});
 	});
 
@@ -330,14 +381,12 @@ describe("DecisionPageView", () => {
 			cards: shownCards(),
 			position: text(".decisions-position"),
 			progress: text(".decisions-progress"),
-			jump: text(".decisions-jump button"),
 			lastSave: text(".decisions-last-save"),
 		}).toStrictEqual({
 			calls: [{method: "PUT", url: "/api/v1/decisions/meetings/a-1", body: {choice: "inbox", note: ""}}],
 			cards: ["b-1"],
 			position: ["Card 3 of 3"],
 			progress: ["2 of 3 answered"],
-			jump: ["3"],
 			lastSave: ["Saved card 1"],
 		});
 	});
@@ -349,8 +398,7 @@ describe("DecisionPageView", () => {
 		await click(card("b-1").querySelector<HTMLInputElement>("input[value=skip]"));
 		const afterLast = {
 			cards: shownCards(),
-			allAnswered: text(".decisions-all-answered"),
-			jump: text(".decisions-jump button"),
+			allAnswered: text(".decisions-footer .decisions-all-answered"),
 		};
 		await click(button("Back"));
 		await click(button("Back"));
@@ -360,7 +408,7 @@ describe("DecisionPageView", () => {
 			radios: radios("a-1"),
 			position: text(".decisions-position"),
 		}).toStrictEqual({
-			afterLast: {cards: ["b-1"], allAnswered: ["All 3 answered. Submit when ready."], jump: []},
+			afterLast: {cards: ["b-1"], allAnswered: ["All 3 answered. Submit when ready."]},
 			cards: ["a-1"],
 			radios: [
 				["inbox", true],
@@ -387,13 +435,81 @@ describe("DecisionPageView", () => {
 		});
 	});
 
-	it("jumps straight to an unanswered card", async () => {
+	it("offers a Light / Dark / System theme toggle that defaults to System and follows the OS", async () => {
 		stubFetch();
 		await mount();
-		await click([...(host?.querySelectorAll<HTMLButtonElement>(".decisions-jump button") ?? [])][1]);
-		expect({cards: shownCards(), current: text(".decisions-jump [aria-current=true]")}).toStrictEqual({
-			cards: ["b-1"],
-			current: ["3"],
+		expect({
+			labels: themeButtons().map((element) => [element.getAttribute("aria-label"), element.title]),
+			pressed: pressedThemes(),
+			icons: themeButtons().map((element) => element.querySelectorAll("svg").length),
+			theme: document.documentElement.dataset.theme,
+			stored: localStorage.getItem("workflowy-theme"),
+		}).toStrictEqual({
+			labels: [
+				["Light theme", "Light"],
+				["Dark theme", "Dark"],
+				["System theme", "System"],
+			],
+			pressed: ["System theme"],
+			icons: [1, 1, 1],
+			theme: globalThis.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light",
+			stored: null,
+		});
+	});
+
+	it("forces dark and light and remembers the choice in the app's theme key", async () => {
+		stubFetch();
+		await mount();
+		await click(themeButton("Dark theme"));
+		const dark = {
+			pressed: pressedThemes(),
+			theme: document.documentElement.dataset.theme,
+			stored: localStorage.getItem("workflowy-theme"),
+		};
+		await click(themeButton("Light theme"));
+		expect({
+			dark,
+			light: {
+				pressed: pressedThemes(),
+				theme: document.documentElement.dataset.theme,
+				stored: localStorage.getItem("workflowy-theme"),
+			},
+		}).toStrictEqual({
+			dark: {pressed: ["Dark theme"], theme: "dark", stored: "dark"},
+			light: {pressed: ["Light theme"], theme: "light", stored: "default"},
+		});
+	});
+
+	it("still switches the theme when storage is blocked", async () => {
+		stubFetch();
+		await mount();
+		const blockedWrites = vi.spyOn(localStorage, "setItem").mockImplementation(() => {
+			throw new DOMException("blocked", "SecurityError");
+		});
+		await click(themeButton("Dark theme"));
+		// restoreAllMocks does not reach happy-dom's localStorage proxy.
+		blockedWrites.mockRestore();
+		expect({pressed: pressedThemes(), theme: document.documentElement.dataset.theme}).toStrictEqual({
+			pressed: ["Dark theme"],
+			theme: "dark",
+		});
+	});
+
+	it("restores the remembered theme on reload, and falls back to System when storage is unreadable", async () => {
+		localStorage.setItem("workflowy-theme", "dark");
+		vi.resetModules();
+		const remembered = (await import("../src/client/stores/outline.js")).useOutlineStore.getState().theme;
+		const rememberedDataTheme = document.documentElement.dataset.theme;
+		const blockedReads = vi.spyOn(localStorage, "getItem").mockImplementation(() => {
+			throw new DOMException("blocked", "SecurityError");
+		});
+		vi.resetModules();
+		const blocked = (await import("../src/client/stores/outline.js")).useOutlineStore.getState().theme;
+		blockedReads.mockRestore();
+		expect({remembered, rememberedDataTheme, blocked}).toStrictEqual({
+			remembered: "dark",
+			rememberedDataTheme: "dark",
+			blocked: "system",
 		});
 	});
 

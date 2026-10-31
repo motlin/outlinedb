@@ -134,8 +134,13 @@ function systemPrefersDark(): boolean {
 	return globalThis.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
+/** The theme saved in this browser, or `system` when storage is blocked. */
 function getInitialTheme(): Theme {
-	return storedTheme(localStorage.getItem(THEME_STORAGE_KEY));
+	try {
+		return storedTheme(localStorage.getItem(THEME_STORAGE_KEY));
+	} catch {
+		return "system";
+	}
 }
 
 function writeCompletedMode(showCompleted: boolean): void {
@@ -1955,7 +1960,11 @@ export const useOutlineStore = create<OutlineStore>((set, get) => ({
 	},
 
 	setTheme(theme) {
-		localStorage.setItem(THEME_STORAGE_KEY, theme);
+		try {
+			localStorage.setItem(THEME_STORAGE_KEY, theme);
+		} catch {
+			// Storage can be blocked; the theme still applies for this page load.
+		}
 		applyTheme(theme, systemPrefersDark());
 		set({theme});
 	},
