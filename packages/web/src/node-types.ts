@@ -37,6 +37,7 @@ import type {
 	UpdateNodeResponseSchema,
 } from "./server/ops/schemas.js";
 import type {AccountResponseSchema} from "./server/ops/account.js";
+import type {AccountAiResponseSchema} from "./server/ops/account-ai.js";
 import type {
 	AppliedLayoutSchema,
 	CalendarDayResponseSchema,
@@ -99,6 +100,7 @@ export type AppliedCalendarLayout = z.output<typeof AppliedLayoutSchema>;
 /** What the Calendar Layout dialog opens with: `GET /api/v1/calendar/layout`. */
 export type CalendarLayout = z.output<typeof CalendarLayoutSchema>;
 export type AccountResponse = z.output<typeof AccountResponseSchema>;
+export type AccountAiResponse = z.output<typeof AccountAiResponseSchema>;
 export type CustomTreeResponse = z.output<typeof CustomTreeResponseSchema>;
 export type FeaturesResponse = z.output<typeof FeaturesResponseSchema>;
 export type FeatureSetResponse = z.output<typeof FeatureSetResponseSchema>;

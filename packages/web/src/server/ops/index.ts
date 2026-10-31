@@ -1,5 +1,6 @@
 import type {z} from "zod";
 import {accountGet} from "./account.js";
+import {accountAi} from "./account-ai.js";
 import {calendarOps} from "./calendar.js";
 import {changesList} from "./changes.js";
 import {customTreeGet} from "./custom-tree.js";
@@ -44,6 +45,7 @@ import type {Json, OpDefinition, OpResult} from "./define.js";
 /** The operation registry; routers move into it one at a time. */
 export const Ops = {
 	"account.get": accountGet,
+	"account.ai": accountAi,
 	...calendarOps,
 	"changes.list": changesList,
 	"customTree.get": customTreeGet,

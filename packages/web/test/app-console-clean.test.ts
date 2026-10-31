@@ -50,6 +50,14 @@ const responses: Partial<Record<string, () => Response>> = {
 			showKeyboardShortcuts: false,
 		}),
 	"/api/v1/account": () => Response.json({userId: 7, joinedAt: "2020-01-02T00:00:00.000Z", fullName: "Alice Smith"}),
+	"/api/v1/account/ai": () =>
+		Response.json({
+			assistants: [],
+			defaultAgentId: null,
+			promptButtons: {draft: [], reply: []},
+			contextLimit: 500,
+			mailboxId: null,
+		}),
 	"/api/v1/tags": () => Response.json({colors: {}}),
 	"/api/v1/features": () => Response.json({visible: [], enabled: {}, available: false}),
 	"/api/v1/custom-tree": () => Response.json({rootId: null, rootChildren: [], watchedIds: [], sections: {}}),

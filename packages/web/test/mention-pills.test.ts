@@ -41,6 +41,16 @@ describe("resolveMentionName", () => {
 			"Unknown",
 		]);
 	});
+
+	it("names an AI assistant's system user id from settings ai.assistants, like upstream's participant names", () => {
+		const account = {...ACCOUNT, assistantNames: {"-5": "Assistant A", "-6": "Assistant B"}};
+		expect(["-5", "-6", "-7", "-10"].map((id) => resolveMentionName(id, account))).toStrictEqual([
+			"Assistant A",
+			"Assistant B",
+			"Unknown",
+			"AI",
+		]);
+	});
 });
 
 describe("renderMentionPills", () => {

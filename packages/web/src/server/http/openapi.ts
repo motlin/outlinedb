@@ -44,6 +44,7 @@ const ERROR_RESPONSE = {
 /** Every route `createHttpApp` registers, keyed by method and Hono path; the spec test fails when a route is missing here. */
 const BINDINGS: Record<string, Binding> = {
 	"GET /api/v1/account": {op: "account.get"},
+	"GET /api/v1/account/ai": {op: "account.ai"},
 	"GET /api/v1/features": {op: "features.get"},
 	"POST /api/v1/features/:codename": {op: "features.set"},
 	"GET /api/v1/custom-tree": {op: "customTree.get"},

@@ -1,6 +1,12 @@
 // Stored `<mention id by ts> </mention>` markup as upstream's atomic monolith pill, and back.
 
-export type MentionAccount = {userId: number; fullName: string | null; joinedAt?: string} | null;
+/** `assistantNames`: settings `ai.assistants` names by system user id, which upstream merges into its participant names. */
+export type MentionAccount = {
+	userId: number;
+	fullName: string | null;
+	joinedAt?: string;
+	assistantNames?: Record<string, string>;
+} | null;
 
 const BOM = "﻿";
 export const MENTION_PATTERN = /<mention\b([^>]*)>[\s\S]*?<\/mention>/giu;
@@ -32,7 +38,12 @@ export function resolveMentionName(id: string, account: MentionAccount): string 
 			return "AI";
 		}
 		default: {
-			return account !== null && id === String(account.userId) ? (account.fullName ?? "Unknown") : "Unknown";
+			if (account === null) {
+				return "Unknown";
+			}
+			return id === String(account.userId)
+				? (account.fullName ?? "Unknown")
+				: (account.assistantNames?.[id] ?? "Unknown");
 		}
 	}
 }
