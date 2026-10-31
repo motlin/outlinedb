@@ -84,7 +84,17 @@ describe("GearMenu header items", () => {
 		});
 	});
 
-	it("lays out upstream's rows, hiding those with no local meaning (What's New, Zapier, Log out, desktop rows)", () => {
+	it("dots the Help row with upstream's blue dot only while What's New has unread entries", () => {
+		const dot =
+			'<span class="relative flex justify-between items-center"><div style="left:-12px" class="absolute top-1/2 w-[7px] h-[7px] rounded-[7px] bg-tint -translate-y-1/2"></div>';
+		const helpRow = (html: string) => html.split("<a ").find((row) => row.includes("Help<")) ?? "";
+		expect({
+			unread: helpRow(renderMainMenuRows(useMainMenuRows, [], [], true)).includes(dot),
+			read: renderMainMenuRows(useMainMenuRows, [], [], false).includes("w-[7px]"),
+		}).toStrictEqual({unread: true, read: false});
+	});
+
+	it("lays out upstream's rows, hiding those with no local meaning (Zapier, Log out, desktop rows)", () => {
 		expect(labels(render([]))).toStrictEqual([
 			"Undo",
 			"Redo",

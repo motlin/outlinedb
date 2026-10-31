@@ -1532,6 +1532,12 @@ export function useCommandRegistry(): CommandRegistry {
 		),
 		star_current_item: starCurrentItemCommand(toggleStar, () => activeCommittedQuery(useOutlineStore.getState())),
 		show_switcher: {execute: showSwitcher},
+		/** Upstream "Changelog: Show": the What's New dialog. */
+		show_changelog: {
+			execute() {
+				useOutlineStore.getState().openChangelog();
+			},
+		},
 		_select_next_in_switcher: switcherStepCommand("next", isJumpMenuOpen, openJumpMenu),
 		_select_prev_in_switcher: switcherStepCommand("prev", isJumpMenuOpen, openJumpMenu),
 		show_export: {

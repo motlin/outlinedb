@@ -76,15 +76,21 @@ const PreferencesPatchSchema = z
 		latestColor: LatestColorSchema.nullable(),
 		/** When the account's change tracking started (upstream's `searchForChangesAfter`), as an ISO date. */
 		searchForChangesAfter: z.iso.datetime().nullable(),
+		/**
+		 * Upstream's `changelog.read.<id>`: which What's New entries were read. A patch merges its flags into the
+		 * stored ones (entries it leaves out are kept); the answer is every stored flag, or null when none were ever set.
+		 */
+		changelogRead: z.record(z.string(), z.boolean()),
 	})
 	.partial()
 	.strict();
 
 /** The full preferences: every patch field present, with `theme` and `font` null when unset. */
 export const PreferencesSchema = z.strictObject({
-	...PreferencesPatchSchema.required().omit({theme: true, font: true}).shape,
+	...PreferencesPatchSchema.required().omit({theme: true, font: true, changelogRead: true}).shape,
 	theme: z.string().nullable(),
 	font: z.string().nullable(),
+	changelogRead: z.record(z.string(), z.boolean()).nullable(),
 	/** The signed-in account's name and email (read-only), null unless both are known. */
 	account: z.strictObject({username: z.string(), email: z.string()}).nullable(),
 	/** Upstream's `settings.mfa` (read-only; turning it on or off happens on workflowy.com), null when the account has none. */
@@ -122,6 +128,19 @@ const PATHS: Record<(typeof KEYS)[number], string[]> = {
 
 /** Upstream's `WF.CoreKv` `latestColor`, kept whole in root metadata. */
 const LATEST_COLOR_PATH = ["latestColor"];
+
+/** Upstream's `WF.CoreKv` `changelog.read`: one boolean per What's New entry id. */
+const CHANGELOG_READ_PATH = ["changelog", "read"];
+
+/** The stored read flags, keeping only booleans, or null when `changelog.read` is not an object. */
+function changelogReadFrom(raw: unknown): Record<string, boolean> | null {
+	if (typeof raw !== "object" || raw === null) {
+		return null;
+	}
+	return Object.fromEntries(
+		Object.entries(raw).filter((entry): entry is [string, boolean] => typeof entry[1] === "boolean"),
+	);
+}
 
 /** Upstream's `WF.CoreKv` `searchForChangesAfter`: a client timestamp (whole seconds since the join date). */
 const SEARCH_FOR_CHANGES_AFTER_PATH = ["searchForChangesAfter"];
@@ -189,20 +208,29 @@ function mfaFrom(raw: unknown): {enabled: boolean} | null {
 
 /** Read the preferences, treating missing or mistyped values as null (false for the flag). */
 async function readPreferences(adapter: WorkflowyInternalAdapter): Promise<Preferences> {
-	const [rootValues, latestColor, searchForChangesAfter, flagValues, theme, font, username, email, mfa] =
-		await Promise.all([
-			Promise.all(KEYS.map(async (key) => adapter.getRootMeta(PATHS[key]))),
-			adapter.getRootMeta(LATEST_COLOR_PATH),
-			adapter
-				.getRootMeta(SEARCH_FOR_CHANGES_AFTER_PATH)
-				.then(async (raw) => searchForChangesAfterFrom(adapter, raw)),
-			Promise.all(FLAG_KEYS.map(async (key) => adapter.getSetting(SETTINGS[key]))),
-			adapter.getSetting(STRING_SETTINGS.theme),
-			adapter.getSetting(STRING_SETTINGS.font),
-			adapter.getSetting("username"),
-			adapter.getSetting("email"),
-			adapter.getSetting("mfa"),
-		]);
+	const [
+		rootValues,
+		latestColor,
+		searchForChangesAfter,
+		flagValues,
+		theme,
+		font,
+		username,
+		email,
+		mfa,
+		changelogRead,
+	] = await Promise.all([
+		Promise.all(KEYS.map(async (key) => adapter.getRootMeta(PATHS[key]))),
+		adapter.getRootMeta(LATEST_COLOR_PATH),
+		adapter.getRootMeta(SEARCH_FOR_CHANGES_AFTER_PATH).then(async (raw) => searchForChangesAfterFrom(adapter, raw)),
+		Promise.all(FLAG_KEYS.map(async (key) => adapter.getSetting(SETTINGS[key]))),
+		adapter.getSetting(STRING_SETTINGS.theme),
+		adapter.getSetting(STRING_SETTINGS.font),
+		adapter.getSetting("username"),
+		adapter.getSetting("email"),
+		adapter.getSetting("mfa"),
+		adapter.getRootMeta(CHANGELOG_READ_PATH),
+	]);
 	const root = Object.fromEntries(KEYS.map((key, index) => [key, rootValues[index]]));
 	const flag = (key: (typeof FLAG_KEYS)[number]): boolean => asFlag(flagValues[FLAG_KEYS.indexOf(key)]);
 	const name = asString(username);
@@ -235,6 +263,7 @@ async function readPreferences(adapter: WorkflowyInternalAdapter): Promise<Prefe
 		font: asString(font),
 		account: name !== null && address !== null ? {username: name, email: address} : null,
 		mfa: mfaFrom(mfa),
+		changelogRead: changelogReadFrom(changelogRead),
 	};
 }
 
@@ -281,6 +310,14 @@ export const preferencesPatch = defineOp({
 						? undefined
 						: await searchForChangesAfterTo(adapter, patch.searchForChangesAfter),
 			});
+		}
+		if (patch.changelogRead !== undefined) {
+			const stored = changelogReadFrom(await adapter.getRootMeta(CHANGELOG_READ_PATH)) ?? {};
+			for (const [entry, read] of Object.entries(patch.changelogRead)) {
+				if (stored[entry] !== read) {
+					changes.push({path: [...CHANGELOG_READ_PATH, entry], value: read});
+				}
+			}
 		}
 		if (changes.length > 0) {
 			await adapter.setRootMetaValues(changes);

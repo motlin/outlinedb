@@ -17,6 +17,7 @@ import {ErrorBoundary} from "./components/error-boundary.js";
 import {ErrorNotifications} from "./components/error-notification.js";
 import {ExportDialog} from "./components/export-dialog.js";
 import {MirrorsDialogHost} from "./components/mirrors-dialog.js";
+import {ChangelogHost} from "./components/changelog-dialog.js";
 import {AlertDialog} from "./components/alert-dialog.js";
 import {setTableCellProbe} from "./item-type-select.js";
 import {cachedTableRole} from "./table-cache.js";
@@ -332,6 +333,7 @@ export const OutlineView = memo(function OutlineView() {
 			<SelectionMenu />
 			<ExportDialog />
 			<MirrorsDialogHost />
+			<ChangelogHost />
 			<Settings />
 			<PresentationMode />
 			<ErrorNotifications />

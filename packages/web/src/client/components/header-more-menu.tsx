@@ -3,6 +3,7 @@ import {useEffect, useRef, useState} from "react";
 import {createPortal} from "react-dom";
 import {useNavigate} from "react-router-dom";
 import {useExpandAll} from "../hooks/use-nodes.js";
+import {useChangelogUnread} from "../hooks/use-preferences.js";
 import {movePane} from "../navigation.js";
 import {cachedResolvedId} from "../node-cache.js";
 import {useOutlineStore} from "../stores/outline.js";
@@ -22,8 +23,17 @@ interface HelpAnchor {
 }
 
 /** The Help submenu: an empty-button ButtonMenu focused on mount, so it opens at once and closes on blur. */
-function HelpSubmenu({anchor, onClose}: {anchor: HelpAnchor; onClose: () => void}) {
-	const rows = useHelpMenuRows();
+function HelpSubmenu({
+	anchor,
+	changelogUnread,
+	onClose,
+}: {
+	anchor: HelpAnchor;
+	changelogUnread: boolean;
+	onClose: () => void;
+}) {
+	const openChangelog = useOutlineStore((state) => state.openChangelog);
+	const rows = useHelpMenuRows({changelogUnread, onOpenChangelog: openChangelog});
 	const menu = useRef<ButtonMenuHandle>(null);
 	useEffect(() => {
 		menu.current?.focus();
@@ -69,8 +79,9 @@ interface HeaderMoreMenuProps {
 }
 
 /**
- * The header kebab (upstream's gearMenu wrapper, no tooltip; blue dot omitted with no unread rows locally). Its
- * Expand/Collapse all act on the zoomed item's whole subtree (every top-level item at Home).
+ * The header kebab (upstream's gearMenu wrapper, no tooltip). While What's New has unread entries the Help row and the
+ * kebab carry upstream's blue dot; with panes open only the last pane's kebab shows it. Its Expand/Collapse all act on
+ * the zoomed item's whole subtree (every top-level item at Home).
  */
 export function HeaderMoreMenu({
 	zoomedId,
@@ -88,7 +99,11 @@ export function HeaderMoreMenu({
 	const expandAll = useExpandAll();
 	const actions = useHeaderActions(zoomedId, query);
 	const [helpAnchor, setHelpAnchor] = useState<HelpAnchor | null>(null);
+	const changelogUnread = useChangelogUnread();
+	// Upstream `showBlueDot: !WF.Panes.any() || WF.Panes.panes().at(-1)?.id === pane?.id`.
+	const showBlueDot = panes.length === 0 || panes.at(-1)?.id === paneId;
 	const rows = useMainMenuRows({
+		changelogUnread,
 		headerItems: compact ? compactHeaderItems(actions, zoomedId, onToday, query) : [],
 		paneItems: movePaneItems({panes}, paneId, (id, index) => {
 			movePane(navigate, id, index, (locationId) => cachedResolvedId(queryClient, locationId) ?? locationId);
@@ -112,6 +127,9 @@ export function HeaderMoreMenu({
 				button={
 					<IconButton>
 						<FaIcon icon="fal:ellipsis-vertical" size="lg" />
+						{showBlueDot && changelogUnread && (
+							<div className="w-[7px] h-[7px] bg-tint rounded-circle absolute top-xs right-xs" />
+						)}
 					</IconButton>
 				}
 				className="gearMenu"
@@ -124,6 +142,7 @@ export function HeaderMoreMenu({
 			{helpAnchor && (
 				<HelpSubmenu
 					anchor={helpAnchor}
+					changelogUnread={changelogUnread}
 					onClose={() => {
 						setHelpAnchor(null);
 					}}

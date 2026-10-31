@@ -52,9 +52,12 @@ vi.mock("../src/client/hooks/use-starred.js", () => ({
 }));
 /** The account's calendar.tooltip_seen as the Today controls read it. */
 const tooltipSeen: {value: boolean | null} = {value: true};
+/** Whether What's New has unread entries, which dots the kebab. */
+const changelogUnread = {value: false};
 vi.mock("../src/client/hooks/use-preferences.js", async (importOriginal) => ({
 	...(await importOriginal<typeof UsePreferencesModule>()),
 	useCalendarTooltipSeen: () => tooltipSeen.value,
+	useChangelogUnread: () => changelogUnread.value,
 }));
 
 vi.mock("react-router-dom", () => ({useNavigate: () => () => {}}));
@@ -363,7 +366,35 @@ describe("TopBar right cluster", () => {
 		expect(clusterSequence(renderCluster(null, true, []))).not.toContain("present_it");
 	});
 
-	it("renders the kebab wrapper without a tooltip or blue dot", () => {
+	it("adds upstream's blue dot inside the kebab button while What's New has unread entries, unless a pane is open", () => {
+		const kebabWith = (unread: boolean, panes: typeof storeState.panes) => {
+			changelogUnread.value = unread;
+			storeState.panes = panes;
+			try {
+				const cluster = clusterHtml(renderCluster("alice", true, [])).replaceAll(/ d="[^"]*"/gu, "");
+				return cluster.slice(
+					cluster.indexOf('<div tabindex="0" class="relative outline-none menu gearMenu">'),
+					cluster.indexOf('<div class="self-stretch border-l'),
+				);
+			} finally {
+				changelogUnread.value = false;
+				storeState.panes = [];
+			}
+		};
+		expect({
+			unread: kebabWith(true, []),
+			withPane: kebabWith(true, [{id: "p1", zoomedId: null}]).includes("w-[7px]"),
+		}).toStrictEqual({
+			unread:
+				'<div tabindex="0" class="relative outline-none menu gearMenu"><div><div role="button" tabindex="0" class="iconButton lg shape-circle">' +
+				'<svg aria-hidden="true" focusable="false" data-prefix="fal" data-icon="ellipsis-vertical" class="svg-inline--fa fa-ellipsis-vertical fa-lg " role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 512"><path fill="currentColor"></path></svg>' +
+				'<div class="w-[7px] h-[7px] bg-tint rounded-circle absolute top-xs right-xs"></div>' +
+				"</div></div></div>",
+			withPane: false,
+		});
+	});
+
+	it("renders the kebab wrapper without a tooltip or blue dot when every What's New entry is read", () => {
 		const cluster = clusterHtml(renderCluster("alice", true, []));
 		const kebab = cluster.slice(
 			cluster.indexOf('<div tabindex="0" class="relative outline-none menu gearMenu">'),

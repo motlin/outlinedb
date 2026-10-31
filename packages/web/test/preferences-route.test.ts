@@ -105,6 +105,7 @@ const EMPTY = {
 	searchForChangesAfter: null,
 	account: null,
 	mfa: null,
+	changelogRead: null,
 };
 
 describe("GET /api/v1/preferences", () => {
@@ -275,6 +276,18 @@ describe("GET /api/v1/preferences", () => {
 		});
 	});
 
+	it("answers changelog.read as changelogRead, keeping only boolean flags, and null when the account has none", async () => {
+		const read = setup({changelog: {read: {may27_2025: true, june11_2025: false, bogus: "yes"}, liked: {x: true}}});
+		const absent = setup({});
+
+		const reads = await Promise.all([read, absent].map(async ({request}) => request("GET", "/preferences")));
+
+		expect(reads).toStrictEqual([
+			{status: 200, body: {...EMPTY, changelogRead: {may27_2025: true, june11_2025: false}}},
+			{status: 200, body: EMPTY},
+		]);
+	});
+
 	it("maps upstream's latestColor attribute and value to a color choice", async () => {
 		const highlight = setup({latestColor: {attribute: 12, value: 2}});
 		const text = setup({latestColor: {attribute: 11, value: 8}});
@@ -410,6 +423,47 @@ describe("PATCH /api/v1/preferences", () => {
 					],
 				],
 			],
+		});
+	});
+
+	it("writes each changed changelogRead flag at changelog.read.<id>, keeping the other entries and changelog keys", async () => {
+		const meta: Record<string, unknown> = {changelog: {read: {may27_2025: true}, liked: {may27_2025: true}}};
+		const {adapter, request} = setup(meta);
+
+		const response = await request("PATCH", "/preferences", {
+			changelogRead: {may27_2025: true, june11_2025: true, june17_2025: true},
+		});
+
+		expect({response, writes: adapter.setRootMetaValues.mock.calls, meta}).toStrictEqual({
+			response: {
+				status: 200,
+				body: {...EMPTY, changelogRead: {may27_2025: true, june11_2025: true, june17_2025: true}},
+			},
+			writes: [
+				[
+					[
+						{path: ["changelog", "read", "june11_2025"], value: true},
+						{path: ["changelog", "read", "june17_2025"], value: true},
+					],
+				],
+			],
+			meta: {
+				changelog: {
+					read: {may27_2025: true, june11_2025: true, june17_2025: true},
+					liked: {may27_2025: true},
+				},
+			},
+		});
+	});
+
+	it("writes nothing when every changelogRead flag is already stored", async () => {
+		const {adapter, request} = setup({changelog: {read: {may27_2025: true}}});
+
+		const response = await request("PATCH", "/preferences", {changelogRead: {may27_2025: true}});
+
+		expect({response, writes: adapter.setRootMetaValues.mock.calls}).toStrictEqual({
+			response: {status: 200, body: {...EMPTY, changelogRead: {may27_2025: true}}},
+			writes: [],
 		});
 	});
 

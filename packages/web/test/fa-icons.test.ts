@@ -76,6 +76,7 @@ describe("FA_ICONS", () => {
 			"fal:xmark",
 			"fas:triangle-exclamation",
 			"fas:circle-exclamation",
+			"fas:circle",
 			"fas:circle-check",
 			"fas:circle-xmark",
 			"fal:h1",

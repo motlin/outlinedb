@@ -96,6 +96,7 @@ const SHELL = {
 	LinkPopupHost: 1,
 	LocationPickerHost: 1,
 	MirrorsDialogHost: 1,
+	ChangelogHost: 1,
 	ExportDialog: 1,
 	SelectionMenu: 1,
 	Settings: 1,

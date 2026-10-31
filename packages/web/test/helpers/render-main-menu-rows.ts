@@ -12,11 +12,13 @@ export function renderMainMenuRows(
 	useMainMenuRows: UseMainMenuRows,
 	headerItems: GearMenuHeaderItem[] = [],
 	paneItems: GearMenuHeaderItem[] = [],
+	changelogUnread = false,
 ): string {
 	function Rows() {
 		const rows = useMainMenuRows({
 			headerItems,
 			paneItems,
+			changelogUnread,
 			onOpenSettings: () => {},
 			onExpandAll: () => {},
 			onCollapseAll: () => {},

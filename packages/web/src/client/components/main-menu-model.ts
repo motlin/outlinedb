@@ -62,6 +62,8 @@ export interface MenuRowEntry {
 	disabled?: boolean | undefined;
 	hidden?: boolean | undefined;
 	extra?: "chevron-down" | undefined;
+	/** Upstream's blue dot: Help and What's New while a changelog entry is unread. */
+	blueDot?: boolean | undefined;
 	onSelect?: (() => unknown) | undefined;
 }
 
@@ -114,6 +116,8 @@ export interface MainMenuActions {
 export interface MainMenuContext {
 	canUndo: boolean;
 	canRedo: boolean;
+	/** What's New has unread entries, which dots the Help row (upstream `blueDotFrom: "changelog.show"`). */
+	changelogUnread?: boolean;
 	paneRows: readonly GearMenuHeaderItem[];
 	actions: MainMenuActions;
 }
@@ -138,9 +142,15 @@ const BLOG_URL = "https://blog.workflowy.com/";
 
 /**
  * The main menu's entries by upstream key. Rows with no local meaning are hidden the way upstream hides them:
- * desktop rows, Faculty dashboard, Log out (no account) and Zapier (deliberately omitted, like What's New).
+ * desktop rows, Faculty dashboard, Log out (no account) and Zapier (deliberately omitted).
  */
-export function mainMenuEntries({canUndo, canRedo, paneRows, actions}: MainMenuContext): Record<string, MainMenuEntry> {
+export function mainMenuEntries({
+	canUndo,
+	canRedo,
+	changelogUnread = false,
+	paneRows,
+	actions,
+}: MainMenuContext): Record<string, MainMenuEntry> {
 	const entries: Record<string, MainMenuEntry> = {
 		"edit.undo": {
 			label: "Undo",
@@ -201,6 +211,7 @@ export function mainMenuEntries({canUndo, canRedo, paneRows, actions}: MainMenuC
 			label: "Help",
 			icon: "fal:circle-question",
 			extra: "chevron-down",
+			blueDot: changelogUnread,
 			onSelect: actions.openHelp,
 		},
 		"auth.log-out": {label: "Log out", icon: "fal:arrow-right-from-bracket", hidden: true},
@@ -221,16 +232,21 @@ export function mainMenuEntries({canUndo, canRedo, paneRows, actions}: MainMenuC
 /** The Help submenu's entries by upstream key; no row has an icon. */
 export function helpEntries({
 	hasHelpDialog,
+	changelogUnread,
+	openChangelog,
 	openUrl,
 }: {
 	hasHelpDialog: boolean;
+	/** Some What's New entry is unread: the row gets upstream's blue dot. */
+	changelogUnread: boolean;
+	openChangelog: () => void;
 	openUrl: (url: string) => void;
 }): Record<string, MainMenuEntry> {
 	const link = (url: string) => () => {
 		openUrl(url);
 	};
 	return {
-		"changelog.show": {label: "What's New", hidden: true},
+		"changelog.show": {label: "What's New", blueDot: changelogUnread, onSelect: openChangelog},
 		"changelog.learn": {label: "Learn WorkFlowy", onSelect: link(LEARN_URL)},
 		"show.show-help-dialog": {label: "Help", handbook: "help.show", hidden: !hasHelpDialog},
 		"show.report-problem": {label: "Report a problem", handbook: "bug.report", hidden: true},

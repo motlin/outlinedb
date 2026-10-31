@@ -133,10 +133,21 @@ describe("mainMenuEntries", () => {
 	});
 });
 
+function helpOptions(overrides: Partial<Parameters<typeof helpEntries>[0]> = {}): Parameters<typeof helpEntries>[0] {
+	return {
+		hasHelpDialog: false,
+		changelogUnread: false,
+		openChangelog: vi.fn<() => void>(),
+		openUrl: vi.fn<(url: string) => void>(),
+		...overrides,
+	};
+}
+
 describe("Help submenu rows", () => {
-	it("omits What's New, Report a problem and the Help dialog while it does not exist", () => {
-		const entries = helpEntries({hasHelpDialog: false, openUrl: vi.fn<(url: string) => void>()});
+	it("lists What's New first and omits Report a problem and the Help dialog while it does not exist", () => {
+		const entries = helpEntries(helpOptions());
 		expect(names(buildMenuRows(HELP_SUBMENU_GROUPS, entries))).toStrictEqual([
+			"What's New",
 			"Learn WorkFlowy",
 			"Community",
 			"Blog",
@@ -144,8 +155,9 @@ describe("Help submenu rows", () => {
 	});
 
 	it("shows Help between Learn WorkFlowy and Community once the dialog exists", () => {
-		const entries = helpEntries({hasHelpDialog: true, openUrl: vi.fn<(url: string) => void>()});
+		const entries = helpEntries(helpOptions({hasHelpDialog: true}));
 		expect(names(buildMenuRows(HELP_SUBMENU_GROUPS, entries))).toStrictEqual([
+			"What's New",
 			"Learn WorkFlowy",
 			"Help",
 			"Community",
@@ -153,9 +165,25 @@ describe("Help submenu rows", () => {
 		]);
 	});
 
+	it("gives What's New upstream's blue dot while an entry is unread, and opens the changelog", () => {
+		const openChangelog = vi.fn<() => void>();
+		const unread = helpEntries(helpOptions({changelogUnread: true, openChangelog}));
+		const read = helpEntries(helpOptions({openChangelog}));
+		select(unread, "changelog.show");
+		expect({
+			unread: unread["changelog.show"],
+			read: read["changelog.show"],
+			opened: openChangelog.mock.calls.length,
+		}).toStrictEqual({
+			unread: {label: "What's New", blueDot: true, onSelect: openChangelog},
+			read: {label: "What's New", blueDot: false, onSelect: openChangelog},
+			opened: 1,
+		});
+	});
+
 	it("opens the upstream links", () => {
 		const openUrl = vi.fn<(url: string) => void>();
-		const entries = helpEntries({hasHelpDialog: false, openUrl});
+		const entries = helpEntries(helpOptions({openUrl}));
 		for (const key of ["changelog.learn", "workflowy.community", "workflowy.blog"]) {
 			select(entries, key);
 		}
@@ -164,5 +192,21 @@ describe("Help submenu rows", () => {
 			["https://community.workflowy.com/"],
 			["https://blog.workflowy.com/"],
 		]);
+	});
+});
+
+describe("Help row blue dot (upstream blueDotFrom changelog.show)", () => {
+	it("dots the main menu's Help row only while What's New has unread entries", () => {
+		const help = (changelogUnread: boolean) => {
+			const entry = mainMenuEntries({
+				canUndo: false,
+				canRedo: false,
+				paneRows: [],
+				changelogUnread,
+				actions: spies(),
+			})["workflowy.help"];
+			return "blueDot" in entry ? entry.blueDot : undefined;
+		};
+		expect([help(true), help(false)]).toStrictEqual([true, false]);
 	});
 });

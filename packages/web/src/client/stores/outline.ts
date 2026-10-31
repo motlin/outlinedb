@@ -462,6 +462,8 @@ interface OutlineState {
 	exportContext: ExportContext | null;
 	/** The node whose "Mirrors for" dialog is open (an original or any of its mirrors), or null. */
 	mirrorsDialogNodeId: string | null;
+	/** Upstream's What's New dialog (`show_changelog`) is open. */
+	changelogOpen: boolean;
 	presentationOpen: boolean;
 	presentationContext: PresentationContext | null;
 	settingsOpen: boolean;
@@ -663,6 +665,8 @@ interface OutlineActions {
 	closeExportDialog: () => void;
 	openMirrorsDialog: (nodeId: string) => void;
 	closeMirrorsDialog: () => void;
+	openChangelog: () => void;
+	closeChangelog: () => void;
 	openPresentation: (nodeId: string) => void;
 	closePresentation: () => void;
 	nextSlide: () => void;
@@ -857,6 +861,7 @@ export function isModalOpen(): boolean {
 		state.locationPicker !== null ||
 		state.exportDialogOpen ||
 		state.mirrorsDialogNodeId !== null ||
+		state.changelogOpen ||
 		state.settingsOpen
 	);
 }
@@ -1069,6 +1074,7 @@ export const useOutlineStore = create<OutlineStore>((set, get) => ({
 	exportDialogOpen: false,
 	exportContext: null,
 	mirrorsDialogNodeId: null,
+	changelogOpen: false,
 	presentationOpen: false,
 	presentationContext: null,
 	settingsOpen: false,
@@ -1895,6 +1901,14 @@ export const useOutlineStore = create<OutlineStore>((set, get) => ({
 
 	closeMirrorsDialog: () => {
 		set({mirrorsDialogNodeId: null});
+	},
+
+	openChangelog: () => {
+		set({changelogOpen: true});
+	},
+
+	closeChangelog: () => {
+		set({changelogOpen: false});
 	},
 
 	openPresentation: (nodeId) => {

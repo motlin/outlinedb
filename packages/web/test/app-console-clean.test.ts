@@ -48,6 +48,7 @@ const responses: Partial<Record<string, () => Response>> = {
 			notesRootId: null,
 			showCompleted: true,
 			showKeyboardShortcuts: false,
+			changelogRead: null,
 		}),
 	"/api/v1/account": () => Response.json({userId: 7, joinedAt: "2020-01-02T00:00:00.000Z", fullName: "Alice Smith"}),
 	"/api/v1/account/ai": () =>

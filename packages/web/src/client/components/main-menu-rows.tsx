@@ -34,6 +34,8 @@ export interface MainMenuRowsOptions {
 	onRedo: () => void;
 	/** Opens the Help submenu. */
 	onOpenHelp?: () => void;
+	/** What's New has unread entries: the Help row gets upstream's blue dot. */
+	changelogUnread?: boolean;
 }
 
 /** Upstream's `status.autosave` footer (KY): the only save-state UI, so writes never block the outline. */
@@ -60,6 +62,7 @@ function entryNode(key: string, entry: MainMenuEntry): ReactElement {
 	}
 	return (
 		<MenuItem
+			blueDot={entry.blueDot}
 			disabled={entry.disabled}
 			extra={entry.extra === undefined ? undefined : <FaIcon icon={`fal:${entry.extra}`} />}
 			handbook={entry.handbook}
@@ -79,15 +82,29 @@ function rowNodes(rows: ReturnType<typeof buildMenuRows>): ReactNode[] {
 	);
 }
 
-/** The Help submenu's rows (no icons). Learn WorkFlowy, Community and Blog open upstream's pages. */
-export function useHelpMenuRows(): ReactNode[] {
-	return rowNodes(buildMenuRows(HELP_SUBMENU_GROUPS, helpEntries({hasHelpDialog: false, openUrl})));
+/**
+ * The Help submenu's rows (no icons). What's New opens the changelog dialog (blue dot while an entry is unread);
+ * Learn WorkFlowy, Community and Blog open upstream's pages.
+ */
+export function useHelpMenuRows({
+	changelogUnread,
+	onOpenChangelog,
+}: {
+	changelogUnread: boolean;
+	onOpenChangelog: () => void;
+}): ReactNode[] {
+	return rowNodes(
+		buildMenuRows(
+			HELP_SUBMENU_GROUPS,
+			helpEntries({hasHelpDialog: false, changelogUnread, openChangelog: onOpenChangelog, openUrl}),
+		),
+	);
 }
 
 /**
  * The main menu's rows, for a ButtonMenu's children (MenuBody reads its direct MenuItem children, so these are
- * a flat list, not a component). What's New and Connect Apps with Zapier are deliberately omitted: there is no
- * changelog or Zapier backend locally. Every `onSelect` returns undefined, so selecting a row closes the menu.
+ * a flat list, not a component). Connect Apps with Zapier is deliberately omitted: there is no Zapier backend
+ * locally. Every `onSelect` returns undefined, so selecting a row closes the menu.
  */
 export function useMainMenuRows({
 	headerItems = NO_HEADER_ITEMS,
@@ -98,6 +115,7 @@ export function useMainMenuRows({
 	onUndo,
 	onRedo,
 	onOpenHelp = () => {},
+	changelogUnread = false,
 }: MainMenuRowsOptions): ReactNode[] {
 	const openExportDialog = useOutlineStore((state) => state.openExportDialog);
 	const canUndo = useUndoStore((state) => state.canUndo);
@@ -106,6 +124,7 @@ export function useMainMenuRows({
 	const entries = mainMenuEntries({
 		canUndo,
 		canRedo,
+		changelogUnread,
 		paneRows: paneItems,
 		actions: {
 			undo: onUndo,
