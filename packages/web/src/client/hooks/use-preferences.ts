@@ -50,6 +50,7 @@ export const EMPTY_PREFERENCES: Preferences = {
 	ignoreLoom: false,
 	unsubscribeFromSummaryEmails: false,
 	unsubscribeFromCommentsEmails: false,
+	backupToDropbox: false,
 	weeklyReportOn: false,
 	latestColor: null,
 	searchForChangesAfter: null,

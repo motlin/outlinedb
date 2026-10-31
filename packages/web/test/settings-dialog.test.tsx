@@ -178,7 +178,7 @@ describe("Settings dialog", () => {
 		});
 	});
 
-	it("lists the sections in upstream order, skipping Account without a name and email and the empty Backup", async () => {
+	it("lists the sections in upstream order, skipping Account without a name and email", async () => {
 		await open();
 		const without = sectionTitles();
 		await run(() => {
@@ -187,8 +187,16 @@ describe("Settings dialog", () => {
 		host?.remove();
 		await open({account: {username: "Alice", email: "alice@example.com"}});
 		expect({without, withAccount: sectionTitles(), accountLabels: rowLabels("Account")}).toStrictEqual({
-			without: ["Personalization", "Dates", "Media & Previews", "Notifications", "Features"],
-			withAccount: ["Account", "Personalization", "Dates", "Media & Previews", "Notifications", "Features"],
+			without: ["Personalization", "Dates", "Media & Previews", "Backup", "Notifications", "Features"],
+			withAccount: [
+				"Account",
+				"Personalization",
+				"Dates",
+				"Media & Previews",
+				"Backup",
+				"Notifications",
+				"Features",
+			],
 			accountLabels: ["Name", "Email"],
 		});
 	});
@@ -204,6 +212,7 @@ describe("Settings dialog", () => {
 			"Personalization",
 			"Dates",
 			"Media & Previews",
+			"Backup",
 			"Notifications",
 			"Features",
 		]);
@@ -493,6 +502,50 @@ describe("Settings dialog", () => {
 		});
 	});
 
+	it("offers Dropbox setup while backup is off, saving the flag and opening upstream's authorize page", async () => {
+		const openWindow = vi.spyOn(window, "open").mockImplementation(() => null);
+		await open();
+		const backup = section("Backup");
+		const markup = collapse(backup.querySelector(".flex-1")?.innerHTML ?? "");
+		await run(() => {
+			backup.querySelector<HTMLElement>("button.button")?.click();
+		});
+		expect({
+			markup,
+			patch: patches().map(([, init]) => init?.body),
+			opened: openWindow.mock.calls,
+		}).toStrictEqual({
+			markup: '<div class="flex flex-col items-start justify-center gap-xs"><div class="text-base leading-s text-primary">Dropbox Auto-backup</div><div class="text-s leading-xs text-tertiary">Automatically back up your WorkFlowy to Dropbox every day.</div><div class="pt-xs"><button tabindex="0" class=" hover:no-underline button" type="button"><span class="">Set up Dropbox backup</span></button></div></div><div class="flex flex-col items-start justify-center gap-xs"><div class="text-base leading-s text-primary">Restore Backup</div><div class="text-s leading-xs text-tertiary">Recover your account from a Dropbox backup.</div><div class="pt-xs"><a href="https://workflowy.com/accounts/restore_from_backup" tabindex="0" class=" hover:no-underline button" target="_blank" rel="noreferrer"><span class="">Restore from a Dropbox backup</span></a></div></div>',
+			patch: ['{"backupToDropbox":true}'],
+			opened: [["https://workflowy.com/authorize_dropbox", "_blank"]],
+		});
+	});
+
+	it("turns Dropbox backup off without opening anything while it is on", async () => {
+		const openWindow = vi.spyOn(window, "open").mockImplementation(() => null);
+		await open({backupToDropbox: true});
+		const button = section("Backup").querySelector<HTMLElement>("button.button");
+		const label = button?.textContent;
+		await act(async () => {
+			button?.click();
+			// The optimistic update lands after the preferences query is cancelled.
+			await new Promise((resolve) => {
+				setTimeout(resolve, 0);
+			});
+		});
+		expect({
+			label,
+			after: section("Backup").querySelector<HTMLElement>("button.button")?.textContent,
+			patch: patches().map(([, init]) => init?.body),
+			opened: openWindow.mock.calls,
+		}).toStrictEqual({
+			label: "Turn off",
+			after: "Set up Dropbox backup",
+			patch: ['{"backupToDropbox":false}'],
+			opened: [],
+		});
+	});
+
 	it("keeps the Dates section by default and drops it when the dates flag is off", async () => {
 		await open();
 		const defaults = sectionTitles();
@@ -507,8 +560,8 @@ describe("Settings dialog", () => {
 		};
 		await open();
 		expect({defaults, off: sectionTitles()}).toStrictEqual({
-			defaults: ["Personalization", "Dates", "Media & Previews", "Notifications", "Features"],
-			off: ["Personalization", "Media & Previews", "Notifications", "Features"],
+			defaults: ["Personalization", "Dates", "Media & Previews", "Backup", "Notifications", "Features"],
+			off: ["Personalization", "Media & Previews", "Backup", "Notifications", "Features"],
 		});
 	});
 

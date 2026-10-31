@@ -99,6 +99,7 @@ const EMPTY = {
 	ignoreLoom: false,
 	unsubscribeFromSummaryEmails: false,
 	unsubscribeFromCommentsEmails: false,
+	backupToDropbox: false,
 	weeklyReportOn: false,
 	latestColor: null,
 	searchForChangesAfter: null,
@@ -389,6 +390,19 @@ describe("PATCH /api/v1/preferences", () => {
 					],
 				],
 			],
+		});
+	});
+
+	it("reads and writes the Dropbox backup flag through the account settings", async () => {
+		const {adapter, request} = setup({}, {backup_to_dropbox: "yes"});
+
+		const read = await request("GET", "/preferences");
+		const written = await request("PATCH", "/preferences", {backupToDropbox: false});
+
+		expect({read, written, settings: adapter.setSetting.mock.calls}).toStrictEqual({
+			read: {status: 200, body: {...EMPTY, backupToDropbox: true}},
+			written: {status: 200, body: EMPTY},
+			settings: [["backup_to_dropbox", false]],
 		});
 	});
 

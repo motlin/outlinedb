@@ -347,6 +347,21 @@ describe("WorkflowyInternalAdapter account state", () => {
 		expect(api.requests).toHaveLength(requestsBefore);
 	});
 
+	it("posts the Dropbox backup flag as yes and caches it as a boolean", async () => {
+		const {api, adapter} = tracked();
+
+		await adapter.setSetting("backup_to_dropbox", true);
+
+		const post = api.requests.find((r) => r.path === "/change_settings");
+		expect({
+			body: Object.fromEntries(new URLSearchParams(post?.body ?? "")),
+			cached: await adapter.getSetting("backup_to_dropbox"),
+		}).toStrictEqual({
+			body: {backup_to_dropbox: "yes", clientId: FAKE_CLIENT_ID, crosscheck_user_id: "123"},
+			cached: true,
+		});
+	});
+
 	it("leaves the cached setting unchanged when the settings POST fails", async () => {
 		const {api, adapter, db} = tracked();
 		await adapter.getSetting("theme");

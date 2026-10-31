@@ -82,6 +82,7 @@ export type ServerSetting =
 	| "ignore_loom"
 	| "unsubscribe_from_summary_emails"
 	| "unsubscribe_from_comments_emails"
+	| "backup_to_dropbox"
 	| "theme"
 	| "font"
 	| "saved_views_json_delta";
@@ -97,6 +98,7 @@ const FLAG_SETTINGS = new Set<ServerSetting>([
 	"ignore_loom",
 	"unsubscribe_from_summary_emails",
 	"unsubscribe_from_comments_emails",
+	"backup_to_dropbox",
 ]);
 
 export interface Account {

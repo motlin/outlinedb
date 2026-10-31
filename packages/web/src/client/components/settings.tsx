@@ -15,7 +15,7 @@ import {useCustomThemesStore} from "../stores/custom-themes.js";
 import {useOutlineStore} from "../stores/outline.js";
 import {DialogCloseButton, DialogShell} from "./dialog-shell.js";
 import {Dropdown, DropdownOption} from "./flyout/dropdown.js";
-import {ControlRow, ReadOnlyField, SectionBody} from "./settings-rows.js";
+import {ActionBlock, ControlRow, ReadOnlyField, SectionBody, SettingsButton} from "./settings-rows.js";
 import {SettingsSection, SettingsSectionRegistry} from "./settings-section.js";
 import {Toggle} from "./toggle.js";
 
@@ -186,7 +186,7 @@ export function DatesSection({now: nowProp}: {now?: Date}) {
 	);
 }
 
-/** Upstream's `Account`, `Personalization`, ... in order; `Backup` and the cloud-only sections are not cloned. */
+/** Upstream's `Account`, `Personalization`, ... in order; the cloud-only sections are not cloned. */
 const SETTINGS_SECTION_TITLES = [
 	"Account",
 	"Personalization",
@@ -319,6 +319,51 @@ function MediaSection({preferences, change}: SectionProps) {
 						/>
 					</ControlRow>
 				))}
+			</SectionBody>
+		</SettingsSection>
+	);
+}
+
+/** Upstream's Dropbox connect page; it links the account's Dropbox and returns to workflowy.com. */
+const AUTHORIZE_DROPBOX_URL = "https://workflowy.com/authorize_dropbox";
+const RESTORE_FROM_BACKUP_URL = "https://workflowy.com/accounts/restore_from_backup";
+
+/**
+ * Upstream `w60`: Dropbox Auto-backup ("Turn off" while `backup_to_dropbox` is on, otherwise
+ * "Set up Dropbox backup", which sets the flag and opens the authorize page) and Restore Backup.
+ * Upstream hides it for non-Pro accounts; the local app has no plan state, so it always shows.
+ */
+function BackupSection({preferences, change}: SectionProps) {
+	const on = preferences.backupToDropbox;
+	return (
+		<SettingsSection title="Backup">
+			<SectionBody>
+				<ActionBlock
+					label="Dropbox Auto-backup"
+					hint="Automatically back up your WorkFlowy to Dropbox every day."
+				>
+					<SettingsButton
+						onClick={() => {
+							change({backupToDropbox: !on});
+							if (!on) {
+								window.open(AUTHORIZE_DROPBOX_URL, "_blank");
+							}
+						}}
+					>
+						{on ? "Turn off" : "Set up Dropbox backup"}
+					</SettingsButton>
+				</ActionBlock>
+				<ActionBlock label="Restore Backup" hint="Recover your account from a Dropbox backup.">
+					<a
+						href={RESTORE_FROM_BACKUP_URL}
+						tabIndex={0}
+						className=" hover:no-underline button"
+						target="_blank"
+						rel="noreferrer"
+					>
+						<span className="">Restore from a Dropbox backup</span>
+					</a>
+				</ActionBlock>
 			</SectionBody>
 		</SettingsSection>
 	);
@@ -525,7 +570,7 @@ function SettingsBody({initialSection, onClose}: {initialSection: string | null;
 			</SettingsSection>
 		),
 		<MediaSection key="Media & Previews" {...sectionProps} />,
-		// Backup holds only Trash, which waits on a trash view.
+		<BackupSection key="Backup" {...sectionProps} />,
 		<NotificationsSection key="Notifications" {...sectionProps} />,
 		<FeaturesSection key="Features" />,
 	];

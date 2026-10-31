@@ -70,6 +70,8 @@ const PreferencesPatchSchema = z
 		ignoreLoom: z.boolean(),
 		unsubscribeFromSummaryEmails: z.boolean(),
 		unsubscribeFromCommentsEmails: z.boolean(),
+		/** Upstream's `backup_to_dropbox`: the daily Dropbox auto-backup is on (connecting Dropbox happens on workflowy.com). */
+		backupToDropbox: z.boolean(),
 		weeklyReportOn: z.boolean(),
 		latestColor: LatestColorSchema.nullable(),
 		/** When the account's change tracking started (upstream's `searchForChangesAfter`), as an ISO date. */
@@ -149,6 +151,7 @@ const SETTINGS = {
 	ignoreLoom: "ignore_loom",
 	unsubscribeFromSummaryEmails: "unsubscribe_from_summary_emails",
 	unsubscribeFromCommentsEmails: "unsubscribe_from_comments_emails",
+	backupToDropbox: "backup_to_dropbox",
 } as const satisfies Record<string, ServerSetting>;
 
 const FLAG_KEYS = [
@@ -162,6 +165,7 @@ const FLAG_KEYS = [
 	"ignoreLoom",
 	"unsubscribeFromSummaryEmails",
 	"unsubscribeFromCommentsEmails",
+	"backupToDropbox",
 ] as const;
 
 /** The server-saved settings that are strings rather than yes/no flags. */
@@ -218,6 +222,7 @@ async function readPreferences(adapter: WorkflowyInternalAdapter): Promise<Prefe
 		ignoreLoom: flag("ignoreLoom"),
 		unsubscribeFromSummaryEmails: flag("unsubscribeFromSummaryEmails"),
 		unsubscribeFromCommentsEmails: flag("unsubscribeFromCommentsEmails"),
+		backupToDropbox: flag("backupToDropbox"),
 		theme: asString(theme),
 		font: asString(font),
 		account: name !== null && address !== null ? {username: name, email: address} : null,
