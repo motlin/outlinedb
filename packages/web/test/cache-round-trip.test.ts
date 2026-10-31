@@ -69,6 +69,7 @@ const {CacheService} = await import("@workflowy/shared/cache");
 const {
 	fetchChildren,
 	fetchNode,
+	sendBlockMoves,
 	undoAdapter,
 	useCreateNode,
 	useDeleteNode,
@@ -435,6 +436,19 @@ describe("the optimistic cache matches the server's round trip", () => {
 			}),
 		).resolves.toStrictEqual({forward: NO_MISMATCH, undo: NO_MISMATCH});
 	});
+
+	it("moves several blocks in one request, each slot counted after the earlier blocks moved", async () => {
+		await expect(
+			withUndo(({moveMany}) => {
+				moveMany.mutate({
+					moves: [
+						{ids: ["charlie"], parent_id: "bravo", index: 1},
+						{ids: ["alpha"], parent_id: "bravo", index: 2},
+					],
+				});
+			}),
+		).resolves.toStrictEqual({forward: NO_MISMATCH, undo: NO_MISMATCH});
+	});
 });
 
 /** Which cached children lists hold each row that more than one list holds, as `row in list,list`. */
@@ -469,6 +483,43 @@ describe("a block move (multi-select Tab)", () => {
 				`POST /api/v1/nodes/move ${JSON.stringify({ids: ["alpha1", "alpha2"], parent_id: "bravo", index: 1})}`,
 			],
 			events: ["bravo renders expanded listing bravo1,alpha1,alpha2"],
+		});
+	});
+
+	it("sends a non-contiguous selection's blocks in one request and expands every new parent with its splice", async () => {
+		const queryClient = await loadedClient();
+		const {moveMany} = captureHooks(queryClient);
+		const events: string[] = [];
+		onExpand = (id) => {
+			queueMicrotask(() => {
+				const ids = queryClient.getQueryData<NodeResponse[]>(nodeKeys.children(id))?.map((row) => row.id);
+				events.push(`${id} renders expanded listing ${ids?.join(",")}`);
+			});
+		};
+		// Per-call callbacks need a mounted listener, which a static render never subscribes: only the request is awaited.
+		void sendBlockMoves(
+			[
+				{ids: ["foxtrot"], parentId: "charlie", index: 0, expandParent: true},
+				{ids: ["alpha2"], parentId: "alpha1", index: 0, expandParent: true},
+			],
+			moveMany.mutate,
+		);
+		await settled(queryClient);
+		expect({
+			writes,
+			events,
+			settled: await settledMismatches(queryClient),
+		}).toStrictEqual({
+			writes: [
+				`POST /api/v1/nodes/move ${JSON.stringify({
+					moves: [
+						{ids: ["foxtrot"], parent_id: "charlie", index: 0},
+						{ids: ["alpha2"], parent_id: "alpha1", index: 0},
+					],
+				})}`,
+			],
+			events: ["charlie renders expanded listing foxtrot", "alpha1 renders expanded listing alpha2"],
+			settled: [],
 		});
 	});
 

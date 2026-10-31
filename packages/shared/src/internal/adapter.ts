@@ -1415,13 +1415,28 @@ export class WorkflowyInternalAdapter {
 
 	/** Move nodes to an exact slot: one `move` for one id, one `bulk_move` (keeping their order) for several. */
 	async moveTo(input: MoveToInput): Promise<void> {
-		if (input.ids.length === 0) {
+		await this.moveBlocks([input]);
+	}
+
+	/**
+	 * Several {@link moveTo}s in one push, in order: each block's op is planned against the outline as the earlier
+	 * ones leave it, so a non-contiguous selection's Tab costs one round trip. The cache re-reads every touched parent.
+	 */
+	async moveBlocks(inputs: readonly MoveToInput[]): Promise<void> {
+		const blocks = inputs.filter((input) => input.ids.length > 0);
+		if (blocks.length === 0) {
 			return;
 		}
 		const tree = this.tree();
-		const target = publicParent(input.parentId);
-		const moving = await Promise.all(input.ids.map(async (id) => tree.liveNode(id)));
-		const parents = [...new Set([...moving.map((node) => node.parent_id ?? null), target])];
+		const parentOf = new Map<string, PublicParent>(
+			await Promise.all(
+				[...new Set(blocks.flatMap((block) => block.ids))].map(async (id) => {
+					const node = await tree.liveNode(id);
+					return [id, node.parent_id ?? null] as const;
+				}),
+			),
+		);
+		const parents = [...new Set([...parentOf.values(), ...blocks.map((block) => publicParent(block.parentId))])];
 		const orders = new Map(
 			await Promise.all(
 				parents.map(async (parent) => {
@@ -1431,21 +1446,37 @@ export class WorkflowyInternalAdapter {
 			),
 		);
 		const order = (parent: PublicParent) => orders.get(parent) ?? [];
-		const from = (id: string, parent: PublicParent): Location => ({
-			parentId: internalParent(parent),
-			index: order(parent).indexOf(id),
-		});
-		const siblings = order(target);
-		const index = clampIndex(input.index ?? siblings.length, siblings.length);
 		const session = await this.session();
 		const clock = {now: this.now(), dateJoinedSec: session.dateJoinedSec};
-		const items = moving.map((node) => ({id: node.id, from: from(node.id, node.parent_id ?? null)}));
-		const [only] = items;
-		const op =
-			only !== undefined && items.length === 1
-				? moveOp({...clock, id: only.id, parentId: internalParent(target), index, from: only.from})
-				: bulkMoveOp({...clock, items, parentId: internalParent(target), siblings, index});
-		await this.pusher.pushAndPoll({ops: [op]});
+		const ops = blocks.map((block) => {
+			const target = publicParent(block.parentId);
+			const siblings = order(target);
+			const index = clampIndex(block.index ?? siblings.length, siblings.length);
+			const items = block.ids.map((id) => {
+				const parent = parentOf.get(id) ?? null;
+				return {id, from: {parentId: internalParent(parent), index: order(parent).indexOf(id)}};
+			});
+			const [only] = items;
+			const op =
+				only !== undefined && items.length === 1
+					? moveOp({...clock, id: only.id, parentId: internalParent(target), index, from: only.from})
+					: bulkMoveOp({...clock, items, parentId: internalParent(target), siblings, index});
+			const moving = new Set(block.ids);
+			const before = siblings.slice(0, index).filter((id) => !moving.has(id)).length;
+			for (const [parent, children] of orders) {
+				orders.set(
+					parent,
+					children.filter((id) => !moving.has(id)),
+				);
+			}
+			const others = order(target);
+			orders.set(target, [...others.slice(0, before), ...block.ids, ...others.slice(before)]);
+			for (const id of block.ids) {
+				parentOf.set(id, target);
+			}
+			return op;
+		});
+		await this.pusher.pushAndPoll({ops});
 		await tree.refreshChildren(parents);
 	}
 

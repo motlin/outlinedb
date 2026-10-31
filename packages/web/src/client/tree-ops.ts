@@ -824,6 +824,8 @@ export type UndoableMutation =
 	| {kind: "delete"; nodeId: string}
 	| {kind: "edit"; nodeId: string; name?: string; note?: string; layoutMode?: string; numberedStart?: number | null}
 	| {kind: "move"; ids: readonly string[]; parentId: string | null; index?: number}
+	/** Several block moves applied in order, each `index` counted against the lists the earlier ones leave. */
+	| {kind: "moves"; moves: readonly {ids: readonly string[]; parentId: string | null; index?: number}[]}
 	| {kind: "complete" | "uncomplete"; nodeId: string}
 	| {kind: "restore"; nodeId: string; parentId: string | null; index: number};
 
@@ -843,6 +845,16 @@ function sameListIndex(from: number, to: number): number {
 	return to <= from ? to : to + 1;
 }
 
+/** The sibling lists and parents as a run of block moves leaves them, read from the cache on first use. */
+interface MoveOutline {
+	lists: Map<string | null, string[] | undefined>;
+	parents: Map<string, string | null>;
+}
+
+function moveOutline(): MoveOutline {
+	return {lists: new Map(), parents: new Map()};
+}
+
 /**
  * One move op per id, issued in order, that together reproduce the block splice.
  * Each id is placed right after its final predecessor among the rows already in
@@ -854,8 +866,9 @@ function moveOps(
 	ids: readonly string[],
 	parentId: string | null,
 	index: number | undefined,
+	outline: MoveOutline = moveOutline(),
 ): UndoOp[] {
-	const lists = new Map<string | null, string[] | undefined>();
+	const {lists, parents} = outline;
 	const list = (id: string | null): string[] | undefined => {
 		if (!lists.has(id)) {
 			lists.set(id, sortedIds(queryClient, id));
@@ -872,13 +885,16 @@ function moveOps(
 		).map((row) => row.id);
 	const ops: UndoOp[] = [];
 	for (const [k, nodeId] of ids.entries()) {
-		const sourceParent = readNode(queryClient, nodeId)?.parent_id ?? null;
+		const sourceParent = parents.has(nodeId)
+			? (parents.get(nodeId) ?? null)
+			: (readNode(queryClient, nodeId)?.parent_id ?? null);
 		const source = list(sourceParent);
 		const from = source?.indexOf(nodeId) ?? -1;
 		if (source === undefined || from === -1) {
 			continue;
 		}
 		source.splice(from, 1);
+		parents.set(nodeId, parentId);
 		if (target === undefined || final === undefined) {
 			ops.push({
 				kind: "move",
@@ -961,6 +977,12 @@ export function toUndoOps(mutation: UndoableMutation, queryClient: QueryClient):
 			return editOps(queryClient, mutation.nodeId, mutation);
 		case "move":
 			return moveOps(queryClient, mutation.ids, mutation.parentId, mutation.index);
+		case "moves": {
+			const outline = moveOutline();
+			return mutation.moves.flatMap(({ids, parentId, index}) =>
+				moveOps(queryClient, ids, parentId, index, outline),
+			);
+		}
 		case "restore":
 			return [{kind: "undelete", nodeId: mutation.nodeId, parentId: mutation.parentId, index: mutation.index}];
 		case "complete":

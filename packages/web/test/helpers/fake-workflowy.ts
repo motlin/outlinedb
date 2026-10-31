@@ -159,6 +159,13 @@ export function fakeAdapter(cache: CacheService) {
 			place(cache, input.ids, parentId, input.index ?? cache.getChildren(parentId).length);
 			return Promise.resolve();
 		},
+		async moveBlocks(inputs: {ids: string[]; parentId: string; index?: number}[]) {
+			for (const input of inputs) {
+				const parentId = home(input.parentId);
+				place(cache, input.ids, parentId, input.index ?? cache.getChildren(parentId).length);
+			}
+			return Promise.resolve();
+		},
 		async restore(input: RestoreInput) {
 			const subtree = trash.get(input.id) ?? [];
 			trash.delete(input.id);

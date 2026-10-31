@@ -149,77 +149,104 @@ export const nodesDuplicate = defineOp({
 	},
 });
 
+/** One block of a move: `ids` (in that order, all cached) land under `parentId` at slot `index`. */
+interface MoveBlock {
+	ids: string[];
+	rawParent: string | null;
+	index: number | undefined;
+}
+
 /**
- * Move `ids` (in that order, all cached) under `rawParent` at a slot, then
- * answer `{nodes}`: the refreshed children of every affected parent. Through
- * the internal API this is one exact-index push; without it only the two ends
- * work (a top block moves last-first so it keeps its order), and any other
- * slot answers 503.
+ * Move each block in turn, then answer `{nodes}`: the refreshed children of
+ * every affected parent. Through the internal API all the blocks go in one
+ * push of exact-index ops; without it only the two ends work (a top block
+ * moves last-first so it keeps its order), and any other slot answers 503.
  */
 async function moveNodes(
 	ctx: ServerContext,
 	client: WorkflowyWriteThroughClient,
-	ids: string[],
-	rawParent: string | null,
-	index: number | undefined,
+	rawBlocks: MoveBlock[],
 ): Promise<OpResult<z.output<typeof NodeListSchema>>> {
-	const parent = parseParent(ctx, rawParent);
-	if (!parent.ok) {
-		return fail(parent.status, {error: parent.error});
+	const blocks: {ids: string[]; parentId: string | null; index: number | undefined}[] = [];
+	for (const {ids, rawParent, index} of rawBlocks) {
+		const parent = parseParent(ctx, rawParent);
+		if (!parent.ok) {
+			return fail(parent.status, {error: parent.error});
+		}
+		blocks.push({ids, parentId: parent.parentId, index});
 	}
-	const {parentId} = parent;
-	const oldParents = ids.map((id) => ctx.cacheService.getNode(id)?.parentId ?? null);
-	const count = countChildren(ctx, parentId);
+	const oldParents = blocks.flatMap(({ids}) => ids.map((id) => ctx.cacheService.getNode(id)?.parentId ?? null));
 
 	const adapter = getAdapter(ctx);
 	if (adapter) {
-		await adapter.moveTo({
+		const moves = blocks.map(({ids, parentId, index}) => ({
 			ids,
 			parentId: adapterParent(parentId),
 			...(index === undefined ? {} : {index}),
-		});
+		}));
+		await (moves.length === 1 && moves[0] !== undefined ? adapter.moveTo(moves[0]) : adapter.moveBlocks(moves));
 	} else {
-		const end = publicEnd(index, count);
-		if (end === undefined) {
-			// A middle slot counts every child before removal; the rotation counts the others.
-			const order = childIds(ctx, parentId);
-			const moving = new Set(ids);
-			const othersBefore = order.slice(0, index ?? order.length).filter((id) => !moving.has(id)).length;
-			const {position, siblingIds} = planBlockSlot(order, ids, othersBefore);
-			for (const id of [...(position === "top" ? ids.toReversed() : ids), ...siblingIds]) {
-				await client.moveNode(id, parentId, publicMovePosition(position));
-			}
-		} else {
-			for (const id of end === "top" ? ids.toReversed() : ids) {
-				await client.moveNode(id, parentId, publicMovePosition(end));
-			}
+		for (const block of blocks) {
+			// oxlint-disable-next-line no-await-in-loop -- each block is planned against the outline the previous one left
+			await movePublic(ctx, client, block);
 		}
 	}
 
-	return ok(toJson({nodes: readSiblingDtos(ctx, [...oldParents, parentId])}));
+	return ok(toJson({nodes: readSiblingDtos(ctx, [...oldParents, ...blocks.map(({parentId}) => parentId)])}));
 }
+
+/** One block through the public API, which places a node only at either end of its new parent. */
+async function movePublic(
+	ctx: ServerContext,
+	client: WorkflowyWriteThroughClient,
+	{ids, parentId, index}: {ids: string[]; parentId: string | null; index: number | undefined},
+): Promise<void> {
+	const end = publicEnd(index, countChildren(ctx, parentId));
+	if (end === undefined) {
+		// A middle slot counts every child before removal; the rotation counts the others.
+		const order = childIds(ctx, parentId);
+		const moving = new Set(ids);
+		const othersBefore = order.slice(0, index ?? order.length).filter((id) => !moving.has(id)).length;
+		const {position, siblingIds} = planBlockSlot(order, ids, othersBefore);
+		for (const id of [...(position === "top" ? ids.toReversed() : ids), ...siblingIds]) {
+			await client.moveNode(id, parentId, publicMovePosition(position));
+		}
+	} else {
+		for (const id of end === "top" ? ids.toReversed() : ids) {
+			await client.moveNode(id, parentId, publicMovePosition(end));
+		}
+	}
+}
+
+const MoveBlockSchema = z.object({ids: NodeIdsSchema, parent_id: ParentIdSchema, index: IndexSchema});
 
 // POST /api/v1/nodes/move - Move a block of nodes, in the given order, to an exact `index`.
 // `index` is a slot among ALL of the target parent's current children in order, the moved
 // nodes included (counted before removal): the block lands right before the child now at
 // `index`; omitted or >= the child count = bottom. Same contract as `MoveToInput.index`.
+// `{moves: [block, ...]}` moves several blocks in order, each slot counted against the
+// outline the earlier blocks leave, in one internal-API push.
 export const nodesMove = defineOp({
-	input: z.object({ids: NodeIdsSchema, parent_id: ParentIdSchema, index: IndexSchema}),
+	input: z.union([MoveBlockSchema, z.object({moves: z.array(MoveBlockSchema).min(1)})]),
 	output: NodeListSchema,
 	async run(ctx, body) {
 		const client = getWriteClient(ctx);
 		if (!client) {
 			return fail(500, {error: WRITE_CLIENT_REQUIRED});
 		}
-		const ids: string[] = [];
-		for (const rawId of body.ids) {
-			const id = resolveNodeId(ctx, rawId);
-			if (id === null || !ctx.cacheService.getNode(id)) {
-				return fail(404, {error: `Node not found: ${rawId}`});
+		const blocks: MoveBlock[] = [];
+		for (const block of "moves" in body ? body.moves : [body]) {
+			const ids: string[] = [];
+			for (const rawId of block.ids) {
+				const id = resolveNodeId(ctx, rawId);
+				if (id === null || !ctx.cacheService.getNode(id)) {
+					return fail(404, {error: `Node not found: ${rawId}`});
+				}
+				ids.push(id);
 			}
-			ids.push(id);
+			blocks.push({ids, rawParent: block.parent_id, index: block.index});
 		}
-		return moveNodes(ctx, client, ids, body.parent_id, body.index);
+		return moveNodes(ctx, client, blocks);
 	},
 });
 
@@ -243,6 +270,8 @@ export const nodesMoveOne = defineOp({
 		if (id === null || !ctx.cacheService.getNode(id)) {
 			return fail(404, {error: "Node not found"});
 		}
-		return moveNodes(ctx, client, [id], body.parent_id, slotIndex(body.index, body.position));
+		return moveNodes(ctx, client, [
+			{ids: [id], rawParent: body.parent_id, index: slotIndex(body.index, body.position)},
+		]);
 	},
 });

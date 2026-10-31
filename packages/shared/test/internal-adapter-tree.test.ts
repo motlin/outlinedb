@@ -443,6 +443,25 @@ describe("WorkflowyInternalAdapter tree writes", () => {
 		expect({home: order(null), x: order("x")}).toStrictEqual({home: ["a"], x: ["b", "c"]});
 	});
 
+	it("moves several blocks in one push, planning each against the outline the earlier ones leave", async () => {
+		const {adapter, pushes, order} = await tracked();
+
+		await adapter.moveBlocks([
+			{ids: ["c"], parentId: "home", index: 0},
+			{ids: ["a"], parentId: "home", index: 3},
+			{ids: ["b"], parentId: "x"},
+		]);
+
+		expect(pushes.map((ops) => ops.map((op) => [op.type, op.data]))).toStrictEqual([
+			[
+				["move", {projectid: "c", parentid: "None", priority: 0}],
+				["move", {projectid: "a", parentid: "None", priority: 2}],
+				["move", {projectid: "b", parentid: "x", priority: 0}],
+			],
+		]);
+		expect({home: order(null), x: order("x")}).toStrictEqual({home: ["c", "a"], x: ["b"]});
+	});
+
 	it("restores into a given slot with one undelete", async () => {
 		const {adapter, pushes, restores, order} = await tracked();
 

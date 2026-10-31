@@ -63,6 +63,7 @@ interface FakeAdapter {
 	createAt: ReturnType<typeof vi.fn<WorkflowyInternalAdapter["createAt"]>>;
 	createTreesAt: ReturnType<typeof vi.fn<WorkflowyInternalAdapter["createTreesAt"]>>;
 	moveTo: ReturnType<typeof vi.fn<WorkflowyInternalAdapter["moveTo"]>>;
+	moveBlocks: ReturnType<typeof vi.fn<WorkflowyInternalAdapter["moveBlocks"]>>;
 	restore: ReturnType<typeof vi.fn<WorkflowyInternalAdapter["restore"]>>;
 }
 
@@ -85,6 +86,7 @@ function setup(configured: boolean) {
 			Promise.resolve({ids: ["t1", "t2"]}),
 		),
 		moveTo: vi.fn<WorkflowyInternalAdapter["moveTo"]>(async () => {}),
+		moveBlocks: vi.fn<WorkflowyInternalAdapter["moveBlocks"]>(async () => {}),
 		restore: vi.fn<WorkflowyInternalAdapter["restore"]>(async (input) => {
 			cacheService.insertNode(apiNode(input.id, null, 0), null);
 			return Promise.resolve();
@@ -219,6 +221,33 @@ describe("POST /api/v1/nodes/move with the internal API", () => {
 
 		expect(res.status).toBe(200);
 		expect(adapter.moveTo.mock.calls).toStrictEqual([[{ids: ["b", "c"], parentId: "a", index: 0}]]);
+		await expect(res.json()).resolves.toStrictEqual({
+			nodes: [dto("a", null, 0), dto("b", null, 1), dto("c", null, 2)],
+		});
+	});
+
+	it("moves several blocks in one push", async () => {
+		const {adapter, post} = setup(true);
+
+		const res = await post("/move", {
+			moves: [
+				{ids: ["c"], parent_id: "b", index: 0},
+				{ids: ["a"], parent_id: null},
+			],
+		});
+
+		expect(res.status).toBe(200);
+		expect({moveTo: adapter.moveTo.mock.calls, moveBlocks: adapter.moveBlocks.mock.calls}).toStrictEqual({
+			moveTo: [],
+			moveBlocks: [
+				[
+					[
+						{ids: ["c"], parentId: "b", index: 0},
+						{ids: ["a"], parentId: "home"},
+					],
+				],
+			],
+		});
 		await expect(res.json()).resolves.toStrictEqual({
 			nodes: [dto("a", null, 0), dto("b", null, 1), dto("c", null, 2)],
 		});
@@ -382,6 +411,24 @@ describe("public-API fallback when the internal API is not configured", () => {
 		expect(moveNode.mock.calls).toStrictEqual([
 			["c", null, -1],
 			["b", null, -1],
+		]);
+	});
+
+	it("moves several blocks one after another", async () => {
+		const {post} = setup(false);
+		moveNode.mockResolvedValue(apiNode("c", null, 0));
+
+		const res = await post("/move", {
+			moves: [
+				{ids: ["c"], parent_id: "home", index: 0},
+				{ids: ["a"], parent_id: "home"},
+			],
+		});
+
+		expect(res.status).toBe(200);
+		expect(moveNode.mock.calls).toStrictEqual([
+			["c", null, -1],
+			["a", null, 0],
 		]);
 	});
 });

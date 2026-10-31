@@ -988,7 +988,7 @@ export function useMoveNode() {
 	return {...mutation, mutate};
 }
 
-interface MoveNodesRequest {
+interface BlockMoveRequest {
 	ids: string[];
 	parent_id: string | null;
 	/** Slot among ALL of the new parent's children, moved ones included (see `spliceBlock`); omitted = bottom. */
@@ -997,12 +997,20 @@ interface MoveNodesRequest {
 	expandParent?: boolean;
 }
 
-async function moveNodes({expandParent: _expandParent, ...request}: MoveNodesRequest): Promise<NodeResponse[]> {
-	await pendingCreates.settled([...request.ids, request.parent_id]);
+/** One block, or several moved in order in one request, each slot counted after the earlier blocks moved. */
+type MoveNodesRequest = BlockMoveRequest | {moves: BlockMoveRequest[]};
+
+function blocksOf(request: MoveNodesRequest): BlockMoveRequest[] {
+	return "moves" in request ? request.moves : [request];
+}
+
+async function moveNodes(request: MoveNodesRequest): Promise<NodeResponse[]> {
+	const blocks = blocksOf(request).map(({expandParent: _expandParent, ...block}) => block);
+	await pendingCreates.settled(blocks.flatMap((block) => [...block.ids, block.parent_id]));
 	const response = await fetch("/api/v1/nodes/move", {
 		method: "POST",
 		headers: {"Content-Type": "application/json"},
-		body: JSON.stringify(request),
+		body: JSON.stringify(blocks.length === 1 ? blocks[0] : {moves: blocks}),
 	});
 	if (!response.ok) {
 		throw await toRequestStatusError("Failed to move nodes", response);
@@ -1013,11 +1021,9 @@ async function moveNodes({expandParent: _expandParent, ...request}: MoveNodesReq
 
 const moveNodesUndos = new HeldUndos<NodeResponse[], MoveNodesRequest>();
 
-function planMoveNodes(
-	{ids, parent_id: parentId, index}: MoveNodesRequest,
-	queryClient: QueryClient,
-): UndoPlan<unknown> {
-	return cachedOps(queryClient, {kind: "move", ids, parentId, index});
+function planMoveNodes(request: MoveNodesRequest, queryClient: QueryClient): UndoPlan<unknown> {
+	const moves = blocksOf(request).map(({ids, parent_id: parentId, index}) => ({ids, parentId, index}));
+	return cachedOps(queryClient, {kind: "moves", moves});
 }
 
 /**
@@ -1037,23 +1043,27 @@ function moveNodesOptions(queryClient: QueryClient) {
 	return mutationOptions({
 		mutationFn: moveNodes,
 		async onMutate(request: MoveNodesRequest) {
-			const readRows = () =>
-				request.ids
-					.map((id) => readNode(queryClient, id))
-					.filter((row): row is NodeResponse => row !== undefined);
+			const blocks = blocksOf(request);
+			const readRows = (ids: string[]) =>
+				ids.map((id) => readNode(queryClient, id)).filter((row): row is NodeResponse => row !== undefined);
 			blockMovesOverlapped ||= pendingMoves.size > 0;
-			pendingMoves.begin(request, [...readRows().map((row) => row.parent_id), request.parent_id]);
+			pendingMoves.begin(
+				request,
+				blocks.flatMap((block) => [...readRows(block.ids).map((row) => row.parent_id), block.parent_id]),
+			);
 			await queryClient.cancelQueries({queryKey: nodeKeys.all});
-			return notifyManager.batch(() => {
-				const parentId = request.parent_id;
-				if (request.expandParent === true && parentId !== null) {
-					// In the same task as the splice: React's sync render for the store change runs in a microtask,
-					// after the splice below, so the expansion and the move paint together.
-					useOutlineStore.getState().expand(parentId);
-				}
-				// Read again: a move sent just before this one may have spliced the rows meanwhile.
-				return spliceMovedRows(queryClient, readRows(), parentId, (count) => request.index ?? count);
-			});
+			// Every block splices in one notification flush, so a non-contiguous selection paints once.
+			return notifyManager.batch(() =>
+				blocks.flatMap(({ids, parent_id: parentId, index, expandParent}) => {
+					if (expandParent === true && parentId !== null) {
+						// In the same task as the splice: React's sync render for the store change runs in a microtask,
+						// after the splice below, so the expansion and the move paint together.
+						useOutlineStore.getState().expand(parentId);
+					}
+					// Read again: a move sent just before this one, or an earlier block, may have spliced the rows meanwhile.
+					return spliceMovedRows(queryClient, readRows(ids), parentId, (count) => index ?? count);
+				}),
+			);
 		},
 		onSuccess(nodes, variables, snapshots) {
 			pendingMoves.end(variables);
@@ -1094,7 +1104,15 @@ function moveNodesOptions(queryClient: QueryClient) {
 				const parentIds = (snapshots ?? []).flatMap((snapshot) =>
 					snapshot.kind === "children" ? [snapshot.parentId] : [],
 				);
-				verifyAgainstServer(queryClient, "move nodes", affectedKeys(queryClient, variables.ids, parentIds));
+				verifyAgainstServer(
+					queryClient,
+					"move nodes",
+					affectedKeys(
+						queryClient,
+						blocksOf(variables).flatMap((block) => block.ids),
+						parentIds,
+					),
+				);
 			}
 		},
 	});
@@ -1610,33 +1628,29 @@ export function useExpandAll(): (rootId: string | null, open: boolean) => void {
 
 export type MoveNodesMutate = ReturnType<typeof useMoveNodes>["mutate"];
 
-/** Send each block move once the previous one lands, so every planned slot matches the server's outline; stop at a failure. */
+/**
+ * Send planned block moves as one request: the server applies them in order, each slot counted against the outline
+ * the earlier ones left, as the planner counted it. Resolves once the request settles.
+ */
 export async function sendBlockMoves(
 	moves: readonly (BlockMove & {expandParent?: boolean})[],
 	mutate: MoveNodesMutate,
 ): Promise<void> {
-	for (const {ids, parentId, index, expandParent} of moves) {
-		// oxlint-disable-next-line no-await-in-loop -- each move's slot is planned against the outline the previous one left
-		const landed = await new Promise<boolean>((resolve) => {
-			mutate(
-				{
-					ids,
-					parent_id: parentId,
-					...(index === undefined ? {} : {index}),
-					...(expandParent ? {expandParent} : {}),
-				},
-				{
-					onSuccess: () => {
-						resolve(true);
-					},
-					onError: () => {
-						resolve(false);
-					},
-				},
-			);
-		});
-		if (!landed) {
-			return;
-		}
+	const blocks = moves.map(({ids, parentId, index, expandParent}) => ({
+		ids,
+		parent_id: parentId,
+		...(index === undefined ? {} : {index}),
+		...(expandParent ? {expandParent} : {}),
+	}));
+	const [only] = blocks;
+	if (only === undefined) {
+		return;
 	}
+	await new Promise<void>((resolve) => {
+		mutate(blocks.length === 1 ? only : {moves: blocks}, {
+			onSettled: () => {
+				resolve();
+			},
+		});
+	});
 }
