@@ -63,6 +63,7 @@ import {useContentLinkClicks} from "./hooks/use-content-link-clicks.js";
 import {usePaneClickRouting} from "./hooks/use-pane-click-routing.js";
 import {useSearchEscape} from "./hooks/use-search-escape.js";
 import {usePreferences} from "./hooks/use-preferences.js";
+import {useLatestColorSync} from "./latest-color.js";
 import {useTagColors} from "./hooks/use-tag-colors.js";
 import {useCustomTree} from "./hooks/use-custom-tree.js";
 import {useShowKeyboardShortcutsSync, useThemeSync} from "./hooks/use-right-bar-sync.js";
@@ -369,6 +370,12 @@ function LinkColorStyles() {
 	return createPortal(<style id="link-colors">{linkColorCss(preferences.sameColorForLinks)}</style>, document.head);
 }
 
+/** Keeps the toolbar's latest color in step with the account's `latestColor`. */
+function LatestColorSync() {
+	useLatestColorSync();
+	return null;
+}
+
 /** Keeps show/hide completed in step with the account's `show_completed` setting. */
 function ShowCompletedSync() {
 	useShowCompletedSync();
@@ -405,6 +412,7 @@ export function App() {
 				<LinkColorStyles />
 				<WindowBlurredClass />
 				<ShowCompletedSync />
+				<LatestColorSync />
 				<FeatureFlagsSync />
 				<ShowKeyboardShortcutsSync />
 				<ExpansionSync />

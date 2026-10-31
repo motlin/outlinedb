@@ -46,6 +46,7 @@ export const EMPTY_PREFERENCES: Preferences = {
 	unsubscribeFromSummaryEmails: false,
 	unsubscribeFromCommentsEmails: false,
 	weeklyReportOn: false,
+	latestColor: null,
 	account: null,
 };
 

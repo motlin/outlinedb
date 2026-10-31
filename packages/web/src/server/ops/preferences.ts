@@ -10,8 +10,37 @@
 import {z} from "zod";
 import type {ServerSetting, WorkflowyInternalAdapter} from "@workflowy/shared/internal";
 import {reapplyWeekLayout} from "../calendar-layout.js";
+import {COLOR_VALUE, isColorName} from "../../color-palette.js";
+import {TAG_COLORS} from "../../tag-colors.js";
 import {INTERNAL_API_NOT_CONFIGURED} from "../internal-api-error.js";
 import {defineOp, fail, ok} from "./define.js";
+
+/** The toolbar's latest color as the client sees it: a text or highlight color from the palette. */
+const LatestColorSchema = z.strictObject({kind: z.enum(["text", "highlight"]), color: z.enum(TAG_COLORS)});
+
+type LatestColor = z.output<typeof LatestColorSchema>;
+
+/** Upstream's `latestColor.attribute`: 11 colors the text, 12 the background. */
+const COLOR_ATTRIBUTE = {text: 11, highlight: 12} as const;
+
+/** Upstream's `{attribute, value}` as a latest color, or null when either is missing or unknown. */
+function latestColorFrom(raw: unknown): LatestColor | null {
+	if (typeof raw !== "object" || raw === null || !("attribute" in raw) || !("value" in raw)) {
+		return null;
+	}
+	const kind =
+		raw.attribute === COLOR_ATTRIBUTE.text
+			? "text"
+			: raw.attribute === COLOR_ATTRIBUTE.highlight
+				? "highlight"
+				: null;
+	const color = Object.entries(COLOR_VALUE).find(([, value]) => value === raw.value)?.[0];
+	return kind !== null && isColorName(color) ? {kind, color} : null;
+}
+
+function latestColorTo({kind, color}: LatestColor): {attribute: number; value: number} {
+	return {attribute: COLOR_ATTRIBUTE[kind], value: COLOR_VALUE[color]};
+}
 
 const PreferencesPatchSchema = z
 	.object({
@@ -32,6 +61,7 @@ const PreferencesPatchSchema = z
 		unsubscribeFromSummaryEmails: z.boolean(),
 		unsubscribeFromCommentsEmails: z.boolean(),
 		weeklyReportOn: z.boolean(),
+		latestColor: LatestColorSchema.nullable(),
 	})
 	.partial()
 	.strict();
@@ -57,6 +87,9 @@ const PATHS: Record<(typeof KEYS)[number], string[]> = {
 	notesRootId: ["notesRootId"],
 	weeklyReportOn: ["weekly-report", "on"],
 };
+
+/** Upstream's `WF.CoreKv` `latestColor`, kept whole in root metadata. */
+const LATEST_COLOR_PATH = ["latestColor"];
 
 /** Flag preferences kept in upstream's account settings rather than root metadata. */
 const SETTINGS = {
@@ -99,8 +132,9 @@ function asString(value: unknown): string | null {
 
 /** Read the preferences, treating missing or mistyped values as null (false for the flag). */
 async function readPreferences(adapter: WorkflowyInternalAdapter): Promise<Preferences> {
-	const [rootValues, flagValues, theme, username, email] = await Promise.all([
+	const [rootValues, latestColor, flagValues, theme, username, email] = await Promise.all([
 		Promise.all(KEYS.map(async (key) => adapter.getRootMeta(PATHS[key]))),
+		adapter.getRootMeta(LATEST_COLOR_PATH),
 		Promise.all(FLAG_KEYS.map(async (key) => adapter.getSetting(SETTINGS[key]))),
 		adapter.getSetting(STRING_SETTINGS.theme),
 		adapter.getSetting("username"),
@@ -117,6 +151,7 @@ async function readPreferences(adapter: WorkflowyInternalAdapter): Promise<Prefe
 		slashDiscovered: root.slashDiscovered === true,
 		notesRootId: asString(root.notesRootId),
 		weeklyReportOn: root.weeklyReportOn === true,
+		latestColor: latestColorFrom(latestColor),
 		showCompleted: flag("showCompleted"),
 		showKeyboardShortcuts: flag("showKeyboardShortcuts"),
 		sameColorForLinks: flag("sameColorForLinks"),
@@ -155,10 +190,18 @@ export const preferencesPatch = defineOp({
 		}
 		const previousWeekStartDay =
 			patch.weekStartDay === undefined ? undefined : await adapter.getRootMeta(PATHS.weekStartDay);
-		const changes = KEYS.filter((key) => key in patch).map((key) => ({
+		const changes: Parameters<WorkflowyInternalAdapter["setRootMetaValues"]>[0] = KEYS.filter(
+			(key) => key in patch,
+		).map((key) => ({
 			path: PATHS[key],
 			value: patch[key] ?? undefined,
 		}));
+		if (patch.latestColor !== undefined) {
+			changes.push({
+				path: LATEST_COLOR_PATH,
+				value: patch.latestColor === null ? undefined : latestColorTo(patch.latestColor),
+			});
+		}
 		if (changes.length > 0) {
 			await adapter.setRootMetaValues(changes);
 		}

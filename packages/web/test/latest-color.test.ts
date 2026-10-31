@@ -1,20 +1,10 @@
-import {beforeEach, describe, expect, it} from "vite-plus/test";
+import {beforeEach, describe, expect, it, vi} from "vite-plus/test";
 import * as latestColor from "../src/client/latest-color.js";
-
-function memoryStorage() {
-	const values = new Map<string, string>();
-	return {
-		getItem: (key: string) => values.get(key) ?? null,
-		setItem: (key: string, value: string) => {
-			values.set(key, value);
-		},
-		values,
-	};
-}
+import type {ColorChoice} from "../src/client/rich-text.js";
 
 describe("latest color store", () => {
 	beforeEach(() => {
-		latestColor.resetLatestColorForTests(memoryStorage());
+		latestColor.resetLatestColorForTests();
 	});
 
 	it("starts empty", () => {
@@ -28,12 +18,25 @@ describe("latest color store", () => {
 		expect(latestColor.swatchClass()).toBe("c-red");
 	});
 
-	it("persists the latest color across loads", () => {
-		const storage = memoryStorage();
-		latestColor.resetLatestColorForTests(storage);
-		latestColor.change("highlight", "yellow");
-		latestColor.resetLatestColorForTests(storage);
-		expect(latestColor.get()).toStrictEqual({kind: "highlight", color: "yellow"});
+	it("adopts the account's latest color without writing it back", () => {
+		const persist = vi.fn<(choice: ColorChoice) => Promise<void>>(async () => Promise.resolve());
+		latestColor.setLatestColorPersister(persist);
+		latestColor.adopt({kind: "highlight", color: "yellow"});
+		const adopted = [latestColor.get(), latestColor.swatchClass()];
+		latestColor.adopt(null);
+		expect({adopted, cleared: latestColor.get(), writes: persist.mock.calls}).toStrictEqual({
+			adopted: [{kind: "highlight", color: "yellow"}, "bc-yellow"],
+			cleared: undefined,
+			writes: [],
+		});
+	});
+
+	it("writes a picked color to the account, but not a removal", () => {
+		const persist = vi.fn<(choice: ColorChoice) => Promise<void>>(async () => Promise.resolve());
+		latestColor.setLatestColorPersister(persist);
+		latestColor.change("text", "red");
+		latestColor.change("text", null);
+		expect(persist.mock.calls).toStrictEqual([[{kind: "text", color: "red"}]]);
 	});
 
 	it("removes the color once after a null change, keeping the latest", () => {
@@ -64,17 +67,11 @@ describe("latest color store", () => {
 		expect(latestColor.planApply("a bc d", 2, 4)).toBe("a bc d");
 	});
 
-	it("does not throw when storage throws", () => {
-		latestColor.resetLatestColorForTests({
-			getItem: () => {
-				throw new Error("blocked");
-			},
-			setItem: () => {
-				throw new Error("blocked");
-			},
-		});
-		expect(latestColor.get()).toBeUndefined();
+	it("keeps the picked color when the account write fails", async () => {
+		const persist = vi.fn<(choice: ColorChoice) => Promise<void>>(async () => Promise.reject(new Error("503")));
+		latestColor.setLatestColorPersister(persist);
 		latestColor.change("text", "blue");
-		expect(latestColor.swatchClass()).toBe("c-blue");
+		await Promise.resolve();
+		expect([latestColor.swatchClass(), persist.mock.calls.length]).toStrictEqual(["c-blue", 1]);
 	});
 });

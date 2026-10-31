@@ -95,6 +95,7 @@ const EMPTY = {
 	unsubscribeFromSummaryEmails: false,
 	unsubscribeFromCommentsEmails: false,
 	weeklyReportOn: false,
+	latestColor: null,
 	account: null,
 };
 
@@ -205,8 +206,27 @@ describe("GET /api/v1/preferences", () => {
 		await expect(partial.request("GET", "/preferences")).resolves.toStrictEqual({status: 200, body: EMPTY});
 	});
 
+	it("maps upstream's latestColor attribute and value to a color choice", async () => {
+		const highlight = setup({latestColor: {attribute: 12, value: 2}});
+		const text = setup({latestColor: {attribute: 11, value: 8}});
+
+		await expect(highlight.request("GET", "/preferences")).resolves.toStrictEqual({
+			status: 200,
+			body: {...EMPTY, latestColor: {kind: "highlight", color: "yellow"}},
+		});
+		await expect(text.request("GET", "/preferences")).resolves.toStrictEqual({
+			status: 200,
+			body: {...EMPTY, latestColor: {kind: "text", color: "sky"}},
+		});
+	});
+
 	it("answers nulls and false for missing or mistyped values", async () => {
-		const {request} = setup({dateFormat: 7, weekStartDay: "1", slash: "yes"});
+		const {request} = setup({
+			dateFormat: 7,
+			weekStartDay: "1",
+			slash: "yes",
+			latestColor: {attribute: 13, value: 2},
+		});
 
 		await expect(request("GET", "/preferences")).resolves.toStrictEqual({status: 200, body: EMPTY});
 	});
@@ -317,6 +337,33 @@ describe("PATCH /api/v1/preferences", () => {
 			response: {status: 200, body: {...EMPTY, ignoreLoom: true, weeklyReportOn: true}},
 			settings: [["ignore_loom", true]],
 			metadata: [[[{path: ["weekly-report", "on"], value: true}]]],
+		});
+	});
+
+	it("writes latestColor as upstream's {attribute, value} and removes it with null", async () => {
+		const {adapter, request} = setup({});
+
+		const written = await request("PATCH", "/preferences", {latestColor: {kind: "text", color: "red"}});
+		const removed = await request("PATCH", "/preferences", {latestColor: null});
+
+		expect({written, removed, metadata: adapter.setRootMetaValues.mock.calls}).toStrictEqual({
+			written: {status: 200, body: {...EMPTY, latestColor: {kind: "text", color: "red"}}},
+			removed: {status: 200, body: EMPTY},
+			metadata: [
+				[[{path: ["latestColor"], value: {attribute: 11, value: 0}}]],
+				[[{path: ["latestColor"], value: undefined}]],
+			],
+		});
+	});
+
+	it("rejects a latestColor outside the palette", async () => {
+		const {adapter, request} = setup({});
+
+		const response = await request("PATCH", "/preferences", {latestColor: {kind: "text", color: "magenta"}});
+
+		expect({status: response.status, writes: adapter.setRootMetaValues.mock.calls}).toStrictEqual({
+			status: 400,
+			writes: [],
 		});
 	});
 

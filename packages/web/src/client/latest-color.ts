@@ -1,56 +1,21 @@
-import {useSyncExternalStore} from "react";
+import {useQuery, useQueryClient} from "@tanstack/react-query";
+import {useEffect, useSyncExternalStore} from "react";
 import type {ColorName} from "../color-palette.js";
-import {isColorName} from "../color-palette.js";
+import {fetchPreferences, preferenceKeys, setPreferences} from "./hooks/use-preferences.js";
 import {toggleColor} from "./rich-text.js";
 import type {ColorChoice, ColorKind} from "./rich-text.js";
 
 /**
- * Upstream's `latestColor` (`WF.CoreKv`): the color the toolbar's font button and Shift+Cmd+H reapply. The
- * public API does not expose the account KV, so it is kept per browser.
+ * Upstream's `latestColor` (`WF.CoreKv`): the color the toolbar's font button and Shift+Cmd+H reapply. It
+ * lives in the account's root metadata (`/api/v1/preferences` `latestColor`), so every device shares it.
  */
-const STORAGE_KEY = "wf.latestColor";
 
-type StorageLike = Pick<Storage, "getItem" | "setItem">;
+type Persist = (choice: ColorChoice) => Promise<void>;
 
-let storage: StorageLike | undefined;
 let latest: ColorChoice | undefined;
-let loaded = false;
+let persist: Persist | undefined;
 let toggleOff = false;
 const listeners = new Set<() => void>();
-
-function backing(): StorageLike | undefined {
-	if (storage !== undefined) {
-		return storage;
-	}
-	try {
-		return globalThis.localStorage;
-	} catch {
-		return undefined;
-	}
-}
-
-function isKind(value: unknown): value is ColorKind {
-	return value === "text" || value === "highlight";
-}
-
-function load(): void {
-	if (loaded) {
-		return;
-	}
-	loaded = true;
-	try {
-		const raw = backing()?.getItem(STORAGE_KEY);
-		const parsed: unknown = raw === null || raw === undefined ? undefined : JSON.parse(raw);
-		if (typeof parsed === "object" && parsed !== null && "kind" in parsed && "color" in parsed) {
-			const {kind, color} = parsed;
-			if (isKind(kind) && isColorName(color)) {
-				latest = {kind, color};
-			}
-		}
-	} catch {
-		latest = undefined;
-	}
-}
 
 function emit(): void {
 	for (const listener of listeners) {
@@ -60,25 +25,36 @@ function emit(): void {
 
 /** The latest color, or undefined before any was picked. */
 export function get(): ColorChoice | undefined {
-	load();
 	return latest;
 }
 
 /** Upstream's `be.change`: a color becomes the latest; `null` sets a one-shot removal and keeps the latest. */
 export function change(kind: ColorKind, color: ColorName | null): void {
-	load();
 	if (color === null) {
 		toggleOff = true;
 		return;
 	}
 	toggleOff = false;
 	latest = {kind, color};
-	try {
-		backing()?.setItem(STORAGE_KEY, JSON.stringify(latest));
-	} catch {
-		// Storage is only a convenience; the in-memory value still applies.
-	}
 	emit();
+	persist?.(latest).catch(() => {
+		// Without the internal API the color still applies for this session.
+	});
+}
+
+/** Take the account's latest color (null when unset) without writing it back. */
+export function adopt(choice: ColorChoice | null): void {
+	const next = choice ?? undefined;
+	if (next?.kind === latest?.kind && next?.color === latest?.color) {
+		return;
+	}
+	latest = next;
+	emit();
+}
+
+/** Where a picked color is saved; the app wires it to `/api/v1/preferences`. */
+export function setLatestColorPersister(replacement: Persist | undefined): void {
+	persist = replacement;
 }
 
 /** Upstream's `be.applyToCaret` on stored HTML: toggles the latest color, or clears the range once after a removal. */
@@ -110,10 +86,27 @@ export function useLatestColorClass(): string {
 	return useSyncExternalStore(subscribe, swatchClass, () => "");
 }
 
-export function resetLatestColorForTests(replacement?: StorageLike): void {
-	storage = replacement;
+/** Adopt the account's latest color whenever preferences load, and save picks back to the account. */
+export function useLatestColorSync(): void {
+	const queryClient = useQueryClient();
+	const {data} = useQuery({queryKey: preferenceKeys.all, queryFn: fetchPreferences});
+	const account = data?.available === true ? data.preferences.latestColor : undefined;
+	useEffect(() => {
+		if (account !== undefined) {
+			adopt(account);
+		}
+	}, [account]);
+	useEffect(() => {
+		setLatestColorPersister(async (latestColor) => setPreferences(queryClient, {latestColor}));
+		return () => {
+			setLatestColorPersister(undefined);
+		};
+	}, [queryClient]);
+}
+
+export function resetLatestColorForTests(): void {
 	latest = undefined;
-	loaded = false;
+	persist = undefined;
 	toggleOff = false;
 	emit();
 }
