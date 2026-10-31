@@ -339,10 +339,74 @@ describe("Settings dialog", () => {
 		}).toStrictEqual({patch: ['{"theme":"default"}'], setTheme: [["default"]]});
 	});
 
+	it("shows the account font in the Font dropdown and saves a choice to the account and the body", async () => {
+		document.body.className = "is-desktop font-system";
+		await open({font: "times"});
+		const menu = [...section("Personalization").querySelectorAll<HTMLElement>(".menu")].at(1);
+		const trigger = menu?.firstElementChild;
+		const label = trigger?.textContent;
+		await run(() => {
+			menu?.focus();
+		});
+		const rows = [...document.querySelectorAll(".flyout a")];
+		const options = rows.map((row) => row.textContent);
+		const classes = rows.slice(0, 3).map((row) => [...row.classList].slice(-4).join(" "));
+		await pickOption(menu!, "ET Book");
+		expect({
+			label,
+			triggerClasses: {
+				dropdownFont: trigger?.classList.contains("dropdownFont"),
+				dropdown: trigger?.classList.contains("dropdown"),
+			},
+			options,
+			classes,
+			patch: patches().map(([, init]) => init?.body),
+			bodyClass: document.body.className,
+		}).toStrictEqual({
+			label: "Serif",
+			triggerClasses: {dropdownFont: true, dropdown: false},
+			options: [
+				"System",
+				"Sans-serif",
+				"Serif",
+				"Interface",
+				"Atkinson Hyperlegible",
+				"Bold",
+				"Courier New",
+				"ET Book",
+				"Fira Code",
+				"Geist Mono",
+				"IBM Plex Mono",
+				"Inter",
+				"JetBrains Mono",
+				"Junicode",
+				"Lexend",
+				"Light",
+				"Open Dyslexic",
+				"Open Sans",
+				"Terminal",
+				"Typewriter",
+			],
+			classes: [
+				"menuItem fontOption system canHover",
+				"menuItem fontOption helvetica canHover",
+				"menuItem fontOption times canHover",
+			],
+			patch: ['{"font":"etBook"}'],
+			bodyClass: "is-desktop font-etBook",
+		});
+	});
+
+	it("labels the Font dropdown System when the account has no font", async () => {
+		await open();
+		const menu = [...section("Personalization").querySelectorAll<HTMLElement>(".menu")].at(1);
+		expect(menu?.firstElementChild?.textContent).toBe("System");
+	});
+
 	it("shows the account emoji style in the Emojis dropdown and saves a choice to the account, the body and this browser", async () => {
 		localStorage.clear();
 		await open({emojiSelected: "system"});
-		const menu = [...section("Personalization").querySelectorAll<HTMLElement>(".menu")].at(1);
+		const menu = [...section("Personalization").querySelectorAll<HTMLElement>(".menu")].at(2);
 		const label = menu?.firstElementChild?.textContent;
 		await run(() => {
 			menu?.focus();
@@ -357,7 +421,7 @@ describe("Settings dialog", () => {
 			bodyClass: document.body.classList.contains("emoji-noto"),
 			stored: localStorage.getItem("emoji_options__selected"),
 		}).toStrictEqual({
-			rows: ["Theme", "Emojis"],
+			rows: ["Theme", "Font", "Emojis"],
 			label: "System",
 			options: ["System", "Noto Emoji"],
 			patch: ['{"emojiSelected":"noto"}'],
@@ -369,7 +433,7 @@ describe("Settings dialog", () => {
 	it("labels the Emojis dropdown System when the account has no emoji style", async () => {
 		localStorage.clear();
 		await open();
-		const menu = [...section("Personalization").querySelectorAll<HTMLElement>(".menu")].at(1);
+		const menu = [...section("Personalization").querySelectorAll<HTMLElement>(".menu")].at(2);
 		expect(menu?.firstElementChild?.textContent).toBe("System");
 	});
 

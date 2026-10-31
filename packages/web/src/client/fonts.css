@@ -1,0 +1,412 @@
+/*
+ * Upstream fonts.css: each account font (body class `font-<name>`, see font-apply.ts) restyles the rows and
+ * left-bar rows that opt in with `font-custom`. The `system` scope lives in styles.css. Upstream's @font-face
+ * webfonts are not shipped, so Lexend, Inter, ET Book, ... fall back to the next family in each stack.
+ */
+
+.font-helvetica .font-custom {
+	font-family:
+		"Helvetica Neue", Arial, Sans-serif, var(--emoji-font, "Apple Color Emoji"), "Segoe UI Emoji", "Segoe UI Symbol";
+	font-weight: normal;
+
+	--font-default-line-height: 20px;
+	--font-descendant-padding-top: 4px;
+	--expand-collapse--top: 4px;
+	--bullet--top: 5px;
+	--item-menu--top: 2px;
+	--item-menu-root--top: 7px;
+	--font-ui-font-size: 13px;
+	--font-default-font-size: 16px;
+	--font-descendant-note-font-size: 13px;
+	--font-selected-name-font-size: 27px;
+	--font-selected-name-line-height: 34px;
+	--font-minimal-document-height: 23px;
+	--font-help-text-font-size: 12px;
+}
+
+.font-times .font-custom {
+	font-family: Georgia, Times, serif, var(--emoji-font, "Apple Color Emoji"), "Segoe UI Emoji", "Segoe UI Symbol";
+	font-weight: normal;
+
+	--font-default-line-height: 20px;
+	--font-descendant-padding-top: 4px;
+	--expand-collapse--top: 4px;
+	--bullet--top: 5px;
+	--item-menu--top: 2px;
+	--item-menu-root--top: 7px;
+	--font-ui-font-size: 13px;
+	--font-default-font-size: 16px;
+	--font-descendant-note-font-size: 13px;
+	--font-selected-name-font-size: 27px;
+	--font-selected-name-line-height: 34px;
+	--font-minimal-document-height: 23px;
+	--font-help-text-font-size: 12px;
+}
+
+.font-courier .font-custom {
+	font-family: Courier, monospace, var(--emoji-font, "Apple Color Emoji"), "Segoe UI Emoji", "Segoe UI Symbol";
+	font-weight: normal;
+
+	--font-default-line-height: 19px;
+	--font-descendant-padding-top: 5px;
+	--expand-collapse--top: 4.5px;
+	--bullet--top: 5.5px;
+	--item-menu--top: 2.5px;
+	--item-menu-root--top: 5px;
+	--font-ui-font-size: 13px;
+	--font-default-font-size: 14px;
+	--font-descendant-note-font-size: 12px;
+	--font-selected-name-font-size: 27px;
+	--font-selected-name-line-height: 30px;
+	--font-minimal-document-height: 23px;
+	--font-help-text-font-size: 12px;
+}
+
+.font-courierNew .font-custom {
+	font-family:
+		"Courier New", Courier, monospace, var(--emoji-font, "Apple Color Emoji"), "Segoe UI Emoji", "Segoe UI Symbol";
+	font-weight: 100;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+
+	--font-default-line-height: 27px;
+	--font-descendant-padding-top: 5px;
+	--expand-collapse--top: 4.5px;
+	--bullet--top: 5.5px;
+	--item-menu--top: 2.5px;
+	--item-menu-root--top: 5px;
+	--font-ui-font-size: 20px;
+	--font-default-font-size: 22px;
+	--font-code-font-family: "Courier New", Courier, monospace;
+	--font-code-block-font-size: 22px;
+	--font-descendant-note-font-size: 12px;
+	--font-selected-name-font-size: 22px;
+	--font-selected-name-line-height: 27px;
+	--font-minimal-document-height: 23px;
+	--font-help-text-font-size: 12px;
+}
+
+.font-lexend .font-custom {
+	font-family: Lexend, sans-serif, var(--emoji-font, "Apple Color Emoji"), "Segoe UI Emoji", "Segoe UI Symbol";
+	font-weight: normal;
+
+	--font-default-line-height: 24px;
+	--font-descendant-padding-top: 4px;
+	--expand-collapse--top: 6px;
+	--bullet--top: 7px;
+	--item-menu--top: 4px;
+	--item-menu-root--top: 7px;
+	--font-ui-font-size: 13px;
+	--font-default-font-size: 16px;
+	--font-descendant-note-font-size: 13px;
+	--font-selected-name-font-size: 27px;
+	--font-selected-name-line-height: 34px;
+	--font-minimal-document-height: 23px;
+	--font-help-text-font-size: 12px;
+}
+
+.font-atkinsonHyperlegible .font-custom {
+	font-family:
+		"Atkinson Hyperlegible", sans-serif, var(--emoji-font, "Apple Color Emoji"), "Segoe UI Emoji", "Segoe UI Symbol";
+	font-weight: normal;
+
+	--font-default-line-height: 22px;
+	--font-descendant-padding-top: 3.5px;
+	--expand-collapse--top: 5px;
+	--bullet--top: 6px;
+	--item-menu--top: 3px;
+	--item-menu-root--top: 6px;
+	--font-ui-font-size: 13px;
+	--font-default-font-size: 16px;
+	--font-descendant-note-font-size: 13px;
+	--font-selected-name-font-size: 26px;
+	--font-selected-name-line-height: 33px;
+	--font-minimal-document-height: 22px;
+	--font-help-text-font-size: 12px;
+}
+
+.font-etBook .font-custom {
+	font-family:
+		ET Book,
+		serif,
+		var(--emoji-font, "Apple Color Emoji"),
+		"Segoe UI Emoji",
+		"Segoe UI Symbol";
+	font-weight: normal;
+
+	--font-default-line-height: 26px;
+	--font-descendant-padding-top: 4px;
+	--expand-collapse--top: 6px;
+	--bullet--top: 7px;
+	--item-menu--top: 4px;
+	--item-menu-root--top: 7px;
+	--font-ui-font-size: 13px;
+	--font-default-font-size: 18px;
+	--font-descendant-note-font-size: 15px;
+	--font-selected-name-font-size: 27px;
+	--font-selected-name-line-height: 34px;
+	--font-minimal-document-height: 23px;
+	--font-help-text-font-size: 12px;
+	--font-code-block-font-size: 15px;
+}
+
+.font-jetbrainsMono .font-custom {
+	font-family:
+		JetBrains Mono,
+		monospace,
+		var(--emoji-font, "Apple Color Emoji"),
+		"Segoe UI Emoji",
+		"Segoe UI Symbol";
+	font-weight: normal;
+
+	--font-default-line-height: 24px;
+	--font-descendant-padding-top: 5px;
+	--expand-collapse--top: 6px;
+	--bullet--top: 7px;
+	--item-menu--top: 4px;
+	--item-menu-root--top: 7px;
+	--font-ui-font-size: 13px;
+	--font-default-font-size: 16px;
+	--font-descendant-note-font-size: 13px;
+	--font-selected-name-font-size: 27px;
+	--font-selected-name-line-height: 34px;
+	--font-minimal-document-height: 23px;
+	--font-help-text-font-size: 12px;
+	--font-code-font-family: "JetBrains Mono";
+}
+
+.font-firaCode .font-custom {
+	font-family:
+		Fira Code,
+		monospace,
+		var(--emoji-font, "Apple Color Emoji"),
+		"Segoe UI Emoji",
+		"Segoe UI Symbol";
+	font-weight: normal;
+
+	--font-default-line-height: 24px;
+	--font-descendant-padding-top: 5px;
+	--expand-collapse--top: 6px;
+	--bullet--top: 7px;
+	--item-menu--top: 4px;
+	--item-menu-root--top: 7px;
+	--font-ui-font-size: 13px;
+	--font-default-font-size: 16px;
+	--font-descendant-note-font-size: 13px;
+	--font-selected-name-font-size: 27px;
+	--font-selected-name-line-height: 34px;
+	--font-minimal-document-height: 23px;
+	--font-help-text-font-size: 12px;
+	--font-code-font-family: "Fira Code";
+}
+
+.font-geistMono .font-custom {
+	font-family:
+		Geist Mono,
+		monospace,
+		var(--emoji-font, "Apple Color Emoji"),
+		"Segoe UI Emoji",
+		"Segoe UI Symbol";
+	font-weight: normal;
+
+	--font-default-line-height: 24px;
+	--font-descendant-padding-top: 5px;
+	--expand-collapse--top: 6px;
+	--bullet--top: 7px;
+	--item-menu--top: 4px;
+	--item-menu-root--top: 7px;
+	--font-ui-font-size: 13px;
+	--font-default-font-size: 14px;
+	--font-descendant-note-font-size: 12px;
+	--font-selected-name-font-size: 27px;
+	--font-selected-name-line-height: 34px;
+	--font-minimal-document-height: 23px;
+	--font-help-text-font-size: 12px;
+	--font-code-font-family: "Geist Mono";
+}
+
+.font-inter .font-custom {
+	font-family: Inter, Sans-serif, var(--emoji-font, "Apple Color Emoji"), "Segoe UI Emoji", "Segoe UI Symbol";
+	font-weight: normal;
+
+	--font-default-line-height: 24px;
+	--font-descendant-padding-top: 4px;
+	--expand-collapse--top: 6px;
+	--bullet--top: 7px;
+	--item-menu--top: 4px;
+	--item-menu-root--top: 7px;
+	--font-ui-font-size: 13px;
+	--font-default-font-size: 16px;
+	--font-descendant-note-font-size: 13px;
+	--font-selected-name-font-size: 27px;
+	--font-selected-name-line-height: 34px;
+	--font-minimal-document-height: 23px;
+	--font-help-text-font-size: 12px;
+}
+
+.font-ibmPlexMono .font-custom {
+	font-family:
+		IBM Plex Mono,
+		monospace,
+		var(--emoji-font, "Apple Color Emoji"),
+		"Segoe UI Emoji",
+		"Segoe UI Symbol";
+	font-weight: normal;
+
+	--font-default-line-height: 24px;
+	--font-descendant-padding-top: 4px;
+	--expand-collapse--top: 6px;
+	--bullet--top: 7px;
+	--item-menu--top: 4px;
+	--item-menu-root--top: 7px;
+	--font-ui-font-size: 13px;
+	--font-default-font-size: 14px;
+	--font-descendant-note-font-size: 12px;
+	--font-selected-name-font-size: 27px;
+	--font-selected-name-line-height: 34px;
+	--font-minimal-document-height: 23px;
+	--font-help-text-font-size: 12px;
+}
+
+.font-openSans .font-custom {
+	font-family:
+		Open Sans,
+		Sans-serif,
+		var(--emoji-font, "Apple Color Emoji"),
+		"Segoe UI Emoji",
+		"Segoe UI Symbol";
+	font-weight: normal;
+
+	--font-default-line-height: 24px;
+	--font-descendant-padding-top: 3.5px;
+	--expand-collapse--top: 6px;
+	--bullet--top: 7px;
+	--item-menu--top: 4px;
+	--item-menu-root--top: 7px;
+	--font-ui-font-size: 13px;
+	--font-default-font-size: 16px;
+	--font-descendant-note-font-size: 13px;
+	--font-selected-name-font-size: 27px;
+	--font-selected-name-line-height: 34px;
+	--font-minimal-document-height: 23px;
+	--font-help-text-font-size: 12px;
+}
+
+.font-junicode .font-custom {
+	font-family: Junicode, serif, var(--emoji-font, "Apple Color Emoji"), "Segoe UI Emoji", "Segoe UI Symbol";
+	font-weight: normal;
+
+	--font-default-line-height: 24px;
+	--font-descendant-padding-top: 6.5px;
+	--expand-collapse--top: 6px;
+	--bullet--top: 7.5px;
+	--item-menu--top: 4px;
+	--item-menu-root--top: 7px;
+	--font-ui-font-size: 13px;
+	--font-default-font-size: 18px;
+	--font-descendant-note-font-size: 13px;
+	--font-selected-name-font-size: 27px;
+	--font-selected-name-line-height: 34px;
+	--font-minimal-document-height: 23px;
+	--font-help-text-font-size: 12px;
+}
+
+.font-openDyslexic .font-custom {
+	font-family:
+		open-dyslexic, Arial, Sans-serif, var(--emoji-font, "Apple Color Emoji"), "Segoe UI Emoji", "Segoe UI Symbol";
+	font-weight: normal;
+
+	--font-default-line-height: 19px;
+	--font-descendant-padding-top: 5px;
+	--expand-collapse--top: 4.5px;
+	--bullet--top: 5.5px;
+	--item-menu--top: 2.5px;
+	--item-menu-root--top: 5px;
+	--font-ui-font-size: 13px;
+	--font-default-font-size: 16px;
+	--font-descendant-note-font-size: 12px;
+	--font-selected-name-font-size: 27px;
+	--font-selected-name-line-height: 30px;
+	--font-minimal-document-height: 23px;
+	--font-help-text-font-size: 12px;
+}
+
+.font-helvetica_light .font-custom {
+	font-family:
+		"Helvetica Neue", Arial, Sans-serif, var(--emoji-font, "Apple Color Emoji"), "Segoe UI Emoji", "Segoe UI Symbol";
+	font-weight: 300;
+
+	--font-default-line-height: 20px;
+	--font-descendant-padding-top: 4px;
+	--expand-collapse--top: 4px;
+	--bullet--top: 5px;
+	--item-menu--top: 2px;
+	--item-menu-root--top: 7px;
+	--font-ui-font-size: 13px;
+	--font-default-font-size: 16px;
+	--font-descendant-note-font-size: 13px;
+	--font-selected-name-font-size: 27px;
+	--font-selected-name-line-height: 34px;
+	--font-minimal-document-height: 23px;
+	--font-help-text-font-size: 12px;
+}
+
+.font-helvetica_bold .font-custom {
+	font-family:
+		"Helvetica Neue", Arial, Sans-serif, var(--emoji-font, "Apple Color Emoji"), "Segoe UI Emoji", "Segoe UI Symbol";
+	font-weight: 700;
+
+	--font-default-line-height: 20px;
+	--font-descendant-padding-top: 4px;
+	--expand-collapse--top: 4px;
+	--bullet--top: 5px;
+	--item-menu--top: 2px;
+	--item-menu-root--top: 7px;
+	--font-ui-font-size: 13px;
+	--font-default-font-size: 16px;
+	--font-descendant-note-font-size: 13px;
+	--font-selected-name-font-size: 27px;
+	--font-selected-name-line-height: 34px;
+	--font-minimal-document-height: 23px;
+	--font-help-text-font-size: 12px;
+}
+
+.font-andale .font-custom {
+	font-family:
+		"Andale Mono", Menlo, Consolas, monospace, var(--emoji-font, "Apple Color Emoji"), "Segoe UI Emoji",
+		"Segoe UI Symbol";
+	font-weight: normal;
+
+	--font-default-line-height: 19px;
+	--font-descendant-padding-top: 5px;
+	--expand-collapse--top: 4.5px;
+	--bullet--top: 5.5px;
+	--item-menu--top: 2.5px;
+	--item-menu-root--top: 5px;
+	--font-ui-font-size: 13px;
+	--font-default-font-size: 14px;
+	--font-descendant-note-font-size: 12px;
+	--font-selected-name-font-size: 27px;
+	--font-selected-name-line-height: 30px;
+	--font-minimal-document-height: 23px;
+	--font-help-text-font-size: 12px;
+}
+
+.font-lucidagrande .font-custom {
+	font-family: "Lucida Grande", "Lucida Sans Unicode", var(--emoji-font, "Segoe UI Emoji"), "Segoe UI Symbol";
+	font-weight: normal;
+
+	--font-default-line-height: 19px;
+	--font-descendant-padding-top: 5px;
+	--expand-collapse--top: 4.5px;
+	--bullet--top: 5.5px;
+	--item-menu--top: 2.5px;
+	--item-menu-root--top: 5px;
+	--font-ui-font-size: 13px;
+	--font-default-font-size: 14px;
+	--font-descendant-note-font-size: 12px;
+	--font-selected-name-font-size: 27px;
+	--font-selected-name-line-height: 30px;
+	--font-minimal-document-height: 23px;
+	--font-help-text-font-size: 12px;
+}

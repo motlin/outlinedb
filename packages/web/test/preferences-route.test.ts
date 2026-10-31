@@ -91,6 +91,7 @@ const EMPTY = {
 	showKeyboardShortcuts: false,
 	sameColorForLinks: false,
 	theme: null,
+	font: null,
 	displayImagePreviewsAsThumbnails: false,
 	ignoreYoutube: false,
 	ignoreYtShort: false,
@@ -198,6 +199,19 @@ describe("GET /api/v1/preferences", () => {
 			read: {status: 200, body: {...EMPTY, theme: "dark"}},
 			written: {status: 200, body: {...EMPTY, theme: "system"}},
 			settings: [["theme", "system"]],
+		});
+	});
+
+	it("round-trips the font as a string", async () => {
+		const {adapter, request} = setup({}, {font: "system"});
+
+		const read = await request("GET", "/preferences");
+		const written = await request("PATCH", "/preferences", {font: "etBook"});
+
+		expect({read, written, settings: adapter.setSetting.mock.calls}).toStrictEqual({
+			read: {status: 200, body: {...EMPTY, font: "system"}},
+			written: {status: 200, body: {...EMPTY, font: "etBook"}},
+			settings: [["font", "etBook"]],
 		});
 	});
 

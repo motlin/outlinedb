@@ -5,7 +5,14 @@ import type {Theme} from "../stores/outline.js";
 import {useCustomThemesStore} from "../stores/custom-themes.js";
 import {isRegisteredTheme} from "../themes.js";
 import {applyEmoji, serverEmoji} from "../emoji-apply.js";
-import {fetchPreferences, preferenceKeys, serverShowKeyboardShortcuts, serverTheme} from "./use-preferences.js";
+import {applyFont} from "../font-apply.js";
+import {
+	fetchPreferences,
+	preferenceKeys,
+	serverFont,
+	serverShowKeyboardShortcuts,
+	serverTheme,
+} from "./use-preferences.js";
 
 /** Adopt the account's `showKeyboardShortcuts` whenever `/api/v1/preferences` reports a value. */
 export function useShowKeyboardShortcutsSync(): void {
@@ -45,4 +52,15 @@ export function useEmojiSync(): void {
 			applyEmoji(emoji);
 		}
 	}, [emoji]);
+}
+
+/** Adopt the account's `font` as body class `font-<name>` whenever `/api/v1/preferences` reports one. */
+export function useFontSync(): void {
+	const {data} = useQuery({queryKey: preferenceKeys.all, queryFn: fetchPreferences});
+	const font = serverFont(data);
+	useEffect(() => {
+		if (font !== null) {
+			applyFont(font);
+		}
+	}, [font]);
 }

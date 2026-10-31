@@ -67,7 +67,7 @@ import {useLatestColorSync} from "./latest-color.js";
 import {useSearchForChangesAfterSync} from "./search-for-changes-after.js";
 import {useTagColors} from "./hooks/use-tag-colors.js";
 import {useCustomTree} from "./hooks/use-custom-tree.js";
-import {useEmojiSync, useShowKeyboardShortcutsSync, useThemeSync} from "./hooks/use-right-bar-sync.js";
+import {useEmojiSync, useFontSync, useShowKeyboardShortcutsSync, useThemeSync} from "./hooks/use-right-bar-sync.js";
 import {useShowCompletedSync} from "./hooks/use-show-completed-toggle.js";
 import {installWindowBlurredClass} from "./window-blurred.js";
 import {installCoalescingTimeoutProvider} from "./coalescing-timers.js";
@@ -88,6 +88,7 @@ import {queryClientDefaults} from "./query-retry.js";
 import "./reset.css";
 import "./wf-tailwind.css";
 import "./styles.css";
+import "./fonts.css";
 import "./zen-mode.css";
 import "./themes/hacker.css";
 import "./themes/space.css";
@@ -394,6 +395,7 @@ function ShowKeyboardShortcutsSync() {
 	useShowKeyboardShortcutsSync();
 	useThemeSync();
 	useEmojiSync();
+	useFontSync();
 	useCustomTree();
 	return null;
 }

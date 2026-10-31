@@ -42,6 +42,7 @@ export const EMPTY_PREFERENCES: Preferences = {
 	showKeyboardShortcuts: false,
 	sameColorForLinks: false,
 	theme: null,
+	font: null,
 	displayImagePreviewsAsThumbnails: false,
 	ignoreYoutube: false,
 	ignoreYtShort: false,
@@ -205,6 +206,11 @@ export function serverShowKeyboardShortcuts(state: PreferencesState | undefined)
 /** The account's `theme` once preferences load; null while loading, unavailable or unset. */
 export function serverTheme(state: PreferencesState | undefined): string | null {
 	return state?.available === true ? state.preferences.theme : null;
+}
+
+/** The account's `font` once preferences load; null while loading, unavailable or unset. */
+export function serverFont(state: PreferencesState | undefined): string | null {
+	return state?.available === true ? state.preferences.font : null;
 }
 
 /** The embed a row's first link gets under the account's embed flags, or null; a row re-renders only when its own embed changes. */

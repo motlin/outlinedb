@@ -9,6 +9,7 @@ import type {Preferences, PreferencesPatch} from "../hooks/use-preferences.js";
 import {currentVersionLabel} from "../app-version.js";
 import {useFlash} from "../hooks/use-flash.js";
 import {EMOJI_OPTIONS, applyEmoji, storedEmoji} from "../emoji-apply.js";
+import {FONT_OPTIONS, applyFont} from "../font-apply.js";
 import {allThemes, currentTheme} from "../themes.js";
 import {useCustomThemesStore} from "../stores/custom-themes.js";
 import {useOutlineStore} from "../stores/outline.js";
@@ -225,6 +226,7 @@ function PersonalizationSection({preferences, change}: SectionProps) {
 	const customThemes = useCustomThemesStore((state) => state.themes);
 	const current = currentTheme(preferences.theme ?? theme);
 	const emoji = preferences.emojiSelected ?? storedEmoji();
+	const font = preferences.font ?? "system";
 	return (
 		<SettingsSection title="Personalization">
 			<SectionBody>
@@ -238,6 +240,22 @@ function PersonalizationSection({preferences, change}: SectionProps) {
 								onSelect={() => {
 									change({theme: option.name});
 									setTheme(option.name);
+								}}
+							/>
+						))}
+					</Dropdown>
+				</ControlRow>
+				<ControlRow label="Font">
+					<Dropdown large className="dropdownFont">
+						{FONT_OPTIONS.map(([name, label]) => (
+							<DropdownOption
+								key={name}
+								label={label}
+								className={`fontOption ${name}`}
+								isSelected={font === name}
+								onSelect={() => {
+									change({font: name});
+									applyFont(name);
 								}}
 							/>
 						))}

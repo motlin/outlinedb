@@ -2,6 +2,7 @@ import {describe, expect, it} from "vite-plus/test";
 import {readFileSync} from "node:fs";
 import {fileURLToPath} from "node:url";
 import {cssBlock, cssPreludes, hasSelector} from "./helpers/css-block.js";
+import {FONT_OPTIONS} from "../src/client/font-apply.js";
 
 function readSource(relative: string): string {
 	return readFileSync(fileURLToPath(new URL(relative, import.meta.url)), "utf8");
@@ -9,6 +10,7 @@ function readSource(relative: string): string {
 
 const styles = readSource("../src/client/styles.css");
 const indexHtml = readSource("../src/client/index.html");
+const fonts = readSource("../src/client/fonts.css");
 
 const SYSTEM_FONT_STACK =
 	'-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, var(--emoji-font, "Apple Color Emoji"), "Segoe UI Emoji", "Segoe UI Symbol"';
@@ -232,5 +234,37 @@ describe("upstream button variants and duotone icons", () => {
 			.map((prelude) => prelude.replace(/^[\s}]*/u, "").trim())
 			.filter((prelude) => prelude.endsWith("code") && !allowed.has(prelude));
 		expect(offenders).toStrictEqual([]);
+	});
+});
+
+describe("fonts.css", () => {
+	it("scopes every non-system font to font-custom rows", () => {
+		const preludes = new Set(cssPreludes(stripComments(fonts)).map((prelude) => prelude.trim()));
+		const missing = FONT_OPTIONS.filter(
+			([name]) => name !== "system" && !preludes.has(`.font-${name} .font-custom`),
+		);
+		expect(missing).toStrictEqual([]);
+	});
+
+	it("ports upstream's ET Book rule verbatim", () => {
+		expect(cssBlock(fonts, ".font-etBook .font-custom")).toStrictEqual({
+			"font-family":
+				'ET Book, serif, var(--emoji-font, "Apple Color Emoji"), "Segoe UI Emoji", "Segoe UI Symbol"',
+			"font-weight": "normal",
+			"--font-default-line-height": "26px",
+			"--font-descendant-padding-top": "4px",
+			"--expand-collapse--top": "6px",
+			"--bullet--top": "7px",
+			"--item-menu--top": "4px",
+			"--item-menu-root--top": "7px",
+			"--font-ui-font-size": "13px",
+			"--font-default-font-size": "18px",
+			"--font-descendant-note-font-size": "15px",
+			"--font-selected-name-font-size": "27px",
+			"--font-selected-name-line-height": "34px",
+			"--font-minimal-document-height": "23px",
+			"--font-help-text-font-size": "12px",
+			"--font-code-block-font-size": "15px",
+		});
 	});
 });

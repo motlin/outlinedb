@@ -61,6 +61,8 @@ const PreferencesPatchSchema = z
 		showKeyboardShortcuts: z.boolean(),
 		sameColorForLinks: z.boolean(),
 		theme: z.string(),
+		/** Upstream's account `font` (`system`, `helvetica`, `etBook`, ...), applied as body class `font-<name>`. */
+		font: z.string(),
 		displayImagePreviewsAsThumbnails: z.boolean(),
 		ignoreYoutube: z.boolean(),
 		ignoreYtShort: z.boolean(),
@@ -76,10 +78,11 @@ const PreferencesPatchSchema = z
 	.partial()
 	.strict();
 
-/** The full preferences: every patch field present, with `theme` null when unset. */
+/** The full preferences: every patch field present, with `theme` and `font` null when unset. */
 export const PreferencesSchema = z.strictObject({
-	...PreferencesPatchSchema.required().omit({theme: true}).shape,
+	...PreferencesPatchSchema.required().omit({theme: true, font: true}).shape,
 	theme: z.string().nullable(),
+	font: z.string().nullable(),
 	/** The signed-in account's name and email (read-only), null unless both are known. */
 	account: z.strictObject({username: z.string(), email: z.string()}).nullable(),
 });
@@ -162,7 +165,7 @@ const FLAG_KEYS = [
 ] as const;
 
 /** The server-saved settings that are strings rather than yes/no flags. */
-const STRING_SETTINGS = {theme: "theme"} as const satisfies Record<string, ServerSetting>;
+const STRING_SETTINGS = {theme: "theme", font: "font"} as const satisfies Record<string, ServerSetting>;
 
 /** Upstream sends flags as `"yes"`/`"no"`; the adapter caches a written flag as a boolean. */
 function asFlag(value: unknown): boolean {
@@ -175,15 +178,19 @@ function asString(value: unknown): string | null {
 
 /** Read the preferences, treating missing or mistyped values as null (false for the flag). */
 async function readPreferences(adapter: WorkflowyInternalAdapter): Promise<Preferences> {
-	const [rootValues, latestColor, searchForChangesAfter, flagValues, theme, username, email] = await Promise.all([
-		Promise.all(KEYS.map(async (key) => adapter.getRootMeta(PATHS[key]))),
-		adapter.getRootMeta(LATEST_COLOR_PATH),
-		adapter.getRootMeta(SEARCH_FOR_CHANGES_AFTER_PATH).then(async (raw) => searchForChangesAfterFrom(adapter, raw)),
-		Promise.all(FLAG_KEYS.map(async (key) => adapter.getSetting(SETTINGS[key]))),
-		adapter.getSetting(STRING_SETTINGS.theme),
-		adapter.getSetting("username"),
-		adapter.getSetting("email"),
-	]);
+	const [rootValues, latestColor, searchForChangesAfter, flagValues, theme, font, username, email] =
+		await Promise.all([
+			Promise.all(KEYS.map(async (key) => adapter.getRootMeta(PATHS[key]))),
+			adapter.getRootMeta(LATEST_COLOR_PATH),
+			adapter
+				.getRootMeta(SEARCH_FOR_CHANGES_AFTER_PATH)
+				.then(async (raw) => searchForChangesAfterFrom(adapter, raw)),
+			Promise.all(FLAG_KEYS.map(async (key) => adapter.getSetting(SETTINGS[key]))),
+			adapter.getSetting(STRING_SETTINGS.theme),
+			adapter.getSetting(STRING_SETTINGS.font),
+			adapter.getSetting("username"),
+			adapter.getSetting("email"),
+		]);
 	const root = Object.fromEntries(KEYS.map((key, index) => [key, rootValues[index]]));
 	const flag = (key: (typeof FLAG_KEYS)[number]): boolean => asFlag(flagValues[FLAG_KEYS.indexOf(key)]);
 	const name = asString(username);
@@ -212,6 +219,7 @@ async function readPreferences(adapter: WorkflowyInternalAdapter): Promise<Prefe
 		unsubscribeFromSummaryEmails: flag("unsubscribeFromSummaryEmails"),
 		unsubscribeFromCommentsEmails: flag("unsubscribeFromCommentsEmails"),
 		theme: asString(theme),
+		font: asString(font),
 		account: name !== null && address !== null ? {username: name, email: address} : null,
 	};
 }
@@ -271,6 +279,9 @@ export const preferencesPatch = defineOp({
 		}
 		if (patch.theme !== undefined) {
 			await adapter.setSetting(STRING_SETTINGS.theme, patch.theme);
+		}
+		if (patch.font !== undefined) {
+			await adapter.setSetting(STRING_SETTINGS.font, patch.font);
 		}
 		if (
 			patch.weekStartDay !== undefined &&
