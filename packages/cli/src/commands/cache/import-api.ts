@@ -1,9 +1,10 @@
 import {WorkflowyApiClient, WorkflowyInternalClient} from "@workflowy/shared/api";
 import type {TreeSnapshot} from "@workflowy/shared/api";
-import {importInternalMetadata} from "@workflowy/shared/cache";
-import {readInternalAuth} from "@workflowy/shared/node";
+import {importInternalMetadata, WorkflowyWriteThroughClient} from "@workflowy/shared/cache";
+import {internalAdapter, readInternalAuth} from "@workflowy/shared/node";
 import {Command, Flags} from "@oclif/core";
 import {createDatabase} from "../../db/index.js";
+import {CacheService} from "../../services/cache.js";
 import {importFromApi} from "../../services/cache-import-api.js";
 import type {ImportApiResult} from "../../services/cache-import-api.js";
 import {logger} from "../../services/logger.js";
@@ -81,12 +82,40 @@ export default class ImportApi extends Command {
 			if (snapshot !== undefined) {
 				const {written, skipped} = importInternalMetadata(database, snapshot, Date.now());
 				this.log(`Item metadata: ${written.toLocaleString()} nodes (${skipped.toLocaleString()} not in cache)`);
+				await this.backfillCalendarMetadata(database, apiClient);
 			}
 		} catch (error) {
 			if (error instanceof Error && error.message.includes("429")) {
 				this.error("Rate limit exceeded. Please wait 1 minute before trying again.");
 			}
 			this.error(`Failed to import from API: ${String(error)}`);
+		}
+	}
+
+	/**
+	 * Run workflowy.com's one-time calendar migrations (`calendar.ts_added_v2`,
+	 * `calendar.dateId_added_v1`) on the freshly imported metadata, as upstream
+	 * does on boot. Once both flags are set this only reads root metadata. A
+	 * failure is reported without failing the import, like upstream's Sentry catch.
+	 */
+	private async backfillCalendarMetadata(
+		database: ReturnType<typeof createDatabase>,
+		apiClient: WorkflowyApiClient,
+	): Promise<void> {
+		const adapter = internalAdapter(
+			database,
+			new WorkflowyWriteThroughClient(apiClient, new CacheService(database)),
+		);
+		if (adapter === undefined) {
+			return;
+		}
+		try {
+			const {timestamps, dateIds} = await adapter.backfillCalendarMetadata();
+			if (timestamps.length > 0 || dateIds.length > 0) {
+				this.log(`Calendar backfill: +${timestamps.length} timestamps, +${dateIds.length} dateIds`);
+			}
+		} catch (error) {
+			this.warn(`Calendar metadata backfill failed: ${String(error)}`);
 		}
 	}
 

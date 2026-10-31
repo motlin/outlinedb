@@ -599,3 +599,174 @@ describe("WorkflowyInternalAdapter.ensureCalendarDay", () => {
 		});
 	});
 });
+
+describe("WorkflowyInternalAdapter.backfillCalendarMetadata", () => {
+	let open: DatabaseConstructor.Database[] = [];
+	afterEach(() => {
+		vi.restoreAllMocks();
+		for (const sqlite of open) {
+			sqlite.close();
+		}
+		open = [];
+	});
+	function tracked(options: Parameters<typeof setup>[0]) {
+		const result = setup(options);
+		open.push(result.sqlite);
+		return result;
+	}
+	const withRootId = (calendar: Record<string, unknown>): InternalSession => ({
+		...SESSION,
+		rootMetadata: {...SESSION.rootMetadata, calendar},
+	});
+	const oct17 = new Date(2026, 9, 17).getTime();
+	const oct1 = new Date(2026, 9, 1).getTime();
+	const flagEdit = (key: string, op: "add" | "replace" = "add") => [
+		"edit",
+		{id: "None", metadataPatches: [{op, path: ["calendar", key], value: true}]},
+	];
+
+	it("adds timestamps from the ancestor values, then dateIds from the timestamps, and sets both flags, like upstream's boot migrations", async () => {
+		const {adapter, calls, cachedMetadata} = tracked({
+			children: {home: [CAL], [CAL]: ["y"], y: ["m"], m: ["d", "entry"], d: ["child"]},
+			metadata: {
+				[CAL]: ROOT_META,
+				y: {
+					calendar: {
+						level: "year",
+						value: "2026",
+						timestamp: new Date(2026, 0, 1).getTime(),
+						dateId: 20_260_000,
+					},
+				},
+				m: {calendar: {level: "month", value: "10", timestamp: oct1}},
+				d: {calendar: {level: "day", value: "17"}},
+			},
+			session: withRootId({rootId: CAL}),
+		});
+
+		const result = await adapter.backfillCalendarMetadata();
+
+		expect({
+			result,
+			calls,
+			month: cachedMetadata("m"),
+			day: cachedMetadata("d"),
+		}).toStrictEqual({
+			result: {timestamps: ["d"], dateIds: ["m", "d"]},
+			calls: [
+				["edit", {id: "d", metadataPatches: [{op: "add", path: ["calendar", "timestamp"], value: oct17}]}],
+				flagEdit("ts_added_v2"),
+				["edit", {id: "m", metadataPatches: [{op: "add", path: ["calendar", "dateId"], value: 20_261_000}]}],
+				["edit", {id: "d", metadataPatches: [{op: "add", path: ["calendar", "dateId"], value: 20_261_017}]}],
+				flagEdit("dateId_added_v1"),
+			],
+			month: {calendar: {level: "month", value: "10", timestamp: oct1, dateId: 20_261_000}},
+			day: {calendar: {level: "day", value: "17", timestamp: oct17, dateId: 20_261_017}},
+		});
+	});
+
+	it("does nothing once both flags are set", async () => {
+		const {adapter, calls} = tracked({
+			children: {home: [CAL], [CAL]: ["d"]},
+			metadata: {[CAL]: ROOT_META, d: {calendar: {level: "day", value: "17"}}},
+			session: withRootId({rootId: CAL, ts_added_v2: true, dateId_added_v1: true}),
+		});
+
+		const result = await adapter.backfillCalendarMetadata();
+
+		expect({result, calls}).toStrictEqual({result: {timestamps: [], dateIds: []}, calls: []});
+	});
+
+	it("reruns both backfills when forced, without rewriting the flags", async () => {
+		const {adapter, calls} = tracked({
+			children: {home: [CAL], [CAL]: ["y"]},
+			metadata: {[CAL]: ROOT_META, y: {calendar: {level: "year", value: "2026"}}},
+			session: withRootId({rootId: CAL, ts_added_v2: true, dateId_added_v1: true}),
+		});
+
+		const result = await adapter.backfillCalendarMetadata({force: true});
+
+		expect({result, calls}).toStrictEqual({
+			result: {timestamps: ["y"], dateIds: ["y"]},
+			calls: [
+				[
+					"edit",
+					{
+						id: "y",
+						metadataPatches: [
+							{op: "add", path: ["calendar", "timestamp"], value: new Date(2026, 0, 1).getTime()},
+						],
+					},
+				],
+				["edit", {id: "y", metadataPatches: [{op: "add", path: ["calendar", "dateId"], value: 20_260_000}]}],
+			],
+		});
+	});
+
+	it("tags the calendar.rootId node as the root when it has no calendar metadata, as upstream's timestamp migration does", async () => {
+		const {adapter, calls, cachedMetadata} = tracked({
+			children: {home: ["plain"], plain: []},
+			metadata: {},
+			session: withRootId({rootId: "plain", ts_added_v2: false, dateId_added_v1: true}),
+		});
+
+		await adapter.backfillCalendarMetadata();
+
+		expect({calls, root: cachedMetadata("plain")}).toStrictEqual({
+			calls: [
+				["edit", {id: "plain", metadataPatches: [{op: "add", path: ["calendar"], value: {root: true}}]}],
+				flagEdit("ts_added_v2", "replace"),
+			],
+			root: {calendar: {root: true}},
+		});
+	});
+
+	it("only sets the flags when root metadata names no calendar root", async () => {
+		const {adapter, calls} = tracked({
+			children: {home: [CAL], [CAL]: ["d"]},
+			metadata: {[CAL]: ROOT_META, d: {calendar: {level: "day", value: "17"}}},
+		});
+
+		const result = await adapter.backfillCalendarMetadata();
+
+		expect({result, calls}).toStrictEqual({
+			result: {timestamps: [], dateIds: []},
+			calls: [
+				["edit", {id: "None", metadataPatches: [{op: "add", path: ["calendar"], value: {ts_added_v2: true}}]}],
+				[
+					"edit",
+					{id: "None", metadataPatches: [{op: "add", path: ["calendar"], value: {dateId_added_v1: true}}]},
+				],
+			],
+		});
+	});
+
+	it("walks past week ancestors and skips nodes it cannot date, leaving them unchanged", async () => {
+		const {adapter, calls} = tracked({
+			children: {home: [CAL], [CAL]: ["y"], y: ["m"], m: ["w", "loose"], w: ["d"]},
+			metadata: {
+				[CAL]: ROOT_META,
+				y: {
+					calendar: {
+						level: "year",
+						value: "2026",
+						timestamp: new Date(2026, 0, 1).getTime(),
+						dateId: 20_260_000,
+					},
+				},
+				m: {calendar: {level: "month", value: "10", timestamp: oct1, dateId: 20_261_000}},
+				w: {calendar: {level: "week", value: "42"}},
+				d: {calendar: {level: "day", value: "17"}},
+				loose: {calendar: {level: "fortnight"}},
+			},
+			session: withRootId({rootId: CAL, dateId_added_v1: true}),
+		});
+
+		const result = await adapter.backfillCalendarMetadata();
+
+		expect({result, edits: calls.slice(0, -1)}).toStrictEqual({
+			result: {timestamps: ["d"], dateIds: []},
+			edits: [["edit", {id: "d", metadataPatches: [{op: "add", path: ["calendar", "timestamp"], value: oct17}]}]],
+		});
+	});
+});
