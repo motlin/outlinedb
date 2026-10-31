@@ -19,6 +19,7 @@ import {
 	nodesList,
 	nodesMirrors,
 	nodesSubtreeIds,
+	nodesVerify,
 	nodesView,
 } from "./nodes.js";
 import {nodesDetachMirror, nodesMirror, nodesSwapMirrorOrigin} from "./nodes-mirror.js";
@@ -64,6 +65,7 @@ export const Ops = {
 	"nodes.foundDates": nodesFoundDates,
 	"nodes.get": nodesGet,
 	"nodes.list": nodesList,
+	"nodes.verify": nodesVerify,
 	"nodes.complete": nodesComplete,
 	"nodes.create": nodesCreate,
 	"nodes.delete": nodesDelete,

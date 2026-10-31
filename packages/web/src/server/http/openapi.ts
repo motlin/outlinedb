@@ -73,6 +73,7 @@ const BINDINGS: Record<string, Binding> = {
 	"GET /api/v1/home": {op: "home.get"},
 	"GET /api/v1/nodes": {op: "nodes.list", query: {parent_id: "parentId"}},
 	"POST /api/v1/nodes/children": {op: "nodes.children"},
+	"POST /api/v1/nodes/verify": {op: "nodes.verify"},
 	"GET /api/v1/nodes/changes": {op: "nodes.changes"},
 	"POST /api/v1/nodes/view": {op: "nodes.view"},
 	"POST /api/v1/nodes/export-tree": {op: "nodes.exportTree"},

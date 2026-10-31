@@ -63,12 +63,14 @@ describe("findCustomRoot", () => {
 
 describe("GET /api/v1/custom-tree", () => {
 	const AT = "2026-01-01 00:00:00.000";
-	it("returns the sections under the Custom root", async () => {
+	it("returns the sections under the Custom root and the ids whose change can change them", async () => {
 		const sqlite = new DatabaseConstructor(":memory:");
 		const db = drizzle(sqlite, {schema});
 		migrate(db, {migrationsFolder: join(import.meta.dirname, "../../shared/src/db/migrations")});
 		const rows: [string, string | null, string, number][] = [
 			["custom", null, "Custom", 0],
+			["other", null, "Other", 1],
+			["elsewhere", "other", "Hotkeys", 0],
 			["hk", "custom", "Hotkeys", 0],
 			["combo", "hk", "alt+z", 0],
 			["cmd", "combo", "zoom_in", 0],
@@ -87,6 +89,7 @@ describe("GET /api/v1/custom-tree", () => {
 		expect(body).toStrictEqual({
 			rootId: "custom",
 			rootChildren: [{id: "hk", name: "Hotkeys"}],
+			watchedIds: ["custom", "other", "hk", "combo", "cmd"],
 			sections: {
 				Hotkeys: [
 					{

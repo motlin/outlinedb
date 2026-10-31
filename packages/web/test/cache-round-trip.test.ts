@@ -144,10 +144,13 @@ let onExpand: (id: string) => void = () => {};
 /** Each write request the server received, as `METHOD url body`. */
 let writes: string[] = [];
 
+/** The POST routes that only read. */
+const READS = new Set(["/api/v1/nodes/children", "/api/v1/nodes/verify"]);
+
 function serve(app: Hono<AppEnv>): void {
 	vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
 		const method = init?.method ?? "GET";
-		if (method !== "GET" && url !== "/api/v1/nodes/children") {
+		if (method !== "GET" && !READS.has(url)) {
 			writes.push(`${method} ${url} ${typeof init?.body === "string" ? init.body : ""}`);
 			onWrite();
 		}
@@ -501,6 +504,42 @@ describe("the dev-only runtime check", () => {
 				nodeKeys.detail("bravo"),
 			].map((key) => JSON.stringify(key)),
 		);
+	});
+
+	it("reads the server's side of every key in one request", async () => {
+		const queryClient = await loadedClient();
+		const keys = [...verifiedKeys(queryClient), nodeKeys.children("gone"), nodeKeys.detail("gone")];
+		const requests: string[] = [];
+		const served = globalThis.fetch;
+		vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+			requests.push(`${init?.method ?? "GET"} ${url}`);
+			return served(url, init);
+		});
+		const entries = await fetchServerEntries(keys);
+		expect({
+			requests,
+			keys: [...entries.keys()],
+			bravo: entries.get(JSON.stringify(nodeKeys.children("bravo"))),
+		}).toStrictEqual({
+			requests: ["POST /api/v1/nodes/verify"],
+			keys: [
+				...SHOWN_LISTS.map((parentId) => nodeKeys.children(parentId)),
+				...SHOWN_DETAILS.map((nodeId) => nodeKeys.detail(nodeId)),
+			].map((key) => JSON.stringify(key)),
+			bravo: [
+				{
+					id: "bravo1",
+					parent_id: "bravo",
+					name: "bravo1",
+					note: "",
+					completed: false,
+					hasChildren: false,
+					hasUncompletedChildren: false,
+					isMirror: false,
+					originalNodeId: null,
+				},
+			],
+		});
 	});
 
 	it("reports each cached entry that differs from the server", async () => {

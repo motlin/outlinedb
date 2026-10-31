@@ -1,5 +1,5 @@
 import type {QueryClient, QueryKey} from "@tanstack/react-query";
-import type {NodeChildrenResponse, NodeEnvelope, NodeListResponse, NodeResponse} from "../node-types.js";
+import type {NodeResponse, NodeVerifyResponse} from "../node-types.js";
 import {nodeKeys} from "./node-cache.js";
 import {readJson} from "./read-json.js";
 
@@ -62,64 +62,43 @@ export function snapshotEntries(queryClient: QueryClient, keys: readonly QueryKe
 	return entries;
 }
 
-async function fetchDetail(nodeId: string): Promise<NodeResponse | undefined> {
-	const response = await fetch(`/api/v1/nodes/${encodeURIComponent(nodeId)}`);
-	if (response.status === 404) {
-		return undefined;
-	}
-	if (!response.ok) {
-		throw new Error(`Failed to fetch node: ${response.statusText}`);
-	}
-	return (await readJson<NodeEnvelope>(response)).node;
-}
-
-async function fetchList(parentId: string | null): Promise<NodeResponse[] | undefined> {
-	if (parentId === null) {
-		const response = await fetch("/api/v1/nodes");
-		if (!response.ok) {
-			throw new Error(`Failed to fetch children: ${response.statusText}`);
-		}
-		return (await readJson<NodeListResponse>(response)).nodes;
-	}
-	// A deleted node's leftover list renders nowhere: only a live parent's list is compared.
-	if ((await fetchDetail(parentId)) === undefined) {
-		return undefined;
-	}
-	const response = await fetch("/api/v1/nodes/children", {
-		method: "POST",
-		headers: {"Content-Type": "application/json"},
-		body: JSON.stringify({parentIds: [parentId]}),
-	});
-	if (!response.ok) {
-		throw new Error(`Failed to fetch children: ${response.statusText}`);
-	}
-	return (await readJson<NodeChildrenResponse>(response)).children[parentId];
-}
-
-/** The server's answer for a children-list or detail key; undefined for any other key or a node the server lacks. */
-async function fetchServerData(key: QueryKey): Promise<NodeResponse[] | NodeResponse | undefined> {
-	const [, kind, id] = key;
-	if (kind === "children" && (typeof id === "string" || id === null)) {
-		return fetchList(id);
-	}
-	return kind === "detail" && typeof id === "string" ? fetchDetail(id) : undefined;
-}
-
 /**
- * The server's answer for each key, straight from the API (no pending-write waits), in comparable form by JSON key. A
- * key whose node is gone from the server is left out: its cached entry is unreachable.
+ * The server's answer for each children-list and detail key, straight from the API (no pending-write waits), in
+ * comparable form by JSON key, read in one `POST /api/v1/nodes/verify`. A key whose node is gone from the server is
+ * left out: its cached entry is unreachable, and so is a deleted parent's leftover list.
  */
 export async function fetchServerEntries(keys: readonly QueryKey[]): Promise<Map<string, ComparableEntry>> {
-	const entries = await Promise.all(
-		keys.map(async (key): Promise<[string, ComparableEntry][]> => {
-			const data = await fetchServerData(key);
-			if (data === undefined) {
-				return [];
-			}
-			return [[JSON.stringify(key), Array.isArray(data) ? data.map(comparableRow) : comparableRow(data)]];
+	const ids = new Set<string>();
+	const parentIds = new Set<string | null>();
+	for (const [, kind, id] of keys) {
+		if (kind === "children" && (typeof id === "string" || id === null)) {
+			parentIds.add(id);
+		} else if (kind === "detail" && typeof id === "string") {
+			ids.add(id);
+		}
+	}
+	const response = await fetch("/api/v1/nodes/verify", {
+		method: "POST",
+		headers: {"Content-Type": "application/json"},
+		body: JSON.stringify({ids: [...ids], parentIds: [...parentIds]}),
+	});
+	if (!response.ok) {
+		throw new Error(`Failed to fetch the server's lists: ${response.statusText}`);
+	}
+	const {nodes, children} = await readJson<NodeVerifyResponse>(response);
+	const entries = new Map<string, ComparableEntry>();
+	for (const {parentId, nodes: rows} of children) {
+		entries.set(JSON.stringify(nodeKeys.children(parentId)), rows.map(comparableRow));
+	}
+	for (const [id, node] of Object.entries(nodes)) {
+		entries.set(JSON.stringify(nodeKeys.detail(id)), comparableRow(node));
+	}
+	return new Map(
+		keys.flatMap((key) => {
+			const entry = entries.get(JSON.stringify(key));
+			return entry === undefined ? [] : [[JSON.stringify(key), entry]];
 		}),
 	);
-	return new Map(entries.flat());
 }
 
 export interface CacheMismatch {

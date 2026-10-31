@@ -42,6 +42,7 @@ import {
 	NodeChildrenResponseSchema,
 	NodeEnvelopeSchema,
 	NodeListSchema,
+	NodeVerifyResponseSchema,
 	OutlineViewResponseSchema,
 	SubtreeItemsResponseSchema,
 } from "./schemas.js";
@@ -89,23 +90,58 @@ export const nodesChildren = defineOp({
 	input: z.object({parentIds: z.array(z.string())}),
 	output: NodeChildrenResponseSchema,
 	run(ctx, {parentIds}) {
-		const requestedToResolved = new Map<string, string>();
-		for (const requested of new Set(parentIds)) {
-			const resolved = resolveNodeId(ctx, requested);
-			if (resolved !== null) {
-				requestedToResolved.set(requested, resolved);
+		return ok(toJson({children: Object.fromEntries(readRequestedChildren(ctx, parentIds))}));
+	},
+});
+
+/**
+ * The children of each requested parent (a short id resolved, a mirror listing its original's children), keyed by the
+ * requested id; an unresolvable short id is left out.
+ */
+function readRequestedChildren(ctx: ServerContext, parentIds: readonly string[]): Map<string, NodeResponse[]> {
+	const requestedToResolved = new Map<string, string>();
+	for (const requested of new Set(parentIds)) {
+		const resolved = resolveNodeId(ctx, requested);
+		if (resolved !== null) {
+			requestedToResolved.set(requested, resolved);
+		}
+	}
+	const originals = resolveMirrorsToOriginals(ctx, [...requestedToResolved.values()]);
+	const requestedToParent = new Map(
+		[...requestedToResolved].map(([requested, resolved]) => [requested, originals.get(resolved) ?? resolved]),
+	);
+	const lists = readChildDtoLists(ctx, [...requestedToParent.values()]);
+	return new Map([...requestedToParent].map(([requested, parent]) => [requested, lists.get(parent) ?? []]));
+}
+
+// POST /api/v1/nodes/verify - The client's dev-only cache check reads the server's side of every cached entry a write
+// touched in this one round trip instead of one GET per node and one children POST per list. Nodes are read from the
+// cache only (no live read of a missing uuid); a parent the cache lacks has no list, as its leftover list renders
+// nowhere.
+export const nodesVerify = defineOp({
+	input: z.object({ids: z.array(z.string()), parentIds: z.array(z.string().nullable())}),
+	output: NodeVerifyResponseSchema,
+	async run(ctx, {ids, parentIds}) {
+		const details = new Map<string, NodeResponse>();
+		for (const id of new Set([...ids, ...parentIds.filter((parentId) => parentId !== null)])) {
+			const resolved = resolveNodeId(ctx, id);
+			const node = resolved === null ? undefined : await readNodeDto(ctx, resolved);
+			if (node !== undefined) {
+				details.set(id, node);
 			}
 		}
-		const originals = resolveMirrorsToOriginals(ctx, [...requestedToResolved.values()]);
-		const requestedToParent = new Map(
-			[...requestedToResolved].map(([requested, resolved]) => [requested, originals.get(resolved) ?? resolved]),
+		const live = [...new Set(parentIds)].filter((parentId) => parentId === null || details.has(parentId));
+		const lists = readRequestedChildren(
+			ctx,
+			live.filter((parentId) => parentId !== null),
 		);
-		const lists = readChildDtoLists(ctx, [...requestedToParent.values()]);
 		return ok(
 			toJson({
-				children: Object.fromEntries(
-					[...requestedToParent].map(([requested, parent]) => [requested, lists.get(parent) ?? []]),
-				),
+				nodes: Object.fromEntries([...details].filter(([id]) => ids.includes(id))),
+				children: live.map((parentId) => ({
+					parentId,
+					nodes: parentId === null ? readChildDtos(ctx, null) : (lists.get(parentId) ?? []),
+				})),
 			}),
 		);
 	},

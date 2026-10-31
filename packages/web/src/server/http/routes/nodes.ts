@@ -10,7 +10,7 @@ async function body(request: Request): Promise<unknown> {
 
 /**
  * The node routes (see `ops/nodes.ts`, `ops/nodes-tree.ts` and `ops/nodes-mirror.ts` for what each answers). Registration order matters: the fixed paths
- * (`/changes`, `/children`, `/view`, `/export-tree`) come before `/:id`.
+ * (`/changes`, `/children`, `/verify`, `/view`, `/export-tree`) come before `/:id`.
  */
 export function nodesRoutes(resolveStore: ResolveStore): Hono {
 	const routes = new Hono();
@@ -18,6 +18,11 @@ export function nodesRoutes(resolveStore: ResolveStore): Hono {
 	routes.post("/children", async (c) =>
 		callOp(resolveStore, c.req.raw, "nodes.children", await body(c.req.raw), {
 			error: "parentIds must be an array of strings",
+		}),
+	);
+	routes.post("/verify", async (c) =>
+		callOp(resolveStore, c.req.raw, "nodes.verify", await body(c.req.raw), {
+			error: "body must be {ids, parentIds}",
 		}),
 	);
 	routes.get("/changes", async (c) =>

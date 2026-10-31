@@ -89,6 +89,15 @@ export const NodeListSchema = z.strictObject({nodes: z.array(NodeResponseSchema)
 /** Each requested parent's live children, as `POST /nodes/children` answers it. */
 export const NodeChildrenResponseSchema = z.strictObject({children: z.record(z.string(), z.array(NodeResponseSchema))});
 
+/**
+ * The server's side of the client's dev-only cache check, as `POST /nodes/verify` answers it: each requested node the
+ * cache holds by its requested id, and the children of each requested parent (Home's under `null`) that still exists.
+ */
+export const NodeVerifyResponseSchema = z.strictObject({
+	nodes: z.record(z.string(), NodeResponseSchema),
+	children: z.array(z.strictObject({parentId: z.string().nullable(), nodes: z.array(NodeResponseSchema)})),
+});
+
 /** A node's ancestors, as `GET /nodes/:id/ancestors` answers it. */
 export const AncestorsResponseSchema = z.strictObject({ancestors: z.array(NodeResponseSchema)});
 

@@ -57,15 +57,18 @@ export function findCustomRoot(topLevel: readonly TopLevel[], preferredId?: stri
 
 const MAX_DEPTH = 12;
 
+/** The tree under `rootId`, `MAX_DEPTH` levels deep; each node read (completed ones too) is added to `readIds`. */
 export function readCustomTree(
 	cache: Pick<CacheService, "getChildren" | "getNode">,
 	rootId: string,
+	readIds = new Set<string>(),
 ): CustomNode | null {
 	const toNode = (id: string, depth: number): CustomNode | null => {
 		const node = cache.getNode(id);
 		if (node === undefined) {
 			return null;
 		}
+		readIds.add(id);
 		const children =
 			depth >= MAX_DEPTH
 				? []

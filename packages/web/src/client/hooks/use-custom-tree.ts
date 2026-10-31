@@ -1,10 +1,11 @@
 /**
  * Applies the account's Custom tree (upstream's `custom-tree` module): Hotkeys nodes become keymap overrides and
  * Themes nodes become themes with adopted stylesheets. The tree is read from `/api/v1/custom-tree` and re-read after
- * every successful mutation, standing in for upstream's `operation.applied` re-apply.
+ * each successful mutation that can change it, standing in for upstream's `operation.applied` re-apply.
  */
 
 import {useQuery, useQueryClient} from "@tanstack/react-query";
+import type {QueryClient} from "@tanstack/react-query";
 import {useEffect} from "react";
 import type {CustomTreeResponse} from "../../node-types.js";
 import {readJson} from "../read-json.js";
@@ -53,13 +54,47 @@ export function useCustomTree(): void {
 			applyCustomTree(data);
 		}
 	}, [data]);
-	useEffect(
-		() =>
-			queryClient.getMutationCache().subscribe((event) => {
-				if (event.type === "updated" && event.action.type === "success") {
-					void queryClient.invalidateQueries({queryKey: ["custom-tree"]});
-				}
-			}),
-		[queryClient],
+	useEffect(() => invalidateCustomTreeOnWrites(queryClient), [queryClient]);
+}
+
+const PARENT_KEYS: ReadonlySet<string> = new Set(["parent_id", "parentId"]);
+
+/**
+ * Whether `value` (a mutation's variables or answer) names one of `watched` anywhere in it, or puts something under
+ * Home (a `null` parent: a new top-level node may become the Custom root). Walks a few levels of objects and arrays.
+ */
+function namesWatched(value: unknown, watched: ReadonlySet<string>, depth = 0): boolean {
+	if (typeof value === "string") {
+		return watched.has(value);
+	}
+	if (depth > 4 || typeof value !== "object" || value === null) {
+		return false;
+	}
+	if (Array.isArray(value)) {
+		return value.some((item) => namesWatched(item, watched, depth + 1));
+	}
+	return Object.entries(value).some(
+		([key, item]) => (item === null && PARENT_KEYS.has(key)) || namesWatched(item, watched, depth + 1),
 	);
+}
+
+/**
+ * Re-read the custom tree after each successful mutation whose variables or answer name a node the cached tree
+ * watches (its `watchedIds`) or a top-level parent; a write elsewhere in the outline leaves it alone. Returns the
+ * unsubscribe.
+ */
+export function invalidateCustomTreeOnWrites(queryClient: QueryClient): () => void {
+	return queryClient.getMutationCache().subscribe((event) => {
+		if (event.type !== "updated" || event.action.type !== "success") {
+			return;
+		}
+		const variables: unknown = event.mutation.state.variables;
+		const data: unknown = event.action.data;
+		for (const [queryKey, tree] of queryClient.getQueriesData<CustomTreeResponse>({queryKey: ["custom-tree"]})) {
+			const watched = new Set(tree?.watchedIds);
+			if (tree === undefined || namesWatched(variables, watched) || namesWatched(data, watched)) {
+				void queryClient.invalidateQueries({queryKey, exact: true});
+			}
+		}
+	});
 }

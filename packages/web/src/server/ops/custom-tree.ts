@@ -14,6 +14,11 @@ const CustomNodeSchema = z.strictObject({
 export const CustomTreeResponseSchema = z.strictObject({
 	rootId: z.string().nullable(),
 	rootChildren: z.array(z.strictObject({id: z.string(), name: z.string()})),
+	/**
+	 * The ids whose write can change this answer: every top-level node (one may become the root) and every node read
+	 * under the root. The client refetches the tree only after a write naming one of them or a top-level parent.
+	 */
+	watchedIds: z.array(z.string()),
 	sections: z.record(z.string(), z.array(CustomNodeSchema)),
 });
 
@@ -25,10 +30,14 @@ export const customTreeGet = defineOp({
 	output: CustomTreeResponseSchema,
 	run(ctx, {rootId: requested}) {
 		const {cacheService} = ctx;
-		const rootId = findCustomRoot(cacheService.getChildren(null), requested);
-		const root = rootId === null ? null : readCustomTree(cacheService, rootId);
+		const topLevel = cacheService.getChildren(null);
+		const rootId = findCustomRoot(topLevel, requested);
+		const watched = new Set(topLevel.map(({id}) => id));
+		const root = rootId === null ? null : readCustomTree(cacheService, rootId, watched);
 		const rootChildren =
 			rootId === null ? [] : cacheService.getChildren(rootId).map(({id, name}) => ({id, name: name ?? ""}));
-		return ok(toJson({rootId, rootChildren, sections: collectCustomSections(root, GRAMMARS)}));
+		return ok(
+			toJson({rootId, rootChildren, watchedIds: [...watched], sections: collectCustomSections(root, GRAMMARS)}),
+		);
 	},
 });

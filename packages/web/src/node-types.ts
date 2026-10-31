@@ -23,6 +23,7 @@ import type {
 	NodeAttachmentSchema,
 	NodeChangesResponseSchema,
 	NodeChildrenResponseSchema,
+	NodeVerifyResponseSchema,
 	NodeEnvelopeSchema,
 	NodeListSchema,
 	NodeResponseSchema,
@@ -64,6 +65,7 @@ export type NodeListResponse = z.output<typeof NodeListSchema>;
 /** One node, as `GET /nodes/:id` and the single-node writes answer it. */
 export type NodeEnvelope = z.output<typeof NodeEnvelopeSchema>;
 export type NodeChildrenResponse = z.output<typeof NodeChildrenResponseSchema>;
+export type NodeVerifyResponse = z.output<typeof NodeVerifyResponseSchema>;
 export type AncestorsResponse = z.output<typeof AncestorsResponseSchema>;
 export type CreatedIdsResponse = z.output<typeof CreatedIdsSchema>;
 export type DetachMirrorResponse = z.output<typeof DetachMirrorResponseSchema>;
