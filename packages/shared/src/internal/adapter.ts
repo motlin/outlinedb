@@ -84,8 +84,7 @@ export type ServerSetting =
 	| "unsubscribe_from_comments_emails"
 	| "backup_to_dropbox"
 	| "theme"
-	| "font"
-	| "saved_views_json_delta";
+	| "font";
 
 const FLAG_SETTINGS = new Set<ServerSetting>([
 	"show_completed",
@@ -2104,6 +2103,20 @@ export class WorkflowyInternalAdapter {
 		await this.postOk("/change_settings", new URLSearchParams({[name]: wireValue, clientId: session.clientId}));
 		const current = await this.snapshotToWrite();
 		this.store({...current, settings: {...current.settings, [name]: value}});
+	}
+
+	/**
+	 * POST a `saved_views_json_delta` (`{added?, removed?}`, see `saved-views.ts`), then cache
+	 * `json` as `saved_views_json`, the client copy upstream never sends to the server.
+	 */
+	async setSavedViews(json: string, delta: string): Promise<void> {
+		const session = await this.session();
+		await this.postOk(
+			"/change_settings",
+			new URLSearchParams({saved_views_json_delta: delta, clientId: session.clientId}),
+		);
+		const current = await this.snapshotToWrite();
+		this.store({...current, settings: {...current.settings, saved_views_json: json}});
 	}
 
 	/**

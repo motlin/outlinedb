@@ -362,6 +362,27 @@ describe("WorkflowyInternalAdapter account state", () => {
 		});
 	});
 
+	it("posts a saved-views delta, then caches the new list as saved_views_json and saved_views rows", async () => {
+		const {api, adapter, db} = tracked();
+		const view = {zoomedProject: {projectid: "abc", auxiliaryRootProjectId: "None"}, searchQuery: "#todo"};
+		const delta = JSON.stringify({added: [view]});
+
+		await adapter.setSavedViews(JSON.stringify([view]), delta);
+
+		const post = api.requests.find((r) => r.path === "/change_settings");
+		expect({
+			body: Object.fromEntries(new URLSearchParams(post?.body ?? "")),
+			cached: await adapter.getSetting("saved_views_json"),
+			delta: await adapter.getSetting("saved_views_json_delta"),
+			rows: readAccountRows(db).savedViews,
+		}).toStrictEqual({
+			body: {saved_views_json_delta: delta, clientId: FAKE_CLIENT_ID, crosscheck_user_id: "123"},
+			cached: JSON.stringify([view]),
+			delta: undefined,
+			rows: [{position: 0, projectId: "abc", auxiliaryRootProjectId: "None", searchQuery: "#todo"}],
+		});
+	});
+
 	it("leaves the cached setting unchanged when the settings POST fails", async () => {
 		const {api, adapter, db} = tracked();
 		await adapter.getSetting("theme");

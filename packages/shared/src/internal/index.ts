@@ -17,6 +17,7 @@ export type {CalendarLayoutLevels, CalendarLayoutStep, LayoutNode} from "./calen
 export type {CalendarDate, CalendarLevel, CalendarLevelMetadata} from "./calendar-day.js";
 export {orderChanges, renameChanges, starChanges, starsFromRootMeta, unstarChanges} from "./stars.js";
 export type {StarNodes} from "./stars.js";
+export {savedViewsMap, toggleSavedView} from "./saved-views.js";
 export {
 	adoptAfterCreate,
 	adoptOnInsert,

@@ -7,7 +7,15 @@ import {z} from "zod";
 import {locationKey} from "@workflowy/shared";
 import type {Star} from "@workflowy/shared";
 import {stripHtmlTags} from "@workflowy/shared/html";
-import {orderChanges, renameChanges, starChanges, starsFromRootMeta, unstarChanges} from "@workflowy/shared/internal";
+import {
+	orderChanges,
+	renameChanges,
+	savedViewsMap,
+	starChanges,
+	starsFromRootMeta,
+	toggleSavedView,
+	unstarChanges,
+} from "@workflowy/shared/internal";
 import type {StarNodes, WorkflowyInternalAdapter} from "@workflowy/shared/internal";
 import type {ServerContext} from "../context.js";
 import {INTERNAL_API_NOT_CONFIGURED} from "../internal-api-error.js";
@@ -27,8 +35,27 @@ function starNodes(ctx: ServerContext): StarNodes {
 	};
 }
 
+async function savedViewsJson(adapter: WorkflowyInternalAdapter): Promise<string | undefined> {
+	const json = await adapter.getSetting("saved_views_json");
+	return typeof json === "string" ? json : undefined;
+}
+
 async function readStars(ctx: ServerContext, adapter: WorkflowyInternalAdapter) {
-	return starsFromRootMeta(await adapter.getRootMeta([]), starNodes(ctx));
+	return starsFromRootMeta(await adapter.getRootMeta([]), starNodes(ctx), await savedViewsJson(adapter));
+}
+
+/**
+ * Upstream `toggleLocation`: toggle `key` in root metadata and in the legacy saved views
+ * (`saved_views_json`), whose map an unsynced account copies into its locations.
+ */
+async function toggleStar(ctx: ServerContext, adapter: WorkflowyInternalAdapter, key: string, starred: boolean) {
+	const legacy = toggleSavedView(await savedViewsJson(adapter), key, starred, starNodes(ctx));
+	const meta = await adapter.getRootMeta([]);
+	const toggle = starred ? starChanges : unstarChanges;
+	await adapter.setRootMetaValues(toggle(meta, key, savedViewsMap(legacy.json)));
+	if (legacy.delta !== "{}") {
+		await adapter.setSavedViews(legacy.json, legacy.delta);
+	}
 }
 
 const StarSchema = z.strictObject({
@@ -97,7 +124,7 @@ export const starsSet = defineOp({
 			if (nodeId !== null && !starNodes(ctx).exists(nodeId)) {
 				return fail(404, {error: `Node not found: ${nodeId}`});
 			}
-			await adapter.setRootMetaValues(starChanges(await adapter.getRootMeta([]), key));
+			await toggleStar(ctx, adapter, key, true);
 			const star = (await readStars(ctx, adapter)).find((s) => s.key === key);
 			return ok(toJson(star ?? null), {created: true});
 		});
@@ -109,7 +136,7 @@ export const starsRemove = defineOp({
 	output: NoContentSchema,
 	async run(ctx, {key}) {
 		return withAdapter(ctx, async (adapter) => {
-			await adapter.setRootMetaValues(unstarChanges(await adapter.getRootMeta([]), key));
+			await toggleStar(ctx, adapter, key, false);
 			return ok(null);
 		});
 	},

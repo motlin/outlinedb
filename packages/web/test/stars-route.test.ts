@@ -14,10 +14,18 @@ const P2 = "5e6f7a8b-0000-4000-8000-000000000002";
 
 const NAMES: Record<string, string> = {[P1]: "<b>Zulu</b>", [P2]: "Bravo"};
 
-function setup(meta: Record<string, unknown> | undefined) {
+function view(projectid: string, searchQuery: string) {
+	return {zoomedProject: {projectid, auxiliaryRootProjectId: "None"}, searchQuery};
+}
+
+function setup(meta: Record<string, unknown> | undefined, savedViews?: string) {
 	const adapter = {
 		getRootMeta: vi.fn<WorkflowyInternalAdapter["getRootMeta"]>(async () => Promise.resolve(meta)),
 		setRootMetaValues: vi.fn<WorkflowyInternalAdapter["setRootMetaValues"]>(async () => Promise.resolve()),
+		getSetting: vi.fn<WorkflowyInternalAdapter["getSetting"]>(async (name) =>
+			Promise.resolve(name === "saved_views_json" ? savedViews : undefined),
+		),
+		setSavedViews: vi.fn<WorkflowyInternalAdapter["setSavedViews"]>(async () => Promise.resolve()),
 	};
 	const cacheService = {
 		getNode: (id: string) => (Object.hasOwn(NAMES, id) ? {id, name: NAMES[id]} : undefined),
@@ -72,7 +80,7 @@ describe("GET /api/v1/stars", () => {
 	});
 
 	it("orders by plain-text node name without a stored order", async () => {
-		const {request} = setup({starring: {locations: {[P1]: "None", [P2]: "None"}}});
+		const {request} = setup({starring: {isSynced: true, locations: {[P1]: "None", [P2]: "None"}}});
 
 		const response = await request("GET");
 
@@ -91,6 +99,24 @@ describe("GET /api/v1/stars", () => {
 		});
 	});
 
+	it("reads an unsynced account's stars from its saved views", async () => {
+		const {request} = setup(
+			{starring: {locations: {[P2]: "None"}}},
+			JSON.stringify([view(P1, "#todo"), view("None", "")]),
+		);
+
+		await expect(request("GET")).resolves.toStrictEqual({
+			status: 200,
+			body: {
+				stars: [
+					{key: `${P1}_#todo`, nodeId: P1, query: "#todo", name: null, position: 0},
+					{key: "None", nodeId: null, query: null, name: null, position: 1},
+				],
+				nodes: [{id: P1, name: "<b>Zulu</b>"}],
+			},
+		});
+	});
+
 	it("answers 503 without the internal API", async () => {
 		const {request} = setup(undefined);
 
@@ -100,16 +126,27 @@ describe("GET /api/v1/stars", () => {
 
 describe("PUT /api/v1/stars/:key", () => {
 	it("stars the location and appends it to the order in one push, answering the new star", async () => {
-		const {adapter, request} = setup({starring: {isSynced: true, locations: {[P1]: "None"}, order: `None/${P1}/`}});
+		const {adapter, request} = setup(
+			{starring: {isSynced: true, locations: {[P1]: "None"}, order: `None/${P1}/`}},
+			JSON.stringify([view(P1, "")]),
+		);
 		adapter.getRootMeta
 			.mockResolvedValueOnce({starring: {isSynced: true, locations: {[P1]: "None"}, order: `None/${P1}/`}})
 			.mockResolvedValueOnce({
-				starring: {locations: {[P1]: "None", [`${P2}_#todo`]: "None"}, order: `None/${P1}/,None/${P2}/#todo`},
+				starring: {
+					isSynced: true,
+					locations: {[P1]: "None", [`${P2}_#todo`]: "None"},
+					order: `None/${P1}/,None/${P2}/#todo`,
+				},
 			});
 
 		const response = await request("PUT", `/${P2}_%23todo`, {nodeId: P2, query: "#todo"});
 
-		expect({response, writes: adapter.setRootMetaValues.mock.calls}).toStrictEqual({
+		expect({
+			response,
+			writes: adapter.setRootMetaValues.mock.calls,
+			savedViews: adapter.setSavedViews.mock.calls,
+		}).toStrictEqual({
 			response: {status: 201, body: {key: `${P2}_#todo`, nodeId: P2, query: "#todo", name: null, position: 1}},
 			writes: [
 				[
@@ -119,11 +156,14 @@ describe("PUT /api/v1/stars/:key", () => {
 					],
 				],
 			],
+			savedViews: [
+				[JSON.stringify([view(P1, ""), view(P2, "#todo")]), JSON.stringify({added: [view(P2, "#todo")]})],
+			],
 		});
 	});
 
-	it("marks a fresh account with no starring metadata as synced in the same push", async () => {
-		const {adapter, request} = setup({});
+	it("copies a fresh account's toggled saved views into its locations and marks it synced in the same push", async () => {
+		const {adapter, request} = setup({}, JSON.stringify([view(P2, "")]));
 		adapter.getRootMeta
 			.mockResolvedValueOnce({})
 			.mockResolvedValueOnce({starring: {isSynced: true, locations: {[P1]: "None"}}});
@@ -135,7 +175,7 @@ describe("PUT /api/v1/stars/:key", () => {
 			writes: [
 				[
 					[
-						{path: ["starring", "locations", P1], value: "None"},
+						{path: ["starring", "locations"], value: {[P2]: "None", [P1]: "None"}},
 						{path: ["starring", "isSynced"], value: true},
 					],
 				],
@@ -150,21 +190,39 @@ describe("PUT /api/v1/stars/:key", () => {
 		const mismatch = await request("PUT", `/${P1}`, {nodeId: P2, query: null});
 		const unknown = await request("PUT", `/${missing}`, {nodeId: missing, query: null});
 
-		expect({mismatch, unknown, writes: adapter.setRootMetaValues.mock.calls}).toStrictEqual({
+		expect({
+			mismatch,
+			unknown,
+			writes: adapter.setRootMetaValues.mock.calls,
+			savedViews: adapter.setSavedViews.mock.calls,
+		}).toStrictEqual({
 			mismatch: {status: 400, body: {error: "key must equal the location key of {nodeId, query}"}},
 			unknown: {status: 404, body: {error: `Node not found: ${missing}`}},
 			writes: [],
+			savedViews: [],
 		});
+	});
+
+	it("posts no saved-views delta when the saved views already hold the location", async () => {
+		const {adapter, request} = setup(ORDERED, JSON.stringify([view(P1, "")]));
+
+		await request("PUT", `/${P1}`, {nodeId: P1, query: null});
+
+		expect(adapter.setSavedViews.mock.calls).toStrictEqual([]);
 	});
 });
 
 describe("DELETE /api/v1/stars/:key", () => {
 	it("removes the location and its order entry, keeping the rename", async () => {
-		const {adapter, request} = setup(ORDERED);
+		const {adapter, request} = setup(ORDERED, JSON.stringify([view(P1, "#todo"), view(P1, "")]));
 
 		const response = await request("DELETE", `/${P1}`);
 
-		expect({response, writes: adapter.setRootMetaValues.mock.calls}).toStrictEqual({
+		expect({
+			response,
+			writes: adapter.setRootMetaValues.mock.calls,
+			savedViews: adapter.setSavedViews.mock.calls,
+		}).toStrictEqual({
 			response: {status: 204, body: null},
 			writes: [
 				[
@@ -174,6 +232,7 @@ describe("DELETE /api/v1/stars/:key", () => {
 					],
 				],
 			],
+			savedViews: [[JSON.stringify([view(P1, "#todo")]), JSON.stringify({removed: [view(P1, "")]})]],
 		});
 	});
 });
