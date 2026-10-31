@@ -97,12 +97,12 @@ describe("spliceChildren", () => {
 		expect(ids(spliceChildren(abc, row("x", 0), 9))).toStrictEqual(["a", "b", "c", "x"]);
 	});
 
-	it("sorts by priority and renumbers priorities", () => {
+	it("sorts by priority and fits the row into the gap before the first row, keeping the others' priorities", () => {
 		const shuffled = [row("c", 30), row("a", 10), row("b", 20)];
 		expect(spliceChildren(shuffled, shuffled[0], 0).map((r) => [r.id, r.priority])).toStrictEqual([
-			["c", 100],
-			["a", 200],
-			["b", 300],
+			["c", 4],
+			["a", 10],
+			["b", 20],
 		]);
 	});
 });
@@ -119,6 +119,55 @@ describe("spliceBlock", () => {
 			["d", "c", "b", "a"],
 			["c", "b", "d", "a"],
 		]);
+	});
+
+	it("appends after the last row's priority and seeds an empty list from 100, keeping every unmoved row", () => {
+		const children = [row("a", 100), row("b", 200)];
+		const appended = spliceBlock(children, [row("x", 5), row("y", 6)], 2);
+		expect({
+			appended: appended.map((r) => [r.id, r.priority]),
+			kept: appended.slice(0, 2).every((r, i) => r === children[i]),
+			seeded: spliceBlock([], [row("x", 5), row("y", 6)], 0).map((r) => [r.id, r.priority]),
+		}).toStrictEqual({
+			appended: [
+				["a", 100],
+				["b", 200],
+				["x", 300],
+				["y", 400],
+			],
+			kept: true,
+			seeded: [
+				["x", 100],
+				["y", 200],
+			],
+		});
+	});
+
+	it("spreads a block evenly over the gap between its neighbours", () => {
+		const children = [row("a", 100), row("b", 400)];
+		expect(spliceBlock(children, [row("x", 0), row("y", 0)], 1).map((r) => [r.id, r.priority])).toStrictEqual([
+			["a", 100],
+			["x", 200],
+			["y", 300],
+			["b", 400],
+		]);
+	});
+
+	it("renumbers from 0 when the block has no gap, keeping each row whose slot did not change as the same object", () => {
+		const children = [row("a", 0), row("b", 1), row("c", 2), row("d", 3)];
+		const spliced = spliceBlock(children, [children[2]], 1);
+		expect({
+			order: spliced.map((r) => [r.id, r.priority]),
+			kept: spliced.map((r) => children.includes(r)),
+		}).toStrictEqual({
+			order: [
+				["a", 0],
+				["c", 1],
+				["b", 2],
+				["d", 3],
+			],
+			kept: [true, false, false, true],
+		});
 	});
 });
 

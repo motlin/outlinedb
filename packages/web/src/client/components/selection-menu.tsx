@@ -1,9 +1,12 @@
 import {useQueryClient} from "@tanstack/react-query";
-import {useCallback, useEffect, useLayoutEffect, useRef, useState} from "react";
+import type {QueryClient} from "@tanstack/react-query";
+import {memo, useCallback, useEffect, useLayoutEffect, useRef, useState} from "react";
 import type {CSSProperties} from "react";
 import {createPortal} from "react-dom";
 import {activeCommandRegistry} from "../hooks/use-global-keymap.js";
 import {commandTargets, selectionMenuAnchor} from "../item-selection.js";
+import type {SelectionState} from "../item-selection.js";
+import type {CommandContext} from "../keys/dispatch.js";
 import {hint} from "../keys/hint.js";
 import {readNode} from "../node-cache.js";
 import {buildSelectionMenu} from "../selection-menu-model.js";
@@ -44,23 +47,110 @@ export interface SelectionMenuViewProps {
 	/** Every selected item is read-only: no footer separator. */
 	readOnly: boolean;
 	onSelect: (id: string) => void;
+	/** Called instead of placing the menu when `anchor` has left the DOM, as a move remounts the row. */
+	onAnchorLost?: () => void;
+}
+
+/** Runs `run` once on the next frame however often `schedule` is called before it. */
+function coalescedFrame(run: () => void): {schedule: () => void; cancel: () => void} {
+	let frame: number | null = null;
+	return {
+		schedule: () => {
+			frame ??= requestAnimationFrame(() => {
+				frame = null;
+				run();
+			});
+		},
+		cancel: () => {
+			if (frame !== null) {
+				cancelAnimationFrame(frame);
+			}
+		},
+	};
 }
 
 function viewportSize(): {width: number; height: number} {
 	return {width: document.documentElement.clientWidth, height: document.documentElement.clientHeight};
 }
 
+type SelectionMenuRowsProps = Omit<SelectionMenuViewProps, "anchor" | "onAnchorLost">;
+
+function sameEntry(a: SelectionMenuEntry | undefined, b: SelectionMenuEntry | undefined): boolean {
+	return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/** Equal rows: the host rebuilds `entries` on each render, so they are compared by value. */
+function sameRows(previous: SelectionMenuRowsProps, next: SelectionMenuRowsProps): boolean {
+	return (
+		previous.count === next.count &&
+		previous.readOnly === next.readOnly &&
+		previous.onSelect === next.onSelect &&
+		previous.entries.length === next.entries.length &&
+		previous.entries.every((entry, index) => sameEntry(entry, next.entries[index]))
+	);
+}
+
+/**
+ * The menu's rows and footer; memoized by value, so neither repositioning the menu nor a host render that left the
+ * rows as they were re-renders a row.
+ */
+const SelectionMenuRows = memo(function SelectionMenuRows({
+	entries,
+	count,
+	readOnly,
+	onSelect,
+}: SelectionMenuRowsProps) {
+	return (
+		<MenuBody unwrapped disableKeyboard>
+			{entries.map((entry, index) =>
+				entry.kind === "separator" ? (
+					// Separators have no identity beyond their position.
+					// oxlint-disable-next-line react/no-array-index-key
+					<MenuSeparator key={`separator${index}`} />
+				) : (
+					<MenuItem
+						key={entry.id}
+						handbook={entry.id}
+						icon={entry.icon}
+						label={entry.label}
+						shortcut={entry.shortcutCommand === null ? undefined : hint(entry.shortcutCommand)}
+						onSelect={() => {
+							onSelect(entry.id);
+						}}
+					/>
+				),
+			)}
+			{!readOnly && <MenuSeparator />}
+			<div className="text-center text-tertiary pt-s pb-ml text-xs">{count} items</div>
+		</MenuBody>
+	);
+}, sameRows);
+
 /**
  * Upstream's `.selection-menu` flyout (`uF4`): a `Menu.Static` with no keyboard model and no enter or exit
  * animation, portaled to `body` and positioned by popper `right-start` / `left-start` beside the anchor row.
+ * Memoized: it renders when its inputs or its position change, and re-places itself after each cache change, which
+ * may move the anchor row, without rendering.
  */
-export function SelectionMenuView({anchor, entries, count, readOnly, onSelect}: SelectionMenuViewProps) {
+export const SelectionMenuView = memo(function SelectionMenuView({
+	anchor,
+	entries,
+	count,
+	readOnly,
+	onSelect,
+	onAnchorLost,
+}: SelectionMenuViewProps) {
+	const queryClient = useQueryClient();
 	const menu = useRef<HTMLDivElement>(null);
 	const [position, setPosition] = useState<SideMenuPosition | null>(null);
 
 	const place = useCallback(() => {
 		const element = menu.current;
 		if (element === null) {
+			return;
+		}
+		if (!anchor.isConnected) {
+			onAnchorLost?.();
 			return;
 		}
 		const rect = anchor.getBoundingClientRect();
@@ -78,21 +168,25 @@ export function SelectionMenuView({anchor, entries, count, readOnly, onSelect}: 
 				? current
 				: next,
 		);
-	}, [anchor]);
+	}, [anchor, onAnchorLost]);
 
-	// Every commit may change the rows (and so the menu's size); the guard in `place` stops a render loop.
+	// A render may change the rows (and so the menu's size); the guard in `place` stops a render loop.
 	useLayoutEffect(() => {
 		place();
 	});
 
 	useEffect(() => {
+		const nextFrame = coalescedFrame(place);
+		const unsubscribe = queryClient.getQueryCache().subscribe(nextFrame.schedule);
 		globalThis.addEventListener("scroll", place, true);
 		globalThis.addEventListener("resize", place);
 		return () => {
+			unsubscribe();
+			nextFrame.cancel();
 			globalThis.removeEventListener("scroll", place, true);
 			globalThis.removeEventListener("resize", place);
 		};
-	}, [place]);
+	}, [place, queryClient]);
 
 	const style: CSSProperties = {
 		position: "fixed",
@@ -109,32 +203,11 @@ export function SelectionMenuView({anchor, entries, count, readOnly, onSelect}: 
 			data-popper-escaped="false"
 			data-popper-placement={position?.placement ?? "right-start"}
 		>
-			<MenuBody unwrapped disableKeyboard>
-				{entries.map((entry, index) =>
-					entry.kind === "separator" ? (
-						// Separators have no identity beyond their position.
-						// oxlint-disable-next-line react/no-array-index-key
-						<MenuSeparator key={`separator${index}`} />
-					) : (
-						<MenuItem
-							key={entry.id}
-							handbook={entry.id}
-							icon={entry.icon}
-							label={entry.label}
-							shortcut={entry.shortcutCommand === null ? undefined : hint(entry.shortcutCommand)}
-							onSelect={() => {
-								onSelect(entry.id);
-							}}
-						/>
-					),
-				)}
-				{!readOnly && <MenuSeparator />}
-				<div className="text-center text-tertiary pt-s pb-ml text-xs">{count} items</div>
-			</MenuBody>
+			<SelectionMenuRows entries={entries} count={count} readOnly={readOnly} onSelect={onSelect} />
 		</div>,
 		document.body,
 	);
-}
+});
 
 /** The floating menu of the item selection, mounted once beside the other global hosts; idle without a selection. */
 export function SelectionMenu() {
@@ -142,37 +215,20 @@ export function SelectionMenu() {
 	return hasSelection ? <SelectionMenuHost /> : null;
 }
 
-function SelectionMenuHost() {
-	const queryClient = useQueryClient();
-	const selection = useOutlineStore((state) => state.itemSelection);
-	const [anchor, setAnchor] = useState<{element: HTMLElement; count: number} | null>(null);
-	const hasSelection = selection.entries.length > 0;
-	const zoomedId = useOutlineStore(activeZoomedId);
-	const [revision, setRevision] = useState(0);
+interface SelectionMenuModel {
+	ctx: CommandContext;
+	entries: SelectionMenuEntry[];
+	readOnly: boolean;
+	/** Changes exactly when `entries` or `readOnly` do. */
+	key: string;
+}
 
-	// The anchor is captured when the selection changes, like upstream's `selected.changed` listener.
-	useLayoutEffect(() => {
-		const {anchorId, count} = selectionMenuAnchor(selection, (id) => projectElement(id) !== null);
-		const element = anchorId === null ? null : projectElement(anchorId);
-		// oxlint-disable-next-line react/set-state-in-effect -- the row element exists in the DOM only after the commit
-		setAnchor(element === null ? null : {element, count});
-	}, [selection]);
-
-	// Labels such as Complete/Uncomplete track the items' current state.
-	useEffect(() => {
-		const unsubscribe = hasSelection
-			? queryClient.getQueryCache().subscribe(() => {
-					setRevision((value) => value + 1);
-				})
-			: () => {};
-		return () => {
-			unsubscribe();
-		};
-	}, [queryClient, hasSelection]);
-
-	if (selection.entries.length === 0 || anchor === null) {
-		return null;
-	}
+/** The menu's rows and footer for the current selection, read from the cache and the rendered rows. */
+function selectionMenuModel(
+	queryClient: QueryClient,
+	selection: SelectionState,
+	zoomedId: string | null,
+): SelectionMenuModel {
 	const view = currentSelectionView(queryClient);
 	const items = commandTargets(selection, () => view.tree, null);
 	const ctx = {items, zoomedId};
@@ -197,22 +253,91 @@ function SelectionMenuHost() {
 		firstEmbedded: false,
 		qualifiers,
 	});
-	if (entries.length === 0) {
+	const readOnly = nodes.every((node) => node?.readOnly === true);
+	return {ctx, entries, readOnly, key: JSON.stringify([readOnly, entries])};
+}
+
+type MenuAnchor = {element: HTMLElement; count: number} | null;
+
+/** The row the menu floats beside for `selection`; `previous` itself when that is unchanged. */
+function menuAnchor(selection: SelectionState, previous: MenuAnchor): MenuAnchor {
+	const {anchorId, count} = selectionMenuAnchor(selection, (id) => projectElement(id) !== null);
+	const element = anchorId === null ? null : projectElement(anchorId);
+	if (element === null) {
 		return null;
 	}
-	// `revision` only forces this render when the cache changes.
-	void revision;
+	return previous?.element === element && previous.count === count ? previous : {element, count};
+}
+
+/** The menu model for the store's current selection, read outside render (a cache event, a click). */
+function currentMenuModel(queryClient: QueryClient): SelectionMenuModel {
+	const state = useOutlineStore.getState();
+	return selectionMenuModel(queryClient, state.itemSelection, activeZoomedId(state));
+}
+
+function SelectionMenuHost() {
+	const queryClient = useQueryClient();
+	const selection = useOutlineStore((state) => state.itemSelection);
+	const [anchor, setAnchor] = useState<MenuAnchor>(null);
+	const zoomedId = useOutlineStore(activeZoomedId);
+	// Only the model's key is state: a cache event that leaves the rows as they were renders nothing.
+	const [, setModelKey] = useState("");
+
+	// The anchor is captured when the selection changes, like upstream's `selected.changed` listener.
+	useLayoutEffect(() => {
+		// oxlint-disable-next-line react/set-state-in-effect -- the row element exists in the DOM only after the commit
+		setAnchor((previous) => menuAnchor(selection, previous));
+	}, [selection]);
+	// And again when a move remounts the anchor row.
+	const recaptureAnchor = useCallback(() => {
+		setAnchor((previous) => menuAnchor(useOutlineStore.getState().itemSelection, previous));
+	}, []);
+
+	// Labels such as Complete/Uncomplete track the items' current state. The cache notifies synchronously, even while
+	// another component renders (a `useQuery` observer subscribing), so a burst is read once, in a microtask.
+	useEffect(() => {
+		let scheduled = false;
+		let live = true;
+		const unsubscribe = queryClient.getQueryCache().subscribe(() => {
+			if (scheduled) {
+				return;
+			}
+			scheduled = true;
+			queueMicrotask(() => {
+				scheduled = false;
+				if (live) {
+					setModelKey(currentMenuModel(queryClient).key);
+				}
+			});
+		});
+		return () => {
+			live = false;
+			unsubscribe();
+		};
+	}, [queryClient]);
+
+	const onSelect = useCallback(
+		(id: string) => {
+			const {ctx} = currentMenuModel(queryClient);
+			maintainFocus(() => {
+				activeCommandRegistry()[id]?.execute(ctx);
+			}, liveFocusEnv(queryClient));
+		},
+		[queryClient],
+	);
+
+	const model = selectionMenuModel(queryClient, selection, zoomedId);
+	if (selection.entries.length === 0 || anchor === null || model.entries.length === 0) {
+		return null;
+	}
 	return (
 		<SelectionMenuView
 			anchor={anchor.element}
-			entries={entries}
+			entries={model.entries}
 			count={anchor.count}
-			readOnly={nodes.every((node) => node?.readOnly === true)}
-			onSelect={(id) => {
-				maintainFocus(() => {
-					registry[id]?.execute(ctx);
-				}, liveFocusEnv(queryClient));
-			}}
+			readOnly={model.readOnly}
+			onSelect={onSelect}
+			onAnchorLost={recaptureAnchor}
 		/>
 	);
 }

@@ -190,10 +190,25 @@ export function removeOptimistic(children: NodeResponse[] | undefined, id: strin
 
 /**
  * Upstream move/insert splice: sort `children` by priority, drop any copy of `row`,
- * insert it at `index` (a move slot, see `spliceBlock`), and renumber priorities `(i+1)*100`.
+ * insert it at `index` (a move slot, see `spliceBlock`), giving it a priority between its neighbours'.
  */
 export function spliceChildren(children: NodeResponse[], row: NodeResponse, index: number): NodeResponse[] {
 	return spliceBlock(children, [row], index);
+}
+
+/**
+ * Priorities for `count` rows between the neighbours' `before` and `after` (either missing at an end): 100 apart
+ * past the last row or in an empty list, as the server numbers a fresh list, else spread evenly over the gap. Null
+ * when the gap has no room, or the neighbours are out of order.
+ */
+function blockPriorities(before: number | undefined, after: number | undefined, count: number): number[] | null {
+	if (after === undefined) {
+		const base = before ?? 0;
+		return Array.from({length: count}, (_, i) => base + (i + 1) * 100);
+	}
+	const low = before ?? -1;
+	const step = Math.floor((after - low) / (count + 1));
+	return step >= 1 ? Array.from({length: count}, (_, i) => low + (i + 1) * step) : null;
 }
 
 /**
@@ -201,6 +216,8 @@ export function spliceChildren(children: NodeResponse[], row: NodeResponse, inde
  * them contiguously in the given order. `index` is the move endpoint's slot: counted
  * among ALL of `children` in priority order, moved rows included (before removal),
  * so `index` lands the block right before the row that sat at `index`; clamped to the end.
+ * The block takes priorities in the gap between its neighbours (`blockPriorities`), so no other row changes; with
+ * no room the whole list is renumbered from 0.
  */
 export function spliceBlock<T extends Pick<NodeResponse, "id" | "priority">>(
 	children: T[],
@@ -211,10 +228,18 @@ export function spliceBlock<T extends Pick<NodeResponse, "id" | "priority">>(
 	const sorted = sortByPriority(children);
 	const others = sorted.filter((child) => !moving.has(child.id));
 	const at = sorted.slice(0, Math.max(0, index)).filter((child) => !moving.has(child.id)).length;
-	return [...others.slice(0, at), ...rows, ...others.slice(at)].map((child, i) => ({
-		...child,
-		priority: (i + 1) * 100,
-	}));
+	const before = others[at - 1]?.priority;
+	const after = others[at]?.priority;
+	const gap = blockPriorities(before, after, rows.length);
+	if (gap !== null) {
+		// The block fits between its neighbours: every other row keeps its priority, and so its object.
+		const block = rows.map((row, i) => (row.priority === gap[i] ? row : {...row, priority: gap[i] ?? 0}));
+		return [...others.slice(0, at), ...block, ...others.slice(at)];
+	}
+	// No room: slots from 0, as the server renumbers a crowded list; a row already in its slot keeps its object.
+	return [...others.slice(0, at), ...rows, ...others.slice(at)].map((child, i) =>
+		child.priority === i ? child : {...child, priority: i},
+	);
 }
 
 /** The cache entries that hold `nodeId`: its detail entry and every cached children list containing its row. */

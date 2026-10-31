@@ -4,11 +4,11 @@ import {
 	mutationOptions,
 	notifyManager,
 	skipToken,
-	useMutation,
 	useQuery,
 	useQueryClient,
 } from "@tanstack/react-query";
 import {useCallback} from "react";
+import {useMutationRunner} from "./use-mutation-runner.js";
 import {HOME_TARGET} from "@workflowy/shared/types";
 import type {MutateOptions, MutationObserverOptions, QueryClient} from "@tanstack/react-query";
 import type {
@@ -558,7 +558,7 @@ export function useCreateNode() {
 	const queryClient = useQueryClient();
 	const addErrorNotification = useOutlineStore((state) => state.addErrorNotification);
 
-	const mutation = useMutation({
+	const mutation = useMutationRunner({
 		mutationFn: createNode,
 		async onMutate(newNode) {
 			const early = earlyCreates.get(newNode);
@@ -775,7 +775,7 @@ export function useUpdateNode() {
 	const queryClient = useQueryClient();
 	const addErrorNotification = useOutlineStore((state) => state.addErrorNotification);
 
-	const mutation = useMutation({
+	const mutation = useMutationRunner({
 		// In line with undo replays: a save and a replay of the same text must land in issue order.
 		mutationFn: async ({nodeId, ...request}: UpdateNodeRequest & {nodeId: string}) =>
 			serializeWrite(async () => updateNode(nodeId, request)),
@@ -837,7 +837,7 @@ export function useUpdateNode() {
 	);
 	// Outermost, so the slot reads the before-text ahead of `mutateNow`'s optimistic patch.
 	const nodeMutate = useUndoableMutate(mutateNow, updateUndos, planEdit);
-	const homeMutation = useMutation({
+	const homeMutation = useMutationRunner({
 		mutationFn: updateHome,
 		async onMutate(layoutMode) {
 			await queryClient.cancelQueries({queryKey: nodeKeys.home()});
@@ -894,7 +894,7 @@ export function useDeleteNode() {
 	const queryClient = useQueryClient();
 	const addErrorNotification = useOutlineStore((state) => state.addErrorNotification);
 
-	const mutation = useMutation({
+	const mutation = useMutationRunner({
 		mutationFn: deleteNode,
 		async onMutate(nodeId) {
 			// Cancel first: a cancelled refetch reverts to the data it started from, row included.
@@ -944,7 +944,7 @@ export function useMoveNode() {
 	const queryClient = useQueryClient();
 	const addErrorNotification = useOutlineStore((state) => state.addErrorNotification);
 
-	const mutation = useMutation({
+	const mutation = useMutationRunner({
 		mutationFn: async ({nodeId, ...request}: MoveNodeRequest & {nodeId: string}) => moveNode(nodeId, request),
 		async onMutate(request) {
 			pendingMoves.begin(request, [readNode(queryClient, request.nodeId)?.parent_id ?? null, request.parent_id]);
@@ -1102,7 +1102,7 @@ function moveNodesOptions(queryClient: QueryClient) {
 
 export function useMoveNodes() {
 	const queryClient = useQueryClient();
-	const mutation = useMutation(moveNodesOptions(queryClient));
+	const mutation = useMutationRunner(moveNodesOptions(queryClient));
 	const mutate = useUndoableMutate(mutation.mutate, moveNodesUndos, planMoveNodes);
 	return {...mutation, mutate};
 }
@@ -1258,7 +1258,7 @@ function toggleCompleteOptions(queryClient: QueryClient) {
 
 export function useToggleComplete() {
 	const queryClient = useQueryClient();
-	const mutation = useMutation(toggleCompleteOptions(queryClient));
+	const mutation = useMutationRunner(toggleCompleteOptions(queryClient));
 	const mutate = useUndoableMutate(mutation.mutate, toggleUndos, planToggle);
 	return {...mutation, mutate};
 }
@@ -1286,7 +1286,7 @@ export function useRestoreNode() {
 	const queryClient = useQueryClient();
 	const addErrorNotification = useOutlineStore((state) => state.addErrorNotification);
 
-	const mutation = useMutation({
+	const mutation = useMutationRunner({
 		mutationFn: async ({nodeId, ...request}: RestoreNodeRequest & {nodeId: string}) => restoreNode(nodeId, request),
 		onSuccess(data, variables) {
 			restoreUndos.settle(variables, {data});
@@ -1466,7 +1466,7 @@ function planMirrorNodes(
 /** Mirrors items under `parent_id` (MIR4); ⌘Z deletes the new mirrors. The change sync shows them. */
 export function useMirrorNodes() {
 	const queryClient = useQueryClient();
-	const mutation = useMutation({
+	const mutation = useMutationRunner({
 		mutationFn: mirrorNodes,
 		onSuccess(nodes, variables) {
 			mirrorNodesUndos.settle(variables, {data: nodes});

@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import {afterEach, beforeAll, describe, expect, it, vi} from "vite-plus/test";
 import type {Root} from "react-dom/client";
+import type * as MenuItemModule from "../src/client/components/flyout/menu-item.js";
 import type {CommandContext} from "../src/client/keys/dispatch.js";
 import {selectionOf} from "../src/client/item-selection.js";
 
@@ -48,12 +49,44 @@ vi.mock("../src/client/hooks/use-selection-keymap.js", () => ({
 		allIds: [],
 	}),
 }));
+const completed = new Set<string>();
 vi.mock("../src/client/node-cache.js", () => ({
-	readNode: (_client: unknown, id: string) => ({id, parent_id: "R", data: {layoutMode: null}, completedAt: null}),
+	readNode: (_client: unknown, id: string) => ({
+		id,
+		parent_id: "R",
+		data: {layoutMode: null},
+		completedAt: completed.has(id) ? 1 : null,
+	}),
 }));
-vi.mock("@tanstack/react-query", () => ({
-	useQueryClient: () => ({getQueryCache: () => ({subscribe: () => () => {}})}),
-}));
+const cacheListeners = new Set<() => void>();
+const queryClient = {
+	getQueryCache: () => ({
+		subscribe: (listener: () => void) => {
+			cacheListeners.add(listener);
+			return () => {
+				cacheListeners.delete(listener);
+			};
+		},
+	}),
+};
+vi.mock("@tanstack/react-query", () => ({useQueryClient: () => queryClient}));
+/** Fires every query-cache listener, as the cache does synchronously on each event. */
+function notifyCache(): void {
+	for (const listener of cacheListeners) {
+		listener();
+	}
+}
+const menuItemRenders = {count: 0};
+vi.mock("../src/client/components/flyout/menu-item.js", async (importOriginal) => {
+	const actual = await importOriginal<typeof MenuItemModule>();
+	return {
+		...actual,
+		MenuItem: (props: Parameters<typeof actual.MenuItem>[0]) => {
+			menuItemRenders.count++;
+			return actual.MenuItem(props);
+		},
+	};
+});
 
 const {act, createElement} = await import("react");
 const {createRoot} = await import("react-dom/client");
@@ -74,6 +107,7 @@ afterEach(() => {
 	host?.remove();
 	document.body.innerHTML = "";
 	executed.length = 0;
+	completed.clear();
 	useOutlineStore.getState().clearItemSelection();
 });
 
@@ -164,6 +198,33 @@ describe("SelectionMenu", () => {
 		});
 	});
 
+	it("re-anchors on the selected row's new element once a move remounts that row", async () => {
+		addRow("Bravo");
+		mount(createElement(SelectionMenu));
+		act(() => {
+			useOutlineStore.getState().restoreItemSelection(["Bravo"]);
+		});
+		document.querySelector('[data-node-id="Bravo"]')?.closest(".project")?.remove();
+		addRow("Bravo");
+		const remounted = document.querySelector('[data-node-id="Bravo"]')?.closest(".project");
+		const measured: Element[] = [];
+		const spy = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+			measured.push(this);
+			return new DOMRect(0, 0, 100, 20);
+		});
+		await act(async () => {
+			notifyCache();
+			await new Promise((resolve) => {
+				requestAnimationFrame(resolve);
+			});
+			await new Promise((resolve) => {
+				requestAnimationFrame(resolve);
+			});
+		});
+		spy.mockRestore();
+		expect(measured.includes(remounted!)).toBe(true);
+	});
+
 	it("removes the menu synchronously when the selection clears", () => {
 		addRow("Bravo");
 		mount(createElement(SelectionMenu));
@@ -216,6 +277,71 @@ describe("SelectionMenu", () => {
 			}
 		});
 		expect([document.querySelectorAll(".selection-menu .active").length, executed.length]).toStrictEqual([0, 0]);
+	});
+
+	it("re-renders no menu row for a query-cache event that leaves the menu unchanged", async () => {
+		addRow("Bravo");
+		mount(createElement(SelectionMenu));
+		act(() => {
+			useOutlineStore.getState().restoreItemSelection(["Bravo"]);
+		});
+		menuItemRenders.count = 0;
+		await act(async () => {
+			notifyCache();
+			notifyCache();
+			await Promise.resolve();
+		});
+		expect({renders: menuItemRenders.count, rows: rowLabels().length}).toStrictEqual({
+			renders: 0,
+			rows: LOCAL_ORDER.length,
+		});
+	});
+
+	it("relabels Complete once a query-cache event completes every selected item", async () => {
+		addRow("Bravo");
+		mount(createElement(SelectionMenu));
+		act(() => {
+			useOutlineStore.getState().restoreItemSelection(["Bravo"]);
+		});
+		const label = () =>
+			document.querySelector('.selection-menu [data-handbook="complete"]')?.textContent.trim() ?? null;
+		const before = label();
+		completed.add("Bravo");
+		await act(async () => {
+			notifyCache();
+			await Promise.resolve();
+		});
+		expect([before, label()]).toStrictEqual([
+			expect.stringMatching(/^Complete/u),
+			expect.stringMatching(/^Uncomplete/u),
+		]);
+	});
+
+	it("logs no setState-in-render error when the cache notifies while another component renders", async () => {
+		addRow("Bravo");
+		const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+		function Observer({tick}: {tick: number}) {
+			// A `useQuery` observer subscribing during render makes the cache notify synchronously.
+			notifyCache();
+			return createElement("span", null, tick);
+		}
+		host = document.createElement("div");
+		document.body.append(host);
+		root = createRoot(host);
+		act(() => {
+			root?.render(createElement("div", null, createElement(SelectionMenu), createElement(Observer, {tick: 0})));
+		});
+		act(() => {
+			useOutlineStore.getState().restoreItemSelection(["Bravo"]);
+		});
+		completed.add("Bravo");
+		await act(async () => {
+			root?.render(createElement("div", null, createElement(SelectionMenu), createElement(Observer, {tick: 1})));
+			await Promise.resolve();
+		});
+		const messages = errors.mock.calls.map((call) => String(call[0]));
+		errors.mockRestore();
+		expect(messages.filter((message) => message.includes("Cannot update a component"))).toStrictEqual([]);
 	});
 
 	it("renders nothing when the selected row is not rendered", () => {
