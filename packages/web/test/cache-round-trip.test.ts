@@ -37,6 +37,9 @@ const outlineState = {
 	editingNoteId: null,
 	itemSelection: {entries: [], pivotId: null, retractableIds: [], counter: 0},
 	addErrorNotification: () => "id",
+	expand: (id: string) => {
+		onExpand(id);
+	},
 	startEditing() {},
 	markCreatedForSearch() {},
 };
@@ -135,10 +138,17 @@ function server(): Hono<AppEnv> {
 /** Called as each write request reaches the server, after its mutation's `onMutate` wrote the cache. */
 let onWrite: () => void;
 
+/** Called as the outline store expands a row. */
+let onExpand: (id: string) => void = () => {};
+
+/** Each write request the server received, as `METHOD url body`. */
+let writes: string[] = [];
+
 function serve(app: Hono<AppEnv>): void {
 	vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
 		const method = init?.method ?? "GET";
 		if (method !== "GET" && url !== "/api/v1/nodes/children") {
+			writes.push(`${method} ${url} ${typeof init?.body === "string" ? init.body : ""}`);
 			onWrite();
 		}
 		return app.fetch(new Request(`http://x${url}`, init));
@@ -279,6 +289,8 @@ beforeEach(() => {
 	undoHistory.clear();
 	resetFakeWorkflowy();
 	onWrite = () => {};
+	onExpand = () => {};
+	writes = [];
 	serve(server());
 });
 
@@ -419,6 +431,62 @@ describe("the optimistic cache matches the server's round trip", () => {
 				moveMany.mutate({ids: ["alpha1", "alpha2"], parent_id: "bravo", index: 1});
 			}),
 		).resolves.toStrictEqual({forward: NO_MISMATCH, undo: NO_MISMATCH});
+	});
+});
+
+/** Which cached children lists hold each row that more than one list holds, as `row in list,list`. */
+function rowsInTwoLists(queryClient: QueryClient): string[] {
+	const lists = new Map<string, string[]>();
+	for (const [key, rows] of queryClient.getQueriesData<NodeResponse[]>({queryKey: [...nodeKeys.all, "children"]})) {
+		for (const row of rows ?? []) {
+			lists.set(row.id, [...(lists.get(row.id) ?? []), String(key[2])]);
+		}
+	}
+	return [...lists]
+		.filter(([, parents]) => parents.length > 1)
+		.map(([id, parents]) => `${id} in ${parents.join(",")}`);
+}
+
+describe("a block move (multi-select Tab)", () => {
+	it("sends one request and expands the new parent in the same task as the splice", async () => {
+		const queryClient = await loadedClient();
+		const {moveMany} = captureHooks(queryClient);
+		const events: string[] = [];
+		onExpand = (id) => {
+			// React renders a store change in a microtask: by then the block must already sit in the new parent.
+			queueMicrotask(() => {
+				const ids = queryClient.getQueryData<NodeResponse[]>(nodeKeys.children(id))?.map((row) => row.id);
+				events.push(`${id} renders expanded listing ${ids?.join(",")}`);
+			});
+		};
+		moveMany.mutate({ids: ["alpha1", "alpha2"], parent_id: "bravo", index: 1, expandParent: true});
+		await settled(queryClient);
+		expect({writes, events}).toStrictEqual({
+			writes: [
+				`POST /api/v1/nodes/move ${JSON.stringify({ids: ["alpha1", "alpha2"], parent_id: "bravo", index: 1})}`,
+			],
+			events: ["bravo renders expanded listing bravo1,alpha1,alpha2"],
+		});
+	});
+
+	it("never shows a row in two lists while a second Tab overtakes the first, and settles on the server's tree", async () => {
+		const queryClient = await loadedClient();
+		const {moveMany} = captureHooks(queryClient);
+		const duplicates = new Set<string>();
+		const unsubscribe = queryClient.getQueryCache().subscribe(() => {
+			for (const duplicate of rowsInTwoLists(queryClient)) {
+				duplicates.add(duplicate);
+			}
+		});
+		moveMany.mutate({ids: ["alpha1", "alpha2"], parent_id: "bravo", index: 1});
+		moveMany.mutate({ids: ["alpha1", "alpha2"], parent_id: "bravo1", index: 0});
+		await settled(queryClient);
+		unsubscribe();
+		expect({
+			duplicates: [...duplicates],
+			bravo1: queryClient.getQueryData<NodeResponse[]>(nodeKeys.children("bravo1"))?.map((row) => row.id),
+			settled: await settledMismatches(queryClient),
+		}).toStrictEqual({duplicates: [], bravo1: ["alpha1", "alpha2"], settled: []});
 	});
 });
 

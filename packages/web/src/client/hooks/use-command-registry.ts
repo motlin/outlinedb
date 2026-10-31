@@ -333,13 +333,16 @@ export function useCommandRegistry(): CommandRegistry {
 			});
 			return;
 		}
-		for (const {parentId} of moves) {
-			if (parentId !== null && parentId !== zoomedNodeId && !activePaneView().expandedIds.has(parentId)) {
-				expand(parentId);
-			}
-		}
+		// Each new parent expands in the same render as its optimistic splice, never a frame before it.
+		const expanding = moves.map((move) => ({
+			...move,
+			expandParent:
+				move.parentId !== null &&
+				move.parentId !== zoomedNodeId &&
+				!activePaneView().expandedIds.has(move.parentId),
+		}));
 		if (moves.length > 0) {
-			void runInUndoBatch(captureOutlineView, async () => sendBlockMoves(moves, moveNodesMutation.mutate));
+			void runInUndoBatch(captureOutlineView, async () => sendBlockMoves(expanding, moveNodesMutation.mutate));
 			// Upstream `WF.Scroll.fit`: both ends of the moved selection stay in view.
 			revealRowsAfterPaint(
 				[ctx.items[0], ctx.items.at(-1)].filter((id) => id !== undefined),

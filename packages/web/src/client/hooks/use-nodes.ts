@@ -993,9 +993,11 @@ interface MoveNodesRequest {
 	parent_id: string | null;
 	/** Slot among ALL of the new parent's children, moved ones included (see `spliceBlock`); omitted = bottom. */
 	index?: number;
+	/** Client only: expand the new parent in the same render as the optimistic splice (Tab's auto-expand). */
+	expandParent?: boolean;
 }
 
-async function moveNodes(request: MoveNodesRequest): Promise<NodeResponse[]> {
+async function moveNodes({expandParent: _expandParent, ...request}: MoveNodesRequest): Promise<NodeResponse[]> {
 	await pendingCreates.settled([...request.ids, request.parent_id]);
 	const response = await fetch("/api/v1/nodes/move", {
 		method: "POST",
@@ -1019,40 +1021,69 @@ function planMoveNodes(
 }
 
 /**
+ * Whether a block move started while another move was still in flight since the moves last all settled. Each reply
+ * describes the tree as of its own move, so an overtaken reply would put back rows a later optimistic move took away;
+ * once overlapped, replies are dropped and the last one to settle reads the change feed instead.
+ */
+let blockMovesOverlapped = false;
+
+/**
  * Moves a contiguous block of nodes, in the given order, to `index` under `parent_id`
- * in one call (multi-select, drag, Sort). Splices optimistically, then applies the
- * server's sibling lists for every touched parent.
+ * in one call (multi-select, drag, Sort). Splices optimistically (expanding the new parent in the same
+ * notification flush when asked), then applies the server's sibling lists for every touched parent in one flush,
+ * or, when moves overlapped, patches the cache from the change feed once the last one settles.
  */
 function moveNodesOptions(queryClient: QueryClient) {
 	return mutationOptions({
 		mutationFn: moveNodes,
 		async onMutate(request: MoveNodesRequest) {
-			const rows = request.ids
-				.map((id) => readNode(queryClient, id))
-				.filter((row): row is NodeResponse => row !== undefined);
-			pendingMoves.begin(request, [...rows.map((row) => row.parent_id), request.parent_id]);
+			const readRows = () =>
+				request.ids
+					.map((id) => readNode(queryClient, id))
+					.filter((row): row is NodeResponse => row !== undefined);
+			blockMovesOverlapped ||= pendingMoves.size > 0;
+			pendingMoves.begin(request, [...readRows().map((row) => row.parent_id), request.parent_id]);
 			await queryClient.cancelQueries({queryKey: nodeKeys.all});
-			return notifyManager.batch(() =>
-				spliceMovedRows(queryClient, rows, request.parent_id, (count) => request.index ?? count),
-			);
+			return notifyManager.batch(() => {
+				const parentId = request.parent_id;
+				if (request.expandParent === true && parentId !== null) {
+					// In the same task as the splice: React's sync render for the store change runs in a microtask,
+					// after the splice below, so the expansion and the move paint together.
+					useOutlineStore.getState().expand(parentId);
+				}
+				// Read again: a move sent just before this one may have spliced the rows meanwhile.
+				return spliceMovedRows(queryClient, readRows(), parentId, (count) => request.index ?? count);
+			});
 		},
 		onSuccess(nodes, variables, snapshots) {
 			pendingMoves.end(variables);
 			moveNodesUndos.settle(variables, {data: nodes});
-			// A move can bring a dated node into or out of a day, so Found Dates lists are refetched.
-			void queryClient.invalidateQueries({queryKey: [...nodeKeys.all, "found-dates"]});
-			for (const {parentId} of snapshots.filter((snapshot) => snapshot.kind === "children")) {
-				queryClient.setQueryData<NodeResponse[]>(
-					nodeKeys.children(parentId),
-					nodes.filter((node) => node.parent_id === parentId),
-				);
+			if (blockMovesOverlapped) {
+				if (pendingMoves.size === 0) {
+					blockMovesOverlapped = false;
+					void syncNodeChanges(queryClient);
+				}
+				return;
 			}
-			for (const node of nodes) {
-				queryClient.setQueryData<NodeResponse>(nodeKeys.detail(node.id), (old) => (old ? node : old));
-			}
+			notifyManager.batch(() => {
+				// A move can bring a dated node into or out of a day, so Found Dates lists are refetched.
+				void queryClient.invalidateQueries({queryKey: [...nodeKeys.all, "found-dates"]});
+				for (const {parentId} of snapshots.filter((snapshot) => snapshot.kind === "children")) {
+					queryClient.setQueryData<NodeResponse[]>(
+						nodeKeys.children(parentId),
+						nodes.filter((node) => node.parent_id === parentId),
+					);
+				}
+				for (const node of nodes) {
+					queryClient.setQueryData<NodeResponse>(nodeKeys.detail(node.id), (old) => (old ? node : old));
+				}
+			});
 		},
 		async onError(error, variables, snapshots) {
 			pendingMoves.end(variables);
+			if (pendingMoves.size === 0) {
+				blockMovesOverlapped = false;
+			}
 			moveNodesUndos.settle(variables, "failed");
 			restoreSnapshots(queryClient, snapshots);
 			useOutlineStore.getState().addErrorNotification(`Failed to move nodes: ${error.message}`);
@@ -1580,12 +1611,20 @@ export function useExpandAll(): (rootId: string | null, open: boolean) => void {
 export type MoveNodesMutate = ReturnType<typeof useMoveNodes>["mutate"];
 
 /** Send each block move once the previous one lands, so every planned slot matches the server's outline; stop at a failure. */
-export async function sendBlockMoves(moves: readonly BlockMove[], mutate: MoveNodesMutate): Promise<void> {
-	for (const {ids, parentId, index} of moves) {
+export async function sendBlockMoves(
+	moves: readonly (BlockMove & {expandParent?: boolean})[],
+	mutate: MoveNodesMutate,
+): Promise<void> {
+	for (const {ids, parentId, index, expandParent} of moves) {
 		// oxlint-disable-next-line no-await-in-loop -- each move's slot is planned against the outline the previous one left
 		const landed = await new Promise<boolean>((resolve) => {
 			mutate(
-				{ids, parent_id: parentId, ...(index === undefined ? {} : {index})},
+				{
+					ids,
+					parent_id: parentId,
+					...(index === undefined ? {} : {index}),
+					...(expandParent ? {expandParent} : {}),
+				},
 				{
 					onSuccess: () => {
 						resolve(true);

@@ -21,6 +21,11 @@ class PendingMoves {
 		this.#moves.delete(key);
 	}
 
+	/** How many moves are still pending. */
+	get size(): number {
+		return this.#moves.size;
+	}
+
 	/** Whether a move into or out of `parentId` is still pending. */
 	has(parentId: string | null): boolean {
 		return [...this.#moves.values()].some((move) => move.parentIds.has(parentId));
