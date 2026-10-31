@@ -65,6 +65,20 @@ export class ProbeStore extends UserStore {
 					.map((row) => row.n),
 			);
 		}
+		if (url.pathname === "/__sync-tables") {
+			const sql = this.ctx.storage.sql;
+			const live = "CASE WHEN system_to = '9999-12-31 23:59:59' THEN 1 ELSE 0 END";
+			return Response.json({
+				runs: sql
+					.exec(`SELECT phase, applied, status, ${live} AS live FROM sync_runs ORDER BY system_from, run_id`)
+					.toArray(),
+				runSystemFroms: Number(sql.exec("SELECT count(DISTINCT system_from) AS n FROM sync_runs").one().n),
+				seen: sql
+					.exec(`SELECT ${live} AS live, count(*) AS n FROM sync_seen GROUP BY live ORDER BY live`)
+					.toArray(),
+				seedRequests: sql.exec(`SELECT ${live} AS live FROM sync_seed_requests ORDER BY system_from`).toArray(),
+			});
+		}
 		if (url.pathname === "/__live-ids") {
 			const ids = this.ctx.storage.sql
 				.exec("SELECT id FROM node_content WHERE system_to = '9999-12-31 23:59:59'")

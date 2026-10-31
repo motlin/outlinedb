@@ -88,6 +88,21 @@ async function rowsPerSystemTime(h: Harness): Promise<unknown> {
 	return response.json();
 }
 
+interface SyncTables {
+	runs: {phase: string; applied: number; status: string | null; live: number}[];
+	runSystemFroms: number;
+	seen: {live: number; n: number}[];
+	seedRequests: {live: number}[];
+}
+
+/** The sync job's own temporal tables: every run version, the seen-id scratch and the seed requests. */
+async function syncTables(h: Harness): Promise<SyncTables> {
+	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
+	const ns = (await h.mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace;
+	const response = await ns.get(ns.idFromName("dev")).fetch("http://localhost/__sync-tables");
+	return response.json();
+}
+
 async function accountRows(h: Harness): Promise<unknown> {
 	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
 	const ns = (await h.mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace;
@@ -227,6 +242,17 @@ describe("sync from a fake upstream", () => {
 		expect(third.lastResult).toMatchObject({status: "ok", nodesUpdated: 1, nodesPhasedOut: 1});
 		await expect(liveIds(h)).resolves.toHaveLength(4999);
 		expect(third.nextAlarmAt).toBeGreaterThan(Date.now() + 25 * 60_000);
+		// Each run finished inside one alarm, so each is one live version; its seen ids never outlived that alarm.
+		await expect(syncTables(h)).resolves.toStrictEqual({
+			runs: [
+				{phase: "idle", applied: 5000, status: "ok", live: 1},
+				{phase: "idle", applied: 5000, status: "ok", live: 1},
+				{phase: "idle", applied: 4999, status: "ok", live: 1},
+			],
+			runSystemFroms: 3,
+			seen: [],
+			seedRequests: [],
+		});
 	}, 180_000);
 
 	it("backs off on a 429 without losing state", async () => {
@@ -246,6 +272,12 @@ describe("sync from a fake upstream", () => {
 		expect(result?.lastResult?.status).toBe("rate_limited");
 		expect(exportCalls).toBe(before + 1);
 		expect(result?.nextAlarmAt).toBeGreaterThan(Date.now() + 100_000);
+		await expect(syncTables(h)).resolves.toStrictEqual({
+			runs: [{phase: "fetching", applied: 0, status: "rate_limited", live: 1}],
+			runSystemFroms: 1,
+			seen: [],
+			seedRequests: [],
+		});
 		rateLimit = false;
 		await stop(h);
 	}, 120_000);
@@ -282,6 +314,18 @@ describe("sync from a fake upstream", () => {
 		await expect(liveIds(second)).resolves.toHaveLength(5000);
 		// Each alarm run is its own unit of work with a fresh system time, so no stamp outlives one run.
 		await expect(rowsPerSystemTime(second)).resolves.toStrictEqual([2000, 2000, 1000]);
+		// One run version per alarm run; the seen ids of earlier alarms close when the run ends, the last alarm's never
+		// outlived it.
+		await expect(syncTables(second)).resolves.toStrictEqual({
+			runs: [
+				{phase: "importing", applied: 2000, status: null, live: 0},
+				{phase: "importing", applied: 4000, status: null, live: 0},
+				{phase: "idle", applied: 5000, status: "ok", live: 1},
+			],
+			runSystemFroms: 3,
+			seen: [{live: 0, n: 4000}],
+			seedRequests: [],
+		});
 		await stop(second);
 		rmSync(persistDir, {recursive: true, force: true});
 	}, 180_000);
@@ -305,6 +349,7 @@ describe("sync from a fake upstream", () => {
 		expect(internalCalls.filter((path) => path === "/get_tree_data/")).toStrictEqual(["/get_tree_data/"]);
 		await expect(internalMetadata(h)).resolves.toStrictEqual([{node_id: uuid(1), numbered_start: 7}]);
 		await expect(treeLog(h)).resolves.toStrictEqual({txId: "1", mirrors: []});
+		await expect(syncTables(h).then((tables) => tables.seedRequests)).resolves.toStrictEqual([{live: 0}]);
 
 		const mirrored = JSON.stringify({
 			id: 4,

@@ -59,6 +59,31 @@ describe("user store Durable Object behind the Worker", () => {
 		expect(normalize(schema)).toStrictEqual(normalize(nodeSchema));
 	});
 
+	it("creates the sync job's own tables temporal, each with a live unique index and a closed-at index", async () => {
+		const {schema} = await probeStore(harness.mf);
+		const syncRows = schema.filter((row) => row.name.startsWith("sync_"));
+		const tables = syncRows.filter((row) => row.type === "table");
+		const shape = Object.fromEntries(
+			tables.map((table) => [
+				table.name,
+				{
+					temporal: /system_from TEXT NOT NULL.*system_to TEXT NOT NULL/su.test(table.sql),
+					indexes: syncRows
+						.filter((row) => row.type === "index" && row.sql.includes(`ON ${table.name} `))
+						.map((row) => row.name),
+				},
+			]),
+		);
+		expect(shape).toStrictEqual({
+			sync_runs: {temporal: true, indexes: ["sync_runs_closed_at_idx", "sync_runs_system_to_idx"]},
+			sync_seed_requests: {
+				temporal: true,
+				indexes: ["sync_seed_requests_closed_at_idx", "sync_seed_requests_system_to_idx"],
+			},
+			sync_seen: {temporal: true, indexes: ["sync_seen_closed_at_idx", "sync_seen_system_to_idx"]},
+		});
+	});
+
 	it("serves an empty outline root on a fresh database", async () => {
 		const response = await harness.mf.dispatchFetch("http://localhost/api/v1/nodes");
 		expect(response.status).toBe(200);
