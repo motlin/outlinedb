@@ -1,4 +1,4 @@
-import {CacheService, PathBuilder} from "@workflowy/shared/cache";
+import {CacheService, findInbox, PathBuilder} from "@workflowy/shared/cache";
 import type * as schema from "@workflowy/shared/db";
 import {stripHtmlTags} from "@workflowy/shared/html";
 import type {BetterSQLite3Database} from "drizzle-orm/better-sqlite3";
@@ -7,18 +7,20 @@ export function findUnregisteredInboxes(
 	database: BetterSQLite3Database<typeof schema>,
 	registeredIds: Set<string>,
 ): {id: string; name: string; path: string}[] {
+	const cache = new CacheService(database);
 	// SQLite's negative limit searches the entire cache, including deep descendants.
-	const matches = new CacheService(database).searchText({query: "Inbox", limit: -1});
-	const unregistered = matches.filter((node) => {
-		const name = stripHtmlTags(node.name ?? "").trim();
-		return (name === "Inbox" || name === "📥 Inbox") && !registeredIds.has(node.id);
-	});
-	const paths = new PathBuilder(database).buildFullPathsBatch(unregistered.map((node) => node.id));
+	const named = cache
+		.searchText({query: "Inbox", limit: -1})
+		.map((node) => ({id: node.id, name: stripHtmlTags(node.name ?? "").trim()}))
+		.filter(({id, name}) => (name === "Inbox" || name === "📥 Inbox") && !registeredIds.has(id));
+	// Root metadata `inbox_id` names the account Inbox whatever it is called.
+	const accountInbox = findInbox(database);
+	const unregistered =
+		accountInbox === undefined || registeredIds.has(accountInbox.id) || named.some(({id}) => id === accountInbox.id)
+			? named
+			: [...named, {id: accountInbox.id, name: accountInbox.name}];
+	const paths = new PathBuilder(database).buildFullPathsBatch(unregistered.map(({id}) => id));
 	return unregistered
-		.map((node) => ({
-			id: node.id,
-			name: stripHtmlTags(node.name ?? "").trim(),
-			path: paths.get(node.id) ?? "",
-		}))
+		.map(({id, name}) => ({id, name, path: paths.get(id) ?? ""}))
 		.toSorted((left, right) => left.id.localeCompare(right.id));
 }
