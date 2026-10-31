@@ -11,14 +11,8 @@ import {z} from "zod";
 import * as schema from "../src/db/schema.js";
 import {WorkflowyInternalAdapter} from "../src/internal/adapter.js";
 import type {MoveToInput} from "../src/internal/adapter.js";
-import {
-	CalendarRootMissing,
-	calendarDateId,
-	calendarLevelMetadata,
-	calendarLevelName,
-	parseDateId,
-} from "../src/internal/calendar-day.js";
-import {calendarNodeId} from "../src/internal/calendar-ids.js";
+import {calendarDateId, calendarLevelMetadata, calendarLevelName, parseDateId} from "../src/internal/calendar-day.js";
+import {CALENDAR_ID_NAMESPACE, calendarNodeId, uuidv5} from "../src/internal/calendar-ids.js";
 import {PushAndPoll} from "../src/internal/push-and-poll.js";
 import {FAR_FUTURE_DATE} from "../src/temporal/constants.js";
 
@@ -116,6 +110,13 @@ function setup(options: {
 			return Promise.resolve((children.get(parent ?? "home") ?? []).map((id) => ({id})));
 		},
 		cachedChildIds: (parent: string | null) => cached.get(parent ?? "home") ?? [],
+		refreshChildren: async (parentIds: (string | null)[]) => {
+			calls.push(["refreshChildren", parentIds]);
+			for (const parent of parentIds) {
+				cached.set(parent ?? "home", [...(children.get(parent ?? "home") ?? [])]);
+			}
+			return Promise.resolve();
+		},
 		refreshChain: async (parentIds: string[]) => {
 			calls.push(["refresh", parentIds]);
 			for (const parent of parentIds) {
@@ -142,10 +143,15 @@ function setup(options: {
 	};
 	vi.spyOn(PushAndPoll.prototype, "pushAndPoll").mockImplementation(async ({ops = []} = {}) => {
 		for (const op of ops) {
+			if (op.type === "edit") {
+				const {projectid, metadataPatches} = op.data as {projectid: string; metadataPatches: unknown};
+				calls.push(["edit", {id: projectid, metadataPatches}]);
+				continue;
+			}
 			const data = op.data as {parentid: string; starting_priority: number; project_trees: string};
 			const trees = pushedTrees(data.project_trees);
 			calls.push([op.type, {parentId: data.parentid, index: data.starting_priority, trees}]);
-			insert(data.parentid, data.starting_priority, trees);
+			insert(data.parentid === "None" ? "home" : data.parentid, data.starting_priority, trees);
 		}
 		return Promise.resolve({txId: "2", serverRun: [], remote: [], needsRefresh: false});
 	});
@@ -514,9 +520,82 @@ describe("WorkflowyInternalAdapter.ensureCalendarDay", () => {
 		});
 	});
 
-	it("refuses when no calendar root is cached", async () => {
-		const {adapter} = tracked({children: {home: ["a"]}, metadata: {}});
+	const yearCreate = (parentId: string) => [
+		"bulk_create",
+		{
+			parentId,
+			index: 0,
+			trees: [{id: Y2026, nm: "2026", metadata: {restorableUniqueNode: true, ...yearMeta}, ch: []}],
+		},
+	];
 
-		await expect(adapter.ensureCalendarDay(20_261_017)).rejects.toThrow(CalendarRootMissing);
+	it("walks from the root that root metadata calendar.rootId names, like upstream's Calendar.find", async () => {
+		const {adapter, calls} = tracked({
+			children: {home: [CAL, "alt"], [CAL]: [], alt: []},
+			metadata: {[CAL]: ROOT_META},
+			session: {...SESSION, rootMetadata: {...SESSION.rootMetadata, calendar: {rootId: "alt"}}},
+		});
+
+		const result = await adapter.ensureCalendarDay(20_261_017, {stopAt: "year", createChild: false});
+
+		expect({result, calls}).toStrictEqual({
+			result: {dayId: Y2026, firstChildId: null, created: [Y2026]},
+			calls: [["live", "alt"], yearCreate("alt"), ["refresh", ["alt"]]],
+		});
+	});
+
+	it("falls back to the calendar.root-tagged node when calendar.rootId names no cached node", async () => {
+		const {adapter, calls} = tracked({
+			children: {home: [CAL], [CAL]: []},
+			metadata: {[CAL]: ROOT_META},
+			session: {...SESSION, rootMetadata: {...SESSION.rootMetadata, calendar: {rootId: "gone"}}},
+		});
+
+		await adapter.ensureCalendarDay(20_261_017, {stopAt: "year", createChild: false});
+
+		expect(calls).toStrictEqual([["live", CAL], yearCreate(CAL), ["refresh", [CAL]]]);
+	});
+
+	it("creates the 📆 Calendar root at the end of Home and points calendar.rootId at it when none exists, like upstream's Calendar.ensure", async () => {
+		const {adapter, calls, children, cachedMetadata} = tracked({children: {home: ["a"]}, metadata: {}});
+		const root = uuidv5(`${ENTROPY}-calendar-root`, CALENDAR_ID_NAMESPACE);
+
+		const result = await adapter.ensureCalendarDay(20_261_017, {stopAt: "year", createChild: false});
+
+		expect({
+			result,
+			calls,
+			home: children.get("home"),
+			rootMetadata: cachedMetadata(root),
+			rootId: await adapter.getRootMeta(["calendar", "rootId"]),
+		}).toStrictEqual({
+			result: {dayId: Y2026, firstChildId: null, created: [Y2026]},
+			calls: [
+				["live", null],
+				[
+					"bulk_create",
+					{
+						parentId: "None",
+						index: 1,
+						trees: [
+							{
+								id: root,
+								nm: "📆 Calendar",
+								metadata: {restorableUniqueNode: true, calendar: {root: true}},
+								ch: [],
+							},
+						],
+					},
+				],
+				["refreshChildren", [null]],
+				["edit", {id: "None", metadataPatches: [{op: "add", path: ["calendar"], value: {rootId: root}}]}],
+				["live", root],
+				yearCreate(root),
+				["refresh", [root]],
+			],
+			home: ["a", root],
+			rootMetadata: {calendar: {root: true}, restorableUniqueNode: true},
+			rootId: root,
+		});
 	});
 });

@@ -24,7 +24,7 @@ import {applyRelationshipOps, isReplayable} from "../cache/relationship-log.js";
 import {applyExpansionDelta, expansionVersion, readExpansion} from "../cache/expansion-store.js";
 import {advanceTreeTxId, readTreeTxId} from "../cache/tree-transaction.js";
 import type {ItemRelationships} from "../cache/item-relationships.js";
-import {calendarLayoutApplies, calendarMetadata, mirrors as mirrorsTable, nodeContent} from "../db/schema.js";
+import {calendarLayoutApplies, mirrors as mirrorsTable, nodeContent} from "../db/schema.js";
 import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 import {HOME_TARGET} from "../types/targets.js";
 import {hasInternalLink, internalLinkShortIds} from "../workflowy/internal-links.js";
@@ -40,7 +40,8 @@ import {
 	parseDateId,
 } from "./calendar-day.js";
 import type {CalendarLevel} from "./calendar-day.js";
-import {calendarNodeId} from "./calendar-ids.js";
+import {CALENDAR_ID_NAMESPACE, calendarNodeId, uuidv5} from "./calendar-ids.js";
+import {CALENDAR_ROOT_NAME, findTaggedCalendarRoot} from "../cache/calendar-lookup.js";
 import {calendarLayoutWrites, layoutWriteParents} from "./calendar-layout-apply.js";
 import {calendarLayoutUndoWrites} from "./calendar-layout-undo.js";
 import type {LayoutWrite} from "./calendar-layout-apply.js";
@@ -977,7 +978,7 @@ export class WorkflowyInternalAdapter {
 		if (date === undefined) {
 			throw new RangeError(`${dateId} is not a YYYYMMDD date`);
 		}
-		const root = this.findCalendarRoot();
+		const root = await this.ensureCalendarRoot();
 		// Upstream `GO`: the root's levels (a missing key is off), else year, month and day.
 		const shown = root.levels ?? DEFAULT_CALENDAR_LEVELS;
 		const levels = CALENDAR_LEVELS.slice(0, CALENDAR_LEVELS.indexOf(stopAt) + 1).filter((level) => shown[level]);
@@ -1375,24 +1376,32 @@ export class WorkflowyInternalAdapter {
 		});
 	}
 
-	private findCalendarRoot(): {id: string; levels: Record<string, boolean> | undefined} {
-		const row = this.db
-			.select({nodeId: calendarMetadata.nodeId})
-			.from(calendarMetadata)
-			.innerJoin(nodeContent, eq(nodeContent.id, calendarMetadata.nodeId))
-			.where(
-				and(
-					eq(calendarMetadata.root, 1),
-					eq(calendarMetadata.systemTo, FAR_FUTURE_DATE),
-					eq(nodeContent.systemTo, FAR_FUTURE_DATE),
-				),
-			)
-			.get();
-		if (row === undefined) {
-			throw new CalendarRootMissing();
+	/**
+	 * Upstream's `Calendar.ensure`: the root {@link findTaggedCalendarRoot} finds (root metadata
+	 * `calendar.rootId` when it names a cached node, else the `calendar.root`-tagged node), or a new
+	 * `📆 Calendar` at the end of Home with id `uuidv5("calendar-root")` and
+	 * `{restorableUniqueNode, calendar: {root: true}}`, which `calendar.rootId` then names.
+	 */
+	private async ensureCalendarRoot(): Promise<{id: string; levels: Record<string, boolean> | undefined}> {
+		const pointer = await this.getRootMeta(["calendar", "rootId"]);
+		const found =
+			typeof pointer === "string" && this.isCached(pointer) ? pointer : findTaggedCalendarRoot({db: this.db});
+		if (found !== undefined) {
+			const parsed = CalendarMetadataSchema.safeParse(this.readNodeMetadata(found));
+			return {id: found, levels: parsed.success ? parsed.data.calendar.levels : undefined};
 		}
-		const parsed = CalendarMetadataSchema.safeParse(this.readNodeMetadata(row.nodeId));
-		return {id: row.nodeId, levels: parsed.success ? parsed.data.calendar.levels : undefined};
+		const {entropyKey} = await this.session();
+		const {id} = await this.createAt({
+			parentId: HOME,
+			id:
+				entropyKey === undefined
+					? this.generateId()
+					: uuidv5(`${entropyKey}-calendar-root`, CALENDAR_ID_NAMESPACE),
+			name: CALENDAR_ROOT_NAME,
+			metadata: {restorableUniqueNode: true, calendar: {root: true}},
+		});
+		await this.setRootMetaValues([{path: ["calendar", "rootId"], value: id}]);
+		return {id, levels: undefined};
 	}
 
 	/** A node's cached calendar level and dateId, if it has both. */

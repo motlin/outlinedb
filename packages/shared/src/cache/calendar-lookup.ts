@@ -8,7 +8,7 @@ import {and, between, eq, exists, inArray, sql} from "drizzle-orm";
 import type {SQL} from "drizzle-orm";
 import {parseTimeAttrs} from "../dates/date-markup.js";
 import type {AppDatabase} from "../db/types.js";
-import {calendarLevels, calendarMetadata, nodeContent} from "../db/schema.js";
+import {calendarLevels, calendarMetadata, nodeContent, rootPreferences} from "../db/schema.js";
 import {CALENDAR_LEVELS, DEFAULT_CALENDAR_LEVELS, calendarDateId, parseDateId} from "../internal/calendar-day.js";
 import type {CalendarDate, CalendarLevel} from "../internal/calendar-day.js";
 import {auditCalendarMonth, auditCalendarRoot} from "../internal/calendar-adopt.js";
@@ -295,18 +295,32 @@ function namedDaysInMonth(cache: CacheService, root: string, date: CalendarDate)
 	return days;
 }
 
-/** The node whose cached metadata marks it the calendar root, else the Home child named `📆 Calendar`. */
+/** {@link findTaggedCalendarRoot}, else the Home child named `📆 Calendar`. */
 export function findCalendarRoot(deps: Pick<CalendarDayDeps, "db" | "cache">): string | undefined {
 	return findTaggedCalendarRoot(deps) ?? deps.cache.getChildByName(null, CALENDAR_ROOT_NAME)?.id;
 }
 
 /**
- * The calendar root whose cached internal metadata marks it `calendar.root`, or undefined. Metadata
- * patches are built against that cached row, so without it a `calendar.*` write would replace the
- * root's whole `calendar` object.
+ * The account's calendar root, or undefined: the live node root metadata `calendar.rootId` names
+ * (upstream's `Calendar.find`), else the node whose cached internal metadata marks it `calendar.root`.
+ * Metadata patches are built against the cached `calendar` row, so a `calendar.*` write needs this
+ * internal-metadata view of the account rather than the public tree's name lookup.
  */
 export function findTaggedCalendarRoot(deps: Pick<CalendarDayDeps, "db">): string | undefined {
-	return calendarRows(deps, eq(calendarMetadata.root, 1)).find(({calendar}) => calendar.root === true)?.id;
+	return (
+		pointedCalendarRoot(deps) ??
+		calendarRows(deps, eq(calendarMetadata.root, 1)).find(({calendar}) => calendar.root === true)?.id
+	);
+}
+
+/** The node root metadata `calendar.rootId` (`root_preferences.calendar_root_id`) names, when it is live. */
+function pointedCalendarRoot(deps: Pick<CalendarDayDeps, "db">): string | undefined {
+	return deps.db
+		.select({id: nodeContent.id})
+		.from(rootPreferences)
+		.innerJoin(nodeContent, eq(nodeContent.id, rootPreferences.calendarRootId))
+		.where(and(eq(rootPreferences.systemTo, FAR_FUTURE_DATE), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
+		.get()?.id;
 }
 
 /** Durable Object SQLite caps a statement at 100 bound parameters. */

@@ -8,7 +8,7 @@ import * as schema from "@workflowy/shared/db";
 import {calendarNodeId} from "@workflowy/shared/internal";
 import type {WorkflowyInternalAdapter} from "@workflowy/shared/internal";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
-import {findCalendarDay, findCalendarDays} from "../src/server/calendar-day.js";
+import {findCalendarDay, findCalendarDays, findTaggedCalendarRoot} from "../src/server/calendar-day.js";
 import type {ServerContext} from "../src/server/context.js";
 import {httpAppFor} from "./http-app-for.js";
 
@@ -135,6 +135,50 @@ describe("findCalendarDay", () => {
 		const deps = setup(undefined, {taggedRoot: false});
 
 		expect([20_261_017, 20_261_001].map((dateId) => findCalendarDay(deps, dateId))).toStrictEqual([D1017, "d1001"]);
+	});
+
+	/** A second, untagged calendar root `alt` holding a tagged 2026 > 10 > 17, and root metadata `calendar.rootId` naming `pointer`. */
+	function withPointer(pointer: string) {
+		const deps = setup();
+		const alt: [string, string | null, string, Record<string, unknown>?][] = [
+			["alt", null, "Alt Calendar"],
+			["alt-y", "alt", "2026", {calendar: {level: "year", value: "2026", timestamp: 0, dateId: 20_260_000}}],
+			["alt-m", "alt-y", "10", {calendar: {level: "month", value: "10", timestamp: 0, dateId: 20_261_000}}],
+			["alt-d", "alt-m", "17", {calendar: {level: "day", value: "17", timestamp: 0, dateId: 20_261_017}}],
+		];
+		for (const [id, parentId, name, metadata] of alt) {
+			deps.db
+				.insert(schema.nodeContent)
+				.values({id, name, parentId, systemFrom: "2026-01-01", systemTo: FAR_FUTURE_DATE})
+				.run();
+			if (metadata !== undefined) {
+				storeInternalMetadata(deps.db, new Map([[id, metadata]]));
+			}
+		}
+		deps.db
+			.insert(schema.rootPreferences)
+			.values({userId: 1, calendarRootId: pointer, systemFrom: "2026-01-01", systemTo: FAR_FUTURE_DATE})
+			.run();
+		return {...deps, entropyKey: KEY};
+	}
+
+	it("finds the root through root metadata calendar.rootId when it names a live node, like upstream's Calendar.find", () => {
+		const deps = withPointer("alt");
+
+		expect({
+			root: findTaggedCalendarRoot(deps),
+			day: findCalendarDay(deps, 20_261_017),
+			days: findCalendarDays(deps, [20_261_017]),
+		}).toStrictEqual({root: "alt", day: "alt-d", days: new Map([[20_261_017, "alt-d"]])});
+	});
+
+	it("falls back to the calendar.root-tagged node when calendar.rootId names no live node", () => {
+		const deps = withPointer("gone");
+
+		expect({root: findTaggedCalendarRoot(deps), day: findCalendarDay(deps, 20_261_017)}).toStrictEqual({
+			root: "cal",
+			day: D1017,
+		});
 	});
 });
 
