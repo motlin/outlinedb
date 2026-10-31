@@ -83,6 +83,7 @@ const EMPTY = {
 	weekStartDay: null,
 	slashDiscovered: false,
 	calendarTooltipSeen: false,
+	emojiSelected: null,
 	notesRootId: null,
 	showCompleted: false,
 	showKeyboardShortcuts: false,
@@ -131,6 +132,15 @@ describe("GET /api/v1/preferences", () => {
 		await expect(request("GET", "/preferences")).resolves.toStrictEqual({
 			status: 200,
 			body: {...EMPTY, calendarTooltipSeen: true},
+		});
+	});
+
+	it("reads emojiSelected from emoji.options.selected", async () => {
+		const {request} = setup({emoji: {options: {selected: "noto"}}});
+
+		await expect(request("GET", "/preferences")).resolves.toStrictEqual({
+			status: 200,
+			body: {...EMPTY, emojiSelected: "noto"},
 		});
 	});
 
@@ -284,6 +294,19 @@ describe("PATCH /api/v1/preferences", () => {
 			response: {status: 200, body: {...EMPTY, calendarTooltipSeen: true}},
 			writes: [[[{path: ["calendar", "tooltip_seen"], value: true}]]],
 			meta: {calendar: {rootId: "cal", tooltip_seen: true}},
+		});
+	});
+
+	it("writes emojiSelected at emoji.options.selected", async () => {
+		const meta: Record<string, unknown> = {};
+		const {adapter, request} = setup(meta);
+
+		const response = await request("PATCH", "/preferences", {emojiSelected: "noto"});
+
+		expect({response, writes: adapter.setRootMetaValues.mock.calls, meta}).toStrictEqual({
+			response: {status: 200, body: {...EMPTY, emojiSelected: "noto"}},
+			writes: [[[{path: ["emoji", "options", "selected"], value: "noto"}]]],
+			meta: {emoji: {options: {selected: "noto"}}},
 		});
 	});
 

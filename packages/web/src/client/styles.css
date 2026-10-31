@@ -404,6 +404,11 @@
 	box-sizing: border-box;
 }
 
+/* Upstream fonts.css: the Noto Emoji style swaps the emoji font in body's font stack. */
+.emoji-noto {
+	--emoji-font: "Noto Emoji";
+}
+
 body {
 	margin: 0;
 	padding: 0;

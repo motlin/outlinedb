@@ -3,6 +3,7 @@ import {createRoot} from "react-dom/client";
 import {App} from "./app.js";
 import {IS_MOBILE, applyDeviceClass} from "./is-mobile.js";
 import {clearPrepaintBackground} from "./theme-apply.js";
+import {applyEmoji, storedEmoji} from "./emoji-apply.js";
 import "./print.css";
 import {installPrintListeners} from "./hooks/use-printing.js";
 
@@ -15,6 +16,9 @@ if (!rootElement) {
 applyDeviceClass(document.body, IS_MOBILE, navigator.userAgent);
 
 installPrintListeners(window);
+
+// Upstream applies this browser's saved emoji style at boot, before the account's arrives.
+applyEmoji(storedEmoji());
 
 const root = createRoot(rootElement);
 root.render(

@@ -8,6 +8,7 @@ import {usePreferences} from "../hooks/use-preferences.js";
 import type {Preferences, PreferencesPatch} from "../hooks/use-preferences.js";
 import {currentVersionLabel} from "../app-version.js";
 import {useFlash} from "../hooks/use-flash.js";
+import {EMOJI_OPTIONS, applyEmoji, storedEmoji} from "../emoji-apply.js";
 import {allThemes, currentTheme} from "../themes.js";
 import {useCustomThemesStore} from "../stores/custom-themes.js";
 import {useOutlineStore} from "../stores/outline.js";
@@ -223,6 +224,7 @@ function PersonalizationSection({preferences, change}: SectionProps) {
 	const setTheme = useOutlineStore((state) => state.setTheme);
 	const customThemes = useCustomThemesStore((state) => state.themes);
 	const current = currentTheme(preferences.theme ?? theme);
+	const emoji = preferences.emojiSelected ?? storedEmoji();
 	return (
 		<SettingsSection title="Personalization">
 			<SectionBody>
@@ -236,6 +238,21 @@ function PersonalizationSection({preferences, change}: SectionProps) {
 								onSelect={() => {
 									change({theme: option.name});
 									setTheme(option.name);
+								}}
+							/>
+						))}
+					</Dropdown>
+				</ControlRow>
+				<ControlRow label="Emojis" hint={"\u{1F973}\u{1F370}\u{1F41B}\u{1F60A}\u{1F451}\u{1F37B}"}>
+					<Dropdown large>
+						{EMOJI_OPTIONS.map(([name, label]) => (
+							<DropdownOption
+								key={name}
+								label={label}
+								isSelected={emoji === name}
+								onSelect={() => {
+									change({emojiSelected: name});
+									applyEmoji(name);
 								}}
 							/>
 						))}

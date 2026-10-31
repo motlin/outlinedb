@@ -339,6 +339,40 @@ describe("Settings dialog", () => {
 		}).toStrictEqual({patch: ['{"theme":"default"}'], setTheme: [["default"]]});
 	});
 
+	it("shows the account emoji style in the Emojis dropdown and saves a choice to the account, the body and this browser", async () => {
+		localStorage.clear();
+		await open({emojiSelected: "system"});
+		const menu = [...section("Personalization").querySelectorAll<HTMLElement>(".menu")].at(1);
+		const label = menu?.firstElementChild?.textContent;
+		await run(() => {
+			menu?.focus();
+		});
+		const options = [...document.querySelectorAll(".flyout a")].map((row) => row.textContent);
+		await pickOption(menu!, "Noto Emoji");
+		expect({
+			rows: rowLabels("Personalization"),
+			label,
+			options,
+			patch: patches().map(([, init]) => init?.body),
+			bodyClass: document.body.classList.contains("emoji-noto"),
+			stored: localStorage.getItem("emoji_options__selected"),
+		}).toStrictEqual({
+			rows: ["Theme", "Emojis"],
+			label: "System",
+			options: ["System", "Noto Emoji"],
+			patch: ['{"emojiSelected":"noto"}'],
+			bodyClass: true,
+			stored: "noto",
+		});
+	});
+
+	it("labels the Emojis dropdown System when the account has no emoji style", async () => {
+		localStorage.clear();
+		await open();
+		const menu = [...section("Personalization").querySelectorAll<HTMLElement>(".menu")].at(1);
+		expect(menu?.firstElementChild?.textContent).toBe("System");
+	});
+
 	it("shows the media rows from the account flags and writes an embed toggle inverted", async () => {
 		await open();
 		const thumbnails =

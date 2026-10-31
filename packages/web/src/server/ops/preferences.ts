@@ -50,6 +50,8 @@ const PreferencesPatchSchema = z
 		slashDiscovered: z.boolean(),
 		/** Upstream's `calendar.tooltip_seen`: the calendar onboarding tooltip was dismissed or tried, which shows Today. */
 		calendarTooltipSeen: z.boolean(),
+		/** Upstream's `emoji.options.selected`: the emoji style (`system`, `noto`), applied as body class `emoji-<name>`. */
+		emojiSelected: z.string().nullable(),
 		notesRootId: z.string().nullable(),
 		showCompleted: z.boolean(),
 		showKeyboardShortcuts: z.boolean(),
@@ -86,6 +88,7 @@ const KEYS = [
 	"weekStartDay",
 	"slashDiscovered",
 	"calendarTooltipSeen",
+	"emojiSelected",
 	"notesRootId",
 	"weeklyReportOn",
 ] as const;
@@ -97,6 +100,7 @@ const PATHS: Record<(typeof KEYS)[number], string[]> = {
 	weekStartDay: ["weekStartDay"],
 	slashDiscovered: ["slash", "discovered"],
 	calendarTooltipSeen: ["calendar", "tooltip_seen"],
+	emojiSelected: ["emoji", "options", "selected"],
 	notesRootId: ["notesRootId"],
 	weeklyReportOn: ["weekly-report", "on"],
 };
@@ -182,6 +186,7 @@ async function readPreferences(adapter: WorkflowyInternalAdapter): Promise<Prefe
 		weekStartDay: typeof root.weekStartDay === "number" ? root.weekStartDay : null,
 		slashDiscovered: root.slashDiscovered === true,
 		calendarTooltipSeen: root.calendarTooltipSeen === true,
+		emojiSelected: asString(root.emojiSelected),
 		notesRootId: asString(root.notesRootId),
 		weeklyReportOn: root.weeklyReportOn === true,
 		latestColor: latestColorFrom(latestColor),

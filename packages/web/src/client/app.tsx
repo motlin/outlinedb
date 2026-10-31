@@ -67,7 +67,7 @@ import {useLatestColorSync} from "./latest-color.js";
 import {useSearchForChangesAfterSync} from "./search-for-changes-after.js";
 import {useTagColors} from "./hooks/use-tag-colors.js";
 import {useCustomTree} from "./hooks/use-custom-tree.js";
-import {useShowKeyboardShortcutsSync, useThemeSync} from "./hooks/use-right-bar-sync.js";
+import {useEmojiSync, useShowKeyboardShortcutsSync, useThemeSync} from "./hooks/use-right-bar-sync.js";
 import {useShowCompletedSync} from "./hooks/use-show-completed-toggle.js";
 import {installWindowBlurredClass} from "./window-blurred.js";
 import {installCoalescingTimeoutProvider} from "./coalescing-timers.js";
@@ -393,6 +393,7 @@ function ShowCompletedSync() {
 function ShowKeyboardShortcutsSync() {
 	useShowKeyboardShortcutsSync();
 	useThemeSync();
+	useEmojiSync();
 	useCustomTree();
 	return null;
 }

@@ -4,6 +4,7 @@ import {useOutlineStore} from "../stores/outline.js";
 import type {Theme} from "../stores/outline.js";
 import {useCustomThemesStore} from "../stores/custom-themes.js";
 import {isRegisteredTheme} from "../themes.js";
+import {applyEmoji, serverEmoji} from "../emoji-apply.js";
 import {fetchPreferences, preferenceKeys, serverShowKeyboardShortcuts, serverTheme} from "./use-preferences.js";
 
 /** Adopt the account's `showKeyboardShortcuts` whenever `/api/v1/preferences` reports a value. */
@@ -33,4 +34,15 @@ export function useThemeSync(): void {
 			useOutlineStore.getState().setTheme(theme);
 		}
 	}, [theme]);
+}
+
+/** Adopt the account's emoji style (`emoji.options.selected`) whenever `/api/v1/preferences` reports one. */
+export function useEmojiSync(): void {
+	const {data} = useQuery({queryKey: preferenceKeys.all, queryFn: fetchPreferences});
+	const emoji = serverEmoji(data);
+	useEffect(() => {
+		if (emoji !== null) {
+			applyEmoji(emoji);
+		}
+	}, [emoji]);
 }

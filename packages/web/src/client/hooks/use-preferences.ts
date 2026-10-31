@@ -34,6 +34,7 @@ export const EMPTY_PREFERENCES: Preferences = {
 	weekStartDay: null,
 	slashDiscovered: false,
 	calendarTooltipSeen: false,
+	emojiSelected: null,
 	notesRootId: null,
 	showCompleted: false,
 	showKeyboardShortcuts: false,
