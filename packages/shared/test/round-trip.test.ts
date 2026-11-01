@@ -70,7 +70,6 @@ describe("round-trip test infrastructure", () => {
 				"root_preferences",
 				"s3_files",
 				"saved_views",
-				"sqlite_sequence",
 				"star_order",
 				"stars",
 				"surveys",
@@ -88,7 +87,7 @@ describe("round-trip test infrastructure", () => {
 
 			const result = database.get<{count: number}>(sql`SELECT COUNT(*) AS count FROM __drizzle_migrations`);
 
-			expect(result.count).toBe(50);
+			expect(result.count).toBe(1);
 
 			sqlite.close();
 		});

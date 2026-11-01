@@ -32,7 +32,7 @@ All temporal columns use UTC ISO8601 TEXT with millisecond precision: `YYYY-MM-D
 
 ## Keys and Indexes
 
-- The primary key is the business key plus one of `system_from` or `system_to`; the other gets a UNIQUE index on the same business key columns. Either choice is equivalent. This repo's convention is PK `(key..., system_from)` plus UNIQUE `(key..., system_to)`.
+- The primary key is the business key plus one of `system_from` or `system_to`; the other gets a UNIQUE index on the same business key columns. Either choice is equivalent. This repo's convention is PK `(key..., system_from)` plus UNIQUE `(key..., system_to)`. `packages/shared/test/schema-guard.test.ts` fails when a temporal table lacks either.
 - Add a partial closed-at index on `system_to WHERE system_to < '9999-12-31 23:59:59'` when queries look up ended rows; a full `system_to` index would win every live-row lookup.
 
 Example schema:

@@ -101,7 +101,7 @@
 		}
 	},
 	"scripts": {
-		"build": "tsc && shx cp -r src/db/migrations dist/db/",
+		"build": "tsc && shx rm -rf dist/db/migrations && shx cp -r src/db/migrations dist/db/",
 		"dev": "tsc --watch",
 		"typecheck": "tsc --noEmit"
 	},

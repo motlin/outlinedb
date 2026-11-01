@@ -40,6 +40,36 @@ function nonTemporalTables(sqlite: Database): string[] {
 		});
 }
 
+/**
+ * Temporal tables whose primary key is not (key..., system_from) with a UNIQUE index on (key..., system_to),
+ * the index that makes the database reject two live versions of one row.
+ */
+function tablesWithoutUniqueSystemTo(sqlite: Database): string[] {
+	return tableNames(sqlite)
+		.filter((table) => !isAllowlisted(table))
+		.filter((table) => {
+			const primaryKey = sqlite
+				.prepare<[string], {name: string}>("SELECT name FROM pragma_table_info(?) WHERE pk > 0 ORDER BY pk")
+				.all(table)
+				.map((column) => column.name);
+			if (primaryKey.at(-1) !== "system_from") {
+				return true;
+			}
+			const expected = [...primaryKey.slice(0, -1), "system_to"].join(", ");
+			const uniqueIndexes = sqlite
+				.prepare<[string], {name: string}>('SELECT name FROM pragma_index_list(?) WHERE "unique" = 1')
+				.all(table);
+			return !uniqueIndexes.some(
+				(index) =>
+					sqlite
+						.prepare<[string], {name: string}>("SELECT name FROM pragma_index_info(?) ORDER BY seqno")
+						.all(index.name)
+						.map((column) => column.name)
+						.join(", ") === expected,
+			);
+		});
+}
+
 /** `table.column` for every column whose name ends in json, in any table. */
 function jsonNamedColumns(sqlite: Database): string[] {
 	return tableNames(sqlite).flatMap((table) =>
@@ -101,6 +131,10 @@ describe("schema guard", () => {
 		expect(nonTemporalTables(seededDb())).toStrictEqual([]);
 	});
 
+	it("gives every temporal table PK (key, system_from) and a UNIQUE (key, system_to) index", () => {
+		expect(tablesWithoutUniqueSystemTo(seededDb())).toStrictEqual([]);
+	});
+
 	it("names no column *json", () => {
 		expect(jsonNamedColumns(seededDb())).toStrictEqual([]);
 	});
@@ -109,12 +143,15 @@ describe("schema guard", () => {
 		expect(jsonValuedColumns(seededDb())).toStrictEqual([]);
 	});
 
-	it("flags a table without system time, a *_json column, and a JSON-shaped value", () => {
+	it("flags a table without system time, a missing unique system_to index, a *_json column, and a JSON-shaped value", () => {
 		const sqlite = new DatabaseConstructor(":memory:");
 		open.push(sqlite);
 		sqlite.exec(`
 			CREATE TABLE plain (id TEXT PRIMARY KEY, payload_json TEXT);
-			CREATE TABLE versioned (id TEXT, value TEXT, system_from TEXT NOT NULL, system_to TEXT NOT NULL);
+			CREATE TABLE versioned (id TEXT, value TEXT, system_from TEXT NOT NULL, system_to TEXT NOT NULL, PRIMARY KEY (id, system_from));
+			CREATE INDEX versioned_system_to_idx ON versioned (id, system_to);
+			CREATE TABLE unique_versioned (id TEXT, system_from TEXT NOT NULL, system_to TEXT NOT NULL, PRIMARY KEY (id, system_from));
+			CREATE UNIQUE INDEX unique_versioned_system_to_idx ON unique_versioned (id, system_to);
 			CREATE TABLE node_tags (node_id TEXT, tag TEXT);
 			INSERT INTO plain VALUES ('a', 'x');
 			INSERT INTO versioned VALUES ('a', ' [1, 2]', '2026-10-01', '9999-12-31');
@@ -123,10 +160,12 @@ describe("schema guard", () => {
 
 		expect({
 			nonTemporal: nonTemporalTables(sqlite),
+			withoutUniqueSystemTo: tablesWithoutUniqueSystemTo(sqlite),
 			jsonNamed: jsonNamedColumns(sqlite),
 			jsonValued: jsonValuedColumns(sqlite),
 		}).toStrictEqual({
 			nonTemporal: ["plain"],
+			withoutUniqueSystemTo: ["plain", "versioned"],
 			jsonNamed: ["plain.payload_json"],
 			jsonValued: ["versioned.value"],
 		});

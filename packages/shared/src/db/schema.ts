@@ -53,7 +53,7 @@ export const nodeMetadata = sqliteTable(
 	},
 	(table) => [
 		primaryKey({columns: [table.nodeId, table.systemFrom]}),
-		index("node_metadata_system_to_idx").on(table.nodeId, table.systemTo),
+		uniqueIndex("node_metadata_system_to_idx").on(table.nodeId, table.systemTo),
 		index("node_metadata_short_id_idx").on(table.shortId, table.systemTo),
 		index("node_metadata_system_from_idx").on(table.systemFrom),
 		// Partial: a full system_to index would win every live-row lookup (system_to = far future).
@@ -98,7 +98,7 @@ export const calendarMetadata = sqliteTable(
 	},
 	(table) => [
 		primaryKey({columns: [table.nodeId, table.systemFrom]}),
-		index("calendar_metadata_system_to_idx").on(table.nodeId, table.systemTo),
+		uniqueIndex("calendar_metadata_system_to_idx").on(table.nodeId, table.systemTo),
 		index("calendar_metadata_root_idx").on(table.root, table.systemTo),
 		index("calendar_metadata_level_idx").on(table.level, table.systemTo, table.dateId),
 	],
@@ -125,7 +125,7 @@ export const calendarLevels = sqliteTable(
 	},
 	(table) => [
 		primaryKey({columns: [table.nodeId, table.systemFrom]}),
-		index("calendar_levels_system_to_idx").on(table.nodeId, table.systemTo),
+		uniqueIndex("calendar_levels_system_to_idx").on(table.nodeId, table.systemTo),
 	],
 );
 
@@ -141,7 +141,7 @@ export const nodeEmbeddings = sqliteTable(
 	},
 	(table) => [
 		primaryKey({columns: [table.nodeId, table.model, table.systemFrom]}),
-		index("node_embeddings_system_to_idx").on(table.nodeId, table.model, table.systemTo),
+		uniqueIndex("node_embeddings_system_to_idx").on(table.nodeId, table.model, table.systemTo),
 	],
 );
 
@@ -163,6 +163,7 @@ export const mirrors = sqliteTable(
 	},
 	(table) => [
 		primaryKey({columns: [table.mirrorId, table.originalId, table.systemFrom]}),
+		uniqueIndex("mirrors_system_to_idx").on(table.mirrorId, table.originalId, table.systemTo),
 		index("mirrors_mirror_idx").on(table.mirrorId, table.systemTo),
 		index("mirrors_original_idx").on(table.originalId, table.systemTo),
 	],
@@ -180,7 +181,7 @@ export const aiMetadata = sqliteTable(
 	},
 	(table) => [
 		primaryKey({columns: [table.nodeId, table.systemFrom]}),
-		index("ai_metadata_system_to_idx").on(table.nodeId, table.systemTo),
+		uniqueIndex("ai_metadata_system_to_idx").on(table.nodeId, table.systemTo),
 	],
 );
 
@@ -203,7 +204,7 @@ export const s3Files = sqliteTable(
 	},
 	(table) => [
 		primaryKey({columns: [table.nodeId, table.systemFrom]}),
-		index("s3_files_system_to_idx").on(table.nodeId, table.systemTo),
+		uniqueIndex("s3_files_system_to_idx").on(table.nodeId, table.systemTo),
 	],
 );
 
@@ -219,7 +220,7 @@ export const changesMetadata = sqliteTable(
 	},
 	(table) => [
 		primaryKey({columns: [table.nodeId, table.systemFrom]}),
-		index("changes_metadata_system_to_idx").on(table.nodeId, table.systemTo),
+		uniqueIndex("changes_metadata_system_to_idx").on(table.nodeId, table.systemTo),
 	],
 );
 
@@ -233,7 +234,7 @@ export const referencesRoots = sqliteTable(
 	},
 	(table) => [
 		primaryKey({columns: [table.nodeId, table.systemFrom]}),
-		index("references_roots_system_to_idx").on(table.nodeId, table.systemTo),
+		uniqueIndex("references_roots_system_to_idx").on(table.nodeId, table.systemTo),
 	],
 );
 
@@ -248,7 +249,7 @@ export const backupImports = sqliteTable(
 	},
 	(table) => [
 		primaryKey({columns: [table.filename, table.systemFrom]}),
-		index("backup_imports_system_to_idx").on(table.filename, table.systemTo),
+		uniqueIndex("backup_imports_system_to_idx").on(table.filename, table.systemTo),
 	],
 );
 

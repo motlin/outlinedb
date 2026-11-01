@@ -403,7 +403,6 @@ describe("WorkflowyInternalAdapter.syncBacklinks", () => {
 				('${OLD_ROOT}', '', '${TARGET}', '${SEEDED}', '9999-12-31 23:59:59'),
 				('${OLD_ITEM}', '', '${OLD_ROOT}', '${SEEDED}', '9999-12-31 23:59:59');
 			INSERT INTO references_roots VALUES ('${OLD_ROOT}', '${SEEDED}', '9999-12-31 23:59:59');
-			INSERT INTO mirrors VALUES ('${OLD_ITEM}', '${SOURCE}', '${SEEDED}', '9999-12-31 23:59:59');
 		`);
 
 		const result = await adapter.syncBacklinks([SOURCE]);

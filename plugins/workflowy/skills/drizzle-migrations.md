@@ -13,8 +13,10 @@ packages/shared/src/db/migrations/
 ├── meta/
 │   ├── _journal.json
 │   └── 0000_snapshot.json
-└── 0000_initial_migration.sql
+└── 0000_initial.sql
 ```
+
+`0000_initial.sql` is a baseline that collapsed the earlier 0001-0050 history. drizzle-kit generated it from `schema.ts`, and the `node_fts` full-text virtual table is appended by hand because drizzle-kit does not generate virtual tables. Its journal `when` equals the last collapsed migration's, so a database migrated through the old history treats the baseline as applied instead of re-running it.
 
 ## Why meta/ Files Are Version Controlled
 
@@ -36,7 +38,9 @@ The meta files are generated output, but they are **required inputs** for future
 Always use `drizzle-kit generate` with the `--name` flag to create migrations:
 
 ```bash
-npx drizzle-kit generate --name descriptive_migration_name
+vp exec drizzle-kit generate --name descriptive_migration_name
 ```
 
 This generates both the SQL file and updates `meta/_journal.json` automatically. Never create migration SQL files manually without also updating the journal.
+
+After adding or changing a migration, run `vp run gen:migrations` to regenerate the Durable Object bundle (`packages/shared/src/db/migrations-bundle.generated.ts`).
