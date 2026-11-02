@@ -8,22 +8,27 @@ import {MobileMoreMenu} from "./mobile-more-menu.js";
 /** Upstream's `body { height: 100vh; overflow-y: hidden }` while a sheet is open (styles.css `mobile-sheet-open`). */
 const SHEET_OPEN_BODY_CLASS = "mobile-sheet-open";
 
-function deferredHide(): void {
+function deferredHide(): void
+{
 	setTimeout(hideSheet, 0);
 }
 
 /** Renders the open sheet (`WF.Sheet`). A location change closes it, deferred a tick like upstream. */
-export function MobileSheetHost() {
+export function MobileSheetHost()
+{
 	const sheet = useSheetStore((state) => state.sheet);
 	// Deferred a tick, like upstream (`setTimeout 0`).
 	useCloseOnLocationChange(deferredHide);
-	useEffect(() => {
+	useEffect(() =>
+	{
 		document.body.classList.toggle(SHEET_OPEN_BODY_CLASS, sheet !== null);
-		return () => {
+		return () =>
+		{
 			document.body.classList.remove(SHEET_OPEN_BODY_CLASS);
 		};
 	}, [sheet]);
-	if (sheet === null) {
+	if (sheet === null)
+	{
 		return null;
 	}
 	return (

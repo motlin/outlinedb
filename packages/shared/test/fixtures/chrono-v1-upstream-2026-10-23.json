@@ -10,7 +10,8 @@
 				"known": ["year", "month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-23 12:00",
 			"end": "2026-10-23 12:00",
 			"known": ["year", "month", "day"]
@@ -27,7 +28,8 @@
 				"known": ["year", "month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-24 12:00",
 			"end": "2026-10-24 12:00",
 			"known": ["year", "month", "day"]
@@ -36,7 +38,8 @@
 	{
 		"phrase": "tmr",
 		"guess": [],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-24 12:00",
 			"end": "2026-10-24 12:00",
 			"known": ["year", "month", "day"]
@@ -53,7 +56,8 @@
 				"known": ["year", "month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-22 12:00",
 			"end": "2026-10-22 12:00",
 			"known": ["year", "month", "day"]
@@ -70,7 +74,8 @@
 				"known": ["year", "month", "day", "hour", "minute"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-23 20:30",
 			"end": "2026-10-23 20:30",
 			"known": ["year", "month", "day", "hour", "minute"]
@@ -87,7 +92,8 @@
 				"known": ["year", "month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-23 22:00",
 			"end": "2026-10-23 22:00",
 			"known": ["year", "month", "day"]
@@ -104,7 +110,8 @@
 				"known": ["year", "month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-22 00:00",
 			"end": "2026-10-22 00:00",
 			"known": ["year", "month", "day"]
@@ -121,7 +128,8 @@
 				"known": []
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-23 06:00",
 			"end": "2026-10-23 06:00",
 			"known": []
@@ -138,7 +146,8 @@
 				"known": []
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-23 20:00",
 			"end": "2026-10-23 20:00",
 			"known": []
@@ -155,7 +164,8 @@
 				"known": []
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-23 12:00",
 			"end": "2026-10-23 12:00",
 			"known": []
@@ -172,7 +182,8 @@
 				"known": ["hour", "minute"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-23 00:00",
 			"end": "2026-10-23 00:00",
 			"known": ["hour", "minute"]
@@ -189,7 +200,8 @@
 				"known": ["year", "month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-18 12:00",
 			"end": "2026-10-24 12:00",
 			"known": ["year", "month", "day"]
@@ -206,7 +218,8 @@
 				"known": ["year", "month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-25 12:00",
 			"end": "2026-10-31 12:00",
 			"known": ["year", "month", "day"]
@@ -223,7 +236,8 @@
 				"known": ["year", "month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-11 12:00",
 			"end": "2026-10-17 12:00",
 			"known": ["year", "month", "day"]
@@ -240,7 +254,8 @@
 				"known": ["year", "month"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-01 12:00",
 			"end": "2026-10-01 12:00",
 			"known": ["year", "month"]
@@ -257,7 +272,8 @@
 				"known": ["year", "month"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-11-23 12:00",
 			"end": "2026-11-23 12:00",
 			"known": ["year", "month"]
@@ -274,7 +290,8 @@
 				"known": ["year", "month"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-09-23 12:00",
 			"end": "2026-09-23 12:00",
 			"known": ["year", "month"]
@@ -291,7 +308,8 @@
 				"known": ["year"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-01-01 12:00",
 			"end": "2026-01-01 12:00",
 			"known": ["year"]
@@ -308,7 +326,8 @@
 				"known": ["year"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2027-10-23 12:00",
 			"end": "2027-10-23 12:00",
 			"known": ["year"]
@@ -325,7 +344,8 @@
 				"known": ["year"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2025-10-23 12:00",
 			"end": "2025-10-23 12:00",
 			"known": ["year"]
@@ -342,7 +362,8 @@
 				"known": []
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-26 12:00",
 			"end": "2026-10-26 12:00",
 			"known": ["year", "month", "day"]
@@ -359,7 +380,8 @@
 				"known": ["year", "month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-20 12:00",
 			"end": "2026-10-20 12:00",
 			"known": ["year", "month", "day"]
@@ -376,7 +398,8 @@
 				"known": []
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-11-06 12:00",
 			"end": "2026-11-06 12:00",
 			"known": ["year", "month", "day"]
@@ -393,7 +416,8 @@
 				"known": []
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-09 12:00",
 			"end": "2026-10-09 12:00",
 			"known": ["year", "month", "day"]
@@ -410,7 +434,8 @@
 				"known": []
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-30 12:00",
 			"end": "2026-10-30 12:00",
 			"known": ["year", "month", "day"]
@@ -427,7 +452,8 @@
 				"known": []
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-30 12:00",
 			"end": "2026-10-30 12:00",
 			"known": ["year", "month", "day"]
@@ -444,7 +470,8 @@
 				"known": []
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-11-23 12:00",
 			"end": "2026-11-23 12:00",
 			"known": ["year", "month", "day"]
@@ -461,7 +488,8 @@
 				"known": []
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-23 22:30",
 			"end": "2026-10-23 22:30",
 			"known": ["year", "month", "day", "hour"]
@@ -478,7 +506,8 @@
 				"known": ["year", "month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-28 12:00",
 			"end": "2026-10-28 12:00",
 			"known": ["year", "month", "day"]
@@ -495,7 +524,8 @@
 				"known": []
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-26 12:00",
 			"end": "2026-10-26 12:00",
 			"known": ["year", "month", "day"]
@@ -512,7 +542,8 @@
 				"known": ["year", "month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-21 12:00",
 			"end": "2026-10-21 12:00",
 			"known": ["year", "month", "day"]
@@ -529,7 +560,8 @@
 				"known": ["weekday"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-26 12:00",
 			"end": "2026-10-26 12:00",
 			"known": ["year", "month", "day", "weekday"]
@@ -538,7 +570,8 @@
 	{
 		"phrase": "mon",
 		"guess": [],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-26 12:00",
 			"end": "2026-10-26 12:00",
 			"known": ["year", "month", "day", "weekday"]
@@ -547,7 +580,8 @@
 	{
 		"phrase": "fri",
 		"guess": [],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-23 12:00",
 			"end": "2026-10-23 12:00",
 			"known": ["year", "month", "day", "weekday"]
@@ -564,7 +598,8 @@
 				"known": ["weekday"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-23 12:00",
 			"end": "2026-10-23 12:00",
 			"known": ["year", "month", "day", "weekday"]
@@ -581,7 +616,8 @@
 				"known": ["year", "month", "day", "weekday"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-26 12:00",
 			"end": "2026-10-26 12:00",
 			"known": ["year", "month", "day", "weekday"]
@@ -598,7 +634,8 @@
 				"known": ["year", "month", "day", "weekday"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-16 12:00",
 			"end": "2026-10-16 12:00",
 			"known": ["year", "month", "day", "weekday"]
@@ -615,7 +652,8 @@
 				"known": ["weekday"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-23 12:00",
 			"end": "2026-10-23 12:00",
 			"known": ["year", "month", "day", "weekday"]
@@ -624,7 +662,8 @@
 	{
 		"phrase": "sat",
 		"guess": [],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-24 12:00",
 			"end": "2026-10-24 12:00",
 			"known": ["year", "month", "day", "weekday"]
@@ -641,7 +680,8 @@
 				"known": ["weekday"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-25 12:00",
 			"end": "2026-10-25 12:00",
 			"known": ["year", "month", "day", "weekday"]
@@ -650,7 +690,8 @@
 	{
 		"phrase": "oct",
 		"guess": [],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-01 12:00",
 			"end": "2026-10-01 12:00",
 			"known": ["month"]
@@ -659,7 +700,8 @@
 	{
 		"phrase": "dec",
 		"guess": [],
-		"search": {
+		"search":
+		{
 			"start": "2026-12-01 12:00",
 			"end": "2026-12-01 12:00",
 			"known": ["month"]
@@ -668,7 +710,8 @@
 	{
 		"phrase": "may",
 		"guess": [],
-		"search": {
+		"search":
+		{
 			"start": "2026-05-01 12:00",
 			"end": "2026-05-01 12:00",
 			"known": ["month"]
@@ -685,7 +728,8 @@
 				"known": ["month"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-01 12:00",
 			"end": "2026-10-01 12:00",
 			"known": ["month"]
@@ -702,7 +746,8 @@
 				"known": ["month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2027-10-15 12:00",
 			"end": "2027-10-15 12:00",
 			"known": ["month", "day"]
@@ -719,7 +764,8 @@
 				"known": ["month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2027-10-15 12:00",
 			"end": "2027-10-15 12:00",
 			"known": ["month", "day"]
@@ -736,7 +782,8 @@
 				"known": ["month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2027-10-15 12:00",
 			"end": "2027-10-15 12:00",
 			"known": ["month", "day"]
@@ -763,7 +810,8 @@
 				"known": ["month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2027-01-05 12:00",
 			"end": "2027-01-05 12:00",
 			"known": ["month", "day"]
@@ -780,7 +828,8 @@
 				"known": ["year", "month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2027-01-05 12:00",
 			"end": "2027-01-05 12:00",
 			"known": ["year", "month", "day"]
@@ -797,7 +846,8 @@
 				"known": ["month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-12-31 12:00",
 			"end": "2026-12-31 12:00",
 			"known": ["month", "day"]
@@ -814,7 +864,8 @@
 				"known": ["month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2027-10-15 12:00",
 			"end": "2027-10-15 12:00",
 			"known": ["month", "day"]
@@ -831,7 +882,8 @@
 				"known": ["year", "month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-15 12:00",
 			"end": "2026-10-15 12:00",
 			"known": ["year", "month", "day"]
@@ -848,7 +900,8 @@
 				"known": ["year", "month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-15 12:00",
 			"end": "2026-10-15 12:00",
 			"known": ["year", "month", "day"]
@@ -865,7 +918,8 @@
 				"known": ["year", "month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-15 12:00",
 			"end": "2026-10-15 12:00",
 			"known": ["year", "month", "day"]
@@ -882,7 +936,8 @@
 				"known": ["month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2027-10-15 12:00",
 			"end": "2027-10-20 12:00",
 			"known": ["month", "day"]
@@ -899,7 +954,8 @@
 				"known": ["month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2027-10-15 12:00",
 			"end": "2027-10-20 12:00",
 			"known": ["month", "day"]
@@ -916,7 +972,8 @@
 				"known": ["month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2027-10-15 12:00",
 			"end": "2027-10-20 12:00",
 			"known": ["month", "day"]
@@ -933,7 +990,8 @@
 				"known": ["month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-30 12:00",
 			"end": "2026-11-02 12:00",
 			"known": ["month", "day"]
@@ -950,7 +1008,8 @@
 				"known": ["month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-12-30 12:00",
 			"end": "2027-01-02 12:00",
 			"known": ["month", "day"]
@@ -967,7 +1026,8 @@
 				"known": ["weekday"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-23 12:00",
 			"end": "2026-10-23 12:00",
 			"known": ["year", "month", "day", "weekday"]
@@ -984,7 +1044,8 @@
 				"known": ["month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2027-10-01 12:00",
 			"end": "2027-10-05 12:00",
 			"known": ["month", "day"]
@@ -993,7 +1054,8 @@
 	{
 		"phrase": "3pm",
 		"guess": [],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-23 15:00",
 			"end": "2026-10-23 15:00",
 			"known": ["hour", "minute"]
@@ -1010,7 +1072,8 @@
 				"known": ["hour", "minute"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-23 15:00",
 			"end": "2026-10-23 15:00",
 			"known": ["hour", "minute"]
@@ -1027,7 +1090,8 @@
 				"known": ["year", "month", "day", "hour", "minute"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-24 15:00",
 			"end": "2026-10-24 15:00",
 			"known": ["year", "month", "day", "hour", "minute"]
@@ -1044,7 +1108,8 @@
 				"known": ["year", "month", "day", "hour", "minute"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-24 15:00",
 			"end": "2026-10-24 15:00",
 			"known": ["year", "month", "day", "hour", "minute"]
@@ -1061,7 +1126,8 @@
 				"known": ["year", "month", "day", "hour", "minute"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-24 15:00",
 			"end": "2026-10-24 15:00",
 			"known": ["year", "month", "day", "hour", "minute"]
@@ -1078,7 +1144,8 @@
 				"known": ["year", "month", "day", "hour", "minute"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-24 10:00",
 			"end": "2026-10-24 11:00",
 			"known": ["year", "month", "day", "hour", "minute"]
@@ -1095,7 +1162,8 @@
 				"known": ["hour", "minute"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-23 17:00",
 			"end": "2026-10-23 18:00",
 			"known": ["hour", "minute"]
@@ -1112,7 +1180,8 @@
 				"known": ["hour", "minute"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-23 09:30",
 			"end": "2026-10-23 09:30",
 			"known": ["hour", "minute"]
@@ -1129,7 +1198,8 @@
 				"known": ["month", "day", "hour", "minute"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2027-10-15 09:30",
 			"end": "2027-10-15 09:30",
 			"known": ["month", "day", "hour", "minute"]
@@ -1146,7 +1216,8 @@
 				"known": ["month", "day", "hour", "minute"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2027-10-15 09:00",
 			"end": "2027-10-15 09:00",
 			"known": ["month", "day", "hour", "minute"]
@@ -1163,7 +1234,8 @@
 				"known": ["year", "month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-24 12:00",
 			"end": "2026-10-24 12:00",
 			"known": ["year", "month", "day"]
@@ -1190,7 +1262,8 @@
 	{
 		"phrase": "明日",
 		"guess": [],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-24 12:00",
 			"end": "2026-10-24 12:00",
 			"known": ["year", "month", "day"]
@@ -1207,7 +1280,8 @@
 				"known": ["weekday"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-26 12:00",
 			"end": "2026-10-26 12:00",
 			"known": ["year", "month", "day", "weekday"]
@@ -1224,7 +1298,8 @@
 				"known": ["weekday"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-26 12:00",
 			"end": "2026-10-26 12:00",
 			"known": ["year", "month", "day", "weekday"]
@@ -1241,7 +1316,8 @@
 				"known": ["year", "month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-22 12:00",
 			"end": "2026-10-22 12:00",
 			"known": ["year", "month", "day"]
@@ -1283,7 +1359,8 @@
 				"known": ["weekday"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-23 12:00",
 			"end": "2026-10-23 12:00",
 			"known": ["year", "month", "day", "weekday"]
@@ -1305,7 +1382,8 @@
 	{
 		"phrase": "nov",
 		"guess": [],
-		"search": {
+		"search":
+		{
 			"start": "2026-11-01 12:00",
 			"end": "2026-11-01 12:00",
 			"known": ["month"]
@@ -1352,7 +1430,8 @@
 				"known": ["year", "month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-26 12:00",
 			"end": "2026-10-26 12:00",
 			"known": ["year", "month", "day"]
@@ -1369,7 +1448,8 @@
 				"known": ["month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2027-10-23 12:00",
 			"end": "2027-10-23 12:00",
 			"known": ["month", "day"]
@@ -1386,7 +1466,8 @@
 				"known": ["month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2027-10-23 12:00",
 			"end": "2027-10-23 12:00",
 			"known": ["month", "day"]
@@ -1403,7 +1484,8 @@
 				"known": ["month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2027-10-23 12:00",
 			"end": "2027-10-23 12:00",
 			"known": ["month", "day"]
@@ -1420,7 +1502,8 @@
 				"known": ["month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2027-10-22 12:00",
 			"end": "2027-10-22 12:00",
 			"known": ["month", "day"]
@@ -1437,7 +1520,8 @@
 				"known": ["month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-24 12:00",
 			"end": "2026-10-24 12:00",
 			"known": ["month", "day"]
@@ -1454,7 +1538,8 @@
 				"known": ["weekday"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-27 12:00",
 			"end": "2026-10-27 12:00",
 			"known": ["year", "month", "day", "weekday"]
@@ -1471,7 +1556,8 @@
 				"known": ["weekday"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-27 12:00",
 			"end": "2026-10-27 12:00",
 			"known": ["year", "month", "day", "weekday"]
@@ -1488,7 +1574,8 @@
 				"known": ["year", "month", "day", "weekday"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-13 12:00",
 			"end": "2026-10-13 12:00",
 			"known": ["year", "month", "day", "weekday"]
@@ -1505,7 +1592,8 @@
 				"known": ["year", "month", "day", "weekday"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-17 12:00",
 			"end": "2026-10-17 12:00",
 			"known": ["year", "month", "day", "weekday"]
@@ -1522,7 +1610,8 @@
 				"known": ["year", "month", "day", "weekday"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-25 12:00",
 			"end": "2026-10-25 12:00",
 			"known": ["year", "month", "day", "weekday"]
@@ -1539,7 +1628,8 @@
 				"known": ["year", "month", "day", "weekday"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-30 12:00",
 			"end": "2026-10-30 12:00",
 			"known": ["year", "month", "day", "weekday"]
@@ -1556,7 +1646,8 @@
 				"known": ["year", "month", "day", "weekday"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-31 12:00",
 			"end": "2026-10-31 12:00",
 			"known": ["year", "month", "day", "weekday"]
@@ -1573,7 +1664,8 @@
 				"known": ["weekday"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-24 12:00",
 			"end": "2026-10-24 12:00",
 			"known": ["year", "month", "day", "weekday"]
@@ -1590,7 +1682,8 @@
 				"known": ["weekday"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-29 12:00",
 			"end": "2026-10-29 12:00",
 			"known": ["year", "month", "day", "weekday"]
@@ -1607,7 +1700,8 @@
 				"known": ["month"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2027-03-01 12:00",
 			"end": "2027-03-01 12:00",
 			"known": ["month"]
@@ -1624,7 +1718,8 @@
 				"known": ["month"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2027-04-01 12:00",
 			"end": "2027-04-01 12:00",
 			"known": ["month"]
@@ -1641,7 +1736,8 @@
 				"known": ["month"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2027-01-01 12:00",
 			"end": "2027-01-01 12:00",
 			"known": ["month"]
@@ -1658,7 +1754,8 @@
 				"known": ["month"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-11-01 12:00",
 			"end": "2026-11-01 12:00",
 			"known": ["month"]
@@ -1667,7 +1764,8 @@
 	{
 		"phrase": "sep",
 		"guess": [],
-		"search": {
+		"search":
+		{
 			"start": "2026-09-01 12:00",
 			"end": "2026-09-01 12:00",
 			"known": ["month"]
@@ -1684,7 +1782,8 @@
 				"known": ["weekday"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-25 12:00",
 			"end": "2026-10-25 12:00",
 			"known": ["year", "month", "day", "weekday"]
@@ -1693,7 +1792,8 @@
 	{
 		"phrase": "tue",
 		"guess": [],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-27 12:00",
 			"end": "2026-10-27 12:00",
 			"known": ["year", "month", "day", "weekday"]
@@ -1702,7 +1802,8 @@
 	{
 		"phrase": "wed",
 		"guess": [],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-28 12:00",
 			"end": "2026-10-28 12:00",
 			"known": ["year", "month", "day", "weekday"]
@@ -1711,7 +1812,8 @@
 	{
 		"phrase": "thu",
 		"guess": [],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-29 12:00",
 			"end": "2026-10-29 12:00",
 			"known": ["year", "month", "day", "weekday"]
@@ -1720,7 +1822,8 @@
 	{
 		"phrase": "4pm",
 		"guess": [],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-23 16:00",
 			"end": "2026-10-23 16:00",
 			"known": ["hour", "minute"]
@@ -1737,7 +1840,8 @@
 				"known": ["hour", "minute"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-23 09:00",
 			"end": "2026-10-23 09:00",
 			"known": ["hour", "minute"]
@@ -1746,7 +1850,8 @@
 	{
 		"phrase": "9am",
 		"guess": [],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-23 09:00",
 			"end": "2026-10-23 09:00",
 			"known": ["hour", "minute"]
@@ -1763,7 +1868,8 @@
 				"known": ["year", "month", "day", "hour", "minute"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-24 01:00",
 			"end": "2026-10-24 01:00",
 			"known": ["year", "month", "day", "hour", "minute"]
@@ -1780,7 +1886,8 @@
 				"known": []
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-23 12:00",
 			"end": "2026-10-23 12:00",
 			"known": ["year", "month", "day"]
@@ -1797,7 +1904,8 @@
 				"known": ["year", "month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-25 12:00",
 			"end": "2026-10-25 12:00",
 			"known": ["year", "month", "day"]
@@ -1814,7 +1922,8 @@
 				"known": ["year", "month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-11-02 12:00",
 			"end": "2026-11-02 12:00",
 			"known": ["year", "month", "day"]
@@ -1831,7 +1940,8 @@
 				"known": ["year", "month", "day", "weekday"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-16 12:00",
 			"end": "2026-10-16 12:00",
 			"known": ["year", "month", "day", "weekday"]
@@ -1848,7 +1958,8 @@
 				"known": ["year", "month", "day", "weekday"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-18 12:00",
 			"end": "2026-10-18 12:00",
 			"known": ["year", "month", "day", "weekday"]
@@ -1865,7 +1976,8 @@
 				"known": ["year", "month", "day", "weekday"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-25 12:00",
 			"end": "2026-10-25 12:00",
 			"known": ["year", "month", "day", "weekday"]
@@ -1882,7 +1994,8 @@
 				"known": ["weekday"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-26 12:00",
 			"end": "2026-10-26 12:00",
 			"known": ["year", "month", "day", "weekday"]
@@ -1899,7 +2012,8 @@
 				"known": ["month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2027-10-15 12:00",
 			"end": "2027-10-20 12:00",
 			"known": ["month", "day"]
@@ -1916,7 +2030,8 @@
 				"known": ["month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2027-10-15 12:00",
 			"end": "2027-10-20 12:00",
 			"known": ["month", "day"]
@@ -1933,7 +2048,8 @@
 				"known": ["month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-11-02 12:00",
 			"end": "2027-10-30 12:00",
 			"known": ["month", "day"]
@@ -1950,7 +2066,8 @@
 				"known": ["month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-12-30 12:00",
 			"end": "2027-01-02 12:00",
 			"known": ["month", "day"]
@@ -1967,7 +2084,8 @@
 				"known": ["month", "day", "hour", "minute"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2027-10-15 15:00",
 			"end": "2027-10-15 17:00",
 			"known": ["month", "day", "hour", "minute"]
@@ -1984,7 +2102,8 @@
 				"known": ["hour", "minute"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-23 15:00",
 			"end": "2026-10-23 17:00",
 			"known": ["hour", "minute"]
@@ -2001,7 +2120,8 @@
 				"known": ["year", "month", "day"]
 			}
 		],
-		"search": {
+		"search":
+		{
 			"start": "2026-10-24 12:00",
 			"end": "2026-10-24 12:00",
 			"known": ["year", "month", "day"]

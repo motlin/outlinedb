@@ -7,7 +7,8 @@ import {isFeatureOn} from "./features.js";
 import {normalizeLayoutMode} from "./layout-types.js";
 import {plainText, splitHtml} from "./rich-text.js";
 
-export interface BlockPrefixPlan {
+export interface BlockPrefixPlan
+{
 	/**
 	 * `strip` keeps the rich rest of the name; `code` and `divider-above` keep its plain text; `clear` empties it.
 	 * `divider-above` also creates a divider sibling directly above the row.
@@ -21,8 +22,20 @@ export interface BlockPrefixPlan {
 	numberedStart?: number;
 }
 
-const TODO_PREFIXES: Record<string, boolean> = {"[] ": false, "[ ] ": false, "[x] ": true, "[+] ": true, "[-] ": true};
-const HEADING_PREFIXES: Record<string, string> = {"# ": "h1", "## ": "h2", "### ": "h3"};
+const TODO_PREFIXES: Record<string, boolean> =
+{
+	"[] ": false,
+	"[ ] ": false,
+	"[x] ": true,
+	"[+] ": true,
+	"[-] ": true,
+};
+const HEADING_PREFIXES: Record<string, string> =
+{
+	"# ": "h1",
+	"## ": "h2",
+	"### ": "h3",
+};
 const HEADING_MODES = new Set(["p", "h1", "h2", "h3"]);
 const NUMBERED_PREFIX = /^(\d+)\. $/u;
 const CODE_FENCE = "```";
@@ -32,35 +45,71 @@ export function planBlockPrefix(input: {
 	before: string;
 	after: string;
 	layoutMode: string | null;
-}): BlockPrefixPlan | null {
+}): BlockPrefixPlan | null
+{
 	const before = input.before.replaceAll(" ", " ");
 	const current = normalizeLayoutMode(input.layoutMode);
 	const {length} = before;
 
 	const complete = TODO_PREFIXES[before];
-	if (complete !== undefined) {
-		return {kind: "strip", strip: length, layoutMode: "todo", complete};
+	if (complete !== undefined)
+	{
+		return {
+			kind: "strip",
+			strip: length,
+			layoutMode: "todo",
+			complete,
+		};
 	}
-	if (before === CODE_FENCE) {
+	if (before === CODE_FENCE)
+	{
 		return current === "code-block"
 			? null
-			: {kind: "code", strip: length, layoutMode: "code-block", complete: false};
+			:
+				{
+					kind: "code",
+					strip: length,
+					layoutMode: "code-block",
+					complete: false,
+				};
 	}
-	if (before === "> ") {
+	if (before === "> ")
+	{
 		return current === "quote-block"
 			? null
-			: {kind: "strip", strip: length, layoutMode: "quote-block", complete: false};
+			:
+				{
+					kind: "strip",
+					strip: length,
+					layoutMode: "quote-block",
+					complete: false,
+				};
 	}
-	if (before === "--- " || before === "- - - ") {
-		if (current === "divider") {
+	if (before === "--- " || before === "- - - ")
+	{
+		if (current === "divider")
+		{
 			return null;
 		}
 		return input.after === ""
-			? {kind: "clear", strip: length, layoutMode: "divider", complete: false}
-			: {kind: "divider-above", strip: length, layoutMode: input.layoutMode ?? "bullets", complete: false};
+			?
+				{
+					kind: "clear",
+					strip: length,
+					layoutMode: "divider",
+					complete: false,
+				}
+			:
+				{
+					kind: "divider-above",
+					strip: length,
+					layoutMode: input.layoutMode ?? "bullets",
+					complete: false,
+				};
 	}
 	const heading = HEADING_PREFIXES[before];
-	if (heading !== undefined) {
+	if (heading !== undefined)
+	{
 		const currentHeading = current !== null && HEADING_MODES.has(current) ? current : null;
 		return {
 			kind: "strip",
@@ -70,7 +119,8 @@ export function planBlockPrefix(input: {
 		};
 	}
 	const numbered = NUMBERED_PREFIX.exec(before);
-	if (numbered !== null && input.after === "" && current !== "numbered" && isFeatureOn("numbered_list")) {
+	if (numbered !== null && input.after === "" && current !== "numbered" && isFeatureOn("numbered_list"))
+	{
 		return {
 			kind: "clear",
 			strip: length,
@@ -82,13 +132,16 @@ export function planBlockPrefix(input: {
 	return null;
 }
 
-function escapeHtml(text: string): string {
+function escapeHtml(text: string): string
+{
 	return text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
 /** The stored name once the plan's prefix is removed from the typed `html`. */
-export function prefixedName(html: string, plan: BlockPrefixPlan, pillChar: string): string {
-	if (plan.kind === "clear") {
+export function prefixedName(html: string, plan: BlockPrefixPlan, pillChar: string): string
+{
+	if (plan.kind === "clear")
+	{
 		return "";
 	}
 	const rest = splitHtml(html, 0, plan.strip).after;

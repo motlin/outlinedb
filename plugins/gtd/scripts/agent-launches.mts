@@ -18,7 +18,8 @@ import {isMain} from "./is-main.mts";
 
 export const LEDGER_PATH = ".llm/gtd/review/agent-launches.json";
 
-export interface Launch {
+export interface Launch
+{
 	readonly slug: string;
 	readonly pane: string;
 	readonly cwd: string;
@@ -26,28 +27,46 @@ export interface Launch {
 	readonly reportPath: string;
 }
 
-export interface Ledger {
+export interface Ledger
+{
 	readonly launches: readonly Launch[];
 }
 
-export function reportPath(slug: string, date: string): string {
+export function reportPath(slug: string, date: string): string
+{
 	return `.llm/gtd/review/agent-reports/${slug}-${date}.md`;
 }
 
-export function recordLaunch(ledger: Ledger, launch: Launch): Ledger {
-	return {launches: [...ledger.launches, launch]};
+export function recordLaunch(ledger: Ledger, launch: Launch): Ledger
+{
+	return {
+		launches: [...ledger.launches, launch],
+	};
 }
 
-export function alreadyLaunched(ledger: Ledger, slug: string, date: string): boolean {
+export function alreadyLaunched(ledger: Ledger, slug: string, date: string): boolean
+{
 	return ledger.launches.some((l) => l.slug === slug && l.launchedAt.slice(0, 10) === date);
 }
 
-export function pendingReports(ledger: Ledger, root: string): {ready: readonly Launch[]; missing: readonly Launch[]} {
+export function pendingReports(
+	ledger: Ledger,
+	root: string,
+):
+{
+	ready: readonly Launch[];
+	missing: readonly Launch[];
+}
+{
 	const present = (l: Launch): boolean => existsSync(join(root, l.reportPath));
-	return {ready: ledger.launches.filter(present), missing: ledger.launches.filter((l) => !present(l))};
+	return {
+		ready: ledger.launches.filter(present),
+		missing: ledger.launches.filter((l) => !present(l)),
+	};
 }
 
-function isLaunch(value: unknown): value is Launch {
+function isLaunch(value: unknown): value is Launch
+{
 	return (
 		isObject(value) &&
 		typeof value.slug === "string" &&
@@ -58,48 +77,76 @@ function isLaunch(value: unknown): value is Launch {
 	);
 }
 
-function readLedger(path: string): Ledger {
-	if (!existsSync(path)) {
-		return {launches: []};
+function readLedger(path: string): Ledger
+{
+	if (!existsSync(path))
+	{
+		return {
+			launches: [],
+		};
 	}
 	const parsed = readJsonFile(path);
 	const launches = isObject(parsed) ? arrayField(parsed, "launches") : [];
-	return {launches: launches.filter(isLaunch)};
+	return {
+		launches: launches.filter(isLaunch),
+	};
 }
 
-function today(): string {
+function today(): string
+{
 	return new Date().toLocaleDateString("en-CA");
 }
 
-function main(argv: readonly string[]): unknown {
+function main(argv: readonly string[]): unknown
+{
 	const positional: string[] = [];
 	let date = today();
 	const args = argv[Symbol.iterator]();
-	for (const arg of args) {
-		if (arg === "--date") {
+	for (const arg of args)
+	{
+		if (arg === "--date")
+		{
 			date = takeValue(args, arg);
-		} else {
+		}
+		else
+		{
 			positional.push(arg);
 		}
 	}
 	const [command, slug = "", pane = "", cwd = ""] = positional;
 	const ledger = readLedger(LEDGER_PATH);
-	if (command === "check") {
+	if (command === "check")
+	{
 		return alreadyLaunched(ledger, slug, date);
 	}
-	if (command === "pending") {
+	if (command === "pending")
+	{
 		return pendingReports(ledger, ".");
 	}
-	if (command === "record") {
+	if (command === "record")
+	{
 		const report = reportPath(slug, date);
-		const launch: Launch = {slug, pane, cwd, launchedAt: new Date().toISOString(), reportPath: report};
-		mkdirSync(dirname(LEDGER_PATH), {recursive: true});
+		const launch: Launch =
+		{
+			slug,
+			pane,
+			cwd,
+			launchedAt: new Date().toISOString(),
+			reportPath: report,
+		};
+		mkdirSync(
+			dirname(LEDGER_PATH),
+			{
+				recursive: true,
+			},
+		);
 		writeFileSync(LEDGER_PATH, `${JSON.stringify(recordLaunch(ledger, launch), null, 2)}\n`);
 		return report;
 	}
 	throw new Error("usage: agent-launches.mts record <slug> <pane> <cwd> | check <slug> | pending [--date D]");
 }
 
-if (isMain(import.meta.url)) {
+if (isMain(import.meta.url))
+{
 	console.log(JSON.stringify(main(process.argv.slice(2)), null, 2));
 }

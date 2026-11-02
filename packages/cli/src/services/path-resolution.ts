@@ -1,27 +1,34 @@
 import type {WorkflowyApiClient} from "@outlinedb/shared/api";
 import type {CacheService} from "./cache.js";
 
-export interface PathResolutionResult {
+export interface PathResolutionResult
+{
 	nodeId: string;
 	foundInCache: boolean;
 }
 
-export interface PathResolutionOptions {
+export interface PathResolutionOptions
+{
 	rootId: string | null;
 	path: string | undefined;
 	dataSource: "auto" | "api" | "cache";
 }
 
-export class PathResolutionService {
+export class PathResolutionService
+{
 	constructor(
 		private readonly cacheService: CacheService,
 		private readonly apiClient: WorkflowyApiClient | null,
-	) {}
+	)
+	{
+	}
 
-	async resolveTargetNodeId(options: PathResolutionOptions): Promise<PathResolutionResult> {
+	async resolveTargetNodeId(options: PathResolutionOptions): Promise<PathResolutionResult>
+	{
 		const {rootId, path, dataSource} = options;
 
-		if (!path) {
+		if (!path)
+		{
 			return {
 				nodeId: rootId ?? "",
 				foundInCache: true,
@@ -32,20 +39,24 @@ export class PathResolutionService {
 
 		const cachedNode = this.cacheService.findNodeByPath(pathComponents, rootId);
 
-		if (cachedNode) {
+		if (cachedNode)
+		{
 			return {
 				nodeId: cachedNode.id,
 				foundInCache: true,
 			};
 		}
 
-		if (dataSource === "cache") {
+		if (dataSource === "cache")
+		{
 			throw new Error(`Could not find node at path: ${pathComponents.join(" > ")} (not in cache)`);
 		}
 
-		if (this.apiClient) {
+		if (this.apiClient)
+		{
 			const apiNode = await this.apiClient.findNodeByPath(pathComponents, rootId);
-			if (!apiNode) {
+			if (!apiNode)
+			{
 				throw new Error(`Could not find node at path: ${pathComponents.join(" > ")}`);
 			}
 			return {

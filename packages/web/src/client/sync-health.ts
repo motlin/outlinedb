@@ -16,18 +16,37 @@ const WARN_AFTER_FAILURES = 2;
 /** Upstream's watchdog (`a94`): a push in flight this long marks the app as stalled. */
 const STALL_AFTER_MS = 120_000;
 
-export function syncHealth(state: {failures: number}, event: SyncEvent): {failures: number; warn: boolean} {
+export function syncHealth(
+	state:
+	{
+		failures: number;
+	},
+	event: SyncEvent,
+):
+{
+	failures: number;
+	warn: boolean;
+}
+{
 	let failures = state.failures;
-	if (event === "write-failed-network" || event === "browser-offline") {
+	if (event === "write-failed-network" || event === "browser-offline")
+	{
 		failures += 1;
-	} else if (event === "write-succeeded") {
+	}
+	else if (event === "write-succeeded")
+	{
 		failures = 0;
 	}
-	return {failures, warn: failures >= WARN_AFTER_FAILURES};
+	return {
+		failures,
+		warn: failures >= WARN_AFTER_FAILURES,
+	};
 }
 
-export function classifyWriteFailure(error: unknown): "write-failed-network" | "write-failed-client" {
-	if (error instanceof TypeError || (error instanceof RequestStatusError && error.status >= 500)) {
+export function classifyWriteFailure(error: unknown): "write-failed-network" | "write-failed-client"
+{
+	if (error instanceof TypeError || (error instanceof RequestStatusError && error.status >= 500))
+	{
 		return "write-failed-network";
 	}
 	return "write-failed-client";
@@ -39,16 +58,27 @@ export function isStalled({
 }: {
 	oldestInFlightStartedAt: number | null;
 	now: number;
-}): boolean {
+}): boolean
+{
 	return oldestInFlightStartedAt !== null && now - oldestInFlightStartedAt >= STALL_AFTER_MS;
 }
 
 export function oldestInFlightStart(
-	mutations: readonly {state: {status: string; submittedAt: number}}[],
-): number | null {
+	mutations: readonly
+	{
+		state:
+		{
+			status: string;
+			submittedAt: number;
+		};
+	}[],
+): number | null
+{
 	let oldest: number | null = null;
-	for (const {state} of mutations) {
-		if (state.status === "pending" && (oldest === null || state.submittedAt < oldest)) {
+	for (const {state} of mutations)
+	{
+		if (state.status === "pending" && (oldest === null || state.submittedAt < oldest))
+		{
 			oldest = state.submittedAt;
 		}
 	}
@@ -56,15 +86,21 @@ export function oldestInFlightStart(
 }
 
 /** Feeds settled mutations into `onEvent`. Returns the unsubscribe. */
-export function watchMutations(queryClient: QueryClient, onEvent: (event: SyncEvent) => void): () => void {
-	return queryClient.getMutationCache().subscribe((cacheEvent) => {
-		if (cacheEvent.type !== "updated") {
+export function watchMutations(queryClient: QueryClient, onEvent: (event: SyncEvent) => void): () => void
+{
+	return queryClient.getMutationCache().subscribe((cacheEvent) =>
+	{
+		if (cacheEvent.type !== "updated")
+		{
 			return;
 		}
 		const {action, mutation} = cacheEvent;
-		if (action.type === "error") {
+		if (action.type === "error")
+		{
 			onEvent(classifyWriteFailure(mutation.state.error));
-		} else if (action.type === "success") {
+		}
+		else if (action.type === "success")
+		{
 			onEvent("write-succeeded");
 		}
 	});

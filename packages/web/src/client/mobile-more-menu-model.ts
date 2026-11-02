@@ -2,9 +2,20 @@ import type {FaIconKey} from "./components/fa-icons.js";
 
 /** One row of upstream's more-menu sheet. */
 export type MoreMenuRow =
-	| {kind: "undo-redo"; canUndo: boolean; canRedo: boolean; onUndo: () => void; onRedo: () => void}
-	| {kind: "separator"}
-	| {
+	|
+	  {
+			kind: "undo-redo";
+			canUndo: boolean;
+			canRedo: boolean;
+			onUndo: () => void;
+			onRedo: () => void;
+	  }
+	|
+	  {
+			kind: "separator";
+	  }
+	|
+	  {
 			kind: "item";
 			label: string;
 			icon: FaIconKey;
@@ -15,7 +26,8 @@ export type MoreMenuRow =
 			starred?: boolean;
 	  };
 
-export interface MoreMenuContext {
+export interface MoreMenuContext
+{
 	/** The zoomed node, or null at Home. */
 	zoomedId: string | null;
 	canUndo: boolean;
@@ -26,7 +38,8 @@ export interface MoreMenuContext {
 	/** A revealing search forces completed rows, so upstream offers no toggle. */
 	completedForced: boolean;
 	canTurnInto: boolean;
-	actions: {
+	actions:
+	{
 		undo: () => void;
 		redo: () => void;
 		turnInto: () => void;
@@ -42,14 +55,18 @@ export interface MoreMenuContext {
 	};
 }
 
-const SEPARATOR: MoreMenuRow = {kind: "separator"};
+const SEPARATOR: MoreMenuRow =
+{
+	kind: "separator",
+};
 
 /**
  * Upstream's `config("ui.touch.menu.*")` order: Undo/Redo, Turn into, Starred, Share and Export, Expand/Collapse all,
  * Delete, then Adjust Text Size, Show completed and Settings. Trash is left out (no trash view locally). Empty groups
  * drop their separators, like upstream's `[&+&]:hidden`.
  */
-export function moreMenuRows(context: MoreMenuContext): MoreMenuRow[] {
+export function moreMenuRows(context: MoreMenuContext): MoreMenuRow[]
+{
 	const {actions} = context;
 	const home = context.zoomedId === null;
 	const groups: MoreMenuRow[][] = [
@@ -87,8 +104,20 @@ export function moreMenuRows(context: MoreMenuContext): MoreMenuRow[] {
 		[
 			...(home
 				? []
-				: ([{kind: "item", label: "Share", icon: "fal:user-plus", onSelect: actions.share}] as MoreMenuRow[])),
-			{kind: "item", label: "Export", icon: "fal:file-export", onSelect: actions.exportZoomed},
+				: ([
+						{
+							kind: "item",
+							label: "Share",
+							icon: "fal:user-plus",
+							onSelect: actions.share,
+						},
+					] as MoreMenuRow[])),
+			{
+				kind: "item",
+				label: "Export",
+				icon: "fal:file-export",
+				onSelect: actions.exportZoomed,
+			},
 		],
 		[
 			{
@@ -104,9 +133,23 @@ export function moreMenuRows(context: MoreMenuContext): MoreMenuRow[] {
 				onSelect: actions.collapseAll,
 			},
 		],
-		home ? [] : [{kind: "item", label: "Delete", icon: "fal:trash-can", onSelect: actions.deleteZoomed}],
+		home
+			? []
+			: [
+					{
+						kind: "item",
+						label: "Delete",
+						icon: "fal:trash-can",
+						onSelect: actions.deleteZoomed,
+					},
+				],
 		[
-			{kind: "item", label: "Adjust Text Size", icon: "fal:font", onSelect: actions.adjustTextSize},
+			{
+				kind: "item",
+				label: "Adjust Text Size",
+				icon: "fal:font",
+				onSelect: actions.adjustTextSize,
+			},
 			...(context.completedForced
 				? []
 				: ([
@@ -119,18 +162,25 @@ export function moreMenuRows(context: MoreMenuContext): MoreMenuRow[] {
 							toggled: context.showCompleted,
 						},
 					] as MoreMenuRow[])),
-			{kind: "item", label: "Settings", icon: "fal:gear", onSelect: actions.openSettings},
+			{
+				kind: "item",
+				label: "Settings",
+				icon: "fal:gear",
+				onSelect: actions.openSettings,
+			},
 		],
 	];
 	const rows: MoreMenuRow[] = [];
-	for (const group of groups.filter((candidate) => candidate.length > 0)) {
+	for (const group of groups.filter((candidate) => candidate.length > 0))
+	{
 		rows.push(...group, SEPARATOR);
 	}
 	return rows;
 }
 
 /** The text of every row in order, for tests and the sheet's accessible names. */
-export function moreMenuLabels(rows: readonly MoreMenuRow[]): string[] {
+export function moreMenuLabels(rows: readonly MoreMenuRow[]): string[]
+{
 	return rows.flatMap((row) =>
 		row.kind === "undo-redo" ? ["Undo", "Redo"] : row.kind === "item" ? [row.label] : ["-"],
 	);

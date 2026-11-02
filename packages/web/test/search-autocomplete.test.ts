@@ -6,22 +6,37 @@ import {SearchAutocomplete, autocompleteClassName} from "../src/client/component
 const BASE =
 	"menu [&.menu.flyout]:m-0 [&.menu.flyout]:-mt-px [&.menu.flyout]:box-border [&.menu.flyout]:border-solid [&.menu.flyout]:border-t-0 [&.menu.flyout]:rounded-[16px] [&.menu.flyout]:rounded-tl-none [&.menu.flyout]:rounded-tr-none [&.menu.flyout]:shadow-none ";
 
-describe("SearchAutocomplete", () => {
-	it("uses upstream's flyout class with the tint border for a committed query", () => {
+describe("SearchAutocomplete", () =>
+{
+	it("uses upstream's flyout class with the tint border for a committed query", () =>
+	{
 		expect(autocompleteClassName(true)).toBe(`${BASE}[&.menu.flyout]:border-[var(--wf-border-tint)]`);
 		expect(autocompleteClassName(false)).toBe(`${BASE}[&.menu.flyout]:border-primary-x`);
 	});
 
-	it("renders the Tags header with upstream's exact markup", () => {
+	it("renders the Tags header with upstream's exact markup", () =>
+	{
 		const html = renderToStaticMarkup(
-			createElement(SearchAutocomplete, {
-				rows: [
-					{type: "header", label: "Tags"},
-					{type: "row", label: "@sa", value: "@sa"},
-				],
-				committed: true,
-				onSelect: () => {},
-			}),
+			createElement(
+				SearchAutocomplete,
+				{
+					rows: [
+						{
+							type: "header",
+							label: "Tags",
+						},
+						{
+							type: "row",
+							label: "@sa",
+							value: "@sa",
+						},
+					],
+					committed: true,
+					onSelect: () =>
+					{
+					},
+				},
+			),
 		);
 
 		expect(html).toContain(

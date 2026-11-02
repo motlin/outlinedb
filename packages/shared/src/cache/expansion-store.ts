@@ -25,13 +25,19 @@ const KEY_CHUNK = 90;
 const PREFIX_CHUNK = 4;
 
 /** The stored keys, or undefined before any import seeded them. */
-export function readExpansion(tx: TemporalTransaction): Set<string> | undefined {
-	if (readImportTime(tx, EXPANDED_NODES_IMPORT_NAME) === undefined) {
+export function readExpansion(tx: TemporalTransaction): Set<string> | undefined
+{
+	if (readImportTime(tx, EXPANDED_NODES_IMPORT_NAME) === undefined)
+	{
 		return undefined;
 	}
 	return new Set(
 		tx
-			.select({shortKey: expandedNodes.shortKey})
+			.select(
+				{
+					shortKey: expandedNodes.shortKey,
+				},
+			)
 			.from(expandedNodes)
 			.where(eq(expandedNodes.systemTo, FAR_FUTURE_DATE))
 			.all()
@@ -43,7 +49,8 @@ export function readExpansion(tx: TemporalTransaction): Set<string> | undefined 
  * A version of `keys` that changes exactly when their content does, whatever the change times: a change feed's
  * cursor, since two changes may share a timestamp or land out of order.
  */
-export function expansionVersion(keys: ReadonlySet<string>): string {
+export function expansionVersion(keys: ReadonlySet<string>): string
+{
 	return hash64(canonicalJson(keys));
 }
 
@@ -51,10 +58,12 @@ export function expansionVersion(keys: ReadonlySet<string>): string {
  * A 64-bit string hash (cyrb53's mixing, both 32-bit halves kept) as 16 hex chars. Synchronous and free of Node
  * builtins, since the browser bundle reaches this module.
  */
-export function hash64(text: string): string {
+export function hash64(text: string): string
+{
 	let h1 = 0xde_ad_be_ef;
 	let h2 = 0x41_c6_ce_57;
-	for (let index = 0; index < text.length; index++) {
+	for (let index = 0; index < text.length; index++)
+	{
 		const code = text.codePointAt(index) ?? 0;
 		h1 = Math.imul(h1 ^ code, 2_654_435_761);
 		h2 = Math.imul(h2 ^ code, 1_597_334_677);
@@ -64,13 +73,22 @@ export function hash64(text: string): string {
 	return [h2, h1].map((half) => (half >>> 0).toString(16).padStart(8, "0")).join("");
 }
 
-function canonicalJson(keys: Iterable<string>): string {
+function canonicalJson(keys: Iterable<string>): string
+{
 	return JSON.stringify([...new Set(keys)].toSorted());
 }
 
-function liveKeys(tx: TemporalTransaction): {shortKey: string}[] {
+function liveKeys(tx: TemporalTransaction):
+{
+	shortKey: string;
+}[]
+{
 	return tx
-		.select({shortKey: expandedNodes.shortKey})
+		.select(
+			{
+				shortKey: expandedNodes.shortKey,
+			},
+		)
 		.from(expandedNodes)
 		.where(eq(expandedNodes.systemTo, FAR_FUTURE_DATE))
 		.all();
@@ -79,7 +97,8 @@ function liveKeys(tx: TemporalTransaction): {shortKey: string}[] {
 const byKey = (row: {shortKey: string}) => row.shortKey;
 
 /** Replace the stored keys and record the seed at `at` (Unix ms), as a whole-tree import does, in the caller's unit of work. */
-export function replaceExpansion(unitOfWork: UnitOfWork, keys: Iterable<string>, at: number): void {
+export function replaceExpansion(unitOfWork: UnitOfWork, keys: Iterable<string>, at: number): void
+{
 	temporalMerge(
 		unitOfWork.tx,
 		{
@@ -88,9 +107,15 @@ export function replaceExpansion(unitOfWork: UnitOfWork, keys: Iterable<string>,
 			incomingKey: byKey,
 			currentKey: byKey,
 			contentMatches: () => true,
-			buildInsertRow: (row) => ({shortKey: row.shortKey}),
+			buildInsertRow: (row) => (
+			{
+				shortKey: row.shortKey,
+			}),
 		},
-		[...new Set(keys)].map((shortKey) => ({shortKey})),
+		[...new Set(keys)].map((shortKey) => (
+		{
+			shortKey,
+		})),
 		liveKeys(unitOfWork.tx),
 		unitOfWork.systemTime,
 	);
@@ -102,15 +127,18 @@ export function replaceExpansion(unitOfWork: UnitOfWork, keys: Iterable<string>,
  * keys, and return the result; an unseeded store stays unseeded (undefined), since a partial set would read as the
  * whole account's.
  */
-export function applyExpansionDelta(unitOfWork: UnitOfWork, delta: Record<string, boolean>): Set<string> | undefined {
+export function applyExpansionDelta(unitOfWork: UnitOfWork, delta: Record<string, boolean>): Set<string> | undefined
+{
 	const {tx, systemTime} = unitOfWork;
 	const stored = readExpansion(tx);
-	if (stored === undefined) {
+	if (stored === undefined)
+	{
 		return undefined;
 	}
 	const added = Object.entries(delta).flatMap(([key, expanded]) => (expanded && !stored.has(key) ? [key] : []));
 	const removed = Object.entries(delta).flatMap(([key, expanded]) => (!expanded && stored.has(key) ? [key] : []));
-	for (let start = 0; start < removed.length; start += KEY_CHUNK) {
+	for (let start = 0; start < removed.length; start += KEY_CHUNK)
+	{
 		closeCurrentVersions(
 			tx,
 			expandedNodes,
@@ -118,20 +146,26 @@ export function applyExpansionDelta(unitOfWork: UnitOfWork, delta: Record<string
 			inArray(expandedNodes.shortKey, removed.slice(start, start + KEY_CHUNK)),
 		);
 	}
-	for (let start = 0; start < added.length; start += KEY_CHUNK) {
+	for (let start = 0; start < added.length; start += KEY_CHUNK)
+	{
 		tx.insert(expandedNodes)
 			.values(
-				added
-					.slice(start, start + KEY_CHUNK)
-					.map((shortKey) => ({shortKey, systemFrom: systemTime, systemTo: FAR_FUTURE_DATE})),
+				added.slice(start, start + KEY_CHUNK).map((shortKey) => (
+				{
+					shortKey,
+					systemFrom: systemTime,
+					systemTo: FAR_FUTURE_DATE,
+				})),
 			)
 			.run();
 	}
 	const keys = new Set(stored);
-	for (const key of removed) {
+	for (const key of removed)
+	{
 		keys.delete(key);
 	}
-	for (const key of added) {
+	for (const key of added)
+	{
 		keys.add(key);
 	}
 	return keys;
@@ -141,8 +175,10 @@ export function applyExpansionDelta(unitOfWork: UnitOfWork, delta: Record<string
  * Apply an expansion delta in a context with no workflowy.com account, where no import ever seeds the store: an
  * unseeded store is seeded empty first, so the delta's keys are the whole expanded set.
  */
-export function applyLocalExpansionDelta(unitOfWork: UnitOfWork, delta: Record<string, boolean>): void {
-	if (readExpansion(unitOfWork.tx) === undefined) {
+export function applyLocalExpansionDelta(unitOfWork: UnitOfWork, delta: Record<string, boolean>): void
+{
+	if (readExpansion(unitOfWork.tx) === undefined)
+	{
 		replaceExpansion(unitOfWork, [], Date.now());
 	}
 	applyExpansionDelta(unitOfWork, delta);
@@ -153,9 +189,14 @@ export function applyLocalExpansionDelta(unitOfWork: UnitOfWork, delta: Record<s
  * resolves to every cached id it prefixes (twins expand together, as upstream) and keys with no cached node are
  * dropped; a `v_` key resolves to the mirror instances it names.
  */
-export function resolveExpandedIds(tx: TemporalTransaction, keys: ReadonlySet<string>): string[] {
+export function resolveExpandedIds(tx: TemporalTransaction, keys: ReadonlySet<string>): string[]
+{
 	const plain = tx
-		.select({id: nodeContent.id})
+		.select(
+			{
+				id: nodeContent.id,
+			},
+		)
 		.from(nodeContent)
 		.where(eq(nodeContent.systemTo, FAR_FUTURE_DATE))
 		.orderBy(nodeContent.id)
@@ -172,51 +213,80 @@ export function resolveExpandedIds(tx: TemporalTransaction, keys: ReadonlySet<st
  * mirror are its original's), following only the rows whose chunk is the key path's next one. A row met when the
  * walk's path equals the key's path and whose id starts with the child chunk is an expanded instance.
  */
-function instanceIds(tx: TemporalTransaction, key: string): string[] {
+function instanceIds(tx: TemporalTransaction, key: string): string[]
+{
 	const child = key.slice(2, 2 + PREFIX_CHUNK);
 	const mirror = key.slice(2 + PREFIX_CHUNK, 2 + 2 * PREFIX_CHUNK);
 	const path = key.slice(2 + 2 * PREFIX_CHUNK);
-	if (child.length < PREFIX_CHUNK || mirror.length < PREFIX_CHUNK || !path.startsWith(mirror)) {
+	if (child.length < PREFIX_CHUNK || mirror.length < PREFIX_CHUNK || !path.startsWith(mirror))
+	{
 		return [];
 	}
 	const roots = tx
-		.select({id: mirrorsTable.mirrorId, originalId: mirrorsTable.originalId})
+		.select(
+			{
+				id: mirrorsTable.mirrorId,
+				originalId: mirrorsTable.originalId,
+			},
+		)
 		.from(mirrorsTable)
 		.where(and(like(mirrorsTable.mirrorId, `${mirror}%`), eq(mirrorsTable.systemTo, FAR_FUTURE_DATE)))
 		.all();
 	const found: string[] = [];
-	const walk = (rootId: string, rowId: string, walked: string): void => {
+	const walk = (rootId: string, rowId: string, walked: string): void =>
+	{
 		const childIds = shownChildIds(tx, rowId);
-		if (walked === path) {
+		if (walked === path)
+		{
 			found.push(
 				...childIds
 					.filter((id) => id.startsWith(child))
-					.map((id) => virtualId({childId: id, mirrorRootId: rootId, path})),
+					.map((id) =>
+						virtualId(
+							{
+								childId: id,
+								mirrorRootId: rootId,
+								path,
+							},
+						),
+					),
 			);
 			return;
 		}
 		const chunk = path.slice(walked.length, walked.length + PREFIX_CHUNK);
-		for (const id of childIds) {
-			if (id.startsWith(chunk)) {
+		for (const id of childIds)
+		{
+			if (id.startsWith(chunk))
+			{
 				walk(rootId, id, walked + chunk);
 			}
 		}
 	};
-	for (const root of roots) {
+	for (const root of roots)
+	{
 		walk(root.id, root.id, mirror);
 	}
 	return found;
 }
 
 /** The ids of a row's current children, taken from its original when it is a mirror. */
-function shownChildIds(tx: TemporalTransaction, rowId: string): string[] {
+function shownChildIds(tx: TemporalTransaction, rowId: string): string[]
+{
 	const original = tx
-		.select({originalId: mirrorsTable.originalId})
+		.select(
+			{
+				originalId: mirrorsTable.originalId,
+			},
+		)
 		.from(mirrorsTable)
 		.where(and(eq(mirrorsTable.mirrorId, rowId), eq(mirrorsTable.systemTo, FAR_FUTURE_DATE)))
 		.get();
 	return tx
-		.select({id: nodeContent.id})
+		.select(
+			{
+				id: nodeContent.id,
+			},
+		)
 		.from(nodeContent)
 		.where(and(eq(nodeContent.parentId, original?.originalId ?? rowId), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
 		.orderBy(nodeContent.id)

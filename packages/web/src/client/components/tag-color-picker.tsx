@@ -2,7 +2,8 @@ import {createPortal} from "react-dom";
 import {TAG_COLORS} from "../../tag-colors.js";
 import {useCloseOnLocationChange} from "../hooks/use-close-on-location-change.js";
 import type {TagColorName} from "../../tag-colors.js";
-import {
+import
+{
 	CANCEL_SWATCH,
 	CancelIcon,
 	SELECTED_BORDER,
@@ -28,7 +29,8 @@ import {POPUP_Z, popoverBox} from "./flyout/popover-box.js";
 export type {TagColorName};
 export {swatchClick};
 
-interface TagColorPickerProps {
+interface TagColorPickerProps
+{
 	/** Viewport coordinates of the tag's bottom-left corner; upstream adds a 4px margin-top. */
 	top: number;
 	left: number;
@@ -42,19 +44,26 @@ interface TagColorPickerProps {
 // (10 colors + remove) * 32px pitch + 32px insets.
 const MAX_WIDTH = (TAG_COLORS.length + 1) * 32 + 32;
 
-export function TagColorPicker({top, left, currentColor, onSelect, onRemove, onClose}: TagColorPickerProps) {
+export function TagColorPicker({top, left, currentColor, onSelect, onRemove, onClose}: TagColorPickerProps)
+{
 	useCloseOnLocationChange(onClose);
-	const box = popoverBox({maxWidth: MAX_WIDTH});
+	const box = popoverBox(
+		{
+			maxWidth: MAX_WIDTH,
+		},
+	);
 	const surface = box.className.replaceAll(/\s+/gu, " ");
 	return createPortal(
 		// oxlint-disable-next-line jsx-a11y/no-static-element-interactions -- upstream's flyout is a plain div; mousedown only keeps editor focus
 		<div
 			className={`${surface} flyout !pt-0 !pb-0 overflow-hidden tag-color-picker`}
 			// Keep the editor's selection/focus when interacting with the picker.
-			onMouseDown={(event) => {
+			onMouseDown={(event) =>
+			{
 				event.preventDefault();
 			}}
-			style={{
+			style={
+			{
 				pointerEvents: "auto",
 				zIndex: POPUP_Z,
 				maxWidth: MAX_WIDTH,
@@ -80,11 +89,15 @@ export function TagColorPicker({top, left, currentColor, onSelect, onRemove, onC
 											title={capitalize(color)}
 											className={`${SWATCH} ${currentColor === color ? SELECTED_BORDER : UNSELECTED_BORDER}${index === TAG_COLORS.length - 1 ? " mobile:mr-l" : ""} bc-${color}`}
 											key={color}
-											onClick={() => {
+											onClick={() =>
+											{
 												const picked = swatchClick(currentColor, color);
-												if (picked === null) {
+												if (picked === null)
+												{
 													onRemove();
-												} else {
+												}
+												else
+												{
 													onSelect(picked);
 												}
 											}}

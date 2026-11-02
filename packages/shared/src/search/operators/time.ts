@@ -5,7 +5,8 @@ import {MetaNode} from "./meta.js";
  * Port of upstream's time-range cutoff: `parseInt(value)` (NaN or negative -> 0) with suffix `h` = hours,
  * `d` = days and anything else (including `w`) = minutes. Returns `now` minus that many minutes.
  */
-export function sinceTimestamp(value: string, now: number): number {
+export function sinceTimestamp(value: string, now: number): number
+{
 	const amount = Math.max(0, Number(/^[+-]?\d+/u.exec(value)?.[0] ?? 0));
 	const multiplier = value.endsWith("h") ? 60 : value.endsWith("d") ? 1440 : 1;
 	return now - amount * multiplier * 60_000;
@@ -13,14 +14,17 @@ export function sinceTimestamp(value: string, now: number): number {
 
 type Timestamp = (item: SearchItem) => number | null;
 
-function timeRange(prefixes: [string, ...string[]], timestamp: Timestamp, before = false): SearchOperator {
+function timeRange(prefixes: [string, ...string[]], timestamp: Timestamp, before = false): SearchOperator
+{
 	const prefixOf = (token: string): string => prefixes.find((prefix) => token.startsWith(prefix)) ?? "";
 	return {
 		name: prefixes[0],
 		matchesToken: (token) => prefixOf(token).length > 0,
-		create(token, _rawToken, context) {
+		create(token, _rawToken, context)
+		{
 			const since = sinceTimestamp(token.slice(prefixOf(token).length), context.now);
-			return new MetaNode((item) => {
+			return new MetaNode((item) =>
+			{
 				const at = timestamp(item);
 				return at !== null && (before ? at < since : at >= since);
 			});
@@ -37,10 +41,12 @@ export const completed = timeRange(["completed:", "completed-since:"], (item) =>
  * `changed-by:me` always matches and anything else (`others`) never does: in a single-user tree upstream leaves
  * last-modified-by unset, so every change is the viewer's own.
  */
-export const changedBy: SearchOperator = {
+export const changedBy: SearchOperator =
+{
 	name: "changed-by:",
 	matchesToken: (token) => token.startsWith("changed-by:") || token.startsWith("last-changed-by:"),
-	create(token) {
+	create(token)
+	{
 		const isMe = token.slice(token.indexOf(":") + 1) === "me";
 		return new MetaNode(() => isMe);
 	},

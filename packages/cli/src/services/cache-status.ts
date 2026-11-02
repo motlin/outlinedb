@@ -12,8 +12,10 @@ import {logger} from "./logger.js";
 import {nonEmpty} from "../utils/non-empty.js";
 import {DEFAULT_DB_FILE} from "../db/default-db-file.js";
 
-export interface CacheStatus {
-	nodes: {
+export interface CacheStatus
+{
+	nodes:
+	{
 		total: number;
 		root: number;
 		completed: number;
@@ -22,20 +24,24 @@ export interface CacheStatus {
 	lastBackupImport: string | null;
 	/** Relationship rows a delete or import left behind; all zero when the cache matches upstream. */
 	stranded: StrandedRowCounts;
-	database: {
+	database:
+	{
 		path: string;
 		size: string;
 	};
 }
 
-export class CacheStatusService {
+export class CacheStatusService
+{
 	private readonly database: BetterSQLite3Database<typeof schema>;
 
-	constructor(database: BetterSQLite3Database<typeof schema>) {
+	constructor(database: BetterSQLite3Database<typeof schema>)
+	{
 		this.database = database;
 	}
 
-	getStatus(): CacheStatus {
+	getStatus(): CacheStatus
+	{
 		const nodeStats = this.getNodeStats();
 		const lastSync = this.getLastSync();
 		const lastBackupImport = this.getLastImportDate();
@@ -48,16 +54,27 @@ export class CacheStatusService {
 			lastSync,
 			lastBackupImport,
 			stranded: countStrandedRows(this.database),
-			database: {
+			database:
+			{
 				path: dbPath,
 				size: dbSize,
 			},
 		};
 	}
 
-	private getNodeStats(): {total: number; root: number; completed: number} {
+	private getNodeStats():
+	{
+		total: number;
+		root: number;
+		completed: number;
+	}
+	{
 		const totalNodesResult = this.database
-			.select({count: count()})
+			.select(
+				{
+					count: count(),
+				},
+			)
 			.from(nodeContent)
 			.where(eq(nodeContent.systemTo, FAR_FUTURE_DATE))
 			.get();
@@ -65,7 +82,11 @@ export class CacheStatusService {
 		const totalNodes = totalNodesResult?.count ?? 0;
 
 		const completedNodesResult = this.database
-			.select({count: count()})
+			.select(
+				{
+					count: count(),
+				},
+			)
 			.from(nodeMetadata)
 			.where(and(isNotNull(nodeMetadata.completedAt), eq(nodeMetadata.systemTo, FAR_FUTURE_DATE)))
 			.get();
@@ -73,7 +94,11 @@ export class CacheStatusService {
 		const completedNodes = completedNodesResult?.count ?? 0;
 
 		const rootNodesResult = this.database
-			.select({count: count()})
+			.select(
+				{
+					count: count(),
+				},
+			)
 			.from(nodeContent)
 			.where(and(isNull(nodeContent.parentId), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
 			.get();
@@ -87,9 +112,14 @@ export class CacheStatusService {
 		};
 	}
 
-	private getLastSync(): Date | null {
+	private getLastSync(): Date | null
+	{
 		const result = this.database
-			.select({systemFrom: nodeContent.systemFrom})
+			.select(
+				{
+					systemFrom: nodeContent.systemFrom,
+				},
+			)
 			.from(nodeContent)
 			.where(eq(nodeContent.systemTo, FAR_FUTURE_DATE))
 			.orderBy(desc(nodeContent.systemFrom))
@@ -97,24 +127,32 @@ export class CacheStatusService {
 			.get();
 		logger.logSqlResult("getLastSync", result);
 
-		if (!result) {
+		if (!result)
+		{
 			return null;
 		}
 
 		return new Date(`${result.systemFrom.replace(" ", "T")}Z`);
 	}
 
-	private getDatabaseSize(dbPath: string): string {
-		if (!fs.existsSync(dbPath)) {
+	private getDatabaseSize(dbPath: string): string
+	{
+		if (!fs.existsSync(dbPath))
+		{
 			return "0 KB";
 		}
 
 		return formatBytes(fs.statSync(dbPath).size);
 	}
 
-	getLastImportDate(): string | null {
+	getLastImportDate(): string | null
+	{
 		const lastImport = this.database
-			.select({backupDate: backupImports.backupDate})
+			.select(
+				{
+					backupDate: backupImports.backupDate,
+				},
+			)
 			.from(backupImports)
 			.where(eq(backupImports.systemTo, FAR_FUTURE_DATE))
 			.orderBy(desc(backupImports.backupDate))

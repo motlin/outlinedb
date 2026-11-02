@@ -12,7 +12,8 @@ import type {LocationResponse} from "../../node-types.js";
 /** One location the `((` popup offers: upstream's `<b><u>` word-start label and root-first ancestors without Home. */
 export type MirrorHit = LocationResponse["results"][number];
 
-interface MirrorMenuProps {
+interface MirrorMenuProps
+{
 	hits: readonly MirrorHit[];
 	index: number;
 	keyboardMode: boolean;
@@ -30,14 +31,18 @@ const POSITION_OFFSET = [0, 0] as const;
  * Upstream's `((` popup (`MIRROR_SEARCH_POPUP`): the shared suggest flyout under the chip with a "mirror from" header
  * and one location row per hit, its label matched in `<b><u>` and its ancestors as breadcrumbs.
  */
-export function MirrorMenu({hits, index, keyboardMode, left, top, onSelect, onHover, onMouseMove}: MirrorMenuProps) {
-	const scrollActive = useCallback((element: HTMLAnchorElement | null) => {
-		if (element !== null) {
+export function MirrorMenu({hits, index, keyboardMode, left, top, onSelect, onHover, onMouseMove}: MirrorMenuProps)
+{
+	const scrollActive = useCallback((element: HTMLAnchorElement | null) =>
+	{
+		if (element !== null)
+		{
 			revealInScroller(element);
 		}
 	}, []);
 
-	if (hits.length === 0) {
+	if (hits.length === 0)
+	{
 		return null;
 	}
 	return createPortal(
@@ -51,7 +56,8 @@ export function MirrorMenu({hits, index, keyboardMode, left, top, onSelect, onHo
 		>
 			<MenuScroller onMouseMove={onMouseMove}>
 				<MenuSectionHeader key="header">{MIRROR_FROM_HEADER}</MenuSectionHeader>
-				{hits.map((hit, hitIndex) => {
+				{hits.map((hit, hitIndex) =>
+				{
 					const active = hitIndex === index;
 					return (
 						<MenuItem
@@ -59,16 +65,23 @@ export function MirrorMenu({hits, index, keyboardMode, left, top, onSelect, onHo
 							ref={active && keyboardMode ? scrollActive : undefined}
 							label={
 								<div data-menu-item-label="" className="flex flex-row gap-m">
-									<div dangerouslySetInnerHTML={{__html: hit.labelHtml}} />
+									<div
+										dangerouslySetInnerHTML={
+										{
+											__html: hit.labelHtml,
+										}}
+									/>
 								</div>
 							}
 							subtext={<LocationCrumbs crumbs={hit.ancestors} />}
 							isSelected={keyboardMode && active}
 							isInKeyboardMode={keyboardMode}
-							onMouseEnter={() => {
+							onMouseEnter={() =>
+							{
 								onHover(hitIndex);
 							}}
-							onSelect={() => {
+							onSelect={() =>
+							{
 								onSelect(hitIndex);
 							}}
 						/>

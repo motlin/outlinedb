@@ -3,7 +3,8 @@ import {eq, sql} from "drizzle-orm";
 import {nodeContent, nodeMetadata} from "@outlinedb/shared/db";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {describe, expect, it} from "vite-plus/test";
-import {
+import
+{
 	buildTestDb,
 	bulkImportWithWatermarkGuard,
 	collectBackupMirrorRows,
@@ -25,13 +26,21 @@ import {
  * build on. Everything runs in a single Vitest process: an in-memory SQLite
  * database with migrations applied, no filesystem state, no subprocess.
  */
-describe("round-trip test infrastructure", () => {
-	describe("buildTestDb", () => {
-		it("creates an in-memory database with every migration applied", () => {
+describe("round-trip test infrastructure", () =>
+{
+	describe("buildTestDb", () =>
+	{
+		it("creates an in-memory database with every migration applied", () =>
+		{
 			const {sqlite} = buildTestDb();
 
 			const tableRows = sqlite
-				.prepare<[], {name: string}>("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+				.prepare<
+					[],
+					{
+						name: string;
+					}
+				>("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
 				.all();
 			const tableNames = tableRows.map((row) => row.name);
 
@@ -83,20 +92,28 @@ describe("round-trip test infrastructure", () => {
 			sqlite.close();
 		});
 
-		it("records the full migration journal in __drizzle_migrations", () => {
+		it("records the full migration journal in __drizzle_migrations", () =>
+		{
 			const {database, sqlite} = buildTestDb();
 
-			const result = database.get<{count: number}>(sql`SELECT COUNT(*) AS count FROM __drizzle_migrations`);
+			const result = database.get<
+			{
+				count: number;
+			}>(sql`SELECT COUNT(*) AS count FROM __drizzle_migrations`);
 
 			expect(result.count).toBe(5);
 
 			sqlite.close();
 		});
 
-		it("returns an empty node_content table", () => {
+		it("returns an empty node_content table", () =>
+		{
 			const {database, sqlite} = buildTestDb();
 
-			const result = database.get<{count: number}>(sql`SELECT COUNT(*) AS count FROM node_content`);
+			const result = database.get<
+			{
+				count: number;
+			}>(sql`SELECT COUNT(*) AS count FROM node_content`);
 
 			expect(result.count).toBe(0);
 
@@ -104,12 +121,15 @@ describe("round-trip test infrastructure", () => {
 		});
 	});
 
-	describe("loadFixtureBackup", () => {
-		it("loads and validates the small backup fixture", () => {
+	describe("loadFixtureBackup", () =>
+	{
+		it("loads and validates the small backup fixture", () =>
+		{
 			const nodes = loadFixtureBackup("small-backup");
 
 			expect(
-				nodes.map(({id, nm, ch, metadata}) => ({
+				nodes.map(({id, nm, ch, metadata}) => (
+				{
 					id,
 					name: nm,
 					childIds: ch?.map((child) => child.id) ?? [],
@@ -126,7 +146,8 @@ describe("round-trip test infrastructure", () => {
 					id: "44444444-4444-4444-4444-444444444444",
 					name: "Mirror of Ship Phase 4",
 					childIds: [],
-					mirror: {
+					mirror:
+					{
 						originalId: "33333333-3333-3333-3333-333333333333",
 						isMirrorRoot: true,
 					},
@@ -135,26 +156,59 @@ describe("round-trip test infrastructure", () => {
 		});
 	});
 
-	describe("loadFixtureRestApiResponse", () => {
-		it("loads and validates the small REST API fixture", () => {
+	describe("loadFixtureRestApiResponse", () =>
+	{
+		it("loads and validates the small REST API fixture", () =>
+		{
 			const nodes = loadFixtureRestApiResponse("small-rest-api-response");
 
-			expect(nodes.map(({id, completed, completedAt}) => ({id, completed, completedAt}))).toStrictEqual([
-				{id: "11111111-1111-1111-1111-111111111111", completed: false, completedAt: null},
-				{id: "22222222-2222-2222-2222-222222222222", completed: false, completedAt: null},
-				{id: "33333333-3333-3333-3333-333333333333", completed: true, completedAt: 1_700_000_600},
+			expect(
+				nodes.map(({id, completed, completedAt}) => (
+				{
+					id,
+					completed,
+					completedAt,
+				})),
+			).toStrictEqual([
+				{
+					id: "11111111-1111-1111-1111-111111111111",
+					completed: false,
+					completedAt: null,
+				},
+				{
+					id: "22222222-2222-2222-2222-222222222222",
+					completed: false,
+					completedAt: null,
+				},
+				{
+					id: "33333333-3333-3333-3333-333333333333",
+					completed: true,
+					completedAt: 1_700_000_600,
+				},
 			]);
 		});
 	});
 });
 
 /** Sort temporal rows by their `id` column for order-independent comparison. */
-function sortById<T extends {id: string}>(rows: T[]): T[] {
+function sortById<
+	T extends
+	{
+		id: string;
+	},
+>(rows: T[]): T[]
+{
 	return [...rows].toSorted((a, b) => a.id.localeCompare(b.id));
 }
 
 /** Sort temporal rows by their `nodeId` column for order-independent comparison. */
-function sortByNodeId<T extends {nodeId: string}>(rows: T[]): T[] {
+function sortByNodeId<
+	T extends
+	{
+		nodeId: string;
+	},
+>(rows: T[]): T[]
+{
 	return [...rows].toSorted((a, b) => a.nodeId.localeCompare(b.nodeId));
 }
 
@@ -166,9 +220,12 @@ function sortByNodeId<T extends {nodeId: string}>(rows: T[]): T[] {
  * Everything runs in a single Vitest process against an in-memory SQLite
  * database.
  */
-describe("round-trip equivalence", () => {
-	describe("backup -> DB -> DTO -> DB equivalence", () => {
-		it("produces zero new temporal rows on re-import of the round-tripped DTO", () => {
+describe("round-trip equivalence", () =>
+{
+	describe("backup -> DB -> DTO -> DB equivalence", () =>
+	{
+		it("produces zero new temporal rows on re-import of the round-tripped DTO", () =>
+		{
 			const {database, sqlite} = buildTestDb();
 			const importedAt = new Date("2026-05-22T10:00:00Z");
 
@@ -179,7 +236,11 @@ describe("round-trip equivalence", () => {
 
 			const reader = new NodeReader(database);
 			const ids = database
-				.select({id: nodeContent.id})
+				.select(
+					{
+						id: nodeContent.id,
+					},
+				)
 				.from(nodeContent)
 				.where(eq(nodeContent.systemTo, FAR_FUTURE_DATE))
 				.all()
@@ -191,9 +252,11 @@ describe("round-trip equivalence", () => {
 				"44444444-4444-4444-4444-444444444444",
 			]);
 
-			const dtos = ids.map((id) => {
+			const dtos = ids.map((id) =>
+			{
 				const node = reader.getById(id);
-				if (node === null) {
+				if (node === null)
+				{
 					throw new Error(`NodeReader returned null for ${id}`);
 				}
 				return nodeToRestDto(node);
@@ -204,10 +267,14 @@ describe("round-trip equivalence", () => {
 			// current, the temporal merge must insert nothing and phase out
 			// nothing — the whole point of the round-trip safety net.
 			const reimportRows = restDtoToNormalizedRows(dtos);
-			const reapplied = runUnitOfWork(database, (unitOfWork) => applyRows(unitOfWork, reimportRows), {
-				systemTime: "2026-05-22 11:00:00",
-				startedAt: Date.now(),
-			});
+			const reapplied = runUnitOfWork(
+				database,
+				(unitOfWork) => applyRows(unitOfWork, reimportRows),
+				{
+					systemTime: "2026-05-22 11:00:00",
+					startedAt: Date.now(),
+				},
+			);
 			expect(reapplied.nodeContent?.inserted).toBe(0);
 			expect(reapplied.nodeContent?.phasedOut).toBe(0);
 			expect(reapplied.nodeContent?.unchanged).toBe(4);
@@ -215,8 +282,14 @@ describe("round-trip equivalence", () => {
 			expect(reapplied.nodeMetadata?.phasedOut).toBe(0);
 			expect(reapplied.nodeMetadata?.unchanged).toBe(4);
 
-			const contentVersions = database.get<{count: number}>(sql`SELECT COUNT(*) AS count FROM node_content`);
-			const metadataVersions = database.get<{count: number}>(sql`SELECT COUNT(*) AS count FROM node_metadata`);
+			const contentVersions = database.get<
+			{
+				count: number;
+			}>(sql`SELECT COUNT(*) AS count FROM node_content`);
+			const metadataVersions = database.get<
+			{
+				count: number;
+			}>(sql`SELECT COUNT(*) AS count FROM node_metadata`);
 			expect(contentVersions.count).toBe(4);
 			expect(metadataVersions.count).toBe(4);
 
@@ -224,8 +297,10 @@ describe("round-trip equivalence", () => {
 		});
 	});
 
-	describe("two-adapter equivalence", () => {
-		it("writes byte-identical node_content and node_metadata rows from both adapters", () => {
+	describe("two-adapter equivalence", () =>
+	{
+		it("writes byte-identical node_content and node_metadata rows from both adapters", () =>
+		{
 			const importedAt = new Date("2026-05-22T10:00:00Z");
 
 			const bulkDb = buildTestDb();
@@ -246,7 +321,8 @@ describe("round-trip equivalence", () => {
 			restDb.sqlite.close();
 		});
 
-		it("confirms the test-local adapters agree on the normalized row shapes", () => {
+		it("confirms the test-local adapters agree on the normalized row shapes", () =>
+		{
 			const bulkRows = normalizeBackupNodes(loadFixtureBackup("equivalence-backup"));
 			const restRows = normalizeRestNodes(loadFixtureRestApiResponse("equivalence-rest-api-response"));
 
@@ -255,8 +331,10 @@ describe("round-trip equivalence", () => {
 		});
 	});
 
-	describe("watermark guard", () => {
-		it("rejects a bulk import older than the local high watermark", () => {
+	describe("watermark guard", () =>
+	{
+		it("rejects a bulk import older than the local high watermark", () =>
+		{
 			const {database, sqlite} = buildTestDb();
 
 			const newer = bulkImportWithWatermarkGuard(
@@ -271,12 +349,17 @@ describe("round-trip equivalence", () => {
 				loadFixtureBackup("small-backup"),
 				new Date("2026-05-21T10:00:00Z"),
 			);
-			expect(older).toStrictEqual({skipped: true});
+			expect(older).toStrictEqual(
+				{
+					skipped: true,
+				},
+			);
 
 			sqlite.close();
 		});
 
-		it("accepts a bulk import newer than the local high watermark", () => {
+		it("accepts a bulk import newer than the local high watermark", () =>
+		{
 			const {database, sqlite} = buildTestDb();
 
 			bulkImportWithWatermarkGuard(database, loadFixtureBackup("small-backup"), new Date("2026-05-22T10:00:00Z"));
@@ -291,7 +374,8 @@ describe("round-trip equivalence", () => {
 			sqlite.close();
 		});
 
-		it("lets the per-node REST adapter write unconditionally regardless of timestamp order", () => {
+		it("lets the per-node REST adapter write unconditionally regardless of timestamp order", () =>
+		{
 			const {database, sqlite} = buildTestDb();
 			const restNodes = loadFixtureRestApiResponse("small-rest-api-response");
 
@@ -301,7 +385,13 @@ describe("round-trip equivalence", () => {
 			// bulk-export watermark guard would reject this; the per-node REST
 			// adapter has no guard and must apply the change unconditionally.
 			const editedNodes = restNodes.map((node) =>
-				node.id === "11111111-1111-1111-1111-111111111111" ? {...node, name: "Projects (renamed)"} : node,
+				node.id === "11111111-1111-1111-1111-111111111111"
+					?
+						{
+							...node,
+							name: "Projects (renamed)",
+						}
+					: node,
 			);
 			const olderResult = restImport(database, editedNodes, new Date("2026-05-21T10:00:00Z"));
 			expect(olderResult.nodeContent?.inserted).toBe(1);
@@ -314,8 +404,10 @@ describe("round-trip equivalence", () => {
 		});
 	});
 
-	describe("mirror name resolution", () => {
-		it("ignores text stored on a mirror and uses its original text, even when the original is blank", () => {
+	describe("mirror name resolution", () =>
+	{
+		it("ignores text stored on a mirror and uses its original text, even when the original is blank", () =>
+		{
 			const {database, sqlite} = buildTestDb();
 			const importedAt = new Date("2026-05-22T10:00:00Z");
 
@@ -329,40 +421,52 @@ describe("round-trip equivalence", () => {
 			const originalId = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee";
 
 			const mirror = reader.getById(mirrorId);
-			expect(mirror).toStrictEqual({
-				id: mirrorId,
-				shortId: "ffffffffffff",
-				parentId: null,
-				name: null,
-				note: null,
-				priority: 1,
-				layoutMode: null,
-				createdAt: new Date("2023-11-14T22:20:00.000Z"),
-				modifiedAt: new Date("2023-11-14T22:21:40.000Z"),
-				completedAt: null,
-				collapsed: false,
-				mirror: {isMirror: true, originalNodeId: originalId},
-				systemFrom: "2026-05-22 10:00:00.000",
-				systemTo: "9999-12-31 23:59:59",
-			});
+			expect(mirror).toStrictEqual(
+				{
+					id: mirrorId,
+					shortId: "ffffffffffff",
+					parentId: null,
+					name: null,
+					note: null,
+					priority: 1,
+					layoutMode: null,
+					createdAt: new Date("2023-11-14T22:20:00.000Z"),
+					modifiedAt: new Date("2023-11-14T22:21:40.000Z"),
+					completedAt: null,
+					collapsed: false,
+					mirror:
+					{
+						isMirror: true,
+						originalNodeId: originalId,
+					},
+					systemFrom: "2026-05-22 10:00:00.000",
+					systemTo: "9999-12-31 23:59:59",
+				},
+			);
 
 			const original = reader.getById(originalId);
-			expect(original).toStrictEqual({
-				id: originalId,
-				shortId: "eeeeeeeeeeee",
-				parentId: "dddddddd-dddd-dddd-dddd-dddddddddddd",
-				name: null,
-				note: null,
-				priority: 0,
-				layoutMode: null,
-				createdAt: new Date("2023-11-14T22:16:40.000Z"),
-				modifiedAt: new Date("2023-11-14T22:18:20.000Z"),
-				completedAt: null,
-				collapsed: false,
-				mirror: {isMirror: false, originalNodeId: null},
-				systemFrom: "2026-05-22 10:00:00.000",
-				systemTo: "9999-12-31 23:59:59",
-			});
+			expect(original).toStrictEqual(
+				{
+					id: originalId,
+					shortId: "eeeeeeeeeeee",
+					parentId: "dddddddd-dddd-dddd-dddd-dddddddddddd",
+					name: null,
+					note: null,
+					priority: 0,
+					layoutMode: null,
+					createdAt: new Date("2023-11-14T22:16:40.000Z"),
+					modifiedAt: new Date("2023-11-14T22:18:20.000Z"),
+					completedAt: null,
+					collapsed: false,
+					mirror:
+					{
+						isMirror: false,
+						originalNodeId: null,
+					},
+					systemFrom: "2026-05-22 10:00:00.000",
+					systemTo: "9999-12-31 23:59:59",
+				},
+			);
 
 			sqlite.close();
 		});

@@ -1,20 +1,28 @@
 /** The search helper flyout's highlighted tab and chip (-1 means none) and whether the tab row has keyboard focus. */
-export interface HelperSelection {
+export interface HelperSelection
+{
 	tab: number;
 	chip: number;
 	/** Upstream's `o1`: the keyboard is driving the tab row. */
 	rowMode: boolean;
 }
 
-export const NO_HELPER_SELECTION: HelperSelection = {tab: -1, chip: -1, rowMode: false};
+export const NO_HELPER_SELECTION: HelperSelection =
+{
+	tab: -1,
+	chip: -1,
+	rowMode: false,
+};
 
-export interface HelperKeyEvent {
+export interface HelperKeyEvent
+{
 	/** `KeyboardEvent.code`, as upstream switches on it. */
 	code: string;
 	ctrl: boolean;
 }
 
-export interface HelperLayout {
+export interface HelperLayout
+{
 	tabCount: number;
 	hasChips: (tab: number) => boolean;
 	/** The selected tab's chip count. */
@@ -25,7 +33,8 @@ export interface HelperLayout {
 	hidden?: boolean;
 }
 
-export interface HelperKeyResult {
+export interface HelperKeyResult
+{
 	sel: HelperSelection;
 	preventDefault: boolean;
 	/** Upstream's `stopImmediatePropagation`: the input's own key handler must not run. */
@@ -34,29 +43,56 @@ export interface HelperKeyResult {
 	select: number | null;
 }
 
-interface Pending extends HelperKeyResult {
+interface Pending extends HelperKeyResult
+{
 	/** The chip handler declined an ArrowUp, so the tab-row ArrowUp runs next. */
 	fallThroughUp: boolean;
 }
 
 /** Upstream `g1`: step the tab, -1 reachable, no tab while the flyout is hidden. */
-function stepTab(sel: HelperSelection, delta: number, layout: HelperLayout): HelperSelection {
-	if (layout.hidden === true) {
-		return {...sel, tab: -1, chip: -1};
+function stepTab(sel: HelperSelection, delta: number, layout: HelperLayout): HelperSelection
+{
+	if (layout.hidden === true)
+	{
+		return {
+			...sel,
+			tab: -1,
+			chip: -1,
+		};
 	}
-	if (sel.tab === -1) {
-		return {...sel, tab: delta === -1 ? -1 : 0, chip: -1};
+	if (sel.tab === -1)
+	{
+		return {
+			...sel,
+			tab: delta === -1 ? -1 : 0,
+			chip: -1,
+		};
 	}
-	return {...sel, tab: Math.min(layout.tabCount - 1, sel.tab + delta), chip: -1};
+	return {
+		...sel,
+		tab: Math.min(layout.tabCount - 1, sel.tab + delta),
+		chip: -1,
+	};
 }
 
 /** Upstream `jN4`: the chip row's keys, attached while a tab with chips is selected; it ignores Ctrl. */
-function chipKey(sel: HelperSelection, event: HelperKeyEvent, layout: HelperLayout): Pending {
+function chipKey(sel: HelperSelection, event: HelperKeyEvent, layout: HelperLayout): Pending
+{
 	const last = layout.chipCount - 1;
-	const next = (patch: Partial<Pending> & {chip?: number}): Pending => {
+	const next = (
+		patch: Partial<Pending> &
+		{
+			chip?: number;
+		},
+	): Pending =>
+	{
 		const {chip = sel.chip, ...rest} = patch;
 		return {
-			sel: {...sel, chip},
+			sel:
+			{
+				...sel,
+				chip,
+			},
 			preventDefault: false,
 			stopPropagation: false,
 			select: null,
@@ -64,58 +100,135 @@ function chipKey(sel: HelperSelection, event: HelperKeyEvent, layout: HelperLayo
 			...rest,
 		};
 	};
-	switch (event.code) {
+	switch (event.code)
+	{
 		case "ArrowLeft":
-			return next({chip: sel.chip === -1 ? last : Math.max(0, sel.chip - 1), preventDefault: true});
+			return next(
+				{
+					chip: sel.chip === -1 ? last : Math.max(0, sel.chip - 1),
+					preventDefault: true,
+				},
+			);
 		case "ArrowRight":
-			return next({chip: sel.chip === -1 ? 0 : Math.min(last, sel.chip + 1), preventDefault: true});
-		case "ArrowUp": {
+			return next(
+				{
+					chip: sel.chip === -1 ? 0 : Math.min(last, sel.chip + 1),
+					preventDefault: true,
+				},
+			);
+		case "ArrowUp":
+		{
 			const target = sel.chip === -1 ? null : layout.neighbor(sel.chip, "up");
 			return target === null
-				? next({chip: -1, preventDefault: true, fallThroughUp: true})
-				: next({chip: target, preventDefault: true, stopPropagation: true});
+				? next(
+						{
+							chip: -1,
+							preventDefault: true,
+							fallThroughUp: true,
+						},
+					)
+				: next(
+						{
+							chip: target,
+							preventDefault: true,
+							stopPropagation: true,
+						},
+					);
 		}
-		case "ArrowDown": {
+		case "ArrowDown":
+		{
 			const target = sel.chip === -1 ? 0 : layout.neighbor(sel.chip, "down");
-			return next({chip: target ?? sel.chip, preventDefault: true});
+			return next(
+				{
+					chip: target ?? sel.chip,
+					preventDefault: true,
+				},
+			);
 		}
 		case "Enter":
 		case "Space":
 		case "Tab":
-			return next({
-				preventDefault: true,
-				stopPropagation: event.code === "Tab",
-				select: sel.chip >= 0 ? sel.chip : null,
-			});
+			return next(
+				{
+					preventDefault: true,
+					stopPropagation: event.code === "Tab",
+					select: sel.chip >= 0 ? sel.chip : null,
+				},
+			);
 		default:
 			return next({});
 	}
 }
 
 /** Upstream `EN4.b1`: the tab row's keys, attached while nothing is selected or the row has keyboard focus. */
-function tabKey(sel: HelperSelection, event: HelperKeyEvent, layout: HelperLayout): Partial<HelperKeyResult> {
-	if (event.ctrl) {
-		if (event.code === "KeyP" || event.code === "KeyN") {
-			return {sel: stepTab(sel, event.code === "KeyP" ? -1 : 1, layout), preventDefault: true};
+function tabKey(sel: HelperSelection, event: HelperKeyEvent, layout: HelperLayout): Partial<HelperKeyResult>
+{
+	if (event.ctrl)
+	{
+		if (event.code === "KeyP" || event.code === "KeyN")
+		{
+			return {
+				sel: stepTab(sel, event.code === "KeyP" ? -1 : 1, layout),
+				preventDefault: true,
+			};
 		}
 		return {};
 	}
-	switch (event.code) {
+	switch (event.code)
+	{
 		case "ArrowLeft":
-			return sel.tab === 0 || !sel.rowMode ? {} : {sel: stepTab(sel, -1, layout), preventDefault: true};
+			return sel.tab === 0 || !sel.rowMode
+				? {}
+				:
+					{
+						sel: stepTab(sel, -1, layout),
+						preventDefault: true,
+					};
 		case "ArrowRight":
-			return sel.rowMode ? {sel: stepTab(sel, 1, layout), preventDefault: true} : {};
+			return sel.rowMode
+				?
+					{
+						sel: stepTab(sel, 1, layout),
+						preventDefault: true,
+					}
+				: {};
 		case "ArrowUp":
 			return {
-				sel: sel.rowMode ? NO_HELPER_SELECTION : {...sel, rowMode: true},
+				sel: sel.rowMode
+					? NO_HELPER_SELECTION
+					:
+						{
+							...sel,
+							rowMode: true,
+						},
 				preventDefault: true,
 				stopPropagation: sel.tab !== -1,
 			};
 		case "ArrowDown":
-			if (sel.tab === -1) {
-				return {sel: stepTab({...sel, rowMode: true}, 1, layout), preventDefault: true};
+			if (sel.tab === -1)
+			{
+				return {
+					sel: stepTab(
+						{
+							...sel,
+							rowMode: true,
+						},
+						1,
+						layout,
+					),
+					preventDefault: true,
+				};
 			}
-			return {sel: sel.rowMode ? {...sel, rowMode: false} : sel, preventDefault: true};
+			return {
+				sel: sel.rowMode
+					?
+						{
+							...sel,
+							rowMode: false,
+						}
+					: sel,
+				preventDefault: true,
+			};
 		default:
 			return {};
 	}
@@ -125,22 +238,31 @@ function tabKey(sel: HelperSelection, event: HelperKeyEvent, layout: HelperLayou
  * Upstream's helper flyout key machine as a pure step: the chip row's handler runs first (on a tab with chips), then the
  * tab row's (while nothing is selected or the tab row is armed), so `rowMode` on a chip tab runs both.
  */
-export function helperKey(sel: HelperSelection, event: HelperKeyEvent, layout: HelperLayout): HelperKeyResult {
+export function helperKey(sel: HelperSelection, event: HelperKeyEvent, layout: HelperLayout): HelperKeyResult
+{
 	const chip =
 		sel.tab > -1 && layout.hasChips(sel.tab) && !event.ctrl
 			? chipKey(sel, event, layout)
-			: ({
+			: (
+				{
 					sel,
 					preventDefault: false,
 					stopPropagation: false,
 					select: null,
 					fallThroughUp: false,
 				} satisfies Pending);
-	if (chip.stopPropagation && chip.select === null && event.code !== "Tab") {
-		return {sel: chip.sel, preventDefault: chip.preventDefault, stopPropagation: true, select: null};
+	if (chip.stopPropagation && chip.select === null && event.code !== "Tab")
+	{
+		return {
+			sel: chip.sel,
+			preventDefault: chip.preventDefault,
+			stopPropagation: true,
+			select: null,
+		};
 	}
 	const tabRowAttached = sel.tab === -1 || sel.rowMode;
-	if (!tabRowAttached && !chip.fallThroughUp) {
+	if (!tabRowAttached && !chip.fallThroughUp)
+	{
 		return {
 			sel: chip.sel,
 			preventDefault: chip.preventDefault,
@@ -157,14 +279,16 @@ export function helperKey(sel: HelperSelection, event: HelperKeyEvent, layout: H
 	};
 }
 
-export interface RectLike {
+export interface RectLike
+{
 	left: number;
 	top: number;
 	width: number;
 	height: number;
 }
 
-export interface ChipGeometry {
+export interface ChipGeometry
+{
 	/** The chip's `div.min-w-0.py-xs.px-px` wrapper. */
 	wrapper: RectLike;
 	/** The inner `a.menuItem`. */
@@ -177,7 +301,8 @@ const MIN_ROOM_BELOW = 10;
 const DOWN_PROBES = 10;
 const DOWN_PROBE_STEP = 20;
 
-function contains(rect: RectLike, x: number, y: number): boolean {
+function contains(rect: RectLike, x: number, y: number): boolean
+{
 	return x >= rect.left && x < rect.left + rect.width && y >= rect.top && y < rect.top + rect.height;
 }
 
@@ -192,26 +317,33 @@ export function chipNeighbor(
 	active: number,
 	dir: "up" | "down",
 	hit: (x: number, y: number) => number = (x, y) => chips.findIndex(({wrapper}) => contains(wrapper, x, y)),
-): number | null {
+): number | null
+{
 	const current = chips[active];
-	if (current === undefined) {
+	if (current === undefined)
+	{
 		return null;
 	}
 	const {item} = current;
-	if (dir === "up") {
-		if (current.offsetTop < FIRST_ROW_OFFSET) {
+	if (dir === "up")
+	{
+		if (current.offsetTop < FIRST_ROW_OFFSET)
+		{
 			return null;
 		}
 		const index = hit(item.left + item.width / 4, item.top - item.height / 2);
 		return index === -1 ? null : index;
 	}
 	const bottom = item.top + item.height;
-	if (containerBottom - bottom <= MIN_ROOM_BELOW) {
+	if (containerBottom - bottom <= MIN_ROOM_BELOW)
+	{
 		return null;
 	}
-	for (let probe = 0; probe <= DOWN_PROBES; probe++) {
+	for (let probe = 0; probe <= DOWN_PROBES; probe++)
+	{
 		const index = hit(item.left + item.width / 4 - probe * DOWN_PROBE_STEP, bottom + item.height / 2);
-		if (index !== -1) {
+		if (index !== -1)
+		{
 			return index;
 		}
 	}

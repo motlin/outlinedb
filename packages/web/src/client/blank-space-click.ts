@@ -1,6 +1,21 @@
-export type BlankSpaceClickPlan = {kind: "none"} | {kind: "edit-end"; id: string} | {kind: "add-child"; index: number};
+export type BlankSpaceClickPlan =
+	|
+	  {
+			kind: "none";
+	  }
+	|
+	  {
+			kind: "edit-end";
+			id: string;
+	  }
+	|
+	  {
+			kind: "add-child";
+			index: number;
+	  };
 
-export interface BlankSpaceClickInput {
+export interface BlankSpaceClickInput
+{
 	selectionActive: boolean;
 	/** The last visible descendant row of the zoom, never the zoom root itself. */
 	lastVisibleRowId: string | null;
@@ -14,12 +29,29 @@ export function planBlankSpaceClick({
 	lastVisibleRowId,
 	searching,
 	visibleChildCount,
-}: BlankSpaceClickInput): BlankSpaceClickPlan {
-	if (selectionActive) {
-		return {kind: "none"};
+}: BlankSpaceClickInput): BlankSpaceClickPlan
+{
+	if (selectionActive)
+	{
+		return {
+			kind: "none",
+		};
 	}
-	if (lastVisibleRowId !== null) {
-		return {kind: "edit-end", id: lastVisibleRowId};
+	if (lastVisibleRowId !== null)
+	{
+		return {
+			kind: "edit-end",
+			id: lastVisibleRowId,
+		};
 	}
-	return searching ? {kind: "none"} : {kind: "add-child", index: visibleChildCount};
+	return searching
+		?
+			{
+				kind: "none",
+			}
+		:
+			{
+				kind: "add-child",
+				index: visibleChildCount,
+			};
 }

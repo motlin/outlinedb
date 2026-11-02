@@ -1,4 +1,5 @@
-export {
+export
+{
 	backupToUnixTime,
 	calculateWorkflowyEpoch,
 	formatWorkflowyDate,

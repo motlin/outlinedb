@@ -1,4 +1,5 @@
-._theme-robot {
+._theme-robot
+{
 	--robot-red: #e8393f;
 	--robot-orange: #fea143;
 	--robot-yellow: #dfe361;
@@ -77,16 +78,19 @@
 	--wf-border-warning: var(--robot-yellow);
 	--wf-border-success: var(--robot-lime);
 
-	.wf-header {
+	.wf-header
+	{
 		--wf-text-primary: var(--robot-red);
 		--wf-text-secondary: var(--robot-lime);
 	}
 
-	.wf-menu {
+	.wf-menu
+	{
 		--wf-text-quaternary: var(--robot-black);
 	}
 
-	.wf-helper {
+	.wf-helper
+	{
 		--wf-background-primary: var(--robot-grid);
 	}
 }

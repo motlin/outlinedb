@@ -1,45 +1,58 @@
 {
-	"request": {
+	"request":
+	{
 		"model": "clef-flash",
-		"state": {
+		"state":
+		{
 			"date": "2026-11-03",
 			"parent": "📆 Calendar > 2026 > November > Mon, Nov 3",
 			"entry": "Played pickleball with Alice after work"
 		},
-		"questions": {
-			"p.AliceBrown": {
+		"questions":
+		{
+			"p.AliceBrown":
+			{
 				"type": "noul",
 				"instructions": "Does this journal entry involve @AliceBrown (Alice Brown, book club friend)?"
 			},
-			"p.AliceChen": {
+			"p.AliceChen":
+			{
 				"type": "noul",
 				"instructions": "Does this journal entry involve @AliceChen (Alice Chen, coworker)?"
 			},
-			"t.pickleball": {
+			"t.pickleball":
+			{
 				"type": "noul",
 				"instructions": "Does this journal entry describe doing #pickleball (Pickleball)?"
 			}
 		}
 	},
 	"status": 200,
-	"body": {
-		"result": {
+	"body":
+	{
+		"result":
+		{
 			"model": "clef-flash",
-			"answers": {
-				"p.AliceBrown": {
+			"answers":
+			{
+				"p.AliceBrown":
+				{
 					"type": "noul",
 					"noul": 0.1329
 				},
-				"p.AliceChen": {
+				"p.AliceChen":
+				{
 					"type": "noul",
 					"noul": 0.1798
 				},
-				"t.pickleball": {
+				"t.pickleball":
+				{
 					"type": "noul",
 					"noul": 0.9526
 				}
 			},
-			"usage": {
+			"usage":
+			{
 				"input_tokens": 386,
 				"output_tokens": 0
 			}

@@ -7,6 +7,7 @@ const STARTS_WITH_MONOLITH = new RegExp(String.raw`^(?:<[a-z][^>]*>)*${MONOLITH}
 const ENDS_WITH_MONOLITH = new RegExp(String.raw`${MONOLITH}(?:<\/[a-z][^>]*>)*$`, "iu");
 
 /** `html` with a leading and/or trailing U+FEFF where a monolith pill starts or ends the content. */
-export function addMonolithGuards(html: string): string {
+export function addMonolithGuards(html: string): string
+{
 	return `${STARTS_WITH_MONOLITH.test(html) ? BOM : ""}${html}${ENDS_WITH_MONOLITH.test(html) ? BOM : ""}`;
 }

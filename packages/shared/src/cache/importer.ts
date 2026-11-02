@@ -15,7 +15,8 @@
 
 import {and, eq, inArray} from "drizzle-orm";
 import type {BaseSQLiteDatabase, SQLiteColumn, SQLiteTable} from "drizzle-orm/sqlite-core";
-import {
+import
+{
 	aiMetadata,
 	calendarLevels,
 	calendarMetadata,
@@ -28,7 +29,8 @@ import {
 import type {CalendarLevels, CalendarMetadata, S3File} from "../db/schema.js";
 import {FAR_FUTURE_DATE} from "../temporal/index.js";
 import {contentMatches, keepSkewedTimestamps, metadataMatches} from "./cache-temporal.js";
-import type {
+import type
+{
 	NormalizedAiMetadataRow,
 	NormalizedCalendarLevelsRow,
 	NormalizedCalendarMetadataRow,
@@ -52,7 +54,8 @@ import type {TemporalMergeResult, TemporalTransaction} from "./temporal-merge.js
  * left untouched. Supplying an empty array means "this adapter manages this
  * table and the desired state is empty" — all current rows are phased out.
  */
-export interface NormalizedRowsByTable {
+export interface NormalizedRowsByTable
+{
 	nodeContent?: NormalizedNodeContentRow[];
 	nodeMetadata?: NormalizedNodeMetadataRow[];
 	calendarMetadata?: NormalizedCalendarMetadataRow[];
@@ -67,7 +70,8 @@ export interface NormalizedRowsByTable {
  * Per-table merge results, keyed by the same names as {@link NormalizedRowsByTable}.
  * A table absent from the input is absent here too.
  */
-export interface ApplyRowsResult {
+export interface ApplyRowsResult
+{
 	nodeContent?: TemporalMergeResult;
 	nodeMetadata?: TemporalMergeResult;
 	calendarMetadata?: TemporalMergeResult;
@@ -78,7 +82,8 @@ export interface ApplyRowsResult {
 	referencesRoots?: TemporalMergeResult;
 }
 
-function s3Matches(current: S3File, incoming: NormalizedS3FileRow): boolean {
+function s3Matches(current: S3File, incoming: NormalizedS3FileRow): boolean
+{
 	return (
 		current.fileName === incoming.fileName &&
 		current.fileType === incoming.fileType &&
@@ -91,7 +96,8 @@ function s3Matches(current: S3File, incoming: NormalizedS3FileRow): boolean {
 	);
 }
 
-function calendarMetadataMatches(current: CalendarMetadata, incoming: NormalizedCalendarMetadataRow): boolean {
+function calendarMetadataMatches(current: CalendarMetadata, incoming: NormalizedCalendarMetadataRow): boolean
+{
 	return (
 		current.root === (incoming.root ?? null) &&
 		current.level === (incoming.level ?? null) &&
@@ -103,7 +109,8 @@ function calendarMetadataMatches(current: CalendarMetadata, incoming: Normalized
 	);
 }
 
-function calendarLevelsMatches(current: CalendarLevels, incoming: NormalizedCalendarLevelsRow): boolean {
+function calendarLevelsMatches(current: CalendarLevels, incoming: NormalizedCalendarLevelsRow): boolean
+{
 	return (
 		current.day === (incoming.day ?? null) &&
 		current.week === (incoming.week ?? null) &&
@@ -134,13 +141,18 @@ function mergeNodeKeyedTable<TIncoming, TTable extends SQLiteTable>(
 	importedAt: string,
 	preserveKeys?: ReadonlySet<string>,
 	onlyKeys?: readonly string[],
-): TemporalMergeResult {
+): TemporalMergeResult
+{
 	let currentRows: TTable["$inferSelect"][] = [];
-	if (onlyKeys === undefined) {
+	if (onlyKeys === undefined)
+	{
 		// Assigned, not spread into push(): a full table has more rows than one call's argument list allows.
 		currentRows = tx.select().from(table).where(eq(systemToColumn, FAR_FUTURE_DATE)).all();
-	} else {
-		for (let start = 0; start < onlyKeys.length; start += LOOKUP_CHUNK_SIZE) {
+	}
+	else
+	{
+		for (let start = 0; start < onlyKeys.length; start += LOOKUP_CHUNK_SIZE)
+		{
 			currentRows.push(
 				...tx
 					.select()
@@ -194,12 +206,14 @@ export function applyRows(
 	rowsByTable: NormalizedRowsByTable,
 	preserveNodeIds?: ReadonlySet<string>,
 	onlyNodeIds?: readonly string[],
-): ApplyRowsResult {
+): ApplyRowsResult
+{
 	const result: ApplyRowsResult = {};
 	const {tx, systemTime: importedAt} = unitOfWork;
 
 	// node_content / node_metadata describe the nodes themselves; merge first.
-	if (rowsByTable.nodeContent !== undefined) {
+	if (rowsByTable.nodeContent !== undefined)
+	{
 		result.nodeContent = mergeNodeKeyedTable(
 			tx,
 			nodeContent,
@@ -209,19 +223,26 @@ export function applyRows(
 			(row) => row.id,
 			(row) => row.id,
 			(current, incoming) =>
-				contentMatches(current, {
-					name: incoming.name ?? null,
-					note: incoming.note ?? null,
-					parentId: incoming.parentId ?? null,
-				}),
-			(row) => ({...row}),
+				contentMatches(
+					current,
+					{
+						name: incoming.name ?? null,
+						note: incoming.note ?? null,
+						parentId: incoming.parentId ?? null,
+					},
+				),
+			(row) => (
+			{
+				...row,
+			}),
 			importedAt,
 			preserveNodeIds,
 			onlyNodeIds,
 		);
 	}
 
-	if (rowsByTable.nodeMetadata !== undefined) {
+	if (rowsByTable.nodeMetadata !== undefined)
+	{
 		result.nodeMetadata = mergeNodeKeyedTable(
 			tx,
 			nodeMetadata,
@@ -231,14 +252,23 @@ export function applyRows(
 			(row) => row.nodeId,
 			(row) => row.nodeId,
 			(current, incoming) =>
-				metadataMatches(current, {
-					priority: incoming.priority ?? null,
-					createdAt: toUnix(incoming.createdAt),
-					modifiedAt: toUnix(incoming.modifiedAt),
-					completedAt: toUnix(incoming.completedAt),
-					layoutMode: incoming.layoutMode ?? null,
-				}),
-			(row, current) => (current ? keepSkewedTimestamps(current, row) : {...row}),
+				metadataMatches(
+					current,
+					{
+						priority: incoming.priority ?? null,
+						createdAt: toUnix(incoming.createdAt),
+						modifiedAt: toUnix(incoming.modifiedAt),
+						completedAt: toUnix(incoming.completedAt),
+						layoutMode: incoming.layoutMode ?? null,
+					},
+				),
+			(row, current) =>
+				current
+					? keepSkewedTimestamps(current, row)
+					:
+						{
+							...row,
+						},
 			importedAt,
 			preserveNodeIds,
 			onlyNodeIds,
@@ -246,7 +276,8 @@ export function applyRows(
 	}
 
 	// Node-attribute tables reference a node; merge after the node rows.
-	if (rowsByTable.calendarMetadata !== undefined) {
+	if (rowsByTable.calendarMetadata !== undefined)
+	{
 		result.calendarMetadata = mergeNodeKeyedTable(
 			tx,
 			calendarMetadata,
@@ -256,14 +287,18 @@ export function applyRows(
 			(row) => row.nodeId,
 			(row) => row.nodeId,
 			calendarMetadataMatches,
-			(row) => ({...row}),
+			(row) => (
+			{
+				...row,
+			}),
 			importedAt,
 			preserveNodeIds,
 			onlyNodeIds,
 		);
 	}
 
-	if (rowsByTable.calendarLevels !== undefined) {
+	if (rowsByTable.calendarLevels !== undefined)
+	{
 		result.calendarLevels = mergeNodeKeyedTable(
 			tx,
 			calendarLevels,
@@ -273,14 +308,18 @@ export function applyRows(
 			(row) => row.nodeId,
 			(row) => row.nodeId,
 			calendarLevelsMatches,
-			(row) => ({...row}),
+			(row) => (
+			{
+				...row,
+			}),
 			importedAt,
 			preserveNodeIds,
 			onlyNodeIds,
 		);
 	}
 
-	if (rowsByTable.aiMetadata !== undefined) {
+	if (rowsByTable.aiMetadata !== undefined)
+	{
 		result.aiMetadata = mergeNodeKeyedTable(
 			tx,
 			aiMetadata,
@@ -290,14 +329,18 @@ export function applyRows(
 			(row) => row.nodeId,
 			(row) => row.nodeId,
 			(current, incoming) => current.inChat === incoming.inChat,
-			(row) => ({...row}),
+			(row) => (
+			{
+				...row,
+			}),
 			importedAt,
 			preserveNodeIds,
 			onlyNodeIds,
 		);
 	}
 
-	if (rowsByTable.s3Files !== undefined) {
+	if (rowsByTable.s3Files !== undefined)
+	{
 		result.s3Files = mergeNodeKeyedTable(
 			tx,
 			s3Files,
@@ -307,14 +350,18 @@ export function applyRows(
 			(row) => row.nodeId,
 			(row) => row.nodeId,
 			s3Matches,
-			(row) => ({...row}),
+			(row) => (
+			{
+				...row,
+			}),
 			importedAt,
 			preserveNodeIds,
 			onlyNodeIds,
 		);
 	}
 
-	if (rowsByTable.changesMetadata !== undefined) {
+	if (rowsByTable.changesMetadata !== undefined)
+	{
 		result.changesMetadata = mergeNodeKeyedTable(
 			tx,
 			changesMetadata,
@@ -324,14 +371,18 @@ export function applyRows(
 			(row) => row.nodeId,
 			(row) => row.nodeId,
 			(current, incoming) => current.ctBy === incoming.ctBy,
-			(row) => ({...row}),
+			(row) => (
+			{
+				...row,
+			}),
 			importedAt,
 			preserveNodeIds,
 			onlyNodeIds,
 		);
 	}
 
-	if (rowsByTable.referencesRoots !== undefined) {
+	if (rowsByTable.referencesRoots !== undefined)
+	{
 		result.referencesRoots = mergeNodeKeyedTable(
 			tx,
 			referencesRoots,
@@ -341,7 +392,10 @@ export function applyRows(
 			(row) => row.nodeId,
 			(row) => row.nodeId,
 			() => true,
-			(row) => ({...row}),
+			(row) => (
+			{
+				...row,
+			}),
 			importedAt,
 			preserveNodeIds,
 			onlyNodeIds,
@@ -356,7 +410,8 @@ export function applyRows(
  * timestamp for comparison against the API/backup integer timestamps that
  * {@link metadataMatches} expects.
  */
-function toUnix(date: Date | null | undefined): number | null {
+function toUnix(date: Date | null | undefined): number | null
+{
 	return date ? Math.floor(date.getTime() / 1000) : null;
 }
 
@@ -368,8 +423,17 @@ function toUnix(date: Date | null | undefined): number | null {
  */
 export function applyNodeRowsBatch(
 	unitOfWork: UnitOfWork,
-	rows: {nodeContent: NormalizedNodeContentRow[]; nodeMetadata: NormalizedNodeMetadataRow[]},
-): {nodeContent: TemporalMergeResult; nodeMetadata: TemporalMergeResult} {
+	rows:
+	{
+		nodeContent: NormalizedNodeContentRow[];
+		nodeMetadata: NormalizedNodeMetadataRow[];
+	},
+):
+{
+	nodeContent: TemporalMergeResult;
+	nodeMetadata: TemporalMergeResult;
+}
+{
 	const {tx, systemTime: importedAt} = unitOfWork;
 	const contentIds = rows.nodeContent.map((row) => row.id);
 	const metadataIds = rows.nodeMetadata.map((row) => row.nodeId);
@@ -382,12 +446,18 @@ export function applyNodeRowsBatch(
 		(row) => row.id,
 		(row) => row.id,
 		(current, incoming) =>
-			contentMatches(current, {
-				name: incoming.name ?? null,
-				note: incoming.note ?? null,
-				parentId: incoming.parentId ?? null,
-			}),
-		(row) => ({...row}),
+			contentMatches(
+				current,
+				{
+					name: incoming.name ?? null,
+					note: incoming.note ?? null,
+					parentId: incoming.parentId ?? null,
+				},
+			),
+		(row) => (
+		{
+			...row,
+		}),
 		importedAt,
 		undefined,
 		contentIds,
@@ -401,17 +471,29 @@ export function applyNodeRowsBatch(
 		(row) => row.nodeId,
 		(row) => row.nodeId,
 		(current, incoming) =>
-			metadataMatches(current, {
-				priority: incoming.priority ?? null,
-				createdAt: toUnix(incoming.createdAt),
-				modifiedAt: toUnix(incoming.modifiedAt),
-				completedAt: toUnix(incoming.completedAt),
-				layoutMode: incoming.layoutMode ?? null,
-			}),
-		(row, current) => (current ? keepSkewedTimestamps(current, row) : {...row}),
+			metadataMatches(
+				current,
+				{
+					priority: incoming.priority ?? null,
+					createdAt: toUnix(incoming.createdAt),
+					modifiedAt: toUnix(incoming.modifiedAt),
+					completedAt: toUnix(incoming.completedAt),
+					layoutMode: incoming.layoutMode ?? null,
+				},
+			),
+		(row, current) =>
+			current
+				? keepSkewedTimestamps(current, row)
+				:
+					{
+						...row,
+					},
 		importedAt,
 		undefined,
 		metadataIds,
 	);
-	return {nodeContent: content, nodeMetadata: metadata};
+	return {
+		nodeContent: content,
+		nodeMetadata: metadata,
+	};
 }

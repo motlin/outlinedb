@@ -16,7 +16,8 @@ import type {SQL} from "drizzle-orm";
 import type {SQLiteColumn, SQLiteTable} from "drizzle-orm/sqlite-core";
 import {z} from "zod";
 import type {TreeSnapshot} from "../api/workflowy-internal-client.js";
-import {
+import
+{
 	calendarLevels,
 	calendarMetadata,
 	nodeContent,
@@ -55,26 +56,35 @@ const KEPT_METADATA_KEYS = ["numbered_start", "calendar", "layoutMode", "table",
  * `numbered_start`, `calendar`, `restorableUniqueNode`, `layoutMode`, `table` and `priority.defaultToBottom`.
  * Undefined when none of them is present.
  */
-export function keptInternalMetadata(metadata: InternalMetadata | undefined): InternalMetadata | undefined {
-	if (metadata === undefined) {
+export function keptInternalMetadata(metadata: InternalMetadata | undefined): InternalMetadata | undefined
+{
+	if (metadata === undefined)
+	{
 		return undefined;
 	}
 	const kept: InternalMetadata = {};
-	for (const key of KEPT_METADATA_KEYS) {
-		if (Object.hasOwn(metadata, key)) {
+	for (const key of KEPT_METADATA_KEYS)
+	{
+		if (Object.hasOwn(metadata, key))
+		{
 			kept[key] = metadata[key];
 		}
 	}
 	const {priority} = metadata;
-	if (typeof priority === "object" && priority !== null && Object.hasOwn(priority, "defaultToBottom")) {
+	if (typeof priority === "object" && priority !== null && Object.hasOwn(priority, "defaultToBottom"))
+	{
 		const defaultToBottom: unknown = Reflect.get(priority, "defaultToBottom");
-		kept.priority = {defaultToBottom};
+		kept.priority =
+		{
+			defaultToBottom,
+		};
 	}
 	return Object.keys(kept).length === 0 ? undefined : kept;
 }
 
 /** Upstream's `metadata.calendar`, as both a backup and `/get_tree_data/` carry it. */
-export interface UpstreamCalendar {
+export interface UpstreamCalendar
+{
 	root?: boolean | undefined;
 	level?: string | undefined;
 	levels?: Partial<Record<string, boolean>> | undefined;
@@ -86,10 +96,12 @@ export interface UpstreamCalendar {
 }
 
 /** `schema`'s value, or undefined when the field is absent or malformed, so one bad field drops only itself. */
-function lenient<T>(schema: z.ZodType<T>) {
+function lenient<T>(schema: z.ZodType<T>)
+{
 	return z
 		.unknown()
-		.transform((value): T | undefined => {
+		.transform((value): T | undefined =>
+		{
 			const parsed = schema.safeParse(value);
 			return parsed.success ? parsed.data : undefined;
 		})
@@ -98,32 +110,38 @@ function lenient<T>(schema: z.ZodType<T>) {
 
 const optionalBoolean = lenient(z.boolean());
 const UpstreamCalendarSchema = z
-	.object({
-		root: optionalBoolean,
-		level: lenient(z.string()),
-		levels: lenient(z.record(z.string(), z.boolean())),
-		value: lenient(z.union([z.string(), z.number().transform(String)])),
-		dateId: lenient(z.number().int()),
-		timestamp: lenient(z.number()),
-		found_dates: optionalBoolean,
-		day_prefix: optionalBoolean,
-	})
+	.object(
+		{
+			root: optionalBoolean,
+			level: lenient(z.string()),
+			levels: lenient(z.record(z.string(), z.boolean())),
+			value: lenient(z.union([z.string(), z.number().transform(String)])),
+			dateId: lenient(z.number().int()),
+			timestamp: lenient(z.number()),
+			found_dates: optionalBoolean,
+			day_prefix: optionalBoolean,
+		},
+	)
 	.loose();
 
 const TableSchema = z
-	.object({
-		headers: optionalBoolean,
-		skipHeaders: optionalBoolean,
-		bg: lenient(z.string()),
-		sizes: lenient(z.record(z.string(), z.unknown())),
-	})
+	.object(
+		{
+			headers: optionalBoolean,
+			skipHeaders: optionalBoolean,
+			bg: lenient(z.string()),
+			sizes: lenient(z.record(z.string(), z.unknown())),
+		},
+	)
 	.loose();
 
-function booleanToInt(value: boolean | undefined): 0 | 1 | null {
+function booleanToInt(value: boolean | undefined): 0 | 1 | null
+{
 	return value === undefined ? null : value ? 1 : 0;
 }
 
-function intToBoolean(value: number | null): boolean | undefined {
+function intToBoolean(value: number | null): boolean | undefined
+{
 	return value === null ? undefined : value === 1;
 }
 
@@ -131,10 +149,16 @@ function intToBoolean(value: number | null): boolean | undefined {
 export function calendarRows(
 	nodeId: string,
 	calendar: UpstreamCalendar,
-): {calendarMetadata: NormalizedCalendarMetadataRow; calendarLevels?: NormalizedCalendarLevelsRow} {
+):
+{
+	calendarMetadata: NormalizedCalendarMetadataRow;
+	calendarLevels?: NormalizedCalendarLevelsRow;
+}
+{
 	const {levels} = calendar;
 	return {
-		calendarMetadata: {
+		calendarMetadata:
+		{
 			nodeId,
 			root: booleanToInt(calendar.root),
 			level: calendar.level ?? null,
@@ -146,8 +170,10 @@ export function calendarRows(
 		},
 		...(levels === undefined
 			? {}
-			: {
-					calendarLevels: {
+			:
+				{
+					calendarLevels:
+					{
 						nodeId,
 						day: booleanToInt(levels.day),
 						week: booleanToInt(levels.week),
@@ -159,7 +185,8 @@ export function calendarRows(
 }
 
 /** The typed rows of one node's kept metadata. */
-interface TypedRows {
+interface TypedRows
+{
 	layoutMode: string | null;
 	calendarMetadata?: NormalizedCalendarMetadataRow;
 	calendarLevels?: NormalizedCalendarLevelsRow;
@@ -167,19 +194,29 @@ interface TypedRows {
 	cellSizes: CellSizeRow[];
 }
 
-function typedRows(nodeId: string, metadata: InternalMetadata | undefined): TypedRows {
+function typedRows(nodeId: string, metadata: InternalMetadata | undefined): TypedRows
+{
 	const kept = keptInternalMetadata(metadata) ?? {};
-	const rows: TypedRows = {
+	const rows: TypedRows =
+	{
 		layoutMode: normalizeLayoutMode(typeof kept.layoutMode === "string" ? kept.layoutMode : null),
 		cellSizes: [],
 	};
 	const calendar = UpstreamCalendarSchema.safeParse(kept.calendar);
-	if (calendar.success) {
+	if (calendar.success)
+	{
 		Object.assign(rows, calendarRows(nodeId, calendar.data));
 	}
 	const table = TableSchema.safeParse(kept.table);
-	const priority = z.object({defaultToBottom: optionalBoolean}).safeParse(kept.priority);
-	const display: DisplayRow = {
+	const priority = z
+		.object(
+			{
+				defaultToBottom: optionalBoolean,
+			},
+		)
+		.safeParse(kept.priority);
+	const display: DisplayRow =
+	{
 		nodeId,
 		numberedStart:
 			typeof kept.numbered_start === "number" && Number.isInteger(kept.numbered_start)
@@ -192,22 +229,34 @@ function typedRows(nodeId: string, metadata: InternalMetadata | undefined): Type
 		tableBg: table.success ? (table.data.bg ?? null) : null,
 		priorityDefaultToBottom: priority.success ? booleanToInt(priority.data.defaultToBottom) : null,
 	};
-	if (Object.entries(display).some(([key, value]) => key !== "nodeId" && value !== null)) {
+	if (Object.entries(display).some(([key, value]) => key !== "nodeId" && value !== null))
+	{
 		rows.display = display;
 	}
-	if (table.success) {
-		for (const [cellId, size] of Object.entries(table.data.sizes ?? {})) {
-			if (typeof size === "number") {
-				rows.cellSizes.push({nodeId, cellId, size});
+	if (table.success)
+	{
+		for (const [cellId, size] of Object.entries(table.data.sizes ?? {}))
+		{
+			if (typeof size === "number")
+			{
+				rows.cellSizes.push(
+					{
+						nodeId,
+						cellId,
+						size,
+					},
+				);
 			}
 		}
 	}
 	return rows;
 }
 
-function chunks<T>(items: readonly T[]): T[][] {
+function chunks<T>(items: readonly T[]): T[][]
+{
 	const result: T[][] = [];
-	for (let start = 0; start < items.length; start += ID_CHUNK) {
+	for (let start = 0; start < items.length; start += ID_CHUNK)
+	{
 		result.push(items.slice(start, start + ID_CHUNK));
 	}
 	return result;
@@ -221,12 +270,14 @@ function liveRows<TTable extends SQLiteTable>(
 	systemToColumn: SQLiteColumn,
 	ownerIds: readonly string[] | undefined,
 	asOf?: string,
-): TTable["$inferSelect"][] {
+): TTable["$inferSelect"][]
+{
 	const version: SQL =
 		asOf === undefined
 			? eq(systemToColumn, FAR_FUTURE_DATE)
 			: sql`${sql.identifier("system_from")} <= ${asOf} AND ${sql.identifier("system_to")} > ${asOf}`;
-	if (ownerIds === undefined) {
+	if (ownerIds === undefined)
+	{
 		return tx.select().from(table).where(version).all();
 	}
 	return tx
@@ -237,7 +288,8 @@ function liveRows<TTable extends SQLiteTable>(
 }
 
 /** True when every one of `fields` is equal on both rows, a missing field counting as null. */
-function sameFields(fields: readonly string[]) {
+function sameFields(fields: readonly string[])
+{
 	return (current: object, incoming: object): boolean =>
 		fields.every((field) => (Reflect.get(current, field) ?? null) === (Reflect.get(incoming, field) ?? null));
 }
@@ -245,7 +297,8 @@ function sameFields(fields: readonly string[]) {
 /** Merge `incoming` into a node-owned temporal table, phasing out the live rows of the scope it does not carry. */
 function mergeOwned(
 	{tx, systemTime}: UnitOfWork,
-	options: {
+	options:
+	{
 		table: SQLiteTable;
 		owner: SQLiteColumn;
 		systemTo: SQLiteColumn;
@@ -255,7 +308,8 @@ function mergeOwned(
 	},
 	incoming: object[],
 	ownerIds: readonly string[] | undefined,
-): void {
+): void
+{
 	temporalMerge(
 		tx,
 		{
@@ -264,7 +318,10 @@ function mergeOwned(
 			incomingKey: options.key,
 			currentKey: options.key,
 			contentMatches: sameFields(options.fields),
-			buildInsertRow: (row: object) => ({...row}),
+			buildInsertRow: (row: object) => (
+			{
+				...row,
+			}),
 		},
 		incoming,
 		liveRows(tx, options.table, options.owner, options.systemTo, ownerIds),
@@ -279,12 +336,14 @@ function mergeLayoutModes(
 	{tx, systemTime}: UnitOfWork,
 	layoutModes: ReadonlyMap<string, string | null>,
 	ownerIds: readonly string[] | undefined,
-): void {
+): void
+{
 	const changed = liveRows(tx, nodeMetadata, nodeMetadata.nodeId, nodeMetadata.systemTo, ownerIds).filter(
 		// A legacy "bullets" row already means the default, so it is no change.
 		(row) => layoutModes.has(row.nodeId) && layoutModes.get(row.nodeId) !== normalizeLayoutMode(row.layoutMode),
 	);
-	for (const chunk of chunks(changed)) {
+	for (const chunk of chunks(changed))
+	{
 		closeCurrentVersions(
 			tx,
 			nodeMetadata,
@@ -296,10 +355,12 @@ function mergeLayoutModes(
 		);
 	}
 	const rowsPerStatement = 9;
-	for (let start = 0; start < changed.length; start += rowsPerStatement) {
+	for (let start = 0; start < changed.length; start += rowsPerStatement)
+	{
 		tx.insert(nodeMetadata)
 			.values(
-				changed.slice(start, start + rowsPerStatement).map((row) => ({
+				changed.slice(start, start + rowsPerStatement).map((row) => (
+				{
 					...row,
 					layoutMode: layoutModes.get(row.nodeId) ?? null,
 					systemFrom: systemTime,
@@ -319,8 +380,14 @@ function mergeLayoutModes(
 export function writeInternalMetadata(
 	unitOfWork: UnitOfWork,
 	metadataById: ReadonlyMap<string, InternalMetadata | undefined>,
-	{wholeTree = false}: {wholeTree?: boolean} = {},
-): void {
+	{
+		wholeTree = false,
+	}:
+	{
+		wholeTree?: boolean;
+	} = {},
+): void
+{
 	const ids = [...metadataById.keys()];
 	const scope = wholeTree ? undefined : ids;
 	const calendarRowsOut: NormalizedCalendarMetadataRow[] = [];
@@ -328,16 +395,20 @@ export function writeInternalMetadata(
 	const displayRowsOut: DisplayRow[] = [];
 	const cellSizeRowsOut: CellSizeRow[] = [];
 	const layoutModes = new Map<string, string | null>();
-	for (const [id, metadata] of metadataById) {
+	for (const [id, metadata] of metadataById)
+	{
 		const rows = typedRows(id, metadata);
 		layoutModes.set(id, rows.layoutMode);
-		if (rows.calendarMetadata !== undefined) {
+		if (rows.calendarMetadata !== undefined)
+		{
 			calendarRowsOut.push(rows.calendarMetadata);
 		}
-		if (rows.calendarLevels !== undefined) {
+		if (rows.calendarLevels !== undefined)
+		{
 			levelsRowsOut.push(rows.calendarLevels);
 		}
-		if (rows.display !== undefined) {
+		if (rows.display !== undefined)
+		{
 			displayRowsOut.push(rows.display);
 		}
 		cellSizeRowsOut.push(...rows.cellSizes);
@@ -408,18 +479,24 @@ export function writeInternalMetadata(
 export function storeInternalMetadata(
 	database: TemporalTransaction,
 	metadataById: ReadonlyMap<string, InternalMetadata | undefined>,
-): void {
-	if (metadataById.size > 0) {
-		runUnitOfWork(database, (unitOfWork) => {
+): void
+{
+	if (metadataById.size > 0)
+	{
+		runUnitOfWork(database, (unitOfWork) =>
+		{
 			writeInternalMetadata(unitOfWork, metadataById);
 		});
 	}
 }
 
-function calendarOf(row: typeof calendarMetadata.$inferSelect, levels: typeof calendarLevels.$inferSelect | undefined) {
+function calendarOf(row: typeof calendarMetadata.$inferSelect, levels: typeof calendarLevels.$inferSelect | undefined)
+{
 	const calendar: InternalMetadata = {};
-	const set = (key: string, value: unknown) => {
-		if (value !== null && value !== undefined) {
+	const set = (key: string, value: unknown) =>
+	{
+		if (value !== null && value !== undefined)
+		{
 			calendar[key] = value;
 		}
 	};
@@ -430,11 +507,14 @@ function calendarOf(row: typeof calendarMetadata.$inferSelect, levels: typeof ca
 	set("timestamp", row.timestamp);
 	set("found_dates", intToBoolean(row.foundDates));
 	set("day_prefix", intToBoolean(row.dayPrefix));
-	if (levels !== undefined) {
+	if (levels !== undefined)
+	{
 		const flags: Record<string, boolean> = {};
-		for (const level of ["day", "week", "month", "year"] as const) {
+		for (const level of ["day", "week", "month", "year"] as const)
+		{
 			const flag = intToBoolean(levels[level]);
-			if (flag !== undefined) {
+			if (flag !== undefined)
+			{
 				flags[level] = flag;
 			}
 		}
@@ -453,11 +533,14 @@ export function readInternalMetadata(
 	database: TemporalTransaction,
 	ids: readonly string[],
 	asOf?: string,
-): Map<string, InternalMetadata> {
+): Map<string, InternalMetadata>
+{
 	const result = new Map<string, InternalMetadata>();
-	const entry = (id: string): InternalMetadata => {
+	const entry = (id: string): InternalMetadata =>
+	{
 		let metadata = result.get(id);
-		if (metadata === undefined) {
+		if (metadata === undefined)
+		{
 			metadata = {};
 			result.set(id, metadata);
 		}
@@ -495,16 +578,20 @@ export function readInternalMetadata(
 		unique,
 		asOf,
 	);
-	for (const row of layoutRows) {
+	for (const row of layoutRows)
+	{
 		const layoutMode = normalizeLayoutMode(row.layoutMode);
-		if (layoutMode !== null) {
+		if (layoutMode !== null)
+		{
 			entry(row.nodeId).layoutMode = layoutMode;
 		}
 	}
-	for (const row of calendarRowsIn) {
+	for (const row of calendarRowsIn)
+	{
 		entry(row.nodeId).calendar = calendarOf(row, levelRows.get(row.nodeId));
 	}
-	for (const [nodeId, levels] of levelRows) {
+	for (const [nodeId, levels] of levelRows)
+	{
 		const metadata = entry(nodeId);
 		metadata.calendar ??= calendarOf(
 			{
@@ -523,40 +610,54 @@ export function readInternalMetadata(
 		);
 	}
 	const tables = new Map<string, InternalMetadata>();
-	const table = (id: string): InternalMetadata => {
+	const table = (id: string): InternalMetadata =>
+	{
 		let value = tables.get(id);
-		if (value === undefined) {
+		if (value === undefined)
+		{
 			value = {};
 			tables.set(id, value);
 			entry(id).table = value;
 		}
 		return value;
 	};
-	for (const row of displayRows) {
+	for (const row of displayRows)
+	{
 		const metadata = entry(row.nodeId);
-		if (row.numberedStart !== null) {
+		if (row.numberedStart !== null)
+		{
 			metadata.numbered_start = row.numberedStart;
 		}
-		if (row.restorableUniqueNode !== null) {
+		if (row.restorableUniqueNode !== null)
+		{
 			metadata.restorableUniqueNode = row.restorableUniqueNode === 1;
 		}
-		if (row.priorityDefaultToBottom !== null) {
-			metadata.priority = {defaultToBottom: row.priorityDefaultToBottom === 1};
+		if (row.priorityDefaultToBottom !== null)
+		{
+			metadata.priority =
+			{
+				defaultToBottom: row.priorityDefaultToBottom === 1,
+			};
 		}
-		if (row.tableHeaders !== null) {
+		if (row.tableHeaders !== null)
+		{
 			table(row.nodeId).headers = row.tableHeaders === 1;
 		}
-		if (row.tableSkipHeaders !== null) {
+		if (row.tableSkipHeaders !== null)
+		{
 			table(row.nodeId).skipHeaders = row.tableSkipHeaders === 1;
 		}
-		if (row.tableBg !== null) {
+		if (row.tableBg !== null)
+		{
 			table(row.nodeId).bg = row.tableBg;
 		}
 	}
 	const sizesByNode = new Map<string, Record<string, number>>();
-	for (const row of sizeRows) {
+	for (const row of sizeRows)
+	{
 		let sizes = sizesByNode.get(row.nodeId);
-		if (sizes === undefined) {
+		if (sizes === undefined)
+		{
 			sizes = {};
 			sizesByNode.set(row.nodeId, sizes);
 			table(row.nodeId).sizes = sizes;
@@ -567,11 +668,13 @@ export function readInternalMetadata(
 }
 
 /** One node's stored kept metadata in upstream's shape, `{}` when it has none. */
-export function readNodeInternalMetadata(database: TemporalTransaction, id: string): InternalMetadata {
+export function readNodeInternalMetadata(database: TemporalTransaction, id: string): InternalMetadata
+{
 	return readInternalMetadata(database, [id]).get(id) ?? {};
 }
 
-export interface ImportInternalMetadataResult {
+export interface ImportInternalMetadataResult
+{
 	/** Cached nodes whose kept metadata was written. */
 	written: number;
 	/** Items with kept metadata whose node is absent from the cache. */
@@ -590,35 +693,55 @@ export function importInternalMetadata(
 	database: TemporalTransaction,
 	{items, txId, expandedKeys}: TreeSnapshot,
 	fetchedAt: number,
-): ImportInternalMetadataResult {
-	const result: ImportInternalMetadataResult = {written: 0, skipped: 0};
-	runUnitOfWork(database, (unitOfWork) => {
+): ImportInternalMetadataResult
+{
+	const result: ImportInternalMetadataResult =
+	{
+		written: 0,
+		skipped: 0,
+	};
+	runUnitOfWork(database, (unitOfWork) =>
+	{
 		const {tx} = unitOfWork;
 		replaceTreeTxId(unitOfWork, txId);
 		replaceExpansion(unitOfWork, expandedKeys, fetchedAt);
 		const cached = new Set(
 			tx
-				.select({id: nodeContent.id})
+				.select(
+					{
+						id: nodeContent.id,
+					},
+				)
 				.from(nodeContent)
 				.where(eq(nodeContent.systemTo, FAR_FUTURE_DATE))
 				.all()
 				.map((row) => row.id),
 		);
 		const metadataById = new Map<string, InternalMetadata | undefined>();
-		for (const item of items) {
+		for (const item of items)
+		{
 			const kept = keptInternalMetadata(item.metadata);
-			if (!cached.has(item.id)) {
-				if (kept !== undefined) {
+			if (!cached.has(item.id))
+			{
+				if (kept !== undefined)
+				{
 					result.skipped++;
 				}
 				continue;
 			}
 			metadataById.set(item.id, kept);
-			if (kept !== undefined) {
+			if (kept !== undefined)
+			{
 				result.written++;
 			}
 		}
-		writeInternalMetadata(unitOfWork, metadataById, {wholeTree: true});
+		writeInternalMetadata(
+			unitOfWork,
+			metadataById,
+			{
+				wholeTree: true,
+			},
+		);
 	});
 	return result;
 }

@@ -12,27 +12,51 @@ const here = import.meta.dirname;
 const loader = join(here, "load-existing-tasks.sh");
 const syncScript = join(here, "sync-metadata.sh");
 
-interface TaskNode {
+interface TaskNode
+{
 	id: string;
 	name: string;
 	completedAt: string | null;
 	children: TaskNode[];
 }
 
-function metadataDirWith(workNext: TaskNode): string {
+function metadataDirWith(workNext: TaskNode): string
+{
 	const root = mkdtempSync(join(tmpdir(), "load-existing-tasks-"));
-	mkdirSync(join(root, "next-actions"), {recursive: true});
-	mkdirSync(join(root, "projects"), {recursive: true});
-	mkdirSync(join(root, "calendar"), {recursive: true});
+	mkdirSync(
+		join(root, "next-actions"),
+		{
+			recursive: true,
+		},
+	);
+	mkdirSync(
+		join(root, "projects"),
+		{
+			recursive: true,
+		},
+	);
+	mkdirSync(
+		join(root, "calendar"),
+		{
+			recursive: true,
+		},
+	);
 	writeFileSync(join(root, "next-actions", "work-next.json"), JSON.stringify(workNext));
 	return root;
 }
 
-function node(id: string, name: string, children: TaskNode[] = [], completedAt: string | null = null): TaskNode {
-	return {id, name, completedAt, children};
+function node(id: string, name: string, children: TaskNode[] = [], completedAt: string | null = null): TaskNode
+{
+	return {
+		id,
+		name,
+		completedAt,
+		children,
+	};
 }
 
-test("nextActions includes open tasks on the asap ladder tiers and skips tiers and completed tasks", () => {
+test("nextActions includes open tasks on the asap ladder tiers and skips tiers and completed tasks", () =>
+{
 	const workNext = node("root", "☑️ Next (Work)", [
 		node("tasks", "✅ Tasks", [
 			node("ladder", "📌 Tasks (asap) (work)", [
@@ -49,36 +73,70 @@ test("nextActions includes open tasks on the asap ladder tiers and skips tiers a
 
 	const output = expectObject(
 		parseJson(
-			execFileSync("bash", [loader], {env: {...process.env, GTD_METADATA_DIR: metadataDir}, encoding: "utf8"}),
+			execFileSync(
+				"bash",
+				[loader],
+				{
+					env:
+					{
+						...process.env,
+						GTD_METADATA_DIR: metadataDir,
+					},
+					encoding: "utf8",
+				},
+			),
 		),
 		"loader output",
 	);
 
 	assert.deepEqual(
 		arrayField(output, "nextActions")
-			.map((task) => {
+			.map((task) =>
+			{
 				const object = expectObject(task, "next action");
-				return {id: stringField(object, "id") ?? "", name: stringField(object, "name")};
+				return {
+					id: stringField(object, "id") ?? "",
+					name: stringField(object, "name"),
+				};
 			})
 			.toSorted((a, b) => a.id.localeCompare(b.id)),
 		[
-			{id: "t-open", name: "Arrange Dev Practice work into Arcs"},
-			{id: "t-two", name: "Set up a weekly Dev Practice meeting"},
+			{
+				id: "t-open",
+				name: "Arrange Dev Practice work into Arcs",
+			},
+			{
+				id: "t-two",
+				name: "Set up a weekly Dev Practice meeting",
+			},
 		],
 	);
 });
 
-test("next-actions link targets sync deep enough to reach tasks inside asap tiers", () => {
+test("next-actions link targets sync deep enough to reach tasks inside asap tiers", () =>
+{
 	const script = readFileSync(syncScript, "utf8");
 	const fn = script.match(/^link_target_depth\(\) \{[\s\S]*?^\}/mu);
 	assert.ok(fn, "sync-metadata.sh defines link_target_depth()");
 
 	const depthFor = (section: string): string =>
-		execFileSync("bash", ["-c", `${fn[0]}\nlink_target_depth "$1"`, "bash", section], {encoding: "utf8"}).trim();
+		execFileSync(
+			"bash",
+			["-c", `${fn[0]}\nlink_target_depth "$1"`, "bash", section],
+			{
+				encoding: "utf8",
+			},
+		).trim();
 
 	// Next > ✅ Tasks > 📌 Tasks (asap) > tier > task > child
 	assert.deepEqual(
-		{nextActions: depthFor("next-actions"), reference: depthFor("reference")},
-		{nextActions: "5", reference: "3"},
+		{
+			nextActions: depthFor("next-actions"),
+			reference: depthFor("reference"),
+		},
+		{
+			nextActions: "5",
+			reference: "3",
+		},
 	);
 });

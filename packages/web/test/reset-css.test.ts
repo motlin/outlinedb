@@ -3,7 +3,8 @@ import {readFileSync} from "node:fs";
 import {fileURLToPath} from "node:url";
 import {cssBlock} from "./helpers/css-block.js";
 
-function readSource(relative: string): string {
+function readSource(relative: string): string
+{
 	return readFileSync(fileURLToPath(new URL(relative, import.meta.url)), "utf8");
 }
 
@@ -23,43 +24,81 @@ const RESET_ELEMENTS = [
 	"table, caption, tbody, tfoot, thead, tr, th, td",
 ].join(" ");
 
-describe("upstream reset.css (css_reset.11b989919d8b.css)", () => {
-	it("resets margin, padding, outline, font-size, vertical-align and background on every listed element", () => {
-		expect(cssBlock(reset, RESET_ELEMENTS)).toStrictEqual({
-			margin: "0",
-			padding: "0",
-			border: "0",
-			outline: "0",
-			"font-size": "100%",
-			"vertical-align": "baseline",
-			background: "transparent",
-		});
+describe("upstream reset.css (css_reset.11b989919d8b.css)", () =>
+{
+	it("resets margin, padding, outline, font-size, vertical-align and background on every listed element", () =>
+	{
+		expect(cssBlock(reset, RESET_ELEMENTS)).toStrictEqual(
+			{
+				margin: "0",
+				padding: "0",
+				border: "0",
+				outline: "0",
+				"font-size": "100%",
+				"vertical-align": "baseline",
+				background: "transparent",
+			},
+		);
 	});
 
-	it("sets body line-height 1, no list markers, no quotes and no focus outline", () => {
-		expect(cssBlock(reset, "body")).toStrictEqual({"line-height": "1"});
-		expect(cssBlock(reset, "ol, ul")).toStrictEqual({"list-style": "none"});
-		expect(cssBlock(reset, "blockquote, q")).toStrictEqual({quotes: "none"});
-		expect(cssBlock(reset, ":focus")).toStrictEqual({outline: "0"});
-		expect(cssBlock(reset, "ins")).toStrictEqual({"text-decoration": "none"});
-		expect(cssBlock(reset, "del")).toStrictEqual({"text-decoration": "line-through"});
-		expect(cssBlock(reset, "table")).toStrictEqual({"border-collapse": "collapse", "border-spacing": "0"});
+	it("sets body line-height 1, no list markers, no quotes and no focus outline", () =>
+	{
+		expect(cssBlock(reset, "body")).toStrictEqual(
+			{
+				"line-height": "1",
+			},
+		);
+		expect(cssBlock(reset, "ol, ul")).toStrictEqual(
+			{
+				"list-style": "none",
+			},
+		);
+		expect(cssBlock(reset, "blockquote, q")).toStrictEqual(
+			{
+				quotes: "none",
+			},
+		);
+		expect(cssBlock(reset, ":focus")).toStrictEqual(
+			{
+				outline: "0",
+			},
+		);
+		expect(cssBlock(reset, "ins")).toStrictEqual(
+			{
+				"text-decoration": "none",
+			},
+		);
+		expect(cssBlock(reset, "del")).toStrictEqual(
+			{
+				"text-decoration": "line-through",
+			},
+		);
+		expect(cssBlock(reset, "table")).toStrictEqual(
+			{
+				"border-collapse": "collapse",
+				"border-spacing": "0",
+			},
+		);
 	});
 
-	it("loads before tailwind so utilities win ties", () => {
+	it("loads before tailwind so utilities win ties", () =>
+	{
 		expect(app.indexOf('import "./reset.css";')).toBeGreaterThan(-1);
 		expect(app.indexOf('import "./reset.css";')).toBeLessThan(app.indexOf('import "./wf-tailwind.css";'));
 	});
 
-	it("is not duplicated in styles.css", () => {
+	it("is not duplicated in styles.css", () =>
+	{
 		expect(styles.includes("applet,")).toBe(false);
 	});
 
-	it("leaves the bullet without a local focus ring", () => {
+	it("leaves the bullet without a local focus ring", () =>
+	{
 		expect(/\.bullet:focus\s*\{/u.test(styles)).toBe(false);
 	});
 
-	it("drops the body line-height override and the scoped line-height workarounds", () => {
+	it("drops the body line-height override and the scoped line-height workarounds", () =>
+	{
 		expect(cssBlock(styles, "body")["line-height"]).toBeUndefined();
 		expect(styles.includes(":where([data-calendar-layout])")).toBe(false);
 		expect(cssBlock(styles, ".related-nodes-panel")["line-height"]).toBe("1.5");

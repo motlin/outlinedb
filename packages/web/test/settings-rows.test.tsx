@@ -4,20 +4,33 @@ import {describe, expect, it} from "vite-plus/test";
 import {ActionBlock, ControlRow, SettingsButton} from "../src/client/components/settings-rows.js";
 import {Toggle} from "../src/client/components/toggle.js";
 
-function collapse(value: string): string {
+function collapse(value: string): string
+{
 	return value.replaceAll(/\s+/gu, " ").trim();
 }
 
 const CONTROL =
 	"shrink-0 [&_.menu>div:first-child>div]:!h-2xl [&>.toggle]:!gap-0 [&>.toggle>div:first-child]:!box-border [&>.toggle>div:first-child]:!h-[21px] [&>.toggle>div:first-child]:!w-[36px] [&>.toggle>div:first-child]:!p-[3px] [&>.toggle>div:first-child]:!rounded-pill [&>.toggle>div:first-child>div]:!h-[15px] [&>.toggle>div:first-child>div]:!w-[15px] [&>.toggle.on>div:first-child>div]:!translate-x-[15px] [&>.toggle>div:last-child]:hidden";
 
-describe("settings rows", () => {
-	it("renders a control row with a badge and hint like upstream", () => {
+describe("settings rows", () =>
+{
+	it("renders a control row with a badge and hint like upstream", () =>
+	{
 		const html = renderToStaticMarkup(
 			createElement(
 				ControlRow,
-				{label: "All updates", badge: "LABS", hint: "x"},
-				createElement(Toggle, {on: true, className: "update_notifications"}),
+				{
+					label: "All updates",
+					badge: "LABS",
+					hint: "x",
+				},
+				createElement(
+					Toggle,
+					{
+						on: true,
+						className: "update_notifications",
+					},
+				),
 			),
 		);
 		const normalized = collapse(html.replaceAll(/(<[^>]*>)\s+/gu, "$1"));
@@ -31,12 +44,23 @@ describe("settings rows", () => {
 		expect(html).toContain("toggle on inline-flex");
 	});
 
-	it("renders a danger action block with the padded button wrapper", () => {
+	it("renders a danger action block with the padded button wrapper", () =>
+	{
 		const html = renderToStaticMarkup(
 			createElement(
 				ActionBlock,
-				{label: "Delete", hint: "Gone", danger: true},
-				createElement(SettingsButton, {danger: true}, "Delete"),
+				{
+					label: "Delete",
+					hint: "Gone",
+					danger: true,
+				},
+				createElement(
+					SettingsButton,
+					{
+						danger: true,
+					},
+					"Delete",
+				),
 			),
 		);
 		expect(html).toBe(

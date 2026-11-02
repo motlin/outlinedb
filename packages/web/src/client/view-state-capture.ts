@@ -12,22 +12,49 @@ const ZOOMING = "item--zooming-in-progress";
  */
 export function captureViewState(
 	current: Loc | null,
-	editing: {editingId: string | null; editingNoteId: string | null},
-): void {
-	if (current === null || document.body.classList.contains(ZOOMING)) {
+	editing:
+	{
+		editingId: string | null;
+		editingNoteId: string | null;
+	},
+): void
+{
+	if (current === null || document.body.classList.contains(ZOOMING))
+	{
 		return;
 	}
 	let saved: SavedEditing | null = null;
-	if (editing.editingNoteId !== null) {
+	if (editing.editingNoteId !== null)
+	{
 		const note = activeNoteContent();
-		if (note !== null) {
-			saved = {nodeId: editing.editingNoteId, field: "note", ...selectionTextRange(note)};
-		}
-	} else if (editing.editingId !== null) {
-		const name = editorElement(editing.editingId);
-		if (name !== null) {
-			saved = {nodeId: editing.editingId, field: "name", ...selectionTextRange(name)};
+		if (note !== null)
+		{
+			saved =
+			{
+				nodeId: editing.editingNoteId,
+				field: "note",
+				...selectionTextRange(note),
+			};
 		}
 	}
-	viewStates.set(viewStateKey(current), {editing: saved, scrollY: globalThis.scrollY});
+	else if (editing.editingId !== null)
+	{
+		const name = editorElement(editing.editingId);
+		if (name !== null)
+		{
+			saved =
+			{
+				nodeId: editing.editingId,
+				field: "name",
+				...selectionTextRange(name),
+			};
+		}
+	}
+	viewStates.set(
+		viewStateKey(current),
+		{
+			editing: saved,
+			scrollY: globalThis.scrollY,
+		},
+	);
 }

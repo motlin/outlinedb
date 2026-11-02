@@ -10,10 +10,15 @@ import type {ItemType} from "./layout-types.js";
  */
 export function requestedMenuEntries(
 	menuId: string,
-	cmdContext: {nodeIds: readonly string[]},
+	cmdContext:
+	{
+		nodeIds: readonly string[];
+	},
 	qualifiers: readonly string[],
-): AssembledEntry<ItemType>[] {
-	if (menuId !== "node_type_picker") {
+): AssembledEntry<ItemType>[]
+{
+	if (menuId !== "node_type_picker")
+	{
 		return [];
 	}
 	const types = pickerItemTypes(cmdContext.nodeIds);

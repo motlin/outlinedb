@@ -8,7 +8,8 @@ import {CacheService} from "../../services/cache.js";
 import {logger} from "../../services/logger.js";
 import {resolveNodeId, resolveParent} from "@outlinedb/shared/utils";
 
-export default class Move extends Command {
+export default class Move extends Command
+{
 	static override description = "Move a single node to a new location by ID or path";
 
 	static override examples = [
@@ -34,49 +35,66 @@ export default class Move extends Command {
 		'<%= config.bin %> <%= command.id %> --node-id abc123 --parent-path "Work,Archive"',
 	];
 
-	static override flags = {
-		"node-id": Flags.string({
-			description: "ID of the node to move",
-			exclusive: ["node-path"],
-		}),
-		"node-path": Flags.string({
-			description: 'Comma-separated path to the node to move (e.g., "Work,Tasks,My Task")',
-			exclusive: ["node-id"],
-		}),
-		"parent-id": Flags.string({
-			description:
-				'ID of the destination parent node, a system target (e.g., "inbox"), or "home" for the top level',
-			exclusive: ["parent-path"],
-		}),
-		"parent-path": Flags.string({
-			description: 'Comma-separated path to the destination parent node (e.g., "Work,Archive")',
-			exclusive: ["parent-id"],
-		}),
-		"dry-run": Flags.boolean({
-			char: "d",
-			description: "Show the exact CLI command to execute the move without actually moving",
-			default: false,
-		}),
-		position: Flags.string({
-			char: "p",
-			description: "Position within the destination parent (top or bottom)",
-			options: ["top", "bottom"],
-		}),
+	static override flags =
+	{
+		"node-id": Flags.string(
+			{
+				description: "ID of the node to move",
+				exclusive: ["node-path"],
+			},
+		),
+		"node-path": Flags.string(
+			{
+				description: 'Comma-separated path to the node to move (e.g., "Work,Tasks,My Task")',
+				exclusive: ["node-id"],
+			},
+		),
+		"parent-id": Flags.string(
+			{
+				description:
+					'ID of the destination parent node, a system target (e.g., "inbox"), or "home" for the top level',
+				exclusive: ["parent-path"],
+			},
+		),
+		"parent-path": Flags.string(
+			{
+				description: 'Comma-separated path to the destination parent node (e.g., "Work,Archive")',
+				exclusive: ["parent-id"],
+			},
+		),
+		"dry-run": Flags.boolean(
+			{
+				char: "d",
+				description: "Show the exact CLI command to execute the move without actually moving",
+				default: false,
+			},
+		),
+		position: Flags.string(
+			{
+				char: "p",
+				description: "Position within the destination parent (top or bottom)",
+				options: ["top", "bottom"],
+			},
+		),
 	};
 
-	public async run(): Promise<void> {
+	public async run(): Promise<void>
+	{
 		const {flags} = await this.parse(Move);
 
-		if (!flags["node-id"] && !flags["node-path"]) {
+		if (!flags["node-id"] && !flags["node-path"])
+		{
 			this.error("Either --node-id or --node-path is required");
 		}
 
-		if (!flags["parent-id"] && !flags["parent-path"]) {
+		if (!flags["parent-id"] && !flags["parent-path"])
+		{
 			this.error("Either --parent-id or --parent-path is required");
 		}
 
 		const apiKey = process.env.WORKFLOWY_API_KEY;
-		if (!apiKey) {
+		if (!apiKey)
+		{
 			this.error("WORKFLOWY_API_KEY environment variable is required");
 		}
 
@@ -86,9 +104,19 @@ export default class Move extends Command {
 		const client = new WorkflowyWriteThroughClient(apiClient, cacheService);
 		const pathBuilder = new PathBuilder(database);
 
-		const nodeId = await resolveNodeId({id: flags["node-id"], path: flags["node-path"]}, cacheService, apiClient);
+		const nodeId = await resolveNodeId(
+			{
+				id: flags["node-id"],
+				path: flags["node-path"],
+			},
+			cacheService,
+			apiClient,
+		);
 		const parentId = await resolveParent(
-			{id: flags["parent-id"], path: flags["parent-path"]},
+			{
+				id: flags["parent-id"],
+				path: flags["parent-path"],
+			},
 			cacheService,
 			apiClient,
 		);
@@ -99,39 +127,53 @@ export default class Move extends Command {
 		// Convert position string to number for API (-1 for top, 0 for bottom)
 		const positionValue = flags.position === "top" ? -1 : flags.position === "bottom" ? 0 : undefined;
 
-		if (flags["dry-run"]) {
+		if (flags["dry-run"])
+		{
 			let command = `${this.config.bin} node:move --node-id ${nodeId} --parent-id ${parentId ?? HOME_TARGET}`;
-			if (flags.position) {
+			if (flags.position)
+			{
 				command += ` --position ${flags.position}`;
 			}
 			this.log(`Would move:`);
 			this.log(`  From: ${sourcePath}`);
 			this.log(`  To:   ${destinationPath}`);
-			if (flags.position) {
+			if (flags.position)
+			{
 				this.log(`  Position: ${flags.position}`);
 			}
 			this.log(``);
 			this.log(`Execute with:`);
 			this.log(`  ${command}`);
-		} else {
+		}
+		else
+		{
 			this.log(`Moving:`);
 			this.log(`  From: ${sourcePath}`);
 			this.log(`  To:   ${destinationPath}`);
-			if (flags.position) {
+			if (flags.position)
+			{
 				this.log(`  Position: ${flags.position}`);
 			}
 
 			await client.moveNode(nodeId, parentId, positionValue);
-			await adoptUnderCalendar({
-				rows: [{id: nodeId, name: cacheService.getNode(nodeId)?.name ?? ""}],
-				parentId,
-				database,
-				cache: cacheService,
-				writeThrough: client,
-				warn: (message) => {
-					this.logToStderr(message);
+			await adoptUnderCalendar(
+				{
+					rows: [
+						{
+							id: nodeId,
+							name: cacheService.getNode(nodeId)?.name ?? "",
+						},
+					],
+					parentId,
+					database,
+					cache: cacheService,
+					writeThrough: client,
+					warn: (message) =>
+					{
+						this.logToStderr(message);
+					},
 				},
-			});
+			);
 
 			this.log(`Successfully moved node`);
 		}

@@ -10,7 +10,8 @@ import {filesSignedUrl} from "./files.js";
 import {featuresGet, featuresSet} from "./features.js";
 import {inboxShare} from "./inbox.js";
 import {ladderOps} from "./ladder.js";
-import {
+import
+{
 	homeGet,
 	nodesAncestors,
 	nodesBacklinks,
@@ -27,7 +28,8 @@ import {
 } from "./nodes.js";
 import {nodesReadTree, nodesResolve} from "./nodes-lookup.js";
 import {nodesDetachMirror, nodesMirror, nodesSwapMirrorOrigin} from "./nodes-mirror.js";
-import {
+import
+{
 	nodesComplete,
 	nodesCreate,
 	nodesDelete,
@@ -47,7 +49,8 @@ import {tagsClear, tagsList, tagsSet} from "./tags.js";
 import type {Json, OpDefinition, OpResult} from "./define.js";
 
 /** The operation registry; routers move into it one at a time. */
-export const Ops = {
+export const Ops =
+{
 	"account.get": accountGet,
 	"account.ai": accountAi,
 	"cache.status": cacheStatus,

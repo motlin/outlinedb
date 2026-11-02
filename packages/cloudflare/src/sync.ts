@@ -1,4 +1,5 @@
-import {
+import
+{
 	applyApiBatch,
 	beginApiImport,
 	finishApiImport,
@@ -79,7 +80,8 @@ CREATE INDEX IF NOT EXISTS sync_seed_requests_closed_at_idx ON sync_seed_request
 `;
 
 /** Bindings the sync job reads; all but the bucket are optional. */
-export interface SyncEnv {
+export interface SyncEnv
+{
 	SNAPSHOTS: R2Bucket;
 	WORKFLOWY_API_KEY?: string;
 	WORKFLOWY_API_URL?: string;
@@ -91,7 +93,8 @@ export interface SyncEnv {
 	SYNC_TICK_DELAY_MS?: string;
 }
 
-export interface SyncDeps {
+export interface SyncDeps
+{
 	storage: DurableObjectStorage;
 	db: AppDatabase;
 	env: SyncEnv;
@@ -117,7 +120,8 @@ export interface SyncDeps {
 
 type Phase = "idle" | "fetching" | "importing";
 
-interface Job {
+interface Job
+{
 	runId: string;
 	phase: Phase;
 	exportKey: string;
@@ -137,7 +141,8 @@ interface Job {
 	result: SyncResult | null;
 }
 
-const NO_TOTALS: Job["totals"] = {
+const NO_TOTALS: Job["totals"] =
+{
 	totalNodes: 0,
 	nodesAdded: 0,
 	nodesUpdated: 0,
@@ -147,19 +152,29 @@ const NO_TOTALS: Job["totals"] = {
 };
 
 export type SyncResult =
-	| ({status: "ok"; exportKey: string; finishedAt: number; durationMs: number} & Omit<
-			ImportApiResult,
-			"importTimestamp"
-	  > & {
+	| (
+	  {
+			status: "ok";
+			exportKey: string;
+			finishedAt: number;
+			durationMs: number;
+	  } & Omit<ImportApiResult, "importTimestamp"> &
+			{
 				/**
 				 * Set when the internal half failed (a seed's get_tree_data read, or the transaction-log catch-up):
 				 * the public import still completed, the edge tables did not.
 				 */
 				internalSyncError?: string;
 			})
-	| {status: "rate_limited" | "error"; message: string; at: number};
+	|
+	  {
+			status: "rate_limited" | "error";
+			message: string;
+			at: number;
+	  };
 
-export interface SyncStatus {
+export interface SyncStatus
+{
 	phase: Phase;
 	applied: number;
 	nextAlarmAt: number | null;
@@ -167,40 +182,48 @@ export interface SyncStatus {
 }
 
 /** The streaming import, driven by Durable Object alarms with all progress in the object's own SQLite. */
-export class SyncJob {
+export class SyncJob
+{
 	/** The system time of the alarm run in progress: every sync-table version it writes takes this one value. */
 	private systemTime = newSystemTimestamp();
 
-	constructor(private readonly deps: SyncDeps) {
+	constructor(private readonly deps: SyncDeps)
+	{
 		const {sql} = deps.storage;
 		// The pre-temporal key/value table and seen set go; a run they held restarts from scratch.
 		const seenSql = sql
 			.exec("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'sync_seen'")
 			.toArray()[0]?.sql;
-		if (typeof seenSql === "string" && !seenSql.includes("system_from")) {
+		if (typeof seenSql === "string" && !seenSql.includes("system_from"))
+		{
 			sql.exec("DROP TABLE sync_seen");
 		}
 		sql.exec(`DROP TABLE IF EXISTS sync_state; ${SYNC_TABLES}`);
 		const runColumns = sql.exec("SELECT name FROM pragma_table_info('sync_runs')").toArray();
-		if (!runColumns.some((row) => row.name === "snapshot_at")) {
+		if (!runColumns.some((row) => row.name === "snapshot_at"))
+		{
 			sql.exec("ALTER TABLE sync_runs ADD COLUMN snapshot_at INTEGER");
 		}
 	}
 
-	private get alarm(): JobAlarm {
+	private get alarm(): JobAlarm
+	{
 		return this.deps.alarm ?? this.deps.storage;
 	}
 
-	private get sql(): SqlStorage {
+	private get sql(): SqlStorage
+	{
 		return this.deps.storage.sql;
 	}
 
-	private now(): number {
+	private now(): number
+	{
 		return (this.deps.now ?? Date.now)();
 	}
 
 	/** The live version of the run in progress, or null when idle. */
-	private readJob(): Job | null {
+	private readJob(): Job | null
+	{
 		const row = this.sql
 			.exec("SELECT * FROM sync_runs WHERE system_to = ? AND phase IN ('fetching', 'importing')", FAR_FUTURE_DATE)
 			.toArray()[0];
@@ -208,7 +231,8 @@ export class SyncJob {
 	}
 
 	/** The newest run's result: a live rate limit, or how the last run finished. */
-	private readLastResult(): SyncResult | null {
+	private readLastResult(): SyncResult | null
+	{
 		const row = this.sql
 			.exec(
 				"SELECT * FROM sync_runs WHERE system_to = ? AND status IS NOT NULL ORDER BY system_from DESC LIMIT 1",
@@ -222,7 +246,8 @@ export class SyncJob {
 	 * Write the run's version for this alarm run: phase out the version an earlier alarm run wrote, or replace the
 	 * one this alarm run already wrote, so each alarm run leaves one version.
 	 */
-	private writeJob(job: Job): void {
+	private writeJob(job: Job): void
+	{
 		this.sql.exec(
 			"UPDATE sync_runs SET system_to = ? WHERE run_id = ? AND system_to = ? AND system_from <> ?",
 			this.systemTime,
@@ -267,7 +292,8 @@ export class SyncJob {
 	 * alarm run, or by a request that landed while the run awaited I/O) was never live before that time, so it goes
 	 * instead of closing with zero width or an inverted interval.
 	 */
-	private closeLive(table: "sync_seed_requests", where: string, ...bindings: string[]): void {
+	private closeLive(table: "sync_seed_requests", where: string, ...bindings: string[]): void
+	{
 		this.sql.exec(`DELETE FROM ${table} WHERE ${where} AND system_from >= ?`, ...bindings, this.systemTime);
 		this.sql.exec(
 			`UPDATE ${table} SET system_to = ? WHERE ${where} AND system_to = ?`,
@@ -277,14 +303,16 @@ export class SyncJob {
 		);
 	}
 
-	private seedRequested(): boolean {
+	private seedRequested(): boolean
+	{
 		return (
 			this.sql.exec("SELECT 1 FROM sync_seed_requests WHERE system_to = ?", FAR_FUTURE_DATE).toArray().length > 0
 		);
 	}
 
 	/** Make a run start (or continue) as soon as possible. */
-	async syncNow(): Promise<SyncStatus> {
+	async syncNow(): Promise<SyncStatus>
+	{
 		await this.alarm.setAlarm(this.now());
 		return this.status();
 	}
@@ -293,8 +321,10 @@ export class SyncJob {
 	 * Make the next run (or the one in progress) finish with a whole-tree read that reseeds the edge tables, the
 	 * transaction id and the expanded keys. The only path that reads get_tree_data; never triggered automatically.
 	 */
-	async seed(): Promise<SyncStatus> {
-		if (!this.seedRequested()) {
+	async seed(): Promise<SyncStatus>
+	{
+		if (!this.seedRequested())
+		{
 			this.sql.exec(
 				"INSERT INTO sync_seed_requests (system_from, system_to) VALUES (?, ?)",
 				newSystemTimestamp(),
@@ -304,7 +334,8 @@ export class SyncJob {
 		return this.syncNow();
 	}
 
-	async status(): Promise<SyncStatus> {
+	async status(): Promise<SyncStatus>
+	{
 		const job = this.readJob();
 		return {
 			phase: job?.phase ?? "idle",
@@ -315,11 +346,14 @@ export class SyncJob {
 	}
 
 	/** One alarm: start a run when idle, otherwise continue the one in progress. */
-	async tick(): Promise<void> {
+	async tick(): Promise<void>
+	{
 		this.systemTime = newSystemTimestamp();
 		let job = this.readJob();
-		if (job === null) {
-			job = {
+		if (job === null)
+		{
+			job =
+			{
 				runId: crypto.randomUUID(),
 				phase: "fetching",
 				exportKey: "",
@@ -330,121 +364,185 @@ export class SyncJob {
 			};
 			this.writeJob(job);
 		}
-		try {
-			if (job.phase === "fetching") {
+		try
+		{
+			if (job.phase === "fetching")
+			{
 				const fetched = await this.fetchExport(job);
-				if (fetched === undefined) {
+				if (fetched === undefined)
+				{
 					return;
 				}
 				job = fetched;
 			}
 			await this.importExport(job);
-		} catch (error) {
+		}
+		catch (error)
+		{
 			// The live version holds the progress the failed import committed.
-			this.finishRun(this.readJob() ?? job, {
-				status: "error",
-				message: errorMessage(error),
-				at: this.now(),
-			});
+			this.finishRun(
+				this.readJob() ?? job,
+				{
+					status: "error",
+					message: errorMessage(error),
+					at: this.now(),
+				},
+			);
 			await this.scheduleNextRun();
 		}
 	}
 
 	/** Seed the account row once, when internal auth exists and none is live; a failure leaves it for the next run. */
-	private async seedAccountRow(signal: AbortSignal): Promise<void> {
-		if (readWorkflowyEpoch(this.deps.db) !== undefined) {
+	private async seedAccountRow(signal: AbortSignal): Promise<void>
+	{
+		if (readWorkflowyEpoch(this.deps.db) !== undefined)
+		{
 			return;
 		}
-		try {
+		try
+		{
 			const stored = await this.deps.readAccount?.(signal);
-			if (stored !== undefined) {
-				runUnitOfWork(this.deps.db, (unitOfWork) => {
+			if (stored !== undefined)
+			{
+				runUnitOfWork(this.deps.db, (unitOfWork) =>
+				{
 					seedAccount(unitOfWork, stored);
 				});
 			}
-		} catch {
+		}
+		catch
+		{
 			// The epoch only serves backup imports; the sync itself does not depend on it.
 		}
 	}
 
-	private finishRun(job: Job, result: SyncResult): void {
-		this.writeJob({...job, phase: "idle", result});
+	private finishRun(job: Job, result: SyncResult): void
+	{
+		this.writeJob(
+			{
+				...job,
+				phase: "idle",
+				result,
+			},
+		);
 		// Only the run in progress reads its seen ids, so they go with it, along with any left by an abandoned run.
 		this.sql.exec("DELETE FROM sync_seen");
 	}
 
-	private async scheduleNextRun(): Promise<void> {
+	private async scheduleNextRun(): Promise<void>
+	{
 		const minutes = Number(this.deps.env.SYNC_INTERVAL_MINUTES);
 		const interval = (Number.isFinite(minutes) && minutes > 0 ? minutes : DEFAULT_INTERVAL_MINUTES) * 60_000;
 		await this.alarm.setAlarm(this.now() + interval);
 	}
 
 	/** GET the export and tee it into R2. Returns undefined when the run was rescheduled instead. */
-	private async fetchExport(job: Job): Promise<Job | undefined> {
+	private async fetchExport(job: Job): Promise<Job | undefined>
+	{
 		const {env} = this.deps;
-		if (!env.WORKFLOWY_API_KEY) {
-			this.finishRun(job, {status: "error", message: "WORKFLOWY_API_KEY is not configured", at: this.now()});
+		if (!env.WORKFLOWY_API_KEY)
+		{
+			this.finishRun(
+				job,
+				{
+					status: "error",
+					message: "WORKFLOWY_API_KEY is not configured",
+					at: this.now(),
+				},
+			);
 			await this.scheduleNextRun();
 			return undefined;
 		}
 		const base = (env.WORKFLOWY_API_URL === "" ? undefined : env.WORKFLOWY_API_URL) ?? "https://workflowy.com";
 		// Read before the request goes out: the same clock as system time, so later writes compare after it.
 		const snapshotAt = Date.now();
-		const response = await fetch(`${base}/api/v1/nodes-export`, {
-			headers: {Authorization: `Bearer ${env.WORKFLOWY_API_KEY}`},
-		});
-		if (response.status === 429) {
+		const response = await fetch(
+			`${base}/api/v1/nodes-export`,
+			{
+				headers:
+				{
+					Authorization: `Bearer ${env.WORKFLOWY_API_KEY}`,
+				},
+			},
+		);
+		if (response.status === 429)
+		{
 			const retryAfter = Number(response.headers.get("retry-after"));
 			const delay = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : RATE_LIMIT_BACKOFF_MS;
 			await response.body?.cancel();
 			// The job stays in "fetching", so the next alarm retries the same run.
-			this.writeJob({
-				...job,
-				result: {status: "rate_limited", message: "Workflowy answered 429", at: this.now()},
-			});
+			this.writeJob(
+				{
+					...job,
+					result:
+					{
+						status: "rate_limited",
+						message: "Workflowy answered 429",
+						at: this.now(),
+					},
+				},
+			);
 			await this.alarm.setAlarm(this.now() + delay);
 			return undefined;
 		}
-		if (!response.ok || response.body === null) {
+		if (!response.ok || response.body === null)
+		{
 			throw new Error(`nodes-export failed with ${response.status}`);
 		}
 		const exportKey = `exports/${new Date(this.now()).toISOString().replaceAll(":", "-")}.json`;
 		const length = Number(response.headers.get("content-length"));
-		if (Number.isFinite(length) && length > 0) {
+		if (Number.isFinite(length) && length > 0)
+		{
 			const fixed = new FixedLengthStream(length);
 			const piping = response.body.pipeTo(fixed.writable);
 			await Promise.all([env.SNAPSHOTS.put(exportKey, fixed.readable), piping]);
-		} else {
+		}
+		else
+		{
 			await env.SNAPSHOTS.put(exportKey, await response.arrayBuffer());
 		}
-		const next: Job = {...job, phase: "importing", exportKey, snapshotAt};
+		const next: Job =
+		{
+			...job,
+			phase: "importing",
+			exportKey,
+			snapshotAt,
+		};
 		this.writeJob(next);
 		return next;
 	}
 
 	/** This alarm run's import: a fresh system time, so the run is its own unit of work, resuming the run's totals. */
-	private importState(job: Job): ApiImportState {
-		const state = beginApiImport(this.deps.db, {
-			snapshotTakenAt: job.snapshotAt === undefined ? undefined : new Date(job.snapshotAt),
-		});
+	private importState(job: Job): ApiImportState
+	{
+		const state = beginApiImport(
+			this.deps.db,
+			{
+				snapshotTakenAt: job.snapshotAt === undefined ? undefined : new Date(job.snapshotAt),
+			},
+		);
 		Object.assign(state, job.totals);
 		const seen = this.sql.exec(
 			"SELECT id FROM sync_seen WHERE run_id = ? AND system_to = ?",
 			job.runId,
 			FAR_FUTURE_DATE,
 		);
-		for (const row of seen.toArray()) {
-			if (typeof row.id === "string") {
+		for (const row of seen.toArray())
+		{
+			if (typeof row.id === "string")
+			{
 				state.seenIds.add(row.id);
 			}
 		}
 		return state;
 	}
 
-	private async importExport(job: Job): Promise<void> {
+	private async importExport(job: Job): Promise<void>
+	{
 		const {env, storage} = this.deps;
 		const object = await env.SNAPSHOTS.get(job.exportKey);
-		if (object === null) {
+		if (object === null)
+		{
 			throw new Error(`export ${job.exportKey} is missing from R2`);
 		}
 		const state = this.importState(job);
@@ -453,20 +551,28 @@ export class SyncJob {
 		let batches = 0;
 		let yielded = false;
 		const overBudget = () => Date.now() - state.start.startedAt >= RUN_BUDGET_MS;
-		// oxlint-disable-next-line typescript/no-unsafe-argument -- the workers types declare R2ObjectBody.body as ReadableStream<any>
-		for await (const batch of nodeBatches(object.body, {
-			size: BATCH_SIZE,
-			skip: job.applied,
-		})) {
-			if (batches >= limit || (batches > 0 && overBudget())) {
+		for await (const batch of nodeBatches(
+			// oxlint-disable-next-line typescript/no-unsafe-argument -- the workers types declare R2ObjectBody.body as ReadableStream<any>
+			object.body,
+			{
+				size: BATCH_SIZE,
+				skip: job.applied,
+			},
+		))
+		{
+			if (batches >= limit || (batches > 0 && overBudget()))
+			{
 				yielded = true;
 				break;
 			}
 			// One transaction, so the cursor never runs ahead of or behind the rows it counts.
-			storage.transactionSync(() => {
+			storage.transactionSync(() =>
+			{
 				applyApiBatch(state, batch);
-				for (const node of batch) {
-					if (state.seenIds.has(node.id)) {
+				for (const node of batch)
+				{
+					if (state.seenIds.has(node.id))
+					{
 						this.sql.exec(
 							"INSERT OR IGNORE INTO sync_seen (run_id, id, system_from, system_to) VALUES (?, ?, ?, ?)",
 							job.runId,
@@ -476,10 +582,12 @@ export class SyncJob {
 						);
 					}
 				}
-				job = {
+				job =
+				{
 					...job,
 					applied: job.applied + batch.length,
-					totals: {
+					totals:
+					{
 						totalNodes: state.totalNodes,
 						nodesAdded: state.nodesAdded,
 						nodesUpdated: state.nodesUpdated,
@@ -492,7 +600,8 @@ export class SyncJob {
 			});
 			batches++;
 		}
-		if (yielded || (batches > 0 && overBudget())) {
+		if (yielded || (batches > 0 && overBudget()))
+		{
 			const delay = Number(env.SYNC_TICK_DELAY_MS);
 			await this.alarm.setAlarm(this.now() + (Number.isFinite(delay) && delay > 0 ? delay : 0));
 			return;
@@ -501,14 +610,19 @@ export class SyncJob {
 		const seeding = this.seedRequested();
 		let snapshot: TreeSnapshot | undefined;
 		let internalSyncError: string | undefined;
-		if (seeding) {
+		if (seeding)
+		{
 			this.closeLive("sync_seed_requests", "1 = 1");
-			try {
+			try
+			{
 				snapshot = await this.deps.readTreeSnapshot?.(unitOfWorkSignal(state.start));
-				if (snapshot === undefined) {
+				if (snapshot === undefined)
+				{
 					internalSyncError = "A seed needs internal auth (WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD)";
 				}
-			} catch (error) {
+			}
+			catch (error)
+			{
 				// The public export alone is still a complete import; the edge tables wait for the next seed.
 				snapshot = undefined;
 				internalSyncError = errorMessage(error);
@@ -516,39 +630,55 @@ export class SyncJob {
 		}
 		await this.seedAccountRow(unitOfWorkSignal(state.start));
 		const result = finishApiImport(state, snapshot?.items);
-		if (snapshot !== undefined) {
+		if (snapshot !== undefined)
+		{
 			importInternalMetadata(this.deps.db, snapshot, this.now());
 		}
-		if (!seeding) {
-			try {
+		if (!seeding)
+		{
+			try
+			{
 				await this.deps.catchUp?.();
-			} catch (error) {
+			}
+			catch (error)
+			{
 				// Never reseeded automatically: a missing seed or a refresh request needs an explicit seed.
 				internalSyncError =
 					error instanceof TreeResyncRequired ? `${error.message}. ${SEED_HINT}` : errorMessage(error);
 			}
 		}
 		const {importTimestamp: _timestamp, ...counts} = result;
-		this.finishRun(job, {
-			status: "ok",
-			exportKey: job.exportKey,
-			finishedAt: this.now(),
-			durationMs: this.now() - job.startedAt,
-			...counts,
-			...(internalSyncError === undefined ? {} : {internalSyncError}),
-		});
+		this.finishRun(
+			job,
+			{
+				status: "ok",
+				exportKey: job.exportKey,
+				finishedAt: this.now(),
+				durationMs: this.now() - job.startedAt,
+				...counts,
+				...(internalSyncError === undefined
+					? {}
+					:
+						{
+							internalSyncError,
+						}),
+			},
+		);
 		await this.scheduleNextRun();
 	}
 }
 
 /** A `sync_runs` row as the run it versions, its result rebuilt from the typed columns. */
-function jobFromRow(row: Record<string, SqlStorageValue>): Job {
+function jobFromRow(row: Record<string, SqlStorageValue>): Job
+{
 	const count = (column: string): number => Number(row[column]);
-	const text = (column: string): string | undefined => {
+	const text = (column: string): string | undefined =>
+	{
 		const value = row[column];
 		return typeof value === "string" ? value : undefined;
 	};
-	const totals = {
+	const totals =
+	{
 		totalNodes: count("total_nodes"),
 		nodesAdded: count("nodes_added"),
 		nodesUpdated: count("nodes_updated"),
@@ -560,8 +690,10 @@ function jobFromRow(row: Record<string, SqlStorageValue>): Job {
 	const exportKey = text("export_key") ?? "";
 	const internalSyncError = text("internal_sync_error");
 	let result: SyncResult | null = null;
-	if (status === "ok") {
-		result = {
+	if (status === "ok")
+	{
+		result =
+		{
 			status,
 			exportKey,
 			finishedAt: count("result_at"),
@@ -570,10 +702,22 @@ function jobFromRow(row: Record<string, SqlStorageValue>): Job {
 			nodesDeleted: count("nodes_deleted"),
 			nodesPhasedOut: count("nodes_phased_out"),
 			priorityUpdated: count("priority_updated"),
-			...(internalSyncError === undefined ? {} : {internalSyncError}),
+			...(internalSyncError === undefined
+				? {}
+				:
+					{
+						internalSyncError,
+					}),
 		};
-	} else if (status === "rate_limited" || status === "error") {
-		result = {status, message: text("message") ?? "", at: count("result_at")};
+	}
+	else if (status === "rate_limited" || status === "error")
+	{
+		result =
+		{
+			status,
+			message: text("message") ?? "",
+			at: count("result_at"),
+		};
 	}
 	const phase = text("phase");
 	const snapshotAt = row.snapshot_at;
@@ -584,11 +728,17 @@ function jobFromRow(row: Record<string, SqlStorageValue>): Job {
 		applied: count("applied"),
 		totals,
 		startedAt: count("started_at"),
-		...(typeof snapshotAt === "number" ? {snapshotAt} : {}),
+		...(typeof snapshotAt === "number"
+			?
+				{
+					snapshotAt,
+				}
+			: {}),
 		result,
 	};
 }
 
-function errorMessage(error: unknown): string {
+function errorMessage(error: unknown): string
+{
 	return error instanceof Error ? error.message : String(error);
 }

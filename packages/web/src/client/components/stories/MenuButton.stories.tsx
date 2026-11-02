@@ -3,20 +3,25 @@ import {fn} from "storybook/test";
 
 import {MenuButton} from "./primitives.js";
 
-const meta: Meta<typeof MenuButton> = {
+const meta: Meta<typeof MenuButton> =
+{
 	title: "Components/MenuButton",
 	component: MenuButton,
-	parameters: {
+	parameters:
+	{
 		layout: "centered",
 	},
 	tags: ["autodocs"],
-	argTypes: {
-		isVisible: {
+	argTypes:
+	{
+		isVisible:
+		{
 			control: "boolean",
 			description: "Whether the menu button is visible (shown on hover/selection)",
 		},
 	},
-	args: {
+	args:
+	{
 		onClick: fn<() => void>(),
 	},
 };
@@ -24,14 +29,18 @@ const meta: Meta<typeof MenuButton> = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Visible: Story = {
-	args: {
+export const Visible: Story =
+{
+	args:
+	{
 		isVisible: true,
 	},
 };
 
-export const Hidden: Story = {
-	args: {
+export const Hidden: Story =
+{
+	args:
+	{
 		isVisible: false,
 	},
 };

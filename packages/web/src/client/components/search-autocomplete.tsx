@@ -9,23 +9,30 @@ const AUTOCOMPLETE_BASE_CLASS =
 const ROW_CLASS = "hover:!bg-secondary [&.active]:!bg-secondary";
 
 /** Upstream's flyout class: the tint border once a query is committed, else a class with no shipped rule. */
-export function autocompleteClassName(committed: boolean): string {
+export function autocompleteClassName(committed: boolean): string
+{
 	return `${AUTOCOMPLETE_BASE_CLASS}${committed ? "[&.menu.flyout]:border-[var(--wf-border-tint)]" : "[&.menu.flyout]:border-primary-x"}`;
 }
 
-function iconOf(icon: AutocompleteIcon | undefined) {
-	if (icon === undefined || typeof icon === "string") {
+function iconOf(icon: AutocompleteIcon | undefined)
+{
+	if (icon === undefined || typeof icon === "string")
+	{
 		return icon;
 	}
 	return (
 		<span
 			className="border border-primary box-border w-[14px] h-[14px] rounded-xs"
-			style={{backgroundColor: `var(--wf-${icon.swatch}-${icon.color})`}}
+			style={
+			{
+				backgroundColor: `var(--wf-${icon.swatch}-${icon.color})`,
+			}}
 		/>
 	);
 }
 
-export interface SearchAutocompleteProps {
+export interface SearchAutocompleteProps
+{
 	rows: readonly (AutocompleteRow | AutocompleteHeader)[];
 	/** The committed query is non-empty. */
 	committed: boolean;
@@ -33,7 +40,8 @@ export interface SearchAutocompleteProps {
 }
 
 /** Upstream's search box autocomplete flyout (`kN4`): a keyboard-driven value list under the pill. */
-export function SearchAutocomplete({rows, committed, onSelect}: SearchAutocompleteProps) {
+export function SearchAutocomplete({rows, committed, onSelect}: SearchAutocompleteProps)
+{
 	const items = useMemo(
 		() =>
 			rows.map((row) =>
@@ -47,7 +55,8 @@ export function SearchAutocomplete({rows, committed, onSelect}: SearchAutocomple
 						label={row.label}
 						icon={iconOf(row.icon)}
 						className={ROW_CLASS}
-						onSelect={() => {
+						onSelect={() =>
+						{
 							onSelect(row);
 						}}
 					/>

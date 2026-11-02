@@ -6,7 +6,8 @@
 import {vi} from "vite-plus/test";
 import {checkOpOutputs} from "../helpers/check-op-outputs.js";
 
-vi.mock(import("../../src/server/ops/index.js"), async (importOriginal) => {
+vi.mock(import("../../src/server/ops/index.js"), async (importOriginal) =>
+{
 	const registry = await importOriginal();
 	checkOpOutputs(registry.Ops);
 	return registry;

@@ -10,21 +10,32 @@ import {renderDatePills} from "../src/client/date-pills.js";
 import {DEFAULT_DATE_SETTINGS} from "../src/client/date-settings.js";
 import {EMPTY_PREFERENCES, preferenceKeys} from "../src/client/hooks/use-preferences.js";
 
-const outlineState = {
+const outlineState =
+{
 	searchQuery: "",
-	focusNote: () => {},
-	focusName: () => {},
-	blurNote: () => {},
+	focusNote: () =>
+	{
+	},
+	focusName: () =>
+	{
+	},
+	blurNote: () =>
+	{
+	},
 };
 
-vi.mock("../src/client/stores/outline.js", () => ({
+vi.mock("../src/client/stores/outline.js", () => (
+{
 	useOutlineStore: (selector?: (state: typeof outlineState) => unknown) =>
 		selector ? selector(outlineState) : outlineState,
 	outlineActions: () => outlineState,
-	registerEditFlush: () => () => {},
+	registerEditFlush: () => () =>
+	{
+	},
 	isModalOpen: () => false,
 }));
-vi.mock("../src/client/hooks/use-nodes.js", async () => {
+vi.mock("../src/client/hooks/use-nodes.js", async () =>
+{
 	const {noopMutation} = await import("./helpers/stable-mutation.js");
 	return {
 		useUpdateNode: () => noopMutation,
@@ -34,72 +45,153 @@ vi.mock("../src/client/hooks/use-nodes.js", async () => {
 const {EditableNote} = await import("../src/client/components/editable-note.js");
 
 function render(
-	props: {initialValue: string; isFocused?: boolean; isMain?: boolean},
+	props:
+	{
+		initialValue: string;
+		isFocused?: boolean;
+		isMain?: boolean;
+	},
 	client: QueryClient = new QueryClient(),
-): string {
+): string
+{
 	return renderToStaticMarkup(
 		createElement(
 			QueryClientProvider,
-			{client},
-			createElement(EditableNote, {nodeId: "alice", isFocused: false, ...props}),
+			{
+				client,
+			},
+			createElement(
+				EditableNote,
+				{
+					nodeId: "alice",
+					isFocused: false,
+					...props,
+				},
+			),
 		),
 	);
 }
 
-describe("EditableNote markup", () => {
-	it("renders date pills while unfocused and while focused", () => {
+describe("EditableNote markup", () =>
+{
+	it("renders date pills while unfocused and while focused", () =>
+	{
 		const note = 'due <time startYear="2026" startMonth="10" startDay="1">Thu, Oct 1, 2026</time>';
 		const open =
 			'<div class="notes"><div class="notranslate content text-tertiary whitespace-pre-wrap overflow-hidden';
-		expect({
-			unfocused: render({initialValue: note}),
-			focused: render({initialValue: note, isFocused: true}),
-		}).toStrictEqual({
-			unfocused: `${open}" contentEditable="true"><span class="innerContentContainer">${addMonolithGuards(renderDatePills(note, DEFAULT_DATE_SETTINGS))}</span></div></div>`,
-			focused: `${open} active" contentEditable="true"><span class="innerContentContainer">${addMonolithGuards(renderDatePills(note, DEFAULT_DATE_SETTINGS))}</span></div></div>`,
-		});
+		expect(
+			{
+				unfocused: render(
+					{
+						initialValue: note,
+					},
+				),
+				focused: render(
+					{
+						initialValue: note,
+						isFocused: true,
+					},
+				),
+			},
+		).toStrictEqual(
+			{
+				unfocused: `${open}" contentEditable="true"><span class="innerContentContainer">${addMonolithGuards(renderDatePills(note, DEFAULT_DATE_SETTINGS))}</span></div></div>`,
+				focused: `${open} active" contentEditable="true"><span class="innerContentContainer">${addMonolithGuards(renderDatePills(note, DEFAULT_DATE_SETTINGS))}</span></div></div>`,
+			},
+		);
 	});
 
-	it("labels date pills with the account's date format from preferences", () => {
+	it("labels date pills with the account's date format from preferences", () =>
+	{
 		const note = 'due <time startYear="2026" startMonth="10" startDay="1">Thu, Oct 1, 2026</time>';
 		const client = new QueryClient();
-		const account = {dateFormat: "YYYY-MM-DD ddd", timeFormat: "HH:mm", weekStartDay: 1};
-		client.setQueryData(preferenceKeys.all, {
-			preferences: {...EMPTY_PREFERENCES, ...account},
-			available: true,
-			error: null,
-		});
-		expect(render({initialValue: note}, client)).toBe(
+		const account =
+		{
+			dateFormat: "YYYY-MM-DD ddd",
+			timeFormat: "HH:mm",
+			weekStartDay: 1,
+		};
+		client.setQueryData(
+			preferenceKeys.all,
+			{
+				preferences:
+				{
+					...EMPTY_PREFERENCES,
+					...account,
+				},
+				available: true,
+				error: null,
+			},
+		);
+		expect(
+			render(
+				{
+					initialValue: note,
+				},
+				client,
+			),
+		).toBe(
 			`<div class="notes"><div class="notranslate content text-tertiary whitespace-pre-wrap overflow-hidden" contentEditable="true"><span class="innerContentContainer">${addMonolithGuards(renderDatePills(note, account))}</span></div></div>`,
 		);
 	});
 
-	it("renders one always-contenteditable content div", () => {
-		expect(render({initialValue: "Alice\nBob"})).toBe(
+	it("renders one always-contenteditable content div", () =>
+	{
+		expect(
+			render(
+				{
+					initialValue: "Alice\nBob",
+				},
+			),
+		).toBe(
 			'<div class="notes"><div class="notranslate content text-tertiary whitespace-pre-wrap overflow-hidden" contentEditable="true"><span class="innerContentContainer">Alice\nBob</span></div></div>',
 		);
 	});
 
-	it("adds notes--main for the zoom root's note", () => {
-		expect(render({initialValue: "Alice", isMain: true})).toBe(
+	it("adds notes--main for the zoom root's note", () =>
+	{
+		expect(
+			render(
+				{
+					initialValue: "Alice",
+					isMain: true,
+				},
+			),
+		).toBe(
 			'<div class="notes notes--main"><div class="notranslate content text-tertiary whitespace-pre-wrap overflow-hidden" contentEditable="true"><span class="innerContentContainer">Alice</span></div></div>',
 		);
 	});
 
-	it("renders an empty content div for an empty note", () => {
-		expect(render({initialValue: ""})).toBe(
+	it("renders an empty content div for an empty note", () =>
+	{
+		expect(
+			render(
+				{
+					initialValue: "",
+				},
+			),
+		).toBe(
 			'<div class="notes"><div class="notranslate content text-tertiary whitespace-pre-wrap overflow-hidden" contentEditable="true"></div></div>',
 		);
 	});
 
-	it("marks the focused note's content active", () => {
-		expect(render({initialValue: "Alice", isFocused: true})).toBe(
+	it("marks the focused note's content active", () =>
+	{
+		expect(
+			render(
+				{
+					initialValue: "Alice",
+					isFocused: true,
+				},
+			),
+		).toBe(
 			'<div class="notes"><div class="notranslate content text-tertiary whitespace-pre-wrap overflow-hidden active" contentEditable="true"><span class="innerContentContainer">Alice</span></div></div>',
 		);
 	});
 });
 
-const LEAF = {
+const LEAF =
+{
 	hasChildren: false,
 	expanded: false,
 	completed: false,
@@ -109,22 +201,44 @@ const LEAF = {
 	addedToSelection: false,
 };
 
-describe("noted", () => {
-	it("is set while an empty note is focused and dropped on blur", () => {
-		expect({
-			focused: projectClassName({...LEAF, hasNote: false, noteFocused: true})
-				.split(" ")
-				.includes("noted"),
-			blurred: projectClassName({...LEAF, hasNote: false, noteFocused: false})
-				.split(" ")
-				.includes("noted"),
-		}).toStrictEqual({focused: true, blurred: false});
+describe("noted", () =>
+{
+	it("is set while an empty note is focused and dropped on blur", () =>
+	{
+		expect(
+			{
+				focused: projectClassName(
+					{
+						...LEAF,
+						hasNote: false,
+						noteFocused: true,
+					},
+				)
+					.split(" ")
+					.includes("noted"),
+				blurred: projectClassName(
+					{
+						...LEAF,
+						hasNote: false,
+						noteFocused: false,
+					},
+				)
+					.split(" ")
+					.includes("noted"),
+			},
+		).toStrictEqual(
+			{
+				focused: true,
+				blurred: false,
+			},
+		);
 	});
 });
 
 const styles = readFileSync(fileURLToPath(new URL("../src/client/styles.css", import.meta.url)), "utf8");
 
-function normalizeCss(css: string): string {
+function normalizeCss(css: string): string
+{
 	return css
 		.replaceAll(/\/\*[\s\S]*?\*\//gu, "")
 		.replaceAll(/\s*([{}:;,>()])\s*/gu, "$1")
@@ -132,17 +246,27 @@ function normalizeCss(css: string): string {
 		.replaceAll(";}", "}");
 }
 
-describe("note behavior CSS", () => {
+describe("note behavior CSS", () =>
+{
 	const css = normalizeCss(styles);
 
-	it("drops the click-to-expand and editing-chrome rules", () => {
-		expect({
-			outlineNodeNote: styles.includes(".outline-node-note"),
-			expanded: css.includes(".notes>.content.expanded"),
-		}).toStrictEqual({outlineNodeNote: false, expanded: false});
+	it("drops the click-to-expand and editing-chrome rules", () =>
+	{
+		expect(
+			{
+				outlineNodeNote: styles.includes(".outline-node-note"),
+				expanded: css.includes(".notes>.content.expanded"),
+			},
+		).toStrictEqual(
+			{
+				outlineNodeNote: false,
+				expanded: false,
+			},
+		);
 	});
 
-	it("contains upstream's note behavior rules", () => {
+	it("contains upstream's note behavior rules", () =>
+	{
 		const rules = [
 			".noted>.notes>.content.active,.noted>.notes>.content.copyOrPasteInProgress,.root>.notes>.content{overflow:visible;display:block;max-height:none;height:auto}",
 			'.content:empty:before{content:" ";width:0;display:block}',
@@ -153,7 +277,8 @@ describe("note behavior CSS", () => {
 		expect(rules.filter((rule) => !css.includes(normalizeCss(rule)))).toStrictEqual([]);
 	});
 
-	it("contains the remaining upstream note rules", () => {
+	it("contains the remaining upstream note rules", () =>
+	{
 		const rules = [
 			".children .notes.notes--main{margin-left:-100px;padding-left:100px}",
 			".noted>.notes>.content.active,.noted>.notes>.content.copyOrPasteInProgress,.root>.notes>.content{overflow:visible;display:block;max-height:none;height:auto}",

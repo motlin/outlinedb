@@ -7,9 +7,17 @@ import {cssBlock} from "./helpers/css-block.js";
 const styles = readFileSync(fileURLToPath(new URL("../src/client/styles.css", import.meta.url)), "utf8");
 const COLORS = ["red", "orange", "yellow", "green", "teal", "sky", "blue", "purple", "pink", "gray"];
 
-describe("buildTagColorCss", () => {
-	it("emits one block per color in index order, then five shared blocks over all tags", () => {
-		const css = buildTagColorCss({"#b": "green", "#a": "red", "#c": "green"});
+describe("buildTagColorCss", () =>
+{
+	it("emits one block per color in index order, then five shared blocks over all tags", () =>
+	{
+		const css = buildTagColorCss(
+			{
+				"#b": "green",
+				"#a": "red",
+				"#c": "green",
+			},
+		);
 		const blocks = css.split("}\n").filter((block) => block !== "");
 		const first = (block: string) => block.slice(0, block.indexOf(" {"));
 		const sel = (suffix: string, prefix = "") =>
@@ -28,34 +36,60 @@ describe("buildTagColorCss", () => {
 		expect(blocks[1]).toContain("background-color: var(--wf-background-green)!important");
 	});
 
-	it("never emits the invented --wf-tag-bg- family", () => {
-		expect(buildTagColorCss({"#x": "red"})).not.toContain("--wf-tag-bg-");
+	it("never emits the invented --wf-tag-bg- family", () =>
+	{
+		expect(
+			buildTagColorCss(
+				{
+					"#x": "red",
+				},
+			),
+		).not.toContain("--wf-tag-bg-");
 	});
 
-	it.each(COLORS)("paints .bc-%s from the upstream --wf-background token", (color) => {
+	it.each(COLORS)("paints .bc-%s from the upstream --wf-background token", (color) =>
+	{
 		expect(cssBlock(styles, `.bc-${color}.bc-${color}`)["background-color"]).toBe(`var(--wf-background-${color})`);
 	});
 
-	it.each(COLORS)("colors .c-%s text from the upstream --wf-text token", (color) => {
+	it.each(COLORS)("colors .c-%s text from the upstream --wf-text token", (color) =>
+	{
 		expect(cssBlock(styles, `.c-${color}`).color).toBe(`var(--wf-text-${color})`);
 	});
 
-	it("is empty without colors", () => {
+	it("is empty without colors", () =>
+	{
 		expect(buildTagColorCss({})).toBe("");
 	});
 
-	it("escapes quotes and backslashes in the attribute value", () => {
-		expect(buildTagColorCss({'#a"b\\c': "red"}).split("\n")[0]).toBe(
-			String.raw`.contentTag[data-val="#a\"b\\c"] {`,
-		);
+	it("escapes quotes and backslashes in the attribute value", () =>
+	{
+		expect(
+			buildTagColorCss(
+				{
+					'#a"b\\c': "red",
+				},
+			).split("\n")[0],
+		).toBe(String.raw`.contentTag[data-val="#a\"b\\c"] {`);
 	});
 });
 
-describe("normalizeTagColors", () => {
-	it("lowercases keys", () => {
-		expect(normalizeTagColors({"#TaZebra": "green", "@Alice": "red"})).toStrictEqual({
-			"#tazebra": "green",
-			"@alice": "red",
-		});
+describe("normalizeTagColors", () =>
+{
+	it("lowercases keys", () =>
+	{
+		expect(
+			normalizeTagColors(
+				{
+					"#TaZebra": "green",
+					"@Alice": "red",
+				},
+			),
+		).toStrictEqual(
+			{
+				"#tazebra": "green",
+				"@alice": "red",
+			},
+		);
 	});
 });

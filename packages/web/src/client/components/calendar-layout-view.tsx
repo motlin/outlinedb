@@ -6,11 +6,17 @@ import {LEVELS, MOVE_NODES_CONFIRM, capitalize, layoutWarningLevels} from "../ca
 import type {CalendarLayout} from "../../node-types.js";
 import type {LayoutLevels} from "../calendar-layout-model.js";
 
-interface CalendarLayoutViewProps {
+interface CalendarLayoutViewProps
+{
 	layout: CalendarLayout;
 	onCancel: () => void;
 	/** Update Layout, after any confirm: the checked levels, with day always on. */
-	onUpdate: (levels: LayoutLevels & {day: true}) => Promise<void> | void;
+	onUpdate: (
+		levels: LayoutLevels &
+		{
+			day: true;
+		},
+	) => Promise<void> | void;
 	/** The header's Date format button (upstream opens Settings > Dates). */
 	onDateFormat?: () => void;
 	/** Upstream's confirm dialog; the browser's by default. */
@@ -18,7 +24,8 @@ interface CalendarLayoutViewProps {
 }
 
 /** The browser's confirm, standing in for upstream's dialog. */
-function browserConfirm(message: string): boolean {
+function browserConfirm(message: string): boolean
+{
 	return globalThis.confirm(message);
 }
 
@@ -33,7 +40,8 @@ function Checkbox({
 	text: string;
 	checked: boolean;
 	onChange: () => void;
-}) {
+})
+{
 	return (
 		// oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- verbatim upstream markup; the sr-only input is the keyboard path
 		<div className="flex flex-col gap-xs text-base cursor-pointer  " onClick={onChange}>
@@ -52,7 +60,8 @@ function Checkbox({
 }
 
 /** Upstream `E10`: the warning that turning these levels off deletes their custom text. */
-function CustomTextWarning({levels}: {levels: readonly string[]}) {
+function CustomTextWarning({levels}: {levels: readonly string[]})
+{
 	return (
 		<span className="mt-s flex gap-m text-s px-m py-s border-2 border-solid border-warning rounded-s leading-s">
 			<FaIcon icon="fal:triangle-exclamation" />
@@ -75,16 +84,27 @@ export function CalendarLayoutView({
 	onUpdate,
 	onDateFormat,
 	confirm = browserConfirm,
-}: CalendarLayoutViewProps) {
+}: CalendarLayoutViewProps)
+{
 	const [checked, setChecked] = useState<LayoutLevels>(layout.levels);
 	const [loading, setLoading] = useState(false);
 	const warning = layoutWarningLevels(layout.customLevels, checked);
-	const update = async () => {
-		if (layout.needsConfirm && !confirm(MOVE_NODES_CONFIRM)) {
+	const update = async () =>
+	{
+		if (layout.needsConfirm && !confirm(MOVE_NODES_CONFIRM))
+		{
 			return;
 		}
 		setLoading(true);
-		await Promise.resolve(onUpdate({...checked, day: true})).finally(() => {
+		await Promise.resolve(
+			onUpdate(
+				{
+					...checked,
+					day: true,
+				},
+			),
+		).finally(() =>
+		{
 			setLoading(false);
 		});
 	};
@@ -107,8 +127,13 @@ export function CalendarLayoutView({
 						name={`calendar-layout-${level}`}
 						text={capitalize(level)}
 						checked={checked[level] === true}
-						onChange={() => {
-							setChecked((previous) => ({...previous, [level]: previous[level] !== true}));
+						onChange={() =>
+						{
+							setChecked((previous) => (
+							{
+								...previous,
+								[level]: previous[level] !== true,
+							}));
 						}}
 					/>
 				))}
@@ -121,7 +146,8 @@ export function CalendarLayoutView({
 				<Button
 					variant="primary"
 					loading={loading}
-					onClick={() => {
+					onClick={() =>
+					{
 						void update();
 					}}
 				>

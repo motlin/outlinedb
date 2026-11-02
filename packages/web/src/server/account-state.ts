@@ -9,8 +9,14 @@ import type {Json, OpResult} from "./ops/define.js";
 export type AccountState = LocalAccount | WorkflowyInternalAdapter;
 
 /** The 503 a mirror without the internal API, or an unprovisioned standalone store, answers for account state. */
-export function accountStateUnavailable(): OpResult<never> {
-	return fail(503, {error: INTERNAL_API_NOT_CONFIGURED});
+export function accountStateUnavailable(): OpResult<never>
+{
+	return fail(
+		503,
+		{
+			error: INTERNAL_API_NOT_CONFIGURED,
+		},
+	);
 }
 
 /**
@@ -18,7 +24,8 @@ export function accountStateUnavailable(): OpResult<never> {
  * or a mirror's internal adapter (push, then store). Undefined for a mirror without the internal API, which must
  * answer 503 rather than write locally and diverge from workflowy.com.
  */
-function accountState(ctx: ServerContext): AccountState | undefined {
+function accountState(ctx: ServerContext): AccountState | undefined
+{
 	return ctx.mode === "standalone" ? new LocalAccount(ctx.db) : ctx.internalAdapter?.();
 }
 
@@ -29,15 +36,21 @@ function accountState(ctx: ServerContext): AccountState | undefined {
 export async function withAccountState<T extends Json>(
 	ctx: ServerContext,
 	body: (state: AccountState) => Promise<OpResult<T>>,
-): Promise<OpResult<T>> {
+): Promise<OpResult<T>>
+{
 	const state = accountState(ctx);
-	if (state === undefined) {
+	if (state === undefined)
+	{
 		return accountStateUnavailable();
 	}
-	try {
+	try
+	{
 		return await body(state);
-	} catch (error) {
-		if (error instanceof AccountNotProvisionedError) {
+	}
+	catch (error)
+	{
+		if (error instanceof AccountNotProvisionedError)
+		{
 			return accountStateUnavailable();
 		}
 		throw error;

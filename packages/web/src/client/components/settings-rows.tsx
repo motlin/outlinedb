@@ -1,7 +1,8 @@
 import type {ReactNode} from "react";
 
 /** Upstream `WF.GuiSettings.css` (`gX1`): the class table every Settings row is built from. */
-const SETTINGS_CSS = {
+const SETTINGS_CSS =
+{
 	stack_v: "flex-1 flex flex-col gap-ml",
 	stack_h: "flex flex-row gap-m",
 	description: "min-w-0 flex-1 flex flex-col justify-center gap-xs",
@@ -24,15 +25,25 @@ const SETTINGS_CSS = {
 } as const;
 
 /** The body of a section whose rows are a plain list. */
-export function SectionBody({children}: {children?: ReactNode}) {
+export function SectionBody({children}: {children?: ReactNode})
+{
 	return <div className={`${SETTINGS_CSS.stack_v} !gap-xl`}>{children}</div>;
 }
 
-function FeatureBadge({title}: {title: "LABS" | "DEV"}) {
+function FeatureBadge({title}: {title: "LABS" | "DEV"})
+{
 	const style =
 		title === "LABS"
-			? {color: "var(--wf-gray-0)", background: "var(--wf-blue-300)"}
-			: {color: "var(--wf-gray-800)", background: "var(--wf-gray-300)"};
+			?
+				{
+					color: "var(--wf-gray-0)",
+					background: "var(--wf-blue-300)",
+				}
+			:
+				{
+					color: "var(--wf-gray-800)",
+					background: "var(--wf-gray-300)",
+				};
 	return (
 		<div className="relative -top-2xs ml-s p-xs inline-block text-2xs align-baseline rounded-s" style={style}>
 			{title}
@@ -40,7 +51,8 @@ function FeatureBadge({title}: {title: "LABS" | "DEV"}) {
 	);
 }
 
-export interface ControlRowProps {
+export interface ControlRowProps
+{
 	label: string;
 	badge?: "LABS" | "DEV";
 	hint?: string;
@@ -48,7 +60,8 @@ export interface ControlRowProps {
 }
 
 /** A label (with an optional badge and hint) on the left, its control on the right. */
-export function ControlRow({label, badge, hint, children}: ControlRowProps) {
+export function ControlRow({label, badge, hint, children}: ControlRowProps)
+{
 	return (
 		<div className={`${SETTINGS_CSS.stack_h} w-full min-h-2xl items-center justify-between !gap-l overflow-hidden`}>
 			<div className={SETTINGS_CSS.description}>
@@ -63,7 +76,8 @@ export function ControlRow({label, badge, hint, children}: ControlRowProps) {
 	);
 }
 
-export interface ActionBlockProps {
+export interface ActionBlockProps
+{
 	label: string;
 	hint?: string;
 	danger?: boolean;
@@ -71,7 +85,8 @@ export interface ActionBlockProps {
 }
 
 /** A label and hint above a button (or other action). */
-export function ActionBlock({label, hint, danger = false, children}: ActionBlockProps) {
+export function ActionBlock({label, hint, danger = false, children}: ActionBlockProps)
+{
 	return (
 		<div className="flex flex-col items-start justify-center gap-xs">
 			<div className={SETTINGS_CSS.label}>{label}</div>
@@ -95,7 +110,8 @@ export function SettingsButton({
 	children?: ReactNode;
 	danger?: boolean;
 	onClick?: () => void;
-}) {
+})
+{
 	return (
 		<button
 			tabIndex={0}
@@ -109,7 +125,8 @@ export function SettingsButton({
 }
 
 /** A read-only value box, as upstream shows the account's email. */
-export function ReadOnlyField({label, value}: {label: string; value: string}) {
+export function ReadOnlyField({label, value}: {label: string; value: string})
+{
 	return (
 		<div className="flex flex-col gap-xs">
 			<div className={SETTINGS_CSS.label}>{label}</div>

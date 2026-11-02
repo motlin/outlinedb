@@ -4,7 +4,8 @@
  * them when there is no internal API or stored dict (a standalone OutlineDB account), and the client fallback.
  */
 
-export interface VisibleFeature {
+export interface VisibleFeature
+{
 	codename: string;
 	name: string;
 	label: string | null;
@@ -152,7 +153,8 @@ export const VISIBLE_FEATURES: readonly VisibleFeature[] = [
 ];
 
 /** Dashboards, conversations and ai are off; every other visible flag is on. */
-export const DEFAULT_FEATURES: Readonly<Record<string, true>> = {
+export const DEFAULT_FEATURES: Readonly<Record<string, true>> =
+{
 	always_visible_controls: true,
 	bdl: true,
 	beta_redirect: true,

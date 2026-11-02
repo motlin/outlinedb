@@ -21,7 +21,8 @@ const currentDirectory = import.meta.dirname;
 const migrationsFolder = join(currentDirectory, "../../src/db/migrations");
 const fixturesFolder = join(currentDirectory, "../fixtures");
 
-export interface TestDatabase {
+export interface TestDatabase
+{
 	database: BetterSQLite3Database<typeof schema>;
 	sqlite: Database;
 }
@@ -33,19 +34,34 @@ export interface TestDatabase {
  * migrations directly from `packages/shared/src/db/migrations/`, so no build
  * step is required. All Phase 4 round-trip tests build on this.
  */
-export function buildTestDb(): TestDatabase {
+export function buildTestDb(): TestDatabase
+{
 	const sqlite = new DatabaseConstructor(":memory:");
-	const database = drizzle(sqlite, {schema});
-	migrate(database, {migrationsFolder});
+	const database = drizzle(
+		sqlite,
+		{
+			schema,
+		},
+	);
+	migrate(
+		database,
+		{
+			migrationsFolder,
+		},
+	);
 	sqlite.pragma("foreign_keys = ON");
-	return {database, sqlite};
+	return {
+		database,
+		sqlite,
+	};
 }
 
 /**
  * Load a backup-export fixture by name (without the `.json` extension) from
  * `packages/shared/test/fixtures/` and validate it against `BackupFileSchema`.
  */
-export function loadFixtureBackup(name: string): BackupNode[] {
+export function loadFixtureBackup(name: string): BackupNode[]
+{
 	const filePath = join(fixturesFolder, `${name}.json`);
 	const raw: unknown = JSON.parse(readFileSync(filePath, "utf8"));
 	return BackupFileSchema.parse(raw);
@@ -56,11 +72,13 @@ export function loadFixtureBackup(name: string): BackupNode[] {
  * extension) from `packages/shared/test/fixtures/` and validate it against
  * `ApiResponseSchema`. Returns the contained nodes.
  */
-export function loadFixtureRestApiResponse(name: string): WorkflowyNode[] {
+export function loadFixtureRestApiResponse(name: string): WorkflowyNode[]
+{
 	const filePath = join(fixturesFolder, `${name}.json`);
 	const raw: unknown = JSON.parse(readFileSync(filePath, "utf8"));
 	const response = ApiResponseSchema.parse(raw);
-	if (response.nodes === undefined) {
+	if (response.nodes === undefined)
+	{
 		throw new Error(`REST API fixture '${name}' has no 'nodes' array`);
 	}
 	return response.nodes;
@@ -70,7 +88,8 @@ export function loadFixtureRestApiResponse(name: string): WorkflowyNode[] {
  * Convert a Unix-seconds timestamp (as carried by both the backup and REST
  * JSON shapes) to a `Date`, or null when the timestamp is absent.
  */
-function unixSecondsToDate(seconds: number | null | undefined): Date | null {
+function unixSecondsToDate(seconds: number | null | undefined): Date | null
+{
 	return seconds === null || seconds === undefined ? null : new Date(seconds * 1000);
 }
 
@@ -87,35 +106,46 @@ function unixSecondsToDate(seconds: number | null | undefined): Date | null {
  * The bulk-export tree uses sibling order for priority: each node's priority is
  * its zero-based index among its siblings.
  */
-export function normalizeBackupNodes(nodes: BackupNode[]): NormalizedRowsByTable {
+export function normalizeBackupNodes(nodes: BackupNode[]): NormalizedRowsByTable
+{
 	const contentRows: NonNullable<NormalizedRowsByTable["nodeContent"]> = [];
 	const metadataRows: NonNullable<NormalizedRowsByTable["nodeMetadata"]> = [];
 
-	const walk = (siblings: BackupNode[], parentId: string | null): void => {
-		siblings.forEach((node, index) => {
-			contentRows.push({
-				id: node.id,
-				name: node.nm ?? null,
-				note: node.no ?? null,
-				parentId,
-			});
-			metadataRows.push({
-				nodeId: node.id,
-				shortId: uuidToShortId(node.id),
-				priority: index,
-				createdAt: unixSecondsToDate(node.ct),
-				modifiedAt: unixSecondsToDate(node.lm),
-				completedAt: unixSecondsToDate(node.cp),
-				layoutMode: normalizeLayoutMode(node.metadata.layoutMode),
-			});
-			if (node.ch !== undefined) {
+	const walk = (siblings: BackupNode[], parentId: string | null): void =>
+	{
+		siblings.forEach((node, index) =>
+		{
+			contentRows.push(
+				{
+					id: node.id,
+					name: node.nm ?? null,
+					note: node.no ?? null,
+					parentId,
+				},
+			);
+			metadataRows.push(
+				{
+					nodeId: node.id,
+					shortId: uuidToShortId(node.id),
+					priority: index,
+					createdAt: unixSecondsToDate(node.ct),
+					modifiedAt: unixSecondsToDate(node.lm),
+					completedAt: unixSecondsToDate(node.cp),
+					layoutMode: normalizeLayoutMode(node.metadata.layoutMode),
+				},
+			);
+			if (node.ch !== undefined)
+			{
 				walk(node.ch, node.id);
 			}
 		});
 	};
 
 	walk(nodes, null);
-	return {nodeContent: contentRows, nodeMetadata: metadataRows};
+	return {
+		nodeContent: contentRows,
+		nodeMetadata: metadataRows,
+	};
 }
 
 /**
@@ -123,16 +153,34 @@ export function normalizeBackupNodes(nodes: BackupNode[]): NormalizedRowsByTable
  * tree's `metadata.mirror` entries. `applyRows` does not manage the composite-
  * key `mirrors` table, so callers insert these rows directly.
  */
-export function collectBackupMirrorRows(nodes: BackupNode[]): {originalId: string; mirrorId: string}[] {
-	const rows: {originalId: string; mirrorId: string}[] = [];
+export function collectBackupMirrorRows(nodes: BackupNode[]):
+{
+	originalId: string;
+	mirrorId: string;
+}[]
+{
+	const rows:
+	{
+		originalId: string;
+		mirrorId: string;
+	}[] = [];
 
-	const walk = (siblings: BackupNode[]): void => {
-		for (const node of siblings) {
+	const walk = (siblings: BackupNode[]): void =>
+	{
+		for (const node of siblings)
+		{
 			const mirror = node.metadata.mirror;
-			if (mirror !== undefined && "originalId" in mirror) {
-				rows.push({originalId: mirror.originalId, mirrorId: node.id});
+			if (mirror !== undefined && "originalId" in mirror)
+			{
+				rows.push(
+					{
+						originalId: mirror.originalId,
+						mirrorId: node.id,
+					},
+				);
 			}
-			if (node.ch !== undefined) {
+			if (node.ch !== undefined)
+			{
 				walk(node.ch);
 			}
 		}
@@ -154,29 +202,38 @@ export function collectBackupMirrorRows(nodes: BackupNode[]): {originalId: strin
  * adapters terminating in byte-identical rows is exactly the Phase 4b
  * regression net.
  */
-export function normalizeRestNodes(nodes: WorkflowyNode[]): NormalizedRowsByTable {
+export function normalizeRestNodes(nodes: WorkflowyNode[]): NormalizedRowsByTable
+{
 	const contentRows: NonNullable<NormalizedRowsByTable["nodeContent"]> = [];
 	const metadataRows: NonNullable<NormalizedRowsByTable["nodeMetadata"]> = [];
 
-	for (const node of nodes) {
-		contentRows.push({
-			id: node.id,
-			name: node.name,
-			note: node.note ?? null,
-			parentId: node.parent_id ?? null,
-		});
-		metadataRows.push({
-			nodeId: node.id,
-			shortId: uuidToShortId(node.id),
-			priority: node.priority,
-			createdAt: unixSecondsToDate(node.createdAt),
-			modifiedAt: unixSecondsToDate(node.modifiedAt),
-			completedAt: unixSecondsToDate(node.completedAt),
-			layoutMode: normalizeLayoutMode(node.data?.layoutMode),
-		});
+	for (const node of nodes)
+	{
+		contentRows.push(
+			{
+				id: node.id,
+				name: node.name,
+				note: node.note ?? null,
+				parentId: node.parent_id ?? null,
+			},
+		);
+		metadataRows.push(
+			{
+				nodeId: node.id,
+				shortId: uuidToShortId(node.id),
+				priority: node.priority,
+				createdAt: unixSecondsToDate(node.createdAt),
+				modifiedAt: unixSecondsToDate(node.modifiedAt),
+				completedAt: unixSecondsToDate(node.completedAt),
+				layoutMode: normalizeLayoutMode(node.data?.layoutMode),
+			},
+		);
 	}
 
-	return {nodeContent: contentRows, nodeMetadata: metadataRows};
+	return {
+		nodeContent: contentRows,
+		nodeMetadata: metadataRows,
+	};
 }
 
 /**
@@ -186,30 +243,39 @@ export function normalizeRestNodes(nodes: WorkflowyNode[]): NormalizedRowsByTabl
  * carries its own copy. The mirror name/note fallback and `hasChildren` flag
  * are REST-handler concerns and are intentionally omitted here.
  */
-export interface RestDto {
+export interface RestDto
+{
 	id: string;
 	parent_id: string | null;
 	name: string | null;
 	note: string | null;
 	priority: number;
-	data: {layoutMode: string | null};
+	data:
+	{
+		layoutMode: string | null;
+	};
 	createdAt: number | null;
 	modifiedAt: number | null;
 	completedAt: number | null;
 }
 
-function dateToUnixSeconds(date: Date | null): number | null {
+function dateToUnixSeconds(date: Date | null): number | null
+{
 	return date === null ? null : Math.floor(date.getTime() / 1000);
 }
 
-export function nodeToRestDto(node: Node): RestDto {
+export function nodeToRestDto(node: Node): RestDto
+{
 	return {
 		id: node.id,
 		parent_id: node.parentId,
 		name: node.name,
 		note: node.note,
 		priority: node.priority,
-		data: {layoutMode: node.layoutMode},
+		data:
+		{
+			layoutMode: node.layoutMode,
+		},
 		createdAt: dateToUnixSeconds(node.createdAt),
 		modifiedAt: dateToUnixSeconds(node.modifiedAt),
 		completedAt: dateToUnixSeconds(node.completedAt),
@@ -221,29 +287,38 @@ export function nodeToRestDto(node: Node): RestDto {
  * `Node → DTO → DB` round-trip. A second `applyRows` of these rows must produce
  * zero temporal-row changes.
  */
-export function restDtoToNormalizedRows(dtos: RestDto[]): NormalizedRowsByTable {
+export function restDtoToNormalizedRows(dtos: RestDto[]): NormalizedRowsByTable
+{
 	const contentRows: NonNullable<NormalizedRowsByTable["nodeContent"]> = [];
 	const metadataRows: NonNullable<NormalizedRowsByTable["nodeMetadata"]> = [];
 
-	for (const dto of dtos) {
-		contentRows.push({
-			id: dto.id,
-			name: dto.name,
-			note: dto.note,
-			parentId: dto.parent_id,
-		});
-		metadataRows.push({
-			nodeId: dto.id,
-			shortId: uuidToShortId(dto.id),
-			priority: dto.priority,
-			createdAt: unixSecondsToDate(dto.createdAt),
-			modifiedAt: unixSecondsToDate(dto.modifiedAt),
-			completedAt: unixSecondsToDate(dto.completedAt),
-			layoutMode: normalizeLayoutMode(dto.data.layoutMode),
-		});
+	for (const dto of dtos)
+	{
+		contentRows.push(
+			{
+				id: dto.id,
+				name: dto.name,
+				note: dto.note,
+				parentId: dto.parent_id,
+			},
+		);
+		metadataRows.push(
+			{
+				nodeId: dto.id,
+				shortId: uuidToShortId(dto.id),
+				priority: dto.priority,
+				createdAt: unixSecondsToDate(dto.createdAt),
+				modifiedAt: unixSecondsToDate(dto.modifiedAt),
+				completedAt: unixSecondsToDate(dto.completedAt),
+				layoutMode: normalizeLayoutMode(dto.data.layoutMode),
+			},
+		);
 	}
 
-	return {nodeContent: contentRows, nodeMetadata: metadataRows};
+	return {
+		nodeContent: contentRows,
+		nodeMetadata: metadataRows,
+	};
 }
 
 /**
@@ -253,18 +328,26 @@ export function restDtoToNormalizedRows(dtos: RestDto[]): NormalizedRowsByTable 
  */
 export function insertMirrorRows(
 	database: BetterSQLite3Database<typeof schema>,
-	rows: {originalId: string; mirrorId: string}[],
+	rows:
+	{
+		originalId: string;
+		mirrorId: string;
+	}[],
 	importedAt: string,
-): void {
-	for (const row of rows) {
+): void
+{
+	for (const row of rows)
+	{
 		database
 			.insert(mirrors)
-			.values({
-				originalId: row.originalId,
-				mirrorId: row.mirrorId,
-				systemFrom: importedAt,
-				systemTo: FAR_FUTURE_DATE,
-			})
+			.values(
+				{
+					originalId: row.originalId,
+					mirrorId: row.mirrorId,
+					systemFrom: importedAt,
+					systemTo: FAR_FUTURE_DATE,
+				},
+			)
 			.run();
 	}
 }
@@ -273,7 +356,8 @@ export function insertMirrorRows(
  * Result of a watermark-guarded bulk import. `skipped` is true when the
  * stale-snapshot guard rejected the import.
  */
-export interface GuardedBulkImportResult {
+export interface GuardedBulkImportResult
+{
 	skipped: boolean;
 	mergeResult?: ApplyRowsResult;
 }
@@ -293,19 +377,28 @@ export function bulkImportWithWatermarkGuard(
 	database: BetterSQLite3Database<typeof schema>,
 	nodes: BackupNode[],
 	importedAt: Date,
-): GuardedBulkImportResult {
+): GuardedBulkImportResult
+{
 	const localRow = database
-		.select({systemFrom: nodeContent.systemFrom})
+		.select(
+			{
+				systemFrom: nodeContent.systemFrom,
+			},
+		)
 		.from(nodeContent)
 		.where(eq(nodeContent.systemTo, FAR_FUTURE_DATE))
 		.all();
-	const localWatermarkMs = localRow.reduce<number | null>((newest, row) => {
+	const localWatermarkMs = localRow.reduce<number | null>((newest, row) =>
+	{
 		const ms = Date.parse(`${row.systemFrom.replace(" ", "T")}Z`);
 		return newest === null || ms > newest ? ms : newest;
 	}, null);
 
-	if (localWatermarkMs !== null && importedAt.getTime() <= localWatermarkMs) {
-		return {skipped: true};
+	if (localWatermarkMs !== null && importedAt.getTime() <= localWatermarkMs)
+	{
+		return {
+			skipped: true,
+		};
 	}
 
 	const rowsByTable = normalizeBackupNodes(nodes);
@@ -314,7 +407,10 @@ export function bulkImportWithWatermarkGuard(
 		(unitOfWork) => applyRows(unitOfWork, rowsByTable),
 		startUnitOfWork(importedAt),
 	);
-	return {skipped: false, mergeResult};
+	return {
+		skipped: false,
+		mergeResult,
+	};
 }
 
 /**
@@ -328,7 +424,8 @@ export function restImport(
 	database: BetterSQLite3Database<typeof schema>,
 	nodes: WorkflowyNode[],
 	importedAt: Date,
-): ApplyRowsResult {
+): ApplyRowsResult
+{
 	const rowsByTable = normalizeRestNodes(nodes);
 	return runUnitOfWork(database, (unitOfWork) => applyRows(unitOfWork, rowsByTable), startUnitOfWork(importedAt));
 }

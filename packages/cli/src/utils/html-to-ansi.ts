@@ -11,7 +11,8 @@ type ChalkColor = (text: string) => string;
  * - c-{color} for foreground/text color
  * - bc-{color} for background color
  */
-const FOREGROUND_COLORS: Record<string, ChalkColor> = {
+const FOREGROUND_COLORS: Record<string, ChalkColor> =
+{
 	"c-red": chalk.red,
 	"c-orange": chalk.hex("#FF8C00"),
 	"c-yellow": chalk.yellow,
@@ -25,7 +26,8 @@ const FOREGROUND_COLORS: Record<string, ChalkColor> = {
 	"c-grey": chalk.gray,
 };
 
-const BACKGROUND_COLORS: Record<string, ChalkColor> = {
+const BACKGROUND_COLORS: Record<string, ChalkColor> =
+{
 	"bc-red": chalk.bgRed,
 	"bc-orange": chalk.bgHex("#FF8C00"),
 	"bc-yellow": chalk.bgYellow,
@@ -51,25 +53,33 @@ const BACKGROUND_COLORS: Record<string, ChalkColor> = {
  * - <a href="...">text</a> (links shown as underlined with URL in grey)
  * - Plain text and nested elements
  */
-export function htmlToAnsi(html: string): string {
-	if (!html || !html.includes("<")) {
+export function htmlToAnsi(html: string): string
+{
+	if (!html || !html.includes("<"))
+	{
 		return html;
 	}
 
-	const root = parse(html, {
-		lowerCaseTagName: true,
-		comment: false,
-	});
+	const root = parse(
+		html,
+		{
+			lowerCaseTagName: true,
+			comment: false,
+		},
+	);
 
 	return processNode(root);
 }
 
-function processNode(node: Node): string {
-	if (node.nodeType === NodeType.TEXT_NODE) {
+function processNode(node: Node): string
+{
+	if (node.nodeType === NodeType.TEXT_NODE)
+	{
 		return node.rawText;
 	}
 
-	if (!(node instanceof HTMLElement)) {
+	if (!(node instanceof HTMLElement))
+	{
 		return "";
 	}
 
@@ -78,59 +88,72 @@ function processNode(node: Node): string {
 	const tagName = nullable(element.tagName)?.toLowerCase() ?? "";
 	const childText = element.childNodes.map((child) => processNode(child)).join("");
 
-	switch (tagName) {
+	switch (tagName)
+	{
 		case "b":
-		case "strong": {
+		case "strong":
+		{
 			return chalk.bold(childText);
 		}
 
 		case "i":
-		case "em": {
+		case "em":
+		{
 			return chalk.italic(childText);
 		}
 
-		case "u": {
+		case "u":
+		{
 			return chalk.underline(childText);
 		}
 
 		case "s":
 		case "strike":
-		case "del": {
+		case "del":
+		{
 			return chalk.strikethrough(childText);
 		}
 
-		case "a": {
+		case "a":
+		{
 			const href = element.getAttribute("href");
-			if (href) {
+			if (href)
+			{
 				return `${chalk.underline(childText)} ${chalk.gray(`(${href})`)}`;
 			}
 			return chalk.underline(childText);
 		}
 
-		case "span": {
+		case "span":
+		{
 			return processSpan(element, childText);
 		}
 
-		case "br": {
+		case "br":
+		{
 			return "\n";
 		}
 
-		default: {
+		default:
+		{
 			return childText;
 		}
 	}
 }
 
-function processSpan(element: HTMLElement, childText: string): string {
+function processSpan(element: HTMLElement, childText: string): string
+{
 	const className = element.getAttribute("class") ?? "";
 	const classes = className.split(/\s+/u);
 
 	let styledText = childText;
 	let hasStyle = false;
 
-	for (const cls of classes) {
+	for (const cls of classes)
+	{
 		const color = FOREGROUND_COLORS[cls] ?? BACKGROUND_COLORS[cls];
-		if (color !== undefined) {
+		if (color !== undefined)
+		{
 			styledText = color(styledText);
 			hasStyle = true;
 		}

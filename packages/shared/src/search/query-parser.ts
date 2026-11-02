@@ -1,7 +1,8 @@
 /**
  * Structured form of a search query after operators are parsed out.
  */
-export interface ParsedQuery {
+export interface ParsedQuery
+{
 	/** Quoted `"exact phrases"`, each of which must appear in name or note. */
 	exactPhrases: string[];
 	/** Bare terms combined with AND (all must appear). */
@@ -23,8 +24,10 @@ export interface ParsedQuery {
  * `last-changed:Nd`, `-negation`, `a OR b` groups, and bare AND terms. Pure and
  * side-effect free so it can be unit-tested and reused by any adapter.
  */
-export function parseSearchQuery(queryString: string): ParsedQuery {
-	const result: ParsedQuery = {
+export function parseSearchQuery(queryString: string): ParsedQuery
+{
+	const result: ParsedQuery =
+	{
 		exactPhrases: [],
 		requiredTerms: [],
 		orTerms: [],
@@ -37,8 +40,10 @@ export function parseSearchQuery(queryString: string): ParsedQuery {
 
 	// Extract exact phrases (quoted strings)
 	const exactPhraseRegex = /"([^"]+)"/gu;
-	for (const [, phrase] of remaining.matchAll(exactPhraseRegex)) {
-		if (phrase !== undefined) {
+	for (const [, phrase] of remaining.matchAll(exactPhraseRegex))
+	{
+		if (phrase !== undefined)
+		{
 			result.exactPhrases.push(phrase);
 		}
 	}
@@ -46,27 +51,32 @@ export function parseSearchQuery(queryString: string): ParsedQuery {
 
 	// Extract completion filter: is:complete or is:incomplete
 	const completeMatch = /\bis:complete\b/iu.exec(remaining);
-	if (completeMatch) {
+	if (completeMatch)
+	{
 		result.isComplete = true;
 		remaining = remaining.replace(completeMatch[0], " ");
 	}
 	const incompleteMatch = /\bis:incomplete\b/iu.exec(remaining);
-	if (incompleteMatch) {
+	if (incompleteMatch)
+	{
 		result.isComplete = false;
 		remaining = remaining.replace(incompleteMatch[0], " ");
 	}
 
 	// Extract date filter: last-changed:7d
 	const dateMatch = /\blast-changed:(\d+)d\b/iu.exec(remaining);
-	if (dateMatch) {
+	if (dateMatch)
+	{
 		result.lastChangedDays = Number(dateMatch[1]);
 		remaining = remaining.replace(dateMatch[0], " ");
 	}
 
 	// Extract negated terms: -word
 	const negationRegex = /-(\S+)/gu;
-	for (const [, term] of remaining.matchAll(negationRegex)) {
-		if (term !== undefined) {
+	for (const [, term] of remaining.matchAll(negationRegex))
+	{
+		if (term !== undefined)
+		{
 			result.excludedTerms.push(term);
 		}
 	}
@@ -75,18 +85,23 @@ export function parseSearchQuery(queryString: string): ParsedQuery {
 	// Process remaining terms for OR groups and required terms
 	// Split by OR (case-insensitive) to find OR groups
 	const orSplit = remaining.split(/\s+OR\s+/u);
-	if (orSplit.length > 1) {
+	if (orSplit.length > 1)
+	{
 		// Multiple parts separated by OR
-		for (const part of orSplit) {
+		for (const part of orSplit)
+		{
 			const terms = part
 				.trim()
 				.split(/\s+/u)
 				.filter((term) => term.length > 0);
-			if (terms.length > 0) {
+			if (terms.length > 0)
+			{
 				result.orTerms.push(terms);
 			}
 		}
-	} else {
+	}
+	else
+	{
 		// No OR operators, all terms are AND (required)
 		const terms = remaining
 			.trim()

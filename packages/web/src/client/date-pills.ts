@@ -1,4 +1,5 @@
-import {
+import
+{
 	canonicalTimeAttributes,
 	domTimeAttributes,
 	findDatePhrase,
@@ -18,14 +19,19 @@ const PILL_ATTRS =
 const TIME_PATTERN = /<time\b([^>]*)>[\s\S]*?<\/time>/giu;
 
 /** Display-mode HTML: each stored `<time>` becomes upstream's non-editable monolith pill. */
-export function renderDatePills(html: string, settings: DateSettings, now: Date = new Date()): string {
-	const rendered = html.replaceAll(TIME_PATTERN, (_match, attrText: string) => {
+export function renderDatePills(html: string, settings: DateSettings, now: Date = new Date()): string
+{
+	const rendered = html.replaceAll(TIME_PATTERN, (_match, attrText: string) =>
+	{
 		const parsed = parseTimeAttrsLoose(attrText);
-		const label = formatTimeLabel(parsed, {
-			dateFormat: settings.dateFormat,
-			timeFormat: settings.timeFormat,
-			now,
-		});
+		const label = formatTimeLabel(
+			parsed,
+			{
+				dateFormat: settings.dateFormat,
+				timeFormat: settings.timeFormat,
+				now,
+			},
+		);
 		const attrs = domTimeAttributes(parsed);
 		return `<time ${`${PILL_ATTRS} ${attrs}`.trim()}>${BOM}<span class="content-wrapper">${label}</span>${BOM}</time>`;
 	});
@@ -38,30 +44,38 @@ export function renderDatePills(html: string, settings: DateSettings, now: Date 
  * canonical camelCase markup with markup-format inner text, and the pills' U+FEFF caret
  * guards are dropped. A `<time>` without a full start date keeps its text, attributes camelCased.
  */
-export function serializeDatePills(html: string): string {
+export function serializeDatePills(html: string): string
+{
 	return html
-		.replaceAll(TIME_PATTERN, (match, attrText: string) => {
-			try {
+		.replaceAll(TIME_PATTERN, (match, attrText: string) =>
+		{
+			try
+			{
 				return toTimeMarkup(parseTimeAttrs(attrText));
-			} catch {
+			}
+			catch
+			{
 				return canonicalTimeAttributes(match);
 			}
 		})
 		.replaceAll(BOM, "");
 }
 
-function deletePillAt(html: string, index: number): string | null {
+function deletePillAt(html: string, index: number): string | null
+{
 	const char = index < 0 ? null : plainCharAt(html, index);
 	return char !== null && /^<(?:time|mention)\b/iu.test(char.raw) ? char.without : null;
 }
 
 /** Backspace right after a pill (at plain-text `offset`, a pill counting one) deletes the whole pill, else null. */
-export function deletePillBeforeCaret(html: string, offset: number): string | null {
+export function deletePillBeforeCaret(html: string, offset: number): string | null
+{
 	return deletePillAt(html, offset - 1);
 }
 
 /** Delete right before a pill (at plain-text `offset`, a pill counting one) deletes the whole pill, else null. */
-export function deletePillAfterCaret(html: string, offset: number): string | null {
+export function deletePillAfterCaret(html: string, offset: number): string | null
+{
 	return deletePillAt(html, offset);
 }
 
@@ -72,7 +86,8 @@ const EDGE = /^\s$/u;
  * Upstream's `symbol.spaced` `!!` trigger: the two characters before `caret` in plain `text`
  * are `!` or `！`, preceded by whitespace or the start and followed by whitespace or the end.
  */
-export function shouldTriggerDatePopup(text: string, caret: number): boolean {
+export function shouldTriggerDatePopup(text: string, caret: number): boolean
+{
 	const before = text[caret - 3];
 	const after = text[caret];
 	return (
@@ -85,17 +100,21 @@ export function shouldTriggerDatePopup(text: string, caret: number): boolean {
 }
 
 /** `<time>` attributes for a picked day, or for a range sorted start to end (months 1-based). */
-export function timeAttrsFromDates(dates: Date[]): TimeAttrs {
+export function timeAttrsFromDates(dates: Date[]): TimeAttrs
+{
 	const [start, end] = dates.toSorted((a, b) => a.getTime() - b.getTime());
-	if (start === undefined) {
+	if (start === undefined)
+	{
 		throw new Error("timeAttrsFromDates needs at least one date");
 	}
-	const attrs: TimeAttrs = {
+	const attrs: TimeAttrs =
+	{
 		startYear: start.getFullYear(),
 		startMonth: start.getMonth() + 1,
 		startDay: start.getDate(),
 	};
-	if (end !== undefined) {
+	if (end !== undefined)
+	{
 		attrs.endYear = end.getFullYear();
 		attrs.endMonth = end.getMonth() + 1;
 		attrs.endDay = end.getDate();
@@ -111,8 +130,18 @@ export function planDateInsertion(
 	html: string,
 	caretOffset: number,
 	attrs: TimeAttrs,
-	{addSpaceBefore = false}: {addSpaceBefore?: boolean | undefined} = {},
-): {html: string; caretOffset: number} {
+	{
+		addSpaceBefore = false,
+	}:
+	{
+		addSpaceBefore?: boolean | undefined;
+	} = {},
+):
+{
+	html: string;
+	caretOffset: number;
+}
+{
 	const {before, after} = splitHtml(html, caretOffset, caretOffset);
 	const previous = plainText(before, PILL_CHAR).at(-1);
 	const lead = addSpaceBefore && previous !== undefined && !/\s/u.test(previous) ? " " : "";
@@ -128,12 +157,15 @@ export function planDateInsertion(
  * hours and minutes the old pill had, as upstream does), or removed when `attrs` is null.
  * Surrounding text, including the space before the pill, is kept and no space is added.
  */
-export function replacePill(html: string, pillIndex: number, attrs: TimeAttrs | null): string {
+export function replacePill(html: string, pillIndex: number, attrs: TimeAttrs | null): string
+{
 	let index = 0;
-	return html.replaceAll(TIME_PATTERN, (match) => {
+	return html.replaceAll(TIME_PATTERN, (match) =>
+	{
 		const current = index;
 		index += 1;
-		if (current !== pillIndex) {
+		if (current !== pillIndex)
+		{
 			return match;
 		}
 		return attrs === null ? "" : toTimeMarkup(attrs);
@@ -149,10 +181,19 @@ export function planPillReplacement(
 	html: string,
 	pillIndex: number,
 	attrs: TimeAttrs | null,
-): {html: string; caretOffset: number} {
+):
+{
+	html: string;
+	caretOffset: number;
+}
+{
 	const match = [...html.matchAll(TIME_PATTERN)][pillIndex];
-	if (match === undefined) {
-		return {html, caretOffset: plainLength(html)};
+	if (match === undefined)
+	{
+		return {
+			html,
+			caretOffset: plainLength(html),
+		};
 	}
 	return {
 		html: replacePill(html, pillIndex, attrs),
@@ -164,26 +205,55 @@ export function planPillReplacement(
 const SPACED_TIME_PATTERN = /[ \u00A0]?<time\b(?:[^>]*\/>|[^>]*>[\s\S]*?<\/time>)/giu;
 
 /** Upstream's `delete_dates`: stored HTML with every `<time>` removed, each with one preceding space. */
-export function deleteDates(html: string): string {
+export function deleteDates(html: string): string
+{
 	return html.replaceAll(SPACED_TIME_PATTERN, "");
 }
 
 /** Per-node `delete_dates` edits: only the fields whose value changes. */
 export function planDeleteDates(
-	nodes: readonly {id: string; name: string; note: string}[],
-): {id: string; name?: string; note?: string}[] {
-	const plan: {id: string; name?: string; note?: string}[] = [];
-	for (const {id, name, note} of nodes) {
-		const edit: {id: string; name?: string; note?: string} = {id};
+	nodes: readonly
+	{
+		id: string;
+		name: string;
+		note: string;
+	}[],
+):
+{
+	id: string;
+	name?: string;
+	note?: string;
+}[]
+{
+	const plan:
+	{
+		id: string;
+		name?: string;
+		note?: string;
+	}[] = [];
+	for (const {id, name, note} of nodes)
+	{
+		const edit:
+		{
+			id: string;
+			name?: string;
+			note?: string;
+		} =
+		{
+			id,
+		};
 		const newName = deleteDates(name);
 		const newNote = deleteDates(note);
-		if (newName !== name) {
+		if (newName !== name)
+		{
 			edit.name = newName;
 		}
-		if (newNote !== note) {
+		if (newNote !== note)
+		{
 			edit.note = newNote;
 		}
-		if (edit.name !== undefined || edit.note !== undefined) {
+		if (edit.name !== undefined || edit.note !== undefined)
+		{
 			plan.push(edit);
 		}
 	}
@@ -191,7 +261,8 @@ export function planDeleteDates(
 }
 
 /** Whether stored HTML holds any `<time>` date. */
-export function hasDates(html: string): boolean {
+export function hasDates(html: string): boolean
+{
 	return /<time\b/iu.test(html);
 }
 
@@ -199,7 +270,8 @@ export function hasDates(html: string): boolean {
 const PILL_CHAR = "\uFFFC";
 
 /** Plain text of editor or stored HTML for date-phrase search: each pill is U+FFFC, entities decoded. */
-export function datePhraseText(html: string): string {
+export function datePhraseText(html: string): string
+{
 	return plainText(html, PILL_CHAR);
 }
 
@@ -212,17 +284,40 @@ export function findDatePhraseAtCaret(
 	text: string,
 	caret: number,
 	now: Date = new Date(),
-	options: {dateFormat?: string; weekStartDay?: number} = {},
-): DatePhrase | undefined {
+	options:
+	{
+		dateFormat?: string;
+		weekStartDay?: number;
+	} = {},
+): DatePhrase | undefined
+{
 	const segmentStart = text.lastIndexOf(PILL_CHAR, caret - 1) + 1;
 	const nextPill = text.indexOf(PILL_CHAR, caret);
 	const segment = text.slice(segmentStart, nextPill === -1 ? undefined : nextPill);
 	const found = findDatePhrase(segment, caret - segmentStart, now, options);
-	return found && {start: found.start + segmentStart, end: found.end + segmentStart, attrs: found.attrs};
+	return (
+		found &&
+		{
+			start: found.start + segmentStart,
+			end: found.end + segmentStart,
+			attrs: found.attrs,
+		}
+	);
 }
 
 /** Stored HTML with the autocompleted phrase replaced by its pill plus one space, and the caret after the space. */
-export function applyDatePhrase(html: string, phrase: DatePhrase): {html: string; caretOffset: number} {
+export function applyDatePhrase(
+	html: string,
+	phrase: DatePhrase,
+):
+{
+	html: string;
+	caretOffset: number;
+}
+{
 	const {before, after} = splitHtml(html, phrase.start, phrase.end);
-	return {html: `${before}${toTimeMarkup(phrase.attrs)} ${after}`, caretOffset: plainLength(before) + 2};
+	return {
+		html: `${before}${toTimeMarkup(phrase.attrs)} ${after}`,
+		caretOffset: plainLength(before) + 2,
+	};
 }

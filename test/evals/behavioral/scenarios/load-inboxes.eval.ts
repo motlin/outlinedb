@@ -18,56 +18,90 @@ import {createEvalContext, runInEvalContext} from "../helpers/eval-db-setup.js";
 import type {EvalContext} from "../helpers/eval-types.js";
 
 // Items carry an optional children array.
-const InboxesFileSchema = z.looseObject({
-	loadedAt: z.string(),
-	itemCount: z.number(),
-	inboxes: z.array(
-		z.looseObject({
-			id: z.string(),
-			name: z.string(),
-			items: z.array(
-				z.looseObject({id: z.string(), name: z.string(), children: z.array(z.unknown()).optional()}),
+const InboxesFileSchema = z.looseObject(
+	{
+		loadedAt: z.string(),
+		itemCount: z.number(),
+		inboxes: z.array(
+			z.looseObject(
+				{
+					id: z.string(),
+					name: z.string(),
+					items: z.array(
+						z.looseObject(
+							{
+								id: z.string(),
+								name: z.string(),
+								children: z.array(z.unknown()).optional(),
+							},
+						),
+					),
+				},
 			),
-		}),
-	),
-});
+		),
+	},
+);
 
-describe("Behavioral Eval: gtd inboxes load", () => {
+describe("Behavioral Eval: gtd inboxes load", () =>
+{
 	let ctx: EvalContext;
 	let outputFile: string;
 
-	beforeAll(() => {
+	beforeAll(() =>
+	{
 		ctx = createEvalContext();
 		outputFile = path.join(ctx.projectRoot, ".llm/gtd-inboxes.json");
 	});
 
-	afterAll(() => {
+	afterAll(() =>
+	{
 		ctx.cleanup();
 	});
 
-	it("should run without errors against the eval database", {timeout: 60_000}, async () => {
-		const result = await runInEvalContext(ctx, "./bin/run.js gtd inboxes load --depth 3");
+	it(
+		"should run without errors against the eval database",
+		{
+			timeout: 60_000,
+		},
+		async () =>
+		{
+			const result = await runInEvalContext(ctx, "./bin/run.js gtd inboxes load --depth 3");
 
-		expect(result.exitCode, `Command failed with stderr: ${result.stderr}\nstdout: ${result.stdout}`).toBe(0);
-		expect(result.stdout).toContain("itemCount");
-	});
+			expect(result.exitCode, `Command failed with stderr: ${result.stderr}\nstdout: ${result.stdout}`).toBe(0);
+			expect(result.stdout).toContain("itemCount");
+		},
+	);
 
-	it("should produce a gtd-inboxes.json file with valid structure", {timeout: 60_000}, async () => {
-		await runInEvalContext(ctx, "./bin/run.js gtd inboxes load --depth 3");
+	it(
+		"should produce a gtd-inboxes.json file with valid structure",
+		{
+			timeout: 60_000,
+		},
+		async () =>
+		{
+			await runInEvalContext(ctx, "./bin/run.js gtd inboxes load --depth 3");
 
-		expect(fs.existsSync(outputFile), `Expected ${outputFile} to exist`).toBe(true);
+			expect(fs.existsSync(outputFile), `Expected ${outputFile} to exist`).toBe(true);
 
-		const content = fs.readFileSync(outputFile, "utf8");
-		const data = InboxesFileSchema.parse(JSON.parse(content));
+			const content = fs.readFileSync(outputFile, "utf8");
+			const data = InboxesFileSchema.parse(JSON.parse(content));
 
-		expect(data.inboxes.length).toBeGreaterThan(0);
-		expect(data.inboxes.flatMap((inbox) => inbox.items).length).toBeGreaterThan(0);
-	});
+			expect(data.inboxes.length).toBeGreaterThan(0);
+			expect(data.inboxes.flatMap((inbox) => inbox.items).length).toBeGreaterThan(0);
+		},
+	);
 
-	it("should use cache data (not require API key)", {timeout: 60_000}, async () => {
-		const result = await runInEvalContext(ctx, "./bin/run.js gtd inboxes load --depth 3");
+	it(
+		"should use cache data (not require API key)",
+		{
+			timeout: 60_000,
+		},
+		async () =>
+		{
+			const result = await runInEvalContext(ctx, "./bin/run.js gtd inboxes load --depth 3");
 
-		// Should succeed even without WORKFLOWY_API_KEY
-		expect(result.exitCode).toBe(0);
-	});
+			// Should succeed even without WORKFLOWY_API_KEY
+			expect(result.exitCode).toBe(0);
+		},
+	);
 });

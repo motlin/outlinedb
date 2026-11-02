@@ -8,7 +8,8 @@
  * @param backupTimestamp - The timestamp from the backup file (relative to epoch)
  * @param epoch - The user's epoch (Unix timestamp of account creation). Required.
  */
-export function backupToUnixTime(backupTimestamp: number, epoch: number): number {
+export function backupToUnixTime(backupTimestamp: number, epoch: number): number
+{
 	return backupTimestamp + epoch;
 }
 
@@ -19,7 +20,8 @@ export function backupToUnixTime(backupTimestamp: number, epoch: number): number
  * @param unixTimestamp - The Unix timestamp to convert
  * @param epoch - The user's epoch (Unix timestamp of account creation). Required.
  */
-export function unixToBackupTime(unixTimestamp: number, epoch: number): number {
+export function unixToBackupTime(unixTimestamp: number, epoch: number): number
+{
 	return unixTimestamp - epoch;
 }
 
@@ -31,7 +33,8 @@ export function unixToBackupTime(unixTimestamp: number, epoch: number): number {
  * @param backupCt - Relative timestamp from the backup file
  * @returns The user's epoch (Unix timestamp of account creation)
  */
-export function calculateWorkflowyEpoch(apiCreatedAt: number, backupCt: number): number {
+export function calculateWorkflowyEpoch(apiCreatedAt: number, backupCt: number): number
+{
 	return apiCreatedAt - backupCt;
 }
 
@@ -40,7 +43,8 @@ export function calculateWorkflowyEpoch(apiCreatedAt: number, backupCt: number):
  * Workflowy URLs use the last 12 characters of the UUID (without hyphens).
  * Example: "3435cb92-d00d-45be-9950-b1ed4735574c" → "b1ed4735574c"
  */
-export function uuidToShortId(uuid: string): string {
+export function uuidToShortId(uuid: string): string
+{
 	const withoutHyphens = uuid.replaceAll("-", "");
 	return withoutHyphens.slice(-12);
 }
@@ -50,7 +54,8 @@ export function uuidToShortId(uuid: string): string {
  * appears in a Workflowy URL. Reads accept a short ID and resolve it to a full
  * UUID; full UUIDs (with hyphens) are not short IDs.
  */
-export function isShortId(value: string): boolean {
+export function isShortId(value: string): boolean
+{
 	return /^[\da-f]{12}$/iu.test(value);
 }
 
@@ -58,7 +63,8 @@ export function isShortId(value: string): boolean {
  * Generates a Workflowy deep link URL for a node.
  * Example: "3435cb92-d00d-45be-9950-b1ed4735574c" → "https://workflowy.com/#/b1ed4735574c"
  */
-export function getWorkflowyUrl(nodeId: string): string {
+export function getWorkflowyUrl(nodeId: string): string
+{
 	return `https://workflowy.com/#/${uuidToShortId(nodeId)}`;
 }
 
@@ -71,17 +77,22 @@ export function getWorkflowyUrl(nodeId: string): string {
  * @param date - Date object, or YYYY-MM-DD string (defaults to today)
  * @returns Bracket-formatted date string that Workflowy converts to native date
  */
-export function formatWorkflowyDate(date: Date | string = new Date()): string {
+export function formatWorkflowyDate(date: Date | string = new Date()): string
+{
 	let dateObj: Date;
 
-	if (typeof date === "string") {
+	if (typeof date === "string")
+	{
 		// Parse YYYY-MM-DD string as local date (not UTC)
 		const [year, month, day] = date.split("-").map(Number);
-		if (year === undefined || month === undefined || day === undefined) {
+		if (year === undefined || month === undefined || day === undefined)
+		{
 			throw new Error(`Invalid date "${date}": expected YYYY-MM-DD`);
 		}
 		dateObj = new Date(year, month - 1, day);
-	} else {
+	}
+	else
+	{
 		dateObj = date;
 	}
 
@@ -101,7 +112,8 @@ export function formatWorkflowyDate(date: Date | string = new Date()): string {
  * @param date - Date object, or ISO datetime string (defaults to now)
  * @returns Bracket-formatted datetime string that Workflowy converts to native datetime
  */
-export function formatWorkflowyDateTime(date: Date | string = new Date()): string {
+export function formatWorkflowyDateTime(date: Date | string = new Date()): string
+{
 	const dateObj: Date = typeof date === "string" ? new Date(date) : date;
 
 	const year = dateObj.getFullYear();

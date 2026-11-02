@@ -1,5 +1,6 @@
 /** Upstream's `focus.request(paneId)`: where a pane focus request wants the caret, and whether to scroll the pane into view. */
-export interface PaneFocusRequest {
+export interface PaneFocusRequest
+{
 	paneId: string;
 	/** The zoom the pane is about to show: the request waits for its title to render. Null skips the check (Home). */
 	zoomedId: string | null;
@@ -8,7 +9,8 @@ export interface PaneFocusRequest {
 }
 
 /** Upstream's `rj4` fallback target: the pane's first `.name .content`, the zoom title when zoomed, else the first row. */
-export function paneFocusTarget(paneRoot: ParentNode): HTMLElement | null {
+export function paneFocusTarget(paneRoot: ParentNode): HTMLElement | null
+{
 	return paneRoot.querySelector<HTMLElement>(".name .content");
 }
 
@@ -23,12 +25,18 @@ let pendingRequest = 0;
  */
 export function requestPaneFocus(
 	request: PaneFocusRequest,
-	deps: {resumeEditing: (nodeId: string, offset: number) => void},
-): void {
+	deps:
+	{
+		resumeEditing: (nodeId: string, offset: number) => void;
+	},
+): void
+{
 	const token = ++pendingRequest;
 	let frames = 0;
-	const attempt = (): void => {
-		if (token !== pendingRequest) {
+	const attempt = (): void =>
+	{
+		if (token !== pendingRequest)
+		{
 			return;
 		}
 		frames++;
@@ -36,20 +44,31 @@ export function requestPaneFocus(
 		const target = paneElement === null ? null : paneFocusTarget(paneElement);
 		const nodeId = target?.querySelector<HTMLElement>("[data-node-id]")?.dataset.nodeId;
 		const rendered = nodeId !== undefined && (request.zoomedId === null || nodeId === request.zoomedId);
-		if (paneElement === null || !rendered) {
-			if (frames < MAX_FRAMES) {
+		if (paneElement === null || !rendered)
+		{
+			if (frames < MAX_FRAMES)
+			{
 				requestAnimationFrame(attempt);
-			} else if (paneElement !== null && nodeId !== undefined) {
+			}
+			else if (paneElement !== null && nodeId !== undefined)
+			{
 				place(paneElement, nodeId);
 			}
 			return;
 		}
 		place(paneElement, nodeId);
 	};
-	const place = (paneElement: HTMLElement, nodeId: string): void => {
+	const place = (paneElement: HTMLElement, nodeId: string): void =>
+	{
 		deps.resumeEditing(nodeId, 0);
-		if (request.reveal) {
-			paneElement.scrollIntoView({block: "nearest", inline: "nearest"});
+		if (request.reveal)
+		{
+			paneElement.scrollIntoView(
+				{
+					block: "nearest",
+					inline: "nearest",
+				},
+			);
 		}
 	};
 	requestAnimationFrame(attempt);

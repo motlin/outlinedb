@@ -25,30 +25,47 @@ const currentInChatIds = sql`(SELECT ${aiMetadata.nodeId} FROM ${aiMetadata} WHE
  * items directly under it. Upstream never shows either as a row, child, search
  * or jump hit; they surface only through the Backlinks section.
  */
-export function notReferencesContent(): SQL {
+export function notReferencesContent(): SQL
+{
 	return sql`(${nodeContent.id} NOT IN ${currentReferencesRootIds} AND (${nodeContent.parentId} IS NULL OR ${nodeContent.parentId} NOT IN ${currentReferencesRootIds}))`;
 }
 
 /** A `node_content` condition that drops every references root (its backlink items stay). */
-export function notReferencesRoot(): SQL {
+export function notReferencesRoot(): SQL
+{
 	return sql`${nodeContent.id} NOT IN ${currentReferencesRootIds}`;
 }
 
 /** Which parents have any child, and which have at least one uncompleted child. */
-export interface ChildFlags {
+export interface ChildFlags
+{
 	withChildren: Set<string>;
 	withUncompletedChildren: Set<string>;
 }
 
 /** The child flags over `{parentId, completedAt}` rows, one row per child. */
-export function childFlagsFromRows(rows: {parentId: string | null; completedAt: Date | null}[]): ChildFlags {
-	const flags: ChildFlags = {withChildren: new Set(), withUncompletedChildren: new Set()};
-	for (const {parentId, completedAt} of rows) {
-		if (parentId === null) {
+export function childFlagsFromRows(
+	rows:
+	{
+		parentId: string | null;
+		completedAt: Date | null;
+	}[],
+): ChildFlags
+{
+	const flags: ChildFlags =
+	{
+		withChildren: new Set(),
+		withUncompletedChildren: new Set(),
+	};
+	for (const {parentId, completedAt} of rows)
+	{
+		if (parentId === null)
+		{
 			continue;
 		}
 		flags.withChildren.add(parentId);
-		if (completedAt === null) {
+		if (completedAt === null)
+		{
 			flags.withUncompletedChildren.add(parentId);
 		}
 	}
@@ -60,15 +77,19 @@ export function childFlagsFromRows(rows: {parentId: string | null; completedAt: 
  * references roots or `ai.inChat` items. Upstream hides the triangle of a parent whose children are
  * all completed while completed items are hidden, so both flags are needed.
  */
-export function childFlags(db: ServerDatabase, parentIds: string[]): ChildFlags {
-	if (parentIds.length === 0) {
+export function childFlags(db: ServerDatabase, parentIds: string[]): ChildFlags
+{
+	if (parentIds.length === 0)
+	{
 		return childFlagsFromRows([]);
 	}
 	const rows = db
-		.select({
-			parentId: nodeContent.parentId,
-			completedAt: effectiveCompletedAt(nodeContent.id, nodeMetadata.completedAt),
-		})
+		.select(
+			{
+				parentId: nodeContent.parentId,
+				completedAt: effectiveCompletedAt(nodeContent.id, nodeMetadata.completedAt),
+			},
+		)
 		.from(nodeContent)
 		.leftJoin(
 			nodeMetadata,
@@ -94,9 +115,14 @@ export function childFlags(db: ServerDatabase, parentIds: string[]): ChildFlags 
  * whose only child is the section still has an arrow. It counts as an
  * uncompleted child only while some backlink source is uncompleted.
  */
-function addReferencesRootFlags(db: ServerDatabase, parentIds: string[], flags: ChildFlags): void {
+function addReferencesRootFlags(db: ServerDatabase, parentIds: string[], flags: ChildFlags): void
+{
 	const roots = db
-		.select({id: nodeContent.id})
+		.select(
+			{
+				id: nodeContent.id,
+			},
+		)
 		.from(nodeContent)
 		.where(
 			and(
@@ -106,7 +132,8 @@ function addReferencesRootFlags(db: ServerDatabase, parentIds: string[], flags: 
 			),
 		)
 		.all();
-	if (roots.length === 0) {
+	if (roots.length === 0)
+	{
 		return;
 	}
 	// A backlink item's target is its references root's parent: the row whose flags it sets.
@@ -120,12 +147,18 @@ function addReferencesRootFlags(db: ServerDatabase, parentIds: string[], flags: 
 			liveOriginal,
 		),
 	);
-	for (const {targetId} of items) {
+	for (const {targetId} of items)
+	{
 		flags.withChildren.add(targetId);
 	}
 	const uncompletedSources = new Set(
 		db
-			.select({id: nodeContent.id, completedAt: effectiveCompletedAt(nodeContent.id, nodeMetadata.completedAt)})
+			.select(
+				{
+					id: nodeContent.id,
+					completedAt: effectiveCompletedAt(nodeContent.id, nodeMetadata.completedAt),
+				},
+			)
 			.from(nodeContent)
 			.leftJoin(
 				nodeMetadata,
@@ -140,17 +173,24 @@ function addReferencesRootFlags(db: ServerDatabase, parentIds: string[], flags: 
 			.all()
 			.flatMap(({id, completedAt}) => (completedAt === null ? [id] : [])),
 	);
-	for (const {sourceId, targetId} of items) {
-		if (uncompletedSources.has(sourceId)) {
+	for (const {sourceId, targetId} of items)
+	{
+		if (uncompletedSources.has(sourceId))
+		{
 			flags.withUncompletedChildren.add(targetId);
 		}
 	}
 }
 
 /** The current references root under `targetId`, or null. */
-export function findReferencesRoot(db: ServerDatabase, targetId: string): string | null {
+export function findReferencesRoot(db: ServerDatabase, targetId: string): string | null
+{
 	const row = db
-		.select({id: nodeContent.id})
+		.select(
+			{
+				id: nodeContent.id,
+			},
+		)
 		.from(nodeContent)
 		.where(
 			and(
@@ -169,13 +209,15 @@ export function findReferencesRoot(db: ServerDatabase, targetId: string): string
  * that source id. Whether the source text still links to the target is not
  * checked, matching upstream's count.
  */
-function currentBacklinkSources(db: ServerDatabase, rootId: string): Map<string, string> {
+function currentBacklinkSources(db: ServerDatabase, rootId: string): Map<string, string>
+{
 	const items = currentBacklinkItems(db, and(eq(backlinkItemParent, rootId), liveOriginal));
 	return new Map(items.map((item) => [item.nodeId, item.sourceId]));
 }
 
 /** The target of every current backlink item made from `sourceId`, keyed by the item's id. */
-export function backlinkTargetsOfSource(db: ServerDatabase, sourceId: string): Map<string, string> {
+export function backlinkTargetsOfSource(db: ServerDatabase, sourceId: string): Map<string, string>
+{
 	const items = currentBacklinkItems(db, eq(mirrors.originalId, sourceId));
 	return new Map(items.map((item) => [item.nodeId, item.targetId]));
 }
@@ -186,26 +228,26 @@ export function backlinkTargetsOfSource(db: ServerDatabase, sourceId: string): M
  * references root that upstream's edit would recreate. Keeps the whole-tree
  * `syncBacklinks` off the path of a plain keystroke in a linked row.
  */
-export function backlinksNeedSync(
-	ctx: ServerContext,
-	sourceId: string,
-	beforeText: string,
-	afterText: string,
-): boolean {
+export function backlinksNeedSync(ctx: ServerContext, sourceId: string, beforeText: string, afterText: string): boolean
+{
 	const before = new Set(internalLinkShortIds(beforeText));
 	const after = new Set(internalLinkShortIds(afterText));
-	if (before.size !== after.size || [...after].some((id) => !before.has(id))) {
+	if (before.size !== after.size || [...after].some((id) => !before.has(id)))
+	{
 		return true;
 	}
 	// Every derived backlink item already sits under a current references root.
 	const present = new Set(backlinkTargetsOfSource(ctx.db, sourceId).values());
-	for (const shortId of after) {
+	for (const shortId of after)
+	{
 		const resolved = ctx.cacheService.resolveShortIdToUuid(shortId);
-		if (resolved === null) {
+		if (resolved === null)
+		{
 			continue;
 		}
 		const target = ctx.cacheService.getMirrorOriginal(resolved) ?? resolved;
-		if (target !== sourceId && !present.has(target)) {
+		if (target !== sourceId && !present.has(target))
+		{
 			return true;
 		}
 	}
@@ -213,9 +255,14 @@ export function backlinksNeedSync(
 }
 
 /** `rootId` when it is a current references root, else null. */
-function findReferencesRootId(db: ServerDatabase, rootId: string): string | null {
+function findReferencesRootId(db: ServerDatabase, rootId: string): string | null
+{
 	const row = db
-		.select({nodeId: referencesRoots.nodeId})
+		.select(
+			{
+				nodeId: referencesRoots.nodeId,
+			},
+		)
 		.from(referencesRoots)
 		.where(and(eq(referencesRoots.nodeId, rootId), eq(referencesRoots.systemTo, FAR_FUTURE_DATE)))
 		.get();
@@ -223,6 +270,7 @@ function findReferencesRootId(db: ServerDatabase, rootId: string): string | null
 }
 
 /** A current references root's "N Backlinks" label (upstream `JP.displayLabel`), or null for any other node. */
-export function referencesRootLabel(db: ServerDatabase, nodeId: string): string | null {
+export function referencesRootLabel(db: ServerDatabase, nodeId: string): string | null
+{
 	return findReferencesRootId(db, nodeId) === null ? null : backlinksLabel(currentBacklinkSources(db, nodeId).size);
 }

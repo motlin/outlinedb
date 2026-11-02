@@ -2,14 +2,16 @@ import {Command, Flags} from "@oclif/core";
 import {accountRowTotal, readAccountState} from "@outlinedb/shared/cache";
 import {createDatabase} from "../../db/index.js";
 
-export interface SeedAccountStateResult {
+export interface SeedAccountStateResult
+{
 	/** Live rows sent, summed over the account tables. */
 	rows: number;
 	/** Expanded keys sent; null while the local cache has none seeded. */
 	expandedKeys: number | null;
 }
 
-export default class SeedAccountState extends Command {
+export default class SeedAccountState extends Command
+{
 	static override enableJsonFlag = true;
 
 	static override description =
@@ -17,38 +19,58 @@ export default class SeedAccountState extends Command {
 
 	static override examples = ["<%= config.bin %> cache:seed-account-state --url http://localhost:8787"];
 
-	static override flags = {
-		url: Flags.string({description: "Worker base URL to seed", required: true}),
-		"access-client-id": Flags.string({
-			description: "Cloudflare Access service token client id (sent as CF-Access-Client-Id)",
-			env: "CF_ACCESS_CLIENT_ID",
-		}),
-		"access-client-secret": Flags.string({
-			description: "Cloudflare Access service token client secret (sent as CF-Access-Client-Secret)",
-			env: "CF_ACCESS_CLIENT_SECRET",
-		}),
+	static override flags =
+	{
+		url: Flags.string(
+			{
+				description: "Worker base URL to seed",
+				required: true,
+			},
+		),
+		"access-client-id": Flags.string(
+			{
+				description: "Cloudflare Access service token client id (sent as CF-Access-Client-Id)",
+				env: "CF_ACCESS_CLIENT_ID",
+			},
+		),
+		"access-client-secret": Flags.string(
+			{
+				description: "Cloudflare Access service token client secret (sent as CF-Access-Client-Secret)",
+				env: "CF_ACCESS_CLIENT_SECRET",
+			},
+		),
 	};
 
-	public async run(): Promise<SeedAccountStateResult> {
+	public async run(): Promise<SeedAccountStateResult>
+	{
 		const {flags} = await this.parse(SeedAccountState);
 		const state = readAccountState(createDatabase());
 
-		const headers: Record<string, string> = {"content-type": "application/json"};
+		const headers: Record<string, string> =
+		{
+			"content-type": "application/json",
+		};
 		const clientId = flags["access-client-id"];
 		const clientSecret = flags["access-client-secret"];
-		if (clientId && clientSecret) {
+		if (clientId && clientSecret)
+		{
 			headers["CF-Access-Client-Id"] = clientId;
 			headers["CF-Access-Client-Secret"] = clientSecret;
 		}
-		const response = await fetch(new URL("/api/admin/account-state", flags.url), {
-			method: "PUT",
-			headers,
-			body: JSON.stringify(state),
-		});
-		if (!response.ok) {
+		const response = await fetch(
+			new URL("/api/admin/account-state", flags.url),
+			{
+				method: "PUT",
+				headers,
+				body: JSON.stringify(state),
+			},
+		);
+		if (!response.ok)
+		{
 			this.error(`Seeding failed: ${response.status} ${await response.text()}`);
 		}
-		const result = {
+		const result =
+		{
 			rows: accountRowTotal(state.rows),
 			expandedKeys: state.expandedKeys?.length ?? null,
 		};

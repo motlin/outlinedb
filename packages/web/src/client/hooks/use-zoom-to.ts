@@ -31,7 +31,8 @@ export function useZoomTo(): (
 	targetId: string | null,
 	focus: ZoomFocus,
 	instance?: MirrorInstance | null,
-) => Promise<void> {
+) => Promise<void>
+{
 	const navigate = useStableNavigate();
 	const queryClient = useQueryClient();
 	return useCallback(
@@ -47,7 +48,8 @@ async function zoomTo(
 	targetId: string | null,
 	focus: ZoomFocus,
 	instance: MirrorInstance | null,
-): Promise<void> {
+): Promise<void>
+{
 	const state = useOutlineStore.getState();
 	const {editingId, showCompleted, animatingCompletionIds, resumeEditing, stopEditing, zoomPane} = state;
 	const zoomedNodeId = activeZoomedId(state);
@@ -66,28 +68,35 @@ async function zoomTo(
 		viewTarget === zoomedNodeId
 			? undefined
 			: queryOutlineView(queryClient, viewTarget, outlineViewShape(activePaneView().expandedIds, showCompleted));
-	if (zoomingInto) {
+	if (zoomingInto)
+	{
 		await treeLoaded;
 	}
 	const children = zoomingInto
-		? await queryClient.query({
-				queryKey: nodeKeys.children(targetId),
-				queryFn: async () => fetchChildren(targetId),
-				staleTime: "static",
-			})
+		? await queryClient.query(
+				{
+					queryKey: nodeKeys.children(targetId),
+					queryFn: async () => fetchChildren(targetId),
+					staleTime: "static",
+				},
+			)
 		: undefined;
 	const firstChild = sortByPriority(children ?? []).find((node) =>
 		isPotentiallyVisible(node, showCompleted, animatingCompletionIds),
 	);
-	const plan = planZoomFocus(focus, {
-		zoomedId: zoomedNodeId,
-		targetId,
-		firstChildId: firstChild?.id ?? null,
-		parentOfZoomed,
-		previousEditingId: editingId,
-		previousOffset,
-	});
-	if (plan === null) {
+	const plan = planZoomFocus(
+		focus,
+		{
+			zoomedId: zoomedNodeId,
+			targetId,
+			firstChildId: firstChild?.id ?? null,
+			parentOfZoomed,
+			previousEditingId: editingId,
+			previousOffset,
+		},
+	);
+	if (plan === null)
+	{
 		return;
 	}
 	editor?.blur();
@@ -99,45 +108,61 @@ async function zoomTo(
 	const isBoard = (id: string | null) => id !== null && readNode(queryClient, id)?.data.layoutMode === "board";
 	const animate =
 		paneId === null && movingId !== null && zoomAnimationEnabled(isBoard(zoomedNodeId) || isBoard(destination));
-	if (animate) {
+	if (animate)
+	{
 		document.body.classList.add(ZOOMING_CLASS);
 	}
-	try {
+	try
+	{
 		// Zooming in animates first, then navigates; zooming out navigates, then animates.
-		if (animate && !isOut) {
+		if (animate && !isOut)
+		{
 			await runZoomAnimation(false, movingId);
 		}
 		await Promise.all([viewLoaded, treeLoaded]);
 		// The new view paints first; focusing its edited row inside that frame would force a style and layout pass of
 		// the whole outline before the paint. After it, style and layout are clean and the focus costs next to nothing.
 		stopEditing();
-		showZoom(destination, plan.scrollTop, {
-			paneId,
-			zoomPane,
-			goToNode: (id) => {
-				if (id !== null) {
-					seedResolvedId(queryClient, id);
-				}
-				goToNode(navigate, id, null, false, focus === "first_child" && id === targetId ? instance : null);
+		showZoom(
+			destination,
+			plan.scrollTop,
+			{
+				paneId,
+				zoomPane,
+				goToNode: (id) =>
+				{
+					if (id !== null)
+					{
+						seedResolvedId(queryClient, id);
+					}
+					goToNode(navigate, id, null, false, focus === "first_child" && id === targetId ? instance : null);
+				},
+				scrollToTop: (scrolledPaneId) =>
+				{
+					scrollPaneToTop(scrolledPaneId ?? MAIN_PANE_ID);
+				},
 			},
-			scrollToTop: (scrolledPaneId) => {
-				scrollPaneToTop(scrolledPaneId ?? MAIN_PANE_ID);
-			},
-		});
+		);
 		// The zoom-out animation hides the row until it ends, so the caret is set after it, as upstream does.
-		if (animate && isOut) {
+		if (animate && isOut)
+		{
 			await waitForZoomRow(movingId);
 			await runZoomAnimation(true, movingId);
 		}
-		if (plan.editId !== null) {
+		if (plan.editId !== null)
+		{
 			await afterNextPaint();
 			const after = useOutlineStore.getState();
-			if (after.editingId === null && activeZoomedId(after) === destination) {
+			if (after.editingId === null && activeZoomedId(after) === destination)
+			{
 				resumeEditing(plan.editId, plan.offset);
 			}
 		}
-	} finally {
-		if (animate) {
+	}
+	finally
+	{
+		if (animate)
+		{
 			document.body.classList.remove(ZOOMING_CLASS);
 		}
 	}

@@ -1,8 +1,10 @@
 import {describe, expect, it} from "vite-plus/test";
 import {linkColorCss} from "../src/client/link-color-style.js";
 
-describe("linkColorCss", () => {
-	it("Blue: the tint rule, the workflowy.com and localhost overrides, then the search-match sky rule", () => {
+describe("linkColorCss", () =>
+{
+	it("Blue: the tint rule, the workflowy.com and localhost overrides, then the search-match sky rule", () =>
+	{
 		expect(linkColorCss(false)).toBe(
 			[
 				".contentLink { color: var(--wf-text-tint); }",
@@ -12,7 +14,8 @@ describe("linkColorCss", () => {
 		);
 	});
 
-	it("Gray: only the tertiary rule", () => {
+	it("Gray: only the tertiary rule", () =>
+	{
 		expect(linkColorCss(true)).toBe(".contentLink { color: var(--wf-text-tertiary); }");
 	});
 });

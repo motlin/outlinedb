@@ -29,7 +29,8 @@ const ORDER = ["starring", "order"];
 const RENAMED = ["location", "renamed"];
 const IS_SYNCED = ["starring", "isSynced"];
 
-export interface StarNodes {
+export interface StarNodes
+{
 	/** Whether a (non-Home) node is still in the cache. */
 	exists(nodeId: string): boolean;
 	nameText: NameText;
@@ -37,20 +38,24 @@ export interface StarNodes {
 
 const RecordSchema = z.record(z.string(), z.unknown());
 
-function record(value: unknown): Record<string, unknown> {
+function record(value: unknown): Record<string, unknown>
+{
 	return RecordSchema.safeParse(value).data ?? {};
 }
 
-function getIn(meta: unknown, path: string[]): unknown {
+function getIn(meta: unknown, path: string[]): unknown
+{
 	return path.reduce<unknown>((current, key) => record(current)[key], meta);
 }
 
-function storedOrder(meta: unknown): string[] | undefined {
+function storedOrder(meta: unknown): string[] | undefined
+{
 	const order = getIn(meta, ORDER);
 	return typeof order === "string" ? order.split(",") : undefined;
 }
 
-function isSynced(meta: unknown): boolean {
+function isSynced(meta: unknown): boolean
+{
 	return getIn(meta, IS_SYNCED) === true;
 }
 
@@ -58,28 +63,57 @@ function isSynced(meta: unknown): boolean {
  * Upstream `toggleLocation`: a synced account toggles `key` in `starring.locations`; an unsynced
  * one gets the whole toggled legacy map there instead, and `starring.isSynced: true`.
  */
-function toggleChanges(meta: unknown, key: string, value: string | undefined, legacy: Record<string, string>) {
+function toggleChanges(meta: unknown, key: string, value: string | undefined, legacy: Record<string, string>)
+{
 	return isSynced(meta)
-		? {location: [{path: [...LOCATIONS, key], value}], synced: []}
-		: {location: [{path: LOCATIONS, value: legacy}], synced: [{path: IS_SYNCED, value: true}]};
+		?
+			{
+				location: [
+					{
+						path: [...LOCATIONS, key],
+						value,
+					},
+				],
+				synced: [],
+			}
+		:
+			{
+				location: [
+					{
+						path: LOCATIONS,
+						value: legacy,
+					},
+				],
+				synced: [
+					{
+						path: IS_SYNCED,
+						value: true,
+					},
+				],
+			};
 }
 
-function keyUniqueId(key: string): string {
+function keyUniqueId(key: string): string
+{
 	return uniqueId(parseLocationKey(key));
 }
 
 /** Upstream `g82`: drop unknown and duplicate ids, then append valid ids missing from the order. */
-function normalizeOrder(order: string[], validIds: string[]): string[] | undefined {
+function normalizeOrder(order: string[], validIds: string[]): string[] | undefined
+{
 	const valid = new Set(validIds);
 	const seen = new Set<string>();
-	const kept = order.filter((id) => {
-		if (!valid.has(id) || seen.has(id)) {
+	const kept = order.filter((id) =>
+	{
+		if (!valid.has(id) || seen.has(id))
+		{
 			return false;
 		}
 		seen.add(id);
 		return true;
 	});
-	if (kept.length === 0 && order.every((id) => id === "")) {
+	if (kept.length === 0 && order.every((id) => id === ""))
+	{
 		return undefined;
 	}
 	return [...kept, ...validIds.filter((id) => !seen.has(id))];
@@ -89,15 +123,21 @@ function normalizeOrder(order: string[], validIds: string[]): string[] | undefin
  * The valid stars (Home, or a node still in the cache) in upstream's display order, read from
  * `starring.locations`, or from the legacy `savedViews` (`saved_views_json`) while unsynced.
  */
-export function starsFromRootMeta(meta: unknown, nodes: StarNodes, savedViews: string | undefined): Star[] {
+export function starsFromRootMeta(meta: unknown, nodes: StarNodes, savedViews: string | undefined): Star[]
+{
 	const renamed = record(getIn(meta, RENAMED));
 	const locations = isSynced(meta) ? record(getIn(meta, LOCATIONS)) : savedViewsMap(savedViews);
 	const valid = Object.entries(locations)
 		.filter(([, treeRoot]) => treeRoot === MAIN_TREE)
-		.map(([key]) => {
+		.map(([key]) =>
+		{
 			const location = parseLocationKey(key);
 			const name = renamed[uniqueId(location)];
-			return {key, ...location, name: typeof name === "string" && name !== "" ? name : null};
+			return {
+				key,
+				...location,
+				name: typeof name === "string" && name !== "" ? name : null,
+			};
 		})
 		.filter((star) => star.nodeId === null || nodes.exists(star.nodeId));
 
@@ -111,10 +151,15 @@ export function starsFromRootMeta(meta: unknown, nodes: StarNodes, savedViews: s
 	const ordered = order
 		? valid.toSorted((x, y) => order.indexOf(uniqueId(x)) - order.indexOf(uniqueId(y)))
 		: defaultOrder(
-				valid.map((star) => ({...star, position: 0})),
+				valid.map((star) => (
+				{
+					...star,
+					position: 0,
+				})),
 				nodes.nameText,
 			);
-	return ordered.map((star, position) => ({
+	return ordered.map((star, position) => (
+	{
 		key: star.key,
 		nodeId: star.nodeId,
 		query: star.query,
@@ -127,11 +172,20 @@ export function starsFromRootMeta(meta: unknown, nodes: StarNodes, savedViews: s
  * Star `key`; an existing order gets its uniqueId appended (upstream `toggleLocation`).
  * `legacy` is the saved-views map after starring, copied in while the account is unsynced.
  */
-export function starChanges(meta: unknown, key: string, legacy: Record<string, string>): MetadataChange[] {
+export function starChanges(meta: unknown, key: string, legacy: Record<string, string>): MetadataChange[]
+{
 	const {location, synced} = toggleChanges(meta, key, MAIN_TREE, legacy);
 	const order = storedOrder(meta);
 	const id = keyUniqueId(key);
-	const orderChange = order && !order.includes(id) ? [{path: ORDER, value: [...order, id].join(",")}] : [];
+	const orderChange =
+		order && !order.includes(id)
+			? [
+					{
+						path: ORDER,
+						value: [...order, id].join(","),
+					},
+				]
+			: [];
 	return [...location, ...orderChange, ...synced];
 }
 
@@ -139,22 +193,40 @@ export function starChanges(meta: unknown, key: string, legacy: Record<string, s
  * Unstar `key`: its location and its order entry (when ordered). Like upstream, a custom name survives.
  * `legacy` is the saved-views map after unstarring, copied in while the account is unsynced.
  */
-export function unstarChanges(meta: unknown, key: string, legacy: Record<string, string>): MetadataChange[] {
+export function unstarChanges(meta: unknown, key: string, legacy: Record<string, string>): MetadataChange[]
+{
 	const {location, synced} = toggleChanges(meta, key, undefined, legacy);
 	const id = keyUniqueId(key);
 	const order = storedOrder(meta);
 	const orderChange = order?.includes(id)
-		? [{path: ORDER, value: order.filter((entry) => entry !== id).join(",")}]
+		? [
+				{
+					path: ORDER,
+					value: order.filter((entry) => entry !== id).join(","),
+				},
+			]
 		: [];
 	return [...location, ...orderChange, ...synced];
 }
 
 /** Rename `key`; `null` or `""` clears the rename. */
-export function renameChanges(key: string, name: string | null): MetadataChange[] {
-	return [{path: [...RENAMED, keyUniqueId(key)], value: name === null || name === "" ? undefined : name}];
+export function renameChanges(key: string, name: string | null): MetadataChange[]
+{
+	return [
+		{
+			path: [...RENAMED, keyUniqueId(key)],
+			value: name === null || name === "" ? undefined : name,
+		},
+	];
 }
 
 /** Store `keys` as the explicit star order. */
-export function orderChanges(keys: readonly string[]): MetadataChange[] {
-	return [{path: ORDER, value: keys.map((key) => keyUniqueId(key)).join(",")}];
+export function orderChanges(keys: readonly string[]): MetadataChange[]
+{
+	return [
+		{
+			path: ORDER,
+			value: keys.map((key) => keyUniqueId(key)).join(","),
+		},
+	];
 }

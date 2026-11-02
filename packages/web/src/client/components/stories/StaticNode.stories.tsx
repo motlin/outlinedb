@@ -3,41 +3,57 @@ import {fn} from "storybook/test";
 
 import {StaticNode} from "./primitives.js";
 
-const meta: Meta<typeof StaticNode> = {
+const meta: Meta<typeof StaticNode> =
+{
 	title: "Components/StaticNode",
 	component: StaticNode,
-	parameters: {
+	parameters:
+	{
 		layout: "padded",
 	},
 	tags: ["autodocs"],
-	argTypes: {
-		name: {
+	argTypes:
+	{
+		name:
+		{
 			control: "text",
 			description: "The node text content (can include HTML)",
 		},
-		note: {
+		note:
+		{
 			control: "text",
 			description: "Optional note content",
 		},
-		isCompleted: {
+		isCompleted:
+		{
 			control: "boolean",
 			description: "Whether the node is completed (strikethrough)",
 		},
-		isExpanded: {
+		isExpanded:
+		{
 			control: "boolean",
 			description: "Whether the node is expanded",
 		},
-		isEditing: {
+		isEditing:
+		{
 			control: "boolean",
 			description: "Whether the node is being edited (shows its menu button)",
 		},
 	},
-	args: {
+	args:
+	{
 		onToggleExpand: fn<() => void>(),
 	},
 	decorators: [
 		(Story) => (
-			<div style={{width: "600px", position: "relative", minHeight: "50px"}}>
+			<div
+				style={
+				{
+					width: "600px",
+					position: "relative",
+					minHeight: "50px",
+				}}
+			>
 				<Story />
 			</div>
 		),
@@ -47,32 +63,40 @@ const meta: Meta<typeof StaticNode> = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const LeafNode: Story = {
-	args: {
+export const LeafNode: Story =
+{
+	args:
+	{
 		name: "A leaf node without children",
 		isExpanded: false,
 		isCompleted: false,
 	},
 };
 
-export const ExpandedNode: Story = {
-	args: {
+export const ExpandedNode: Story =
+{
+	args:
+	{
 		name: "An expanded node with children",
 		isExpanded: true,
 		isCompleted: false,
 	},
 };
 
-export const CompletedNode: Story = {
-	args: {
+export const CompletedNode: Story =
+{
+	args:
+	{
 		name: "A completed task",
 		isExpanded: false,
 		isCompleted: true,
 	},
 };
 
-export const EditingNode: Story = {
-	args: {
+export const EditingNode: Story =
+{
+	args:
+	{
 		name: "A node being edited",
 		isExpanded: false,
 		isCompleted: false,
@@ -80,8 +104,10 @@ export const EditingNode: Story = {
 	},
 };
 
-export const NodeWithNote: Story = {
-	args: {
+export const NodeWithNote: Story =
+{
+	args:
+	{
 		name: "Node with a note",
 		note: "This is additional information about the node.",
 		isExpanded: false,
@@ -89,8 +115,10 @@ export const NodeWithNote: Story = {
 	},
 };
 
-export const NodeWithLongNote: Story = {
-	args: {
+export const NodeWithLongNote: Story =
+{
+	args:
+	{
 		name: "Node with a long note",
 		note: "This is a much longer note that contains multiple sentences. It provides detailed context about the node, including background information, related links, and additional considerations that might be relevant when working on this item.",
 		isExpanded: false,
@@ -98,8 +126,10 @@ export const NodeWithLongNote: Story = {
 	},
 };
 
-export const NestedNode: Story = {
-	args: {
+export const NestedNode: Story =
+{
+	args:
+	{
 		name: "A parent node",
 		isExpanded: true,
 		isCompleted: false,
@@ -111,16 +141,20 @@ export const NestedNode: Story = {
 	),
 };
 
-export const WithHTMLContent: Story = {
-	args: {
+export const WithHTMLContent: Story =
+{
+	args:
+	{
 		name: '<span class="colored c-green">Green text</span> with <b>bold</b> and <em>italic</em>',
 		isExpanded: false,
 		isCompleted: false,
 	},
 };
 
-export const CompletedWithNote: Story = {
-	args: {
+export const CompletedWithNote: Story =
+{
+	args:
+	{
 		name: "Completed task with notes",
 		note: "This task was completed on time.",
 		isExpanded: false,

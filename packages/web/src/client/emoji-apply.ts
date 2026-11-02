@@ -15,19 +15,27 @@ export const EMOJI_OPTIONS = [
 ] as const;
 
 /** This browser's saved emoji style, `system` when unset or unreadable. */
-export function storedEmoji(): string {
-	try {
+export function storedEmoji(): string
+{
+	try
+	{
 		return localStorage.getItem(EMOJI_STORAGE_KEY) ?? "system";
-	} catch {
+	}
+	catch
+	{
 		return "system";
 	}
 }
 
 /** Remember `name` in this browser and swap the body's `emoji-*` class for `emoji-<name>`. */
-export function applyEmoji(name: string): void {
-	try {
+export function applyEmoji(name: string): void
+{
+	try
+	{
 		localStorage.setItem(EMOJI_STORAGE_KEY, name);
-	} catch {
+	}
+	catch
+	{
 		// Storage can be blocked; the style still applies for this page load.
 	}
 	const {classList} = document.body;
@@ -36,6 +44,7 @@ export function applyEmoji(name: string): void {
 }
 
 /** The account's `emojiSelected` once preferences load; null while loading, unavailable or unset. */
-export function serverEmoji(state: PreferencesState | undefined): string | null {
+export function serverEmoji(state: PreferencesState | undefined): string | null
+{
 	return state?.available === true ? state.preferences.emojiSelected : null;
 }

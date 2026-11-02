@@ -4,15 +4,24 @@ import {describe, expect, it} from "vite-plus/test";
 
 const opsDir = fileURLToPath(new URL("../src/server/ops/", import.meta.url));
 
-function sourceFiles(dir: string): string[] {
-	return readdirSync(dir, {withFileTypes: true}).flatMap((entry) => {
+function sourceFiles(dir: string): string[]
+{
+	return readdirSync(
+		dir,
+		{
+			withFileTypes: true,
+		},
+	).flatMap((entry) =>
+	{
 		const full = `${dir}${entry.name}`;
 		return entry.isDirectory() ? sourceFiles(`${full}/`) : [full];
 	});
 }
 
-describe("host-neutral ops", () => {
-	it("do not import hono", () => {
+describe("host-neutral ops", () =>
+{
+	it("do not import hono", () =>
+	{
 		const offenders = existsSync(opsDir)
 			? sourceFiles(opsDir).filter((file) =>
 					/from\s+["']hono(\/[^"']*)?["']|from\s+["']@hono\//u.test(readFileSync(file, "utf8")),
@@ -21,7 +30,8 @@ describe("host-neutral ops", () => {
 		expect(offenders).toStrictEqual([]);
 	});
 
-	it("do not import cloudflare:* modules", () => {
+	it("do not import cloudflare:* modules", () =>
+	{
 		const offenders = existsSync(opsDir)
 			? sourceFiles(opsDir).filter((file) => /from\s+["']cloudflare:/u.test(readFileSync(file, "utf8")))
 			: [];

@@ -2,8 +2,10 @@ import {describe, expect, it} from "vite-plus/test";
 import {installPrintListeners, printingStore} from "../src/client/hooks/use-printing.js";
 import {printRowBudget} from "../src/client/render-window.js";
 
-describe("printing flag", () => {
-	it("follows beforeprint and afterprint, and the disposer removes both listeners", () => {
+describe("printing flag", () =>
+{
+	it("follows beforeprint and afterprint, and the disposer removes both listeners", () =>
+	{
 		const win = new EventTarget();
 		const dispose = installPrintListeners(win);
 		const seen: boolean[] = [printingStore.get()];
@@ -19,9 +21,11 @@ describe("printing flag", () => {
 		printingStore.set(false);
 	});
 
-	it("notifies subscribers", () => {
+	it("notifies subscribers", () =>
+	{
 		const calls: boolean[] = [];
-		const unsubscribe = printingStore.subscribe(() => {
+		const unsubscribe = printingStore.subscribe(() =>
+		{
 			calls.push(printingStore.get());
 		});
 		printingStore.set(true);
@@ -34,8 +38,10 @@ describe("printing flag", () => {
 	});
 });
 
-describe("printRowBudget", () => {
-	it("renders every row while printing and the windowed budget otherwise", () => {
+describe("printRowBudget", () =>
+{
+	it("renders every row while printing and the windowed budget otherwise", () =>
+	{
 		expect([printRowBudget(48, true), printRowBudget(48, false)]).toStrictEqual([Number.POSITIVE_INFINITY, 48]);
 	});
 });

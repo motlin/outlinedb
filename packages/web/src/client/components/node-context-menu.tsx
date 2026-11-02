@@ -26,31 +26,40 @@ function MirrorBanner({
 }: {
 	originalNodeId: string;
 	onShowMirrors: (data: MirrorsResponse) => void;
-}) {
+})
+{
 	const [mirrorsData, setMirrorsData] = useState<MirrorsResponse | null>(null);
 
-	useEffect(() => {
-		void (async () => {
-			try {
+	useEffect(() =>
+	{
+		void (async () =>
+		{
+			try
+			{
 				const response = await fetch(`/api/v1/nodes/${encodeURIComponent(originalNodeId)}/mirrors`);
-				if (response.ok) {
+				if (response.ok)
+				{
 					const data = await readJson<MirrorsResponse>(response);
 					setMirrorsData(data);
 				}
-			} catch {
+			}
+			catch
+			{
 				// The mirrors badge is optional; a failed lookup just leaves it hidden.
 			}
 		})();
 	}, [originalNodeId]);
 
-	if (!mirrorsData || mirrorsData.mirrors.length <= 1) {
+	if (!mirrorsData || mirrorsData.mirrors.length <= 1)
+	{
 		return null;
 	}
 
 	return (
 		<MirrorBannerView
 			count={mirrorsData.mirrors.length}
-			onSeeThem={() => {
+			onSeeThem={() =>
+			{
 				onShowMirrors(mirrorsData);
 			}}
 		/>
@@ -58,7 +67,8 @@ function MirrorBanner({
 }
 
 /** Upstream's banner markup: `Node has N mirrors.` and a "See them" link that keeps focus on the menu trigger. */
-export function MirrorBannerView({count, onSeeThem}: {count: number; onSeeThem: () => void}) {
+export function MirrorBannerView({count, onSeeThem}: {count: number; onSeeThem: () => void})
+{
 	return (
 		<div className="flex flex-wrap justify-center py-m bg-tertiary !mt-0 mb-1.5 rounded-t-md border-b border-primary text-primary text-2xs">
 			<span>Node has {count} mirrors.</span>
@@ -66,11 +76,13 @@ export function MirrorBannerView({count, onSeeThem}: {count: number; onSeeThem: 
 			{/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions, jsx-a11y/anchor-is-valid -- verbatim upstream markup */}
 			<a
 				className="underline my-0 mx-xs"
-				onClick={(event) => {
+				onClick={(event) =>
+				{
 					event.stopPropagation();
 					onSeeThem();
 				}}
-				onMouseDown={(event) => {
+				onMouseDown={(event) =>
+				{
 					event.preventDefault();
 				}}
 			>
@@ -83,14 +95,17 @@ export function MirrorBannerView({count, onSeeThem}: {count: number; onSeeThem: 
 /** The node whose mirrors the banner lists: the original of a mirror, or an original that has mirrors; else none. */
 export function mirrorBannerOriginalId(
 	node: Pick<NodeResponse, "id" | "isMirror" | "hasMirrors" | "originalNodeId">,
-): string | null {
-	if (node.isMirror === true) {
+): string | null
+{
+	if (node.isMirror === true)
+	{
 		return node.originalNodeId ?? null;
 	}
 	return node.hasMirrors === true ? node.id : null;
 }
 
-export interface ItemMenuActions {
+export interface ItemMenuActions
+{
 	onOpenInPane: () => void;
 	onComplete: () => void;
 	onAddNote: () => void;
@@ -116,8 +131,13 @@ function footerTimestamp(
 	label: string,
 	unixSeconds: number | null,
 	now: Date,
-	formats: {dateFormat: string; timeFormat: string},
-) {
+	formats:
+	{
+		dateFormat: string;
+		timeFormat: string;
+	},
+)
+{
 	return (
 		<div className="flex flex-col gap-s">
 			<div>
@@ -141,7 +161,8 @@ export function ItemMenuBody({
 	actions: ItemMenuActions;
 	onClose: () => void;
 	onShowMirrors: (data: MirrorsResponse) => void;
-}) {
+})
+{
 	// The body mounts each time the menu opens, so "now" is the moment it opened.
 	const [now] = useState(() => new Date());
 	const dateSettings = useDateSettings();
@@ -155,19 +176,22 @@ export function ItemMenuBody({
 	const entries = buildItemMenu(node, qualifiers);
 	const mirrorOriginalId = mirrorBannerOriginalId(node);
 	/** Runs the action, then closes the menu (returning false so MenuItem does not keep it open). */
-	const thenClose = (run: () => void) => (): boolean => {
+	const thenClose = (run: () => void) => (): boolean =>
+	{
 		run();
 		onClose();
 		return false;
 	};
 	/** Closes the menu first, for actions that move focus or open another surface. */
-	const closeThen = (run: () => void) => (): boolean => {
+	const closeThen = (run: () => void) => (): boolean =>
+	{
 		onClose();
 		run();
 		return false;
 	};
 	// Expand all / Collapse all return true so the menu stays open; the rest close it.
-	const select: Partial<Record<ItemMenuKey, () => boolean>> = {
+	const select: Partial<Record<ItemMenuKey, () => boolean>> =
+	{
 		open_in_pane: closeThen(actions.onOpenInPane),
 		complete: thenClose(actions.onComplete),
 		add_note: closeThen(actions.onAddNote),
@@ -178,28 +202,34 @@ export function ItemMenuBody({
 		mirror: closeThen(actions.onMirror),
 		detach_mirror: thenClose(actions.onDetachMirror),
 		duplicate: thenClose(actions.onDuplicate),
-		duplicate_table_column: thenClose(() => {
+		duplicate_table_column: thenClose(() =>
+		{
 			actions.onDuplicateColumn?.();
 		}),
-		delete_table_column: thenClose(() => {
+		delete_table_column: thenClose(() =>
+		{
 			actions.onDeleteColumn?.();
 		}),
 		show_export: closeThen(actions.onExport),
 		copy_link: thenClose(actions.onCopyLink),
 		make_template: thenClose(actions.onMakeTemplate),
 		delete: thenClose(actions.onDelete),
-		expand_all: () => {
+		expand_all: () =>
+		{
 			actions.onExpandAll();
 			return true;
 		},
-		collapse_all: () => {
+		collapse_all: () =>
+		{
 			actions.onCollapseAll();
 			return true;
 		},
-		sort_children_asc: thenClose(() => {
+		sort_children_asc: thenClose(() =>
+		{
 			actions.onSort("asc");
 		}),
-		sort_children_desc: thenClose(() => {
+		sort_children_desc: thenClose(() =>
+		{
 			actions.onSort("desc");
 		}),
 	};
@@ -208,25 +238,41 @@ export function ItemMenuBody({
 		<>
 			{mirrorOriginalId !== null && (
 				<MirrorBanner
-					onShowMirrors={(data) => {
+					onShowMirrors={(data) =>
+					{
 						onClose();
 						onShowMirrors(data);
 					}}
 					originalNodeId={mirrorOriginalId}
 				/>
 			)}
-			{renderAssembledMenu(entries, {
-				cmdContext: {nodeIds: [node.id]},
-				qualifiers,
-				onSelect: (cmd) => (cmd.key === "node_type_picker" ? undefined : select[cmd.key]?.()),
-				// Upstream closes the bullet menu on a click, then opens the submenu at the click's page point.
-				openSubmenu: (menuId, target) => {
-					onClose();
-					setTimeout(() => {
-						useOutlineStore.getState().showMenuById(menuId, target, {nodeIds: [node.id]}, qualifiers);
-					});
+			{renderAssembledMenu(
+				entries,
+				{
+					cmdContext:
+					{
+						nodeIds: [node.id],
+					},
+					qualifiers,
+					onSelect: (cmd) => (cmd.key === "node_type_picker" ? undefined : select[cmd.key]?.()),
+					// Upstream closes the bullet menu on a click, then opens the submenu at the click's page point.
+					openSubmenu: (menuId, target) =>
+					{
+						onClose();
+						setTimeout(() =>
+						{
+							useOutlineStore.getState().showMenuById(
+								menuId,
+								target,
+								{
+									nodeIds: [node.id],
+								},
+								qualifiers,
+							);
+						});
+					},
 				},
-			})}
+			)}
 			{hasFooter(node) && (
 				<>
 					<MenuSeparator key="separator4" />
@@ -243,7 +289,8 @@ export function ItemMenuBody({
 	);
 }
 
-interface ItemMenuTriggerProps {
+interface ItemMenuTriggerProps
+{
 	node: NodeResponse;
 	/** Upstream `--item-menu-left`, from `itemMenuLeft`; omitted on the zoom title, whose CSS pins it at 65px. */
 	left?: string;
@@ -264,8 +311,10 @@ const ITEM_MENU_TRIGGER_CLASS =
 const ITEM_MENU_DOTS_CLASS =
 	"\n            block size-xl rounded-[12px]\n            text-tertiary\n            hover:bg-tertiary\n            [.menu:focus_&]:text-quaternary\n            [.menu:focus_&]:bg-tertiary\n          ";
 
-function blurActiveElement(): void {
-	if (document.activeElement instanceof HTMLElement) {
+function blurActiveElement(): void
+{
+	if (document.activeElement instanceof HTMLElement)
+	{
 		document.activeElement.blur();
 	}
 }
@@ -274,7 +323,8 @@ function blurActiveElement(): void {
  * Upstream's bullet-menu trigger: a ButtonMenu `div.menu.itemMenu` holding the three-dot
  * button. The row mounts it only while hovered or while its menu is open.
  */
-export function ItemMenuTrigger({node, left, actions, onOpenChange, expanded, setExpanded}: ItemMenuTriggerProps) {
+export function ItemMenuTrigger({node, left, actions, onOpenChange, expanded, setExpanded}: ItemMenuTriggerProps)
+{
 	return (
 		<ButtonMenu
 			className={ITEM_MENU_TRIGGER_CLASS}
@@ -283,13 +333,22 @@ export function ItemMenuTrigger({node, left, actions, onOpenChange, expanded, se
 			offset={ITEM_MENU_OFFSET}
 			placement="bottom-start"
 			setExpanded={setExpanded}
-			onHide={() => {
+			onHide={() =>
+			{
 				onOpenChange(false);
 			}}
-			onShow={() => {
+			onShow={() =>
+			{
 				onOpenChange(true);
 			}}
-			style={left === undefined ? undefined : {["--item-menu-left" as string]: left}}
+			style={
+				left === undefined
+					? undefined
+					:
+						{
+							["--item-menu-left" as string]: left,
+						}
+			}
 			button={
 				<span className={ITEM_MENU_DOTS_CLASS}>
 					<svg viewBox="0 0 24 24" fill="currentColor" className="block size-full">
@@ -304,7 +363,8 @@ export function ItemMenuTrigger({node, left, actions, onOpenChange, expanded, se
 				actions={actions}
 				node={node}
 				onClose={blurActiveElement}
-				onShowMirrors={(data) => {
+				onShowMirrors={(data) =>
+				{
 					useOutlineStore.getState().openMirrorsDialog(data.originalId);
 				}}
 			/>

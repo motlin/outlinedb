@@ -7,25 +7,36 @@ import type {GearMenuHeaderItem} from "./main-menu-model.js";
  * the main pane): hidden with no pane open, each disabled when `canPlacePane` refuses that direction.
  */
 export function movePaneItems(
-	state: {panes: readonly {id: string}[]},
+	state:
+	{
+		panes: readonly
+		{
+			id: string;
+		}[];
+	},
 	paneId: string,
 	move: (paneId: string, index: number) => void,
-): GearMenuHeaderItem[] {
-	if (state.panes.length === 0) {
+): GearMenuHeaderItem[]
+{
+	if (state.panes.length === 0)
+	{
 		return [];
 	}
 	const row = (
 		direction: "left" | "right",
 		label: string,
 		icon: "fal:square-chevron-left" | "fal:square-chevron-right",
-	) => {
+	) =>
+	{
 		const index = paneMoveIndex(state, paneId, direction);
 		return {
 			label,
 			icon: <FaIcon icon={icon} />,
 			disabled: index === null,
-			onSelect: () => {
-				if (index !== null) {
+			onSelect: () =>
+			{
+				if (index !== null)
+				{
 					move(paneId, index);
 				}
 			},

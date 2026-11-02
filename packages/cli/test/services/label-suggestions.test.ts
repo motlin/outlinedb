@@ -12,10 +12,12 @@ const EDITED_AT = "2026-11-03 21:14:02.000";
 const FIRST_RUN = "2026-11-04 06:00:11.000";
 const SECOND_RUN = "2026-11-05 06:00:11.000";
 
-describe("label suggestions persistence", () => {
+describe("label suggestions persistence", () =>
+{
 	let testDatabase: TestDatabase;
 
-	beforeEach(() => {
+	beforeEach(() =>
+	{
 		testDatabase = createInMemoryTestDatabase();
 		testDatabase.db
 			.insert(nodeContent)
@@ -40,11 +42,13 @@ describe("label suggestions persistence", () => {
 			.run();
 	});
 
-	afterEach(() => {
+	afterEach(() =>
+	{
 		cleanupTestDatabase(testDatabase);
 	});
 
-	function allRows() {
+	function allRows()
+	{
 		return testDatabase.db
 			.select()
 			.from(nodeLabelSuggestions)
@@ -56,13 +60,27 @@ describe("label suggestions persistence", () => {
 			.all();
 	}
 
-	it("writes one live row per label and source, stamped with the content version it scored", () => {
+	it("writes one live row per label and source, stamped with the content version it scored", () =>
+	{
 		saveLabelSuggestions(
 			testDatabase.db,
-			{nodeId: ENTRY, contentFrom: EDITED_AT},
+			{
+				nodeId: ENTRY,
+				contentFrom: EDITED_AT,
+			},
 			[
-				{label: "#pickleball", kind: "tag", source: "clef-flash-shortlist", score: 0.62},
-				{label: "#pickleball", kind: "tag", source: "clef-flash", score: 0.98},
+				{
+					label: "#pickleball",
+					kind: "tag",
+					source: "clef-flash-shortlist",
+					score: 0.62,
+				},
+				{
+					label: "#pickleball",
+					kind: "tag",
+					source: "clef-flash",
+					score: 0.98,
+				},
 			],
 			FIRST_RUN,
 		);
@@ -91,27 +109,61 @@ describe("label suggestions persistence", () => {
 		]);
 	});
 
-	it("re-scoring closes every live row of that entry and inserts the new scores, leaving other entries alone", () => {
+	it("re-scoring closes every live row of that entry and inserts the new scores, leaving other entries alone", () =>
+	{
 		saveLabelSuggestions(
 			testDatabase.db,
-			{nodeId: ENTRY, contentFrom: EDITED_AT},
+			{
+				nodeId: ENTRY,
+				contentFrom: EDITED_AT,
+			},
 			[
-				{label: "#pickleball", kind: "tag", source: "clef-flash", score: 0.98},
-				{label: "@AliceChen", kind: "person", source: "clef-flash", score: 0.07},
+				{
+					label: "#pickleball",
+					kind: "tag",
+					source: "clef-flash",
+					score: 0.98,
+				},
+				{
+					label: "@AliceChen",
+					kind: "person",
+					source: "clef-flash",
+					score: 0.07,
+				},
 			],
 			FIRST_RUN,
 		);
 		saveLabelSuggestions(
 			testDatabase.db,
-			{nodeId: OTHER, contentFrom: EDITED_AT},
-			[{label: "#health", kind: "tag", source: "clef-flash", score: 0.9}],
+			{
+				nodeId: OTHER,
+				contentFrom: EDITED_AT,
+			},
+			[
+				{
+					label: "#health",
+					kind: "tag",
+					source: "clef-flash",
+					score: 0.9,
+				},
+			],
 			FIRST_RUN,
 		);
 
 		saveLabelSuggestions(
 			testDatabase.db,
-			{nodeId: ENTRY, contentFrom: EDITED_AT},
-			[{label: "#pickleball", kind: "tag", source: "clef", score: 0.95}],
+			{
+				nodeId: ENTRY,
+				contentFrom: EDITED_AT,
+			},
+			[
+				{
+					label: "#pickleball",
+					kind: "tag",
+					source: "clef",
+					score: 0.95,
+				},
+			],
 			SECOND_RUN,
 		);
 
@@ -159,24 +211,57 @@ describe("label suggestions persistence", () => {
 		]);
 	});
 
-	it("needs scoring for entries never scored and entries edited since their live scores, skipping fresh ones", () => {
+	it("needs scoring for entries never scored and entries edited since their live scores, skipping fresh ones", () =>
+	{
 		saveLabelSuggestions(
 			testDatabase.db,
-			{nodeId: ENTRY, contentFrom: EDITED_AT},
-			[{label: "#pickleball", kind: "tag", source: "clef-flash", score: 0.98}],
+			{
+				nodeId: ENTRY,
+				contentFrom: EDITED_AT,
+			},
+			[
+				{
+					label: "#pickleball",
+					kind: "tag",
+					source: "clef-flash",
+					score: 0.98,
+				},
+			],
 			FIRST_RUN,
 		);
 
-		expect(entriesToScore(testDatabase.db, [ENTRY, OTHER, "missing"], {force: false})).toStrictEqual([
-			{nodeId: OTHER, contentFrom: EDITED_AT},
+		expect(
+			entriesToScore(
+				testDatabase.db,
+				[ENTRY, OTHER, "missing"],
+				{
+					force: false,
+				},
+			),
+		).toStrictEqual([
+			{
+				nodeId: OTHER,
+				contentFrom: EDITED_AT,
+			},
 		]);
 	});
 
-	it("treats live rows as stale once node_content.system_from moves past their content_from", () => {
+	it("treats live rows as stale once node_content.system_from moves past their content_from", () =>
+	{
 		saveLabelSuggestions(
 			testDatabase.db,
-			{nodeId: ENTRY, contentFrom: EDITED_AT},
-			[{label: "#pickleball", kind: "tag", source: "clef-flash", score: 0.98}],
+			{
+				nodeId: ENTRY,
+				contentFrom: EDITED_AT,
+			},
+			[
+				{
+					label: "#pickleball",
+					kind: "tag",
+					source: "clef-flash",
+					score: 0.98,
+				},
+			],
 			FIRST_RUN,
 		);
 		const reEditedAt = "2026-11-04 20:00:00.000";
@@ -185,46 +270,114 @@ describe("label suggestions persistence", () => {
 			.run(reEditedAt, ENTRY, FAR_FUTURE_DATE);
 		testDatabase.db
 			.insert(nodeContent)
-			.values({
-				id: ENTRY,
-				name: "Played pickleball with Alice and Bob",
-				note: null,
-				parentId: "day",
-				systemFrom: reEditedAt,
-				systemTo: FAR_FUTURE_DATE,
-			})
+			.values(
+				{
+					id: ENTRY,
+					name: "Played pickleball with Alice and Bob",
+					note: null,
+					parentId: "day",
+					systemFrom: reEditedAt,
+					systemTo: FAR_FUTURE_DATE,
+				},
+			)
 			.run();
 
-		expect(entriesToScore(testDatabase.db, [ENTRY], {force: false})).toStrictEqual([
-			{nodeId: ENTRY, contentFrom: reEditedAt},
+		expect(
+			entriesToScore(
+				testDatabase.db,
+				[ENTRY],
+				{
+					force: false,
+				},
+			),
+		).toStrictEqual([
+			{
+				nodeId: ENTRY,
+				contentFrom: reEditedAt,
+			},
 		]);
 	});
 
-	it("an entry whose only scores are closed needs scoring again", () => {
+	it("an entry whose only scores are closed needs scoring again", () =>
+	{
 		saveLabelSuggestions(
 			testDatabase.db,
-			{nodeId: ENTRY, contentFrom: EDITED_AT},
-			[{label: "#pickleball", kind: "tag", source: "clef-flash", score: 0.98}],
+			{
+				nodeId: ENTRY,
+				contentFrom: EDITED_AT,
+			},
+			[
+				{
+					label: "#pickleball",
+					kind: "tag",
+					source: "clef-flash",
+					score: 0.98,
+				},
+			],
 			FIRST_RUN,
 		);
-		saveLabelSuggestions(testDatabase.db, {nodeId: ENTRY, contentFrom: EDITED_AT}, [], SECOND_RUN);
+		saveLabelSuggestions(
+			testDatabase.db,
+			{
+				nodeId: ENTRY,
+				contentFrom: EDITED_AT,
+			},
+			[],
+			SECOND_RUN,
+		);
 
-		expect(entriesToScore(testDatabase.db, [ENTRY], {force: false})).toStrictEqual([
-			{nodeId: ENTRY, contentFrom: EDITED_AT},
+		expect(
+			entriesToScore(
+				testDatabase.db,
+				[ENTRY],
+				{
+					force: false,
+				},
+			),
+		).toStrictEqual([
+			{
+				nodeId: ENTRY,
+				contentFrom: EDITED_AT,
+			},
 		]);
 	});
 
-	it("--force rescoring returns fresh entries too, in the order asked", () => {
+	it("--force rescoring returns fresh entries too, in the order asked", () =>
+	{
 		saveLabelSuggestions(
 			testDatabase.db,
-			{nodeId: ENTRY, contentFrom: EDITED_AT},
-			[{label: "#pickleball", kind: "tag", source: "clef-flash", score: 0.98}],
+			{
+				nodeId: ENTRY,
+				contentFrom: EDITED_AT,
+			},
+			[
+				{
+					label: "#pickleball",
+					kind: "tag",
+					source: "clef-flash",
+					score: 0.98,
+				},
+			],
 			FIRST_RUN,
 		);
 
-		expect(entriesToScore(testDatabase.db, [OTHER, ENTRY, "missing"], {force: true})).toStrictEqual([
-			{nodeId: OTHER, contentFrom: EDITED_AT},
-			{nodeId: ENTRY, contentFrom: EDITED_AT},
+		expect(
+			entriesToScore(
+				testDatabase.db,
+				[OTHER, ENTRY, "missing"],
+				{
+					force: true,
+				},
+			),
+		).toStrictEqual([
+			{
+				nodeId: OTHER,
+				contentFrom: EDITED_AT,
+			},
+			{
+				nodeId: ENTRY,
+				contentFrom: EDITED_AT,
+			},
 		]);
 	});
 });

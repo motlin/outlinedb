@@ -21,25 +21,34 @@ import type {NormalizedAiMetadataRow, NormalizedMirrorRow, NormalizedReferencesR
 import {joinKey, temporalMerge} from "./temporal-merge.js";
 import type {TemporalMergeResult, TemporalTransaction} from "./temporal-merge.js";
 
-export interface ItemRelationships {
+export interface ItemRelationships
+{
 	mirrors: NormalizedMirrorRow[];
 	referencesRoots: NormalizedReferencesRootsRow[];
 	aiMetadata: NormalizedAiMetadataRow[];
 }
 
-export interface MergeItemRelationshipsResult {
+export interface MergeItemRelationshipsResult
+{
 	mirrors: TemporalMergeResult;
 }
 
-export function emptyItemRelationships(): ItemRelationships {
-	return {mirrors: [], referencesRoots: [], aiMetadata: []};
+export function emptyItemRelationships(): ItemRelationships
+{
+	return {
+		mirrors: [],
+		referencesRoots: [],
+		aiMetadata: [],
+	};
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isRecord(value: unknown): value is Record<string, unknown>
+{
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function keysOf(value: unknown): string[] {
+function keysOf(value: unknown): string[]
+{
 	return isRecord(value) ? Object.keys(value) : [];
 }
 
@@ -48,34 +57,67 @@ function keysOf(value: unknown): string[] {
  * malformed fields are ignored, so it reads both the validated backup shape and
  * the untyped `/get_tree_data/` items.
  */
-export function collectItemRelationships(into: ItemRelationships, id: string, metadata: unknown): void {
-	if (!isRecord(metadata)) {
+export function collectItemRelationships(into: ItemRelationships, id: string, metadata: unknown): void
+{
+	if (!isRecord(metadata))
+	{
 		return;
 	}
-	if (metadata.isReferencesRoot === true) {
-		into.referencesRoots.push({nodeId: id});
+	if (metadata.isReferencesRoot === true)
+	{
+		into.referencesRoots.push(
+			{
+				nodeId: id,
+			},
+		);
 	}
-	if (isRecord(metadata.ai) && typeof metadata.ai.inChat === "boolean") {
-		into.aiMetadata.push({nodeId: id, inChat: metadata.ai.inChat ? 1 : 0});
+	if (isRecord(metadata.ai) && typeof metadata.ai.inChat === "boolean")
+	{
+		into.aiMetadata.push(
+			{
+				nodeId: id,
+				inChat: metadata.ai.inChat ? 1 : 0,
+			},
+		);
 	}
 	const {mirror, backlink} = metadata;
-	if (isRecord(mirror)) {
+	if (isRecord(mirror))
+	{
 		// originalId: this node mirrors that original.
-		if (typeof mirror.originalId === "string" && mirror.originalId !== "") {
-			into.mirrors.push({mirrorId: id, originalId: mirror.originalId});
+		if (typeof mirror.originalId === "string" && mirror.originalId !== "")
+		{
+			into.mirrors.push(
+				{
+					mirrorId: id,
+					originalId: mirror.originalId,
+				},
+			);
 		}
 		// mirrorRootIds / backlinkMirrorRootIds: this node is the original of each id.
-		for (const mirrorId of [...keysOf(mirror.mirrorRootIds), ...keysOf(mirror.backlinkMirrorRootIds)]) {
-			into.mirrors.push({mirrorId, originalId: id});
+		for (const mirrorId of [...keysOf(mirror.mirrorRootIds), ...keysOf(mirror.backlinkMirrorRootIds)])
+		{
+			into.mirrors.push(
+				{
+					mirrorId,
+					originalId: id,
+				},
+			);
 		}
 	}
 	// A backlink item mirrors its source; its target is derived from where it sits.
-	if (isRecord(backlink) && typeof backlink.sourceID === "string" && backlink.sourceID !== "") {
-		into.mirrors.push({mirrorId: id, originalId: backlink.sourceID});
+	if (isRecord(backlink) && typeof backlink.sourceID === "string" && backlink.sourceID !== "")
+	{
+		into.mirrors.push(
+			{
+				mirrorId: id,
+				originalId: backlink.sourceID,
+			},
+		);
 	}
 }
 
-function dedupe<T>(rows: T[], key: (row: T) => string): T[] {
+function dedupe<T>(rows: T[], key: (row: T) => string): T[]
+{
 	return [...new Map(rows.map((row) => [key(row), row])).values()];
 }
 
@@ -91,7 +133,8 @@ export function mergeItemRelationships(
 	unitOfWork: UnitOfWork,
 	relationships: ItemRelationships,
 	liveNodeIds: ReadonlySet<string>,
-): MergeItemRelationshipsResult {
+): MergeItemRelationshipsResult
+{
 	const {tx, systemTime} = unitOfWork;
 
 	const mirrorRows = dedupe(
@@ -106,14 +149,20 @@ export function mergeItemRelationships(
 			incomingKey: mirrorKey,
 			currentKey: mirrorKey,
 			contentMatches: () => true, // the key is the whole row
-			buildInsertRow: (m: NormalizedMirrorRow) => ({mirrorId: m.mirrorId, originalId: m.originalId}),
+			buildInsertRow: (m: NormalizedMirrorRow) => (
+			{
+				mirrorId: m.mirrorId,
+				originalId: m.originalId,
+			}),
 		},
 		mirrorRows,
 		tx.select().from(mirrors).where(eq(mirrors.systemTo, FAR_FUTURE_DATE)).all(),
 		systemTime,
 	);
 
-	return {mirrors: mirrorResult};
+	return {
+		mirrors: mirrorResult,
+	};
 }
 
 /**
@@ -122,12 +171,22 @@ export function mergeItemRelationships(
  * Unlike {@link mergeItemRelationships} it ends nothing: it records what an
  * accepted push created.
  */
-export function recordItemRelationships(unitOfWork: UnitOfWork, relationships: ItemRelationships): void {
+export function recordItemRelationships(unitOfWork: UnitOfWork, relationships: ItemRelationships): void
+{
 	const {tx, systemTime} = unitOfWork;
-	const current = {systemFrom: systemTime, systemTo: FAR_FUTURE_DATE};
-	for (const row of dedupe(relationships.mirrors, mirrorKey)) {
+	const current =
+	{
+		systemFrom: systemTime,
+		systemTo: FAR_FUTURE_DATE,
+	};
+	for (const row of dedupe(relationships.mirrors, mirrorKey))
+	{
 		const exists = tx
-			.select({id: mirrors.mirrorId})
+			.select(
+				{
+					id: mirrors.mirrorId,
+				},
+			)
 			.from(mirrors)
 			.where(
 				and(
@@ -137,40 +196,65 @@ export function recordItemRelationships(unitOfWork: UnitOfWork, relationships: I
 				),
 			)
 			.get();
-		if (exists === undefined) {
+		if (exists === undefined)
+		{
 			tx.insert(mirrors)
-				.values({mirrorId: row.mirrorId, originalId: row.originalId, ...current})
+				.values(
+					{
+						mirrorId: row.mirrorId,
+						originalId: row.originalId,
+						...current,
+					},
+				)
 				.run();
 		}
 	}
-	for (const nodeId of new Set(relationships.referencesRoots.map((row) => row.nodeId))) {
+	for (const nodeId of new Set(relationships.referencesRoots.map((row) => row.nodeId)))
+	{
 		const exists = tx
-			.select({id: referencesRoots.nodeId})
+			.select(
+				{
+					id: referencesRoots.nodeId,
+				},
+			)
 			.from(referencesRoots)
 			.where(and(eq(referencesRoots.nodeId, nodeId), eq(referencesRoots.systemTo, FAR_FUTURE_DATE)))
 			.get();
-		if (exists === undefined) {
+		if (exists === undefined)
+		{
 			tx.insert(referencesRoots)
-				.values({nodeId, ...current})
+				.values(
+					{
+						nodeId,
+						...current,
+					},
+				)
 				.run();
 		}
 	}
 }
 
 /** The relationship part of one item's upstream metadata, as `/get_tree_data/` carries it. */
-export interface UpstreamRelationshipMetadata {
-	mirror?: {
+export interface UpstreamRelationshipMetadata
+{
+	mirror?:
+	{
 		originalId?: string;
 		isMirrorRoot?: true;
 		mirrorRootIds?: Record<string, true>;
 		backlinkMirrorRootIds?: Record<string, true>;
 	};
-	backlink?: {sourceID: string; targetID: string};
+	backlink?:
+	{
+		sourceID: string;
+		targetID: string;
+	};
 	isReferencesRoot?: true;
 }
 
 /** A backlink item: a mirror of `sourceId` under `targetId`'s references root. */
-export interface BacklinkItem {
+export interface BacklinkItem
+{
 	nodeId: string;
 	sourceId: string;
 	targetId: string;
@@ -186,9 +270,16 @@ const rootContent = alias(nodeContent, "backlink_root");
  * may filter on `mirrors.mirrorId`, `mirrors.originalId` or
  * {@link backlinkItemParent}.
  */
-export function currentBacklinkItems(tx: TemporalTransaction, where: SQL | undefined): BacklinkItem[] {
+export function currentBacklinkItems(tx: TemporalTransaction, where: SQL | undefined): BacklinkItem[]
+{
 	return tx
-		.select({nodeId: mirrors.mirrorId, sourceId: mirrors.originalId, targetId: rootContent.parentId})
+		.select(
+			{
+				nodeId: mirrors.mirrorId,
+				sourceId: mirrors.originalId,
+				targetId: rootContent.parentId,
+			},
+		)
 		.from(mirrors)
 		.innerJoin(itemContent, and(eq(itemContent.id, mirrors.mirrorId), eq(itemContent.systemTo, FAR_FUTURE_DATE)))
 		.innerJoin(
@@ -201,14 +292,25 @@ export function currentBacklinkItems(tx: TemporalTransaction, where: SQL | undef
 		)
 		.where(and(eq(mirrors.systemTo, FAR_FUTURE_DATE), where))
 		.all()
-		.flatMap(({nodeId, sourceId, targetId}) => (targetId === null ? [] : [{nodeId, sourceId, targetId}]));
+		.flatMap(({nodeId, sourceId, targetId}) =>
+			targetId === null
+				? []
+				: [
+						{
+							nodeId,
+							sourceId,
+							targetId,
+						},
+					],
+		);
 }
 
 /** The parent column of a backlink item in {@link currentBacklinkItems}, for filtering by references root. */
 export const backlinkItemParent = itemContent.parentId;
 
 /** A `mirrors` condition: the mirror is not a backlink item (its parent is not a current references root). */
-export function notBacklinkItem(): SQL {
+export function notBacklinkItem(): SQL
+{
 	return sql`NOT EXISTS (SELECT 1 FROM ${nodeContent} c JOIN ${referencesRoots} r ON r.node_id = c.parent_id AND r.system_to = ${FAR_FUTURE_DATE} WHERE c.id = ${mirrors.mirrorId} AND c.system_to = ${FAR_FUTURE_DATE})`;
 }
 
@@ -223,40 +325,69 @@ export function notBacklinkItem(): SQL {
 export function upstreamRelationshipMetadata(
 	tx: TemporalTransaction,
 	nodeIds: readonly string[],
-): Map<string, UpstreamRelationshipMetadata> {
+): Map<string, UpstreamRelationshipMetadata>
+{
 	const result = new Map<string, UpstreamRelationshipMetadata>(nodeIds.map((id) => [id, {}]));
 	const ids = [...result.keys()];
 	const touches = or(inIds(mirrors.mirrorId, ids), inIds(mirrors.originalId, ids));
 	const mirrorRows = tx
-		.select({mirrorId: mirrors.mirrorId, originalId: mirrors.originalId})
+		.select(
+			{
+				mirrorId: mirrors.mirrorId,
+				originalId: mirrors.originalId,
+			},
+		)
 		.from(mirrors)
 		.where(and(touches, eq(mirrors.systemTo, FAR_FUTURE_DATE)))
 		.all();
 	const backlinkItems = new Map(currentBacklinkItems(tx, touches).map((item) => [item.nodeId, item]));
-	for (const {mirrorId, originalId} of mirrorRows) {
+	for (const {mirrorId, originalId} of mirrorRows)
+	{
 		const item = backlinkItems.get(mirrorId);
 		const asMirror = result.get(mirrorId);
-		if (asMirror !== undefined) {
-			asMirror.mirror = {...asMirror.mirror, originalId, isMirrorRoot: true};
-			if (item !== undefined) {
-				asMirror.backlink = {sourceID: item.sourceId, targetID: item.targetId};
+		if (asMirror !== undefined)
+		{
+			asMirror.mirror =
+			{
+				...asMirror.mirror,
+				originalId,
+				isMirrorRoot: true,
+			};
+			if (item !== undefined)
+			{
+				asMirror.backlink =
+				{
+					sourceID: item.sourceId,
+					targetID: item.targetId,
+				};
 			}
 		}
 		const asOriginal = result.get(originalId);
-		if (asOriginal !== undefined) {
+		if (asOriginal !== undefined)
+		{
 			const mirror = (asOriginal.mirror ??= {});
 			const field = item === undefined ? "mirrorRootIds" : "backlinkMirrorRootIds";
-			mirror[field] = {...mirror[field], [mirrorId]: true};
+			mirror[field] =
+			{
+				...mirror[field],
+				[mirrorId]: true,
+			};
 		}
 	}
 	const rootRows = tx
-		.select({nodeId: referencesRoots.nodeId})
+		.select(
+			{
+				nodeId: referencesRoots.nodeId,
+			},
+		)
 		.from(referencesRoots)
 		.where(and(inIds(referencesRoots.nodeId, ids), eq(referencesRoots.systemTo, FAR_FUTURE_DATE)))
 		.all();
-	for (const {nodeId} of rootRows) {
+	for (const {nodeId} of rootRows)
+	{
 		const metadata = result.get(nodeId);
-		if (metadata !== undefined) {
+		if (metadata !== undefined)
+		{
 			metadata.isReferencesRoot = true;
 		}
 	}

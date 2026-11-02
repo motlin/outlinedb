@@ -10,7 +10,8 @@ import type {TemporalTransaction} from "./temporal-merge.js";
  * a backlink source deletes its backlink items, and a deleted node takes its
  * mirror and references root rows with it.
  */
-export interface StrandedRowCounts {
+export interface StrandedRowCounts
+{
 	/** Current children of a current references root with no current mirror row naming a current original. */
 	backlinkItems: number;
 	/** Current mirror rows whose mirror or original is not a current node. */
@@ -23,9 +24,13 @@ const notCurrentNode = (column: unknown) =>
 	sql`NOT EXISTS (SELECT 1 FROM ${nodeContent} n WHERE n.id = ${column} AND n.system_to = ${FAR_FUTURE_DATE})`;
 
 /** The current backlink items with no current original, sorted by id. */
-function strandedBacklinkItemIds(tx: TemporalTransaction): string[] {
+function strandedBacklinkItemIds(tx: TemporalTransaction): string[]
+{
 	return tx
-		.all<{id: string}>(
+		.all<
+		{
+			id: string;
+		}>(
 			sql`SELECT c.id AS id FROM ${nodeContent} c
 				JOIN ${referencesRoots} r ON r.node_id = c.parent_id AND r.system_to = ${FAR_FUTURE_DATE}
 				JOIN ${nodeContent} root ON root.id = r.node_id AND root.system_to = ${FAR_FUTURE_DATE}
@@ -41,12 +46,25 @@ function strandedBacklinkItemIds(tx: TemporalTransaction): string[] {
 }
 
 /** Count the stranded relationship rows; read-only. */
-export function countStrandedRows(tx: TemporalTransaction): StrandedRowCounts {
-	const strandedMirrors = tx.get<{count: number} | undefined>(
+export function countStrandedRows(tx: TemporalTransaction): StrandedRowCounts
+{
+	const strandedMirrors = tx.get<
+		|
+		  {
+				count: number;
+		  }
+		| undefined
+	>(
 		sql`SELECT COUNT(*) AS count FROM ${mirrors} WHERE ${mirrors.systemTo} = ${FAR_FUTURE_DATE}
 			AND (${notCurrentNode(mirrors.mirrorId)} OR ${notCurrentNode(mirrors.originalId)})`,
 	);
-	const strandedRoots = tx.get<{count: number} | undefined>(
+	const strandedRoots = tx.get<
+		|
+		  {
+				count: number;
+		  }
+		| undefined
+	>(
 		sql`SELECT COUNT(*) AS count FROM ${referencesRoots} WHERE ${referencesRoots.systemTo} = ${FAR_FUTURE_DATE}
 			AND ${notCurrentNode(referencesRoots.nodeId)}`,
 	);
@@ -63,7 +81,8 @@ export function countStrandedRows(tx: TemporalTransaction): StrandedRowCounts {
  * none (upstream has none). An item this unit of work inserted is withdrawn.
  * Returns the ended ids, sorted.
  */
-export function endStrandedBacklinkItems(unitOfWork: UnitOfWork): string[] {
+export function endStrandedBacklinkItems(unitOfWork: UnitOfWork): string[]
+{
 	const ids = strandedBacklinkItemIds(unitOfWork.tx);
 	withdrawNodeComposites(unitOfWork, ids);
 	return ids;

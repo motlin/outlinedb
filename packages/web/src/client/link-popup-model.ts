@@ -9,29 +9,35 @@ import {storeAnchors} from "./link-render.js";
 const SCHEME_PATTERN = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//u;
 
 /** The href Apply stores: `message:<` is `encodeURI`'d, a scheme with `//` is kept, anything else gets `https://`. */
-export function normalizeLinkHref(raw: string): string {
+export function normalizeLinkHref(raw: string): string
+{
 	const href = raw.trim();
-	if (href.startsWith("message:<")) {
+	if (href.startsWith("message:<"))
+	{
 		return encodeURI(href);
 	}
-	if (href.startsWith("message:") || SCHEME_PATTERN.test(href)) {
+	if (href.startsWith("message:") || SCHEME_PATTERN.test(href))
+	{
 		return href;
 	}
 	return `https://${href}`;
 }
 
 /** Apply is enabled once both fields have text. */
-export function canApply(text: string, href: string): boolean {
+export function canApply(text: string, href: string): boolean
+{
 	return text.trim() !== "" && href.trim() !== "";
 }
 
 /** Unlink is hidden when the text is exactly one URL (it would just relink itself). */
-export function canUnlink(text: string): boolean {
+export function canUnlink(text: string): boolean
+{
 	const links = findAutoLinks(text, []);
 	return !(links.length === 1 && links[0]?.start === 0 && links[0].end === text.length);
 }
 
-export interface LinkPopupTriggerInput {
+export interface LinkPopupTriggerInput
+{
 	collapsed: boolean;
 	selectionTouchesLink: boolean;
 	caretInLink: boolean;
@@ -42,17 +48,22 @@ export function linkPopupTrigger({
 	collapsed,
 	selectionTouchesLink,
 	caretInLink,
-}: LinkPopupTriggerInput): "new" | "edit" | null {
-	if (!collapsed) {
+}: LinkPopupTriggerInput): "new" | "edit" | null
+{
+	if (!collapsed)
+	{
 		return selectionTouchesLink ? null : "new";
 	}
 	return caretInLink ? "edit" : null;
 }
 
 /** The anchor in `root` whose first plain-text unit is `start`. */
-function anchorAt(root: HTMLElement, start: number): HTMLAnchorElement | null {
-	for (const anchor of root.querySelectorAll("a")) {
-		if (unitsBefore(root, anchor, 0) === start) {
+function anchorAt(root: HTMLElement, start: number): HTMLAnchorElement | null
+{
+	for (const anchor of root.querySelectorAll("a"))
+	{
+		if (unitsBefore(root, anchor, 0) === start)
+		{
 			return anchor;
 		}
 	}
@@ -65,10 +76,25 @@ function anchorAt(root: HTMLElement, start: number): HTMLAnchorElement | null {
  */
 function applyLinkToElement(
 	root: HTMLElement,
-	{start, end, text, href, existing}: {start: number; end: number; text: string; href: string; existing: boolean},
-): number {
+	{
+		start,
+		end,
+		text,
+		href,
+		existing,
+	}:
+	{
+		start: number;
+		end: number;
+		text: string;
+		href: string;
+		existing: boolean;
+	},
+): number
+{
 	const anchor = existing ? anchorAt(root, start) : null;
-	if (anchor === null) {
+	if (anchor === null)
+	{
 		const range = rangeAtTextOffsets(root, start, end);
 		range.deleteContents();
 		const created = document.createElement("a");
@@ -78,7 +104,9 @@ function applyLinkToElement(
 		created.setAttribute("href", href);
 		created.textContent = text;
 		range.insertNode(created);
-	} else {
+	}
+	else
+	{
 		anchor.setAttribute("href", href);
 		anchor.textContent = text;
 	}
@@ -86,7 +114,8 @@ function applyLinkToElement(
 }
 
 /** Unwrap the anchor that starts at plain-text unit `start` of `root`, keeping its content. */
-function unlinkInElement(root: HTMLElement, start: number): void {
+function unlinkInElement(root: HTMLElement, start: number): void
+{
 	const anchor = anchorAt(root, start);
 	anchor?.replaceWith(...anchor.childNodes);
 }
@@ -99,15 +128,33 @@ export function applyLinkToHtml(
 	text: string,
 	href: string,
 	existing: boolean,
-): {html: string; caret: number} {
+):
+{
+	html: string;
+	caret: number;
+}
+{
 	const root = document.createElement("div");
 	root.innerHTML = html;
-	const caret = applyLinkToElement(root, {start, end, text, href, existing});
-	return {html: storeAnchors(root.innerHTML), caret};
+	const caret = applyLinkToElement(
+		root,
+		{
+			start,
+			end,
+			text,
+			href,
+			existing,
+		},
+	);
+	return {
+		html: storeAnchors(root.innerHTML),
+		caret,
+	};
 }
 
 /** `unlinkInElement` over stored html. */
-export function unlinkInHtml(html: string, start: number): string {
+export function unlinkInHtml(html: string, start: number): string
+{
 	const root = document.createElement("div");
 	root.innerHTML = html;
 	unlinkInElement(root, start);

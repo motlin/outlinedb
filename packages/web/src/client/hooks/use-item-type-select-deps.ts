@@ -10,40 +10,65 @@ import {useTableDeps} from "./use-table-actions.js";
 import {useCreateNode, useUpdateNode} from "./use-nodes.js";
 
 /** What choosing a "Turn into" type needs from the outline: layout writes, expansion and the cached tree. */
-export function useItemTypeSelectDeps(): ItemTypeSelectDeps {
+export function useItemTypeSelectDeps(): ItemTypeSelectDeps
+{
 	const queryClient = useQueryClient();
 	const updateNode = useUpdateNode();
 	const createNode = useCreateNode();
 	const tableDeps = useTableDeps();
 	return {
-		structureTable: (nodeId, on) => {
+		structureTable: (nodeId, on) =>
+		{
 			void structureTable(tableDeps, nodeId, on);
 		},
-		update: (nodeId, layoutMode, extra) => {
-			updateNode.mutate({nodeId, layoutMode, ...extra});
+		update: (nodeId, layoutMode, extra) =>
+		{
+			updateNode.mutate(
+				{
+					nodeId,
+					layoutMode,
+					...extra,
+				},
+			);
 		},
 		plainName: (nodeId) => plainText(readNode(queryClient, nodeId)?.name ?? "", ""),
-		createAfter: (nodeId, lines) => {
+		createAfter: (nodeId, lines) =>
+		{
 			for (const request of lineSplitRequests(
 				queryClient,
-				lines.map((line) => ({afterId: nodeId, ...line})),
-			)) {
+				lines.map((line) => (
+				{
+					afterId: nodeId,
+					...line,
+				})),
+			))
+			{
 				createNode.mutate(request);
 			}
 		},
 		hasNote: (nodeId) => (readNode(queryClient, nodeId)?.note ?? "") !== "",
-		expandAll: (ids) => {
+		expandAll: (ids) =>
+		{
 			const {expandedIds, replaceExpanded} = activePaneView();
 			replaceExpanded(new Set([...expandedIds, ...ids]));
 		},
 		childIds: (nodeId) =>
 			(readChildren(queryClient, nodeId === HOME_TARGET ? null : nodeId) ?? []).map((child) => child.id),
-		createChild: (parentId) => {
+		createChild: (parentId) =>
+		{
 			const id = crypto.randomUUID();
-			createNode.mutate({id, parent_id: parentId === HOME_TARGET ? undefined : parentId, name: "", index: 0});
+			createNode.mutate(
+				{
+					id,
+					parent_id: parentId === HOME_TARGET ? undefined : parentId,
+					name: "",
+					index: 0,
+				},
+			);
 			return id;
 		},
-		startEditing: (nodeId) => {
+		startEditing: (nodeId) =>
+		{
 			useOutlineStore.getState().resumeEditing(nodeId, 0);
 		},
 		layoutMode: (nodeId) => readNode(queryClient, nodeId)?.data.layoutMode ?? null,

@@ -14,16 +14,19 @@ const ladderEvents = new LadderEventBus();
  * Build a {@link ServerContext} from the process database singleton and
  * environment (the Node host). Tests bypass this and construct a context directly.
  */
-export function createServerContext(): ServerContext {
+export function createServerContext(): ServerContext
+{
 	const db = getDatabase();
 	const config = readNodeConfig(process.env);
-	return buildServerContext({
-		db,
-		config,
-		ladderEvents,
-		decisions: fileDecisionStore(decisionsDirectory(process.env), decisionPhotosDirectory(process.env)),
-		// A standalone host has no workflowy.com behind it: a saved session must not sync or push into its outline.
-		internalAuth: config.mode === "mirror" ? readInternalAuth() : undefined,
-		embeddingIndex: (model) => new SqliteVecIndex(db, model),
-	});
+	return buildServerContext(
+		{
+			db,
+			config,
+			ladderEvents,
+			decisions: fileDecisionStore(decisionsDirectory(process.env), decisionPhotosDirectory(process.env)),
+			// A standalone host has no workflowy.com behind it: a saved session must not sync or push into its outline.
+			internalAuth: config.mode === "mirror" ? readInternalAuth() : undefined,
+			embeddingIndex: (model) => new SqliteVecIndex(db, model),
+		},
+	);
 }

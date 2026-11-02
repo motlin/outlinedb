@@ -3,25 +3,29 @@ import type {ClefModel, ShortlistEntry} from "./clef-requests.js";
 import type {LabelKind} from "./label-pool.js";
 import type {PassResult} from "./suggest-labels.js";
 
-export interface KindedLabel {
+export interface KindedLabel
+{
 	/** Canonical `@Name` or `#tag`; compared case-insensitively. */
 	readonly label: string;
 	readonly kind: LabelKind;
 }
 
-export interface ScoredLabel extends KindedLabel {
+export interface ScoredLabel extends KindedLabel
+{
 	/** Pass 2 verify probability. */
 	readonly score: number;
 }
 
 /** One held-out entry: its true labels and what the two Clef passes returned for its stripped text. */
-export interface EvalCase {
+export interface EvalCase
+{
 	readonly truth: readonly KindedLabel[];
 	readonly shortlist: readonly KindedLabel[];
 	readonly verify: readonly ScoredLabel[];
 }
 
-export interface PrecisionRecall {
+export interface PrecisionRecall
+{
 	readonly threshold: number;
 	readonly truePositives: number;
 	readonly predicted: number;
@@ -51,14 +55,30 @@ export type PeopleContext = (typeof PEOPLE_CONTEXTS)[number];
  */
 export function stripLabels(
 	entry: string,
-	{tags = "drop"}: {tags?: TagStripMode} = {},
-): {text: string; labels: KindedLabel[]} {
+	{
+		tags = "drop",
+	}:
+	{
+		tags?: TagStripMode;
+	} = {},
+):
+{
+	text: string;
+	labels: KindedLabel[];
+}
+{
 	const labels: KindedLabel[] = [];
 	let text = "";
 	let cursor = 0;
-	for (const {index, tag} of findTags(entry)) {
+	for (const {index, tag} of findTags(entry))
+	{
 		const kind: LabelKind = tag.startsWith("@") ? "person" : "tag";
-		labels.push({label: tag, kind});
+		labels.push(
+			{
+				label: tag,
+				kind,
+			},
+		);
 		text += entry.slice(cursor, index) + (kind === "person" ? firstName(tag) : tags === "word" ? tagWord(tag) : "");
 		cursor = index + tag.length;
 	}
@@ -72,11 +92,13 @@ export function stripLabels(
 	};
 }
 
-function tagWord(tag: string): string {
+function tagWord(tag: string): string
+{
 	return tag.slice(1).replaceAll(/[_-]+/gu, " ");
 }
 
-function firstName(mention: string): string {
+function firstName(mention: string): string
+{
 	return (
 		mention
 			.slice(1)
@@ -91,8 +113,18 @@ function firstName(mention: string): string {
  */
 export function sampleStratified<T>(
 	items: readonly T[],
-	{size, seed, stratum}: {size: number; seed: number; stratum: (item: T) => LabelKind},
-): T[] {
+	{
+		size,
+		seed,
+		stratum,
+	}:
+	{
+		size: number;
+		seed: number;
+		stratum: (item: T) => LabelKind;
+	},
+): T[]
+{
 	const random = mulberry32(seed);
 	const people = shuffle(
 		items.filter((item) => stratum(item) === "person"),
@@ -107,9 +139,11 @@ export function sampleStratified<T>(
 	return [...people.slice(0, personQuota), ...tags.slice(0, tagQuota)];
 }
 
-function mulberry32(seed: number): () => number {
+function mulberry32(seed: number): () => number
+{
 	let state = seed >>> 0;
-	return () => {
+	return () =>
+	{
 		state = (state + 0x6d_2b_79_f5) >>> 0;
 		let t = state;
 		t = Math.imul(t ^ (t >>> 15), t | 1);
@@ -118,37 +152,58 @@ function mulberry32(seed: number): () => number {
 	};
 }
 
-function shuffle<T>(items: readonly T[], random: () => number): T[] {
+function shuffle<T>(items: readonly T[], random: () => number): T[]
+{
 	return items
-		.map((item) => ({item, key: random()}))
+		.map((item) => (
+		{
+			item,
+			key: random(),
+		}))
 		.toSorted((a, b) => a.key - b.key)
 		.map(({item}) => item);
 }
 
 /** Share of `kind` true labels that reach the pass 1 shortlist, and the mean number of `kind` shortlist labels. */
-export function shortlistRecall(cases: readonly EvalCase[], kind: LabelKind): {recall: number; meanSize: number} {
+export function shortlistRecall(
+	cases: readonly EvalCase[],
+	kind: LabelKind,
+):
+{
+	recall: number;
+	meanSize: number;
+}
+{
 	let actual = 0;
 	let found = 0;
 	let shortlisted = 0;
-	for (const {truth, shortlist} of cases) {
+	for (const {truth, shortlist} of cases)
+	{
 		const keys = labelKeys(shortlist, kind);
 		shortlisted += keys.size;
-		for (const key of labelKeys(truth, kind)) {
+		for (const key of labelKeys(truth, kind))
+		{
 			actual++;
-			if (keys.has(key)) {
+			if (keys.has(key))
+			{
 				found++;
 			}
 		}
 	}
-	return {recall: ratio(found, actual, 1), meanSize: ratio(shortlisted, cases.length, 0)};
+	return {
+		recall: ratio(found, actual, 1),
+		meanSize: ratio(shortlisted, cases.length, 0),
+	};
 }
 
 /** Pass 2 precision and recall for `kind`: verify scores at or above `threshold` are predictions. */
-export function precisionRecallAt(cases: readonly EvalCase[], kind: LabelKind, threshold: number): PrecisionRecall {
+export function precisionRecallAt(cases: readonly EvalCase[], kind: LabelKind, threshold: number): PrecisionRecall
+{
 	let truePositives = 0;
 	let predicted = 0;
 	let actual = 0;
-	for (const {truth, verify} of cases) {
+	for (const {truth, verify} of cases)
+	{
 		const truthKeys = labelKeys(truth, kind);
 		actual += truthKeys.size;
 		const predictedKeys = labelKeys(
@@ -173,66 +228,85 @@ export function thresholdForPrecision(
 	cases: readonly EvalCase[],
 	kind: LabelKind,
 	target: number,
-): PrecisionRecall | undefined {
+): PrecisionRecall | undefined
+{
 	const scores = new Set(
 		cases.flatMap(({verify}) => verify.filter((label) => label.kind === kind).map(({score}) => score)),
 	);
-	for (const threshold of [...scores].toSorted((a, b) => a - b)) {
+	for (const threshold of [...scores].toSorted((a, b) => a - b))
+	{
 		const result = precisionRecallAt(cases, kind, threshold);
-		if (result.precision >= target) {
+		if (result.precision >= target)
+		{
 			return result;
 		}
 	}
 	return undefined;
 }
 
-function labelKeys(labels: readonly KindedLabel[], kind: LabelKind): Set<string> {
+function labelKeys(labels: readonly KindedLabel[], kind: LabelKind): Set<string>
+{
 	return new Set(labels.filter((label) => label.kind === kind).map(({label}) => label.toLowerCase()));
 }
 
-function ratio(numerator: number, denominator: number, empty: number): number {
+function ratio(numerator: number, denominator: number, empty: number): number
+{
 	return denominator === 0 ? empty : numerator / denominator;
 }
 
 /** A verify-pass arm of the eval and the Clef model it runs. */
 export const EVAL_ARMS = ["flash", "clef"] as const;
 export type EvalArm = (typeof EVAL_ARMS)[number];
-export const ARM_MODELS: Readonly<Record<EvalArm, ClefModel>> = {flash: "clef-flash", clef: "clef"};
+export const ARM_MODELS: Readonly<Record<EvalArm, ClefModel>> =
+{
+	flash: "clef-flash",
+	clef: "clef",
+};
 
 /** US dollars per 1M input tokens; output tokens are free. */
-const PRICE_PER_MILLION: Readonly<Record<ClefModel, number>> = {"clef-flash": 0.038, clef: 0.24};
+const PRICE_PER_MILLION: Readonly<Record<ClefModel, number>> =
+{
+	"clef-flash": 0.038,
+	clef: 0.24,
+};
 
 /** A pass's Clef results for one entry, and how long its requests took. */
-export interface TimedPass<T> {
+export interface TimedPass<T>
+{
 	readonly result: PassResult<T>;
 	readonly ms: number;
 }
 
 /** One sampled entry: its true labels and the shortlist and per-arm verify passes run on its stripped text. */
-export interface EvalRun {
+export interface EvalRun
+{
 	readonly truth: readonly KindedLabel[];
 	readonly shortlist: TimedPass<readonly ShortlistEntry[]>;
 	verify: Partial<Record<EvalArm, TimedPass<readonly ScoredLabel[]>>>;
 }
 
-export interface UsageReport {
+export interface UsageReport
+{
 	readonly requests: number;
 	readonly inputTokens: number;
 	readonly inputTokensPerEntry: number;
 	readonly costPer100Entries: number;
 }
 
-export interface LatencyReport {
+export interface LatencyReport
+{
 	readonly p50: number;
 	readonly p95: number;
 }
 
-export interface KindReport {
+export interface KindReport
+{
 	readonly thresholds: PrecisionRecall[];
 	readonly atTargetPrecision: PrecisionRecall | null;
 }
 
-export interface EvalReport {
+export interface EvalReport
+{
 	readonly entries: number;
 	readonly since: string;
 	readonly seed: number;
@@ -241,14 +315,24 @@ export interface EvalReport {
 	readonly kind: LabelKind | null;
 	readonly peopleContext: readonly PeopleContext[];
 	readonly targetPrecision: number;
-	readonly shortlist: {
+	readonly shortlist:
+	{
 		readonly model: ClefModel;
-		readonly person: {recall: number; meanSize: number};
-		readonly tag: {recall: number; meanSize: number};
+		readonly person:
+		{
+			recall: number;
+			meanSize: number;
+		};
+		readonly tag:
+		{
+			recall: number;
+			meanSize: number;
+		};
 		readonly usage: UsageReport;
 		readonly latencyMs: LatencyReport;
 	};
-	readonly arms: {
+	readonly arms:
+	{
 		readonly arm: EvalArm;
 		readonly model: ClefModel;
 		readonly person: KindReport;
@@ -263,7 +347,8 @@ export interface EvalReport {
 /** Aggregates eval runs into the per-arm, per-label-kind report; cost comes from `usage.input_tokens`. Pure. */
 export function buildEvalReport(
 	runs: readonly EvalRun[],
-	options: {
+	options:
+	{
 		since: string;
 		seed: number;
 		tagStrip: TagStripMode;
@@ -271,18 +356,25 @@ export function buildEvalReport(
 		peopleContext: readonly PeopleContext[];
 		targetPrecision: number;
 		thresholds: readonly number[];
-		arms: readonly {arm: EvalArm; model: ClefModel}[];
+		arms: readonly
+		{
+			arm: EvalArm;
+			model: ClefModel;
+		}[];
 	},
-): EvalReport {
+): EvalReport
+{
 	const shortlistPasses = runs.map(({shortlist}) => shortlist);
 	const shortlistUsage = usageReport(shortlistPasses, runs.length, "clef-flash");
 	const cases = (arm: EvalArm): EvalCase[] =>
-		runs.map(({truth, shortlist, verify}) => ({
+		runs.map(({truth, shortlist, verify}) => (
+		{
 			truth,
 			shortlist: shortlist.result.value.map(({label}) => label),
 			verify: verify[arm]?.result.value ?? [],
 		}));
-	const kindReport = (armCases: readonly EvalCase[], kind: LabelKind): KindReport => ({
+	const kindReport = (armCases: readonly EvalCase[], kind: LabelKind): KindReport => (
+	{
 		thresholds: options.thresholds.map((threshold) => precisionRecallAt(armCases, kind, threshold)),
 		atTargetPrecision: thresholdForPrecision(armCases, kind, options.targetPrecision) ?? null,
 	});
@@ -296,14 +388,16 @@ export function buildEvalReport(
 		kind: options.kind,
 		peopleContext: options.peopleContext,
 		targetPrecision: options.targetPrecision,
-		shortlist: {
+		shortlist:
+		{
 			model: "clef-flash",
 			person: shortlistRecall(shortlistCases, "person"),
 			tag: shortlistRecall(shortlistCases, "tag"),
 			usage: shortlistUsage,
 			latencyMs: latencyReport(shortlistPasses),
 		},
-		arms: options.arms.map(({arm, model}) => {
+		arms: options.arms.map(({arm, model}) =>
+		{
 			const armCases = cases(arm);
 			const passes = runs.flatMap(({verify}) => verify[arm] ?? []);
 			const usage = usageReport(passes, runs.length, model);
@@ -320,7 +414,8 @@ export function buildEvalReport(
 	};
 }
 
-function usageReport(passes: readonly TimedPass<unknown>[], entries: number, model: ClefModel): UsageReport {
+function usageReport(passes: readonly TimedPass<unknown>[], entries: number, model: ClefModel): UsageReport
+{
 	const requests = passes.reduce((sum, {result}) => sum + result.requests, 0);
 	const inputTokens = passes.reduce((sum, {result}) => sum + result.inputTokens, 0);
 	const inputTokensPerEntry = ratio(inputTokens, entries, 0);
@@ -333,13 +428,18 @@ function usageReport(passes: readonly TimedPass<unknown>[], entries: number, mod
 }
 
 /** Nearest-rank percentiles of the per-entry pass durations. */
-function latencyReport(passes: readonly TimedPass<unknown>[]): LatencyReport {
+function latencyReport(passes: readonly TimedPass<unknown>[]): LatencyReport
+{
 	const sorted = passes.map(({ms}) => ms).toSorted((a, b) => a - b);
 	const percentile = (p: number): number => sorted[Math.max(0, Math.ceil(p * sorted.length) - 1)] ?? 0;
-	return {p50: percentile(0.5), p95: percentile(0.95)};
+	return {
+		p50: percentile(0.5),
+		p95: percentile(0.95),
+	};
 }
 
 /** Rounds to a millionth of a dollar, hiding floating-point noise. */
-function dollars(value: number): number {
+function dollars(value: number): number
+{
 	return Math.round(value * 1_000_000) / 1_000_000;
 }

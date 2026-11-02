@@ -14,14 +14,16 @@ const MIRROR_CHIP_CLASS = "mirror-input";
 const SEARCH_LIMIT = 20;
 
 /** What the row held around the `((query))` when a location was chosen. */
-export interface MirrorPick {
+export interface MirrorPick
+{
 	hit: MirrorHit;
 	/** The row's html before the chip and after the closing `))`. */
 	beforeHtml: string;
 	afterHtml: string;
 }
 
-interface MirrorMenuOptions {
+interface MirrorMenuOptions
+{
 	editorRef: React.RefObject<HTMLElement | null>;
 	/** The editor's text changed outside a native input (the chip was unwrapped or removed). */
 	onChange: () => void;
@@ -29,16 +31,29 @@ interface MirrorMenuOptions {
 	onPick: (pick: MirrorPick) => void;
 }
 
-async function fetchHits(query: string): Promise<MirrorHit[]> {
-	const response = await fetch("/api/search/locations", {
-		method: "POST",
-		headers: {"Content-Type": "application/json"},
-		body: JSON.stringify({query, limit: SEARCH_LIMIT}),
-	});
+async function fetchHits(query: string): Promise<MirrorHit[]>
+{
+	const response = await fetch(
+		"/api/search/locations",
+		{
+			method: "POST",
+			headers:
+			{
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(
+				{
+					query,
+					limit: SEARCH_LIMIT,
+				},
+			),
+		},
+	);
 	return response.ok ? (await readJson<LocationResponse>(response)).results : [];
 }
 
-function rangeHtml(range: Range): string {
+function rangeHtml(range: Range): string
+{
 	const holder = document.createElement("div");
 	holder.append(range.cloneContents());
 	return serializeEditorHtml(holder.innerHTML);
@@ -46,7 +61,8 @@ function rangeHtml(range: Range): string {
 
 /** Unwraps a live `((` chip to its plain text so it is never persisted. */
 const MIRROR_CHIP_PATTERN = new RegExp(`<span class="${MIRROR_CHIP_CLASS}">([^<]*)</span>`, "gu");
-export function stripMirrorChip(html: string): string {
+export function stripMirrorChip(html: string): string
+{
 	return html.replaceAll(MIRROR_CHIP_PATTERN, "$1");
 }
 
@@ -54,29 +70,35 @@ export function stripMirrorChip(html: string): string {
  * Upstream's `((` inline mirror popup (`MIRROR_SEARCH_POPUP`): typing `((` arms a chip, auto-closes to `((…))` and
  * offers locations matching the text between the parentheses under a "mirror from" header.
  */
-export function useMirrorMenu({editorRef, onChange, onPick}: MirrorMenuOptions): {
+export function useMirrorMenu({editorRef, onChange, onPick}: MirrorMenuOptions):
+{
 	handleInput: (event?: Event) => SuggestInputResult;
 	handleKeyDown: (event: React.KeyboardEvent) => boolean;
 	isOpen: () => boolean;
 	detach: () => void;
 	menu: ReactNode;
-} {
+}
+{
 	const cache = useRef(new Map<string, MirrorHit[]>());
 	const pending = useRef(new Set<string>());
 	const last = useRef<MirrorHit[]>([]);
 	const refreshRef = useRef<() => void>(() => {});
 
-	const search = useCallback((chipText: string): MirrorHit[] | null => {
+	const search = useCallback((chipText: string): MirrorHit[] | null =>
+	{
 		const query = chipText.startsWith("((") ? chipText.slice(2).trim() : "";
-		if (query === "") {
+		if (query === "")
+		{
 			return [];
 		}
 		const hit = cache.current.get(query);
-		if (hit === undefined && !pending.current.has(query)) {
+		if (hit === undefined && !pending.current.has(query))
+		{
 			pending.current.add(query);
 			fetchHits(query)
 				.catch((): MirrorHit[] => [])
-				.then((hits) => {
+				.then((hits) =>
+				{
 					cache.current.set(query, hits);
 					pending.current.delete(query);
 					last.current = hits;
@@ -89,21 +111,29 @@ export function useMirrorMenu({editorRef, onChange, onPick}: MirrorMenuOptions):
 	}, []);
 
 	const client: SuggestClient<MirrorHit[], MirrorHit> = useMemo(
-		() => ({
-			opts: {prefix: "(", chipClassName: MIRROR_CHIP_CLASS},
+		() => (
+		{
+			opts:
+			{
+				prefix: "(",
+				chipClassName: MIRROR_CHIP_CLASS,
+			},
 			planOpen: planMirrorOpen,
 			planRearm: planMirrorRearm,
 			search,
 			count: (hits) => hits.length,
 			option: (hits, index) => hits[index],
 			// Upstream auto-closes: `((` becomes `(())` with the caret between.
-			onArm: (chip) => {
+			onArm: (chip) =>
+			{
 				chip.after(document.createTextNode("))"));
 			},
 			onChange,
-			select: (hit, {chip, replaceChip}) => {
+			select: (hit, {chip, replaceChip}) =>
+			{
 				const editor = editorRef.current;
-				if (editor === null) {
+				if (editor === null)
+				{
 					return;
 				}
 				const closing =
@@ -115,12 +145,20 @@ export function useMirrorMenu({editorRef, onChange, onPick}: MirrorMenuOptions):
 				before.setEndBefore(chip);
 				const after = document.createRange();
 				after.selectNodeContents(editor);
-				if (closing === null) {
+				if (closing === null)
+				{
 					after.setStartAfter(chip);
-				} else {
+				}
+				else
+				{
 					after.setStart(closing, 2);
 				}
-				const pick: MirrorPick = {hit, beforeHtml: rangeHtml(before), afterHtml: rangeHtml(after)};
+				const pick: MirrorPick =
+				{
+					hit,
+					beforeHtml: rangeHtml(before),
+					afterHtml: rangeHtml(after),
+				};
 				replaceChip("");
 				onPick(pick);
 			},
@@ -139,9 +177,15 @@ export function useMirrorMenu({editorRef, onChange, onPick}: MirrorMenuOptions):
 		}),
 		[search, onChange, onPick, editorRef],
 	);
-	const suggest = useSuggest({editorRef, client});
+	const suggest = useSuggest(
+		{
+			editorRef,
+			client,
+		},
+	);
 	const {refresh} = suggest;
-	useEffect(() => {
+	useEffect(() =>
+	{
 		refreshRef.current = refresh;
 	}, [refresh]);
 	return {

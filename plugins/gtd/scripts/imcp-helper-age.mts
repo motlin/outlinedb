@@ -26,7 +26,8 @@ import {isMain} from "./is-main.mts";
 // ~1 day, mirrored in overview.md
 export const STALE_THRESHOLD_SECONDS = 86_400;
 
-const MONTHS: Record<string, number> = {
+const MONTHS: Record<string, number> =
+{
 	Jan: 0,
 	Feb: 1,
 	Mar: 2,
@@ -45,20 +46,24 @@ const MONTHS: Record<string, number> = {
 // spaces. Parse it to epoch seconds in local time, matching how ps prints it.
 const LSTART_RE = /^\w{3}\s+(\w{3})\s+(\d{1,2})\s+(\d{2}):(\d{2}):(\d{2})\s+(\d{4})$/u;
 
-export function parseLstartToEpochSeconds(lstart: string): number | null {
+export function parseLstartToEpochSeconds(lstart: string): number | null
+{
 	const m = lstart.trim().match(LSTART_RE);
-	if (!m) {
+	if (!m)
+	{
 		return null;
 	}
 	const month = MONTHS[m[1] ?? ""];
-	if (month === undefined) {
+	if (month === undefined)
+	{
 		return null;
 	}
 	const [day, hh, mm, ss, year] = m.slice(2);
 	return Math.floor(new Date(Number(year), month, Number(day), Number(hh), Number(mm), Number(ss)).getTime() / 1000);
 }
 
-export function ageSeconds(lstart: string, nowEpochSeconds: number): number | null {
+export function ageSeconds(lstart: string, nowEpochSeconds: number): number | null
+{
 	const start = parseLstartToEpochSeconds(lstart);
 	return start === null ? null : nowEpochSeconds - start;
 }
@@ -66,18 +71,28 @@ export function ageSeconds(lstart: string, nowEpochSeconds: number): number | nu
 const HELPER_COMMAND = "iMCP.app/Contents/MacOS/imcp-server";
 
 // Parse `ps -A -o pid=,ppid=,command=` output.
-export interface PsProcess {
+export interface PsProcess
+{
 	pid: number;
 	ppid: number;
 	command: string;
 }
 
-export function parsePsTable(output: string): PsProcess[] {
+export function parsePsTable(output: string): PsProcess[]
+{
 	const processes: PsProcess[] = [];
-	for (const line of output.split("\n")) {
+	for (const line of output.split("\n"))
+	{
 		const m = line.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/u);
-		if (m) {
-			processes.push({pid: Number(m[1]), ppid: Number(m[2]), command: (m[3] ?? "").trim()});
+		if (m)
+		{
+			processes.push(
+				{
+					pid: Number(m[1]),
+					ppid: Number(m[2]),
+					command: (m[3] ?? "").trim(),
+				},
+			);
 		}
 	}
 	return processes;
@@ -85,36 +100,57 @@ export function parsePsTable(output: string): PsProcess[] {
 
 // Return the pid of the iMCP helper whose parent is startPid or one of its
 // ancestors, preferring the nearest ancestor; null when there is none.
-export function findSessionHelperPid(processes: readonly PsProcess[], startPid: number): number | null {
+export function findSessionHelperPid(processes: readonly PsProcess[], startPid: number): number | null
+{
 	const parentOf = new Map(processes.map((p) => [p.pid, p.ppid]));
 	const helpers = processes.filter((p) => (p.command.split(/\s+/u)[0] ?? "").endsWith(HELPER_COMMAND));
 	const seen = new Set<number>();
-	for (let pid = startPid; pid > 0 && !seen.has(pid); pid = parentOf.get(pid) ?? 0) {
+	for (let pid = startPid; pid > 0 && !seen.has(pid); pid = parentOf.get(pid) ?? 0)
+	{
 		seen.add(pid);
 		const helper = helpers.find((p) => p.ppid === pid);
-		if (helper) {
+		if (helper)
+		{
 			return helper.pid;
 		}
 	}
 	return null;
 }
 
-function main(): void {
-	const processes = parsePsTable(execSync("ps -A -o pid=,ppid=,command=", {encoding: "utf8"}));
+function main(): void
+{
+	const processes = parsePsTable(
+		execSync(
+			"ps -A -o pid=,ppid=,command=",
+			{
+				encoding: "utf8",
+			},
+		),
+	);
 	const pid = findSessionHelperPid(processes, process.pid);
-	if (process.argv.includes("--pid")) {
+	if (process.argv.includes("--pid"))
+	{
 		process.stdout.write(`${pid ?? "none"}\n`);
 		return;
 	}
-	if (pid === null) {
+	if (pid === null)
+	{
 		process.stdout.write("none\n");
 		return;
 	}
 
 	let lstart: string;
-	try {
-		lstart = execSync(`ps -o lstart= -p ${pid}`, {encoding: "utf8"}).trim();
-	} catch {
+	try
+	{
+		lstart = execSync(
+			`ps -o lstart= -p ${pid}`,
+			{
+				encoding: "utf8",
+			},
+		).trim();
+	}
+	catch
+	{
 		process.stdout.write("unknown\n");
 		return;
 	}
@@ -123,6 +159,7 @@ function main(): void {
 	process.stdout.write(age === null ? "unknown\n" : `${age}\n`);
 }
 
-if (isMain(import.meta.url)) {
+if (isMain(import.meta.url))
+{
 	main();
 }

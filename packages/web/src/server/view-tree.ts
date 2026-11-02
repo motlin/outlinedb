@@ -26,9 +26,23 @@ import type {ServerContext} from "./context.js";
 import {displayMetadataFields, nodeToRestDto} from "./ops/nodes-shared.js";
 
 /** Which rows are expanded: the request's ids, the account's stored keys, or none. */
-export type ViewExpansion = {kind: "ids"; ids: readonly string[]} | {kind: "stored"} | {kind: "none"};
+export type ViewExpansion =
+	|
+	  {
+			kind: "ids";
+			ids: readonly string[];
+	  }
+	|
+	  {
+			kind: "stored";
+	  }
+	|
+	  {
+			kind: "none";
+	  };
 
-export interface ViewTreeQuery {
+export interface ViewTreeQuery
+{
 	/** The view root (resolved, possibly a mirror), or null for Home. */
 	rootId: string | null;
 	expansion: ViewExpansion;
@@ -57,7 +71,8 @@ const SORT_SLICE = sql`printf('%020d%020d%s ', coalesce(m.priority, 0) + ${SORT_
 const WALK_COMPLETED = sql`CASE WHEN o.original_id IS NULL THEN m.completed_at ELSE (SELECT om.completed_at FROM node_content oc JOIN node_metadata om ON om.node_id = oc.id AND om.system_to = ${LIVE} WHERE oc.id = o.original_id AND oc.system_to = ${LIVE}) END`;
 
 /** The expansion key of walk row `c` rendered in the instance (`root`, `path`), null outside any mirror. */
-function expansionKey(expansion: ViewExpansion, root: SQL, path: SQL): SQL {
+function expansionKey(expansion: ViewExpansion, root: SQL, path: SQL): SQL
+{
 	return expansion.kind === "stored"
 		? sql`CASE WHEN ${root} IS NULL THEN substr(c.id, 1, 8) ELSE 'v_' || substr(c.id, 1, 4) || substr(${root}, 1, 4) || ${path} END`
 		: sql`CASE WHEN ${root} IS NULL THEN c.id ELSE 'virtual_' || c.id || '_' || ${root} || '_' || ${path} END`;
@@ -67,8 +82,10 @@ function expansionKey(expansion: ViewExpansion, root: SQL, path: SQL): SQL {
  * Whether `key` is expanded. The request's ids are one JSON parameter, materialized once per statement into an
  * indexed list; the account's stored keys are probed through `expanded_nodes`' own `(short_key, system_to)` index.
  */
-function isExpandedSql(expansion: ViewExpansion, key: SQL): SQL {
-	if (expansion.kind === "ids") {
+function isExpandedSql(expansion: ViewExpansion, key: SQL): SQL
+{
+	if (expansion.kind === "ids")
+	{
 		return sql`${key} IN (SELECT k FROM expanded)`;
 	}
 	return expansion.kind === "stored"
@@ -83,7 +100,8 @@ function isExpandedSql(expansion: ViewExpansion, key: SQL): SQL {
  * The walk starts from one constant row standing for the root, always expanded, so the request's expansion set is
  * referenced (and indexed) once; that row takes one place in the `LIMIT`.
  */
-function listParents({rootId, expansion, limit, showCompleted}: ViewTreeQuery): SQL {
+function listParents({rootId, expansion, limit, showCompleted}: ViewTreeQuery): SQL
+{
 	const rootParent =
 		rootId === null
 			? sql`NULL`
@@ -117,7 +135,8 @@ function listParents({rootId, expansion, limit, showCompleted}: ViewTreeQuery): 
 }
 
 /** SQL for the effective completion of the node whose id is `id` (see `effectiveCompletedAt`). */
-function completedOf(id: SQL): SQL {
+function completedOf(id: SQL): SQL
+{
 	return sql`CASE WHEN EXISTS (SELECT 1 FROM mirrors xm WHERE xm.mirror_id = ${id} AND xm.system_to = ${LIVE})
 		THEN (SELECT xom.completed_at FROM mirrors xmi JOIN node_metadata xom ON xom.node_id = xmi.original_id AND xom.system_to = ${LIVE} WHERE xmi.mirror_id = ${id} AND xmi.system_to = ${LIVE} LIMIT 1)
 		ELSE (SELECT xow.completed_at FROM node_metadata xow WHERE xow.node_id = ${id} AND xow.system_to = ${LIVE}) END`;
@@ -128,7 +147,8 @@ function completedOf(id: SQL): SQL {
  * children that are neither references roots nor `ai.inChat` items, plus a references root holding a backlink item
  * from a current source, which counts as uncompleted while that source is.
  */
-function childFlagSql(id: SQL, uncompletedOnly: boolean): SQL {
+function childFlagSql(id: SQL, uncompletedOnly: boolean): SQL
+{
 	const parent = sql`coalesce((SELECT fm.original_id FROM mirrors fm WHERE fm.mirror_id = ${id} AND fm.system_to = ${LIVE} LIMIT 1), ${id})`;
 	return sql`(EXISTS (SELECT 1 FROM node_content k WHERE k.parent_id = ${parent} AND k.system_to = ${LIVE}
 			AND k.id NOT IN ${REFERENCES_ROOTS} AND k.id NOT IN ${IN_CHAT}${
@@ -148,7 +168,8 @@ function childFlagSql(id: SQL, uncompletedOnly: boolean): SQL {
  * The current original's stored completion (Unix seconds) when `id` is a mirror, null when that original is not
  * cached. Raw: drizzle applies no column decoder to a relational read's extras.
  */
-function originalCompletedAt(id: SQL): SQL<number | null> {
+function originalCompletedAt(id: SQL): SQL<number | null>
+{
 	return sql<
 		number | null
 	>`(SELECT om.completed_at FROM mirrors mi JOIN node_content oc ON oc.id = mi.original_id AND oc.system_to = ${LIVE} JOIN node_metadata om ON om.node_id = oc.id AND om.system_to = ${LIVE} WHERE mi.mirror_id = ${id} AND mi.system_to = ${LIVE} LIMIT 1)`;
@@ -158,35 +179,74 @@ function originalCompletedAt(id: SQL): SQL<number | null> {
  * Every list the view sends plus the root's own row, in one statement: the current children of each list parent
  * {@link listParents} names (Home's for a null root), shaped for the REST node.
  */
-function selectViewRows(ctx: ServerContext, query: ViewTreeQuery) {
+function selectViewRows(ctx: ServerContext, query: ViewTreeQuery)
+{
 	return ctx.db.query.nodeContent
-		.findMany({
-			where: and(
-				currentVersion(nodeContent),
-				or(
-					query.rootId === null ? isNull(nodeContent.parentId) : eq(nodeContent.id, query.rootId),
-					sql`${nodeContent.parentId} IN (${listParents(query)})`,
+		.findMany(
+			{
+				where: and(
+					currentVersion(nodeContent),
+					or(
+						query.rootId === null ? isNull(nodeContent.parentId) : eq(nodeContent.id, query.rootId),
+						sql`${nodeContent.parentId} IN (${listParents(query)})`,
+					),
 				),
-			),
-			with: {
-				metadata: true,
-				mirrorsAsOriginal: {where: currentVersion(mirrors), columns: {mirrorId: true}},
-				mirrorsAsCopy: {where: currentVersion(mirrors), columns: {originalId: true}},
-				aiMetadata: {columns: {inChat: true}},
-				s3File: true,
-				referencesRoot: {columns: {nodeId: true}},
-				calendar: true,
-				displayMetadata: true,
-				tableCellSizes: {where: currentVersion(nodeTableCellSizes), columns: {cellId: true, size: true}},
+				with:
+				{
+					metadata: true,
+					mirrorsAsOriginal:
+					{
+						where: currentVersion(mirrors),
+						columns:
+						{
+							mirrorId: true,
+						},
+					},
+					mirrorsAsCopy:
+					{
+						where: currentVersion(mirrors),
+						columns:
+						{
+							originalId: true,
+						},
+					},
+					aiMetadata:
+					{
+						columns:
+						{
+							inChat: true,
+						},
+					},
+					s3File: true,
+					referencesRoot:
+					{
+						columns:
+						{
+							nodeId: true,
+						},
+					},
+					calendar: true,
+					displayMetadata: true,
+					tableCellSizes:
+					{
+						where: currentVersion(nodeTableCellSizes),
+						columns:
+						{
+							cellId: true,
+							size: true,
+						},
+					},
+				},
+				extras:
+				{
+					originalName: mirrorOriginalText(relationalRowId, "name").as("original_name"),
+					originalNote: mirrorOriginalText(relationalRowId, "note").as("original_note"),
+					originalCompletedAt: originalCompletedAt(relationalRowId).as("original_completed_at"),
+					hasChildren: childFlagSql(relationalRowId, false).as("has_children"),
+					hasUncompletedChildren: childFlagSql(relationalRowId, true).as("has_uncompleted_children"),
+				},
 			},
-			extras: {
-				originalName: mirrorOriginalText(relationalRowId, "name").as("original_name"),
-				originalNote: mirrorOriginalText(relationalRowId, "note").as("original_note"),
-				originalCompletedAt: originalCompletedAt(relationalRowId).as("original_completed_at"),
-				hasChildren: childFlagSql(relationalRowId, false).as("has_children"),
-				hasUncompletedChildren: childFlagSql(relationalRowId, true).as("has_uncompleted_children"),
-			},
-		})
+		)
 		.sync();
 }
 
@@ -196,12 +256,14 @@ type ViewRow = ReturnType<typeof selectViewRows>[number];
  * Drizzle types a `one()` relation on non-null columns as always present, but a node can lack the current related
  * row, so the relation is really nullable.
  */
-function nullable<T>(value: T): T | null {
+function nullable<T>(value: T): T | null
+{
 	return value;
 }
 
 /** The row as the canonical node: a mirror takes its original's id, text and completion. */
-function nodeOf(row: ViewRow): Node {
+function nodeOf(row: ViewRow): Node
+{
 	const originalId = row.mirrorsAsCopy[0]?.originalId ?? null;
 	const metadata = nullable(row.metadata);
 	return {
@@ -221,17 +283,23 @@ function nodeOf(row: ViewRow): Node {
 					? null
 					: new Date(row.originalCompletedAt * 1000),
 		collapsed: false,
-		mirror: {isMirror: originalId !== null, originalNodeId: originalId},
+		mirror:
+		{
+			isMirror: originalId !== null,
+			originalNodeId: originalId,
+		},
 		systemFrom: row.systemFrom,
 		systemTo: row.systemTo,
 	};
 }
 
-function attachmentOf(row: ViewRow): NodeAttachment | null {
+function attachmentOf(row: ViewRow): NodeAttachment | null
+{
 	const file = nullable(row.s3File);
 	return file === null
 		? null
-		: {
+		:
+			{
 				fileName: file.fileName,
 				fileType: file.fileType,
 				objectFolder: file.objectFolder,
@@ -244,20 +312,24 @@ function attachmentOf(row: ViewRow): NodeAttachment | null {
 }
 
 /** Siblings by priority, then creation time (missing metadata as 0), then id: the walk's order. */
-function compareSiblings(a: Node, b: Node): number {
-	if (a.priority !== b.priority) {
+function compareSiblings(a: Node, b: Node): number
+{
+	if (a.priority !== b.priority)
+	{
 		return a.priority - b.priority;
 	}
 	const createdA = a.createdAt?.getTime() ?? 0;
 	const createdB = b.createdAt?.getTime() ?? 0;
-	if (createdA !== createdB) {
+	if (createdA !== createdB)
+	{
 		return createdA - createdB;
 	}
 	return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
 /** The view's tree as read by {@link readViewTree}. */
-export interface ViewTree {
+export interface ViewTree
+{
 	/** The root's own node, or undefined for Home or an uncached root. */
 	root: Node | undefined;
 	/** The root's calendar role, when it has one. */
@@ -274,25 +346,41 @@ export interface ViewTree {
  * Read the view's tree in one statement (see the module comment). The rows' calendar roles need one more lookup
  * only when a row's name is a date and the account's calendar metadata is not cached.
  */
-export function readViewTree(ctx: ServerContext, query: ViewTreeQuery): ViewTree {
+export function readViewTree(ctx: ServerContext, query: ViewTreeQuery): ViewTree
+{
 	const rows = selectViewRows(ctx, query);
 	const rootRow = query.rootId === null ? undefined : rows.find((row) => row.id === query.rootId);
-	const byParent = new Map<string | null, {row: ViewRow; node: Node}[]>();
+	const byParent = new Map<
+		string | null,
+		{
+			row: ViewRow;
+			node: Node;
+		}[]
+	>();
 	const referencesRootOf = new Map<string, string>();
 	// The root row is read for its own fields and lands in its parent's group too, which only a view that also read
 	// that parent's whole list ever asks for.
-	for (const row of rows) {
-		if (nullable(row.referencesRoot) !== null) {
-			if (row.parentId !== null && !referencesRootOf.has(row.parentId)) {
+	for (const row of rows)
+	{
+		if (nullable(row.referencesRoot) !== null)
+		{
+			if (row.parentId !== null && !referencesRootOf.has(row.parentId))
+			{
 				referencesRootOf.set(row.parentId, row.id);
 			}
 			continue;
 		}
-		if ((nullable(row.aiMetadata)?.inChat ?? 0) !== 0) {
+		if ((nullable(row.aiMetadata)?.inChat ?? 0) !== 0)
+		{
 			continue;
 		}
 		const siblings = byParent.get(row.parentId) ?? [];
-		siblings.push({row, node: nodeOf(row)});
+		siblings.push(
+			{
+				row,
+				node: nodeOf(row),
+			},
+		);
 		byParent.set(row.parentId, siblings);
 	}
 	const root = rootRow === undefined ? undefined : nodeOf(rootRow);
@@ -301,35 +389,50 @@ export function readViewTree(ctx: ServerContext, query: ViewTreeQuery): ViewTree
 	const all =
 		rootRow === undefined || root === undefined || shaped.some(({row}) => row === rootRow)
 			? shaped
-			: [...shaped, {row: rootRow, node: root}];
-	for (const {row} of all) {
+			: [
+					...shaped,
+					{
+						row: rootRow,
+						node: root,
+					},
+				];
+	for (const {row} of all)
+	{
 		const stored = nullable(row.calendar);
-		if (stored !== null) {
+		if (stored !== null)
+		{
 			calendar.set(row.id, calendarInfoOfRow(stored, nullable(row.displayMetadata)?.restorableUniqueNode === 1));
 		}
 	}
 	addNamedCalendarDays(
-		{db: ctx.db, cache: ctx.cacheService},
+		{
+			db: ctx.db,
+			cache: ctx.cacheService,
+		},
 		all.map(({node}) => node),
 		calendar,
 	);
 	const lists = new Map<string | null, NodeResponse[]>();
-	for (const [parentId, siblings] of byParent) {
+	for (const [parentId, siblings] of byParent)
+	{
 		lists.set(
 			parentId,
 			siblings
 				.toSorted((a, b) => compareSiblings(a.node, b.node))
 				.map(({row, node}) =>
-					nodeToRestDto(node, {
-						hasMirrors: !node.mirror.isMirror && row.mirrorsAsOriginal.length > 0,
-						hasChildren: Boolean(row.hasChildren),
-						hasUncompletedChildren: Boolean(row.hasUncompletedChildren),
-						name: node.name,
-						note: node.note,
-						attachment: attachmentOf(row),
-						metadata: displayMetadataFields(nullable(row.displayMetadata), row.tableCellSizes),
-						calendar: calendar.get(row.id),
-					}),
+					nodeToRestDto(
+						node,
+						{
+							hasMirrors: !node.mirror.isMirror && row.mirrorsAsOriginal.length > 0,
+							hasChildren: Boolean(row.hasChildren),
+							hasUncompletedChildren: Boolean(row.hasUncompletedChildren),
+							name: node.name,
+							note: node.note,
+							attachment: attachmentOf(row),
+							metadata: displayMetadataFields(nullable(row.displayMetadata), row.tableCellSizes),
+							calendar: calendar.get(row.id),
+						},
+					),
 				),
 		);
 	}
@@ -343,12 +446,14 @@ export function readViewTree(ctx: ServerContext, query: ViewTreeQuery): ViewTree
 }
 
 /** The parents whose lists the view sends (see {@link listParents}), as a parenthesized subquery for an `IN`. */
-export function viewListParents(query: ViewTreeQuery): SQL {
+export function viewListParents(query: ViewTreeQuery): SQL
+{
 	return sql`(${listParents(query)})`;
 }
 
 /** The source of the backlink item `id`: its current mirror row's original. */
-function backlinkSource(id: SQL): SQL<string | null> {
+function backlinkSource(id: SQL): SQL<string | null>
+{
 	return sql<
 		string | null
 	>`(SELECT bs.original_id FROM mirrors bs WHERE bs.mirror_id = ${id} AND bs.system_to = ${LIVE} LIMIT 1)`;
@@ -360,7 +465,8 @@ function backlinkSource(id: SQL): SQL<string | null> {
  * mirror's original's; `backlinks` is a references root's backlink item count (null for any other node), counting
  * only items whose source is current.
  */
-function ancestorCrumbsSql(id: SQL): SQL<string> {
+function ancestorCrumbsSql(id: SQL): SQL<string>
+{
 	const name = sql`CASE WHEN EXISTS (SELECT 1 FROM mirrors am WHERE am.mirror_id = a.id AND am.system_to = ${LIVE}) THEN ${mirrorOriginalText(sql`a.id`, "name")} ELSE a.name END`;
 	return sql<string>`(WITH RECURSIVE up(id, parent_id, name, depth, seen) AS (
 			SELECT a.id, a.parent_id, a.name, 0, '/' || a.id || '/' FROM node_content a WHERE a.id = ${id} AND a.system_to = ${LIVE}
@@ -382,32 +488,46 @@ function ancestorCrumbsSql(id: SQL): SQL<string> {
  * statement: each current item whose source is current, shaped with its source's text, completion, child flags and
  * ancestor crumbs through correlated subqueries.
  */
-function selectBacklinkItems(ctx: ServerContext, targets: SQL) {
+function selectBacklinkItems(ctx: ServerContext, targets: SQL)
+{
 	const source = backlinkSource(relationalRowId);
 	return ctx.db.query.nodeContent
-		.findMany({
-			where: and(
-				currentVersion(nodeContent),
-				sql`${nodeContent.parentId} IN (SELECT r.id FROM node_content r WHERE r.parent_id IN ${targets} AND r.system_to = ${LIVE} AND r.id IN ${REFERENCES_ROOTS})`,
-				sql`EXISTS (SELECT 1 FROM mirrors im JOIN node_content s ON s.id = im.original_id AND s.system_to = ${LIVE} WHERE im.mirror_id = ${relationalRowId} AND im.system_to = ${LIVE})`,
-			),
-			with: {metadata: true},
-			extras: {
-				sourceId: source.as("source_id"),
-				sourceName: mirrorOriginalText(relationalRowId, "name").as("source_name"),
-				sourceNote: mirrorOriginalText(relationalRowId, "note").as("source_note"),
-				sourceCompletedAt: originalCompletedAt(relationalRowId).as("source_completed_at"),
-				sourceHasChildren: childFlagSql(source, false).as("source_has_children"),
-				sourceHasUncompletedChildren: childFlagSql(source, true).as("source_has_uncompleted_children"),
-				crumbs: ancestorCrumbsSql(source).as("crumbs"),
+		.findMany(
+			{
+				where: and(
+					currentVersion(nodeContent),
+					sql`${nodeContent.parentId} IN (SELECT r.id FROM node_content r WHERE r.parent_id IN ${targets} AND r.system_to = ${LIVE} AND r.id IN ${REFERENCES_ROOTS})`,
+					sql`EXISTS (SELECT 1 FROM mirrors im JOIN node_content s ON s.id = im.original_id AND s.system_to = ${LIVE} WHERE im.mirror_id = ${relationalRowId} AND im.system_to = ${LIVE})`,
+				),
+				with:
+				{
+					metadata: true,
+				},
+				extras:
+				{
+					sourceId: source.as("source_id"),
+					sourceName: mirrorOriginalText(relationalRowId, "name").as("source_name"),
+					sourceNote: mirrorOriginalText(relationalRowId, "note").as("source_note"),
+					sourceCompletedAt: originalCompletedAt(relationalRowId).as("source_completed_at"),
+					sourceHasChildren: childFlagSql(source, false).as("source_has_children"),
+					sourceHasUncompletedChildren: childFlagSql(source, true).as("source_has_uncompleted_children"),
+					crumbs: ancestorCrumbsSql(source).as("crumbs"),
+				},
 			},
-		})
+		)
 		.sync();
 }
 
 /** The JSON array {@link ancestorCrumbsSql} returns. */
 const CrumbRowsSchema = z.array(
-	z.object({id: z.string(), name: z.string().nullable(), depth: z.number(), backlinks: z.number().nullable()}),
+	z.object(
+		{
+			id: z.string(),
+			name: z.string().nullable(),
+			depth: z.number(),
+			backlinks: z.number().nullable(),
+		},
+	),
 );
 
 /**
@@ -415,15 +535,25 @@ const CrumbRowsSchema = z.array(
  * references root, in sibling order. Each item is a mirror row of its source: the source's text, completion and child
  * flags, with the source's ancestors from the top down as crumbs (a references root shown by its label).
  */
-export function readBacklinkItems(ctx: ServerContext, targets: SQL): Map<string, BacklinkItem[]> {
-	const byRoot = new Map<string, {node: Node; item: BacklinkItem}[]>();
-	for (const row of selectBacklinkItems(ctx, targets)) {
+export function readBacklinkItems(ctx: ServerContext, targets: SQL): Map<string, BacklinkItem[]>
+{
+	const byRoot = new Map<
+		string,
+		{
+			node: Node;
+			item: BacklinkItem;
+		}[]
+	>();
+	for (const row of selectBacklinkItems(ctx, targets))
+	{
 		const {sourceId, parentId} = row;
-		if (sourceId === null || parentId === null) {
+		if (sourceId === null || parentId === null)
+		{
 			continue;
 		}
 		const metadata = nullable(row.metadata);
-		const node: Node = {
+		const node: Node =
+		{
 			id: row.id,
 			shortId: metadata?.shortId ?? null,
 			parentId,
@@ -435,30 +565,41 @@ export function readBacklinkItems(ctx: ServerContext, targets: SQL): Map<string,
 			modifiedAt: metadata?.modifiedAt ?? null,
 			completedAt: row.sourceCompletedAt === null ? null : new Date(row.sourceCompletedAt * 1000),
 			collapsed: false,
-			mirror: {isMirror: true, originalNodeId: sourceId},
+			mirror:
+			{
+				isMirror: true,
+				originalNodeId: sourceId,
+			},
 			systemFrom: row.systemFrom,
 			systemTo: row.systemTo,
 		};
 		const crumbs = CrumbRowsSchema.parse(JSON.parse(row.crumbs))
 			.toSorted((a, b) => b.depth - a.depth)
-			.map((crumb) => ({
+			.map((crumb) => (
+			{
 				id: crumb.id,
 				name: crumb.backlinks === null ? (crumb.name ?? "") : backlinksLabel(crumb.backlinks),
 			}));
 		const items = byRoot.get(parentId) ?? [];
-		items.push({
-			node,
-			item: {
-				node: nodeToRestDto(node, {
-					hasChildren: Boolean(row.sourceHasChildren),
-					hasUncompletedChildren: Boolean(row.sourceHasUncompletedChildren),
-					name: node.name,
-					note: node.note,
-				}),
-				sourceId,
-				crumbs,
+		items.push(
+			{
+				node,
+				item:
+				{
+					node: nodeToRestDto(
+						node,
+						{
+							hasChildren: Boolean(row.sourceHasChildren),
+							hasUncompletedChildren: Boolean(row.sourceHasUncompletedChildren),
+							name: node.name,
+							note: node.note,
+						},
+					),
+					sourceId,
+					crumbs,
+				},
 			},
-		});
+		);
 		byRoot.set(parentId, items);
 	}
 	return new Map(

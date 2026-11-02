@@ -15,21 +15,29 @@ import {inIds} from "./in-ids.js";
 
 type Database = AppDatabase;
 
-interface TextRow {
+interface TextRow
+{
 	id: string;
 	name: string | null;
 	note: string | null;
 }
 
 /** Map each current mirror among `nodeIds` to its original's id. */
-export function loadMirrorOriginals(database: Database, nodeIds: string[]): Map<string, string> {
+export function loadMirrorOriginals(database: Database, nodeIds: string[]): Map<string, string>
+{
 	const originals = new Map<string, string>();
 	const rows = database
-		.select({mirrorId: mirrors.mirrorId, originalId: mirrors.originalId})
+		.select(
+			{
+				mirrorId: mirrors.mirrorId,
+				originalId: mirrors.originalId,
+			},
+		)
 		.from(mirrors)
 		.where(and(inIds(mirrors.mirrorId, nodeIds), currentVersion(mirrors)))
 		.all();
-	for (const row of rows) {
+	for (const row of rows)
+	{
 		originals.set(row.mirrorId, row.originalId);
 	}
 	return originals;
@@ -44,32 +52,60 @@ export function applyMirrorText<T extends TextRow>(
 	database: Database,
 	rows: T[],
 	mirrorOriginals: Map<string, string>,
-): T[] {
-	if (mirrorOriginals.size === 0) {
+): T[]
+{
+	if (mirrorOriginals.size === 0)
+	{
 		return rows;
 	}
 	const originalIds = [...new Set(mirrorOriginals.values())];
-	const originalText = new Map<string, {name: string | null; note: string | null}>();
+	const originalText = new Map<
+		string,
+		{
+			name: string | null;
+			note: string | null;
+		}
+	>();
 	const originals = database
-		.select({id: nodeContent.id, name: nodeContent.name, note: nodeContent.note})
+		.select(
+			{
+				id: nodeContent.id,
+				name: nodeContent.name,
+				note: nodeContent.note,
+			},
+		)
 		.from(nodeContent)
 		.where(and(inIds(nodeContent.id, originalIds), currentVersion(nodeContent)))
 		.all();
-	for (const original of originals) {
-		originalText.set(original.id, {name: original.name, note: original.note});
+	for (const original of originals)
+	{
+		originalText.set(
+			original.id,
+			{
+				name: original.name,
+				note: original.note,
+			},
+		);
 	}
-	return rows.map((row) => {
+	return rows.map((row) =>
+	{
 		const originalId = mirrorOriginals.get(row.id);
-		if (originalId === undefined) {
+		if (originalId === undefined)
+		{
 			return row;
 		}
 		const text = originalText.get(originalId);
-		return {...row, name: text?.name ?? null, note: text?.note ?? null};
+		return {
+			...row,
+			name: text?.name ?? null,
+			note: text?.note ?? null,
+		};
 	});
 }
 
 /** {@link applyMirrorText} with the mirror relationships looked up from the rows' ids. */
-export function withMirrorText<T extends TextRow>(database: Database, rows: T[]): T[] {
+export function withMirrorText<T extends TextRow>(database: Database, rows: T[]): T[]
+{
 	return applyMirrorText(
 		database,
 		rows,
@@ -91,7 +127,8 @@ export const relationalRowId = sql.raw('"nodeContent"."id"');
  * SQL for the current original's `name` or `note` when the row `id` is a current mirror, else null: the text
  * {@link applyMirrorText} would give the row, as a correlated subquery a shaped read selects beside the row.
  */
-export function mirrorOriginalText(id: SQL, column: "name" | "note"): SQL<string | null> {
+export function mirrorOriginalText(id: SQL, column: "name" | "note"): SQL<string | null>
+{
 	return sql<
 		string | null
 	>`(SELECT o.${sql.raw(column)} FROM ${mirrors} mi JOIN ${nodeContent} o ON o.id = mi.original_id AND o.system_to = ${FAR_FUTURE_DATE} WHERE mi.mirror_id = ${id} AND mi.system_to = ${FAR_FUTURE_DATE} LIMIT 1)`;
@@ -101,6 +138,7 @@ export function mirrorOriginalText(id: SQL, column: "name" | "note"): SQL<string
  * SQL condition that `idColumn` is not a current mirror. Text matching skips
  * mirrors, whose stored text is never meaningful; the original matches instead.
  */
-export function notAMirror(idColumn: AnySQLiteColumn): SQL {
+export function notAMirror(idColumn: AnySQLiteColumn): SQL
+{
 	return sql`NOT EXISTS (SELECT 1 FROM ${mirrors} WHERE ${mirrors.mirrorId} = ${idColumn} AND ${eq(mirrors.systemTo, FAR_FUTURE_DATE)})`;
 }

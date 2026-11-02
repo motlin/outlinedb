@@ -11,14 +11,16 @@ import {fileURLToPath} from "node:url";
 const SCRIPT = fileURLToPath(new URL("otter-api.sh", import.meta.url));
 
 /** Build a sandbox with a fake `op` that records every invocation. */
-interface Sandbox {
+interface Sandbox
+{
 	dir: string;
 	bin: string;
 	cache: string;
 	calls: string;
 }
 
-function sandbox(): Sandbox {
+function sandbox(): Sandbox
+{
 	const dir = mkdtempSync(join(tmpdir(), "otter-creds-"));
 	const bin = join(dir, "bin");
 	const cache = join(dir, "cache");
@@ -39,26 +41,38 @@ function sandbox(): Sandbox {
 		].join("\n"),
 	);
 	chmodSync(fakeOp, 0o755);
-	return {dir, bin, cache, calls};
+	return {
+		dir,
+		bin,
+		cache,
+		calls,
+	};
 }
 
-function warm(sb: Sandbox): string {
-	return execFileSync("bash", [SCRIPT, "warm-credentials"], {
-		env: {
-			...process.env,
-			PATH: `${sb.bin}:${process.env.PATH}`,
-			OTTER_CACHE_DIR: sb.cache,
-			OTTER_USERNAME: "op://Private/Otter/username",
-			OTTER_PASSWORD: "op://Private/Otter/password",
+function warm(sb: Sandbox): string
+{
+	return execFileSync(
+		"bash",
+		[SCRIPT, "warm-credentials"],
+		{
+			env:
+			{
+				...process.env,
+				PATH: `${sb.bin}:${process.env.PATH}`,
+				OTTER_CACHE_DIR: sb.cache,
+				OTTER_USERNAME: "op://Private/Otter/username",
+				OTTER_PASSWORD: "op://Private/Otter/password",
+			},
+			encoding: "utf8",
 		},
-		encoding: "utf8",
-	});
+	);
 }
 
 const opCalls = (sb: Sandbox): string[] =>
 	existsSync(sb.calls) ? readFileSync(sb.calls, "utf8").trim().split("\n").filter(Boolean) : [];
 
-test("warm-credentials resolves op:// refs into the cache file", () => {
+test("warm-credentials resolves op:// refs into the cache file", () =>
+{
 	const sb = sandbox();
 	warm(sb);
 	const creds = readFileSync(join(sb.cache, "otter-creds-cache"), "utf8");
@@ -66,22 +80,26 @@ test("warm-credentials resolves op:// refs into the cache file", () => {
 	assert.equal(opCalls(sb).length, 2, "cold warm should call op exactly twice");
 });
 
-test("warm-credentials is a no-op once the cache exists, so subagents never invoke op", () => {
+test("warm-credentials is a no-op once the cache exists, so subagents never invoke op", () =>
+{
 	const sb = sandbox();
 	warm(sb);
 	warm(sb);
 	assert.equal(opCalls(sb).length, 2, "second warm must not invoke op again");
 });
 
-test("credential cache lives outside /tmp so reads do not trigger permission prompts", () => {
+test("credential cache lives outside /tmp so reads do not trigger permission prompts", () =>
+{
 	const body = readFileSync(SCRIPT, "utf8");
-	for (const stale of ["/tmp/otter-creds-cache", "/tmp/otter-session-cache", "/tmp/otter-userid-cache"]) {
+	for (const stale of ["/tmp/otter-creds-cache", "/tmp/otter-session-cache", "/tmp/otter-userid-cache"])
+	{
 		assert.ok(!body.includes(stale), `${SCRIPT} must not hardcode ${stale}`);
 	}
 });
 
 /** Sandbox whose fake `op` hangs forever, to prove the in-script timeout fires. */
-function hangingSandbox() {
+function hangingSandbox()
+{
 	const sb = sandbox();
 	writeFileSync(
 		join(sb.bin, "op"),
@@ -91,24 +109,33 @@ function hangingSandbox() {
 	return sb;
 }
 
-test("a hanging op read is killed by the in-script timeout instead of blocking forever", () => {
+test("a hanging op read is killed by the in-script timeout instead of blocking forever", () =>
+{
 	const sb = hangingSandbox();
 	const started = Date.now();
 	let failed = false;
-	try {
-		execFileSync("bash", [SCRIPT, "warm-credentials"], {
-			env: {
-				...process.env,
-				PATH: `${sb.bin}:${process.env.PATH}`,
-				OTTER_CACHE_DIR: sb.cache,
-				OTTER_OP_TIMEOUT: "1",
-				OTTER_USERNAME: "op://Private/Otter/username",
-				OTTER_PASSWORD: "op://Private/Otter/password",
+	try
+	{
+		execFileSync(
+			"bash",
+			[SCRIPT, "warm-credentials"],
+			{
+				env:
+				{
+					...process.env,
+					PATH: `${sb.bin}:${process.env.PATH}`,
+					OTTER_CACHE_DIR: sb.cache,
+					OTTER_OP_TIMEOUT: "1",
+					OTTER_USERNAME: "op://Private/Otter/username",
+					OTTER_PASSWORD: "op://Private/Otter/password",
+				},
+				encoding: "utf8",
+				stdio: "pipe",
 			},
-			encoding: "utf8",
-			stdio: "pipe",
-		});
-	} catch {
+		);
+	}
+	catch
+	{
 		failed = true;
 	}
 	const elapsed = Date.now() - started;
@@ -120,7 +147,8 @@ test("a hanging op read is killed by the in-script timeout instead of blocking f
 	);
 });
 
-test("the empty-response check stays fast on a large multibyte response", () => {
+test("the empty-response check stays fast on a large multibyte response", () =>
+{
 	const big = '{"title": "réunion — café ☕ ", "x": 1}, '.repeat(8000);
 	const run = (value: string): string =>
 		execFileSync(
@@ -134,7 +162,12 @@ test("the empty-response check stays fast on a large multibyte response", () => 
 			{
 				encoding: "utf8",
 				timeout: 10_000,
-				env: {...process.env, LANG: "en_US.UTF-8", LC_ALL: "en_US.UTF-8"},
+				env:
+				{
+					...process.env,
+					LANG: "en_US.UTF-8",
+					LC_ALL: "en_US.UTF-8",
+				},
 			},
 		).trim();
 	assert.equal(run(big), "content");

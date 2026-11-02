@@ -20,14 +20,19 @@ import {PROJECT_ROOT, trackedFiles} from "./helpers/scan-roots.js";
 const MUTATING_INVOCATION = /\.\/bin\/run\.js node (?:complete|create|delete|move|uncomplete|update)\b/u;
 const DEV_NULL_REDIRECT = /(?:[12&]?>|>&)\s*\/dev\/null/u;
 
-describe("Structural Eval: No Suppressed Mutations", () => {
-	it("no tracked file under plugins/ redirects a mutating node command to /dev/null", () => {
+describe("Structural Eval: No Suppressed Mutations", () =>
+{
+	it("no tracked file under plugins/ redirects a mutating node command to /dev/null", () =>
+	{
 		const violations: string[] = [];
 
-		for (const relativePath of trackedFiles("plugins")) {
+		for (const relativePath of trackedFiles("plugins"))
+		{
 			const content = readFileSync(join(PROJECT_ROOT, relativePath), "utf8");
-			for (const {text, lineNumber} of joinContinuationLines(content.split("\n"))) {
-				if (MUTATING_INVOCATION.test(text) && DEV_NULL_REDIRECT.test(text)) {
+			for (const {text, lineNumber} of joinContinuationLines(content.split("\n")))
+			{
+				if (MUTATING_INVOCATION.test(text) && DEV_NULL_REDIRECT.test(text))
+				{
 					violations.push(`${relativePath}:${lineNumber}: ${text.trim()}`);
 				}
 			}

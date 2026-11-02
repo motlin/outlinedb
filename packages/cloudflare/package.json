@@ -4,12 +4,14 @@
 	"private": true,
 	"description": "Cloudflare Worker host for the OutlineDB web app",
 	"type": "module",
-	"scripts": {
+	"scripts":
+	{
 		"dev": "wrangler dev",
 		"typecheck": "tsc --noEmit",
 		"types": "wrangler types"
 	},
-	"dependencies": {
+	"dependencies":
+	{
 		"@cloudflare/workers-oauth-provider": "^1.2.4",
 		"@modelcontextprotocol/sdk": "^1.32.2",
 		"@outlinedb/mcp": "workspace:*",
@@ -20,7 +22,8 @@
 		"hono": "^4.13.16",
 		"jose": "^6.2.15"
 	},
-	"devDependencies": {
+	"devDependencies":
+	{
 		"esbuild": "^0.28.0",
 		"miniflare": "4.20260730.0",
 		"playwright-core": "^1.64.1",

@@ -1,6 +1,7 @@
 import {z} from "zod";
 import {WorkflowyApiClient} from "@outlinedb/shared/api";
-import type {
+import type
+{
 	BacklinkCrumb,
 	BacklinksResponse,
 	CalendarInfo,
@@ -14,7 +15,8 @@ import type {
 	TableMetadata,
 	UpdateNodeResponse,
 } from "../../node-types.js";
-import {
+import
+{
 	LocalTreeWriter,
 	NodeReader,
 	NodeTreeReader,
@@ -43,20 +45,24 @@ import {TableMetadataSchema} from "./schemas.js";
  * Resolve an ID parameter that could be a short ID (12 hex chars) or a full UUID.
  * Returns the full UUID, or null if a short ID couldn't be resolved.
  */
-export function resolveNodeId(ctx: ServerContext, id: string): string | null {
+export function resolveNodeId(ctx: ServerContext, id: string): string | null
+{
 	// A row inside a mirror (`v_<child12>_<mirror12>[_<path>]`) names the original child it shows.
 	const virtual = parseVirtualShortId(id);
-	if (virtual !== null) {
+	if (virtual !== null)
+	{
 		return ctx.cacheService.resolveShortIdToUuid(virtual.nodeShortId);
 	}
-	if (!isShortId(id)) {
+	if (!isShortId(id))
+	{
 		return id;
 	}
 	return ctx.cacheService.resolveShortIdToUuid(id);
 }
 
 /** {@link resolveMirrorToOriginal} for many ids at once: two queries however many ids. */
-export function resolveMirrorsToOriginals(ctx: ServerContext, nodeIds: string[]): Map<string, string> {
+export function resolveMirrorsToOriginals(ctx: ServerContext, nodeIds: string[]): Map<string, string>
+{
 	const nodes = new NodeReader(ctx.db).getMany(nodeIds);
 	return new Map(nodeIds.map((id) => [id, nodes.get(id)?.mirror.originalNodeId ?? id]));
 }
@@ -67,10 +73,17 @@ export function resolveMirrorsToOriginals(ctx: ServerContext, nodeIds: string[])
  */
 export function saveEffects(
 	ctx: ServerContext,
-	before: {name: string | null; note?: string | null} | undefined,
+	before:
+		|
+		  {
+				name: string | null;
+				note?: string | null;
+		  }
+		| undefined,
 	name: string | undefined,
 	note: string | undefined,
-): SaveEffects {
+): SaveEffects
+{
 	const beforeText = `${before?.name ?? ""} ${before?.note ?? ""}`;
 	const afterText = `${name ?? before?.name ?? ""} ${note ?? before?.note ?? ""}`;
 	const beforeLinks = new Set(internalLinkShortIds(beforeText));
@@ -90,7 +103,8 @@ export function saveEffects(
  * Otherwise return the same ID. Used when fetching children —
  * a mirror's children are the original node's children.
  */
-export function resolveMirrorToOriginal(ctx: ServerContext, nodeId: string): string {
+export function resolveMirrorToOriginal(ctx: ServerContext, nodeId: string): string
+{
 	const reader = new NodeReader(ctx.db);
 	return reader.getById(nodeId)?.mirror.originalNodeId ?? nodeId;
 }
@@ -98,7 +112,8 @@ export function resolveMirrorToOriginal(ctx: ServerContext, nodeId: string): str
 /**
  * Convert a Date to a Unix timestamp in seconds, or null.
  */
-export function toUnixSeconds(date: Date | null): number | null {
+export function toUnixSeconds(date: Date | null): number | null
+{
 	return date ? Math.floor(date.getTime() / 1000) : null;
 }
 
@@ -109,7 +124,8 @@ export function toUnixSeconds(date: Date | null): number | null {
  */
 export function nodeToRestDto(
 	node: Node,
-	derived: {
+	derived:
+	{
 		hasChildren: boolean;
 		hasUncompletedChildren: boolean;
 		hasMirrors?: boolean;
@@ -119,14 +135,18 @@ export function nodeToRestDto(
 		metadata?: InternalMetadataFields;
 		calendar?: CalendarInfo;
 	},
-): NodeResponse {
+): NodeResponse
+{
 	return {
 		id: node.id,
 		parent_id: node.parentId,
 		name: derived.name,
 		note: derived.note,
 		priority: node.priority,
-		data: {layoutMode: node.layoutMode},
+		data:
+		{
+			layoutMode: node.layoutMode,
+		},
 		numberedStart: derived.metadata?.numberedStart ?? null,
 		createdAt: toUnixSeconds(node.createdAt),
 		modifiedAt: toUnixSeconds(node.modifiedAt),
@@ -149,43 +169,52 @@ export function nodeToRestDto(
  * attachment are absent from the map. `isDeleted` is normalized to a boolean —
  * the column stores 1/0/NULL, and anything other than 1 means "not deleted".
  */
-export function loadAttachments(ctx: ServerContext, nodeIds: string[]): Map<string, NodeAttachment> {
+export function loadAttachments(ctx: ServerContext, nodeIds: string[]): Map<string, NodeAttachment>
+{
 	const map = new Map<string, NodeAttachment>();
-	if (nodeIds.length === 0) {
+	if (nodeIds.length === 0)
+	{
 		return map;
 	}
 	const rows = ctx.db
-		.select({
-			nodeId: s3Files.nodeId,
-			fileName: s3Files.fileName,
-			fileType: s3Files.fileType,
-			objectFolder: s3Files.objectFolder,
-			imageOriginalWidth: s3Files.imageOriginalWidth,
-			imageOriginalHeight: s3Files.imageOriginalHeight,
-			imageOriginalPixels: s3Files.imageOriginalPixels,
-			isAnimatedGif: s3Files.isAnimatedGif,
-			isDeleted: s3Files.isDeleted,
-		})
+		.select(
+			{
+				nodeId: s3Files.nodeId,
+				fileName: s3Files.fileName,
+				fileType: s3Files.fileType,
+				objectFolder: s3Files.objectFolder,
+				imageOriginalWidth: s3Files.imageOriginalWidth,
+				imageOriginalHeight: s3Files.imageOriginalHeight,
+				imageOriginalPixels: s3Files.imageOriginalPixels,
+				isAnimatedGif: s3Files.isAnimatedGif,
+				isDeleted: s3Files.isDeleted,
+			},
+		)
 		.from(s3Files)
 		.where(and(inIds(s3Files.nodeId, nodeIds), eq(s3Files.systemTo, FAR_FUTURE_DATE)))
 		.all();
-	for (const row of rows) {
-		map.set(row.nodeId, {
-			fileName: row.fileName,
-			fileType: row.fileType,
-			objectFolder: row.objectFolder,
-			imageOriginalWidth: row.imageOriginalWidth,
-			imageOriginalHeight: row.imageOriginalHeight,
-			imageOriginalPixels: row.imageOriginalPixels,
-			isAnimatedGif: row.isAnimatedGif === 1,
-			isDeleted: row.isDeleted === 1,
-		});
+	for (const row of rows)
+	{
+		map.set(
+			row.nodeId,
+			{
+				fileName: row.fileName,
+				fileType: row.fileType,
+				objectFolder: row.objectFolder,
+				imageOriginalWidth: row.imageOriginalWidth,
+				imageOriginalHeight: row.imageOriginalHeight,
+				imageOriginalPixels: row.imageOriginalPixels,
+				isAnimatedGif: row.isAnimatedGif === 1,
+				isDeleted: row.isDeleted === 1,
+			},
+		);
 	}
 	return map;
 }
 
 /** The node DTO fields read from the cached internal metadata. */
-export interface InternalMetadataFields {
+export interface InternalMetadataFields
+{
 	numberedStart: number | null;
 	defaultToBottom: boolean;
 	table: TableMetadata | null;
@@ -196,23 +225,32 @@ export interface InternalMetadataFields {
  * `priority.defaultToBottom` from the cached internal metadata; nodes without
  * metadata are absent from the map.
  */
-export function loadInternalMetadataFields(ctx: ServerContext, nodeIds: string[]): Map<string, InternalMetadataFields> {
+export function loadInternalMetadataFields(ctx: ServerContext, nodeIds: string[]): Map<string, InternalMetadataFields>
+{
 	const map = new Map<string, InternalMetadataFields>();
-	if (nodeIds.length === 0) {
+	if (nodeIds.length === 0)
+	{
 		return map;
 	}
-	for (const [nodeId, metadata] of readInternalMetadata(ctx.db, nodeIds)) {
+	for (const [nodeId, metadata] of readInternalMetadata(ctx.db, nodeIds))
+	{
 		const {numbered_start: numberedStart, priority, table} = metadata;
-		if (numberedStart === undefined && priority === undefined && table === undefined) {
+		if (numberedStart === undefined && priority === undefined && table === undefined)
+		{
 			continue;
 		}
 		const parsedTable = TableMetadataSchema.safeParse(table);
-		map.set(nodeId, {
-			numberedStart: typeof numberedStart === "number" ? numberedStart : null,
-			defaultToBottom:
-				typeof priority === "object" && priority !== null && Reflect.get(priority, "defaultToBottom") === true,
-			table: parsedTable.success ? parsedTable.data : null,
-		});
+		map.set(
+			nodeId,
+			{
+				numberedStart: typeof numberedStart === "number" ? numberedStart : null,
+				defaultToBottom:
+					typeof priority === "object" &&
+					priority !== null &&
+					Reflect.get(priority, "defaultToBottom") === true,
+				table: parsedTable.success ? parsedTable.data : null,
+			},
+		);
 	}
 	return map;
 }
@@ -222,32 +260,43 @@ export function loadInternalMetadataFields(ctx: ServerContext, nodeIds: string[]
  * `node_display_metadata` row and its current table cell sizes. Undefined when they set none of the fields.
  */
 export function displayMetadataFields(
-	display: {
+	display:
+	{
 		numberedStart: number | null;
 		priorityDefaultToBottom: number | null;
 		tableHeaders: number | null;
 		tableSkipHeaders: number | null;
 		tableBg: string | null;
 	} | null,
-	sizes: readonly {cellId: string; size: number}[],
-): InternalMetadataFields | undefined {
+	sizes: readonly
+	{
+		cellId: string;
+		size: number;
+	}[],
+): InternalMetadataFields | undefined
+{
 	const table: Record<string, unknown> = {};
-	if (display?.tableHeaders != null) {
+	if (display?.tableHeaders != null)
+	{
 		table.headers = display.tableHeaders === 1;
 	}
-	if (display?.tableSkipHeaders != null) {
+	if (display?.tableSkipHeaders != null)
+	{
 		table.skipHeaders = display.tableSkipHeaders === 1;
 	}
-	if (display?.tableBg != null) {
+	if (display?.tableBg != null)
+	{
 		table.bg = display.tableBg;
 	}
-	if (sizes.length > 0) {
+	if (sizes.length > 0)
+	{
 		table.sizes = Object.fromEntries(sizes.map(({cellId, size}) => [cellId, size]));
 	}
 	const hasTable = Object.keys(table).length > 0;
 	const numberedStart = display?.numberedStart ?? null;
 	const defaultToBottom = display?.priorityDefaultToBottom ?? null;
-	if (numberedStart === null && defaultToBottom === null && !hasTable) {
+	if (numberedStart === null && defaultToBottom === null && !hasTable)
+	{
 		return undefined;
 	}
 	const parsedTable = TableMetadataSchema.safeParse(hasTable ? table : undefined);
@@ -262,38 +311,68 @@ export function displayMetadataFields(
  * Build the write-through client from the context, or undefined when no API key
  * is configured (read-only mode).
  */
-export function getApiClient(ctx: ServerContext): WorkflowyApiClient | undefined {
+export function getApiClient(ctx: ServerContext): WorkflowyApiClient | undefined
+{
 	return ctx.apiKey ? new WorkflowyApiClient(ctx.apiKey, undefined, ctx.config.apiUrl) : undefined;
 }
 
-export function getWriteClient(ctx: ServerContext): WorkflowyWriteThroughClient | undefined {
+export function getWriteClient(ctx: ServerContext): WorkflowyWriteThroughClient | undefined
+{
 	const apiClient = getApiClient(ctx);
-	if (!apiClient) {
+	if (!apiClient)
+	{
 		return undefined;
 	}
 	// With the internal API, a mirror-delete promotion is one exact-index move instead of a sibling rotation.
 	const adapter = getAdapter(ctx);
-	const exactMover: ExactMover | undefined = adapter && {
-		moveTo: async ({ids, parentId, index}) => adapter.moveTo({ids, parentId: adapterParent(parentId), index}),
+	const exactMover: ExactMover | undefined = adapter &&
+	{
+		moveTo: async ({ids, parentId, index}) =>
+			adapter.moveTo(
+				{
+					ids,
+					parentId: adapterParent(parentId),
+					index,
+				},
+			),
 	};
 	return new WorkflowyWriteThroughClient(apiClient, ctx.cacheService, exactMover);
 }
 
 /** Where a node write goes: the local node tables (standalone) or workflowy.com through the write-through client (mirror). */
 export type NodeWriter =
-	| {mode: "standalone"; local: LocalTreeWriter}
-	| {mode: "mirror"; client: WorkflowyWriteThroughClient};
+	|
+	  {
+			mode: "standalone";
+			local: LocalTreeWriter;
+	  }
+	|
+	  {
+			mode: "mirror";
+			client: WorkflowyWriteThroughClient;
+	  };
 
 /**
  * The context's node writer, chosen by its mode; undefined for a mirror with no API key, which answers 500 rather than
  * forking local-only nodes that the next sync would phase out.
  */
-export function getNodeWriter(ctx: ServerContext): NodeWriter | undefined {
-	if (ctx.mode === "standalone") {
-		return {mode: "standalone", local: new LocalTreeWriter(ctx.db)};
+export function getNodeWriter(ctx: ServerContext): NodeWriter | undefined
+{
+	if (ctx.mode === "standalone")
+	{
+		return {
+			mode: "standalone",
+			local: new LocalTreeWriter(ctx.db),
+		};
 	}
 	const client = getWriteClient(ctx);
-	return client && {mode: "mirror", client};
+	return (
+		client &&
+		{
+			mode: "mirror",
+			client,
+		}
+	);
 }
 
 /**
@@ -301,17 +380,24 @@ export function getNodeWriter(ctx: ServerContext): NodeWriter | undefined {
  * internal API (or the public API key its write-through refresh needs) is not
  * configured.
  */
-export function getAdapter(ctx: ServerContext): WorkflowyInternalAdapter | undefined {
+export function getAdapter(ctx: ServerContext): WorkflowyInternalAdapter | undefined
+{
 	return ctx.apiKey ? ctx.internalAdapter?.() : undefined;
 }
 
 /** Which of `ids` are originals with at least one live mirror: one query for the whole list. */
-export function originalsWithMirrors(ctx: ServerContext, ids: string[]): Set<string> {
-	if (ids.length === 0) {
+export function originalsWithMirrors(ctx: ServerContext, ids: string[]): Set<string>
+{
+	if (ids.length === 0)
+	{
 		return new Set();
 	}
 	const rows = ctx.db
-		.selectDistinct({originalId: mirrorsTable.originalId})
+		.selectDistinct(
+			{
+				originalId: mirrorsTable.originalId,
+			},
+		)
 		.from(mirrorsTable)
 		.where(and(inIds(mirrorsTable.originalId, ids), eq(mirrorsTable.systemTo, FAR_FUTURE_DATE)))
 		.all();
@@ -319,32 +405,56 @@ export function originalsWithMirrors(ctx: ServerContext, ids: string[]): Set<str
 }
 
 /** A node as the REST API returns it, read from the cache; undefined when it is not cached. */
-export async function readNodeDto(ctx: ServerContext, id: string): Promise<NodeResponse | undefined> {
+export async function readNodeDto(ctx: ServerContext, id: string): Promise<NodeResponse | undefined>
+{
 	// NodeTreeReader gives a mirror its original's name and note, and sets mirror flags.
-	const [node] = await new NodeTreeReader(ctx.cacheService).readNodes([id], {depth: 0});
-	if (node === undefined) {
+	const [node] = await new NodeTreeReader(ctx.cacheService).readNodes(
+		[id],
+		{
+			depth: 0,
+		},
+	);
+	if (node === undefined)
+	{
 		return undefined;
 	}
 	const flags = childFlags(ctx.db, [node.mirror.originalNodeId ?? id]);
 	const attachment = loadAttachments(ctx, [id]).get(id) ?? null;
 	const metadata = loadInternalMetadataFields(ctx, [id]).get(id);
-	const calendar = loadCalendarInfo({db: ctx.db, cache: ctx.cacheService}, [node]).get(id);
+	const calendar = loadCalendarInfo(
+		{
+			db: ctx.db,
+			cache: ctx.cacheService,
+		},
+		[node],
+	).get(id);
 	const label = referencesRootLabel(ctx.db, id);
-	const dto = nodeToRestDto(node, {
-		hasMirrors: !node.mirror.isMirror && originalsWithMirrors(ctx, [id]).has(id),
-		hasChildren: flags.withChildren.size > 0,
-		hasUncompletedChildren: flags.withUncompletedChildren.size > 0,
-		name: node.name,
-		note: node.note,
-		attachment,
-		metadata,
-		calendar,
-	});
-	return label === null ? dto : {...dto, isReferencesRoot: true, backlinksLabel: label};
+	const dto = nodeToRestDto(
+		node,
+		{
+			hasMirrors: !node.mirror.isMirror && originalsWithMirrors(ctx, [id]).has(id),
+			hasChildren: flags.withChildren.size > 0,
+			hasUncompletedChildren: flags.withUncompletedChildren.size > 0,
+			name: node.name,
+			note: node.note,
+			attachment,
+			metadata,
+			calendar,
+		},
+	);
+	return label === null
+		? dto
+		:
+			{
+				...dto,
+				isReferencesRoot: true,
+				backlinksLabel: label,
+			};
 }
 
 /** A parent's children (Home's for `null`) as the REST API returns them, read from the cache. */
-export function readChildDtos(ctx: ServerContext, parentId: string | null): NodeResponse[] {
+export function readChildDtos(ctx: ServerContext, parentId: string | null): NodeResponse[]
+{
 	return readChildDtoLists(ctx, [parentId]).get(parentId) ?? [];
 }
 
@@ -353,17 +463,16 @@ export function readChildDtos(ctx: ServerContext, parentId: string | null): Node
  * once for the whole id set (children, mirrors, child flags, attachments, internal metadata, calendar), so the
  * statement count does not grow with the number of parents.
  */
-export function readChildDtoLists(
-	ctx: ServerContext,
-	parentIds: (string | null)[],
-): Map<string | null, NodeResponse[]> {
+export function readChildDtoLists(ctx: ServerContext, parentIds: (string | null)[]): Map<string | null, NodeResponse[]>
+{
 	// NodeTreeReader gives each mirror its original's name and note. A references
 	// root is never a row: its backlinks render as the parent's Backlinks section.
 	// Neither is an `ai.inChat` item (upstream's "AI Messages" mailbox).
 	const byParent = new NodeTreeReader(ctx.cacheService).readChildrenOfMany(parentIds);
 	const lists = new Map<string | null, NodeResponse[]>();
 	const nodesByParent = new Map<string | null, Node[]>();
-	for (const [parentId, trees] of byParent) {
+	for (const [parentId, trees] of byParent)
+	{
 		nodesByParent.set(
 			parentId,
 			trees.filter((node) => !node.hasReferencesRoot && !node.inChat),
@@ -380,21 +489,33 @@ export function readChildDtoLists(
 	// Batch-load file attachments for all returned nodes.
 	const attachments = loadAttachments(ctx, ids);
 	const metadata = loadInternalMetadataFields(ctx, ids);
-	const calendar = loadCalendarInfo({db: ctx.db, cache: ctx.cacheService}, nodes);
-	for (const [parentId, parentNodes] of nodesByParent) {
+	const calendar = loadCalendarInfo(
+		{
+			db: ctx.db,
+			cache: ctx.cacheService,
+		},
+		nodes,
+	);
+	for (const [parentId, parentNodes] of nodesByParent)
+	{
 		lists.set(
 			parentId,
 			parentNodes.map((node) =>
-				nodeToRestDto(node, {
-					hasMirrors: !node.mirror.isMirror && mirrored.has(node.id),
-					hasChildren: flags.withChildren.has(node.mirror.originalNodeId ?? node.id),
-					hasUncompletedChildren: flags.withUncompletedChildren.has(node.mirror.originalNodeId ?? node.id),
-					name: node.name,
-					note: node.note,
-					attachment: attachments.get(node.id) ?? null,
-					metadata: metadata.get(node.id),
-					calendar: calendar.get(node.id),
-				}),
+				nodeToRestDto(
+					node,
+					{
+						hasMirrors: !node.mirror.isMirror && mirrored.has(node.id),
+						hasChildren: flags.withChildren.has(node.mirror.originalNodeId ?? node.id),
+						hasUncompletedChildren: flags.withUncompletedChildren.has(
+							node.mirror.originalNodeId ?? node.id,
+						),
+						name: node.name,
+						note: node.note,
+						attachment: attachments.get(node.id) ?? null,
+						metadata: metadata.get(node.id),
+						calendar: calendar.get(node.id),
+					},
+				),
 			),
 		);
 	}
@@ -402,7 +523,8 @@ export function readChildDtoLists(
 }
 
 /** The refreshed children of every affected parent, in order, as one list. */
-export function readSiblingDtos(ctx: ServerContext, parentIds: (string | null)[]): NodeResponse[] {
+export function readSiblingDtos(ctx: ServerContext, parentIds: (string | null)[]): NodeResponse[]
+{
 	return [...readChildDtoLists(ctx, parentIds).values()].flat();
 }
 
@@ -421,29 +543,57 @@ export const AfterIdSchema = z.string().nullable().optional();
 /** A non-empty, ordered list of node ids (short ids expand). */
 export const NodeIdsSchema = z.array(z.string()).min(1);
 
-export type ParentResult = {ok: true; parentId: string | null} | {ok: false; status: 404; error: string};
+export type ParentResult =
+	|
+	  {
+			ok: true;
+			parentId: string | null;
+	  }
+	|
+	  {
+			ok: false;
+			status: 404;
+			error: string;
+	  };
 
 /** Resolve a request's `parent_id` to a node id, or `null` for Home; a short id is expanded from the cache. */
-export function parseParent(ctx: ServerContext, raw: string | null): ParentResult {
-	if (raw === null || raw === "" || raw === "None" || raw === HOME_TARGET) {
-		return {ok: true, parentId: null};
+export function parseParent(ctx: ServerContext, raw: string | null): ParentResult
+{
+	if (raw === null || raw === "" || raw === "None" || raw === HOME_TARGET)
+	{
+		return {
+			ok: true,
+			parentId: null,
+		};
 	}
 	const resolved = resolveNodeId(ctx, raw);
 	return resolved === null
-		? {ok: false, status: 404, error: "Parent node not found"}
-		: {ok: true, parentId: resolved};
+		?
+			{
+				ok: false,
+				status: 404,
+				error: "Parent node not found",
+			}
+		:
+			{
+				ok: true,
+				parentId: resolved,
+			};
 }
 
 /** The requested slot: `index` when given, else the legacy `position` (negative = top), else undefined (bottom). */
-export function slotIndex(index: number | undefined, position: number | undefined): number | undefined {
-	if (index !== undefined) {
+export function slotIndex(index: number | undefined, position: number | undefined): number | undefined
+{
+	if (index !== undefined)
+	{
 		return index;
 	}
 	return position !== undefined && position < 0 ? 0 : undefined;
 }
 
 /** The adapter's parent id: a node id, or `HOME_TARGET`. */
-export function adapterParent(parentId: string | null): string {
+export function adapterParent(parentId: string | null): string
+{
 	return parentId ?? HOME_TARGET;
 }
 
@@ -451,23 +601,28 @@ export function adapterParent(parentId: string | null): string {
  * Map a slot onto the public API's two ends: omitted or past the last child is
  * the bottom, 0 the top. Any other slot needs the internal API (undefined).
  */
-export function publicEnd(index: number | undefined, childCount: number): "top" | "bottom" | undefined {
-	if (index === undefined || index >= childCount) {
+export function publicEnd(index: number | undefined, childCount: number): "top" | "bottom" | undefined
+{
+	if (index === undefined || index >= childCount)
+	{
 		return "bottom";
 	}
 	return index === 0 ? "top" : undefined;
 }
 
 /** The public API's move position for an end: negative is top, anything else bottom. */
-export function publicMovePosition(end: "top" | "bottom"): number {
+export function publicMovePosition(end: "top" | "bottom"): number
+{
 	return end === "top" ? -1 : 0;
 }
 
-export function childIds(ctx: ServerContext, parentId: string | null): string[] {
+export function childIds(ctx: ServerContext, parentId: string | null): string[]
+{
 	return ctx.cacheService.getChildren(parentId).map((child) => child.id);
 }
 
-export function countChildren(ctx: ServerContext, parentId: string | null): number {
+export function countChildren(ctx: ServerContext, parentId: string | null): number
+{
 	return ctx.cacheService.getChildren(parentId).length;
 }
 
@@ -477,17 +632,25 @@ export function countChildren(ctx: ServerContext, parentId: string | null): numb
 export async function openCopies(
 	adapter: WorkflowyInternalAdapter,
 	sourceToNew: ReadonlyMap<string, string>,
-	rootSource?: {original: string; row: string},
-): Promise<void> {
+	rootSource?:
+	{
+		original: string;
+		row: string;
+	},
+): Promise<void>
+{
 	const isExpanded = adapter.expansionTest();
 	const opened: Record<string, boolean> = {};
-	for (const [sourceId, copyId] of sourceToNew) {
+	for (const [sourceId, copyId] of sourceToNew)
+	{
 		const row = sourceId === rootSource?.original ? rootSource.row : sourceId;
-		if (isExpanded(row)) {
+		if (isExpanded(row))
+		{
 			opened[copyId] = true;
 		}
 	}
-	if (Object.keys(opened).length > 0) {
+	if (Object.keys(opened).length > 0)
+	{
 		await adapter.setExpanded(opened);
 	}
 }

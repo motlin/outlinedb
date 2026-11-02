@@ -4,7 +4,8 @@ import type {Root} from "react-dom/client";
 import {renders} from "./helpers/render-counter.js";
 import type {NodeResponse} from "../src/node-types.js";
 
-declare global {
+declare global
+{
 	// React reads this to know act() wraps every update.
 	var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -17,49 +18,78 @@ const {OutlineView} = await import("../src/client/app.js");
 const {nodeKeys} = await import("../src/client/node-cache.js");
 const {useOutlineStore} = await import("../src/client/stores/outline.js");
 
-const alice: NodeResponse = {
+const alice: NodeResponse =
+{
 	id: "alice",
 	parent_id: null,
 	name: "Alice",
 	note: null,
 	priority: 0,
-	data: {layoutMode: null},
+	data:
+	{
+		layoutMode: null,
+	},
 	completedAt: null,
 	createdAt: 0,
 	modifiedAt: 0,
 	hasChildren: false,
 };
 
-const queryClient = new QueryClient({defaultOptions: {queries: {retry: false, staleTime: Number.POSITIVE_INFINITY}}});
+const queryClient = new QueryClient(
+	{
+		defaultOptions:
+		{
+			queries:
+			{
+				retry: false,
+				staleTime: Number.POSITIVE_INFINITY,
+			},
+		},
+	},
+);
 let root: Root | undefined;
 const slowResponseMs = 300;
 
 /** Wait out pending renders and every in-flight query, so a late response never lands in the next measured window. */
-async function settle(): Promise<void> {
-	do {
-		await act(async () => {
-			await new Promise((resolve) => {
+async function settle(): Promise<void>
+{
+	do
+	{
+		await act(async () =>
+		{
+			await new Promise((resolve) =>
+			{
 				setTimeout(resolve, 20);
 			});
 		});
-	} while (queryClient.isFetching() > 0);
+	}
+	while (queryClient.isFetching() > 0);
 }
 
-beforeAll(async () => {
+beforeAll(async () =>
+{
 	globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 	vi.stubGlobal(
 		"fetch",
-		vi.fn<typeof fetch>(async (input) => {
+		vi.fn<typeof fetch>(async (input) =>
+		{
 			const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
 			// Only the root's children answer; every other endpoint is missing, so its query errors and stays empty.
 			// The misses answer later than one settle(), as on a loaded CI runner, so no test may measure before they land.
-			if (url.includes("/children")) {
+			if (url.includes("/children"))
+			{
 				return Response.json([alice]);
 			}
-			await new Promise((resolve) => {
+			await new Promise((resolve) =>
+			{
 				setTimeout(resolve, slowResponseMs);
 			});
-			return Response.json({}, {status: 404});
+			return Response.json(
+				{},
+				{
+					status: 404,
+				},
+			);
 		}),
 	);
 	queryClient.setQueryData(nodeKeys.children(null), [alice]);
@@ -67,11 +97,14 @@ beforeAll(async () => {
 	const container = document.createElement("div");
 	document.body.append(container);
 	root = createRoot(container);
-	act(() => {
+	act(() =>
+	{
 		root?.render(
 			createElement(
 				QueryClientProvider,
-				{client: queryClient},
+				{
+					client: queryClient,
+				},
 				createElement(MemoryRouter, null, createElement(OutlineView)),
 			),
 		);
@@ -79,31 +112,49 @@ beforeAll(async () => {
 	await settle();
 });
 
-afterAll(() => {
-	act(() => {
+afterAll(() =>
+{
+	act(() =>
+	{
 		root?.unmount();
 	});
 	vi.unstubAllGlobals();
 });
 
-describe("OutlineView render count", () => {
-	it("does not re-render the page shell when editing moves to a row", async () => {
+describe("OutlineView render count", () =>
+{
+	it("does not re-render the page shell when editing moves to a row", async () =>
+	{
 		renders.clear();
-		act(() => {
-			useOutlineStore.setState({editingId: "alice"});
+		act(() =>
+		{
+			useOutlineStore.setState(
+				{
+					editingId: "alice",
+				},
+			);
 		});
 		await settle();
 		expect(renders.get("OutlineView") ?? 0).toBe(0);
 	});
 
-	it("renders the outline rows it is given", () => {
+	it("renders the outline rows it is given", () =>
+	{
 		expect(document.querySelectorAll('[data-node-id="alice"]').length).toBeGreaterThan(0);
 	});
 
-	it("re-renders only the new row when a sibling joins an unchanged list", async () => {
-		const bob: NodeResponse = {...alice, id: "bob", name: "Bob", priority: 1};
+	it("re-renders only the new row when a sibling joins an unchanged list", async () =>
+	{
+		const bob: NodeResponse =
+		{
+			...alice,
+			id: "bob",
+			name: "Bob",
+			priority: 1,
+		};
 		renders.clear();
-		act(() => {
+		act(() =>
+		{
 			queryClient.setQueryData(nodeKeys.children(null), [
 				queryClient.getQueryData<NodeResponse[]>(nodeKeys.children(null))?.[0] ?? alice,
 				bob,
@@ -113,32 +164,55 @@ describe("OutlineView render count", () => {
 		expect(renders.get("OutlineRow") ?? 0).toBe(1);
 	});
 
-	it("does not re-render the page shell when the edited row's text is saved", async () => {
+	it("does not re-render the page shell when the edited row's text is saved", async () =>
+	{
 		renders.clear();
-		act(() => {
-			queryClient.setQueryData(nodeKeys.detail("alice"), {...alice, name: "Alice!"});
+		act(() =>
+		{
+			queryClient.setQueryData(
+				nodeKeys.detail("alice"),
+				{
+					...alice,
+					name: "Alice!",
+				},
+			);
 		});
 		await settle();
 		expect(renders.get("OutlineView") ?? 0).toBe(0);
 	});
 
-	it("re-renders no component when a keystroke types into the edited row", async () => {
+	it("re-renders no component when a keystroke types into the edited row", async () =>
+	{
 		const editor = document.querySelector<HTMLElement>('.innerContentContainer.editing[data-node-id="alice"]');
 		const fetchingWhenMeasured = queryClient.isFetching();
 		renders.clear();
-		act(() => {
+		act(() =>
+		{
 			editor?.append("x");
-			editor?.dispatchEvent(new InputEvent("input", {bubbles: true, data: "x", inputType: "insertText"}));
+			editor?.dispatchEvent(
+				new InputEvent(
+					"input",
+					{
+						bubbles: true,
+						data: "x",
+						inputType: "insertText",
+					},
+				),
+			);
 		});
 		await settle();
-		expect({
-			fetchingWhenMeasured,
-			editing: editor !== null,
-			renders: Object.fromEntries(renders),
-		}).toStrictEqual({
-			fetchingWhenMeasured: 0,
-			editing: true,
-			renders: {},
-		});
+		expect(
+			{
+				fetchingWhenMeasured,
+				editing: editor !== null,
+				renders: Object.fromEntries(renders),
+			},
+		).toStrictEqual(
+			{
+				fetchingWhenMeasured: 0,
+				editing: true,
+				renders: {},
+			},
+		);
 	});
 });

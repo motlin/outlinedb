@@ -1,35 +1,58 @@
 import {describe, expect, it} from "vite-plus/test";
 import {httpLoggingEnabled, loggingFetch} from "../src/server/http-logger.js";
 
-function recorder() {
+function recorder()
+{
 	const lines: string[] = [];
 	return {
 		lines,
-		log: (line: string) => {
+		log: (line: string) =>
+		{
 			lines.push(line);
 		},
 	};
 }
 
-describe("loggingFetch", () => {
-	it("logs a JSON request and response with method, url, headers, body, status and elapsed time", async () => {
+describe("loggingFetch", () =>
+{
+	it("logs a JSON request and response with method, url, headers, body, status and elapsed time", async () =>
+	{
 		const {lines, log} = recorder();
 		const clock = [100, 142];
 		const inner: typeof fetch = async () =>
 			Promise.resolve(
-				new Response('{"id":"n1"}', {
-					status: 201,
-					statusText: "Created",
-					headers: {"content-type": "application/json"},
-				}),
+				new Response(
+					'{"id":"n1"}',
+					{
+						status: 201,
+						statusText: "Created",
+						headers:
+						{
+							"content-type": "application/json",
+						},
+					},
+				),
 			);
-		const fetchWithLog = loggingFetch(inner, log, {now: () => clock.shift() ?? 0});
+		const fetchWithLog = loggingFetch(
+			inner,
+			log,
+			{
+				now: () => clock.shift() ?? 0,
+			},
+		);
 
-		const response = await fetchWithLog("https://workflowy.com/api/v1/nodes", {
-			method: "POST",
-			headers: {Authorization: "Bearer secret", "Content-Type": "application/json"},
-			body: '{"name":"x"}',
-		});
+		const response = await fetchWithLog(
+			"https://workflowy.com/api/v1/nodes",
+			{
+				method: "POST",
+				headers:
+				{
+					Authorization: "Bearer secret",
+					"Content-Type": "application/json",
+				},
+				body: '{"name":"x"}',
+			},
+		);
 
 		await expect(response.text()).resolves.toBe('{"id":"n1"}');
 		expect(lines).toStrictEqual([
@@ -42,15 +65,37 @@ describe("loggingFetch", () => {
 		]);
 	});
 
-	it("decodes a form-encoded body into one line per field and defaults the method to GET", async () => {
+	it("decodes a form-encoded body into one line per field and defaults the method to GET", async () =>
+	{
 		const {lines, log} = recorder();
-		const inner: typeof fetch = async () => Promise.resolve(new Response("", {status: 200, statusText: "OK"}));
-		const fetchWithLog = loggingFetch(inner, log, {now: () => 0});
+		const inner: typeof fetch = async () =>
+			Promise.resolve(
+				new Response(
+					"",
+					{
+						status: 200,
+						statusText: "OK",
+					},
+				),
+			);
+		const fetchWithLog = loggingFetch(
+			inner,
+			log,
+			{
+				now: () => 0,
+			},
+		);
 
-		await fetchWithLog("https://workflowy.com/push_and_poll", {
-			headers: {"Content-Type": "application/x-www-form-urlencoded"},
-			body: "client_id=abc&push_poll_data=%5B%7B%22a%22%3A1%7D%5D",
-		});
+		await fetchWithLog(
+			"https://workflowy.com/push_and_poll",
+			{
+				headers:
+				{
+					"Content-Type": "application/x-www-form-urlencoded",
+				},
+				body: "client_id=abc&push_poll_data=%5B%7B%22a%22%3A1%7D%5D",
+			},
+		);
 
 		expect(lines).toStrictEqual([
 			"[HTTP] >>> GET https://workflowy.com/push_and_poll",
@@ -62,20 +107,40 @@ describe("loggingFetch", () => {
 		]);
 	});
 
-	it("redacts credential headers and credential form fields", async () => {
+	it("redacts credential headers and credential form fields", async () =>
+	{
 		const {lines, log} = recorder();
-		const inner: typeof fetch = async () => Promise.resolve(new Response("", {status: 200, statusText: "OK"}));
-		const fetchWithLog = loggingFetch(inner, log, {now: () => 0});
-
-		await fetchWithLog("https://workflowy.com/ajax_login", {
-			method: "POST",
-			headers: {
-				Cookie: "sessionid=placeholder-session",
-				"Set-Cookie": "sessionid=placeholder-session; Path=/",
-				"Content-Type": "application/x-www-form-urlencoded",
+		const inner: typeof fetch = async () =>
+			Promise.resolve(
+				new Response(
+					"",
+					{
+						status: 200,
+						statusText: "OK",
+					},
+				),
+			);
+		const fetchWithLog = loggingFetch(
+			inner,
+			log,
+			{
+				now: () => 0,
 			},
-			body: "username=alice%40example.com&password=placeholder-password&sessionid=placeholder-session&token=placeholder-token&api_token=placeholder-token",
-		});
+		);
+
+		await fetchWithLog(
+			"https://workflowy.com/ajax_login",
+			{
+				method: "POST",
+				headers:
+				{
+					Cookie: "sessionid=placeholder-session",
+					"Set-Cookie": "sessionid=placeholder-session; Path=/",
+					"Content-Type": "application/x-www-form-urlencoded",
+				},
+				body: "username=alice%40example.com&password=placeholder-password&sessionid=placeholder-session&token=placeholder-token&api_token=placeholder-token",
+			},
+		);
 
 		expect(lines).toStrictEqual([
 			"[HTTP] >>> POST https://workflowy.com/ajax_login",
@@ -92,11 +157,27 @@ describe("loggingFetch", () => {
 		]);
 	});
 
-	it("truncates a long response body and says how much was cut", async () => {
+	it("truncates a long response body and says how much was cut", async () =>
+	{
 		const {lines, log} = recorder();
 		const inner: typeof fetch = async () =>
-			Promise.resolve(new Response("abcdefghij", {status: 200, statusText: "OK"}));
-		const fetchWithLog = loggingFetch(inner, log, {now: () => 0, maxBodyChars: 4});
+			Promise.resolve(
+				new Response(
+					"abcdefghij",
+					{
+						status: 200,
+						statusText: "OK",
+					},
+				),
+			);
+		const fetchWithLog = loggingFetch(
+			inner,
+			log,
+			{
+				now: () => 0,
+				maxBodyChars: 4,
+			},
+		);
 
 		await fetchWithLog("https://workflowy.com/get_initialization_data");
 
@@ -107,10 +188,17 @@ describe("loggingFetch", () => {
 		]);
 	});
 
-	it("logs a network failure and rethrows it", async () => {
+	it("logs a network failure and rethrows it", async () =>
+	{
 		const {lines, log} = recorder();
 		const inner: typeof fetch = async () => Promise.reject(new TypeError("fetch failed"));
-		const fetchWithLog = loggingFetch(inner, log, {now: () => 0});
+		const fetchWithLog = loggingFetch(
+			inner,
+			log,
+			{
+				now: () => 0,
+			},
+		);
 
 		await expect(fetchWithLog("https://workflowy.com/x")).rejects.toThrow("fetch failed");
 		expect(lines).toStrictEqual([
@@ -120,10 +208,24 @@ describe("loggingFetch", () => {
 	});
 });
 
-describe("httpLoggingEnabled", () => {
-	it("is on only for OUTLINEDB_HTTP_LOGGING=true, like the SQL query log switch", () => {
-		expect(httpLoggingEnabled({OUTLINEDB_HTTP_LOGGING: "true"})).toBe(true);
-		expect(httpLoggingEnabled({OUTLINEDB_HTTP_LOGGING: "1"})).toBe(false);
+describe("httpLoggingEnabled", () =>
+{
+	it("is on only for OUTLINEDB_HTTP_LOGGING=true, like the SQL query log switch", () =>
+	{
+		expect(
+			httpLoggingEnabled(
+				{
+					OUTLINEDB_HTTP_LOGGING: "true",
+				},
+			),
+		).toBe(true);
+		expect(
+			httpLoggingEnabled(
+				{
+					OUTLINEDB_HTTP_LOGGING: "1",
+				},
+			),
+		).toBe(false);
 		expect(httpLoggingEnabled({})).toBe(false);
 	});
 });

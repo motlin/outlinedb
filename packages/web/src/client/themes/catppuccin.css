@@ -1,4 +1,5 @@
-._theme-catppuccin {
+._theme-catppuccin
+{
 	--wf-background-primary: #1e1e2e;
 	--wf-background-secondary: #343546;
 	--wf-background-tertiary: #45475a;
@@ -62,17 +63,20 @@
 	--wf-border-warning: #f9e2af;
 	--wf-border-success: #a6e3a1;
 
-	.wf-header {
+	.wf-header
+	{
 		--wf-text-primary: #9399b2;
 		--wf-text-secondary: #cdd6f4;
 	}
 
-	.wf-menu {
+	.wf-menu
+	{
 		--wf-text-primary: #bac2de;
 		--wf-border-secondary: #7f849c;
 	}
 
-	.wf-helper {
+	.wf-helper
+	{
 		--wf-background-primary: #45475a;
 	}
 }

@@ -15,16 +15,19 @@ import {adoptUnderCalendar, calendarMonthPath} from "../../services/calendar-ado
 /**
  * Read all content from stdin as a string
  */
-async function readStdin(): Promise<string> {
+async function readStdin(): Promise<string>
+{
 	const {stdin} = process;
-	if (stdin.isTTY) {
+	if (stdin.isTTY)
+	{
 		throw new Error("No input provided on stdin. Use --name with a value or pipe content to stdin.");
 	}
 
 	return text(stdin);
 }
 
-export default class Create extends Command {
+export default class Create extends Command
+{
 	static override description = "Create a new Workflowy node or tree of nodes from JSON";
 
 	static override examples = [
@@ -62,62 +65,89 @@ export default class Create extends Command {
 		'<%= config.bin %> <%= command.id %> --parent-path "Metadata,Scanner State,my-scanner" --name "state.json" --create-path',
 	];
 
-	static override flags = {
-		name: Flags.string({
-			char: "n",
-			description:
-				'Name of the new node (use "-" to read from stdin; an indented bullet outline becomes a nested tree per top-level bullet)',
-			exclusive: ["json", "json-file"],
-		}),
-		json: Flags.string({
-			description: "JSON structure defining a tree of nodes to create",
-			exclusive: ["name", "note", "layout-mode", "json-file"],
-		}),
-		"json-file": Flags.string({
-			description: "Path to a JSON file defining a tree of nodes to create",
-			exclusive: ["name", "note", "layout-mode", "json"],
-		}),
-		"parent-id": Flags.string({
-			description: 'ID of parent node, a system target (e.g., "inbox"), or "home" for the top level',
-			exclusive: ["parent-path"],
-		}),
-		"parent-path": Flags.string({
-			description: 'Comma-separated path to parent node (e.g., "Work,Projects")',
-			exclusive: ["parent-id"],
-		}),
-		note: Flags.string({
-			description: "Note/description for the node",
-		}),
-		"layout-mode": Flags.string({
-			description: 'Layout mode for the node (e.g., "document", "list", "board")',
-		}),
-		position: Flags.option({
-			description: 'Position among siblings: "top" (first) or "bottom" (last, default)',
-			options: ["top", "bottom"] as const,
-		})(),
-		"dry-run": Flags.boolean({
-			char: "d",
-			description: "Show the API call that would be made without executing",
-			default: false,
-		}),
-		"create-path": Flags.boolean({
-			description: "Create missing parent path segments (like mkdir -p)",
-			default: false,
-		}),
+	static override flags =
+	{
+		name: Flags.string(
+			{
+				char: "n",
+				description:
+					'Name of the new node (use "-" to read from stdin; an indented bullet outline becomes a nested tree per top-level bullet)',
+				exclusive: ["json", "json-file"],
+			},
+		),
+		json: Flags.string(
+			{
+				description: "JSON structure defining a tree of nodes to create",
+				exclusive: ["name", "note", "layout-mode", "json-file"],
+			},
+		),
+		"json-file": Flags.string(
+			{
+				description: "Path to a JSON file defining a tree of nodes to create",
+				exclusive: ["name", "note", "layout-mode", "json"],
+			},
+		),
+		"parent-id": Flags.string(
+			{
+				description: 'ID of parent node, a system target (e.g., "inbox"), or "home" for the top level',
+				exclusive: ["parent-path"],
+			},
+		),
+		"parent-path": Flags.string(
+			{
+				description: 'Comma-separated path to parent node (e.g., "Work,Projects")',
+				exclusive: ["parent-id"],
+			},
+		),
+		note: Flags.string(
+			{
+				description: "Note/description for the node",
+			},
+		),
+		"layout-mode": Flags.string(
+			{
+				description: 'Layout mode for the node (e.g., "document", "list", "board")',
+			},
+		),
+		position: Flags.option(
+			{
+				description: 'Position among siblings: "top" (first) or "bottom" (last, default)',
+				options: ["top", "bottom"] as const,
+			},
+		)(),
+		"dry-run": Flags.boolean(
+			{
+				char: "d",
+				description: "Show the API call that would be made without executing",
+				default: false,
+			},
+		),
+		"create-path": Flags.boolean(
+			{
+				description: "Create missing parent path segments (like mkdir -p)",
+				default: false,
+			},
+		),
 	};
 
-	public async run(): Promise<void> {
+	public async run(): Promise<void>
+	{
 		const {flags} = await this.parse(Create);
 		// oclif types parsed flags as `F & {json: boolean | undefined}`, which collapses this string flag to `undefined`.
-		const {json: jsonFlag} = flags as {json?: string};
+		const {json: jsonFlag} = flags as
+		{
+			json?: string;
+		};
 
 		const apiKey = process.env.WORKFLOWY_API_KEY;
-		if (!apiKey) {
+		if (!apiKey)
+		{
 			this.error("WORKFLOWY_API_KEY environment variable is required");
 		}
 
 		// Validate that either --name or --json/--json-file is provided
-		if (flags.name === undefined && !jsonFlag && !flags["json-file"]) {
+		if (flags.name === undefined && !jsonFlag && !flags["json-file"])
+		{
 			this.error("Either --name, --json, or --json-file is required");
 		}
 
@@ -127,7 +157,8 @@ export default class Create extends Command {
 		const client = new WorkflowyWriteThroughClient(apiClient, cacheService);
 
 		// Validate that at least one parent specifier is provided
-		if (!flags["parent-id"] && !flags["parent-path"]) {
+		if (!flags["parent-id"] && !flags["parent-path"])
+		{
 			this.error("Parent node is required. Use --parent-id or --parent-path to specify a parent.");
 		}
 
@@ -136,33 +167,48 @@ export default class Create extends Command {
 		const parentId =
 			flags["create-path"] && flags["parent-path"] && !flags["dry-run"]
 				? await this.resolveCreatePath(flags["parent-path"], cacheService, apiClient, client, database)
-				: await resolveParent({id: flags["parent-id"], path: flags["parent-path"]}, cacheService, apiClient);
+				: await resolveParent(
+						{
+							id: flags["parent-id"],
+							path: flags["parent-path"],
+						},
+						cacheService,
+						apiClient,
+					);
 
 		// Handle JSON input mode
-		if (jsonFlag || flags["json-file"]) {
+		if (jsonFlag || flags["json-file"])
+		{
 			await this.runJsonMode(flags, parentId, apiClient, cacheService, database);
 			return;
 		}
 
 		// Handle stdin input when --name is "-"
-		if (flags.name === undefined) {
+		if (flags.name === undefined)
+		{
 			this.error("Either --name, --json, or --json-file is required");
 		}
 		let {name} = flags;
-		if (name === "-") {
-			try {
+		if (name === "-")
+		{
+			try
+			{
 				name = await readStdin();
-			} catch (error) {
+			}
+			catch (error)
+			{
 				this.error(error instanceof Error ? error.message : "Failed to read from stdin");
 			}
 		}
 
 		// An indented bullet outline on stdin becomes a node tree per top-level bullet
 		const outline = flags.name === "-" ? parseBulletOutline(name) : [];
-		if (outline.length > 0) {
+		if (outline.length > 0)
+		{
 			// Each tree lands at the same end of the parent, so --position top creates them last-first.
 			const ordered = flags.position === "top" ? outline.toReversed() : outline;
-			for (const tree of ordered) {
+			for (const tree of ordered)
+			{
 				// oxlint-disable-next-line no-await-in-loop -- trees must be created in order
 				await this.createTree(tree, flags, parentId, apiClient, cacheService, database);
 			}
@@ -170,7 +216,15 @@ export default class Create extends Command {
 		}
 
 		// Handle single node creation mode (original behavior)
-		await this.runSingleNodeMode({...flags, name}, parentId, client, database);
+		await this.runSingleNodeMode(
+			{
+				...flags,
+				name,
+			},
+			parentId,
+			client,
+			database,
+		);
 	}
 
 	/**
@@ -184,13 +238,16 @@ export default class Create extends Command {
 		apiClient: WorkflowyApiClient,
 		client: WorkflowyWriteThroughClient,
 		database: ReturnType<typeof createDatabase>,
-	): Promise<string> {
+	): Promise<string>
+	{
 		const calendarPath = calendarMonthPath(parentPath);
-		if (calendarPath === undefined) {
+		if (calendarPath === undefined)
+		{
 			return resolveOrCreateNodePath(parentPath, cacheService, apiClient);
 		}
 		const adapter = internalAdapter(database, client);
-		if (adapter === undefined) {
+		if (adapter === undefined)
+		{
 			if (
 				cacheService.findNodeByPath(
 					parentPath
@@ -198,18 +255,35 @@ export default class Create extends Command {
 						.slice(0, 3)
 						.map((part) => part.trim()),
 				) === null
-			) {
+			)
+			{
 				this.logToStderr(
 					`warning: ${parentPath} will be created by name, without 📆 Calendar metadata; workflowy.com will not use those year/month nodes. Set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD, or run ./bin/run.js calendar day --date ${calendarPath.year}-${String(calendarPath.month).padStart(2, "0")}-01 --ensure instead.`,
 				);
 			}
 			return resolveOrCreateNodePath(parentPath, cacheService, apiClient);
 		}
-		const {dayId} = await adapter.ensureCalendarDay(calendarPath.dateId, {stopAt: "month", createChild: false});
+		const {dayId} = await adapter.ensureCalendarDay(
+			calendarPath.dateId,
+			{
+				stopAt: "month",
+				createChild: false,
+			},
+		);
 		let current = dayId;
-		for (const segment of calendarPath.rest) {
+		for (const segment of calendarPath.rest)
+		{
 			const existing = cacheService.getChildByName(current, segment);
-			current = existing?.id ?? (await client.createNode({parent_id: current, name: segment})).id;
+			current =
+				existing?.id ??
+				(
+					await client.createNode(
+						{
+							parent_id: current,
+							name: segment,
+						},
+					)
+				).id;
 		}
 		return current;
 	}
@@ -218,7 +292,8 @@ export default class Create extends Command {
 	 * Create a single node (original behavior)
 	 */
 	private async runSingleNodeMode(
-		flags: {
+		flags:
+		{
 			name: string;
 			note?: string;
 			"layout-mode"?: string;
@@ -228,17 +303,36 @@ export default class Create extends Command {
 		parentId: string | null,
 		client: WorkflowyWriteThroughClient,
 		database: ReturnType<typeof createDatabase>,
-	): Promise<void> {
+	): Promise<void>
+	{
 		const {name} = flags;
 
-		if (flags["dry-run"]) {
+		if (flags["dry-run"])
+		{
 			// Home has no API key: a top-level create omits parent_id.
-			const requestBody: {parent_id?: string; name: string; note?: string; layoutMode?: string} =
-				parentId === null ? {name} : {parent_id: parentId, name};
-			if (flags.note) {
+			const requestBody:
+			{
+				parent_id?: string;
+				name: string;
+				note?: string;
+				layoutMode?: string;
+			} =
+				parentId === null
+					?
+						{
+							name,
+						}
+					:
+						{
+							parent_id: parentId,
+							name,
+						};
+			if (flags.note)
+			{
 				requestBody.note = flags.note;
 			}
-			if (flags["layout-mode"]) {
+			if (flags["layout-mode"])
+			{
 				requestBody.layoutMode = flags["layout-mode"];
 			}
 
@@ -255,30 +349,42 @@ export default class Create extends Command {
 			const parentPath = pathBuilder.buildFullPath(parentId);
 			this.log("");
 			this.log(`Parent: ${parentPath}`);
-		} else {
+		}
+		else
+		{
 			this.log(`Creating node: ${name}`);
 			const pathBuilder = new PathBuilder(database);
 			const parentPath = pathBuilder.buildFullPath(parentId);
 			this.log(`Parent: ${parentPath}`);
 
-			const newNode = await client.createNode({
-				parent_id: parentId,
-				name,
-				note: flags.note,
-				layoutMode: flags["layout-mode"],
-				position: flags.position,
-			});
-			await syncBacklinksIfLinked([newNode.id], [name, flags.note], database, client);
-			await adoptUnderCalendar({
-				rows: [{id: newNode.id, name}],
-				parentId,
-				database,
-				cache: new CacheService(database),
-				writeThrough: client,
-				warn: (message) => {
-					this.logToStderr(message);
+			const newNode = await client.createNode(
+				{
+					parent_id: parentId,
+					name,
+					note: flags.note,
+					layoutMode: flags["layout-mode"],
+					position: flags.position,
 				},
-			});
+			);
+			await syncBacklinksIfLinked([newNode.id], [name, flags.note], database, client);
+			await adoptUnderCalendar(
+				{
+					rows: [
+						{
+							id: newNode.id,
+							name,
+						},
+					],
+					parentId,
+					database,
+					cache: new CacheService(database),
+					writeThrough: client,
+					warn: (message) =>
+					{
+						this.logToStderr(message);
+					},
+				},
+			);
 
 			this.log("");
 			this.log("Successfully created node");
@@ -293,7 +399,8 @@ export default class Create extends Command {
 	 * Create nodes from JSON input (tree structure)
 	 */
 	private async runJsonMode(
-		flags: {
+		flags:
+		{
 			json?: string;
 			"json-file"?: string;
 			"dry-run": boolean;
@@ -303,31 +410,43 @@ export default class Create extends Command {
 		apiClient: WorkflowyApiClient,
 		cacheService: CacheService,
 		database: ReturnType<typeof createDatabase>,
-	): Promise<void> {
+	): Promise<void>
+	{
 		// Parse JSON input
 		let jsonInput: unknown;
-		if (flags.json) {
-			try {
+		if (flags.json)
+		{
+			try
+			{
 				jsonInput = JSON.parse(flags.json);
-			} catch {
+			}
+			catch
+			{
 				this.error("Invalid JSON in --json flag");
 			}
-		} else if (flags["json-file"]) {
+		}
+		else if (flags["json-file"])
+		{
 			const filePath = flags["json-file"];
-			if (!fs.existsSync(filePath)) {
+			if (!fs.existsSync(filePath))
+			{
 				this.error(`File not found: ${filePath}`);
 			}
-			try {
+			try
+			{
 				const fileContent = fs.readFileSync(filePath, "utf8");
 				jsonInput = JSON.parse(fileContent);
-			} catch {
+			}
+			catch
+			{
 				this.error(`Failed to parse JSON from file: ${filePath}`);
 			}
 		}
 
 		// Validate JSON structure
 		const parseResult = NodeTreeSpecSchema.safeParse(jsonInput);
-		if (!parseResult.success) {
+		if (!parseResult.success)
+		{
 			this.error(`Invalid JSON structure: ${parseResult.error.message}`);
 		}
 
@@ -339,13 +458,19 @@ export default class Create extends Command {
 	 */
 	private async createTree(
 		nodeTree: NodeTreeSpec,
-		flags: {"dry-run": boolean; position?: "top" | "bottom"},
+		flags:
+		{
+			"dry-run": boolean;
+			position?: "top" | "bottom";
+		},
 		parentId: string | null,
 		apiClient: WorkflowyApiClient,
 		cacheService: CacheService,
 		database: ReturnType<typeof createDatabase>,
-	): Promise<void> {
-		if (flags["dry-run"]) {
+	): Promise<void>
+	{
+		if (flags["dry-run"])
+		{
 			this.dryRunJsonMode(nodeTree, parentId, database);
 			return;
 		}
@@ -367,16 +492,24 @@ export default class Create extends Command {
 			client,
 		);
 
-		await adoptUnderCalendar({
-			rows: [{id: result.id, name: nodeTree.name}],
-			parentId,
-			database,
-			cache: cacheService,
-			writeThrough: client,
-			warn: (message) => {
-				this.logToStderr(message);
+		await adoptUnderCalendar(
+			{
+				rows: [
+					{
+						id: result.id,
+						name: nodeTree.name,
+					},
+				],
+				parentId,
+				database,
+				cache: cacheService,
+				writeThrough: client,
+				warn: (message) =>
+				{
+					this.logToStderr(message);
+				},
 			},
-		});
+		);
 
 		// Output results
 		this.log("Successfully created node tree:");
@@ -391,13 +524,15 @@ export default class Create extends Command {
 	/**
 	 * Print the created tree structure
 	 */
-	private printCreatedTree(node: CreatedNodeTree, depth: number): void {
+	private printCreatedTree(node: CreatedNodeTree, depth: number): void
+	{
 		const indent = "  ".repeat(depth);
 		this.log(`${indent}- ${node.name}`);
 		this.log(`${indent}  ID: ${node.id}`);
 		this.log(`${indent}  URL: ${getWorkflowyUrl(node.id)}`);
 
-		for (const child of node.children) {
+		for (const child of node.children)
+		{
 			this.printCreatedTree(child, depth + 1);
 		}
 	}
@@ -408,8 +543,19 @@ export default class Create extends Command {
 	private flattenCreatedNodes(
 		node: CreatedNodeTree,
 		parentId?: string,
-	): {id: string; name: string; parentId: string | null}[] {
-		const result: {id: string; name: string; parentId: string | null}[] = [
+	):
+	{
+		id: string;
+		name: string;
+		parentId: string | null;
+	}[]
+	{
+		const result:
+		{
+			id: string;
+			name: string;
+			parentId: string | null;
+		}[] = [
 			{
 				id: node.id,
 				name: node.name,
@@ -417,7 +563,8 @@ export default class Create extends Command {
 			},
 		];
 
-		for (const child of node.children) {
+		for (const child of node.children)
+		{
 			result.push(...this.flattenCreatedNodes(child, node.id));
 		}
 
@@ -431,7 +578,8 @@ export default class Create extends Command {
 		nodeTree: NodeTreeSpec,
 		parentId: string | null,
 		database: ReturnType<typeof createDatabase>,
-	): void {
+	): void
+	{
 		this.log("Would create the following node tree:");
 		this.log("");
 
@@ -451,18 +599,23 @@ export default class Create extends Command {
 	/**
 	 * Print a preview of the node tree that would be created
 	 */
-	private printNodeTreePreview(node: NodeTreeSpec, depth: number): void {
+	private printNodeTreePreview(node: NodeTreeSpec, depth: number): void
+	{
 		const indent = "  ".repeat(depth);
 		this.log(`${indent}- ${node.name}`);
-		if (node.note) {
+		if (node.note)
+		{
 			this.log(`${indent}  Note: ${node.note.slice(0, 50)}${node.note.length > 50 ? "..." : ""}`);
 		}
-		if (node.layoutMode) {
+		if (node.layoutMode)
+		{
 			this.log(`${indent}  Layout: ${node.layoutMode}`);
 		}
 
-		if (node.children) {
-			for (const child of node.children) {
+		if (node.children)
+		{
+			for (const child of node.children)
+			{
 				this.printNodeTreePreview(child, depth + 1);
 			}
 		}
@@ -471,10 +624,13 @@ export default class Create extends Command {
 	/**
 	 * Count total nodes in a tree
 	 */
-	private countNodes(node: NodeTreeSpec): number {
+	private countNodes(node: NodeTreeSpec): number
+	{
 		let count = 1;
-		if (node.children) {
-			for (const child of node.children) {
+		if (node.children)
+		{
+			for (const child of node.children)
+			{
 				count += this.countNodes(child);
 			}
 		}
@@ -483,11 +639,27 @@ export default class Create extends Command {
 }
 
 /** Each created node whose spec text holds an internal link, with that text, depth-first. */
-function linkedCreatedNodes(spec: NodeTreeSpec, created: CreatedNodeTree): {id: string; text: string}[] {
+function linkedCreatedNodes(
+	spec: NodeTreeSpec,
+	created: CreatedNodeTree,
+):
+{
+	id: string;
+	text: string;
+}[]
+{
 	const specText = `${spec.name} ${spec.note ?? ""}`;
 	return [
-		...(hasInternalLink(specText) ? [{id: created.id, text: specText}] : []),
-		...(spec.children ?? []).flatMap((child, index) => {
+		...(hasInternalLink(specText)
+			? [
+					{
+						id: created.id,
+						text: specText,
+					},
+				]
+			: []),
+		...(spec.children ?? []).flatMap((child, index) =>
+		{
 			const createdChild = created.children[index];
 			return createdChild === undefined ? [] : linkedCreatedNodes(child, createdChild);
 		}),
@@ -501,30 +673,50 @@ const BULLET_LINE = /^(?<indent>[ \t]*)[-*+][ \t]+(?<text>.*)$/u;
  * (a tab counts as four spaces). Blank lines are skipped. Returns [] when any other line is not a
  * bullet, so headings, paragraphs, and continuation lines keep the single-node path.
  */
-function parseBulletOutline(input: string): NodeTreeSpec[] {
+function parseBulletOutline(input: string): NodeTreeSpec[]
+{
 	const roots: NodeTreeSpec[] = [];
-	const stack: {indent: number; node: NodeTreeSpec}[] = [];
-	for (const line of input.split(/\r?\n/u)) {
-		if (line.trim() === "") {
+	const stack:
+	{
+		indent: number;
+		node: NodeTreeSpec;
+	}[] = [];
+	for (const line of input.split(/\r?\n/u))
+	{
+		if (line.trim() === "")
+		{
 			continue;
 		}
 		const match = BULLET_LINE.exec(line);
 		const {indent: indentText, text: bulletText} = match?.groups ?? {};
-		if (indentText === undefined || bulletText === undefined) {
+		if (indentText === undefined || bulletText === undefined)
+		{
 			return [];
 		}
 		const indent = indentText.replaceAll("\t", "    ").length;
-		const node: NodeTreeSpec = {name: bulletText.trimEnd()};
-		while ((stack.at(-1)?.indent ?? -1) >= indent) {
+		const node: NodeTreeSpec =
+		{
+			name: bulletText.trimEnd(),
+		};
+		while ((stack.at(-1)?.indent ?? -1) >= indent)
+		{
 			stack.pop();
 		}
 		const parent = stack.at(-1)?.node;
-		if (parent === undefined) {
+		if (parent === undefined)
+		{
 			roots.push(node);
-		} else {
+		}
+		else
+		{
 			(parent.children ??= []).push(node);
 		}
-		stack.push({indent, node});
+		stack.push(
+			{
+				indent,
+				node,
+			},
+		);
 	}
 	return roots;
 }

@@ -17,12 +17,15 @@ import {installScrollRestoration, restorePoppedScroll} from "../scroll-restorati
 import {loadMainZoomView, mainZoomViewCached} from "./use-outline-view.js";
 
 /** Resolve a location id (short or full) to the node's full uuid; null when the server has no such node. */
-export async function fetchResolvedId(locationId: string): Promise<string | null> {
+export async function fetchResolvedId(locationId: string): Promise<string | null>
+{
 	const response = await fetch(`/api/v1/nodes/${encodeURIComponent(locationId)}`);
-	if (response.status === 404) {
+	if (response.status === 404)
+	{
 		return null;
 	}
-	if (!response.ok) {
+	if (!response.ok)
+	{
 		throw new Error(`Failed to resolve node: ${response.statusText}`);
 	}
 	const data = await readJson<NodeEnvelope>(response);
@@ -41,7 +44,8 @@ export async function fetchResolvedId(locationId: string): Promise<string | null
  * After the first zoom, a view the cache lacks loads before the zoom lands (`zoomWhenViewReady`), so the outline,
  * title and breadcrumbs swap together in one commit, as for a cached view.
  */
-export function useHashLocationZoom(): void {
+export function useHashLocationZoom(): void
+{
 	const location = useLocation();
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
@@ -49,19 +53,23 @@ export function useHashLocationZoom(): void {
 	const setUrlSearchQuery = useOutlineStore((state) => state.setUrlSearchQuery);
 	const {id, query, fragments} = parseLocationHash(location.hash);
 	const panes = fragments[PANES_FRAGMENT];
-	const resolved = useQuery({
-		queryKey: nodeKeys.resolvedId(id ?? ""),
-		queryFn: id === null ? skipToken : async () => fetchResolvedId(id),
-		initialData: () => (id === null ? undefined : cachedResolvedId(queryClient, id)),
-		staleTime: RESOLVED_ID_STALE_TIME,
-	});
+	const resolved = useQuery(
+		{
+			queryKey: nodeKeys.resolvedId(id ?? ""),
+			queryFn: id === null ? skipToken : async () => fetchResolvedId(id),
+			initialData: () => (id === null ? undefined : cachedResolvedId(queryClient, id)),
+			staleTime: RESOLVED_ID_STALE_TIME,
+		},
+	);
 	const virtual = id === null ? null : parseVirtualShortId(id);
-	const mirror = useQuery({
-		queryKey: nodeKeys.resolvedId(virtual?.mirrorShortId ?? ""),
-		queryFn: virtual === null ? skipToken : async () => fetchResolvedId(virtual.mirrorShortId),
-		initialData: () => (virtual === null ? undefined : cachedResolvedId(queryClient, virtual.mirrorShortId)),
-		staleTime: RESOLVED_ID_STALE_TIME,
-	});
+	const mirror = useQuery(
+		{
+			queryKey: nodeKeys.resolvedId(virtual?.mirrorShortId ?? ""),
+			queryFn: virtual === null ? skipToken : async () => fetchResolvedId(virtual.mirrorShortId),
+			initialData: () => (virtual === null ? undefined : cachedResolvedId(queryClient, virtual.mirrorShortId)),
+			staleTime: RESOLVED_ID_STALE_TIME,
+		},
+	);
 	const mirrorPending = virtual !== null && mirror.isFetching;
 	const mirrorRootId = typeof mirror.data === "string" ? mirror.data : null;
 	const virtualPath = virtual?.path;
@@ -72,70 +80,113 @@ export function useHashLocationZoom(): void {
 
 	useLayoutEffect(
 		() =>
-			setZoomViewLoader({
-				cached: (viewRoot) => mainZoomViewCached(queryClient, viewRoot),
-				load: async (viewRoot) => loadMainZoomView(queryClient, viewRoot),
-			}),
+			setZoomViewLoader(
+				{
+					cached: (viewRoot) => mainZoomViewCached(queryClient, viewRoot),
+					load: async (viewRoot) => loadMainZoomView(queryClient, viewRoot),
+				},
+			),
 		[queryClient],
 	);
 
-	useLayoutEffect(() => {
+	useLayoutEffect(() =>
+	{
 		// Installed first, so its `popstate` listener notes the entry's scroll before the zoom below reads it.
 		const uninstallScroll = installScrollRestoration(globalThis.window);
-		const zoomFromHistory = () => {
+		const zoomFromHistory = () =>
+		{
 			const shown = useOutlineStore.getState().zoomedNodeId;
 			// Upstream saves the view as a location is left; popstate leaves the stacks alone, so `nav.current` is the one left.
 			const {nav, editingId, editingNoteId} = useOutlineStore.getState();
-			captureViewState(nav.current, {editingId, editingNoteId});
+			captureViewState(
+				nav.current,
+				{
+					editingId,
+					editingNoteId,
+				},
+			);
 			oweViewRestoreForHash(globalThis.location.hash);
 			zoomToCachedLocation(globalThis.location.hash, (locationId) => cachedResolvedId(queryClient, locationId));
 			// An entry on the shown view swaps nothing, so its scroll restores now; a swap restores it in its own commit.
-			if (useOutlineStore.getState().zoomedNodeId === shown) {
+			if (useOutlineStore.getState().zoomedNodeId === shown)
+			{
 				restorePoppedScroll(shown);
 				restoreShownView(queryClient, shown);
 			}
 		};
 		globalThis.addEventListener("popstate", zoomFromHistory);
-		return () => {
+		return () =>
+		{
 			globalThis.removeEventListener("popstate", zoomFromHistory);
 			uninstallScroll();
 		};
 	}, [queryClient]);
 
-	useLayoutEffect(() => {
-		if (unknown) {
+	useLayoutEffect(() =>
+	{
+		if (unknown)
+		{
 			zoom(null);
-			void navigate("/", {state: {wfCanonical: true}});
+			void navigate(
+				"/",
+				{
+					state:
+					{
+						wfCanonical: true,
+					},
+				},
+			);
 			return;
 		}
-		if (target === null || mirrorPending) {
+		if (target === null || mirrorPending)
+		{
 			return;
 		}
 		const fullId = target === "home" ? null : target;
 		const instance =
-			virtualPath === undefined || mirrorRootId === null ? null : {rootId: mirrorRootId, path: virtualPath};
+			virtualPath === undefined || mirrorRootId === null
+				? null
+				:
+					{
+						rootId: mirrorRootId,
+						path: virtualPath,
+					};
 		// The page load's zoom shows its own loading state; every later one holds the shown view until its view loads.
-		if (zoomedOnce.current) {
-			zoomWhenViewReady(fullId, () => {
+		if (zoomedOnce.current)
+		{
+			zoomWhenViewReady(fullId, () =>
+			{
 				zoom(fullId, instance);
 			});
-		} else {
+		}
+		else
+		{
 			zoomedOnce.current = true;
 			zoom(fullId, instance);
 		}
-		const canonical = locationUrl({
-			id: instance === null ? fullId : id,
-			query,
-			fragments: panes === undefined ? {} : {[PANES_FRAGMENT]: panes},
-		});
+		const canonical = locationUrl(
+			{
+				id: instance === null ? fullId : id,
+				query,
+				fragments:
+					panes === undefined
+						? {}
+						:
+							{
+								[PANES_FRAGMENT]: panes,
+							},
+			},
+		);
 		// Also compared with the live URL, not just the render's: a re-run effect (StrictMode) or a second render before
 		// the router commits must not push the same canonical URL again.
-		if (canonical !== currentUrl && canonical !== globalThis.location.pathname + globalThis.location.hash) {
+		if (canonical !== currentUrl && canonical !== globalThis.location.pathname + globalThis.location.hash)
+		{
 			void navigate(canonical);
 		}
 	}, [currentUrl, id, mirrorPending, mirrorRootId, navigate, panes, query, target, unknown, virtualPath, zoom]);
 
-	useLayoutEffect(() => {
+	useLayoutEffect(() =>
+	{
 		setUrlSearchQuery(query);
 	}, [query, setUrlSearchQuery]);
 }

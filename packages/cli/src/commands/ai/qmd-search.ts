@@ -5,7 +5,8 @@ import {parseStrictNumber} from "../../utils/parse-strict-number.js";
 import {QmdSearchService} from "../../services/qmd-search.js";
 import type {QmdSearchResultItem} from "../../services/qmd-search.js";
 
-export default class QmdSearch extends Command {
+export default class QmdSearch extends Command
+{
 	static override enableJsonFlag = true;
 
 	static override description = "Search Workflowy nodes using qmd hybrid search (BM25 + vector + LLM reranking)";
@@ -17,37 +18,50 @@ export default class QmdSearch extends Command {
 		'<%= config.bin %> <%= command.id %> --query "tasks" --limit 10 --json',
 	];
 
-	static override flags = {
-		query: Flags.string({
-			char: "q",
-			description: "Search query",
-			required: true,
-		}),
-		limit: Flags.integer({
-			char: "l",
-			description: "Maximum number of results to return",
-			default: 5,
-		}),
-		threshold: Flags.string({
-			char: "t",
-			description: "Minimum score threshold (0-1, higher = more relevant)",
-		}),
-		"show-distance": Flags.boolean({
-			char: "d",
-			description: "Show relevance scores",
-			default: false,
-		}),
-		json: Flags.boolean({
-			char: "j",
-			description: "Output results in JSON format",
-			default: false,
-		}),
-		mode: Flags.option({
-			char: "m",
-			description: "Search mode",
-			options: ["hybrid", "vector", "keyword"] as const,
-			default: "hybrid",
-		})(),
+	static override flags =
+	{
+		query: Flags.string(
+			{
+				char: "q",
+				description: "Search query",
+				required: true,
+			},
+		),
+		limit: Flags.integer(
+			{
+				char: "l",
+				description: "Maximum number of results to return",
+				default: 5,
+			},
+		),
+		threshold: Flags.string(
+			{
+				char: "t",
+				description: "Minimum score threshold (0-1, higher = more relevant)",
+			},
+		),
+		"show-distance": Flags.boolean(
+			{
+				char: "d",
+				description: "Show relevance scores",
+				default: false,
+			},
+		),
+		json: Flags.boolean(
+			{
+				char: "j",
+				description: "Output results in JSON format",
+				default: false,
+			},
+		),
+		mode: Flags.option(
+			{
+				char: "m",
+				description: "Search mode",
+				options: ["hybrid", "vector", "keyword"] as const,
+				default: "hybrid",
+			},
+		)(),
 	};
 
 	public async run(): Promise<
@@ -66,30 +80,37 @@ export default class QmdSearch extends Command {
 			textContent: string;
 			score?: number;
 		}[]
-	> {
+	>
+	{
 		const {flags} = await this.parse(QmdSearch);
 		const {query} = flags;
 		const minScore = flags.threshold === undefined ? undefined : parseStrictNumber(flags.threshold);
-		if (flags.threshold !== undefined && minScore === undefined) {
+		if (flags.threshold !== undefined && minScore === undefined)
+		{
 			this.error(`Invalid --threshold value: "${flags.threshold}". Must be a number.`);
 		}
 
 		const database = createDatabase();
 		const service = new QmdSearchService(database);
 
-		try {
-			if (!this.jsonEnabled()) {
+		try
+		{
+			if (!this.jsonEnabled())
+			{
 				this.log(`Searching for: "${query}" (mode: ${flags.mode})\n`);
 			}
 
-			const results = await service.search({
-				query,
-				limit: flags.limit,
-				minScore,
-				mode: flags.mode,
-			});
+			const results = await service.search(
+				{
+					query,
+					limit: flags.limit,
+					minScore,
+					mode: flags.mode,
+				},
+			);
 
-			const transformedResults = results.map((result) => ({
+			const transformedResults = results.map((result) => (
+			{
 				id: result.id,
 				name: result.name,
 				note: result.note,
@@ -102,16 +123,24 @@ export default class QmdSearch extends Command {
 				nodeId: result.nodeId,
 				fullPath: result.fullPath,
 				textContent: result.textContent,
-				...(flags["show-distance"] ? {score: result.score} : {}),
+				...(flags["show-distance"]
+					?
+						{
+							score: result.score,
+						}
+					: {}),
 			}));
 
-			if (flags.json) {
+			if (flags.json)
+			{
 				this.log(JSON.stringify(transformedResults, null, 2));
 				return transformedResults;
 			}
 
-			if (results.length === 0) {
-				if (!this.jsonEnabled()) {
+			if (results.length === 0)
+			{
+				if (!this.jsonEnabled())
+				{
 					this.log("No results found. Try:");
 					this.log("  - Using different search terms");
 					this.log("  - Lowering the threshold with --threshold");
@@ -120,22 +149,28 @@ export default class QmdSearch extends Command {
 				return transformedResults;
 			}
 
-			if (!this.jsonEnabled()) {
-				for (const result of results) {
+			if (!this.jsonEnabled())
+			{
+				for (const result of results)
+				{
 					this.displayResult(result, flags["show-distance"]);
 				}
 			}
 
 			return transformedResults;
-		} finally {
+		}
+		finally
+		{
 			await service.close();
 		}
 	}
 
-	private displayResult(result: QmdSearchResultItem, showScore: boolean): void {
+	private displayResult(result: QmdSearchResultItem, showScore: boolean): void
+	{
 		const formattedPath = this.formatPathWithGreySeparators(result.fullPath);
 		this.log(`\u{1F4CD} ${formattedPath}`);
-		if (showScore) {
+		if (showScore)
+		{
 			this.log(`   Score: ${result.score.toFixed(4)}`);
 		}
 
@@ -145,7 +180,8 @@ export default class QmdSearch extends Command {
 		this.log(`   \u{1F517} ${greyUrl}\n`);
 	}
 
-	private formatPathWithGreySeparators(path: string): string {
+	private formatPathWithGreySeparators(path: string): string
+	{
 		return path.replaceAll(" > ", "\u001B[90m > \u001B[0m");
 	}
 }

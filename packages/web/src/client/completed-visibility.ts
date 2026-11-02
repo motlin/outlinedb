@@ -1,6 +1,7 @@
 import {parseQuery} from "@outlinedb/shared/search-query";
 
-export interface CompletedVisibility {
+export interface CompletedVisibility
+{
 	/** Whether completed rows render: the preference, or a revealing query forcing them. */
 	shown: boolean;
 	/** The persisted preference alone, which a forced value never changes. */
@@ -11,12 +12,15 @@ export interface CompletedVisibility {
 
 const revealsByQuery = new Map<string, boolean>();
 
-function queryRevealsCompleted(query: string): boolean {
-	if (query === "") {
+function queryRevealsCompleted(query: string): boolean
+{
+	if (query === "")
+	{
 		return false;
 	}
 	let reveals = revealsByQuery.get(query);
-	if (reveals === undefined) {
+	if (reveals === undefined)
+	{
 		reveals = parseQuery(query).revealsCompleted();
 		revealsByQuery.set(query, reveals);
 	}
@@ -27,7 +31,12 @@ function queryRevealsCompleted(query: string): boolean {
  * Upstream's `WF.Complete.shown = forced || userShown`. Derived from the committed query, so it is reactive where
  * upstream's non-observable read renders stale.
  */
-export function selectCompletedVisibility(state: {showCompleted: boolean; searchQuery: string}): CompletedVisibility {
+export function selectCompletedVisibility(state: {showCompleted: boolean; searchQuery: string}): CompletedVisibility
+{
 	const forced = queryRevealsCompleted(state.searchQuery);
-	return {shown: forced || state.showCompleted, userShown: state.showCompleted, forced};
+	return {
+		shown: forced || state.showCompleted,
+		userShown: state.showCompleted,
+		forced,
+	};
 }

@@ -6,7 +6,8 @@ import {existsSync, mkdirSync} from "node:fs";
 import {dirname, join} from "node:path";
 import {createHash} from "node:crypto";
 import {createStore} from "@tobilu/qmd";
-import type {
+import type
+{
 	EmbedProgress,
 	EmbedResult,
 	HybridQueryResult,
@@ -17,7 +18,8 @@ import {buildEmbedTexts, loadEmbeddableNodes, PathBuilder} from "@outlinedb/shar
 import {logger} from "./logger.js";
 import {nullable} from "../utils/nullable.js";
 
-function hashContent(content: string): string {
+function hashContent(content: string): string
+{
 	return createHash("sha256").update(content).digest("hex");
 }
 
@@ -27,14 +29,16 @@ const QMD_DB_FILE = "outlinedb.sqlite";
 
 export type QmdSearchMode = "hybrid" | "vector" | "keyword";
 
-export interface QmdSearchOptions {
+export interface QmdSearchOptions
+{
 	query: string;
 	limit?: number;
 	minScore?: number;
 	mode?: QmdSearchMode;
 }
 
-export interface QmdSyncResult {
+export interface QmdSyncResult
+{
 	inserted: number;
 	updated: number;
 	unchanged: number;
@@ -42,7 +46,8 @@ export interface QmdSyncResult {
 	totalTime: number;
 }
 
-export interface QmdSearchResultItem {
+export interface QmdSearchResultItem
+{
 	id: string;
 	name: string;
 	note: string | null | undefined;
@@ -58,56 +63,75 @@ export interface QmdSearchResultItem {
 	score: number;
 }
 
-function extractNodeId(virtualPath: string): string {
+function extractNodeId(virtualPath: string): string
+{
 	// qmd virtual paths are like: qmd://outlinedb/node-uuid
 	const prefix = `qmd://${COLLECTION_NAME}/`;
-	if (virtualPath.startsWith(prefix)) {
+	if (virtualPath.startsWith(prefix))
+	{
 		return virtualPath.slice(prefix.length);
 	}
 	return virtualPath;
 }
 
-export class QmdSearchService {
+export class QmdSearchService
+{
 	private readonly database: BetterSQLite3Database<typeof schema>;
 	private readonly pathBuilder: PathBuilder;
 	private store: QMDStore | null = null;
 
-	constructor(database: BetterSQLite3Database<typeof schema>) {
+	constructor(database: BetterSQLite3Database<typeof schema>)
+	{
 		this.database = database;
 		this.pathBuilder = new PathBuilder(database);
 	}
 
-	private getDbPath(): string {
+	private getDbPath(): string
+	{
 		return join(QMD_DB_DIR, QMD_DB_FILE);
 	}
 
-	private async getStore(): Promise<QMDStore> {
-		if (this.store) {
+	private async getStore(): Promise<QMDStore>
+	{
+		if (this.store)
+		{
 			return this.store;
 		}
 
 		const dbPath = this.getDbPath();
 		const dir = dirname(dbPath);
-		if (!existsSync(dir)) {
-			mkdirSync(dir, {recursive: true});
+		if (!existsSync(dir))
+		{
+			mkdirSync(
+				dir,
+				{
+					recursive: true,
+				},
+			);
 		}
 
-		this.store = await createStore({
-			dbPath,
-			config: {
-				collections: {
-					[COLLECTION_NAME]: {
-						path: "/virtual/outlinedb",
-						pattern: "**/*",
+		this.store = await createStore(
+			{
+				dbPath,
+				config:
+				{
+					collections:
+					{
+						[COLLECTION_NAME]:
+						{
+							path: "/virtual/outlinedb",
+							pattern: "**/*",
+						},
 					},
 				},
 			},
-		});
+		);
 
 		return this.store;
 	}
 
-	async syncNodes(onProgress?: (message: string) => void): Promise<QmdSyncResult> {
+	async syncNodes(onProgress?: (message: string) => void): Promise<QmdSyncResult>
+	{
 		const startTime = Date.now();
 		const store = await this.getStore();
 		const {internal} = store;
@@ -127,7 +151,8 @@ export class QmdSearchService {
 		const now = new Date().toISOString();
 		const processedPaths = new Set<string>();
 
-		for (const [i, node] of nonLeafNodes.entries()) {
+		for (const [i, node] of nonLeafNodes.entries())
+		{
 			const combinedText = texts.get(node.id) ?? "";
 
 			const nodePath = node.id;
@@ -138,8 +163,10 @@ export class QmdSearchService {
 
 			const existing = internal.findActiveDocument(COLLECTION_NAME, nodePath);
 
-			if (existing) {
-				if (existing.hash === hash) {
+			if (existing)
+			{
+				if (existing.hash === hash)
+				{
 					unchanged++;
 					continue;
 				}
@@ -147,21 +174,26 @@ export class QmdSearchService {
 				internal.insertContent(hash, combinedText, now);
 				internal.updateDocument(existing.id, nodeName, hash, now);
 				updated++;
-			} else {
+			}
+			else
+			{
 				internal.insertContent(hash, combinedText, now);
 				internal.insertDocument(COLLECTION_NAME, nodePath, nodeName, hash, now, now);
 				inserted++;
 			}
 
-			if ((i + 1) % 100 === 0) {
+			if ((i + 1) % 100 === 0)
+			{
 				onProgress?.(`Synced ${i + 1}/${nonLeafNodes.length} nodes...`);
 			}
 		}
 
 		const activePaths = internal.getActiveDocumentPaths(COLLECTION_NAME);
 		let deactivated = 0;
-		for (const path of activePaths) {
-			if (!processedPaths.has(path)) {
+		for (const path of activePaths)
+		{
+			if (!processedPaths.has(path))
+			{
 				internal.deactivateDocument(COLLECTION_NAME, path);
 				deactivated++;
 			}
@@ -173,56 +205,91 @@ export class QmdSearchService {
 			`qmd sync: ${inserted} inserted, ${updated} updated, ${unchanged} unchanged, ${deactivated} deactivated in ${totalTime.toFixed(1)}s`,
 		);
 
-		return {inserted, updated, unchanged, deactivated, totalTime};
+		return {
+			inserted,
+			updated,
+			unchanged,
+			deactivated,
+			totalTime,
+		};
 	}
 
-	async embed(options?: {force?: boolean}, onProgress?: (info: EmbedProgress) => void): Promise<EmbedResult> {
+	async embed(
+		options?:
+		{
+			force?: boolean;
+		},
+		onProgress?: (info: EmbedProgress) => void,
+	): Promise<EmbedResult>
+	{
 		const store = await this.getStore();
-		return store.embed({
-			force: options?.force,
-			onProgress,
-		});
+		return store.embed(
+			{
+				force: options?.force,
+				onProgress,
+			},
+		);
 	}
 
-	async search(options: QmdSearchOptions): Promise<QmdSearchResultItem[]> {
+	async search(options: QmdSearchOptions): Promise<QmdSearchResultItem[]>
+	{
 		const {query, limit = 5, minScore, mode = "hybrid"} = options;
 		const store = await this.getStore();
 
-		let rawResults: {nodeId: string; score: number}[];
+		let rawResults:
+		{
+			nodeId: string;
+			score: number;
+		}[];
 
-		switch (mode) {
-			case "hybrid": {
-				const results: HybridQueryResult[] = await store.search({
-					query,
-					limit,
-					minScore,
-					collection: COLLECTION_NAME,
-				});
-				rawResults = results.map((r) => ({
+		switch (mode)
+		{
+			case "hybrid":
+			{
+				const results: HybridQueryResult[] = await store.search(
+					{
+						query,
+						limit,
+						minScore,
+						collection: COLLECTION_NAME,
+					},
+				);
+				rawResults = results.map((r) => (
+				{
 					nodeId: extractNodeId(r.file),
 					score: r.score,
 				}));
 				break;
 			}
 
-			case "keyword": {
-				const results: QmdSearchResult[] = await store.searchLex(query, {
-					limit,
-					collection: COLLECTION_NAME,
-				});
-				rawResults = results.map((r) => ({
+			case "keyword":
+			{
+				const results: QmdSearchResult[] = await store.searchLex(
+					query,
+					{
+						limit,
+						collection: COLLECTION_NAME,
+					},
+				);
+				rawResults = results.map((r) => (
+				{
 					nodeId: extractNodeId(r.filepath),
 					score: r.score,
 				}));
 				break;
 			}
 
-			case "vector": {
-				const results: QmdSearchResult[] = await store.searchVector(query, {
-					limit,
-					collection: COLLECTION_NAME,
-				});
-				rawResults = results.map((r) => ({
+			case "vector":
+			{
+				const results: QmdSearchResult[] = await store.searchVector(
+					query,
+					{
+						limit,
+						collection: COLLECTION_NAME,
+					},
+				);
+				rawResults = results.map((r) => (
+				{
 					nodeId: extractNodeId(r.filepath),
 					score: r.score,
 				}));
@@ -233,34 +300,48 @@ export class QmdSearchService {
 		return this.enrichResults(rawResults);
 	}
 
-	async close(): Promise<void> {
-		if (this.store) {
+	async close(): Promise<void>
+	{
+		if (this.store)
+		{
 			await this.store.close();
 			this.store = null;
 		}
 	}
 
-	private enrichResults(rawResults: {nodeId: string; score: number}[]): QmdSearchResultItem[] {
+	private enrichResults(
+		rawResults:
+		{
+			nodeId: string;
+			score: number;
+		}[],
+	): QmdSearchResultItem[]
+	{
 		const enriched: QmdSearchResultItem[] = [];
 
-		for (const raw of rawResults) {
+		for (const raw of rawResults)
+		{
 			const {nodeId} = raw;
 
 			const fullPath = this.pathBuilder.buildFullPath(nodeId);
 			const textContent = this.pathBuilder.buildTextContent(nodeId);
 
 			const nodeWithRelations = this.database.query.nodeContent
-				.findFirst({
-					where: and(eq(schema.nodeContent.id, nodeId), eq(schema.nodeContent.systemTo, FAR_FUTURE_DATE)),
-					with: {
-						metadata: true,
-						aiMetadata: true,
-						referencesRoot: true,
+				.findFirst(
+					{
+						where: and(eq(schema.nodeContent.id, nodeId), eq(schema.nodeContent.systemTo, FAR_FUTURE_DATE)),
+						with:
+						{
+							metadata: true,
+							aiMetadata: true,
+							referencesRoot: true,
+						},
 					},
-				})
+				)
 				.sync();
 
-			if (!nodeWithRelations) {
+			if (!nodeWithRelations)
+			{
 				continue;
 			}
 
@@ -272,35 +353,41 @@ export class QmdSearchService {
 			const priority = metadata?.priority ?? 0;
 			const data: Record<string, unknown> = {};
 
-			if (metadata?.layoutMode) {
+			if (metadata?.layoutMode)
+			{
 				data.layoutMode = metadata.layoutMode;
 			}
 
-			if (referencesRoot != null) {
+			if (referencesRoot != null)
+			{
 				data.isReferencesRoot = true;
 			}
 
-			if (aiMetadata != null) {
-				data.ai = {
+			if (aiMetadata != null)
+			{
+				data.ai =
+				{
 					inChat: Boolean(aiMetadata.inChat),
 				};
 			}
 
-			enriched.push({
-				id: nodeWithRelations.id,
-				name: nodeWithRelations.name ?? "",
-				note: nodeWithRelations.note,
-				priority,
-				completed: metadata?.completedAt !== null,
-				createdAt: metadata?.createdAt ? Math.floor(metadata.createdAt.getTime() / 1000) : 0,
-				modifiedAt: metadata?.modifiedAt ? Math.floor(metadata.modifiedAt.getTime() / 1000) : 0,
-				completedAt: metadata?.completedAt ? Math.floor(metadata.completedAt.getTime() / 1000) : null,
-				data,
-				nodeId,
-				fullPath,
-				textContent,
-				score: raw.score,
-			});
+			enriched.push(
+				{
+					id: nodeWithRelations.id,
+					name: nodeWithRelations.name ?? "",
+					note: nodeWithRelations.note,
+					priority,
+					completed: metadata?.completedAt !== null,
+					createdAt: metadata?.createdAt ? Math.floor(metadata.createdAt.getTime() / 1000) : 0,
+					modifiedAt: metadata?.modifiedAt ? Math.floor(metadata.modifiedAt.getTime() / 1000) : 0,
+					completedAt: metadata?.completedAt ? Math.floor(metadata.completedAt.getTime() / 1000) : null,
+					data,
+					nodeId,
+					fullPath,
+					textContent,
+					score: raw.score,
+				},
+			);
 		}
 
 		return enriched;

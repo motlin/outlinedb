@@ -4,7 +4,8 @@ export {editOp, moveOp} from "./ops.js";
 export type {NewTree} from "./ops.js";
 export {CALENDAR_ID_NAMESPACE, calendarNodeId, uuidv5} from "./calendar-ids.js";
 export type {CalendarIdLevel} from "./calendar-ids.js";
-export {
+export
+{
 	CALENDAR_LEVELS,
 	CalendarRootMissing,
 	calendarDateId,
@@ -18,7 +19,8 @@ export type {CalendarDate, CalendarLevel, CalendarLevelMetadata} from "./calenda
 export {orderChanges, renameChanges, starChanges, starsFromRootMeta, unstarChanges} from "./stars.js";
 export type {StarNodes} from "./stars.js";
 export {savedViewsMap, toggleSavedView} from "./saved-views.js";
-export {
+export
+{
 	adoptAfterCreate,
 	adoptOnInsert,
 	auditCalendarMonth,
@@ -26,7 +28,8 @@ export {
 	calendarAdoptWarning,
 	datesInName,
 } from "./calendar-adopt.js";
-export type {
+export type
+{
 	AdoptAfterCreateResult,
 	AdoptOnInsertInput,
 	AuditNode,

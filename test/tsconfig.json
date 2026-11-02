@@ -1,6 +1,7 @@
 {
 	"extends": "../tsconfig.base.json",
-	"compilerOptions": {
+	"compilerOptions":
+	{
 		"outDir": "../dist-test/evals",
 		"rootDir": ".",
 		"types": ["vitest/globals", "node"]

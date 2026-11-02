@@ -6,13 +6,15 @@ export const ZEN_CURRENT = "zen-mode-current";
 /** After a centring scroll, scroll events within this window are our own. */
 const IGNORE_SCROLL_MS = 250;
 
-interface ClassListLike {
+interface ClassListLike
+{
 	add(name: string): void;
 	remove(name: string): void;
 	contains(name: string): boolean;
 }
 
-export interface ZenDeps {
+export interface ZenDeps
+{
 	body: ClassListLike;
 	getLeftOpen: () => boolean;
 	setLeftOpen: (open: boolean) => void;
@@ -27,16 +29,19 @@ export interface ZenDeps {
 	isEditorFocused: () => boolean;
 }
 
-interface RowElement {
+interface RowElement
+{
 	classList: ClassListLike;
 }
 
-interface RevealTarget {
+interface RevealTarget
+{
 	isConnected: boolean;
 	contains(other: object | null): boolean;
 }
 
-export interface ZenController {
+export interface ZenController
+{
 	isOn(): boolean;
 	toggle(): void;
 	exit(): void;
@@ -45,52 +50,72 @@ export interface ZenController {
 	onScroll(): void;
 }
 
-export function createZenController(deps: ZenDeps): ZenController {
+export function createZenController(deps: ZenDeps): ZenController
+{
 	let on = false;
-	let snapshot = {left: false, right: false};
+	let snapshot =
+	{
+		left: false,
+		right: false,
+	};
 	let current: RowElement | null = null;
 	let pending: number | null = null;
 	let ignoreScrollUntil = 0;
 
-	const cancel = () => {
-		if (pending !== null) {
+	const cancel = () =>
+	{
+		if (pending !== null)
+		{
 			deps.cancelRaf(pending);
 			pending = null;
 		}
 	};
-	const clearCurrent = () => {
+	const clearCurrent = () =>
+	{
 		current?.classList.remove(ZEN_CURRENT);
 		current = null;
 	};
-	const unfocus = () => {
+	const unfocus = () =>
+	{
 		deps.body.remove(ZEN_FOCUSED);
 		clearCurrent();
 		cancel();
 	};
 
-	const enter = () => {
+	const enter = () =>
+	{
 		on = true;
-		snapshot = {left: deps.getLeftOpen(), right: deps.getRightOpen()};
+		snapshot =
+		{
+			left: deps.getLeftOpen(),
+			right: deps.getRightOpen(),
+		};
 		deps.body.add(ZEN);
-		if (snapshot.left) {
+		if (snapshot.left)
+		{
 			deps.setLeftOpen(false);
 		}
-		if (snapshot.right) {
+		if (snapshot.right)
+		{
 			deps.setRightOpen(false);
 		}
 	};
 
-	const exit = () => {
-		if (!on) {
+	const exit = () =>
+	{
+		if (!on)
+		{
 			return;
 		}
 		on = false;
 		deps.body.remove(ZEN);
 		unfocus();
-		if (deps.getLeftOpen() !== snapshot.left) {
+		if (deps.getLeftOpen() !== snapshot.left)
+		{
 			deps.setLeftOpen(snapshot.left);
 		}
-		if (deps.getRightOpen() !== snapshot.right) {
+		if (deps.getRightOpen() !== snapshot.right)
+		{
 			deps.setRightOpen(snapshot.right);
 		}
 	};
@@ -98,52 +123,67 @@ export function createZenController(deps: ZenDeps): ZenController {
 	return {
 		isOn: () => on,
 		exit,
-		toggle() {
-			if (on) {
+		toggle()
+		{
+			if (on)
+			{
 				exit();
-			} else {
+			}
+			else
+			{
 				enter();
 			}
 		},
-		onFocusRow(row, target) {
-			if (!on) {
+		onFocusRow(row, target)
+		{
+			if (!on)
+			{
 				return;
 			}
 			deps.body.add(ZEN_FOCUSED);
-			if (current !== row) {
+			if (current !== row)
+			{
 				current?.classList.remove(ZEN_CURRENT);
 				row.classList.add(ZEN_CURRENT);
 				current = row;
 			}
 			cancel();
-			pending = deps.raf(() => {
+			pending = deps.raf(() =>
+			{
 				pending = null;
 				if (
 					!on ||
 					!deps.body.contains(ZEN_FOCUSED) ||
 					!target.isConnected ||
 					!target.contains(deps.activeElement())
-				) {
+				)
+				{
 					return;
 				}
 				ignoreScrollUntil = deps.now() + IGNORE_SCROLL_MS;
 				deps.reveal(target);
 			});
 		},
-		onBlur() {
-			if (!on) {
+		onBlur()
+		{
+			if (!on)
+			{
 				return;
 			}
 			cancel();
-			pending = deps.raf(() => {
+			pending = deps.raf(() =>
+			{
 				pending = null;
-				if (on && !deps.isEditorFocused()) {
+				if (on && !deps.isEditorFocused())
+				{
 					unfocus();
 				}
 			});
 		},
-		onScroll() {
-			if (!on || deps.now() < ignoreScrollUntil) {
+		onScroll()
+		{
+			if (!on || deps.now() < ignoreScrollUntil)
+			{
 				return;
 			}
 			unfocus();
@@ -151,7 +191,8 @@ export function createZenController(deps: ZenDeps): ZenController {
 	};
 }
 
-interface ScrollTargetLike {
+interface ScrollTargetLike
+{
 	closest?: (selector: string) => unknown;
 	querySelector?: (selector: string) => unknown;
 	tagName?: string;
@@ -161,14 +202,18 @@ interface ScrollTargetLike {
  * Whether a scroll on `target` is the user leaving the focused row: the document, body or html, anything inside a
  * `.project`, or a `.vertical-scrollable-container` holding `.project`s (a pane's scroller).
  */
-export function scrollCounts(target: ScrollTargetLike | null): boolean {
-	if (target?.closest === undefined) {
+export function scrollCounts(target: ScrollTargetLike | null): boolean
+{
+	if (target?.closest === undefined)
+	{
 		return true;
 	}
-	if (target.tagName === "BODY" || target.tagName === "HTML") {
+	if (target.tagName === "BODY" || target.tagName === "HTML")
+	{
 		return true;
 	}
-	if (target.closest(".project") !== null) {
+	if (target.closest(".project") !== null)
+	{
 		return true;
 	}
 	return (

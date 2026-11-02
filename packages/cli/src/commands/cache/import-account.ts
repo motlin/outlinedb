@@ -4,12 +4,14 @@ import {readInternalAuth} from "@outlinedb/shared/node";
 import {Command} from "@oclif/core";
 import {createDatabase} from "../../db/index.js";
 
-export interface ImportAccountResult {
+export interface ImportAccountResult
+{
 	/** Each account table's live row count after the refresh. */
 	tables: Record<string, number>;
 }
 
-export default class ImportAccount extends Command {
+export default class ImportAccount extends Command
+{
 	static override enableJsonFlag = true;
 
 	static override description =
@@ -17,21 +19,30 @@ export default class ImportAccount extends Command {
 
 	static override examples = ["<%= config.bin %> cache:import-account"];
 
-	public async run(): Promise<ImportAccountResult> {
+	public async run(): Promise<ImportAccountResult>
+	{
 		await this.parse(ImportAccount);
 		const auth = readInternalAuth();
-		if (!auth) {
+		if (!auth)
+		{
 			this.error(
 				"Importing account state needs the internal API: set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD (e.g. via op run)",
 			);
 		}
-		const adapter = new WorkflowyInternalAdapter({client: new WorkflowyInternalClient(auth), db: createDatabase()});
+		const adapter = new WorkflowyInternalAdapter(
+			{
+				client: new WorkflowyInternalClient(auth),
+				db: createDatabase(),
+			},
+		);
 		const tables = await adapter.refreshAccountState();
 		this.log(
 			`Account state: ${Object.entries(tables)
 				.map(([table, rows]) => `${table} ${rows}`)
 				.join(", ")}`,
 		);
-		return {tables};
+		return {
+			tables,
+		};
 	}
 }

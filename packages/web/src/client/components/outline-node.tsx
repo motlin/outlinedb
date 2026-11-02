@@ -22,7 +22,8 @@ import {useZoomTo} from "../hooks/use-zoom-to.js";
 import {useMoveTo} from "../hooks/use-move-to.js";
 import {useDetachMirror, useMirrorCopy, useMirrorTo} from "../hooks/use-mirror-to.js";
 import {useQueryClient} from "@tanstack/react-query";
-import {
+import
+{
 	toggleComplete,
 	useCreateNode,
 	useDeleteNode,
@@ -55,7 +56,8 @@ import {OutlineChildren} from "./outline-tree.js";
 import {BoardChildren, BoardColumnBody, ColumnResizeHandle, safeStorage} from "./board-view.js";
 import {BoardZoomedContext} from "./board-context.js";
 import type {BoardRowRole} from "./board-context.js";
-import {
+import
+{
 	BOARD_CARD_CHILDREN_CLASS,
 	BOARD_CARD_CLASS,
 	BOARD_CARD_EXPAND_CLASS,
@@ -84,7 +86,8 @@ import {hasMirrorsClass, isMirrorRoot, nameClassName, projectClassName} from "./
 import {rowClickResumesEditing} from "./row-click.js";
 import {planDuplicate, rowHasChildren} from "../tree-ops.js";
 
-interface NodeItemMenuProps {
+interface NodeItemMenuProps
+{
 	node: NodeResponse;
 	left?: string;
 	onComplete: () => void;
@@ -92,7 +95,8 @@ interface NodeItemMenuProps {
 }
 
 /** The bullet-menu trigger wired to the node's outline actions. */
-export function NodeItemMenu({node, left, onComplete, onOpenChange}: NodeItemMenuProps) {
+export function NodeItemMenu({node, left, onComplete, onOpenChange}: NodeItemMenuProps)
+{
 	const queryClient = useQueryClient();
 	const {navigateToNode} = useNodeNavigation();
 	const expandAll = useExpandAll();
@@ -108,81 +112,113 @@ export function NodeItemMenu({node, left, onComplete, onOpenChange}: NodeItemMen
 	const sortChildren = useSortChildren();
 	const moveNode = useMoveNode();
 	const tableDeps = () =>
-		makeTableDeps(queryClient, {
-			create: createNode.mutate,
-			remove: deleteNode.mutate,
-			move: moveNode.mutate,
-			update: updateNode.mutate,
-		});
+		makeTableDeps(
+			queryClient,
+			{
+				create: createNode.mutate,
+				remove: deleteNode.mutate,
+				move: moveNode.mutate,
+				update: updateNode.mutate,
+			},
+		);
 	return (
 		<ItemMenuTrigger
-			actions={{
-				onOpenInPane: () => {
+			actions={
+			{
+				onOpenInPane: () =>
+				{
 					openInPane(useOutlineStore.getState(), node.id);
 				},
 				onComplete,
-				onAddNote: () => {
+				onAddNote: () =>
+				{
 					// Upstream: "Add note" from inside the note moves the caret to the end of the name.
-					if (useOutlineStore.getState().editingNoteId === node.id) {
+					if (useOutlineStore.getState().editingNoteId === node.id)
+					{
 						focusName(node.id, "end");
-					} else if (canHaveNote(node.data.layoutMode)) {
+					}
+					else if (canHaveNote(node.data.layoutMode))
+					{
 						focusNote(node.id);
 					}
 				},
-				onAddDate: () => {
+				onAddDate: () =>
+				{
 					requestDatePicker(node.id);
 				},
-				onPresent: () => {
+				onPresent: () =>
+				{
 					navigateToNode(node.id);
 					openPresentation(node.id);
 				},
-				onMoveTo: () => {
+				onMoveTo: () =>
+				{
 					void moveTo([node.id]);
 				},
-				onMirrorTo: () => {
+				onMirrorTo: () =>
+				{
 					void mirrorTo([node.id]);
 				},
-				onMirror: () => {
+				onMirror: () =>
+				{
 					mirrorCopy([node.id]);
 				},
-				onDetachMirror: () => {
+				onDetachMirror: () =>
+				{
 					void detachMirror(node.id);
 				},
-				onDuplicate: () => {
+				onDuplicate: () =>
+				{
 					// Same mutation as ⇧⌘D, without moving focus into the copy.
 					createNode.mutate(planDuplicate(queryClient, node));
 				},
-				onDuplicateColumn: () => {
+				onDuplicateColumn: () =>
+				{
 					const cell = locateCell(queryClient, node.id);
-					if (cell !== null) {
+					if (cell !== null)
+					{
 						void duplicateColumn(tableDeps(), cell);
 					}
 				},
-				onDeleteColumn: () => {
+				onDeleteColumn: () =>
+				{
 					const cell = locateCell(queryClient, node.id);
-					if (cell !== null) {
+					if (cell !== null)
+					{
 						void cellDelete(tableDeps(), cell, []);
 					}
 				},
-				onExport: () => {
+				onExport: () =>
+				{
 					openExportDialog(selectionExportRequest([node.id]));
 				},
-				onCopyLink: () => {
+				onCopyLink: () =>
+				{
 					void copyLink(node.id);
 				},
-				onMakeTemplate: () => {
-					updateNode.mutate({nodeId: node.id, name: `${node.name ?? ""} #template`});
+				onMakeTemplate: () =>
+				{
+					updateNode.mutate(
+						{
+							nodeId: node.id,
+							name: `${node.name ?? ""} #template`,
+						},
+					);
 				},
-				onDelete: () => {
+				onDelete: () =>
+				{
 					deleteNode.mutate(node.id);
 				},
-				onExpandAll: () => {
+				onExpandAll: () =>
+				{
 					expandAll(node.id, true);
 				},
-				onCollapseAll: () => {
+				onCollapseAll: () =>
+				{
 					expandAll(node.id, false);
 				},
-				onSort: (direction) => {
+				onSort: (direction) =>
+				{
 					void sortChildren(node.id, direction);
 				},
 			}}
@@ -193,7 +229,8 @@ export function NodeItemMenu({node, left, onComplete, onOpenChange}: NodeItemMen
 	);
 }
 
-interface NodeNameProps {
+interface NodeNameProps
+{
 	/** The row is a card of a dashboard. */
 	dashboardCard?: boolean;
 	node: NodeResponse;
@@ -227,8 +264,10 @@ interface NodeNameProps {
  * which is mounted only while `.name` is hovered or its menu is open.
  */
 /** Upstream's arrow click leaves the caret at the start of the row's text (`WF.Caret.set(content, 0)` next frame). */
-function focusRowStart(id: string): void {
-	requestAnimationFrame(() => {
+function focusRowStart(id: string): void
+{
+	requestAnimationFrame(() =>
+	{
 		useOutlineStore.getState().focusName(id, 0);
 	});
 }
@@ -249,7 +288,8 @@ function NodeName({
 	boardRole,
 	tableCell,
 	dashboardCard = false,
-}: NodeNameProps) {
+}: NodeNameProps)
+{
 	const boardZoomed = useContext(BoardZoomedContext);
 	const search = useOutlineSearchFilter();
 	const isHovered = useIsRowHovered(node.id);
@@ -260,7 +300,8 @@ function NodeName({
 	const mobileNameStyle: CSSProperties | undefined =
 		mobileMetrics === null
 			? undefined
-			: {
+			:
+				{
 					["--name-padding-left" as string]: `${mobileMetrics.namePaddingLeft}px`,
 					["--name-font-size" as string]: `${fontSize}px`,
 				};
@@ -271,7 +312,8 @@ function NodeName({
 	const rowExpansionId = expansionId(node.id, rowInstance);
 	// A row unmounted with its menu open (collapsed parent, deleted row) must not leave a stale highlight.
 	useEffect(
-		() => () => {
+		() => () =>
+		{
 			setItemMenuOpen(node.id, false);
 		},
 		[node.id, setItemMenuOpen],
@@ -282,10 +324,14 @@ function NodeName({
 	const pane = useContext(PaneContext);
 	const handleBulletMouseDown = useBulletDrag(node.id);
 	// Inside a side pane a bullet zooms that pane; the main outline zooms by navigating.
-	const zoomIn = () => {
-		if (pane === null) {
+	const zoomIn = () =>
+	{
+		if (pane === null)
+		{
 			void mainZoomTo(node.id, "first_child", rowInstance);
-		} else {
+		}
+		else
+		{
 			pane.zoom(node.id);
 		}
 	};
@@ -297,28 +343,40 @@ function NodeName({
 
 	// Clicking the row outside its text edits the node with the caret at the end;
 	// clicks inside an editor (the text or note being edited) belong to that editor.
-	const handleRowClick = (event: React.MouseEvent<HTMLDivElement>) => {
+	const handleRowClick = (event: React.MouseEvent<HTMLDivElement>) =>
+	{
 		const target = event.target instanceof Element ? event.target : null;
-		if (rowClickResumesEditing(target, event.currentTarget)) {
+		if (rowClickResumesEditing(target, event.currentTarget))
+		{
 			resumeEditing(node.id, Number.MAX_SAFE_INTEGER);
 		}
 	};
 
-	const handleComplete = () => {
-		toggleComplete(queryClient, {nodeId: node.id, isCurrentlyCompleted: isCompleted});
+	const handleComplete = () =>
+	{
+		toggleComplete(
+			queryClient,
+			{
+				nodeId: node.id,
+				isCurrentlyCompleted: isCompleted,
+			},
+		);
 	};
 
 	const checkboxComplete = useCheckboxComplete();
 	const prefixPieces: ReactNode[] = [];
-	if (number !== undefined) {
+	if (number !== undefined)
+	{
 		prefixPieces.push(<NumberPiece key="numbered" number={number} />);
 	}
-	if (layout.isTodo) {
+	if (layout.isTodo)
+	{
 		prefixPieces.push(
 			<ItemCheckbox
 				key="todo"
 				isCompleted={isCompleted}
-				onComplete={() => {
+				onComplete={() =>
+				{
 					checkboxComplete(node, false);
 				}}
 			/>,
@@ -327,7 +385,8 @@ function NodeName({
 	const isDivider = node.data.layoutMode === "divider";
 	const dividerLine = isDivider ? (
 		<DividerLine
-			onActivate={() => {
+			onActivate={() =>
+			{
 				resumeEditing(node.id, 0);
 			}}
 		/>
@@ -337,23 +396,25 @@ function NodeName({
 		node.data.layoutMode === "code-block" ? <CopyCodeButton plainText={plainText(name, "")} /> : null;
 
 	const nameClasses = withClasses(
-		nameClassName({
-			focused: isEditing,
-			empty: name === "",
-			withEmbedder,
-			isZoomRoot: boardRole === "column",
-			tailBeforeEmpty: tableCell !== undefined,
-			tail:
-				tableCell === undefined
-					? boardRole === "column"
-						? boardColumnNameClass(boardZoomed)
-						: boardRole === "card"
-							? BOARD_CARD_NAME_CLASS
-							: dashboardCard
-								? "group/name"
-								: undefined
-					: tableCellNameClass(tableCell.header),
-		}),
+		nameClassName(
+			{
+				focused: isEditing,
+				empty: name === "",
+				withEmbedder,
+				isZoomRoot: boardRole === "column",
+				tailBeforeEmpty: tableCell !== undefined,
+				tail:
+					tableCell === undefined
+						? boardRole === "column"
+							? boardColumnNameClass(boardZoomed)
+							: boardRole === "card"
+								? BOARD_CARD_NAME_CLASS
+								: dashboardCard
+									? "group/name"
+									: undefined
+						: tableCellNameClass(tableCell.header),
+			},
+		),
 		searchNameClasses,
 	);
 
@@ -364,11 +425,14 @@ function NodeName({
 			className={nameClasses}
 			style={mobileNameStyle}
 			onClick={handleRowClick}
-			onMouseEnter={() => {
+			onMouseEnter={() =>
+			{
 				setHoveredRowId(node.id);
 			}}
-			onMouseLeave={() => {
-				if (getHoveredRowId() === node.id) {
+			onMouseLeave={() =>
+			{
+				if (getHoveredRowId() === node.id)
+				{
 					setHoveredRowId(null);
 				}
 			}}
@@ -384,30 +448,37 @@ function NodeName({
 					<div className="contentEditablePlaceholder">{CARD_PLACEHOLDER}</div>
 				</div>
 			) : null}
-			{nodeBullet({
-				board: boardRole,
-				dashboardCard,
-				tableCell: tableCell !== undefined,
-				shared: (tableCell !== undefined || dashboardCard) && isMirrorRoot(node),
-				mobile:
-					mobileMetrics === null
-						? undefined
-						: {size: mobileMetrics.bulletSize, left: mobileMetrics.bulletLeft},
-				nodeId: node.id,
-				instance: rowInstance,
-				isMirror: isMirrorRoot(node),
-				showHalo:
-					hasChildren &&
-					!collapsing &&
-					(!isExpanded || (search !== null && isSearchHalfExpanded(node.id, search))),
-				keepBullet: hasChildren && !collapsing && !isExpanded,
-				onMouseDown: handleBulletMouseDown,
-				onZoom: zoomIn,
-				isInSelection: () => bulletInSelection(queryClient, node.id),
-				onClearSelection: () => {
-					clearSelectionFromBullet(queryClient, node.id);
+			{nodeBullet(
+				{
+					board: boardRole,
+					dashboardCard,
+					tableCell: tableCell !== undefined,
+					shared: (tableCell !== undefined || dashboardCard) && isMirrorRoot(node),
+					mobile:
+						mobileMetrics === null
+							? undefined
+							:
+								{
+									size: mobileMetrics.bulletSize,
+									left: mobileMetrics.bulletLeft,
+								},
+					nodeId: node.id,
+					instance: rowInstance,
+					isMirror: isMirrorRoot(node),
+					showHalo:
+						hasChildren &&
+						!collapsing &&
+						(!isExpanded || (search !== null && isSearchHalfExpanded(node.id, search))),
+					keepBullet: hasChildren && !collapsing && !isExpanded,
+					onMouseDown: handleBulletMouseDown,
+					onZoom: zoomIn,
+					isInSelection: () => bulletInSelection(queryClient, node.id),
+					onClearSelection: () =>
+					{
+						clearSelectionFromBullet(queryClient, node.id);
+					},
 				},
-			})}
+			)}
 			{itemPrefix(prefixPieces)}
 			{/* Upstream's `ui.item.name.afterbegin` friendly day name; mounted only on day rows to keep other rows cheap. */}
 			{node.calendar?.level === "day" ? <DayTitlePrefix node={node} /> : null}
@@ -416,52 +487,65 @@ function NodeName({
 			<div className="notranslate content whitespace-pre-wrap" onMouseDown={handleContentMouseDown}>
 				{/* Called, not mounted: it only picks the editing or resting text, so it needs no fiber of its own. */}
 				{name !== "" || isEditing
-					? editableText({
-							clickPosition: isEditing ? (editingClickPosition ?? undefined) : undefined,
-							initialValue: name,
-							isEditing,
-							layoutMode: node.data.layoutMode,
-							nodeId: node.id,
-							parentId: node.parent_id,
-							priority: node.priority,
-						})
+					? editableText(
+							{
+								clickPosition: isEditing ? (editingClickPosition ?? undefined) : undefined,
+								initialValue: name,
+								isEditing,
+								layoutMode: node.data.layoutMode,
+								nodeId: node.id,
+								parentId: node.parent_id,
+								priority: node.priority,
+							},
+						)
 					: null}
 			</div>
 			{copyCodeButton}
-			<div className="wf-menu nameButtons" style={{marginLeft: 0}} />
+			<div
+				className="wf-menu nameButtons"
+				style={
+				{
+					marginLeft: 0,
+				}}
+			/>
 			{dividerLine}
 			{/* Hook-free, so called as a plain element rather than mounted as a component. */}
-			{expandArrow({
-				hasChildren,
-				isExpanded,
-				mobile: mobileMetrics !== null,
-				nodeId: node.id,
-				alwaysVisible: boardRole === undefined ? alwaysVisibleControls : true,
-				extraClassName:
-					tableCell === undefined
-						? boardRole === "column"
-							? BOARD_COLUMN_EXPAND_CLASS
-							: boardRole === "card"
-								? BOARD_CARD_EXPAND_CLASS
-								: undefined
-						: TABLE_CELL_EXPAND_CLASS,
-				onFocusRow: focusRowStart,
-				onExpandAll: searching || cyclical ? undefined : expandAll,
-				onToggle: searching
-					? (id) => {
-							toggleSearchExpansion(id, isExpanded);
-						}
-					: () => {
-							// Expansion is per mirror instance, so a toggle inside a mirror leaves the original alone.
-							toggleExpand(rowExpansionId);
-						},
-			})}
+			{expandArrow(
+				{
+					hasChildren,
+					isExpanded,
+					mobile: mobileMetrics !== null,
+					nodeId: node.id,
+					alwaysVisible: boardRole === undefined ? alwaysVisibleControls : true,
+					extraClassName:
+						tableCell === undefined
+							? boardRole === "column"
+								? BOARD_COLUMN_EXPAND_CLASS
+								: boardRole === "card"
+									? BOARD_CARD_EXPAND_CLASS
+									: undefined
+							: TABLE_CELL_EXPAND_CLASS,
+					onFocusRow: focusRowStart,
+					onExpandAll: searching || cyclical ? undefined : expandAll,
+					onToggle: searching
+						? (id) =>
+							{
+								toggleSearchExpansion(id, isExpanded);
+							}
+						: () =>
+							{
+								// Expansion is per mirror instance, so a toggle inside a mirror leaves the original alone.
+								toggleExpand(rowExpansionId);
+							},
+				},
+			)}
 			{isHovered || isMenuOpen ? (
 				<NodeItemMenu
 					left={itemMenuLeft(hasChildren, depth)}
 					node={node}
 					onComplete={handleComplete}
-					onOpenChange={(open) => {
+					onOpenChange={(open) =>
+					{
 						setIsMenuOpen(open);
 						setItemMenuOpen(node.id, open);
 					}}
@@ -491,58 +575,71 @@ function rowProjectClassName(
 	boardRenders = false,
 	dashboardCard = false,
 	dashboardRenders = false,
-): string {
+): string
+{
 	const flagOn = dashboardsOn();
-	const dashboardExtras = dashboardClasses({
-		layoutMode: node.data.layoutMode,
-		renders: dashboardRenders,
-		parentRenders: dashboardCard,
-		isZoomRoot: false,
-		flagOn,
-	}).project.filter((name) => name !== "dashboard");
-	return projectClassName({
-		selectedColumn: boardRole === "column" && boardZoomed,
-		hasChildren,
-		hasAnyChildren: node.hasChildren === true,
-		collapsingChildren,
-		// A cell never shows its children, so it is never open.
-		expanded: tableCell === undefined && isExpanded,
-		completed: node.completedAt !== null,
-		hasNote: Boolean(node.note),
-		noteFocused: isEditingNote,
-		isZoomRoot: false,
-		hasMirrors: hasMirrorsClass(node),
-		highlighted,
-		addedToSelection: addedToSelection || tableCell?.rowSelected === true,
-		withImage: isPreviewable(node.attachment),
-		layoutClasses: [
-			...resolveLayoutMode(node.data.layoutMode, flagOn).projectClasses.flatMap((layoutClass) =>
-				layoutClass === "tableItem"
-					? tableRenders
-						? [isExpanded ? "tableItem " : "tableItem"]
-						: []
-					: layoutClass === "board"
-						? boardRenders
-							? [layoutClass]
+	const dashboardExtras = dashboardClasses(
+		{
+			layoutMode: node.data.layoutMode,
+			renders: dashboardRenders,
+			parentRenders: dashboardCard,
+			isZoomRoot: false,
+			flagOn,
+		},
+	).project.filter((name) => name !== "dashboard");
+	return projectClassName(
+		{
+			selectedColumn: boardRole === "column" && boardZoomed,
+			hasChildren,
+			hasAnyChildren: node.hasChildren === true,
+			collapsingChildren,
+			// A cell never shows its children, so it is never open.
+			expanded: tableCell === undefined && isExpanded,
+			completed: node.completedAt !== null,
+			hasNote: Boolean(node.note),
+			noteFocused: isEditingNote,
+			isZoomRoot: false,
+			hasMirrors: hasMirrorsClass(node),
+			highlighted,
+			addedToSelection: addedToSelection || tableCell?.rowSelected === true,
+			withImage: isPreviewable(node.attachment),
+			layoutClasses: [
+				...resolveLayoutMode(node.data.layoutMode, flagOn).projectClasses.flatMap((layoutClass) =>
+					layoutClass === "tableItem"
+						? tableRenders
+							? [isExpanded ? "tableItem " : "tableItem"]
 							: []
-						: [layoutClass],
-			),
-			...dashboardExtras,
-			...(tableCell === undefined
-				? boardRole === "column"
-					? [boardColumnClass(boardZoomed)]
-					: boardRole === "card"
-						? [BOARD_CARD_CLASS]
-						: []
-				: [tableCellClass({header: tableCell.header, nested: hasChildren, bg: node.table?.bg})]),
-		],
-		slidingUp,
-		slidingDown,
-		moving,
-		animatingShowChildren,
-		dragHoveredIn: dragHover === "in",
-		dragHoveredAt: dragHover === "at",
-	});
+						: layoutClass === "board"
+							? boardRenders
+								? [layoutClass]
+								: []
+							: [layoutClass],
+				),
+				...dashboardExtras,
+				...(tableCell === undefined
+					? boardRole === "column"
+						? [boardColumnClass(boardZoomed)]
+						: boardRole === "card"
+							? [BOARD_CARD_CLASS]
+							: []
+					: [
+							tableCellClass(
+								{
+									header: tableCell.header,
+									nested: hasChildren,
+									bg: node.table?.bg,
+								},
+							),
+						]),
+			],
+			slidingUp,
+			slidingDown,
+			moving,
+			animatingShowChildren,
+			dragHoveredIn: dragHover === "in",
+			dragHoveredAt: dragHover === "at",
+		},
+	);
 }
 
 /**
@@ -551,9 +648,22 @@ function rowProjectClassName(
  * top-level source. A local adaptation lays backlink crumbs out flat, without the
  * header's truncation engine; Found Dates crumbs (`fitted`) collapse from the left to fit.
  */
-function BacklinkCrumbs({crumbs, fitted}: {crumbs: BacklinkCrumb[]; fitted: boolean}) {
+function BacklinkCrumbs({crumbs, fitted}: {crumbs: BacklinkCrumb[]; fitted: boolean})
+{
 	const items =
-		crumbs.length === 0 ? [{id: "None", isRoot: true}] : crumbs.map(({id, name}) => ({id, name, isRoot: false}));
+		crumbs.length === 0
+			? [
+					{
+						id: "None",
+						isRoot: true,
+					},
+				]
+			: crumbs.map(({id, name}) => (
+				{
+					id,
+					name,
+					isRoot: false,
+				}));
 	return (
 		<div className="text-xs mobile:text-s text-tertiary mt-m ml-xl mobile:ml-2xl leading-s">
 			{fitted ? <LeftCollapsingCrumbs crumbs={items} /> : <FlatCrumbs crumbs={items} />}
@@ -595,7 +705,8 @@ export const OutlineRow = memo(function OutlineRow({
 	columnMode?: ColumnSearchMode;
 	/** The row is a cell of a table. */
 	tableCell?: TableCellInfo;
-}) {
+})
+{
 	const boardZoomed = useContext(BoardZoomedContext);
 	const inComplexLayout = useContext(InComplexLayoutContext);
 	const embed = useRowEmbed(node.name);
@@ -612,7 +723,8 @@ export const OutlineRow = memo(function OutlineRow({
 	const search = useOutlineSearchFilter();
 	const paneId = usePaneId();
 	const instance = useContext(MirrorInstanceContext);
-	const {
+	const
+	{
 		isPersistentlyExpanded,
 		isEditingNote,
 		isEditingName,
@@ -635,46 +747,67 @@ export const OutlineRow = memo(function OutlineRow({
 			: search === null
 				? isPersistentlyExpanded
 				: isSearchExpanded(node.id, search);
-	const rowSearchClasses = searchClasses({id: node.id, parentId: node.parent_id}, search);
+	const rowSearchClasses = searchClasses(
+		{
+			id: node.id,
+			parentId: node.parent_id,
+		},
+		search,
+	);
 	const {endCompletionAnimation} = outlineActions();
 	const hasChildren = rowHasChildren(node, showCompleted);
 
 	// Upstream mounts `.notes` once the note is non-empty, has had focus, or the name was edited, and never unmounts it.
 	const [noteMounted, setNoteMounted] = useState(false);
 	const shouldMountNote = Boolean(node.note) || isEditingNote || isEditingName;
-	if (shouldMountNote && !noteMounted) {
+	if (shouldMountNote && !noteMounted)
+	{
 		setNoteMounted(true);
 	}
 
 	// Expanding slides `.children` down; collapsing removes `open` at once but keeps `.children` mounted while it
 	// slides up. A row that mounts expanded, or whose expansion a search entering or leaving changed, does not slide.
-	const expansion = {expanded: isExpanded, searching: search !== null};
+	const expansion =
+	{
+		expanded: isExpanded,
+		searching: search !== null,
+	};
 	const [prevExpansion, setPrevExpansion] = useState(expansion);
 	const [childrenSlide, setChildrenSlide] = useState<"down" | "up" | null>(null);
-	if (expansion.expanded !== prevExpansion.expanded || expansion.searching !== prevExpansion.searching) {
+	if (expansion.expanded !== prevExpansion.expanded || expansion.searching !== prevExpansion.searching)
+	{
 		setPrevExpansion(expansion);
 		setChildrenSlide(expansionSlide(prevExpansion, expansion));
 	}
 	// A state ref, not an object ref: a first expand fetches its rows, so `.children` mounts after the slide is due.
 	const [childrenEl, setChildrenEl] = useState<HTMLDivElement | null>(null);
-	useLayoutEffect(() => {
-		const done = () => {
+	useLayoutEffect(() =>
+	{
+		const done = () =>
+		{
 			setChildrenSlide(null);
 		};
-		if (childrenSlide === null) {
-			return () => {};
+		if (childrenSlide === null)
+		{
+			return () =>
+			{
+			};
 		}
 		const action = pendingSlideAction(childrenSlide, childrenEl !== null, 0);
-		if (action === "drop") {
+		if (action === "drop")
+		{
 			const frame = requestAnimationFrame(done);
-			return () => {
+			return () =>
+			{
 				cancelAnimationFrame(frame);
 			};
 		}
-		if (action === "wait" || childrenEl === null) {
+		if (action === "wait" || childrenEl === null)
+		{
 			// Slides once the children mount; gives up after SLIDE_WAIT_MS.
 			const timer = setTimeout(done, SLIDE_WAIT_MS);
-			return () => {
+			return () =>
+			{
 				clearTimeout(timer);
 			};
 		}
@@ -682,8 +815,10 @@ export const OutlineRow = memo(function OutlineRow({
 	}, [childrenSlide, childrenEl]);
 
 	// The slideUp's own transition ending hides the row; a child's transition does not.
-	const handleTransitionEnd = (event: React.TransitionEvent<HTMLDivElement>) => {
-		if (isSlidingUp && event.target === event.currentTarget) {
+	const handleTransitionEnd = (event: React.TransitionEvent<HTMLDivElement>) =>
+	{
+		if (isSlidingUp && event.target === event.currentTarget)
+		{
 			endCompletionAnimation([node.id]);
 		}
 	};
@@ -718,10 +853,16 @@ export const OutlineRow = memo(function OutlineRow({
 			onTransitionEnd={handleTransitionEnd}
 			style={
 				boardRole === "column"
-					? {width: columnWidth(node.id, safeStorage())}
+					?
+						{
+							width: columnWidth(node.id, safeStorage()),
+						}
 					: tableCell?.width === undefined
 						? undefined
-						: {width: tableCell.width}
+						:
+							{
+								width: tableCell.width,
+							}
 			}
 		>
 			{backlinkCrumbs ? <BacklinkCrumbs crumbs={backlinkCrumbs} fitted={fitCrumbs} /> : null}

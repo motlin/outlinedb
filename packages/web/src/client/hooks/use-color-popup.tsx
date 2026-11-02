@@ -8,11 +8,20 @@ import {colorAt} from "../rich-text.js";
 import type {ColorKind} from "../rich-text.js";
 
 /** Escape collapses the caret to the selection start (upstream's `ZS4` Escape handler). */
-export function escapeCaret(sel: {start: number; end: number}): {start: number; end: number} {
-	return {start: sel.start, end: sel.start};
+export function escapeCaret(sel: {start: number; end: number}):
+{
+	start: number;
+	end: number;
+}
+{
+	return {
+		start: sel.start,
+		end: sel.start,
+	};
 }
 
-interface ColorPopupOptions {
+interface ColorPopupOptions
+{
 	editorRef: RefObject<HTMLElement | null>;
 	/** The editor's content as stored HTML. */
 	read: () => string;
@@ -24,10 +33,15 @@ interface ColorPopupOptions {
 	refreshToolbar: () => void;
 }
 
-interface OpenState {
+interface OpenState
+{
 	left: number;
 	top: number;
-	selected: {text?: ColorName; highlight?: ColorName};
+	selected:
+	{
+		text?: ColorName;
+		highlight?: ColorName;
+	};
 }
 
 /**
@@ -42,11 +56,18 @@ export function useColorPopup({
 	applyLatestColor,
 	hideToolbar,
 	refreshToolbar,
-}: ColorPopupOptions): {popup: ReactNode; openPalette: () => void; applyLatestOrOpen: () => void} {
+}: ColorPopupOptions):
+{
+	popup: ReactNode;
+	openPalette: () => void;
+	applyLatestOrOpen: () => void;
+}
+{
 	const [state, setState] = useState<OpenState | null>(null);
 	const opened = useRef(false);
 
-	const close = useCallback(() => {
+	const close = useCallback(() =>
+	{
 		opened.current = false;
 		unpop("COLORS_POPUP");
 		setState(null);
@@ -54,16 +75,19 @@ export function useColorPopup({
 	}, [refreshToolbar]);
 
 	useEffect(
-		() => () => {
+		() => () =>
+		{
 			unpop("COLORS_POPUP");
 		},
 		[],
 	);
 
-	const openPalette = useCallback(() => {
+	const openPalette = useCallback(() =>
+	{
 		const editor = editorRef.current;
 		const selection = globalThis.getSelection();
-		if (editor === null || selection === null || selection.rangeCount === 0) {
+		if (editor === null || selection === null || selection.rangeCount === 0)
+		{
 			return;
 		}
 		const box = selection.getRangeAt(0).getBoundingClientRect();
@@ -71,11 +95,19 @@ export function useColorPopup({
 		hideToolbar();
 		opened.current = true;
 		pop("COLORS_POPUP", editor);
-		setState({left: box.left, top: box.bottom, selected: colorAt(read(), start, end)});
+		setState(
+			{
+				left: box.left,
+				top: box.bottom,
+				selected: colorAt(read(), start, end),
+			},
+		);
 	}, [editorRef, hideToolbar, read]);
 
-	const applyLatestOrOpen = useCallback(() => {
-		if (!applyLatestColor()) {
+	const applyLatestOrOpen = useCallback(() =>
+	{
+		if (!applyLatestColor())
+		{
 			openPalette();
 		}
 	}, [applyLatestColor, openPalette]);
@@ -86,14 +118,17 @@ export function useColorPopup({
 				left={state.left}
 				top={state.top}
 				selected={state.selected}
-				onSelect={(kind, color) => {
+				onSelect={(kind, color) =>
+				{
 					applyColorToggle(kind, color);
 					close();
 				}}
 				onClose={close}
-				onEscape={() => {
+				onEscape={() =>
+				{
 					const editor = editorRef.current;
-					if (editor !== null) {
+					if (editor !== null)
+					{
 						placeCaretAtTextOffset(editor, escapeCaret(selectionTextOffsets(editor)).start);
 					}
 					close();
@@ -101,5 +136,9 @@ export function useColorPopup({
 			/>
 		);
 
-	return {popup, openPalette, applyLatestOrOpen};
+	return {
+		popup,
+		openPalette,
+		applyLatestOrOpen,
+	};
 }

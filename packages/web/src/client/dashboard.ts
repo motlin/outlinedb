@@ -8,23 +8,28 @@ import {accountFeaturesKnown, isFeatureOn} from "./features.js";
 let cachedFlag: boolean | undefined;
 
 /** The flag as of the first read after the account's features loaded: rows ask per render, so flipping it takes a reload. */
-export function dashboardsOn(): boolean {
-	if (cachedFlag !== undefined) {
+export function dashboardsOn(): boolean
+{
+	if (cachedFlag !== undefined)
+	{
 		return cachedFlag;
 	}
 	const on = isFeatureOn("dashboards");
-	if (accountFeaturesKnown()) {
+	if (accountFeaturesKnown())
+	{
 		cachedFlag = on;
 	}
 	return on;
 }
 
 /** Upstream's `xs` predicate, minus the mobile and `canRender` checks (the caller is desktop-only). */
-export function isDashboard(layoutMode: string | null | undefined, flagOn: boolean): boolean {
+export function isDashboard(layoutMode: string | null | undefined, flagOn: boolean): boolean
+{
 	return flagOn && layoutMode === "dashboard";
 }
 
-export interface DashboardClassInput {
+export interface DashboardClassInput
+{
 	layoutMode: string | null | undefined;
 	/** The row is a dashboard that draws as one: the zoom root, or not under another complex layout. */
 	renders: boolean;
@@ -35,10 +40,12 @@ export interface DashboardClassInput {
 }
 
 /** Upstream's `item:classes` and `page:classes` middleware: the extra `.project` and `.page` classes. */
-export function dashboardClasses({layoutMode, renders, parentRenders, isZoomRoot, flagOn}: DashboardClassInput): {
+export function dashboardClasses({layoutMode, renders, parentRenders, isZoomRoot, flagOn}: DashboardClassInput):
+{
 	project: string[];
 	page: string[];
-} {
+}
+{
 	const dashboard = renders && isDashboard(layoutMode, flagOn);
 	return {
 		project: [
@@ -53,17 +60,20 @@ export function dashboardClasses({layoutMode, renders, parentRenders, isZoomRoot
 export const CARD_PLACEHOLDER = "Add a title …";
 
 /** Enter in a card title expands the card and makes the new row its first child, not a sibling card. */
-export function shouldExpandOnEnter(parentLayoutMode: string | null | undefined, flagOn: boolean): boolean {
+export function shouldExpandOnEnter(parentLayoutMode: string | null | undefined, flagOn: boolean): boolean
+{
 	return isDashboard(parentLayoutMode, flagOn);
 }
 
 /** Upstream's `can_move_under.dashboard`: nothing may move under a target whose parent is a dashboard (a card). */
-export function canMoveUnderDashboard(targetParentLayoutMode: string | null | undefined, flagOn: boolean): boolean {
+export function canMoveUnderDashboard(targetParentLayoutMode: string | null | undefined, flagOn: boolean): boolean
+{
 	return !isDashboard(targetParentLayoutMode, flagOn);
 }
 
 /** The card bullet's class string (upstream `bullet.dashboard` patch), a shared item using the shared color. */
-export function cardBulletClass(shared: boolean): string {
+export function cardBulletClass(shared: boolean): string
+{
 	return [
 		"bullet keep-bullet group/bullet absolute !left-auto right-0 mr-[10px] z-1 bg-transparent",
 		shared ? "!text-[var(--wf-background-shared)]" : "!text-[var(--wf-text-tertiary)]",
@@ -72,6 +82,7 @@ export function cardBulletClass(shared: boolean): string {
 }
 
 /** The new card's index: the top button inserts first, the bottom button appends. */
-export function dashboardInsertIndex(position: "top" | "bottom", childCount: number): number {
+export function dashboardInsertIndex(position: "top" | "bottom", childCount: number): number
+{
 	return position === "top" ? 0 : childCount;
 }

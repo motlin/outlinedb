@@ -1,8 +1,10 @@
 import type {MenuConfig} from "./app-menu.js";
 
 /** Upstream's compiled desktop menu config (`WF.StdConfig.compiled`): the single_node_menu, node_type_picker and multi_select_menu slice. */
-export const APP_MENU_CONFIG: MenuConfig = {
-	orderedUi: {
+export const APP_MENU_CONFIG: MenuConfig =
+{
+	orderedUi:
+	{
 		node_type_picker: [
 			["turn_into_bullet", true],
 			["turn_into_h1", true],
@@ -109,7 +111,8 @@ export const APP_MENU_CONFIG: MenuConfig = {
 		multi_select_menu_group_4: [["delete", true]],
 	},
 	isSubmenu: new Set(["node_type_picker"]),
-	activeSets: {
+	activeSets:
+	{
 		"single_node_menu :: is_dangling": ["delete"],
 		"single_node_menu :: is_guide_preview": ["node_type_picker", "expand_all", "collapse_all"],
 		"single_node_menu :: is_draft": [
@@ -178,7 +181,8 @@ export const APP_MENU_CONFIG: MenuConfig = {
 		"multi_select_menu :: all_comment_paragraphs": [],
 		"multi_select_menu :: has_calendar_search_container": [],
 	},
-	blockSets: {
+	blockSets:
+	{
 		"node_type_picker :: is_inside_side_pane": ["turn_into_dashboard"],
 		"single_node_menu :: is_comment": ["node_type_picker"],
 		"single_node_menu :: is_conversation_container": ["node_type_picker"],
@@ -199,6 +203,12 @@ export const APP_MENU_CONFIG: MenuConfig = {
 			"mirror_to_date",
 		],
 	},
-	labels: {node_type_picker: "Turn into..."},
-	icons: {node_type_picker: "list-ul"},
+	labels:
+	{
+		node_type_picker: "Turn into...",
+	},
+	icons:
+	{
+		node_type_picker: "list-ul",
+	},
 };

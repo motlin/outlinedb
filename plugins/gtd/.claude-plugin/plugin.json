@@ -2,7 +2,8 @@
 	"name": "gtd",
 	"version": "0.1.0",
 	"description": "Getting Things Done on Workflowy: capture, inbox refinement, journaling, and daily reviews. Depends on the workflowy plugin (and its CLI) from the same marketplace.",
-	"author": {
+	"author":
+	{
 		"name": "Craig Motlin"
 	},
 	"license": "Apache-2.0",

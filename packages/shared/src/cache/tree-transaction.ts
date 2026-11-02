@@ -14,9 +14,14 @@ import type {TemporalTransaction} from "./temporal-merge.js";
 export const MAIN_TREE_ID = "main";
 
 /** The stored tree transaction id, or undefined before the first whole-tree import. */
-export function readTreeTxId(tx: TemporalTransaction): string | undefined {
+export function readTreeTxId(tx: TemporalTransaction): string | undefined
+{
 	return tx
-		.select({transactionId: treeTransactions.transactionId})
+		.select(
+			{
+				transactionId: treeTransactions.transactionId,
+			},
+		)
 		.from(treeTransactions)
 		.where(and(eq(treeTransactions.treeId, MAIN_TREE_ID), eq(treeTransactions.systemTo, FAR_FUTURE_DATE)))
 		.get()?.transactionId;
@@ -25,7 +30,8 @@ export function readTreeTxId(tx: TemporalTransaction): string | undefined {
 const byTree = (row: {treeId: string}) => row.treeId;
 
 /** Replace the stored tree transaction id, as a whole-tree import does, in the caller's unit of work. */
-export function replaceTreeTxId({tx, systemTime}: UnitOfWork, txId: string): void {
+export function replaceTreeTxId({tx, systemTime}: UnitOfWork, txId: string): void
+{
 	temporalMerge(
 		tx,
 		{
@@ -33,13 +39,35 @@ export function replaceTreeTxId({tx, systemTime}: UnitOfWork, txId: string): voi
 			keyColumn: treeTransactions.treeId,
 			incomingKey: byTree,
 			currentKey: byTree,
-			contentMatches: (current: {transactionId: string}, incoming: {transactionId: string}) =>
-				current.transactionId === incoming.transactionId,
-			buildInsertRow: (row) => ({treeId: row.treeId, transactionId: row.transactionId}),
+			contentMatches: (
+				current:
+				{
+					transactionId: string;
+				},
+				incoming:
+				{
+					transactionId: string;
+				},
+			) => current.transactionId === incoming.transactionId,
+			buildInsertRow: (row) => (
+			{
+				treeId: row.treeId,
+				transactionId: row.transactionId,
+			}),
 		},
-		[{treeId: MAIN_TREE_ID, transactionId: txId}],
+		[
+			{
+				treeId: MAIN_TREE_ID,
+				transactionId: txId,
+			},
+		],
 		tx
-			.select({treeId: treeTransactions.treeId, transactionId: treeTransactions.transactionId})
+			.select(
+				{
+					treeId: treeTransactions.treeId,
+					transactionId: treeTransactions.transactionId,
+				},
+			)
 			.from(treeTransactions)
 			.where(and(eq(treeTransactions.treeId, MAIN_TREE_ID), eq(treeTransactions.systemTo, FAR_FUTURE_DATE)))
 			.all(),
@@ -53,16 +81,20 @@ export function replaceTreeTxId({tx, systemTime}: UnitOfWork, txId: string): voi
  * processes sharing one cache the larger id is always the later point in the
  * tree's log.
  */
-export function advanceTreeTxId(unitOfWork: UnitOfWork, txId: string): void {
+export function advanceTreeTxId(unitOfWork: UnitOfWork, txId: string): void
+{
 	const current = readTreeTxId(unitOfWork.tx);
-	if (current === undefined || BigInt(txId) > BigInt(current)) {
+	if (current === undefined || BigInt(txId) > BigInt(current))
+	{
 		replaceTreeTxId(unitOfWork, txId);
 	}
 }
 
 /** {@link replaceTreeTxId} in a unit of work of its own, for a seed outside any import. */
-export function storeTreeTxId(database: TemporalTransaction, txId: string): void {
-	runUnitOfWork(database, (unitOfWork) => {
+export function storeTreeTxId(database: TemporalTransaction, txId: string): void
+{
+	runUnitOfWork(database, (unitOfWork) =>
+	{
 		replaceTreeTxId(unitOfWork, txId);
 	});
 }

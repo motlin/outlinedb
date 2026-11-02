@@ -8,10 +8,12 @@
 		{"path": "./packages/mcp/test"},
 		{"path": "./test"}
 	],
-	"ts-node": {
+	"ts-node":
+	{
 		"esm": true,
 		"transpileOnly": true,
-		"compilerOptions": {
+		"compilerOptions":
+		{
 			"module": "esnext",
 			"target": "es2023"
 		}

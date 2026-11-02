@@ -8,13 +8,18 @@ import {fileURLToPath} from "node:url";
  * string compare is false whenever the script is reached through a symlink (`~/.claude` is one) and the script silently
  * exits 0 having done nothing.
  */
-export function isMain(moduleUrl: string, scriptPath: string | undefined = process.argv[1]): boolean {
-	if (scriptPath === undefined) {
+export function isMain(moduleUrl: string, scriptPath: string | undefined = process.argv[1]): boolean
+{
+	if (scriptPath === undefined)
+	{
 		return false;
 	}
-	try {
+	try
+	{
 		return realpathSync(fileURLToPath(moduleUrl)) === realpathSync(scriptPath);
-	} catch {
+	}
+	catch
+	{
 		return false;
 	}
 }

@@ -8,10 +8,13 @@ import {compress} from "hono/compress";
 
 const UNCOMPRESSED_PATHS = new Set(["/api/v1/ladder/events"]);
 
-export function apiCompression(): MiddlewareHandler {
+export function apiCompression(): MiddlewareHandler
+{
 	const compressor = compress();
-	return async (c, next) => {
-		if (UNCOMPRESSED_PATHS.has(c.req.path)) {
+	return async (c, next) =>
+	{
+		if (UNCOMPRESSED_PATHS.has(c.req.path))
+		{
 			await next();
 			return;
 		}

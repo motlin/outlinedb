@@ -13,14 +13,19 @@ import {createTestNode} from "../../helpers/node-fixtures.js";
 const FULL_ID = "3435cb92-d00d-45be-9950-b1ed4735574c";
 const SHORT_ID = "b1ed4735574c";
 
-describe("node complete and uncomplete commands", () => {
+describe("node complete and uncomplete commands", () =>
+{
 	let originalEnv: typeof process.env;
 	let fetchStub: MockInstance;
 	let tempDir: string;
 	let testDatabase: TestDatabase;
 
-	beforeEach(() => {
-		originalEnv = {...process.env};
+	beforeEach(() =>
+	{
+		originalEnv =
+		{
+			...process.env,
+		};
 
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-complete-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
@@ -31,20 +36,41 @@ describe("node complete and uncomplete commands", () => {
 		fetchStub = vi.spyOn(globalThis, "fetch");
 	});
 
-	afterEach(() => {
+	afterEach(() =>
+	{
 		process.env = originalEnv;
 
 		cleanupTestDatabase(testDatabase);
 
-		if (fs.existsSync(tempDir)) {
-			fs.rmSync(tempDir, {recursive: true, force: true});
+		if (fs.existsSync(tempDir))
+		{
+			fs.rmSync(
+				tempDir,
+				{
+					recursive: true,
+					force: true,
+				},
+			);
 		}
 	});
 
-	it("expands a short id to the full UUID before completing", async () => {
-		seedTestData(testDatabase, nodeFixtures([createTestNode({id: FULL_ID, name: "Test Node", parentId: null})]));
+	it("expands a short id to the full UUID before completing", async () =>
+	{
+		seedTestData(
+			testDatabase,
+			nodeFixtures([
+				createTestNode(
+					{
+						id: FULL_ID,
+						name: "Test Node",
+						parentId: null,
+					},
+				),
+			]),
+		);
 
-		const {stdout} = await captureOutput(async () => {
+		const {stdout} = await captureOutput(async () =>
+		{
 			await Complete.run(["--id", SHORT_ID, "--dry-run"]);
 		});
 
@@ -54,10 +80,23 @@ describe("node complete and uncomplete commands", () => {
 		expect(fetchStub.mock.calls).toStrictEqual([]);
 	});
 
-	it("expands a short id to the full UUID before uncompleting", async () => {
-		seedTestData(testDatabase, nodeFixtures([createTestNode({id: FULL_ID, name: "Test Node", parentId: null})]));
+	it("expands a short id to the full UUID before uncompleting", async () =>
+	{
+		seedTestData(
+			testDatabase,
+			nodeFixtures([
+				createTestNode(
+					{
+						id: FULL_ID,
+						name: "Test Node",
+						parentId: null,
+					},
+				),
+			]),
+		);
 
-		const {stdout} = await captureOutput(async () => {
+		const {stdout} = await captureOutput(async () =>
+		{
 			await Uncomplete.run(["--id", SHORT_ID, "--dry-run"]);
 		});
 
@@ -67,7 +106,8 @@ describe("node complete and uncomplete commands", () => {
 		expect(fetchStub.mock.calls).toStrictEqual([]);
 	});
 
-	it("rejects a short id that is not in the cache", async () => {
+	it("rejects a short id that is not in the cache", async () =>
+	{
 		await expect(Complete.run(["--id", "ffffffffffff", "--dry-run"])).rejects.toThrow(
 			"No node found for short ID: ffffffffffff",
 		);

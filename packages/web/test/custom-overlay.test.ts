@@ -16,14 +16,21 @@ const overrides: HotkeyOverride[] = [
 	["meta+.", null],
 	["ctrl+right", null],
 ];
-const ctx: CommandContext = {items: [], zoomedId: null};
+const ctx: CommandContext =
+{
+	items: [],
+	zoomedId: null,
+};
 
-afterEach(() => {
+afterEach(() =>
+{
 	useCustomKeymapStore.getState().set([]);
 });
 
-describe("overlayHotkeys", () => {
-	it("puts overrides first in order, then the unshadowed defaults", () => {
+describe("overlayHotkeys", () =>
+{
+	it("puts overrides first in order, then the unshadowed defaults", () =>
+	{
 		expect(overlayHotkeys(defaults, overrides)).toStrictEqual([
 			["alt+z", "zoom_in"],
 			["meta+.", null],
@@ -32,36 +39,98 @@ describe("overlayHotkeys", () => {
 		]);
 	});
 
-	it("is the defaults when there are no overrides", () => {
+	it("is the defaults when there are no overrides", () =>
+	{
 		expect(overlayHotkeys(defaults, [])).toStrictEqual(defaults);
 	});
 
-	it("looks up, treating a disabled combo as unbound, and hints the custom combo", () => {
+	it("looks up, treating a disabled combo as unbound, and hints the custom combo", () =>
+	{
 		const table = overlayHotkeys(defaults, overrides);
-		expect({
-			disabled: lookup(table, "meta+."),
-			kept: lookup(table, "meta+o"),
-			hint: hintFrom(table, "zoom_in"),
-		}).toStrictEqual({disabled: undefined, kept: "show_or_hide_completed", hint: "alt+z"});
+		expect(
+			{
+				disabled: lookup(table, "meta+."),
+				kept: lookup(table, "meta+o"),
+				hint: hintFrom(table, "zoom_in"),
+			},
+		).toStrictEqual(
+			{
+				disabled: undefined,
+				kept: "show_or_hide_completed",
+				hint: "alt+z",
+			},
+		);
 	});
 });
 
-describe("custom keymap in the dispatcher and hint", () => {
-	it("leaves a disabled default unclaimed and claims an unknown command without running anything", () => {
+describe("custom keymap in the dispatcher and hint", () =>
+{
+	it("leaves a disabled default unclaimed and claims an unknown command without running anything", () =>
+	{
 		useCustomKeymapStore.getState().set([...overrides, ["alt+x", "no_such_cmd"]]);
 		const execute = vi.fn<(ctx: CommandContext) => void>();
-		expect({
-			disabled: processCombo("meta+.", {zoom_in: {execute}}, ctx, true),
-			unknown: processCombo("alt+x", {zoom_in: {execute}}, ctx, true),
-			custom: processCombo("alt+z", {zoom_in: {execute}}, ctx, true),
-			calls: execute.mock.calls.length,
-		}).toStrictEqual({disabled: "unclaimed", unknown: "claimed", custom: "claimed", calls: 1});
+		expect(
+			{
+				disabled: processCombo(
+					"meta+.",
+					{
+						zoom_in:
+						{
+							execute,
+						},
+					},
+					ctx,
+					true,
+				),
+				unknown: processCombo(
+					"alt+x",
+					{
+						zoom_in:
+						{
+							execute,
+						},
+					},
+					ctx,
+					true,
+				),
+				custom: processCombo(
+					"alt+z",
+					{
+						zoom_in:
+						{
+							execute,
+						},
+					},
+					ctx,
+					true,
+				),
+				calls: execute.mock.calls.length,
+			},
+		).toStrictEqual(
+			{
+				disabled: "unclaimed",
+				unknown: "claimed",
+				custom: "claimed",
+				calls: 1,
+			},
+		);
 	});
 
-	it("hints the custom combo and restores the default when cleared", () => {
+	it("hints the custom combo and restores the default when cleared", () =>
+	{
 		useCustomKeymapStore.getState().set(overrides);
 		const custom = hint("zoom_in");
 		useCustomKeymapStore.getState().set([]);
-		expect({custom, restored: hint("zoom_in")}).toStrictEqual({custom: "⌥Z", restored: "⌘."});
+		expect(
+			{
+				custom,
+				restored: hint("zoom_in"),
+			},
+		).toStrictEqual(
+			{
+				custom: "⌥Z",
+				restored: "⌘.",
+			},
+		);
 	});
 });

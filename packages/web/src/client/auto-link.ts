@@ -4,13 +4,15 @@
  * anchors without the stored text carrying `<a>`. Ranges are plain-text offsets.
  */
 
-export interface UrlMatch {
+export interface UrlMatch
+{
 	start: number;
 	end: number;
 	href: string;
 }
 
-export interface TextMatch {
+export interface TextMatch
+{
 	start: number;
 	end: number;
 	text: string;
@@ -47,12 +49,17 @@ const TLDS = new Set(
 // TLDs that read as file extensions: a bare `notes.md` is not linked unless it has a scheme.
 const FILE_LIKE_TLDS = new Set(["PY", "PL", "RS", "SH", "MD", "NAME", "ID"]);
 
-function openParenCount(text: string): number {
+function openParenCount(text: string): number
+{
 	let count = 0;
-	for (const char of text) {
-		if (char === "(") {
+	for (const char of text)
+	{
+		if (char === "(")
+		{
 			count += 1;
-		} else if (char === ")" && count > 0) {
+		}
+		else if (char === ")" && count > 0)
+		{
 			count -= 1;
 		}
 	}
@@ -60,17 +67,21 @@ function openParenCount(text: string): number {
 }
 
 /** Drops a trailing `)` that closes a paren opened before the URL. */
-function trimUnbalancedParen(rest: string): string {
-	if (rest.endsWith(")")) {
+function trimUnbalancedParen(rest: string): string
+{
+	if (rest.endsWith(")"))
+	{
 		const trimmed = rest.slice(0, -1);
-		if (openParenCount(trimmed) === 0) {
+		if (openParenCount(trimmed) === 0)
+		{
 			return trimmed;
 		}
 	}
 	return rest;
 }
 
-function isExcluded(url: string): boolean {
+function isExcluded(url: string): boolean
+{
 	const tld = (url.split(".").pop() ?? "").toUpperCase();
 	return (
 		url === "m.sc" ||
@@ -80,68 +91,120 @@ function isExcluded(url: string): boolean {
 	);
 }
 
-function urlRest(text: string): string | null {
+function urlRest(text: string): string | null
+{
 	const match = URL_REST_PATTERN.exec(text);
 	return match === null ? null : trimUnbalancedParen(match[0]);
 }
 
-function locateUrl(text: string, match: RegExpExecArray): {start: number; end: number; hasScheme: boolean} | null {
+function locateUrl(
+	text: string,
+	match: RegExpExecArray,
+):
+{
+	start: number;
+	end: number;
+	hasScheme: boolean;
+} | null
+{
 	const [trigger] = match;
 	const index = match.index;
-	if (trigger === "://") {
+	if (trigger === "://")
+	{
 		let start = index;
-		while (start > 0 && SCHEME_CHAR_PATTERN.test(text.charAt(start - 1))) {
+		while (start > 0 && SCHEME_CHAR_PATTERN.test(text.charAt(start - 1)))
+		{
 			start -= 1;
 		}
-		while (start < index && !/[a-z]/iu.test(text.charAt(start))) {
+		while (start < index && !/[a-z]/iu.test(text.charAt(start)))
+		{
 			start += 1;
 		}
-		if (start === index || /^javascript$/iu.test(text.slice(start, index))) {
+		if (start === index || /^javascript$/iu.test(text.slice(start, index)))
+		{
 			return null;
 		}
 		const restStart = index + trigger.length;
 		const rest = urlRest(text.slice(restStart));
-		return rest === null ? null : {start, end: restStart + rest.length, hasScheme: true};
+		return rest === null
+			? null
+			:
+				{
+					start,
+					end: restStart + rest.length,
+					hasScheme: true,
+				};
 	}
-	if (trigger === "message:<" || trigger === "message:%3C") {
+	if (trigger === "message:<" || trigger === "message:%3C")
+	{
 		const close = trigger === "message:%3C" ? "%3E" : ">";
 		const closeIndex = text.indexOf(close, index + trigger.length);
-		return closeIndex === -1 ? null : {start: index, end: closeIndex + close.length, hasScheme: true};
+		return closeIndex === -1
+			? null
+			:
+				{
+					start: index,
+					end: closeIndex + close.length,
+					hasScheme: true,
+				};
 	}
-	if (match[1] === undefined || !TLDS.has(match[1].toUpperCase())) {
+	if (match[1] === undefined || !TLDS.has(match[1].toUpperCase()))
+	{
 		return null;
 	}
 	let start = index;
-	while (start > 0 && DOMAIN_CHAR_PATTERN.test(text.charAt(start - 1))) {
+	while (start > 0 && DOMAIN_CHAR_PATTERN.test(text.charAt(start - 1)))
+	{
 		start -= 1;
 	}
-	if (!DOMAIN_PATTERN.test(text.slice(start, index))) {
+	if (!DOMAIN_PATTERN.test(text.slice(start, index)))
+	{
 		return null;
 	}
 	const after = index + trigger.length;
 	const next = text.charAt(after);
-	if (next !== "" && /\w/u.test(next)) {
+	if (next !== "" && /\w/u.test(next))
+	{
 		return null;
 	}
-	if (next !== "/") {
-		return {start, end: after, hasScheme: false};
+	if (next !== "/")
+	{
+		return {
+			start,
+			end: after,
+			hasScheme: false,
+		};
 	}
-	return {start, end: after + (urlRest(text.slice(after)) ?? "").length, hasScheme: false};
+	return {
+		start,
+		end: after + (urlRest(text.slice(after)) ?? "").length,
+		hasScheme: false,
+	};
 }
 
 /** Upstream `TT`: every URL or bare domain in plain text, with the href it links to. */
-export function findUrls(text: string): UrlMatch[] {
+export function findUrls(text: string): UrlMatch[]
+{
 	const matches: UrlMatch[] = [];
 	URL_TRIGGER_PATTERN.lastIndex = 0;
 	let match: RegExpExecArray | null;
-	while ((match = URL_TRIGGER_PATTERN.exec(text)) !== null) {
+	while ((match = URL_TRIGGER_PATTERN.exec(text)) !== null)
+	{
 		const located = locateUrl(text, match);
-		if (located === null) {
+		if (located === null)
+		{
 			continue;
 		}
 		const url = text.slice(located.start, located.end);
-		if (!isExcluded(url)) {
-			matches.push({start: located.start, end: located.end, href: located.hasScheme ? url : `http://${url}`});
+		if (!isExcluded(url))
+		{
+			matches.push(
+				{
+					start: located.start,
+					end: located.end,
+					href: located.hasScheme ? url : `http://${url}`,
+				},
+			);
 		}
 		URL_TRIGGER_PATTERN.lastIndex = located.end;
 	}
@@ -149,41 +212,60 @@ export function findUrls(text: string): UrlMatch[] {
 }
 
 /** Upstream `Gn1`: every email address in plain text. */
-export function findEmails(text: string): TextMatch[] {
+export function findEmails(text: string): TextMatch[]
+{
 	const matches: TextMatch[] = [];
 	let cursor = 0;
-	while ((cursor = text.indexOf("@", cursor)) >= 0) {
+	while ((cursor = text.indexOf("@", cursor)) >= 0)
+	{
 		const at = cursor;
 		cursor += 1;
 		let start = at;
-		while (start > 0 && EMAIL_LOCAL_CHAR_PATTERN.test(text.charAt(start - 1))) {
+		while (start > 0 && EMAIL_LOCAL_CHAR_PATTERN.test(text.charAt(start - 1)))
+		{
 			start -= 1;
 		}
-		if (start === at) {
+		if (start === at)
+		{
 			continue;
 		}
 		const domain = EMAIL_DOMAIN_PATTERN.exec(text.slice(cursor));
-		if (domain === null) {
+		if (domain === null)
+		{
 			continue;
 		}
 		cursor += domain[0].length;
-		if (text.charAt(cursor) !== ">") {
-			matches.push({start, end: cursor, text: text.slice(start, cursor)});
+		if (text.charAt(cursor) !== ">")
+		{
+			matches.push(
+				{
+					start,
+					end: cursor,
+					text: text.slice(start, cursor),
+				},
+			);
 		}
 	}
 	return matches;
 }
 
 /** Upstream `Vn1`: every NANP phone number bounded by whitespace or punctuation. */
-export function findPhoneNumbers(text: string): TextMatch[] {
-	return [...text.matchAll(PHONE_PATTERN)].map((match) => {
+export function findPhoneNumbers(text: string): TextMatch[]
+{
+	return [...text.matchAll(PHONE_PATTERN)].map((match) =>
+	{
 		const start = match.index + (match[1] ?? "").length;
 		const number = match[2] ?? "";
-		return {start, end: start + number.length, text: number};
+		return {
+			start,
+			end: start + number.length,
+			text: number,
+		};
 	});
 }
 
-function decodeHrefEntities(href: string): string {
+function decodeHrefEntities(href: string): string
+{
 	return href
 		.replaceAll("&lt;", "<")
 		.replaceAll("&gt;", ">")
@@ -193,25 +275,40 @@ function decodeHrefEntities(href: string): string {
 }
 
 /** The href a found URL links to: entities decoded, then URI-encoded when it does not parse. */
-function normalizeUrlHref(href: string): string {
+function normalizeUrlHref(href: string): string
+{
 	const decoded = decodeHrefEntities(href);
-	if (URL.canParse(decoded)) {
+	if (URL.canParse(decoded))
+	{
 		return decoded;
 	}
-	try {
+	try
+	{
 		return encodeURI(decoded);
-	} catch {
+	}
+	catch
+	{
 		return decoded;
 	}
 }
 
-export interface AutoLink {
+export interface AutoLink
+{
 	start: number;
 	end: number;
 	href: string;
 }
 
-function intersects(start: number, end: number, ranges: readonly {start: number; end: number}[]): boolean {
+function intersects(
+	start: number,
+	end: number,
+	ranges: readonly
+	{
+		start: number;
+		end: number;
+	}[],
+): boolean
+{
 	return ranges.some((range) => start < range.end && range.start < end);
 }
 
@@ -219,20 +316,39 @@ function intersects(start: number, end: number, ranges: readonly {start: number;
  * Every auto-link in plain text, in upstream's locate order: emails, then phone numbers,
  * then URLs, each skipping ranges an earlier one claimed or `blocked` covers.
  */
-export function findAutoLinks(text: string, blocked: readonly {start: number; end: number}[]): AutoLink[] {
+export function findAutoLinks(
+	text: string,
+	blocked: readonly
+	{
+		start: number;
+		end: number;
+	}[],
+): AutoLink[]
+{
 	const links: AutoLink[] = [];
-	const claim = (start: number, end: number, href: string): void => {
-		if (!intersects(start, end, blocked) && !intersects(start, end, links)) {
-			links.push({start, end, href});
+	const claim = (start: number, end: number, href: string): void =>
+	{
+		if (!intersects(start, end, blocked) && !intersects(start, end, links))
+		{
+			links.push(
+				{
+					start,
+					end,
+					href,
+				},
+			);
 		}
 	};
-	for (const {start, end, text: email} of findEmails(text)) {
+	for (const {start, end, text: email} of findEmails(text))
+	{
 		claim(start, end, `mailto:${email}`);
 	}
-	for (const {start, end, text: phone} of findPhoneNumbers(text)) {
+	for (const {start, end, text: phone} of findPhoneNumbers(text))
+	{
 		claim(start, end, `tel:${phone}`);
 	}
-	for (const {start, end, href} of findUrls(text)) {
+	for (const {start, end, href} of findUrls(text))
+	{
 		claim(start, end, normalizeUrlHref(href));
 	}
 	return links.toSorted((a, b) => a.start - b.start);

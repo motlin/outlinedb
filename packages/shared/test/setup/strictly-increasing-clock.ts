@@ -10,7 +10,8 @@
  */
 const realNow = Date.now.bind(Date);
 let last = 0;
-Date.now = (): number => {
+Date.now = (): number =>
+{
 	last = Math.max(realNow(), last + 1);
 	return last;
 };

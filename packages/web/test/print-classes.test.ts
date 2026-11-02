@@ -13,8 +13,10 @@ const FILES = [
 	"components/side-pane.tsx",
 ];
 
-describe("print:hidden on floating chrome", () => {
-	it("is present in every chrome surface's class string", () => {
+describe("print:hidden on floating chrome", () =>
+{
+	it("is present in every chrome surface's class string", () =>
+	{
 		const pairs = FILES.map((file) => [
 			file,
 			readFileSync(new URL(`../src/client/${file}`, import.meta.url), "utf8").includes("print:hidden"),
@@ -22,7 +24,8 @@ describe("print:hidden on floating chrome", () => {
 		expect(pairs).toStrictEqual(FILES.map((file) => [file, true]));
 	});
 
-	it("keeps export, settings, link insert, shortcuts and jump dialogs inside the print-hidden backdrop", () => {
+	it("keeps export, settings, link insert, shortcuts and jump dialogs inside the print-hidden backdrop", () =>
+	{
 		const unshelled = ["export-dialog", "jump-menu", "alert-dialog", "mirrors-dialog"].filter(
 			(name) =>
 				readFileSync(new URL(`../src/client/components/${name}.tsx`, import.meta.url), "utf8").match(

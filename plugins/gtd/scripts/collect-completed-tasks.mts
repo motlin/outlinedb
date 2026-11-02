@@ -15,19 +15,22 @@ import {isObject} from "./json.mts";
 import {takeValue} from "./cli-args.mts";
 import {isMain} from "./is-main.mts";
 
-export interface CompletedNode {
+export interface CompletedNode
+{
 	id?: string;
 	name: string;
 	completedAt?: string | null;
 	children?: CompletedNode[];
 }
 
-export interface RootInput {
+export interface RootInput
+{
 	root: string;
 	tree: CompletedNode;
 }
 
-export interface CompletedRow {
+export interface CompletedRow
+{
 	root: string;
 	id: string;
 	name: string;
@@ -39,34 +42,52 @@ export interface CompletedRow {
 }
 
 /** The YYYY-MM-DD local date of an ISO timestamp in the given IANA time zone. */
-export function completionDate(completedAt: string, timeZone: string): string {
-	return new Intl.DateTimeFormat("en-CA", {timeZone, year: "numeric", month: "2-digit", day: "2-digit"}).format(
-		new Date(completedAt),
-	);
+export function completionDate(completedAt: string, timeZone: string): string
+{
+	return new Intl.DateTimeFormat(
+		"en-CA",
+		{
+			timeZone,
+			year: "numeric",
+			month: "2-digit",
+			day: "2-digit",
+		},
+	).format(new Date(completedAt));
 }
 
-export function collectCompletedTasks(roots: readonly RootInput[], timeZone: string): CompletedRow[] {
+export function collectCompletedTasks(roots: readonly RootInput[], timeZone: string): CompletedRow[]
+{
 	const rows: CompletedRow[] = [];
-	const walk = (root: string, node: CompletedNode, path: string[]): void => {
-		for (const child of node.children ?? []) {
-			if (child.completedAt && child.id) {
-				rows.push({
-					root,
-					id: child.id,
-					name: child.name,
-					completedAt: child.completedAt,
-					completedDate: completionDate(child.completedAt, timeZone),
-					path,
-					childCount: child.children?.length ?? 0,
-				});
-			} else {
+	const walk = (root: string, node: CompletedNode, path: string[]): void =>
+	{
+		for (const child of node.children ?? [])
+		{
+			if (child.completedAt && child.id)
+			{
+				rows.push(
+					{
+						root,
+						id: child.id,
+						name: child.name,
+						completedAt: child.completedAt,
+						completedDate: completionDate(child.completedAt, timeZone),
+						path,
+						childCount: child.children?.length ?? 0,
+					},
+				);
+			}
+			else
+			{
 				walk(root, child, [...path, child.name]);
 			}
 		}
 	};
-	for (const {root, tree} of roots) {
-		for (const wrapper of tree.children ?? []) {
-			if (wrapper.name.startsWith("✅")) {
+	for (const {root, tree} of roots)
+	{
+		for (const wrapper of tree.children ?? [])
+		{
+			if (wrapper.name.startsWith("✅"))
+			{
 				walk(root, wrapper, [wrapper.name]);
 			}
 		}
@@ -74,33 +95,45 @@ export function collectCompletedTasks(roots: readonly RootInput[], timeZone: str
 	return rows;
 }
 
-function isCompletedNode(value: unknown): value is CompletedNode {
+function isCompletedNode(value: unknown): value is CompletedNode
+{
 	return isObject(value) && typeof value.name === "string";
 }
 
-function main(argv: string[]): void {
+function main(argv: string[]): void
+{
 	const args = argv[Symbol.iterator]();
 	let timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 	const roots: RootInput[] = [];
-	for (let next = args.next(); next.done !== true; next = args.next()) {
+	for (let next = args.next(); next.done !== true; next = args.next())
+	{
 		const arg = next.value;
-		if (arg === "--timezone") {
+		if (arg === "--timezone")
+		{
 			timeZone = takeValue(args, "--timezone");
 			continue;
 		}
 		const [root, file] = arg.split("=");
-		if (!root || !file) {
+		if (!root || !file)
+		{
 			throw new Error(`Expected Label=path.json, got: ${arg}`);
 		}
 		const tree: unknown = JSON.parse(readFileSync(file, "utf8"));
-		if (!isCompletedNode(tree)) {
+		if (!isCompletedNode(tree))
+		{
 			throw new TypeError(`${file} must hold a node with a name`);
 		}
-		roots.push({root, tree});
+		roots.push(
+			{
+				root,
+				tree,
+			},
+		);
 	}
 	process.stdout.write(`${JSON.stringify(collectCompletedTasks(roots, timeZone), null, 2)}\n`);
 }
 
-if (isMain(import.meta.url)) {
+if (isMain(import.meta.url))
+{
 	main(process.argv.slice(2));
 }

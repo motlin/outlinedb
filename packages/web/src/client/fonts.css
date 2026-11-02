@@ -4,7 +4,8 @@
  * webfonts are not shipped, so Lexend, Inter, ET Book, ... fall back to the next family in each stack.
  */
 
-.font-helvetica .font-custom {
+.font-helvetica .font-custom
+{
 	font-family:
 		"Helvetica Neue", Arial, Sans-serif, var(--emoji-font, "Apple Color Emoji"), "Segoe UI Emoji", "Segoe UI Symbol";
 	font-weight: normal;
@@ -24,7 +25,8 @@
 	--font-help-text-font-size: 12px;
 }
 
-.font-times .font-custom {
+.font-times .font-custom
+{
 	font-family: Georgia, Times, serif, var(--emoji-font, "Apple Color Emoji"), "Segoe UI Emoji", "Segoe UI Symbol";
 	font-weight: normal;
 
@@ -43,7 +45,8 @@
 	--font-help-text-font-size: 12px;
 }
 
-.font-courier .font-custom {
+.font-courier .font-custom
+{
 	font-family: Courier, monospace, var(--emoji-font, "Apple Color Emoji"), "Segoe UI Emoji", "Segoe UI Symbol";
 	font-weight: normal;
 
@@ -62,7 +65,8 @@
 	--font-help-text-font-size: 12px;
 }
 
-.font-courierNew .font-custom {
+.font-courierNew .font-custom
+{
 	font-family:
 		"Courier New", Courier, monospace, var(--emoji-font, "Apple Color Emoji"), "Segoe UI Emoji", "Segoe UI Symbol";
 	font-weight: 100;
@@ -86,7 +90,8 @@
 	--font-help-text-font-size: 12px;
 }
 
-.font-lexend .font-custom {
+.font-lexend .font-custom
+{
 	font-family: Lexend, sans-serif, var(--emoji-font, "Apple Color Emoji"), "Segoe UI Emoji", "Segoe UI Symbol";
 	font-weight: normal;
 
@@ -105,7 +110,8 @@
 	--font-help-text-font-size: 12px;
 }
 
-.font-atkinsonHyperlegible .font-custom {
+.font-atkinsonHyperlegible .font-custom
+{
 	font-family:
 		"Atkinson Hyperlegible", sans-serif, var(--emoji-font, "Apple Color Emoji"), "Segoe UI Emoji", "Segoe UI Symbol";
 	font-weight: normal;
@@ -125,7 +131,8 @@
 	--font-help-text-font-size: 12px;
 }
 
-.font-etBook .font-custom {
+.font-etBook .font-custom
+{
 	font-family:
 		ET Book,
 		serif,
@@ -150,7 +157,8 @@
 	--font-code-block-font-size: 15px;
 }
 
-.font-jetbrainsMono .font-custom {
+.font-jetbrainsMono .font-custom
+{
 	font-family:
 		JetBrains Mono,
 		monospace,
@@ -175,7 +183,8 @@
 	--font-code-font-family: "JetBrains Mono";
 }
 
-.font-firaCode .font-custom {
+.font-firaCode .font-custom
+{
 	font-family:
 		Fira Code,
 		monospace,
@@ -200,7 +209,8 @@
 	--font-code-font-family: "Fira Code";
 }
 
-.font-geistMono .font-custom {
+.font-geistMono .font-custom
+{
 	font-family:
 		Geist Mono,
 		monospace,
@@ -225,7 +235,8 @@
 	--font-code-font-family: "Geist Mono";
 }
 
-.font-inter .font-custom {
+.font-inter .font-custom
+{
 	font-family: Inter, Sans-serif, var(--emoji-font, "Apple Color Emoji"), "Segoe UI Emoji", "Segoe UI Symbol";
 	font-weight: normal;
 
@@ -244,7 +255,8 @@
 	--font-help-text-font-size: 12px;
 }
 
-.font-ibmPlexMono .font-custom {
+.font-ibmPlexMono .font-custom
+{
 	font-family:
 		IBM Plex Mono,
 		monospace,
@@ -268,7 +280,8 @@
 	--font-help-text-font-size: 12px;
 }
 
-.font-openSans .font-custom {
+.font-openSans .font-custom
+{
 	font-family:
 		Open Sans,
 		Sans-serif,
@@ -292,7 +305,8 @@
 	--font-help-text-font-size: 12px;
 }
 
-.font-junicode .font-custom {
+.font-junicode .font-custom
+{
 	font-family: Junicode, serif, var(--emoji-font, "Apple Color Emoji"), "Segoe UI Emoji", "Segoe UI Symbol";
 	font-weight: normal;
 
@@ -311,7 +325,8 @@
 	--font-help-text-font-size: 12px;
 }
 
-.font-openDyslexic .font-custom {
+.font-openDyslexic .font-custom
+{
 	font-family:
 		open-dyslexic, Arial, Sans-serif, var(--emoji-font, "Apple Color Emoji"), "Segoe UI Emoji", "Segoe UI Symbol";
 	font-weight: normal;
@@ -331,7 +346,8 @@
 	--font-help-text-font-size: 12px;
 }
 
-.font-helvetica_light .font-custom {
+.font-helvetica_light .font-custom
+{
 	font-family:
 		"Helvetica Neue", Arial, Sans-serif, var(--emoji-font, "Apple Color Emoji"), "Segoe UI Emoji", "Segoe UI Symbol";
 	font-weight: 300;
@@ -351,7 +367,8 @@
 	--font-help-text-font-size: 12px;
 }
 
-.font-helvetica_bold .font-custom {
+.font-helvetica_bold .font-custom
+{
 	font-family:
 		"Helvetica Neue", Arial, Sans-serif, var(--emoji-font, "Apple Color Emoji"), "Segoe UI Emoji", "Segoe UI Symbol";
 	font-weight: 700;
@@ -371,7 +388,8 @@
 	--font-help-text-font-size: 12px;
 }
 
-.font-andale .font-custom {
+.font-andale .font-custom
+{
 	font-family:
 		"Andale Mono", Menlo, Consolas, monospace, var(--emoji-font, "Apple Color Emoji"), "Segoe UI Emoji",
 		"Segoe UI Symbol";
@@ -392,7 +410,8 @@
 	--font-help-text-font-size: 12px;
 }
 
-.font-lucidagrande .font-custom {
+.font-lucidagrande .font-custom
+{
 	font-family: "Lucida Grande", "Lucida Sans Unicode", var(--emoji-font, "Segoe UI Emoji"), "Segoe UI Symbol";
 	font-weight: normal;
 

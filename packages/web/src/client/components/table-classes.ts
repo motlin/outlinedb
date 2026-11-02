@@ -9,7 +9,8 @@ export const TABLE_TITLE_CLASS = "overflow-hidden";
 const SCROLLER_COMMON = "[--item-selection-x-offset:0] [--item-selection-border-radius:0] inline-block !w-auto";
 
 /** The horizontal scroller around a table's `.children` and add-row button. */
-export function tableScrollerClass(zoomed: boolean): string {
+export function tableScrollerClass(zoomed: boolean): string
+{
 	return zoomed
 		? `vertical-scrollable-container mt-m flex-1 min-h-0 ${SCROLLER_COMMON} relative box-border overflow-x-auto `
 		: `vertical-scrollable-container ${SCROLLER_COMMON} max-h-[300px] relative box-border overflow-x-auto `;
@@ -23,7 +24,8 @@ const CELL_BASE =
 	"table-cell relative tableCell group/cell box-border relative z-0 !m-0 p-xs pl-m mobile:!py-m mobile:!ml-0 border-b border-primary border-solid [&_.addSiblingButton]:hidden [&_.contentEditablePlaceholder]:!leading-[var(--font-default-line-height)] [&>.notes]:!ml-0 [&>.notes]:!pl-0 border-l border-r border-solid border-primary bg-primary [--wf-content-padding-top:0]";
 
 /** The classes a cell adds to its `.project` after `task` or `collapsed`. */
-export function tableCellClass(options: {header: boolean; nested: boolean; bg?: string | undefined}): string {
+export function tableCellClass(options: {header: boolean; nested: boolean; bg?: string | undefined}): string
+{
 	return [
 		CELL_BASE,
 		options.header ? "bg-secondary border-t border-solid border-primary" : "",
@@ -37,7 +39,8 @@ export function tableCellClass(options: {header: boolean; nested: boolean; bg?: 
 const CELL_NAME = "!ml-0 !pl-0 [&>.content]:!pr-0 [&>.content]:!pt-0 [&_button]:hidden";
 
 /** A cell's name classes after `name`; the header row is bold. */
-export function tableCellNameClass(header: boolean): string {
+export function tableCellNameClass(header: boolean): string
+{
 	return header ? `${CELL_NAME} font-bold` : CELL_NAME;
 }
 

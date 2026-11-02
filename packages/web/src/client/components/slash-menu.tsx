@@ -7,7 +7,8 @@ import {FlyoutAlign} from "./flyout/flyout-style.js";
 import {MenuScroller} from "./flyout/menu.js";
 import {MenuItem, MenuSectionHeader} from "./flyout/menu-item.js";
 
-interface SlashMenuProps {
+interface SlashMenuProps
+{
 	groups: readonly SlashGroup[];
 	/** The highlighted row, counted across all groups. */
 	index: number;
@@ -22,7 +23,8 @@ interface SlashMenuProps {
 
 const POSITION_OFFSET = [0, 0] as const;
 
-function isCommand(option: SlashCommandOption | SlashMathOption): option is SlashCommandOption {
+function isCommand(option: SlashCommandOption | SlashMathOption): option is SlashCommandOption
+{
 	return "key" in option;
 }
 
@@ -32,25 +34,36 @@ function isCommand(option: SlashCommandOption | SlashMathOption): option is Slas
  * className `" undefined"`, which lands verbatim in every row's class list.
  */
 /** Each group's first row in the menu's flat row order. */
-function groupStarts(groups: readonly {options: readonly unknown[]}[]): number[] {
+function groupStarts(
+	groups: readonly
+	{
+		options: readonly unknown[];
+	}[],
+): number[]
+{
 	const starts: number[] = [];
 	let next = 0;
-	for (const group of groups) {
+	for (const group of groups)
+	{
 		starts.push(next);
 		next += group.options.length;
 	}
 	return starts;
 }
 
-export function SlashMenu({groups, index, keyboardMode, left, top, onSelect, onHover, onMouseMove}: SlashMenuProps) {
+export function SlashMenu({groups, index, keyboardMode, left, top, onSelect, onHover, onMouseMove}: SlashMenuProps)
+{
 	// Attaching the ref to a newly active row reveals it inside the menu's scroller, like upstream's keyboard-mode effect.
-	const scrollActive = useCallback((element: HTMLAnchorElement | null) => {
-		if (element !== null) {
+	const scrollActive = useCallback((element: HTMLAnchorElement | null) =>
+	{
+		if (element !== null)
+		{
 			revealInScroller(element);
 		}
 	}, []);
 
-	if (!groups.some((group) => group.options.length > 0)) {
+	if (!groups.some((group) => group.options.length > 0))
+	{
 		return null;
 	}
 
@@ -71,7 +84,8 @@ export function SlashMenu({groups, index, keyboardMode, left, top, onSelect, onH
 							{group.name}
 						</span>
 					</MenuSectionHeader>,
-					...group.options.map((option: SlashCommandOption | SlashMathOption, optionIndex) => {
+					...group.options.map((option: SlashCommandOption | SlashMathOption, optionIndex) =>
+					{
 						const itemIndex = (starts[groupIndex] ?? 0) + optionIndex;
 						const active = itemIndex === index;
 						const command = isCommand(option) ? option : undefined;
@@ -85,10 +99,12 @@ export function SlashMenu({groups, index, keyboardMode, left, top, onSelect, onH
 								className=" undefined"
 								isSelected={keyboardMode && active}
 								isInKeyboardMode={keyboardMode}
-								onMouseEnter={() => {
+								onMouseEnter={() =>
+								{
 									onHover(itemIndex);
 								}}
-								onSelect={() => {
+								onSelect={() =>
+								{
 									onSelect(itemIndex);
 								}}
 							/>

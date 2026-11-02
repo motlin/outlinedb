@@ -1,5 +1,7 @@
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-	if (typeof value !== "object" || value === null) {
+function isPlainObject(value: unknown): value is Record<string, unknown>
+{
+	if (typeof value !== "object" || value === null)
+	{
 		return false;
 	}
 	const proto: unknown = Object.getPrototypeOf(value);
@@ -7,11 +9,14 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /** Each item's string `id`, or null unless every item has one and no two share it. */
-function uniqueIds(items: readonly unknown[]): string[] | null {
+function uniqueIds(items: readonly unknown[]): string[] | null
+{
 	const ids: string[] = [];
-	for (const item of items) {
+	for (const item of items)
+	{
 		const id = isPlainObject(item) ? item.id : undefined;
-		if (typeof id !== "string") {
+		if (typeof id !== "string")
+		{
 			return null;
 		}
 		ids.push(id);
@@ -19,7 +24,8 @@ function uniqueIds(items: readonly unknown[]): string[] | null {
 	return new Set(ids).size === ids.length ? ids : null;
 }
 
-function shareArray(previous: readonly unknown[], next: readonly unknown[]): readonly unknown[] {
+function shareArray(previous: readonly unknown[], next: readonly unknown[]): readonly unknown[]
+{
 	const previousIds = uniqueIds(previous);
 	const nextIds = previousIds === null ? null : uniqueIds(next);
 	const byId =
@@ -27,10 +33,12 @@ function shareArray(previous: readonly unknown[], next: readonly unknown[]): rea
 			? null
 			: new Map(previousIds.map((id, index) => [id, previous[index]]));
 	let same = previous.length === next.length;
-	const shared = next.map((item, index) => {
+	const shared = next.map((item, index) =>
+	{
 		const counterpart = byId === null || nextIds === null ? previous[index] : byId.get(nextIds[index] ?? "");
 		const value = counterpart === undefined ? item : shareById(counterpart, item);
-		if (value !== previous[index]) {
+		if (value !== previous[index])
+		{
 			same = false;
 		}
 		return value;
@@ -38,14 +46,17 @@ function shareArray(previous: readonly unknown[], next: readonly unknown[]): rea
 	return same ? previous : shared;
 }
 
-function shareObject(previous: Record<string, unknown>, next: Record<string, unknown>): Record<string, unknown> {
+function shareObject(previous: Record<string, unknown>, next: Record<string, unknown>): Record<string, unknown>
+{
 	const keys = Object.keys(next);
 	let same = Object.keys(previous).length === keys.length;
 	const shared: Record<string, unknown> = {};
-	for (const key of keys) {
+	for (const key of keys)
+	{
 		const value = Object.hasOwn(previous, key) ? shareById(previous[key], next[key]) : next[key];
 		shared[key] = value;
-		if (!Object.hasOwn(previous, key) || value !== previous[key]) {
+		if (!Object.hasOwn(previous, key) || value !== previous[key])
+		{
 			same = false;
 		}
 	}
@@ -59,14 +70,18 @@ function shareObject(previous: Record<string, unknown>, next: Record<string, unk
  * ids are matched by position, as `replaceEqualDeep` does; anything that is not a plain object or array is taken
  * from `next` unless it is identical.
  */
-export function shareById(previous: unknown, next: unknown): unknown {
-	if (previous === next) {
+export function shareById(previous: unknown, next: unknown): unknown
+{
+	if (previous === next)
+	{
 		return previous;
 	}
-	if (Array.isArray(previous) && Array.isArray(next)) {
+	if (Array.isArray(previous) && Array.isArray(next))
+	{
 		return shareArray(previous, next);
 	}
-	if (isPlainObject(previous) && isPlainObject(next)) {
+	if (isPlainObject(previous) && isPlainObject(next))
+	{
 		return shareObject(previous, next);
 	}
 	return next;

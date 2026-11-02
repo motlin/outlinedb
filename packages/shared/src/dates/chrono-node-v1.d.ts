@@ -1,5 +1,7 @@
-declare module "chrono-node-v1" {
-	export interface ParsedComponents {
+declare module "chrono-node-v1"
+{
+	export interface ParsedComponents
+	{
 		knownValues: Record<string, number>;
 		impliedValues: Record<string, number>;
 		get(component: string): number;
@@ -10,7 +12,8 @@ declare module "chrono-node-v1" {
 		clone(): ParsedComponents;
 	}
 
-	export interface ParsedResult {
+	export interface ParsedResult
+	{
 		index: number;
 		text: string;
 		tags: Record<string, boolean>;
@@ -20,35 +23,74 @@ declare module "chrono-node-v1" {
 		date(): Date;
 	}
 
-	export class Refiner {
+	export class Refiner
+	{
 		refine: (text: string, results: ParsedResult[], options?: unknown) => ParsedResult[];
 	}
 
-	export interface ChronoOption {
+	export interface ChronoOption
+	{
 		parsers: unknown[];
-		refiners: (Refiner & {mergeResult?: unknown; isAbleToMerge?: unknown})[];
+		refiners: (Refiner &
+		{
+			mergeResult?: unknown;
+			isAbleToMerge?: unknown;
+		})[];
 	}
 
-	export class Chrono {
+	export class Chrono
+	{
 		constructor(option?: ChronoOption);
 		parsers: unknown[];
-		refiners: (Refiner & {mergeResult?: unknown; isAbleToMerge?: unknown})[];
-		parse(text: string, refDate?: Date, options?: {forwardDate?: boolean}): ParsedResult[];
+		refiners: (Refiner &
+		{
+			mergeResult?: unknown;
+			isAbleToMerge?: unknown;
+		})[];
+		parse(
+			text: string,
+			refDate?: Date,
+			options?:
+			{
+				forwardDate?: boolean;
+			},
+		): ParsedResult[];
 	}
 
-	type OptionFactory = (() => Partial<ChronoOption>) & {casual?: () => Partial<ChronoOption>};
+	type OptionFactory = (() => Partial<ChronoOption>) &
+	{
+		casual?: () => Partial<ChronoOption>;
+	};
 
-	export interface ChronoOptions {
+	export interface ChronoOptions
+	{
 		mergeOptions(options: (Partial<ChronoOption> | (() => Partial<ChronoOption>))[]): ChronoOption;
 		commonPostProcessing: () => Partial<ChronoOption>;
-		en: {casual: () => Partial<ChronoOption>};
+		en:
+		{
+			casual: () => Partial<ChronoOption>;
+		};
 		de: (config: {strict: boolean}) => Partial<ChronoOption>;
-		es: {casual: () => Partial<ChronoOption>};
-		fr: {casual: () => Partial<ChronoOption>};
-		ja: {casual: () => Partial<ChronoOption>};
+		es:
+		{
+			casual: () => Partial<ChronoOption>;
+		};
+		fr:
+		{
+			casual: () => Partial<ChronoOption>;
+		};
+		ja:
+		{
+			casual: () => Partial<ChronoOption>;
+		};
 		zh: OptionFactory;
 	}
 
-	const chrono: {Chrono: typeof Chrono; Refiner: typeof Refiner; options: ChronoOptions};
+	const chrono:
+	{
+		Chrono: typeof Chrono;
+		Refiner: typeof Refiner;
+		options: ChronoOptions;
+	};
 	export default chrono;
 }

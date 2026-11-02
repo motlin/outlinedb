@@ -11,15 +11,26 @@ import type {TestDatabase} from "../../db/migration-helper.js";
 import {createTestNode} from "../../helpers/node-fixtures.js";
 
 const JAN15 = '<time startYear="2026" startMonth="1" startDay="15">Thu, Jan 15, 2026</time>';
-const jan15Tag = {level: "day", value: "15", timestamp: new Date(2026, 0, 15).getTime(), dateId: 20_260_115};
+const jan15Tag =
+{
+	level: "day",
+	value: "15",
+	timestamp: new Date(2026, 0, 15).getTime(),
+	dateId: 20_260_115,
+};
 
-describe("calendar audit command", () => {
+describe("calendar audit command", () =>
+{
 	let originalEnv: typeof process.env;
 	let tempDir: string;
 	let testDatabase: TestDatabase;
 
-	beforeEach(() => {
-		originalEnv = {...process.env};
+	beforeEach(() =>
+	{
+		originalEnv =
+		{
+			...process.env,
+		};
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-calendar-audit-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
@@ -30,72 +41,204 @@ describe("calendar audit command", () => {
 		process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "session");
 	});
 
-	afterEach(() => {
+	afterEach(() =>
+	{
 		vi.restoreAllMocks();
 		process.env = originalEnv;
 		cleanupTestDatabase(testDatabase);
-		fs.rmSync(tempDir, {recursive: true, force: true});
+		fs.rmSync(
+			tempDir,
+			{
+				recursive: true,
+				force: true,
+			},
+		);
 	});
 
 	/** Mirrors the live 2026-01-15 case: an untagged day under month 01 whose only child is the tagged day. */
-	function seedJan15Case(): void {
-		seedTestData(testDatabase, {
-			...nodeFixtures([
-				createTestNode({id: "cal", name: "📆 Calendar", parentId: null}),
-				createTestNode({id: "y2026", name: "2026", parentId: "cal"}),
-				createTestNode({id: "m01", name: "01", parentId: "y2026"}),
-				createTestNode({id: "outer", name: JAN15, parentId: "m01"}),
-				createTestNode({id: "inner", name: JAN15, parentId: "outer"}),
-			]),
-		});
+	function seedJan15Case(): void
+	{
+		seedTestData(
+			testDatabase,
+			{
+				...nodeFixtures([
+					createTestNode(
+						{
+							id: "cal",
+							name: "📆 Calendar",
+							parentId: null,
+						},
+					),
+					createTestNode(
+						{
+							id: "y2026",
+							name: "2026",
+							parentId: "cal",
+						},
+					),
+					createTestNode(
+						{
+							id: "m01",
+							name: "01",
+							parentId: "y2026",
+						},
+					),
+					createTestNode(
+						{
+							id: "outer",
+							name: JAN15,
+							parentId: "m01",
+						},
+					),
+					createTestNode(
+						{
+							id: "inner",
+							name: JAN15,
+							parentId: "outer",
+						},
+					),
+				]),
+			},
+		);
 		const metadata: [string, Record<string, unknown>][] = [
-			["cal", {calendar: {root: true, levels: {year: true, month: true, day: true}}}],
-			["y2026", {calendar: {level: "year", value: "2026", timestamp: 0, dateId: 20_260_000}}],
-			["m01", {calendar: {level: "month", value: "1", timestamp: 0, dateId: 20_260_100}}],
-			["inner", {calendar: jan15Tag}],
+			[
+				"cal",
+				{
+					calendar:
+					{
+						root: true,
+						levels:
+						{
+							year: true,
+							month: true,
+							day: true,
+						},
+					},
+				},
+			],
+			[
+				"y2026",
+				{
+					calendar:
+					{
+						level: "year",
+						value: "2026",
+						timestamp: 0,
+						dateId: 20_260_000,
+					},
+				},
+			],
+			[
+				"m01",
+				{
+					calendar:
+					{
+						level: "month",
+						value: "1",
+						timestamp: 0,
+						dateId: 20_260_100,
+					},
+				},
+			],
+			[
+				"inner",
+				{
+					calendar: jan15Tag,
+				},
+			],
 		];
 		storeInternalMetadata(testDatabase.db, new Map(metadata));
 	}
 
-	it("reports the untagged day and its nested tagged child", async () => {
+	it("reports the untagged day and its nested tagged child", async () =>
+	{
 		seedJan15Case();
 
-		const {stdout} = await captureOutput(async () => {
+		const {stdout} = await captureOutput(async () =>
+		{
 			await CalendarAudit.run(["--json"]);
 		});
 
 		expect(JSON.parse(stdout)).toStrictEqual([
-			{kind: "untagged-day", id: "outer", dateId: 20_260_115},
-			{kind: "nested-day", id: "inner", dateId: 20_260_115},
+			{
+				kind: "untagged-day",
+				id: "outer",
+				dateId: 20_260_115,
+			},
+			{
+				kind: "nested-day",
+				id: "inner",
+				dateId: 20_260_115,
+			},
 		]);
 	});
 
-	it("--fix adopts the untagged day only", async () => {
+	it("--fix adopts the untagged day only", async () =>
+	{
 		seedJan15Case();
 		const setMeta = vi.spyOn(WorkflowyInternalAdapter.prototype, "setNodeMetaValues").mockResolvedValue();
 
-		await captureOutput(async () => {
+		await captureOutput(async () =>
+		{
 			await CalendarAudit.run(["--json", "--fix"]);
 		});
 
-		expect(setMeta.mock.calls).toStrictEqual([["outer", [{path: ["calendar"], value: jan15Tag}]]]);
+		expect(setMeta.mock.calls).toStrictEqual([
+			[
+				"outer",
+				[
+					{
+						path: ["calendar"],
+						value: jan15Tag,
+					},
+				],
+			],
+		]);
 	});
 
-	it("audits the root given by --root-id", async () => {
+	it("audits the root given by --root-id", async () =>
+	{
 		seedJan15Case();
 
-		const {stdout} = await captureOutput(async () => {
+		const {stdout} = await captureOutput(async () =>
+		{
 			await CalendarAudit.run(["--json", "--root-id", "cal"]);
 		});
 
 		expect(JSON.parse(stdout)).toHaveLength(2);
 	});
 
-	it("prints [] for a clean calendar", async () => {
-		seedTestData(testDatabase, nodeFixtures([createTestNode({id: "cal", name: "📆 Calendar", parentId: null})]));
-		storeInternalMetadata(testDatabase.db, new Map([["cal", {calendar: {root: true}}]]));
+	it("prints [] for a clean calendar", async () =>
+	{
+		seedTestData(
+			testDatabase,
+			nodeFixtures([
+				createTestNode(
+					{
+						id: "cal",
+						name: "📆 Calendar",
+						parentId: null,
+					},
+				),
+			]),
+		);
+		storeInternalMetadata(
+			testDatabase.db,
+			new Map([
+				[
+					"cal",
+					{
+						calendar:
+						{
+							root: true,
+						},
+					},
+				],
+			]),
+		);
 
-		const {stdout} = await captureOutput(async () => {
+		const {stdout} = await captureOutput(async () =>
+		{
 			await CalendarAudit.run(["--json"]);
 		});
 

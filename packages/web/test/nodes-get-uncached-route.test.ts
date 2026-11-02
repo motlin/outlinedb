@@ -12,21 +12,28 @@ import {httpAppFor} from "./http-app-for.js";
 
 const FULL = "11111111-2222-3333-4444-555555555555";
 const GONE = "99999999-2222-3333-4444-555555555555";
-const live = vi.hoisted(() => ({
+const live = vi.hoisted(() => (
+{
 	nodes: new Map<string, unknown>(),
 	calls: [] as unknown[][],
-	store: (_node: unknown) => {},
+	store: (_node: unknown) =>
+	{
+	},
 }));
 
-vi.mock("@outlinedb/shared/cache", async (importOriginal) => {
+vi.mock("@outlinedb/shared/cache", async (importOriginal) =>
+{
 	const actual = await importOriginal<typeof SharedCache>();
 	return {
 		...actual,
-		WorkflowyWriteThroughClient: class {
-			async cacheLiveNode(id: string) {
+		WorkflowyWriteThroughClient: class
+		{
+			async cacheLiveNode(id: string)
+			{
 				live.calls.push(["cacheLiveNode", id]);
 				const node = live.nodes.get(id);
-				if (node === undefined) {
+				if (node === undefined)
+				{
 					return Promise.reject(new Error("Failed to get node: 404 Not Found"));
 				}
 				live.store(node);
@@ -39,7 +46,8 @@ vi.mock("@outlinedb/shared/cache", async (importOriginal) => {
 const {CacheService} = await import("@outlinedb/shared/cache");
 const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 
-function apiNode(id: string, parentId: string | null): WorkflowyNode {
+function apiNode(id: string, parentId: string | null): WorkflowyNode
+{
 	return {
 		id,
 		name: id,
@@ -52,39 +60,71 @@ function apiNode(id: string, parentId: string | null): WorkflowyNode {
 	};
 }
 
-function setup() {
+function setup()
+{
 	const sqlite = new DatabaseConstructor(":memory:");
-	const db = drizzle(sqlite, {schema});
-	migrate(db, {migrationsFolder});
+	const db = drizzle(
+		sqlite,
+		{
+			schema,
+		},
+	);
+	migrate(
+		db,
+		{
+			migrationsFolder,
+		},
+	);
 	const cacheService = new CacheService(db);
 	cacheService.insertNode(apiNode("Alpha", null), null);
-	live.store = (node) => {
+	live.store = (node) =>
+	{
 		const n = node as WorkflowyNode;
-		if (cacheService.getNode(n.id) === undefined) {
+		if (cacheService.getNode(n.id) === undefined)
+		{
 			cacheService.insertNode(n, n.parent_id ?? null);
 		}
 	};
-	const ctx = {db, cacheService, apiKey: "k", config: {} as ServerContext["config"]} as unknown as ServerContext;
+	const ctx =
+	{
+		db,
+		cacheService,
+		apiKey: "k",
+		config: {} as ServerContext["config"],
+	} as unknown as ServerContext;
 	const app = new Hono<AppEnv>();
-	app.use("*", async (c, next) => {
+	app.use("*", async (c, next) =>
+	{
 		c.set("ctx", ctx);
 		await next();
 	});
 	app.route("/", httpAppFor(ctx));
-	return {cacheService, get: async (id: string) => app.fetch(new Request(`http://x/api/v1/nodes/${id}`))};
+	return {
+		cacheService,
+		get: async (id: string) => app.fetch(new Request(`http://x/api/v1/nodes/${id}`)),
+	};
 }
 
-describe("GET /api/v1/nodes/:id for uncached nodes", () => {
-	beforeEach(() => {
+describe("GET /api/v1/nodes/:id for uncached nodes", () =>
+{
+	beforeEach(() =>
+	{
 		live.nodes.clear();
 		live.calls.length = 0;
 	});
 
-	it("reads a full uuid live, caches it, and answers 200", async () => {
+	it("reads a full uuid live, caches it, and answers 200", async () =>
+	{
 		const {cacheService, get} = setup();
 		live.nodes.set(FULL, apiNode(FULL, "Alpha"));
 		const res = await get(FULL);
-		expect({status: res.status, cached: cacheService.getNode(FULL) !== undefined, calls: live.calls}).toStrictEqual(
+		expect(
+			{
+				status: res.status,
+				cached: cacheService.getNode(FULL) !== undefined,
+				calls: live.calls,
+			},
+		).toStrictEqual(
 			{
 				status: 200,
 				cached: true,
@@ -93,18 +133,37 @@ describe("GET /api/v1/nodes/:id for uncached nodes", () => {
 		);
 	});
 
-	it("keeps a real API 404 a 404 and stores nothing", async () => {
+	it("keeps a real API 404 a 404 and stores nothing", async () =>
+	{
 		const {cacheService, get} = setup();
 		const res = await get(GONE);
-		expect({status: res.status, cached: cacheService.getNode(GONE) !== undefined}).toStrictEqual({
-			status: 404,
-			cached: false,
-		});
+		expect(
+			{
+				status: res.status,
+				cached: cacheService.getNode(GONE) !== undefined,
+			},
+		).toStrictEqual(
+			{
+				status: 404,
+				cached: false,
+			},
+		);
 	});
 
-	it("answers 404 for an uncached short id without calling the API", async () => {
+	it("answers 404 for an uncached short id without calling the API", async () =>
+	{
 		const {get} = setup();
 		const res = await get("abcdef123456");
-		expect({status: res.status, calls: live.calls}).toStrictEqual({status: 404, calls: []});
+		expect(
+			{
+				status: res.status,
+				calls: live.calls,
+			},
+		).toStrictEqual(
+			{
+				status: 404,
+				calls: [],
+			},
+		);
 	});
 });

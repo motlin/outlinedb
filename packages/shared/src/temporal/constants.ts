@@ -8,7 +8,8 @@ export const FAR_FUTURE_DATE = "9999-12-31 23:59:59";
  * Checks if a record is current based on its systemTo timestamp.
  * Current records have systemTo set to FAR_FUTURE_DATE.
  */
-export function isCurrentRecord(systemTo: string): boolean {
+export function isCurrentRecord(systemTo: string): boolean
+{
 	return systemTo === FAR_FUTURE_DATE;
 }
 
@@ -16,7 +17,8 @@ export function isCurrentRecord(systemTo: string): boolean {
  * Formats a Date object as a temporal timestamp string with millisecond precision.
  * Format: 'YYYY-MM-DD HH:MM:SS.sss' (ISO8601 without timezone)
  */
-export function formatTemporalTimestamp(date: Date): string {
+export function formatTemporalTimestamp(date: Date): string
+{
 	const year = date.getUTCFullYear();
 	const month = String(date.getUTCMonth() + 1).padStart(2, "0");
 	const day = String(date.getUTCDate()).padStart(2, "0");

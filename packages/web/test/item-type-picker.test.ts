@@ -8,29 +8,51 @@ import type {ItemType} from "../src/client/layout-types.js";
 /** The flag-off picker: Dashboard is a Labs type, hidden by default. */
 const ITEM_TYPES = ALL_ITEM_TYPES.filter((type) => type.key !== "dashboard");
 
-vi.mock(import("react-dom"), async (importOriginal) => ({
+vi.mock(import("react-dom"), async (importOriginal) => (
+{
 	...(await importOriginal()),
 	createPortal: (node: ReactNode): ReactPortal => node as ReactPortal,
 }));
 
 const blur = vi.fn<() => void>();
-class FakeElement {
+class FakeElement
+{
 	blur = blur;
 }
 vi.stubGlobal("HTMLElement", FakeElement);
-vi.stubGlobal("document", {activeElement: new FakeElement(), body: {classList: {add: () => {}, remove: () => {}}}});
+vi.stubGlobal(
+	"document",
+	{
+		activeElement: new FakeElement(),
+		body:
+		{
+			classList:
+			{
+				add: () =>
+				{
+				},
+				remove: () =>
+				{
+				},
+			},
+		},
+	},
+);
 
 const {ItemTypePicker, nodeTypeMenuItems} = await import("../src/client/components/layout-menu.js");
 
-function tokens(className: string): string[] {
+function tokens(className: string): string[]
+{
 	return className.split(/\s+/u).filter(Boolean);
 }
 
-function renderItems(): string[] {
+function renderItems(): string[]
+{
 	return nodeTypeMenuItems(ITEM_TYPES, () => {}).map((item) => renderToStaticMarkup(item));
 }
 
-function anchorAttribute(markup: string, name: string): string | undefined {
+function anchorAttribute(markup: string, name: string): string | undefined
+{
 	const open = /^<a[^>]*>/u.exec(markup)?.[0] ?? "";
 	return new RegExp(` ${name}="([^"]*)"`, "u").exec(open)?.[1];
 }
@@ -38,11 +60,14 @@ function anchorAttribute(markup: string, name: string): string | undefined {
 const UPSTREAM_ROW_CLASS =
 	"pl-l py-xs pr-l block !no-underline cursor-pointer whitespace-nowrap leading-base border-solid border-primary text-primary hover:bg-secondary mobile:border-t mobile:last:border-b mobile:py-ml mobile:landscape:pl-safe-left mobile:landscape:pr-safe-right menuItem";
 
-describe("ItemTypePicker items", () => {
-	it("renders the twelve turn_into rows with exact upstream class tokens, handbooks and labels in order", () => {
+describe("ItemTypePicker items", () =>
+{
+	it("renders the twelve turn_into rows with exact upstream class tokens, handbooks and labels in order", () =>
+	{
 		const rows = renderItems();
 		expect(
-			rows.map((row) => ({
+			rows.map((row) => (
+			{
 				classes: tokens(anchorAttribute(row, "class") ?? ""),
 				handbook: anchorAttribute(row, "data-handbook"),
 				placement: anchorAttribute(row, "data-handbook-placement"),
@@ -63,7 +88,8 @@ describe("ItemTypePicker items", () => {
 				["turn_into_quote_block", "Quote"],
 				["turn_into_code_block", "Code Block"],
 				["turn_into_divider", "Divider"],
-			].map(([handbook, label]) => ({
+			].map(([handbook, label]) => (
+			{
 				classes: [...tokens(UPSTREAM_ROW_CLASS), "menuItem", "canHover"],
 				handbook,
 				placement: "right",
@@ -73,26 +99,47 @@ describe("ItemTypePicker items", () => {
 		);
 	});
 
-	it("passes the chosen type to onSelect and blurs the focused picker so it closes", () => {
+	it("passes the chosen type to onSelect and blurs the focused picker so it closes", () =>
+	{
 		const onSelect = vi.fn<(type: ItemType) => void>();
 		nodeTypeMenuItems(ITEM_TYPES, onSelect)[7]?.props.onSelect?.();
-		expect({selected: onSelect.mock.calls, blurs: blur.mock.calls.length}).toStrictEqual({
-			selected: [[ITEM_TYPES[7]]],
-			blurs: 1,
-		});
+		expect(
+			{
+				selected: onSelect.mock.calls,
+				blurs: blur.mock.calls.length,
+			},
+		).toStrictEqual(
+			{
+				selected: [[ITEM_TYPES[7]]],
+				blurs: 1,
+			},
+		);
 	});
 });
 
-describe("ItemTypePicker host", () => {
-	it("renders an absolutely positioned host around a ButtonMenu with no button", () => {
+describe("ItemTypePicker host", () =>
+{
+	it("renders an absolutely positioned host around a ButtonMenu with no button", () =>
+	{
 		expect(
 			renderToStaticMarkup(
-				createElement(ItemTypePicker, {
-					position: {top: 46, left: 1131},
-					types: ITEM_TYPES,
-					onSelect: () => {},
-					onClose: () => {},
-				}),
+				createElement(
+					ItemTypePicker,
+					{
+						position:
+						{
+							top: 46,
+							left: 1131,
+						},
+						types: ITEM_TYPES,
+						onSelect: () =>
+						{
+						},
+						onClose: () =>
+						{
+						},
+					},
+				),
 			),
 		).toBe(
 			`<div style="position:absolute;top:46px;left:1131px"><div tabindex="0" class="relative outline-none menu "><div></div></div></div>`,

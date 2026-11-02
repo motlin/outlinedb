@@ -4,7 +4,8 @@
    License: MPL-2.0
  */
 
-._theme-one_dark {
+._theme-one_dark
+{
 	--wf-background-primary: #282c33;
 	--wf-background-secondary: #2f343e;
 	--wf-background-tertiary: #3b4048;
@@ -68,20 +69,23 @@
 	--wf-border-warning: #dfc184;
 	--wf-border-success: #a1c181;
 
-	.wf-header {
+	.wf-header
+	{
 		--wf-background-primary: #282c33;
 		--wf-text-primary: #5d636f;
 		--wf-text-secondary: #c8ccd4;
 		--wf-border-primary: #2f343e;
 	}
 
-	.wf-menu {
+	.wf-menu
+	{
 		--wf-text-primary: #c8ccd4;
 		--wf-border-primary: #3b4048;
 		--wf-border-secondary: #5d636f;
 	}
 
-	.wf-helper {
+	.wf-helper
+	{
 		--wf-background-primary: #3b4048;
 	}
 }

@@ -5,7 +5,8 @@ import {CacheService} from "../../services/cache.js";
 import {logger} from "../../services/logger.js";
 import {PathResolutionService} from "../../services/path-resolution.js";
 
-export default class PathToId extends Command {
+export default class PathToId extends Command
+{
 	static override description = "Resolve a Workflowy path to a node ID";
 
 	static override examples = [
@@ -22,25 +23,33 @@ export default class PathToId extends Command {
 		'<%= config.bin %> <%= command.id %> --path "Home,Inbox" --data-source cache',
 	];
 
-	static override flags = {
-		path: Flags.string({
-			char: "p",
-			description: 'Comma-separated path to the node (e.g., "Work,Projects,My Project")',
-			required: true,
-		}),
-		"root-id": Flags.string({
-			char: "r",
-			description: "Root node ID to start path from (omit for root level)",
-		}),
-		"data-source": Flags.option({
-			char: "d",
-			description: "Data source to use: auto (default), api, or cache",
-			options: ["auto", "api", "cache"] as const,
-			default: "auto",
-		})(),
+	static override flags =
+	{
+		path: Flags.string(
+			{
+				char: "p",
+				description: 'Comma-separated path to the node (e.g., "Work,Projects,My Project")',
+				required: true,
+			},
+		),
+		"root-id": Flags.string(
+			{
+				char: "r",
+				description: "Root node ID to start path from (omit for root level)",
+			},
+		),
+		"data-source": Flags.option(
+			{
+				char: "d",
+				description: "Data source to use: auto (default), api, or cache",
+				options: ["auto", "api", "cache"] as const,
+				default: "auto",
+			},
+		)(),
 	};
 
-	public async run(): Promise<void> {
+	public async run(): Promise<void>
+	{
 		const {flags} = await this.parse(PathToId);
 
 		const database = createDatabase();
@@ -48,7 +57,8 @@ export default class PathToId extends Command {
 
 		let apiClient: WorkflowyApiClient | null = null;
 		const apiKey = process.env.WORKFLOWY_API_KEY;
-		if (apiKey) {
+		if (apiKey)
+		{
 			apiClient = new WorkflowyApiClient(apiKey, logger, process.env.WORKFLOWY_API_URL);
 		}
 
@@ -57,16 +67,21 @@ export default class PathToId extends Command {
 		const rootId = flags["root-id"] ?? null;
 		const dataSource = flags["data-source"];
 
-		try {
-			const result = await pathResolutionService.resolveTargetNodeId({
-				rootId,
-				path: flags.path,
-				dataSource,
-			});
+		try
+		{
+			const result = await pathResolutionService.resolveTargetNodeId(
+				{
+					rootId,
+					path: flags.path,
+					dataSource,
+				},
+			);
 
 			// Output only the node ID for easy composition with other commands
 			this.log(result.nodeId);
-		} catch (error) {
+		}
+		catch (error)
+		{
 			this.error(String(error));
 		}
 	}

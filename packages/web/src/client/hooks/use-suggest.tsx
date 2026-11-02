@@ -6,12 +6,14 @@ import {suggestInputAction, suggestKeyAction, suggestMode} from "../suggest/sugg
 import type {SuggestOptions} from "../suggest/suggest-engine.js";
 import {useOutlineStore} from "../stores/outline.js";
 
-export interface SuggestRange {
+export interface SuggestRange
+{
 	readonly start: number;
 	readonly end: number;
 }
 
-export interface SuggestOpen<G> {
+export interface SuggestOpen<G>
+{
 	groups: G;
 	index: number;
 	keyboardMode: boolean;
@@ -20,13 +22,15 @@ export interface SuggestOpen<G> {
 	top: number;
 }
 
-export interface SuggestMenuProps<G> extends SuggestOpen<G> {
+export interface SuggestMenuProps<G> extends SuggestOpen<G>
+{
 	onSelect: (index: number) => void;
 	onHover: (index: number) => void;
 	onMouseMove: () => void;
 }
 
-export interface SuggestSelectContext {
+export interface SuggestSelectContext
+{
 	chip: HTMLElement;
 	/** Replace the chip with `text` as plain text and close the menu; the caret goes to the end of it. */
 	replaceChip: (text: string) => void;
@@ -35,7 +39,8 @@ export interface SuggestSelectContext {
 }
 
 /** A client of the shared engine: upstream's `WF.Suggest.for` options plus its search and popup. */
-export interface SuggestClient<G, O> {
+export interface SuggestClient<G, O>
+{
 	opts: SuggestOptions;
 	planOpen: (text: string, index: number) => SuggestRange | null;
 	planRearm: (text: string, caret: number) => SuggestRange | null;
@@ -51,26 +56,38 @@ export interface SuggestClient<G, O> {
 	renderMenu: (props: SuggestMenuProps<G>) => ReactNode;
 }
 
-export interface SuggestInputResult {
+export interface SuggestInputResult
+{
 	armedBefore: boolean;
 	armedAfter: boolean;
 }
 
 /** The selection's collapsed caret inside `editor` when it sits in a text node there. */
-function caretTextNode(editor: HTMLElement): {node: Text; offset: number} | null {
+function caretTextNode(editor: HTMLElement):
+{
+	node: Text;
+	offset: number;
+} | null
+{
 	const selection = globalThis.getSelection();
-	if (selection === null || !selection.isCollapsed || selection.rangeCount === 0) {
+	if (selection === null || !selection.isCollapsed || selection.rangeCount === 0)
+	{
 		return null;
 	}
 	const {focusNode, focusOffset} = selection;
-	if (!(focusNode instanceof Text) || !editor.contains(focusNode)) {
+	if (!(focusNode instanceof Text) || !editor.contains(focusNode))
+	{
 		return null;
 	}
-	return {node: focusNode, offset: focusOffset};
+	return {
+		node: focusNode,
+		offset: focusOffset,
+	};
 }
 
 /** Wraps `range` of `node` in a chip and puts the caret at the end of the chip's text node. */
-function wrapChip(node: Text, range: SuggestRange, className: string): HTMLSpanElement {
+function wrapChip(node: Text, range: SuggestRange, className: string): HTMLSpanElement
+{
 	const chipText = node.splitText(range.start);
 	chipText.splitText(range.end - range.start);
 	const chip = document.createElement("span");
@@ -86,12 +103,21 @@ function wrapChip(node: Text, range: SuggestRange, className: string): HTMLSpanE
 	return chip;
 }
 
-function chipAnchor(chip: HTMLElement): {left: number; top: number} {
+function chipAnchor(chip: HTMLElement):
+{
+	left: number;
+	top: number;
+}
+{
 	const rect = chip.getBoundingClientRect();
-	return {left: rect.left + globalThis.scrollX, top: rect.bottom + globalThis.scrollY};
+	return {
+		left: rect.left + globalThis.scrollX,
+		top: rect.bottom + globalThis.scrollY,
+	};
 }
 
-interface TriggerEntry {
+interface TriggerEntry
+{
 	editorRef: React.RefObject<HTMLElement | null>;
 	trigger: () => boolean;
 }
@@ -102,16 +128,20 @@ const triggerEntries = new Set<TriggerEntry>();
  * Upstream's `WF.Suggest.trigger()`: re-runs the open planners as if the character before the caret had just
  * been typed. Command-inserted prefixes (`insert_at_tag`) use it. Returns whether a chip armed.
  */
-export function triggerSuggest(editor: HTMLElement): boolean {
-	for (const entry of triggerEntries) {
-		if (entry.editorRef.current === editor && entry.trigger()) {
+export function triggerSuggest(editor: HTMLElement): boolean
+{
+	for (const entry of triggerEntries)
+	{
+		if (entry.editorRef.current === editor && entry.trigger())
+		{
 			return true;
 		}
 	}
 	return false;
 }
 
-interface SuggestOptionsInput<G, O> {
+interface SuggestOptionsInput<G, O>
+{
 	editorRef: React.RefObject<HTMLElement | null>;
 	client: SuggestClient<G, O>;
 }
@@ -126,7 +156,8 @@ interface SuggestOptionsInput<G, O> {
 export function useSuggest<G, O>({
 	editorRef,
 	client,
-}: SuggestOptionsInput<G, O>): {
+}: SuggestOptionsInput<G, O>):
+{
 	handleInput: (event?: Event) => SuggestInputResult;
 	handleKeyDown: (event: React.KeyboardEvent) => boolean;
 	isOpen: () => boolean;
@@ -134,15 +165,18 @@ export function useSuggest<G, O>({
 	/** Re-run the client's search for the armed chip (an async result arrived); a strict client with no results abandons. */
 	refresh: () => void;
 	menu: ReactNode;
-} {
+}
+{
 	const clientRef = useRef(client);
-	useLayoutEffect(() => {
+	useLayoutEffect(() =>
+	{
 		clientRef.current = client;
 	});
 	const [open, setOpenState] = useState<SuggestOpen<G> | null>(null);
 	const openRef = useRef<SuggestOpen<G> | null>(null);
 	const chipRef = useRef<HTMLSpanElement | null>(null);
-	const setOpen = useCallback((next: SuggestOpen<G> | null) => {
+	const setOpen = useCallback((next: SuggestOpen<G> | null) =>
+	{
 		openRef.current = next;
 		setOpenState(next);
 	}, []);
@@ -153,17 +187,21 @@ export function useSuggest<G, O>({
 	 * was in the editor. Returns the replacement's start offset in the editor's text.
 	 */
 	const disarm = useCallback(
-		({text, caretAtEnd}: {text?: string; caretAtEnd: boolean}): number | null => {
+		({text, caretAtEnd}: {text?: string; caretAtEnd: boolean}): number | null =>
+		{
 			const chip = chipRef.current;
 			const editor = editorRef.current;
 			chipRef.current = null;
-			if (chip !== null) {
+			if (chip !== null)
+			{
 				unpop("suggest");
 			}
-			if (openRef.current !== null) {
+			if (openRef.current !== null)
+			{
 				setOpen(null);
 			}
-			if (chip === null || editor === null || !chip.isConnected) {
+			if (chip === null || editor === null || !chip.isConnected)
+			{
 				return null;
 			}
 			const start = unitsBefore(editor, chip, 0);
@@ -177,9 +215,12 @@ export function useSuggest<G, O>({
 					: null;
 			chip.replaceWith(document.createTextNode(replacement));
 			editor.normalize();
-			if (caretAtEnd) {
+			if (caretAtEnd)
+			{
 				placeCaretAtTextOffset(editor, start + replacement.length);
-			} else if (caret !== null) {
+			}
+			else if (caret !== null)
+			{
 				placeCaretAtTextOffset(editor, Math.min(caret, start + replacement.length));
 			}
 			return start;
@@ -187,28 +228,44 @@ export function useSuggest<G, O>({
 		[editorRef, setOpen],
 	);
 
-	const onChange = useCallback(() => {
+	const onChange = useCallback(() =>
+	{
 		clientRef.current.onChange();
 	}, []);
 
-	const detach = useCallback(() => {
-		if (chipRef.current !== null || openRef.current !== null) {
-			disarm({caretAtEnd: false});
+	const detach = useCallback(() =>
+	{
+		if (chipRef.current !== null || openRef.current !== null)
+		{
+			disarm(
+				{
+					caretAtEnd: false,
+				},
+			);
 			onChange();
 		}
 	}, [disarm, onChange]);
 
 	const arm = useCallback(
-		(node: Text, range: SuggestRange): boolean => {
+		(node: Text, range: SuggestRange): boolean =>
+		{
 			const current = clientRef.current;
 			const groups = current.search(node.data.slice(range.start, range.end));
-			if (groups === null) {
+			if (groups === null)
+			{
 				return false;
 			}
 			const chip = wrapChip(node, range, current.opts.chipClassName);
 			chipRef.current = chip;
 			pop("suggest", chip);
-			setOpen({groups, index: 0, keyboardMode: true, ...chipAnchor(chip)});
+			setOpen(
+				{
+					groups,
+					index: 0,
+					keyboardMode: true,
+					...chipAnchor(chip),
+				},
+			);
 			current.onArm?.(chip);
 			return true;
 		},
@@ -217,21 +274,26 @@ export function useSuggest<G, O>({
 
 	/** Arm on the character before the caret as if `inputType` had just typed it. */
 	const openFromCaret = useCallback(
-		(inputType: string): boolean => {
+		(inputType: string): boolean =>
+		{
 			const editor = editorRef.current;
-			if (editor === null) {
+			if (editor === null)
+			{
 				return false;
 			}
 			const caret = caretTextNode(editor);
-			if (caret === null) {
+			if (caret === null)
+			{
 				return false;
 			}
 			const current = clientRef.current;
-			if (inputType.startsWith("insert") && caret.node.data[caret.offset - 1] === current.opts.prefix) {
+			if (inputType.startsWith("insert") && caret.node.data[caret.offset - 1] === current.opts.prefix)
+			{
 				const range = current.planOpen(caret.node.data, caret.offset - 1);
 				return range !== null && arm(caret.node, range);
 			}
-			if (inputType.startsWith("delete")) {
+			if (inputType.startsWith("delete"))
+			{
 				const range = current.planRearm(caret.node.data, caret.offset);
 				return range !== null && arm(caret.node, range);
 			}
@@ -241,43 +303,82 @@ export function useSuggest<G, O>({
 	);
 
 	const handleInput = useCallback(
-		(event?: Event): SuggestInputResult => {
+		(event?: Event): SuggestInputResult =>
+		{
 			const editor = editorRef.current;
-			if (editor === null) {
-				return {armedBefore: false, armedAfter: false};
+			if (editor === null)
+			{
+				return {
+					armedBefore: false,
+					armedAfter: false,
+				};
 			}
 			const chip = chipRef.current;
 			const inputEvent = event instanceof InputEvent ? event : undefined;
 			const inputType = inputEvent?.inputType ?? "";
-			if (chip !== null) {
+			if (chip !== null)
+			{
 				const current = clientRef.current;
 				const groups = chip.isConnected ? current.search(chip.textContent) : null;
-				const action = suggestInputAction({
-					chipText: chip.textContent,
-					inserted: inputEvent?.data ?? null,
-					deleting: inputType.startsWith("delete"),
-					composing: inputEvent?.isComposing === true,
-					resultsEmpty: groups === null,
-					opts: current.opts,
-				});
-				if (action === "abandon" || !chip.isConnected) {
-					disarm({caretAtEnd: false});
-					return {armedBefore: true, armedAfter: false};
+				const action = suggestInputAction(
+					{
+						chipText: chip.textContent,
+						inserted: inputEvent?.data ?? null,
+						deleting: inputType.startsWith("delete"),
+						composing: inputEvent?.isComposing === true,
+						resultsEmpty: groups === null,
+						opts: current.opts,
+					},
+				);
+				if (action === "abandon" || !chip.isConnected)
+				{
+					disarm(
+						{
+							caretAtEnd: false,
+						},
+					);
+					return {
+						armedBefore: true,
+						armedAfter: false,
+					};
 				}
-				setOpen(groups === null ? null : {groups, index: 0, keyboardMode: true, ...chipAnchor(chip)});
-				return {armedBefore: true, armedAfter: true};
+				setOpen(
+					groups === null
+						? null
+						:
+							{
+								groups,
+								index: 0,
+								keyboardMode: true,
+								...chipAnchor(chip),
+							},
+				);
+				return {
+					armedBefore: true,
+					armedAfter: true,
+				};
 			}
-			return {armedBefore: false, armedAfter: openFromCaret(inputType)};
+			return {
+				armedBefore: false,
+				armedAfter: openFromCaret(inputType),
+			};
 		},
 		[disarm, editorRef, openFromCaret, setOpen],
 	);
 
-	useEffect(() => {
-		const entry: TriggerEntry = {editorRef, trigger: () => openFromCaret("insertText")};
+	useEffect(() =>
+	{
+		const entry: TriggerEntry =
+		{
+			editorRef,
+			trigger: () => openFromCaret("insertText"),
+		};
 		triggerEntries.add(entry);
-		return () => {
+		return () =>
+		{
 			triggerEntries.delete(entry);
-			if (chipRef.current !== null) {
+			if (chipRef.current !== null)
+			{
 				chipRef.current = null;
 				unpop("suggest");
 			}
@@ -285,74 +386,112 @@ export function useSuggest<G, O>({
 	}, [editorRef, openFromCaret]);
 
 	const run = useCallback(
-		(index: number) => {
+		(index: number) =>
+		{
 			const current = openRef.current;
 			const chip = chipRef.current;
 			const owner = clientRef.current;
 			const option = current === null ? undefined : owner.option(current.groups, index);
-			if (option === undefined || chip === null) {
+			if (option === undefined || chip === null)
+			{
 				return;
 			}
 			const anchorRect = chip.getBoundingClientRect();
-			owner.select(option, {
-				chip,
-				anchorRect,
-				replaceChip: (text) => {
-					disarm({text, caretAtEnd: true});
+			owner.select(
+				option,
+				{
+					chip,
+					anchorRect,
+					replaceChip: (text) =>
+					{
+						disarm(
+							{
+								text,
+								caretAtEnd: true,
+							},
+						);
+					},
 				},
-			});
+			);
 		},
 		[disarm],
 	);
 
 	const handleKeyDown = useCallback(
-		(event: React.KeyboardEvent): boolean => {
+		(event: React.KeyboardEvent): boolean =>
+		{
 			const current = openRef.current;
 			const chip = chipRef.current;
-			if (chip === null || event.nativeEvent.isComposing) {
+			if (chip === null || event.nativeEvent.isComposing)
+			{
 				return false;
 			}
 			const caret = editorRef.current === null ? null : caretTextNode(editorRef.current);
-			const action = suggestKeyAction({
-				key: event.key,
-				ctrlKey: event.ctrlKey,
-				metaKey: event.metaKey,
-				caretAtChipEnd: caret !== null && chip.contains(caret.node) && caret.offset === caret.node.length,
-			});
-			if (action === null) {
+			const action = suggestKeyAction(
+				{
+					key: event.key,
+					ctrlKey: event.ctrlKey,
+					metaKey: event.metaKey,
+					caretAtChipEnd: caret !== null && chip.contains(caret.node) && caret.offset === caret.node.length,
+				},
+			);
+			if (action === null)
+			{
 				return false;
 			}
-			if (action === "disarmNoAbandon") {
+			if (action === "disarmNoAbandon")
+			{
 				// Upstream removes the chip and its text and swallows the key: the app's undo never runs.
 				event.preventDefault();
 				event.stopPropagation();
-				disarm({text: "", caretAtEnd: true});
+				disarm(
+					{
+						text: "",
+						caretAtEnd: true,
+					},
+				);
 				onChange();
 				return true;
 			}
-			if (current === null) {
+			if (current === null)
+			{
 				return false;
 			}
 			event.preventDefault();
 			event.stopPropagation();
 			const count = clientRef.current.count(current.groups);
-			switch (action) {
+			switch (action)
+			{
 				case "down":
-				case "up": {
-					if (count === 0) {
+				case "up":
+				{
+					if (count === 0)
+					{
 						break;
 					}
 					const step = action === "down" ? 1 : -1;
-					setOpen({...current, index: (current.index + step + count) % count, keyboardMode: true});
+					setOpen(
+						{
+							...current,
+							index: (current.index + step + count) % count,
+							keyboardMode: true,
+						},
+					);
 					break;
 				}
-				case "select": {
+				case "select":
+				{
 					run(current.index);
 					break;
 				}
-				case "abandon": {
+				case "abandon":
+				{
 					// The caret keeps its offset inside the replaced text.
-					disarm({caretAtEnd: false});
+					disarm(
+						{
+							caretAtEnd: false,
+						},
+					);
 					onChange();
 					break;
 				}
@@ -363,20 +502,25 @@ export function useSuggest<G, O>({
 	);
 
 	// The caret leaving the chip (a click elsewhere, ArrowLeft past it) disarms and keeps the text.
-	useEffect(() => {
-		if (open === null) {
+	useEffect(() =>
+	{
+		if (open === null)
+		{
 			// oxlint-disable-next-line unicorn/no-useless-undefined -- consistent-return needs a value beside the cleanup return
 			return undefined;
 		}
-		const onSelectionChange = () => {
+		const onSelectionChange = () =>
+		{
 			const chip = chipRef.current;
 			const focus = globalThis.getSelection()?.focusNode ?? null;
-			if (chip !== null && (focus === null || !chip.contains(focus))) {
+			if (chip !== null && (focus === null || !chip.contains(focus)))
+			{
 				detach();
 			}
 		};
 		document.addEventListener("selectionchange", onSelectionChange);
-		return () => {
+		return () =>
+		{
 			document.removeEventListener("selectionchange", onSelectionChange);
 		};
 	}, [open, detach]);
@@ -384,8 +528,10 @@ export function useSuggest<G, O>({
 	// Navigating to another location disarms.
 	useEffect(
 		() =>
-			useOutlineStore.subscribe((state, previous) => {
-				if (state.zoomedNodeId !== previous.zoomedNodeId) {
+			useOutlineStore.subscribe((state, previous) =>
+			{
+				if (state.zoomedNodeId !== previous.zoomedNodeId)
+				{
 					detach();
 				}
 			}),
@@ -394,49 +540,99 @@ export function useSuggest<G, O>({
 
 	const isOpen = useCallback(() => chipRef.current !== null, []);
 
-	const refresh = useCallback(() => {
+	const refresh = useCallback(() =>
+	{
 		const chip = chipRef.current;
 		const current = openRef.current;
-		if (chip === null || current === null || !chip.isConnected) {
+		if (chip === null || current === null || !chip.isConnected)
+		{
 			return;
 		}
 		const owner = clientRef.current;
 		const groups = owner.search(chip.textContent);
-		if (groups === null) {
-			if (owner.opts.strict === true) {
-				disarm({caretAtEnd: false});
+		if (groups === null)
+		{
+			if (owner.opts.strict === true)
+			{
+				disarm(
+					{
+						caretAtEnd: false,
+					},
+				);
 				onChange();
 			}
 			return;
 		}
-		setOpen({...current, groups, index: Math.min(current.index, Math.max(0, owner.count(groups) - 1))});
+		setOpen(
+			{
+				...current,
+				groups,
+				index: Math.min(current.index, Math.max(0, owner.count(groups) - 1)),
+			},
+		);
 	}, [disarm, onChange, setOpen]);
 
 	const hover = useCallback(
-		(index: number) => {
+		(index: number) =>
+		{
 			const current = openRef.current;
-			if (current !== null) {
+			if (current !== null)
+			{
 				const mode = suggestMode(
-					{index: current.index, hidden: false, keyboardMode: current.keyboardMode},
-					{type: "hover", index},
+					{
+						index: current.index,
+						hidden: false,
+						keyboardMode: current.keyboardMode,
+					},
+					{
+						type: "hover",
+						index,
+					},
 				);
-				setOpen({...current, index: mode.index, keyboardMode: mode.keyboardMode});
+				setOpen(
+					{
+						...current,
+						index: mode.index,
+						keyboardMode: mode.keyboardMode,
+					},
+				);
 			}
 		},
 		[setOpen],
 	);
-	const mouseMove = useCallback(() => {
+	const mouseMove = useCallback(() =>
+	{
 		const current = openRef.current;
-		if (current?.keyboardMode === true) {
-			setOpen({...current, keyboardMode: false});
+		if (current?.keyboardMode === true)
+		{
+			setOpen(
+				{
+					...current,
+					keyboardMode: false,
+				},
+			);
 		}
 	}, [setOpen]);
 
 	const menu =
 		open === null
 			? null
-			: // oxlint-disable-next-line react/refs -- `run` reads the latest client from the ref only in event handlers
-				client.renderMenu({...open, onSelect: run, onHover: hover, onMouseMove: mouseMove});
+			: client.renderMenu(
+					// oxlint-disable-next-line react/refs -- `run` reads the latest client from the ref only in event handlers
+					{
+						...open,
+						onSelect: run,
+						onHover: hover,
+						onMouseMove: mouseMove,
+					},
+				);
 
-	return {handleInput, handleKeyDown, isOpen, detach, refresh, menu};
+	return {
+		handleInput,
+		handleKeyDown,
+		isOpen,
+		detach,
+		refresh,
+		menu,
+	};
 }

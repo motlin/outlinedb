@@ -9,10 +9,19 @@ import type {Command} from "./keys/dispatch.js";
 export function starCurrentItemCommand(
 	toggleStar: (loc: StarredLocation) => Promise<unknown>,
 	committedQuery: () => string | null,
-): Command {
+): Command
+{
 	return {
-		execute(ctx) {
-			void toggleStar(starCurrentLocation({zoomedId: ctx.zoomedId, query: committedQuery()}));
+		execute(ctx)
+		{
+			void toggleStar(
+				starCurrentLocation(
+					{
+						zoomedId: ctx.zoomedId,
+						query: committedQuery(),
+					},
+				),
+			);
 		},
 	};
 }

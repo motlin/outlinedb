@@ -6,7 +6,8 @@ import {buildMonthArchive, compressFileInPlace, resolveBackupsDirectory} from ".
 const BACKUP_SOURCES = ["Data", "History"] as const;
 type BackupSource = (typeof BACKUP_SOURCES)[number];
 
-interface LooseBackup {
+interface LooseBackup
+{
 	filename: string;
 	filePath: string;
 	backupDate: Date;
@@ -14,7 +15,8 @@ interface LooseBackup {
 	compressed: boolean;
 }
 
-export default class BackupsArchive extends Command {
+export default class BackupsArchive extends Command
+{
 	static override description =
 		"Compress local backups: keep recent days as per-file .zst, fold older days into solid monthly archives";
 
@@ -24,23 +26,30 @@ export default class BackupsArchive extends Command {
 		"<%= config.bin %> backups:archive --source Data",
 	];
 
-	static override flags = {
-		"keep-days": Flags.integer({
-			description:
-				"Days of backups to keep as individually compressed files before folding into monthly archives",
-			default: 30,
-		}),
-		source: Flags.option({
-			description: "Limit to a single backup source",
-			options: BACKUP_SOURCES,
-		})(),
+	static override flags =
+	{
+		"keep-days": Flags.integer(
+			{
+				description:
+					"Days of backups to keep as individually compressed files before folding into monthly archives",
+				default: 30,
+			},
+		),
+		source: Flags.option(
+			{
+				description: "Limit to a single backup source",
+				options: BACKUP_SOURCES,
+			},
+		)(),
 	};
 
-	public async run(): Promise<void> {
+	public async run(): Promise<void>
+	{
 		const {flags} = await this.parse(BackupsArchive);
 
 		const backupsDirectory = resolveBackupsDirectory();
-		if (!fs.existsSync(backupsDirectory)) {
+		if (!fs.existsSync(backupsDirectory))
+		{
 			this.error(`No backups directory found at ${backupsDirectory}`);
 		}
 
@@ -50,7 +59,8 @@ export default class BackupsArchive extends Command {
 		const sources = flags.source ? [flags.source] : [...BACKUP_SOURCES];
 		const sizeBefore = directorySize(backupsDirectory);
 
-		for (const source of sources) {
+		for (const source of sources)
+		{
 			this.archiveSource(backupsDirectory, source, cutoff);
 		}
 
@@ -58,14 +68,17 @@ export default class BackupsArchive extends Command {
 		this.log(`\n📦 backups/: ${formatBytes(sizeBefore)} → ${formatBytes(sizeAfter)}`);
 	}
 
-	private archiveSource(backupsDirectory: string, source: BackupSource, cutoff: Date): void {
+	private archiveSource(backupsDirectory: string, source: BackupSource, cutoff: Date): void
+	{
 		const sourceDir = path.join(backupsDirectory, source);
-		if (!fs.existsSync(sourceDir)) {
+		if (!fs.existsSync(sourceDir))
+		{
 			return;
 		}
 
 		const looseBackups = scanLooseBackups(sourceDir);
-		if (looseBackups.length === 0) {
+		if (looseBackups.length === 0)
+		{
 			this.log(`${source}: nothing to do`);
 			return;
 		}
@@ -74,15 +87,18 @@ export default class BackupsArchive extends Command {
 		const old = looseBackups.filter((backup) => backup.backupDate < cutoff);
 
 		let compressedCount = 0;
-		for (const backup of recent) {
-			if (!backup.compressed) {
+		for (const backup of recent)
+		{
+			if (!backup.compressed)
+			{
 				compressFileInPlace(backup.filePath);
 				compressedCount++;
 			}
 		}
 
 		const byMonth = new Map<string, LooseBackup[]>();
-		for (const backup of old) {
+		for (const backup of old)
+		{
 			const monthBackups = byMonth.get(backup.month) ?? [];
 			monthBackups.push(backup);
 			byMonth.set(backup.month, monthBackups);
@@ -90,13 +106,15 @@ export default class BackupsArchive extends Command {
 
 		const archiveDir = path.join(sourceDir, "archive");
 		const monthsAscending = [...byMonth.entries()].toSorted(([a], [b]) => a.localeCompare(b));
-		for (const [month, monthBackups] of monthsAscending) {
+		for (const [month, monthBackups] of monthsAscending)
+		{
 			const archivePath = path.join(archiveDir, `${month}.tar.zst`);
 			buildMonthArchive(
 				archivePath,
 				monthBackups.map((backup) => backup.filePath),
 			);
-			for (const backup of monthBackups) {
+			for (const backup of monthBackups)
+			{
 				fs.rmSync(backup.filePath);
 			}
 			this.log(`${source}: archived ${monthBackups.length} file(s) → archive/${month}.tar.zst`);
@@ -107,11 +125,13 @@ export default class BackupsArchive extends Command {
 }
 
 /** Extract the backup date from a Data, History, or legacy filename (ignoring a `.zst` suffix). */
-function parseDate(filename: string): Date | null {
+function parseDate(filename: string): Date | null
+{
 	const base = filename.replace(/\.zst$/u, "");
 	const match = base.match(/(\d{4}-\d{2}-\d{2})\.(?:workflowy\.backup|txt|json)$/u);
 	const dateText = match?.[1];
-	if (dateText === undefined) {
+	if (dateText === undefined)
+	{
 		return null;
 	}
 
@@ -119,39 +139,55 @@ function parseDate(filename: string): Date | null {
 	return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function scanLooseBackups(sourceDir: string): LooseBackup[] {
+function scanLooseBackups(sourceDir: string): LooseBackup[]
+{
 	const backups: LooseBackup[] = [];
 
-	for (const filename of fs.readdirSync(sourceDir)) {
+	for (const filename of fs.readdirSync(sourceDir))
+	{
 		const filePath = path.join(sourceDir, filename);
-		if (!fs.statSync(filePath).isFile()) {
+		if (!fs.statSync(filePath).isFile())
+		{
 			continue;
 		}
 
 		const backupDate = parseDate(filename);
-		if (!backupDate) {
+		if (!backupDate)
+		{
 			continue;
 		}
 
-		backups.push({
-			filename,
-			filePath,
-			backupDate,
-			month: backupDate.toISOString().slice(0, 7),
-			compressed: filename.endsWith(".zst"),
-		});
+		backups.push(
+			{
+				filename,
+				filePath,
+				backupDate,
+				month: backupDate.toISOString().slice(0, 7),
+				compressed: filename.endsWith(".zst"),
+			},
+		);
 	}
 
 	return backups;
 }
 
-function directorySize(directory: string): number {
+function directorySize(directory: string): number
+{
 	let total = 0;
-	for (const entry of fs.readdirSync(directory, {withFileTypes: true})) {
+	for (const entry of fs.readdirSync(
+		directory,
+		{
+			withFileTypes: true,
+		},
+	))
+	{
 		const entryPath = path.join(directory, entry.name);
-		if (entry.isDirectory()) {
+		if (entry.isDirectory())
+		{
 			total += directorySize(entryPath);
-		} else if (entry.isFile()) {
+		}
+		else if (entry.isFile())
+		{
 			total += fs.statSync(entryPath).size;
 		}
 	}
@@ -159,11 +195,13 @@ function directorySize(directory: string): number {
 	return total;
 }
 
-function formatBytes(bytes: number): string {
+function formatBytes(bytes: number): string
+{
 	const units = ["B", "KB", "MB", "GB"];
 	let value = bytes;
 	let unitIndex = 0;
-	while (value >= 1024 && unitIndex < units.length - 1) {
+	while (value >= 1024 && unitIndex < units.length - 1)
+	{
 		value /= 1024;
 		unitIndex++;
 	}

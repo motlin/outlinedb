@@ -17,39 +17,61 @@ export function calendarPickerSettingsRows(
 	settings: CalendarSettings,
 	onToggle: (key: keyof CalendarSettings) => void,
 	onLayout: () => void,
-): ReactElement[] {
+): ReactElement[]
+{
 	return [
-		<MenuSeparator key="calendar-found-dates-separator" style={{margin: 0}} />,
+		<MenuSeparator
+			key="calendar-found-dates-separator"
+			style={
+			{
+				margin: 0,
+			}}
+		/>,
 		<MenuItem
 			key="calendar-found-dates"
 			label="Found Dates"
 			subtext="Shows all matching dates"
 			icon={<Toggle on={settings.foundDates} />}
 			className={ROW_CLASS}
-			onSelect={() => {
+			onSelect={() =>
+			{
 				onToggle("foundDates");
 				return true;
 			}}
 		/>,
-		<MenuSeparator key="calendar-friendly-names-separator" style={{margin: 0}} />,
+		<MenuSeparator
+			key="calendar-friendly-names-separator"
+			style={
+			{
+				margin: 0,
+			}}
+		/>,
 		<MenuItem
 			key="calendar-friendly-names"
 			label="Friendly day names"
 			subtext="Yesterday, Today, Tomorrow"
 			icon={<Toggle on={settings.dayPrefix} />}
 			className={ROW_CLASS}
-			onSelect={() => {
+			onSelect={() =>
+			{
 				onToggle("dayPrefix");
 				return true;
 			}}
 		/>,
-		<MenuSeparator key="calendar-layout-separator" style={{margin: 0}} />,
+		<MenuSeparator
+			key="calendar-layout-separator"
+			style={
+			{
+				margin: 0,
+			}}
+		/>,
 		<MenuItem
 			key="calendar-layout"
 			label="Calendar Layout"
 			icon="fal:gear"
 			className={ROW_CLASS}
-			onSelect={() => {
+			onSelect={() =>
+			{
 				onLayout();
 				return true;
 			}}
@@ -61,8 +83,10 @@ export function calendarPickerSettingsRows(
  * Upstream `S10`, the strip picker's day content: the day number, then a `circle-small` dot pinned to the cell's
  * bottom only when `hasDot` (journal content, or a Found Date while Found Dates is on).
  */
-export function calendarDayContent(hasDot: (date: Date) => boolean): DayContent {
-	return (day) => {
+export function calendarDayContent(hasDot: (date: Date) => boolean): DayContent
+{
+	return (day) =>
+	{
 		const color = day.selected ? "!text-on-color" : day.inCurrentMonth && day.now ? "text-tint" : "text-tertiary";
 		return (
 			<>
@@ -79,6 +103,7 @@ export function calendarDayContent(hasDot: (date: Date) => boolean): DayContent 
  * The strip picker's grid selection: the page day while the input is blank, otherwise the typed date's parse
  * (empty for an unparseable term, which clears the selection like upstream).
  */
-export function stripPickerSelection(term: string, pageDate: Date, guess: Date[]): Date[] {
+export function stripPickerSelection(term: string, pageDate: Date, guess: Date[]): Date[]
+{
 	return term.trim() === "" ? [pageDate] : guess;
 }

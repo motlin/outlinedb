@@ -1,5 +1,6 @@
 {
-	"ordered_ui": {
+	"ordered_ui":
+	{
 		"node_type_picker": [
 			"turn_into_bullet",
 			"turn_into_h1",
@@ -91,19 +92,24 @@
 		],
 		"multi_select_menu_group_4": ["delete"]
 	},
-	"is_submenu": {
+	"is_submenu":
+	{
 		"node_type_picker": true
 	},
-	"menu_active_set": {
-		"single_node_menu :: is_dangling": {
+	"menu_active_set":
+	{
+		"single_node_menu :: is_dangling":
+		{
 			"delete": true
 		},
-		"single_node_menu :: is_guide_preview": {
+		"single_node_menu :: is_guide_preview":
+		{
 			"node_type_picker": true,
 			"expand_all": true,
 			"collapse_all": true
 		},
-		"single_node_menu :: is_draft": {
+		"single_node_menu :: is_draft":
+		{
 			"node_type_picker": true,
 			"upload_image": true,
 			"copy_link": true,
@@ -111,7 +117,8 @@
 			"expand_all": true,
 			"collapse_all": true
 		},
-		"single_node_menu :: is_comment_not_draft": {
+		"single_node_menu :: is_comment_not_draft":
+		{
 			"mark_read": true,
 			"mark_unread": true,
 			"focus_name": true,
@@ -123,12 +130,14 @@
 			"copy_link": true,
 			"delete": true
 		},
-		"single_node_menu :: is_shared_page_root": {
+		"single_node_menu :: is_shared_page_root":
+		{
 			"share": true,
 			"expand_all": true,
 			"collapse_all": true
 		},
-		"single_node_menu :: is_table_header_cell": {
+		"single_node_menu :: is_table_header_cell":
+		{
 			"node_type_picker": true,
 			"add_note": true,
 			"duplicate_table_column": true,
@@ -137,7 +146,8 @@
 			"upload_file": true,
 			"delete_table_column": true
 		},
-		"single_node_menu :: is_table_body_cell": {
+		"single_node_menu :: is_table_body_cell":
+		{
 			"node_type_picker": true,
 			"add_note": true,
 			"duplicate_table_column": true,
@@ -146,7 +156,8 @@
 			"upload_file": true,
 			"delete": true
 		},
-		"single_node_menu :: is_divider": {
+		"single_node_menu :: is_divider":
+		{
 			"node_type_picker": true,
 			"move_to": true,
 			"copy_link": true,
@@ -155,7 +166,8 @@
 			"expand_all": true,
 			"collapse_all": true
 		},
-		"single_node_menu :: is_ai_item": {
+		"single_node_menu :: is_ai_item":
+		{
 			"node_type_picker": true,
 			"add_date": true,
 			"comment": true,
@@ -163,7 +175,8 @@
 			"duplicate": true,
 			"delete": true
 		},
-		"multi_select_menu :: has_table_cell": {
+		"multi_select_menu :: has_table_cell":
+		{
 			"toggle_bullet": true,
 			"toggle_todo_mode": true,
 			"toggle_bold": true,
@@ -180,35 +193,45 @@
 		"multi_select_menu :: all_comment_paragraphs": {},
 		"multi_select_menu :: has_calendar_search_container": {}
 	},
-	"menu_block_set": {
-		"node_type_picker :: is_inside_side_pane": {
+	"menu_block_set":
+	{
+		"node_type_picker :: is_inside_side_pane":
+		{
 			"turn_into_dashboard": true
 		},
-		"single_node_menu :: is_comment": {
+		"single_node_menu :: is_comment":
+		{
 			"node_type_picker": true
 		},
-		"single_node_menu :: is_conversation_container": {
+		"single_node_menu :: is_conversation_container":
+		{
 			"node_type_picker": true
 		},
-		"single_node_menu :: is_embedded_share_root": {
+		"single_node_menu :: is_embedded_share_root":
+		{
 			"node_type_picker": true
 		},
-		"single_node_menu :: is_readonly": {
+		"single_node_menu :: is_readonly":
+		{
 			"node_type_picker": true
 		},
-		"single_node_menu :: is_code_block": {
+		"single_node_menu :: is_code_block":
+		{
 			"make_template": true,
 			"add_date": true,
 			"present_it": true
 		},
-		"single_node_menu :: is_quote_block": {
+		"single_node_menu :: is_quote_block":
+		{
 			"make_template": true,
 			"present_it": true
 		},
-		"single_node_menu :: is_inside_side_pane": {
+		"single_node_menu :: is_inside_side_pane":
+		{
 			"comment": true
 		},
-		"multi_select_menu :: has_pane_item": {
+		"multi_select_menu :: has_pane_item":
+		{
 			"move_to": true,
 			"move_to_today": true,
 			"move_to_tomorrow": true,
@@ -220,10 +243,12 @@
 			"mirror_to_date": true
 		}
 	},
-	"ui_label": {
+	"ui_label":
+	{
 		"node_type_picker": "Turn into..."
 	},
-	"icon": {
+	"icon":
+	{
 		"node_type_picker": "list-ul"
 	}
 }

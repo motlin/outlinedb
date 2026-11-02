@@ -20,14 +20,18 @@ let sqlite: DatabaseConstructor.Database;
 let store: StoreClient;
 
 /** A seeded or written node as the REST API answers it: uncompleted, childless, at Home unless overridden. */
-function dto(id: string, overrides: Partial<NodeResponse> = {}): NodeResponse {
+function dto(id: string, overrides: Partial<NodeResponse> = {}): NodeResponse
+{
 	return {
 		id,
 		parent_id: null,
 		name: id,
 		note: null,
 		priority: 0,
-		data: {layoutMode: null},
+		data:
+		{
+			layoutMode: null,
+		},
 		numberedStart: null,
 		createdAt: SEEDED,
 		modifiedAt: SEEDED,
@@ -45,18 +49,48 @@ function dto(id: string, overrides: Partial<NodeResponse> = {}): NodeResponse {
 	};
 }
 
-beforeEach(() => {
-	vi.useFakeTimers({toFake: ["Date"]});
+beforeEach(() =>
+{
+	vi.useFakeTimers(
+		{
+			toFake: ["Date"],
+		},
+	);
 	vi.setSystemTime(SEEDED * 1000);
 	sqlite = new DatabaseConstructor(":memory:");
-	const db = drizzle(sqlite, {schema});
-	migrate(db, {migrationsFolder});
+	const db = drizzle(
+		sqlite,
+		{
+			schema,
+		},
+	);
+	migrate(
+		db,
+		{
+			migrationsFolder,
+		},
+	);
 	// No WORKFLOWY_API_KEY: a standalone Node host.
-	const ctx = buildServerContext({db, config: readNodeConfig({}), ladderEvents: new LadderEventBus()});
+	const ctx = buildServerContext(
+		{
+			db,
+			config: readNodeConfig({}),
+			ladderEvents: new LadderEventBus(),
+		},
+	);
 	store = inProcessStore(ctx);
-	const insert = (id: string, parentId: string | null, priority: number) => {
+	const insert = (id: string, parentId: string | null, priority: number) =>
+	{
 		ctx.cacheService.insertNode(
-			{id, name: id, note: null, priority, createdAt: SEEDED, modifiedAt: SEEDED, completedAt: null},
+			{
+				id,
+				name: id,
+				note: null,
+				priority,
+				createdAt: SEEDED,
+				modifiedAt: SEEDED,
+				completedAt: null,
+			},
 			parentId,
 		);
 	};
@@ -72,157 +106,574 @@ beforeEach(() => {
 	);
 });
 
-afterEach(() => {
+afterEach(() =>
+{
 	vi.useRealTimers();
 	vi.restoreAllMocks();
 	sqlite.close();
 });
 
-describe("node writes in a standalone context", () => {
-	it("creates a node at a slot and reads it back", async () => {
-		const created = dto(NEW_ID, {parent_id: "p", name: "new", priority: 1, createdAt: NOW, modifiedAt: NOW});
-
-		await expect(
-			store.call("nodes.create", {parent_id: "p", name: "new", index: 1, id: NEW_ID}),
-		).resolves.toStrictEqual({ok: true, value: {node: created}, meta: {created: true}});
-		await expect(store.call("nodes.children", {parentIds: ["p"]})).resolves.toStrictEqual({
-			ok: true,
-			value: {children: {p: [dto("a", {parent_id: "p"}), created, dto("b", {parent_id: "p", priority: 2})]}},
-		});
-	});
-
-	it("creates at Home's bottom when the parent is omitted, as an empty outline's first bullet sends", async () => {
-		await expect(store.call("nodes.create", {name: "", id: NEW_ID})).resolves.toStrictEqual({
-			ok: true,
-			value: {node: dto(NEW_ID, {name: "", priority: 2, createdAt: NOW, modifiedAt: NOW})},
-			meta: {created: true},
-		});
-	});
-
-	it("answers 404 for a create under an unknown parent", async () => {
-		await expect(
-			store.call("nodes.create", {parent_id: "4d7c2f10-0000-4000-8000-000000000000", name: "x"}),
-		).resolves.toStrictEqual({ok: false, status: 404, body: {error: "Parent node not found"}});
-	});
-
-	it("updates a node's name and note and reads it back", async () => {
-		const updated = dto("a", {parent_id: "p", name: "renamed", note: "a note", modifiedAt: NOW});
-
-		await expect(store.call("nodes.update", {id: "a", name: "renamed", note: "a note"})).resolves.toStrictEqual({
-			ok: true,
-			value: {node: updated, effects: {backlinkTargets: [], dates: false}},
-		});
-		await expect(store.call("nodes.get", {id: "a"})).resolves.toStrictEqual({ok: true, value: {node: updated}});
-	});
-
-	it("writes numberedStart locally", async () => {
-		await expect(store.call("nodes.update", {id: "a", numberedStart: 3})).resolves.toStrictEqual({
-			ok: true,
-			value: {
-				node: dto("a", {parent_id: "p", numberedStart: 3, modifiedAt: NOW}),
-				effects: {backlinkTargets: [], dates: false},
+describe("node writes in a standalone context", () =>
+{
+	it("creates a node at a slot and reads it back", async () =>
+	{
+		const created = dto(
+			NEW_ID,
+			{
+				parent_id: "p",
+				name: "new",
+				priority: 1,
+				createdAt: NOW,
+				modifiedAt: NOW,
 			},
-		});
+		);
+
+		await expect(
+			store.call(
+				"nodes.create",
+				{
+					parent_id: "p",
+					name: "new",
+					index: 1,
+					id: NEW_ID,
+				},
+			),
+		).resolves.toStrictEqual(
+			{
+				ok: true,
+				value:
+				{
+					node: created,
+				},
+				meta:
+				{
+					created: true,
+				},
+			},
+		);
+		await expect(
+			store.call(
+				"nodes.children",
+				{
+					parentIds: ["p"],
+				},
+			),
+		).resolves.toStrictEqual(
+			{
+				ok: true,
+				value:
+				{
+					children:
+					{
+						p: [
+							dto(
+								"a",
+								{
+									parent_id: "p",
+								},
+							),
+							created,
+							dto(
+								"b",
+								{
+									parent_id: "p",
+									priority: 2,
+								},
+							),
+						],
+					},
+				},
+			},
+		);
 	});
 
-	it("creates several trees at one slot", async () => {
-		const result = await store.call("nodes.trees", {
-			parent_id: "p",
-			after_id: "a",
-			trees: [
-				{name: "t1", children: [{name: "t2"}]},
-				{name: "t3", completed: true},
-			],
-		});
-		const children = await store.call("nodes.children", {parentIds: ["p"]});
+	it("creates at Home's bottom when the parent is omitted, as an empty outline's first bullet sends", async () =>
+	{
+		await expect(
+			store.call(
+				"nodes.create",
+				{
+					name: "",
+					id: NEW_ID,
+				},
+			),
+		).resolves.toStrictEqual(
+			{
+				ok: true,
+				value:
+				{
+					node: dto(
+						NEW_ID,
+						{
+							name: "",
+							priority: 2,
+							createdAt: NOW,
+							modifiedAt: NOW,
+						},
+					),
+				},
+				meta:
+				{
+					created: true,
+				},
+			},
+		);
+	});
+
+	it("answers 404 for a create under an unknown parent", async () =>
+	{
+		await expect(
+			store.call(
+				"nodes.create",
+				{
+					parent_id: "4d7c2f10-0000-4000-8000-000000000000",
+					name: "x",
+				},
+			),
+		).resolves.toStrictEqual(
+			{
+				ok: false,
+				status: 404,
+				body:
+				{
+					error: "Parent node not found",
+				},
+			},
+		);
+	});
+
+	it("updates a node's name and note and reads it back", async () =>
+	{
+		const updated = dto(
+			"a",
+			{
+				parent_id: "p",
+				name: "renamed",
+				note: "a note",
+				modifiedAt: NOW,
+			},
+		);
+
+		await expect(
+			store.call(
+				"nodes.update",
+				{
+					id: "a",
+					name: "renamed",
+					note: "a note",
+				},
+			),
+		).resolves.toStrictEqual(
+			{
+				ok: true,
+				value:
+				{
+					node: updated,
+					effects:
+					{
+						backlinkTargets: [],
+						dates: false,
+					},
+				},
+			},
+		);
+		await expect(
+			store.call(
+				"nodes.get",
+				{
+					id: "a",
+				},
+			),
+		).resolves.toStrictEqual(
+			{
+				ok: true,
+				value:
+				{
+					node: updated,
+				},
+			},
+		);
+	});
+
+	it("writes numberedStart locally", async () =>
+	{
+		await expect(
+			store.call(
+				"nodes.update",
+				{
+					id: "a",
+					numberedStart: 3,
+				},
+			),
+		).resolves.toStrictEqual(
+			{
+				ok: true,
+				value:
+				{
+					node: dto(
+						"a",
+						{
+							parent_id: "p",
+							numberedStart: 3,
+							modifiedAt: NOW,
+						},
+					),
+					effects:
+					{
+						backlinkTargets: [],
+						dates: false,
+					},
+				},
+			},
+		);
+	});
+
+	it("creates several trees at one slot", async () =>
+	{
+		const result = await store.call(
+			"nodes.trees",
+			{
+				parent_id: "p",
+				after_id: "a",
+				trees: [
+					{
+						name: "t1",
+						children: [
+							{
+								name: "t2",
+							},
+						],
+					},
+					{
+						name: "t3",
+						completed: true,
+					},
+				],
+			},
+		);
+		const children = await store.call(
+			"nodes.children",
+			{
+				parentIds: ["p"],
+			},
+		);
 
 		expect(
 			children.ok && result.ok
-				? {
+				?
+					{
 						ids: result.value.ids.length,
 						names: children.value.children.p.map((node) => [node.name, node.hasChildren, node.completedAt]),
 					}
-				: {result, children},
-		).toStrictEqual({
-			ids: 2,
-			names: [
-				["a", false, null],
-				["t1", true, null],
-				["t3", false, NOW],
-				["b", false, null],
-			],
-		});
-	});
-
-	it("restores a deleted node under its original id, and answers 409 for a live one", async () => {
-		await store.call("nodes.delete", {id: "a"});
-		vi.setSystemTime((NOW + 1) * 1000);
-
-		await expect(store.call("nodes.restore", {id: "a"})).resolves.toStrictEqual({
-			ok: true,
-			value: {node: dto("a", {parent_id: "p"})},
-		});
-		await expect(store.call("nodes.restore", {id: "b"})).resolves.toStrictEqual({
-			ok: false,
-			status: 409,
-			body: {error: "Node is not deleted"},
-		});
-		await expect(store.call("nodes.restore", {id: "4d7c2f10-0000-4000-8000-000000000000"})).resolves.toStrictEqual({
-			ok: false,
-			status: 404,
-			body: {error: "Node not found"},
-		});
-	});
-
-	it("deletes a node and closes the gap", async () => {
-		await expect(store.call("nodes.delete", {id: "a"})).resolves.toStrictEqual({ok: true, value: null});
-		await expect(store.call("nodes.get", {id: "a"})).resolves.toStrictEqual({
-			ok: false,
-			status: 404,
-			body: {error: "Node not found"},
-		});
-		await expect(store.call("nodes.children", {parentIds: ["p"]})).resolves.toStrictEqual({
-			ok: true,
-			value: {children: {p: [dto("b", {parent_id: "p"})]}},
-		});
-	});
-
-	it("completes and uncompletes a node", async () => {
-		const completed = dto("a", {parent_id: "p", modifiedAt: NOW, completedAt: NOW});
-
-		await expect(store.call("nodes.complete", {id: "a"})).resolves.toStrictEqual({
-			ok: true,
-			value: {node: completed},
-		});
-		await expect(store.call("nodes.get", {id: "a"})).resolves.toStrictEqual({ok: true, value: {node: completed}});
-		vi.setSystemTime((NOW + 1) * 1000);
-		await expect(store.call("nodes.uncomplete", {id: "a"})).resolves.toStrictEqual({
-			ok: true,
-			value: {node: dto("a", {parent_id: "p", modifiedAt: NOW + 1})},
-		});
-	});
-
-	it("moves a node to another parent and answers both parents' children", async () => {
-		const moved = dto("b", {parent_id: "q", modifiedAt: NOW});
-
-		await expect(store.call("nodes.moveOne", {id: "b", parent_id: "q", index: 0})).resolves.toStrictEqual({
-			ok: true,
-			value: {nodes: [dto("a", {parent_id: "p"}), moved]},
-		});
-		await expect(store.call("nodes.get", {id: "b"})).resolves.toStrictEqual({ok: true, value: {node: moved}});
-	});
-
-	it("moves several blocks in one call", async () => {
-		await expect(
-			store.call("nodes.move", {
-				moves: [
-					{ids: ["b"], parent_id: "p", index: 0},
-					{ids: ["a"], parent_id: "q"},
+				:
+					{
+						result,
+						children,
+					},
+		).toStrictEqual(
+			{
+				ids: 2,
+				names: [
+					["a", false, null],
+					["t1", true, null],
+					["t3", false, NOW],
+					["b", false, null],
 				],
-			}),
-		).resolves.toStrictEqual({
-			ok: true,
-			value: {nodes: [dto("b", {parent_id: "p", modifiedAt: NOW}), dto("a", {parent_id: "q", modifiedAt: NOW})]},
-		});
+			},
+		);
+	});
+
+	it("restores a deleted node under its original id, and answers 409 for a live one", async () =>
+	{
+		await store.call(
+			"nodes.delete",
+			{
+				id: "a",
+			},
+		);
+		vi.setSystemTime((NOW + 1) * 1000);
+
+		await expect(
+			store.call(
+				"nodes.restore",
+				{
+					id: "a",
+				},
+			),
+		).resolves.toStrictEqual(
+			{
+				ok: true,
+				value:
+				{
+					node: dto(
+						"a",
+						{
+							parent_id: "p",
+						},
+					),
+				},
+			},
+		);
+		await expect(
+			store.call(
+				"nodes.restore",
+				{
+					id: "b",
+				},
+			),
+		).resolves.toStrictEqual(
+			{
+				ok: false,
+				status: 409,
+				body:
+				{
+					error: "Node is not deleted",
+				},
+			},
+		);
+		await expect(
+			store.call(
+				"nodes.restore",
+				{
+					id: "4d7c2f10-0000-4000-8000-000000000000",
+				},
+			),
+		).resolves.toStrictEqual(
+			{
+				ok: false,
+				status: 404,
+				body:
+				{
+					error: "Node not found",
+				},
+			},
+		);
+	});
+
+	it("deletes a node and closes the gap", async () =>
+	{
+		await expect(
+			store.call(
+				"nodes.delete",
+				{
+					id: "a",
+				},
+			),
+		).resolves.toStrictEqual(
+			{
+				ok: true,
+				value: null,
+			},
+		);
+		await expect(
+			store.call(
+				"nodes.get",
+				{
+					id: "a",
+				},
+			),
+		).resolves.toStrictEqual(
+			{
+				ok: false,
+				status: 404,
+				body:
+				{
+					error: "Node not found",
+				},
+			},
+		);
+		await expect(
+			store.call(
+				"nodes.children",
+				{
+					parentIds: ["p"],
+				},
+			),
+		).resolves.toStrictEqual(
+			{
+				ok: true,
+				value:
+				{
+					children:
+					{
+						p: [
+							dto(
+								"b",
+								{
+									parent_id: "p",
+								},
+							),
+						],
+					},
+				},
+			},
+		);
+	});
+
+	it("completes and uncompletes a node", async () =>
+	{
+		const completed = dto(
+			"a",
+			{
+				parent_id: "p",
+				modifiedAt: NOW,
+				completedAt: NOW,
+			},
+		);
+
+		await expect(
+			store.call(
+				"nodes.complete",
+				{
+					id: "a",
+				},
+			),
+		).resolves.toStrictEqual(
+			{
+				ok: true,
+				value:
+				{
+					node: completed,
+				},
+			},
+		);
+		await expect(
+			store.call(
+				"nodes.get",
+				{
+					id: "a",
+				},
+			),
+		).resolves.toStrictEqual(
+			{
+				ok: true,
+				value:
+				{
+					node: completed,
+				},
+			},
+		);
+		vi.setSystemTime((NOW + 1) * 1000);
+		await expect(
+			store.call(
+				"nodes.uncomplete",
+				{
+					id: "a",
+				},
+			),
+		).resolves.toStrictEqual(
+			{
+				ok: true,
+				value:
+				{
+					node: dto(
+						"a",
+						{
+							parent_id: "p",
+							modifiedAt: NOW + 1,
+						},
+					),
+				},
+			},
+		);
+	});
+
+	it("moves a node to another parent and answers both parents' children", async () =>
+	{
+		const moved = dto(
+			"b",
+			{
+				parent_id: "q",
+				modifiedAt: NOW,
+			},
+		);
+
+		await expect(
+			store.call(
+				"nodes.moveOne",
+				{
+					id: "b",
+					parent_id: "q",
+					index: 0,
+				},
+			),
+		).resolves.toStrictEqual(
+			{
+				ok: true,
+				value:
+				{
+					nodes: [
+						dto(
+							"a",
+							{
+								parent_id: "p",
+							},
+						),
+						moved,
+					],
+				},
+			},
+		);
+		await expect(
+			store.call(
+				"nodes.get",
+				{
+					id: "b",
+				},
+			),
+		).resolves.toStrictEqual(
+			{
+				ok: true,
+				value:
+				{
+					node: moved,
+				},
+			},
+		);
+	});
+
+	it("moves several blocks in one call", async () =>
+	{
+		await expect(
+			store.call(
+				"nodes.move",
+				{
+					moves: [
+						{
+							ids: ["b"],
+							parent_id: "p",
+							index: 0,
+						},
+						{
+							ids: ["a"],
+							parent_id: "q",
+						},
+					],
+				},
+			),
+		).resolves.toStrictEqual(
+			{
+				ok: true,
+				value:
+				{
+					nodes: [
+						dto(
+							"b",
+							{
+								parent_id: "p",
+								modifiedAt: NOW,
+							},
+						),
+						dto(
+							"a",
+							{
+								parent_id: "q",
+								modifiedAt: NOW,
+							},
+						),
+					],
+				},
+			},
+		);
 	});
 });

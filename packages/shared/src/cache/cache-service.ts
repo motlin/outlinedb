@@ -8,7 +8,8 @@ import {isSystemTarget} from "../types/targets.js";
 import type {WorkflowyNode} from "../types/workflowy.js";
 import {uuidToShortId} from "../workflowy/constants.js";
 import {and, eq, isNull, like, notInArray, or, sql} from "drizzle-orm";
-import {
+import
+{
 	contentMatches,
 	currentVersion,
 	keepSkewedTimestamps,
@@ -32,17 +33,29 @@ type NodeMetadataRow = typeof schema.nodeMetadata.$inferSelect;
  * Drizzle types a `one()` relation on non-null columns as always present, but a
  * node can lack a current metadata row, so the relation is really nullable.
  */
-function metadataOf(row: {metadata: NodeMetadataRow}): NodeMetadataRow | null {
+function metadataOf(row: {metadata: NodeMetadataRow}): NodeMetadataRow | null
+{
 	return row.metadata;
 }
 
 /** Sort siblings by priority, then createdAt, treating missing metadata as 0. */
-function compareByMetadata(a: {metadata: NodeMetadataRow}, b: {metadata: NodeMetadataRow}): number {
+function compareByMetadata(
+	a:
+	{
+		metadata: NodeMetadataRow;
+	},
+	b:
+	{
+		metadata: NodeMetadataRow;
+	},
+): number
+{
 	const metadataA = metadataOf(a);
 	const metadataB = metadataOf(b);
 	const priorityA = metadataA?.priority ?? 0;
 	const priorityB = metadataB?.priority ?? 0;
-	if (priorityA !== priorityB) {
+	if (priorityA !== priorityB)
+	{
 		return priorityA - priorityB;
 	}
 	const createdAtA = metadataA?.createdAt?.getTime() ?? 0;
@@ -51,12 +64,14 @@ function compareByMetadata(a: {metadata: NodeMetadataRow}, b: {metadata: NodeMet
 }
 
 /** The cached note: Workflowy sends an empty note as "", which the cache stores as null. */
-function noteOrNull(note: string | null | undefined): string | null {
+function noteOrNull(note: string | null | undefined): string | null
+{
 	return note === undefined || note === null || note === "" ? null : note;
 }
 
 /** The Node metadata fields, each null when the node has no metadata row. */
-function metadataFields(metadata: NodeMetadataRow | null) {
+function metadataFields(metadata: NodeMetadataRow | null)
+{
 	return {
 		shortId: metadata?.shortId ?? null,
 		priority: metadata?.priority ?? null,
@@ -75,7 +90,8 @@ function metadataFields(metadata: NodeMetadataRow | null) {
  * tables (mirrors, calendar, etc.) that the canonical type
  * deliberately excludes, and keeps `priority` nullable as stored in the DB.
  */
-export interface NodeWithRelations {
+export interface NodeWithRelations
+{
 	id: string;
 	shortId: string | null;
 	name: string | null;
@@ -89,11 +105,21 @@ export interface NodeWithRelations {
 	systemFrom: string;
 	systemTo: string;
 	// Mirrors where this node is the original (other nodes mirror this one)
-	mirrorsAsOriginal?: {mirrorId: string}[];
+	mirrorsAsOriginal?:
+	{
+		mirrorId: string;
+	}[];
 	// Mirrors where this node is the copy (this node mirrors others)
-	mirrorsAsCopy?: {originalId: string}[];
-	aiMetadata?: {inChat: number} | null;
-	s3File?: {
+	mirrorsAsCopy?:
+	{
+		originalId: string;
+	}[];
+	aiMetadata?:
+	{
+		inChat: number;
+	} | null;
+	s3File?:
+	{
 		fileName: string;
 		fileType: string;
 		objectFolder: string | null;
@@ -103,9 +129,16 @@ export interface NodeWithRelations {
 		imageOriginalPixels: number | null;
 		isDeleted: number | null;
 	} | null;
-	changesMetadata?: {ctBy: number} | null;
-	referencesRoot?: {nodeId: string} | null;
-	calendar?: {
+	changesMetadata?:
+	{
+		ctBy: number;
+	} | null;
+	referencesRoot?:
+	{
+		nodeId: string;
+	} | null;
+	calendar?:
+	{
 		root: number | null;
 		level: string | null;
 		value: string | null;
@@ -113,7 +146,8 @@ export interface NodeWithRelations {
 		timestamp: number | null;
 		foundDates: number | null;
 		dayPrefix: number | null;
-		levels?: {
+		levels?:
+		{
 			day: number | null;
 			week: number | null;
 			month: number | null;
@@ -123,14 +157,16 @@ export interface NodeWithRelations {
 }
 
 /** Options for {@link CacheService.searchText}. */
-export interface TextSearchOptions {
+export interface TextSearchOptions
+{
 	query: string;
 	limit?: number;
 	incomplete?: boolean;
 }
 
 /** A single text-search hit: the matched node's identity and content. */
-export interface TextSearchRow {
+export interface TextSearchRow
+{
 	id: string;
 	shortId: string | null;
 	name: string | null;
@@ -139,25 +175,24 @@ export interface TextSearchRow {
 }
 
 /** Convert Unix seconds to a Date, passing null and undefined through as null. */
-function timestampToDate(timestamp: number | null | undefined): Date | null {
+function timestampToDate(timestamp: number | null | undefined): Date | null
+{
 	return timestamp === null || timestamp === undefined ? null : new Date(timestamp * 1000);
 }
 
-function insertContent(
-	db: TemporalTransaction,
-	node: WorkflowyNode,
-	parentId: string | null,
-	systemFrom: string,
-): void {
+function insertContent(db: TemporalTransaction, node: WorkflowyNode, parentId: string | null, systemFrom: string): void
+{
 	db.insert(nodeContent)
-		.values({
-			id: node.id,
-			name: node.name,
-			note: noteOrNull(node.note),
-			parentId,
-			systemFrom,
-			systemTo: FAR_FUTURE_DATE,
-		})
+		.values(
+			{
+				id: node.id,
+				name: node.name,
+				note: noteOrNull(node.note),
+				parentId,
+				systemFrom,
+				systemTo: FAR_FUTURE_DATE,
+			},
+		)
 		.run();
 }
 
@@ -170,22 +205,26 @@ function insertMetadata(
 	node: WorkflowyNode,
 	systemFrom: string,
 	existing?: NodeMetadataRow,
-): void {
-	const timestamps = {
+): void
+{
+	const timestamps =
+	{
 		createdAt: timestampToDate(node.createdAt),
 		modifiedAt: timestampToDate(node.modifiedAt),
 		completedAt: timestampToDate(node.completedAt),
 	};
 	db.insert(nodeMetadata)
-		.values({
-			nodeId: node.id,
-			shortId: uuidToShortId(node.id),
-			priority: node.priority,
-			...(existing ? keepSkewedTimestamps(existing, timestamps) : timestamps),
-			layoutMode: normalizeLayoutMode(node.data?.layoutMode),
-			systemFrom,
-			systemTo: FAR_FUTURE_DATE,
-		})
+		.values(
+			{
+				nodeId: node.id,
+				shortId: uuidToShortId(node.id),
+				priority: node.priority,
+				...(existing ? keepSkewedTimestamps(existing, timestamps) : timestamps),
+				layoutMode: normalizeLayoutMode(node.data?.layoutMode),
+				systemFrom,
+				systemTo: FAR_FUTURE_DATE,
+			},
+		)
 		.run();
 }
 
@@ -202,20 +241,32 @@ function upsertNodeVersion(
 	node: WorkflowyNode,
 	parentId: string | null,
 	systemTime: string,
-): void {
+): void
+{
 	const existingContent = db
 		.select()
 		.from(nodeContent)
 		.where(and(eq(nodeContent.id, node.id), currentVersion(nodeContent)))
 		.get();
 
-	if (!existingContent) {
+	if (!existingContent)
+	{
 		insertContent(db, node, parentId, systemTime);
 		insertMetadata(db, node, systemTime);
 		return;
 	}
 
-	if (!contentMatches(existingContent, {name: node.name, note: noteOrNull(node.note), parentId})) {
+	if (
+		!contentMatches(
+			existingContent,
+			{
+				name: node.name,
+				note: noteOrNull(node.note),
+				parentId,
+			},
+		)
+	)
+	{
 		closeCurrentVersions(db, nodeContent, systemTime, eq(nodeContent.id, node.id));
 		insertContent(db, node, parentId, systemTime);
 	}
@@ -225,16 +276,20 @@ function upsertNodeVersion(
 		.from(nodeMetadata)
 		.where(and(eq(nodeMetadata.nodeId, node.id), currentVersion(nodeMetadata)))
 		.get();
-	const metadata = {
+	const metadata =
+	{
 		priority: node.priority,
 		createdAt: node.createdAt,
 		modifiedAt: node.modifiedAt,
 		completedAt: node.completedAt ?? null,
 		layoutMode: normalizeLayoutMode(node.data?.layoutMode),
 	};
-	if (!existingMetadata) {
+	if (!existingMetadata)
+	{
 		insertMetadata(db, node, systemTime);
-	} else if (!metadataMatches(existingMetadata, metadata)) {
+	}
+	else if (!metadataMatches(existingMetadata, metadata))
+	{
 		closeCurrentVersions(db, nodeMetadata, systemTime, eq(nodeMetadata.nodeId, node.id));
 		insertMetadata(db, node, systemTime, existingMetadata);
 	}
@@ -255,39 +310,51 @@ function storeChildren(
 	parentId: string | null,
 	systemTime: string,
 	storedInUnit: ReadonlySet<string> = new Set(),
-): void {
-	if (parentId !== null && isSystemTarget(parentId)) {
+): void
+{
+	if (parentId !== null && isSystemTarget(parentId))
+	{
 		throw new Error(`Cannot cache children under system target "${parentId}"; resolve it to a node id first`);
 	}
-	if (parentId !== null && !storedInUnit.has(parentId)) {
+	if (parentId !== null && !storedInUnit.has(parentId))
+	{
 		const parentExists = tx
-			.select({id: nodeContent.id})
+			.select(
+				{
+					id: nodeContent.id,
+				},
+			)
 			.from(nodeContent)
 			.where(and(eq(nodeContent.id, parentId), currentVersion(nodeContent)))
 			.get();
-		if (!parentExists) {
+		if (!parentExists)
+		{
 			tx.insert(nodeContent)
-				.values({
-					id: parentId,
-					name: null,
-					note: null,
-					parentId: null,
-					systemFrom: systemTime,
-					systemTo: FAR_FUTURE_DATE,
-				})
+				.values(
+					{
+						id: parentId,
+						name: null,
+						note: null,
+						parentId: null,
+						systemFrom: systemTime,
+						systemTo: FAR_FUTURE_DATE,
+					},
+				)
 				.run();
 			tx.insert(nodeMetadata)
-				.values({
-					nodeId: parentId,
-					shortId: uuidToShortId(parentId),
-					priority: null,
-					createdAt: null,
-					modifiedAt: null,
-					completedAt: null,
-					layoutMode: null,
-					systemFrom: systemTime,
-					systemTo: FAR_FUTURE_DATE,
-				})
+				.values(
+					{
+						nodeId: parentId,
+						shortId: uuidToShortId(parentId),
+						priority: null,
+						createdAt: null,
+						modifiedAt: null,
+						completedAt: null,
+						layoutMode: null,
+						systemFrom: systemTime,
+						systemTo: FAR_FUTURE_DATE,
+					},
+				)
 				.run();
 		}
 	}
@@ -296,11 +363,13 @@ function storeChildren(
 	// references roots, ai, s3, changes), so closing them here would be
 	// permanent data loss, not a refresh (#1712). import-api's /get_tree_data/ merge,
 	// backup imports and deleteNode() own their lifecycle.
-	for (const apiNode of apiNodes) {
+	for (const apiNode of apiNodes)
+	{
 		upsertNodeVersion(tx, apiNode, parentId, systemTime);
 	}
 
-	if (parentId === null) {
+	if (parentId === null)
+	{
 		return;
 	}
 	// Phase out cached children that are no longer in the API response (deleted nodes):
@@ -318,9 +387,14 @@ function storeChildren(
 }
 
 /** What one backlink sync changed upstream, for {@link CacheService.recordBacklinkSync}. */
-export interface BacklinkSyncRecord {
+export interface BacklinkSyncRecord
+{
 	/** Each changed parent's full child list, read back from the API; parents before their new children. */
-	children: {parentId: string; nodes: WorkflowyNode[]}[];
+	children:
+	{
+		parentId: string;
+		nodes: WorkflowyNode[];
+	}[];
 	/** References roots created. */
 	referencesRoots: string[];
 	/** Backlink items created. */
@@ -330,7 +404,8 @@ export interface BacklinkSyncRecord {
 }
 
 /** The cached subtree under a node, as {@link CacheService.getSubtreeMirrors} returns it. */
-export interface SubtreeMirrors {
+export interface SubtreeMirrors
+{
 	/** Each node below the root mapped to its parent, in breadth-first order. */
 	parents: Map<string, string>;
 	/** The mirror nodes in the subtree, in breadth-first order. */
@@ -344,24 +419,29 @@ export interface SubtreeMirrors {
 	mirrorsOf: Map<string, string[]>;
 }
 
-export class CacheService {
+export class CacheService
+{
 	protected database: AppDatabase;
 	protected nodeReader: NodeReader;
 
-	constructor(database: AppDatabase) {
+	constructor(database: AppDatabase)
+	{
 		this.database = database;
 		this.nodeReader = new NodeReader(database);
 	}
 
-	getNode(nodeId: string): Node | undefined {
+	getNode(nodeId: string): Node | undefined
+	{
 		return this.nodeReader.getById(nodeId) ?? undefined;
 	}
 
-	getMultipleNodes(nodeIds: string[]): Map<string, Node> {
+	getMultipleNodes(nodeIds: string[]): Map<string, Node>
+	{
 		return this.nodeReader.getMany(nodeIds);
 	}
 
-	getChildren(parentId: string | null): Node[] {
+	getChildren(parentId: string | null): Node[]
+	{
 		return this.nodeReader.getChildren(parentId);
 	}
 
@@ -370,7 +450,8 @@ export class CacheService {
 	 * @param parentId The parent ID (null for root nodes)
 	 * @param name The exact name to match
 	 */
-	getChildByName(parentId: string | null, name: string): Node | null {
+	getChildByName(parentId: string | null, name: string): Node | null
+	{
 		const children = this.nodeReader.getChildren(parentId);
 		// Names may carry inline HTML formatting (e.g. a colored <span> around
 		// "Personal"). Callers pass plain-text path segments, so fall back to a
@@ -381,14 +462,20 @@ export class CacheService {
 	/**
 	 * Get node with cache timestamp
 	 */
-	getNodeWithMergedData(nodeId: string): {
+	getNodeWithMergedData(nodeId: string):
+	{
 		node: Node | undefined;
 		source: "cache" | "none";
 		fetchedAt?: Date;
-	} {
+	}
+	{
 		const node = this.getNode(nodeId);
-		if (!node) {
-			return {node: undefined, source: "none"};
+		if (!node)
+		{
+			return {
+				node: undefined,
+				source: "none",
+			};
 		}
 
 		return {
@@ -402,50 +489,60 @@ export class CacheService {
 	 * Get children with all related data from cache.
 	 * Returns raw Drizzle query results with joined relations.
 	 */
-	getChildrenWithMergedData(parentId: string | null): NodeWithRelations[] {
+	getChildrenWithMergedData(parentId: string | null): NodeWithRelations[]
+	{
 		const whereClause =
 			parentId === null
 				? and(isNull(nodeContent.parentId), currentVersion(nodeContent))
 				: and(eq(nodeContent.parentId, parentId), currentVersion(nodeContent));
 
 		const results = this.database.query.nodeContent
-			.findMany({
-				where: whereClause,
-				with: {
-					metadata: true,
-					mirrorsAsOriginal: {
-						where: currentVersion(mirrors),
-					},
-					mirrorsAsCopy: {
-						where: currentVersion(mirrors),
-					},
-					aiMetadata: true,
-					s3File: true,
-					changesMetadata: true,
-					referencesRoot: true,
-					calendar: {
-						columns: {
-							root: true,
-							level: true,
-							value: true,
-							dateId: true,
-							timestamp: true,
-							foundDates: true,
-							dayPrefix: true,
+			.findMany(
+				{
+					where: whereClause,
+					with:
+					{
+						metadata: true,
+						mirrorsAsOriginal:
+						{
+							where: currentVersion(mirrors),
 						},
-						with: {
-							levels: true,
+						mirrorsAsCopy:
+						{
+							where: currentVersion(mirrors),
+						},
+						aiMetadata: true,
+						s3File: true,
+						changesMetadata: true,
+						referencesRoot: true,
+						calendar:
+						{
+							columns:
+							{
+								root: true,
+								level: true,
+								value: true,
+								dateId: true,
+								timestamp: true,
+								foundDates: true,
+								dayPrefix: true,
+							},
+							with:
+							{
+								levels: true,
+							},
 						},
 					},
 				},
-			})
+			)
 			.sync();
 
 		// Sort by priority and createdAt (metadata fields)
 		results.sort(compareByMetadata);
 
 		// Transform nodeContent results to Node format
-		return results.map((result) => ({
+		return results.map((result) => (
+		{
 			id: result.id,
 			name: result.name,
 			note: result.note,
@@ -469,7 +566,8 @@ export class CacheService {
 	 * search` command and the MCP `outlinedb_search` tool; each adapter formats the
 	 * rows its own way (CLI adds a path, MCP a URL).
 	 */
-	searchText(options: TextSearchOptions): TextSearchRow[] {
+	searchText(options: TextSearchOptions): TextSearchRow[]
+	{
 		const {query, limit = 20, incomplete = false} = options;
 		const pattern = `%${query}%`;
 
@@ -478,18 +576,21 @@ export class CacheService {
 			notAMirror(nodeContent.id),
 			or(like(nodeContent.name, pattern), like(nodeContent.note, pattern)),
 		];
-		if (incomplete) {
+		if (incomplete)
+		{
 			conditions.push(isNull(nodeMetadata.completedAt));
 		}
 
 		return this.database
-			.select({
-				id: nodeContent.id,
-				name: nodeContent.name,
-				note: nodeContent.note,
-				shortId: nodeMetadata.shortId,
-				completedAt: nodeMetadata.completedAt,
-			})
+			.select(
+				{
+					id: nodeContent.id,
+					name: nodeContent.name,
+					note: nodeContent.note,
+					shortId: nodeMetadata.shortId,
+					completedAt: nodeMetadata.completedAt,
+				},
+			)
 			.from(nodeContent)
 			.innerJoin(nodeMetadata, and(eq(nodeContent.id, nodeMetadata.nodeId), currentVersion(nodeMetadata)))
 			.where(and(...conditions))
@@ -502,39 +603,56 @@ export class CacheService {
 	 * in the same shape as {@link getChildrenWithMergedData}. Used to seed a
 	 * subtree read from arbitrary root nodes rather than from a single parent.
 	 */
-	getMergedDataForNodes(nodeIds: string[]): NodeWithRelations[] {
-		if (nodeIds.length === 0) {
+	getMergedDataForNodes(nodeIds: string[]): NodeWithRelations[]
+	{
+		if (nodeIds.length === 0)
+		{
 			return [];
 		}
 
 		const results = this.database.query.nodeContent
-			.findMany({
-				where: and(inIds(nodeContent.id, nodeIds), currentVersion(nodeContent)),
-				with: {
-					metadata: true,
-					mirrorsAsOriginal: {where: currentVersion(mirrors)},
-					mirrorsAsCopy: {where: currentVersion(mirrors)},
-					aiMetadata: true,
-					s3File: true,
-					changesMetadata: true,
-					referencesRoot: true,
-					calendar: {
-						columns: {
-							root: true,
-							level: true,
-							value: true,
-							dateId: true,
-							timestamp: true,
-							foundDates: true,
-							dayPrefix: true,
+			.findMany(
+				{
+					where: and(inIds(nodeContent.id, nodeIds), currentVersion(nodeContent)),
+					with:
+					{
+						metadata: true,
+						mirrorsAsOriginal:
+						{
+							where: currentVersion(mirrors),
 						},
-						with: {levels: true},
+						mirrorsAsCopy:
+						{
+							where: currentVersion(mirrors),
+						},
+						aiMetadata: true,
+						s3File: true,
+						changesMetadata: true,
+						referencesRoot: true,
+						calendar:
+						{
+							columns:
+							{
+								root: true,
+								level: true,
+								value: true,
+								dateId: true,
+								timestamp: true,
+								foundDates: true,
+								dayPrefix: true,
+							},
+							with:
+							{
+								levels: true,
+							},
+						},
 					},
 				},
-			})
+			)
 			.sync();
 
-		return results.map((result) => ({
+		return results.map((result) => (
+		{
 			id: result.id,
 			name: result.name,
 			note: result.note,
@@ -557,17 +675,28 @@ export class CacheService {
 	 * @param apiNodes Array of nodes from the API
 	 * @param parentId The parent ID these nodes belong to (null for root)
 	 */
-	storeApiResponse(apiNodes: WorkflowyNode[], parentId: string | null): void {
-		runUnitOfWork(this.database, ({tx, systemTime}) => {
+	storeApiResponse(apiNodes: WorkflowyNode[], parentId: string | null): void
+	{
+		runUnitOfWork(this.database, ({tx, systemTime}) =>
+		{
 			storeChildren(tx, apiNodes, parentId, systemTime);
 		});
 	}
 
 	/** {@link storeApiResponse} for several parents, as one unit of work: one transaction and one system time. */
-	storeApiResponses(batches: {nodes: WorkflowyNode[]; parentId: string | null}[]): void {
+	storeApiResponses(
+		batches:
+		{
+			nodes: WorkflowyNode[];
+			parentId: string | null;
+		}[],
+	): void
+	{
 		const storedInUnit = new Set(batches.flatMap(({nodes}) => nodes.map((node) => node.id)));
-		runUnitOfWork(this.database, ({tx, systemTime}) => {
-			for (const {nodes, parentId} of batches) {
+		runUnitOfWork(this.database, ({tx, systemTime}) =>
+		{
+			for (const {nodes, parentId} of batches)
+			{
 				storeChildren(tx, nodes, parentId, systemTime, storedInUnit);
 			}
 		});
@@ -579,22 +708,42 @@ export class CacheService {
 	 * changed parents' children are replaced, and each created references root
 	 * and backlink item gets its `references_roots` or `mirrors` row.
 	 */
-	recordBacklinkSync(record: BacklinkSyncRecord): void {
-		runUnitOfWork(this.database, (unitOfWork) => {
+	recordBacklinkSync(record: BacklinkSyncRecord): void
+	{
+		runUnitOfWork(this.database, (unitOfWork) =>
+		{
 			const {tx, systemTime} = unitOfWork;
 			endNodeComposites(unitOfWork, record.deleted);
-			for (const {parentId, nodes} of record.children) {
+			for (const {parentId, nodes} of record.children)
+			{
 				storeChildren(tx, nodes, parentId, systemTime);
 			}
-			const current = {systemFrom: systemTime, systemTo: FAR_FUTURE_DATE};
-			for (const nodeId of record.referencesRoots) {
+			const current =
+			{
+				systemFrom: systemTime,
+				systemTo: FAR_FUTURE_DATE,
+			};
+			for (const nodeId of record.referencesRoots)
+			{
 				tx.insert(referencesRoots)
-					.values({nodeId, ...current})
+					.values(
+						{
+							nodeId,
+							...current,
+						},
+					)
 					.run();
 			}
-			for (const {nodeId, sourceId} of record.backlinks) {
+			for (const {nodeId, sourceId} of record.backlinks)
+			{
 				tx.insert(mirrors)
-					.values({mirrorId: nodeId, originalId: sourceId, ...current})
+					.values(
+						{
+							mirrorId: nodeId,
+							originalId: sourceId,
+							...current,
+						},
+					)
 					.run();
 			}
 		});
@@ -612,8 +761,10 @@ export class CacheService {
 	 * @param node The newly created node from the API
 	 * @param parentId The parent ID this node belongs to (null for root)
 	 */
-	insertNode(node: WorkflowyNode, parentId: string | null): void {
-		runUnitOfWork(this.database, ({tx, systemTime}) => {
+	insertNode(node: WorkflowyNode, parentId: string | null): void
+	{
+		runUnitOfWork(this.database, ({tx, systemTime}) =>
+		{
 			upsertNodeVersion(tx, node, parentId, systemTime);
 		});
 	}
@@ -623,17 +774,24 @@ export class CacheService {
 	 * This closes the records by setting systemTo to the current timestamp.
 	 * @param nodeId The node ID to delete
 	 */
-	deleteNode(nodeId: string): void {
+	deleteNode(nodeId: string): void
+	{
 		// Collect all descendant IDs iteratively (BFS)
 		const descendantIds: string[] = [nodeId];
 		// for-of over an array visits elements pushed during the loop, so this walks every level.
-		for (const parentId of descendantIds) {
+		for (const parentId of descendantIds)
+		{
 			const children = this.database
-				.select({id: nodeContent.id})
+				.select(
+					{
+						id: nodeContent.id,
+					},
+				)
 				.from(nodeContent)
 				.where(and(eq(nodeContent.parentId, parentId), currentVersion(nodeContent)))
 				.all();
-			for (const child of children) {
+			for (const child of children)
+			{
 				descendantIds.push(child.id);
 			}
 		}
@@ -642,7 +800,8 @@ export class CacheService {
 		// every owned part) in one unit of work. Rows of surviving nodes that merely
 		// reference a deleted node are left alone, except mirror rows, which close
 		// when either side dies.
-		runUnitOfWork(this.database, (unitOfWork) => {
+		runUnitOfWork(this.database, (unitOfWork) =>
+		{
 			endNodeComposites(unitOfWork, descendantIds);
 		});
 	}
@@ -655,8 +814,10 @@ export class CacheService {
 	 * @param original The original as Workflowy returns it after the move
 	 * @param parentId The parent the original now sits under
 	 */
-	promoteOriginal(mirrorId: string, original: WorkflowyNode, parentId: string | null): void {
-		runUnitOfWork(this.database, (unitOfWork) => {
+	promoteOriginal(mirrorId: string, original: WorkflowyNode, parentId: string | null): void
+	{
+		runUnitOfWork(this.database, (unitOfWork) =>
+		{
 			endNodeComposites(unitOfWork, [mirrorId]);
 			upsertNodeVersion(unitOfWork.tx, original, parentId, unitOfWork.systemTime);
 		});
@@ -668,9 +829,12 @@ export class CacheService {
 	 * @param path Array of exact node names to traverse
 	 * @param rootId Optional root node ID to start from
 	 */
-	findNodeByPath(path: string[], rootId: string | null = null): Node | null {
-		if (path.length === 0) {
-			if (rootId) {
+	findNodeByPath(path: string[], rootId: string | null = null): Node | null
+	{
+		if (path.length === 0)
+		{
+			if (rootId)
+			{
 				const node = this.getNode(rootId);
 				return node ?? null;
 			}
@@ -679,14 +843,17 @@ export class CacheService {
 
 		let currentParentId = rootId;
 
-		for (const segment of path) {
+		for (const segment of path)
+		{
 			const matchingChild = this.getChildByName(currentParentId, segment);
 
-			if (!matchingChild) {
+			if (!matchingChild)
+			{
 				return null;
 			}
 
-			if (segment === path.at(-1)) {
+			if (segment === path.at(-1))
+			{
 				return matchingChild;
 			}
 
@@ -702,42 +869,52 @@ export class CacheService {
 	 * Returns a Map from parentId to array of NodeWithRelations.
 	 * This is more efficient than calling getChildrenWithMergedData multiple times.
 	 */
-	getChildrenForMultipleParents(parentIds: string[]): Map<string, NodeWithRelations[]> {
-		if (parentIds.length === 0) {
+	getChildrenForMultipleParents(parentIds: string[]): Map<string, NodeWithRelations[]>
+	{
+		if (parentIds.length === 0)
+		{
 			return new Map();
 		}
 
 		const children = this.database.query.nodeContent
-			.findMany({
-				where: and(inIds(nodeContent.parentId, parentIds), currentVersion(nodeContent)),
-				with: {
-					metadata: true,
-					mirrorsAsOriginal: {
-						where: currentVersion(mirrors),
-					},
-					mirrorsAsCopy: {
-						where: currentVersion(mirrors),
-					},
-					aiMetadata: true,
-					s3File: true,
-					changesMetadata: true,
-					referencesRoot: true,
-					calendar: {
-						columns: {
-							root: true,
-							level: true,
-							value: true,
-							dateId: true,
-							timestamp: true,
-							foundDates: true,
-							dayPrefix: true,
+			.findMany(
+				{
+					where: and(inIds(nodeContent.parentId, parentIds), currentVersion(nodeContent)),
+					with:
+					{
+						metadata: true,
+						mirrorsAsOriginal:
+						{
+							where: currentVersion(mirrors),
 						},
-						with: {
-							levels: true,
+						mirrorsAsCopy:
+						{
+							where: currentVersion(mirrors),
+						},
+						aiMetadata: true,
+						s3File: true,
+						changesMetadata: true,
+						referencesRoot: true,
+						calendar:
+						{
+							columns:
+							{
+								root: true,
+								level: true,
+								value: true,
+								dateId: true,
+								timestamp: true,
+								foundDates: true,
+								dayPrefix: true,
+							},
+							with:
+							{
+								levels: true,
+							},
 						},
 					},
 				},
-			})
+			)
 			.sync();
 
 		// Sort in-memory since orderBy can't reference joined relation columns
@@ -745,35 +922,41 @@ export class CacheService {
 
 		const resultMap = new Map<string, NodeWithRelations[]>();
 
-		for (const parentId of parentIds) {
+		for (const parentId of parentIds)
+		{
 			resultMap.set(parentId, []);
 		}
 
-		for (const child of children) {
+		for (const child of children)
+		{
 			const {parentId} = child;
-			if (!parentId) {
+			if (!parentId)
+			{
 				continue;
 			}
 
 			const existingList = resultMap.get(parentId);
-			if (existingList) {
+			if (existingList)
+			{
 				// Transform to NodeWithRelations format
-				existingList.push({
-					id: child.id,
-					name: child.name,
-					note: child.note,
-					parentId: child.parentId,
-					...metadataFields(metadataOf(child)),
-					systemFrom: child.systemFrom,
-					systemTo: child.systemTo,
-					mirrorsAsOriginal: child.mirrorsAsOriginal,
-					mirrorsAsCopy: child.mirrorsAsCopy,
-					aiMetadata: child.aiMetadata,
-					s3File: child.s3File,
-					changesMetadata: child.changesMetadata,
-					referencesRoot: child.referencesRoot,
-					calendar: child.calendar,
-				});
+				existingList.push(
+					{
+						id: child.id,
+						name: child.name,
+						note: child.note,
+						parentId: child.parentId,
+						...metadataFields(metadataOf(child)),
+						systemFrom: child.systemFrom,
+						systemTo: child.systemTo,
+						mirrorsAsOriginal: child.mirrorsAsOriginal,
+						mirrorsAsCopy: child.mirrorsAsCopy,
+						aiMetadata: child.aiMetadata,
+						s3File: child.s3File,
+						changesMetadata: child.changesMetadata,
+						referencesRoot: child.referencesRoot,
+						calendar: child.calendar,
+					},
+				);
 			}
 		}
 
@@ -784,12 +967,18 @@ export class CacheService {
 	 * Resolve a short_id (12 hex chars from Workflowy URL) to a full UUID.
 	 * Returns null if no matching node is found.
 	 */
-	resolveShortIdToUuid(shortId: string): string | null {
+	resolveShortIdToUuid(shortId: string): string | null
+	{
 		const result = this.database.query.nodeMetadata
-			.findFirst({
-				where: and(eq(nodeMetadata.shortId, shortId), currentVersion(nodeMetadata)),
-				columns: {nodeId: true},
-			})
+			.findFirst(
+				{
+					where: and(eq(nodeMetadata.shortId, shortId), currentVersion(nodeMetadata)),
+					columns:
+					{
+						nodeId: true,
+					},
+				},
+			)
 			.sync();
 		return result?.nodeId ?? null;
 	}
@@ -798,21 +987,31 @@ export class CacheService {
 	 * Resolve multiple short_ids to full UUIDs in a single query.
 	 * Returns a Map from short_id to full UUID.
 	 */
-	resolveMultipleShortIds(shortIds: string[]): Map<string, string> {
-		if (shortIds.length === 0) {
+	resolveMultipleShortIds(shortIds: string[]): Map<string, string>
+	{
+		if (shortIds.length === 0)
+		{
 			return new Map();
 		}
 
 		const results = this.database.query.nodeMetadata
-			.findMany({
-				where: and(inIds(nodeMetadata.shortId, shortIds), currentVersion(nodeMetadata)),
-				columns: {nodeId: true, shortId: true},
-			})
+			.findMany(
+				{
+					where: and(inIds(nodeMetadata.shortId, shortIds), currentVersion(nodeMetadata)),
+					columns:
+					{
+						nodeId: true,
+						shortId: true,
+					},
+				},
+			)
 			.sync();
 
 		const map = new Map<string, string>();
-		for (const result of results) {
-			if (result.shortId) {
+		for (const result of results)
+		{
+			if (result.shortId)
+			{
 				map.set(result.shortId, result.nodeId);
 			}
 		}
@@ -824,14 +1023,17 @@ export class CacheService {
 	 * created, as one unit of work at one system time. Rows already current
 	 * are left alone.
 	 */
-	recordRelationships(relationships: ItemRelationships): void {
-		runUnitOfWork(this.database, (unitOfWork) => {
+	recordRelationships(relationships: ItemRelationships): void
+	{
+		runUnitOfWork(this.database, (unitOfWork) =>
+		{
 			recordItemRelationships(unitOfWork, relationships);
 		});
 	}
 
 	/** Each node's upstream `mirror`/`backlink`/`isReferencesRoot` view, rebuilt from the edge tables. */
-	relationshipMetadata(nodeIds: readonly string[]): Map<string, UpstreamRelationshipMetadata> {
+	relationshipMetadata(nodeIds: readonly string[]): Map<string, UpstreamRelationshipMetadata>
+	{
 		return upstreamRelationshipMetadata(this.database, nodeIds);
 	}
 
@@ -840,15 +1042,18 @@ export class CacheService {
 	 * sourced only from backup imports; this is the write-through path for a
 	 * mirror the CLI just created.
 	 */
-	insertMirror(originalId: string, mirrorId: string): void {
+	insertMirror(originalId: string, mirrorId: string): void
+	{
 		this.database
 			.insert(mirrors)
-			.values({
-				originalId,
-				mirrorId,
-				systemFrom: newSystemTimestamp(),
-				systemTo: FAR_FUTURE_DATE,
-			})
+			.values(
+				{
+					originalId,
+					mirrorId,
+					systemFrom: newSystemTimestamp(),
+					systemTo: FAR_FUTURE_DATE,
+				},
+			)
 			.run();
 	}
 
@@ -858,35 +1063,54 @@ export class CacheService {
 	 * priority order then by id, and the walk stops at each mirror: a mirror's
 	 * own children live under its original.
 	 */
-	getSubtreeMirrors(nodeId: string): SubtreeMirrors {
+	getSubtreeMirrors(nodeId: string): SubtreeMirrors
+	{
 		const parents = new Map<string, string>();
 		const inside: string[] = [];
 		const nonMirrorIds: string[] = [nodeId];
 		let level = [nodeId];
-		while (level.length > 0) {
+		while (level.length > 0)
+		{
 			const levelIndex = new Map(level.map((id, index) => [id, index]));
-			const rows: {id: string; parentId: string; levelIndex: number; priority: number}[] = [];
+			const rows:
+			{
+				id: string;
+				parentId: string;
+				levelIndex: number;
+				priority: number;
+			}[] = [];
 			const children = this.database
-				.select({id: nodeContent.id, parentId: nodeContent.parentId, priority: nodeMetadata.priority})
+				.select(
+					{
+						id: nodeContent.id,
+						parentId: nodeContent.parentId,
+						priority: nodeMetadata.priority,
+					},
+				)
 				.from(nodeContent)
 				.leftJoin(nodeMetadata, and(eq(nodeMetadata.nodeId, nodeContent.id), currentVersion(nodeMetadata)))
 				.where(and(inIds(nodeContent.parentId, level), currentVersion(nodeContent)))
 				.all();
-			for (const row of children) {
+			for (const row of children)
+			{
 				// The WHERE clause matched parentId against this level, so both lookups succeed.
 				const parentIndex = row.parentId === null ? undefined : levelIndex.get(row.parentId);
-				if (row.parentId === null || parentIndex === undefined) {
+				if (row.parentId === null || parentIndex === undefined)
+				{
 					throw new Error(`Subtree row ${row.id} has a parent outside the current level`);
 				}
-				rows.push({
-					id: row.id,
-					parentId: row.parentId,
-					levelIndex: parentIndex,
-					priority: row.priority ?? 0,
-				});
+				rows.push(
+					{
+						id: row.id,
+						parentId: row.parentId,
+						levelIndex: parentIndex,
+						priority: row.priority ?? 0,
+					},
+				);
 			}
 			rows.sort((a, b) => a.levelIndex - b.levelIndex || a.priority - b.priority || a.id.localeCompare(b.id));
-			for (const row of rows) {
+			for (const row of rows)
+			{
 				parents.set(row.id, row.parentId);
 			}
 			const childIds = rows.map((row) => row.id);
@@ -898,7 +1122,12 @@ export class CacheService {
 
 		const mirrorIds = new Map<string, string[]>();
 		const rows = this.database
-			.select({originalId: mirrors.originalId, mirrorId: mirrors.mirrorId})
+			.select(
+				{
+					originalId: mirrors.originalId,
+					mirrorId: mirrors.mirrorId,
+				},
+			)
 			.from(mirrors)
 			.innerJoin(nodeContent, and(eq(nodeContent.id, mirrors.mirrorId), currentVersion(nodeContent)))
 			.where(
@@ -911,26 +1140,38 @@ export class CacheService {
 				),
 			)
 			.all();
-		for (const row of rows) {
+		for (const row of rows)
+		{
 			mirrorIds.set(row.originalId, [...(mirrorIds.get(row.originalId) ?? []), row.mirrorId]);
 		}
 		const mirrorsOf = new Map<string, string[]>();
-		for (const id of nonMirrorIds) {
+		for (const id of nonMirrorIds)
+		{
 			const ids = mirrorIds.get(id);
-			if (ids !== undefined) {
+			if (ids !== undefined)
+			{
 				mirrorsOf.set(id, ids.toSorted());
 			}
 		}
-		return {parents, inside, mirrorsOf};
+		return {
+			parents,
+			inside,
+			mirrorsOf,
+		};
 	}
 
 	/**
 	 * Get the original node ID for a mirror node.
 	 * Returns null if the node is not a mirror or not found.
 	 */
-	getMirrorOriginal(mirrorId: string): string | null {
+	getMirrorOriginal(mirrorId: string): string | null
+	{
 		const result = this.database
-			.select({originalId: mirrors.originalId})
+			.select(
+				{
+					originalId: mirrors.originalId,
+				},
+			)
 			.from(mirrors)
 			.where(and(eq(mirrors.mirrorId, mirrorId), currentVersion(mirrors)))
 			.get();

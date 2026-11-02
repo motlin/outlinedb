@@ -10,7 +10,8 @@
 			"createdAt": 1700000000,
 			"modifiedAt": 1700000100,
 			"completedAt": null,
-			"data": {
+			"data":
+			{
 				"layoutMode": "bullets"
 			}
 		},
@@ -24,7 +25,8 @@
 			"createdAt": 1700000200,
 			"modifiedAt": 1700000300,
 			"completedAt": null,
-			"data": {
+			"data":
+			{
 				"layoutMode": "bullets"
 			}
 		},
@@ -38,7 +40,8 @@
 			"createdAt": 1700000400,
 			"modifiedAt": 1700000500,
 			"completedAt": 1700000600,
-			"data": {
+			"data":
+			{
 				"layoutMode": "bullets"
 			}
 		}

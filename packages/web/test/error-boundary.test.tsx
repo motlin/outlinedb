@@ -4,7 +4,8 @@ import {renderToStaticMarkup} from "react-dom/server";
 import {ErrorBoundary, FatalErrorScreen} from "../src/client/components/error-boundary.js";
 
 const match = (markup: string, re: RegExp) => re.exec(markup)?.[1];
-const summarize = (markup: string) => ({
+const summarize = (markup: string) => (
+{
 	title: match(markup, /(<h1 class="error-boundary-title">[^<]*<\/h1>)/u),
 	buttonClass: match(markup, /<button class="([^"]*)"/u),
 	buttonText: match(markup, /<button[^>]*><span>([^<]*)<\/span>/u),
@@ -15,25 +16,47 @@ const summarize = (markup: string) => ({
 	hasOldTitle: markup.includes("Something went wrong"),
 });
 
-describe("FatalErrorScreen", () => {
-	it("matches the upstream fatal screen and truncates details to 200 chars", () => {
+describe("FatalErrorScreen", () =>
+{
+	it("matches the upstream fatal screen and truncates details to 200 chars", () =>
+	{
 		const message = "x".repeat(250);
-		expect(summarize(renderToStaticMarkup(createElement(FatalErrorScreen, {message})))).toStrictEqual({
-			title: '<h1 class="error-boundary-title">Something has gone wrong</h1>',
-			buttonClass: "button large error-boundary-retry",
-			buttonText: "Try again",
-			detailsLabel: "Error details",
-			detailsBox: "x".repeat(200),
-			viewBox: "0 0 36 36",
-			hasSupportEmail: false,
-			hasOldTitle: false,
-		});
+		expect(
+			summarize(
+				renderToStaticMarkup(
+					createElement(
+						FatalErrorScreen,
+						{
+							message,
+						},
+					),
+				),
+			),
+		).toStrictEqual(
+			{
+				title: '<h1 class="error-boundary-title">Something has gone wrong</h1>',
+				buttonClass: "button large error-boundary-retry",
+				buttonText: "Try again",
+				detailsLabel: "Error details",
+				detailsBox: "x".repeat(200),
+				viewBox: "0 0 36 36",
+				hasSupportEmail: false,
+				hasOldTitle: false,
+			},
+		);
 	});
 });
 
-describe("ErrorBoundary", () => {
-	it("getDerivedStateFromError returns the error state", () => {
+describe("ErrorBoundary", () =>
+{
+	it("getDerivedStateFromError returns the error state", () =>
+	{
 		const error = new Error("boom");
-		expect(ErrorBoundary.getDerivedStateFromError(error)).toStrictEqual({hasError: true, error});
+		expect(ErrorBoundary.getDerivedStateFromError(error)).toStrictEqual(
+			{
+				hasError: true,
+				error,
+			},
+		);
 	});
 });

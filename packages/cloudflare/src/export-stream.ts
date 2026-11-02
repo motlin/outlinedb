@@ -1,6 +1,7 @@
 import type {WorkflowyNode} from "@outlinedb/shared/types";
 
-export interface NodeBatchOptions {
+export interface NodeBatchOptions
+{
 	/** Nodes per batch. */
 	size: number;
 	/** Leading nodes to pass over without parsing, for resuming a partly applied export. */
@@ -15,7 +16,8 @@ export interface NodeBatchOptions {
 export async function* nodeBatches(
 	body: ReadableStream<Uint8Array>,
 	options: NodeBatchOptions,
-): AsyncGenerator<WorkflowyNode[]> {
+): AsyncGenerator<WorkflowyNode[]>
+{
 	const reader = body.getReader();
 	const decoder = new TextDecoder();
 	let skip = options.skip ?? 0;
@@ -25,43 +27,70 @@ export async function* nodeBatches(
 	let escaped = false;
 	let pending = "";
 	let capturing = false;
-	try {
-		for (;;) {
+	try
+	{
+		for (;;)
+		{
 			const {done, value} = await reader.read();
-			const chunk = done ? decoder.decode() : decoder.decode(value, {stream: true});
+			const chunk = done
+				? decoder.decode()
+				: decoder.decode(
+						value,
+						{
+							stream: true,
+						},
+					);
 			let segmentStart = 0;
-			for (let i = 0; i < chunk.length; i++) {
+			for (let i = 0; i < chunk.length; i++)
+			{
 				const code = chunk.codePointAt(i) ?? 0;
-				if (inString) {
-					if (escaped) {
+				if (inString)
+				{
+					if (escaped)
+					{
 						escaped = false;
-					} else if (code === 92) {
+					}
+					else if (code === 92)
+					{
 						escaped = true;
-					} else if (code === 34) {
+					}
+					else if (code === 34)
+					{
 						inString = false;
 					}
 					continue;
 				}
-				if (code === 34) {
+				if (code === 34)
+				{
 					inString = true;
-				} else if (code === 123 || code === 91) {
+				}
+				else if (code === 123 || code === 91)
+				{
 					depth++;
-					if (code === 123 && depth === 3) {
+					if (code === 123 && depth === 3)
+					{
 						capturing = skip === 0;
 						segmentStart = i;
 						pending = "";
 					}
-				} else if (code === 125 || code === 93) {
+				}
+				else if (code === 125 || code === 93)
+				{
 					depth--;
-					if (code === 125 && depth === 2) {
-						if (skip > 0) {
+					if (code === 125 && depth === 2)
+					{
+						if (skip > 0)
+						{
 							skip--;
-						} else if (capturing) {
+						}
+						else if (capturing)
+						{
 							// oxlint-disable-next-line typescript/no-unsafe-argument -- applyApiBatch validates every node with its schema
 							batch.push(JSON.parse(pending + chunk.slice(segmentStart, i + 1)));
 							capturing = false;
 							pending = "";
-							if (batch.length === options.size) {
+							if (batch.length === options.size)
+							{
 								yield batch;
 								batch = [];
 							}
@@ -69,17 +98,22 @@ export async function* nodeBatches(
 					}
 				}
 			}
-			if (capturing) {
+			if (capturing)
+			{
 				pending += chunk.slice(segmentStart);
 			}
-			if (done) {
+			if (done)
+			{
 				break;
 			}
 		}
-		if (batch.length > 0) {
+		if (batch.length > 0)
+		{
 			yield batch;
 		}
-	} finally {
+	}
+	finally
+	{
 		await reader.cancel().catch(() => {});
 	}
 }

@@ -3,7 +3,8 @@ import {createDoublePressDetector, handleExpandClick} from "../expansion.js";
 /** Shared across arrows so a second click pairs only with the first click on the same row. */
 const clickDetector = createDoublePressDetector();
 
-interface ExpandArrowProps {
+interface ExpandArrowProps
+{
 	nodeId: string;
 	hasChildren: boolean;
 	isExpanded: boolean;
@@ -42,38 +43,52 @@ export function expandArrow({
 	onFocusRow,
 	extraClassName,
 	mobile = false,
-}: ExpandArrowProps) {
-	const handleClick = (event: Pick<React.MouseEvent, "preventDefault" | "stopPropagation" | "timeStamp">) => {
+}: ExpandArrowProps)
+{
+	const handleClick = (event: Pick<React.MouseEvent, "preventDefault" | "stopPropagation" | "timeStamp">) =>
+	{
 		event.preventDefault();
 		event.stopPropagation();
-		if (!onExpandAll) {
-			if (hasChildren) {
+		if (!onExpandAll)
+		{
+			if (hasChildren)
+			{
 				onToggle(nodeId);
 			}
 			return;
 		}
-		const plan = handleExpandClick({
-			now: event.timeStamp,
-			id: nodeId,
-			isOpen: isExpanded,
-			hasChildren,
-			detector: clickDetector,
-		});
-		if (plan.type === "toggle") {
+		const plan = handleExpandClick(
+			{
+				now: event.timeStamp,
+				id: nodeId,
+				isOpen: isExpanded,
+				hasChildren,
+				detector: clickDetector,
+			},
+		);
+		if (plan.type === "toggle")
+		{
 			onToggle(nodeId);
 			onFocusRow?.(nodeId);
-		} else if (plan.type === "all") {
+		}
+		else if (plan.type === "all")
+		{
 			onExpandAll(nodeId, plan.open);
 			onFocusRow?.(nodeId);
 		}
 	};
-	const shared = {
+	const shared =
+	{
 		"data-handbook": "expand.toggle",
 		className: [mobile ? MOBILE_EXPAND_CLASS : EXPAND_CLASS, extraClassName].filter(Boolean).join(" "),
-		style: {color: mobile ? "var(--wf-text-tertiary)" : alwaysVisible ? "var(--wf-text-quinary)" : "transparent"},
+		style:
+		{
+			color: mobile ? "var(--wf-text-tertiary)" : alwaysVisible ? "var(--wf-text-quinary)" : "transparent",
+		},
 		onClick: handleClick,
 	};
-	if (!hasChildren) {
+	if (!hasChildren)
+	{
 		return <button type="button" tabIndex={-1} aria-hidden="true" {...shared} />;
 	}
 	return (
@@ -82,12 +97,22 @@ export function expandArrow({
 			aria-expanded={isExpanded}
 			aria-label={isExpanded ? "Collapse" : "Expand"}
 			// Upstream's anchor is never focusable; keep a click from moving focus to the button.
-			onMouseDown={(event) => {
+			onMouseDown={(event) =>
+			{
 				event.preventDefault();
 			}}
 			{...shared}
 		>
-			<div style={mobile ? {transform: "scale(1.2)"} : undefined}>
+			<div
+				style={
+					mobile
+						?
+							{
+								transform: "scale(1.2)",
+							}
+						: undefined
+				}
+			>
 				<svg
 					width="20"
 					height="20"

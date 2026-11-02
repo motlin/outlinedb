@@ -10,7 +10,8 @@ import {runUnitOfWork} from "../cache/node-composite.js";
 import {readSubtreeAt, systemTimeJustBefore} from "../cache/subtree-history.js";
 import {newSystemTimestamp} from "../cache/system-time.js";
 import {closeCurrentVersions} from "../cache/temporal-merge.js";
-import {
+import
+{
 	ACCOUNT_IMPORT_NAME,
 	accountRowCounts,
 	accountRows,
@@ -31,7 +32,8 @@ import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 import {HOME_TARGET} from "../types/targets.js";
 import {hasInternalLink, internalLinkShortIds} from "../workflowy/internal-links.js";
 import {upstreamExpansionKey} from "../workflowy/virtual-id.js";
-import {
+import
+{
 	CALENDAR_LEVELS,
 	DEFAULT_CALENDAR_LEVELS,
 	CalendarRootMissing,
@@ -51,7 +53,8 @@ import {calendarLayoutUndoWrites} from "./calendar-layout-undo.js";
 import type {LayoutWrite} from "./calendar-layout-apply.js";
 import {planCalendarLayout} from "./calendar-layout.js";
 import type {CalendarLayoutLevels, LayoutNode} from "./calendar-layout.js";
-import {
+import
+{
 	ExpansionNotSeeded,
 	InboxMissing,
 	LoggedOut,
@@ -104,33 +107,46 @@ const FLAG_SETTINGS = new Set<ServerSetting>([
 	"backup_to_dropbox",
 ]);
 
-export interface Account {
+export interface Account
+{
 	userId: string;
 	joinedAt: Date;
 	fullName: string | null;
 }
 
 const MetadataSchema = z.record(z.string(), z.unknown());
-const SucceededSchema = z.object({succeeded: z.boolean()});
-const CalendarMetadataSchema = z.object({
-	calendar: z
-		.object({
-			root: z.boolean().optional(),
-			level: z.string().optional(),
-			value: z.unknown().optional(),
-			timestamp: z.number().optional(),
-			dateId: z.number().optional(),
-			levels: z.record(z.string(), z.boolean()).optional(),
-		})
-		.loose(),
-});
+const SucceededSchema = z.object(
+	{
+		succeeded: z.boolean(),
+	},
+);
+const CalendarMetadataSchema = z.object(
+	{
+		calendar: z
+			.object(
+				{
+					root: z.boolean().optional(),
+					level: z.string().optional(),
+					value: z.unknown().optional(),
+					timestamp: z.number().optional(),
+					dateId: z.number().optional(),
+					levels: z.record(z.string(), z.boolean()).optional(),
+				},
+			)
+			.loose(),
+	},
+);
 
 /** The `true`/`"yes"` entries of a `settings.features` value. */
-function enabledDict(value: unknown): Record<string, true> {
+function enabledDict(value: unknown): Record<string, true>
+{
 	const dict: Record<string, true> = {};
-	if (typeof value === "object" && value !== null) {
-		for (const [name, flag] of Object.entries(value)) {
-			if (flag === true || flag === "yes") {
+	if (typeof value === "object" && value !== null)
+	{
+		for (const [name, flag] of Object.entries(value))
+		{
+			if (flag === true || flag === "yes")
+			{
 				dict[name] = true;
 			}
 		}
@@ -148,7 +164,8 @@ const FEATURE_CODENAME = /^[a-z0-9_-]+$/u;
  * A change-feed read of expansion: the stored keys' current content version, and the expanded ids when it differs
  * from the version asked about (null when it does not).
  */
-export interface ExpansionChanges {
+export interface ExpansionChanges
+{
 	version: string;
 	expandedIds: string[] | null;
 }
@@ -159,18 +176,21 @@ export const HOME = HOME_TARGET;
 /** Home is `null` to the public API and the cache. */
 type PublicParent = string | null;
 
-function publicParent(id: string): PublicParent {
+function publicParent(id: string): PublicParent
+{
 	return id === HOME ? null : id;
 }
 
-function internalParent(parent: PublicParent): string {
+function internalParent(parent: PublicParent): string
+{
 	return parent ?? ROOT_PROJECT_ID;
 }
 
 /** Upstream's expansion key for a node: the first 8 chars of its id, or `v_<child4><mirror4><path>` for a mirror instance. */
 const expansionKey = upstreamExpansionKey;
 
-function clampIndex(index: number, length: number): number {
+function clampIndex(index: number, length: number): number
+{
 	return Math.min(Math.max(Math.trunc(index), 0), length);
 }
 
@@ -178,19 +198,18 @@ function clampIndex(index: number, length: number): number {
  * The slot right after `afterId` among `siblingIds` (0 for null) while it is still one of them, else `index`
  * clamped: a client whose sibling list missed another client's write still lands the row below the one it saw.
  */
-export function anchoredIndex(
-	siblingIds: readonly string[],
-	afterId: string | null | undefined,
-	index: number,
-): number {
-	if (afterId === null) {
+export function anchoredIndex(siblingIds: readonly string[], afterId: string | null | undefined, index: number): number
+{
+	if (afterId === null)
+	{
 		return 0;
 	}
 	const anchor = afterId === undefined ? -1 : siblingIds.indexOf(afterId);
 	return anchor === -1 ? clampIndex(index, siblingIds.length) : anchor + 1;
 }
 
-export interface CreateAtInput {
+export interface CreateAtInput
+{
 	/** The new node's id; generated when absent. */
 	id?: string;
 	/** A node id, or `HOME`. */
@@ -205,12 +224,25 @@ export interface CreateAtInput {
 }
 
 /** Every mirror root among `trees` (ids already assigned), with the original it mirrors. */
-function mirrorRootsIn(trees: NewTree[]): {mirrorId: string; originId: string}[] {
-	return trees.flatMap((node) => {
+function mirrorRootsIn(trees: NewTree[]):
+{
+	mirrorId: string;
+	originId: string;
+}[]
+{
+	return trees.flatMap((node) =>
+	{
 		const originId = getPath(node.metadata ?? {}, ["mirror", "originalId"]);
 		const isRoot = getPath(node.metadata ?? {}, ["mirror", "isMirrorRoot"]) === true;
 		const own =
-			typeof originId === "string" && isRoot && node.id !== undefined ? [{mirrorId: node.id, originId}] : [];
+			typeof originId === "string" && isRoot && node.id !== undefined
+				? [
+						{
+							mirrorId: node.id,
+							originId,
+						},
+					]
+				: [];
 		return [...own, ...mirrorRootsIn(node.children ?? [])];
 	});
 }
@@ -221,12 +253,16 @@ function mirrorRootsIn(trees: NewTree[]): {mirrorId: string; originId: string}[]
  * rows naming a created node as someone else's original are left out, since a
  * copied `mirrorRootIds` describes the copied node, not the new one.
  */
-function createdRelationships(trees: NewTree[]): ItemRelationships {
+function createdRelationships(trees: NewTree[]): ItemRelationships
+{
 	const relationships = emptyItemRelationships();
 	const created = new Set<string>();
-	const collect = (nodes: NewTree[]): void => {
-		for (const node of nodes) {
-			if (node.id !== undefined) {
+	const collect = (nodes: NewTree[]): void =>
+	{
+		for (const node of nodes)
+		{
+			if (node.id !== undefined)
+			{
 				created.add(node.id);
 				collectItemRelationships(relationships, node.id, node.metadata);
 			}
@@ -234,17 +270,22 @@ function createdRelationships(trees: NewTree[]): ItemRelationships {
 		}
 	};
 	collect(trees);
-	return {...relationships, mirrors: relationships.mirrors.filter((row) => created.has(row.mirrorId))};
+	return {
+		...relationships,
+		mirrors: relationships.mirrors.filter((row) => created.has(row.mirrorId)),
+	};
 }
 
-export interface CreateTreesAtInput {
+export interface CreateTreesAtInput
+{
 	parentId: string;
 	index?: number;
 	afterId?: string | null;
 	trees: NewTree[];
 }
 
-export interface CreateMirrorsAtInput {
+export interface CreateMirrorsAtInput
+{
 	/** The nodes to mirror, in order; a mirror resolves to its original. */
 	originalIds: string[];
 	/** A node id, or `HOME`. */
@@ -253,7 +294,8 @@ export interface CreateMirrorsAtInput {
 	index: number;
 }
 
-export interface CreateMirrorAtInput {
+export interface CreateMirrorAtInput
+{
 	/** The node to mirror; a mirror resolves to its original. */
 	originalId: string;
 	/** A node id, or `HOME`. */
@@ -262,7 +304,8 @@ export interface CreateMirrorAtInput {
 	index: number;
 }
 
-export interface EnsuredCalendarDay {
+export interface EnsuredCalendarDay
+{
 	/** The ensured node: the day, or the month or year when `stopAt` says so. */
 	dayId: string;
 	/** The node's first child (the empty one created for a new or empty node), or null when `createChild` is false and it has none. */
@@ -272,21 +315,24 @@ export interface EnsuredCalendarDay {
 }
 
 /** A calendar level node {@link WorkflowyInternalAdapter.ensureCalendarDay} creates. */
-interface CalendarChainNode {
+interface CalendarChainNode
+{
 	id: string;
 	name: string;
 	metadata: Metadata;
 }
 
 /** What {@link WorkflowyInternalAdapter.applyCalendarLayout} (or its undo) pushed. */
-export interface AppliedCalendarLayout {
+export interface AppliedCalendarLayout
+{
 	rootId: string;
 	/** Tree writes pushed; 0 when the layout was already in place. */
 	writes: number;
 }
 
 /** The calendar a layout is planned from: the root's subtree as the restructure walks it, and its current levels. */
-export interface CalendarLayoutSnapshot {
+export interface CalendarLayoutSnapshot
+{
 	root: LayoutNode;
 	/** The root's `calendar.levels`, or undefined for upstream's default. */
 	levels: CalendarLayoutLevels | undefined;
@@ -296,17 +342,22 @@ export interface CalendarLayoutSnapshot {
 export type LayoutTimings = Record<string, number>;
 
 /** Throw unless a layout write names its target calendar root: there is no fallback to the tagged root. */
-function requireRootId(rootId: string | undefined): asserts rootId is string {
-	if (typeof rootId !== "string" || rootId === "") {
+function requireRootId(rootId: string | undefined): asserts rootId is string
+{
+	if (typeof rootId !== "string" || rootId === "")
+	{
 		throw new Error("calendar layout: rootId is required");
 	}
 }
 
 /** A function recording the time since its previous call (or creation) under a phase name; a no-op without `timings`. */
-function phaseTimer(timings: LayoutTimings | undefined): (phase: string) => void {
+function phaseTimer(timings: LayoutTimings | undefined): (phase: string) => void
+{
 	let last = performance.now();
-	return (phase) => {
-		if (timings !== undefined) {
+	return (phase) =>
+	{
+		if (timings !== undefined)
+		{
 			const now = performance.now();
 			timings[phase] = (timings[phase] ?? 0) + now - last;
 			last = now;
@@ -319,12 +370,16 @@ function phaseTimer(timings: LayoutTimings | undefined): (phase: string) => void
  * insert into or take from, and every node they delete, which must be empty.
  * Level nodes the writes create are not in the snapshot and are left out.
  */
-function layoutWriteReads(writes: LayoutWrite[], childIds: ReadonlyMap<string, string[]>): string[] {
-	const reads = writes.flatMap((write) => {
-		if (write.op === "create" || write.op === "undelete") {
+function layoutWriteReads(writes: LayoutWrite[], childIds: ReadonlyMap<string, string[]>): string[]
+{
+	const reads = writes.flatMap((write) =>
+	{
+		if (write.op === "create" || write.op === "undelete")
+		{
 			return [write.parentId];
 		}
-		if (write.op === "move") {
+		if (write.op === "move")
+		{
 			return [write.from.parentId, write.parentId];
 		}
 		return write.op === "delete" ? [write.from.parentId, write.id] : [];
@@ -333,9 +388,11 @@ function layoutWriteReads(writes: LayoutWrite[], childIds: ReadonlyMap<string, s
 }
 
 /** Each snapshot node's child ids, in order, keyed by its id. */
-function layoutChildIds(root: LayoutNode): Map<string, string[]> {
+function layoutChildIds(root: LayoutNode): Map<string, string[]>
+{
 	const childIds = new Map<string, string[]>();
-	const visit = (node: LayoutNode): void => {
+	const visit = (node: LayoutNode): void =>
+	{
 		childIds.set(
 			node.id,
 			node.children.map((child) => child.id),
@@ -346,7 +403,8 @@ function layoutChildIds(root: LayoutNode): Map<string, string[]> {
 	return childIds;
 }
 
-export interface MoveToInput {
+export interface MoveToInput
+{
 	ids: string[];
 	/** A node id, or `HOME`. */
 	parentId: string;
@@ -359,7 +417,8 @@ export interface MoveToInput {
 	index?: number;
 }
 
-export interface RestoreInput {
+export interface RestoreInput
+{
 	id: string;
 	/** A node id, or `HOME`. Without it the node goes back where it was deleted from. */
 	parentId?: string;
@@ -368,16 +427,23 @@ export interface RestoreInput {
 }
 
 /** What {@link WorkflowyInternalAdapter.syncBacklinks} changed upstream. */
-export interface BacklinkSync {
+export interface BacklinkSync
+{
 	/** Backlink items created: a mirror of `sourceId` under `targetId`'s references root. */
-	created: {id: string; sourceId: string; targetId: string}[];
+	created:
+	{
+		id: string;
+		sourceId: string;
+		targetId: string;
+	}[];
 	/** References roots created under targets that had none. */
 	referencesRoots: string[];
 	/** Backlink items deleted because their source no longer links to their target. */
 	deleted: string[];
 }
 
-export interface WorkflowyInternalAdapterOptions {
+export interface WorkflowyInternalAdapterOptions
+{
 	client: WorkflowyInternalClient;
 	db: AdapterDatabase;
 	/** Defaults to `Date.now`; drives both cache freshness and op timestamps. */
@@ -395,15 +461,19 @@ export interface WorkflowyInternalAdapterOptions {
 }
 
 /** Log a resync error at error level before it propagates, so a missing or stale seed never goes unnoticed. */
-function loud<E extends Error>(error: E): E {
+function loud<E extends Error>(error: E): E
+{
 	console.error(error);
 	return error;
 }
 
-function getPath(value: unknown, path: string[]): unknown {
+function getPath(value: unknown, path: string[]): unknown
+{
 	let current = value;
-	for (const key of path) {
-		if (typeof current !== "object" || current === null || !Object.hasOwn(current, key)) {
+	for (const key of path)
+	{
+		if (typeof current !== "object" || current === null || !Object.hasOwn(current, key))
+		{
 			return undefined;
 		}
 		current = Reflect.get(current, key);
@@ -418,9 +488,14 @@ const ID_BATCH_SIZE = 500;
  * {@link linkedSourcesInSubtree}): `ids` are the possible backlink sources, and
  * `mirrors` each one's current `mirrors` rows, which the cache delete ends.
  */
-export interface LinkedSources {
+export interface LinkedSources
+{
 	ids: string[];
-	mirrors: {originalId: string; mirrorId: string}[];
+	mirrors:
+	{
+		originalId: string;
+		mirrorId: string;
+	}[];
 }
 
 /**
@@ -431,13 +506,26 @@ export interface LinkedSources {
  * rows naming it as original. Read before a delete, since the cache drops the
  * subtree, and those rows, with it.
  */
-export function linkedSourcesInSubtree(db: AdapterDatabase, rootId: string): LinkedSources {
-	const ids = linkedIdsInSubtree(db, rootId, {withBacklinkItems: true});
+export function linkedSourcesInSubtree(db: AdapterDatabase, rootId: string): LinkedSources
+{
+	const ids = linkedIdsInSubtree(
+		db,
+		rootId,
+		{
+			withBacklinkItems: true,
+		},
+	);
 	const mirrors: LinkedSources["mirrors"] = [];
-	for (let start = 0; start < ids.length; start += ID_BATCH_SIZE) {
+	for (let start = 0; start < ids.length; start += ID_BATCH_SIZE)
+	{
 		mirrors.push(
 			...db
-				.select({originalId: mirrorsTable.originalId, mirrorId: mirrorsTable.mirrorId})
+				.select(
+					{
+						originalId: mirrorsTable.originalId,
+						mirrorId: mirrorsTable.mirrorId,
+					},
+				)
 				.from(mirrorsTable)
 				.where(
 					and(
@@ -449,28 +537,42 @@ export function linkedSourcesInSubtree(db: AdapterDatabase, rootId: string): Lin
 				.all(),
 		);
 	}
-	return {ids, mirrors};
+	return {
+		ids,
+		mirrors,
+	};
 }
 
 /** Those of `ids` that are the original of a current backlink item. */
-function backlinkSourceIds(db: AdapterDatabase, ids: string[]): Set<string> {
+function backlinkSourceIds(db: AdapterDatabase, ids: string[]): Set<string>
+{
 	const sources = new Set<string>();
-	for (let start = 0; start < ids.length; start += ID_BATCH_SIZE) {
+	for (let start = 0; start < ids.length; start += ID_BATCH_SIZE)
+	{
 		for (const item of currentBacklinkItems(
 			db,
 			inArray(mirrorsTable.originalId, ids.slice(start, start + ID_BATCH_SIZE)),
-		)) {
+		))
+		{
 			sources.add(item.sourceId);
 		}
 	}
 	return sources;
 }
 
-function linkedIdsInSubtree(db: AdapterDatabase, rootId: string, {withBacklinkItems = false} = {}): string[] {
+function linkedIdsInSubtree(db: AdapterDatabase, rootId: string, {withBacklinkItems = false} = {}): string[]
+{
 	const linked: string[] = [];
-	for (let level = [rootId]; level.length > 0;) {
+	for (let level = [rootId]; level.length > 0;)
+	{
 		const rows = db
-			.select({id: nodeContent.id, name: nodeContent.name, note: nodeContent.note})
+			.select(
+				{
+					id: nodeContent.id,
+					name: nodeContent.name,
+					note: nodeContent.note,
+				},
+			)
 			.from(nodeContent)
 			.where(and(inArray(nodeContent.id, level), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
 			.all();
@@ -481,7 +583,11 @@ function linkedIdsInSubtree(db: AdapterDatabase, rootId: string, {withBacklinkIt
 				.map((row) => row.id),
 		);
 		level = db
-			.select({id: nodeContent.id})
+			.select(
+				{
+					id: nodeContent.id,
+				},
+			)
 			.from(nodeContent)
 			.where(and(inArray(nodeContent.parentId, level), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
 			.all()
@@ -507,7 +613,8 @@ function linkedIdsInSubtree(db: AdapterDatabase, rootId: string, {withBacklinkIt
  * the push succeeds re-read every affected parent's children and replace them
  * in the node cache in one transaction.
  */
-export class WorkflowyInternalAdapter {
+export class WorkflowyInternalAdapter
+{
 	private readonly client: WorkflowyInternalClient;
 	private readonly db: AdapterDatabase;
 	private readonly now: () => number;
@@ -521,20 +628,26 @@ export class WorkflowyInternalAdapter {
 	/** The stored id the push in flight started from, for the refresh error. */
 	private startedFrom: string | undefined;
 
-	constructor(options: WorkflowyInternalAdapterOptions) {
+	constructor(options: WorkflowyInternalAdapterOptions)
+	{
 		this.client = options.client;
 		this.db = options.db;
 		this.now = options.now ?? Date.now;
-		this.pusher = new PushAndPoll(options.client, {
-			...options.pushAndPoll,
-			now: this.now,
-			transactionLog: {
-				start: () => this.startTxId(),
-				accept: (result) => {
-					this.acceptTransactions(result);
+		this.pusher = new PushAndPoll(
+			options.client,
+			{
+				...options.pushAndPoll,
+				now: this.now,
+				transactionLog:
+				{
+					start: () => this.startTxId(),
+					accept: (result) =>
+					{
+						this.acceptTransactions(result);
+					},
 				},
 			},
-		});
+		);
 		this.writeThrough = options.writeThrough;
 		this.generateId = options.generateId ?? (() => crypto.randomUUID());
 		this.standalone = options.standalone ?? false;
@@ -545,20 +658,24 @@ export class WorkflowyInternalAdapter {
 	 * pure poll from the stored transaction id (about 279 bytes when nothing
 	 * changed). Every push does the same as a side effect.
 	 */
-	async catchUp(): Promise<void> {
+	async catchUp(): Promise<void>
+	{
 		await this.session();
 		await this.pusher.pushAndPoll();
 	}
 
 	/** The session's `wfclientid`, which names this client's `/ws/signal/<client_id>/` channel. */
-	async clientId(): Promise<string> {
+	async clientId(): Promise<string>
+	{
 		return (await this.session()).clientId;
 	}
 
 	/** Where every push starts: the stored tree transaction id, or a loud error without one. */
-	private startTxId(): string {
+	private startTxId(): string
+	{
 		const txId = readTreeTxId(this.db);
-		if (txId === undefined) {
+		if (txId === undefined)
+		{
 			throw loud(new TreeNotSeeded());
 		}
 		this.startedFrom = txId;
@@ -571,8 +688,10 @@ export class WorkflowyInternalAdapter {
 	 * come back among the remote ones, so a transaction id is applied once. Our own ops' content is
 	 * already written through, so of those only the moves replay into the nodes.
 	 */
-	private acceptTransactions(result: PushResult): void {
-		if (result.needsRefresh) {
+	private acceptTransactions(result: PushResult): void
+	{
+		if (result.needsRefresh)
+		{
 			throw loud(new TreeRefreshRequired(this.startedFrom ?? "unknown"));
 		}
 		const seen = new Set<string>();
@@ -580,26 +699,41 @@ export class WorkflowyInternalAdapter {
 		const ownOps = new Set<InternalOp>();
 		for (const {id, ops: transactionOps} of [
 			...result.remote,
-			{...(result.serverRunId === undefined ? {} : {id: result.serverRunId}), ops: result.serverRun},
-		]) {
-			if (id !== undefined && seen.has(id)) {
+			{
+				...(result.serverRunId === undefined
+					? {}
+					:
+						{
+							id: result.serverRunId,
+						}),
+				ops: result.serverRun,
+			},
+		])
+		{
+			if (id !== undefined && seen.has(id))
+			{
 				continue;
 			}
-			if (id !== undefined) {
+			if (id !== undefined)
+			{
 				seen.add(id);
 			}
 			const unreplayable = transactionOps.find((op) => !isReplayable(op) || !isNodeReplayable(op));
-			if (unreplayable !== undefined) {
+			if (unreplayable !== undefined)
+			{
 				throw loud(new UnreplayableTransaction(id ?? "from our own push", unreplayable.type));
 			}
 			ops.push(...transactionOps);
-			if (id === undefined || id === result.serverRunId) {
-				for (const op of transactionOps) {
+			if (id === undefined || id === result.serverRunId)
+			{
+				for (const op of transactionOps)
+				{
 					ownOps.add(op);
 				}
 			}
 		}
-		runUnitOfWork(this.db, (unitOfWork) => {
+		runUnitOfWork(this.db, (unitOfWork) =>
+		{
 			// Edges first: their delete replay reads the subtree's node rows before the node replay ends them.
 			applyRelationshipOps(unitOfWork, ops);
 			applyNodeOps(unitOfWork, ops, ownOps);
@@ -608,86 +742,126 @@ export class WorkflowyInternalAdapter {
 	}
 
 	/** Create one node at an exact slot with a `bulk_create`; the id is chosen here, so none is read back. */
-	async createAt(input: CreateAtInput): Promise<{id: string}> {
+	async createAt(input: CreateAtInput): Promise<
+	{
+		id: string;
+	}>
+	{
 		const tree = this.tree();
 		const parent = publicParent(input.parentId);
 		const siblings = await tree.liveChildren(parent);
 		const session = await this.session();
-		const newTree: NewTree = {name: input.name};
-		if (input.id !== undefined) {
+		const newTree: NewTree =
+		{
+			name: input.name,
+		};
+		if (input.id !== undefined)
+		{
 			newTree.id = input.id;
 		}
-		if (input.note !== undefined) {
+		if (input.note !== undefined)
+		{
 			newTree.note = input.note;
 		}
-		if (input.metadata !== undefined) {
+		if (input.metadata !== undefined)
+		{
 			newTree.metadata = input.metadata;
 		}
-		const {op, ids} = bulkCreateOp({
-			parentId: internalParent(parent),
-			index: anchoredIndex(
-				siblings.map((sibling) => sibling.id),
-				input.afterId,
-				input.index ?? siblings.length,
-			),
-			trees: [newTree],
-			userId: session.userId,
-			now: this.now(),
-			dateJoinedSec: session.dateJoinedSec,
-			generateId: this.generateId,
-		});
-		await this.pusher.pushAndPoll({ops: [op]});
+		const {op, ids} = bulkCreateOp(
+			{
+				parentId: internalParent(parent),
+				index: anchoredIndex(
+					siblings.map((sibling) => sibling.id),
+					input.afterId,
+					input.index ?? siblings.length,
+				),
+				trees: [newTree],
+				userId: session.userId,
+				now: this.now(),
+				dateJoinedSec: session.dateJoinedSec,
+				generateId: this.generateId,
+			},
+		);
+		await this.pusher.pushAndPoll(
+			{
+				ops: [op],
+			},
+		);
 		const [id] = ids;
-		if (id === undefined) {
+		if (id === undefined)
+		{
 			throw new Error("bulk_create produced no id");
 		}
 		await tree.refreshChildren([parent]);
 		const kept = keptInternalMetadata(input.metadata);
-		if (kept !== undefined) {
+		if (kept !== undefined)
+		{
 			this.writeNodesMetadata(new Map([[id, kept]]));
 		}
-		if (hasInternalLink(`${input.name} ${input.note ?? ""}`)) {
+		if (hasInternalLink(`${input.name} ${input.note ?? ""}`))
+		{
 			await this.syncBacklinks([id]);
 		}
-		return {id};
+		return {
+			id,
+		};
 	}
 
 	/** Create N trees at one slot with a single `bulk_create`; like `createAt` but recursive. */
-	async createTreesAt(input: CreateTreesAtInput): Promise<{ids: string[]}> {
+	async createTreesAt(input: CreateTreesAtInput): Promise<
+	{
+		ids: string[];
+	}>
+	{
 		const tree = this.tree();
 		const parent = publicParent(input.parentId);
 		const siblings = await tree.liveChildren(parent);
 		const session = await this.session();
 		const withIds = (trees: NewTree[]): NewTree[] =>
-			trees.map((node) => ({
+			trees.map((node) => (
+			{
 				...node,
 				id: node.id ?? this.generateId(),
-				...(node.children === undefined ? {} : {children: withIds(node.children)}),
+				...(node.children === undefined
+					? {}
+					:
+						{
+							children: withIds(node.children),
+						}),
 			}));
 		const trees = withIds(input.trees);
-		const {op, ids} = bulkCreateOp({
-			parentId: internalParent(parent),
-			index: anchoredIndex(
-				siblings.map((sibling) => sibling.id),
-				input.afterId,
-				input.index ?? siblings.length,
-			),
-			trees,
-			userId: session.userId,
-			now: this.now(),
-			dateJoinedSec: session.dateJoinedSec,
-		});
+		const {op, ids} = bulkCreateOp(
+			{
+				parentId: internalParent(parent),
+				index: anchoredIndex(
+					siblings.map((sibling) => sibling.id),
+					input.afterId,
+					input.index ?? siblings.length,
+				),
+				trees,
+				userId: session.userId,
+				now: this.now(),
+				dateJoinedSec: session.dateJoinedSec,
+			},
+		);
 		const linkOps = await this.mirrorLinkOps(trees, session.dateJoinedSec);
-		await this.pusher.pushAndPoll({ops: [op, ...linkOps]});
+		await this.pusher.pushAndPoll(
+			{
+				ops: [op, ...linkOps],
+			},
+		);
 		await tree.refreshChildren(
 			[parent],
 			trees.flatMap((node) => (node.id !== undefined && (node.children?.length ?? 0) > 0 ? [node.id] : [])),
 		);
 		const kept = new Map<string, Record<string, unknown>>();
-		const collectKept = (nodes: NewTree[]) => {
-			for (const node of nodes) {
+		const collectKept = (nodes: NewTree[]) =>
+		{
+			for (const node of nodes)
+			{
 				const metadata = keptInternalMetadata(node.metadata);
-				if (node.id !== undefined && metadata !== undefined) {
+				if (node.id !== undefined && metadata !== undefined)
+				{
 					kept.set(node.id, metadata);
 				}
 				collectKept(node.children ?? []);
@@ -696,7 +870,9 @@ export class WorkflowyInternalAdapter {
 		collectKept(trees);
 		this.writeNodesMetadata(kept);
 		tree.recordRelationships(createdRelationships(trees));
-		return {ids};
+		return {
+			ids,
+		};
 	}
 
 	/**
@@ -704,37 +880,53 @@ export class WorkflowyInternalAdapter {
 	 * Call after {@link catchUp}: an original shown without a `mirror` gets the whole object, which would drop
 	 * mirror ids the cache missed.
 	 */
-	private originalMetadata(originIds: string[]): (id: string) => Metadata {
+	private originalMetadata(originIds: string[]): (id: string) => Metadata
+	{
 		const originals = this.tree().relationshipMetadata(originIds);
-		return (id) => {
+		return (id) =>
+		{
 			const {mirror} = originals.get(id) ?? {};
-			return mirror === undefined ? {} : {mirror};
+			return mirror === undefined
+				? {}
+				:
+					{
+						mirror,
+					};
 		};
 	}
 
 	/** The `edit`s that list each mirror root created inside `trees` on its original's `mirror.mirrorRootIds`. */
-	private async mirrorLinkOps(trees: NewTree[], dateJoinedSec: number): Promise<InternalOp[]> {
+	private async mirrorLinkOps(trees: NewTree[], dateJoinedSec: number): Promise<InternalOp[]>
+	{
 		const roots = mirrorRootsIn(trees);
-		if (roots.length === 0) {
+		if (roots.length === 0)
+		{
 			return [];
 		}
 		await this.catchUp();
 		const originIds = [...new Set(roots.map((root) => root.originId))];
 		const metadataOf = this.originalMetadata(originIds);
-		return originIds.map((originId) => {
+		return originIds.map((originId) =>
+		{
 			const {patches, inverse} = buildMetadataChanges(
 				metadataOf(originId),
 				roots
 					.filter((root) => root.originId === originId)
-					.map((root) => ({path: ["mirror", "mirrorRootIds", root.mirrorId], value: true})),
+					.map((root) => (
+					{
+						path: ["mirror", "mirrorRootIds", root.mirrorId],
+						value: true,
+					})),
 			);
-			return editOp({
-				id: originId,
-				metadataPatches: patches,
-				metadataInversePatches: inverse,
-				now: this.now(),
-				dateJoinedSec,
-			});
+			return editOp(
+				{
+					id: originId,
+					metadataPatches: patches,
+					metadataInversePatches: inverse,
+					now: this.now(),
+					dateJoinedSec,
+				},
+			);
 		});
 	}
 
@@ -755,22 +947,38 @@ export class WorkflowyInternalAdapter {
 	 * so the whole tree is never read. Everything goes out in one push; the
 	 * changed parents are then read back and recorded as one unit of work.
 	 */
-	async syncBacklinks(sourceIds: string[]): Promise<BacklinkSync> {
-		const result: BacklinkSync = {created: [], referencesRoots: [], deleted: []};
+	async syncBacklinks(sourceIds: string[]): Promise<BacklinkSync>
+	{
+		const result: BacklinkSync =
+		{
+			created: [],
+			referencesRoots: [],
+			deleted: [],
+		};
 		const tree = this.tree();
 		await this.catchUp();
 		const sources = [...new Set(sourceIds)];
 		const sourceRelations = tree.relationshipMetadata(sources);
 		// The session is read only once there is an op to build.
 		let sessionRead: Promise<InternalSession> | undefined;
-		const opContext = async () => {
+		const opContext = async () =>
+		{
 			const {userId, dateJoinedSec} = await (sessionRead ??= this.session());
-			return {userId, clock: {now: this.now(), dateJoinedSec}};
+			return {
+				userId,
+				clock:
+				{
+					now: this.now(),
+					dateJoinedSec,
+				},
+			};
 		};
 		const childOrders = new Map<string, string[]>();
-		const childOrder = async (parentId: string): Promise<string[]> => {
+		const childOrder = async (parentId: string): Promise<string[]> =>
+		{
 			let order = childOrders.get(parentId);
-			if (order === undefined) {
+			if (order === undefined)
+			{
 				order = (await tree.liveChildren(parentId)).map((child) => child.id);
 				childOrders.set(parentId, order);
 			}
@@ -780,18 +988,22 @@ export class WorkflowyInternalAdapter {
 		const changedParents = new Set<string>();
 		const ops: InternalOp[] = [];
 
-		for (const sourceId of sources) {
+		for (const sourceId of sources)
+		{
 			const {mirror, isReferencesRoot} = sourceRelations.get(sourceId) ?? {};
-			if (isReferencesRoot === true || mirror?.originalId !== undefined) {
+			if (isReferencesRoot === true || mirror?.originalId !== undefined)
+			{
 				continue;
 			}
 			const source = await tree.findLiveNode(sourceId);
-			if (source === null) {
+			if (source === null)
+			{
 				continue;
 			}
 			const linked = [
 				...new Set(
-					internalLinkShortIds(`${source.name} ${source.note ?? ""}`).flatMap((shortId) => {
+					internalLinkShortIds(`${source.name} ${source.note ?? ""}`).flatMap((shortId) =>
+					{
 						const id = tree.resolveShortId(shortId);
 						return id === null ? [] : [id];
 					}),
@@ -805,53 +1017,94 @@ export class WorkflowyInternalAdapter {
 
 			const itemIds = Object.keys(mirror?.backlinkMirrorRootIds ?? {});
 			const itemRelations = tree.relationshipMetadata(itemIds);
-			for (const itemId of itemIds) {
+			for (const itemId of itemIds)
+			{
 				const item = await tree.findLiveNode(itemId);
-				if (item === null) {
+				if (item === null)
+				{
 					// The item is gone from the tree; upstream's detach drops its id from the source.
-					changes.push({path: ["mirror", "backlinkMirrorRootIds", itemId], value: undefined});
+					changes.push(
+						{
+							path: ["mirror", "backlinkMirrorRootIds", itemId],
+							value: undefined,
+						},
+					);
 					continue;
 				}
 				const backlink = itemRelations.get(itemId)?.backlink;
-				if (backlink?.sourceID !== sourceId) {
+				if (backlink?.sourceID !== sourceId)
+				{
 					continue;
 				}
 				const kept = targets.indexOf(backlink.targetID);
-				if (kept !== -1) {
+				if (kept !== -1)
+				{
 					targets.splice(kept, 1);
 					continue;
 				}
 				const parentId = item.parent_id ?? null;
-				if (parentId === null) {
+				if (parentId === null)
+				{
 					continue;
 				}
 				const siblings = await childOrder(parentId);
 				const {clock} = await opContext();
-				ops.push(deleteOp({...clock, id: itemId, from: {parentId, index: siblings.indexOf(itemId)}}));
+				ops.push(
+					deleteOp(
+						{
+							...clock,
+							id: itemId,
+							from:
+							{
+								parentId,
+								index: siblings.indexOf(itemId),
+							},
+						},
+					),
+				);
 				siblings.splice(siblings.indexOf(itemId), 1);
-				changes.push({path: ["mirror", "backlinkMirrorRootIds", itemId], value: undefined});
+				changes.push(
+					{
+						path: ["mirror", "backlinkMirrorRootIds", itemId],
+						value: undefined,
+					},
+				);
 				changedParents.add(parentId);
 				result.deleted.push(itemId);
 			}
 
-			for (const targetId of targets) {
+			for (const targetId of targets)
+			{
 				let rootId = rootOf.get(targetId);
-				if (rootId === undefined) {
+				if (rootId === undefined)
+				{
 					const children = await childOrder(targetId);
 					const childRelations = tree.relationshipMetadata(children);
 					rootId = children.find((child) => childRelations.get(child)?.isReferencesRoot === true);
-					if (rootId === undefined) {
+					if (rootId === undefined)
+					{
 						const {userId, clock} = await opContext();
-						const created = bulkCreateOp({
-							...clock,
-							parentId: targetId,
-							index: children.length,
-							trees: [{name: "", metadata: {isReferencesRoot: true}}],
-							userId,
-							generateId: this.generateId,
-						});
+						const created = bulkCreateOp(
+							{
+								...clock,
+								parentId: targetId,
+								index: children.length,
+								trees: [
+									{
+										name: "",
+										metadata:
+										{
+											isReferencesRoot: true,
+										},
+									},
+								],
+								userId,
+								generateId: this.generateId,
+							},
+						);
 						[rootId] = created.ids;
-						if (rootId === undefined) {
+						if (rootId === undefined)
+						{
 							throw new Error("bulk_create produced no id");
 						}
 						ops.push(created.op);
@@ -863,52 +1116,103 @@ export class WorkflowyInternalAdapter {
 					rootOf.set(targetId, rootId);
 				}
 				const {userId, clock} = await opContext();
-				const created = bulkCreateOp({
-					...clock,
-					parentId: rootId,
-					index: 0,
-					trees: [
-						{
-							name: "",
-							metadata: {
-								mirror: {originalId: sourceId, isMirrorRoot: true},
-								backlink: {sourceID: sourceId, targetID: targetId},
+				const created = bulkCreateOp(
+					{
+						...clock,
+						parentId: rootId,
+						index: 0,
+						trees: [
+							{
+								name: "",
+								metadata:
+								{
+									mirror:
+									{
+										originalId: sourceId,
+										isMirrorRoot: true,
+									},
+									backlink:
+									{
+										sourceID: sourceId,
+										targetID: targetId,
+									},
+								},
 							},
-						},
-					],
-					userId,
-					generateId: this.generateId,
-				});
+						],
+						userId,
+						generateId: this.generateId,
+					},
+				);
 				const [itemId] = created.ids;
-				if (itemId === undefined) {
+				if (itemId === undefined)
+				{
 					throw new Error("bulk_create produced no id");
 				}
 				ops.push(created.op);
 				(await childOrder(rootId)).unshift(itemId);
-				changes.push({path: ["mirror", "backlinkMirrorRootIds", itemId], value: true});
+				changes.push(
+					{
+						path: ["mirror", "backlinkMirrorRootIds", itemId],
+						value: true,
+					},
+				);
 				changedParents.add(rootId);
-				result.created.push({id: itemId, sourceId, targetId});
+				result.created.push(
+					{
+						id: itemId,
+						sourceId,
+						targetId,
+					},
+				);
 			}
 
-			if (changes.length > 0) {
+			if (changes.length > 0)
+			{
 				// Caught up above: a source shown without a `mirror` gets the whole object, otherwise leaf patches.
-				const {patches, inverse} = buildMetadataChanges(mirror === undefined ? {} : {mirror}, changes);
+				const {patches, inverse} = buildMetadataChanges(
+					mirror === undefined
+						? {}
+						:
+							{
+								mirror,
+							},
+					changes,
+				);
 				const {clock} = await opContext();
-				ops.push(editOp({...clock, id: sourceId, metadataPatches: patches, metadataInversePatches: inverse}));
+				ops.push(
+					editOp(
+						{
+							...clock,
+							id: sourceId,
+							metadataPatches: patches,
+							metadataInversePatches: inverse,
+						},
+					),
+				);
 			}
 		}
 
-		if (ops.length === 0) {
+		if (ops.length === 0)
+		{
 			return result;
 		}
-		await this.pusher.pushAndPoll({ops});
+		await this.pusher.pushAndPoll(
+			{
+				ops,
+			},
+		);
 		// A new references root is read back after its target, which first caches it.
 		const newRoots = new Set(result.referencesRoots);
 		await tree.refreshBacklinks(
 			[...changedParents].toSorted((a, b) => Number(newRoots.has(a)) - Number(newRoots.has(b))),
 			{
 				referencesRoots: result.referencesRoots,
-				backlinks: result.created.map(({id, sourceId, targetId}) => ({nodeId: id, sourceId, targetId})),
+				backlinks: result.created.map(({id, sourceId, targetId}) => (
+				{
+					nodeId: id,
+					sourceId,
+					targetId,
+				})),
 				deleted: result.deleted,
 			},
 		);
@@ -923,14 +1227,18 @@ export class WorkflowyInternalAdapter {
 	 * endpoint, this takes `HOME`. See {@link createMirrorsAt} for how the edit
 	 * keeps the mirrors the original already has.
 	 */
-	async createMirrorAt(input: CreateMirrorAtInput): Promise<CreateMirrorResult> {
-		const {mirrors} = await this.createMirrorsAt({
-			originalIds: [input.originalId],
-			parentId: input.parentId,
-			index: input.index,
-		});
+	async createMirrorAt(input: CreateMirrorAtInput): Promise<CreateMirrorResult>
+	{
+		const {mirrors} = await this.createMirrorsAt(
+			{
+				originalIds: [input.originalId],
+				parentId: input.parentId,
+				index: input.index,
+			},
+		);
 		const [only] = mirrors;
-		if (only === undefined) {
+		if (only === undefined)
+		{
 			throw new Error("bulk_create produced no id");
 		}
 		return only;
@@ -946,12 +1254,18 @@ export class WorkflowyInternalAdapter {
 	 * gets the whole object, because an open workflowy.com tab cannot apply a leaf add under a missing parent.
 	 * An id that is neither cached nor live on Workflowy is refused before anything is pushed.
 	 */
-	async createMirrorsAt(input: CreateMirrorsAtInput): Promise<{mirrors: CreateMirrorResult[]}> {
+	async createMirrorsAt(input: CreateMirrorsAtInput): Promise<
+	{
+		mirrors: CreateMirrorResult[];
+	}>
+	{
 		const tree = this.tree();
 		await this.catchUp();
 		await Promise.all(
-			[...new Set(input.originalIds)].map(async (requestedId) => {
-				if (!(await tree.exists(requestedId))) {
+			[...new Set(input.originalIds)].map(async (requestedId) =>
+			{
+				if (!(await tree.exists(requestedId)))
+				{
 					throw new Error(`Cannot mirror ${requestedId}: it is not in the Workflowy tree`);
 				}
 			}),
@@ -965,41 +1279,74 @@ export class WorkflowyInternalAdapter {
 		const parent = publicParent(input.parentId);
 		const siblings = await tree.liveChildren(parent);
 		const session = await this.session();
-		const {op: createOp, ids} = bulkCreateOp({
-			parentId: internalParent(parent),
-			index: clampIndex(input.index, siblings.length),
-			trees: originIds.map((originId) => ({
-				name: "",
-				metadata: {mirror: {originalId: originId, isMirrorRoot: true}},
-			})),
-			userId: session.userId,
-			now: this.now(),
-			dateJoinedSec: session.dateJoinedSec,
-			generateId: this.generateId,
-		});
-		const mirrors = ids.map((mirrorId, offset) => ({mirrorId, originId: originIds[offset] ?? ""}));
-		const linkOps = [...new Set(originIds)].map((originId) => {
+		const {op: createOp, ids} = bulkCreateOp(
+			{
+				parentId: internalParent(parent),
+				index: clampIndex(input.index, siblings.length),
+				trees: originIds.map((originId) => (
+				{
+					name: "",
+					metadata:
+					{
+						mirror:
+						{
+							originalId: originId,
+							isMirrorRoot: true,
+						},
+					},
+				})),
+				userId: session.userId,
+				now: this.now(),
+				dateJoinedSec: session.dateJoinedSec,
+				generateId: this.generateId,
+			},
+		);
+		const mirrors = ids.map((mirrorId, offset) => (
+		{
+			mirrorId,
+			originId: originIds[offset] ?? "",
+		}));
+		const linkOps = [...new Set(originIds)].map((originId) =>
+		{
 			const {patches, inverse} = buildMetadataChanges(
 				metadataOf(originId),
 				mirrors
 					.filter((mirror) => mirror.originId === originId)
-					.map((mirror) => ({path: ["mirror", "mirrorRootIds", mirror.mirrorId], value: true})),
+					.map((mirror) => (
+					{
+						path: ["mirror", "mirrorRootIds", mirror.mirrorId],
+						value: true,
+					})),
 			);
-			return editOp({
-				id: originId,
-				metadataPatches: patches,
-				metadataInversePatches: inverse,
-				now: this.now(),
-				dateJoinedSec: session.dateJoinedSec,
-			});
+			return editOp(
+				{
+					id: originId,
+					metadataPatches: patches,
+					metadataInversePatches: inverse,
+					now: this.now(),
+					dateJoinedSec: session.dateJoinedSec,
+				},
+			);
 		});
-		await this.pusher.pushAndPoll({ops: [createOp, ...linkOps]});
+		await this.pusher.pushAndPoll(
+			{
+				ops: [createOp, ...linkOps],
+			},
+		);
 		await tree.refreshChildren([parent]);
-		tree.recordRelationships({
-			...emptyItemRelationships(),
-			mirrors: mirrors.map(({mirrorId, originId}) => ({mirrorId, originalId: originId})),
-		});
-		return {mirrors};
+		tree.recordRelationships(
+			{
+				...emptyItemRelationships(),
+				mirrors: mirrors.map(({mirrorId, originId}) => (
+				{
+					mirrorId,
+					originalId: originId,
+				})),
+			},
+		);
+		return {
+			mirrors,
+		};
 	}
 
 	/**
@@ -1020,10 +1367,19 @@ export class WorkflowyInternalAdapter {
 	 */
 	async ensureCalendarDay(
 		dateId: number,
-		{stopAt = "day", createChild = true}: {stopAt?: CalendarLevel; createChild?: boolean} = {},
-	): Promise<EnsuredCalendarDay> {
+		{
+			stopAt = "day",
+			createChild = true,
+		}:
+		{
+			stopAt?: CalendarLevel;
+			createChild?: boolean;
+		} = {},
+	): Promise<EnsuredCalendarDay>
+	{
 		const date = parseDateId(dateId);
-		if (date === undefined) {
+		if (date === undefined)
+		{
 			throw new RangeError(`${dateId} is not a YYYYMMDD date`);
 		}
 		const root = await this.ensureCalendarRoot();
@@ -1035,60 +1391,89 @@ export class WorkflowyInternalAdapter {
 		const dateFormat = getPath(rootMetadata, ["dateFormat"]);
 		const weekStartDay = getPath(rootMetadata, ["weekStartDay"]);
 		const weekStart = typeof weekStartDay === "number" ? weekStartDay : 0;
-		const specs = levels.map((level) => {
+		const specs = levels.map((level) =>
+		{
 			const levelDateId = calendarDateId(level, date, weekStart);
 			const id =
 				session.entropyKey === undefined
 					? undefined
 					: calendarNodeId(session.entropyKey, level, levelDateId, date.year);
-			return {level, levelDateId, id};
+			return {
+				level,
+				levelDateId,
+				id,
+			};
 		});
-		const toCreate = ({level, id}: (typeof specs)[number]): CalendarChainNode => ({
+		const toCreate = ({level, id}: (typeof specs)[number]): CalendarChainNode => (
+		{
 			id: id ?? this.generateId(),
 			name: calendarLevelName(level, date, typeof dateFormat === "string" ? dateFormat : "", weekStart),
-			metadata: {restorableUniqueNode: true, calendar: calendarLevelMetadata(level, date, weekStart)},
+			metadata:
+			{
+				restorableUniqueNode: true,
+				calendar: calendarLevelMetadata(level, date, weekStart),
+			},
 		});
 		const tree = this.tree();
 		let live = false;
 		// Parents read live: the cache lagged Workflowy there, so they are cached before returning.
 		const liveParents: string[] = [];
-		const cacheLiveParents = async (parents: string[]): Promise<void> => {
-			if (parents.length > 0) {
+		const cacheLiveParents = async (parents: string[]): Promise<void> =>
+		{
+			if (parents.length > 0)
+			{
 				await tree.refreshChain(parents);
 			}
 		};
 		const lookUp = async (
 			parentId: string,
 			matches: (ids: string[]) => string | undefined,
-		): Promise<{found: string | undefined; children: string[]}> => {
-			if (!live) {
+		): Promise<
+		{
+			found: string | undefined;
+			children: string[];
+		}> =>
+		{
+			if (!live)
+			{
 				const cached = tree.cachedChildIds(parentId);
 				const found = matches(cached);
-				if (found !== undefined) {
-					return {found, children: cached};
+				if (found !== undefined)
+				{
+					return {
+						found,
+						children: cached,
+					};
 				}
 				live = true;
 			}
 			const children = (await tree.liveChildren(parentId)).map((child) => child.id);
 			liveParents.push(parentId);
-			return {found: matches(children), children};
+			return {
+				found: matches(children),
+				children,
+			};
 		};
 
 		const created: string[] = [];
 		let parentId = root.id;
-		for (let position = 0; position < specs.length; position += 1) {
+		for (let position = 0; position < specs.length; position += 1)
+		{
 			const spec = specs[position];
-			if (spec === undefined) {
+			if (spec === undefined)
+			{
 				break;
 			}
 			const {level, levelDateId, id} = spec;
 			const {found, children} = await lookUp(parentId, (ids) =>
-				ids.find((child) => {
+				ids.find((child) =>
+				{
 					const calendar = this.readCalendar(child);
 					return child === id || (calendar?.level === level && calendar.dateId === levelDateId);
 				}),
 			);
-			if (found !== undefined) {
+			if (found !== undefined)
+			{
 				parentId = found;
 				continue;
 			}
@@ -1097,14 +1482,22 @@ export class WorkflowyInternalAdapter {
 				level,
 				levelDateId,
 			);
-			if (id !== undefined && this.isCached(id)) {
-				await this.moveTo({ids: [id], parentId, index});
+			if (id !== undefined && this.isCached(id))
+			{
+				await this.moveTo(
+					{
+						ids: [id],
+						parentId,
+						index,
+					},
+				);
 				parentId = id;
 				continue;
 			}
 			// This level and each deeper one whose deterministic node is not elsewhere are created together.
 			let end = position + 1;
-			while (end < specs.length && !this.isCachedLevel(specs[end]?.id)) {
+			while (end < specs.length && !this.isCachedLevel(specs[end]?.id))
+			{
 				end += 1;
 			}
 			const chain = specs.slice(position, end).map(toCreate);
@@ -1113,26 +1506,37 @@ export class WorkflowyInternalAdapter {
 			await this.createCalendarChain(parentId, index, chain, childId);
 			created.push(...chain.map((node) => node.id), ...(childId === undefined ? [] : [childId]));
 			parentId = chain.at(-1)?.id ?? parentId;
-			if (end === specs.length) {
+			if (end === specs.length)
+			{
 				await cacheLiveParents(liveParents.filter((other) => other !== chainParentId));
-				return {dayId: parentId, firstChildId: childId ?? null, created};
+				return {
+					dayId: parentId,
+					firstChildId: childId ?? null,
+					created,
+				};
 			}
 			position = end - 1;
 		}
 		let {found: firstChildId = null} = await lookUp(parentId, (ids) => ids[0]);
 		let alreadyCached: string | undefined;
-		if (firstChildId === null && createChild) {
+		if (firstChildId === null && createChild)
+		{
 			firstChildId = this.generateId();
 			await this.createCalendarChain(parentId, 0, [], firstChildId);
 			created.push(firstChildId);
 			alreadyCached = parentId;
 		}
 		await cacheLiveParents(liveParents.filter((other) => other !== alreadyCached));
-		return {dayId: parentId, firstChildId, created};
+		return {
+			dayId: parentId,
+			firstChildId,
+			created,
+		};
 	}
 
 	/** Whether a level's deterministic node is cached (so it is moved, not created). */
-	private isCachedLevel(id: string | undefined): boolean {
+	private isCachedLevel(id: string | undefined): boolean
+	{
 		return id !== undefined && this.isCached(id);
 	}
 
@@ -1147,20 +1551,43 @@ export class WorkflowyInternalAdapter {
 		index: number,
 		chain: CalendarChainNode[],
 		childId: string | undefined,
-	): Promise<void> {
-		const leaf: NewTree[] = childId === undefined ? [] : [{id: childId, name: ""}];
-		const trees = chain.reduceRight<NewTree[]>((children, node) => [{...node, children}], leaf);
+	): Promise<void>
+	{
+		const leaf: NewTree[] =
+			childId === undefined
+				? []
+				: [
+						{
+							id: childId,
+							name: "",
+						},
+					];
+		const trees = chain.reduceRight<NewTree[]>(
+			(children, node) => [
+				{
+					...node,
+					children,
+				},
+			],
+			leaf,
+		);
 		const session = await this.session();
-		const {op} = bulkCreateOp({
-			parentId,
-			index,
-			trees,
-			userId: session.userId,
-			now: this.now(),
-			dateJoinedSec: session.dateJoinedSec,
-			generateId: this.generateId,
-		});
-		await this.pusher.pushAndPoll({ops: [op]});
+		const {op} = bulkCreateOp(
+			{
+				parentId,
+				index,
+				trees,
+				userId: session.userId,
+				now: this.now(),
+				dateJoinedSec: session.dateJoinedSec,
+				generateId: this.generateId,
+			},
+		);
+		await this.pusher.pushAndPoll(
+			{
+				ops: [op],
+			},
+		);
 		const parents = childId === undefined ? chain.slice(0, -1) : chain;
 		await this.tree().refreshChain([parentId, ...parents.map((node) => node.id)]);
 		this.writeNodesMetadata(new Map(chain.map((node) => [node.id, keptInternalMetadata(node.metadata)])));
@@ -1186,8 +1613,14 @@ export class WorkflowyInternalAdapter {
 			rootId: requestedRootId,
 			loadSnapshot,
 			timings,
-		}: {rootId: string; loadSnapshot: () => CalendarLayoutSnapshot | undefined; timings?: LayoutTimings},
-	): Promise<AppliedCalendarLayout> {
+		}:
+		{
+			rootId: string;
+			loadSnapshot: () => CalendarLayoutSnapshot | undefined;
+			timings?: LayoutTimings;
+		},
+	): Promise<AppliedCalendarLayout>
+	{
 		requireRootId(requestedRootId);
 		const time = phaseTimer(timings);
 		const dateFormat = await this.getRootMeta(["dateFormat"]);
@@ -1195,27 +1628,51 @@ export class WorkflowyInternalAdapter {
 		const tree = this.tree();
 		time("settings");
 
-		const planFromCache = async () => {
+		const planFromCache = async () =>
+		{
 			const snapshot = loadSnapshot();
-			if (snapshot === undefined) {
+			if (snapshot === undefined)
+			{
 				throw new CalendarRootMissing();
 			}
 			const rootId = snapshot.root.id;
-			if (rootId !== requestedRootId) {
+			if (rootId !== requestedRootId)
+			{
 				throw new Error(`calendar layout: planned root ${rootId} is not the requested root ${requestedRootId}`);
 			}
 			const rootMetadata = CalendarMetadataSchema.safeParse(this.readNodeMetadata(rootId));
 			const tagged = rootMetadata.success && rootMetadata.data.calendar.root === true;
 			const entropyKey = tagged ? (await this.session()).entropyKey : undefined;
-			const steps = planCalendarLayout(snapshot.root, levels, {
-				...(snapshot.levels === undefined ? {} : {currentLevels: snapshot.levels}),
-				dateFormat: typeof dateFormat === "string" ? dateFormat : "",
-				...(typeof weekStartDay === "number" ? {weekStartDay} : {}),
-				...(entropyKey === undefined ? {} : {entropyKey}),
-				generateId: this.generateId,
-			});
-			for (const step of steps) {
-				if (step.op === "create" && this.isCached(step.id)) {
+			const steps = planCalendarLayout(
+				snapshot.root,
+				levels,
+				{
+					...(snapshot.levels === undefined
+						? {}
+						:
+							{
+								currentLevels: snapshot.levels,
+							}),
+					dateFormat: typeof dateFormat === "string" ? dateFormat : "",
+					...(typeof weekStartDay === "number"
+						?
+							{
+								weekStartDay,
+							}
+						: {}),
+					...(entropyKey === undefined
+						? {}
+						:
+							{
+								entropyKey,
+							}),
+					generateId: this.generateId,
+				},
+			);
+			for (const step of steps)
+			{
+				if (step.op === "create" && this.isCached(step.id))
+				{
 					throw new Error(`calendar layout: new level node ${step.id} already exists outside the calendar`);
 				}
 			}
@@ -1233,10 +1690,12 @@ export class WorkflowyInternalAdapter {
 
 		let planned = await planFromCache();
 		time("plan");
-		for (let attempt = 0; planned.writes.length > 0; attempt += 1) {
+		for (let attempt = 0; planned.writes.length > 0; attempt += 1)
+		{
 			const {childIds, writes} = planned;
 			const live = await Promise.all(
-				layoutWriteReads(writes, childIds).map(async (parentId) => ({
+				layoutWriteReads(writes, childIds).map(async (parentId) => (
+				{
 					parentId,
 					nodes: await tree.liveChildren(parentId),
 				})),
@@ -1245,10 +1704,12 @@ export class WorkflowyInternalAdapter {
 			const stale = live.filter(
 				({parentId, nodes}) => nodes.map((child) => child.id).join() !== childIds.get(parentId)?.join(),
 			);
-			if (stale.length === 0) {
+			if (stale.length === 0)
+			{
 				break;
 			}
-			if (attempt > 0) {
+			if (attempt > 0)
+			{
 				throw new Error("calendar layout: the calendar changed while planning; try again");
 			}
 			await tree.refreshChildren(stale.map(({parentId}) => parentId));
@@ -1256,8 +1717,12 @@ export class WorkflowyInternalAdapter {
 			time("replan");
 		}
 		const {rootId, writes, touchedParents, metadata} = planned;
-		if (writes.length === 0) {
-			return {rootId, writes: 0};
+		if (writes.length === 0)
+		{
+			return {
+				rootId,
+				writes: 0,
+			};
 		}
 		const appliedAt = newSystemTimestamp();
 		await this.pushLayoutWrites(writes);
@@ -1266,7 +1731,10 @@ export class WorkflowyInternalAdapter {
 		this.recordLayoutApplied(rootId, appliedAt);
 		await this.refreshLayout(touchedParents, metadata);
 		time("refresh");
-		return {rootId, writes: writes.length};
+		return {
+			rootId,
+			writes: writes.length,
+		};
 	}
 
 	/**
@@ -1278,21 +1746,28 @@ export class WorkflowyInternalAdapter {
 	 * phased out. Throws, pushing nothing, when a write would land outside
 	 * `rootId`.
 	 */
-	async undoCalendarLayout(rootId: string): Promise<AppliedCalendarLayout | undefined> {
+	async undoCalendarLayout(rootId: string): Promise<AppliedCalendarLayout | undefined>
+	{
 		requireRootId(rootId);
 		const applied = this.db
-			.select({appliedAt: calendarLayoutApplies.appliedAtSystemTime})
+			.select(
+				{
+					appliedAt: calendarLayoutApplies.appliedAtSystemTime,
+				},
+			)
 			.from(calendarLayoutApplies)
 			.where(and(eq(calendarLayoutApplies.rootId, rootId), eq(calendarLayoutApplies.systemTo, FAR_FUTURE_DATE)))
 			.get();
-		if (applied === undefined) {
+		if (applied === undefined)
+		{
 			return undefined;
 		}
 		const before = readSubtreeAt(this.db, rootId, systemTimeJustBefore(applied.appliedAt));
 		const now = readSubtreeAt(this.db, rootId);
 		const writes = calendarLayoutUndoWrites(rootId, before, now, (id) => this.isCached(id));
 		this.assertLayoutWritesUnder(rootId, writes);
-		if (writes.length > 0) {
+		if (writes.length > 0)
+		{
 			await this.pushLayoutWrites(writes);
 		}
 		this.endLayoutApplied(rootId);
@@ -1304,7 +1779,10 @@ export class WorkflowyInternalAdapter {
 			),
 		);
 		await this.refreshLayout(layoutWriteParents(writes), restored);
-		return {rootId, writes: writes.length};
+		return {
+			rootId,
+			writes: writes.length,
+		};
 	}
 
 	/**
@@ -1313,89 +1791,152 @@ export class WorkflowyInternalAdapter {
 	 * node an earlier write in the batch creates or undeletes there. An
 	 * undeleted node is in the trash, so only its new parent is checked.
 	 */
-	private assertLayoutWritesUnder(rootId: string, writes: readonly LayoutWrite[]): void {
+	private assertLayoutWritesUnder(rootId: string, writes: readonly LayoutWrite[]): void
+	{
 		const verdicts = new Map<string, boolean>([[rootId, true]]);
-		const cachedUnder = (id: string): boolean => {
+		const cachedUnder = (id: string): boolean =>
+		{
 			const path: string[] = [];
 			let current: string | null | undefined = id;
 			let verdict = false;
-			while (current !== null && current !== undefined) {
+			while (current !== null && current !== undefined)
+			{
 				const known = verdicts.get(current);
-				if (known !== undefined) {
+				if (known !== undefined)
+				{
 					verdict = known;
 					break;
 				}
 				path.push(current);
 				current = this.db
-					.select({parentId: nodeContent.parentId})
+					.select(
+						{
+							parentId: nodeContent.parentId,
+						},
+					)
 					.from(nodeContent)
 					.where(and(eq(nodeContent.id, current), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
 					.get()?.parentId;
 			}
-			for (const visited of path) {
+			for (const visited of path)
+			{
 				verdicts.set(visited, verdict);
 			}
 			return verdict;
 		};
 		const added = new Set<string>();
 		const inside = (id: string) => added.has(id) || cachedUnder(id);
-		const check = (id: string, ok: boolean) => {
-			if (!ok) {
+		const check = (id: string, ok: boolean) =>
+		{
+			if (!ok)
+			{
 				throw new Error(`calendar layout: a write to ${id} lies outside the calendar root ${rootId}`);
 			}
 		};
-		for (const write of writes) {
-			if (write.op === "move" || write.op === "delete") {
+		for (const write of writes)
+		{
+			if (write.op === "move" || write.op === "delete")
+			{
 				check(write.from.parentId, inside(write.from.parentId));
 			}
-			if (write.op === "create" || write.op === "move" || write.op === "undelete") {
+			if (write.op === "create" || write.op === "move" || write.op === "undelete")
+			{
 				check(write.parentId, inside(write.parentId));
 			}
-			if (write.op === "create" || write.op === "undelete") {
+			if (write.op === "create" || write.op === "undelete")
+			{
 				check(write.id, !this.isCached(write.id) || cachedUnder(write.id));
 				added.add(write.id);
-			} else {
+			}
+			else
+			{
 				check(write.id, inside(write.id));
 			}
 		}
 	}
 
 	/** Push layout writes as one batch of ops. */
-	private async pushLayoutWrites(writes: LayoutWrite[]): Promise<void> {
+	private async pushLayoutWrites(writes: LayoutWrite[]): Promise<void>
+	{
 		const session = await this.session();
-		const clock = {now: this.now(), dateJoinedSec: session.dateJoinedSec};
-		const ops = writes.map((write): InternalOp => {
-			if (write.op === "edit") {
-				return editOp({
+		const clock =
+		{
+			now: this.now(),
+			dateJoinedSec: session.dateJoinedSec,
+		};
+		const ops = writes.map((write): InternalOp =>
+		{
+			if (write.op === "edit")
+			{
+				return editOp(
+					{
+						...clock,
+						id: write.id,
+						metadataPatches: write.patches,
+						metadataInversePatches: write.inverse,
+					},
+				);
+			}
+			if (write.op === "create")
+			{
+				const {id, name, metadata: treeMetadata} = write;
+				return bulkCreateOp(
+					{
+						...clock,
+						parentId: write.parentId,
+						index: write.index,
+						trees: [
+							{
+								id,
+								name,
+								metadata: treeMetadata,
+							},
+						],
+						userId: session.userId,
+					},
+				).op;
+			}
+			if (write.op === "move")
+			{
+				return moveOp(
+					{
+						...clock,
+						id: write.id,
+						parentId: write.parentId,
+						index: write.index,
+						from: write.from,
+					},
+				);
+			}
+			if (write.op === "delete")
+			{
+				return deleteOp(
+					{
+						...clock,
+						id: write.id,
+						from: write.from,
+					},
+				);
+			}
+			return undeleteOp(
+				{
 					...clock,
 					id: write.id,
-					metadataPatches: write.patches,
-					metadataInversePatches: write.inverse,
-				});
-			}
-			if (write.op === "create") {
-				const {id, name, metadata: treeMetadata} = write;
-				return bulkCreateOp({
-					...clock,
 					parentId: write.parentId,
 					index: write.index,
-					trees: [{id, name, metadata: treeMetadata}],
-					userId: session.userId,
-				}).op;
-			}
-			if (write.op === "move") {
-				return moveOp({...clock, id: write.id, parentId: write.parentId, index: write.index, from: write.from});
-			}
-			if (write.op === "delete") {
-				return deleteOp({...clock, id: write.id, from: write.from});
-			}
-			return undeleteOp({...clock, id: write.id, parentId: write.parentId, index: write.index});
+				},
+			);
 		});
-		await this.pusher.pushAndPoll({ops});
+		await this.pusher.pushAndPoll(
+			{
+				ops,
+			},
+		);
 	}
 
 	/** Re-read the touched parents into the cache, then cache the edited and created nodes' metadata. */
-	private async refreshLayout(touchedParents: string[], metadata: ReadonlyMap<string, Metadata>): Promise<void> {
+	private async refreshLayout(touchedParents: string[], metadata: ReadonlyMap<string, Metadata>): Promise<void>
+	{
 		// Parents come first-touched first, so a created level node is cached before the days moved into it.
 		await this.tree().refreshChildren(touchedParents);
 		this.writeNodesMetadata(
@@ -1408,18 +1949,29 @@ export class WorkflowyInternalAdapter {
 	}
 
 	/** Record that a layout under `rootId` was pushed at `appliedAt`, replacing any earlier one there. */
-	private recordLayoutApplied(rootId: string, appliedAt: string): void {
-		runUnitOfWork(this.db, ({tx, systemTime}) => {
+	private recordLayoutApplied(rootId: string, appliedAt: string): void
+	{
+		runUnitOfWork(this.db, ({tx, systemTime}) =>
+		{
 			closeCurrentVersions(tx, calendarLayoutApplies, systemTime, eq(calendarLayoutApplies.rootId, rootId));
 			tx.insert(calendarLayoutApplies)
-				.values({rootId, appliedAtSystemTime: appliedAt, systemFrom: systemTime, systemTo: FAR_FUTURE_DATE})
+				.values(
+					{
+						rootId,
+						appliedAtSystemTime: appliedAt,
+						systemFrom: systemTime,
+						systemTo: FAR_FUTURE_DATE,
+					},
+				)
 				.run();
 		});
 	}
 
 	/** Phase out the applied layout under `rootId`, keeping it in history. */
-	private endLayoutApplied(rootId: string): void {
-		runUnitOfWork(this.db, ({tx, systemTime}) => {
+	private endLayoutApplied(rootId: string): void
+	{
+		runUnitOfWork(this.db, ({tx, systemTime}) =>
+		{
 			closeCurrentVersions(tx, calendarLayoutApplies, systemTime, eq(calendarLayoutApplies.rootId, rootId));
 		});
 	}
@@ -1434,39 +1986,77 @@ export class WorkflowyInternalAdapter {
 	 * `uuidv5("calendar-root")` and `{restorableUniqueNode, calendar: {root: true}}`, which
 	 * `calendar.rootId` then names.
 	 */
-	private async ensureCalendarRoot(): Promise<{id: string; levels: Record<string, boolean> | undefined}> {
+	private async ensureCalendarRoot(): Promise<
+	{
+		id: string;
+		levels: Record<string, boolean> | undefined;
+	}>
+	{
 		const pointer = await this.getRootMeta(["calendar", "rootId"]);
 		const found =
-			typeof pointer === "string" && this.isCached(pointer) ? pointer : findTaggedCalendarRoot({db: this.db});
-		if (found !== undefined) {
+			typeof pointer === "string" && this.isCached(pointer)
+				? pointer
+				: findTaggedCalendarRoot(
+						{
+							db: this.db,
+						},
+					);
+		if (found !== undefined)
+		{
 			const parsed = CalendarMetadataSchema.safeParse(this.readNodeMetadata(found));
-			return {id: found, levels: parsed.success ? parsed.data.calendar.levels : undefined};
+			return {
+				id: found,
+				levels: parsed.success ? parsed.data.calendar.levels : undefined,
+			};
 		}
-		if (!this.standalone) {
-			return {id: await this.resyncCalendarRoot(), levels: undefined};
+		if (!this.standalone)
+		{
+			return {
+				id: await this.resyncCalendarRoot(),
+				levels: undefined,
+			};
 		}
 		const {entropyKey} = await this.session();
-		const {id} = await this.createAt({
-			parentId: HOME,
-			id:
-				entropyKey === undefined
-					? this.generateId()
-					: uuidv5(`${entropyKey}-calendar-root`, CALENDAR_ID_NAMESPACE),
-			name: CALENDAR_ROOT_NAME,
-			metadata: {restorableUniqueNode: true, calendar: {root: true}},
-		});
-		await this.setRootMetaValues([{path: ["calendar", "rootId"], value: id}]);
-		return {id, levels: undefined};
+		const {id} = await this.createAt(
+			{
+				parentId: HOME,
+				id:
+					entropyKey === undefined
+						? this.generateId()
+						: uuidv5(`${entropyKey}-calendar-root`, CALENDAR_ID_NAMESPACE),
+				name: CALENDAR_ROOT_NAME,
+				metadata:
+				{
+					restorableUniqueNode: true,
+					calendar:
+					{
+						root: true,
+					},
+				},
+			},
+		);
+		await this.setRootMetaValues([
+			{
+				path: ["calendar", "rootId"],
+				value: id,
+			},
+		]);
+		return {
+			id,
+			levels: undefined,
+		};
 	}
 
 	/** The calendar root workflowy.com's fresh `calendar.rootId` names, cached under its live parent, or a loud miss. */
-	private async resyncCalendarRoot(): Promise<string> {
+	private async resyncCalendarRoot(): Promise<string>
+	{
 		const fresh = this.fromSession(await this.client.bootstrap());
 		this.store(fresh);
 		const pointer = getPath(fresh.rootMetadata, ["calendar", "rootId"]);
 		const tree = this.tree();
 		const live = typeof pointer === "string" ? await tree.findLiveNode(pointer) : null;
-		if (live === null) {
+		if (live === null)
+		{
 			throw loud(new CalendarRootMissing());
 		}
 		await tree.refreshChildren([live.parent_id ?? null]);
@@ -1481,23 +2071,50 @@ export class WorkflowyInternalAdapter {
 	 * rather than create a duplicate. Only in standalone mode does a miss create an `Inbox` at the
 	 * end of Home, which `inbox_id` then names.
 	 */
-	async ensureInbox(): Promise<{id: string; created: boolean}> {
+	async ensureInbox(): Promise<
+	{
+		id: string;
+		created: boolean;
+	}>
+	{
 		// Stores the account snapshot first, so findInbox can read its `inbox_id`.
 		await this.snapshot();
 		const found = findInbox(this.db);
-		if (found !== undefined) {
-			return {id: found.id, created: false};
+		if (found !== undefined)
+		{
+			return {
+				id: found.id,
+				created: false,
+			};
 		}
-		if (!this.standalone) {
-			return {id: await this.resyncInbox(), created: false};
+		if (!this.standalone)
+		{
+			return {
+				id: await this.resyncInbox(),
+				created: false,
+			};
 		}
-		const {id} = await this.createAt({parentId: HOME, name: INBOX_NAME});
-		await this.setRootMetaValues([{path: ["inbox_id"], value: id}]);
-		return {id, created: true};
+		const {id} = await this.createAt(
+			{
+				parentId: HOME,
+				name: INBOX_NAME,
+			},
+		);
+		await this.setRootMetaValues([
+			{
+				path: ["inbox_id"],
+				value: id,
+			},
+		]);
+		return {
+			id,
+			created: true,
+		};
 	}
 
 	/** The Inbox workflowy.com's fresh `inbox_id` names, else Home's live child named Inbox, cached, or a loud miss. */
-	private async resyncInbox(): Promise<string> {
+	private async resyncInbox(): Promise<string>
+	{
 		const fresh = this.fromSession(await this.client.bootstrap());
 		this.store(fresh);
 		const pointer = getPath(fresh.rootMetadata, ["inbox_id"]);
@@ -1505,17 +2122,32 @@ export class WorkflowyInternalAdapter {
 		const live = typeof pointer === "string" ? await tree.findLiveNode(pointer) : null;
 		await tree.refreshChildren([live === null ? null : (live.parent_id ?? null)]);
 		const found = live === null ? findInbox(this.db)?.id : live.id;
-		if (found === undefined) {
+		if (found === undefined)
+		{
 			throw loud(new InboxMissing());
 		}
 		return found;
 	}
 
 	/** Create one item at the top of the Inbox, ensuring the Inbox first. */
-	async addToInbox(input: {name: string}): Promise<{inboxId: string; id: string}> {
+	async addToInbox(input: {name: string}): Promise<
+	{
+		inboxId: string;
+		id: string;
+	}>
+	{
 		const inbox = await this.ensureInbox();
-		const {id} = await this.createAt({parentId: inbox.id, index: 0, name: input.name});
-		return {inboxId: inbox.id, id};
+		const {id} = await this.createAt(
+			{
+				parentId: inbox.id,
+				index: 0,
+				name: input.name,
+			},
+		);
+		return {
+			inboxId: inbox.id,
+			id,
+		};
 	}
 
 	/**
@@ -1528,49 +2160,107 @@ export class WorkflowyInternalAdapter {
 	 * each timestamp. The walks read the cache; each migration's edits go in one
 	 * push. Returns the ids that gained a timestamp and a dateId.
 	 */
-	async backfillCalendarMetadata({force = false}: {force?: boolean} = {}): Promise<{
+	async backfillCalendarMetadata({
+		force = false,
+	}:
+	{
+		force?: boolean;
+	} = {}): Promise<
+	{
 		timestamps: string[];
 		dateIds: string[];
-	}> {
+	}>
+	{
 		const timestamps: string[] = [];
 		const dateIds: string[] = [];
-		if (force || (await this.getRootMeta(["calendar", "ts_added_v2"])) !== true) {
-			const rootId = await this.taggedCalendarRootId({tagUntagged: true});
-			if (rootId !== undefined) {
+		if (force || (await this.getRootMeta(["calendar", "ts_added_v2"])) !== true)
+		{
+			const rootId = await this.taggedCalendarRootId(
+				{
+					tagUntagged: true,
+				},
+			);
+			if (rootId !== undefined)
+			{
 				const metadataById = new Map<string, Metadata>();
-				this.walkCalendar(rootId, (id, calendar, chain) => {
-					if (calendar.timestamp !== undefined) {
+				this.walkCalendar(rootId, (id, calendar, chain) =>
+				{
+					if (calendar.timestamp !== undefined)
+					{
 						return;
 					}
 					const timestamp = backfilledCalendarTimestamp(chain);
-					if (timestamp !== undefined) {
-						metadataById.set(id, {...this.readNodeMetadata(id), calendar: {...calendar, timestamp}});
+					if (timestamp !== undefined)
+					{
+						metadataById.set(
+							id,
+							{
+								...this.readNodeMetadata(id),
+								calendar:
+								{
+									...calendar,
+									timestamp,
+								},
+							},
+						);
 					}
 				});
 				await this.pushCalendarMetadata(metadataById, "timestamp");
 				timestamps.push(...metadataById.keys());
 			}
-			await this.setRootMetaValues([{path: ["calendar", "ts_added_v2"], value: true}]);
+			await this.setRootMetaValues([
+				{
+					path: ["calendar", "ts_added_v2"],
+					value: true,
+				},
+			]);
 		}
-		if (force || (await this.getRootMeta(["calendar", "dateId_added_v1"])) !== true) {
-			const rootId = await this.taggedCalendarRootId({tagUntagged: false});
-			if (rootId !== undefined) {
+		if (force || (await this.getRootMeta(["calendar", "dateId_added_v1"])) !== true)
+		{
+			const rootId = await this.taggedCalendarRootId(
+				{
+					tagUntagged: false,
+				},
+			);
+			if (rootId !== undefined)
+			{
 				const metadataById = new Map<string, Metadata>();
-				this.walkCalendar(rootId, (id, calendar) => {
-					if (calendar.dateId !== undefined || typeof calendar.timestamp !== "number") {
+				this.walkCalendar(rootId, (id, calendar) =>
+				{
+					if (calendar.dateId !== undefined || typeof calendar.timestamp !== "number")
+					{
 						return;
 					}
 					const dateId = backfilledCalendarDateId(calendar.level, calendar.timestamp);
-					if (dateId !== undefined) {
-						metadataById.set(id, {...this.readNodeMetadata(id), calendar: {...calendar, dateId}});
+					if (dateId !== undefined)
+					{
+						metadataById.set(
+							id,
+							{
+								...this.readNodeMetadata(id),
+								calendar:
+								{
+									...calendar,
+									dateId,
+								},
+							},
+						);
 					}
 				});
 				await this.pushCalendarMetadata(metadataById, "dateId");
 				dateIds.push(...metadataById.keys());
 			}
-			await this.setRootMetaValues([{path: ["calendar", "dateId_added_v1"], value: true}]);
+			await this.setRootMetaValues([
+				{
+					path: ["calendar", "dateId_added_v1"],
+					value: true,
+				},
+			]);
 		}
-		return {timestamps, dateIds};
+		return {
+			timestamps,
+			dateIds,
+		};
 	}
 
 	/**
@@ -1578,14 +2268,31 @@ export class WorkflowyInternalAdapter {
 	 * `calendar.root`. With `tagUntagged`, a named node without calendar
 	 * metadata is tagged `{root: true}` first, as upstream's timestamp migration does.
 	 */
-	private async taggedCalendarRootId({tagUntagged}: {tagUntagged: boolean}): Promise<string | undefined> {
+	private async taggedCalendarRootId({tagUntagged}: {tagUntagged: boolean}): Promise<string | undefined>
+	{
 		const rootId = await this.getRootMeta(["calendar", "rootId"]);
-		if (typeof rootId !== "string" || !this.isCached(rootId)) {
+		if (typeof rootId !== "string" || !this.isCached(rootId))
+		{
 			return undefined;
 		}
 		const metadata = this.readNodeMetadata(rootId);
-		if (tagUntagged && metadata.calendar === undefined) {
-			await this.pushCalendarMetadata(new Map([[rootId, {...metadata, calendar: {root: true}}]]), undefined);
+		if (tagUntagged && metadata.calendar === undefined)
+		{
+			await this.pushCalendarMetadata(
+				new Map([
+					[
+						rootId,
+						{
+							...metadata,
+							calendar:
+							{
+								root: true,
+							},
+						},
+					],
+				]),
+				undefined,
+			);
 			return rootId;
 		}
 		const parsed = CalendarMetadataSchema.safeParse(metadata);
@@ -1600,20 +2307,25 @@ export class WorkflowyInternalAdapter {
 	private walkCalendar(
 		rootId: string,
 		visit: (id: string, calendar: CalendarNodeMetadata, chain: CalendarNodeMetadata[]) => void,
-	): void {
+	): void
+	{
 		const tree = this.tree();
-		const walk = (id: string, ancestors: CalendarNodeMetadata[]): void => {
+		const walk = (id: string, ancestors: CalendarNodeMetadata[]): void =>
+		{
 			const parsed = CalendarMetadataSchema.safeParse(this.readNodeMetadata(id));
 			const calendar = parsed.success && parsed.data.calendar.root !== true ? parsed.data.calendar : undefined;
 			const chain = calendar === undefined ? ancestors : [calendar, ...ancestors];
-			if (calendar !== undefined) {
+			if (calendar !== undefined)
+			{
 				visit(id, calendar, chain);
 			}
-			for (const child of tree.cachedChildIds(id)) {
+			for (const child of tree.cachedChildIds(id))
+			{
 				walk(child, chain);
 			}
 		};
-		for (const child of tree.cachedChildIds(rootId)) {
+		for (const child of tree.cachedChildIds(rootId))
+		{
 			walk(child, []);
 		}
 	}
@@ -1623,43 +2335,71 @@ export class WorkflowyInternalAdapter {
 	 * `calendar.<key>`, or the whole `calendar` without a key) in one push,
 	 * then cache it.
 	 */
-	private async pushCalendarMetadata(metadataById: Map<string, Metadata>, key: string | undefined): Promise<void> {
-		if (metadataById.size === 0) {
+	private async pushCalendarMetadata(metadataById: Map<string, Metadata>, key: string | undefined): Promise<void>
+	{
+		if (metadataById.size === 0)
+		{
 			return;
 		}
 		const session = await this.session();
-		const ops = [...metadataById].map(([id, metadata]) => {
+		const ops = [...metadataById].map(([id, metadata]) =>
+		{
 			const path = key === undefined ? ["calendar"] : ["calendar", key];
 			const {patches, inverse} = buildMetadataChanges(this.readNodeMetadata(id), [
-				{path, value: getPath(metadata, path)},
+				{
+					path,
+					value: getPath(metadata, path),
+				},
 			]);
-			return editOp({
-				id,
-				metadataPatches: patches,
-				metadataInversePatches: inverse,
-				now: this.now(),
-				dateJoinedSec: session.dateJoinedSec,
-			});
+			return editOp(
+				{
+					id,
+					metadataPatches: patches,
+					metadataInversePatches: inverse,
+					now: this.now(),
+					dateJoinedSec: session.dateJoinedSec,
+				},
+			);
 		});
-		await this.pusher.pushAndPoll({ops});
+		await this.pusher.pushAndPoll(
+			{
+				ops,
+			},
+		);
 		this.writeNodesMetadata(
 			new Map([...metadataById].map(([id, metadata]) => [id, keptInternalMetadata(metadata)])),
 		);
 	}
 
 	/** A node's cached calendar level and dateId, if it has both. */
-	private readCalendar(id: string): {level: string; dateId: number} | undefined {
+	private readCalendar(id: string):
+		|
+		  {
+				level: string;
+				dateId: number;
+		  }
+		| undefined
+	{
 		const parsed = CalendarMetadataSchema.safeParse(this.readNodeMetadata(id));
 		const calendar = parsed.success ? parsed.data.calendar : undefined;
 		return calendar?.level === undefined || calendar.dateId === undefined
 			? undefined
-			: {level: calendar.level, dateId: calendar.dateId};
+			:
+				{
+					level: calendar.level,
+					dateId: calendar.dateId,
+				};
 	}
 
-	private isCached(id: string): boolean {
+	private isCached(id: string): boolean
+	{
 		return (
 			this.db
-				.select({id: nodeContent.id})
+				.select(
+					{
+						id: nodeContent.id,
+					},
+				)
 				.from(nodeContent)
 				.where(and(eq(nodeContent.id, id), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
 				.get() !== undefined
@@ -1667,7 +2407,8 @@ export class WorkflowyInternalAdapter {
 	}
 
 	/** Move nodes to an exact slot: one `move` for one id, one `bulk_move` (keeping their order) for several. */
-	async moveTo(input: MoveToInput): Promise<void> {
+	async moveTo(input: MoveToInput): Promise<void>
+	{
 		await this.moveBlocks([input]);
 	}
 
@@ -1675,15 +2416,18 @@ export class WorkflowyInternalAdapter {
 	 * Several {@link moveTo}s in one push, in order: each block's op is planned against the outline as the earlier
 	 * ones leave it, so a non-contiguous selection's Tab costs one round trip. The cache re-reads every touched parent.
 	 */
-	async moveBlocks(inputs: readonly MoveToInput[]): Promise<void> {
+	async moveBlocks(inputs: readonly MoveToInput[]): Promise<void>
+	{
 		const blocks = inputs.filter((input) => input.ids.length > 0);
-		if (blocks.length === 0) {
+		if (blocks.length === 0)
+		{
 			return;
 		}
 		const tree = this.tree();
 		const parentOf = new Map<string, PublicParent>(
 			await Promise.all(
-				[...new Set(blocks.flatMap((block) => block.ids))].map(async (id) => {
+				[...new Set(blocks.flatMap((block) => block.ids))].map(async (id) =>
+				{
 					const node = await tree.liveNode(id);
 					return [id, node.parent_id ?? null] as const;
 				}),
@@ -1692,7 +2436,8 @@ export class WorkflowyInternalAdapter {
 		const parents = [...new Set([...parentOf.values(), ...blocks.map((block) => publicParent(block.parentId))])];
 		const orders = new Map(
 			await Promise.all(
-				parents.map(async (parent) => {
+				parents.map(async (parent) =>
+				{
 					const children = await tree.liveChildren(parent);
 					return [parent, children.map((child) => child.id)] as const;
 				}),
@@ -1700,23 +2445,53 @@ export class WorkflowyInternalAdapter {
 		);
 		const order = (parent: PublicParent) => orders.get(parent) ?? [];
 		const session = await this.session();
-		const clock = {now: this.now(), dateJoinedSec: session.dateJoinedSec};
-		const ops = blocks.map((block) => {
+		const clock =
+		{
+			now: this.now(),
+			dateJoinedSec: session.dateJoinedSec,
+		};
+		const ops = blocks.map((block) =>
+		{
 			const target = publicParent(block.parentId);
 			const siblings = order(target);
 			const index = clampIndex(block.index ?? siblings.length, siblings.length);
-			const items = block.ids.map((id) => {
+			const items = block.ids.map((id) =>
+			{
 				const parent = parentOf.get(id) ?? null;
-				return {id, from: {parentId: internalParent(parent), index: order(parent).indexOf(id)}};
+				return {
+					id,
+					from:
+					{
+						parentId: internalParent(parent),
+						index: order(parent).indexOf(id),
+					},
+				};
 			});
 			const [only] = items;
 			const op =
 				only !== undefined && items.length === 1
-					? moveOp({...clock, id: only.id, parentId: internalParent(target), index, from: only.from})
-					: bulkMoveOp({...clock, items, parentId: internalParent(target), siblings, index});
+					? moveOp(
+							{
+								...clock,
+								id: only.id,
+								parentId: internalParent(target),
+								index,
+								from: only.from,
+							},
+						)
+					: bulkMoveOp(
+							{
+								...clock,
+								items,
+								parentId: internalParent(target),
+								siblings,
+								index,
+							},
+						);
 			const moving = new Set(block.ids);
 			const before = siblings.slice(0, index).filter((id) => !moving.has(id)).length;
-			for (const [parent, children] of orders) {
+			for (const [parent, children] of orders)
+			{
 				orders.set(
 					parent,
 					children.filter((id) => !moving.has(id)),
@@ -1724,12 +2499,17 @@ export class WorkflowyInternalAdapter {
 			}
 			const others = order(target);
 			orders.set(target, [...others.slice(0, before), ...block.ids, ...others.slice(before)]);
-			for (const id of block.ids) {
+			for (const id of block.ids)
+			{
 				parentOf.set(id, target);
 			}
 			return op;
 		});
-		await this.pusher.pushAndPoll({ops});
+		await this.pusher.pushAndPoll(
+			{
+				ops,
+			},
+		);
 		await tree.refreshChildren(parents);
 	}
 
@@ -1739,9 +2519,11 @@ export class WorkflowyInternalAdapter {
 	 * The descendants come back too, so the cache re-reads the restored subtree
 	 * along with the parent's children.
 	 */
-	async restore(input: RestoreInput): Promise<void> {
+	async restore(input: RestoreInput): Promise<void>
+	{
 		const tree = this.tree();
-		if (input.parentId === undefined) {
+		if (input.parentId === undefined)
+		{
 			await this.session();
 			await this.postOk(`/trash/restore/${input.id}/`, new URLSearchParams(), true);
 			const restored = await tree.liveNode(input.id);
@@ -1752,22 +2534,30 @@ export class WorkflowyInternalAdapter {
 		const parent = publicParent(input.parentId);
 		const siblings = await tree.liveChildren(parent);
 		const session = await this.session();
-		const op = undeleteOp({
-			id: input.id,
-			parentId: internalParent(parent),
-			index: clampIndex(input.index ?? siblings.length, siblings.length),
-			now: this.now(),
-			dateJoinedSec: session.dateJoinedSec,
-		});
-		await this.pusher.pushAndPoll({ops: [op]});
+		const op = undeleteOp(
+			{
+				id: input.id,
+				parentId: internalParent(parent),
+				index: clampIndex(input.index ?? siblings.length, siblings.length),
+				now: this.now(),
+				dateJoinedSec: session.dateJoinedSec,
+			},
+		);
+		await this.pusher.pushAndPoll(
+			{
+				ops: [op],
+			},
+		);
 		await tree.refreshChildren([parent], [input.id]);
 		await this.syncRestoredBacklinks(input.id);
 	}
 
 	/** Upstream re-syncs the backlinks of every undeleted item; only cached nodes with a link can have any to create. */
-	private async syncRestoredBacklinks(rootId: string): Promise<void> {
+	private async syncRestoredBacklinks(rootId: string): Promise<void>
+	{
 		const linked = linkedIdsInSubtree(this.db, rootId);
-		if (linked.length > 0) {
+		if (linked.length > 0)
+		{
 			await this.syncBacklinks(linked);
 		}
 	}
@@ -1790,14 +2580,17 @@ export class WorkflowyInternalAdapter {
 	 * item's slot comes from live public reads, so the whole tree is never read.
 	 * An item already gone upstream is skipped.
 	 */
-	async deleteBacklinksOf(linked: LinkedSources): Promise<string[]> {
+	async deleteBacklinksOf(linked: LinkedSources): Promise<string[]>
+	{
 		const sourceIds = linked.ids;
-		if (sourceIds.length === 0) {
+		if (sourceIds.length === 0)
+		{
 			return [];
 		}
 		const cached = new Set(this.cachedIds(sourceIds));
 		const deletedSources = [...new Set(sourceIds)].filter((id) => !cached.has(id));
-		if (deletedSources.length === 0) {
+		if (deletedSources.length === 0)
+		{
 			return [];
 		}
 		const tree = this.tree();
@@ -1815,48 +2608,87 @@ export class WorkflowyInternalAdapter {
 		];
 		const itemRelations = tree.relationshipMetadata(itemIds);
 		const mirrorOnly = new Set(mirroredAtDelete);
-		const ownItemIds = itemIds.filter((id) => {
+		const ownItemIds = itemIds.filter((id) =>
+		{
 			const sourceID = itemRelations.get(id)?.backlink?.sourceID;
 			return sourceID === undefined ? mirrorOnly.has(id) : sources.has(sourceID);
 		});
-		if (ownItemIds.length === 0) {
+		if (ownItemIds.length === 0)
+		{
 			return [];
 		}
 		const session = await this.session();
-		const clock = {now: this.now(), dateJoinedSec: session.dateJoinedSec};
+		const clock =
+		{
+			now: this.now(),
+			dateJoinedSec: session.dateJoinedSec,
+		};
 		const orders = new Map<string, string[]>();
 		const ops: InternalOp[] = [];
 		const deleted: string[] = [];
-		for (const itemId of ownItemIds) {
+		for (const itemId of ownItemIds)
+		{
 			const parentId = (await tree.findLiveNode(itemId))?.parent_id ?? null;
-			if (parentId === null) {
+			if (parentId === null)
+			{
 				continue;
 			}
 			let siblings = orders.get(parentId);
-			if (siblings === undefined) {
+			if (siblings === undefined)
+			{
 				siblings = (await tree.liveChildren(parentId)).map((child) => child.id);
 				orders.set(parentId, siblings);
 			}
 			const index = siblings.indexOf(itemId);
-			ops.push(deleteOp({...clock, id: itemId, from: {parentId, index}}));
+			ops.push(
+				deleteOp(
+					{
+						...clock,
+						id: itemId,
+						from:
+						{
+							parentId,
+							index,
+						},
+					},
+				),
+			);
 			siblings.splice(index, 1);
 			deleted.push(itemId);
 		}
-		if (ops.length === 0) {
+		if (ops.length === 0)
+		{
 			return [];
 		}
-		await this.pusher.pushAndPoll({ops});
-		await tree.refreshBacklinks([...orders.keys()], {referencesRoots: [], backlinks: [], deleted});
+		await this.pusher.pushAndPoll(
+			{
+				ops,
+			},
+		);
+		await tree.refreshBacklinks(
+			[...orders.keys()],
+			{
+				referencesRoots: [],
+				backlinks: [],
+				deleted,
+			},
+		);
 		return deleted;
 	}
 
 	/** Those of `ids` the cache currently holds. */
-	private cachedIds(ids: string[]): string[] {
-		if (ids.length === 0) {
+	private cachedIds(ids: string[]): string[]
+	{
+		if (ids.length === 0)
+		{
 			return [];
 		}
 		return this.db
-			.select({id: nodeContent.id})
+			.select(
+				{
+					id: nodeContent.id,
+				},
+			)
 			.from(nodeContent)
 			.where(and(inArray(nodeContent.id, ids), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
 			.all()
@@ -1864,8 +2696,14 @@ export class WorkflowyInternalAdapter {
 	}
 
 	/** Set (or, with `undefined`, remove) one node metadata value; see {@link setNodeMetaValues}. */
-	async setNodeMeta(id: string, path: string[], value: unknown): Promise<void> {
-		await this.setNodeMetaValues(id, [{path, value}]);
+	async setNodeMeta(id: string, path: string[], value: unknown): Promise<void>
+	{
+		await this.setNodeMetaValues(id, [
+			{
+				path,
+				value,
+			},
+		]);
 	}
 
 	/**
@@ -1876,68 +2714,99 @@ export class WorkflowyInternalAdapter {
 	 * the server accepts the edit and the parent is re-read, the patched result
 	 * is written back to the typed metadata tables.
 	 */
-	async setNodeMetaValues(id: string, changes: MetadataChange[]): Promise<void> {
-		if (id === HOME) {
+	async setNodeMetaValues(id: string, changes: MetadataChange[]): Promise<void>
+	{
+		if (id === HOME)
+		{
 			await this.setRootMetaValues(changes);
 			return;
 		}
 		const tree = this.tree();
 		const node = await tree.liveNode(id);
-		const base = {...node.data, ...this.readNodeMetadata(id)};
+		const base =
+		{
+			...node.data,
+			...this.readNodeMetadata(id),
+		};
 		const {patches, inverse} = buildMetadataChanges(base, changes);
-		if (patches.length === 0) {
+		if (patches.length === 0)
+		{
 			return;
 		}
 		const session = await this.session();
-		const op = editOp({
-			id,
-			metadataPatches: patches,
-			metadataInversePatches: inverse,
-			now: this.now(),
-			dateJoinedSec: session.dateJoinedSec,
-		});
-		await this.pusher.pushAndPoll({ops: [op]});
+		const op = editOp(
+			{
+				id,
+				metadataPatches: patches,
+				metadataInversePatches: inverse,
+				now: this.now(),
+				dateJoinedSec: session.dateJoinedSec,
+			},
+		);
+		await this.pusher.pushAndPoll(
+			{
+				ops: [op],
+			},
+		);
 		await tree.refreshChildren([node.parent_id ?? null]);
 		this.writeNodesMetadata(new Map([[id, keptInternalMetadata(applyMetadataPatches(base, patches))]]));
 	}
 
-	private readNodeMetadata(id: string): Metadata {
+	private readNodeMetadata(id: string): Metadata
+	{
 		return readNodeInternalMetadata(this.db, id);
 	}
 
 	/** Store each node's kept metadata (undefined: none) in the typed tables, in one unit of work. */
-	private writeNodesMetadata(metadataById: ReadonlyMap<string, Metadata | undefined>): void {
+	private writeNodesMetadata(metadataById: ReadonlyMap<string, Metadata | undefined>): void
+	{
 		storeInternalMetadata(this.db, metadataById);
 	}
 
-	private tree(): WorkflowyWriteThroughClient {
-		if (!this.writeThrough) {
+	private tree(): WorkflowyWriteThroughClient
+	{
+		if (!this.writeThrough)
+		{
 			throw new TypeError("tree writes need the writeThrough option");
 		}
 		return this.writeThrough;
 	}
 
-	private async session(): Promise<InternalSession> {
+	private async session(): Promise<InternalSession>
+	{
 		return this.client.session ?? this.client.bootstrap();
 	}
 
 	/** POST a form; a redirect means logged out, a non-2xx (or, when `checkSucceeded`, `succeeded:false`) fails. */
-	private async postOk(path: string, form: URLSearchParams, checkSucceeded = false): Promise<void> {
+	private async postOk(path: string, form: URLSearchParams, checkSucceeded = false): Promise<void>
+	{
 		let response: Response;
-		try {
+		try
+		{
 			response = await this.client.postForm(path, form);
-		} catch (error) {
-			throw new TransportError(`POST ${path} failed`, {cause: error});
 		}
-		if (response.status >= 300 && response.status < 400) {
+		catch (error)
+		{
+			throw new TransportError(
+				`POST ${path} failed`,
+				{
+					cause: error,
+				},
+			);
+		}
+		if (response.status >= 300 && response.status < 400)
+		{
 			throw new LoggedOut(`redirect to ${response.headers.get("location") ?? "unknown"}`);
 		}
-		if (!response.ok) {
+		if (!response.ok)
+		{
 			throw new TransportError(`POST ${path} returned ${response.status} ${response.statusText}`);
 		}
-		if (checkSucceeded) {
+		if (checkSucceeded)
+		{
 			const body = SucceededSchema.safeParse(await response.json().catch(() => {}));
-			if (!body.success || !body.data.succeeded) {
+			if (!body.success || !body.data.succeeded)
+			{
 				throw new OperationRejected(`POST ${path} did not succeed`);
 			}
 		}
@@ -1953,7 +2822,8 @@ export class WorkflowyInternalAdapter {
 	 * a whole-tree import seeds and every local change updates; no read goes
 	 * to workflowy.com. Without a seed this fails loudly ({@link ExpansionNotSeeded}).
 	 */
-	getExpandedIds(): string[] {
+	getExpandedIds(): string[]
+	{
 		return resolveExpandedIds(this.db, this.storedExpansion().keys);
 	}
 
@@ -1961,34 +2831,48 @@ export class WorkflowyInternalAdapter {
 	 * The expansion change feed: the stored keys' content version, plus the expanded ids (as {@link getExpandedIds})
 	 * when it differs from the caller's `version`, or always when no `version` is given.
 	 */
-	getExpansionChanges(version: string | undefined): ExpansionChanges {
+	getExpansionChanges(version: string | undefined): ExpansionChanges
+	{
 		const {keys} = this.storedExpansion();
 		const current = expansionVersion(keys);
-		return {version: current, expandedIds: version === current ? null : resolveExpandedIds(this.db, keys)};
+		return {
+			version: current,
+			expandedIds: version === current ? null : resolveExpandedIds(this.db, keys),
+		};
 	}
 
 	/** The stored expansion, or a loud {@link ExpansionNotSeeded} before any import seeded it. */
-	private storedExpansion(): {keys: Set<string>} {
+	private storedExpansion():
+	{
+		keys: Set<string>;
+	}
+	{
 		const keys = readExpansion(this.db);
-		if (keys === undefined) {
+		if (keys === undefined)
+		{
 			throw loud(new ExpansionNotSeeded());
 		}
-		return {keys};
+		return {
+			keys,
+		};
 	}
 
 	/**
 	 * Whether an id is expanded, per the same cached keys {@link getExpandedIds} reads, without listing every cached
 	 * node: an outline view tests only the rows it reaches.
 	 */
-	expansionTest(): (id: string) => boolean {
+	expansionTest(): (id: string) => boolean
+	{
 		const {keys} = this.storedExpansion();
 		return (id) => keys.has(expansionKey(id));
 	}
 
 	/** Expand (`true`) or collapse (`false`) nodes with one push carrying only `project_expansions_delta`. */
-	async setExpanded(changes: Record<string, boolean>): Promise<void> {
+	async setExpanded(changes: Record<string, boolean>): Promise<void>
+	{
 		const entries = Object.entries(changes);
-		if (entries.length === 0) {
+		if (entries.length === 0)
+		{
 			return;
 		}
 		await this.session();
@@ -1998,22 +2882,30 @@ export class WorkflowyInternalAdapter {
 	}
 
 	/** The account's left-bar expansion keys (`leftbar__<section>__<context>__<id8>`), as stored, unresolved. */
-	getLeftBarExpansionKeys(): string[] {
+	getLeftBarExpansionKeys(): string[]
+	{
 		const {keys} = this.storedExpansion();
 		return [...keys].filter((key) => key.startsWith("leftbar__")).toSorted();
 	}
 
 	/** Push expansion changes keyed by raw upstream keys, with no id-prefix mapping. */
-	async setRawExpansionKeys(changes: Record<string, boolean>): Promise<void> {
-		if (Object.keys(changes).length === 0) {
+	async setRawExpansionKeys(changes: Record<string, boolean>): Promise<void>
+	{
+		if (Object.keys(changes).length === 0)
+		{
 			return;
 		}
 		await this.session();
 		await this.pushExpansionsDelta(changes);
 	}
 
-	private async pushExpansionsDelta(expansionsDelta: Record<string, boolean>): Promise<void> {
-		await this.pusher.pushAndPoll({expansionsDelta});
+	private async pushExpansionsDelta(expansionsDelta: Record<string, boolean>): Promise<void>
+	{
+		await this.pusher.pushAndPoll(
+			{
+				expansionsDelta,
+			},
+		);
 		runUnitOfWork(this.db, (unitOfWork) => applyExpansionDelta(unitOfWork, expansionsDelta));
 	}
 
@@ -2022,34 +2914,48 @@ export class WorkflowyInternalAdapter {
 	 * ids (`calendarNodeId`). It never changes, so it is read from the cached
 	 * `account` row with no expiry; undefined when the account data has none.
 	 */
-	async getEntropyKey(): Promise<string | undefined> {
+	async getEntropyKey(): Promise<string | undefined>
+	{
 		const cached = readAccountSnapshot(this.db);
-		if (cached?.account.entropyKey !== undefined) {
+		if (cached?.account.entropyKey !== undefined)
+		{
 			return cached.account.entropyKey;
 		}
 		const session = await this.session();
 		const {entropyKey} = session;
-		if (entropyKey !== undefined) {
+		if (entropyKey !== undefined)
+		{
 			this.store(
 				cached === undefined
 					? this.fromSession(session)
-					: {...cached, account: {...cached.account, entropyKey}},
+					:
+						{
+							...cached,
+							account:
+							{
+								...cached.account,
+								entropyKey,
+							},
+						},
 			);
 		}
 		return entropyKey;
 	}
 
 	/** The id upstream's `/file-proxy/` paths carry as the file owner. */
-	async fileOwnerId(): Promise<number> {
+	async fileOwnerId(): Promise<number>
+	{
 		return (await this.session()).ownerId;
 	}
 
 	/** The signed S3 URL a `/file-proxy/signed-preview|signed-original/...` path resolves to. */
-	async signedFileUrl(path: string): Promise<string> {
+	async signedFileUrl(path: string): Promise<string>
+	{
 		return this.client.signedFileUrl(path);
 	}
 
-	async getAccount(): Promise<Account> {
+	async getAccount(): Promise<Account>
+	{
 		const {account} = await this.snapshot();
 		return {
 			userId: account.userId,
@@ -2059,13 +2965,20 @@ export class WorkflowyInternalAdapter {
 	}
 
 	/** The root (Home) metadata value at `path`; the whole object for an empty path. */
-	async getRootMeta(path: string[]): Promise<unknown> {
+	async getRootMeta(path: string[]): Promise<unknown>
+	{
 		return getPath((await this.snapshot()).rootMetadata, path);
 	}
 
 	/** Set (or, with `undefined`, remove) one root metadata value; see {@link setRootMetaValues}. */
-	async setRootMeta(path: string[], value: unknown): Promise<void> {
-		await this.setRootMetaValues([{path, value}]);
+	async setRootMeta(path: string[], value: unknown): Promise<void>
+	{
+		await this.setRootMetaValues([
+			{
+				path,
+				value,
+			},
+		]);
 	}
 
 	/**
@@ -2073,34 +2986,45 @@ export class WorkflowyInternalAdapter {
 	 * build patches against the fresh metadata, push one edit, then cache the
 	 * patched metadata.
 	 */
-	async setRootMetaValues(changes: MetadataChange[]): Promise<void> {
+	async setRootMetaValues(changes: MetadataChange[]): Promise<void>
+	{
 		const session = await this.client.bootstrap();
 		const fresh = this.fromSession(session);
 		const {patches, inverse, snapshot} = withRootMetaChanges(fresh, changes);
-		if (patches.length > 0) {
-			const op = editOp({
-				id: ROOT_PROJECT_ID,
-				metadataPatches: patches,
-				metadataInversePatches: inverse,
-				now: this.now(),
-				dateJoinedSec: session.dateJoinedSec,
-			});
-			await this.pusher.pushAndPoll({ops: [op]});
+		if (patches.length > 0)
+		{
+			const op = editOp(
+				{
+					id: ROOT_PROJECT_ID,
+					metadataPatches: patches,
+					metadataInversePatches: inverse,
+					now: this.now(),
+					dateJoinedSec: session.dateJoinedSec,
+				},
+			);
+			await this.pusher.pushAndPoll(
+				{
+					ops: [op],
+				},
+			);
 		}
 		this.store(snapshot);
 	}
 
-	async getSetting(name: string): Promise<unknown> {
+	async getSetting(name: string): Promise<unknown>
+	{
 		return (await this.snapshot()).settings[name];
 	}
 
 	/** The server's visible feature list (one Settings > Features row each), from the account cache. */
-	async visibleFeatures(): Promise<VisibleFeature[]> {
+	async visibleFeatures(): Promise<VisibleFeature[]>
+	{
 		return (await this.snapshot()).visibleFeatures;
 	}
 
 	/** The enabled-feature dict: codename -> true. Disabled flags are absent. */
-	async enabledFeatures(): Promise<Record<string, true>> {
+	async enabledFeatures(): Promise<Record<string, true>>
+	{
 		return enabledDict((await this.snapshot()).settings.features);
 	}
 
@@ -2110,33 +3034,62 @@ export class WorkflowyInternalAdapter {
 	 * out) in `enabled_features`.
 	 * A failed POST changes nothing.
 	 */
-	async setFeature(codename: string, on: boolean): Promise<Record<string, true>> {
-		if (!FEATURE_CODENAME.test(codename)) {
+	async setFeature(codename: string, on: boolean): Promise<Record<string, true>>
+	{
+		if (!FEATURE_CODENAME.test(codename))
+		{
 			throw new TypeError(`invalid feature codename: ${codename}`);
 		}
 		const session = await this.session();
 		await this.postOk(
 			`/features/${on ? "enable" : "disable"}/${codename}`,
-			new URLSearchParams({clientId: session.clientId}),
+			new URLSearchParams(
+				{
+					clientId: session.clientId,
+				},
+			),
 		);
 		const current = await this.snapshotToWrite();
 		const next: Record<string, true> = on
-			? {...enabledDict(current.settings.features), [codename]: true}
+			?
+				{
+					...enabledDict(current.settings.features),
+					[codename]: true,
+				}
 			: Object.fromEntries(
 					Object.entries(enabledDict(current.settings.features)).filter(([name]) => name !== codename),
 				);
-		this.store({...current, settings: {...current.settings, features: next}});
+		this.store(
+			{
+				...current,
+				settings:
+				{
+					...current.settings,
+					features: next,
+				},
+			},
+		);
 		return next;
 	}
 
 	/** POST one server-saved setting; flags go over the wire as `"yes"`/`"no"`. */
-	async setSetting(name: ServerSetting, value: string | boolean): Promise<void> {
-		if (FLAG_SETTINGS.has(name) !== (typeof value === "boolean")) {
+	async setSetting(name: ServerSetting, value: string | boolean): Promise<void>
+	{
+		if (FLAG_SETTINGS.has(name) !== (typeof value === "boolean"))
+		{
 			throw new TypeError(`setting ${name} takes a ${FLAG_SETTINGS.has(name) ? "boolean" : "string"}`);
 		}
 		const session = await this.session();
 		const wireValue = typeof value === "boolean" ? (value ? "yes" : "no") : value;
-		await this.postOk("/change_settings", new URLSearchParams({[name]: wireValue, clientId: session.clientId}));
+		await this.postOk(
+			"/change_settings",
+			new URLSearchParams(
+				{
+					[name]: wireValue,
+					clientId: session.clientId,
+				},
+			),
+		);
 		const current = await this.snapshotToWrite();
 		this.store(withSetting(current, name, value));
 	}
@@ -2145,11 +3098,17 @@ export class WorkflowyInternalAdapter {
 	 * POST a `saved_views_json_delta` (`{added?, removed?}`, see `saved-views.ts`), then cache
 	 * `json` as `saved_views_json`, the client copy upstream never sends to the server.
 	 */
-	async setSavedViews(json: string, delta: string): Promise<void> {
+	async setSavedViews(json: string, delta: string): Promise<void>
+	{
 		const session = await this.session();
 		await this.postOk(
 			"/change_settings",
-			new URLSearchParams({saved_views_json_delta: delta, clientId: session.clientId}),
+			new URLSearchParams(
+				{
+					saved_views_json_delta: delta,
+					clientId: session.clientId,
+				},
+			),
 		);
 		const current = await this.snapshotToWrite();
 		this.store(withSetting(current, "saved_views_json", json));
@@ -2161,15 +3120,19 @@ export class WorkflowyInternalAdapter {
 	 * background (see {@link accountRefreshed}), since date format, week start
 	 * and settings rarely change and the bootstrap costs 0.3-1.1s.
 	 */
-	private async snapshot(): Promise<AccountSnapshot> {
+	private async snapshot(): Promise<AccountSnapshot>
+	{
 		const cached = this.load();
-		if (!cached) {
+		if (!cached)
+		{
 			const fresh = this.fromSession(await this.client.bootstrap());
 			this.store(fresh);
 			return fresh;
 		}
-		if (cached.fetchedAt < this.now() - FRESHNESS_MS) {
-			void this.refreshAccount().catch((error: unknown) => {
+		if (cached.fetchedAt < this.now() - FRESHNESS_MS)
+		{
+			void this.refreshAccount().catch((error: unknown) =>
+			{
 				console.error("Failed to refresh account state", error);
 			});
 		}
@@ -2181,20 +3144,27 @@ export class WorkflowyInternalAdapter {
 	 * snapshot, or a fresh bootstrap's when nothing is cached. Unlike
 	 * {@link snapshot} it stores nothing itself, so the write is one unit of work.
 	 */
-	private async snapshotToWrite(): Promise<AccountSnapshot> {
+	private async snapshotToWrite(): Promise<AccountSnapshot>
+	{
 		return this.load()?.snapshot ?? this.fromSession(await this.client.bootstrap());
 	}
 
 	/** One background bootstrap at a time; its result is dropped if a write stored a newer snapshot meanwhile. */
-	private async refreshAccount(): Promise<void> {
-		this.accountRefresh ??= (async () => {
-			try {
+	private async refreshAccount(): Promise<void>
+	{
+		this.accountRefresh ??= (async () =>
+		{
+			try
+			{
 				const storesBefore = this.accountStores;
 				const fresh = this.fromSession(await this.client.bootstrap());
-				if (this.accountStores === storesBefore) {
+				if (this.accountStores === storesBefore)
+				{
 					this.store(fresh);
 				}
-			} finally {
+			}
+			finally
+			{
 				this.accountRefresh = undefined;
 			}
 		})();
@@ -2207,24 +3177,38 @@ export class WorkflowyInternalAdapter {
 	 * database calls it once to seed the account tables.
 	 * @returns each account table's live row count after the refresh
 	 */
-	async refreshAccountState(): Promise<Record<string, number>> {
+	async refreshAccountState(): Promise<Record<string, number>>
+	{
 		const fresh = this.fromSession(await this.client.bootstrap());
 		this.store(fresh);
 		return accountRowCounts(accountRows(fresh));
 	}
 
 	/** Settles once the in-flight account refresh, if any, has finished. */
-	async accountRefreshed(): Promise<void> {
+	async accountRefreshed(): Promise<void>
+	{
 		await this.accountRefresh?.catch(() => {});
 	}
 
-	private fromSession(session: InternalSession): AccountSnapshot {
+	private fromSession(session: InternalSession): AccountSnapshot
+	{
 		return {
-			account: {
+			account:
+			{
 				userId: String(session.userId),
 				dateJoinedSec: session.dateJoinedSec,
-				...(session.fullName === undefined ? {} : {fullName: session.fullName}),
-				...(session.entropyKey === undefined ? {} : {entropyKey: session.entropyKey}),
+				...(session.fullName === undefined
+					? {}
+					:
+						{
+							fullName: session.fullName,
+						}),
+				...(session.entropyKey === undefined
+					? {}
+					:
+						{
+							entropyKey: session.entropyKey,
+						}),
 			} satisfies StoredAccount,
 			rootMetadata: session.rootMetadata,
 			settings: session.settings,
@@ -2233,15 +3217,30 @@ export class WorkflowyInternalAdapter {
 	}
 
 	/** The cached snapshot with the time of its last refresh or accepted write, if an account import stored one. */
-	private load(): {snapshot: AccountSnapshot; fetchedAt: number} | undefined {
+	private load():
+		|
+		  {
+				snapshot: AccountSnapshot;
+				fetchedAt: number;
+		  }
+		| undefined
+	{
 		const snapshot = readAccountSnapshot(this.db);
-		return snapshot && {snapshot, fetchedAt: readImportTime(this.db, ACCOUNT_IMPORT_NAME) ?? 0};
+		return (
+			snapshot &&
+			{
+				snapshot,
+				fetchedAt: readImportTime(this.db, ACCOUNT_IMPORT_NAME) ?? 0,
+			}
+		);
 	}
 
-	private store(snapshot: AccountSnapshot): void {
+	private store(snapshot: AccountSnapshot): void
+	{
 		this.accountStores += 1;
 		const fetchedAt = this.now();
-		runUnitOfWork(this.db, (unitOfWork) => {
+		runUnitOfWork(this.db, (unitOfWork) =>
+		{
 			writeAccountSnapshot(unitOfWork, snapshot);
 			stampImportTime(unitOfWork, ACCOUNT_IMPORT_NAME, fetchedAt);
 		});

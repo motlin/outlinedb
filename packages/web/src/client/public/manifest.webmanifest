@@ -5,7 +5,8 @@
 	"scope": "/",
 	"display": "standalone",
 	"icons": [{"src": "/favicon.png", "sizes": "32x32", "type": "image/png"}],
-	"share_target": {
+	"share_target":
+	{
 		"action": "/api/v1/inbox/share",
 		"method": "GET",
 		"params": {"title": "title", "text": "text", "url": "url"}

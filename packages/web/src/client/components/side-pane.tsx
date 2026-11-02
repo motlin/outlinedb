@@ -44,15 +44,18 @@ const WORKSPACE_SCROLLER_CLASSES = [
 const WORKSPACE_CLASS = `relative flex h-screen max-h-screen min-h-0 items-stretch overflow-hidden bg-primary print:block print:!mr-0 print:!h-auto print:!max-h-none print:!overflow-visible ${WORKSPACE_SCROLLER_CLASSES}`;
 
 /** A style object with CSS custom properties, which `CSSProperties` does not name. */
-function cssVars(style: Record<string, string | number>): CSSProperties {
+function cssVars(style: Record<string, string | number>): CSSProperties
+{
 	return style;
 }
 
-const WORKSPACE_STYLE: CSSProperties = cssVars({
-	"--pane-workspace-control-width": "var(--wf-header-height)",
-	"--pane-workspace-left-control-width": "calc(var(--wf-space-s) + 36px)",
-	marginRight: 8,
-});
+const WORKSPACE_STYLE: CSSProperties = cssVars(
+	{
+		"--pane-workspace-control-width": "var(--wf-header-height)",
+		"--pane-workspace-left-control-width": "calc(var(--wf-space-s) + 36px)",
+		marginRight: 8,
+	},
+);
 
 /** Upstream's pane: a fixed-width column that never flexes. Only the active pane prints. */
 const PANE_CLASS = "group/pane relative box-border flex-none h-full max-h-full min-h-0 bg-primary flex flex-col";
@@ -65,19 +68,34 @@ const PANE_LAST_CLASS = "[&_.header]:pr-[var(--pane-workspace-control-width)] [&
 /** Upstream's pane body scroller: padding 16px 32px 16px 56px, a centred project column and the Home indent. */
 export const PANE_SCROLLER_CLASS =
 	"flex-1 min-h-0 py-l pr-2xl overflow-auto overscroll-contain relative vertical-scrollable-container print:!overflow-visible pl-[calc(var(--wf-space-xl)+var(--side-pane-menu-gutter))] [--name-left-overhang:60px] [&>.project.root]:w-full [&>.project.root]:max-w-[700px] [&>.project.root]:mx-auto [&>.project.root]:data-[full-width-active=true]:!max-w-none [&>.project.root]:!max-w-none";
-export const PANE_SCROLLER_STYLE: CSSProperties = cssVars({"--side-pane-menu-gutter": "32px"});
+export const PANE_SCROLLER_STYLE: CSSProperties = cssVars(
+	{
+		"--side-pane-menu-gutter": "32px",
+	},
+);
 
-function paneClassName(isActive: boolean, extra = ""): string {
+function paneClassName(isActive: boolean, extra = ""): string
+{
 	return `${PANE_CLASS} ${isActive ? PANE_ACTIVE_PRINT_CLASS : "print:hidden"}${extra === "" ? "" : ` ${extra}`}`;
 }
 
 /** Upstream's blank space under a pane's last row, so the end of the outline scrolls clear of the bottom edge. */
-export function DocumentEnd() {
-	return <div className="document-end flex-grow flex-shrink-0 print:hidden" style={{height: 380}} />;
+export function DocumentEnd()
+{
+	return (
+		<div
+			className="document-end flex-grow flex-shrink-0 print:hidden"
+			style={
+			{
+				height: 380,
+			}}
+		/>
+	);
 }
 
 /** Upstream's item-tree pane title (`getNameText`): the plain text of the pane's zoom, Home at the root. */
-function paneTitle(queryClient: QueryClient, paneId: string): string {
+function paneTitle(queryClient: QueryClient, paneId: string): string
+{
 	const state = useOutlineStore.getState();
 	const pane = findPane(state.panes, paneId);
 	const zoomedId = pane === undefined ? state.zoomedNodeId : pane.zoomedId;
@@ -85,14 +103,16 @@ function paneTitle(queryClient: QueryClient, paneId: string): string {
 }
 
 /** Upstream's header-drag overlay, portaled to the body: the tint drop line and the ghost chip under the pointer. */
-function ReorderOverlay({view}: {view: ReorderView}) {
+function ReorderOverlay({view}: {view: ReorderView})
+{
 	return createPortal(
 		<>
 			{view.dropLine !== null && (
 				<div
 					aria-hidden
 					className="fixed w-xs bg-tint rounded-pill pointer-events-none print:hidden"
-					style={{
+					style={
+					{
 						left: view.dropLine.left,
 						top: view.dropLine.top,
 						height: view.dropLine.height,
@@ -104,7 +124,12 @@ function ReorderOverlay({view}: {view: ReorderView}) {
 			<div
 				aria-hidden
 				className="fixed translate-x-ml translate-y-ml flex items-center gap-s max-w-[280px] px-m py-s text-s text-primary bg-secondary border border-solid border-primary rounded-s shadow-md pointer-events-none print:hidden"
-				style={{left: view.pointerX, top: view.pointerY, zIndex: POPUP_Z}}
+				style={
+				{
+					left: view.pointerX,
+					top: view.pointerY,
+					zIndex: POPUP_Z,
+				}}
 			>
 				<FaIcon className="flex-shrink-0 text-tertiary" icon="fal:grip-dots-vertical" />
 				<span className="truncate">{view.title}</span>
@@ -121,7 +146,8 @@ function ReorderOverlay({view}: {view: ReorderView}) {
  * header reorders the panes (drop line and ghost chip while dragging). In the single-document layout both wrappers
  * are `display: contents`, so the fixed header and document-scrolled outline lay out as before.
  */
-export function PaneWorkspace({children}: {children: ReactNode}) {
+export function PaneWorkspace({children}: {children: ReactNode})
+{
 	const panesOpen = useOutlineStore((state) => state.panes.length > 0);
 	const resizing = useOutlineStore((state) => state.paneResizing);
 	const workspaceWidth = useOutlineStore((state) => state.workspaceWidth);
@@ -132,36 +158,48 @@ export function PaneWorkspace({children}: {children: ReactNode}) {
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const [reorder, setReorder] = useState<ReorderView | null>(null);
 	// Upstream measures the scroll container into `workspaceWidth`; the store rescales the panes when it changes.
-	useEffect(() => {
+	useEffect(() =>
+	{
 		const scroller = scrollRef.current;
-		if (!panesOpen || scroller === null || typeof ResizeObserver === "undefined") {
-			return () => {};
+		if (!panesOpen || scroller === null || typeof ResizeObserver === "undefined")
+		{
+			return () =>
+			{
+			};
 		}
-		const measure = () => {
+		const measure = () =>
+		{
 			setWorkspaceWidth(scroller.clientWidth);
 		};
 		measure();
 		const observer = new ResizeObserver(measure);
 		observer.observe(scroller);
-		return () => {
+		return () =>
+		{
 			observer.disconnect();
 			setWorkspaceWidth(null);
 		};
 	}, [panesOpen, setWorkspaceWidth]);
-	useEffect(() => {
+	useEffect(() =>
+	{
 		const scroller = scrollRef.current;
 		const unbind =
 			panesOpen && scroller !== null
-				? bindPaneReorder(scroller, {
-						getState: useOutlineStore.getState,
-						title: (paneId) => paneTitle(queryClient, paneId),
-						movePane: (paneId, index) => {
-							movePane(navigate, paneId, index, (id) => cachedResolvedId(queryClient, id) ?? id);
+				? bindPaneReorder(
+						scroller,
+						{
+							getState: useOutlineStore.getState,
+							title: (paneId) => paneTitle(queryClient, paneId),
+							movePane: (paneId, index) =>
+							{
+								movePane(navigate, paneId, index, (id) => cachedResolvedId(queryClient, id) ?? id);
+							},
+							onView: setReorder,
 						},
-						onView: setReorder,
-					})
+					)
 				: null;
-		return () => {
+		return () =>
+		{
 			unbind?.();
 		};
 	}, [navigate, panesOpen, queryClient]);
@@ -186,7 +224,15 @@ export function PaneWorkspace({children}: {children: ReactNode}) {
 					<div
 						aria-hidden="true"
 						className="flex-none print:hidden"
-						style={{width: workspaceAvailableWidth({leftBarOffset, workspaceWidth})}}
+						style={
+						{
+							width: workspaceAvailableWidth(
+								{
+									leftBarOffset,
+									workspaceWidth,
+								},
+							),
+						}}
 					/>
 				)}
 			</div>
@@ -203,7 +249,8 @@ export function PaneWorkspace({children}: {children: ReactNode}) {
  * in upstream's body wrapper, then its resize separator. It is the active pane (header border tinted) only while a
  * pane is open and the main outline last saw a pointerdown or focusin.
  */
-export function MainPane({children}: {children: ReactNode}) {
+export function MainPane({children}: {children: ReactNode})
+{
 	const panesOpen = useOutlineStore((state) => state.panes.length > 0);
 	const isActive = useOutlineStore((state) => state.panes.length > 0 && state.activePaneId === MAIN_PANE_ID);
 	const width = useOutlineStore((state) => (state.panes.length > 0 ? state.paneWidths[MAIN_PANE_ID] : undefined));
@@ -216,7 +263,11 @@ export function MainPane({children}: {children: ReactNode}) {
 			data-pane-type="item-tree"
 			data-pane-active={isActive ? "true" : "false"}
 			className={`main-pane ${paneClassName(isActive, leftControlShown ? PANE_FIRST_CLASS : "")}`}
-			style={{width, minWidth: MIN_PANE_WIDTH}}
+			style={
+			{
+				width,
+				minWidth: MIN_PANE_WIDTH,
+			}}
 			{...paneActivation(MAIN_PANE_ID, setActivePane)}
 		>
 			<div className="flex flex-1 min-h-0 flex-col" data-full-width-boundary="true" data-split-pane="true">
@@ -235,7 +286,8 @@ export function MainPane({children}: {children: ReactNode}) {
  * Upstream's resize separator on a pane's right edge, the last pane's included: a 6px focusable `role=separator`.
  * Dragging it or pressing ArrowLeft, ArrowRight or Home resizes the pane at workspace `index` (see `resizedDivider`).
  */
-function PaneSeparator({index}: {index: number}) {
+function PaneSeparator({index}: {index: number})
+{
 	const panes = useOutlineStore((state) => state.panes);
 	const paneWidths = useOutlineStore((state) => state.paneWidths);
 	const workspaceWidth = useOutlineStore((state) => state.workspaceWidth);
@@ -244,29 +296,48 @@ function PaneSeparator({index}: {index: number}) {
 	const setPaneResizing = useOutlineStore((state) => state.setPaneResizing);
 	const ref = useRef<HTMLDivElement>(null);
 	const ids = [MAIN_PANE_ID, ...panes.map((pane) => pane.id)];
-	const widths = workspaceWidths({panes, paneWidths});
-	const available = workspaceAvailableWidth({leftBarOffset, workspaceWidth});
+	const widths = workspaceWidths(
+		{
+			panes,
+			paneWidths,
+		},
+	);
+	const available = workspaceAvailableWidth(
+		{
+			leftBarOffset,
+			workspaceWidth,
+		},
+	);
 	const width = widths[index] ?? MIN_PANE_WIDTH;
 	const nextId = ids[index + 1];
 	const nextWidth = widths[index + 1];
-	const deps = {
+	const deps =
+	{
 		getWidths: () => workspaceWidths(useOutlineStore.getState()),
 		available: () => workspaceAvailableWidth(useOutlineStore.getState()),
 		setWidths: setPaneWidths,
 	};
-	useEffect(() => {
+	useEffect(() =>
+	{
 		const separator = ref.current;
 		const scroller = separator?.closest<HTMLElement>("[data-pane-scroll-container]") ?? null;
-		if (separator === null || scroller === null) {
-			return () => {};
+		if (separator === null || scroller === null)
+		{
+			return () =>
+			{
+			};
 		}
-		return bindPaneSeparator(separator, index, {
-			scroller,
-			getWidths: () => workspaceWidths(useOutlineStore.getState()),
-			available: () => workspaceAvailableWidth(useOutlineStore.getState()),
-			setWidths: setPaneWidths,
-			setResizing: setPaneResizing,
-		});
+		return bindPaneSeparator(
+			separator,
+			index,
+			{
+				scroller,
+				getWidths: () => workspaceWidths(useOutlineStore.getState()),
+				available: () => workspaceAvailableWidth(useOutlineStore.getState()),
+				setWidths: setPaneWidths,
+				setResizing: setPaneResizing,
+			},
+		);
 	}, [index, setPaneResizing, setPaneWidths]);
 	return (
 		<div
@@ -282,13 +353,17 @@ function PaneSeparator({index}: {index: number}) {
 			}
 			className="absolute top-0 right-0 bottom-0 w-[6px] cursor-col-resize touch-none select-none border-r border-solid border-primary hover:bg-tertiary focus-visible:bg-tertiary focus-visible:outline-none print:hidden"
 			data-pane-drag-ignore="true"
-			onKeyDown={(event) => {
+			onKeyDown={(event) =>
+			{
 				handleSeparatorKey(event, index, deps);
 			}}
 			ref={ref}
 			// oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- upstream's focusable, draggable separator is a div; an hr cannot take pointer or key handlers
 			role="separator"
-			style={{zIndex: 200}}
+			style={
+			{
+				zIndex: 200,
+			}}
 			tabIndex={0}
 		/>
 	);
@@ -298,18 +373,29 @@ function PaneSeparator({index}: {index: number}) {
  * Upstream's `pane-workspace-control`: one per workspace, at its top right. Its New pane button opens another pane on
  * the last pane's zoom after it and focuses it.
  */
-function PaneWorkspaceControl() {
+function PaneWorkspaceControl()
+{
 	const last = useOutlineStore((state) => state.panes.at(-1));
 	const openPane = useOutlineStore((state) => state.openPane);
 	return (
 		<div
 			className="wf-header pane-workspace-control box-border absolute top-0 right-0 flex h-[var(--wf-header-height)] w-[var(--pane-workspace-control-width)] items-center justify-center border-x border-solid border-primary bg-primary [&_.iconButton]:text-primary print:hidden"
-			style={{zIndex: 200}}
+			style={
+			{
+				zIndex: 200,
+			}}
 		>
 			<IconButton
-				onClick={() => {
-					if (last !== undefined) {
-						openPane(last.zoomedId, {sourcePaneId: last.id});
+				onClick={() =>
+				{
+					if (last !== undefined)
+					{
+						openPane(
+							last.zoomedId,
+							{
+								sourcePaneId: last.id,
+							},
+						);
 					}
 				}}
 				shortcut="⌃R"
@@ -321,12 +407,14 @@ function PaneWorkspaceControl() {
 	);
 }
 
-interface PaneActions {
+interface PaneActions
+{
 	onUndo: () => void;
 	onRedo: () => void;
 }
 
-interface SidePaneProps extends PaneActions {
+interface SidePaneProps extends PaneActions
+{
 	pane: ItemTreePane;
 	/** The pane's workspace index, counting the main pane as 0. */
 	index: number;
@@ -342,7 +430,8 @@ interface SidePaneProps extends PaneActions {
  * the kebab holding the compactable actions for the pane's zoom, and Close pane. Its body follows upstream's wrappers,
  * and its resize separator sits on its right edge.
  */
-function SidePane({pane, index, isLast, onUndo, onRedo}: SidePaneProps) {
+function SidePane({pane, index, isLast, onUndo, onRedo}: SidePaneProps)
+{
 	const {id} = pane;
 	const width = useOutlineStore((state) => state.paneWidths[id]);
 	const zoomPane = useOutlineStore((state) => state.zoomPane);
@@ -353,9 +442,11 @@ function SidePane({pane, index, isLast, onUndo, onRedo}: SidePaneProps) {
 	const isActive = useOutlineStore((state) => state.activePaneId === id);
 	const setActivePane = useOutlineStore((state) => state.setActivePane);
 	const context = useMemo(
-		() => ({
+		() => (
+		{
 			id,
-			zoom: (zoomedId: string | null) => {
+			zoom: (zoomedId: string | null) =>
+			{
 				zoomPane(id, zoomedId);
 			},
 		}),
@@ -372,7 +463,11 @@ function SidePane({pane, index, isLast, onUndo, onRedo}: SidePaneProps) {
 			data-pane-type="item-tree"
 			data-pane-active={isActive ? "true" : "false"}
 			className={paneClassName(isActive, isLast ? PANE_LAST_CLASS : "")}
-			style={{width, minWidth: MIN_PANE_WIDTH}}
+			style={
+			{
+				width,
+				minWidth: MIN_PANE_WIDTH,
+			}}
 			{...paneActivation(id, setActivePane)}
 		>
 			<div className="flex flex-1 min-h-0 flex-col" data-full-width-boundary="true" data-split-pane="true">
@@ -383,7 +478,8 @@ function SidePane({pane, index, isLast, onUndo, onRedo}: SidePaneProps) {
 						<IconButton
 							data-handbook="nav.back"
 							disabled={pane.backLocations.length === 0}
-							onClick={() => {
+							onClick={() =>
+							{
 								paneBack(id);
 							}}
 							tooltip="Back"
@@ -393,7 +489,8 @@ function SidePane({pane, index, isLast, onUndo, onRedo}: SidePaneProps) {
 						{pane.forwardLocations.length > 0 && (
 							<IconButton
 								data-handbook="nav.forward"
-								onClick={() => {
+								onClick={() =>
+								{
 									paneForward(id);
 								}}
 								tooltip="Forward"
@@ -406,14 +503,16 @@ function SidePane({pane, index, isLast, onUndo, onRedo}: SidePaneProps) {
 						nodeId={pane.zoomedId}
 						onNavigate={context.zoom}
 						{...paneCrumbOptions(width ?? MIN_PANE_WIDTH)}
-						scrollToTop={() => {
+						scrollToTop={() =>
+						{
 							scrollPaneToTop(id);
 						}}
 					/>
 					<div className="ml-auto flex self-stretch items-center gap-xs flex-shrink-0">
 						<PaneSearchBox
 							compact
-							onCommit={(query) => {
+							onCommit={(query) =>
+							{
 								setPaneQuery(id, query);
 							}}
 							query={pane.query}
@@ -439,7 +538,8 @@ function SidePane({pane, index, isLast, onUndo, onRedo}: SidePaneProps) {
 						/>
 						<IconButton
 							className="text-tertiary hover:text-on-surface flex-shrink-0"
-							onClick={() => {
+							onClick={() =>
+							{
 								closePane(id);
 							}}
 							tooltip="Close pane"
@@ -463,7 +563,8 @@ function SidePane({pane, index, isLast, onUndo, onRedo}: SidePaneProps) {
 }
 
 /** Upstream's secondary panes: every open item-tree pane left to right, after the main pane in the workspace. */
-export function SidePanes(actions: PaneActions) {
+export function SidePanes(actions: PaneActions)
+{
 	const panes = useOutlineStore((state) => state.panes);
 	return panes.map((pane, index) => (
 		<SidePane index={index + 1} isLast={index === panes.length - 1} key={pane.id} pane={pane} {...actions} />

@@ -5,24 +5,63 @@ export const PAGE_BREAKPOINT = 720;
 export const DOCUMENT_END_HEIGHT = 380;
 
 /** Upstream's `ln2`: the page's side padding for a window `width`. */
-export function getPagePadding(width: number): {left: number; right: number} {
-	return width < PAGE_BREAKPOINT ? {left: 56, right: 56} : {left: 80, right: 136};
+export function getPagePadding(width: number):
+{
+	left: number;
+	right: number;
+}
+{
+	return width < PAGE_BREAKPOINT
+		?
+			{
+				left: 56,
+				right: 56,
+			}
+		:
+			{
+				left: 80,
+				right: 136,
+			};
 }
 
 /** Upstream's `ln2` mobile branch: the smaller sides apply below 720px, and neither goes under a safe-area inset. */
-export function mobilePagePadding(width: number, safe: {left: number; right: number}): {left: number; right: number} {
+export function mobilePagePadding(
+	width: number,
+	safe:
+	{
+		left: number;
+		right: number;
+	},
+):
+{
+	left: number;
+	right: number;
+}
+{
 	const narrow = width < PAGE_BREAKPOINT;
-	return {left: Math.max(narrow ? 16 : 40, safe.left), right: Math.max(narrow ? 24 : 40, safe.right)};
+	return {
+		left: Math.max(narrow ? 16 : 40, safe.left),
+		right: Math.max(narrow ? 24 : 40, safe.right),
+	};
 }
 
 /** The device's `--safe-area-inset-left/right` in px (0 without `viewport-fit=cover` or off a notched phone). */
-export function readSafeInsets(root: HTMLElement = document.documentElement): {left: number; right: number} {
+export function readSafeInsets(root: HTMLElement = document.documentElement):
+{
+	left: number;
+	right: number;
+}
+{
 	const style = getComputedStyle(root);
 	const read = (name: string): number => Number(style.getPropertyValue(name).replace("px", "").trim()) || 0;
-	return {left: read("--safe-area-inset-left"), right: read("--safe-area-inset-right")};
+	return {
+		left: read("--safe-area-inset-left"),
+		right: read("--safe-area-inset-right"),
+	};
 }
 
-export interface PageStyleInput {
+export interface PageStyleInput
+{
 	fullWidth: boolean;
 	/** `window.innerWidth`. */
 	width: number;
@@ -32,7 +71,11 @@ export interface PageStyleInput {
 	/** A phone: upstream's `by4` geometry. */
 	mobile?: boolean;
 	/** The device's safe-area insets, for the phone padding. */
-	safeInsets?: {left: number; right: number};
+	safeInsets?:
+	{
+		left: number;
+		right: number;
+	};
 	/** The mobile search form is showing: `WF.GuiPage.appendTopMargin("search", 44)`. */
 	searchFormVisible?: boolean;
 }
@@ -44,10 +87,16 @@ export function pageStyle({
 	searching,
 	offline = false,
 	mobile = false,
-	safeInsets = {left: 0, right: 0},
+	safeInsets =
+	{
+		left: 0,
+		right: 0,
+	},
 	searchFormVisible = false,
-}: PageStyleInput) {
-	if (mobile) {
+}: PageStyleInput)
+{
+	if (mobile)
+	{
 		const sides = mobilePagePadding(width, safeInsets);
 		return {
 			minHeight: "calc(100vh - 82px)",
@@ -88,7 +137,8 @@ export function pageClassName({
 	mobile?: boolean;
 	/** The zoomed item is a dashboard (upstream's `page:classes`). */
 	dashboardPage?: boolean;
-}): string {
+}): string
+{
 	return [
 		PAGE_CLASS,
 		mobile && "overflow-x-hidden",
@@ -101,7 +151,8 @@ export function pageClassName({
 }
 
 /** Upstream's `.pageContainer` class string (desktop). */
-export function pageContainerClassName(mobile = false): string {
+export function pageContainerClassName(mobile = false): string
+{
 	const base =
 		"min-h-screen bg-[var(--wf-background-ambient)] bg-fixed [background-image:var(--wf-image-ambient)] pageContainer";
 	return mobile ? `${base} [.fly_&]:pb-[20vh]` : base;

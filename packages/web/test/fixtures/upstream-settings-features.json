@@ -122,7 +122,8 @@
 			"description": "Open nodes in separate panes to view and work with multiple parts of your WorkFlowy side by side."
 		}
 	],
-	"enabled": {
+	"enabled":
+	{
 		"always_visible_controls": true,
 		"bdl": true,
 		"beta_redirect": true,

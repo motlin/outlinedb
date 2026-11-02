@@ -21,32 +21,44 @@ const ALLOWED = [
 	'src/client/components/main-menu-model.ts: "workflowy.help",',
 	'src/client/components/main-menu-model.ts: "workflowy.community",',
 	'src/client/components/main-menu-model.ts: "workflowy.blog",',
-	'src/client/components/main-menu-model.ts: "workflowy.help": {',
-	'src/client/components/main-menu-model.ts: "workflowy.community": {label: "Community", onSelect: link(COMMUNITY_URL)},',
-	'src/client/components/main-menu-model.ts: "workflowy.blog": {label: "Blog", onSelect: link(BLOG_URL)},',
+	'src/client/components/main-menu-model.ts: "workflowy.help":',
+	'src/client/components/main-menu-model.ts: "workflowy.community":',
+	'src/client/components/main-menu-model.ts: "workflowy.blog":',
 	// Upstream's built-in "-2" system mention, rendered as upstream names it.
 	'src/client/mention-pills.ts: return "Workflowy";',
 ];
 
-function sourceFiles(dir: string): string[] {
-	return fs.readdirSync(dir, {withFileTypes: true}).flatMap((entry) => {
-		const full = path.join(dir, entry.name);
-		if (entry.isDirectory()) {
-			return sourceFiles(full);
-		}
-		const scanned = /\.(ts|tsx|html|webmanifest)$/u.test(entry.name) && !/\.test\.tsx?$/u.test(entry.name);
-		return scanned ? [full] : [];
-	});
+function sourceFiles(dir: string): string[]
+{
+	return fs
+		.readdirSync(
+			dir,
+			{
+				withFileTypes: true,
+			},
+		)
+		.flatMap((entry) =>
+		{
+			const full = path.join(dir, entry.name);
+			if (entry.isDirectory())
+			{
+				return sourceFiles(full);
+			}
+			const scanned = /\.(ts|tsx|html|webmanifest)$/u.test(entry.name) && !/\.test\.tsx?$/u.test(entry.name);
+			return scanned ? [full] : [];
+		});
 }
 
-function withoutComments(source: string): string {
+function withoutComments(source: string): string
+{
 	return source
 		.replaceAll(/\/\*[\s\S]*?\*\//gu, (comment) => comment.replaceAll(/[^\n]/gu, ""))
 		.replaceAll(/<!--[\s\S]*?-->/gu, (comment) => comment.replaceAll(/[^\n]/gu, ""))
 		.replaceAll(/(^|\s)\/\/.*$/gmu, "$1");
 }
 
-function brandMentions(file: string): string[] {
+function brandMentions(file: string): string[]
+{
 	const relative = path.relative(WEB_ROOT, file);
 	return withoutComments(fs.readFileSync(file, "utf8"))
 		.split("\n")
@@ -54,8 +66,10 @@ function brandMentions(file: string): string[] {
 		.map((line) => `${relative}: ${line.trim()}`);
 }
 
-describe("OutlineDB brand guard", () => {
-	it("names the product OutlineDB in user-visible client text, keeping only upstream references", () => {
+describe("OutlineDB brand guard", () =>
+{
+	it("names the product OutlineDB in user-visible client text, keeping only upstream references", () =>
+	{
 		// oxlint-disable-next-line unicorn/no-array-sort -- the test tsconfig lib has no toSorted
 		const files = [...sourceFiles(CLIENT_ROOT), ...EXTRA_FILES.map((file) => path.join(WEB_ROOT, file))].sort();
 

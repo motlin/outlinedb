@@ -12,17 +12,21 @@ import type {MetadataChange} from "./metadata-patch.js";
 type Metadata = Record<string, unknown>;
 
 /** A subtree at one system time: every node's ordered children (leaves map to `[]`) and its kept metadata. */
-export interface SubtreeState {
+export interface SubtreeState
+{
 	children: ReadonlyMap<string, readonly string[]>;
 	metadata: ReadonlyMap<string, Metadata>;
 }
 
-function isObject(value: unknown): value is Metadata {
+function isObject(value: unknown): value is Metadata
+{
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function sameValue(a: unknown, b: unknown): boolean {
-	if (isObject(a) && isObject(b)) {
+function sameValue(a: unknown, b: unknown): boolean
+{
+	if (isObject(a) && isObject(b))
+	{
 		const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
 		return [...keys].every((key) => sameValue(a[key], b[key]));
 	}
@@ -30,32 +34,45 @@ function sameValue(a: unknown, b: unknown): boolean {
 }
 
 /** The changes that turn `current` into `target`, recursing into objects both sides hold. */
-function metadataChanges(current: Metadata, target: Metadata, path: string[] = []): MetadataChange[] {
+function metadataChanges(current: Metadata, target: Metadata, path: string[] = []): MetadataChange[]
+{
 	const keys = [...new Set([...Object.keys(current), ...Object.keys(target)])];
-	return keys.flatMap((key): MetadataChange[] => {
+	return keys.flatMap((key): MetadataChange[] =>
+	{
 		const from = current[key];
 		const to = target[key];
-		if (sameValue(from, to)) {
+		if (sameValue(from, to))
+		{
 			return [];
 		}
-		if (isObject(from) && isObject(to)) {
+		if (isObject(from) && isObject(to))
+		{
 			return metadataChanges(from, to, [...path, key]);
 		}
-		return [{path: [...path, key], value: to}];
+		return [
+			{
+				path: [...path, key],
+				value: to,
+			},
+		];
 	});
 }
 
-function parentsOf(children: ReadonlyMap<string, readonly string[]>): Map<string, string> {
+function parentsOf(children: ReadonlyMap<string, readonly string[]>): Map<string, string>
+{
 	const parents = new Map<string, string>();
-	for (const [parent, kids] of children) {
-		for (const kid of kids) {
+	for (const [parent, kids] of children)
+	{
+		for (const kid of kids)
+		{
 			parents.set(kid, parent);
 		}
 	}
 	return parents;
 }
 
-function isLevelNode(metadata: Metadata | undefined): boolean {
+function isLevelNode(metadata: Metadata | undefined): boolean
+{
 	const calendar = metadata?.calendar;
 	return isObject(calendar) && calendar.level !== undefined;
 }
@@ -75,13 +92,16 @@ export function calendarLayoutUndoWrites(
 	before: SubtreeState,
 	now: SubtreeState,
 	isCachedElsewhere: (id: string) => boolean,
-): LayoutWrite[] {
+): LayoutWrite[]
+{
 	const writes: LayoutWrite[] = [];
 	const lists = new Map([...now.children].map(([parent, kids]) => [parent, [...kids]]));
 	const parents = parentsOf(now.children);
-	const listOf = (parent: string): string[] => {
+	const listOf = (parent: string): string[] =>
+	{
 		let list = lists.get(parent);
-		if (list === undefined) {
+		if (list === undefined)
+		{
 			list = [];
 			lists.set(parent, list);
 		}
@@ -89,21 +109,47 @@ export function calendarLayoutUndoWrites(
 	};
 
 	const queue = [rootId];
-	for (let parent = queue.shift(); parent !== undefined; parent = queue.shift()) {
+	for (let parent = queue.shift(); parent !== undefined; parent = queue.shift())
+	{
 		let slot = 0;
-		for (const child of before.children.get(parent) ?? []) {
+		for (const child of before.children.get(parent) ?? [])
+		{
 			const from = parents.get(child);
-			if (from === undefined && isCachedElsewhere(child)) {
+			if (from === undefined && isCachedElsewhere(child))
+			{
 				continue;
 			}
 			const target = listOf(parent);
-			if (from === undefined) {
-				writes.push({op: "undelete", id: child, parentId: parent, index: slot});
-			} else {
+			if (from === undefined)
+			{
+				writes.push(
+					{
+						op: "undelete",
+						id: child,
+						parentId: parent,
+						index: slot,
+					},
+				);
+			}
+			else
+			{
 				const source = listOf(from);
 				const index = source.indexOf(child);
-				if (from !== parent || index !== slot) {
-					writes.push({op: "move", id: child, parentId: parent, index: slot, from: {parentId: from, index}});
+				if (from !== parent || index !== slot)
+				{
+					writes.push(
+						{
+							op: "move",
+							id: child,
+							parentId: parent,
+							index: slot,
+							from:
+							{
+								parentId: from,
+								index,
+							},
+						},
+					);
 				}
 				source.splice(index, 1);
 			}
@@ -116,28 +162,50 @@ export function calendarLayoutUndoWrites(
 
 	const beforeIds = new Set([rootId, ...parentsOf(before.children).keys()]);
 	let created = [...parents.keys()].filter((id) => !beforeIds.has(id) && isLevelNode(now.metadata.get(id)));
-	while (created.length > 0) {
+	while (created.length > 0)
+	{
 		const empty = created.filter((id) => listOf(id).length === 0);
-		if (empty.length === 0) {
+		if (empty.length === 0)
+		{
 			throw new Error(`calendar layout: cannot undo, ${created[0]} still holds nodes added since the layout`);
 		}
-		for (const id of empty) {
+		for (const id of empty)
+		{
 			const parent = parents.get(id) ?? rootId;
 			const siblings = listOf(parent);
 			const index = siblings.indexOf(id);
-			writes.push({op: "delete", id, from: {parentId: parent, index}});
+			writes.push(
+				{
+					op: "delete",
+					id,
+					from:
+					{
+						parentId: parent,
+						index,
+					},
+				},
+			);
 			siblings.splice(index, 1);
 			parents.delete(id);
 		}
 		created = created.filter((id) => !empty.includes(id));
 	}
 
-	for (const id of beforeIds) {
-		if (now.children.has(id)) {
+	for (const id of beforeIds)
+	{
+		if (now.children.has(id))
+		{
 			const current = now.metadata.get(id) ?? {};
 			const changes = metadataChanges(current, before.metadata.get(id) ?? {});
-			if (changes.length > 0) {
-				writes.push({op: "edit", id, ...buildMetadataChanges(current, changes)});
+			if (changes.length > 0)
+			{
+				writes.push(
+					{
+						op: "edit",
+						id,
+						...buildMetadataChanges(current, changes),
+					},
+				);
 			}
 		}
 	}

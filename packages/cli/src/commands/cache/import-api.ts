@@ -10,35 +10,44 @@ import type {ImportApiResult} from "../../services/cache-import-api.js";
 import {logger} from "../../services/logger.js";
 import {describeError} from "../../utils/describe-error.js";
 
-export default class ImportApi extends Command {
+export default class ImportApi extends Command
+{
 	static override description = "Import all nodes from Workflowy API export endpoint";
 
 	static override examples = ["<%= config.bin %> cache:import-api", "<%= config.bin %> cache:import-api --dry-run"];
 
-	static override flags = {
-		"dry-run": Flags.boolean({
-			char: "d",
-			description: "Show what would be imported without making changes",
-			default: false,
-		}),
-		verbose: Flags.boolean({
-			char: "v",
-			description: "Show detailed timing information",
-			default: false,
-		}),
+	static override flags =
+	{
+		"dry-run": Flags.boolean(
+			{
+				char: "d",
+				description: "Show what would be imported without making changes",
+				default: false,
+			},
+		),
+		verbose: Flags.boolean(
+			{
+				char: "v",
+				description: "Show detailed timing information",
+				default: false,
+			},
+		),
 	};
 
-	public async run(): Promise<void> {
+	public async run(): Promise<void>
+	{
 		const {flags} = await this.parse(ImportApi);
 
 		const apiKey = process.env.WORKFLOWY_API_KEY;
-		if (!apiKey) {
+		if (!apiKey)
+		{
 			this.error("WORKFLOWY_API_KEY environment variable is required");
 		}
 
 		const startTime = Date.now();
 
-		try {
+		try
+		{
 			this.log("Fetching all nodes from Workflowy API...");
 
 			const apiClient = new WorkflowyApiClient(apiKey, logger, process.env.WORKFLOWY_API_URL);
@@ -51,10 +60,12 @@ export default class ImportApi extends Command {
 			const fetchElapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 			this.log(`Fetched ${nodes.length.toLocaleString()} nodes in ${fetchElapsed}s`);
 
-			if (flags["dry-run"]) {
+			if (flags["dry-run"])
+			{
 				this.log("\n[DRY RUN] Would import to cache:");
 				this.log(`  Total nodes: ${nodes.length.toLocaleString()}`);
-				if (treeItems !== undefined) {
+				if (treeItems !== undefined)
+				{
 					this.log(`  Tree data items: ${treeItems.length.toLocaleString()}`);
 				}
 				this.log("  No changes made.");
@@ -75,9 +86,12 @@ export default class ImportApi extends Command {
 
 			const changedCount = result.nodesAdded + result.nodesUpdated + result.nodesDeleted;
 
-			if (changedCount === 0) {
+			if (changedCount === 0)
+			{
 				this.log(`\nNo changes (${result.totalNodes.toLocaleString()} nodes in ${totalElapsed}s)`);
-			} else {
+			}
+			else
+			{
 				this.log(
 					`\n+${result.nodesAdded.toLocaleString()} added, ` +
 						`~${result.nodesUpdated.toLocaleString()} updated ` +
@@ -89,13 +103,17 @@ export default class ImportApi extends Command {
 					`(${result.nodesAdded} + ${result.nodesUpdated} + ${result.nodesUnchanged} + ${result.nodesDeleted} = ${result.totalNodes.toLocaleString()} nodes in ${totalElapsed}s)`,
 				);
 			}
-			if (snapshot !== undefined) {
+			if (snapshot !== undefined)
+			{
 				const {written, skipped} = importInternalMetadata(database, snapshot, Date.now());
 				this.log(`Item metadata: ${written.toLocaleString()} nodes (${skipped.toLocaleString()} not in cache)`);
 				await this.backfillCalendarMetadata(database, apiClient);
 			}
-		} catch (error) {
-			if (error instanceof Error && error.message.includes("429")) {
+		}
+		catch (error)
+		{
+			if (error instanceof Error && error.message.includes("429"))
+			{
 				this.error("Rate limit exceeded. Please wait 1 minute before trying again.");
 			}
 			this.error(`Failed to import from API: ${describeError(error)}`);
@@ -111,20 +129,26 @@ export default class ImportApi extends Command {
 	private async backfillCalendarMetadata(
 		database: ReturnType<typeof createDatabase>,
 		apiClient: WorkflowyApiClient,
-	): Promise<void> {
+	): Promise<void>
+	{
 		const adapter = internalAdapter(
 			database,
 			new WorkflowyWriteThroughClient(apiClient, new CacheService(database)),
 		);
-		if (adapter === undefined) {
+		if (adapter === undefined)
+		{
 			return;
 		}
-		try {
+		try
+		{
 			const {timestamps, dateIds} = await adapter.backfillCalendarMetadata();
-			if (timestamps.length > 0 || dateIds.length > 0) {
+			if (timestamps.length > 0 || dateIds.length > 0)
+			{
 				this.log(`Calendar backfill: +${timestamps.length} timestamps, +${dateIds.length} dateIds`);
 			}
-		} catch (error) {
+		}
+		catch (error)
+		{
 			this.warn(`Calendar metadata backfill failed: ${String(error)}`);
 		}
 	}
@@ -136,9 +160,11 @@ export default class ImportApi extends Command {
 	 * references roots, numbered_start, calendar and priority.defaultToBottom.
 	 * Its transaction id seeds the cache's transaction-log position.
 	 */
-	private async fetchTreeSnapshot(): Promise<TreeSnapshot | undefined> {
+	private async fetchTreeSnapshot(): Promise<TreeSnapshot | undefined>
+	{
 		const auth = readInternalAuth();
-		if (!auth) {
+		if (!auth)
+		{
 			return undefined;
 		}
 		return new WorkflowyInternalClient(auth).getTreeSnapshot();

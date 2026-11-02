@@ -7,7 +7,8 @@ const CHILDREN_BASE =
 	"children relative   [.addedToSelection_&]:border-l-transparent [.item--zooming-in-progress_&]:border-l-transparent flex overflow-x-auto box-border !border-l-0";
 
 /** The horizontal flex scroller of a board's columns. */
-export function boardChildrenClass(zoomed: boolean, ready: boolean): string {
+export function boardChildrenClass(zoomed: boolean, ready: boolean): string
+{
 	const tail = zoomed ? "mt-m flex-1 min-h-0 [&.children]:ml-0 [&.children]:!pl-0" : "max-h-[60vh] [&.children]:ml-0";
 	return `${CHILDREN_BASE} ${ready ? "" : "opacity-0 "}${tail}`;
 }
@@ -17,7 +18,8 @@ const COLUMN_BORDERS_INLINE =
 	"border-r border-solid border-r-secondary border-l border-solid border-l-secondary -mr-px";
 
 /** The `.project` classes a column adds after `selected`, from `group/column` on. */
-export function boardColumnClass(zoomed: boolean): string {
+export function boardColumnClass(zoomed: boolean): string
+{
 	return [
 		"boardColumn",
 		"group/column !ml-0 pt-0 pl-[var(--board-unread-pl)] mobile:!py-0",
@@ -36,7 +38,8 @@ const CARD_BOX = "!ml-m !mr-2xl mb-ml p-s mobile:!py-m mobile:!ml-2xl desktop:!p
 export const BOARD_CARD_CLASS = `boardCard group/card [--wf-content-padding-top:0] relative z-0 ${CARD_BOX} ${CARD_BOX} bg-[color-mix(in_srgb,_var(--wf-background-secondary)_50%,_var(--wf-background-primary)_80%)] rounded [&.divider]:!border-transparent [&.divider]:!bg-transparent [&_.addSiblingButton]:hidden [&>.notes]:!ml-0 [&>.notes]:!pl-m `;
 
 /** A column title's classes after `name name--main`. */
-export function boardColumnNameClass(zoomed: boolean): string {
+export function boardColumnNameClass(zoomed: boolean): string
+{
 	const size = zoomed ? "--font-selected-name-font-size" : "--font-default-font-size";
 	return `group/name mt-2 !mb-0 !ml-0 mr-8 !pl-8 pr-0 bg-inherit !text-[length:var(${size})] [&>.content]:!flex [&>.content]:!flex-1 [&>.content]:!pr-[28px] [&:hover>.bullet]:!opacity-100`;
 }

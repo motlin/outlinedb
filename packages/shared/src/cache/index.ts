@@ -1,7 +1,8 @@
 export {ancestorChain} from "./ancestor-chain.js";
 export {buildEmbedTexts, filterEmbeddable, loadEmbeddableNodes} from "./embed-text.js";
 export {inIds} from "./in-ids.js";
-export {
+export
+{
 	type ApiImportState,
 	applyApiBatch,
 	beginApiImport,
@@ -11,21 +12,24 @@ export {
 	type ImportFromApiOptions,
 	type ImportLogger,
 } from "./api-import.js";
-export {
+export
+{
 	CacheService,
 	type BacklinkSyncRecord,
 	type SubtreeMirrors,
 	type TextSearchOptions,
 	type TextSearchRow,
 } from "./cache-service.js";
-export {
+export
+{
 	type CreatedNodeTree,
 	createNodeTree,
 	type NodeTreeSpec,
 	NodeTreeSpecSchema,
 	type TreeWriteClient,
 } from "./create-node-tree.js";
-export {
+export
+{
 	contentMatches,
 	currentVersion,
 	metadataComparisonStats,
@@ -34,7 +38,8 @@ export {
 	systemFromToDate,
 } from "./cache-temporal.js";
 export {findInbox, INBOX_NAME, type InboxLookup} from "./inbox-lookup.js";
-export {
+export
+{
 	type LocalCreateInput,
 	type LocalCreateTreesInput,
 	type LocalMetaChange,
@@ -46,7 +51,8 @@ export {
 	readHomeLayoutMode,
 } from "./local-tree-writer.js";
 export {type ApplyRowsResult, applyNodeRowsBatch, applyRows, type NormalizedRowsByTable} from "./importer.js";
-export {
+export
+{
 	calendarRows,
 	type ImportInternalMetadataResult,
 	importInternalMetadata,
@@ -58,7 +64,8 @@ export {
 	type UpstreamCalendar,
 	writeInternalMetadata,
 } from "./internal-metadata.js";
-export {
+export
+{
 	type BacklinkItem,
 	backlinkItemParent,
 	collectItemRelationships,
@@ -69,7 +76,8 @@ export {
 	type MergeItemRelationshipsResult,
 } from "./item-relationships.js";
 export {advanceTreeTxId, readTreeTxId, replaceTreeTxId, storeTreeTxId} from "./tree-transaction.js";
-export {
+export
+{
 	ACCOUNT_IMPORT_NAME,
 	AccountNotProvisionedError,
 	accountRowTotal,
@@ -89,7 +97,8 @@ export {
 	writeAccountSnapshot,
 	writeEnabledFeatures,
 } from "./account-store.js";
-export {
+export
+{
 	applyLocalExpansionDelta,
 	EXPANDED_NODES_IMPORT_NAME,
 	expansionVersion,
@@ -102,7 +111,8 @@ export type {LocalIdentity} from "./local-account.js";
 export {markWhatsNewRead, readWhatsNewReads} from "./whats-new-store.js";
 export {accountVersion, readAccountState, writeAccountState} from "./account-seed.js";
 export {effectiveCompletedAt} from "./effective-completion.js";
-export {
+export
+{
 	applyMirrorText,
 	loadMirrorOriginals,
 	mirrorOriginalText,
@@ -113,7 +123,8 @@ export {
 export {NodeReader} from "./node-reader.js";
 export {PathBuilder} from "./path-builder.js";
 export {type LinkTarget, type NodeTree, NodeTreeReader, type ReadTreeOptions} from "./node-tree-reader.js";
-export type {
+export type
+{
 	NormalizedAiMetadataRow,
 	NormalizedCalendarLevelsRow,
 	NormalizedCalendarMetadataRow,
@@ -125,7 +136,8 @@ export type {
 	NormalizedS3FileRow,
 	WithoutTemporal,
 } from "./normalized-rows.js";
-export {
+export
+{
 	closeCurrentVersions,
 	joinKey,
 	SameMillisecondOverwriteError,
@@ -134,7 +146,8 @@ export {
 	temporalMerge,
 	type TemporalTransaction,
 } from "./temporal-merge.js";
-export {
+export
+{
 	type DeletePlan,
 	type DeletePlanCall,
 	deletePlanCalls,
@@ -142,7 +155,8 @@ export {
 	planSubtreeDelete,
 } from "./delete-plan.js";
 export {planBlockSlot, planSlot, type SlotPlan} from "./slot-plan.js";
-export {
+export
+{
 	ACCOUNT_COMPOSITE_TABLES,
 	type CompositeEntry,
 	type CompositePart,
@@ -158,7 +172,8 @@ export {
 } from "./node-composite.js";
 export {countStrandedRows, endStrandedBacklinkItems, type StrandedRowCounts} from "./stranded-relationships.js";
 export {ensureNodeTags, rebuildNodeTags} from "./node-tags.js";
-export {
+export
+{
 	assertWithinTransactionTimeout,
 	newSystemTime,
 	newSystemTimestamp,

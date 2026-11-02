@@ -25,16 +25,19 @@ const TransactionIdSchema = z.union([z.string(), z.number()]).transform((value) 
 const ClientVersionSchema = TransactionIdSchema;
 
 const VisibleFeatureSchema = z
-	.object({
-		codename: z.string(),
-		name: z.string(),
-		label: z.string().nullish(),
-		description: z.string().nullish(),
-	})
+	.object(
+		{
+			codename: z.string(),
+			name: z.string(),
+			label: z.string().nullish(),
+			description: z.string().nullish(),
+		},
+	)
 	.loose();
 
 /** One row of the server's visible feature list (Settings > Features). */
-export interface VisibleFeature {
+export interface VisibleFeature
+{
 	codename: string;
 	name: string;
 	/** `"LABS"`, `"DEV"` or null. */
@@ -43,103 +46,155 @@ export interface VisibleFeature {
 }
 
 const InitializationDataSchema = z
-	.object({
-		projectTreeData: z
-			.object({
-				mainProjectTreeInfo: z
-					.object({
-						dateJoinedTimestampInSeconds: z.number(),
-						initialMostRecentOperationTransactionId: TransactionIdSchema.optional(),
-						serverExpandedProjectsList: z.array(z.string()).optional(),
-						ownerId: z.number().nullable().optional(),
-						isReadOnly: z.boolean().nullable().optional(),
-					})
-					.loose(),
-				rootProjectMetadata: z.record(z.string(), z.unknown()).optional(),
-			})
-			.loose(),
-		settings: z.record(z.string(), z.unknown()).optional(),
-		user: z
-			.object({id: z.number(), fullName: z.string().nullish(), avatarUrl: z.string().nullish()})
-			.loose()
-			.optional(),
-		globals: z.array(z.tuple([z.string(), z.unknown()])).optional(),
-		features: z.array(VisibleFeatureSchema).optional(),
-	})
+	.object(
+		{
+			projectTreeData: z
+				.object(
+					{
+						mainProjectTreeInfo: z
+							.object(
+								{
+									dateJoinedTimestampInSeconds: z.number(),
+									initialMostRecentOperationTransactionId: TransactionIdSchema.optional(),
+									serverExpandedProjectsList: z.array(z.string()).optional(),
+									ownerId: z.number().nullable().optional(),
+									isReadOnly: z.boolean().nullable().optional(),
+								},
+							)
+							.loose(),
+						rootProjectMetadata: z.record(z.string(), z.unknown()).optional(),
+					},
+				)
+				.loose(),
+			settings: z.record(z.string(), z.unknown()).optional(),
+			user: z
+				.object(
+					{
+						id: z.number(),
+						fullName: z.string().nullish(),
+						avatarUrl: z.string().nullish(),
+					},
+				)
+				.loose()
+				.optional(),
+			globals: z.array(z.tuple([z.string(), z.unknown()])).optional(),
+			features: z.array(VisibleFeatureSchema).optional(),
+		},
+	)
 	.loose();
 
 /** `/get_user_data/`: where the live server keeps the user, settings, globals and root metadata. */
 const UserDataSchema = z
-	.object({
-		user: z.object({id: z.number(), fullName: z.string().nullish(), avatarUrl: z.string().nullish()}).loose(),
-		settings: z.record(z.string(), z.unknown()).optional(),
-		globals: z.array(z.tuple([z.string(), z.unknown()])).optional(),
-		rootProjectMetadata: z.record(z.string(), z.unknown()).optional(),
-		features: z.array(VisibleFeatureSchema).optional(),
-	})
+	.object(
+		{
+			user: z
+				.object(
+					{
+						id: z.number(),
+						fullName: z.string().nullish(),
+						avatarUrl: z.string().nullish(),
+					},
+				)
+				.loose(),
+			settings: z.record(z.string(), z.unknown()).optional(),
+			globals: z.array(z.tuple([z.string(), z.unknown()])).optional(),
+			rootProjectMetadata: z.record(z.string(), z.unknown()).optional(),
+			features: z.array(VisibleFeatureSchema).optional(),
+		},
+	)
 	.loose();
 
 const TreeItemSchema = z
-	.object({
-		id: z.string(),
-		metadata: z.record(z.string(), z.unknown()).optional(),
-	})
+	.object(
+		{
+			id: z.string(),
+			metadata: z.record(z.string(), z.unknown()).optional(),
+		},
+	)
 	.loose();
 
 const TreeSnapshotSchema = z
-	.object({
-		items: z.array(TreeItemSchema),
-		most_recent_operation_transaction_id: TransactionIdSchema,
-		server_expanded_projects_list: z.array(z.string()).optional(),
-	})
+	.object(
+		{
+			items: z.array(TreeItemSchema),
+			most_recent_operation_transaction_id: TransactionIdSchema,
+			server_expanded_projects_list: z.array(z.string()).optional(),
+		},
+	)
 	.loose();
 
 /** One `/get_tree_data/` item, reduced to what the cache imports. */
-export interface InternalTreeItem {
+export interface InternalTreeItem
+{
 	id: string;
 	metadata?: Record<string, unknown>;
 }
 
 /** One whole-tree `/get_tree_data/` read: its items, the transaction id they are current to, and the expanded keys. */
-export interface TreeSnapshot {
+export interface TreeSnapshot
+{
 	items: InternalTreeItem[];
 	txId: string;
 	expandedKeys: string[];
 }
 
-const SignedFileSchema = z.object({url: z.string().min(1)}).loose();
+const SignedFileSchema = z
+	.object(
+		{
+			url: z.string().min(1),
+		},
+	)
+	.loose();
 
-const LoggedOutSchema = z.object({logged_out: z.literal(true)}).loose();
+const LoggedOutSchema = z
+	.object(
+		{
+			logged_out: z.literal(true),
+		},
+	)
+	.loose();
 
 /**
  * Schema for the login response.
  */
-const LoginResponseSchema = z.object({
-	success: z.boolean().optional(),
-	errors: z.record(z.string(), z.array(z.string())).optional(),
-});
+const LoginResponseSchema = z.object(
+	{
+		success: z.boolean().optional(),
+		errors: z.record(z.string(), z.array(z.string())).optional(),
+	},
+);
 
-export interface WorkflowyCredentials {
+export interface WorkflowyCredentials
+{
 	username: string;
 	password: string;
 }
 
 /** Both `WORKFLOWY_USERNAME` and `WORKFLOWY_PASSWORD` from the environment, or undefined if either is unset. */
-export function readWorkflowyCredentials(env: NodeJS.ProcessEnv = process.env): WorkflowyCredentials | undefined {
+export function readWorkflowyCredentials(env: NodeJS.ProcessEnv = process.env): WorkflowyCredentials | undefined
+{
 	const username = env.WORKFLOWY_USERNAME;
 	const password = env.WORKFLOWY_PASSWORD;
-	return username && password ? {username, password} : undefined;
+	return username && password
+		?
+			{
+				username,
+				password,
+			}
+		: undefined;
 }
 
 /** Where a Workflowy `sessionid=...` cookie persists between processes. */
-export interface SessionCookieStore {
+export interface SessionCookieStore
+{
 	read(): string | undefined;
 	write(cookie: string): void;
 	clear(): void;
 }
 
 /** How the internal client authenticates: a saved cookie, a password login, or both. */
-export interface InternalAuth {
+export interface InternalAuth
+{
 	credentials?: WorkflowyCredentials;
 	sessionStore: SessionCookieStore;
 }
@@ -147,7 +202,8 @@ export interface InternalAuth {
 export const MISSING_AUTH_MESSAGE =
 	"Workflowy session cookie is missing or expired and WORKFLOWY_USERNAME/WORKFLOWY_PASSWORD are not set; set them in the environment (e.g. from .envrc), or run './bin/run.js internal login' with them set";
 
-export interface WorkflowyInternalClientOptions {
+export interface WorkflowyInternalClientOptions
+{
 	/** Password login; optional when `sessionStore` holds a valid cookie. */
 	credentials?: WorkflowyCredentials;
 	/** Reads the cookie to start from and saves each fresh login's cookie. */
@@ -161,7 +217,8 @@ export interface WorkflowyInternalClientOptions {
 }
 
 /** Everything a write path needs from `/get_initialization_data`, parsed once per bootstrap. */
-export interface InternalSession {
+export interface InternalSession
+{
 	/** The `wfclientid` response header, sent back as `client_id` on `/push_and_poll`. */
 	clientId: string;
 	/** The `CLIENT_VERSION` global, sent back as `client_version`. */
@@ -188,18 +245,23 @@ export interface InternalSession {
 const DEFAULT_CLIENT_VERSION = "21";
 const CLIENT_VERSION_V2 = "28";
 
-function initializationPath(clientVersion: string): string {
-	const query = new URLSearchParams({
-		client_version: clientVersion,
-		client_version_v2: CLIENT_VERSION_V2,
-		no_root_children: "1",
-	});
+function initializationPath(clientVersion: string): string
+{
+	const query = new URLSearchParams(
+		{
+			client_version: clientVersion,
+			client_version_v2: CLIENT_VERSION_V2,
+			no_root_children: "1",
+		},
+	);
 	return `/get_initialization_data?${query.toString()}`;
 }
 
 /** The server refused the session cookie (a redirect to the login page, or a `logged_out` body). */
-export class SessionRejectedError extends Error {
-	constructor(readonly reason: string) {
+export class SessionRejectedError extends Error
+{
+	constructor(readonly reason: string)
+	{
 		super(`Workflowy session rejected (${reason})`);
 	}
 }
@@ -207,7 +269,8 @@ export class SessionRejectedError extends Error {
 /**
  * Client for Workflowy's internal API (session-based authentication).
  */
-export class WorkflowyInternalClient {
+export class WorkflowyInternalClient
+{
 	private sessionCookie: string | null;
 	private readonly credentials: WorkflowyCredentials | undefined;
 	private readonly sessionStore: SessionCookieStore | undefined;
@@ -216,7 +279,8 @@ export class WorkflowyInternalClient {
 	private readonly transientId: string;
 	private currentSession: InternalSession | undefined;
 
-	constructor(options: WorkflowyInternalClientOptions) {
+	constructor(options: WorkflowyInternalClientOptions)
+	{
 		this.credentials = options.credentials;
 		this.sessionStore = options.sessionStore;
 		this.sessionCookie = options.sessionStore?.read() ?? null;
@@ -226,7 +290,8 @@ export class WorkflowyInternalClient {
 	}
 
 	/** The session parsed by the most recent `bootstrap()`, if any. */
-	get session(): InternalSession | undefined {
+	get session(): InternalSession | undefined
+	{
 		return this.currentSession;
 	}
 
@@ -234,8 +299,10 @@ export class WorkflowyInternalClient {
 	 * Authenticate with Workflowy using username/password.
 	 * Stores the session cookie for subsequent requests and in the session store.
 	 */
-	async login(): Promise<void> {
-		if (!this.credentials) {
+	async login(): Promise<void>
+	{
+		if (!this.credentials)
+		{
 			throw new Error(MISSING_AUTH_MESSAGE);
 		}
 		const url = `${this.baseUrl}/ajax_login`;
@@ -245,43 +312,56 @@ export class WorkflowyInternalClient {
 		formData.append("password", this.credentials.password);
 
 		this.sessionCookie = null;
-		const response = await this.fetchImpl(url, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/x-www-form-urlencoded",
+		const response = await this.fetchImpl(
+			url,
+			{
+				method: "POST",
+				headers:
+				{
+					"Content-Type": "application/x-www-form-urlencoded",
+				},
+				body: formData.toString(),
+				redirect: "manual",
 			},
-			body: formData.toString(),
-			redirect: "manual",
-		});
+		);
 
 		// Extract session cookie from Set-Cookie header
 		const setCookie = response.headers.get("set-cookie");
-		if (setCookie) {
+		if (setCookie)
+		{
 			// Parse the session cookie (sessionid=...)
 			const sessionMatch = setCookie.match(/sessionid=([^;]+)/u);
-			if (sessionMatch) {
+			if (sessionMatch)
+			{
 				this.sessionCookie = `sessionid=${sessionMatch[1]}`;
 			}
 		}
 
 		// Check response for errors
-		if (response.ok || response.status === 302) {
+		if (response.ok || response.status === 302)
+		{
 			const text = await response.text();
-			if (text) {
-				try {
+			if (text)
+			{
+				try
+				{
 					const data: unknown = JSON.parse(text);
 					const parsed = LoginResponseSchema.safeParse(data);
-					if (parsed.success && parsed.data.errors) {
+					if (parsed.success && parsed.data.errors)
+					{
 						const errorMessages = Object.values(parsed.data.errors).flat().join(", ");
 						throw new Error(`Login failed: ${errorMessages}`);
 					}
-				} catch {
+				}
+				catch
+				{
 					// Response might not be JSON on success redirect
 				}
 			}
 		}
 
-		if (!this.sessionCookie) {
+		if (!this.sessionCookie)
+		{
 			throw new Error("Login failed: No session cookie received");
 		}
 		this.sessionStore?.write(this.sessionCookie);
@@ -292,14 +372,20 @@ export class WorkflowyInternalClient {
 	 * and on a rejected session (302 to login, or `logged_out`) log in exactly
 	 * once and retry. A second rejection right after a fresh login propagates.
 	 */
-	private async withSession<T>(request: () => Promise<T>): Promise<T> {
-		if (!this.sessionCookie) {
+	private async withSession<T>(request: () => Promise<T>): Promise<T>
+	{
+		if (!this.sessionCookie)
+		{
 			await this.login();
 		}
-		try {
+		try
+		{
 			return await request();
-		} catch (error) {
-			if (!(error instanceof SessionRejectedError)) {
+		}
+		catch (error)
+		{
+			if (!(error instanceof SessionRejectedError))
+			{
 				throw error;
 			}
 			await this.login();
@@ -312,20 +398,23 @@ export class WorkflowyInternalClient {
 	 * `InternalApiError` when init omits the transaction id; it never falls back
 	 * to a whole-tree `/get_tree_data/` download.
 	 */
-	async bootstrap(): Promise<InternalSession> {
+	async bootstrap(): Promise<InternalSession>
+	{
 		const session = await this.withSession(async () => this.fetchSession());
 		this.currentSession = session;
 		return session;
 	}
 
-	private async fetchSession(): Promise<InternalSession> {
+	private async fetchSession(): Promise<InternalSession>
+	{
 		const clientVersion = this.currentSession?.clientVersion ?? DEFAULT_CLIENT_VERSION;
 		const {response, body} = await this.getJson(initializationPath(clientVersion));
 		const init = InitializationDataSchema.parse(body);
 		const tree = init.projectTreeData.mainProjectTreeInfo;
 
 		const txId = tree.initialMostRecentOperationTransactionId;
-		if (txId === undefined) {
+		if (txId === undefined)
+		{
 			throw new InternalApiError(
 				"get_initialization_data omitted projectTreeData.mainProjectTreeInfo.initialMostRecentOperationTransactionId",
 			);
@@ -335,7 +424,8 @@ export class WorkflowyInternalClient {
 		const account =
 			init.user === undefined
 				? UserDataSchema.parse((await this.getJson("/get_user_data/")).body)
-				: {
+				:
+					{
 						user: init.user,
 						settings: init.settings,
 						globals: init.globals,
@@ -359,15 +449,26 @@ export class WorkflowyInternalClient {
 			txId,
 			rootMetadata: account.rootProjectMetadata ?? {},
 			settings: account.settings ?? {},
-			visibleFeatures: (account.features ?? []).map(({codename, name, label, description}) => ({
+			visibleFeatures: (account.features ?? []).map(({codename, name, label, description}) => (
+			{
 				codename,
 				name,
 				label: label ?? null,
 				description: description ?? null,
 			})),
 			expandedKeys: tree.serverExpandedProjectsList ?? [],
-			...(entropyKey.success ? {entropyKey: entropyKey.data} : {}),
-			...(fullName.success ? {fullName: fullName.data} : {}),
+			...(entropyKey.success
+				?
+					{
+						entropyKey: entropyKey.data,
+					}
+				: {}),
+			...(fullName.success
+				?
+					{
+						fullName: fullName.data,
+					}
+				: {}),
 		};
 	}
 
@@ -377,11 +478,23 @@ export class WorkflowyInternalClient {
 	 * expanded keys of that same read. Only batch imports and the explicit
 	 * Cloudflare seed call it (guarded by `tree-download-guard.test.ts`).
 	 */
-	async getTreeSnapshot(): Promise<TreeSnapshot> {
+	async getTreeSnapshot(): Promise<TreeSnapshot>
+	{
 		const {body} = await this.withSession(async () => this.getJson("/get_tree_data/"));
 		const snapshot = TreeSnapshotSchema.parse(body);
 		return {
-			items: snapshot.items.map(({id, metadata}) => (metadata === undefined ? {id} : {id, metadata})),
+			items: snapshot.items.map(({id, metadata}) =>
+				metadata === undefined
+					?
+						{
+							id,
+						}
+					:
+						{
+							id,
+							metadata,
+						},
+			),
 			txId: snapshot.most_recent_operation_transaction_id,
 			expandedKeys: snapshot.server_expanded_projects_list ?? [],
 		};
@@ -391,36 +504,53 @@ export class WorkflowyInternalClient {
 	 * The short-lived signed S3 URL behind one of workflowy.com's `/file-proxy/signed-preview|signed-original/...` paths
 	 * (logging in per {@link withSession}).
 	 */
-	async signedFileUrl(path: string): Promise<string> {
+	async signedFileUrl(path: string): Promise<string>
+	{
 		const {body} = await this.withSession(async () => this.getJson(path));
 		return SignedFileSchema.parse(body).url;
 	}
 
 	/** An authenticated GET; throws `SessionRejectedError` on a login redirect or `logged_out` body. */
-	private async getJson(pathAndQuery: string): Promise<{response: Response; body: unknown}> {
-		if (!this.sessionCookie) {
+	private async getJson(pathAndQuery: string): Promise<
+	{
+		response: Response;
+		body: unknown;
+	}>
+	{
+		if (!this.sessionCookie)
+		{
 			throw new Error("Not authenticated. Call login() first.");
 		}
-		const response = await this.fetchImpl(`${this.baseUrl}${pathAndQuery}`, {
-			headers: {
-				Cookie: this.sessionCookie,
-				Accept: "application/json",
-				"X-Requested-With": "XMLHttpRequest",
-				"WF-TRANSIENT-ID": this.transientId,
+		const response = await this.fetchImpl(
+			`${this.baseUrl}${pathAndQuery}`,
+			{
+				headers:
+				{
+					Cookie: this.sessionCookie,
+					Accept: "application/json",
+					"X-Requested-With": "XMLHttpRequest",
+					"WF-TRANSIENT-ID": this.transientId,
+				},
+				redirect: "manual",
 			},
-			redirect: "manual",
-		});
-		if (response.status >= 300 && response.status < 400) {
+		);
+		if (response.status >= 300 && response.status < 400)
+		{
 			throw new SessionRejectedError(`redirect to ${response.headers.get("location") ?? "unknown"}`);
 		}
-		if (!response.ok) {
+		if (!response.ok)
+		{
 			throw new Error(`Failed to GET ${pathAndQuery}: ${response.status} ${response.statusText}`);
 		}
 		const body: unknown = await response.json();
-		if (LoggedOutSchema.safeParse(body).success) {
+		if (LoggedOutSchema.safeParse(body).success)
+		{
 			throw new SessionRejectedError("logged_out");
 		}
-		return {response, body};
+		return {
+			response,
+			body,
+		};
 	}
 
 	/**
@@ -428,25 +558,32 @@ export class WorkflowyInternalClient {
 	 * followed). Like upstream's HTTP layer, it appends `crosscheck_user_id` once
 	 * a bootstrap has learned the user id.
 	 */
-	async postForm(pathAndQuery: string, form: URLSearchParams): Promise<Response> {
-		if (!this.sessionCookie) {
+	async postForm(pathAndQuery: string, form: URLSearchParams): Promise<Response>
+	{
+		if (!this.sessionCookie)
+		{
 			throw new Error("Not authenticated. Call login() first.");
 		}
 		const body = new URLSearchParams(form);
-		if (this.currentSession) {
+		if (this.currentSession)
+		{
 			body.append("crosscheck_user_id", String(this.currentSession.userId));
 		}
-		return this.fetchImpl(`${this.baseUrl}${pathAndQuery}`, {
-			method: "POST",
-			headers: {
-				Cookie: this.sessionCookie,
-				Accept: "application/json",
-				"Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-				"X-Requested-With": "XMLHttpRequest",
-				"WF-TRANSIENT-ID": this.transientId,
+		return this.fetchImpl(
+			`${this.baseUrl}${pathAndQuery}`,
+			{
+				method: "POST",
+				headers:
+				{
+					Cookie: this.sessionCookie,
+					Accept: "application/json",
+					"Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+					"X-Requested-With": "XMLHttpRequest",
+					"WF-TRANSIENT-ID": this.transientId,
+				},
+				body: body.toString(),
+				redirect: "manual",
 			},
-			body: body.toString(),
-			redirect: "manual",
-		});
+		);
 	}
 }

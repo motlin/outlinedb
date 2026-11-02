@@ -5,7 +5,8 @@ import {useOutlineStore} from "../stores/outline.js";
 import {FaIcon} from "./fa-icons.js";
 import {DomKitSpinner} from "./dom-kit-spinner.js";
 
-export interface SearchCountIndicatorProps {
+export interface SearchCountIndicatorProps
+{
 	/** Every match, hidden completed ones included. */
 	matchCount: number;
 	completedMatchCount: number;
@@ -27,12 +28,20 @@ export function SearchCountIndicatorView({
 	shown,
 	searching,
 	onToggleCompleted,
-}: SearchCountIndicatorProps) {
+}: SearchCountIndicatorProps)
+{
 	const done = !searching;
 	const hasToggle = completedMatchCount > 0;
 	return (
 		<div className="flex justify-center print:hidden">
-			<span className={PILL_CLASS} style={{marginBottom: "var(--safe-area-inset-bottom)", zIndex: 500}}>
+			<span
+				className={PILL_CLASS}
+				style={
+				{
+					marginBottom: "var(--safe-area-inset-bottom)",
+					zIndex: 500,
+				}}
+			>
 				{done && (
 					<Fragment>
 						<span>{`${matchCount} Match${matchCount === 1 ? "" : "es"}`}</span>
@@ -56,19 +65,28 @@ export function SearchCountIndicatorView({
 }
 
 /** The count pill for the committed search; upstream keeps it while the caret is in a row. */
-export function SearchCountIndicator() {
+export function SearchCountIndicator()
+{
 	const searchQuery = useOutlineStore((state) => state.searchQuery);
 	const showCompleted = useOutlineStore((state) => state.showCompleted);
 	const toggleShowCompleted = useOutlineStore((state) => state.toggleShowCompleted);
 	const {result, searching} = useSearchProgress();
-	if (searchQuery === "") {
+	if (searchQuery === "")
+	{
 		return null;
 	}
 	return (
 		<SearchCountIndicatorView
 			matchCount={result?.matchCount ?? 0}
 			completedMatchCount={result?.completedMatchCount ?? 0}
-			shown={selectCompletedVisibility({showCompleted, searchQuery}).shown}
+			shown={
+				selectCompletedVisibility(
+					{
+						showCompleted,
+						searchQuery,
+					},
+				).shown
+			}
 			searching={searching}
 			onToggleCompleted={toggleShowCompleted}
 		/>

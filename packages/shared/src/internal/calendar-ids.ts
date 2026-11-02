@@ -7,7 +7,8 @@ export const CALENDAR_ID_NAMESPACE = "3e19dffe-1c3b-4d76-8e57-0de20e69bdae";
 export type CalendarIdLevel = "day" | "week" | "month" | "year";
 
 /** RFC 4122 version 5 (SHA-1, name-based) uuid of `name` in `namespace`. */
-export function uuidv5(name: string, namespace: string): string {
+export function uuidv5(name: string, namespace: string): string
+{
 	const hash = createHash("sha1")
 		.update(Buffer.from(namespace.replaceAll("-", ""), "hex"))
 		.update(name, "utf8")
@@ -25,11 +26,14 @@ export function uuidv5(name: string, namespace: string): string {
  * `calendar-week-${year}-${dateId}`, where `year` is the year of the date the
  * week was made for, not of its first day.
  */
-export function calendarNodeId(entropyKey: string, level: CalendarIdLevel, dateId: number, year?: number): string {
-	if (level !== "week") {
+export function calendarNodeId(entropyKey: string, level: CalendarIdLevel, dateId: number, year?: number): string
+{
+	if (level !== "week")
+	{
 		return uuidv5(`${entropyKey}-calendar-${level}-${dateId}`, CALENDAR_ID_NAMESPACE);
 	}
-	if (year === undefined) {
+	if (year === undefined)
+	{
 		throw new RangeError("a week node id needs the year of its date");
 	}
 	return uuidv5(`${entropyKey}-calendar-week-${year}-${dateId}`, CALENDAR_ID_NAMESPACE);

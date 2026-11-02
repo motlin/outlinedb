@@ -10,54 +10,97 @@ import {renderOverview} from "./render-overview.mts";
 
 const script = new URL("render-overview.mts", import.meta.url).pathname;
 
-function withDirectory(body: (directory: string) => void): void {
+function withDirectory(body: (directory: string) => void): void
+{
 	const directory = mkdtempSync(join(tmpdir(), "render-overview-test-"));
-	try {
+	try
+	{
 		body(directory);
-	} finally {
-		rmSync(directory, {recursive: true, force: true});
+	}
+	finally
+	{
+		rmSync(
+			directory,
+			{
+				recursive: true,
+				force: true,
+			},
+		);
 	}
 }
 
-function run(args: string[]) {
-	const result = spawnSync(process.execPath, [script, ...args], {encoding: "utf8"});
-	return {status: result.status, stdout: result.stdout, stderr: result.stderr};
+function run(args: string[])
+{
+	const result = spawnSync(
+		process.execPath,
+		[script, ...args],
+		{
+			encoding: "utf8",
+		},
+	);
+	return {
+		status: result.status,
+		stdout: result.stdout,
+		stderr: result.stderr,
+	};
 }
 
-function main(html: string): string {
+function main(html: string): string
+{
 	const match = /<main>([\s\S]*)<\/main>/u.exec(html);
 	const content = match?.[1];
 	assert.ok(content !== undefined, "page has a <main>");
 	return content.trim();
 }
 
-test("renders every section, group, item, link, and note in order", () => {
-	const html = renderOverview({
-		title: "Morning overview",
-		subtitle: "Tue, Nov 3",
-		sections: [
-			{
-				heading: "📅 Today — Tue, Nov 3",
-				link: {label: "Open Fantastical", href: "fantastical://"},
-				groups: [
+test("renders every section, group, item, link, and note in order", () =>
+{
+	const html = renderOverview(
+		{
+			title: "Morning overview",
+			subtitle: "Tue, Nov 3",
+			sections: [
+				{
+					heading: "📅 Today — Tue, Nov 3",
+					link:
 					{
-						heading: "Fantastical",
-						items: [{text: "10:00 AM - Team standup", note: "Work"}],
+						label: "Open Fantastical",
+						href: "fantastical://",
 					},
-					{heading: "Workflowy", items: []},
-				],
-			},
-			{
-				heading: "☑️ Next Actions",
-				groups: [
-					{
-						items: [{text: "Call the plumber", href: "https://workflowy.com/#/abc123", highlight: true}],
-					},
-				],
-				notes: ["Quick win: Call the plumber"],
-			},
-		],
-	});
+					groups: [
+						{
+							heading: "Fantastical",
+							items: [
+								{
+									text: "10:00 AM - Team standup",
+									note: "Work",
+								},
+							],
+						},
+						{
+							heading: "Workflowy",
+							items: [],
+						},
+					],
+				},
+				{
+					heading: "☑️ Next Actions",
+					groups: [
+						{
+							items: [
+								{
+									text: "Call the plumber",
+									href: "https://workflowy.com/#/abc123",
+									highlight: true,
+								},
+							],
+						},
+					],
+					notes: ["Quick win: Call the plumber"],
+				},
+			],
+		},
+	);
 	assert.equal(
 		main(html),
 		[
@@ -75,11 +118,27 @@ test("renders every section, group, item, link, and note in order", () => {
 	assert.match(html, /<title>Morning overview<\/title>/u);
 });
 
-test("escapes text once, decoding Workflowy entities first", () => {
-	const html = renderOverview({
-		title: "A <b> & B",
-		sections: [{heading: "H", groups: [{items: [{text: "Tom &amp; Jerry <script>"}]}]}],
-	});
+test("escapes text once, decoding Workflowy entities first", () =>
+{
+	const html = renderOverview(
+		{
+			title: "A <b> & B",
+			sections: [
+				{
+					heading: "H",
+					groups: [
+						{
+							items: [
+								{
+									text: "Tom &amp; Jerry <script>",
+								},
+							],
+						},
+					],
+				},
+			],
+		},
+	);
 	assert.equal(
 		main(html),
 		[
@@ -91,33 +150,75 @@ test("escapes text once, decoding Workflowy entities first", () => {
 	);
 });
 
-test("CLI writes the page and prints its path", () => {
-	withDirectory((directory) => {
+test("CLI writes the page and prints its path", () =>
+{
+	withDirectory((directory) =>
+	{
 		const input = join(directory, "overview.json");
 		const output = join(directory, "overview.html");
-		const spec = {title: "T", sections: [{heading: "H", groups: [{items: [{text: "x"}]}]}]};
+		const spec =
+		{
+			title: "T",
+			sections: [
+				{
+					heading: "H",
+					groups: [
+						{
+							items: [
+								{
+									text: "x",
+								},
+							],
+						},
+					],
+				},
+			],
+		};
 		writeFileSync(input, JSON.stringify(spec));
-		assert.deepStrictEqual(run([input, output]), {status: 0, stdout: `${output}\n`, stderr: ""});
+		assert.deepStrictEqual(
+			run([input, output]),
+			{
+				status: 0,
+				stdout: `${output}\n`,
+				stderr: "",
+			},
+		);
 		assert.equal(readFileSync(output, "utf8"), renderOverview(spec));
 	});
 });
 
-test("CLI refuses a spec missing its sections", () => {
-	withDirectory((directory) => {
+test("CLI refuses a spec missing its sections", () =>
+{
+	withDirectory((directory) =>
+	{
 		const input = join(directory, "overview.json");
-		writeFileSync(input, JSON.stringify({title: "T"}));
-		assert.deepStrictEqual(run([input, join(directory, "out.html")]), {
-			status: 2,
-			stdout: "",
-			stderr: "overview.sections must be a JSON array\n",
-		});
+		writeFileSync(
+			input,
+			JSON.stringify(
+				{
+					title: "T",
+				},
+			),
+		);
+		assert.deepStrictEqual(
+			run([input, join(directory, "out.html")]),
+			{
+				status: 2,
+				stdout: "",
+				stderr: "overview.sections must be a JSON array\n",
+			},
+		);
 	});
 });
 
-test("CLI prints usage without two paths", () => {
-	assert.deepStrictEqual(run(["only-one.json"]), {
-		status: 2,
-		stdout: "",
-		stderr: "Usage: render-overview.mts <overview.json> <overview.html>\n",
-	});
+test("CLI prints usage without two paths", () =>
+{
+	assert.deepStrictEqual(
+		run(["only-one.json"]),
+		{
+			status: 2,
+			stdout: "",
+			stderr: "Usage: render-overview.mts <overview.json> <overview.html>\n",
+		},
+	);
 });

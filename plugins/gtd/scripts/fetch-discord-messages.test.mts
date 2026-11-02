@@ -3,7 +3,8 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import type {DiscordMessage, FetchImpl, FetchResponse} from "./fetch-discord-messages.mts";
-import {
+import
+{
 	fetchMessagesSince,
 	maxSnowflake,
 	snowflakeFromTime,
@@ -11,56 +12,108 @@ import {
 	toScanRecord,
 } from "./fetch-discord-messages.mts";
 
-const message = (id: string, overrides: Partial<DiscordMessage> = {}): DiscordMessage => ({
+const message = (id: string, overrides: Partial<DiscordMessage> = {}): DiscordMessage => (
+{
 	id,
 	channel_id: "200",
 	content: `message ${id}`,
 	timestamp: snowflakeToIso(id),
-	author: {id: "9", username: "alice", global_name: "Alice"},
+	author:
+	{
+		id: "9",
+		username: "alice",
+		global_name: "Alice",
+	},
 	attachments: [],
 	...overrides,
 });
 
-const page = (body: unknown, status = 200): FetchResponse => ({
+const page = (body: unknown, status = 200): FetchResponse => (
+{
 	ok: status >= 200 && status < 300,
 	status,
 	json: async () => Promise.resolve(body),
 });
 
-function fakeFetch(responses: FetchResponse[]): {
+function fakeFetch(responses: FetchResponse[]):
+{
 	fetchImpl: FetchImpl;
-	calls: {url: string; authorization: string | undefined}[];
-} {
-	const calls: {url: string; authorization: string | undefined}[] = [];
-	const fetchImpl: FetchImpl = async (url, init) => {
-		calls.push({url, authorization: init.headers.Authorization});
+	calls:
+	{
+		url: string;
+		authorization: string | undefined;
+	}[];
+}
+{
+	const calls:
+	{
+		url: string;
+		authorization: string | undefined;
+	}[] = [];
+	const fetchImpl: FetchImpl = async (url, init) =>
+	{
+		calls.push(
+			{
+				url,
+				authorization: init.headers.Authorization,
+			},
+		);
 		const next = responses.shift();
-		if (!next) {
+		if (!next)
+		{
 			return Promise.reject(new Error(`unexpected request ${url}`));
 		}
 		return Promise.resolve(next);
 	};
-	return {fetchImpl, calls};
+	return {
+		fetchImpl,
+		calls,
+	};
 }
 
-test("snowflakeFromTime and snowflakeToIso round-trip through the Discord epoch", () => {
+test("snowflakeFromTime and snowflakeToIso round-trip through the Discord epoch", () =>
+{
 	const id = snowflakeFromTime(Date.parse("2026-10-01T12:00:00.000Z"));
-	assert.deepStrictEqual({id, iso: snowflakeToIso(id)}, {id: "1555187525222400000", iso: "2026-10-01T12:00:00.000Z"});
+	assert.deepStrictEqual(
+		{
+			id,
+			iso: snowflakeToIso(id),
+		},
+		{
+			id: "1555187525222400000",
+			iso: "2026-10-01T12:00:00.000Z",
+		},
+	);
 });
 
-test("maxSnowflake compares numerically, not lexically", () => {
+test("maxSnowflake compares numerically, not lexically", () =>
+{
 	assert.strictEqual(maxSnowflake(["999", "1000", "200"]), "1000");
 });
 
-test("maxSnowflake returns null for an empty list", () => {
+test("maxSnowflake returns null for an empty list", () =>
+{
 	assert.strictEqual(maxSnowflake([]), null);
 });
 
-test("fetchMessagesSince pages forward with after= until a short page, returning messages oldest first", async () => {
-	const firstPage = Array.from({length: 100}, (_, index) => message(String(1100 - index)));
+test("fetchMessagesSince pages forward with after= until a short page, returning messages oldest first", async () =>
+{
+	const firstPage = Array.from(
+		{
+			length: 100,
+		},
+		(_, index) => message(String(1100 - index)),
+	);
 	const {fetchImpl, calls} = fakeFetch([page(firstPage), page([message("1102"), message("1101")])]);
 
-	const messages = await fetchMessagesSince({channelId: "200", afterId: "1000", token: "tok", fetchImpl});
+	const messages = await fetchMessagesSince(
+		{
+			channelId: "200",
+			afterId: "1000",
+			token: "tok",
+			fetchImpl,
+		},
+	);
 
 	assert.deepStrictEqual(
 		{
@@ -85,39 +138,72 @@ test("fetchMessagesSince pages forward with after= until a short page, returning
 	);
 });
 
-test("fetchMessagesSince stops at maxPages so a stale cursor cannot pull the whole history", async () => {
+test("fetchMessagesSince stops at maxPages so a stale cursor cannot pull the whole history", async () =>
+{
 	const full = (start: number): DiscordMessage[] =>
-		Array.from({length: 100}, (_, index) => message(String(start + index)));
+		Array.from(
+			{
+				length: 100,
+			},
+			(_, index) => message(String(start + index)),
+		);
 	const {fetchImpl, calls} = fakeFetch([page(full(1001)), page(full(1101))]);
 
-	const messages = await fetchMessagesSince({
-		channelId: "200",
-		afterId: "1000",
-		token: "tok",
-		fetchImpl,
-		maxPages: 2,
-	});
-
-	assert.deepStrictEqual({count: messages.length, requests: calls.length}, {count: 200, requests: 2});
-});
-
-test("fetchMessagesSince waits out a 429 and retries the same page", async () => {
-	const waits: number[] = [];
-	const {fetchImpl, calls} = fakeFetch([page({retry_after: 0.25}, 429), page([message("1001")])]);
-
-	const messages = await fetchMessagesSince({
-		channelId: "200",
-		afterId: "1000",
-		token: "tok",
-		fetchImpl,
-		sleep: async (ms) => {
-			waits.push(ms);
-			return Promise.resolve();
+	const messages = await fetchMessagesSince(
+		{
+			channelId: "200",
+			afterId: "1000",
+			token: "tok",
+			fetchImpl,
+			maxPages: 2,
 		},
-	});
+	);
 
 	assert.deepStrictEqual(
-		{ids: messages.map((m) => m.id), waits, urls: calls.map((c) => c.url)},
+		{
+			count: messages.length,
+			requests: calls.length,
+		},
+		{
+			count: 200,
+			requests: 2,
+		},
+	);
+});
+
+test("fetchMessagesSince waits out a 429 and retries the same page", async () =>
+{
+	const waits: number[] = [];
+	const {fetchImpl, calls} = fakeFetch([
+		page(
+			{
+				retry_after: 0.25,
+			},
+			429,
+		),
+		page([message("1001")]),
+	]);
+
+	const messages = await fetchMessagesSince(
+		{
+			channelId: "200",
+			afterId: "1000",
+			token: "tok",
+			fetchImpl,
+			sleep: async (ms) =>
+			{
+				waits.push(ms);
+				return Promise.resolve();
+			},
+		},
+	);
+
+	assert.deepStrictEqual(
+		{
+			ids: messages.map((m) => m.id),
+			waits,
+			urls: calls.map((c) => c.url),
+		},
 		{
 			ids: ["1001"],
 			waits: [250],
@@ -129,50 +215,112 @@ test("fetchMessagesSince waits out a 429 and retries the same page", async () =>
 	);
 });
 
-test("fetchMessagesSince throws a readable error on a non-retryable failure", async () => {
-	const {fetchImpl} = fakeFetch([page({message: "Missing Access", code: 50_001}, 403)]);
+test("fetchMessagesSince throws a readable error on a non-retryable failure", async () =>
+{
+	const {fetchImpl} = fakeFetch([
+		page(
+			{
+				message: "Missing Access",
+				code: 50_001,
+			},
+			403,
+		),
+	]);
 
-	await assert.rejects(fetchMessagesSince({channelId: "200", afterId: "1000", token: "tok", fetchImpl}), {
-		message: "Discord API 403 for channel 200: Missing Access (code 50001)",
-	});
+	await assert.rejects(
+		fetchMessagesSince(
+			{
+				channelId: "200",
+				afterId: "1000",
+				token: "tok",
+				fetchImpl,
+			},
+		),
+		{
+			message: "Discord API 403 for channel 200: Missing Access (code 50001)",
+		},
+	);
 });
 
-test("toScanRecord flattens a message into the fields the scanner reads, with a jump link", () => {
-	const raw = message("1555187525222400000", {
-		content: "Blueprint import crashes on empty string",
-		author: {id: "9", username: "alice", global_name: "Alice"},
-		attachments: [{filename: "crash.png", url: "https://cdn.example.com/crash.png"}],
-		message_reference: {message_id: "1555187525222300000"},
-		thread: {id: "300", name: "Import crash"},
-	});
+test("toScanRecord flattens a message into the fields the scanner reads, with a jump link", () =>
+{
+	const raw = message(
+		"1555187525222400000",
+		{
+			content: "Blueprint import crashes on empty string",
+			author:
+			{
+				id: "9",
+				username: "alice",
+				global_name: "Alice",
+			},
+			attachments: [
+				{
+					filename: "crash.png",
+					url: "https://cdn.example.com/crash.png",
+				},
+			],
+			message_reference:
+			{
+				message_id: "1555187525222300000",
+			},
+			thread:
+			{
+				id: "300",
+				name: "Import crash",
+			},
+		},
+	);
 
-	assert.deepStrictEqual(toScanRecord(raw, "100"), {
-		id: "1555187525222400000",
-		timestamp: "2026-10-01T12:00:00.000Z",
-		author: "Alice",
-		authorUsername: "alice",
-		isBot: false,
-		content: "Blueprint import crashes on empty string",
-		attachments: [{filename: "crash.png", url: "https://cdn.example.com/crash.png"}],
-		replyToId: "1555187525222300000",
-		threadName: "Import crash",
-		url: "https://discord.com/channels/100/200/1555187525222400000",
-	});
+	assert.deepStrictEqual(
+		toScanRecord(raw, "100"),
+		{
+			id: "1555187525222400000",
+			timestamp: "2026-10-01T12:00:00.000Z",
+			author: "Alice",
+			authorUsername: "alice",
+			isBot: false,
+			content: "Blueprint import crashes on empty string",
+			attachments: [
+				{
+					filename: "crash.png",
+					url: "https://cdn.example.com/crash.png",
+				},
+			],
+			replyToId: "1555187525222300000",
+			threadName: "Import crash",
+			url: "https://discord.com/channels/100/200/1555187525222400000",
+		},
+	);
 });
 
-test("toScanRecord falls back to username and marks bots", () => {
-	const raw = message("1001", {author: {id: "8", username: "ci-bot", bot: true}});
+test("toScanRecord falls back to username and marks bots", () =>
+{
+	const raw = message(
+		"1001",
+		{
+			author:
+			{
+				id: "8",
+				username: "ci-bot",
+				bot: true,
+			},
+		},
+	);
 
-	assert.deepStrictEqual(toScanRecord(raw, "100"), {
-		id: "1001",
-		timestamp: snowflakeToIso("1001"),
-		author: "ci-bot",
-		authorUsername: "ci-bot",
-		isBot: true,
-		content: "message 1001",
-		attachments: [],
-		replyToId: null,
-		threadName: null,
-		url: "https://discord.com/channels/100/200/1001",
-	});
+	assert.deepStrictEqual(
+		toScanRecord(raw, "100"),
+		{
+			id: "1001",
+			timestamp: snowflakeToIso("1001"),
+			author: "ci-bot",
+			authorUsername: "ci-bot",
+			isBot: true,
+			content: "message 1001",
+			attachments: [],
+			replyToId: null,
+			threadName: null,
+			url: "https://discord.com/channels/100/200/1001",
+		},
+	);
 });

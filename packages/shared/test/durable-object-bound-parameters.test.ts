@@ -19,7 +19,12 @@ const COUNT = 150;
 
 const SEEDED = "2026-01-01 00:00:00.000";
 
-const childIds = Array.from({length: COUNT}, (_, index) => `child-${String(index).padStart(3, "0")}`);
+const childIds = Array.from(
+	{
+		length: COUNT,
+	},
+	(_, index) => `child-${String(index).padStart(3, "0")}`,
+);
 const mirrorIds = childIds.map((id) => `mirror-of-${id}`);
 
 /**
@@ -27,33 +32,71 @@ const mirrorIds = childIds.map((id) => `mirror-of-${id}`);
  * each mirrored once under `elsewhere`, whose statements fail past the Durable
  * Object's bound-parameter cap the way workerd does.
  */
-function cappedDatabase() {
+function cappedDatabase()
+{
 	const {database, sqlite} = buildTestDb();
-	const live = {systemFrom: SEEDED, systemTo: FAR_FUTURE_DATE};
+	const live =
+	{
+		systemFrom: SEEDED,
+		systemTo: FAR_FUTURE_DATE,
+	};
 	database
 		.insert(nodeContent)
 		.values([
-			{id: "parent", name: "Parent", note: null, parentId: null, ...live},
-			{id: "elsewhere", name: "Elsewhere", note: null, parentId: null, ...live},
+			{
+				id: "parent",
+				name: "Parent",
+				note: null,
+				parentId: null,
+				...live,
+			},
+			{
+				id: "elsewhere",
+				name: "Elsewhere",
+				note: null,
+				parentId: null,
+				...live,
+			},
 		])
 		.run();
-	for (const [index, id] of childIds.entries()) {
+	for (const [index, id] of childIds.entries())
+	{
 		database
 			.insert(nodeContent)
 			.values([
-				{id, name: `Child ${index}`, note: `Note ${index}`, parentId: "parent", ...live},
-				{id: mirrorIds[index] ?? "", name: null, note: null, parentId: "elsewhere", ...live},
+				{
+					id,
+					name: `Child ${index}`,
+					note: `Note ${index}`,
+					parentId: "parent",
+					...live,
+				},
+				{
+					id: mirrorIds[index] ?? "",
+					name: null,
+					note: null,
+					parentId: "elsewhere",
+					...live,
+				},
 			])
 			.run();
 		database
 			.insert(mirrors)
-			.values({mirrorId: mirrorIds[index] ?? "", originalId: id, ...live})
+			.values(
+				{
+					mirrorId: mirrorIds[index] ?? "",
+					originalId: id,
+					...live,
+				},
+			)
 			.run();
 	}
 	const prepare = sqlite.prepare.bind(sqlite);
-	sqlite.prepare = (source: string) => {
+	sqlite.prepare = (source: string) =>
+	{
 		const parameters = source.match(/\?/gu)?.length ?? 0;
-		if (parameters > DURABLE_OBJECT_PARAMETER_CAP) {
+		if (parameters > DURABLE_OBJECT_PARAMETER_CAP)
+		{
 			throw new Error(`too many SQL variables: ${parameters}`);
 		}
 		return prepare(source);
@@ -61,69 +104,122 @@ function cappedDatabase() {
 	return database;
 }
 
-describe("id batches on a Durable Object's 100-bound-parameter cap", () => {
-	it("ends more composites than the cap in one call, mirrors included", () => {
+describe("id batches on a Durable Object's 100-bound-parameter cap", () =>
+{
+	it("ends more composites than the cap in one call, mirrors included", () =>
+	{
 		const database = cappedDatabase();
 
-		runUnitOfWork(database, (unitOfWork) => {
+		runUnitOfWork(database, (unitOfWork) =>
+		{
 			endNodeComposites(unitOfWork, childIds);
 		});
 
 		const liveChildren = database
-			.select({id: nodeContent.id})
+			.select(
+				{
+					id: nodeContent.id,
+				},
+			)
 			.from(nodeContent)
 			.where(and(eq(nodeContent.parentId, "parent"), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
 			.all();
 		const liveMirrors = database
-			.select({id: mirrors.mirrorId})
+			.select(
+				{
+					id: mirrors.mirrorId,
+				},
+			)
 			.from(mirrors)
 			.where(eq(mirrors.systemTo, FAR_FUTURE_DATE))
 			.all();
-		expect({liveChildren, liveMirrors}).toStrictEqual({liveChildren: [], liveMirrors: []});
+		expect(
+			{
+				liveChildren,
+				liveMirrors,
+			},
+		).toStrictEqual(
+			{
+				liveChildren: [],
+				liveMirrors: [],
+			},
+		);
 	});
 
-	it("withdraws more composites than the cap in one call", () => {
+	it("withdraws more composites than the cap in one call", () =>
+	{
 		const database = cappedDatabase();
 
-		runUnitOfWork(database, (unitOfWork) => {
+		runUnitOfWork(database, (unitOfWork) =>
+		{
 			withdrawNodeComposites(unitOfWork, mirrorIds);
 		});
 
 		const liveMirrors = database
-			.select({id: mirrors.mirrorId})
+			.select(
+				{
+					id: mirrors.mirrorId,
+				},
+			)
 			.from(mirrors)
 			.where(eq(mirrors.systemTo, FAR_FUTURE_DATE))
 			.all();
 		expect(liveMirrors).toStrictEqual([]);
 	});
 
-	it("reads upstream relationship metadata for more ids than the cap", () => {
+	it("reads upstream relationship metadata for more ids than the cap", () =>
+	{
 		const database = cappedDatabase();
 
 		const metadata = upstreamRelationshipMetadata(database, mirrorIds);
 
-		expect(metadata.get(mirrorIds[COUNT - 1] ?? "")).toStrictEqual({
-			mirror: {originalId: childIds[COUNT - 1], isMirrorRoot: true},
-		});
+		expect(metadata.get(mirrorIds[COUNT - 1] ?? "")).toStrictEqual(
+			{
+				mirror:
+				{
+					originalId: childIds[COUNT - 1],
+					isMirrorRoot: true,
+				},
+			},
+		);
 	});
 
-	it("loads and applies mirror text for more mirrors than the cap", () => {
+	it("loads and applies mirror text for more mirrors than the cap", () =>
+	{
 		const database = cappedDatabase();
 
 		const originals = loadMirrorOriginals(database, mirrorIds);
 		const rows = applyMirrorText(
 			database,
-			mirrorIds.map((id) => ({id, name: null, note: null})),
+			mirrorIds.map((id) => (
+			{
+				id,
+				name: null,
+				note: null,
+			})),
 			originals,
 		);
 
-		expect({size: originals.size, last: rows.at(-1)}).toStrictEqual({
-			size: COUNT,
-			last: {id: mirrorIds[COUNT - 1], name: `Child ${COUNT - 1}`, note: `Note ${COUNT - 1}`},
-		});
+		expect(
+			{
+				size: originals.size,
+				last: rows.at(-1),
+			},
+		).toStrictEqual(
+			{
+				size: COUNT,
+				last:
+				{
+					id: mirrorIds[COUNT - 1],
+					name: `Child ${COUNT - 1}`,
+					note: `Note ${COUNT - 1}`,
+				},
+			},
+		);
 	});
 
-	it("plans a subtree delete over more children than the cap", () => {
+	it("plans a subtree delete over more children than the cap", () =>
+	{
 		const database = cappedDatabase();
 
 		const subtree = new CacheService(database).getSubtreeMirrors("parent");
@@ -131,7 +227,8 @@ describe("id batches on a Durable Object's 100-bound-parameter cap", () => {
 		expect(subtree.mirrorsOf.get(childIds[0] ?? "")).toStrictEqual([mirrorIds[0]]);
 	});
 
-	it("builds paths, text and leaf sets for more nodes than the cap", () => {
+	it("builds paths, text and leaf sets for more nodes than the cap", () =>
+	{
 		const database = cappedDatabase();
 		const pathBuilder = new PathBuilder(database);
 
@@ -140,47 +237,56 @@ describe("id batches on a Durable Object's 100-bound-parameter cap", () => {
 		const nonLeaf = pathBuilder.getNonLeafNodeIds([...childIds, "parent"]);
 		const childrenText = pathBuilder.buildChildrenTextBatch([...childIds, "parent"]);
 
-		expect({
-			path: paths.get(childIds[0] ?? ""),
-			text: texts.get(childIds[0] ?? ""),
-			nonLeaf: [...nonLeaf],
-			childrenTextLines: childrenText.get("parent")?.split("\n").length,
-		}).toStrictEqual({
-			path: "Parent > Child 0",
-			text: "Child 0\n\nNote 0",
-			nonLeaf: ["parent"],
-			childrenTextLines: COUNT,
-		});
+		expect(
+			{
+				path: paths.get(childIds[0] ?? ""),
+				text: texts.get(childIds[0] ?? ""),
+				nonLeaf: [...nonLeaf],
+				childrenTextLines: childrenText.get("parent")?.split("\n").length,
+			},
+		).toStrictEqual(
+			{
+				path: "Parent > Child 0",
+				text: "Child 0\n\nNote 0",
+				nonLeaf: ["parent"],
+				childrenTextLines: COUNT,
+			},
+		);
 	});
 
-	it("detects changes across more mirrors than the cap", () => {
+	it("detects changes across more mirrors than the cap", () =>
+	{
 		const database = cappedDatabase();
 
 		const {changes} = new ChangeDetector(database).detectChanges(new Date("2025-12-31T00:00:00.000Z"));
 
-		expect(changes.find((change) => change.id === mirrorIds[COUNT - 1])).toStrictEqual({
-			id: mirrorIds[COUNT - 1],
-			isNew: true,
-			isDeleted: false,
-			contentChanged: false,
-			parentChanged: false,
-			completionChanged: false,
-			noteChanged: false,
-			oldName: null,
-			oldNote: null,
-			oldParentId: null,
-			oldCompletedAt: null,
-			currentName: `Child ${COUNT - 1}`,
-			currentNote: `Note ${COUNT - 1}`,
-			currentParentId: "elsewhere",
-			currentCompletedAt: null,
-			parentId: "elsewhere",
-		});
+		expect(changes.find((change) => change.id === mirrorIds[COUNT - 1])).toStrictEqual(
+			{
+				id: mirrorIds[COUNT - 1],
+				isNew: true,
+				isDeleted: false,
+				contentChanged: false,
+				parentChanged: false,
+				completionChanged: false,
+				noteChanged: false,
+				oldName: null,
+				oldNote: null,
+				oldParentId: null,
+				oldCompletedAt: null,
+				currentName: `Child ${COUNT - 1}`,
+				currentNote: `Note ${COUNT - 1}`,
+				currentParentId: "elsewhere",
+				currentCompletedAt: null,
+				parentId: "elsewhere",
+			},
+		);
 	});
 
-	it("builds a change tree whose context ancestors outnumber the cap", () => {
+	it("builds a change tree whose context ancestors outnumber the cap", () =>
+	{
 		const database = cappedDatabase();
-		const changes: NodeChange[] = childIds.map((id, index) => ({
+		const changes: NodeChange[] = childIds.map((id, index) => (
+		{
 			id: `grandchild-${index}`,
 			isNew: true,
 			isDeleted: false,
@@ -207,7 +313,8 @@ describe("id batches on a Durable Object's 100-bound-parameter cap", () => {
 				name: "Parent",
 				isContext: true,
 				change: null,
-				children: childIds.map((id, index) => ({
+				children: childIds.map((id, index) => (
+				{
 					id,
 					name: `Child ${index}`,
 					isContext: true,

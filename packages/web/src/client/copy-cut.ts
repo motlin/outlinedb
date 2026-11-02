@@ -10,7 +10,8 @@ import {sortByPriority} from "./tree-position.js";
 import {recordCut} from "./cut-registry.js";
 import {cutBannerText, rowsWithDescendants, selectedMarkup} from "./copy-cut-plan.js";
 
-export interface CopyCutDeps {
+export interface CopyCutDeps
+{
 	/** The selected ids in display order; empty when there is no item selection. */
 	selected: () => string[];
 	/** The rows as export trees (children loaded from the cache). */
@@ -34,15 +35,25 @@ export function planCopy(
 	items: ExportItem[],
 	childFilter: ChildAccessor,
 	options?: FormatOptions,
-): {html: string; text: string} {
-	return {html: copyItemsHtml(items, childFilter, options), text: copyItemsPlainText(items, childFilter, options)};
+):
+{
+	html: string;
+	text: string;
+}
+{
+	return {
+		html: copyItemsHtml(items, childFilter, options),
+		text: copyItemsPlainText(items, childFilter, options),
+	};
 }
 
 /** The copy renderers while a search is committed: matched words keep their `contentMatch` highlight. */
-export function searchFormatOptions(query: string): FormatOptions | undefined {
+export function searchFormatOptions(query: string): FormatOptions | undefined
+{
 	return query === ""
 		? undefined
-		: {
+		:
+			{
 				renderName: (html) => highlightSearchMatches(html, query),
 				renderNote: (html) => highlightSearchMatches(html, query),
 			};
@@ -60,8 +71,10 @@ export function makeChildFilter({
 	showCompleted: boolean;
 	/** The committed search: only the rows it renders are copied, under the rows it expands. */
 	search?: SearchFilter | null;
-}): ChildAccessor {
-	if (search !== null) {
+}): ChildAccessor
+{
+	if (search !== null)
+	{
 		const completedShown = showCompleted || search.result.revealsCompleted;
 		return (item) =>
 			item.id === zoomedId || isSearchExpanded(item.id, search)
@@ -82,10 +95,13 @@ export function makeChildFilter({
 }
 
 /** Build the export trees for `ids` from the cache, each top row's parent a stub so `data-parent` is written. */
-export function exportItemsFromCache(queryClient: QueryClient, ids: readonly string[]): ExportItem[] {
-	const build = (id: string): ExportItem | undefined => {
+export function exportItemsFromCache(queryClient: QueryClient, ids: readonly string[]): ExportItem[]
+{
+	const build = (id: string): ExportItem | undefined =>
+	{
 		const node = readNode(queryClient, id);
-		if (node === undefined) {
+		if (node === undefined)
+		{
 			return undefined;
 		}
 		const children = sortByPriority(readChildren(queryClient, id) ?? [])
@@ -102,18 +118,25 @@ export function exportItemsFromCache(queryClient: QueryClient, ids: readonly str
 			children,
 		};
 	};
-	return ids.flatMap((id) => {
+	return ids.flatMap((id) =>
+	{
 		const item = build(id);
-		if (item === undefined) {
+		if (item === undefined)
+		{
 			return [];
 		}
 		const parentId = readNode(queryClient, id)?.parent_id ?? null;
-		const top: ExportItem = {...item};
-		if (parentId === null) {
+		const top: ExportItem =
+		{
+			...item,
+		};
+		if (parentId === null)
+		{
 			linkParents([top]);
 			return [top];
 		}
-		const parent: ExportItem = {
+		const parent: ExportItem =
+		{
 			id: parentId,
 			name: "",
 			note: "",
@@ -129,15 +152,21 @@ export function exportItemsFromCache(queryClient: QueryClient, ids: readonly str
 	});
 }
 
-export interface ClipboardLike {
+export interface ClipboardLike
+{
 	defaultPrevented: boolean;
 	preventDefault: () => void;
-	clipboardData: {setData: (type: string, value: string) => void} | null;
+	clipboardData:
+	{
+		setData: (type: string, value: string) => void;
+	} | null;
 }
 
-function writeClipboard(event: ClipboardLike, deps: CopyCutDeps, ids: readonly string[]): boolean {
+function writeClipboard(event: ClipboardLike, deps: CopyCutDeps, ids: readonly string[]): boolean
+{
 	const data = event.clipboardData;
-	if (data === null) {
+	if (data === null)
+	{
 		return false;
 	}
 	const {html, text} = planCopy(deps.items(ids), deps.childFilter, deps.format);
@@ -148,9 +177,11 @@ function writeClipboard(event: ClipboardLike, deps: CopyCutDeps, ids: readonly s
 }
 
 /** `copy` with an item selection: both formats go on the clipboard and the selection is kept. */
-export function handleCopy(event: ClipboardLike, deps: CopyCutDeps): boolean {
+export function handleCopy(event: ClipboardLike, deps: CopyCutDeps): boolean
+{
 	const ids = deps.selected();
-	if (ids.length === 0 || event.defaultPrevented) {
+	if (ids.length === 0 || event.defaultPrevented)
+	{
 		return false;
 	}
 	return writeClipboard(event, deps, ids);
@@ -160,25 +191,32 @@ export function handleCopy(event: ClipboardLike, deps: CopyCutDeps): boolean {
  * `cut` with an item selection: copy the cuttable rows, then delete them as one undo step with no confirm, clear the
  * selection, and (for a large cut) open the Restore banner.
  */
-export function handleCut(event: ClipboardLike, deps: CopyCutDeps): boolean {
+export function handleCut(event: ClipboardLike, deps: CopyCutDeps): boolean
+{
 	const selected = deps.selected();
-	if (selected.length === 0 || event.defaultPrevented) {
+	if (selected.length === 0 || event.defaultPrevented)
+	{
 		return false;
 	}
 	const ids = selected.filter((id) => deps.canCut(id));
-	if (ids.length === 0) {
+	if (ids.length === 0)
+	{
 		return false;
 	}
-	if (!writeClipboard(event, deps, ids)) {
+	if (!writeClipboard(event, deps, ids))
+	{
 		return false;
 	}
 	recordCut(ids);
 	const {big, hasKids} = rowsWithDescendants(ids, deps.childIds);
-	deps.schedule(() => {
+	deps.schedule(() =>
+	{
 		deps.deleteRows(ids);
 		deps.clearSelection();
-		if (big) {
-			deps.showBanner(cutBannerText(ids.length, hasKids), () => {
+		if (big)
+		{
+			deps.showBanner(cutBannerText(ids.length, hasKids), () =>
+			{
 				deps.restore(ids);
 			});
 		}
@@ -187,7 +225,8 @@ export function handleCut(event: ClipboardLike, deps: CopyCutDeps): boolean {
 }
 
 /** What the zoom-root title's selection holds, or null when the selection is not inside that one title. */
-export interface TitleSelection {
+export interface TitleSelection
+{
 	stored: string;
 	start: number;
 	end: number;
@@ -204,18 +243,22 @@ export function handleTitleCopyCut(
 	cut: boolean,
 	selection: TitleSelection | null,
 	removeRange: () => void,
-): boolean {
-	if (selection === null || event.defaultPrevented || selection.start === selection.end) {
+): boolean
+{
+	if (selection === null || event.defaultPrevented || selection.start === selection.end)
+	{
 		return false;
 	}
 	const data = event.clipboardData;
-	if (data === null) {
+	if (data === null)
+	{
 		return false;
 	}
 	data.setData("text/plain", selection.text);
 	data.setData("text/html", selectedMarkup(selection.stored, selection.start, selection.end));
 	event.preventDefault();
-	if (cut) {
+	if (cut)
+	{
 		removeRange();
 	}
 	return true;

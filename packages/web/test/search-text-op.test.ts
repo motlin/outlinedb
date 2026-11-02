@@ -16,65 +16,157 @@ const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migratio
 const SEEDED_AT = "2026-01-01 00:00:00.000";
 
 const open: DatabaseConstructor.Database[] = [];
-afterEach(() => {
-	for (const sqlite of open.splice(0)) {
+afterEach(() =>
+{
+	for (const sqlite of open.splice(0))
+	{
 		sqlite.close();
 	}
 });
 
-function seededContext(): ServerContext {
+function seededContext(): ServerContext
+{
 	const sqlite = new DatabaseConstructor(":memory:");
 	open.push(sqlite);
-	const db = drizzle(sqlite, {schema});
-	migrate(db, {migrationsFolder});
-	const live = {systemFrom: SEEDED_AT, systemTo: FAR_FUTURE_DATE};
+	const db = drizzle(
+		sqlite,
+		{
+			schema,
+		},
+	);
+	migrate(
+		db,
+		{
+			migrationsFolder,
+		},
+	);
+	const live =
+	{
+		systemFrom: SEEDED_AT,
+		systemTo: FAR_FUTURE_DATE,
+	};
 	db.insert(nodeContent)
 		.values([
-			{id: "parent", name: "Parent", note: null, parentId: null, ...live},
-			{id: "done", name: "Needle done", note: null, parentId: "parent", ...live},
-			{id: "open", name: "Needle open", note: "a note", parentId: "parent", ...live},
+			{
+				id: "parent",
+				name: "Parent",
+				note: null,
+				parentId: null,
+				...live,
+			},
+			{
+				id: "done",
+				name: "Needle done",
+				note: null,
+				parentId: "parent",
+				...live,
+			},
+			{
+				id: "open",
+				name: "Needle open",
+				note: "a note",
+				parentId: "parent",
+				...live,
+			},
 		])
 		.run();
 	db.insert(nodeMetadata)
 		.values([
-			{nodeId: "done", priority: 0, completedAt: new Date(1_600_000_100_000), ...live},
-			{nodeId: "open", priority: 1, completedAt: null, ...live},
+			{
+				nodeId: "done",
+				priority: 0,
+				completedAt: new Date(1_600_000_100_000),
+				...live,
+			},
+			{
+				nodeId: "open",
+				priority: 1,
+				completedAt: null,
+				...live,
+			},
 		])
 		.run();
-	return {db} as unknown as ServerContext;
+	return {
+		db,
+	} as unknown as ServerContext;
 }
 
-describe("search.text", () => {
-	it("returns completedAt in epoch seconds, or null when incomplete", async () => {
+describe("search.text", () =>
+{
+	it("returns completedAt in epoch seconds, or null when incomplete", async () =>
+	{
 		const ctx = seededContext();
 
-		const result = await Promise.resolve(searchText.run(ctx, {query: "Needle", limit: 10, offset: 0}));
+		const result = await Promise.resolve(
+			searchText.run(
+				ctx,
+				{
+					query: "Needle",
+					limit: 10,
+					offset: 0,
+				},
+			),
+		);
 
-		expect(result).toStrictEqual({
-			ok: true,
-			value: {
-				results: [
-					{id: "done", name: "Needle done", note: null, parentPath: "Parent", completedAt: 1_600_000_100},
-					{id: "open", name: "Needle open", note: "a note", parentPath: "Parent", completedAt: null},
-				],
-				totalCount: 2,
+		expect(result).toStrictEqual(
+			{
+				ok: true,
+				value:
+				{
+					results: [
+						{
+							id: "done",
+							name: "Needle done",
+							note: null,
+							parentPath: "Parent",
+							completedAt: 1_600_000_100,
+						},
+						{
+							id: "open",
+							name: "Needle open",
+							note: "a note",
+							parentPath: "Parent",
+							completedAt: null,
+						},
+					],
+					totalCount: 2,
+				},
 			},
-		});
+		);
 	});
 
-	it("returns completedAt when the query joins metadata", async () => {
+	it("returns completedAt when the query joins metadata", async () =>
+	{
 		const ctx = seededContext();
 
-		const result = await Promise.resolve(searchText.run(ctx, {query: "Needle is:complete", limit: 10, offset: 0}));
+		const result = await Promise.resolve(
+			searchText.run(
+				ctx,
+				{
+					query: "Needle is:complete",
+					limit: 10,
+					offset: 0,
+				},
+			),
+		);
 
-		expect(result).toStrictEqual({
-			ok: true,
-			value: {
-				results: [
-					{id: "done", name: "Needle done", note: null, parentPath: "Parent", completedAt: 1_600_000_100},
-				],
-				totalCount: 1,
+		expect(result).toStrictEqual(
+			{
+				ok: true,
+				value:
+				{
+					results: [
+						{
+							id: "done",
+							name: "Needle done",
+							note: null,
+							parentPath: "Parent",
+							completedAt: 1_600_000_100,
+						},
+					],
+					totalCount: 1,
+				},
 			},
-		});
+		);
 	});
 });

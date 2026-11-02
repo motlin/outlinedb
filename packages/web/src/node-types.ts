@@ -4,7 +4,8 @@
  */
 
 import type {z} from "zod";
-import type {
+import type
+{
 	AncestorsResponseSchema,
 	BacklinkCrumbSchema,
 	BacklinkItemSchema,
@@ -38,7 +39,8 @@ import type {
 } from "./server/ops/schemas.js";
 import type {AccountResponseSchema} from "./server/ops/account.js";
 import type {AccountAiResponseSchema} from "./server/ops/account-ai.js";
-import type {
+import type
+{
 	AppliedLayoutSchema,
 	CalendarDayResponseSchema,
 	CalendarDaysResponseSchema,
@@ -125,7 +127,8 @@ export type HelperTags = z.output<typeof HelperTagsSchema>;
 export type LocationResponse = z.output<typeof LocationResponseSchema>;
 
 /** The body an op answers with when it fails (`fail(status, {error})`). */
-export interface OpErrorBody {
+export interface OpErrorBody
+{
 	error?: string;
 }
 
@@ -133,13 +136,15 @@ export interface OpErrorBody {
  * `GET /api/v1/sync-status`, answered by the Cloudflare Worker itself rather than an op (its `UserStore.accountSync`):
  * whether the signed-in account's sync is fetching or importing, and how many items the run has applied.
  */
-export interface AccountSync {
+export interface AccountSync
+{
 	phase: "idle" | "fetching" | "importing";
 	applied: number;
 }
 
 /** One tree of a `POST /api/v1/nodes/trees` body. */
-export interface BulkTree {
+export interface BulkTree
+{
 	name: string;
 	note?: string | undefined;
 	completed?: boolean | undefined;

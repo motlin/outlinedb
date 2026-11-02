@@ -4,11 +4,17 @@ import {renderToStaticMarkup} from "react-dom/server";
 import {describe, expect, it, vi} from "vite-plus/test";
 import type {SlashGroup} from "../src/client/slash-commands.js";
 
-vi.mock(import("react-dom"), async (importOriginal) => ({
+vi.mock(import("react-dom"), async (importOriginal) => (
+{
 	...(await importOriginal()),
 	createPortal: (node: ReactNode): ReactPortal => node as ReactPortal,
 }));
-vi.stubGlobal("document", {body: {}});
+vi.stubGlobal(
+	"document",
+	{
+		body: {},
+	},
+);
 
 const {SlashMenu} = await import("../src/client/components/slash-menu.js");
 
@@ -22,18 +28,21 @@ const FLYOUT_OPEN =
 	'<div style="--menu-max-h:calc(100vh - 50px)" class=" scroller overflow-y-auto desktop:max-h-[min(var(--menu-max-h),calc(100vh-50px))] mobile:max-h-[min(var(--menu-max-h),50vh)] [&amp;&gt;*:first-child]:mt-xs [&amp;&gt;*:last-child]:mb-xs ">';
 const FLYOUT_CLOSE = "</div></div>";
 
-function header(name: string, ascii: string): string {
+function header(name: string, ascii: string): string
+{
 	return `<div class="py-m px-l text-tertiary text-xs uppercase bg-inherit mobile:bg-secondary menu-section-header mobile:landscape:pl-safe-left mobile:landscape:pr-safe-right "><span data-ascii="${ascii}" class="mention-group-${name}">${name === "actions" ? "Actions" : name}</span></div>`;
 }
 
-function itemClass(active: boolean, canHover: boolean): string {
+function itemClass(active: boolean, canHover: boolean): string
+{
 	return `pl-l py-xs pr-l block !no-underline cursor-pointer whitespace-nowrap leading-base border-solid border-primary text-primary ${active ? "bg-secondary" : ""} ${canHover ? "hover:bg-secondary" : ""} mobile:border-t mobile:last:border-b mobile:py-ml mobile:landscape:pl-safe-left mobile:landscape:pr-safe-right menuItem undefined ${active ? "active" : ""} ${canHover ? "canHover" : ""}`.replaceAll(
 		/\s+/gu,
 		" ",
 	);
 }
 
-function commandItem(key: string, icon: string, path: string, label: string, cls: string): string {
+function commandItem(key: string, icon: string, path: string, label: string, cls: string): string
+{
 	return (
 		`<a data-handbook="${key}" data-handbook-placement="right" class="${cls}"><span class="relative flex justify-between items-center"><span class="grow flex items-center gap-m whitespace-nowrap text-ellipsis overflow-hidden desktop:text-xs">` +
 		`<div class="menuItemIcon flex items-center text-secondary"><svg aria-hidden="true" focusable="false" data-prefix="fal" data-icon="${icon}" class="svg-inline--fa fa-${icon} fa-fw fa-1x " role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="${path}"></path></svg></div>` +
@@ -45,30 +54,50 @@ const ACTIONS: SlashGroup[] = [
 	{
 		name: "Actions",
 		options: [
-			{key: "toggle_bullet", label: "Bullets", icon: "fal:list-ul"},
-			{key: "toggle_board", label: "Board", icon: "fal:table-columns"},
+			{
+				key: "toggle_bullet",
+				label: "Bullets",
+				icon: "fal:list-ul",
+			},
+			{
+				key: "toggle_board",
+				label: "Board",
+				icon: "fal:table-columns",
+			},
 		],
 	},
 ];
 
-function render(groups: SlashGroup[], index: number, keyboardMode: boolean): string {
+function render(groups: SlashGroup[], index: number, keyboardMode: boolean): string
+{
 	const html = renderToStaticMarkup(
-		createElement(SlashMenu, {
-			groups,
-			index,
-			keyboardMode,
-			left: 188.758,
-			top: 195.5,
-			onSelect: () => {},
-			onHover: () => {},
-			onMouseMove: () => {},
-		}),
+		createElement(
+			SlashMenu,
+			{
+				groups,
+				index,
+				keyboardMode,
+				left: 188.758,
+				top: 195.5,
+				onSelect: () =>
+				{
+				},
+				onHover: () =>
+				{
+				},
+				onMouseMove: () =>
+				{
+				},
+			},
+		),
 	);
 	return html.replaceAll(/\s+/gu, " ");
 }
 
-describe("SlashMenu", () => {
-	it("renders upstream's flyout with the Actions header and the active row in keyboard mode", () => {
+describe("SlashMenu", () =>
+{
+	it("renders upstream's flyout with the Actions header and the active row in keyboard mode", () =>
+	{
 		expect(render(ACTIONS, 0, true)).toBe(
 			FLYOUT_OPEN +
 				header("actions", "# Actions") +
@@ -78,7 +107,8 @@ describe("SlashMenu", () => {
 		);
 	});
 
-	it("drops active and lets every row hover in mouse mode", () => {
+	it("drops active and lets every row hover in mouse mode", () =>
+	{
 		expect(render(ACTIONS, 0, false)).toBe(
 			FLYOUT_OPEN +
 				header("actions", "# Actions") +
@@ -88,14 +118,41 @@ describe("SlashMenu", () => {
 		);
 	});
 
-	it("renders the math result under the = header with no handbook and no icon", () => {
+	it("renders the math result under the = header with no handbook and no icon", () =>
+	{
 		const mathItem = `<a data-handbook-placement="right" class="${itemClass(true, false)}"><span class="relative flex justify-between items-center"><span class="grow flex items-center gap-m whitespace-nowrap text-ellipsis overflow-hidden desktop:text-xs">4</span></span></a>`;
-		expect(render([{name: "=", options: [{label: "4"}]}], 0, true)).toBe(
-			FLYOUT_OPEN + header("=", "# =") + mathItem + FLYOUT_CLOSE,
-		);
+		expect(
+			render(
+				[
+					{
+						name: "=",
+						options: [
+							{
+								label: "4",
+							},
+						],
+					},
+				],
+				0,
+				true,
+			),
+		).toBe(FLYOUT_OPEN + header("=", "# =") + mathItem + FLYOUT_CLOSE);
 	});
 
-	it("renders nothing when there are no options", () => {
-		expect([render([], 0, true), render([{name: "Actions", options: []}], 0, true)]).toStrictEqual(["", ""]);
+	it("renders nothing when there are no options", () =>
+	{
+		expect([
+			render([], 0, true),
+			render(
+				[
+					{
+						name: "Actions",
+						options: [],
+					},
+				],
+				0,
+				true,
+			),
+		]).toStrictEqual(["", ""]);
 	});
 });

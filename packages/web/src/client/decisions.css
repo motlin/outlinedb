@@ -5,7 +5,8 @@
  * outliner's own styles.
  */
 
-.decisions-page {
+.decisions-page
+{
 	--background: #ffffff;
 	--foreground: #09090b;
 	--card: #ffffff;
@@ -44,8 +45,10 @@
 	flex-direction: column;
 }
 
-@media (prefers-color-scheme: dark) {
-	:root:not([data-theme="light"]) .decisions-page {
+@media (prefers-color-scheme: dark)
+{
+	:root:not([data-theme="light"]) .decisions-page
+	{
 		--background: #09090b;
 		--foreground: #fafafa;
 		--card: #18181b;
@@ -69,7 +72,8 @@
 	}
 }
 
-:root[data-theme="dark"] .decisions-page {
+:root[data-theme="dark"] .decisions-page
+{
 	--background: #09090b;
 	--foreground: #fafafa;
 	--card: #18181b;
@@ -94,11 +98,13 @@
 
 .decisions-page *,
 .decisions-page *::before,
-.decisions-page *::after {
+.decisions-page *::after
+{
 	box-sizing: border-box;
 }
 
-.decisions-wrap {
+.decisions-wrap
+{
 	width: 100%;
 	max-width: calc(var(--content-width) + 32px);
 	margin: 0 auto;
@@ -108,7 +114,8 @@
 
 /* Header */
 
-.decisions-head {
+.decisions-head
+{
 	display: flex;
 	align-items: flex-start;
 	justify-content: space-between;
@@ -116,13 +123,15 @@
 	padding-block: 20px 12px;
 }
 
-.decisions-head-text {
+.decisions-head-text
+{
 	min-width: 0;
 }
 
 /* Theme: a segmented control of three icon buttons */
 
-.decisions-sr-only {
+.decisions-sr-only
+{
 	position: absolute;
 	width: 1px;
 	height: 1px;
@@ -134,7 +143,8 @@
 	border: 0;
 }
 
-.decisions-theme {
+.decisions-theme
+{
 	flex: none;
 	display: inline-flex;
 	gap: 2px;
@@ -146,7 +156,8 @@
 	border-radius: 8px;
 }
 
-.decisions-theme button {
+.decisions-theme button
+{
 	display: inline-grid;
 	place-content: center;
 	width: 28px;
@@ -162,22 +173,26 @@
 		color 120ms;
 }
 
-.decisions-theme button:hover {
+.decisions-theme button:hover
+{
 	color: var(--foreground);
 }
 
-.decisions-theme button[aria-pressed="true"] {
+.decisions-theme button[aria-pressed="true"]
+{
 	color: var(--foreground);
 	background: var(--background);
 	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
 
-.decisions-theme button:focus-visible {
+.decisions-theme button:focus-visible
+{
 	outline: 2px solid var(--ring);
 	outline-offset: 1px;
 }
 
-.decisions-head h1 {
+.decisions-head h1
+{
 	font-size: 18px;
 	font-weight: 600;
 	letter-spacing: -0.01em;
@@ -185,7 +200,8 @@
 	margin: 0;
 }
 
-.decisions-intro {
+.decisions-intro
+{
 	color: var(--muted-foreground);
 	margin: 4px 0 0;
 	white-space: pre-wrap;
@@ -193,14 +209,16 @@
 
 /* Progress */
 
-.decisions-progress-row {
+.decisions-progress-row
+{
 	display: flex;
 	align-items: center;
 	gap: 12px;
 	margin-bottom: 12px;
 }
 
-.decisions-position {
+.decisions-position
+{
 	margin: 0;
 	font-size: 13px;
 	font-weight: 500;
@@ -209,7 +227,8 @@
 	white-space: nowrap;
 }
 
-.decisions-bar {
+.decisions-bar
+{
 	appearance: none;
 	flex: 1;
 	min-width: 0;
@@ -221,18 +240,21 @@
 	overflow: hidden;
 }
 
-.decisions-bar::-webkit-progress-bar {
+.decisions-bar::-webkit-progress-bar
+{
 	background: var(--muted);
 	border-radius: 999px;
 }
 
-.decisions-bar::-webkit-progress-value {
+.decisions-bar::-webkit-progress-value
+{
 	background: var(--primary);
 	border-radius: 999px;
 	transition: width 200ms ease;
 }
 
-.decisions-bar::-moz-progress-bar {
+.decisions-bar::-moz-progress-bar
+{
 	background: var(--primary);
 	border-radius: 999px;
 }
@@ -243,27 +265,33 @@
  * five or six options fits a 1440x900 laptop without scrolling.
  */
 
-@media (min-width: 1100px) {
-	.decisions-page {
+@media (min-width: 1100px)
+{
+	.decisions-page
+	{
 		--content-width: 1100px;
 	}
 
-	.decisions-card {
+	.decisions-card
+	{
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 		gap: 28px;
 	}
 
-	.decisions-card-title {
+	.decisions-card-title
+	{
 		font-size: 20px;
 	}
 
-	.decisions-card-side .decisions-options {
+	.decisions-card-side .decisions-options
+	{
 		margin-top: 0;
 	}
 }
 
-.decisions-card {
+.decisions-card
+{
 	background: var(--card);
 	color: var(--card-foreground);
 	border: 1px solid var(--border);
@@ -272,13 +300,16 @@
 	padding: 20px 24px;
 }
 
-@media (max-width: 480px) {
-	.decisions-card {
+@media (max-width: 480px)
+{
+	.decisions-card
+	{
 		padding: 18px 16px;
 	}
 }
 
-.decisions-group-heading {
+.decisions-group-heading
+{
 	display: inline-block;
 	max-width: 100%;
 	margin: 0 0 10px;
@@ -291,16 +322,19 @@
 	overflow-wrap: anywhere;
 }
 
-.decisions-group-heading a {
+.decisions-group-heading a
+{
 	color: inherit;
 	text-decoration: none;
 }
 
-.decisions-group-heading a:hover {
+.decisions-group-heading a:hover
+{
 	text-decoration: underline;
 }
 
-.decisions-card-title {
+.decisions-card-title
+{
 	font-size: 24px;
 	font-weight: 600;
 	letter-spacing: -0.02em;
@@ -314,7 +348,8 @@
  * card still fits a laptop screen; phones wrap them instead.
  */
 
-.decisions-images {
+.decisions-images
+{
 	display: flex;
 	flex-wrap: nowrap;
 	align-items: flex-start;
@@ -322,13 +357,16 @@
 	margin: 4px 0 12px;
 }
 
-@media (max-width: 480px) {
-	.decisions-images {
+@media (max-width: 480px)
+{
+	.decisions-images
+	{
 		flex-wrap: wrap;
 	}
 }
 
-.decisions-images a {
+.decisions-images a
+{
 	display: block;
 	flex: 0 1 auto;
 	min-width: 0;
@@ -340,12 +378,14 @@
 	line-height: 0;
 }
 
-.decisions-images a:focus-visible {
+.decisions-images a:focus-visible
+{
 	outline: 2px solid var(--ring);
 	outline-offset: 2px;
 }
 
-.decisions-image {
+.decisions-image
+{
 	display: block;
 	max-width: 100%;
 	max-height: 45vh;
@@ -360,7 +400,8 @@
  * watchable without scrolling the options off a laptop screen.
  */
 
-.decisions-video {
+.decisions-video
+{
 	display: block;
 	flex: 0 1 auto;
 	min-width: 0;
@@ -375,17 +416,20 @@
 	object-fit: contain;
 }
 
-.decisions-video:only-child {
+.decisions-video:only-child
+{
 	max-height: 60vh;
 	max-height: 60dvh;
 }
 
-.decisions-video:focus-visible {
+.decisions-video:focus-visible
+{
 	outline: 2px solid var(--ring);
 	outline-offset: 2px;
 }
 
-.decisions-body-line {
+.decisions-body-line
+{
 	color: var(--muted-foreground);
 	margin: 2px 0;
 	white-space: pre-wrap;
@@ -394,29 +438,35 @@
 
 /* Numbers in body lines: counts in blue, durations in amber, how-overdue in orange, dates in plain ink. */
 
-.decisions-num {
+.decisions-num
+{
 	font-weight: 600;
 	font-variant-numeric: tabular-nums;
 }
 
-.decisions-num[data-kind="count"] {
+.decisions-num[data-kind="count"]
+{
 	color: var(--count);
 }
 
-.decisions-num[data-kind="duration"] {
+.decisions-num[data-kind="duration"]
+{
 	color: var(--duration);
 }
 
-.decisions-num[data-kind="overdue"] {
+.decisions-num[data-kind="overdue"]
+{
 	color: var(--warning);
 }
 
-.decisions-num[data-kind="date"] {
+.decisions-num[data-kind="date"]
+{
 	color: var(--foreground);
 	font-weight: 500;
 }
 
-.decisions-links {
+.decisions-links
+{
 	display: flex;
 	flex-wrap: wrap;
 	gap: 6px;
@@ -425,7 +475,8 @@
 	margin: 12px 0 0;
 }
 
-.decisions-links a {
+.decisions-links a
+{
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
@@ -440,30 +491,35 @@
 	transition: background-color 120ms;
 }
 
-.decisions-link-icon {
+.decisions-link-icon
+{
 	flex: none;
 	width: 14px;
 	height: 14px;
 	color: var(--muted-foreground);
 }
 
-img.decisions-link-icon {
+img.decisions-link-icon
+{
 	border-radius: 3px;
 }
 
-.decisions-links a:hover {
+.decisions-links a:hover
+{
 	background: var(--accent);
 }
 
 /* Options as radio cards */
 
-.decisions-options {
+.decisions-options
+{
 	display: grid;
 	gap: 6px;
 	margin: 16px 0 12px;
 }
 
-.decisions-option {
+.decisions-option
+{
 	position: relative;
 	display: flex;
 	gap: 12px;
@@ -478,21 +534,25 @@ img.decisions-link-icon {
 		box-shadow 120ms;
 }
 
-.decisions-option:hover {
+.decisions-option:hover
+{
 	background: var(--accent);
 }
 
-.decisions-option:has(input:checked) {
+.decisions-option:has(input:checked)
+{
 	border-color: var(--primary);
 	box-shadow: 0 0 0 1px var(--primary);
 }
 
-.decisions-option:has(input:focus-visible) {
+.decisions-option:has(input:focus-visible)
+{
 	outline: 2px solid var(--ring);
 	outline-offset: 2px;
 }
 
-.decisions-option input {
+.decisions-option input
+{
 	appearance: none;
 	flex: none;
 	width: 16px;
@@ -504,7 +564,8 @@ img.decisions-link-icon {
 	place-content: center;
 }
 
-.decisions-option input::before {
+.decisions-option input::before
+{
 	content: "";
 	width: 8px;
 	height: 8px;
@@ -514,11 +575,13 @@ img.decisions-link-icon {
 	transition: transform 120ms;
 }
 
-.decisions-option input:checked::before {
+.decisions-option input:checked::before
+{
 	transform: scale(1);
 }
 
-.decisions-option-text {
+.decisions-option-text
+{
 	flex: 1;
 	display: flex;
 	flex-wrap: wrap;
@@ -527,7 +590,8 @@ img.decisions-link-icon {
 	min-width: 0;
 }
 
-.decisions-option-key {
+.decisions-option-key
+{
 	order: 3;
 	margin-left: auto;
 	min-width: 20px;
@@ -544,11 +608,13 @@ img.decisions-link-icon {
 	border-radius: 4px;
 }
 
-.decisions-option-label {
+.decisions-option-label
+{
 	font-weight: 500;
 }
 
-.decisions-suggested {
+.decisions-suggested
+{
 	padding: 0 8px;
 	font-size: 11px;
 	font-weight: 500;
@@ -559,7 +625,8 @@ img.decisions-link-icon {
 	border-radius: 999px;
 }
 
-.decisions-option-description {
+.decisions-option-description
+{
 	order: 4;
 	flex-basis: 100%;
 	color: var(--muted-foreground);
@@ -568,14 +635,16 @@ img.decisions-link-icon {
 
 /* Note */
 
-.decisions-note-label {
+.decisions-note-label
+{
 	display: block;
 	font-size: 13px;
 	font-weight: 500;
 	margin-bottom: 6px;
 }
 
-.decisions-note {
+.decisions-note
+{
 	display: block;
 	width: 100%;
 	min-height: 56px;
@@ -589,17 +658,20 @@ img.decisions-link-icon {
 	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
-.decisions-note::placeholder {
+.decisions-note::placeholder
+{
 	color: var(--muted-foreground);
 }
 
-.decisions-note:focus-visible {
+.decisions-note:focus-visible
+{
 	outline: none;
 	border-color: var(--ring);
 	box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 35%, transparent);
 }
 
-.decisions-status {
+.decisions-status
+{
 	display: block;
 	min-height: 1.4em;
 	margin-top: 6px;
@@ -607,23 +679,27 @@ img.decisions-link-icon {
 	color: var(--muted-foreground);
 }
 
-.decisions-card[data-status="saved"] .decisions-status {
+.decisions-card[data-status="saved"] .decisions-status
+{
 	color: var(--success);
 }
 
 .decisions-card[data-status="error"] .decisions-status,
 .decisions-error,
-.decisions-submit-error {
+.decisions-submit-error
+{
 	color: var(--destructive);
 }
 
-.decisions-error {
+.decisions-error
+{
 	padding: 28px 16px;
 }
 
 /* Buttons */
 
-.decisions-nav {
+.decisions-nav
+{
 	display: flex;
 	gap: 8px;
 	margin-top: 12px;
@@ -632,7 +708,8 @@ img.decisions-link-icon {
 }
 
 .decisions-nav-button,
-.decisions-submit {
+.decisions-submit
+{
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -649,49 +726,58 @@ img.decisions-link-icon {
 		opacity 120ms;
 }
 
-.decisions-nav-button {
+.decisions-nav-button
+{
 	color: var(--foreground);
 	background: var(--background);
 	border: 1px solid var(--input);
 	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
-.decisions-nav-button:hover:not(:disabled) {
+.decisions-nav-button:hover:not(:disabled)
+{
 	background: var(--accent);
 }
 
-.decisions-note-next {
+.decisions-note-next
+{
 	flex: 1;
 	color: var(--secondary-foreground);
 	background: var(--secondary);
 	border-color: transparent;
 }
 
-.decisions-submit {
+.decisions-submit
+{
 	color: var(--primary-foreground);
 	background: var(--primary);
 	border: 1px solid var(--primary);
 }
 
-.decisions-submit:hover:not(:disabled) {
+.decisions-submit:hover:not(:disabled)
+{
 	opacity: 0.9;
 }
 
 .decisions-nav-button:disabled,
-.decisions-submit:disabled {
+.decisions-submit:disabled
+{
 	opacity: 0.5;
 	cursor: default;
 }
 
 .decisions-nav-button:focus-visible,
 .decisions-submit:focus-visible,
-.decisions-links a:focus-visible {
+.decisions-links a:focus-visible
+{
 	outline: 2px solid var(--ring);
 	outline-offset: 2px;
 }
 
-@media (max-width: 480px) {
-	.decisions-nav-button {
+@media (max-width: 480px)
+{
+	.decisions-nav-button
+	{
 		flex: 1;
 		height: 44px;
 		padding: 0 10px;
@@ -700,7 +786,8 @@ img.decisions-link-icon {
 
 /* Footer */
 
-.decisions-footer {
+.decisions-footer
+{
 	position: sticky;
 	bottom: 0;
 	display: flex;
@@ -713,62 +800,74 @@ img.decisions-link-icon {
 	border-top: 1px solid var(--border);
 }
 
-.decisions-progress {
+.decisions-progress
+{
 	font-size: 13px;
 	font-weight: 500;
 	font-variant-numeric: tabular-nums;
 }
 
-.decisions-submit-state {
+.decisions-submit-state
+{
 	flex: 1;
 	font-size: 13px;
 }
 
-.decisions-all-answered {
+.decisions-all-answered
+{
 	color: var(--success);
 	font-weight: 500;
 	margin-right: 10px;
 }
 
-.decisions-last-save {
+.decisions-last-save
+{
 	color: var(--muted-foreground);
 	margin-right: 10px;
 }
 
-.decisions-last-save[data-error="true"] {
+.decisions-last-save[data-error="true"]
+{
 	color: var(--destructive);
 }
 
-.decisions-submitted {
+.decisions-submitted
+{
 	color: var(--success);
 	font-weight: 500;
 }
 
-.decisions-submit[data-ready="true"] {
+.decisions-submit[data-ready="true"]
+{
 	box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 25%, transparent);
 }
 
-.decisions-done {
+.decisions-done
+{
 	text-align: center;
 	padding: 48px 16px;
 }
 
-.decisions-done h2 {
+.decisions-done h2
+{
 	color: var(--success);
 	margin: 0 0 12px;
 }
 
-.decisions-done p {
+.decisions-done p
+{
 	margin: 0 0 8px;
 }
 
-.decisions-done button {
+.decisions-done button
+{
 	margin-top: 16px;
 }
 
 /* A proposed rewrite as a code-review diff: a red removed line, a green added line, changed words marked darker. */
 
-.decisions-diff {
+.decisions-diff
+{
 	border: 1px solid var(--border);
 	border-radius: 6px;
 	overflow: hidden;
@@ -777,7 +876,8 @@ img.decisions-link-icon {
 	font-size: 13px;
 }
 
-.decisions-diff-line {
+.decisions-diff-line
+{
 	display: flex;
 	gap: 8px;
 	margin: 0;
@@ -786,29 +886,35 @@ img.decisions-link-icon {
 	overflow-wrap: anywhere;
 }
 
-.decisions-diff-line[data-kind="removed"] {
+.decisions-diff-line[data-kind="removed"]
+{
 	background: color-mix(in srgb, var(--destructive) 10%, transparent);
 }
 
-.decisions-diff-line[data-kind="added"] {
+.decisions-diff-line[data-kind="added"]
+{
 	background: color-mix(in srgb, var(--success) 10%, transparent);
 }
 
-.decisions-diff-sign {
+.decisions-diff-sign
+{
 	flex: none;
 	user-select: none;
 	color: var(--muted-foreground);
 }
 
-.decisions-diff-line mark {
+.decisions-diff-line mark
+{
 	color: inherit;
 	border-radius: 2px;
 }
 
-.decisions-diff-line[data-kind="removed"] mark {
+.decisions-diff-line[data-kind="removed"] mark
+{
 	background: color-mix(in srgb, var(--destructive) 35%, transparent);
 }
 
-.decisions-diff-line[data-kind="added"] mark {
+.decisions-diff-line[data-kind="added"] mark
+{
 	background: color-mix(in srgb, var(--success) 35%, transparent);
 }

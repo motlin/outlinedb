@@ -2,23 +2,29 @@
 let hoveredRowId: string | null = null;
 const listeners = new Set<() => void>();
 
-export function getHoveredRowId(): string | null {
+export function getHoveredRowId(): string | null
+{
 	return hoveredRowId;
 }
 
-export function setHoveredRowId(id: string | null): void {
-	if (id === hoveredRowId) {
+export function setHoveredRowId(id: string | null): void
+{
+	if (id === hoveredRowId)
+	{
 		return;
 	}
 	hoveredRowId = id;
-	for (const listener of listeners) {
+	for (const listener of listeners)
+	{
 		listener();
 	}
 }
 
-export function subscribeHoveredRow(listener: () => void): () => void {
+export function subscribeHoveredRow(listener: () => void): () => void
+{
 	listeners.add(listener);
-	return () => {
+	return () =>
+	{
 		listeners.delete(listener);
 	};
 }

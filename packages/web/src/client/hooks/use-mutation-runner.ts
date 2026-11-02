@@ -2,7 +2,8 @@ import {MutationObserver, useQueryClient} from "@tanstack/react-query";
 import type {MutateOptions, MutationObserverOptions} from "@tanstack/react-query";
 import {useCallback, useEffect, useLayoutEffect, useMemo, useState} from "react";
 
-export interface MutationRunner<TData, TVariables, TContext> {
+export interface MutationRunner<TData, TVariables, TContext>
+{
 	/** Runs the mutation; a failure goes to the options' and the call's `onError`, never thrown. */
 	mutate: (variables: TVariables, options?: MutateOptions<TData, Error, TVariables, TContext>) => void;
 	mutateAsync: (variables: TVariables, options?: MutateOptions<TData, Error, TVariables, TContext>) => Promise<TData>;
@@ -15,15 +16,18 @@ export interface MutationRunner<TData, TVariables, TContext> {
  */
 export function useMutationRunner<TData, TVariables, TContext>(
 	options: MutationObserverOptions<TData, Error, TVariables, TContext>,
-): MutationRunner<TData, TVariables, TContext> {
+): MutationRunner<TData, TVariables, TContext>
+{
 	const queryClient = useQueryClient();
 	const [observer] = useState(() => new MutationObserver(queryClient, options));
-	useLayoutEffect(() => {
+	useLayoutEffect(() =>
+	{
 		observer.setOptions(options);
 	}, [observer, options]);
 	useEffect(
 		() =>
-			observer.subscribe(() => {
+			observer.subscribe(() =>
+			{
 				// Only so that `observer.hasListeners()` holds: per-call callbacks need a listener.
 			}),
 		[observer],
@@ -33,10 +37,18 @@ export function useMutationRunner<TData, TVariables, TContext>(
 		[observer],
 	);
 	const mutate = useCallback<MutationRunner<TData, TVariables, TContext>["mutate"]>(
-		(variables, mutateOptions) => {
+		(variables, mutateOptions) =>
+		{
 			observer.mutate(variables, mutateOptions).catch(() => {});
 		},
 		[observer],
 	);
-	return useMemo(() => ({mutate, mutateAsync}), [mutate, mutateAsync]);
+	return useMemo(
+		() => (
+		{
+			mutate,
+			mutateAsync,
+		}),
+		[mutate, mutateAsync],
+	);
 }

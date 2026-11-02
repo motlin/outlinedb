@@ -8,7 +8,8 @@ const EDGE_SPEED = 12;
 const KEY_STEP = 10;
 const KEY_STEP_SHIFT = 50;
 
-export interface SeparatorDeps {
+export interface SeparatorDeps
+{
 	/** The `[data-pane-scroll-container]` the panes sit in. */
 	scroller: HTMLElement;
 	/** Every pane's width in workspace order, main first. */
@@ -21,7 +22,8 @@ export interface SeparatorDeps {
 	setResizing: (resizing: boolean) => void;
 }
 
-interface Drag {
+interface Drag
+{
 	pointerId: number;
 	startX: number;
 	pointerX: number;
@@ -39,11 +41,13 @@ interface Drag {
  * its edges, commits on pointerup, and cancels (restoring widths and scroll) on Escape, pointercancel or window blur.
  * Returns the unbind, which also cancels a drag in progress.
  */
-export function bindPaneSeparator(separator: HTMLElement, paneIndex: number, deps: SeparatorDeps): () => void {
+export function bindPaneSeparator(separator: HTMLElement, paneIndex: number, deps: SeparatorDeps): () => void
+{
 	const {scroller} = deps;
 	let drag: Drag | null = null;
 
-	function apply(current: Drag): void {
+	function apply(current: Drag): void
+	{
 		const delta =
 			current.pointerX -
 			current.startX +
@@ -53,60 +57,76 @@ export function bindPaneSeparator(separator: HTMLElement, paneIndex: number, dep
 		deps.setWidths(resizedDivider(deps.getWidths(), current.resize, delta, deps.available()));
 	}
 
-	function finish(commit: boolean): void {
+	function finish(commit: boolean): void
+	{
 		const current = drag;
-		if (current === null) {
+		if (current === null)
+		{
 			return;
 		}
 		drag = null;
 		cancelAnimationFrame(current.frame);
-		if (!commit) {
+		if (!commit)
+		{
 			deps.setWidths(cancelledDivider(deps.getWidths(), current.resize));
 			scroller.scrollLeft = current.startScrollLeft;
 		}
 		scroller.style.scrollBehavior = current.previousScrollBehavior;
-		try {
+		try
+		{
 			separator.releasePointerCapture(current.pointerId);
-		} catch {
+		}
+		catch
+		{
 			// The capture may already be gone (the element left the document).
 		}
 		deps.setResizing(false);
-		if (commit) {
+		if (commit)
+		{
 			globalThis.dispatchEvent(new Event("resize"));
 		}
 	}
 
-	function step(): void {
+	function step(): void
+	{
 		const current = drag;
-		if (current === null) {
+		if (current === null)
+		{
 			return;
 		}
 		const rect = scroller.getBoundingClientRect();
 		const fromRight = rect.right - current.pointerX;
 		const fromLeft = current.pointerX - rect.left;
-		if (current.direction > 0 && fromRight < EDGE_ZONE) {
+		if (current.direction > 0 && fromRight < EDGE_ZONE)
+		{
 			scroller.scrollLeft += EDGE_SPEED * Math.min(1, 1 - fromRight / EDGE_ZONE);
-		} else if (
+		}
+		else if (
 			current.direction < 0 &&
 			fromLeft < EDGE_ZONE &&
 			(deps.getWidths()[paneIndex] ?? 0) > minimumPaneWidth(deps.getWidths(), paneIndex, deps.available())
-		) {
+		)
+		{
 			scroller.scrollLeft -= EDGE_SPEED * Math.min(1, 1 - fromLeft / EDGE_ZONE);
 		}
 		apply(current);
 		current.frame = requestAnimationFrame(step);
 	}
 
-	const onPointerDown = (event: PointerEvent): void => {
-		if (!event.isPrimary || event.button !== 0 || drag !== null) {
+	const onPointerDown = (event: PointerEvent): void =>
+	{
+		if (!event.isPrimary || event.button !== 0 || drag !== null)
+		{
 			return;
 		}
 		const resize = beginDividerResize(deps.getWidths(), paneIndex);
-		if (resize === null) {
+		if (resize === null)
+		{
 			return;
 		}
 		deps.setResizing(true);
-		drag = {
+		drag =
+		{
 			pointerId: event.pointerId,
 			startX: event.clientX,
 			pointerX: event.clientX,
@@ -119,40 +139,53 @@ export function bindPaneSeparator(separator: HTMLElement, paneIndex: number, dep
 		};
 		scroller.style.scrollBehavior = "auto";
 		separator.setPointerCapture(event.pointerId);
-		separator.focus({preventScroll: true});
+		separator.focus(
+			{
+				preventScroll: true,
+			},
+		);
 		drag.frame = requestAnimationFrame(step);
 		event.preventDefault();
 		event.stopPropagation();
 	};
-	const onPointerMove = (event: PointerEvent): void => {
-		if (drag === null || event.pointerId !== drag.pointerId) {
+	const onPointerMove = (event: PointerEvent): void =>
+	{
+		if (drag === null || event.pointerId !== drag.pointerId)
+		{
 			return;
 		}
 		drag.direction = Math.sign(event.clientX - drag.pointerX) || drag.direction;
 		drag.pointerX = event.clientX;
 		apply(drag);
 	};
-	const onPointerUp = (event: PointerEvent): void => {
-		if (drag === null || event.pointerId !== drag.pointerId) {
+	const onPointerUp = (event: PointerEvent): void =>
+	{
+		if (drag === null || event.pointerId !== drag.pointerId)
+		{
 			return;
 		}
 		drag.pointerX = event.clientX;
 		apply(drag);
 		finish(true);
 	};
-	const onPointerCancel = (event: PointerEvent): void => {
-		if (drag !== null && event.pointerId === drag.pointerId) {
+	const onPointerCancel = (event: PointerEvent): void =>
+	{
+		if (drag !== null && event.pointerId === drag.pointerId)
+		{
 			finish(false);
 		}
 	};
-	const onKeyDown = (event: KeyboardEvent): void => {
-		if (drag !== null && event.key === "Escape") {
+	const onKeyDown = (event: KeyboardEvent): void =>
+	{
+		if (drag !== null && event.key === "Escape")
+		{
 			event.preventDefault();
 			event.stopPropagation();
 			finish(false);
 		}
 	};
-	const onBlur = (): void => {
+	const onBlur = (): void =>
+	{
 		finish(false);
 	};
 
@@ -162,7 +195,8 @@ export function bindPaneSeparator(separator: HTMLElement, paneIndex: number, dep
 	document.addEventListener("pointercancel", onPointerCancel, true);
 	document.addEventListener("keydown", onKeyDown, true);
 	globalThis.addEventListener("blur", onBlur);
-	return () => {
+	return () =>
+	{
 		finish(false);
 		separator.removeEventListener("pointerdown", onPointerDown);
 		document.removeEventListener("pointermove", onPointerMove, true);
@@ -173,15 +207,20 @@ export function bindPaneSeparator(separator: HTMLElement, paneIndex: number, dep
 	};
 }
 
-export interface SeparatorKeyEvent {
+export interface SeparatorKeyEvent
+{
 	key: string;
 	shiftKey: boolean;
 	preventDefault: () => void;
 	stopPropagation: () => void;
-	currentTarget: {scrollIntoView: (options: ScrollIntoViewOptions) => void};
+	currentTarget:
+	{
+		scrollIntoView: (options: ScrollIntoViewOptions) => void;
+	};
 }
 
-export interface SeparatorKeyDeps {
+export interface SeparatorKeyDeps
+{
 	getWidths: () => number[];
 	available: () => number;
 	setWidths: (widths: number[]) => void;
@@ -192,15 +231,18 @@ export interface SeparatorKeyDeps {
  * minimum) resize; they begin, apply and commit at once, then scroll the separator into view on the next frame and
  * dispatch a window `resize`. Every other key is left alone.
  */
-export function handleSeparatorKey(event: SeparatorKeyEvent, paneIndex: number, deps: SeparatorKeyDeps): void {
-	if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home") {
+export function handleSeparatorKey(event: SeparatorKeyEvent, paneIndex: number, deps: SeparatorKeyDeps): void
+{
+	if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home")
+	{
 		return;
 	}
 	event.preventDefault();
 	event.stopPropagation();
 	const widths = deps.getWidths();
 	const resize = beginDividerResize(widths, paneIndex);
-	if (resize === null) {
+	if (resize === null)
+	{
 		return;
 	}
 	const available = deps.available();
@@ -213,8 +255,14 @@ export function handleSeparatorKey(event: SeparatorKeyEvent, paneIndex: number, 
 				: step;
 	deps.setWidths(resizedDivider(widths, resize, delta, available));
 	const target = event.currentTarget;
-	requestAnimationFrame(() => {
-		target.scrollIntoView({block: "nearest", inline: "nearest"});
+	requestAnimationFrame(() =>
+	{
+		target.scrollIntoView(
+			{
+				block: "nearest",
+				inline: "nearest",
+			},
+		);
 	});
 	globalThis.dispatchEvent(new Event("resize"));
 }

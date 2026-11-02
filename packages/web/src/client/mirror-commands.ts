@@ -6,7 +6,8 @@ import {defaultIndexIn} from "./tree-ops.js";
 const MIRROR_TOAST_TIMEOUT = 5000;
 
 /** What `POST /api/v1/nodes/mirror` takes. */
-export interface MirrorRequest {
+export interface MirrorRequest
+{
 	item_ids: string[];
 	parent_id: string | null;
 	index: number;
@@ -16,23 +17,28 @@ export interface MirrorRequest {
  * Upstream's clipboard payload: one `<div data-wf-mirror="<original id>">&nbsp;</div>` per item. Upstream builds it by
  * concatenation from `undefined`, so its payload starts with the literal word `undefined`; this one does not.
  */
-export function mirrorClipboardHtml(originalIds: readonly string[]): string {
+export function mirrorClipboardHtml(originalIds: readonly string[]): string
+{
 	return originalIds.map((id) => `<div data-wf-mirror="${id}">&nbsp;</div>`).join("");
 }
 
 /** The original ids named by `[data-wf-mirror]` elements in pasted html, in order. */
-export function parseMirrorPaste(html: string): string[] {
+export function parseMirrorPaste(html: string): string[]
+{
 	return [...html.matchAll(/data-wf-mirror="([^"]*)"/gu)].map((match) => match[1] ?? "");
 }
 
-export const MIRROR_COPIED_TOAST = {
+export const MIRROR_COPIED_TOAST =
+{
 	text: "Mirror(s) copied. Paste it where you want it to go.",
 	timeout: 30_000,
 	dismissOn: ["copy", "paste"],
 } as const;
 
-export function mirrorToastText(kind: "to" | "here" | "cant-here", name: string): string {
-	if (kind === "to") {
+export function mirrorToastText(kind: "to" | "here" | "cant-here", name: string): string
+{
+	if (kind === "to")
+	{
 		return `mirrored to '${name}'`;
 	}
 	return kind === "here" ? `mirrored '${name}' here` : "Can't mirror the selected bullet here";
@@ -47,8 +53,13 @@ export function planMirrorTo({
 	items: readonly string[];
 	target: Pick<MoveToTarget, "id" | "defaultToBottom">;
 	childCount: number;
-}): MirrorRequest {
-	return {item_ids: [...items], parent_id: target.id, index: defaultIndexIn(target, childCount)};
+}): MirrorRequest
+{
+	return {
+		item_ids: [...items],
+		parent_id: target.id,
+		index: defaultIndexIn(target, childCount),
+	};
 }
 
 /** Mirror Here...: the picked item is mirrored right after the row under its parent, or at the top of the zoom root. */
@@ -64,10 +75,21 @@ export function planMirrorHere({
 	parentId: string | null;
 	siblingIndex: number;
 	isZoomRoot: boolean;
-}): MirrorRequest {
+}): MirrorRequest
+{
 	return isZoomRoot
-		? {item_ids: [picked], parent_id: itemId, index: 0}
-		: {item_ids: [picked], parent_id: parentId, index: siblingIndex + 1};
+		?
+			{
+				item_ids: [picked],
+				parent_id: itemId,
+				index: 0,
+			}
+		:
+			{
+				item_ids: [picked],
+				parent_id: parentId,
+				index: siblingIndex + 1,
+			};
 }
 
 /** Upstream deletes the Mirror Here trigger row once the mirror lands in its place, if it is blank. */
@@ -77,13 +99,25 @@ export function shouldDeleteMirrorTrigger(row: {
 	childCount: number;
 	isZoomRoot: boolean;
 	readOnly: boolean;
-}): boolean {
+}): boolean
+{
 	return row.name === "" && row.note === "" && row.childCount === 0 && !row.isZoomRoot && !row.readOnly;
 }
 
-interface MirrorToDeps {
+interface MirrorToDeps
+{
 	/** Opens the location picker; the chosen location (or the one its create-and-pick just made). */
-	pick: () => Promise<{id: string} | {createdId: string} | undefined>;
+	pick: () => Promise<
+		|
+		  {
+				id: string;
+		  }
+		|
+		  {
+				createdId: string;
+		  }
+		| undefined
+	>;
 	loadTarget: (id: string) => Promise<LoadedMoveTarget>;
 	/** Creates the mirrors; resolves to how many were made. */
 	mirrorNodes: (request: MirrorRequest) => Promise<number>;
@@ -101,30 +135,50 @@ export async function executeMirrorTo({
 	showToast,
 	view,
 	undo,
-}: MirrorToDeps & {items: readonly string[]}): Promise<boolean> {
+}: MirrorToDeps &
+{
+	items: readonly string[];
+}): Promise<boolean>
+{
 	const picked = await pick();
-	if (picked === undefined) {
+	if (picked === undefined)
+	{
 		return false;
 	}
 	const {target, childCount} = await loadTarget("id" in picked ? picked.id : picked.createdId);
-	const created = await mirrorNodes(planMirrorTo({items, target, childCount}));
-	if (created === 0) {
+	const created = await mirrorNodes(
+		planMirrorTo(
+			{
+				items,
+				target,
+				childCount,
+			},
+		),
+	);
+	if (created === 0)
+	{
 		return false;
 	}
-	showToast({
-		text: mirrorToastText("to", target.name),
-		timeout: MIRROR_TOAST_TIMEOUT,
-		actions: [
-			{
-				label: "View",
-				shortcut: "shift+return",
-				run: () => {
-					view(target.id);
+	showToast(
+		{
+			text: mirrorToastText("to", target.name),
+			timeout: MIRROR_TOAST_TIMEOUT,
+			actions: [
+				{
+					label: "View",
+					shortcut: "shift+return",
+					run: () =>
+					{
+						view(target.id);
+					},
 				},
-			},
-			{label: "Undo", run: undo},
-		],
-	});
+				{
+					label: "Undo",
+					run: undo,
+				},
+			],
+		},
+	);
 	return true;
 }
 
@@ -141,7 +195,17 @@ export async function executeMirrorHere({
 	showToast,
 	undo,
 }: {
-	pick: () => Promise<{id: string} | {createdId: string} | undefined>;
+	pick: () => Promise<
+		|
+		  {
+				id: string;
+		  }
+		|
+		  {
+				createdId: string;
+		  }
+		| undefined
+	>;
 	loadName: (id: string) => Promise<string>;
 	plan: (picked: string) => MirrorRequest;
 	mirrorNodes: (request: MirrorRequest) => Promise<number>;
@@ -149,37 +213,57 @@ export async function executeMirrorHere({
 	deleteTrigger: () => void;
 	showToast: (toast: MoveToToast) => void;
 	undo: () => void;
-}): Promise<boolean> {
+}): Promise<boolean>
+{
 	const picked = await pick();
-	if (picked === undefined) {
+	if (picked === undefined)
+	{
 		return false;
 	}
 	const id = "id" in picked ? picked.id : picked.createdId;
 	const created = await mirrorNodes(plan(id)).catch(() => 0);
-	if (created === 0) {
-		showToast({
-			text: mirrorToastText("cant-here", ""),
-			timeout: MIRROR_TOAST_TIMEOUT,
-			actions: [],
-			type: "failure",
-		});
+	if (created === 0)
+	{
+		showToast(
+			{
+				text: mirrorToastText("cant-here", ""),
+				timeout: MIRROR_TOAST_TIMEOUT,
+				actions: [],
+				type: "failure",
+			},
+		);
 		return false;
 	}
 	deleteTrigger();
-	showToast({
-		text: mirrorToastText("here", await loadName(id)),
-		timeout: MIRROR_TOAST_TIMEOUT,
-		actions: [{label: "Undo", run: undo}],
-	});
+	showToast(
+		{
+			text: mirrorToastText("here", await loadName(id)),
+			timeout: MIRROR_TOAST_TIMEOUT,
+			actions: [
+				{
+					label: "Undo",
+					run: undo,
+				},
+			],
+		},
+	);
 	return true;
 }
 
 /** The original each item mirrors: the original of a mirror, else the item itself. */
 export function mirrorSourceIds(
 	items: readonly string[],
-	lookup: (id: string) => {isMirror?: boolean; originalNodeId?: string | null} | undefined,
-): string[] {
-	return items.map((id) => {
+	lookup: (id: string) =>
+		|
+		  {
+				isMirror?: boolean;
+				originalNodeId?: string | null;
+		  }
+		| undefined,
+): string[]
+{
+	return items.map((id) =>
+	{
 		const node = lookup(id);
 		return node?.isMirror === true && node.originalNodeId ? node.originalNodeId : id;
 	});

@@ -12,14 +12,16 @@ import {lastChildShapeLayout, planAddChild} from "../tree-ops.js";
 import type {FaIconKey} from "./fa-icons.js";
 import {FaIcon} from "./fa-icons.js";
 
-export interface TabBarButton {
+export interface TabBarButton
+{
 	id: "menu" | "back" | "add" | "today" | "search";
 	icon: FaIconKey;
 	enabled: boolean;
 	onPress: () => void;
 }
 
-export interface MobileTabBarViewProps {
+export interface MobileTabBarViewProps
+{
 	userAgent: string;
 	buttons: readonly TabBarButton[];
 	/** A sheet is open: upstream's `hideForSheetView` fades the bar out. */
@@ -27,19 +29,35 @@ export interface MobileTabBarViewProps {
 }
 
 /** Upstream's bottom tab bar. Android has no back slot; an unavailable command is drawn at half opacity and ignored. */
-export function MobileTabBarView({userAgent, buttons, sheetOpen}: MobileTabBarViewProps) {
+export function MobileTabBarView({userAgent, buttons, sheetOpen}: MobileTabBarViewProps)
+{
 	const shown = isAndroid(userAgent) ? buttons.filter((button) => button.id !== "back") : buttons;
 	return (
-		<div className={tabBarClassName(userAgent)} style={{opacity: sheetOpen ? 0 : 1}}>
+		<div
+			className={tabBarClassName(userAgent)}
+			style={
+			{
+				opacity: sheetOpen ? 0 : 1,
+			}}
+		>
 			{shown.map((button) => (
 				// oxlint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- a touch tab: tapping runs its command
 				<div
 					key={button.id}
 					className="tab-bar-button w-[44px] h-[44px] flex items-center justify-center"
 					data-tab={button.id}
-					style={button.enabled ? undefined : {opacity: 0.5}}
-					onClick={() => {
-						if (button.enabled) {
+					style={
+						button.enabled
+							? undefined
+							:
+								{
+									opacity: 0.5,
+								}
+					}
+					onClick={() =>
+					{
+						if (button.enabled)
+						{
 							button.onPress();
 						}
 					}}
@@ -52,15 +70,18 @@ export function MobileTabBarView({userAgent, buttons, sheetOpen}: MobileTabBarVi
 }
 
 /** Moves the caret into the search form: shows it, then focuses its input once it is displayed. */
-function focusMobileSearch(): void {
+function focusMobileSearch(): void
+{
 	useOutlineStore.getState().focusSearch(null);
-	requestAnimationFrame(() => {
+	requestAnimationFrame(() =>
+	{
 		document.querySelector<HTMLInputElement>(".newMobileSearchBox")?.focus();
 	});
 }
 
 /** The tab bar wired to the leftbar, history, add-child, today and search commands. */
-export function MobileTabBar() {
+export function MobileTabBar()
+{
 	const queryClient = useQueryClient();
 	const navigate = useStableNavigate();
 	const navigateToToday = useNavigateToToday();
@@ -74,24 +95,35 @@ export function MobileTabBar() {
 	const searchOpen = useOutlineStore((state) => state.searchFocused);
 	const sheetOpen = useSheetStore((state) => state.sheet !== null);
 	// While editing, the keyboard accessory owns the bottom; while the search form is focused, its helpers do.
-	if (editing || searchOpen) {
+	if (editing || searchOpen)
+	{
 		return null;
 	}
-	const addChild = () => {
+	const addChild = () =>
+	{
 		const existing = children ?? [];
-		const plan = planAddChild({
-			childCount: existing.length,
-			zoomedId,
-			shapeLayout: lastChildShapeLayout(queryClient, zoomedId, existing.at(-1)),
-		});
+		const plan = planAddChild(
+			{
+				childCount: existing.length,
+				zoomedId,
+				shapeLayout: lastChildShapeLayout(queryClient, zoomedId, existing.at(-1)),
+			},
+		);
 		const id = crypto.randomUUID();
-		createNode.mutate({
-			id,
-			parent_id: plan.parent_id,
-			name: plan.name,
-			index: 0,
-			...(plan.layoutMode === null ? {} : {layoutMode: plan.layoutMode}),
-		});
+		createNode.mutate(
+			{
+				id,
+				parent_id: plan.parent_id,
+				name: plan.name,
+				index: 0,
+				...(plan.layoutMode === null
+					? {}
+					:
+						{
+							layoutMode: plan.layoutMode,
+						}),
+			},
+		);
 		useOutlineStore.getState().resumeEditing(id, 0);
 	};
 	const buttons: TabBarButton[] = [
@@ -99,7 +131,8 @@ export function MobileTabBar() {
 			id: "menu",
 			icon: "fal:bars",
 			enabled: true,
-			onPress: () => {
+			onPress: () =>
+			{
 				useOutlineStore.getState().toggleLeftBar();
 			},
 		},
@@ -107,20 +140,32 @@ export function MobileTabBar() {
 			id: "back",
 			icon: "fal:chevron-left",
 			enabled: canGoBack,
-			onPress: () => {
+			onPress: () =>
+			{
 				stepNav(navigate, "back", (locationId) => cachedResolvedId(queryClient, locationId));
 			},
 		},
-		{id: "add", icon: "fal:plus", enabled: true, onPress: addChild},
+		{
+			id: "add",
+			icon: "fal:plus",
+			enabled: true,
+			onPress: addChild,
+		},
 		{
 			id: "today",
 			icon: "fal:calendar-day",
 			enabled: true,
-			onPress: () => {
+			onPress: () =>
+			{
 				void navigateToToday();
 			},
 		},
-		{id: "search", icon: "fas:magnifying-glass", enabled: true, onPress: focusMobileSearch},
+		{
+			id: "search",
+			icon: "fas:magnifying-glass",
+			enabled: true,
+			onPress: focusMobileSearch,
+		},
 	];
 	return <MobileTabBarView userAgent={navigator.userAgent} buttons={buttons} sheetOpen={sheetOpen} />;
 }

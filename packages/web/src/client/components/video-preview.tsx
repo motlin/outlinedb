@@ -10,11 +10,13 @@ export function videoWidthCap({
 	videoWidth: number;
 	videoHeight: number;
 	innerHeight: number;
-}): number {
+}): number
+{
 	return (videoWidth / videoHeight) * Math.min(videoHeight, innerHeight * 0.9);
 }
 
-const WRAPPER_STYLE = {
+const WRAPPER_STYLE =
+{
 	width: "calc(min(100%, var(--video-width-real), var(--video-width, 100%)))",
 	height: "auto",
 } as const;
@@ -23,7 +25,8 @@ const WRAPPER_STYLE = {
  * Upstream's `gui-video.preview` (`zS2`): a react-player FilePlayer's markup, a native-controls `<video preload="auto">`
  * that is never wider than its natural width nor taller than 90% of the window.
  */
-export function VideoPreview({nodeId}: {nodeId: string}) {
+export function VideoPreview({nodeId}: {nodeId: string})
+{
 	const outerRef = useRef<HTMLDivElement>(null);
 	return (
 		<div ref={outerRef} className="[display:inherit] mobile:flex mobile:mr-[30px]">
@@ -33,13 +36,25 @@ export function VideoPreview({nodeId}: {nodeId: string}) {
 					src={originalUrl(nodeId)}
 					preload="auto"
 					controls
-					style={{width: "100%", height: "auto"}}
-					onLoadedMetadata={(event) => {
+					style={
+					{
+						width: "100%",
+						height: "auto",
+					}}
+					onLoadedMetadata={(event) =>
+					{
 						const {videoWidth, videoHeight} = event.currentTarget;
-						if (videoWidth > 0 && videoHeight > 0) {
+						if (videoWidth > 0 && videoHeight > 0)
+						{
 							outerRef.current?.style.setProperty(
 								"--video-width-real",
-								`${videoWidthCap({videoWidth, videoHeight, innerHeight: window.innerHeight})}px`,
+								`${videoWidthCap(
+									{
+										videoWidth,
+										videoHeight,
+										innerHeight: window.innerHeight,
+									},
+								)}px`,
 							);
 						}
 					}}

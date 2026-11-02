@@ -13,7 +13,8 @@ const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
 const T0 = new Date("2026-03-01T00:00:00.000Z");
 const T1 = new Date("2026-03-02T00:00:00.000Z");
 
-function apiNode(id: string, overrides: Partial<WorkflowyNode> = {}): WorkflowyNode {
+function apiNode(id: string, overrides: Partial<WorkflowyNode> = {}): WorkflowyNode
+{
 	return {
 		id,
 		name: `Name ${id}`,
@@ -24,33 +25,90 @@ function apiNode(id: string, overrides: Partial<WorkflowyNode> = {}): WorkflowyN
 		createdAt: 1_700_000_000,
 		modifiedAt: 1_700_000_100,
 		completedAt: null,
-		data: {layoutMode: "bullets"},
+		data:
+		{
+			layoutMode: "bullets",
+		},
 		...overrides,
 	};
 }
 
 const FIXTURE: WorkflowyNode[] = [
-	apiNode("a", {priority: 0}),
-	apiNode("b", {parent_id: "a", priority: 1, note: "a note"}),
-	apiNode("c", {parent_id: "a", priority: 2}),
-	apiNode("d", {parent_id: "b", priority: 3}),
-	apiNode("e", {priority: 4, completedAt: 1_700_000_200}),
-	apiNode("f", {parent_id: "e", priority: 5}),
-	apiNode("g", {priority: 6}),
+	apiNode(
+		"a",
+		{
+			priority: 0,
+		},
+	),
+	apiNode(
+		"b",
+		{
+			parent_id: "a",
+			priority: 1,
+			note: "a note",
+		},
+	),
+	apiNode(
+		"c",
+		{
+			parent_id: "a",
+			priority: 2,
+		},
+	),
+	apiNode(
+		"d",
+		{
+			parent_id: "b",
+			priority: 3,
+		},
+	),
+	apiNode(
+		"e",
+		{
+			priority: 4,
+			completedAt: 1_700_000_200,
+		},
+	),
+	apiNode(
+		"f",
+		{
+			parent_id: "e",
+			priority: 5,
+		},
+	),
+	apiNode(
+		"g",
+		{
+			priority: 6,
+		},
+	),
 ];
 
-describe("shared API import", () => {
+describe("shared API import", () =>
+{
 	const open: DatabaseConstructor.Database[] = [];
 
-	function createDb() {
+	function createDb()
+	{
 		const sqlite = new DatabaseConstructor(":memory:");
 		open.push(sqlite);
-		const db = drizzle(sqlite, {schema});
-		migrate(db, {migrationsFolder});
+		const db = drizzle(
+			sqlite,
+			{
+				schema,
+			},
+		);
+		migrate(
+			db,
+			{
+				migrationsFolder,
+			},
+		);
 		return db;
 	}
 
-	function snapshot(db: ReturnType<typeof createDb>) {
+	function snapshot(db: ReturnType<typeof createDb>)
+	{
 		return {
 			content: db
 				.select()
@@ -65,39 +123,75 @@ describe("shared API import", () => {
 		};
 	}
 
-	afterEach(() => {
+	afterEach(() =>
+	{
 		vi.useRealTimers();
-		for (const sqlite of open.splice(0)) {
+		for (const sqlite of open.splice(0))
+		{
 			sqlite.close();
 		}
 	});
 
-	it("importing a 3-batch split gives the same rows as the one-shot import", () => {
+	it("importing a 3-batch split gives the same rows as the one-shot import", () =>
+	{
 		const oneShot = createDb();
-		importFromApi(oneShot, FIXTURE, {timestamp: T0});
+		importFromApi(
+			oneShot,
+			FIXTURE,
+			{
+				timestamp: T0,
+			},
+		);
 
 		const batched = createDb();
-		const state = beginApiImport(batched, {timestamp: T0});
+		const state = beginApiImport(
+			batched,
+			{
+				timestamp: T0,
+			},
+		);
 		applyApiBatch(state, FIXTURE.slice(0, 3));
 		applyApiBatch(state, FIXTURE.slice(3, 5));
 		applyApiBatch(state, FIXTURE.slice(5));
 		const result = finishApiImport(state);
 
 		expect(snapshot(batched)).toStrictEqual(snapshot(oneShot));
-		expect({
-			totalNodes: result.totalNodes,
-			nodesAdded: result.nodesAdded,
-			nodesUpdated: result.nodesUpdated,
-			nodesUnchanged: result.nodesUnchanged,
-			nodesDeleted: result.nodesDeleted,
-		}).toStrictEqual({totalNodes: 7, nodesAdded: 7, nodesUpdated: 0, nodesUnchanged: 0, nodesDeleted: 0});
+		expect(
+			{
+				totalNodes: result.totalNodes,
+				nodesAdded: result.nodesAdded,
+				nodesUpdated: result.nodesUpdated,
+				nodesUnchanged: result.nodesUnchanged,
+				nodesDeleted: result.nodesDeleted,
+			},
+		).toStrictEqual(
+			{
+				totalNodes: 7,
+				nodesAdded: 7,
+				nodesUpdated: 0,
+				nodesUnchanged: 0,
+				nodesDeleted: 0,
+			},
+		);
 	});
 
-	it("phases out nodes absent from every batch", () => {
+	it("phases out nodes absent from every batch", () =>
+	{
 		const db = createDb();
-		importFromApi(db, FIXTURE, {timestamp: T0});
+		importFromApi(
+			db,
+			FIXTURE,
+			{
+				timestamp: T0,
+			},
+		);
 
-		const state = beginApiImport(db, {timestamp: T1});
+		const state = beginApiImport(
+			db,
+			{
+				timestamp: T1,
+			},
+		);
 		applyApiBatch(state, FIXTURE.slice(0, 4));
 		applyApiBatch(state, FIXTURE.slice(4, 6));
 		const result = finishApiImport(state);
@@ -109,19 +203,49 @@ describe("shared API import", () => {
 			.filter((row) => row.systemTo === FAR_FUTURE_DATE)
 			.map((row) => row.id)
 			.toSorted();
-		expect({current, nodesDeleted: result.nodesDeleted, nodesPhasedOut: result.nodesPhasedOut}).toStrictEqual({
-			current: ["a", "b", "c", "d", "e", "f"],
-			nodesDeleted: 1,
-			nodesPhasedOut: 1,
-		});
+		expect(
+			{
+				current,
+				nodesDeleted: result.nodesDeleted,
+				nodesPhasedOut: result.nodesPhasedOut,
+			},
+		).toStrictEqual(
+			{
+				current: ["a", "b", "c", "d", "e", "f"],
+				nodesDeleted: 1,
+				nodesPhasedOut: 1,
+			},
+		);
 	});
 
-	it("keeps a node that fails schema validation live instead of treating it as deleted", () => {
+	it("keeps a node that fails schema validation live instead of treating it as deleted", () =>
+	{
 		const db = createDb();
-		importFromApi(db, FIXTURE, {timestamp: T0});
+		importFromApi(
+			db,
+			FIXTURE,
+			{
+				timestamp: T0,
+			},
+		);
 
-		const withUnknownField = {...apiNode("g", {priority: 6}), color: "red"} as WorkflowyNode;
-		const result = importFromApi(db, [...FIXTURE.slice(0, 6), withUnknownField], {timestamp: T1});
+		const withUnknownField =
+		{
+			...apiNode(
+				"g",
+				{
+					priority: 6,
+				},
+			),
+			color: "red",
+		} as WorkflowyNode;
+		const result = importFromApi(
+			db,
+			[...FIXTURE.slice(0, 6), withUnknownField],
+			{
+				timestamp: T1,
+			},
+		);
 
 		const current = db
 			.select()
@@ -130,91 +254,186 @@ describe("shared API import", () => {
 			.filter((row) => row.systemTo === FAR_FUTURE_DATE)
 			.map((row) => row.id)
 			.toSorted();
-		expect({current, nodesDeleted: result.nodesDeleted, nodesPhasedOut: result.nodesPhasedOut}).toStrictEqual({
-			current: ["a", "b", "c", "d", "e", "f", "g"],
-			nodesDeleted: 0,
-			nodesPhasedOut: 0,
-		});
+		expect(
+			{
+				current,
+				nodesDeleted: result.nodesDeleted,
+				nodesPhasedOut: result.nodesPhasedOut,
+			},
+		).toStrictEqual(
+			{
+				current: ["a", "b", "c", "d", "e", "f", "g"],
+				nodesDeleted: 0,
+				nodesPhasedOut: 0,
+			},
+		);
 	});
 
-	describe("rows written after the snapshot was taken", () => {
+	describe("rows written after the snapshot was taken", () =>
+	{
 		const SNAPSHOT_TAKEN = new Date("2026-03-01T12:00:00.000Z");
 		const WRITTEN_AFTER = new Date("2026-03-01T13:00:00.000Z");
 
-		function liveContent(db: ReturnType<typeof createDb>) {
+		function liveContent(db: ReturnType<typeof createDb>)
+		{
 			return db
 				.select()
 				.from(schema.nodeContent)
 				.all()
 				.filter((row) => row.systemTo === FAR_FUTURE_DATE)
-				.map((row) => ({id: row.id, name: row.name}))
+				.map((row) => (
+				{
+					id: row.id,
+					name: row.name,
+				}))
 				.toSorted((x, y) => x.id.localeCompare(y.id));
 		}
 
-		function invertedIntervals(db: ReturnType<typeof createDb>) {
+		function invertedIntervals(db: ReturnType<typeof createDb>)
+		{
 			return [
 				...db.select().from(schema.nodeContent).all(),
 				...db.select().from(schema.nodeMetadata).all(),
 			].filter((row) => row.systemTo < row.systemFrom);
 		}
 
-		function writeAfterSnapshot(db: ReturnType<typeof createDb>) {
-			vi.useFakeTimers({toFake: ["Date"], now: T0});
-			importFromApi(db, FIXTURE, {timestamp: T0});
+		function writeAfterSnapshot(db: ReturnType<typeof createDb>)
+		{
+			vi.useFakeTimers(
+				{
+					toFake: ["Date"],
+					now: T0,
+				},
+			);
+			importFromApi(
+				db,
+				FIXTURE,
+				{
+					timestamp: T0,
+				},
+			);
 			vi.setSystemTime(WRITTEN_AFTER);
 			const cache = new CacheService(db);
-			cache.insertNode(apiNode("h", {parent_id: "a", priority: 7}), "a");
-			cache.insertNode(apiNode("b", {parent_id: "a", priority: 1, note: "a note", name: "Edited"}), "a");
+			cache.insertNode(
+				apiNode(
+					"h",
+					{
+						parent_id: "a",
+						priority: 7,
+					},
+				),
+				"a",
+			);
+			cache.insertNode(
+				apiNode(
+					"b",
+					{
+						parent_id: "a",
+						priority: 1,
+						note: "a note",
+						name: "Edited",
+					},
+				),
+				"a",
+			);
 			cache.deleteNode("g");
 			vi.setSystemTime(T1);
 		}
 
-		it("keeps nodes created, edited or deleted after the snapshot as the later write left them", () => {
+		it("keeps nodes created, edited or deleted after the snapshot as the later write left them", () =>
+		{
 			const db = createDb();
 			writeAfterSnapshot(db);
 
-			const state = beginApiImport(db, {timestamp: T1, snapshotTakenAt: SNAPSHOT_TAKEN});
+			const state = beginApiImport(
+				db,
+				{
+					timestamp: T1,
+					snapshotTakenAt: SNAPSHOT_TAKEN,
+				},
+			);
 			applyApiBatch(state, FIXTURE.slice(0, 4));
 			applyApiBatch(state, FIXTURE.slice(4));
 			const result = finishApiImport(state);
 
-			expect({
-				live: liveContent(db),
-				inverted: invertedIntervals(db),
-				nodesDeleted: result.nodesDeleted,
-				nodesAdded: result.nodesAdded,
-				nodesUpdated: result.nodesUpdated,
-			}).toStrictEqual({
-				live: [
-					{id: "a", name: "Name a"},
-					{id: "b", name: "Edited"},
-					{id: "c", name: "Name c"},
-					{id: "d", name: "Name d"},
-					{id: "e", name: "Name e"},
-					{id: "f", name: "Name f"},
-					{id: "h", name: "Name h"},
-				],
-				inverted: [],
-				nodesDeleted: 0,
-				nodesAdded: 0,
-				nodesUpdated: 0,
-			});
+			expect(
+				{
+					live: liveContent(db),
+					inverted: invertedIntervals(db),
+					nodesDeleted: result.nodesDeleted,
+					nodesAdded: result.nodesAdded,
+					nodesUpdated: result.nodesUpdated,
+				},
+			).toStrictEqual(
+				{
+					live: [
+						{
+							id: "a",
+							name: "Name a",
+						},
+						{
+							id: "b",
+							name: "Edited",
+						},
+						{
+							id: "c",
+							name: "Name c",
+						},
+						{
+							id: "d",
+							name: "Name d",
+						},
+						{
+							id: "e",
+							name: "Name e",
+						},
+						{
+							id: "f",
+							name: "Name f",
+						},
+						{
+							id: "h",
+							name: "Name h",
+						},
+					],
+					inverted: [],
+					nodesDeleted: 0,
+					nodesAdded: 0,
+					nodesUpdated: 0,
+				},
+			);
 		});
 
-		it("guards the one-shot import too", () => {
+		it("guards the one-shot import too", () =>
+		{
 			const db = createDb();
 			writeAfterSnapshot(db);
 
-			importFromApi(db, FIXTURE, {timestamp: T1, snapshotTakenAt: SNAPSHOT_TAKEN});
+			importFromApi(
+				db,
+				FIXTURE,
+				{
+					timestamp: T1,
+					snapshotTakenAt: SNAPSHOT_TAKEN,
+				},
+			);
 
 			expect(liveContent(db).map((row) => row.id)).toStrictEqual(["a", "b", "c", "d", "e", "f", "h"]);
 		});
 
-		it("still applies the snapshot over rows written before it was taken", () => {
+		it("still applies the snapshot over rows written before it was taken", () =>
+		{
 			const db = createDb();
 			writeAfterSnapshot(db);
 
-			importFromApi(db, FIXTURE, {timestamp: T1, snapshotTakenAt: T1});
+			importFromApi(
+				db,
+				FIXTURE,
+				{
+					timestamp: T1,
+					snapshotTakenAt: T1,
+				},
+			);
 
 			expect(liveContent(db).map((row) => `${row.id}:${row.name}`)).toStrictEqual([
 				"a:Name a",
@@ -228,9 +447,15 @@ describe("shared API import", () => {
 		});
 	});
 
-	it("does not phase out a node in an earlier batch when a later batch is applied", () => {
+	it("does not phase out a node in an earlier batch when a later batch is applied", () =>
+	{
 		const db = createDb();
-		const state = beginApiImport(db, {timestamp: T0});
+		const state = beginApiImport(
+			db,
+			{
+				timestamp: T0,
+			},
+		);
 		applyApiBatch(state, FIXTURE.slice(0, 2));
 		applyApiBatch(state, FIXTURE.slice(2, 4));
 		const ids = db
@@ -242,42 +467,106 @@ describe("shared API import", () => {
 		expect(ids).toStrictEqual(["a", "b", "c", "d"]);
 	});
 
-	it("reports no changes when re-run with no changes", () => {
+	it("reports no changes when re-run with no changes", () =>
+	{
 		const db = createDb();
-		importFromApi(db, FIXTURE, {timestamp: T0});
+		importFromApi(
+			db,
+			FIXTURE,
+			{
+				timestamp: T0,
+			},
+		);
 
-		const state = beginApiImport(db, {timestamp: T1});
+		const state = beginApiImport(
+			db,
+			{
+				timestamp: T1,
+			},
+		);
 		applyApiBatch(state, FIXTURE.slice(0, 3));
 		applyApiBatch(state, FIXTURE.slice(3));
 		const result = finishApiImport(state);
 
-		expect({
-			nodesAdded: result.nodesAdded,
-			nodesUpdated: result.nodesUpdated,
-			nodesDeleted: result.nodesDeleted,
-			nodesUnchanged: result.nodesUnchanged,
-		}).toStrictEqual({nodesAdded: 0, nodesUpdated: 0, nodesDeleted: 0, nodesUnchanged: 7});
+		expect(
+			{
+				nodesAdded: result.nodesAdded,
+				nodesUpdated: result.nodesUpdated,
+				nodesDeleted: result.nodesDeleted,
+				nodesUnchanged: result.nodesUnchanged,
+			},
+		).toStrictEqual(
+			{
+				nodesAdded: 0,
+				nodesUpdated: 0,
+				nodesDeleted: 0,
+				nodesUnchanged: 7,
+			},
+		);
 		expect(snapshot(db).content).toHaveLength(7);
 	});
 
-	describe("sibling priority numbering schemes", () => {
+	describe("sibling priority numbering schemes", () =>
+	{
 		// Backup imports number siblings 0,100,200 while REST numbers them 0,1,2 for the
 		// same order; re-importing one scheme over the other must not open versions.
-		const parent = apiNode("p", {priority: 0});
+		const parent = apiNode(
+			"p",
+			{
+				priority: 0,
+			},
+		);
 		const backupScheme = [
 			parent,
-			apiNode("x", {parent_id: "p", priority: 0}),
-			apiNode("y", {parent_id: "p", priority: 100}),
-			apiNode("z", {parent_id: "p", priority: 200}),
+			apiNode(
+				"x",
+				{
+					parent_id: "p",
+					priority: 0,
+				},
+			),
+			apiNode(
+				"y",
+				{
+					parent_id: "p",
+					priority: 100,
+				},
+			),
+			apiNode(
+				"z",
+				{
+					parent_id: "p",
+					priority: 200,
+				},
+			),
 		];
 		const restScheme = [
 			parent,
-			apiNode("x", {parent_id: "p", priority: 0}),
-			apiNode("y", {parent_id: "p", priority: 1}),
-			apiNode("z", {parent_id: "p", priority: 2}),
+			apiNode(
+				"x",
+				{
+					parent_id: "p",
+					priority: 0,
+				},
+			),
+			apiNode(
+				"y",
+				{
+					parent_id: "p",
+					priority: 1,
+				},
+			),
+			apiNode(
+				"z",
+				{
+					parent_id: "p",
+					priority: 2,
+				},
+			),
 		];
 
-		function priorities(db: ReturnType<typeof createDb>) {
+		function priorities(db: ReturnType<typeof createDb>)
+		{
 			return db
 				.select()
 				.from(schema.nodeMetadata)
@@ -287,50 +576,108 @@ describe("shared API import", () => {
 				.map((row) => [row.nodeId, row.priority]);
 		}
 
-		function versionCount(db: ReturnType<typeof createDb>) {
+		function versionCount(db: ReturnType<typeof createDb>)
+		{
 			return db.select().from(schema.nodeMetadata).all().length;
 		}
 
-		it("opens no version when the same sibling order arrives in another numbering", () => {
+		it("opens no version when the same sibling order arrives in another numbering", () =>
+		{
 			const db = createDb();
-			importFromApi(db, backupScheme, {timestamp: T0});
-			const result = importFromApi(db, restScheme, {timestamp: T1});
+			importFromApi(
+				db,
+				backupScheme,
+				{
+					timestamp: T0,
+				},
+			);
+			const result = importFromApi(
+				db,
+				restScheme,
+				{
+					timestamp: T1,
+				},
+			);
 
-			expect({
-				versions: versionCount(db),
-				priorities: priorities(db),
-				metadataUpdated: result.metadataUpdated,
-			}).toStrictEqual({
-				versions: 4,
-				priorities: [
-					["x", 0],
-					["y", 100],
-					["z", 200],
-				],
-				metadataUpdated: 0,
-			});
+			expect(
+				{
+					versions: versionCount(db),
+					priorities: priorities(db),
+					metadataUpdated: result.metadataUpdated,
+				},
+			).toStrictEqual(
+				{
+					versions: 4,
+					priorities: [
+						["x", 0],
+						["y", 100],
+						["z", 200],
+					],
+					metadataUpdated: 0,
+				},
+			);
 		});
 
-		it("opens no version going the other way either", () => {
+		it("opens no version going the other way either", () =>
+		{
 			const db = createDb();
-			importFromApi(db, restScheme, {timestamp: T0});
-			importFromApi(db, backupScheme, {timestamp: T1});
+			importFromApi(
+				db,
+				restScheme,
+				{
+					timestamp: T0,
+				},
+			);
+			importFromApi(
+				db,
+				backupScheme,
+				{
+					timestamp: T1,
+				},
+			);
 
 			expect(versionCount(db)).toBe(4);
 		});
 
-		it("takes the incoming numbers when the sibling order really changed", () => {
+		it("takes the incoming numbers when the sibling order really changed", () =>
+		{
 			const db = createDb();
-			importFromApi(db, backupScheme, {timestamp: T0});
+			importFromApi(
+				db,
+				backupScheme,
+				{
+					timestamp: T0,
+				},
+			);
 			importFromApi(
 				db,
 				[
 					parent,
-					apiNode("x", {parent_id: "p", priority: 2}),
-					apiNode("y", {parent_id: "p", priority: 0}),
-					apiNode("z", {parent_id: "p", priority: 1}),
+					apiNode(
+						"x",
+						{
+							parent_id: "p",
+							priority: 2,
+						},
+					),
+					apiNode(
+						"y",
+						{
+							parent_id: "p",
+							priority: 0,
+						},
+					),
+					apiNode(
+						"z",
+						{
+							parent_id: "p",
+							priority: 1,
+						},
+					),
 				],
-				{timestamp: T1},
+				{
+					timestamp: T1,
+				},
 			);
 
 			expect(priorities(db)).toStrictEqual([
@@ -340,10 +687,32 @@ describe("shared API import", () => {
 			]);
 		});
 
-		it("takes the incoming numbers when a sibling is new", () => {
+		it("takes the incoming numbers when a sibling is new", () =>
+		{
 			const db = createDb();
-			importFromApi(db, backupScheme, {timestamp: T0});
-			importFromApi(db, [...restScheme, apiNode("n", {parent_id: "p", priority: 3})], {timestamp: T1});
+			importFromApi(
+				db,
+				backupScheme,
+				{
+					timestamp: T0,
+				},
+			);
+			importFromApi(
+				db,
+				[
+					...restScheme,
+					apiNode(
+						"n",
+						{
+							parent_id: "p",
+							priority: 3,
+						},
+					),
+				],
+				{
+					timestamp: T1,
+				},
+			);
 
 			expect(priorities(db)).toStrictEqual([
 				["n", 3],
@@ -354,22 +723,35 @@ describe("shared API import", () => {
 		});
 	});
 
-	describe("one-second timestamp skew between REST and the internal API", () => {
+	describe("one-second timestamp skew between REST and the internal API", () =>
+	{
 		// Modeled on a real node: the internal/backup integer second is the floor of
 		// Workflowy's fractional time, REST is its ceiling, so the two sources disagree
 		// by exactly one second on about a quarter of timestamps.
 		const SKEW_NODE = "00000000-0000-0000-0000-00000000s1ew";
-		const floorSide = {createdAt: 1_740_838_291, modifiedAt: 1_758_565_383, completedAt: 1_758_565_380};
-		const ceilSide = {createdAt: 1_740_838_292, modifiedAt: 1_758_565_384, completedAt: 1_758_565_381};
+		const floorSide =
+		{
+			createdAt: 1_740_838_291,
+			modifiedAt: 1_758_565_383,
+			completedAt: 1_758_565_380,
+		};
+		const ceilSide =
+		{
+			createdAt: 1_740_838_292,
+			modifiedAt: 1_758_565_384,
+			completedAt: 1_758_565_381,
+		};
 
-		function metadataVersions(db: ReturnType<typeof createDb>) {
+		function metadataVersions(db: ReturnType<typeof createDb>)
+		{
 			return db
 				.select()
 				.from(schema.nodeMetadata)
 				.all()
 				.filter((row) => row.nodeId === SKEW_NODE)
 				.toSorted((x, y) => x.systemFrom.localeCompare(y.systemFrom))
-				.map((row) => ({
+				.map((row) => (
+				{
 					priority: row.priority,
 					createdAt: row.createdAt?.getTime() ?? null,
 					modifiedAt: row.modifiedAt?.getTime() ?? null,
@@ -378,10 +760,39 @@ describe("shared API import", () => {
 				}));
 		}
 
-		it("opens no new version when only the timestamps differ by one second", () => {
+		it("opens no new version when only the timestamps differ by one second", () =>
+		{
 			const db = createDb();
-			importFromApi(db, [apiNode(SKEW_NODE, {name: "Placeholder", ...ceilSide})], {timestamp: T0});
-			importFromApi(db, [apiNode(SKEW_NODE, {name: "Placeholder", ...floorSide})], {timestamp: T1});
+			importFromApi(
+				db,
+				[
+					apiNode(
+						SKEW_NODE,
+						{
+							name: "Placeholder",
+							...ceilSide,
+						},
+					),
+				],
+				{
+					timestamp: T0,
+				},
+			);
+			importFromApi(
+				db,
+				[
+					apiNode(
+						SKEW_NODE,
+						{
+							name: "Placeholder",
+							...floorSide,
+						},
+					),
+				],
+				{
+					timestamp: T1,
+				},
+			);
 
 			expect(metadataVersions(db)).toStrictEqual([
 				{
@@ -394,65 +805,169 @@ describe("shared API import", () => {
 			]);
 		});
 
-		it("keeps the existing timestamps when a real change opens a new version", () => {
+		it("keeps the existing timestamps when a real change opens a new version", () =>
+		{
 			const db = createDb();
-			importFromApi(db, [apiNode(SKEW_NODE, {name: "Placeholder", ...ceilSide})], {timestamp: T0});
-			importFromApi(db, [apiNode(SKEW_NODE, {name: "Placeholder", data: {layoutMode: "todo"}, ...floorSide})], {
-				timestamp: T1,
-			});
-
-			const kept = {
-				createdAt: ceilSide.createdAt * 1000,
-				modifiedAt: ceilSide.modifiedAt * 1000,
-				completedAt: ceilSide.completedAt * 1000,
-			};
-			expect(metadataVersions(db)).toStrictEqual([
-				{priority: 0, ...kept, open: false},
-				{priority: 0, ...kept, open: true},
-			]);
-		});
-
-		it("takes the incoming timestamp when it moved by more than one second", () => {
-			const db = createDb();
-			importFromApi(db, [apiNode(SKEW_NODE, {name: "Placeholder", ...ceilSide})], {timestamp: T0});
 			importFromApi(
 				db,
 				[
-					apiNode(SKEW_NODE, {
-						name: "Placeholder",
-						data: {layoutMode: "todo"},
-						...floorSide,
-						modifiedAt: 1_758_565_500,
-					}),
+					apiNode(
+						SKEW_NODE,
+						{
+							name: "Placeholder",
+							...ceilSide,
+						},
+					),
 				],
-				{timestamp: T1},
+				{
+					timestamp: T0,
+				},
+			);
+			importFromApi(
+				db,
+				[
+					apiNode(
+						SKEW_NODE,
+						{
+							name: "Placeholder",
+							data:
+							{
+								layoutMode: "todo",
+							},
+							...floorSide,
+						},
+					),
+				],
+				{
+					timestamp: T1,
+				},
 			);
 
-			expect(metadataVersions(db).at(-1)).toStrictEqual({
-				priority: 0,
-				createdAt: ceilSide.createdAt * 1000,
-				modifiedAt: 1_758_565_500_000,
-				completedAt: ceilSide.completedAt * 1000,
-				open: true,
-			});
-		});
-
-		it("keeps the existing timestamps when the write-through cache stores a changed child list", () => {
-			vi.useFakeTimers({toFake: ["Date"], now: T0});
-			const db = createDb();
-			const cache = new CacheService(db);
-			cache.storeApiResponse([apiNode(SKEW_NODE, {name: "Placeholder", priority: 0, ...ceilSide})], null);
-			vi.setSystemTime(T1);
-			cache.storeApiResponse([apiNode(SKEW_NODE, {name: "Placeholder", priority: 100, ...floorSide})], null);
-
-			const kept = {
+			const kept =
+			{
 				createdAt: ceilSide.createdAt * 1000,
 				modifiedAt: ceilSide.modifiedAt * 1000,
 				completedAt: ceilSide.completedAt * 1000,
 			};
 			expect(metadataVersions(db)).toStrictEqual([
-				{priority: 0, ...kept, open: false},
-				{priority: 100, ...kept, open: true},
+				{
+					priority: 0,
+					...kept,
+					open: false,
+				},
+				{
+					priority: 0,
+					...kept,
+					open: true,
+				},
+			]);
+		});
+
+		it("takes the incoming timestamp when it moved by more than one second", () =>
+		{
+			const db = createDb();
+			importFromApi(
+				db,
+				[
+					apiNode(
+						SKEW_NODE,
+						{
+							name: "Placeholder",
+							...ceilSide,
+						},
+					),
+				],
+				{
+					timestamp: T0,
+				},
+			);
+			importFromApi(
+				db,
+				[
+					apiNode(
+						SKEW_NODE,
+						{
+							name: "Placeholder",
+							data:
+							{
+								layoutMode: "todo",
+							},
+							...floorSide,
+							modifiedAt: 1_758_565_500,
+						},
+					),
+				],
+				{
+					timestamp: T1,
+				},
+			);
+
+			expect(metadataVersions(db).at(-1)).toStrictEqual(
+				{
+					priority: 0,
+					createdAt: ceilSide.createdAt * 1000,
+					modifiedAt: 1_758_565_500_000,
+					completedAt: ceilSide.completedAt * 1000,
+					open: true,
+				},
+			);
+		});
+
+		it("keeps the existing timestamps when the write-through cache stores a changed child list", () =>
+		{
+			vi.useFakeTimers(
+				{
+					toFake: ["Date"],
+					now: T0,
+				},
+			);
+			const db = createDb();
+			const cache = new CacheService(db);
+			cache.storeApiResponse(
+				[
+					apiNode(
+						SKEW_NODE,
+						{
+							name: "Placeholder",
+							priority: 0,
+							...ceilSide,
+						},
+					),
+				],
+				null,
+			);
+			vi.setSystemTime(T1);
+			cache.storeApiResponse(
+				[
+					apiNode(
+						SKEW_NODE,
+						{
+							name: "Placeholder",
+							priority: 100,
+							...floorSide,
+						},
+					),
+				],
+				null,
+			);
+
+			const kept =
+			{
+				createdAt: ceilSide.createdAt * 1000,
+				modifiedAt: ceilSide.modifiedAt * 1000,
+				completedAt: ceilSide.completedAt * 1000,
+			};
+			expect(metadataVersions(db)).toStrictEqual([
+				{
+					priority: 0,
+					...kept,
+					open: false,
+				},
+				{
+					priority: 100,
+					...kept,
+					open: true,
+				},
 			]);
 		});
 	});

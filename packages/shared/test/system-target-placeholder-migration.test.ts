@@ -10,28 +10,49 @@ const migrationsFolder = path.join(import.meta.dirname, "../src/db/migrations");
 const FAR_FUTURE = "9999-12-31 23:59:59";
 
 /** A folder holding every migration before the placeholder cleanup, so a database can be migrated to that point. */
-function beforeCleanupFolder(): string {
+function beforeCleanupFolder(): string
+{
 	const folder = mkdtempSync(path.join(tmpdir(), "before-cleanup-"));
 	mkdirSync(path.join(folder, "meta"));
-	const journal = JSON.parse(readFileSync(path.join(migrationsFolder, "meta/_journal.json"), "utf8")) as {
-		entries: {tag: string}[];
+	const journal = JSON.parse(readFileSync(path.join(migrationsFolder, "meta/_journal.json"), "utf8")) as
+	{
+		entries:
+		{
+			tag: string;
+		}[];
 	};
 	// Drizzle skips any migration older than the newest applied one, so stop before the cleanup, not just without it.
 	const entries = journal.entries.slice(
 		0,
 		journal.entries.findIndex((entry) => entry.tag === "0002_close_system_target_placeholders"),
 	);
-	writeFileSync(path.join(folder, "meta/_journal.json"), JSON.stringify({...journal, entries}));
-	for (const {tag} of entries) {
+	writeFileSync(
+		path.join(folder, "meta/_journal.json"),
+		JSON.stringify(
+			{
+				...journal,
+				entries,
+			},
+		),
+	);
+	for (const {tag} of entries)
+	{
 		copyFileSync(path.join(migrationsFolder, `${tag}.sql`), path.join(folder, `${tag}.sql`));
 	}
 	return folder;
 }
 
-describe("system target placeholder migration", () => {
-	it("closes the current blank node row a cached 'inbox' child list left at Home, and nothing else", () => {
+describe("system target placeholder migration", () =>
+{
+	it("closes the current blank node row a cached 'inbox' child list left at Home, and nothing else", () =>
+	{
 		const sqlite = new DatabaseConstructor(":memory:");
-		migrate(drizzle(sqlite), {migrationsFolder: beforeCleanupFolder()});
+		migrate(
+			drizzle(sqlite),
+			{
+				migrationsFolder: beforeCleanupFolder(),
+			},
+		);
 		sqlite.exec(`
 			INSERT INTO node_content (id, name, note, parent_id, system_from, system_to) VALUES
 				('inbox', NULL, NULL, NULL, '2026-11-02 20:43:19.861', '${FAR_FUTURE}'),
@@ -41,30 +62,47 @@ describe("system target placeholder migration", () => {
 				('c1e6ea1d-3a54-4206-9ea6-41bd95477fbc', '41bd95477fbc', '2026-10-01 00:00:00.000', '${FAR_FUTURE}');
 		`);
 
-		migrate(drizzle(sqlite), {migrationsFolder});
+		migrate(
+			drizzle(sqlite),
+			{
+				migrationsFolder,
+			},
+		);
 
-		expect({
-			content: sqlite.prepare("SELECT id, system_from, system_to FROM node_content ORDER BY id").all(),
-			metadata: sqlite
-				.prepare("SELECT node_id, system_from, system_to FROM node_metadata ORDER BY node_id")
-				.all(),
-		}).toStrictEqual({
-			content: [
-				{
-					id: "c1e6ea1d-3a54-4206-9ea6-41bd95477fbc",
-					system_from: "2026-10-01 00:00:00.000",
-					system_to: FAR_FUTURE,
-				},
-				{id: "inbox", system_from: "2026-11-02 20:43:19.861", system_to: "2026-11-02 20:43:19.861"},
-			],
-			metadata: [
-				{
-					node_id: "c1e6ea1d-3a54-4206-9ea6-41bd95477fbc",
-					system_from: "2026-10-01 00:00:00.000",
-					system_to: FAR_FUTURE,
-				},
-				{node_id: "inbox", system_from: "2026-11-02 20:43:19.861", system_to: "2026-11-02 20:43:19.861"},
-			],
-		});
+		expect(
+			{
+				content: sqlite.prepare("SELECT id, system_from, system_to FROM node_content ORDER BY id").all(),
+				metadata: sqlite
+					.prepare("SELECT node_id, system_from, system_to FROM node_metadata ORDER BY node_id")
+					.all(),
+			},
+		).toStrictEqual(
+			{
+				content: [
+					{
+						id: "c1e6ea1d-3a54-4206-9ea6-41bd95477fbc",
+						system_from: "2026-10-01 00:00:00.000",
+						system_to: FAR_FUTURE,
+					},
+					{
+						id: "inbox",
+						system_from: "2026-11-02 20:43:19.861",
+						system_to: "2026-11-02 20:43:19.861",
+					},
+				],
+				metadata: [
+					{
+						node_id: "c1e6ea1d-3a54-4206-9ea6-41bd95477fbc",
+						system_from: "2026-10-01 00:00:00.000",
+						system_to: FAR_FUTURE,
+					},
+					{
+						node_id: "inbox",
+						system_from: "2026-11-02 20:43:19.861",
+						system_to: "2026-11-02 20:43:19.861",
+					},
+				],
+			},
+		);
 	});
 });

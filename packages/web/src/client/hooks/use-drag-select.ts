@@ -13,24 +13,29 @@ const DRAGGING_CLASS = "item-selection--dragging";
 const ROW_BULLET_SELECTOR = ".project:not(.root) > .name > a.bullet[data-item-id]:not(.bullet--backlink-root)";
 
 /** Commit the edited text, stop editing, and drop the caret, so an item selection or bullet drag owns the keyboard. */
-export function leaveEditor(): void {
+export function leaveEditor(): void
+{
 	flushEditing();
 	const active = document.activeElement;
 	useOutlineStore.getState().stopEditing();
 	globalThis.getSelection()?.removeAllRanges();
-	if (active instanceof HTMLElement && active.isContentEditable) {
+	if (active instanceof HTMLElement && active.isContentEditable)
+	{
 		active.blur();
 	}
 }
 
 /** Swallow the click that a selecting press ends with, so the row's click-to-edit does not clear the selection. */
-function suppressNextClick(): void {
-	const swallow = (event: MouseEvent) => {
+function suppressNextClick(): void
+{
+	const swallow = (event: MouseEvent) =>
+	{
 		event.preventDefault();
 		event.stopPropagation();
 		cancel();
 	};
-	const cancel = () => {
+	const cancel = () =>
+	{
 		globalThis.removeEventListener("click", swallow, true);
 		globalThis.removeEventListener("mousedown", cancel, true);
 	};
@@ -39,17 +44,20 @@ function suppressNextClick(): void {
 }
 
 /** Where a drag may select: the start row's board column, else the whole outline. */
-function dragScope(name: Element): Element {
+function dragScope(name: Element): Element
+{
 	const outline = name.closest(".page, .outline-tree-container") ?? document.body;
 	const board = name.parentElement?.parentElement?.closest(".project.board");
-	if (board === null || board === undefined) {
+	if (board === null || board === undefined)
+	{
 		return outline;
 	}
 	const columns = board.querySelector(":scope > .children")?.children ?? [];
 	return [...columns].find((column) => column.contains(name)) ?? board;
 }
 
-interface DragRow {
+interface DragRow
+{
 	id: string;
 	parentId: string | null;
 	top: number;
@@ -57,15 +65,25 @@ interface DragRow {
 }
 
 /** Each row's `.project` rect in display order, with its parent from the cached tree. */
-function rowsIn(scope: Element, parentOf: (id: string) => string | null): DragRow[] {
-	return [...scope.querySelectorAll(ROW_BULLET_SELECTOR)].flatMap((bullet) => {
+function rowsIn(scope: Element, parentOf: (id: string) => string | null): DragRow[]
+{
+	return [...scope.querySelectorAll(ROW_BULLET_SELECTOR)].flatMap((bullet) =>
+	{
 		const id = bullet.getAttribute("data-item-id");
 		const project = bullet.closest(".project");
-		if (id === null || project === null) {
+		if (id === null || project === null)
+		{
 			return [];
 		}
 		const {top, height} = project.getBoundingClientRect();
-		return [{id, parentId: parentOf(id), top, height}];
+		return [
+			{
+				id,
+				parentId: parentOf(id),
+				top,
+				height,
+			},
+		];
 	});
 }
 
@@ -75,8 +93,10 @@ const HIDE_SELECTION_CSS =
 let selectionStyle: HTMLStyleElement | null = null;
 
 /** One module-level `<style>` whose text hides the native text selection while rows are selected. */
-function setNativeSelectionHidden(hidden: boolean): void {
-	if (selectionStyle === null) {
+function setNativeSelectionHidden(hidden: boolean): void
+{
+	if (selectionStyle === null)
+	{
 		selectionStyle = document.createElement("style");
 		document.head.append(selectionStyle);
 	}
@@ -84,19 +104,23 @@ function setNativeSelectionHidden(hidden: boolean): void {
 }
 
 /** Arm drag-select from `nodeId`'s `.name`: once the pointer leaves it, select every row between start and pointer. */
-function armDragSelect(nodeId: string, name: Element, queryClient: QueryClient): void {
+function armDragSelect(nodeId: string, name: Element, queryClient: QueryClient): void
+{
 	const startName = name.getBoundingClientRect();
 	let dragging = false;
 	let rows: DragRow[] = [];
 	let startIndex = -1;
 	let view: SelectionView | null = null;
 
-	const onMove = (event: MouseEvent) => {
-		if ((event.buttons & 1) === 0) {
+	const onMove = (event: MouseEvent) =>
+	{
+		if ((event.buttons & 1) === 0)
+		{
 			finish();
 			return;
 		}
-		if (!dragging) {
+		if (!dragging)
+		{
 			dragging = true;
 			useOutlineStore.getState().clearItemSelection();
 			document.body.classList.add(DRAGGING_CLASS);
@@ -105,7 +129,8 @@ function armDragSelect(nodeId: string, name: Element, queryClient: QueryClient):
 			rows = rowsIn(dragScope(name), (id) => tree.parentOf(id));
 			startIndex = rows.findIndex((row) => row.id === nodeId);
 		}
-		if (view === null) {
+		if (view === null)
+		{
 			return;
 		}
 		const ids = dragRangeAt(rows, startIndex, startName, event.clientY);
@@ -113,16 +138,19 @@ function armDragSelect(nodeId: string, name: Element, queryClient: QueryClient):
 		useOutlineStore.getState().setItemSelection(freshSelection(view, ids ?? []));
 	};
 
-	const finish = () => {
+	const finish = () =>
+	{
 		globalThis.removeEventListener("mousemove", onMove, true);
 		globalThis.removeEventListener("mouseup", finish, true);
-		if (!dragging) {
+		if (!dragging)
+		{
 			return;
 		}
 		document.body.classList.remove(DRAGGING_CLASS);
 		setNativeSelectionHidden(false);
 		// A wobble inside the dead zone selects nothing and stays a click, which puts the caret in the row.
-		if (useOutlineStore.getState().itemSelection.entries.length > 0) {
+		if (useOutlineStore.getState().itemSelection.entries.length > 0)
+		{
 			suppressNextClick();
 			leaveEditor();
 		}
@@ -136,10 +164,12 @@ function armDragSelect(nodeId: string, name: Element, queryClient: QueryClient):
  * Upstream's mousedown on a row's `.content`: ⌘/⌥ toggles the row in the item selection, ⇧ selects from the pivot,
  * and a plain left press arms drag-select. Tags and links keep their own modifier clicks.
  */
-export function useContentMouseDown(nodeId: string): (event: React.MouseEvent<HTMLElement>) => void {
+export function useContentMouseDown(nodeId: string): (event: React.MouseEvent<HTMLElement>) => void
+{
 	const queryClient = useQueryClient();
 	return useCallback(
-		(event: React.MouseEvent<HTMLElement>) => {
+		(event: React.MouseEvent<HTMLElement>) =>
+		{
 			const target = event.target instanceof Element ? event.target : null;
 			const state = useOutlineStore.getState();
 			const action = contentMouseDownAction(
@@ -154,17 +184,21 @@ export function useContentMouseDown(nodeId: string): (event: React.MouseEvent<HT
 				},
 				isMacPlatform(),
 			);
-			if (action === null) {
+			if (action === null)
+			{
 				return;
 			}
-			if (action === "DRAG") {
+			if (action === "DRAG")
+			{
 				const name = event.currentTarget.closest(".name");
-				if (name !== null) {
+				if (name !== null)
+				{
 					armDragSelect(nodeId, name, queryClient);
 				}
 				return;
 			}
-			if (target?.closest("a, .contentTag") != null) {
+			if (target?.closest("a, .contentTag") != null)
+			{
 				return;
 			}
 			event.preventDefault();
@@ -186,14 +220,17 @@ export function useContentMouseDown(nodeId: string): (event: React.MouseEvent<HT
 }
 
 /** Whether the bullet's row is covered by the item selection. */
-export function bulletInSelection(queryClient: QueryClient, id: string): boolean {
+export function bulletInSelection(queryClient: QueryClient, id: string): boolean
+{
 	const {itemSelection} = useOutlineStore.getState();
 	return itemSelection.entries.length > 0 && isCovered(itemSelection, currentSelectionView(queryClient).tree, id);
 }
 
 /** A bullet click on a selected row clears the selection instead of zooming; returns whether it did. */
-export function clearSelectionFromBullet(queryClient: QueryClient, id: string): boolean {
-	if (!bulletInSelection(queryClient, id)) {
+export function clearSelectionFromBullet(queryClient: QueryClient, id: string): boolean
+{
+	if (!bulletInSelection(queryClient, id))
+	{
 		return false;
 	}
 	useOutlineStore.getState().clearItemSelection();

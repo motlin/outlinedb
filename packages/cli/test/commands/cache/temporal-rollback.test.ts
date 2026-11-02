@@ -10,12 +10,14 @@ import TemporalRollback, {TEMPORAL_TABLES} from "../../../src/commands/cache/tem
 import {cleanupTestDatabase, createTestDatabase} from "../../db/migration-helper.js";
 import type {TestDatabase} from "../../db/migration-helper.js";
 
-describe("cache:temporal-rollback command", () => {
+describe("cache:temporal-rollback command", () =>
+{
 	let tempDir: string;
 	let testDatabase: TestDatabase;
 	let originalDbPath: string | undefined;
 
-	beforeEach(() => {
+	beforeEach(() =>
+	{
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-rollback-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
@@ -23,17 +25,28 @@ describe("cache:temporal-rollback command", () => {
 		process.env.OUTLINEDB_DB_PATH = testDbPath;
 	});
 
-	afterEach(() => {
+	afterEach(() =>
+	{
 		cleanupTestDatabase(testDatabase);
-		if (originalDbPath === undefined) {
+		if (originalDbPath === undefined)
+		{
 			delete process.env.OUTLINEDB_DB_PATH;
-		} else {
+		}
+		else
+		{
 			process.env.OUTLINEDB_DB_PATH = originalDbPath;
 		}
-		fs.rmSync(tempDir, {recursive: true, force: true});
+		fs.rmSync(
+			tempDir,
+			{
+				recursive: true,
+				force: true,
+			},
+		);
 	});
 
-	it("rolls back every account table with the tree", () => {
+	it("rolls back every account table with the tree", () =>
+	{
 		const names = new Set<string>(TEMPORAL_TABLES);
 
 		expect(
@@ -41,18 +54,28 @@ describe("cache:temporal-rollback command", () => {
 		).toStrictEqual([]);
 	});
 
-	it("rolls back every table with a system_to column", () => {
+	it("rolls back every table with a system_to column", () =>
+	{
 		const temporal = testDatabase.sqlite
 			.prepare(
 				"SELECT m.name FROM sqlite_master m JOIN pragma_table_info(m.name) c WHERE m.type = 'table' AND c.name = 'system_to' ORDER BY m.name",
 			)
 			.all()
-			.map((row) => (row as {name: string}).name);
+			.map(
+				(row) =>
+					(
+						row as
+						{
+							name: string;
+						}
+					).name,
+			);
 
 		expect(temporal.filter((name) => !(TEMPORAL_TABLES as readonly string[]).includes(name))).toStrictEqual([]);
 	});
 
-	it("restores a preference to its value as of the target time", async () => {
+	it("restores a preference to its value as of the target time", async () =>
+	{
 		testDatabase.db
 			.insert(rootPreferences)
 			.values([
@@ -75,9 +98,19 @@ describe("cache:temporal-rollback command", () => {
 
 		expect(
 			testDatabase.db
-				.select({dateFormat: rootPreferences.dateFormat, systemTo: rootPreferences.systemTo})
+				.select(
+					{
+						dateFormat: rootPreferences.dateFormat,
+						systemTo: rootPreferences.systemTo,
+					},
+				)
 				.from(rootPreferences)
 				.all(),
-		).toStrictEqual([{dateFormat: "YYYY", systemTo: "9999-12-31 23:59:59"}]);
+		).toStrictEqual([
+			{
+				dateFormat: "YYYY",
+				systemTo: "9999-12-31 23:59:59",
+			},
+		]);
 	});
 });

@@ -1,8 +1,12 @@
 import type {Definition, Schema} from "ts-json-schema-generator";
 
-type SchemaObject = Schema & {definitions?: Record<string, Definition>};
+type SchemaObject = Schema &
+{
+	definitions?: Record<string, Definition>;
+};
 
-export function schemaToInterface(schema: SchemaObject, interfaceName: string): string {
+export function schemaToInterface(schema: SchemaObject, interfaceName: string): string
+{
 	const definitions = schema.definitions ?? {};
 
 	// Determine the root type name from the $ref
@@ -10,7 +14,8 @@ export function schemaToInterface(schema: SchemaObject, interfaceName: string): 
 
 	// Map from definition names to output interface names
 	const nameMap = new Map<string, string>();
-	if (rootRefName) {
+	if (rootRefName)
+	{
 		nameMap.set(rootRefName, interfaceName);
 	}
 
@@ -18,9 +23,12 @@ export function schemaToInterface(schema: SchemaObject, interfaceName: string): 
 	const visited = new Set<string>();
 
 	const rootDefinition = rootRefName === undefined ? undefined : definitions[rootRefName];
-	if (rootDefinition === undefined) {
+	if (rootDefinition === undefined)
+	{
 		formatObject(schema, interfaceName, lines, definitions, visited, nameMap);
-	} else {
+	}
+	else
+	{
 		const rootDef = rootDefinition as SchemaObject;
 		formatObject(rootDef, interfaceName, lines, definitions, visited, nameMap);
 	}
@@ -35,19 +43,28 @@ function formatObject(
 	definitions: Record<string, Definition>,
 	visited: Set<string>,
 	nameMap: Map<string, string>,
-): void {
-	if (visited.has(name)) {
+): void
+{
+	if (visited.has(name))
+	{
 		return;
 	}
 	visited.add(name);
 
-	const nestedInterfaces: {schema: SchemaObject; name: string}[] = [];
+	const nestedInterfaces:
+	{
+		schema: SchemaObject;
+		name: string;
+	}[] = [];
 
 	lines.push(`interface ${name} {`);
-	if (schema.properties) {
+	if (schema.properties)
+	{
 		const required = new Set(schema.required);
-		for (const [key, prop] of Object.entries(schema.properties)) {
-			if (typeof prop === "boolean") {
+		for (const [key, prop] of Object.entries(schema.properties))
+		{
+			if (typeof prop === "boolean")
+			{
 				continue;
 			}
 			const optional = required.has(key) ? "" : "?";
@@ -57,17 +74,21 @@ function formatObject(
 	}
 	lines.push("}");
 
-	for (const nested of nestedInterfaces) {
+	for (const nested of nestedInterfaces)
+	{
 		lines.push("");
 		formatObject(nested.schema, nested.name, lines, definitions, visited, nameMap);
 	}
 }
 
-function resolveRef(schema: SchemaObject, definitions: Record<string, Definition>): SchemaObject {
-	if (schema.$ref) {
+function resolveRef(schema: SchemaObject, definitions: Record<string, Definition>): SchemaObject
+{
+	if (schema.$ref)
+	{
 		const refName = schema.$ref.replace("#/definitions/", "");
 		const def = definitions[refName];
-		if (def !== undefined && typeof def !== "boolean") {
+		if (def !== undefined && typeof def !== "boolean")
+		{
 			return def;
 		}
 	}
@@ -77,17 +98,30 @@ function resolveRef(schema: SchemaObject, definitions: Record<string, Definition
 function formatType(
 	schema: SchemaObject,
 	definitions: Record<string, Definition>,
-	nestedInterfaces: {schema: SchemaObject; name: string}[],
+	nestedInterfaces:
+	{
+		schema: SchemaObject;
+		name: string;
+	}[],
 	nameMap: Map<string, string>,
-): string {
-	if (schema.$ref) {
+): string
+{
+	if (schema.$ref)
+	{
 		const refName = schema.$ref.replace("#/definitions/", "");
 		const displayName = nameMap.get(refName) ?? refName;
 		const def = definitions[refName];
-		if (def !== undefined && typeof def !== "boolean") {
+		if (def !== undefined && typeof def !== "boolean")
+		{
 			const resolved = def as SchemaObject;
-			if (resolved.properties) {
-				nestedInterfaces.push({schema: resolved, name: displayName});
+			if (resolved.properties)
+			{
+				nestedInterfaces.push(
+					{
+						schema: resolved,
+						name: displayName,
+					},
+				);
 				return displayName;
 			}
 			return formatType(resolved, definitions, nestedInterfaces, nameMap);
@@ -95,7 +129,8 @@ function formatType(
 		return displayName;
 	}
 
-	if (schema.anyOf) {
+	if (schema.anyOf)
+	{
 		const types = schema.anyOf
 			.filter((s) => typeof s !== "boolean")
 			.map((s) => formatType(s, definitions, nestedInterfaces, nameMap))
@@ -103,20 +138,25 @@ function formatType(
 		return types.join(" | ");
 	}
 
-	if (schema.type === "array") {
+	if (schema.type === "array")
+	{
 		const {items} = schema;
-		if (items !== undefined && typeof items !== "boolean" && !Array.isArray(items)) {
+		if (items !== undefined && typeof items !== "boolean" && !Array.isArray(items))
+		{
 			const itemType = formatType(items, definitions, nestedInterfaces, nameMap);
 			return itemType.includes("|") ? `(${itemType})[]` : `${itemType}[]`;
 		}
 		return "unknown[]";
 	}
 
-	if (schema.type === "object" && schema.properties) {
+	if (schema.type === "object" && schema.properties)
+	{
 		const parts: string[] = [];
 		const required = new Set(schema.required);
-		for (const [key, prop] of Object.entries(schema.properties)) {
-			if (typeof prop === "boolean") {
+		for (const [key, prop] of Object.entries(schema.properties))
+		{
+			if (typeof prop === "boolean")
+			{
 				continue;
 			}
 			const resolved = resolveRef(prop, definitions);
@@ -127,26 +167,33 @@ function formatType(
 		return `{ ${parts.join("; ")} }`;
 	}
 
-	if (Array.isArray(schema.type)) {
+	if (Array.isArray(schema.type))
+	{
 		return schema.type.map((t) => mapPrimitive(t)).join(" | ");
 	}
 
-	if (typeof schema.type === "string") {
+	if (typeof schema.type === "string")
+	{
 		return mapPrimitive(schema.type);
 	}
 
 	return "unknown";
 }
 
-function mapPrimitive(type: string): string {
-	switch (type) {
-		case "integer": {
+function mapPrimitive(type: string): string
+{
+	switch (type)
+	{
+		case "integer":
+		{
 			return "number";
 		}
-		case "null": {
+		case "null":
+		{
 			return "null";
 		}
-		default: {
+		default:
+		{
 			return type;
 		}
 	}

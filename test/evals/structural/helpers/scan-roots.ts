@@ -22,27 +22,43 @@ export type ComponentKind = "commands" | "agents" | "prompts" | "skills";
  * Structural evals scan tracked files only, so gitignored personal config
  * (`.claude/settings.local.json`, `.llm/`) stays exempt by design.
  */
-export function trackedFiles(root: string): string[] {
-	const output = execFileSync("git", ["ls-files", "-z", "--", root], {
-		cwd: PROJECT_ROOT,
-		encoding: "utf8",
-	});
+export function trackedFiles(root: string): string[]
+{
+	const output = execFileSync(
+		"git",
+		["ls-files", "-z", "--", root],
+		{
+			cwd: PROJECT_ROOT,
+			encoding: "utf8",
+		},
+	);
 	return output.split("\0").filter(Boolean);
 }
 
 /**
  * Recursively collect all .md files under a directory.
  */
-export function collectMarkdownFiles(dir: string): string[] {
-	if (!existsSync(dir)) {
+export function collectMarkdownFiles(dir: string): string[]
+{
+	if (!existsSync(dir))
+	{
 		return [];
 	}
 	const results: string[] = [];
-	for (const entry of readdirSync(dir, {withFileTypes: true})) {
+	for (const entry of readdirSync(
+		dir,
+		{
+			withFileTypes: true,
+		},
+	))
+	{
 		const fullPath = join(dir, entry.name);
-		if (entry.isDirectory()) {
+		if (entry.isDirectory())
+		{
 			results.push(...collectMarkdownFiles(fullPath));
-		} else if (entry.isFile() && entry.name.endsWith(".md")) {
+		}
+		else if (entry.isFile() && entry.name.endsWith(".md"))
+		{
 			results.push(fullPath);
 		}
 	}
@@ -52,11 +68,18 @@ export function collectMarkdownFiles(dir: string): string[] {
 /**
  * List plugin names (subdirectories of plugins/).
  */
-export function listPlugins(): string[] {
-	if (!existsSync(PLUGINS_DIR)) {
+export function listPlugins(): string[]
+{
+	if (!existsSync(PLUGINS_DIR))
+	{
 		return [];
 	}
-	return readdirSync(PLUGINS_DIR, {withFileTypes: true})
+	return readdirSync(
+		PLUGINS_DIR,
+		{
+			withFileTypes: true,
+		},
+	)
 		.filter((entry) => entry.isDirectory())
 		.map((entry) => entry.name);
 }
@@ -65,7 +88,8 @@ export function listPlugins(): string[] {
  * All directories holding components of the given kind, across plugins and
  * the project-local .claude tree.
  */
-function componentDirs(kind: ComponentKind): string[] {
+function componentDirs(kind: ComponentKind): string[]
+{
 	return [...listPlugins().map((plugin) => join(PLUGINS_DIR, plugin, kind)), join(PROJECT_ROOT, ".claude", kind)];
 }
 
@@ -73,6 +97,7 @@ function componentDirs(kind: ComponentKind): string[] {
  * All markdown files of the given component kind, across plugins and the
  * project-local .claude tree.
  */
-export function collectComponentFiles(kind: ComponentKind): string[] {
+export function collectComponentFiles(kind: ComponentKind): string[]
+{
 	return componentDirs(kind).flatMap((dir) => collectMarkdownFiles(dir));
 }

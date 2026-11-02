@@ -20,75 +20,151 @@ const ITEM = "00000000-0000-4000-8000-0000000000dd";
 const short = (id: string) => id.slice(-12);
 const link = (id: string) => `<a href="https://workflowy.com/#/${short(id)}">t</a>`;
 
-function setup({withBacklink}: {withBacklink: boolean}) {
+function setup({withBacklink}: {withBacklink: boolean})
+{
 	const sqlite = new DatabaseConstructor(":memory:");
-	const db = drizzle(sqlite, {schema});
-	migrate(db, {migrationsFolder});
+	const db = drizzle(
+		sqlite,
+		{
+			schema,
+		},
+	);
+	migrate(
+		db,
+		{
+			migrationsFolder,
+		},
+	);
 	const rows: [string, string | null][] = [
 		[TARGET, null],
 		[SOURCE, null],
 		[ROOT, TARGET],
 		...(withBacklink ? [[ITEM, ROOT] as [string, string | null]] : []),
 	];
-	for (const [id, parentId] of rows) {
+	for (const [id, parentId] of rows)
+	{
 		db.insert(nodeContent)
-			.values({
-				id,
-				name: id === SOURCE ? link(TARGET) : "x",
-				note: null,
-				parentId,
-				systemFrom: SEEDED_AT,
-				systemTo: FAR_FUTURE_DATE,
-			})
+			.values(
+				{
+					id,
+					name: id === SOURCE ? link(TARGET) : "x",
+					note: null,
+					parentId,
+					systemFrom: SEEDED_AT,
+					systemTo: FAR_FUTURE_DATE,
+				},
+			)
 			.run();
 		db.insert(nodeMetadata)
-			.values({nodeId: id, shortId: short(id), priority: 0, systemFrom: SEEDED_AT, systemTo: FAR_FUTURE_DATE})
+			.values(
+				{
+					nodeId: id,
+					shortId: short(id),
+					priority: 0,
+					systemFrom: SEEDED_AT,
+					systemTo: FAR_FUTURE_DATE,
+				},
+			)
 			.run();
 	}
-	db.insert(referencesRoots).values({nodeId: ROOT, systemFrom: SEEDED_AT, systemTo: FAR_FUTURE_DATE}).run();
-	if (withBacklink) {
+	db.insert(referencesRoots)
+		.values(
+			{
+				nodeId: ROOT,
+				systemFrom: SEEDED_AT,
+				systemTo: FAR_FUTURE_DATE,
+			},
+		)
+		.run();
+	if (withBacklink)
+	{
 		db.insert(mirrors)
-			.values({mirrorId: ITEM, originalId: SOURCE, systemFrom: SEEDED_AT, systemTo: FAR_FUTURE_DATE})
+			.values(
+				{
+					mirrorId: ITEM,
+					originalId: SOURCE,
+					systemFrom: SEEDED_AT,
+					systemTo: FAR_FUTURE_DATE,
+				},
+			)
 			.run();
 	}
-	return {ctx: {db, cacheService: new CacheService(db)} as unknown as ServerContext};
+	return {
+		ctx:
+		{
+			db,
+			cacheService: new CacheService(db),
+		} as unknown as ServerContext,
+	};
 }
 
-describe("backlinksNeedSync", () => {
-	it("is false when the link set is unchanged and its backlink exists", () => {
-		const {ctx} = setup({withBacklink: true});
+describe("backlinksNeedSync", () =>
+{
+	it("is false when the link set is unchanged and its backlink exists", () =>
+	{
+		const {ctx} = setup(
+			{
+				withBacklink: true,
+			},
+		);
 
 		expect(backlinksNeedSync(ctx, SOURCE, `a ${link(TARGET)}`, `ab ${link(TARGET)}`)).toBe(false);
 	});
 
-	it("is true when the backlink was deleted, even with the same text", () => {
-		const {ctx} = setup({withBacklink: false});
+	it("is true when the backlink was deleted, even with the same text", () =>
+	{
+		const {ctx} = setup(
+			{
+				withBacklink: false,
+			},
+		);
 
 		expect(backlinksNeedSync(ctx, SOURCE, `a ${link(TARGET)}`, `ab ${link(TARGET)}`)).toBe(true);
 	});
 
-	it("is true when a link is added", () => {
-		const {ctx} = setup({withBacklink: true});
+	it("is true when a link is added", () =>
+	{
+		const {ctx} = setup(
+			{
+				withBacklink: true,
+			},
+		);
 
 		expect(backlinksNeedSync(ctx, SOURCE, "plain", link(TARGET))).toBe(true);
 	});
 
-	it("is true when a link is removed", () => {
-		const {ctx} = setup({withBacklink: true});
+	it("is true when a link is removed", () =>
+	{
+		const {ctx} = setup(
+			{
+				withBacklink: true,
+			},
+		);
 
 		expect(backlinksNeedSync(ctx, SOURCE, link(TARGET), "plain")).toBe(true);
 	});
 
-	it("is false when neither text has links", () => {
-		const {ctx} = setup({withBacklink: false});
+	it("is false when neither text has links", () =>
+	{
+		const {ctx} = setup(
+			{
+				withBacklink: false,
+			},
+		);
 
 		expect(backlinksNeedSync(ctx, SOURCE, "plain", "plainer")).toBe(false);
 	});
 });
 
-describe("backlinkTargetsOfSource", () => {
-	it("maps each current backlink item of the source to its target", () => {
-		const {ctx} = setup({withBacklink: true});
+describe("backlinkTargetsOfSource", () =>
+{
+	it("maps each current backlink item of the source to its target", () =>
+	{
+		const {ctx} = setup(
+			{
+				withBacklink: true,
+			},
+		);
 
 		expect(backlinkTargetsOfSource(ctx.db, SOURCE)).toStrictEqual(new Map([[ITEM, TARGET]]));
 	});

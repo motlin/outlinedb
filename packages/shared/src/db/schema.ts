@@ -18,7 +18,11 @@ export const nodeContent = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.id, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.id, table.systemFrom],
+			},
+		),
 		uniqueIndex("node_content_system_to_idx").on(table.id, table.systemTo),
 		uniqueIndex("node_content_parent_idx").on(table.parentId, table.systemFrom, table.systemTo, table.id),
 		index("node_content_system_from_idx").on(table.systemFrom),
@@ -42,9 +46,24 @@ export const nodeMetadata = sqliteTable(
 
 		priority: integer("priority"),
 
-		createdAt: integer("created_at", {mode: "timestamp"}),
-		modifiedAt: integer("modified_at", {mode: "timestamp"}),
-		completedAt: integer("completed_at", {mode: "timestamp"}),
+		createdAt: integer(
+			"created_at",
+			{
+				mode: "timestamp",
+			},
+		),
+		modifiedAt: integer(
+			"modified_at",
+			{
+				mode: "timestamp",
+			},
+		),
+		completedAt: integer(
+			"completed_at",
+			{
+				mode: "timestamp",
+			},
+		),
 
 		layoutMode: text("layout_mode"),
 
@@ -52,7 +71,11 @@ export const nodeMetadata = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.nodeId, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.nodeId, table.systemFrom],
+			},
+		),
 		uniqueIndex("node_metadata_system_to_idx").on(table.nodeId, table.systemTo),
 		index("node_metadata_short_id_idx").on(table.shortId, table.systemTo),
 		index("node_metadata_system_from_idx").on(table.systemFrom),
@@ -97,7 +120,11 @@ export const calendarMetadata = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.nodeId, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.nodeId, table.systemFrom],
+			},
+		),
 		uniqueIndex("calendar_metadata_system_to_idx").on(table.nodeId, table.systemTo),
 		index("calendar_metadata_root_idx").on(table.root, table.systemTo),
 		index("calendar_metadata_level_idx").on(table.level, table.systemTo, table.dateId),
@@ -124,7 +151,11 @@ export const calendarLevels = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.nodeId, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.nodeId, table.systemFrom],
+			},
+		),
 		uniqueIndex("calendar_levels_system_to_idx").on(table.nodeId, table.systemTo),
 	],
 );
@@ -134,13 +165,22 @@ export const nodeEmbeddings = sqliteTable(
 	{
 		nodeId: text("node_id").notNull(),
 		model: text("model").notNull().default("minilm"),
-		embedding: blob("embedding", {mode: "buffer"}).notNull(),
+		embedding: blob(
+			"embedding",
+			{
+				mode: "buffer",
+			},
+		).notNull(),
 
 		systemFrom: text("system_from").notNull(),
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.nodeId, table.model, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.nodeId, table.model, table.systemFrom],
+			},
+		),
 		uniqueIndex("node_embeddings_system_to_idx").on(table.nodeId, table.model, table.systemTo),
 	],
 );
@@ -165,7 +205,11 @@ export const nodeLabelSuggestions = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.nodeId, table.label, table.source, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.nodeId, table.label, table.source, table.systemFrom],
+			},
+		),
 		uniqueIndex("node_label_suggestions_system_to_idx").on(table.nodeId, table.label, table.source, table.systemTo),
 		// Partial: a full system_to index would win every live-row lookup (system_to = far future).
 		index("node_label_suggestions_closed_at_idx")
@@ -191,7 +235,11 @@ export const mirrors = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.mirrorId, table.originalId, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.mirrorId, table.originalId, table.systemFrom],
+			},
+		),
 		uniqueIndex("mirrors_system_to_idx").on(table.mirrorId, table.originalId, table.systemTo),
 		index("mirrors_mirror_idx").on(table.mirrorId, table.systemTo),
 		index("mirrors_original_idx").on(table.originalId, table.systemTo),
@@ -209,7 +257,11 @@ export const aiMetadata = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.nodeId, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.nodeId, table.systemFrom],
+			},
+		),
 		uniqueIndex("ai_metadata_system_to_idx").on(table.nodeId, table.systemTo),
 	],
 );
@@ -232,7 +284,11 @@ export const s3Files = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.nodeId, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.nodeId, table.systemFrom],
+			},
+		),
 		uniqueIndex("s3_files_system_to_idx").on(table.nodeId, table.systemTo),
 	],
 );
@@ -248,7 +304,11 @@ export const changesMetadata = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.nodeId, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.nodeId, table.systemFrom],
+			},
+		),
 		uniqueIndex("changes_metadata_system_to_idx").on(table.nodeId, table.systemTo),
 	],
 );
@@ -262,7 +322,11 @@ export const referencesRoots = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.nodeId, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.nodeId, table.systemFrom],
+			},
+		),
 		uniqueIndex("references_roots_system_to_idx").on(table.nodeId, table.systemTo),
 	],
 );
@@ -277,7 +341,11 @@ export const backupImports = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.filename, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.filename, table.systemFrom],
+			},
+		),
 		uniqueIndex("backup_imports_system_to_idx").on(table.filename, table.systemTo),
 	],
 );
@@ -293,13 +361,22 @@ export const apiImportTimestamp = sqliteTable(
 	"api_import_timestamp",
 	{
 		name: text("name").notNull(),
-		timestamp: integer("timestamp", {mode: "timestamp"}),
+		timestamp: integer(
+			"timestamp",
+			{
+				mode: "timestamp",
+			},
+		),
 
 		systemFrom: text("system_from").notNull(),
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.name, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.name, table.systemFrom],
+			},
+		),
 		uniqueIndex("api_import_timestamp_system_to_idx").on(table.name, table.systemTo),
 		index("api_import_timestamp_closed_at_idx")
 			.on(table.systemTo)
@@ -322,7 +399,11 @@ export const calendarLayoutApplies = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.rootId, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.rootId, table.systemFrom],
+			},
+		),
 		uniqueIndex("calendar_layout_applies_system_to_idx").on(table.rootId, table.systemTo),
 		index("calendar_layout_applies_closed_at_idx")
 			.on(table.systemTo)
@@ -347,7 +428,11 @@ export const account = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.userId, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.userId, table.systemFrom],
+			},
+		),
 		uniqueIndex("account_system_to_idx").on(table.userId, table.systemTo),
 		index("account_closed_at_idx")
 			.on(table.systemTo)
@@ -388,7 +473,11 @@ export const rootPreferences = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.userId, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.userId, table.systemFrom],
+			},
+		),
 		uniqueIndex("root_preferences_system_to_idx").on(table.userId, table.systemTo),
 		index("root_preferences_closed_at_idx")
 			.on(table.systemTo)
@@ -425,7 +514,11 @@ export const accountSettings = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.userId, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.userId, table.systemFrom],
+			},
+		),
 		uniqueIndex("account_settings_system_to_idx").on(table.userId, table.systemTo),
 		index("account_settings_closed_at_idx")
 			.on(table.systemTo)
@@ -446,7 +539,11 @@ export const tagColors = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.tag, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.tag, table.systemFrom],
+			},
+		),
 		uniqueIndex("tag_colors_system_to_idx").on(table.tag, table.systemTo),
 		index("tag_colors_closed_at_idx")
 			.on(table.systemTo)
@@ -467,7 +564,11 @@ export const stars = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.locationKey, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.locationKey, table.systemFrom],
+			},
+		),
 		uniqueIndex("stars_system_to_idx").on(table.locationKey, table.systemTo),
 		index("stars_closed_at_idx")
 			.on(table.systemTo)
@@ -488,7 +589,11 @@ export const starOrder = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.position, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.position, table.systemFrom],
+			},
+		),
 		uniqueIndex("star_order_system_to_idx").on(table.position, table.systemTo),
 		index("star_order_closed_at_idx")
 			.on(table.systemTo)
@@ -509,7 +614,11 @@ export const locationRenames = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.locationKey, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.locationKey, table.systemFrom],
+			},
+		),
 		uniqueIndex("location_renames_system_to_idx").on(table.locationKey, table.systemTo),
 		index("location_renames_closed_at_idx")
 			.on(table.systemTo)
@@ -530,7 +639,11 @@ export const enabledFeatures = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.codename, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.codename, table.systemFrom],
+			},
+		),
 		uniqueIndex("enabled_features_system_to_idx").on(table.codename, table.systemTo),
 		index("enabled_features_closed_at_idx")
 			.on(table.systemTo)
@@ -554,7 +667,11 @@ export const visibleFeatures = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.codename, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.codename, table.systemFrom],
+			},
+		),
 		uniqueIndex("visible_features_system_to_idx").on(table.codename, table.systemTo),
 		index("visible_features_closed_at_idx")
 			.on(table.systemTo)
@@ -574,7 +691,11 @@ export const expandedNodes = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.shortKey, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.shortKey, table.systemFrom],
+			},
+		),
 		uniqueIndex("expanded_nodes_system_to_idx").on(table.shortKey, table.systemTo),
 		index("expanded_nodes_closed_at_idx")
 			.on(table.systemTo)
@@ -595,7 +716,11 @@ export const changelogReads = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.entry, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.entry, table.systemFrom],
+			},
+		),
 		uniqueIndex("changelog_reads_system_to_idx").on(table.entry, table.systemTo),
 		index("changelog_reads_closed_at_idx")
 			.on(table.systemTo)
@@ -616,7 +741,11 @@ export const whatsNewReads = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.entry, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.entry, table.systemFrom],
+			},
+		),
 		uniqueIndex("whats_new_reads_system_to_idx").on(table.entry, table.systemTo),
 		index("whats_new_reads_closed_at_idx")
 			.on(table.systemTo)
@@ -641,7 +770,11 @@ export const surveys = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.survey, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.survey, table.systemFrom],
+			},
+		),
 		uniqueIndex("surveys_system_to_idx").on(table.survey, table.systemTo),
 		index("surveys_closed_at_idx")
 			.on(table.systemTo)
@@ -664,7 +797,11 @@ export const savedViews = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.position, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.position, table.systemFrom],
+			},
+		),
 		uniqueIndex("saved_views_system_to_idx").on(table.position, table.systemTo),
 		index("saved_views_closed_at_idx")
 			.on(table.systemTo)
@@ -688,7 +825,11 @@ export const aiAssistants = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.assistantId, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.assistantId, table.systemFrom],
+			},
+		),
 		uniqueIndex("ai_assistants_system_to_idx").on(table.assistantId, table.systemTo),
 		index("ai_assistants_closed_at_idx")
 			.on(table.systemTo)
@@ -712,7 +853,11 @@ export const aiPromptButtons = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.kind, table.position, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.kind, table.position, table.systemFrom],
+			},
+		),
 		uniqueIndex("ai_prompt_buttons_system_to_idx").on(table.kind, table.position, table.systemTo),
 		index("ai_prompt_buttons_closed_at_idx")
 			.on(table.systemTo)
@@ -733,7 +878,11 @@ export const treeTransactions = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.treeId, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.treeId, table.systemFrom],
+			},
+		),
 		uniqueIndex("tree_transactions_system_to_idx").on(table.treeId, table.systemTo),
 		index("tree_transactions_closed_at_idx")
 			.on(table.systemTo)
@@ -764,7 +913,11 @@ export const fileBlobs = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.nodeId, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.nodeId, table.systemFrom],
+			},
+		),
 		uniqueIndex("file_blobs_system_to_idx").on(table.nodeId, table.systemTo),
 		index("file_blobs_closed_at_idx")
 			.on(table.systemTo)
@@ -786,7 +939,14 @@ export const nodeTags = sqliteTable(
 		tagKey: text("tag_key").notNull(),
 		tag: text("tag").notNull(),
 	},
-	(table) => [primaryKey({columns: [table.nodeId, table.tagKey]}), index("node_tags_tag_key_idx").on(table.tagKey)],
+	(table) => [
+		primaryKey(
+			{
+				columns: [table.nodeId, table.tagKey],
+			},
+		),
+		index("node_tags_tag_key_idx").on(table.tagKey),
+	],
 );
 
 /**
@@ -818,7 +978,11 @@ export const nodeDisplayMetadata = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.nodeId, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.nodeId, table.systemFrom],
+			},
+		),
 		uniqueIndex("node_display_metadata_system_to_idx").on(table.nodeId, table.systemTo),
 		index("node_display_metadata_closed_at_idx")
 			.on(table.systemTo)
@@ -841,7 +1005,11 @@ export const nodeTableCellSizes = sqliteTable(
 		systemTo: text("system_to").notNull(),
 	},
 	(table) => [
-		primaryKey({columns: [table.nodeId, table.cellId, table.systemFrom]}),
+		primaryKey(
+			{
+				columns: [table.nodeId, table.cellId, table.systemFrom],
+			},
+		),
 		uniqueIndex("node_table_cell_sizes_system_to_idx").on(table.nodeId, table.cellId, table.systemTo),
 		index("node_table_cell_sizes_closed_at_idx")
 			.on(table.systemTo)
@@ -849,123 +1017,201 @@ export const nodeTableCellSizes = sqliteTable(
 	],
 );
 
-export const nodeContentRelations = relations(nodeContent, ({one, many}) => ({
-	metadata: one(nodeMetadata, {
-		fields: [nodeContent.id, nodeContent.systemTo],
-		references: [nodeMetadata.nodeId, nodeMetadata.systemTo],
-	}),
+export const nodeContentRelations = relations(nodeContent, ({one, many}) => (
+{
+	metadata: one(
+		nodeMetadata,
+		{
+			fields: [nodeContent.id, nodeContent.systemTo],
+			references: [nodeMetadata.nodeId, nodeMetadata.systemTo],
+		},
+	),
 	// Mirrors where this node is the original (other nodes mirror this one)
-	mirrorsAsOriginal: many(mirrors, {relationName: "original"}),
+	mirrorsAsOriginal: many(
+		mirrors,
+		{
+			relationName: "original",
+		},
+	),
 	// Mirrors where this node is the mirror copy
-	mirrorsAsCopy: many(mirrors, {relationName: "mirror"}),
-	aiMetadata: one(aiMetadata, {
-		fields: [nodeContent.id, nodeContent.systemTo],
-		references: [aiMetadata.nodeId, aiMetadata.systemTo],
-	}),
-	s3File: one(s3Files, {
-		fields: [nodeContent.id, nodeContent.systemTo],
-		references: [s3Files.nodeId, s3Files.systemTo],
-	}),
-	changesMetadata: one(changesMetadata, {
-		fields: [nodeContent.id, nodeContent.systemTo],
-		references: [changesMetadata.nodeId, changesMetadata.systemTo],
-	}),
-	referencesRoot: one(referencesRoots, {
-		fields: [nodeContent.id, nodeContent.systemTo],
-		references: [referencesRoots.nodeId, referencesRoots.systemTo],
-	}),
-	calendar: one(calendarMetadata, {
-		fields: [nodeContent.id, nodeContent.systemTo],
-		references: [calendarMetadata.nodeId, calendarMetadata.systemTo],
-	}),
+	mirrorsAsCopy: many(
+		mirrors,
+		{
+			relationName: "mirror",
+		},
+	),
+	aiMetadata: one(
+		aiMetadata,
+		{
+			fields: [nodeContent.id, nodeContent.systemTo],
+			references: [aiMetadata.nodeId, aiMetadata.systemTo],
+		},
+	),
+	s3File: one(
+		s3Files,
+		{
+			fields: [nodeContent.id, nodeContent.systemTo],
+			references: [s3Files.nodeId, s3Files.systemTo],
+		},
+	),
+	changesMetadata: one(
+		changesMetadata,
+		{
+			fields: [nodeContent.id, nodeContent.systemTo],
+			references: [changesMetadata.nodeId, changesMetadata.systemTo],
+		},
+	),
+	referencesRoot: one(
+		referencesRoots,
+		{
+			fields: [nodeContent.id, nodeContent.systemTo],
+			references: [referencesRoots.nodeId, referencesRoots.systemTo],
+		},
+	),
+	calendar: one(
+		calendarMetadata,
+		{
+			fields: [nodeContent.id, nodeContent.systemTo],
+			references: [calendarMetadata.nodeId, calendarMetadata.systemTo],
+		},
+	),
 	nodeEmbeddings: many(nodeEmbeddings),
-	displayMetadata: one(nodeDisplayMetadata, {
-		fields: [nodeContent.id, nodeContent.systemTo],
-		references: [nodeDisplayMetadata.nodeId, nodeDisplayMetadata.systemTo],
-	}),
+	displayMetadata: one(
+		nodeDisplayMetadata,
+		{
+			fields: [nodeContent.id, nodeContent.systemTo],
+			references: [nodeDisplayMetadata.nodeId, nodeDisplayMetadata.systemTo],
+		},
+	),
 	tableCellSizes: many(nodeTableCellSizes),
 }));
 
-export const nodeTableCellSizesRelations = relations(nodeTableCellSizes, ({one}) => ({
-	content: one(nodeContent, {
-		fields: [nodeTableCellSizes.nodeId],
-		references: [nodeContent.id],
-	}),
+export const nodeTableCellSizesRelations = relations(nodeTableCellSizes, ({one}) => (
+{
+	content: one(
+		nodeContent,
+		{
+			fields: [nodeTableCellSizes.nodeId],
+			references: [nodeContent.id],
+		},
+	),
 }));
 
-export const nodeMetadataRelations = relations(nodeMetadata, ({one}) => ({
-	content: one(nodeContent, {
-		fields: [nodeMetadata.nodeId, nodeMetadata.systemTo],
-		references: [nodeContent.id, nodeContent.systemTo],
-	}),
+export const nodeMetadataRelations = relations(nodeMetadata, ({one}) => (
+{
+	content: one(
+		nodeContent,
+		{
+			fields: [nodeMetadata.nodeId, nodeMetadata.systemTo],
+			references: [nodeContent.id, nodeContent.systemTo],
+		},
+	),
 }));
 
-export const mirrorsRelations = relations(mirrors, ({one}) => ({
+export const mirrorsRelations = relations(mirrors, ({one}) => (
+{
 	// The original node being mirrored
-	original: one(nodeContent, {
-		fields: [mirrors.originalId],
-		references: [nodeContent.id],
-		relationName: "original",
-	}),
+	original: one(
+		nodeContent,
+		{
+			fields: [mirrors.originalId],
+			references: [nodeContent.id],
+			relationName: "original",
+		},
+	),
 	// The node that is the mirror/copy
-	mirror: one(nodeContent, {
-		fields: [mirrors.mirrorId],
-		references: [nodeContent.id],
-		relationName: "mirror",
-	}),
+	mirror: one(
+		nodeContent,
+		{
+			fields: [mirrors.mirrorId],
+			references: [nodeContent.id],
+			relationName: "mirror",
+		},
+	),
 }));
 
-export const aiMetadataRelations = relations(aiMetadata, ({one}) => ({
-	content: one(nodeContent, {
-		fields: [aiMetadata.nodeId, aiMetadata.systemTo],
-		references: [nodeContent.id, nodeContent.systemTo],
-	}),
+export const aiMetadataRelations = relations(aiMetadata, ({one}) => (
+{
+	content: one(
+		nodeContent,
+		{
+			fields: [aiMetadata.nodeId, aiMetadata.systemTo],
+			references: [nodeContent.id, nodeContent.systemTo],
+		},
+	),
 }));
 
-export const s3FilesRelations = relations(s3Files, ({one}) => ({
-	content: one(nodeContent, {
-		fields: [s3Files.nodeId, s3Files.systemTo],
-		references: [nodeContent.id, nodeContent.systemTo],
-	}),
+export const s3FilesRelations = relations(s3Files, ({one}) => (
+{
+	content: one(
+		nodeContent,
+		{
+			fields: [s3Files.nodeId, s3Files.systemTo],
+			references: [nodeContent.id, nodeContent.systemTo],
+		},
+	),
 }));
 
-export const changesMetadataRelations = relations(changesMetadata, ({one}) => ({
-	content: one(nodeContent, {
-		fields: [changesMetadata.nodeId, changesMetadata.systemTo],
-		references: [nodeContent.id, nodeContent.systemTo],
-	}),
+export const changesMetadataRelations = relations(changesMetadata, ({one}) => (
+{
+	content: one(
+		nodeContent,
+		{
+			fields: [changesMetadata.nodeId, changesMetadata.systemTo],
+			references: [nodeContent.id, nodeContent.systemTo],
+		},
+	),
 }));
 
-export const referencesRootsRelations = relations(referencesRoots, ({one}) => ({
-	content: one(nodeContent, {
-		fields: [referencesRoots.nodeId, referencesRoots.systemTo],
-		references: [nodeContent.id, nodeContent.systemTo],
-	}),
+export const referencesRootsRelations = relations(referencesRoots, ({one}) => (
+{
+	content: one(
+		nodeContent,
+		{
+			fields: [referencesRoots.nodeId, referencesRoots.systemTo],
+			references: [nodeContent.id, nodeContent.systemTo],
+		},
+	),
 }));
 
-export const nodeEmbeddingsRelations = relations(nodeEmbeddings, ({one}) => ({
-	content: one(nodeContent, {
-		fields: [nodeEmbeddings.nodeId],
-		references: [nodeContent.id],
-	}),
+export const nodeEmbeddingsRelations = relations(nodeEmbeddings, ({one}) => (
+{
+	content: one(
+		nodeContent,
+		{
+			fields: [nodeEmbeddings.nodeId],
+			references: [nodeContent.id],
+		},
+	),
 }));
 
-export const calendarMetadataRelations = relations(calendarMetadata, ({one}) => ({
-	content: one(nodeContent, {
-		fields: [calendarMetadata.nodeId, calendarMetadata.systemTo],
-		references: [nodeContent.id, nodeContent.systemTo],
-	}),
-	levels: one(calendarLevels, {
-		fields: [calendarMetadata.nodeId, calendarMetadata.systemTo],
-		references: [calendarLevels.nodeId, calendarLevels.systemTo],
-	}),
+export const calendarMetadataRelations = relations(calendarMetadata, ({one}) => (
+{
+	content: one(
+		nodeContent,
+		{
+			fields: [calendarMetadata.nodeId, calendarMetadata.systemTo],
+			references: [nodeContent.id, nodeContent.systemTo],
+		},
+	),
+	levels: one(
+		calendarLevels,
+		{
+			fields: [calendarMetadata.nodeId, calendarMetadata.systemTo],
+			references: [calendarLevels.nodeId, calendarLevels.systemTo],
+		},
+	),
 }));
 
-export const calendarLevelsRelations = relations(calendarLevels, ({one}) => ({
-	calendarMetadata: one(calendarMetadata, {
-		fields: [calendarLevels.nodeId, calendarLevels.systemTo],
-		references: [calendarMetadata.nodeId, calendarMetadata.systemTo],
-	}),
+export const calendarLevelsRelations = relations(calendarLevels, ({one}) => (
+{
+	calendarMetadata: one(
+		calendarMetadata,
+		{
+			fields: [calendarLevels.nodeId, calendarLevels.systemTo],
+			references: [calendarMetadata.nodeId, calendarMetadata.systemTo],
+		},
+	),
 }));
 
 // Type exports for use in the application

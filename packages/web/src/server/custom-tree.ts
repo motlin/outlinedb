@@ -7,7 +7,8 @@
 import {stripHtmlTags} from "@outlinedb/shared/html";
 import type {CacheService} from "@outlinedb/shared/cache";
 
-export interface CustomNode {
+export interface CustomNode
+{
 	name: string;
 	completed: boolean;
 	children: CustomNode[];
@@ -17,35 +18,45 @@ export interface CustomNode {
 export function collectCustomSections(
 	root: CustomNode | null,
 	grammars: ReadonlySet<string>,
-): Record<string, CustomNode[]> {
+): Record<string, CustomNode[]>
+{
 	const sections: Record<string, CustomNode[]> = {};
-	const walk = (node: CustomNode): void => {
-		if (node.completed) {
+	const walk = (node: CustomNode): void =>
+	{
+		if (node.completed)
+		{
 			return;
 		}
-		for (const child of node.children) {
+		for (const child of node.children)
+		{
 			walk(child);
 		}
-		if (grammars.has(node.name)) {
+		if (grammars.has(node.name))
+		{
 			(sections[node.name] ??= []).push(node);
 		}
 	};
-	if (root !== null) {
+	if (root !== null)
+	{
 		walk(root);
 	}
 	return sections;
 }
 
-interface TopLevel {
+interface TopLevel
+{
 	id: string;
 	name: string | null;
 	completedAt: Date | null;
 }
 
-export function findCustomRoot(topLevel: readonly TopLevel[], preferredId?: string): string | null {
-	if (preferredId !== undefined) {
+export function findCustomRoot(topLevel: readonly TopLevel[], preferredId?: string): string | null
+{
+	if (preferredId !== undefined)
+	{
 		const preferred = topLevel.find(({id}) => id === preferredId);
-		if (preferred?.completedAt === null) {
+		if (preferred?.completedAt === null)
+		{
 			return preferredId;
 		}
 	}
@@ -62,10 +73,13 @@ export function readCustomTree(
 	cache: Pick<CacheService, "getChildren" | "getNode">,
 	rootId: string,
 	readIds = new Set<string>(),
-): CustomNode | null {
-	const toNode = (id: string, depth: number): CustomNode | null => {
+): CustomNode | null
+{
+	const toNode = (id: string, depth: number): CustomNode | null =>
+	{
 		const node = cache.getNode(id);
-		if (node === undefined) {
+		if (node === undefined)
+		{
 			return null;
 		}
 		readIds.add(id);
@@ -76,7 +90,11 @@ export function readCustomTree(
 						.getChildren(id)
 						.map((child) => toNode(child.id, depth + 1))
 						.filter((child): child is CustomNode => child !== null);
-		return {name: node.name ?? "", completed: node.completedAt !== null, children};
+		return {
+			name: node.name ?? "",
+			completed: node.completedAt !== null,
+			children,
+		};
 	};
 	return toNode(rootId, 0);
 }

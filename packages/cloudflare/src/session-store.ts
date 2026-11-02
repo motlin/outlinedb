@@ -1,7 +1,8 @@
 import type {SessionCookieStore} from "@outlinedb/shared/api";
 
 /** The synchronous key-value surface of `DurableObjectStorage.kv`. */
-export interface KvLike {
+export interface KvLike
+{
 	get(key: string): string | undefined;
 	put(key: string, value: string): void;
 	delete(key: string): boolean;
@@ -19,23 +20,34 @@ const SEEDED_KEY = "workflowy-session-seeded";
 export function kvSessionStore(
 	kv: KvLike,
 	seedCookie: string | undefined,
-	{seed = true}: {seed?: boolean} = {},
-): SessionCookieStore {
-	if (seed && kv.get(SEEDED_KEY) === undefined) {
+	{
+		seed = true,
+	}:
+	{
+		seed?: boolean;
+	} = {},
+): SessionCookieStore
+{
+	if (seed && kv.get(SEEDED_KEY) === undefined)
+	{
 		kv.put(SEEDED_KEY, "1");
-		if (seedCookie) {
+		if (seedCookie)
+		{
 			kv.put(COOKIE_KEY, seedCookie);
 		}
 	}
 	return {
-		read() {
+		read()
+		{
 			const cookie = kv.get(COOKIE_KEY);
 			return cookie === undefined || cookie === "" ? undefined : cookie;
 		},
-		write(cookie) {
+		write(cookie)
+		{
 			kv.put(COOKIE_KEY, cookie);
 		},
-		clear() {
+		clear()
+		{
 			kv.delete(COOKIE_KEY);
 		},
 	};

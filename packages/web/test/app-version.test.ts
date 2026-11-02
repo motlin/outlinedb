@@ -11,24 +11,30 @@ const ANDROID =
 	"Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36";
 const EDGE = `${MAC} Edg/155.0.0.0`;
 
-describe("version label", () => {
-	it("tags the browser and platform like upstream's version line", () => {
-		expect({
-			mac: versionLabel("4.3.1", versionTags(MAC)),
-			windows: versionTags(WINDOWS),
-			iphone: versionTags(IPHONE),
-			android: versionTags(ANDROID),
-			edge: versionTags(EDGE),
-			linux: versionTags("Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/130.0"),
-			bare: versionLabel("4.3.1", []),
-		}).toStrictEqual({
-			mac: "4.3.1 [chrome-155, mac]",
-			windows: ["chrome-155", "win"],
-			iphone: ["ios-17.5"],
-			android: ["chrome-130", "android-14"],
-			edge: ["mac"],
-			linux: ["linx"],
-			bare: "4.3.1",
-		});
+describe("version label", () =>
+{
+	it("tags the browser and platform like upstream's version line", () =>
+	{
+		expect(
+			{
+				mac: versionLabel("4.3.1", versionTags(MAC)),
+				windows: versionTags(WINDOWS),
+				iphone: versionTags(IPHONE),
+				android: versionTags(ANDROID),
+				edge: versionTags(EDGE),
+				linux: versionTags("Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/130.0"),
+				bare: versionLabel("4.3.1", []),
+			},
+		).toStrictEqual(
+			{
+				mac: "4.3.1 [chrome-155, mac]",
+				windows: ["chrome-155", "win"],
+				iphone: ["ios-17.5"],
+				android: ["chrome-130", "android-14"],
+				edge: ["mac"],
+				linux: ["linx"],
+				bare: "4.3.1",
+			},
+		);
 	});
 });

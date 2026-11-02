@@ -1,8 +1,10 @@
 import {describe, expect, it} from "vite-plus/test";
 import {parseQuery} from "../src/search/index.js";
 
-describe("QueryNode.revealsCompleted", () => {
-	it("propagates through AND, OR and NOT like upstream's shouldRevealMatchingCompletedItems", () => {
+describe("QueryNode.revealsCompleted", () =>
+{
+	it("propagates through AND, OR and NOT like upstream's shouldRevealMatchingCompletedItems", () =>
+	{
 		const queries = [
 			"is:complete",
 			"IS:COMPLETE",

@@ -9,9 +9,14 @@ import type {DateSettings} from "../date-settings.js";
 import {outlineActions} from "../stores/outline.js";
 import {CalendarDatePickerPopup} from "./date-picker-popup.js";
 
-interface OpenPill {
+interface OpenPill
+{
 	pillIndex: number;
-	position: {left: number; top: number};
+	position:
+	{
+		left: number;
+		top: number;
+	};
 	term: string;
 	isRange: boolean;
 }
@@ -20,21 +25,35 @@ interface OpenPill {
  * The date pill a plain click (no modifier: ⌥click is reserved for date search) landed on inside
  * `root`, with its index among `root`'s pills, or null.
  */
-export function clickedPill(event: React.MouseEvent, root: Element): {pill: Element; index: number} | null {
+export function clickedPill(
+	event: React.MouseEvent,
+	root: Element,
+):
+{
+	pill: Element;
+	index: number;
+} | null
+{
 	const pill = event.target instanceof Element ? event.target.closest("time.monolith-pill") : null;
-	if (pill === null || !root.contains(pill) || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+	if (pill === null || !root.contains(pill) || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey)
+	{
 		return null;
 	}
-	return {pill, index: [...root.querySelectorAll("time.monolith-pill")].indexOf(pill)};
+	return {
+		pill,
+		index: [...root.querySelectorAll("time.monolith-pill")].indexOf(pill),
+	};
 }
 
 /** Plain-text units (a pill counting one) from the start of `root` to just after `pill`. */
-export function offsetAfterPill(root: HTMLElement, pill: Element): number {
+export function offsetAfterPill(root: HTMLElement, pill: Element): number
+{
 	const parent = pill.parentNode;
 	return parent === null ? 0 : unitsBefore(root, parent, [...parent.childNodes].indexOf(pill) + 1);
 }
 
-interface PillDatePickerOptions {
+interface PillDatePickerOptions
+{
 	dateSettings: DateSettings;
 	/** Replace the `pillIndex`-th pill with `attrs`, or remove it when `attrs` is null, and save. */
 	onChange: (pillIndex: number, attrs: TimeAttrs | null) => void;
@@ -47,49 +66,67 @@ interface PillDatePickerOptions {
  * label prefilled (so the grid opens on its month with the day selected) and "Remove date".
  * Enter with a parsed date, a preset or a day click replaces the pill; Remove date deletes it.
  */
-export function usePillDatePicker({dateSettings, onChange, onDismiss}: PillDatePickerOptions): {
+export function usePillDatePicker({dateSettings, onChange, onDismiss}: PillDatePickerOptions):
+{
 	open: (pill: Element, pillIndex: number) => void;
 	popup: ReactNode;
-} {
+}
+{
 	const [picker, setPicker] = useState<OpenPill | null>(null);
 	// Applying refocuses the editor, whose blur of the picker input would otherwise report a dismissal too.
 	const isOpen = useRef(false);
 	const {openSettings} = outlineActions();
 
-	const open = useCallback((pill: Element, pillIndex: number) => {
+	const open = useCallback((pill: Element, pillIndex: number) =>
+	{
 		const rect = pill.getBoundingClientRect();
 		const label = pill.textContent.replaceAll("﻿", "");
 		isOpen.current = true;
-		setPicker({
-			pillIndex,
-			position: {left: rect.left + globalThis.scrollX, top: rect.bottom + globalThis.scrollY},
-			term: label,
-			isRange: pill.hasAttribute("endyear"),
-		});
+		setPicker(
+			{
+				pillIndex,
+				position:
+				{
+					left: rect.left + globalThis.scrollX,
+					top: rect.bottom + globalThis.scrollY,
+				},
+				term: label,
+				isRange: pill.hasAttribute("endyear"),
+			},
+		);
 	}, []);
 
-	const close = useCallback(() => {
+	const close = useCallback(() =>
+	{
 		isOpen.current = false;
 		setPicker(null);
 	}, []);
 
-	const dismiss = useCallback(() => {
-		if (!isOpen.current) {
+	const dismiss = useCallback(() =>
+	{
+		if (!isOpen.current)
+		{
 			return;
 		}
 		close();
 		onDismiss?.();
 	}, [close, onDismiss]);
 
-	const popup = (() => {
-		if (picker === null) {
+	const popup = (() =>
+	{
+		if (picker === null)
+		{
 			return null;
 		}
-		const guess = guessDates(picker.term, {
-			dateFormat: dateSettings.dateFormat,
-			weekStartDay: dateSettings.weekStartDay,
-		});
-		const apply = (dates: Date[]) => {
+		const guess = guessDates(
+			picker.term,
+			{
+				dateFormat: dateSettings.dateFormat,
+				weekStartDay: dateSettings.weekStartDay,
+			},
+		);
+		const apply = (dates: Date[]) =>
+		{
 			close();
 			onChange(picker.pillIndex, timeAttrsFromDates(dates));
 		};
@@ -101,39 +138,76 @@ export function usePillDatePicker({dateSettings, onChange, onDismiss}: PillDateP
 				showNoDate
 				term={picker.term}
 				position={picker.position}
-				onTermChange={(term) => {
-					setPicker({...picker, term});
+				onTermChange={(term) =>
+				{
+					setPicker(
+						{
+							...picker,
+							term,
+						},
+					);
 				}}
-				onEnter={() => {
-					if (guess.length > 0) {
+				onEnter={() =>
+				{
+					if (guess.length > 0)
+					{
 						apply(guess);
-					} else {
+					}
+					else
+					{
 						dismiss();
 					}
 				}}
-				onApply={(dates) => {
+				onApply={(dates) =>
+				{
 					const [first] = dates;
-					if (picker.isRange && dates.length === 1 && first !== undefined) {
+					if (picker.isRange && dates.length === 1 && first !== undefined)
+					{
 						// A range's first click only fills the input; the second replaces the pill with the sorted range.
-						setPicker({
-							...picker,
-							term: formatPillLabel(timeAttrsFromDates([first]), {dateFormat: dateSettings.dateFormat}),
-						});
-					} else {
+						setPicker(
+							{
+								...picker,
+								term: formatPillLabel(
+									timeAttrsFromDates([first]),
+									{
+										dateFormat: dateSettings.dateFormat,
+									},
+								),
+							},
+						);
+					}
+					else
+					{
 						apply(dates);
 					}
 				}}
-				onPreset={(preset: DatePreset) => {
-					apply([presetDate(preset, {weekStartDay: dateSettings.weekStartDay})]);
+				onPreset={(preset: DatePreset) =>
+				{
+					apply([
+						presetDate(
+							preset,
+							{
+								weekStartDay: dateSettings.weekStartDay,
+							},
+						),
+					]);
 				}}
-				onToggleRange={() => {
-					setPicker({...picker, isRange: !picker.isRange});
+				onToggleRange={() =>
+				{
+					setPicker(
+						{
+							...picker,
+							isRange: !picker.isRange,
+						},
+					);
 				}}
-				onFormat={() => {
+				onFormat={() =>
+				{
 					dismiss();
 					openSettings("Dates");
 				}}
-				onRemove={() => {
+				onRemove={() =>
+				{
 					close();
 					onChange(picker.pillIndex, null);
 				}}
@@ -143,5 +217,8 @@ export function usePillDatePicker({dateSettings, onChange, onDismiss}: PillDateP
 			document.body,
 		);
 	})();
-	return {open, popup};
+	return {
+		open,
+		popup,
+	};
 }

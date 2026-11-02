@@ -8,7 +8,8 @@ import {FlyoutAlign} from "./flyout/flyout-style.js";
 import {MenuScroller} from "./flyout/menu.js";
 import {MenuItem, MenuSectionHeader} from "./flyout/menu-item.js";
 
-interface MentionMenuProps {
+interface MentionMenuProps
+{
 	groups: readonly MentionGroup[];
 	/** The highlighted row, counted across all groups. */
 	index: number;
@@ -23,8 +24,10 @@ interface MentionMenuProps {
 
 const POSITION_OFFSET = [0, 0] as const;
 
-function label(option: MentionOption) {
-	if (option.kind === "tag") {
+function label(option: MentionOption)
+{
+	if (option.kind === "tag")
+	{
 		return option.text;
 	}
 	return (
@@ -46,23 +49,18 @@ function label(option: MentionOption) {
  * Upstream's `@` mention popup (`dumps/mentions-2026-10-23-upstream-popup.json`): the shared suggest flyout under the
  * chip with a PEOPLE and a TAGS group. Rows carry upstream's literal `" undefined"` class.
  */
-export function MentionMenu({
-	groups,
-	index,
-	keyboardMode,
-	left,
-	top,
-	onSelect,
-	onHover,
-	onMouseMove,
-}: MentionMenuProps) {
-	const scrollActive = useCallback((element: HTMLAnchorElement | null) => {
-		if (element !== null) {
+export function MentionMenu({groups, index, keyboardMode, left, top, onSelect, onHover, onMouseMove}: MentionMenuProps)
+{
+	const scrollActive = useCallback((element: HTMLAnchorElement | null) =>
+	{
+		if (element !== null)
+		{
 			revealInScroller(element);
 		}
 	}, []);
 
-	if (!groups.some((group) => group.options.length > 0)) {
+	if (!groups.some((group) => group.options.length > 0))
+	{
 		return null;
 	}
 
@@ -79,7 +77,8 @@ export function MentionMenu({
 			removeFromDom={false}
 		>
 			<MenuScroller onMouseMove={onMouseMove}>
-				{groups.map((group, groupIndex) => {
+				{groups.map((group, groupIndex) =>
+				{
 					const start = starts[groupIndex] ?? 0;
 					return [
 						<MenuSectionHeader key={`header-${group.name}`}>
@@ -90,7 +89,8 @@ export function MentionMenu({
 								{group.name}
 							</span>
 						</MenuSectionHeader>,
-						...group.options.map((option, optionIndex) => {
+						...group.options.map((option, optionIndex) =>
+						{
 							const itemIndex = start + optionIndex;
 							const active = itemIndex === index;
 							return (
@@ -101,10 +101,12 @@ export function MentionMenu({
 									className=" undefined"
 									isSelected={keyboardMode && active}
 									isInKeyboardMode={keyboardMode}
-									onMouseEnter={() => {
+									onMouseEnter={() =>
+									{
 										onHover(itemIndex);
 									}}
-									onSelect={() => {
+									onSelect={() =>
+									{
 										onSelect(itemIndex);
 									}}
 								/>

@@ -1,18 +1,21 @@
 import {Component} from "react";
 import type {ReactNode} from "react";
 
-interface ErrorBoundaryProps {
+interface ErrorBoundaryProps
+{
 	children: ReactNode;
 	fallback?: ReactNode;
 }
 
-interface ErrorBoundaryState {
+interface ErrorBoundaryState
+{
 	hasError: boolean;
 	error: Error | null;
 }
 
 /** Upstream's no-unsaved-data fatal screen (`Ys1`): "Try again" reloads the page (`Zs1`). */
-export function FatalErrorScreen({message}: {message: string}): ReactNode {
+export function FatalErrorScreen({message}: {message: string}): ReactNode
+{
 	return (
 		<div className="error-boundary">
 			<svg
@@ -38,7 +41,8 @@ export function FatalErrorScreen({message}: {message: string}): ReactNode {
 			<h1 className="error-boundary-title">Something has gone wrong</h1>
 			<button
 				className="button large error-boundary-retry"
-				onClick={() => {
+				onClick={() =>
+				{
 					window.location.reload();
 				}}
 				type="button"
@@ -57,26 +61,40 @@ export function FatalErrorScreen({message}: {message: string}): ReactNode {
  * Error boundary component that catches JavaScript errors anywhere in the child
  * component tree, logs them, and displays a fallback UI.
  */
-export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-	constructor(props: ErrorBoundaryProps) {
+export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState>
+{
+	constructor(props: ErrorBoundaryProps)
+	{
 		super(props);
-		this.state = {hasError: false, error: null};
+		this.state =
+		{
+			hasError: false,
+			error: null,
+		};
 	}
 
-	static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-		return {hasError: true, error};
+	static getDerivedStateFromError(error: Error): ErrorBoundaryState
+	{
+		return {
+			hasError: true,
+			error,
+		};
 	}
 
-	componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
+	componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void
+	{
 		console.error("ErrorBoundary caught an error:", error, errorInfo);
 	}
 
-	render(): ReactNode {
+	render(): ReactNode
+	{
 		const {hasError, error} = this.state;
 		const {children, fallback} = this.props;
 
-		if (hasError) {
-			if (fallback != null) {
+		if (hasError)
+		{
+			if (fallback != null)
+			{
 				return fallback;
 			}
 

@@ -30,32 +30,41 @@ export function collectVisibleNodeIds(
 	showCompleted: boolean,
 	animatingCompletionIds: ReadonlySet<string>,
 	search: SearchFilter | null = currentSearchFilter(queryClient),
-): string[] {
+): string[]
+{
 	const visibleIds: string[] = [];
 
 	/** The Backlinks section's rows after `parentId`'s children: its references row, then its items while it is open. */
-	const collectBacklinks = (parentId: string | null) => {
-		if (parentId === null || search !== null) {
+	const collectBacklinks = (parentId: string | null) =>
+	{
+		if (parentId === null || search !== null)
+		{
 			return;
 		}
 		const backlinks = queryClient.getQueryData<BacklinksResponse>(nodeKeys.backlinks(parentId));
-		if (backlinks?.rootId == null || !isBacklinksSectionVisible(backlinks, showCompleted)) {
+		if (backlinks?.rootId == null || !isBacklinksSectionVisible(backlinks, showCompleted))
+		{
 			return;
 		}
 		visibleIds.push(backlinks.rootId);
-		if (expandedIds.has(backlinks.rootId)) {
-			for (const item of backlinks.items) {
-				if (showCompleted || item.node.completedAt === null) {
+		if (expandedIds.has(backlinks.rootId))
+		{
+			for (const item of backlinks.items)
+			{
+				if (showCompleted || item.node.completedAt === null)
+				{
 					visibleIds.push(item.node.id);
 				}
 			}
 		}
 	};
 
-	const collectVisibleNodes = (parentId: string | null, instance: MirrorInstance | null) => {
+	const collectVisibleNodes = (parentId: string | null, instance: MirrorInstance | null) =>
+	{
 		const children = queryClient.getQueryData<NodeResponse[]>(nodeKeys.children(parentId));
 
-		if (!children) {
+		if (!children)
+		{
 			return;
 		}
 
@@ -63,10 +72,12 @@ export function collectVisibleNodeIds(
 			rendersInstanceRow(node, instance, showCompleted, animatingCompletionIds, search),
 		);
 
-		for (const node of filteredChildren) {
+		for (const node of filteredChildren)
+		{
 			visibleIds.push(node.id);
 
-			if (rendersInstanceChildren(node, instance, expandedIds, search)) {
+			if (rendersInstanceChildren(node, instance, expandedIds, search))
+			{
 				collectVisibleNodes(node.id, childInstance(node, instance));
 			}
 		}
@@ -82,7 +93,8 @@ export function collectVisibleNodeIds(
  * title (when zoomed) then the visible rows. Reads the store and cache at call
  * time, so commands see rows created since the last render.
  */
-export function currentNavigableIds(queryClient: QueryClient): string[] {
+export function currentNavigableIds(queryClient: QueryClient): string[]
+{
 	const {zoomedNodeId, expandedIds, showCompleted, animatingCompletionIds} = activePaneView();
 	return navigableIds(
 		zoomedNodeId,
@@ -96,14 +108,18 @@ setNavigableRowsReader(currentNavigableIds);
  * The rendered rows under the zoom root with their depth and whether each is a parent, read from the store and
  * cache at call time, for the zoom root's level-by-level ⌘↓ / ⌘↑ and page-wide ⌃Space.
  */
-export function currentExpansionRows(queryClient: QueryClient): ExpansionRow[] {
+export function currentExpansionRows(queryClient: QueryClient): ExpansionRow[]
+{
 	const {zoomedNodeId, expandedIds, showCompleted, animatingCompletionIds} = activePaneView();
 	const search = currentSearchFilter(queryClient);
 	const rows: ExpansionRow[] = [];
-	const walk = (parentId: string | null, depth: number, instance: MirrorInstance | null) => {
+	const walk = (parentId: string | null, depth: number, instance: MirrorInstance | null) =>
+	{
 		const children = queryClient.getQueryData<NodeResponse[]>(nodeKeys.children(parentId)) ?? [];
-		for (const node of children) {
-			if (!rendersInstanceRow(node, instance, showCompleted, animatingCompletionIds, search)) {
+		for (const node of children)
+		{
+			if (!rendersInstanceRow(node, instance, showCompleted, animatingCompletionIds, search))
+			{
 				continue;
 			}
 			const cached = queryClient.getQueryData<NodeResponse[]>(nodeKeys.children(node.id));
@@ -111,8 +127,15 @@ export function currentExpansionRows(queryClient: QueryClient): ExpansionRow[] {
 				node.hasChildren === undefined
 					? cached === undefined || cached.length > 0
 					: rowHasChildren(node, showCompleted);
-			rows.push({id: node.id, depth, hasVisibleChildren});
-			if (rendersInstanceChildren(node, instance, expandedIds, search)) {
+			rows.push(
+				{
+					id: node.id,
+					depth,
+					hasVisibleChildren,
+				},
+			);
+			if (rendersInstanceChildren(node, instance, expandedIds, search))
+			{
 				walk(node.id, depth + 1, childInstance(node, instance));
 			}
 		}

@@ -2,15 +2,19 @@ import {readFileSync} from "node:fs";
 import {describe, expect, it} from "vite-plus/test";
 import {canBePending, insertWithPendingFormat, togglePendingAttr} from "../src/client/hooks/use-inline-format.js";
 
-function source(path: string): string {
+function source(path: string): string
+{
 	return readFileSync(new URL(`../src/client/components/${path}`, import.meta.url), "utf8");
 }
 
-describe("inline format wiring", () => {
-	it("routes both editors' format commands through applyInlineToggle, never execCommand", () => {
+describe("inline format wiring", () =>
+{
+	it("routes both editors' format commands through applyInlineToggle, never execCommand", () =>
+	{
 		const files = ["editable-text.tsx", "editable-note.tsx"];
 		expect(
-			files.map((file) => {
+			files.map((file) =>
+			{
 				const text = source(file);
 				return [file, text.includes("execCommand("), text.includes("applyInlineToggle")];
 			}),
@@ -21,10 +25,13 @@ describe("inline format wiring", () => {
 	});
 });
 
-describe("editor wiring for code and color", () => {
-	it("runs the inline-code input rule and the color popup in both editors", () => {
+describe("editor wiring for code and color", () =>
+{
+	it("runs the inline-code input rule and the color popup in both editors", () =>
+	{
 		expect(
-			["editable-text.tsx", "editable-note.tsx"].map((file) => {
+			["editable-text.tsx", "editable-note.tsx"].map((file) =>
+			{
 				const text = source(file);
 				return [file, text.includes("applyInlineCodeInput("), text.includes("useColorPopup(")];
 			}),
@@ -35,16 +42,20 @@ describe("editor wiring for code and color", () => {
 	});
 });
 
-describe("togglePendingAttr", () => {
-	it("adds an attribute once and removes it on the second toggle", () => {
+describe("togglePendingAttr", () =>
+{
+	it("adds an attribute once and removes it on the second toggle", () =>
+	{
 		const once = togglePendingAttr(new Set(), "b");
 		const twice = togglePendingAttr(once, "b");
 		expect([[...once], [...twice], [...togglePendingAttr(once, "i")]]).toStrictEqual([["b"], [], ["b", "i"]]);
 	});
 });
 
-describe("canBePending", () => {
-	it("keeps Code out of pending formats, since upstream's Code is atomic", () => {
+describe("canBePending", () =>
+{
+	it("keeps Code out of pending formats, since upstream's Code is atomic", () =>
+	{
 		expect((["b", "i", "u", "s", "code"] as const).map(canBePending)).toStrictEqual([
 			true,
 			true,
@@ -55,11 +66,31 @@ describe("canBePending", () => {
 	});
 });
 
-describe("insertWithPendingFormat with a color", () => {
-	it("wraps the typed text in the pending color", () => {
+describe("insertWithPendingFormat with a color", () =>
+{
+	it("wraps the typed text in the pending color", () =>
+	{
 		expect([
-			insertWithPendingFormat("here", 4, new Set(), "z", {kind: "highlight", color: "yellow"}),
-			insertWithPendingFormat("here", 4, new Set(["b"]), "zy", {kind: "text", color: "red"}),
+			insertWithPendingFormat(
+				"here",
+				4,
+				new Set(),
+				"z",
+				{
+					kind: "highlight",
+					color: "yellow",
+				},
+			),
+			insertWithPendingFormat(
+				"here",
+				4,
+				new Set(["b"]),
+				"zy",
+				{
+					kind: "text",
+					color: "red",
+				},
+			),
 		]).toStrictEqual([
 			'here<span class="colored bc-yellow">z</span>',
 			'here<span class="colored c-red"><b>zy</b></span>',
@@ -67,8 +98,10 @@ describe("insertWithPendingFormat with a color", () => {
 	});
 });
 
-describe("insertWithPendingFormat", () => {
-	it("applies pending attributes to the first typed character; the rest inherit from it", () => {
+describe("insertWithPendingFormat", () =>
+{
+	it("applies pending attributes to the first typed character; the rest inherit from it", () =>
+	{
 		expect([
 			insertWithPendingFormat("ab", 1, new Set(["b"]), "z"),
 			insertWithPendingFormat("ab", 1, new Set(["b"]), "zy"),

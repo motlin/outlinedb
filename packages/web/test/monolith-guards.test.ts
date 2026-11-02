@@ -5,11 +5,13 @@ const BOM = "﻿";
 const TIME = '<time data-monolith="true" contenteditable="false" class="explosive monolith-pill">x</time>';
 const MENTION = '<mention data-monolith="true" contenteditable="false" class="mention">x</mention>';
 
-describe("addMonolithGuards", () => {
+describe("addMonolithGuards", () =>
+{
 	it.each([
 		["time", TIME],
 		["mention", MENTION],
-	])("guards a %s pill by where it sits", (_name, pill) => {
+	])("guards a %s pill by where it sits", (_name, pill) =>
+	{
 		expect([
 			addMonolithGuards(pill),
 			addMonolithGuards(`${pill} lead`),
@@ -18,7 +20,8 @@ describe("addMonolithGuards", () => {
 		]).toStrictEqual([`${BOM}${pill}${BOM}`, `${BOM}${pill} lead`, `trail ${pill}${BOM}`, `mid ${pill} mid`]);
 	});
 
-	it("looks through formatting wrappers and leaves plain text alone", () => {
+	it("looks through formatting wrappers and leaves plain text alone", () =>
+	{
 		expect([
 			addMonolithGuards(`<b>${MENTION}</b>`),
 			addMonolithGuards("plain"),

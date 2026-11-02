@@ -3,7 +3,8 @@ export const POPUP_Z = 300;
 // Upstream ButtonMenu level.
 export const BUTTON_MENU_Z = 1001;
 
-export interface PopoverBoxOptions {
+export interface PopoverBoxOptions
+{
 	surfaceName?: string;
 	minWidth?: number | string;
 	maxWidth?: number | string;
@@ -11,7 +12,8 @@ export interface PopoverBoxOptions {
 	offset?: readonly [number, number];
 }
 
-export interface PopoverBoxStyle {
+export interface PopoverBoxStyle
+{
 	pointerEvents: "auto";
 	zIndex: number;
 	minWidth: number | string | undefined;
@@ -19,14 +21,23 @@ export interface PopoverBoxStyle {
 	marginTop?: number;
 }
 
-export interface PopoverBox {
+export interface PopoverBox
+{
 	style: PopoverBoxStyle;
 	className: string;
 }
 
-export function popoverBox({surfaceName = "wf-menu", minWidth, maxWidth, offset}: PopoverBoxOptions = {}): PopoverBox {
-	const style: PopoverBoxStyle = {pointerEvents: "auto", zIndex: POPUP_Z, minWidth, maxWidth};
-	if (offset) {
+export function popoverBox({surfaceName = "wf-menu", minWidth, maxWidth, offset}: PopoverBoxOptions = {}): PopoverBox
+{
+	const style: PopoverBoxStyle =
+	{
+		pointerEvents: "auto",
+		zIndex: POPUP_Z,
+		minWidth,
+		maxWidth,
+	};
+	if (offset)
+	{
 		style.marginTop = offset[1] + 4;
 	}
 	// Matches the upstream bundle template literal byte for byte, including newlines and indentation.
@@ -36,5 +47,8 @@ export function popoverBox({surfaceName = "wf-menu", minWidth, maxWidth, offset}
       overflow-x-hidden
       [transition:200ms_opacity]
       print:hidden`;
-	return {style, className};
+	return {
+		style,
+		className,
+	};
 }

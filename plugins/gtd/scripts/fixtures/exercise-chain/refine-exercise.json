@@ -20,7 +20,8 @@
 			"applyOps": [
 				"./bin/run.js node update --id aaaaaaaa-1111-2222-3333-444444444444 --name '💪 #Program phase 2, week 3, day 2, Back and Biceps with Alice #exercise' --expect-name '#program phase 2 week 3 day 2 back and biceps with Alice. #exercise'"
 			],
-			"chained": {
+			"chained":
+			{
 				"task": "refine-journal",
 				"before": "#program phase 2 week 3 day 2 back and biceps with @Alice. #exercise",
 				"after": "💪 #Program phase 2, week 3, day 2, Back and Biceps with @Alice #exercise",

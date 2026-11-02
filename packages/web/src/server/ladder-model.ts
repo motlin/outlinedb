@@ -7,11 +7,17 @@
  * out of a higher tier.
  */
 
-const ORDINAL_SUFFIX: Record<number, string> = {1: "st", 2: "nd", 3: "rd"};
+const ORDINAL_SUFFIX: Record<number, string> =
+{
+	1: "st",
+	2: "nd",
+	3: "rd",
+};
 
 export type TierState = "room" | "exact" | "over";
 
-export interface LadderItem {
+export interface LadderItem
+{
 	id: string;
 	name: string;
 	/** Incomplete children, recursively, as read from the cache. */
@@ -21,7 +27,8 @@ export interface LadderItem {
 	descendantCount: number;
 }
 
-export interface LadderTier {
+export interface LadderTier
+{
 	tier: number;
 	label: string;
 	id: string;
@@ -30,75 +37,94 @@ export interface LadderTier {
 	items: LadderItem[];
 }
 
-export interface Ladder {
+export interface Ladder
+{
 	root: string;
 	bucketId: string;
 	tiers: LadderTier[];
 }
 
 /** The shape {@link toLadder} needs from a cached node tree. */
-export interface RawNode {
+export interface RawNode
+{
 	id: string;
 	name?: string | null;
 	completedAt?: string | null;
 	children?: RawNode[];
 }
 
-export function tierCapacity(tier: number): number {
+export function tierCapacity(tier: number): number
+{
 	return 2 ** tier;
 }
 
-export function tierLabel(tier: number): string {
+export function tierLabel(tier: number): string
+{
 	const teen = tier % 100 >= 11 && tier % 100 <= 13;
 	return `${tier}${teen ? "th" : (ORDINAL_SUFFIX[tier % 10] ?? "th")}`;
 }
 
-function parseTierLabel(name: string | null | undefined): number | null {
+function parseTierLabel(name: string | null | undefined): number | null
+{
 	const match = /^\s*(\d+)(st|nd|rd|th)\s*$/iu.exec(stripHtml(name ?? ""));
-	if (!match) {
+	if (!match)
+	{
 		return null;
 	}
 	const tier = Number(match[1]);
 	return Number.isInteger(tier) && tier >= 1 ? tier : null;
 }
 
-function stripHtml(value: string): string {
+function stripHtml(value: string): string
+{
 	return value.replaceAll(/<[^>]+>/gu, "").trim();
 }
 
-function stateFor(count: number, capacity: number): TierState {
-	if (count > capacity) {
+function stateFor(count: number, capacity: number): TierState
+{
+	if (count > capacity)
+	{
 		return "over";
 	}
 	return count === capacity ? "exact" : "room";
 }
 
-export function toLadder(root: string, bucket: RawNode): Ladder {
+export function toLadder(root: string, bucket: RawNode): Ladder
+{
 	const tiers: LadderTier[] = [];
 
-	for (const child of bucket.children ?? []) {
+	for (const child of bucket.children ?? [])
+	{
 		const tier = parseTierLabel(child.name);
-		if (tier === null) {
+		if (tier === null)
+		{
 			continue;
 		}
 		const items = (child.children ?? []).filter((node) => !node.completedAt).map(toItem);
 		const capacity = tierCapacity(tier);
-		tiers.push({
-			tier,
-			label: tierLabel(tier),
-			id: child.id,
-			capacity,
-			state: stateFor(items.length, capacity),
-			items,
-		});
+		tiers.push(
+			{
+				tier,
+				label: tierLabel(tier),
+				id: child.id,
+				capacity,
+				state: stateFor(items.length, capacity),
+				items,
+			},
+		);
 	}
 
 	tiers.sort((a, b) => a.tier - b.tier);
-	return {root, bucketId: bucket.id, tiers};
+	return {
+		root,
+		bucketId: bucket.id,
+		tiers,
+	};
 }
 
 /** A row with its loaded open descendants; the tree panel fetches deeper branches on demand. */
-function toItem(node: RawNode): LadderItem {
+function toItem(node: RawNode): LadderItem
+{
 	const children = (node.children ?? []).filter((child) => !child.completedAt).map(toItem);
 	return {
 		id: node.id,
@@ -109,7 +135,8 @@ function toItem(node: RawNode): LadderItem {
 	};
 }
 
-export interface TierMove {
+export interface TierMove
+{
 	nodeId: string;
 	parentId: string;
 	fromTier: string;
@@ -123,14 +150,22 @@ export interface TierMove {
  * hardcoded one destination tier for every move and silently filed four rows
  * into the wrong place, so an unknown tier has to be an error, never a guess.
  */
-export function planTierMove(ladder: Ladder, nodeId: string, toTier: string): TierMove {
+export function planTierMove(ladder: Ladder, nodeId: string, toTier: string): TierMove
+{
 	const destination = ladder.tiers.find((tier) => tier.label === toTier);
-	if (!destination) {
+	if (!destination)
+	{
 		throw new Error(`no tier ${toTier} on the ${ladder.root} ladder`);
 	}
 	const origin = ladder.tiers.find((tier) => tier.items.some((item) => item.id === nodeId));
-	if (!origin) {
+	if (!origin)
+	{
 		throw new Error(`node ${nodeId} is not on the ${ladder.root} ladder`);
 	}
-	return {nodeId, parentId: destination.id, fromTier: origin.label, toTier: destination.label};
+	return {
+		nodeId,
+		parentId: destination.id,
+		fromTier: origin.label,
+		toTier: destination.label,
+	};
 }

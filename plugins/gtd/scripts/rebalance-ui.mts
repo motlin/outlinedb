@@ -18,13 +18,15 @@ import {isObject, parseJson} from "./json.mts";
 import {webAppUrl} from "./web-app-url.mts";
 import {isMain} from "./is-main.mts";
 
-export interface ModelItem {
+export interface ModelItem
+{
 	readonly id: string;
 	readonly shortId: string | null;
 	readonly text: string;
 }
 
-export interface ModelTier {
+export interface ModelTier
+{
 	readonly tier: number;
 	readonly label: string;
 	readonly id: string | null;
@@ -32,13 +34,15 @@ export interface ModelTier {
 	readonly items: readonly ModelItem[];
 }
 
-export interface LadderModel {
+export interface LadderModel
+{
 	readonly root: string;
 	readonly bucketId: string | null;
 	readonly tiers: readonly ModelTier[];
 }
 
-interface SubmittedTier {
+interface SubmittedTier
+{
 	readonly tier: number;
 	readonly label: string;
 	readonly id: string | null;
@@ -46,19 +50,29 @@ interface SubmittedTier {
 	readonly items: readonly string[];
 }
 
-interface SubmittedRoot {
+interface SubmittedRoot
+{
 	readonly bucketId: string | null;
 	readonly tiers: readonly SubmittedTier[];
 }
 
-export interface Submission {
+export interface Submission
+{
 	readonly roots: Readonly<Record<string, SubmittedRoot>>;
 	readonly completed: readonly string[];
 }
 
 export type RebalanceOp =
-	| {op: "create"; root: string; bucketId: string | null; label: string; tier: number}
-	| {
+	|
+	  {
+			op: "create";
+			root: string;
+			bucketId: string | null;
+			label: string;
+			tier: number;
+	  }
+	|
+	  {
 			op: "move";
 			root: string;
 			nodeId: string;
@@ -68,16 +82,23 @@ export type RebalanceOp =
 			toId: string | null;
 			toIsNew: boolean;
 	  }
-	| {op: "complete"; root: string; nodeId: string};
+	|
+	  {
+			op: "complete";
+			root: string;
+			nodeId: string;
+	  };
 
-function isStringArray(value: unknown): value is string[] {
+function isStringArray(value: unknown): value is string[]
+{
 	return Array.isArray(value) && value.every((entry) => typeof entry === "string");
 }
 
 const TEMPLATE = join(import.meta.dirname, "..", "templates", "ladder-queue.html");
 
 /** Strip Workflowy HTML down to display text, keeping links as their anchor text. */
-export function displayText(name: string | null | undefined): string {
+export function displayText(name: string | null | undefined): string
+{
 	return (name ?? "")
 		.replaceAll(/<a[^>]*>(.*?)<\/a>/gu, "$1")
 		.replaceAll(/<[^>]+>/gu, "")
@@ -88,17 +109,20 @@ export function displayText(name: string | null | undefined): string {
 }
 
 /** One ladder, flattened for the page: every tier present, empty ones included. */
-export function buildLadderModel(root: string, bucket: unknown): LadderModel {
+export function buildLadderModel(root: string, bucket: unknown): LadderModel
+{
 	const ladder = readLadder(bucket);
 	return {
 		root,
 		bucketId: ladder.bucketId,
-		tiers: ladder.tiers.map((t) => ({
+		tiers: ladder.tiers.map((t) => (
+		{
 			tier: t.tier,
 			label: t.label,
 			id: t.id,
 			capacity: t.capacity,
-			items: t.items.map((n) => ({
+			items: t.items.map((n) => (
+			{
 				id: n.id,
 				shortId: typeof n.shortId === "string" ? n.shortId : null,
 				text: displayText(n.name),
@@ -111,67 +135,87 @@ export function buildLadderModel(root: string, bucket: unknown): LadderModel {
  * Ops to turn the live ladders into what the page submitted: tier creates first (a move needs its
  * destination to exist), then one move per item whose tier actually changed.
  */
-export function diffSubmission(models: readonly LadderModel[], input: unknown): RebalanceOp[] {
+export function diffSubmission(models: readonly LadderModel[], input: unknown): RebalanceOp[]
+{
 	const submission = validateSubmission(models, input);
 	const ops: RebalanceOp[] = [];
 	const moves: RebalanceOp[] = [];
 
-	for (const model of models) {
+	for (const model of models)
+	{
 		// validateSubmission narrowed a root for every model, so this lookup always hits.
 		const submitted = submission.roots[model.root];
 		assert.ok(submitted, `Submission is missing root ${model.root}`);
 
 		const wasIn = new Map<string, string>();
-		for (const tier of model.tiers) {
-			for (const item of tier.items) {
+		for (const tier of model.tiers)
+		{
+			for (const item of tier.items)
+			{
 				wasIn.set(item.id, tier.label);
 			}
 		}
 		const textOf = new Map<string, string>();
-		for (const tier of model.tiers) {
-			for (const item of tier.items) {
+		for (const tier of model.tiers)
+		{
+			for (const item of tier.items)
+			{
 				textOf.set(item.id, item.text);
 			}
 		}
 
-		for (const tier of submitted.tiers) {
-			if (tier.isNew) {
-				ops.push({
-					op: "create",
-					root: model.root,
-					bucketId: submitted.bucketId,
-					label: tier.label,
-					tier: tier.tier,
-				});
+		for (const tier of submitted.tiers)
+		{
+			if (tier.isNew)
+			{
+				ops.push(
+					{
+						op: "create",
+						root: model.root,
+						bucketId: submitted.bucketId,
+						label: tier.label,
+						tier: tier.tier,
+					},
+				);
 			}
-			for (const nodeId of tier.items) {
-				if (wasIn.get(nodeId) === tier.label) {
+			for (const nodeId of tier.items)
+			{
+				if (wasIn.get(nodeId) === tier.label)
+				{
 					continue;
 				}
-				moves.push({
-					op: "move",
-					root: model.root,
-					nodeId,
-					text: textOf.get(nodeId) ?? nodeId,
-					fromLabel: wasIn.get(nodeId) ?? null,
-					toLabel: tier.label,
-					toId: tier.id,
-					toIsNew: tier.isNew,
-				});
+				moves.push(
+					{
+						op: "move",
+						root: model.root,
+						nodeId,
+						text: textOf.get(nodeId) ?? nodeId,
+						fromLabel: wasIn.get(nodeId) ?? null,
+						toLabel: tier.label,
+						toId: tier.id,
+						toIsNew: tier.isNew,
+					},
+				);
 			}
 		}
 	}
-	const completed = submission.completed.map((nodeId): RebalanceOp => {
+	const completed = submission.completed.map((nodeId): RebalanceOp =>
+	{
 		const model = models.find((candidate) =>
 			candidate.tiers.some((tier) => tier.items.some((item) => item.id === nodeId)),
 		);
 		assert.ok(model, "Completed items must be unique current ladder items");
-		return {op: "complete", root: model.root, nodeId};
+		return {
+			op: "complete",
+			root: model.root,
+			nodeId,
+		};
 	});
 	return [...ops, ...moves, ...completed];
 }
 
-function narrowTier(value: unknown): SubmittedTier {
+function narrowTier(value: unknown): SubmittedTier
+{
 	assert.ok(isObject(value), "Submission tier must be an object");
 	const {tier, label, id, isNew, items} = value;
 	assert.ok(typeof tier === "number", "Tiers must be ordered and unique");
@@ -179,19 +223,30 @@ function narrowTier(value: unknown): SubmittedTier {
 	assert.ok(id === null || typeof id === "string", "Submission tier destination changed");
 	assert.ok(typeof isNew === "boolean", "Invalid new tier flag");
 	assert.ok(isStringArray(items), "Submission items must match current ladder exactly");
-	return {tier, label, id, isNew, items};
+	return {
+		tier,
+		label,
+		id,
+		isNew,
+		items,
+	};
 }
 
-function narrowRoot(value: unknown): SubmittedRoot {
+function narrowRoot(value: unknown): SubmittedRoot
+{
 	assert.ok(isObject(value), "Submission root must be an object");
 	const {bucketId, tiers} = value;
 	assert.ok(bucketId === null || typeof bucketId === "string", "Submission bucket changed");
 	assert.ok(Array.isArray(tiers), "Submission dropped a tier");
-	return {bucketId, tiers: tiers.map(narrowTier)};
+	return {
+		bucketId,
+		tiers: tiers.map(narrowTier),
+	};
 }
 
 /** Reject stale or incomplete arrangements before producing any write proposals. */
-export function validateSubmission(models: readonly LadderModel[], input: unknown): Submission {
+export function validateSubmission(models: readonly LadderModel[], input: unknown): Submission
+{
 	assert.ok(isObject(input) && isObject(input.roots), "Submission roots must match the current ladders");
 	const inputRoots = input.roots;
 	assert.deepEqual(
@@ -208,14 +263,16 @@ export function validateSubmission(models: readonly LadderModel[], input: unknow
 		"Completed items must be unique current ladder items",
 	);
 	const roots: Record<string, SubmittedRoot> = {};
-	for (const model of models) {
+	for (const model of models)
+	{
 		const submitted = narrowRoot(inputRoots[model.root]);
 		roots[model.root] = submitted;
 		assert.equal(submitted.bucketId, model.bucketId, "Submission bucket changed");
 		assert.ok(submitted.tiers.length >= model.tiers.length, "Submission dropped a tier");
 		const known = new Map(model.tiers.map((tier) => [tier.tier, tier]));
 		let previous = 0;
-		for (const tier of submitted.tiers) {
+		for (const tier of submitted.tiers)
+		{
 			assert.ok(Number.isInteger(tier.tier) && tier.tier > previous, "Tiers must be ordered and unique");
 			previous = tier.tier;
 			assert.equal(tier.label, tierLabel(tier.tier), "Invalid tier label");
@@ -223,7 +280,8 @@ export function validateSubmission(models: readonly LadderModel[], input: unknow
 			assert.equal(tier.id, current?.id ?? null, "Submission tier destination changed");
 			assert.equal(tier.isNew, !current, "Invalid new tier flag");
 		}
-		for (const tier of model.tiers) {
+		for (const tier of model.tiers)
+		{
 			assert.ok(
 				submitted.tiers.some((candidate) => candidate.tier === tier.tier),
 				"Submission dropped a current tier",
@@ -236,18 +294,23 @@ export function validateSubmission(models: readonly LadderModel[], input: unknow
 			"Submission items must match current ladder exactly",
 		);
 	}
-	return {roots, completed};
+	return {
+		roots,
+		completed,
+	};
 }
 
 const esc = (s: string | number): string =>
 	String(s).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 
-function renderLadder(model: LadderModel): string {
+function renderLadder(model: LadderModel): string
+{
 	// One running index across every tier: a shift-click range is a slice of this
 	// sequence, so it has to cross tier boundaries the way Finder's does.
 	let rowIndex = 0;
 	const rows = model.tiers
-		.map((tier) => {
+		.map((tier) =>
+		{
 			const state =
 				tier.items.length > tier.capacity ? "over" : tier.items.length === tier.capacity ? "exact" : "room";
 			const items = tier.items
@@ -272,7 +335,9 @@ function renderLadder(model: LadderModel): string {
       <li class="span ${state}" data-state="${state}" data-tier-span="${tier.tier}" data-drop-target="true" data-capacity="${tier.capacity}" data-tier-id="${esc(tier.id ?? "")}" data-is-new="false">
         <ul class="span-items">${items}</ul>
         <div class="slots">${Array.from(
-			{length: Math.max(0, tier.capacity - tier.items.length)},
+			{
+				length: Math.max(0, tier.capacity - tier.items.length),
+			},
 			() => '<div class="slot">free</div>',
 		)
 			.slice(0, 8)
@@ -291,12 +356,14 @@ function renderLadder(model: LadderModel): string {
 }
 
 /** Stable fingerprint of the tiers and rows a page renders. */
-export function pageSignature(models: readonly LadderModel[]): string {
+export function pageSignature(models: readonly LadderModel[]): string
+{
 	const shape = models
 		.map((m) => `${m.root}:${m.tiers.map((t) => `${t.label}=${t.items.map((i) => i.id).join(",")}`).join("|")}`)
 		.join(";");
 	let h = 0;
-	for (let i = 0; i < shape.length; i++) {
+	for (let i = 0; i < shape.length; i++)
+	{
 		// oxlint-disable-next-line unicorn/prefer-math-trunc, unicorn/prefer-code-point -- `| 0` wraps to int32 (Math.trunc would lose precision past 2^53); codePointAt would change the hash for emoji and orphan saved localStorage drafts keyed by it
 		h = (Math.imul(31, h) + shape.charCodeAt(i)) | 0;
 	}
@@ -308,31 +375,46 @@ export function pageSignature(models: readonly LadderModel[]): string {
  * its bucket id and tiers of {id, shortId, name}. The template renders from this
  * object, so the generator's only job is to produce it correctly.
  */
-export function toQueueLadders(models: readonly LadderModel[]) {
+export function toQueueLadders(models: readonly LadderModel[])
+{
 	const out: Record<
 		string,
 		{
 			root: string;
 			bucketId: string | null;
-			tiers: {
+			tiers:
+			{
 				tier: number;
 				capacity: number;
 				label: string;
 				id: string | null;
-				items: {id: string; shortId: string | null; name: string}[];
+				items:
+				{
+					id: string;
+					shortId: string | null;
+					name: string;
+				}[];
 			}[];
 		}
 	> = {};
-	for (const model of models) {
-		out[model.root] = {
+	for (const model of models)
+	{
+		out[model.root] =
+		{
 			root: model.root,
 			bucketId: model.bucketId,
-			tiers: model.tiers.map((t) => ({
+			tiers: model.tiers.map((t) => (
+			{
 				tier: t.tier,
 				capacity: t.capacity,
 				label: t.label,
 				id: t.id,
-				items: t.items.map((i) => ({id: i.id, shortId: i.shortId, name: i.text})),
+				items: t.items.map((i) => (
+				{
+					id: i.id,
+					shortId: i.shortId,
+					name: i.text,
+				})),
 			})),
 		};
 	}
@@ -348,7 +430,8 @@ export function toQueueLadders(models: readonly LadderModel[]) {
  * controls. Templating keeps the page the user actually uses and leaves the
  * generator responsible only for data.
  */
-export function renderFromTemplate(models: readonly LadderModel[], templatePath = TEMPLATE): string {
+export function renderFromTemplate(models: readonly LadderModel[], templatePath = TEMPLATE): string
+{
 	const template = readFileSync(templatePath, "utf8");
 	// `</script>` anywhere in a task name would close the tag early; \u003c keeps
 	// the payload inert while staying valid JSON.
@@ -356,7 +439,8 @@ export function renderFromTemplate(models: readonly LadderModel[], templatePath 
 	return template.replace("__LADDERS__", () => payload);
 }
 
-export function renderPage(models: readonly LadderModel[]): string {
+export function renderPage(models: readonly LadderModel[]): string
+{
 	return `<title>Asap Ladder Rebalance</title>
 <style>
   :root {
@@ -704,29 +788,36 @@ refresh();
 </script>`;
 }
 
-export function renderWebAppLauncher(url: URL | string): string {
+export function renderWebAppLauncher(url: URL | string): string
+{
 	const target = new URL("/ladder", url);
 	assert.ok(["http:", "https:"].includes(target.protocol), "Web app URL must use HTTP or HTTPS");
 	return `<!doctype html><html lang="en"><meta charset="utf-8"><title>Asap ladder</title><body><a href="${esc(target.href)}">Open the local Asap ladder</a><p>Moves and Done apply immediately in the local web app.</p></body></html>`;
 }
 
-function main(): void {
+function main(): void
+{
 	const args = process.argv.slice(2);
 	const htmlIndex = args.indexOf("--html");
 	const html = htmlIndex !== -1;
-	if (html) {
+	if (html)
+	{
 		args.splice(htmlIndex, 1);
 	}
-	if (!html && args[0] !== "--apply") {
+	if (!html && args[0] !== "--apply")
+	{
 		const outputIndex = args.indexOf("--output");
 		const output = outputIndex === -1 ? null : args.splice(outputIndex, 2)[1];
 		assert.ok(args.length === 0, "Use --html work.json personal.json for an offline or Artifact page");
 		const url = webAppUrl("/ladder");
 		const page = renderWebAppLauncher(url);
-		if (output) {
+		if (output)
+		{
 			writeFileSync(output, page);
 			process.stdout.write(`${resolve(output)}\n`);
-		} else {
+		}
+		else
+		{
 			process.stdout.write(`${url.href}\n`);
 		}
 		return;
@@ -740,7 +831,8 @@ function main(): void {
 		2,
 		"Usage: rebalance-ui.mts [--html | --apply submission.json] work.json personal.json [--output page.html]",
 	);
-	const models = args.map((file, index) => {
+	const models = args.map((file, index) =>
+	{
 		const parsed = parseJson(readFileSync(file, "utf8"));
 		const bucket: unknown = Array.isArray(parsed) ? parsed[0] : parsed;
 		assert.ok(
@@ -752,14 +844,18 @@ function main(): void {
 	const result = apply
 		? `${JSON.stringify(diffSubmission(models, parseJson(readFileSync(submissionPath ?? "", "utf8"))), null, 2)}\n`
 		: renderFromTemplate(models);
-	if (output) {
+	if (output)
+	{
 		writeFileSync(output, result);
 		process.stdout.write(`${resolve(output)}\n`);
-	} else {
+	}
+	else
+	{
 		process.stdout.write(result);
 	}
 }
 
-if (isMain(import.meta.url)) {
+if (isMain(import.meta.url))
+{
 	main();
 }
