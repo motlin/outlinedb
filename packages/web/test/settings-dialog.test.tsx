@@ -554,9 +554,11 @@ describe("Settings dialog", () => {
 		const label = button?.textContent;
 		await act(async () => {
 			button?.click();
-			// The optimistic update lands after the preferences query is cancelled.
-			await new Promise((resolve) => {
-				setTimeout(resolve, 0);
+			// The optimistic update lands after the preferences query is cancelled, which can take more than one tick.
+			await vi.waitFor(() => {
+				if (section("Backup").querySelector<HTMLElement>("button.button")?.textContent === label) {
+					throw new Error("still showing the old label");
+				}
 			});
 		});
 		expect({
