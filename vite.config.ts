@@ -1,47 +1,9 @@
 import {defineConfig} from "vite-plus";
 
 export default defineConfig({
-	fmt: {
-		// Verbatim upstream copy; the byte-for-byte guard in wf-tailwind.test.ts breaks if it is reformatted.
-		ignorePatterns: [
-			"packages/cloudflare/worker-configuration.d.ts",
-			"packages/web/src/client/wf-tailwind.css",
-			"packages/web/src/client/reset.css",
-			// Verbatim upstream DOM capture compared by color-popup.test.tsx.
-			"packages/web/test/fixtures/upstream-color-popup-dom.html",
-		],
-		semi: true,
-		singleQuote: false,
-		useTabs: true,
-		tabWidth: 4,
-		printWidth: 120,
-		proseWrap: "never",
-		embeddedLanguageFormatting: "off",
-		bracketSpacing: false,
-		trailingComma: "all",
-		arrowParens: "always",
-		overrides: [
-			{
-				files: [".yamllint.yaml", "**/*.yaml", "**/*.yml"],
-				options: {
-					useTabs: false,
-					tabWidth: 2,
-				},
-			},
-			{
-				files: ["**/*.md"],
-				options: {
-					printWidth: 320,
-				},
-			},
-			{
-				// `vp config` (the prepare hook) regenerates these with hard-wrapped prose; keep its wrapping so installs stop dirtying the tree.
-				files: ["AGENTS.md", "CLAUDE.md"],
-				options: {
-					proseWrap: "preserve",
-				},
-			},
-		],
+	// Formatting runs through oxfmt-next-line (configured in .oxfmtrc.json), not Vite+'s bundled oxfmt.
+	check: {
+		fmt: false,
 	},
 	run: {
 		tasks: {

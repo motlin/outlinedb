@@ -12,7 +12,7 @@ export PATH := justfile_directory() / "node_modules/.bin" + ":" + env("PATH")
 install:
     pnpm install
     just ensure-sqlite-native
-    vp fmt CLAUDE.md AGENTS.md
+    oxfmt-next-line CLAUDE.md AGENTS.md
 
 # Verify better-sqlite3 native modules match the active Node runtime
 [group('setup')]
@@ -45,9 +45,9 @@ lint: install
 [group('lint')]
 format: install
     pre-commit run just-fmt --all-files
-    vp fmt {{ if ci != "" { "--check" } else { "" } }}
+    oxfmt-next-line {{ if ci != "" { "--check" } else { "" } }}
 
-# Run checks (format + lint + typecheck)
+# Run checks (lint + typecheck; formatting is `just format`)
 [group('lint')]
 check *args: build-shared
     vp run --cache check {{ if ci != "" { "" } else { "--fix" } }} {{ args }}
@@ -202,9 +202,9 @@ eval-behavioral: build
 pre-commit: build-shared
     pre-commit run --all-files
 
-# Run pre-commit hooks except Fallow and vp fmt, which verify's fixer branch already ran
-_pre-commit-unformatted: build-shared
-    SKIP=fallow,oxfmt pre-commit run --all-files
+# Run pre-commit hooks except Fallow, which verify's fixer branch already ran
+_pre-commit-without-fallow: build-shared
+    SKIP=fallow pre-commit run --all-files
 
 # Run all pre-commit checks
 [arg("quick", long, value="true", help="Skip tests")]
@@ -213,9 +213,9 @@ verify quick="": build-shared
     #!/usr/bin/env bash
     set -uo pipefail
     # Branches run in parallel with --no-deps: just's [parallel] can start a shared dependency twice, and a second build-shared rewrites shared dist under the running tests.
-    # Fixers rewrite files in place, so they share one serial branch. Fallow goes first because its fix rewrites package.json with 2-space indentation, which check's formatter re-tabs.
+    # Fixers rewrite files in place, so they share one serial branch. Fallow goes first because its fix rewrites package.json with 2-space indentation, which the oxfmt-next-line pre-commit hook re-tabs.
     branches=(
-        "fallow check _pre-commit-unformatted"
+        "fallow check _pre-commit-without-fallow"
         "typecheck build manifest readme-check eval-structural"
         "test-plugins"
         {{ if quick == "true" { "" } else { '"test"' } }}
