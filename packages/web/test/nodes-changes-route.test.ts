@@ -4,6 +4,7 @@ import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {Hono} from "hono";
 import {join} from "node:path";
+import {TRANSACTION_TIMEOUT_MS} from "@workflowy/shared/cache";
 import * as schema from "@workflowy/shared/db";
 import type {WorkflowyNode} from "@workflowy/shared/types";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
@@ -27,8 +28,8 @@ function stamp(ms: number): string {
 }
 
 /**
- * Home holds `parents` parents P0.., each with two children, seeded at {@link T0}. The clock then stands two
- * transaction timeouts later, so the seeding falls behind every watermark the test sees.
+ * Home holds `parents` parents P0.., each with two children, seeded at {@link T0}. The clock then stands a
+ * transaction timeout plus a minute later, so the seeding falls behind every watermark the test sees.
  */
 function setup(parents: number) {
 	vi.useFakeTimers({toFake: ["Date"], now: T0});
@@ -50,7 +51,7 @@ function setup(parents: number) {
 			cacheService.insertNode(apiNode(`P${p}c${k}`, `P${p}`, k), `P${p}`);
 		}
 	}
-	vi.setSystemTime(T0 + 120_000);
+	vi.setSystemTime(T0 + TRANSACTION_TIMEOUT_MS + 60_000);
 	const ctx = {db, cacheService} as unknown as ServerContext;
 	const app = new Hono<AppEnv>();
 	app.use("*", async (c, next) => {
@@ -103,7 +104,7 @@ describe("GET /api/v1/nodes/changes", () => {
 	it("answers a created node with its parent's refreshed children", async () => {
 		const {cacheService, changes} = setup(2);
 		const seeded = await changes(null);
-		vi.setSystemTime(T0 + 130_000);
+		vi.setSystemTime(T0 + TRANSACTION_TIMEOUT_MS + 70_000);
 		cacheService.insertNode(apiNode("New", "P1", 5), "P1");
 
 		const {body} = await changes(seeded.body.latest);
@@ -150,16 +151,16 @@ describe("GET /api/v1/nodes/changes", () => {
 	it("delivers a change stamped before an earlier poll's watermark that commits after it", async () => {
 		const {cacheService, changes} = setup(2);
 		const seeded = await changes(null);
-		vi.setSystemTime(T0 + 130_000);
+		vi.setSystemTime(T0 + TRANSACTION_TIMEOUT_MS + 70_000);
 		cacheService.insertNode(apiNode("Later", "P0", 5), "P0");
 		const first = await changes(seeded.body.latest);
 		// A unit that read the clock before "Later" and committed after the first poll, within the timeout.
-		vi.setSystemTime(T0 + 100_000);
+		vi.setSystemTime(T0 + TRANSACTION_TIMEOUT_MS + 40_000);
 		cacheService.insertNode(apiNode("Earlier", "P1", 5), "P1");
-		vi.setSystemTime(T0 + 140_000);
+		vi.setSystemTime(T0 + TRANSACTION_TIMEOUT_MS + 80_000);
 		const second = await changes(first.body.latest);
 		// Past the timeout window, the re-reads stop.
-		vi.setSystemTime(T0 + 300_000);
+		vi.setSystemTime(T0 + 3 * TRANSACTION_TIMEOUT_MS + 120_000);
 		const third = await changes(second.body.latest);
 		const fourth = await changes(third.body.latest);
 
@@ -186,13 +187,19 @@ describe("GET /api/v1/nodes/changes", () => {
 				children: {P0: ["P0c0", "P0c1", "Later"], P1: ["P1c0", "P1c1", "Earlier"]},
 			},
 			third: {
-				latest: stamp(240_000),
+				latest: stamp(2 * TRANSACTION_TIMEOUT_MS + 120_000),
 				reset: false,
 				changedIds: new Set(["Later", "Earlier"]),
 				deletedIds: new Set(),
 				children: {P0: ["P0c0", "P0c1", "Later"], P1: ["P1c0", "P1c1", "Earlier"]},
 			},
-			fourth: {latest: stamp(240_000), reset: false, changedIds: new Set(), deletedIds: new Set(), children: {}},
+			fourth: {
+				latest: stamp(2 * TRANSACTION_TIMEOUT_MS + 120_000),
+				reset: false,
+				changedIds: new Set(),
+				deletedIds: new Set(),
+				children: {},
+			},
 		});
 		expect(second.body.changedIds).toStrictEqual([...new Set(second.body.changedIds)]);
 	});
@@ -218,7 +225,7 @@ describe("GET /api/v1/nodes/changes", () => {
 		const run = async (parents: number) => {
 			const {cacheService, changes} = setup(parents);
 			const seeded = await changes(null);
-			vi.setSystemTime(T0 + 130_000);
+			vi.setSystemTime(T0 + TRANSACTION_TIMEOUT_MS + 70_000);
 			for (let p = 0; p < parents; p++) {
 				cacheService.insertNode(apiNode(`New${p}`, `P${p}`, 5), `P${p}`);
 			}

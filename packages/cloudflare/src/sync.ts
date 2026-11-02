@@ -7,7 +7,6 @@ import {
 	readWorkflowyEpoch,
 	runUnitOfWork,
 	seedAccount,
-	TRANSACTION_TIMEOUT_MS,
 	unitOfWorkSignal,
 } from "@workflowy/shared/cache";
 import type {ApiImportState, ImportApiResult, StoredAccount} from "@workflowy/shared/cache";
@@ -22,10 +21,10 @@ const DEFAULT_INTERVAL_MINUTES = 30;
 const RATE_LIMIT_BACKOFF_MS = 60_000;
 const SEED_HINT = "On the Worker, POST /api/admin/seed instead.";
 /**
- * An alarm run stops applying batches, and leaves the finish to a fresh run, once this much of its transaction
- * timeout is spent, so the rest of the run commits well inside it.
+ * An alarm run stops applying batches, and leaves the finish to a fresh run, once this much time is spent. It stays
+ * well inside the transaction timeout and keeps each alarm short on the Worker.
  */
-const RUN_BUDGET_MS = TRANSACTION_TIMEOUT_MS / 2;
+const RUN_BUDGET_MS = 30_000;
 
 /**
  * The sync job's own tables, temporal like every other table: a run's versions (one per alarm run), the ids each run
