@@ -47,13 +47,14 @@ Show the cleaned item name (markup and due `<time>` stripped), `completedDate`, 
 
 ## Apply: Journal
 
-Find the date node under the root's `📅 Calendar` whose `<time>` element matches `completedDate`:
+Find the date node whose `<time>` element matches `completedDate`. Older days are moved out of the root's `📅 Calendar` into `📅 Calendar > 🗃️ Archive > <year> > <month>`, so look in both places:
 
 ```bash
 ./bin/run.js node get --path "<Personal|Work>,📅 Calendar" --depth 1 --json --fields id,name
+./bin/run.js node get --path "<Personal|Work>,📅 Calendar,🗃️ Archive,<YYYY>,<Month>" --depth 1 --json --fields id,name
 ```
 
-If the date node is missing, create it with name `<time startYear="Y" startMonth="M" startDay="D">Ddd, Mmm D, YYYY</time>` under the Calendar node (the date format is described in `plugins/workflowy/skills/workflowy-html.md`), then resolve its full UUID. Then un-complete before moving, so the journal never holds a completed node:
+Use the archived day node when it exists. If the date node is missing from both, create it with name `<time startYear="Y" startMonth="M" startDay="D">Ddd, Mmm D, YYYY</time>`: under the archive month node when that month is already archived, otherwise directly under the Calendar node (the date format is described in `plugins/workflowy/skills/workflowy-html.md`). Resolve its full UUID, and reuse it for every later row with the same `completedDate` instead of creating another. Then un-complete before moving, so the journal never holds a completed node:
 
 ```bash
 ./bin/run.js node uncomplete --id <rowId>
