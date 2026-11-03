@@ -15,6 +15,13 @@
 			"when": 1793690413635,
 			"tag": "0001_unique_system_to_indexes",
 			"breakpoints": true
+		},
+		{
+			"idx": 2,
+			"version": "6",
+			"when": 1793714498827,
+			"tag": "0002_close_system_target_placeholders",
+			"breakpoints": true
 		}
 	]
 }
