@@ -256,11 +256,12 @@ export class SyncJob {
 	}
 
 	/**
-	 * Close the live rows `where` selects at this alarm run's system time; a row this alarm run itself wrote was never
-	 * live at any other system time, so it goes instead of closing with zero width.
+	 * Close the live rows `where` selects at this alarm run's system time. A row stamped at or after it (written by this
+	 * alarm run, or by a request that landed while the run awaited I/O) was never live before that time, so it goes
+	 * instead of closing with zero width or an inverted interval.
 	 */
 	private closeLive(table: "sync_seed_requests", where: string, ...bindings: string[]): void {
-		this.sql.exec(`DELETE FROM ${table} WHERE ${where} AND system_from = ?`, ...bindings, this.systemTime);
+		this.sql.exec(`DELETE FROM ${table} WHERE ${where} AND system_from >= ?`, ...bindings, this.systemTime);
 		this.sql.exec(
 			`UPDATE ${table} SET system_to = ? WHERE ${where} AND system_to = ?`,
 			this.systemTime,

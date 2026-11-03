@@ -76,7 +76,11 @@ export class ProbeStore extends UserStore {
 				seen: sql
 					.exec(`SELECT ${live} AS live, count(*) AS n FROM sync_seen GROUP BY live ORDER BY live`)
 					.toArray(),
-				seedRequests: sql.exec(`SELECT ${live} AS live FROM sync_seed_requests ORDER BY system_from`).toArray(),
+				seedRequests: sql
+					.exec(
+						`SELECT ${live} AS live, CASE WHEN system_from <= system_to THEN 1 ELSE 0 END AS ordered FROM sync_seed_requests ORDER BY system_from`,
+					)
+					.toArray(),
 			});
 		}
 		if (url.pathname === "/__live-ids") {

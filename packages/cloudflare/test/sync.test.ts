@@ -92,7 +92,7 @@ interface SyncTables {
 	runs: {phase: string; applied: number; status: string | null; live: number}[];
 	runSystemFroms: number;
 	seen: {live: number; n: number}[];
-	seedRequests: {live: number}[];
+	seedRequests: {live: number; ordered: number}[];
 }
 
 /** The sync job's own temporal tables: every run version, the seen-id scratch and the seed requests. */
@@ -151,6 +151,8 @@ describe("sync from a fake upstream", () => {
 	let rateLimit = false;
 	let treeData: (() => Response) | undefined;
 	let pushAndPoll: () => Response = () => pollResult("1");
+	let exportGate: Promise<void> | undefined;
+	let exportReached: (() => void) | undefined;
 	const internalCalls: string[] = [];
 	const pollStarts: string[] = [];
 	const auths: (string | null)[] = [];
@@ -176,6 +178,8 @@ describe("sync from a fake upstream", () => {
 					if (url.pathname === "/api/v1/nodes-export") {
 						exportCalls++;
 						auths.push(request.headers.get("authorization"));
+						exportReached?.();
+						await exportGate;
 						if (rateLimit) {
 							return new Response("slow down", {status: 429, headers: {"retry-after": "120"}});
 						}
@@ -373,7 +377,9 @@ describe("sync from a fake upstream", () => {
 		expect(internalCalls.filter((path) => path === "/get_tree_data/")).toStrictEqual(["/get_tree_data/"]);
 		await expect(internalMetadata(h)).resolves.toStrictEqual([{node_id: uuid(1), numbered_start: 7}]);
 		await expect(treeLog(h)).resolves.toStrictEqual({txId: "1", mirrors: []});
-		await expect(syncTables(h).then((tables) => tables.seedRequests)).resolves.toStrictEqual([{live: 0}]);
+		await expect(syncTables(h).then((tables) => tables.seedRequests)).resolves.toStrictEqual([
+			{live: 0, ordered: 1},
+		]);
 
 		const mirrored = JSON.stringify({
 			id: 4,
@@ -404,6 +410,40 @@ describe("sync from a fake upstream", () => {
 			log: {txId: "5", mirrors: [{mirror_id: uuid(4), original_id: uuid(3)}]},
 		});
 		pushAndPoll = () => pollResult("1");
+		await stop(h);
+	}, 60_000);
+
+	it("drops a seed requested while the run awaits the export instead of closing it before it began", async () => {
+		current = makeNodes(100);
+		treeData = () => Response.json({items: [], most_recent_operation_transaction_id: "1"});
+		let release = (): void => {};
+		exportGate = new Promise((resolve) => {
+			release = resolve;
+		});
+		const reached = new Promise<void>((resolve) => {
+			exportReached = resolve;
+		});
+		const h = await start(undefined, internalAuthBindings);
+		await h.mf.dispatchFetch("http://localhost/api/admin/sync", {method: "POST"});
+		await reached;
+		await sleep(50);
+		const seed = await h.mf.dispatchFetch("http://localhost/api/admin/seed", {method: "POST"});
+		expect(seed.status).toBe(202);
+		release();
+		exportGate = undefined;
+		exportReached = undefined;
+		let done: SyncStatus | undefined;
+		for (let i = 0; i < 300; i++) {
+			done = await status(h);
+			if (done.phase === "idle" && done.lastResult !== null) {
+				break;
+			}
+			await sleep(100);
+		}
+		expect(done?.lastResult).toMatchObject({status: "ok", totalNodes: 100});
+		expect(internalCalls.filter((path) => path === "/get_tree_data/")).toContain("/get_tree_data/");
+		// The request was never live before the run's system time, so closing it there would invert its interval.
+		await expect(syncTables(h).then((tables) => tables.seedRequests)).resolves.toStrictEqual([]);
 		await stop(h);
 	}, 60_000);
 
