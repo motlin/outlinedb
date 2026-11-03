@@ -61,11 +61,13 @@ describe("/mcp in the Worker", () => {
 		expect(names.toSorted()).toStrictEqual([
 			"workflowy_cache_status",
 			"workflowy_calendar_day",
+			"workflowy_node_changes",
 			"workflowy_node_complete",
 			"workflowy_node_create",
 			"workflowy_node_delete",
 			"workflowy_node_get",
 			"workflowy_node_list",
+			"workflowy_node_mirror",
 			"workflowy_node_move",
 			"workflowy_node_uncomplete",
 			"workflowy_node_update",

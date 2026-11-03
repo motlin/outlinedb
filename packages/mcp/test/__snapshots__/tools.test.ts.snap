@@ -64,7 +64,39 @@ exports[`MCP tools over a store > advertises every tool with its name, descripti
     },
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
+      "definitions": {
+        "__schema0": {
+          "properties": {
+            "children": {
+              "description": "Its own children, created in order",
+              "items": {
+                "$ref": "#/definitions/__schema0",
+              },
+              "type": "array",
+            },
+            "name": {
+              "description": "Name of the child node",
+              "type": "string",
+            },
+            "note": {
+              "description": "Note for the child node",
+              "type": "string",
+            },
+          },
+          "required": [
+            "name",
+          ],
+          "type": "object",
+        },
+      },
       "properties": {
+        "children": {
+          "description": "Child nodes to create under the new node, in order, each with optional children of its own",
+          "items": {
+            "$ref": "#/definitions/__schema0",
+          },
+          "type": "array",
+        },
         "createPath": {
           "default": false,
           "description": "Create missing parent path segments (like mkdir -p)",
@@ -113,6 +145,11 @@ exports[`MCP tools over a store > advertises every tool with its name, descripti
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "properties": {
+        "clearNote": {
+          "default": false,
+          "description": "Clear the node's note",
+          "type": "boolean",
+        },
         "id": {
           "description": "Node ID",
           "type": "string",
@@ -250,6 +287,68 @@ exports[`MCP tools over a store > advertises every tool with its name, descripti
   {
     "_meta": undefined,
     "annotations": undefined,
+    "description": "Create a live mirror of a node under a parent (a mirror of a mirror mirrors its original); needs the internal API",
+    "execution": {
+      "taskSupport": "forbidden",
+    },
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "nodeId": {
+          "description": "ID of the node to mirror",
+          "type": "string",
+        },
+        "nodePath": {
+          "description": "Comma-separated path to the node to mirror",
+          "type": "string",
+        },
+        "parentId": {
+          "description": "Parent ID, a system target, or "home" for the top level",
+          "type": "string",
+        },
+        "parentPath": {
+          "description": "Comma-separated path to the parent",
+          "type": "string",
+        },
+        "position": {
+          "default": "top",
+          "description": "Position within the parent",
+          "enum": [
+            "top",
+            "bottom",
+          ],
+          "type": "string",
+        },
+      },
+      "type": "object",
+    },
+    "name": "workflowy_node_mirror",
+    "title": undefined,
+  },
+  {
+    "_meta": undefined,
+    "annotations": undefined,
+    "description": "Nodes added, deleted, edited, moved, completed or uncompleted since a cutoff: a flat change list, the changes as a tree with unchanged ancestors as context, and a summary",
+    "execution": {
+      "taskSupport": "forbidden",
+    },
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "since": {
+          "default": "1d",
+          "description": "Duration (e.g. 12h, 2d, 1w) or ISO date to report changes since",
+          "type": "string",
+        },
+      },
+      "type": "object",
+    },
+    "name": "workflowy_node_changes",
+    "title": undefined,
+  },
+  {
+    "_meta": undefined,
+    "annotations": undefined,
     "description": "Find the 📆 Calendar day node workflowy.com uses for a date (strict metadata.calendar walk), or with ensure create it, and any missing year/month, with calendar metadata. Always use this instead of creating date nodes by name under the 📆 Calendar.",
     "execution": {
       "taskSupport": "forbidden",
@@ -306,17 +405,35 @@ exports[`MCP tools over a store > advertises every tool with its name, descripti
   {
     "_meta": undefined,
     "annotations": undefined,
-    "description": "Search for nodes by text query",
+    "description": "Search for nodes by text query (supports operators such as is:complete, is:incomplete and quoted phrases)",
     "execution": {
       "taskSupport": "forbidden",
     },
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "properties": {
+        "incomplete": {
+          "default": false,
+          "description": "Only return incomplete (not completed) nodes",
+          "type": "boolean",
+        },
         "limit": {
           "default": 20,
           "description": "Maximum number of results to return",
           "type": "number",
+        },
+        "offset": {
+          "default": 0,
+          "description": "Number of ranked results to skip, for paging",
+          "type": "number",
+        },
+        "parentId": {
+          "description": "Only search the descendants of this node",
+          "type": "string",
+        },
+        "parentPath": {
+          "description": "Comma-separated path to the node whose descendants to search",
+          "type": "string",
         },
         "query": {
           "description": "Text to search for in node names and notes",

@@ -1,4 +1,5 @@
 import type {McpServer} from "@modelcontextprotocol/sdk/server/mcp.js";
+import type {CallToolResult} from "@modelcontextprotocol/sdk/types.js";
 import type {StoreClient} from "@workflowy/web/node-host";
 import {z} from "zod";
 import {resolve} from "./resolve.js";
@@ -7,6 +8,51 @@ import {errorResult, jsonResult, nodeUrl, opError, textResult} from "./results.j
 /** A node op's id: `nodes.resolve` without `parent` never answers Home (`null`). */
 function nodeIdOf(id: string | null): string {
 	return id ?? "home";
+}
+
+interface NodeTreeSpec {
+	name: string;
+	note?: string | undefined;
+	children?: NodeTreeSpec[] | undefined;
+}
+
+const NodeTreeSpecSchema: z.ZodType<NodeTreeSpec> = z.object({
+	name: z.string().describe("Name of the child node"),
+	note: z.string().optional().describe("Note for the child node"),
+	get children() {
+		return z.array(NodeTreeSpecSchema).optional().describe("Its own children, created in order");
+	},
+});
+
+interface CreatedTree {
+	id: string;
+	name: string;
+	url: string;
+	children: CreatedTree[];
+}
+
+type CreatedChildren = {ok: true; children: CreatedTree[]} | {ok: false; error: CallToolResult};
+
+/** Create `specs` in order at the bottom of `parentId`, each subtree depth-first. */
+async function createChildren(store: StoreClient, parentId: string, specs: NodeTreeSpec[]): Promise<CreatedChildren> {
+	const children: CreatedTree[] = [];
+	for (const spec of specs) {
+		const created = await store.call("nodes.create", {
+			parent_id: parentId,
+			name: spec.name,
+			...(spec.note === undefined ? {} : {note: spec.note}),
+		});
+		if (!created.ok) {
+			return {ok: false, error: opError(created)};
+		}
+		const {id, name} = created.value.node;
+		const grandchildren = await createChildren(store, id, spec.children ?? []);
+		if (!grandchildren.ok) {
+			return grandchildren;
+		}
+		children.push({id, name: name ?? "", url: nodeUrl(id), children: grandchildren.children});
+	}
+	return {ok: true, children};
 }
 
 export function registerNodeTools(server: McpServer, store: StoreClient): void {
@@ -81,9 +127,15 @@ export function registerNodeTools(server: McpServer, store: StoreClient): void {
 					.optional()
 					.default(false)
 					.describe("Create missing parent path segments (like mkdir -p)"),
+				children: z
+					.array(NodeTreeSpecSchema)
+					.optional()
+					.describe(
+						"Child nodes to create under the new node, in order, each with optional children of its own",
+					),
 			},
 		},
-		async ({parentId, parentPath, name, note, position, createPath}) => {
+		async ({parentId, parentPath, name, note, position, createPath, children}) => {
 			if (!parentId && !parentPath) {
 				return errorResult("Either parentId or parentPath is required");
 			}
@@ -101,12 +153,17 @@ export function registerNodeTools(server: McpServer, store: StoreClient): void {
 				return opError(created);
 			}
 			const {node, warning} = created.value;
+			const tree = children === undefined ? undefined : await createChildren(store, node.id, children);
+			if (tree !== undefined && !tree.ok) {
+				return tree.error;
+			}
 			return jsonResult({
 				id: node.id,
 				name: node.name,
 				createdAt: node.createdAt === null ? null : new Date(node.createdAt * 1000).toISOString(),
 				url: nodeUrl(node.id),
 				...(warning === undefined ? {} : {warning}),
+				...(tree === undefined ? {} : {children: tree.children}),
 			});
 		},
 	);
@@ -120,14 +177,19 @@ export function registerNodeTools(server: McpServer, store: StoreClient): void {
 				path: z.string().optional().describe("Comma-separated path to node"),
 				name: z.string().optional().describe("New name for the node"),
 				note: z.string().optional().describe("New note for the node"),
+				clearNote: z.boolean().optional().default(false).describe("Clear the node's note"),
 			},
 		},
-		async ({id, path, name, note}) => {
+		async ({id, path, name, note: newNote, clearNote}) => {
 			if (!id && !path) {
 				return errorResult("Either id or path is required");
 			}
+			if (clearNote && newNote !== undefined) {
+				return errorResult("note and clearNote cannot be used together");
+			}
+			const note = clearNote ? "" : newNote;
 			if (!name && note === undefined) {
-				return errorResult("At least one of name or note must be provided");
+				return errorResult("At least one of name, note or clearNote must be provided");
 			}
 			const resolved = await resolve(store, {id, path});
 			if (!resolved.ok) {
@@ -238,6 +300,75 @@ export function registerNodeTools(server: McpServer, store: StoreClient): void {
 			}
 			const name = moved.value.nodes.find((sibling) => sibling.id === id)?.name ?? "";
 			return textResult(`Successfully moved node: ${name} (${id})`);
+		},
+	);
+
+	server.registerTool(
+		"workflowy_node_mirror",
+		{
+			description:
+				"Create a live mirror of a node under a parent (a mirror of a mirror mirrors its original); needs the internal API",
+			inputSchema: {
+				nodeId: z.string().optional().describe("ID of the node to mirror"),
+				nodePath: z.string().optional().describe("Comma-separated path to the node to mirror"),
+				parentId: z.string().optional().describe('Parent ID, a system target, or "home" for the top level'),
+				parentPath: z.string().optional().describe("Comma-separated path to the parent"),
+				position: z.enum(["top", "bottom"]).optional().default("top").describe("Position within the parent"),
+			},
+		},
+		async ({nodeId, nodePath, parentId, parentPath, position}) => {
+			if (!nodeId && !nodePath) {
+				return errorResult("Either nodeId or nodePath is required");
+			}
+			if (!parentId && !parentPath) {
+				return errorResult("Either parentId or parentPath is required");
+			}
+			const node = await resolve(store, {id: nodeId, path: nodePath});
+			if (!node.ok) {
+				return node.error;
+			}
+			const parent = await resolve(store, {id: parentId, path: parentPath, parent: true});
+			if (!parent.ok) {
+				return parent.error;
+			}
+			const id = nodeIdOf(node.id);
+			const mirrored = await store.call("nodes.mirror", {
+				item_ids: [id],
+				parent_id: parent.id,
+				...(position === "top" ? {index: 0} : {}),
+			});
+			if (!mirrored.ok) {
+				return opError(mirrored);
+			}
+			const [mirror] = mirrored.value.nodes;
+			if (mirror === undefined) {
+				return errorResult(`Mirror of ${id} was not created`);
+			}
+			return jsonResult({
+				mirrorId: mirror.id,
+				originId: mirror.originalNodeId ?? id,
+				parentId: parent.id,
+				url: nodeUrl(mirror.id),
+			});
+		},
+	);
+
+	server.registerTool(
+		"workflowy_node_changes",
+		{
+			description:
+				"Nodes added, deleted, edited, moved, completed or uncompleted since a cutoff: a flat change list, the changes as a tree with unchanged ancestors as context, and a summary",
+			inputSchema: {
+				since: z
+					.string()
+					.optional()
+					.default("1d")
+					.describe("Duration (e.g. 12h, 2d, 1w) or ISO date to report changes since"),
+			},
+		},
+		async ({since}) => {
+			const changes = await store.call("changes.list", {since});
+			return changes.ok ? jsonResult(changes.value) : opError(changes);
 		},
 	);
 }
