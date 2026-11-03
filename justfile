@@ -248,10 +248,10 @@ daily: build backup-db
     # Reclaim dead pages so the db file does not regrow unbounded (full VACUUM; logs before/after sizes)
     ./bin/run.js cache vacuum
 
-# Rebuild the database from scratch into a new file (download + replay every backup, API catch-up, account state, local state, embeddings, vacuum), then swap it in and keep a backup; run as `op run -- just build-fresh-database`
+# Rebuild the database from scratch into a new file (download + replay every backup, API catch-up, account state, local state, embeddings, vacuum), then swap it in and keep a backup; run as `op run -- just build-fresh-database`; refuses while `just web` runs; `just build-fresh-database --swap-only` swaps in a finished rebuild whose swap was refused
 [group('workflow')]
-build-fresh-database: build manifest
-    ./scripts/build-fresh-database.sh
+build-fresh-database *args: build manifest
+    ./scripts/build-fresh-database.sh {{ args }}
 
 # Demo CLI commands - comprehensive exploration of all CLI functionality
 [group('demo')]
