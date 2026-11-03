@@ -81,7 +81,7 @@ The main thread records each answer and creates nothing itself. Creation stays i
 
 Once every flag on the held page has a decision, rerun this command right away. If the user wants to wait, the next daily review's Auto run picks the decisions up instead. The scanner reads the file during title preflight, so a decided otid no longer holds the page. It creates the approved entries, skips the skipped ones, and advances the cursor. URL dedup still prevents duplicates. A recording with no decision still flags as before.
 
-When the user confirms a flagged attendee was in the meeting, offer in a follow-up question to tag that person as a speaker in Otter. Word the options with the actor named, not bare "I" or "you": "Claude will tag it" or "the user will tag it". Otter learns a voice from tagged blocks and then labels that person in future recordings by itself, which stops the same flag from coming back. Erroneous tags destroy voice recognition far more than missing tags do, so suggest only 1-2 obvious blocks per person, never all blocks. Skip mixed or unattributed blocks, and suggest no tag when in doubt:
+When the user confirms a flagged attendee was in the meeting, offer in a follow-up question to tag that person as a speaker in Otter. Word the options with the actor named, not bare "I" or "you". Offer "Claude tags it in the browser" first and "the user will tag it" below it. Otter learns a voice from tagged blocks and then labels that person in future recordings by itself, which stops the same flag from coming back. Erroneous tags destroy voice recognition far more than missing tags do, so suggest only 1-2 obvious blocks per person, never all blocks. Skip mixed or unattributed blocks, and suggest no tag when in doubt:
 
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/scripts/otter-api.sh speaker-blocks <otid> [count]
@@ -91,7 +91,8 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/otter-api.sh speaker-blocks <otid> [count]
 - Choose the speaker whose blocks match the confirmed attendee. Often that is a generic `Speaker N` or `unattributed`.
 - Put the URL plus each block's `[mm:ss]` time and preview inside the question. Do not put them in text around the question.
 - Tagging happens in the Otter web app: open the URL, go to each listed block, click its speaker label, and choose or type the attendee's name. When Otter asks, apply the tag to every block from that speaker.
-- The user tags the blocks. Drive the Otter page through the browser tools only if the user asks you to, and confirm afterward that the blocks show the attendee's name.
+- When the user picks "Claude tags it in the browser", drive the Otter page through the browser tools. Afterward, reload the page and confirm every tagged block shows the attendee's name. If any block does not, say so in the next question.
+- When the user picks "the user will tag it", the user tags the blocks and Claude moves on.
 
 ## Scan Otter and create (create mode)
 
