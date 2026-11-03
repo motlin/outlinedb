@@ -3,7 +3,7 @@ import {readNodeConfig} from "./config.js";
 import {buildServerContext} from "./context.js";
 import type {ServerContext} from "./context.js";
 import {getDatabase} from "./db.js";
-import {decisionsDirectory, fileDecisionStore} from "./decision-files.js";
+import {decisionPhotosDirectory, decisionsDirectory, fileDecisionStore} from "./decision-files.js";
 import {LadderEventBus} from "./ladder-events.js";
 
 /** Process-wide bus; the Node server has one ladder. */
@@ -18,7 +18,7 @@ export function createServerContext(): ServerContext {
 		db: getDatabase(),
 		config: readNodeConfig(process.env),
 		ladderEvents,
-		decisions: fileDecisionStore(decisionsDirectory(process.env)),
+		decisions: fileDecisionStore(decisionsDirectory(process.env), decisionPhotosDirectory(process.env)),
 		internalAuth: readInternalAuth(),
 	});
 }

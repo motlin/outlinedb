@@ -1,6 +1,10 @@
-import {describe, expect, it} from "vite-plus/test";
+import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
+import {afterEach, beforeEach, describe, expect, it} from "vite-plus/test";
 import {Hono} from "hono";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
+import {fileDecisionStore} from "../src/server/decision-files.js";
 import type {DecisionStore} from "../src/server/decisions.js";
 import {createDecisionsApp, createDecisionsRouter} from "../src/server/routes/decisions.js";
 
@@ -40,6 +44,7 @@ function memoryStore(files: Record<string, string>): DecisionStore {
 			files[`${slug}.answers.json`] = text;
 			return Promise.resolve();
 		},
+		readImage: async () => Promise.resolve(null),
 	};
 }
 
@@ -182,6 +187,45 @@ describe("GET /api/v1/decisions/:slug", () => {
 		});
 	});
 
+	it("passes an item's images through to the page", async () => {
+		const images = [{src: "status-2026-11-03/shot.jpg", alt: "The shelf"}];
+		const item = {...DOCUMENT.groups[0].items[0], images};
+		const request = setup({
+			"meetings.json": JSON.stringify({...DOCUMENT, groups: [{heading: "x", items: [item]}]}),
+		});
+		await expect(request("GET", "/meetings")).resolves.toStrictEqual({
+			status: 200,
+			body: {...DOCUMENT, groups: [{heading: "x", items: [{...item, answer: null}]}], submittedAt: null},
+		});
+	});
+
+	it("rejects a staged image whose src is not a relative image path under the photos directory", async () => {
+		const item = {
+			...DOCUMENT.groups[0].items[0],
+			images: [
+				{src: "../secret.jpg", alt: "a"},
+				{src: "/etc/x.png", alt: "b"},
+				{src: "notes.txt", alt: "c"},
+			],
+		};
+		const request = setup({
+			"meetings.json": JSON.stringify({...DOCUMENT, groups: [{heading: "x", items: [item]}]}),
+		});
+		await expect(request("GET", "/meetings")).resolves.toStrictEqual({
+			status: 500,
+			body: {
+				error: [
+					"meetings.json does not match the decision page shape: ✖ Image src must be a relative .jpg, .jpeg, .png, .webp or .gif path under .llm/photos",
+					"  → at groups[0].items[0].images[0].src",
+					"✖ Image src must be a relative .jpg, .jpeg, .png, .webp or .gif path under .llm/photos",
+					"  → at groups[0].items[0].images[1].src",
+					"✖ Image src must be a relative .jpg, .jpeg, .png, .webp or .gif path under .llm/photos",
+					"  → at groups[0].items[0].images[2].src",
+				].join("\n"),
+			},
+		});
+	});
+
 	it("answers 503 when the host has no decision store", async () => {
 		const request = setup({}, {withStore: false});
 		await expect(request("GET", "/meetings")).resolves.toStrictEqual({
@@ -295,6 +339,66 @@ describe("POST /api/v1/decisions/:slug/submit", () => {
 		await expect(request("POST", "/meetings/submit")).resolves.toStrictEqual({
 			status: 404,
 			body: {error: "No decision page staged as meetings"},
+		});
+	});
+});
+
+describe("GET /api/v1/decisions/images/*", () => {
+	let root: string;
+
+	beforeEach(() => {
+		root = mkdtempSync(join(tmpdir(), "decision-images-"));
+		mkdirSync(join(root, "photos", "status 2026-11-03"), {recursive: true});
+		writeFileSync(join(root, "photos", "status 2026-11-03", "shot.JPG"), "jpeg bytes");
+		writeFileSync(join(root, "photos", "chart.png"), "png bytes");
+		writeFileSync(join(root, "photos", "notes.txt"), "text");
+		writeFileSync(join(root, "secret.jpg"), "secret");
+	});
+
+	afterEach(() => {
+		rmSync(root, {recursive: true, force: true});
+	});
+
+	async function fetchImage(path: string) {
+		const ctx = {
+			decisions: fileDecisionStore(join(root, "decisions"), join(root, "photos")),
+		} as unknown as ServerContext;
+		const response = await createDecisionsApp(ctx).fetch(new Request(`http://x/api/v1/decisions/images/${path}`));
+		return {
+			status: response.status,
+			contentType: response.headers.get("content-type"),
+			body: await response.text(),
+		};
+	}
+
+	it("serves an image from the photos directory with its content type", async () => {
+		await expect(
+			Promise.all([fetchImage("status%202026-11-03/shot.JPG"), fetchImage("chart.png")]),
+		).resolves.toStrictEqual([
+			{status: 200, contentType: "image/jpeg", body: "jpeg bytes"},
+			{status: 200, contentType: "image/png", body: "png bytes"},
+		]);
+	});
+
+	it("answers 404 for traversal, absolute paths, non-images and missing files", async () => {
+		const notFound = {status: 404, contentType: "application/json", body: '{"error":"No such image"}'};
+		await expect(
+			Promise.all([
+				fetchImage("..%2Fsecret.jpg"),
+				fetchImage("chart.png%2F..%2F..%2Fsecret.jpg"),
+				fetchImage(encodeURIComponent(join(root, "secret.jpg"))),
+				fetchImage("notes.txt"),
+				fetchImage("missing.gif"),
+			]),
+		).resolves.toStrictEqual([notFound, notFound, notFound, notFound, notFound]);
+	});
+
+	it("answers 404 when the host has no decision store", async () => {
+		const ctx = {decisions: undefined} as unknown as ServerContext;
+		const response = await createDecisionsApp(ctx).fetch(new Request("http://x/api/v1/decisions/images/chart.png"));
+		expect({status: response.status, body: await response.json()}).toStrictEqual({
+			status: 404,
+			body: {error: "No such image"},
 		});
 	});
 });

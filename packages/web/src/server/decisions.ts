@@ -18,9 +18,47 @@ export interface DecisionStore {
 	readAnswers(slug: string): Promise<string | null>;
 	/** Replace `<slug>.answers.json` atomically. */
 	writeAnswers(slug: string, text: string): Promise<void>;
+	/**
+	 * The bytes of an item image by its `src`, or null when the path is missing or
+	 * is not a {@link decisionImageType} image inside the host's photos directory.
+	 */
+	readImage(src: string): Promise<Uint8Array<ArrayBuffer> | null>;
+}
+
+const IMAGE_TYPES: Record<string, string> = {
+	jpg: "image/jpeg",
+	jpeg: "image/jpeg",
+	png: "image/png",
+	webp: "image/webp",
+	gif: "image/gif",
+};
+
+/**
+ * The content type of an image `src`, or null unless it is a relative path with
+ * an image extension and no empty, `.` or `..` segment that could leave the photos directory.
+ */
+export function decisionImageType(src: string): string | null {
+	if (src.includes("\\") || src.includes("\0")) {
+		return null;
+	}
+	if (src.split("/").some((segment) => segment === "" || segment === "." || segment === "..")) {
+		return null;
+	}
+	const extension = /\.([^./]+)$/u.exec(src)?.[1]?.toLowerCase();
+	return extension === undefined ? null : (IMAGE_TYPES[extension] ?? null);
 }
 
 const LinkSchema = z.strictObject({label: z.string(), href: z.string()});
+
+const ImageSchema = z.strictObject({
+	src: z
+		.string()
+		.refine(
+			(src) => decisionImageType(src) !== null,
+			"Image src must be a relative .jpg, .jpeg, .png, .webp or .gif path under .llm/photos",
+		),
+	alt: z.string(),
+});
 
 const OptionSchema = z.strictObject({
 	value: z.string().min(1),
@@ -37,6 +75,8 @@ const ItemSchema = z.strictObject({
 	title: z.string(),
 	body: z.array(z.string()).default([]),
 	links: z.array(LinkSchema).default([]),
+	/** Photos shown above the body; `src` is relative to the host's photos directory (`.llm/photos`). */
+	images: z.array(ImageSchema).optional(),
 	options: z.array(OptionSchema).min(1),
 	default: z.string().nullable().default(null),
 });

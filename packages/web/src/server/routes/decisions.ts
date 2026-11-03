@@ -11,6 +11,7 @@ import {
 	DECISION_SLUG,
 	DecisionAnswerInputSchema,
 	DecisionFileError,
+	decisionImageType,
 	mergeDecisionPage,
 	parseDecisionAnswers,
 	parseDecisionDocument,
@@ -62,6 +63,18 @@ export function createDecisionsRouter(options: DecisionsRouterOptions = {}): Hon
 		}
 	}
 
+	// Registered before `/:slug` so "images" is never read as a slug.
+	router.get("/images/*", async (c) => {
+		const store = c.get("ctx").decisions;
+		const src = imageSource(new URL(c.req.url).pathname);
+		const type = src === null ? null : decisionImageType(src);
+		const bytes = store === undefined || src === null || type === null ? null : await store.readImage(src);
+		if (bytes === null || type === null) {
+			return c.json({error: "No such image"}, 404);
+		}
+		return c.body(bytes, 200, {"content-type": type, "cache-control": "private, max-age=3600"});
+	});
+
 	router.get("/:slug", async (c) =>
 		respond(c, async () => {
 			const {store, slug} = target(c);
@@ -108,6 +121,17 @@ export function createDecisionsRouter(options: DecisionsRouterOptions = {}): Hon
 	);
 
 	return router;
+}
+
+/** The decoded `src` after `/images/` in a request path, or null when it does not decode. */
+function imageSource(pathname: string): string | null {
+	const marker = "/images/";
+	const start = pathname.indexOf(marker);
+	try {
+		return start === -1 ? null : decodeURIComponent(pathname.slice(start + marker.length));
+	} catch {
+		return null;
+	}
 }
 
 function target(c: Context<AppEnv>): {store: DecisionStore; slug: string} {
