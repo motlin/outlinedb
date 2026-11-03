@@ -35,6 +35,18 @@ From it derive two script arguments:
 
 If the file is missing or lists no programs, stage `status: "empty"` with `summary.lastLogged: null` and stop. Never invent a format.
 
+## Load the exercise hashtags from metadata
+
+The user also jumps to programs the spec does not list. Every exercise hashtag already in Workflowy metadata (each `🎮 Hobbies Registry` entry whose name carries `#exercise`, current or archived) marks its day as logged, so such a day gets no guess. Read the cached registry; the DAG's `metadata-sync` has already refreshed it:
+
+```bash
+jq -r '[.. | objects | select(.name? and (.name | type == "string") and (.name | test("#exercise\\b"; "i")))
+  | .name | gsub("<[^>]+>"; "") | capture("(?<tag>#[A-Za-z0-9][\\w-]*)").tag
+  | select(ascii_downcase != "#exercise")] | unique | join(",")' .llm/gtd/metadata/hobbies-registry.json
+```
+
+Pass the result as `--exercise-tags`. If the registry is missing, pass an empty string; the `--programs` tags and `#exercise` still count.
+
 ## Export the calendar tree
 
 History spans the live calendar and its `🗃️ Archive` (decade, year, month, day). Export ids, names, and children only, to a file — never into context:
@@ -55,6 +67,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/guess-workouts.mts \
   --today "$(date +%Y-%m-%d)" \
   --programs '<tags from the spec>' \
   --template '<template from the spec>' \
+  --exercise-tags '<tags from metadata>' \
   --rest-days .llm/gtd/review/workout-guess-rest-days.json \
   --generated-at "$(date +%Y-%m-%dT%H:%M:%S%z)" \
   > .llm/gtd/review/proposals/workout-guess.json
@@ -65,7 +78,7 @@ What it does, so the staged output can be explained:
 - **Logged days.** An entry carrying a listed program hashtag plus any workout detail (phase, week, day, or a workout name) marks its day as logged.
 - **Stubs.** A bare program hashtag with no workout detail (`#ProgramX`, or `💪 #ProgramX #exercise` after refinement) means the user worked out but did not say which workout. Its day is guessed like an unlogged day, and the proposal fills the stub in place with `node update --expect-name` instead of creating a duplicate entry.
 - **Sessions.** Every direct child of a day node (or an entry carrying its own `<time>`) that has `#exercise` and a listed program hashtag. Raw formats are tolerated: missing emoji, lowercase tags, colons, trailing periods, spelled-out numbers, Roman-numeral phases, iteration notes, and free-text commentary after the workout name.
-- **Unlogged days.** Every day after the last session through today that has no `#exercise` or listed-program entry at all and is not in the rest-days ledger. A day with a different `#exercise` entry (a run, say) is logged and gets no guess.
+- **Unlogged days.** Every day after the last session through today that has no `#exercise`, listed-program, or `--exercise-tags` entry at all and is not in the rest-days ledger. A day with a different `#exercise` entry (a run, say) or any known exercise hashtag (an unlisted program) is logged and gets no guess.
 - **Prediction.** The successor most often observed after the last session's slot in earlier history. Failing that, the program structure: the next day of the week, then week + 1 day 1, then the next phase's first day, each only if history has seen it, with the workout name taken from history for that slot. Each later day's guess chains on the previous guess.
 - **Ambiguity.** When nothing can be predicted, it stages one `ambiguity` proposal for that day and stops the chain; the later days resurface after the user answers.
 - **Cap.** At most `--max-days` (default 7) proposals; `summary.remainingDays` counts the rest.

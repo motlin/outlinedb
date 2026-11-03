@@ -631,3 +631,36 @@ test("guessWorkouts fills bare program-hashtag stubs in place instead of countin
 	});
 	assert.deepStrictEqual(validateProposal(staged), {valid: true, errors: []});
 });
+
+test("guessWorkouts counts a day with any known exercise hashtag as logged, even without #exercise", () => {
+	const oct21 = uuid();
+	const tree = calendar(firstPass(), [
+		dayNode("2026-10-18", "Sun, Oct 18, 2026", ["💪 #ProgramX phase 1, week 2, day 3, Pull 1 #exercise"]),
+		dayNode("2026-10-19", "Mon, Oct 19, 2026", ["#ProgramZ cardio blast"]),
+		dayNode("2026-10-20", "Tue, Oct 20, 2026", ["#30dayz "]),
+		dayNode("2026-10-21", "Wed, Oct 21, 2026", ["Worked from home"], oct21),
+	]);
+
+	const staged = guessWorkouts({
+		tree,
+		today: "2026-10-21",
+		template: TEMPLATE,
+		programs: ["#ProgramX"],
+		exerciseTags: ["#ProgramX", "#ProgramZ", "#30DayZ"],
+		restDays: [],
+		maxDays: 7,
+		generatedAt: "x",
+	});
+
+	const finisher = "💪 #ProgramX phase 1, week 2, day 4, The Finisher #exercise";
+	assert.deepStrictEqual(staged.summary, {
+		lastLogged: {date: "2026-10-18", text: "💪 #ProgramX phase 1, week 2, day 3, Pull 1 #exercise"},
+		daysUnlogged: 1,
+		proposalsStaged: 1,
+		remainingDays: 0,
+	});
+	assert.deepStrictEqual(
+		staged.proposals.map((proposal) => ({date: proposal.date, nodeId: proposal.nodeId, after: proposal.after})),
+		[{date: "2026-10-21", nodeId: oct21, after: finisher}],
+	);
+});

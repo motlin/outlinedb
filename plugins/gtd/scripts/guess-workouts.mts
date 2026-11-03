@@ -11,7 +11,8 @@
 //
 // Usage:
 //   node guess-workouts.mts --tree <calendar.json> --template '<line template>' [--today YYYY-MM-DD]
-//     [--programs '#ProgramX,#ProgramY'] [--rest-days <dates.json>] [--max-days 7] [--generated-at <iso>]
+//     [--programs '#ProgramX,#ProgramY'] [--exercise-tags '#ProgramX,#ProgramZ']
+//     [--rest-days <dates.json>] [--max-days 7] [--generated-at <iso>]
 //
 // The template comes from the personal format spec at runtime: {program}, {phase}, {week}, {day},
 // and {workout} placeholders, with [...] marking a segment dropped when any field inside it is empty,
@@ -407,7 +408,13 @@ const isDayNode = (name: string): boolean =>
 	stripTags(name).trim() !== "" &&
 	name.replaceAll(/<time\b[^>]*>[^<]*<\/time>/giu, "").trim() === "";
 
-function readCalendar(tree: CalendarNode, programs: readonly string[]): Calendar {
+const tagSet = (tags: readonly string[]): Set<string> =>
+	new Set(tags.map((tag) => tag.replace(/^#/u, "").toLowerCase()));
+
+const hasTagIn = (name: string, tags: Set<string>): boolean =>
+	[...name.matchAll(/#([A-Za-z0-9][\w-]*)/gu)].some((match) => tags.has(match[1]?.toLowerCase() ?? ""));
+
+function readCalendar(tree: CalendarNode, programs: readonly string[], exerciseTags: readonly string[]): Calendar {
 	const sessions: {session: Session; order: number}[] = [];
 	const lastText = new Map<Session, string>();
 	const exerciseDates = new Set<string>();
@@ -415,9 +422,10 @@ function readCalendar(tree: CalendarNode, programs: readonly string[]): Calendar
 	const stubs = new Map<string, {id: string; name: string}>();
 	// A bare program hashtag ("#ProgramX ") is a workout the user logged but did not finish writing up,
 	// so its day is guessed and the guess fills the stub in place rather than adding a duplicate.
-	const programTags = new Set(programs.map((tag) => tag.replace(/^#/u, "").toLowerCase()));
-	const hasProgramTag = (name: string): boolean =>
-		[...name.matchAll(/#([A-Za-z][\w-]*)/gu)].some((match) => programTags.has(match[1]?.toLowerCase() ?? ""));
+	const programTags = tagSet(programs);
+	const hasProgramTag = (name: string): boolean => hasTagIn(name, programTags);
+	// Any exercise hashtag from metadata (an unlisted program, say) logs its day without being a session.
+	const knownExerciseTags = tagSet(exerciseTags);
 	let order = 0;
 	// Breadth-first, so a live day node is found before an archived duplicate of the same date.
 	const queue: {node: CalendarNode; date: string | null}[] = [{node: tree, date: null}];
@@ -448,7 +456,7 @@ function readCalendar(tree: CalendarNode, programs: readonly string[]): Calendar
 				}
 				continue;
 			}
-			if (hasProgramTag(name)) {
+			if (hasProgramTag(name) || hasTagIn(name, knownExerciseTags)) {
 				exerciseDates.add(entryDate);
 			}
 			if (/#exercise\b/iu.test(name)) {
@@ -493,6 +501,8 @@ export interface GuessOptions {
 	today: string;
 	template: string;
 	programs: readonly string[];
+	/** Every exercise hashtag in metadata; an entry with any of them marks its day logged. */
+	exerciseTags?: readonly string[];
 	restDays: readonly string[];
 	maxDays: number;
 	generatedAt: string;
@@ -529,7 +539,7 @@ export interface StagedGuess {
 
 /** Stage one proposal per unlogged day after the last workout, through today. */
 export function guessWorkouts(options: GuessOptions): StagedGuess {
-	const calendar = readCalendar(options.tree, options.programs);
+	const calendar = readCalendar(options.tree, options.programs, options.exerciseTags ?? []);
 	const last = calendar.sessions.at(-1);
 	const staged = (summary: StagedGuess["summary"], proposals: WorkoutProposal[]): StagedGuess => ({
 		task: "workout-guess",
@@ -661,6 +671,7 @@ if (isMain) {
 	let template = "";
 	let today = localToday();
 	let programs: string[] = [];
+	let exerciseTags: string[] = [];
 	let restDaysPath = "";
 	let maxDays = 7;
 	let generatedAt = new Date().toISOString();
@@ -681,6 +692,13 @@ if (isMain) {
 			}
 			case "--programs": {
 				programs = takeValue(args, argument)
+					.split(",")
+					.map((tag) => tag.trim())
+					.filter((tag) => tag !== "");
+				break;
+			}
+			case "--exercise-tags": {
+				exerciseTags = takeValue(args, argument)
 					.split(",")
 					.map((tag) => tag.trim())
 					.filter((tag) => tag !== "");
@@ -713,6 +731,10 @@ if (isMain) {
 			: [];
 	const tree = expectObject(readJsonFile(treePath), treePath) as CalendarNode;
 	console.log(
-		JSON.stringify(guessWorkouts({tree, today, template, programs, restDays, maxDays, generatedAt}), null, "\t"),
+		JSON.stringify(
+			guessWorkouts({tree, today, template, programs, exerciseTags, restDays, maxDays, generatedAt}),
+			null,
+			"\t",
+		),
 	);
 }
