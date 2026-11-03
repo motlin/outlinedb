@@ -444,6 +444,24 @@ function DecisionCard({group, item, state, onChoose, onNote, children}: Decision
 			<h2 className="decisions-card-title" id={titleId}>
 				{item.title}
 			</h2>
+			{item.images === undefined || item.images.length === 0 ? null : (
+				<div className="decisions-images">
+					{item.images.map((image) => {
+						const url = imageUrl(image.src);
+						return (
+							<a href={url} key={image.src} rel="noopener noreferrer" target="_blank" title={image.alt}>
+								<img
+									alt={image.alt}
+									className="decisions-image"
+									decoding="async"
+									loading="lazy"
+									src={url}
+								/>
+							</a>
+						);
+					})}
+				</div>
+			)}
 			{item.body.length > 0 ? (
 				<div className="decisions-body">
 					{item.body.map((line, index) => (
@@ -514,6 +532,11 @@ function DecisionCard({group, item, state, onChoose, onNote, children}: Decision
 			{children}
 		</article>
 	);
+}
+
+/** Where the server serves an item image, its `src` path encoded one segment at a time. */
+function imageUrl(src: string): string {
+	return `/api/v1/decisions/images/${src.split("/").map(encodeURIComponent).join("/")}`;
 }
 
 /** A body line as plain text, with its dates, durations and counts wrapped for color. */

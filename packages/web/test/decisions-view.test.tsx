@@ -346,6 +346,71 @@ describe("DecisionPageView", () => {
 		});
 	});
 
+	it("shows a card's photos above its body as lazy thumbnails that open the full image in a new tab", async () => {
+		const [group] = PAGE.groups;
+		const [first] = group.items;
+		const images = [
+			{src: "status-2026-11-03/2026-10-31_1356_img3589.jpg", alt: "The garage shelf"},
+			{src: "with space/b#2.png", alt: "Second angle"},
+		];
+		stubFetch(defaultWrite, {...PAGE, groups: [{...group, items: [{...first, images}]}]});
+		await mount();
+		const gallery = card("a-1").querySelector(".decisions-images");
+		expect({
+			beforeBody: gallery?.nextElementSibling?.className,
+			thumbnails: [...(gallery?.querySelectorAll("a") ?? [])].map((link) => {
+				const image = link.querySelector("img");
+				return [
+					link.getAttribute("href"),
+					link.getAttribute("target"),
+					link.getAttribute("rel"),
+					image?.getAttribute("src"),
+					image?.getAttribute("alt"),
+					image?.getAttribute("loading"),
+					image?.className,
+				];
+			}),
+		}).toStrictEqual({
+			beforeBody: "decisions-body",
+			thumbnails: [
+				[
+					"/api/v1/decisions/images/status-2026-11-03/2026-10-31_1356_img3589.jpg",
+					"_blank",
+					"noopener noreferrer",
+					"/api/v1/decisions/images/status-2026-11-03/2026-10-31_1356_img3589.jpg",
+					"The garage shelf",
+					"lazy",
+					"decisions-image",
+				],
+				[
+					"/api/v1/decisions/images/with%20space/b%232.png",
+					"_blank",
+					"noopener noreferrer",
+					"/api/v1/decisions/images/with%20space/b%232.png",
+					"Second angle",
+					"lazy",
+					"decisions-image",
+				],
+			],
+		});
+	});
+
+	it("renders no photo row for an item without images", async () => {
+		stubFetch();
+		await mount();
+		expect([...card("a-1").children].map((element) => element.className)).toStrictEqual([
+			"decisions-group-heading",
+			"decisions-card-title",
+			"decisions-body",
+			"decisions-links",
+			"decisions-options",
+			"decisions-note-label",
+			"decisions-note",
+			"decisions-status",
+			"decisions-nav",
+		]);
+	});
+
 	it("resumes at the first unanswered card on reload", async () => {
 		stubFetch(defaultWrite, pageAnswering(["a-1", "a-2"]));
 		await mount();

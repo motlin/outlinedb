@@ -283,6 +283,52 @@
 	overflow-wrap: anywhere;
 }
 
+/*
+ * Photos: one row, each capped at 45vh and shrunk to share the card's width so the
+ * card still fits a laptop screen; phones wrap them instead.
+ */
+
+.decisions-images {
+	display: flex;
+	flex-wrap: nowrap;
+	align-items: flex-start;
+	gap: 8px;
+	margin: 4px 0 12px;
+}
+
+@media (max-width: 480px) {
+	.decisions-images {
+		flex-wrap: wrap;
+	}
+}
+
+.decisions-images a {
+	display: block;
+	flex: 0 1 auto;
+	min-width: 0;
+	max-width: 100%;
+	border-radius: 8px;
+	border: 1px solid var(--border);
+	background: var(--muted);
+	overflow: hidden;
+	line-height: 0;
+}
+
+.decisions-images a:focus-visible {
+	outline: 2px solid var(--ring);
+	outline-offset: 2px;
+}
+
+.decisions-image {
+	display: block;
+	max-width: 100%;
+	max-height: 45vh;
+	max-height: 45dvh;
+	width: auto;
+	height: auto;
+	object-fit: contain;
+}
+
 .decisions-body-line {
 	color: var(--muted-foreground);
 	margin: 2px 0;
