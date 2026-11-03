@@ -9,11 +9,7 @@ import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";
 import {logger} from "../../services/logger.js";
 import {isoDateId} from "../../services/journal-existing-entries.js";
-
-function todayIso(): string {
-	const now = new Date();
-	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-}
+import {localIsoDate} from "../../utils/local-date.js";
 
 export interface CalendarDayResult {
 	id: string;
@@ -50,7 +46,7 @@ export default class CalendarDay extends Command {
 
 	public async run(): Promise<CalendarDayResult> {
 		const {flags} = await this.parse(CalendarDay);
-		const date = flags.date ?? todayIso();
+		const date = flags.date ?? localIsoDate(new Date());
 		const dateId = isoDateId(date);
 		if (dateId === undefined) {
 			this.error(`Invalid --date "${date}". Use YYYY-MM-DD.`, {exit: 1});

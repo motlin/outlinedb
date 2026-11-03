@@ -5,6 +5,7 @@ import path from "node:path";
 import {z} from "zod";
 import {createDatabase} from "../../../db/index.js";
 import {CacheService} from "../../../services/cache.js";
+import {localLookbackCutoff} from "../../../utils/local-date.js";
 
 interface Task {
 	id: string;
@@ -100,9 +101,7 @@ export default class Load extends Command {
 		this.cacheService = new CacheService(database);
 
 		// Calculate date threshold for recent meetings
-		const now = new Date();
-		const cutoffDate = new Date(now.getTime() - flags["lookback-days"] * 24 * 60 * 60 * 1000);
-		const cutoffDateStr = cutoffDate.toISOString().slice(0, 10);
+		const cutoffDateStr = localLookbackCutoff(new Date(), flags["lookback-days"]);
 
 		// Fetch all data
 		const nextActions = this.fetchNextActionsTasks(metadata);

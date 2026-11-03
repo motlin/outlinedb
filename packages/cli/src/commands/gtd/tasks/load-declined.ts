@@ -1,6 +1,7 @@
 import {Command, Flags} from "@oclif/core";
 import {createDatabase} from "../../../db/index.js";
 import {CacheService} from "../../../services/cache.js";
+import {localLookbackCutoff} from "../../../utils/local-date.js";
 
 interface DeclinedItem {
 	source: string;
@@ -46,9 +47,7 @@ export default class LoadDeclined extends Command {
 		const lookbackDays = flags["lookback-days"];
 
 		// Calculate the cutoff date
-		const now = new Date();
-		const cutoffDate = new Date(now.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
-		const cutoffDateStr = cutoffDate.toISOString().slice(0, 10);
+		const cutoffDateStr = localLookbackCutoff(new Date(), lookbackDays);
 
 		// Initialize cache service
 		const database = createDatabase();
