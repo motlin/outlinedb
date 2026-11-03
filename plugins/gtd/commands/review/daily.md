@@ -200,7 +200,7 @@ Invoke `/gtd:review:daily:file-tasks` — normalize the Next-Actions trees, then
 
 ## Clean Up Completed
 
-Invoke `/gtd:review:daily:cleanup-completed` — walk every completed item still sitting under the `✅ Tasks` wrapper of both roots and ask, one question each, whether to journal it (un-complete it and move it into the root's `📅 Calendar` on its completion date), delete it permanently, or leave it. Nothing is changed unasked, and delete is never the promoted answer.
+Invoke `/gtd:review:daily:cleanup-completed` — walk the 12 oldest completed items still sitting under the `✅ Tasks` wrapper of both roots (the rest wait for later runs) and ask, one question each, whether to journal it (un-complete it and move it into the root's `📅 Calendar` on its completion date), delete it permanently, or leave it. Nothing is changed unasked, and delete is never the promoted answer.
 
 Runs after File Loose Tasks so the trees are normalized, and before Group Tasks so completed clutter never lands in a cluster. Silent when nothing is completed.
 

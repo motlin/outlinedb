@@ -37,13 +37,13 @@ Silent when there are no rows.
 
 ## Walk
 
-Ask one question per row, oldest `completedDate` first, with these outcomes:
+Sort the rows by `completedDate`, oldest first, and present only the first 12 this run. The rest wait for later runs, which keep taking the oldest 12 until the backlog is caught up. Each presented row gets one question, with these outcomes:
 
 - **Journal** — promoted when the item records something done that the user would want to remember (an errand, a conversation, a purchase, a filed form). Un-complete it, then move it under the root's `📅 Calendar` date node for `completedDate`.
 - **Delete** — permanent removal, for noise (a reminder to self, a duplicate, a trivial check). Confirm before deleting any row with `childCount > 0`.
 - **Skip** — leave it completed and untouched; it returns tomorrow.
 
-Show the cleaned item name (markup and due `<time>` stripped), `completedDate`, and `path` in the question. Past a handful of rows, follow the long-walk rule in `daily.md` and use a decision page.
+Show the cleaned item name (markup and due `<time>` stripped), `completedDate`, and `path` in the question. Past a handful of rows, follow the long-walk rule in `daily.md` and use a decision page; the page holds the same 12 rows, never the whole backlog.
 
 ## Apply: Journal
 
@@ -71,7 +71,7 @@ If the item still carries a due-date `<time>` element, leave the text alone; the
 
 ## Report
 
-Report counts for journaled, deleted, and skipped, and list any failure. A failed move after a successful `uncomplete` leaves an incomplete item in the task tree, so retry the move or tell the user that item's name explicitly.
+Report counts for journaled, deleted, and skipped, plus how many completed rows were left unpresented for later runs, and list any failure. A failed move after a successful `uncomplete` leaves an incomplete item in the task tree, so retry the move or tell the user that item's name explicitly.
 
 ## Standalone use
 
