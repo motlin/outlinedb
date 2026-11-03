@@ -178,7 +178,7 @@ export default class ImportBackup extends Command {
 			if (importStats.nodesPreserved > 0) {
 				this.log(
 					`\n🛡  Snapshot predates the cache (snapshot ${importStats.incomingWatermark}, cache ${importStats.localWatermark}); ` +
-						`kept ${importStats.nodesPreserved.toLocaleString()} newer node(s) it does not describe.`,
+						`kept ${importStats.nodesPreserved.toLocaleString()} node(s) the cache holds newer versions of.`,
 				);
 			}
 			if (importStats.nodesKeptDeleted > 0) {

@@ -6,10 +6,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {BACKUP_IMPORT_CHUNK_SIZE, importBackup} from "../../src/services/cache-import.js";
+import {importFromApi} from "../../src/services/cache-import-api.js";
 import {cleanupTestDatabase, createTestDatabase} from "../db/migration-helper.js";
 import type {TestDatabase} from "../db/migration-helper.js";
 import {expectActiveRecord} from "../helpers/assertion-helpers.js";
-import {createNodeFromContent} from "../helpers/node-fixtures.js";
+import {createApiNode, createNodeFromContent} from "../helpers/node-fixtures.js";
 import {assert, it, afterEach, expect, describe, beforeEach, vi} from "vite-plus/test";
 
 const T0 = new Date("2024-01-01T00:00:00Z");
@@ -1458,6 +1459,67 @@ describe("cache-import service", () => {
 				.all()
 				.map((n) => n.id);
 			expect(activeIds).toStrictEqual(["node-1"]);
+		});
+
+		// Regression (2026-11-03): a backup older than the cache undid newer moves
+		// and text edits until the next `cache import-api`. A move leaves the
+		// node's last-modified time alone, so only the cache write time shows it.
+		it("keeps a move and a text edit the cache wrote after the snapshot was taken", async () => {
+			const seedPath = writeBackupFile([
+				{
+					id: "parent-a",
+					nm: "A",
+					ct: T_EARLIER,
+					lm: T_EARLIER,
+					ch: [{id: "moved", nm: "Moved", ct: T_EARLIER, lm: T_EARLIER}],
+				},
+				{id: "parent-b", nm: "B", ct: T_EARLIER, lm: T_EARLIER},
+				{id: "edited", nm: "Original", ct: T_EARLIER, lm: T_EARLIER},
+			]);
+			await importBackup(testDatabase.db, seedPath, "backup.json", false, DATE_EARLIER);
+
+			const apiNode = (id: string, name: string, parentId: string | null, modified: number) =>
+				createApiNode({id, name, parent_id: parentId, createdAt: T_EARLIER, modifiedAt: modified});
+			importFromApi(
+				testDatabase.db,
+				[
+					apiNode("parent-a", "A", null, T_EARLIER),
+					apiNode("parent-b", "B", null, T_EARLIER),
+					apiNode("moved", "Moved", "parent-b", T_EARLIER),
+					apiNode("edited", "Edited", null, T_LATER),
+				],
+				false,
+				WRITE_1,
+			);
+
+			const stalePath = writeBackupFile([
+				{
+					id: "parent-a",
+					nm: "A",
+					ct: T_EARLIER,
+					lm: T_MIDDLE,
+					ch: [{id: "moved", nm: "Moved", ct: T_EARLIER, lm: T_EARLIER}],
+				},
+				{id: "parent-b", nm: "B", ct: T_EARLIER, lm: T_EARLIER},
+				{id: "edited", nm: "Original", ct: T_EARLIER, lm: T_EARLIER},
+			]);
+			const result = await importBackup(testDatabase.db, stalePath, "backup.json", false, WRITE_2);
+
+			const live = testDatabase.db
+				.select({id: nodeContent.id, name: nodeContent.name, parentId: nodeContent.parentId})
+				.from(nodeContent)
+				.where(eq(nodeContent.systemTo, FAR_FUTURE_DATE))
+				.all()
+				.toSorted((a, b) => a.id.localeCompare(b.id));
+			expect({live, nodesDeleted: result.nodesDeleted}).toStrictEqual({
+				live: [
+					{id: "edited", name: "Edited", parentId: null},
+					{id: "moved", name: "Moved", parentId: "parent-b"},
+					{id: "parent-a", name: "A", parentId: null},
+					{id: "parent-b", name: "B", parentId: null},
+				],
+				nodesDeleted: 0,
+			});
 		});
 
 		it("re-adds a deleted node a snapshot newer than the deletion still holds", async () => {

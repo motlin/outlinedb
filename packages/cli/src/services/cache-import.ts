@@ -246,6 +246,23 @@ function toUnixSeconds(value: Date | null): number | null {
 	return value ? Math.floor(value.getTime() / 1000) : null;
 }
 
+/** A backup node's newest content timestamp in Unix seconds, or 0 when it has none. */
+function newestUnix(node: {createdAt: number | null; modifiedAt: number | null; completedAt: number | null}): number {
+	return Math.max(node.createdAt ?? 0, node.modifiedAt ?? 0, node.completedAt ?? 0);
+}
+
+/** A cached node's newest content timestamp in Unix seconds, or 0 when it has none or is not cached. */
+function newestCachedUnix(metadata: NodeMetadataType | undefined): number {
+	if (metadata === undefined) {
+		return 0;
+	}
+	return Math.max(
+		toUnixSeconds(metadata.createdAt) ?? 0,
+		toUnixSeconds(metadata.modifiedAt) ?? 0,
+		toUnixSeconds(metadata.completedAt) ?? 0,
+	);
+}
+
 /**
  * Stamp the import with a system time taken from the backup instead of the clock,
  * for replaying historical backups. See {@link resolveBackupSystemTime}.
@@ -354,7 +371,7 @@ export interface ImportBackupResult {
 	metadataUpdated: number;
 	priorityUpdated: number;
 	importTimestamp: Date;
-	/** Nodes newer than the snapshot that were kept instead of being tombstoned. */
+	/** Nodes newer than the snapshot that were kept instead of being tombstoned or reverted. */
 	nodesPreserved: number;
 	/** Nodes in the snapshot that the cache deleted after it was taken, left deleted instead of re-added. */
 	nodesKeptDeleted: number;
@@ -544,15 +561,7 @@ export async function importBackup(
 	// `cache import-api` stamps it with the wall clock on each daily run.
 	let incomingMaxUnix = 0;
 	for (const n of nodesToProcess) {
-		if (n.createdAt !== null && n.createdAt > incomingMaxUnix) {
-			incomingMaxUnix = n.createdAt;
-		}
-		if (n.modifiedAt !== null && n.modifiedAt > incomingMaxUnix) {
-			incomingMaxUnix = n.modifiedAt;
-		}
-		if (n.completedAt !== null && n.completedAt > incomingMaxUnix) {
-			incomingMaxUnix = n.completedAt;
-		}
+		incomingMaxUnix = Math.max(incomingMaxUnix, newestUnix(n));
 	}
 	const incomingWatermarkMs = incomingMaxUnix === 0 ? null : incomingMaxUnix * 1000;
 	const incomingWatermark: string | null =
@@ -598,12 +607,7 @@ export async function importBackup(
 	// verbatim, tombstoning anything it omits.
 	let localMaxUnix = 0;
 	for (const metadata of existingMetadataMap.values()) {
-		for (const stamp of [metadata.createdAt, metadata.modifiedAt, metadata.completedAt]) {
-			const unix = toUnixSeconds(stamp);
-			if (unix !== null && unix > localMaxUnix) {
-				localMaxUnix = unix;
-			}
-		}
+		localMaxUnix = Math.max(localMaxUnix, newestCachedUnix(metadata));
 	}
 	const localWatermark: string | null =
 		localMaxUnix === 0 ? null : formatTemporalTimestamp(new Date(localMaxUnix * 1000));
@@ -614,12 +618,7 @@ export async function importBackup(
 			if (backupNodeIds.has(nodeId)) {
 				continue;
 			}
-			const newest = Math.max(
-				toUnixSeconds(metadata.createdAt) ?? 0,
-				toUnixSeconds(metadata.modifiedAt) ?? 0,
-				toUnixSeconds(metadata.completedAt) ?? 0,
-			);
-			if (newest > incomingMaxUnix) {
+			if (newestCachedUnix(metadata) > incomingMaxUnix) {
 				protectedIds.add(nodeId);
 			}
 		}
@@ -656,6 +655,28 @@ export async function importBackup(
 	};
 	dropNodes(keptDeletedIds);
 	logTiming(`Left ${keptDeletedIds.size} nodes the cache deleted after the snapshot deleted`);
+
+	// The same guard for nodes the snapshot does hold. When the cache's content
+	// is newer than the snapshot, a version the cache wrote after the snapshot's
+	// watermark is newer than the snapshot's version of that node, unless the
+	// node's own timestamps say the snapshot saw a later edit. A move leaves
+	// those timestamps alone, so only the write time shows it.
+	if (!force && incomingWatermark !== null && incomingMaxUnix < localMaxUnix) {
+		const newerIds = new Set<string>();
+		for (const node of nodesToProcess) {
+			const content = existingContentMap.get(node.id);
+			const metadata = existingMetadataMap.get(node.id);
+			const writtenAfterSnapshot =
+				(content !== undefined && content.systemFrom > incomingWatermark) ||
+				(metadata !== undefined && metadata.systemFrom > incomingWatermark);
+			if (writtenAfterSnapshot && newestUnix(node) <= newestCachedUnix(metadata)) {
+				newerIds.add(node.id);
+				protectedIds.add(node.id);
+			}
+		}
+		dropNodes(newerIds);
+		logTiming(`Kept ${newerIds.size} nodes the cache wrote after the snapshot`);
+	}
 
 	// Upstream has no backlink item without its source. The node chunks commit
 	// before the final unit can end one, so leave it out up front rather than
