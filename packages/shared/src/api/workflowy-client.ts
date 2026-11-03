@@ -270,7 +270,7 @@ export class WorkflowyApiClient {
 		this.logger?.logRequest(url, "GET");
 
 		try {
-			const response = await fetch(url, {
+			const response = await this.fetchWithRetry(url, {
 				headers: this.getHeaders(),
 			});
 
