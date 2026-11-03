@@ -8,7 +8,7 @@
 		"directory": "../web/dist/client",
 		"binding": "ASSETS",
 		"not_found_handling": "single-page-application",
-		"run_worker_first": ["/health", "/api/*"],
+		"run_worker_first": ["/health", "/api/*", "/mcp"],
 	},
 	"durable_objects": {
 		"bindings": [{"name": "USER_STORE", "class_name": "UserStore"}],

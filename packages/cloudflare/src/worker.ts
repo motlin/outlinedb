@@ -5,6 +5,7 @@ import {Hono} from "hono";
 import {createMiddleware} from "hono/factory";
 import {resolveIdentity} from "./access";
 import type {AccessEnv} from "./access";
+import {mcpHandler} from "./mcp";
 import {storeClient} from "./store-client";
 import type {UserStore} from "./user-store";
 
@@ -29,7 +30,7 @@ function passEncodedBody(response: Response): Response {
 type WorkerEnv = Env & AccessEnv;
 interface WorkerApp {
 	Bindings: WorkerEnv;
-	Variables: {stub: DurableObjectStub<UserStore>};
+	Variables: {email: string; stub: DurableObjectStub<UserStore>};
 }
 
 const app = new Hono<WorkerApp>();
@@ -47,6 +48,7 @@ const identity = createMiddleware<WorkerApp>(async (c, next) => {
 	if ("status" in result) {
 		return new Response(result.status === 401 ? "Unauthorized" : "Forbidden", {status: result.status});
 	}
+	c.set("email", result.email);
 	const stub = c.env.USER_STORE.get(c.env.USER_STORE.idFromName(result.email));
 	c.set("stub", stub);
 	stores.set(c.req.raw, storeClient(stub));
@@ -55,6 +57,10 @@ const identity = createMiddleware<WorkerApp>(async (c, next) => {
 
 app.use("/health", identity);
 app.use("/api/*", identity);
+app.use("/mcp", identity);
+
+// MCP sits outside `createHttpApp`, so the API's compression never touches its JSON-RPC responses.
+app.all("/mcp", async (c) => mcpHandler(c.req.raw, c.var.email, c.env));
 
 // Migrated routes are answered here over RPC.
 app.route(

@@ -10,6 +10,8 @@
 		"types": "wrangler types"
 	},
 	"dependencies": {
+		"@modelcontextprotocol/sdk": "^1.32.1",
+		"@workflowy/mcp": "workspace:*",
 		"@workflowy/shared": "workspace:*",
 		"@workflowy/web": "workspace:*",
 		"drizzle-orm": "^0.45.3",
