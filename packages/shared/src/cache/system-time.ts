@@ -25,7 +25,7 @@ export function newSystemTimestamp(): string {
  * to be committed: a change feed can trail the clock by this lag and never
  * miss a late commit.
  */
-export const TRANSACTION_TIMEOUT_MS = 300_000;
+export const TRANSACTION_TIMEOUT_MS = 60_000;
 
 /** A unit of work that would commit after {@link TRANSACTION_TIMEOUT_MS}. */
 export class TransactionTimeoutError extends Error {

@@ -47,8 +47,8 @@ describe("transaction timeout", () => {
 		}
 	});
 
-	it("is 5 minutes, room for importing a first full backup (73 s measured on 2026-11-01)", () => {
-		expect(TRANSACTION_TIMEOUT_MS).toBe(300_000);
+	it("is 60 seconds, the lag every change-feed poll re-reads", () => {
+		expect(TRANSACTION_TIMEOUT_MS).toBe(60_000);
 	});
 
 	it("commits a unit of work that finishes exactly at the timeout", () => {
@@ -79,8 +79,8 @@ describe("transaction timeout", () => {
 	});
 
 	it("names the system time and the elapsed time in the error", () => {
-		expect(new TransactionTimeoutError("2026-02-01 00:00:00.000", 300_001).message).toBe(
-			"Unit of work stamped 2026-02-01 00:00:00.000 would commit 300001ms after it started, past the 300000ms transaction timeout; rolled back",
+		expect(new TransactionTimeoutError("2026-02-01 00:00:00.000", 60_001).message).toBe(
+			"Unit of work stamped 2026-02-01 00:00:00.000 would commit 60001ms after it started, past the 60000ms transaction timeout; rolled back",
 		);
 	});
 

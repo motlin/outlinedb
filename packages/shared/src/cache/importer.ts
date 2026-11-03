@@ -186,11 +186,14 @@ function mergeNodeKeyedTable<TIncoming, TTable extends SQLiteTable>(
  * @param rowsByTable Desired current state per destination table.
  * @param preserveNodeIds Nodes that must stay open even when absent from
  *   `rowsByTable`, because the incoming data predates them.
+ * @param onlyNodeIds Merge only these nodes' rows: look up and phase out
+ *   nothing else, so one chunk of a larger import leaves every other node alone.
  */
 export function applyRows(
 	unitOfWork: UnitOfWork,
 	rowsByTable: NormalizedRowsByTable,
 	preserveNodeIds?: ReadonlySet<string>,
+	onlyNodeIds?: readonly string[],
 ): ApplyRowsResult {
 	const result: ApplyRowsResult = {};
 	const {tx, systemTime: importedAt} = unitOfWork;
@@ -214,6 +217,7 @@ export function applyRows(
 			(row) => ({...row}),
 			importedAt,
 			preserveNodeIds,
+			onlyNodeIds,
 		);
 	}
 
@@ -237,6 +241,7 @@ export function applyRows(
 			(row, current) => (current ? keepSkewedTimestamps(current, row) : {...row}),
 			importedAt,
 			preserveNodeIds,
+			onlyNodeIds,
 		);
 	}
 
@@ -254,6 +259,7 @@ export function applyRows(
 			(row) => ({...row}),
 			importedAt,
 			preserveNodeIds,
+			onlyNodeIds,
 		);
 	}
 
@@ -270,6 +276,7 @@ export function applyRows(
 			(row) => ({...row}),
 			importedAt,
 			preserveNodeIds,
+			onlyNodeIds,
 		);
 	}
 
@@ -286,6 +293,7 @@ export function applyRows(
 			(row) => ({...row}),
 			importedAt,
 			preserveNodeIds,
+			onlyNodeIds,
 		);
 	}
 
@@ -302,6 +310,7 @@ export function applyRows(
 			(row) => ({...row}),
 			importedAt,
 			preserveNodeIds,
+			onlyNodeIds,
 		);
 	}
 
@@ -318,6 +327,7 @@ export function applyRows(
 			(row) => ({...row}),
 			importedAt,
 			preserveNodeIds,
+			onlyNodeIds,
 		);
 	}
 
@@ -334,6 +344,7 @@ export function applyRows(
 			(row) => ({...row}),
 			importedAt,
 			preserveNodeIds,
+			onlyNodeIds,
 		);
 	}
 

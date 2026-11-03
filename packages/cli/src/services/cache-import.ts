@@ -6,6 +6,7 @@ import {
 	calendarRows,
 	collectItemRelationships,
 	emptyItemRelationships,
+	endNodeComposites,
 	endOrphanedParts,
 	endStrandedBacklinkItems,
 	mergeItemRelationships,
@@ -15,6 +16,7 @@ import {
 	seedAccount,
 } from "@workflowy/shared/cache";
 import type {
+	ItemRelationships,
 	TemporalTransaction,
 	NormalizedAiMetadataRow,
 	NormalizedCalendarLevelsRow,
@@ -289,6 +291,32 @@ function closedSince(database: AppDatabase, systemTime: string): Set<string> {
 	return new Set(rows.map((row) => row.id));
 }
 
+/**
+ * The backup's backlink items with no live original: children of a references
+ * root whose every mirror row names a node neither in the backup nor
+ * protected. The final unit's endStrandedBacklinkItems() still ends any the
+ * cache's own rows strand.
+ */
+function strandedBacklinkItems(
+	nodes: readonly {id: string; parentId: string | null}[],
+	relationships: ItemRelationships,
+	protectedIds: ReadonlySet<string>,
+): Set<string> {
+	const liveIds = new Set([...nodes.map((node) => node.id), ...protectedIds]);
+	const referencesRootIds = new Set(relationships.referencesRoots.map((row) => row.nodeId));
+	const withLiveOriginal = new Set(
+		relationships.mirrors.filter((row) => liveIds.has(row.originalId)).map((row) => row.mirrorId),
+	);
+	return new Set(
+		nodes
+			.filter(
+				(node) =>
+					node.parentId !== null && referencesRootIds.has(node.parentId) && !withLiveOriginal.has(node.id),
+			)
+			.map((node) => node.id),
+	);
+}
+
 /** Remove, in place, the rows `keep` rejects. */
 function retainWhere<T>(rows: T[], keep: (row: T) => boolean): void {
 	let kept = 0;
@@ -299,6 +327,12 @@ function retainWhere<T>(rows: T[], keep: (row: T) => boolean): void {
 	}
 	rows.length = kept;
 }
+
+/**
+ * Nodes merged per unit of work. Each chunk commits as its own unit, so a full
+ * backup never holds one transaction open past the transaction timeout.
+ */
+export const BACKUP_IMPORT_CHUNK_SIZE = 5000;
 
 export interface ImportBackupResult {
 	totalNodes: number;
@@ -598,17 +632,28 @@ export async function importBackup(
 			}
 		}
 	}
-	if (keptDeletedIds.size > 0) {
-		const isKept = (row: {nodeId: string}) => !keptDeletedIds.has(row.nodeId);
-		retainWhere(nodesToProcess, (node) => !keptDeletedIds.has(node.id));
+	const dropNodes = (ids: ReadonlySet<string>) => {
+		if (ids.size === 0) {
+			return;
+		}
+		const isKept = (row: {nodeId: string}) => !ids.has(row.nodeId);
+		retainWhere(nodesToProcess, (node) => !ids.has(node.id));
 		retainWhere(aiMetadataRecords, isKept);
 		retainWhere(s3FileRecords, isKept);
 		retainWhere(changesMetadataRecords, isKept);
 		retainWhere(calendarMetadataRecords, isKept);
 		retainWhere(calendarLevelsRecords, isKept);
 		retainWhere(relationships.referencesRoots, isKept);
-	}
+	};
+	dropNodes(keptDeletedIds);
 	logTiming(`Left ${keptDeletedIds.size} nodes the cache deleted after the snapshot deleted`);
+
+	// Upstream has no backlink item without its source. The node chunks commit
+	// before the final unit can end one, so leave it out up front rather than
+	// write a version that the final unit closes on every import.
+	const strandedIds = strandedBacklinkItems(nodesToProcess, relationships, protectedIds);
+	dropNodes(strandedIds);
+	logTiming(`Left out ${strandedIds.size} backlink items whose source is absent`);
 
 	// resolvedPriorities is populated by the classification block below and read
 	// when building the node_metadata rows.
@@ -750,11 +795,9 @@ export async function importBackup(
 	}
 
 	// Normalize the bulk-export tree into the shared in-DB row shape, then hand
-	// the node-keyed temporal tables to the shared importer. applyRows() owns the
-	// temporal merge and FK-correct insertion order for these tables. The
-	// composite-key mirrors table is merged separately below, in the same unit
-	// of work — it is not node-keyed and applyRows() does not yet support its
-	// multi-column natural key.
+	// the node-keyed temporal tables to the shared importer one chunk of nodes
+	// at a time. applyRows() owns the temporal merge and FK-correct insertion
+	// order for these tables; scoped to a chunk's ids, it touches no other node.
 	const nodeContentRows: NormalizedNodeContentRow[] = nodesToProcess.map((node) => ({
 		id: node.id,
 		name: node.name,
@@ -770,42 +813,84 @@ export async function importBackup(
 		completedAt: timestampToDate(node.completedAt),
 		layoutMode: node.layoutMode,
 	}));
-	const aiMetadataRows: NormalizedAiMetadataRow[] = aiMetadataRecords;
-	const s3FileRows: NormalizedS3FileRow[] = s3FileRecords;
-	const changesMetadataRows: NormalizedChangesMetadataRow[] = changesMetadataRecords;
-	const referencesRootsRows: NormalizedReferencesRootsRow[] = relationships.referencesRoots;
+	const chunkOf = new Map(
+		nodesToProcess.map((node, index) => [node.id, Math.floor(index / BACKUP_IMPORT_CHUNK_SIZE)]),
+	);
+	const chunkCount = Math.ceil(nodesToProcess.length / BACKUP_IMPORT_CHUNK_SIZE);
+	const byChunk = <T>(rows: T[], nodeId: (row: T) => string): T[][] => {
+		const chunks: T[][] = Array.from({length: chunkCount}, () => []);
+		for (const row of rows) {
+			const chunk = chunkOf.get(nodeId(row));
+			if (chunk !== undefined) {
+				chunks[chunk]?.push(row);
+			}
+		}
+		return chunks;
+	};
+	const contentChunks = byChunk(nodeContentRows, (row) => row.id);
+	const metadataChunks = byChunk(nodeMetadataRows, (row) => row.nodeId);
+	const calendarMetadataChunks = byChunk(calendarMetadataRecords, (row) => row.nodeId);
+	const calendarLevelsChunks = byChunk(calendarLevelsRecords, (row) => row.nodeId);
+	const aiMetadataChunks = byChunk<NormalizedAiMetadataRow>(aiMetadataRecords, (row) => row.nodeId);
+	const s3FileChunks = byChunk<NormalizedS3FileRow>(s3FileRecords, (row) => row.nodeId);
+	const changesMetadataChunks = byChunk<NormalizedChangesMetadataRow>(changesMetadataRecords, (row) => row.nodeId);
+	const referencesRootsChunks = byChunk<NormalizedReferencesRootsRow>(
+		relationships.referencesRoots,
+		(row) => row.nodeId,
+	);
 
-	// The timeout counts from here, after the parse, so only the merge itself is timed.
+	// Each timeout counts from its own unit's start, after the parse, so only the merge itself is timed.
 	const stamp =
 		timestamp === undefined || timestamp instanceof Date
 			? timestamp
 			: resolveBackupSystemTime(incomingWatermarkMs, timestamp.backupDate, latestBackupImportStamp(database));
-	const unitStart = startUnitOfWork(stamp);
-	const importTimestamp = stamp ?? new Date(unitStart.startedAt);
-	// One unit of work: the node-keyed merge, the relationship merges and the
-	// orphan sweep commit together at the import time, or not at all.
+	// One unit of work per chunk, each committing within the transaction timeout,
+	// so a full backup never sets the lag every change-feed poll re-reads. A
+	// failure leaves the earlier chunks committed; re-running the import converges.
+	let contentInserted = 0;
+	let metadataInserted = 0;
+	for (let chunk = 0; chunk < chunkCount; chunk++) {
+		const chunkIds = (contentChunks[chunk] ?? []).map((row) => row.id);
+		runUnitOfWork(
+			database,
+			(unitOfWork) => {
+				const merged = applyRows(
+					unitOfWork,
+					{
+						nodeContent: contentChunks[chunk],
+						nodeMetadata: metadataChunks[chunk],
+						calendarMetadata: calendarMetadataChunks[chunk],
+						calendarLevels: calendarLevelsChunks[chunk],
+						aiMetadata: aiMetadataChunks[chunk],
+						s3Files: s3FileChunks[chunk],
+						changesMetadata: changesMetadataChunks[chunk],
+						referencesRoots: referencesRootsChunks[chunk],
+					},
+					undefined,
+					chunkIds,
+				);
+				contentInserted += merged.nodeContent?.inserted ?? 0;
+				metadataInserted += merged.nodeMetadata?.inserted ?? 0;
+			},
+			startUnitOfWork(stamp),
+		);
+	}
+	logTiming(
+		`Merged node-keyed tables in ${chunkCount} units: ${contentInserted} content, ${metadataInserted} metadata`,
+	);
+	logTiming(`Content updates: ${contentUpdated}, Metadata updates: ${metadataUpdated}`);
+
+	// The last unit ends the nodes absent from the backup and merges the
+	// relationships, which span nodes of every chunk. The import is stamped with it.
+	const finalStart = startUnitOfWork(stamp);
+	const importTimestamp = stamp ?? new Date(finalStart.startedAt);
 	runUnitOfWork(
 		database,
 		(unitOfWork) => {
-			const merged = applyRows(
-				unitOfWork,
-				{
-					nodeContent: nodeContentRows,
-					nodeMetadata: nodeMetadataRows,
-					calendarMetadata: calendarMetadataRecords,
-					calendarLevels: calendarLevelsRecords,
-					aiMetadata: aiMetadataRows,
-					s3Files: s3FileRows,
-					changesMetadata: changesMetadataRows,
-					referencesRoots: referencesRootsRows,
-				},
-				protectedIds,
-			);
-			logTiming(
-				`Merged node-keyed tables: ${merged.nodeContent?.inserted ?? 0} content, ` +
-					`${merged.nodeMetadata?.inserted ?? 0} metadata`,
-			);
-			logTiming(`Content updates: ${contentUpdated}, Metadata updates: ${metadataUpdated}`);
+			// Nodes deleted in Workflowy (absent from this backup) take their whole composite with them.
+			endNodeComposites(unitOfWork, orphanIds);
+			nodesDeleted = orphanIds.length;
+			logTiming(`Closed ${nodesDeleted} orphaned nodes (deleted from Workflowy)`);
 
 			// Merge mirrors globally: a full backup is the
 			// complete desired state. Mirror pairs need both nodes live in this import.
@@ -815,18 +900,12 @@ export async function importBackup(
 				`Processed relationships: mirrors +${relationshipResult.mirrors.inserted}/-${relationshipResult.mirrors.phasedOut}`,
 			);
 
-			// End every owned row whose node is no longer current: the nodes deleted in
-			// Workflowy (absent from this backup) take their whole composite with them.
-			// applyRows() already closed their node-keyed rows; this sweep covers the
-			// rest (mirrors, embeddings, ...).
+			// End every owned row whose node is no longer current (mirrors, embeddings, ...).
 			endOrphanedParts(unitOfWork);
 			// Upstream has no backlink item without its source; one in the backup is dropped.
 			endStrandedBacklinkItems(unitOfWork);
-			nodesDeleted = orphanIds.length;
-
-			logTiming(`Closed ${nodesDeleted} orphaned nodes (deleted from Workflowy)`);
 		},
-		unitStart,
+		finalStart,
 	);
 
 	logTiming("Transaction complete");

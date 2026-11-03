@@ -1,16 +1,16 @@
-import {countStrandedRows, currentBacklinkItems} from "@workflowy/shared/cache";
+import {countStrandedRows, currentBacklinkItems, TRANSACTION_TIMEOUT_MS} from "@workflowy/shared/cache";
 import {mirrors, nodeContent, nodeMetadata} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@workflowy/shared/temporal";
 import {and, eq} from "drizzle-orm";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import {importBackup} from "../../src/services/cache-import.js";
+import {BACKUP_IMPORT_CHUNK_SIZE, importBackup} from "../../src/services/cache-import.js";
 import {cleanupTestDatabase, createTestDatabase} from "../db/migration-helper.js";
 import type {TestDatabase} from "../db/migration-helper.js";
 import {expectActiveRecord} from "../helpers/assertion-helpers.js";
 import {createNodeFromContent} from "../helpers/node-fixtures.js";
-import {assert, it, afterEach, expect, describe, beforeEach} from "vite-plus/test";
+import {assert, it, afterEach, expect, describe, beforeEach, vi} from "vite-plus/test";
 
 const T0 = new Date("2024-01-01T00:00:00Z");
 const T1 = new Date("2024-01-01T00:01:00Z");
@@ -804,15 +804,46 @@ describe("cache-import service", () => {
 				stranded: {backlinkItems: 0, mirrors: 0, referencesRoots: 0},
 			});
 		});
+
+		it("never writes a version of a backlink item whose source is absent from the backup", async () => {
+			const backup = backlinkBackup({backlink: {sourceID: "source-node", targetID: "target-node"}}).filter(
+				(node) => node.id !== "source-node",
+			);
+
+			// The clock ticks on every node insert, so no two units of work share a system time.
+			vi.useFakeTimers({toFake: ["Date"], now: T0});
+			testDatabase.sqlite.function("advance_clock", () => {
+				vi.setSystemTime(Date.now() + 1);
+				return 0;
+			});
+			testDatabase.sqlite.exec(
+				"CREATE TEMP TRIGGER advance_clock_on_insert AFTER INSERT ON node_content BEGIN SELECT advance_clock(); END",
+			);
+			try {
+				await importBackup(testDatabase.db, writeBackupFile(backup), "backup.json");
+				await importBackup(testDatabase.db, writeBackupFile(backup), "backup.json");
+			} finally {
+				vi.useRealTimers();
+			}
+
+			expect(
+				testDatabase.db
+					.select({id: nodeContent.id, systemFrom: nodeContent.systemFrom, systemTo: nodeContent.systemTo})
+					.from(nodeContent)
+					.where(eq(nodeContent.id, "bn"))
+					.all(),
+			).toStrictEqual([]);
+		});
 	});
 
-	describe("one unit of work", () => {
-		it("rolls back the node merge when merging a relationship table fails", async () => {
+	describe("units of work", () => {
+		it("keeps the committed node chunks and rolls back the final unit when merging a relationship table fails", async () => {
 			await importBackup(
 				testDatabase.db,
 				writeBackupFile([
 					{id: "kept", nm: "Kept"},
 					{id: "doomed", nm: "Doomed"},
+					{id: "gone", nm: "Gone"},
 				]),
 				"backup.json",
 				false,
@@ -825,7 +856,6 @@ describe("cache-import service", () => {
 					.where(eq(nodeContent.systemTo, FAR_FUTURE_DATE))
 					.orderBy(nodeContent.id)
 					.all();
-			const before = currentContent();
 			testDatabase.sqlite.exec(
 				"CREATE TRIGGER fail_mirror BEFORE INSERT ON mirrors BEGIN SELECT RAISE(ABORT, 'mirror failed'); END",
 			);
@@ -847,7 +877,12 @@ describe("cache-import service", () => {
 				),
 			).rejects.toThrow("mirror failed");
 
-			expect(currentContent()).toStrictEqual(before);
+			// The node chunk committed the rename; the final unit's deletion of "gone" rolled back with the mirror.
+			expect(currentContent()).toStrictEqual([
+				{id: "doomed", name: "Doomed"},
+				{id: "gone", name: "Gone"},
+				{id: "kept", name: "Kept, renamed"},
+			]);
 		});
 	});
 
@@ -1498,6 +1533,56 @@ describe("cache-import service", () => {
 				.all()
 				.find((n) => n.systemTo === FAR_FUTURE_DATE);
 			expect(node1).toBeUndefined();
+		});
+	});
+
+	describe("transaction timeout", () => {
+		afterEach(() => {
+			vi.useRealTimers();
+		});
+
+		it("commits a backup whose merge outlasts the transaction timeout as one unit per chunk", async () => {
+			vi.useFakeTimers({toFake: ["Date"], now: T0});
+			// Every node_content insert costs a chunk's share of the timeout, so one chunk fits and one more node does not.
+			const tick = Math.floor(TRANSACTION_TIMEOUT_MS / BACKUP_IMPORT_CHUNK_SIZE);
+			testDatabase.sqlite.function("advance_clock", () => {
+				vi.setSystemTime(Date.now() + tick);
+				return 0;
+			});
+			testDatabase.sqlite.exec(
+				"CREATE TEMP TRIGGER advance_clock_on_insert AFTER INSERT ON node_content BEGIN SELECT advance_clock(); END",
+			);
+			const nodeCount = BACKUP_IMPORT_CHUNK_SIZE + 1;
+			const filePath = writeBackupFile(
+				Array.from({length: nodeCount}, (_, index) => ({id: `node-${index}`, nm: `Node ${index}`})),
+			);
+
+			const result = await importBackup(testDatabase.db, filePath, "backup.json");
+
+			expectImportStats(result, {
+				totalNodes: nodeCount,
+				nodesAdded: nodeCount,
+				nodesUpdated: 0,
+				nodesUnchanged: 0,
+				nodesDeleted: 0,
+				nodesPhasedOut: 0,
+				contentUpdated: 0,
+				metadataUpdated: 0,
+				priorityUpdated: 0,
+			});
+			const stamps = testDatabase.sqlite
+				.prepare(
+					"SELECT system_from AS systemFrom, count(*) AS rows FROM node_content WHERE system_to = ? GROUP BY system_from ORDER BY system_from",
+				)
+				.all(FAR_FUTURE_DATE);
+			expect(stamps).toStrictEqual([
+				{systemFrom: "2024-01-01 00:00:00.000", rows: BACKUP_IMPORT_CHUNK_SIZE},
+				{
+					systemFrom: formatTemporalTimestamp(new Date(T0.getTime() + BACKUP_IMPORT_CHUNK_SIZE * tick)),
+					rows: 1,
+				},
+			]);
+			expect(result.importTimestamp).toStrictEqual(new Date(T0.getTime() + nodeCount * tick));
 		});
 	});
 });
