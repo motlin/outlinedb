@@ -328,6 +328,10 @@ For a recurring-shaped row, place **Delete this copy — the recurring item cove
 
 A genuine external deadline still requires its deadline protections. A future recurring date does not establish that today's obligation is covered. When the user confirms this is one-shot work, retain the ordinary high-priority asap ordering and tier choice. A skip streak alone never authorizes deletion or a lower tier.
 
+## Decision-page cards
+
+When a segment's walk goes to the decision page (see **Decision page** in `${CLAUDE_PLUGIN_ROOT}/skills/review-proposal-staging.md`), each card's title already names the item, so the body carries only the deciding facts, one per line. For an overdue row, those are `overdue Nd` and, when `skipStreak >= 2`, `skipped N runs`. Leave out the `Due <date>` line and the `since <date>` suffix on the streak; the overdue count already says how late it is. Context lines (child count, note, prior-run artifacts, recurring counterparts) follow, each on its own line.
+
 ## Due item options
 
 For rows with `duplicateCopies`, use **Cross-source duplicates** above before the ordinary options. For recurring-shaped rows, apply **Check recurring counterparts before offering a tier** first. For ordinary one-shot rows, first option is the most likely outcome, per the walk skill. That is **Done** on Workflowy and Things rows and **Move to Workflowy** on Reminders rows — a dated reminder has nothing the `⏰` bucket does not do better, so moving it is almost always the answer.
