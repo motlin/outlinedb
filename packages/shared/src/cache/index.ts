@@ -122,7 +122,9 @@ export {
 	NON_NODE_TABLES,
 	runUnitOfWork,
 	type UnitOfWork,
+	withdrawNodeComposites,
 } from "./node-composite.js";
+export {countStrandedRows, endStrandedBacklinkItems, type StrandedRowCounts} from "./stranded-relationships.js";
 export {ensureNodeTags, rebuildNodeTags} from "./node-tags.js";
 export {
 	assertWithinTransactionTimeout,

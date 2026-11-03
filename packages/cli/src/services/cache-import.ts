@@ -7,6 +7,7 @@ import {
 	collectItemRelationships,
 	emptyItemRelationships,
 	endOrphanedParts,
+	endStrandedBacklinkItems,
 	mergeItemRelationships,
 	startUnitOfWork,
 	readWorkflowyEpoch,
@@ -787,6 +788,8 @@ export async function importBackup(
 			// applyRows() already closed their node-keyed rows; this sweep covers the
 			// rest (mirrors, embeddings, ...).
 			endOrphanedParts(unitOfWork);
+			// Upstream has no backlink item without its source; one in the backup is dropped.
+			endStrandedBacklinkItems(unitOfWork);
 			nodesDeleted = orphanIds.length;
 
 			logTiming(`Closed ${nodesDeleted} orphaned nodes (deleted from Workflowy)`);

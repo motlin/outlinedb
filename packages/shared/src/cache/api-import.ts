@@ -13,6 +13,7 @@ import type {NormalizedRowsByTable} from "./importer.js";
 import {collectItemRelationships, emptyItemRelationships, mergeItemRelationships} from "./item-relationships.js";
 import type {ItemRelationships} from "./item-relationships.js";
 import {endNodeComposites, endOrphanedParts, runUnitOfWork} from "./node-composite.js";
+import {endStrandedBacklinkItems} from "./stranded-relationships.js";
 import type {UnitOfWork} from "./node-composite.js";
 import type {NormalizedNodeContentRow, NormalizedNodeMetadataRow} from "./normalized-rows.js";
 import {startUnitOfWork} from "./system-time.js";
@@ -344,6 +345,10 @@ function finishIn(unitOfWork: UnitOfWork, state: ApiImportState, treeItems?: Int
 		mergeItemRelationships(unitOfWork, relationships, state.seenIds);
 	}
 	endOrphanedParts(unitOfWork);
+	if (treeItems !== undefined) {
+		// Only the tree data carries backlinks, so only then can an item be judged stranded.
+		endStrandedBacklinkItems(unitOfWork);
+	}
 
 	state.logger?.debug(`[IMPORT-API] Finished in ${Date.now() - state.startTime}ms`);
 	return {

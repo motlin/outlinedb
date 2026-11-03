@@ -9,6 +9,7 @@ import {WorkflowyInternalClient} from "../src/api/workflowy-internal-client.js";
 import {CacheService} from "../src/cache/cache-service.js";
 import {collectItemRelationships, emptyItemRelationships} from "../src/cache/item-relationships.js";
 import {WorkflowyWriteThroughClient} from "../src/cache/workflowy-write-through-client.js";
+import {countStrandedRows} from "../src/cache/stranded-relationships.js";
 import {storeTreeTxId} from "../src/cache/tree-transaction.js";
 import * as schema from "../src/db/schema.js";
 import {linkedSourcesInSubtree, WorkflowyInternalAdapter} from "../src/internal/adapter.js";
@@ -669,6 +670,40 @@ describe("WorkflowyInternalAdapter.syncBacklinks", () => {
 			pushes: [[["delete", OLD_ITEM]]],
 			referencesChildren: [],
 			treeDataReads: 0,
+		});
+	});
+
+	it("deletes the backlink items of a deleted source whose text no longer links, leaving no stranded rows", async () => {
+		const {adapter, pushes, server, db, cacheService} = await tracked([
+			[SOURCE, node("link removed", ROOT, {mirror: {backlinkMirrorRootIds: {[OLD_ITEM]: true}}})],
+			[TARGET, node("target", ROOT)],
+			[OLD_ROOT, node("", TARGET, {isReferencesRoot: true})],
+			[
+				OLD_ITEM,
+				node("", OLD_ROOT, {
+					mirror: {originalId: SOURCE, isMirrorRoot: true},
+					backlink: {sourceID: SOURCE, targetID: TARGET},
+				}),
+			],
+		]);
+		const linked = linkedSourcesInSubtree(db, SOURCE);
+		server.apply("delete", {projectid: SOURCE});
+		cacheService.deleteNode(SOURCE);
+
+		const deleted = await adapter.deleteBacklinksOf(linked);
+
+		expect({
+			linked,
+			deleted,
+			pushes: pushes.map((ops) => ops.map((op) => [op.type, op.data.projectid])),
+			referencesChildren: server.children(OLD_ROOT),
+			stranded: countStrandedRows(db),
+		}).toStrictEqual({
+			linked: {ids: [SOURCE], mirrors: [{originalId: SOURCE, mirrorId: OLD_ITEM}]},
+			deleted: [OLD_ITEM],
+			pushes: [[["delete", OLD_ITEM]]],
+			referencesChildren: [],
+			stranded: {backlinkItems: 0, mirrors: 0, referencesRoots: 0},
 		});
 	});
 

@@ -1,6 +1,7 @@
 import {Command} from "@oclif/core";
 import {createDatabase} from "../../db/index.js";
 import {CacheStatusService} from "../../services/cache-status.js";
+import type {CacheStatus} from "../../services/cache-status.js";
 
 export default class Status extends Command {
 	static override enableJsonFlag = true;
@@ -9,12 +10,7 @@ export default class Status extends Command {
 
 	static override examples = ["<%= config.bin %> cache:status", "<%= config.bin %> cache:status --json"];
 
-	public async run(): Promise<{
-		nodes: {total: number; root: number; completed: number};
-		lastSync: Date | null;
-		lastBackupImport: string | null;
-		database: {path: string; size: string};
-	}> {
+	public async run(): Promise<CacheStatus> {
 		await this.parse(Status);
 
 		const database = createDatabase();
@@ -43,6 +39,15 @@ export default class Status extends Command {
 				this.log("  No backup data imported");
 			}
 			this.log("");
+
+			const {stranded} = status;
+			if (stranded.backlinkItems + stranded.mirrors + stranded.referencesRoots > 0) {
+				this.log("⚠️ Stranded Rows:");
+				this.log(`  Backlink items without an original: ${stranded.backlinkItems}`);
+				this.log(`  Mirror rows without both nodes: ${stranded.mirrors}`);
+				this.log(`  References roots without a node: ${stranded.referencesRoots}`);
+				this.log("");
+			}
 
 			this.log("💿 Database:");
 			this.log(`  File: ${status.database.path}`);

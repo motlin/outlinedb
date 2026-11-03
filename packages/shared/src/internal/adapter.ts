@@ -5,7 +5,7 @@ import type {CreateMirrorResult} from "../api/workflowy-client.js";
 import type {InternalSession, VisibleFeature, WorkflowyInternalClient} from "../api/workflowy-internal-client.js";
 import type {WorkflowyWriteThroughClient} from "../cache/workflowy-write-through-client.js";
 import {keptInternalMetadata, readNodeInternalMetadata, storeInternalMetadata} from "../cache/internal-metadata.js";
-import {collectItemRelationships, emptyItemRelationships} from "../cache/item-relationships.js";
+import {collectItemRelationships, currentBacklinkItems, emptyItemRelationships} from "../cache/item-relationships.js";
 import {runUnitOfWork} from "../cache/node-composite.js";
 import {readSubtreeAt, systemTimeJustBefore} from "../cache/subtree-history.js";
 import {newSystemTimestamp} from "../cache/system-time.js";
@@ -416,13 +416,15 @@ export interface LinkedSources {
 }
 
 /**
- * The cached nodes in `rootId`'s subtree (itself included) whose name or note
- * holds an internal link: the only ones that can be backlink sources, with the
- * `mirrors` rows naming each as original. Read before a delete, since the cache
- * drops the subtree, and those rows, with it.
+ * The cached nodes in `rootId`'s subtree (itself included) that can be backlink
+ * sources: those whose name or note holds an internal link, and those that are
+ * still the original of a backlink item (whose link was removed without its
+ * backlink), so deleting them strands no item. Each comes with the `mirrors`
+ * rows naming it as original. Read before a delete, since the cache drops the
+ * subtree, and those rows, with it.
  */
 export function linkedSourcesInSubtree(db: AdapterDatabase, rootId: string): LinkedSources {
-	const ids = linkedIdsInSubtree(db, rootId);
+	const ids = linkedIdsInSubtree(db, rootId, {withBacklinkItems: true});
 	const mirrors: LinkedSources["mirrors"] = [];
 	for (let start = 0; start < ids.length; start += ID_BATCH_SIZE) {
 		mirrors.push(
@@ -442,7 +444,21 @@ export function linkedSourcesInSubtree(db: AdapterDatabase, rootId: string): Lin
 	return {ids, mirrors};
 }
 
-function linkedIdsInSubtree(db: AdapterDatabase, rootId: string): string[] {
+/** Those of `ids` that are the original of a current backlink item. */
+function backlinkSourceIds(db: AdapterDatabase, ids: string[]): Set<string> {
+	const sources = new Set<string>();
+	for (let start = 0; start < ids.length; start += ID_BATCH_SIZE) {
+		for (const item of currentBacklinkItems(
+			db,
+			inArray(mirrorsTable.originalId, ids.slice(start, start + ID_BATCH_SIZE)),
+		)) {
+			sources.add(item.sourceId);
+		}
+	}
+	return sources;
+}
+
+function linkedIdsInSubtree(db: AdapterDatabase, rootId: string, {withBacklinkItems = false} = {}): string[] {
 	const linked: string[] = [];
 	for (let level = [rootId]; level.length > 0;) {
 		const rows = db
@@ -450,8 +466,11 @@ function linkedIdsInSubtree(db: AdapterDatabase, rootId: string): string[] {
 			.from(nodeContent)
 			.where(and(inArray(nodeContent.id, level), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
 			.all();
+		const sources = withBacklinkItems ? backlinkSourceIds(db, level) : new Set<string>();
 		linked.push(
-			...rows.filter((row) => hasInternalLink(`${row.name ?? ""} ${row.note ?? ""}`)).map((row) => row.id),
+			...rows
+				.filter((row) => hasInternalLink(`${row.name ?? ""} ${row.note ?? ""}`) || sources.has(row.id))
+				.map((row) => row.id),
 		);
 		level = db
 			.select({id: nodeContent.id})

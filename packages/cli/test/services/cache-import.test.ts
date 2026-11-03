@@ -1,7 +1,7 @@
-import {currentBacklinkItems} from "@workflowy/shared/cache";
+import {countStrandedRows, currentBacklinkItems} from "@workflowy/shared/cache";
 import {mirrors, nodeContent, nodeMetadata} from "@workflowy/shared/db";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
-import {eq} from "drizzle-orm";
+import {and, eq} from "drizzle-orm";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -783,6 +783,26 @@ describe("cache-import service", () => {
 			await importBackup(testDatabase.db, writeBackupFile(backlinkBackup({})), "backup.json", false, T1);
 
 			expect(currentBacklinkItems(testDatabase.db, undefined)).toStrictEqual([]);
+		});
+
+		it("ends a backlink item whose source is absent from the backup, leaving no stranded rows", async () => {
+			const backup = backlinkBackup({backlink: {sourceID: "source-node", targetID: "target-node"}}).filter(
+				(node) => node.id !== "source-node",
+			);
+
+			await importBackup(testDatabase.db, writeBackupFile(backup), "backup.json", false, T0);
+
+			expect({
+				refsChildren: testDatabase.db
+					.select({id: nodeContent.id})
+					.from(nodeContent)
+					.where(and(eq(nodeContent.parentId, "refs"), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
+					.all(),
+				stranded: countStrandedRows(testDatabase.db),
+			}).toStrictEqual({
+				refsChildren: [],
+				stranded: {backlinkItems: 0, mirrors: 0, referencesRoots: 0},
+			});
 		});
 	});
 

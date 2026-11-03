@@ -1,3 +1,5 @@
+import {countStrandedRows} from "@workflowy/shared/cache";
+import type {StrandedRowCounts} from "@workflowy/shared/cache";
 import {backupImports, nodeContent, nodeMetadata} from "@workflowy/shared/db";
 import type * as schema from "@workflowy/shared/db";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
@@ -17,6 +19,8 @@ export interface CacheStatus {
 	};
 	lastSync: Date | null;
 	lastBackupImport: string | null;
+	/** Relationship rows a delete or import left behind; all zero when the cache matches upstream. */
+	stranded: StrandedRowCounts;
 	database: {
 		path: string;
 		size: string;
@@ -42,6 +46,7 @@ export class CacheStatusService {
 			nodes: nodeStats,
 			lastSync,
 			lastBackupImport,
+			stranded: countStrandedRows(this.database),
 			database: {
 				path: dbPath,
 				size: dbSize,

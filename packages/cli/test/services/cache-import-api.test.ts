@@ -1,7 +1,7 @@
 import {assert, beforeEach, vi, afterEach, describe, expect, it} from "vite-plus/test";
 import {mirrors, nodeContent, nodeEmbeddings, nodeMetadata, referencesRoots} from "@workflowy/shared/db";
 import type {InternalTreeItem} from "@workflowy/shared/api";
-import {currentBacklinkItems, SameMillisecondOverwriteError} from "@workflowy/shared/cache";
+import {countStrandedRows, currentBacklinkItems, SameMillisecondOverwriteError} from "@workflowy/shared/cache";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
 import type {WorkflowyNode} from "@workflowy/shared/types";
 import {eq} from "drizzle-orm";
@@ -709,6 +709,26 @@ describe("cache-import-api service", () => {
 				],
 				backlinks: [],
 				referencesRoots: [{nodeId: "refs", systemFrom: AT_T0, systemTo: AT_T1}],
+			});
+		});
+
+		it("ends a backlink item whose source is gone, leaving no stranded rows", () => {
+			importFromApi(testDatabase.db, apiNodes, false, T0, treeItems);
+
+			const withoutSource = apiNodes.filter((node) => node.id !== "source");
+			const strandedItems = treeItems.filter((item) => item.id !== "source");
+			importFromApi(testDatabase.db, withoutSource, false, T1, strandedItems);
+
+			expect({
+				item: testDatabase.db
+					.select({id: nodeContent.id, systemTo: nodeContent.systemTo})
+					.from(nodeContent)
+					.where(eq(nodeContent.id, "item"))
+					.all(),
+				stranded: countStrandedRows(testDatabase.db),
+			}).toStrictEqual({
+				item: [{id: "item", systemTo: AT_T1}],
+				stranded: {backlinkItems: 0, mirrors: 0, referencesRoots: 0},
 			});
 		});
 

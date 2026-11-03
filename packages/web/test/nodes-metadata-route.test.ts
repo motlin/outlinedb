@@ -25,7 +25,8 @@ vi.mock("@workflowy/shared/cache", async (importOriginal) => {
 	};
 });
 
-const {CacheService, storeInternalMetadata} = await import("@workflowy/shared/cache");
+const {CacheService, collectItemRelationships, emptyItemRelationships, storeInternalMetadata} =
+	await import("@workflowy/shared/cache");
 
 const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 const NOT_CONFIGURED =
@@ -169,6 +170,29 @@ describe("DELETE /api/v1/nodes/:id backlinks", () => {
 			status: 204,
 			order: ["delete", "backlinks"],
 			calls: [[{ids: ["n1", "c2"], mirrors: []}]],
+		});
+	});
+
+	it("deletes the backlink items of a source in the subtree whose text no longer links, so none are stranded", async () => {
+		const {adapter, request, cacheService} = setup(true);
+		cacheService.insertNode({...apiNode("n1"), name: "link removed"}, null);
+		cacheService.insertNode(apiNode("target"), null);
+		cacheService.insertNode({...apiNode("refs"), parent_id: "target", name: ""}, "target");
+		cacheService.insertNode({...apiNode("item"), parent_id: "refs", name: ""}, "refs");
+		const relationships = emptyItemRelationships();
+		collectItemRelationships(relationships, "refs", {isReferencesRoot: true});
+		collectItemRelationships(relationships, "item", {
+			mirror: {originalId: "n1", isMirrorRoot: true},
+			backlink: {sourceID: "n1", targetID: "target"},
+		});
+		cacheService.recordRelationships(relationships);
+		deleteNode.mockResolvedValue({mirrorIds: [], promotions: [], nodeId: "n1"});
+
+		const {status} = await request("DELETE", "/nodes/n1");
+
+		expect({status, calls: adapter.deleteBacklinksOf.mock.calls}).toStrictEqual({
+			status: 204,
+			calls: [[{ids: ["n1"], mirrors: [{originalId: "n1", mirrorId: "item"}]}]],
 		});
 	});
 

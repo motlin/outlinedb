@@ -203,6 +203,32 @@ export function endNodeComposites(unitOfWork: UnitOfWork, nodeIds: readonly stri
 }
 
 /**
+ * End the composites rooted at `nodeIds` like {@link endNodeComposites}, even
+ * when this unit of work inserted their current rows: such a row is withdrawn
+ * (deleted), since a version that starts and ends at one system time never
+ * existed, and any version it replaced stays ended at that time.
+ */
+export function withdrawNodeComposites(unitOfWork: UnitOfWork, nodeIds: readonly string[]): void {
+	const {tx, systemTime} = unitOfWork;
+	for (let start = 0; start < nodeIds.length; start += ID_BATCH_SIZE) {
+		const batch = nodeIds.slice(start, start + ID_BATCH_SIZE);
+		for (const part of ROOT_AND_PARTS) {
+			if (part.hardDelete) {
+				continue;
+			}
+			const owned = sql.join(
+				[part.owner, ...(part.endsWithReferences ?? [])].map((column) => inArray(column, batch)),
+				sql` OR `,
+			);
+			tx.run(
+				sql`DELETE FROM ${part.table} WHERE system_from = ${systemTime} AND system_to = ${FAR_FUTURE_DATE} AND (${owned})`,
+			);
+		}
+	}
+	endNodeComposites(unitOfWork, nodeIds);
+}
+
+/**
  * End every owned row whose owner (or, for mirrors, original) has no current
  * node. The sweep after a global merge, in the caller's unit of work.
  */

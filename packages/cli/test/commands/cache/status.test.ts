@@ -1,5 +1,6 @@
 import {beforeEach, vi, afterEach, describe, expect, it} from "vite-plus/test";
-import {backupImports, nodeContent, nodeMetadata} from "@workflowy/shared/db";
+import {backupImports, mirrors, nodeContent, nodeMetadata, referencesRoots} from "@workflowy/shared/db";
+import {z} from "zod";
 import {formatTemporalTimestamp} from "@workflowy/shared/temporal";
 import type {NewNodeContent, NewNodeMetadata} from "@workflowy/shared/db";
 import {captureOutput} from "@oclif/test";
@@ -222,6 +223,59 @@ describe("cache:status command", () => {
 					testDbPath
 				}\n  Size: 4.00 KB\n`,
 			);
+		});
+	});
+
+	describe("with stranded relationship rows", () => {
+		beforeEach(() => {
+			const seeded = {systemFrom: "2024-01-01 00:00:00", systemTo: "9999-12-31 23:59:59"};
+			for (const [id, parentId] of [
+				["target", null],
+				["refs", "target"],
+				["item", "refs"],
+			] as const) {
+				testDatabase.db
+					.insert(nodeContent)
+					.values({id, name: "", note: null, parentId, ...seeded})
+					.run();
+			}
+			testDatabase.db
+				.insert(referencesRoots)
+				.values({nodeId: "refs", ...seeded})
+				.run();
+			testDatabase.db
+				.insert(mirrors)
+				.values({mirrorId: "item", originalId: "gone", ...seeded})
+				.run();
+			fsExistsSyncStub.mockReturnValue(true);
+			fsStatSyncStub.mockReturnValue({size: 1024});
+		});
+
+		it("lists the stranded rows a delete or import left", async () => {
+			const {stdout} = await captureOutput(async () => {
+				await Status.run([]);
+			});
+
+			const seededSync = new Date("2024-01-01T00:00:00Z").toLocaleString();
+			expect(stdout).toBe(
+				`📊 Cache Status\n\n📁 Cached Nodes: 3\n\n🔄 Last Sync:\n  Time: ${
+					seededSync
+				}\n  Age: 2 years ago\n\n💾 Backup Import:\n  No backup data imported\n\n⚠️ Stranded Rows:\n  Backlink items without an original: 1\n  Mirror rows without both nodes: 1\n  References roots without a node: 0\n\n💿 Database:\n  File: ${
+					testDbPath
+				}\n  Size: 1.00 KB\n`,
+			);
+		});
+
+		it("returns the stranded counts as JSON", async () => {
+			const {stdout} = await captureOutput(async () => {
+				await Status.run(["--json"]);
+			});
+
+			expect(z.object({stranded: z.unknown()}).parse(JSON.parse(stdout)).stranded).toStrictEqual({
+				backlinkItems: 1,
+				mirrors: 1,
+				referencesRoots: 0,
+			});
 		});
 	});
 

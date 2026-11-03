@@ -46,7 +46,14 @@ export async function deleteBacklinksOfDeleted(
 	if (linked.ids.length === 0) {
 		return [];
 	}
-	return (await internalAdapter(database, writeThrough)?.deleteBacklinksOf(linked)) ?? [];
+	const adapter = internalAdapter(database, writeThrough);
+	if (adapter === undefined) {
+		process.stderr.write(
+			"Warning: the deleted items may have backlinks, but no internal session is configured, so their backlink items were not deleted. Run 'internal login' or set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD.\n",
+		);
+		return [];
+	}
+	return adapter.deleteBacklinksOf(linked);
 }
 
 /** An internal-API adapter over the cache, or undefined without configured internal auth. */
