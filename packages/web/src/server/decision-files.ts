@@ -1,14 +1,15 @@
 /**
  * The Node host's {@link DecisionStore}: `<slug>.json` and `<slug>.answers.json`
  * in one directory, the repo's `.llm/gtd/review/decisions` unless
- * `WORKFLOWY_DECISIONS_DIR` points elsewhere. Item images are read from the
+ * `WORKFLOWY_DECISIONS_DIR` points elsewhere. Item images and videos are read from the
  * repo's `.llm/photos` unless `WORKFLOWY_DECISION_PHOTOS_DIR` points elsewhere.
  */
 
 import {randomUUID} from "node:crypto";
-import {mkdir, readFile, realpath, rename, writeFile} from "node:fs/promises";
+import {createReadStream} from "node:fs";
+import {mkdir, readFile, realpath, rename, stat, writeFile} from "node:fs/promises";
 import {isAbsolute, join, relative, sep} from "node:path";
-import {DECISION_SLUG, decisionImageType} from "./decisions.js";
+import {DECISION_SLUG, decisionMediaType} from "./decisions.js";
 import type {DecisionStore} from "./decisions.js";
 
 /** src/server and dist/server both sit four levels below the repo root. */
@@ -24,7 +25,7 @@ export function decisionPhotosDirectory(env: {WORKFLOWY_DECISION_PHOTOS_DIR?: st
 	return env.WORKFLOWY_DECISION_PHOTOS_DIR ?? DEFAULT_PHOTOS_DIRECTORY;
 }
 
-/** `photosDirectory` undefined means the host serves no images. */
+/** `photosDirectory` undefined means the host serves no images or videos. */
 export function fileDecisionStore(directory: string, photosDirectory?: string): DecisionStore {
 	const path = (slug: string, suffix: string): string => {
 		if (!DECISION_SLUG.test(slug)) {
@@ -33,8 +34,8 @@ export function fileDecisionStore(directory: string, photosDirectory?: string): 
 		return join(directory, `${slug}${suffix}`);
 	};
 	return {
-		readDocument: async (slug) => readIfPresent(path(slug, ".json"), "utf8"),
-		readAnswers: async (slug) => readIfPresent(path(slug, ".answers.json"), "utf8"),
+		readDocument: async (slug) => readIfPresent(path(slug, ".json")),
+		readAnswers: async (slug) => readIfPresent(path(slug, ".answers.json")),
 		writeAnswers: async (slug, text) => {
 			const destination = path(slug, ".answers.json");
 			await mkdir(directory, {recursive: true});
@@ -42,8 +43,8 @@ export function fileDecisionStore(directory: string, photosDirectory?: string): 
 			await writeFile(temporary, text);
 			await rename(temporary, destination);
 		},
-		readImage: async (src) => {
-			if (photosDirectory === undefined || decisionImageType(src) === null) {
+		openMedia: async (src) => {
+			if (photosDirectory === undefined || decisionMediaType(src) === null) {
 				return null;
 			}
 			const file = await realIfPresent(join(photosDirectory, src));
@@ -52,9 +53,37 @@ export function fileDecisionStore(directory: string, photosDirectory?: string): 
 			if (file === null || root === null || !isInside(root, file)) {
 				return null;
 			}
-			return readIfPresent(file);
+			const stats = await stat(file);
+			if (!stats.isFile()) {
+				return null;
+			}
+			return {
+				size: stats.size,
+				read: (start, end) => readSlice(file, start, end),
+			};
 		},
 	};
+}
+
+/** The bytes of `file` from `start` through `end` inclusive, read only as the consumer pulls them. */
+function readSlice(file: string, start: number, end: number): ReadableStream<Uint8Array<ArrayBuffer>> {
+	const chunks = createReadStream(file, {start, end})[Symbol.asyncIterator]();
+	return new ReadableStream({
+		async pull(controller) {
+			const next: IteratorResult<unknown> = await chunks.next();
+			if (next.done === true) {
+				controller.close();
+				return;
+			}
+			if (!(next.value instanceof Uint8Array)) {
+				throw new TypeError("A file stream yielded a non-byte chunk");
+			}
+			controller.enqueue(new Uint8Array(next.value));
+		},
+		async cancel() {
+			await chunks.return?.();
+		},
+	});
 }
 
 function isInside(root: string, file: string): boolean {
@@ -81,11 +110,9 @@ async function realIfPresent(file: string): Promise<string | null> {
 	}
 }
 
-async function readIfPresent(file: string): Promise<Uint8Array<ArrayBuffer> | null>;
-async function readIfPresent(file: string, encoding: "utf8"): Promise<string | null>;
-async function readIfPresent(file: string, encoding?: "utf8"): Promise<string | Uint8Array<ArrayBuffer> | null> {
+async function readIfPresent(file: string): Promise<string | null> {
 	try {
-		return encoding === undefined ? new Uint8Array(await readFile(file)) : await readFile(file, encoding);
+		return await readFile(file, "utf8");
 	} catch (error) {
 		if (isMissing(error)) {
 			return null;

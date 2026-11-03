@@ -12,7 +12,9 @@ import {
 	DecisionAnswerInputSchema,
 	DecisionFileError,
 	decisionImageType,
+	decisionMediaType,
 	mergeDecisionPage,
+	parseByteRange,
 	parseDecisionAnswers,
 	parseDecisionDocument,
 	serializeDecisionAnswers,
@@ -63,17 +65,9 @@ export function createDecisionsRouter(options: DecisionsRouterOptions = {}): Hon
 		}
 	}
 
-	// Registered before `/:slug` so "images" is never read as a slug.
-	router.get("/images/*", async (c) => {
-		const store = c.get("ctx").decisions;
-		const src = imageSource(new URL(c.req.url).pathname);
-		const type = src === null ? null : decisionImageType(src);
-		const bytes = store === undefined || src === null || type === null ? null : await store.readImage(src);
-		if (bytes === null || type === null) {
-			return c.json({error: "No such image"}, 404);
-		}
-		return c.body(bytes, 200, {"content-type": type, "cache-control": "private, max-age=3600"});
-	});
+	// Registered before `/:slug` so "images" and "media" are never read as slugs.
+	router.get("/images/*", async (c) => serveMedia(c, "/images/", decisionImageType, "No such image"));
+	router.get("/media/*", async (c) => serveMedia(c, "/media/", decisionMediaType, "No such media file"));
 
 	router.get("/:slug", async (c) =>
 		respond(c, async () => {
@@ -123,9 +117,44 @@ export function createDecisionsRouter(options: DecisionsRouterOptions = {}): Hon
 	return router;
 }
 
-/** The decoded `src` after `/images/` in a request path, or null when it does not decode. */
-function imageSource(pathname: string): string | null {
-	const marker = "/images/";
+/**
+ * Serve a photos-directory file whose `src` follows `marker` in the path, whole
+ * or as the single byte range the request asks for, so video players can seek.
+ */
+async function serveMedia(
+	c: Context<AppEnv>,
+	marker: string,
+	typeOf: (src: string) => string | null,
+	missing: string,
+): Promise<Response> {
+	const store = c.get("ctx").decisions;
+	const src = mediaSource(new URL(c.req.url).pathname, marker);
+	const type = src === null ? null : typeOf(src);
+	const media = store === undefined || src === null || type === null ? null : await store.openMedia(src);
+	if (media === null || type === null) {
+		return c.json({error: missing}, 404);
+	}
+	const range = parseByteRange(c.req.header("range"), media.size);
+	if (range === "unsatisfiable") {
+		return c.body(null, 416, {"accept-ranges": "bytes", "content-range": `bytes */${media.size}`});
+	}
+	const {start, end} = range ?? {start: 0, end: media.size - 1};
+	const headers: Record<string, string> = {
+		"content-type": type,
+		"content-length": String(end - start + 1),
+		"accept-ranges": "bytes",
+		"cache-control": "private, max-age=3600",
+	};
+	if (range !== null) {
+		headers["content-range"] = `bytes ${start}-${end}/${media.size}`;
+	}
+	// An empty file has no byte to read; a HEAD request wants only the headers.
+	const body = media.size === 0 || c.req.method === "HEAD" ? null : media.read(start, end);
+	return new Response(body, {status: range === null ? 200 : 206, headers});
+}
+
+/** The decoded `src` after `marker` in a request path, or null when it does not decode. */
+function mediaSource(pathname: string, marker: string): string | null {
 	const start = pathname.indexOf(marker);
 	try {
 		return start === -1 ? null : decodeURIComponent(pathname.slice(start + marker.length));

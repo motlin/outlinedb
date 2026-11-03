@@ -1,4 +1,4 @@
-import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from "node:fs";
+import {mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {afterEach, beforeEach, describe, expect, it} from "vite-plus/test";
@@ -44,7 +44,7 @@ function memoryStore(files: Record<string, string>): DecisionStore {
 			files[`${slug}.answers.json`] = text;
 			return Promise.resolve();
 		},
-		readImage: async () => Promise.resolve(null),
+		openMedia: async () => Promise.resolve(null),
 	};
 }
 
@@ -196,6 +196,53 @@ describe("GET /api/v1/decisions/:slug", () => {
 		await expect(request("GET", "/meetings")).resolves.toStrictEqual({
 			status: 200,
 			body: {...DOCUMENT, groups: [{heading: "x", items: [{...item, answer: null}]}], submittedAt: null},
+		});
+	});
+
+	it("passes an item's videos, with and without a poster, through to the page", async () => {
+		const videos = [{src: "status-2026-11-03/clip.mp4", poster: "status-2026-11-03/clip.jpg"}, {src: "b.webm"}];
+		const item = {...DOCUMENT.groups[0].items[0], videos};
+		const request = setup({
+			"meetings.json": JSON.stringify({...DOCUMENT, groups: [{heading: "x", items: [item]}]}),
+		});
+		await expect(request("GET", "/meetings")).resolves.toStrictEqual({
+			status: 200,
+			body: {...DOCUMENT, groups: [{heading: "x", items: [{...item, answer: null}]}], submittedAt: null},
+		});
+	});
+
+	it("rejects a staged video whose src is not a relative video path, or whose poster is not an image path", async () => {
+		const item = {
+			...DOCUMENT.groups[0].items[0],
+			videos: [
+				{src: "../secret.mp4"},
+				{src: "/etc/x.mov"},
+				{src: "still.jpg"},
+				{src: "ok.m4v", poster: "../poster.jpg"},
+				{src: "ok.mp4", poster: "poster.mp4"},
+			],
+		};
+		const request = setup({
+			"meetings.json": JSON.stringify({...DOCUMENT, groups: [{heading: "x", items: [item]}]}),
+		});
+		const videoError = "✖ Video src must be a relative .mp4, .mov, .m4v or .webm path under .llm/photos";
+		const posterError = "✖ Video poster must be a relative .jpg, .jpeg, .png, .webp or .gif path under .llm/photos";
+		await expect(request("GET", "/meetings")).resolves.toStrictEqual({
+			status: 500,
+			body: {
+				error: [
+					`meetings.json does not match the decision page shape: ${videoError}`,
+					"  → at groups[0].items[0].videos[0].src",
+					videoError,
+					"  → at groups[0].items[0].videos[1].src",
+					videoError,
+					"  → at groups[0].items[0].videos[2].src",
+					posterError,
+					"  → at groups[0].items[0].videos[3].poster",
+					posterError,
+					"  → at groups[0].items[0].videos[4].poster",
+				].join("\n"),
+			},
 		});
 	});
 
@@ -393,12 +440,192 @@ describe("GET /api/v1/decisions/images/*", () => {
 		).resolves.toStrictEqual([notFound, notFound, notFound, notFound, notFound]);
 	});
 
+	it("answers 404 for a video, which only the media endpoint serves", async () => {
+		writeFileSync(join(root, "photos", "clip.mp4"), "video");
+		await expect(fetchImage("clip.mp4")).resolves.toStrictEqual({
+			status: 404,
+			contentType: "application/json",
+			body: '{"error":"No such image"}',
+		});
+	});
+
 	it("answers 404 when the host has no decision store", async () => {
 		const ctx = {decisions: undefined} as unknown as ServerContext;
 		const response = await createDecisionsApp(ctx).fetch(new Request("http://x/api/v1/decisions/images/chart.png"));
 		expect({status: response.status, body: await response.json()}).toStrictEqual({
 			status: 404,
 			body: {error: "No such image"},
+		});
+	});
+});
+
+describe("GET /api/v1/decisions/media/*", () => {
+	let root: string;
+
+	beforeEach(() => {
+		root = mkdtempSync(join(tmpdir(), "decision-media-"));
+		mkdirSync(join(root, "photos", "status 2026-11-03"), {recursive: true});
+		writeFileSync(join(root, "photos", "status 2026-11-03", "clip.MP4"), "0123456789");
+		writeFileSync(join(root, "photos", "a.mov"), "mov");
+		writeFileSync(join(root, "photos", "a.m4v"), "m4v");
+		writeFileSync(join(root, "photos", "a.webm"), "webm");
+		writeFileSync(join(root, "photos", "chart.png"), "png bytes");
+		writeFileSync(join(root, "photos", "empty.mp4"), "");
+		writeFileSync(join(root, "photos", "notes.txt"), "text");
+		writeFileSync(join(root, "secret.mp4"), "secret");
+	});
+
+	afterEach(() => {
+		rmSync(root, {recursive: true, force: true});
+	});
+
+	async function fetchMedia(path: string, headers: Record<string, string> = {}, method = "GET") {
+		const ctx = {
+			decisions: fileDecisionStore(join(root, "decisions"), join(root, "photos")),
+		} as unknown as ServerContext;
+		const response = await createDecisionsApp(ctx).fetch(
+			new Request(`http://x/api/v1/decisions/media/${path}`, {method, headers}),
+		);
+		return {
+			status: response.status,
+			headers: Object.fromEntries(
+				["content-type", "content-length", "accept-ranges", "content-range"].map((name) => [
+					name,
+					response.headers.get(name),
+				]),
+			),
+			body: await response.text(),
+		};
+	}
+
+	function full(contentType: string, body: string) {
+		return {
+			status: 200,
+			headers: {
+				"content-type": contentType,
+				"content-length": String(body.length),
+				"accept-ranges": "bytes",
+				"content-range": null,
+			},
+			body,
+		};
+	}
+
+	function partial(range: string, body: string) {
+		return {
+			status: 206,
+			headers: {
+				"content-type": "video/mp4",
+				"content-length": String(body.length),
+				"accept-ranges": "bytes",
+				"content-range": `bytes ${range}/10`,
+			},
+			body,
+		};
+	}
+
+	it("serves each video type and images whole, advertising byte ranges", async () => {
+		await expect(
+			Promise.all([
+				fetchMedia("status%202026-11-03/clip.MP4"),
+				fetchMedia("a.mov"),
+				fetchMedia("a.m4v"),
+				fetchMedia("a.webm"),
+				fetchMedia("chart.png"),
+				fetchMedia("empty.mp4"),
+			]),
+		).resolves.toStrictEqual([
+			full("video/mp4", "0123456789"),
+			full("video/quicktime", "mov"),
+			full("video/x-m4v", "m4v"),
+			full("video/webm", "webm"),
+			full("image/png", "png bytes"),
+			full("video/mp4", ""),
+		]);
+	});
+
+	it("answers 206 with the requested slice for bounded, open-ended, suffix and overlong ranges", async () => {
+		const clip = "status%202026-11-03/clip.MP4";
+		await expect(
+			Promise.all([
+				fetchMedia(clip, {range: "bytes=2-5"}),
+				fetchMedia(clip, {range: "bytes=7-"}),
+				fetchMedia(clip, {range: "bytes=-3"}),
+				fetchMedia(clip, {range: "bytes=8-100"}),
+				fetchMedia(clip, {range: "bytes=-50"}),
+				fetchMedia(clip, {range: "bytes=0-"}),
+			]),
+		).resolves.toStrictEqual([
+			partial("2-5", "2345"),
+			partial("7-9", "789"),
+			partial("7-9", "789"),
+			partial("8-9", "89"),
+			partial("0-9", "0123456789"),
+			partial("0-9", "0123456789"),
+		]);
+	});
+
+	it("answers 416 with the file size for unsatisfiable or malformed ranges", async () => {
+		const clip = "status%202026-11-03/clip.MP4";
+		const refused = {
+			status: 416,
+			headers: {
+				"content-type": null,
+				"content-length": null,
+				"accept-ranges": "bytes",
+				"content-range": "bytes */10",
+			},
+			body: "",
+		};
+		await expect(
+			Promise.all([
+				fetchMedia(clip, {range: "bytes=10-"}),
+				fetchMedia(clip, {range: "bytes=5-2"}),
+				fetchMedia(clip, {range: "bytes=-0"}),
+				fetchMedia(clip, {range: "bytes=abc"}),
+				fetchMedia(clip, {range: "items=0-1"}),
+				fetchMedia(clip, {range: "bytes=0-1,4-5"}),
+			]),
+		).resolves.toStrictEqual([refused, refused, refused, refused, refused, refused]);
+	});
+
+	it("answers HEAD with the headers and no body", async () => {
+		await expect(fetchMedia("a.mov", {}, "HEAD")).resolves.toStrictEqual({
+			...full("video/quicktime", "mov"),
+			body: "",
+		});
+	});
+
+	it("answers 404 for traversal, absolute paths, symlink escapes, other types and missing files", async () => {
+		symlinkSync(join(root, "secret.mp4"), join(root, "photos", "escape.mp4"));
+		const notFound = {
+			status: 404,
+			headers: {
+				"content-type": "application/json",
+				"content-length": null,
+				"accept-ranges": null,
+				"content-range": null,
+			},
+			body: '{"error":"No such media file"}',
+		};
+		await expect(
+			Promise.all([
+				fetchMedia("..%2Fsecret.mp4"),
+				fetchMedia("a.mov%2F..%2F..%2Fsecret.mp4"),
+				fetchMedia(encodeURIComponent(join(root, "secret.mp4"))),
+				fetchMedia("escape.mp4", {range: "bytes=0-1"}),
+				fetchMedia("notes.txt"),
+				fetchMedia("missing.webm"),
+			]),
+		).resolves.toStrictEqual([notFound, notFound, notFound, notFound, notFound, notFound]);
+	});
+
+	it("answers 404 when the host has no decision store", async () => {
+		const ctx = {decisions: undefined} as unknown as ServerContext;
+		const response = await createDecisionsApp(ctx).fetch(new Request("http://x/api/v1/decisions/media/a.mp4"));
+		expect({status: response.status, body: await response.json()}).toStrictEqual({
+			status: 404,
+			body: {error: "No such media file"},
 		});
 	});
 });

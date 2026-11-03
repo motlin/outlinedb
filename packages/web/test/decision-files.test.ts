@@ -48,51 +48,88 @@ describe("fileDecisionStore", () => {
 	});
 });
 
-describe("fileDecisionStore readImage", () => {
+describe("fileDecisionStore openMedia", () => {
 	let photos: string;
 
 	beforeEach(() => {
 		photos = join(directory, "photos");
 		mkdirSync(join(photos, "status-2026-11-03"), {recursive: true});
 		writeFileSync(join(photos, "status-2026-11-03", "shot.jpg"), "jpeg bytes");
+		writeFileSync(join(photos, "status-2026-11-03", "clip.mp4"), "0123456789");
 		writeFileSync(join(photos, "notes.txt"), "not an image");
 		writeFileSync(join(directory, "outside.jpg"), "secret");
+		writeFileSync(join(directory, "outside.mov"), "secret video");
 	});
 
+	/** The whole file's text, or null when the store refuses it. */
 	async function read(path: string): Promise<string | null> {
-		const bytes = await fileDecisionStore(directory, photos).readImage(path);
-		return bytes === null ? null : Buffer.from(bytes).toString("utf8");
+		const media = await fileDecisionStore(directory, photos).openMedia(path);
+		return media === null ? null : new Response(media.read(0, media.size - 1)).text();
 	}
 
 	it("reads an image by its path under the photos directory", async () => {
 		await expect(read("status-2026-11-03/shot.jpg")).resolves.toBe("jpeg bytes");
 	});
 
-	it("reads null for a missing image", async () => {
-		await expect(read("status-2026-11-03/missing.png")).resolves.toBeNull();
+	it("reports a video's size and reads inclusive byte slices of it", async () => {
+		const media = await fileDecisionStore(directory, photos).openMedia("status-2026-11-03/clip.mp4");
+		if (media === null) {
+			throw new Error("clip.mp4 not opened");
+		}
+		expect({
+			size: media.size,
+			slices: await Promise.all([
+				new Response(media.read(0, 9)).text(),
+				new Response(media.read(2, 5)).text(),
+				new Response(media.read(9, 9)).text(),
+			]),
+		}).toStrictEqual({size: 10, slices: ["0123456789", "2345", "9"]});
+	});
+
+	it("reads null for a missing file", async () => {
+		await expect(
+			Promise.all([read("status-2026-11-03/missing.png"), read("status-2026-11-03/missing.webm")]),
+		).resolves.toStrictEqual([null, null]);
+	});
+
+	it("reads null for a directory with a media extension", async () => {
+		mkdirSync(join(photos, "folder.mp4"));
+		await expect(read("folder.mp4")).resolves.toBeNull();
 	});
 
 	it("refuses paths that climb out of the photos directory", async () => {
 		await expect(
-			Promise.all([read("../outside.jpg"), read("status-2026-11-03/../../outside.jpg"), read("..")]),
-		).resolves.toStrictEqual([null, null, null]);
+			Promise.all([
+				read("../outside.jpg"),
+				read("status-2026-11-03/../../outside.jpg"),
+				read("../outside.mov"),
+				read("status-2026-11-03/../../outside.mov"),
+				read(".."),
+			]),
+		).resolves.toStrictEqual([null, null, null, null, null]);
 	});
 
-	it("refuses an absolute path even when it names a real image", async () => {
-		await expect(read(join(directory, "outside.jpg"))).resolves.toBeNull();
+	it("refuses an absolute path even when it names a real file", async () => {
+		await expect(
+			Promise.all([read(join(directory, "outside.jpg")), read(join(directory, "outside.mov"))]),
+		).resolves.toStrictEqual([null, null]);
 	});
 
 	it("refuses a symlink inside the photos directory that points outside it", async () => {
 		symlinkSync(join(directory, "outside.jpg"), join(photos, "escape.jpg"));
-		await expect(read("escape.jpg")).resolves.toBeNull();
+		symlinkSync(join(directory, "outside.mov"), join(photos, "escape.mov"));
+		await expect(Promise.all([read("escape.jpg"), read("escape.mov")])).resolves.toStrictEqual([null, null]);
 	});
 
-	it("refuses a file without an image extension", async () => {
+	it("refuses a file without an image or video extension", async () => {
 		await expect(read("notes.txt")).resolves.toBeNull();
 	});
 
-	it("reads null for every image when the host has no photos directory", async () => {
-		await expect(fileDecisionStore(directory).readImage("status-2026-11-03/shot.jpg")).resolves.toBeNull();
+	it("reads null for every file when the host has no photos directory", async () => {
+		const store = fileDecisionStore(directory);
+		await expect(
+			Promise.all([store.openMedia("status-2026-11-03/shot.jpg"), store.openMedia("status-2026-11-03/clip.mp4")]),
+		).resolves.toStrictEqual([null, null]);
 	});
 });
 

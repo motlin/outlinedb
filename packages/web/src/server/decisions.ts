@@ -19,10 +19,17 @@ export interface DecisionStore {
 	/** Replace `<slug>.answers.json` atomically. */
 	writeAnswers(slug: string, text: string): Promise<void>;
 	/**
-	 * The bytes of an item image by its `src`, or null when the path is missing or
-	 * is not a {@link decisionImageType} image inside the host's photos directory.
+	 * An item image or video by its `src`, or null when the path is missing or is
+	 * not a {@link decisionMediaType} file inside the host's photos directory.
 	 */
-	readImage(src: string): Promise<Uint8Array<ArrayBuffer> | null>;
+	openMedia(src: string): Promise<DecisionMediaFile | null>;
+}
+
+/** A media file the route can serve whole or in byte ranges. */
+export interface DecisionMediaFile {
+	size: number;
+	/** The bytes from `start` through `end`, both inclusive. */
+	read(start: number, end: number): ReadableStream<Uint8Array<ArrayBuffer>>;
 }
 
 const IMAGE_TYPES: Record<string, string> = {
@@ -33,31 +40,93 @@ const IMAGE_TYPES: Record<string, string> = {
 	gif: "image/gif",
 };
 
+const VIDEO_TYPES: Record<string, string> = {
+	mp4: "video/mp4",
+	mov: "video/quicktime",
+	m4v: "video/x-m4v",
+	webm: "video/webm",
+};
+
 /**
- * The content type of an image `src`, or null unless it is a relative path with
- * an image extension and no empty, `.` or `..` segment that could leave the photos directory.
+ * The lowercase extension of a `src`, or null unless it is a relative path with
+ * no empty, `.` or `..` segment that could leave the photos directory.
  */
-export function decisionImageType(src: string): string | null {
+function safeExtension(src: string): string | null {
 	if (src.includes("\\") || src.includes("\0")) {
 		return null;
 	}
 	if (src.split("/").some((segment) => segment === "" || segment === "." || segment === "..")) {
 		return null;
 	}
-	const extension = /\.([^./]+)$/u.exec(src)?.[1]?.toLowerCase();
-	return extension === undefined ? null : (IMAGE_TYPES[extension] ?? null);
+	return /\.([^./]+)$/u.exec(src)?.[1]?.toLowerCase() ?? null;
+}
+
+function typeIn(types: Record<string, string>, src: string): string | null {
+	const extension = safeExtension(src);
+	return extension === null ? null : (types[extension] ?? null);
+}
+
+/** The content type of a safe relative image `src`, or null. */
+export function decisionImageType(src: string): string | null {
+	return typeIn(IMAGE_TYPES, src);
+}
+
+/** The content type of a safe relative video `src`, or null. */
+function decisionVideoType(src: string): string | null {
+	return typeIn(VIDEO_TYPES, src);
+}
+
+/** The content type of a safe relative image or video `src`, or null. */
+export function decisionMediaType(src: string): string | null {
+	return decisionImageType(src) ?? decisionVideoType(src);
+}
+
+/**
+ * The inclusive byte span a `Range` header asks for: null for no header (serve
+ * the whole file), or "unsatisfiable" for a header this server cannot honor,
+ * including other units, multiple ranges and malformed specs.
+ */
+export function parseByteRange(
+	header: string | undefined,
+	size: number,
+): {start: number; end: number} | "unsatisfiable" | null {
+	if (header === undefined) {
+		return null;
+	}
+	const match = /^bytes=(\d*)-(\d*)$/u.exec(header.trim());
+	if (match === null || (match[1] === "" && match[2] === "")) {
+		return "unsatisfiable";
+	}
+	const [, first = "", last = ""] = match;
+	if (first === "") {
+		const suffix = Number(last);
+		return suffix === 0 || size === 0 ? "unsatisfiable" : {start: Math.max(size - suffix, 0), end: size - 1};
+	}
+	const start = Number(first);
+	const end = last === "" ? size - 1 : Math.min(Number(last), size - 1);
+	return start >= size || start > end ? "unsatisfiable" : {start, end};
 }
 
 const LinkSchema = z.strictObject({label: z.string(), href: z.string()});
 
+const IMAGE_SRC_RULE = "a relative .jpg, .jpeg, .png, .webp or .gif path under .llm/photos";
+
 const ImageSchema = z.strictObject({
+	src: z.string().refine((src) => decisionImageType(src) !== null, `Image src must be ${IMAGE_SRC_RULE}`),
+	alt: z.string(),
+});
+
+const VideoSchema = z.strictObject({
 	src: z
 		.string()
 		.refine(
-			(src) => decisionImageType(src) !== null,
-			"Image src must be a relative .jpg, .jpeg, .png, .webp or .gif path under .llm/photos",
+			(src) => decisionVideoType(src) !== null,
+			"Video src must be a relative .mp4, .mov, .m4v or .webm path under .llm/photos",
 		),
-	alt: z.string(),
+	poster: z
+		.string()
+		.refine((src) => decisionImageType(src) !== null, `Video poster must be ${IMAGE_SRC_RULE}`)
+		.optional(),
 });
 
 const OptionSchema = z.strictObject({
@@ -77,6 +146,8 @@ const ItemSchema = z.strictObject({
 	links: z.array(LinkSchema).default([]),
 	/** Photos shown above the body; `src` is relative to the host's photos directory (`.llm/photos`). */
 	images: z.array(ImageSchema).optional(),
+	/** Videos shown in the same row; `src` and the optional `poster` image are relative to the photos directory. */
+	videos: z.array(VideoSchema).optional(),
 	options: z.array(OptionSchema).min(1),
 	default: z.string().nullable().default(null),
 });
