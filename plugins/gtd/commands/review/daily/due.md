@@ -191,6 +191,7 @@ Task **execution** stays foreground. If a task runs `cache import-api` / `just d
 
 - Detect them from the child instructions: a per-item loop of `AskUserQuestion` calls, or sorting/triaging a collection one entry at a time.
 - Ask one question per such task before running anything, with outcomes **Run now** (promoted), **Skip today**, and **Move to Weekly Review**.
+- Before asking, check for an ssh session: run `[ -n "$SSH_CONNECTION$SSH_TTY" ] && echo ssh`. When it prints `ssh` and the walk `open`s media (videos, photos, an album), say in the question body that anything opened plays on the Mac's screen and cannot be seen over ssh, and promote **Skip today** above **Run now**. The same check applies to any other walk that shows the user media by running `open`.
 - On **Run now**, execute the instructions as written. On **Skip today**, log a skip per the skip-log rules and leave the date alone. On **Move to Weekly Review**, move the node under `🗓️ Weekly Review` and write that section's cadence `<time>`.
 - Related setup steps that only serve the walk (e.g. a NAS sync) belong with it: gate and move them together.
 - Non-interactive `#llm-task` items keep the no-skip-prompt behavior above.
