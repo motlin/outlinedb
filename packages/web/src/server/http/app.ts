@@ -8,6 +8,7 @@ import {changesRoutes} from "./routes/changes.js";
 import {customTreeRoutes} from "./routes/custom-tree.js";
 import {expansionRoutes} from "./routes/expansion.js";
 import {filesRoutes} from "./routes/files.js";
+import {inboxRoutes} from "./routes/inbox.js";
 import {featuresRoutes} from "./routes/features.js";
 import {ladderRoutes} from "./routes/ladder.js";
 import {homeRoutes, nodesRoutes} from "./routes/nodes.js";
@@ -42,6 +43,7 @@ function createHttpRoutes(resolveStore: ResolveStore): Hono {
 	routes.route("/api/v1/expansion", expansionRoutes(resolveStore));
 	routes.route("/api/v1/files", filesRoutes(resolveStore));
 	routes.route("/api/v1/home", homeRoutes(resolveStore));
+	routes.route("/api/v1/inbox", inboxRoutes(resolveStore));
 	routes.route("/api/v1/nodes", nodesRoutes(resolveStore));
 	routes.route("/api/v1/ladder", ladderRoutes(resolveStore));
 	routes.route("/api/related", relatedRoutes(resolveStore));

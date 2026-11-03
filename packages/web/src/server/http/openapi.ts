@@ -72,6 +72,7 @@ const BINDINGS: Record<string, Binding> = {
 	"PATCH /api/v1/expansion/left-bar": {op: "expansion.leftBarPatch"},
 	"GET /api/v1/files/:nodeId/:variant{preview|original}": {op: "files.signedUrl", status: 302},
 	"GET /api/v1/home": {op: "home.get"},
+	"GET /api/v1/inbox/share": {op: "inbox.share", status: 302},
 	"GET /api/v1/nodes": {op: "nodes.list", query: {parent_id: "parentId"}},
 	"POST /api/v1/nodes/children": {op: "nodes.children"},
 	"POST /api/v1/nodes/verify": {op: "nodes.verify"},

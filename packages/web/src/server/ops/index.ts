@@ -7,6 +7,7 @@ import {customTreeGet} from "./custom-tree.js";
 import {expansionGet, expansionLeftBarGet, expansionLeftBarPatch, expansionPatch} from "./expansion.js";
 import {filesSignedUrl} from "./files.js";
 import {featuresGet, featuresSet} from "./features.js";
+import {inboxShare} from "./inbox.js";
 import {ladderOps} from "./ladder.js";
 import {
 	homeGet,
@@ -58,6 +59,7 @@ export const Ops = {
 	"features.get": featuresGet,
 	"features.set": featuresSet,
 	"home.get": homeGet,
+	"inbox.share": inboxShare,
 	...ladderOps,
 	"nodes.ancestors": nodesAncestors,
 	"nodes.backlinks": nodesBacklinks,

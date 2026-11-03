@@ -43,6 +43,7 @@ import type {CalendarLevel} from "./calendar-day.js";
 import {backfilledCalendarDateId, backfilledCalendarTimestamp} from "./calendar-backfill.js";
 import {CALENDAR_ID_NAMESPACE, calendarNodeId, uuidv5} from "./calendar-ids.js";
 import {CALENDAR_ROOT_NAME, findTaggedCalendarRoot} from "../cache/calendar-lookup.js";
+import {findInbox, INBOX_NAME} from "../cache/inbox-lookup.js";
 import {calendarLayoutWrites, layoutWriteParents} from "./calendar-layout-apply.js";
 import {calendarLayoutUndoWrites} from "./calendar-layout-undo.js";
 import type {LayoutWrite} from "./calendar-layout-apply.js";
@@ -50,6 +51,7 @@ import {planCalendarLayout} from "./calendar-layout.js";
 import type {CalendarLayoutLevels, LayoutNode} from "./calendar-layout.js";
 import {
 	ExpansionNotSeeded,
+	InboxMissing,
 	LoggedOut,
 	OperationRejected,
 	TransportError,
@@ -1454,6 +1456,51 @@ export class WorkflowyInternalAdapter {
 		}
 		await tree.refreshChildren([live.parent_id ?? null]);
 		return live.id;
+	}
+
+	/**
+	 * Upstream's `AppInbox.ensured`: the Inbox {@link findInbox} finds (the cached node root metadata
+	 * `inbox_id` names, else the Home child named `Inbox`). Connected to workflowy.com, a miss
+	 * re-syncs: a fresh bootstrap's `inbox_id`, when Workflowy has that node, is cached and used,
+	 * else Home is re-read for a node named `Inbox`, else it fails loudly with {@link InboxMissing}
+	 * rather than create a duplicate. Only in standalone mode does a miss create an `Inbox` at the
+	 * end of Home, which `inbox_id` then names.
+	 */
+	async ensureInbox(): Promise<{id: string; created: boolean}> {
+		// Stores the account snapshot first, so findInbox can read its `inbox_id`.
+		await this.snapshot();
+		const found = findInbox(this.db);
+		if (found !== undefined) {
+			return {id: found.id, created: false};
+		}
+		if (!this.standalone) {
+			return {id: await this.resyncInbox(), created: false};
+		}
+		const {id} = await this.createAt({parentId: HOME, name: INBOX_NAME});
+		await this.setRootMetaValues([{path: ["inbox_id"], value: id}]);
+		return {id, created: true};
+	}
+
+	/** The Inbox workflowy.com's fresh `inbox_id` names, else Home's live child named Inbox, cached, or a loud miss. */
+	private async resyncInbox(): Promise<string> {
+		const fresh = this.fromSession(await this.client.bootstrap());
+		this.store(fresh);
+		const pointer = getPath(fresh.rootMetadata, ["inbox_id"]);
+		const tree = this.tree();
+		const live = typeof pointer === "string" ? await tree.findLiveNode(pointer) : null;
+		await tree.refreshChildren([live === null ? null : (live.parent_id ?? null)]);
+		const found = live === null ? findInbox(this.db)?.id : live.id;
+		if (found === undefined) {
+			throw loud(new InboxMissing());
+		}
+		return found;
+	}
+
+	/** Create one item at the top of the Inbox, ensuring the Inbox first. */
+	async addToInbox(input: {name: string}): Promise<{inboxId: string; id: string}> {
+		const inbox = await this.ensureInbox();
+		const {id} = await this.createAt({parentId: inbox.id, index: 0, name: input.name});
+		return {inboxId: inbox.id, id};
 	}
 
 	/**

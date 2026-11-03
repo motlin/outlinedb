@@ -92,3 +92,11 @@ export class UnreplayableTransaction extends TreeResyncRequired {
 		);
 	}
 }
+
+/** Connected to workflowy.com, which has no Inbox either: neither root metadata `inbox_id` nor a Home child named Inbox. */
+export class InboxMissing extends Error {
+	constructor() {
+		super("Workflowy has no Inbox: root metadata inbox_id names no live node and Home has no node named Inbox");
+		this.name = "InboxMissing";
+	}
+}
