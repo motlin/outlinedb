@@ -4,6 +4,7 @@ import {mirrors, nodeContent, nodeMetadata, referencesRoots} from "../db/schema.
 import {stripHtmlTags} from "../html/strip-tags.js";
 import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 import type {Node} from "../types/node.js";
+import {isSystemTarget} from "../types/targets.js";
 import type {WorkflowyNode} from "../types/workflowy.js";
 import {uuidToShortId} from "../workflowy/constants.js";
 import {and, eq, inArray, isNull, like, notInArray, or, sql} from "drizzle-orm";
@@ -245,6 +246,8 @@ function upsertNodeVersion(
  * A parent missing from the cache gets a blank placeholder row, unless it is in
  * `storedInUnit`, the nodes another list in this unit of work stores, since
  * replacing the placeholder there would overwrite a version of this unit.
+ * A system target such as "inbox" is an API alias, not a node id, so it is refused
+ * rather than given a placeholder that would show up as a blank node at Home.
  */
 function storeChildren(
 	tx: TemporalTransaction,
@@ -253,6 +256,9 @@ function storeChildren(
 	systemTime: string,
 	storedInUnit: ReadonlySet<string> = new Set(),
 ): void {
+	if (parentId !== null && isSystemTarget(parentId)) {
+		throw new Error(`Cannot cache children under system target "${parentId}"; resolve it to a node id first`);
+	}
 	if (parentId !== null && !storedInUnit.has(parentId)) {
 		const parentExists = tx
 			.select({id: nodeContent.id})

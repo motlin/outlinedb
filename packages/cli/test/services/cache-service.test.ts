@@ -473,6 +473,23 @@ describe("CacheService (shared)", () => {
 	});
 
 	describe("storeApiResponse", () => {
+		it("refuses a system target as the parent, instead of inventing a blank Home node for it", () => {
+			expect({
+				thrown: (() => {
+					try {
+						cacheService.storeApiResponse([], "inbox");
+						return null;
+					} catch (error) {
+						return String(error);
+					}
+				})(),
+				rows: testDatabase.db.select({id: nodeContent.id}).from(nodeContent).all(),
+			}).toStrictEqual({
+				thrown: 'Error: Cannot cache children under system target "inbox"; resolve it to a node id first',
+				rows: [],
+			});
+		});
+
 		it("preserves mirror rows on sync (#1712)", () => {
 			const from = formatTemporalTimestamp(new Date(Date.now() - 1000));
 			seedTestData(testDatabase, {

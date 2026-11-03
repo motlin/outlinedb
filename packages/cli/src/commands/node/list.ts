@@ -1,4 +1,7 @@
+import {findInbox} from "@workflowy/shared/cache";
+import {isSystemTarget} from "@workflowy/shared/types";
 import {isShortId} from "@workflowy/shared/workflowy";
+import {createDatabase} from "../../db/index.js";
 import {Flags} from "@oclif/core";
 import {BaseListCommand} from "../base-list-command.js";
 import {ListByIdService} from "../../services/list-by-id.js";
@@ -43,7 +46,14 @@ export default class List extends BaseListCommand {
 		try {
 			// Resolve parent ID, supporting short IDs (12 hex chars from Workflowy URLs)
 			let parentId: string | null = flags["parent-id"] ?? null;
-			if (parentId && isShortId(parentId)) {
+			// The API lists a system target's children as empty, so list the node it names instead.
+			if (parentId && isSystemTarget(parentId)) {
+				const inbox = findInbox(createDatabase());
+				if (!inbox) {
+					this.error(`No cached node for system target: ${parentId}`);
+				}
+				parentId = inbox.id;
+			} else if (parentId && isShortId(parentId)) {
 				const resolvedId = this.cacheService.resolveShortIdToUuid(parentId);
 				if (resolvedId) {
 					logger.debug(`Resolved short ID ${parentId} to full UUID ${resolvedId}`);

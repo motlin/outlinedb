@@ -119,6 +119,36 @@ describe("node:list command", () => {
 			expect(capturedUrl).toBe("https://workflowy.com/api/v1/nodes");
 		});
 
+		it("resolves --parent-id inbox to the account's Inbox node, without caching an 'inbox' row", async () => {
+			const now = "2026-01-01 00:00:00.000";
+			const current = {systemFrom: now, systemTo: "9999-12-31 23:59:59"};
+			testDatabase.db
+				.insert(nodeContent)
+				.values({id: "real-inbox-0000-41bd95477fbc", name: "Inbox", note: null, parentId: null, ...current})
+				.run();
+			testDatabase.db
+				.insert(nodeMetadata)
+				.values({nodeId: "real-inbox-0000-41bd95477fbc", shortId: "41bd95477fbc", priority: 0, ...current})
+				.run();
+			const capturedUrls: string[] = [];
+			globalThis.fetch = async (url: RequestInfo | URL) => {
+				capturedUrls.push(url instanceof Request ? url.url : String(url));
+				return Promise.resolve(Response.json({nodes: []}, {status: 200}));
+			};
+
+			await captureOutput(async () => {
+				await List.run(["--parent-id", "inbox", "--json"]);
+			});
+
+			expect({
+				capturedUrls,
+				ids: testDatabase.db.select({id: nodeContent.id}).from(nodeContent).all(),
+			}).toStrictEqual({
+				capturedUrls: ["https://workflowy.com/api/v1/nodes?parent_id=real-inbox-0000-41bd95477fbc"],
+				ids: [{id: "real-inbox-0000-41bd95477fbc"}],
+			});
+		});
+
 		it("makes request to correct URL with parent-id flag", async () => {
 			let capturedUrl: string | undefined;
 			globalThis.fetch = async (url: RequestInfo | URL) => {
