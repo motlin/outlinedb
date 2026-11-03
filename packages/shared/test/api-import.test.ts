@@ -116,6 +116,27 @@ describe("shared API import", () => {
 		});
 	});
 
+	it("keeps a node that fails schema validation live instead of treating it as deleted", () => {
+		const db = createDb();
+		importFromApi(db, FIXTURE, {timestamp: T0});
+
+		const withUnknownField = {...apiNode("g", {priority: 6}), color: "red"} as WorkflowyNode;
+		const result = importFromApi(db, [...FIXTURE.slice(0, 6), withUnknownField], {timestamp: T1});
+
+		const current = db
+			.select()
+			.from(schema.nodeContent)
+			.all()
+			.filter((row) => row.systemTo === FAR_FUTURE_DATE)
+			.map((row) => row.id)
+			.toSorted();
+		expect({current, nodesDeleted: result.nodesDeleted, nodesPhasedOut: result.nodesPhasedOut}).toStrictEqual({
+			current: ["a", "b", "c", "d", "e", "f", "g"],
+			nodesDeleted: 0,
+			nodesPhasedOut: 0,
+		});
+	});
+
 	it("does not phase out a node in an earlier batch when a later batch is applied", () => {
 		const db = createDb();
 		const state = beginApiImport(db, {timestamp: T0});

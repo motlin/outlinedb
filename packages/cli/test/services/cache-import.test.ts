@@ -880,6 +880,36 @@ describe("cache-import service", () => {
 			});
 		});
 
+		it("aborts without closing any node when one node fails schema validation", async () => {
+			const initialPath = writeBackupFile([
+				{id: "node-1", nm: "Keep Me"},
+				{id: "node-2", nm: "Unknown Field"},
+			]);
+			await importBackup(testDatabase.db, initialPath, "backup.json", false, T0);
+
+			const invalidPath = path.join(tempDir, "backup2.json");
+			fs.writeFileSync(
+				invalidPath,
+				JSON.stringify([
+					{id: "node-1", nm: "Keep Me"},
+					{id: "node-2", nm: "Unknown Field", metadata: {color: "red"}},
+				]),
+			);
+			const error = await importBackup(testDatabase.db, invalidPath, "backup.json", false, T1).catch(
+				(caught: unknown) => caught,
+			);
+
+			const activeIds = testDatabase.db
+				.select()
+				.from(nodeContent)
+				.where(eq(nodeContent.systemTo, FAR_FUTURE_DATE))
+				.all()
+				.map((n) => n.id)
+				.toSorted();
+			assert(error instanceof Error);
+			expect({name: error.name, activeIds}).toStrictEqual({name: "ZodError", activeIds: ["node-1", "node-2"]});
+		});
+
 		it("imports valid nodes from file with all valid entries", async () => {
 			const backupContent = [
 				{id: "valid-node-1", nm: "Valid Node 1"},

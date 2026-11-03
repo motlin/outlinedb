@@ -25,13 +25,12 @@ import type {
 	NormalizedReferencesRootsRow,
 	NormalizedS3FileRow,
 } from "@workflowy/shared/cache";
-import {BackupFileSchema, BackupNodeSchema} from "@workflowy/shared/schemas";
+import {BackupFileSchema} from "@workflowy/shared/schemas";
 import type {BackupNode} from "@workflowy/shared/schemas";
 import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@workflowy/shared/temporal";
 import {backupToUnixTime, uuidToShortId} from "@workflowy/shared/workflowy";
 import {and, eq, gt, max, ne} from "drizzle-orm";
 import type {BetterSQLite3Database} from "drizzle-orm/better-sqlite3";
-import {formatError, ZodError} from "zod";
 import {readBackupFile} from "../utils/backup-archive.js";
 import {parseStrictInteger} from "../utils/parse-strict-number.js";
 import {contentMatches, metadataComparisonStats, metadataMatches, normalizeLayoutMode} from "./cache-temporal.js";
@@ -426,76 +425,59 @@ export async function importBackup(
 	const calendarMetadataRecords: NormalizedCalendarMetadataRow[] = [];
 	const calendarLevelsRecords: NormalizedCalendarLevelsRow[] = [];
 
-	let validationErrors = 0;
+	// BackupFileSchema.parse above validated the whole tree: one invalid node aborts
+	// the import, so no node is dropped here and then closed as deleted.
+	for (const {node: validatedNode, parentId, priority} of allNodes) {
+		nodesToProcess.push({
+			id: validatedNode.id,
+			shortId: uuidToShortId(validatedNode.id),
+			name: validatedNode.nm ?? "",
+			note: nonEmpty(validatedNode.no) ?? null,
+			parentId,
+			priority,
+			createdAt: backupTimeOrNull(validatedNode.ct, workflowyEpoch),
+			modifiedAt: backupTimeOrNull(validatedNode.lm, workflowyEpoch),
+			completedAt: backupTimeOrNull(validatedNode.cp, workflowyEpoch),
+			layoutMode: normalizeLayoutMode(validatedNode.metadata.layoutMode),
+		});
 
-	for (const {node, parentId, priority} of allNodes) {
-		try {
-			const validatedNode = BackupNodeSchema.parse(node);
+		collectItemRelationships(relationships, validatedNode.id, validatedNode.metadata);
 
-			nodesToProcess.push({
-				id: validatedNode.id,
-				shortId: uuidToShortId(validatedNode.id),
-				name: validatedNode.nm ?? "",
-				note: nonEmpty(validatedNode.no) ?? null,
-				parentId,
-				priority,
-				createdAt: backupTimeOrNull(validatedNode.ct, workflowyEpoch),
-				modifiedAt: backupTimeOrNull(validatedNode.lm, workflowyEpoch),
-				completedAt: backupTimeOrNull(validatedNode.cp, workflowyEpoch),
-				layoutMode: normalizeLayoutMode(validatedNode.metadata.layoutMode),
+		if (validatedNode.metadata.ai) {
+			aiMetadataRecords.push({
+				nodeId: validatedNode.id,
+				inChat: validatedNode.metadata.ai.inChat ? 1 : 0,
 			});
+		}
 
-			collectItemRelationships(relationships, validatedNode.id, validatedNode.metadata);
+		if (validatedNode.metadata.s3File) {
+			s3FileRecords.push({
+				nodeId: validatedNode.id,
+				fileName: validatedNode.metadata.s3File.fileName,
+				fileType: validatedNode.metadata.s3File.fileType,
+				objectFolder: nonEmpty(validatedNode.metadata.s3File.objectFolder) ?? null,
+				isAnimatedGif: validatedNode.metadata.s3File.isAnimatedGIF ? 1 : 0,
+				imageOriginalWidth: nonZeroOrNull(validatedNode.metadata.s3File.imageOriginalWidth),
+				imageOriginalHeight: nonZeroOrNull(validatedNode.metadata.s3File.imageOriginalHeight),
+				imageOriginalPixels: nonZeroOrNull(validatedNode.metadata.s3File.imageOriginalPixels),
+				isDeleted: validatedNode.metadata.s3File.isDeleted ? 1 : 0,
+			});
+		}
 
-			if (validatedNode.metadata.ai) {
-				aiMetadataRecords.push({
-					nodeId: validatedNode.id,
-					inChat: validatedNode.metadata.ai.inChat ? 1 : 0,
-				});
-			}
+		if (validatedNode.metadata.changes?.ct) {
+			changesMetadataRecords.push({
+				nodeId: validatedNode.id,
+				ctBy: validatedNode.metadata.changes.ct.by,
+			});
+		}
 
-			if (validatedNode.metadata.s3File) {
-				s3FileRecords.push({
-					nodeId: validatedNode.id,
-					fileName: validatedNode.metadata.s3File.fileName,
-					fileType: validatedNode.metadata.s3File.fileType,
-					objectFolder: nonEmpty(validatedNode.metadata.s3File.objectFolder) ?? null,
-					isAnimatedGif: validatedNode.metadata.s3File.isAnimatedGIF ? 1 : 0,
-					imageOriginalWidth: nonZeroOrNull(validatedNode.metadata.s3File.imageOriginalWidth),
-					imageOriginalHeight: nonZeroOrNull(validatedNode.metadata.s3File.imageOriginalHeight),
-					imageOriginalPixels: nonZeroOrNull(validatedNode.metadata.s3File.imageOriginalPixels),
-					isDeleted: validatedNode.metadata.s3File.isDeleted ? 1 : 0,
-				});
-			}
-
-			if (validatedNode.metadata.changes?.ct) {
-				changesMetadataRecords.push({
-					nodeId: validatedNode.id,
-					ctBy: validatedNode.metadata.changes.ct.by,
-				});
-			}
-
-			if (validatedNode.metadata.calendar) {
-				const rows = calendarRows(validatedNode.id, validatedNode.metadata.calendar);
-				calendarMetadataRecords.push(rows.calendarMetadata);
-				if (rows.calendarLevels !== undefined) {
-					calendarLevelsRecords.push(rows.calendarLevels);
-				}
-			}
-		} catch (error) {
-			if (error instanceof ZodError) {
-				validationErrors++;
-				console.error(`Validation error for node ${node.id}:`);
-				console.error(formatError(error));
-				console.error("Node JSON:", JSON.stringify(node, null, 2));
-			} else {
-				throw error;
+		if (validatedNode.metadata.calendar) {
+			const rows = calendarRows(validatedNode.id, validatedNode.metadata.calendar);
+			calendarMetadataRecords.push(rows.calendarMetadata);
+			if (rows.calendarLevels !== undefined) {
+				calendarLevelsRecords.push(rows.calendarLevels);
 			}
 		}
-	}
-
-	if (validationErrors > 0) {
-		console.warn(`Encountered ${validationErrors} validation errors during import`);
 	}
 
 	logTiming(`Prepare data (${nodesToProcess.length} nodes, ${relationships.mirrors.length} mirrors)`);

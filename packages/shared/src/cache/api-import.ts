@@ -74,6 +74,8 @@ export interface ApiImportState {
 	/** The import's system time and start; the transaction timeout counts from it. */
 	readonly start: UnitOfWorkStart;
 	readonly seenIds: Set<string>;
+	/** Ids of nodes that failed validation: kept as they are, never ended as deleted. */
+	readonly invalidIds: Set<string>;
 	totalNodes: number;
 	nodesAdded: number;
 	nodesUpdated: number;
@@ -102,6 +104,9 @@ function processNodes(state: ApiImportState, apiNodes: WorkflowyNode[]): Process
 			state.logger?.error(
 				`Validation error for node ${node.id}: ${parsed.error.message}\nNode JSON: ${JSON.stringify(node, null, 2)}`,
 			);
+			if (typeof node.id === "string") {
+				state.invalidIds.add(node.id);
+			}
 			continue;
 		}
 		const validated = parsed.data;
@@ -140,6 +145,7 @@ export function beginApiImport(
 		importTimestamp: options.timestamp ?? new Date(start.startedAt),
 		start,
 		seenIds: new Set(),
+		invalidIds: new Set(),
 		totalNodes: 0,
 		nodesAdded: 0,
 		nodesUpdated: 0,
@@ -327,7 +333,7 @@ function finishIn(unitOfWork: UnitOfWork, state: ApiImportState, treeItems?: Int
 		.from(nodeContent)
 		.where(eq(nodeContent.systemTo, FAR_FUTURE_DATE))
 		.all()) {
-		if (!state.seenIds.has(row.id)) {
+		if (!state.seenIds.has(row.id) && !state.invalidIds.has(row.id)) {
 			unseen.push(row.id);
 		}
 	}
