@@ -177,6 +177,35 @@ export class WorkflowyWriteThroughClient {
 		this.cacheService.storeApiResponses(batches);
 	}
 
+	/**
+	 * Read a node the cache lacks from the API and cache it with its siblings
+	 * and every uncached ancestor, each under its real parent. Ancestors are
+	 * fetched up to the first cached one (or Home) and stored top-down before
+	 * the parent's child list, so {@link refreshChain} never adds a blank
+	 * placeholder parent at Home.
+	 */
+	async cacheLiveNode(nodeId: string): Promise<void> {
+		const node = await this.apiClient.getNode(nodeId);
+		const parentId = node.parent_id ?? null;
+		if (parentId === null) {
+			this.cacheService.insertNode(node, null);
+			return;
+		}
+		const ancestors: WorkflowyNode[] = [];
+		const seen = new Set([nodeId]);
+		let ancestorId: string | null = parentId;
+		while (ancestorId !== null && !seen.has(ancestorId) && this.cacheService.getNode(ancestorId) === undefined) {
+			seen.add(ancestorId);
+			const ancestor = await this.apiClient.getNode(ancestorId);
+			ancestors.push(ancestor);
+			ancestorId = ancestor.parent_id ?? null;
+		}
+		for (const ancestor of ancestors.toReversed()) {
+			this.cacheService.insertNode(ancestor, ancestor.parent_id ?? null);
+		}
+		await this.refreshChain([parentId]);
+	}
+
 	/** One node as Workflowy has it now, read from the API. */
 	async liveNode(nodeId: string): Promise<WorkflowyNode> {
 		return this.apiClient.getNode(nodeId);

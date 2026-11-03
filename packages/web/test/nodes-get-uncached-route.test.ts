@@ -23,19 +23,13 @@ vi.mock("@workflowy/shared/cache", async (importOriginal) => {
 	return {
 		...actual,
 		WorkflowyWriteThroughClient: class {
-			async liveNode(id: string) {
-				live.calls.push(["liveNode", id]);
+			async cacheLiveNode(id: string) {
+				live.calls.push(["cacheLiveNode", id]);
 				const node = live.nodes.get(id);
 				if (node === undefined) {
 					return Promise.reject(new Error("Failed to get node: 404 Not Found"));
 				}
-				return Promise.resolve(node);
-			}
-			async refreshChain(parentIds: string[]) {
-				live.calls.push(["refreshChain", parentIds]);
-				for (const node of live.nodes.values()) {
-					live.store(node);
-				}
+				live.store(node);
 				return Promise.resolve();
 			}
 		},
@@ -94,10 +88,7 @@ describe("GET /api/v1/nodes/:id for uncached nodes", () => {
 			{
 				status: 200,
 				cached: true,
-				calls: [
-					["liveNode", FULL],
-					["refreshChain", ["Alpha"]],
-				],
+				calls: [["cacheLiveNode", FULL]],
 			},
 		);
 	});

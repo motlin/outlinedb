@@ -344,20 +344,14 @@ function viewExpansionTest(ctx: ServerContext, expandedIds: string[] | null): (i
 	return adapter === undefined ? () => false : adapter.expansionTest();
 }
 
-/** Fetch a node missing from the cache through the write-through client, cache it with its parent chain, and read it. */
+/** Fetch a node missing from the cache through the write-through client, cache it with its ancestors, and read it. */
 async function readUncachedNodeLive(ctx: ServerContext, id: string): Promise<NodeResponse | undefined> {
 	const client = getWriteClient(ctx);
 	if (client === undefined) {
 		return undefined;
 	}
 	try {
-		const live = await client.liveNode(id);
-		const parentId = live.parent_id ?? null;
-		if (parentId === null) {
-			ctx.cacheService.insertNode(live, null);
-		} else {
-			await client.refreshChain([parentId]);
-		}
+		await client.cacheLiveNode(id);
 	} catch {
 		return undefined;
 	}
