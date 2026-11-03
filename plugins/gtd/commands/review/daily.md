@@ -53,6 +53,10 @@ Append with `printf '%s\n' ... >>` or a heredoc — never rewrite the file — a
 
 This is the same ban as [Never offer to pause or wrap up](#never-offer-to-pause-or-wrap-up) and `due-item-walk.md`'s "Never ask how to scope the walk", applied to ideas instead of volume: an improvement is not new information the user needs to rule on now, and the only correct next move is the next item. A design poll mid-walk ("want me to change how this phase works?") is the same forbidden question wearing a suggestion.
 
+## A phase summary never ends the turn
+
+A phase's summary, briefing, or opened page is not a stopping point. After it, start the next phase in the same turn. The user does not notice console output unless something else stops the turn, so a turn that ends on a summary stalls the review with nothing asking for their input. The turn ends only on an `AskUserQuestion`, a halt the rules here call for, or the final summary.
+
 ## Never offer to pause or wrap up
 
 The review runs every phase to completion. Only a verified failure halts it, and only the user may choose to stop. Never raise the length of the run as a question, in any phrasing:
@@ -176,7 +180,7 @@ Invoke `/gtd:review:daily:meetings` to walk meetings ingested since last review,
 
 ## Morning Overview
 
-Invoke `/gtd:review:daily:overview` — morning orientation (calendar, reminders, next actions, inbox)
+Invoke `/gtd:review:daily:overview` — morning orientation (calendar, reminders, next actions, inbox), rendered as an HTML page and opened in the browser, never printed to the console. Continue into Distribute Project Tasks in the same turn.
 
 ## Distribute Project Tasks
 

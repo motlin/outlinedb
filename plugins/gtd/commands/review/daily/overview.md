@@ -1,5 +1,5 @@
 ---
-description: Morning orientation — pull together today's calendar, Apple Reminders, next actions, delegated/waiting items, and inbox status into one overview, then offer quick edits. Use when the user wants their morning briefing, to see what's on their plate today, or the overview portion of the daily review.
+description: Morning orientation — pull together today's calendar, Apple Reminders, next actions, delegated/waiting items, and inbox status into one HTML page opened in the browser. Use when the user wants their morning briefing, to see what's on their plate today, or the overview portion of the daily review.
 ---
 
 # GTD Daily Review
@@ -44,7 +44,9 @@ TODAY_LABEL=$(date '+%a, %b %-d')        # e.g. Fri, Jun 26
 TOMORROW_LABEL=$(date -v+1d '+%a, %b %-d')
 ```
 
-**Output completeness rule:** When you print the final morning overview, every section MUST show its full content inline. Never abbreviate by referring to earlier text ("already shown above", "see prior output", "as listed earlier") — the user does not scroll back through tool calls and intermediate updates. If a section's content appeared in an earlier turn, print it again in full as part of the final overview block.
+**Output is an HTML page, never the console.** The overview is never printed to the console: a console overview goes unnoticed unless something else stops the turn. The `text` blocks in each section below describe that section's content and order; put that content into the page spec described in [Render the page](#render-the-page), not into chat.
+
+**Output completeness rule:** Every section of the page MUST carry its full content. Never abbreviate by referring to earlier text ("already shown above", "see prior output") — if a section's content appeared earlier in the run, put it on the page again in full.
 
 ## Workflow
 
@@ -138,9 +140,46 @@ Also check the root Inbox:
 
 Format as "📥 **Inbox Status:**" showing count for each. If combined count > 10, suggest running `/gtd:inbox` after daily review.
 
+### Render the page
+
+Write the sections to `.llm/gtd/review/overview.json`, render it, and open it in the browser:
+
+```bash
+node ${CLAUDE_PLUGIN_ROOT}/scripts/render-overview.mts .llm/gtd/review/overview.json .llm/gtd/review/overview.html
+open .llm/gtd/review/overview.html
+```
+
+The spec, with plain-text strings (strip Workflowy HTML such as `<time>` and `<a>` down to its text; put a node's Workflowy URL in `href`):
+
+```json
+{
+	"title": "Morning overview",
+	"subtitle": "$TODAY_LABEL",
+	"sections": [
+		{
+			"heading": "📅 Today's calendar — $TODAY_LABEL",
+			"link": {"label": "Open Fantastical", "href": "fantastical://"},
+			"groups": [
+				{"heading": "Fantastical", "items": [{"text": "10:00 AM - Team standup", "note": "calendar-name"}]},
+				{"heading": "Workflowy", "items": []}
+			]
+		},
+		{
+			"heading": "☑️ Next Actions",
+			"groups": [{"heading": "Personal", "items": [{"text": "Call the plumber <2min", "href": "https://workflowy.com/#/<shortId>", "highlight": true}]}],
+			"notes": ["Quick win: Call the plumber"]
+		}
+	]
+}
+```
+
+One section per heading above, in order: Today's calendar, Tomorrow preview, Apple Reminders (groups Overdue / Due Today / Due Tomorrow, the no-due-date count as a note), Next Actions (one group per context), Delegate / Waiting For, Inbox Status (counts as items, the `/gtd:inbox` suggestion as a note). `highlight: true` marks overdue reminders, overdue delegated items, and quick wins. An empty group renders as "None"; keep it rather than dropping the heading.
+
+The script exits non-zero naming the first malformed field; fix the spec and rerun. In chat, write one line naming the opened page, then continue.
+
 ### This phase orients; it does not act
 
-Print the overview to the console and stop. **Do not offer to complete, move, or edit anything here.**
+Render and open the page, then move on in the same turn. **Do not offer to complete, move, or edit anything here.**
 
 Every actionable outcome belongs to a later phase, and each has a walk built for it:
 
@@ -151,13 +190,13 @@ Every actionable outcome belongs to a later phase, and each has a walk built for
 | Move a loose task into a bucket     | File Loose Tasks                     |
 | Handle a recurring item             | Recurring Review — recurring segment |
 
-Do not render the overview as a checklist or HTML page. The real outcomes are move, edit, reschedule, and discuss, not just complete, and later phases handle each item one at a time with `AskUserQuestion`.
+Do not render the overview as a checklist with completion controls. The real outcomes are move, edit, reschedule, and discuss, not just complete, and later phases handle each item one at a time with `AskUserQuestion`.
 
 If the user does ask for an immediate change while reading the overview, just do it — that's a normal request, not a phase. Don't build a prompt loop around it.
 
 ### Next Step
 
-Do **not** prompt "what would you like to do next?" — the daily review's phase ordering is deterministic. When invoked as part of `/gtd:review:daily`, the orchestrator advances to the next phase (Process Inbox). When invoked standalone, simply end after logging completion.
+Do **not** prompt "what would you like to do next?" — the daily review's phase ordering is deterministic. When invoked as part of `/gtd:review:daily`, continue straight into the next phase (Distribute Project Tasks) in the same turn — opening the page never ends the turn. When invoked standalone, simply end after logging completion.
 
 ### Log Completion
 
