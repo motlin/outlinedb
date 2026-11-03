@@ -1208,6 +1208,45 @@ describe("cache-import service", () => {
 			expect(newMeta.priority).toBe(50);
 		});
 
+		it("respaces siblings instead of tying a new node with its neighbour when the gap is used up", async () => {
+			const existing = [
+				{id: "existing-1", nm: "Existing 1"},
+				{id: "existing-2", nm: "Existing 2"},
+			];
+			const initialPath = writeBackupFile([{id: "parent-1", nm: "Parent", ch: existing}]);
+			await importBackup(testDatabase.db, initialPath, "backup.json", false, T0);
+
+			// Eight new nodes between priorities 0 and 100 halve the gap down to nothing: 50, 75, 87, 93, 96, 98, 99, 99.
+			const newNodes = Array.from({length: 8}, (_, i) => ({id: `new-${i + 1}`, nm: `New ${i + 1}`}));
+			const updatedPath = path.join(tempDir, "backup2.json");
+			fs.writeFileSync(
+				updatedPath,
+				JSON.stringify([{id: "parent-1", nm: "Parent", ch: [existing[0], ...newNodes, existing[1]]}]),
+			);
+			await importBackup(testDatabase.db, updatedPath, "backup.json", false, T1);
+
+			const current = testDatabase.db
+				.select({nodeId: nodeMetadata.nodeId, priority: nodeMetadata.priority})
+				.from(nodeMetadata)
+				.where(eq(nodeMetadata.systemTo, FAR_FUTURE_DATE))
+				.all()
+				.filter((m) => m.nodeId !== "parent-1")
+				.toSorted((a, b) => (a.priority ?? 0) - (b.priority ?? 0));
+
+			expect(current).toStrictEqual([
+				{nodeId: "existing-1", priority: -800},
+				{nodeId: "new-1", priority: -700},
+				{nodeId: "new-2", priority: -600},
+				{nodeId: "new-3", priority: -500},
+				{nodeId: "new-4", priority: -400},
+				{nodeId: "new-5", priority: -300},
+				{nodeId: "new-6", priority: -200},
+				{nodeId: "new-7", priority: -100},
+				{nodeId: "new-8", priority: 0},
+				{nodeId: "existing-2", priority: 100},
+			]);
+		});
+
 		it("handles all new nodes with no existing siblings", async () => {
 			const backupContent = [
 				{

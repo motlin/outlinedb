@@ -132,6 +132,24 @@ function findNextWithPriority(arr: (number | null)[], start: number): KnownPrior
 }
 
 /**
+ * Anchor on the existing node furthest right in backup order and space every
+ * sibling 100 apart from it. Used when the existing order changed, or when a new
+ * node has no free integer between its neighbours.
+ */
+function respaceFromAnchor(siblings: {id: string; existingPriority: number | null}[]): Map<string, number> {
+	const result = new Map<string, number>();
+	const anchorIdx = siblings.findLastIndex((s) => s.existingPriority !== null);
+	const anchorPriority = siblings[anchorIdx]?.existingPriority ?? 0;
+	for (const [i, sibling] of siblings.entries()) {
+		const priority = anchorPriority + (i - anchorIdx) * 100;
+		if (sibling.existingPriority !== priority) {
+			result.set(sibling.id, priority);
+		}
+	}
+	return result;
+}
+
+/**
  * Calculate priorities for siblings, handling both new nodes and order changes.
  *
  * For NEW nodes (existingPriority is null): infer priority from neighbors.
@@ -173,21 +191,8 @@ function calculatePriorities(
 		return result;
 	}
 
-	// If order changed, anchor on the existing node furthest right in backup order
-	// and space every sibling 100 apart from it.
 	if (orderChanged) {
-		const anchorIdx = siblings.findLastIndex((s) => s.existingPriority !== null);
-		const anchorPriority = siblings[anchorIdx]?.existingPriority;
-
-		if (anchorPriority !== null && anchorPriority !== undefined) {
-			for (const [i, sibling] of siblings.entries()) {
-				const priority = anchorPriority + (i - anchorIdx) * 100;
-				if (sibling.existingPriority !== priority) {
-					result.set(sibling.id, priority);
-				}
-			}
-			return result;
-		}
+		return respaceFromAnchor(siblings);
 	}
 
 	// Build working array of priorities (null means needs calculation)
@@ -214,6 +219,10 @@ function calculatePriorities(
 
 			let newPriority: number;
 			if (prev && next) {
+				// No integer fits strictly between the neighbours, so the gap is used up.
+				if (next.priority - prev.priority < 2) {
+					return respaceFromAnchor(siblings);
+				}
 				newPriority = Math.floor((prev.priority + next.priority) / 2);
 			} else if (prev) {
 				newPriority = prev.priority + 100;
