@@ -1,4 +1,5 @@
 import {and, eq, gte, inArray, lte, ne} from "drizzle-orm";
+import {inIds} from "../cache/in-ids.js";
 import {mirrors, nodeContent, nodeMetadata} from "../db/schema.js";
 import type {AppDatabase} from "../db/types.js";
 import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "../temporal/constants.js";
@@ -282,22 +283,15 @@ export class ChangeDetector {
 	 * its original's id, preferring the current relationship.
 	 */
 	private loadMirrorOriginals(nodeIds: string[], cutoffStr: string): Map<string, string> {
+		const rows = this.db
+			.select({mirrorId: mirrors.mirrorId, originalId: mirrors.originalId})
+			.from(mirrors)
+			.where(and(inIds(mirrors.mirrorId, nodeIds), gte(mirrors.systemTo, cutoffStr)))
+			.orderBy(mirrors.systemTo)
+			.all();
 		const originals = new Map<string, string>();
-		for (let i = 0; i < nodeIds.length; i += SQL_CHUNK_SIZE) {
-			const rows = this.db
-				.select({mirrorId: mirrors.mirrorId, originalId: mirrors.originalId})
-				.from(mirrors)
-				.where(
-					and(
-						inArray(mirrors.mirrorId, nodeIds.slice(i, i + SQL_CHUNK_SIZE)),
-						gte(mirrors.systemTo, cutoffStr),
-					),
-				)
-				.orderBy(mirrors.systemTo)
-				.all();
-			for (const row of rows) {
-				originals.set(row.mirrorId, row.originalId);
-			}
+		for (const row of rows) {
+			originals.set(row.mirrorId, row.originalId);
 		}
 		return originals;
 	}

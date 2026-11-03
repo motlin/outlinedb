@@ -5,6 +5,7 @@ import {upstreamRelationshipMetadata} from "../src/cache/item-relationships.js";
 import {applyMirrorText, loadMirrorOriginals} from "../src/cache/mirror-text.js";
 import {endNodeComposites, runUnitOfWork, withdrawNodeComposites} from "../src/cache/node-composite.js";
 import {PathBuilder} from "../src/cache/path-builder.js";
+import {ChangeDetector} from "../src/changes/change-detector.js";
 import {mirrors, nodeContent} from "../src/db/schema.js";
 import {FAR_FUTURE_DATE} from "../src/temporal/constants.js";
 import {buildTestDb} from "./helpers/round-trip-helpers.js";
@@ -148,6 +149,31 @@ describe("id batches on a Durable Object's 100-bound-parameter cap", () => {
 			text: "Child 0\n\nNote 0",
 			nonLeaf: ["parent"],
 			childrenTextLines: COUNT,
+		});
+	});
+
+	it("detects changes across more mirrors than the cap", () => {
+		const database = cappedDatabase();
+
+		const {changes} = new ChangeDetector(database).detectChanges(new Date("2025-12-31T00:00:00.000Z"));
+
+		expect(changes.find((change) => change.id === mirrorIds[COUNT - 1])).toStrictEqual({
+			id: mirrorIds[COUNT - 1],
+			isNew: true,
+			isDeleted: false,
+			contentChanged: false,
+			parentChanged: false,
+			completionChanged: false,
+			noteChanged: false,
+			oldName: null,
+			oldNote: null,
+			oldParentId: null,
+			oldCompletedAt: null,
+			currentName: `Child ${COUNT - 1}`,
+			currentNote: `Note ${COUNT - 1}`,
+			currentParentId: "elsewhere",
+			currentCompletedAt: null,
+			parentId: "elsewhere",
 		});
 	});
 });
