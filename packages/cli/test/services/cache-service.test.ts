@@ -723,6 +723,41 @@ describe("CacheService (shared)", () => {
 			}).toStrictEqual({activeNames: ["Updated"], historicalNames: ["Old"]});
 		});
 
+		it("inserts a missing metadata row for a node whose content is cached", () => {
+			seedTestData(testDatabase, nodeFixtures([createTestNode({id: "node-1", name: "Same", parentId: null})]));
+			testDatabase.db.delete(nodeMetadata).where(eq(nodeMetadata.nodeId, "node-1")).run();
+
+			const apiNode = createApiNode({
+				id: "node-1",
+				name: "Same",
+				parent_id: null,
+				priority: 5,
+				createdAt: FIXED_EPOCH_SECONDS,
+				modifiedAt: FIXED_EPOCH_SECONDS,
+			});
+
+			cacheService.insertNode(apiNode, null);
+
+			const metadataRows = testDatabase.db
+				.select()
+				.from(nodeMetadata)
+				.where(eq(nodeMetadata.nodeId, "node-1"))
+				.all();
+			expect(metadataRows).toStrictEqual([
+				{
+					nodeId: "node-1",
+					shortId: "node1",
+					priority: 5,
+					createdAt: FIXED_DATE,
+					modifiedAt: FIXED_DATE,
+					completedAt: null,
+					layoutMode: null,
+					systemFrom: metadataRows[0]?.systemFrom,
+					systemTo: FAR_FUTURE_DATE,
+				},
+			]);
+		});
+
 		it("normalizes layoutMode on a brand-new insert", () => {
 			// 'bullets' is the default layout and normalizes to null (see normalizeLayoutMode).
 			const apiNode = createApiNode({

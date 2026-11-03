@@ -193,7 +193,8 @@ function insertMetadata(
  *
  * A node not yet cached gets fresh rows in both tables. For a cached node, each table
  * is versioned independently: its current row is closed and a new one opened only when
- * the API data differs, so an unchanged node leaves no history behind.
+ * the API data differs, so an unchanged node leaves no history behind. A cached node
+ * missing its current metadata row gets one.
  */
 function upsertNodeVersion(
 	db: TemporalTransaction,
@@ -230,7 +231,9 @@ function upsertNodeVersion(
 		completedAt: node.completedAt ?? null,
 		layoutMode: normalizeLayoutMode(node.data?.layoutMode),
 	};
-	if (existingMetadata && !metadataMatches(existingMetadata, metadata)) {
+	if (!existingMetadata) {
+		insertMetadata(db, node, systemTime);
+	} else if (!metadataMatches(existingMetadata, metadata)) {
 		closeCurrentVersions(db, nodeMetadata, systemTime, eq(nodeMetadata.nodeId, node.id));
 		insertMetadata(db, node, systemTime, existingMetadata);
 	}
