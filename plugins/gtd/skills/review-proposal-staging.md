@@ -29,6 +29,10 @@ The local web app's generic decision page is the long-walk surface. It renders a
     - `src` is the file's path relative to the repo's `.llm/photos/` directory, such as `<topic>-<yyyy-mm-dd>/<file>.jpg`.
     - Only `.jpg`, `.jpeg`, `.png`, `.webp` and `.gif` are allowed. Convert HEIC to JPEG first. An absolute `src`, or one with a `..` segment or another extension, fails the page load.
     - Write a short `alt` that says what the photo shows, so the card reads without it.
+- An item may carry videos as `"videos": [{"src": "<path>", "poster": "<image path>"}]`; they render in the same row as playable inline players (a lone video is capped at 60% of the screen height so a portrait clip fits above the options). Omit the field for an item without videos.
+    - `src` follows the same `.llm/photos/` rules as images, but only `.mp4`, `.mov`, `.m4v` and `.webm` are allowed. Any other `src`, or a `poster` that is not an allowed image path, fails the page load.
+    - `poster` is optional; give it a still frame (extract one with `ffmpeg -ss 1 -i <video> -frames:v 1 <file>.jpg`) when the first frame is blank or misleading.
+    - The server streams videos with byte ranges, so the user can seek without the whole file loading first.
 - Get the URL from `node plugins/gtd/scripts/decision-page.mts url <slug>` and put it inside the `AskUserQuestion` that tells the user to open the page and answer.
 - Wait until the user says they submitted. Do not poll.
 - Read the choices with `node plugins/gtd/scripts/decision-page.mts answers <slug>`. It prints `{"<itemId>": {"choice", "note", "answeredAt"}, "submittedAt"}` and exits non-zero when nothing was saved. `choice` is an option value or `null`; `note` is free text that may refine or override the choice.
