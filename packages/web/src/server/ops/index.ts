@@ -1,6 +1,7 @@
 import type {z} from "zod";
 import {accountGet} from "./account.js";
 import {accountAi} from "./account-ai.js";
+import {cacheStatus} from "./cache.js";
 import {calendarOps} from "./calendar.js";
 import {changesList} from "./changes.js";
 import {customTreeGet} from "./custom-tree.js";
@@ -24,6 +25,7 @@ import {
 	nodesVerify,
 	nodesView,
 } from "./nodes.js";
+import {nodesReadTree, nodesResolve} from "./nodes-lookup.js";
 import {nodesDetachMirror, nodesMirror, nodesSwapMirrorOrigin} from "./nodes-mirror.js";
 import {
 	nodesComplete,
@@ -48,6 +50,7 @@ import type {Json, OpDefinition, OpResult} from "./define.js";
 export const Ops = {
 	"account.get": accountGet,
 	"account.ai": accountAi,
+	"cache.status": cacheStatus,
 	...calendarOps,
 	"changes.list": changesList,
 	"customTree.get": customTreeGet,
@@ -82,6 +85,8 @@ export const Ops = {
 	"nodes.mirror": nodesMirror,
 	"nodes.mirrors": nodesMirrors,
 	"nodes.move": nodesMove,
+	"nodes.readTree": nodesReadTree,
+	"nodes.resolve": nodesResolve,
 	"nodes.moveOne": nodesMoveOne,
 	"nodes.subtreeIds": nodesSubtreeIds,
 	"nodes.swapMirrorOrigin": nodesSwapMirrorOrigin,

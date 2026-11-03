@@ -109,7 +109,6 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 	}
 
 	/** The one entry point for app operations: runs an op over this object's database; errors come back as values. */
-	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC through `storeClient`
 	async call<K extends OpName>(op: K, input: OpInput<K>): Promise<OpResult<OpOutput<K>>> {
 		return this.store.call(op, input);
 	}

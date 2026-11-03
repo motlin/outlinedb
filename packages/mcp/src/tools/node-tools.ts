@@ -1,13 +1,15 @@
-import {NodeTreeReader} from "@workflowy/shared/cache";
-import {calendarParentContext} from "@workflowy/shared/calendar-lookup";
-import {adoptAfterCreate, calendarAdoptWarning, linkedSourcesInSubtree} from "@workflowy/shared/internal";
-import {deleteBacklinksOfDeleted, syncBacklinksIfLinked} from "@workflowy/shared/node";
-import {resolveNodeId, resolveOrCreateNodePath, resolveParent} from "@workflowy/shared/utils";
-import {z} from "zod";
-import {getApiClient, getCacheService, getDatabase, getInternalAdapter, getWriteThroughClient} from "../services.js";
 import type {McpServer} from "@modelcontextprotocol/sdk/server/mcp.js";
+import type {StoreClient} from "@workflowy/web/node-host";
+import {z} from "zod";
+import {resolve} from "./resolve.js";
+import {errorResult, jsonResult, nodeUrl, opError, textResult} from "./results.js";
 
-export function registerNodeTools(server: McpServer): void {
+/** A node op's id: `nodes.resolve` without `parent` never answers Home (`null`). */
+function nodeIdOf(id: string | null): string {
+	return id ?? "home";
+}
+
+export function registerNodeTools(server: McpServer, store: StoreClient): void {
 	server.registerTool(
 		"workflowy_node_get",
 		{
@@ -19,20 +21,19 @@ export function registerNodeTools(server: McpServer): void {
 		},
 		async ({id, path}) => {
 			if (!id && !path) {
-				return {content: [{type: "text", text: "Either id or path is required"}], isError: true};
+				return errorResult("Either id or path is required");
 			}
-
-			const cacheService = getCacheService();
-			const apiClient = getApiClient();
-
-			const nodeId = await resolveNodeId({id, path}, cacheService, apiClient);
-			const [node] = await new NodeTreeReader(cacheService).readNodes([nodeId], {depth: 0});
-
-			if (node === undefined) {
-				return {content: [{type: "text", text: `Node not found: ${nodeId}`}], isError: true};
+			const resolved = await resolve(store, {id, path});
+			if (!resolved.ok) {
+				return resolved.error;
 			}
-
-			return {content: [{type: "text", text: JSON.stringify(node, null, 2)}]};
+			const nodeId = nodeIdOf(resolved.id);
+			const read = await store.call("nodes.readTree", {ids: [nodeId], depth: 0});
+			if (!read.ok) {
+				return opError(read);
+			}
+			const [node] = read.value.nodes;
+			return node === undefined ? errorResult(`Node not found: ${nodeId}`) : jsonResult(node);
 		},
 	);
 
@@ -47,20 +48,21 @@ export function registerNodeTools(server: McpServer): void {
 			},
 		},
 		async ({parentId, parentPath, depth}) => {
-			const cacheService = getCacheService();
-			const apiClient = getApiClient();
-
 			let resolvedParentId: string | null = null;
 			if (parentId || parentPath) {
-				resolvedParentId = await resolveParent({id: parentId, path: parentPath}, cacheService, apiClient);
+				const resolved = await resolve(store, {id: parentId, path: parentPath, parent: true});
+				if (!resolved.ok) {
+					return resolved.error;
+				}
+				resolvedParentId = resolved.id;
 			}
-
 			// This tool's `depth` counts levels of nodes returned (1 = immediate children only),
-			// whereas readChildren's depth counts levels below each returned node, so subtract one.
-			const result = await new NodeTreeReader(cacheService).readChildren(resolvedParentId, {
+			// whereas readTree's depth counts levels below each returned node, so subtract one.
+			const read = await store.call("nodes.readTree", {
+				parentId: resolvedParentId,
 				depth: Math.max(0, depth - 1),
 			});
-			return {content: [{type: "text", text: JSON.stringify(result, null, 2)}]};
+			return read.ok ? jsonResult(read.value.nodes) : opError(read);
 		},
 	);
 
@@ -83,54 +85,28 @@ export function registerNodeTools(server: McpServer): void {
 		},
 		async ({parentId, parentPath, name, note, position, createPath}) => {
 			if (!parentId && !parentPath) {
-				return {content: [{type: "text", text: "Either parentId or parentPath is required"}], isError: true};
+				return errorResult("Either parentId or parentPath is required");
 			}
-
-			const cacheService = getCacheService();
-			const apiClient = getApiClient();
-			const writeThroughClient = getWriteThroughClient();
-
-			const resolvedParentId = await (createPath && parentPath
-				? resolveOrCreateNodePath(parentPath, cacheService, apiClient)
-				: resolveParent({id: parentId, path: parentPath}, cacheService, apiClient));
-
-			const newNode = await writeThroughClient.createNode({
-				parent_id: resolvedParentId,
+			const parent = await resolve(store, {id: parentId, path: parentPath, parent: true, createPath});
+			if (!parent.ok) {
+				return parent.error;
+			}
+			const created = await store.call("nodes.create", {
+				parent_id: parent.id,
 				name,
-				note,
-				position,
+				...(note === undefined ? {} : {note}),
+				...(position === "top" ? {index: 0} : {}),
 			});
-			await syncBacklinksIfLinked([newNode.id], [name, note], getDatabase(), writeThroughClient);
-			// Tag a dated row created under a 📆 Calendar month as that day, as upstream's web client does.
-			const context =
-				resolvedParentId === null
-					? undefined
-					: calendarParentContext({db: getDatabase(), cache: cacheService}, resolvedParentId);
-			const adoption = await adoptAfterCreate({
-				id: newNode.id,
-				name,
-				context,
-				adapter: context === undefined ? undefined : getInternalAdapter(),
+			if (!created.ok) {
+				return opError(created);
+			}
+			const {node} = created.value;
+			return jsonResult({
+				id: node.id,
+				name: node.name,
+				createdAt: node.createdAt === null ? null : new Date(node.createdAt * 1000).toISOString(),
+				url: nodeUrl(node.id),
 			});
-
-			return {
-				content: [
-					{
-						type: "text",
-						text: JSON.stringify(
-							{
-								id: newNode.id,
-								name: newNode.name,
-								createdAt: new Date(newNode.createdAt * 1000).toISOString(),
-								url: `https://workflowy.com/#/${newNode.id.replaceAll("-", "")}`,
-								...(adoption.status === "unadoptable" ? {warning: calendarAdoptWarning(name)} : {}),
-							},
-							null,
-							2,
-						),
-					},
-				],
-			};
 		},
 	);
 
@@ -147,45 +123,25 @@ export function registerNodeTools(server: McpServer): void {
 		},
 		async ({id, path, name, note}) => {
 			if (!id && !path) {
-				return {content: [{type: "text", text: "Either id or path is required"}], isError: true};
+				return errorResult("Either id or path is required");
 			}
 			if (!name && note === undefined) {
-				return {
-					content: [{type: "text", text: "At least one of name or note must be provided"}],
-					isError: true,
-				};
+				return errorResult("At least one of name or note must be provided");
 			}
-
-			const cacheService = getCacheService();
-			const apiClient = getApiClient();
-			const writeThroughClient = getWriteThroughClient();
-
-			const nodeId = await resolveNodeId({id, path}, cacheService, apiClient);
-			const before = cacheService.getNode(nodeId);
-			const updatedNode = await writeThroughClient.updateNode(nodeId, {name, note});
-			await syncBacklinksIfLinked(
-				[nodeId],
-				[before?.name, before?.note, name, note],
-				getDatabase(),
-				writeThroughClient,
-			);
-
-			return {
-				content: [
-					{
-						type: "text",
-						text: JSON.stringify(
-							{
-								id: updatedNode.id,
-								name: updatedNode.name,
-								note: updatedNode.note,
-							},
-							null,
-							2,
-						),
-					},
-				],
-			};
+			const resolved = await resolve(store, {id, path});
+			if (!resolved.ok) {
+				return resolved.error;
+			}
+			const updated = await store.call("nodes.update", {
+				id: nodeIdOf(resolved.id),
+				...(name ? {name} : {}),
+				...(note === undefined ? {} : {note}),
+			});
+			if (!updated.ok) {
+				return opError(updated);
+			}
+			const {node} = updated.value;
+			return jsonResult({id: node.id, name: node.name, note: node.note});
 		},
 	);
 
@@ -200,84 +156,48 @@ export function registerNodeTools(server: McpServer): void {
 		},
 		async ({id, path}) => {
 			if (!id && !path) {
-				return {content: [{type: "text", text: "Either id or path is required"}], isError: true};
+				return errorResult("Either id or path is required");
 			}
-
-			const cacheService = getCacheService();
-			const apiClient = getApiClient();
-			const writeThroughClient = getWriteThroughClient();
-
-			const nodeId = await resolveNodeId({id, path}, cacheService, apiClient);
-			// Upstream's client deletes a deleted source's backlink items; read the
-			// linked sources before the delete drops the subtree from the cache.
-			const linked = linkedSourcesInSubtree(getDatabase(), nodeId);
-			await writeThroughClient.deleteNode(nodeId);
-			await deleteBacklinksOfDeleted(linked, getDatabase(), writeThroughClient);
-
-			return {content: [{type: "text", text: `Successfully deleted node: ${nodeId}`}]};
+			const resolved = await resolve(store, {id, path});
+			if (!resolved.ok) {
+				return resolved.error;
+			}
+			const nodeId = nodeIdOf(resolved.id);
+			const deleted = await store.call("nodes.delete", {id: nodeId});
+			return deleted.ok ? textResult(`Successfully deleted node: ${nodeId}`) : opError(deleted);
 		},
 	);
 
-	server.registerTool(
-		"workflowy_node_complete",
-		{
-			description: "Mark a node as completed",
-			inputSchema: {
-				id: z.string().optional().describe("Node ID"),
-				path: z.string().optional().describe("Comma-separated path to node"),
+	for (const [operation, verb, description] of [
+		["complete", "completed", "Mark a node as completed"],
+		["uncomplete", "uncompleted", "Mark a node as not completed"],
+	] as const) {
+		server.registerTool(
+			`workflowy_node_${operation}`,
+			{
+				description,
+				inputSchema: {
+					id: z.string().optional().describe("Node ID"),
+					path: z.string().optional().describe("Comma-separated path to node"),
+				},
 			},
-		},
-		async ({id, path}) => {
-			if (!id && !path) {
-				return {content: [{type: "text", text: "Either id or path is required"}], isError: true};
-			}
-
-			const cacheService = getCacheService();
-			const apiClient = getApiClient();
-			const writeThroughClient = getWriteThroughClient();
-
-			const nodeId = await resolveNodeId({id, path}, cacheService, apiClient);
-			const completedNode = await writeThroughClient.completeNode(nodeId);
-
-			return {
-				content: [
-					{type: "text", text: `Successfully completed node: ${completedNode.name} (${completedNode.id})`},
-				],
-			};
-		},
-	);
-
-	server.registerTool(
-		"workflowy_node_uncomplete",
-		{
-			description: "Mark a node as not completed",
-			inputSchema: {
-				id: z.string().optional().describe("Node ID"),
-				path: z.string().optional().describe("Comma-separated path to node"),
+			async ({id, path}) => {
+				if (!id && !path) {
+					return errorResult("Either id or path is required");
+				}
+				const resolved = await resolve(store, {id, path});
+				if (!resolved.ok) {
+					return resolved.error;
+				}
+				const changed = await store.call(`nodes.${operation}`, {id: nodeIdOf(resolved.id)});
+				if (!changed.ok) {
+					return opError(changed);
+				}
+				const {node} = changed.value;
+				return textResult(`Successfully ${verb} node: ${node.name} (${node.id})`);
 			},
-		},
-		async ({id, path}) => {
-			if (!id && !path) {
-				return {content: [{type: "text", text: "Either id or path is required"}], isError: true};
-			}
-
-			const cacheService = getCacheService();
-			const apiClient = getApiClient();
-			const writeThroughClient = getWriteThroughClient();
-
-			const nodeId = await resolveNodeId({id, path}, cacheService, apiClient);
-			const uncompletedNode = await writeThroughClient.uncompleteNode(nodeId);
-
-			return {
-				content: [
-					{
-						type: "text",
-						text: `Successfully uncompleted node: ${uncompletedNode.name} (${uncompletedNode.id})`,
-					},
-				],
-			};
-		},
-	);
+		);
+	}
 
 	server.registerTool(
 		"workflowy_node_move",
@@ -293,25 +213,30 @@ export function registerNodeTools(server: McpServer): void {
 		},
 		async ({nodeId, nodePath, parentId, parentPath, position}) => {
 			if (!nodeId && !nodePath) {
-				return {content: [{type: "text", text: "Either nodeId or nodePath is required"}], isError: true};
+				return errorResult("Either nodeId or nodePath is required");
 			}
 			if (!parentId && !parentPath) {
-				return {content: [{type: "text", text: "Either parentId or parentPath is required"}], isError: true};
+				return errorResult("Either parentId or parentPath is required");
 			}
-
-			const cacheService = getCacheService();
-			const apiClient = getApiClient();
-			const writeThroughClient = getWriteThroughClient();
-
-			const resolvedNodeId = await resolveNodeId({id: nodeId, path: nodePath}, cacheService, apiClient);
-			const resolvedParentId = await resolveParent({id: parentId, path: parentPath}, cacheService, apiClient);
-
-			const positionValue = position === "top" ? -1 : position === "bottom" ? 0 : undefined;
-			const movedNode = await writeThroughClient.moveNode(resolvedNodeId, resolvedParentId, positionValue);
-
-			return {
-				content: [{type: "text", text: `Successfully moved node: ${movedNode.name} (${movedNode.id})`}],
-			};
+			const node = await resolve(store, {id: nodeId, path: nodePath});
+			if (!node.ok) {
+				return node.error;
+			}
+			const parent = await resolve(store, {id: parentId, path: parentPath, parent: true});
+			if (!parent.ok) {
+				return parent.error;
+			}
+			const id = nodeIdOf(node.id);
+			const moved = await store.call("nodes.moveOne", {
+				id,
+				parent_id: parent.id,
+				...(position === "top" ? {index: 0} : {}),
+			});
+			if (!moved.ok) {
+				return opError(moved);
+			}
+			const name = moved.value.nodes.find((sibling) => sibling.id === id)?.name ?? "";
+			return textResult(`Successfully moved node: ${name} (${id})`);
 		},
 	);
 }

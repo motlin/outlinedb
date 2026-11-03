@@ -20,11 +20,11 @@
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.32.1",
 		"@workflowy/shared": "workspace:*",
-		"better-sqlite3": "^13.0.3",
-		"drizzle-orm": "^0.45.3",
+		"@workflowy/web": "workspace:*",
 		"zod": "^4.6.7"
 	},
 	"devDependencies": {
+		"@types/node": "^26.6.5",
 		"tsx": "^4.23.15",
 		"typescript": "^7.0.2"
 	},

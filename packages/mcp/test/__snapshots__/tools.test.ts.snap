@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`MCP tools > advertises every tool with its name, description and input schema 1`] = `
+exports[`MCP tools over a store > advertises every tool with its name, description and input schema 1`] = `
 [
   {
     "_meta": undefined,
@@ -250,6 +250,47 @@ exports[`MCP tools > advertises every tool with its name, description and input 
   {
     "_meta": undefined,
     "annotations": undefined,
+    "description": "Find the 📆 Calendar day node workflowy.com uses for a date (strict metadata.calendar walk), or with ensure create it, and any missing year/month, with calendar metadata. Always use this instead of creating date nodes by name under the 📆 Calendar.",
+    "execution": {
+      "taskSupport": "forbidden",
+    },
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "createChild": {
+          "description": "With ensure, add an empty first child to a new or empty node (default true)",
+          "type": "boolean",
+        },
+        "date": {
+          "description": "Date as YYYY-MM-DD",
+          "type": "string",
+        },
+        "ensure": {
+          "description": "Create the node when it is missing (needs internal API auth)",
+          "type": "boolean",
+        },
+        "level": {
+          "description": "Which node: day (default), week, month or year",
+          "enum": [
+            "year",
+            "month",
+            "week",
+            "day",
+          ],
+          "type": "string",
+        },
+      },
+      "required": [
+        "date",
+      ],
+      "type": "object",
+    },
+    "name": "workflowy_calendar_day",
+    "title": undefined,
+  },
+  {
+    "_meta": undefined,
+    "annotations": undefined,
     "description": "Get cache database status and statistics",
     "execution": {
       "taskSupport": "forbidden",
@@ -291,4 +332,104 @@ exports[`MCP tools > advertises every tool with its name, description and input 
     "title": undefined,
   },
 ]
+`;
+
+exports[`MCP tools over a store > gets a node by path in the NodeTreeReader shape 1`] = `
+{
+  "isError": undefined,
+  "node": {
+    "collapsed": false,
+    "completedAt": null,
+    "createdAt": "2020-09-13T12:26:40.000Z",
+    "hasReferencesRoot": false,
+    "id": "projects",
+    "inChat": false,
+    "layoutMode": null,
+    "mirror": {
+      "isMirror": false,
+      "originalNodeId": null,
+    },
+    "modifiedAt": "2020-09-13T12:26:40.000Z",
+    "name": "Projects",
+    "note": null,
+    "parentId": "work",
+    "priority": 0,
+    "shortId": "projects",
+    "systemFrom": "<systemFrom>",
+    "systemTo": "9999-12-31 23:59:59",
+  },
+}
+`;
+
+exports[`MCP tools over a store > lists a parent's children to the requested depth 1`] = `
+{
+  "isError": undefined,
+  "nodes": [
+    {
+      "children": [
+        {
+          "collapsed": false,
+          "completedAt": null,
+          "createdAt": "2020-09-13T12:26:40.000Z",
+          "hasReferencesRoot": false,
+          "id": "alpha",
+          "inChat": false,
+          "layoutMode": null,
+          "mirror": {
+            "isMirror": false,
+            "originalNodeId": null,
+          },
+          "modifiedAt": "2020-09-13T12:26:40.000Z",
+          "name": "Alpha project",
+          "note": null,
+          "parentId": "projects",
+          "priority": 0,
+          "shortId": "alpha",
+          "systemFrom": "<systemFrom>",
+          "systemTo": "9999-12-31 23:59:59",
+        },
+        {
+          "collapsed": false,
+          "completedAt": null,
+          "createdAt": "2020-09-13T12:26:40.000Z",
+          "hasReferencesRoot": false,
+          "id": "beta",
+          "inChat": false,
+          "layoutMode": null,
+          "mirror": {
+            "isMirror": false,
+            "originalNodeId": null,
+          },
+          "modifiedAt": "2020-09-13T12:26:40.000Z",
+          "name": "Beta project",
+          "note": null,
+          "parentId": "projects",
+          "priority": 1,
+          "shortId": "beta",
+          "systemFrom": "<systemFrom>",
+          "systemTo": "9999-12-31 23:59:59",
+        },
+      ],
+      "collapsed": false,
+      "completedAt": null,
+      "createdAt": "2020-09-13T12:26:40.000Z",
+      "hasReferencesRoot": false,
+      "id": "projects",
+      "inChat": false,
+      "layoutMode": null,
+      "mirror": {
+        "isMirror": false,
+        "originalNodeId": null,
+      },
+      "modifiedAt": "2020-09-13T12:26:40.000Z",
+      "name": "Projects",
+      "note": null,
+      "parentId": "work",
+      "priority": 0,
+      "shortId": "projects",
+      "systemFrom": "<systemFrom>",
+      "systemTo": "9999-12-31 23:59:59",
+    },
+  ],
+}
 `;

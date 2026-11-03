@@ -15,6 +15,11 @@
 			"source": "./src/server/app.ts",
 			"types": "./dist/server/app.d.ts",
 			"import": "./dist/server/app.js"
+		},
+		"./node-host": {
+			"source": "./src/server/node-entry.ts",
+			"types": "./dist/server/node-entry.d.ts",
+			"import": "./dist/server/node-entry.js"
 		}
 	},
 	"scripts": {

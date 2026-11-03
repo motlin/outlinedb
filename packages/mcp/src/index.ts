@@ -1,9 +1,7 @@
 import {McpServer} from "@modelcontextprotocol/sdk/server/mcp.js";
 import {StdioServerTransport} from "@modelcontextprotocol/sdk/server/stdio.js";
-import {registerCalendarTools} from "./tools/calendar-tools.js";
-import {registerNodeTools} from "./tools/node-tools.js";
-import {registerCacheTools} from "./tools/cache-tools.js";
-import {registerSearchTools} from "./tools/search-tools.js";
+import {createServerContext, inProcessStore} from "@workflowy/web/node-host";
+import {registerWorkflowyTools} from "./register.js";
 
 process.title = "workflowy-mcp";
 
@@ -12,10 +10,7 @@ const server = new McpServer({
 	version: "0.1.0",
 });
 
-registerNodeTools(server);
-registerCalendarTools(server);
-registerCacheTools(server);
-registerSearchTools(server);
+registerWorkflowyTools(server, inProcessStore(createServerContext()));
 
 const transport = new StdioServerTransport();
 await server.connect(transport);

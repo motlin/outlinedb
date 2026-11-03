@@ -1,17 +1,10 @@
-import {findCalendarDay} from "@workflowy/shared/calendar-lookup";
-import {CALENDAR_LEVELS} from "@workflowy/shared/internal";
-import {z} from "zod";
-import {getCacheService, getDatabase, getInternalAdapter} from "../services.js";
 import type {McpServer} from "@modelcontextprotocol/sdk/server/mcp.js";
+import {CALENDAR_LEVELS} from "@workflowy/shared/internal";
+import type {StoreClient} from "@workflowy/web/node-host";
+import {z} from "zod";
+import {errorResult, jsonResult, opError} from "./results.js";
 
-const NO_AUTH =
-	"Calendar day ensure needs internal API auth (WORKFLOWY_USERNAME/WORKFLOWY_PASSWORD or a saved session)";
-
-function textResult(text: string, isError = false) {
-	return {content: [{type: "text" as const, text}], ...(isError ? {isError: true} : {})};
-}
-
-export function registerCalendarTools(server: McpServer): void {
+export function registerCalendarTools(server: McpServer, store: StoreClient): void {
 	server.registerTool(
 		"workflowy_calendar_day",
 		{
@@ -30,31 +23,30 @@ export function registerCalendarTools(server: McpServer): void {
 		async ({date, ensure, level, createChild}) => {
 			const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(date);
 			if (match === null) {
-				return textResult(`Invalid date "${date}". Use YYYY-MM-DD.`, true);
+				return errorResult(`Invalid date "${date}". Use YYYY-MM-DD.`);
 			}
-			const dateId = Number(match[1]) * 10_000 + Number(match[2]) * 100 + Number(match[3]);
+			const dateId = `${match[1]}${match[2]}${match[3]}`;
 			const stopAt = level ?? "day";
-			const cache = getCacheService();
-			const found = findCalendarDay({db: getDatabase(), cache}, dateId, stopAt);
-			if (found !== null) {
-				const firstChildId = cache.getChildren(found)[0]?.id ?? null;
-				return textResult(JSON.stringify({id: found, created: false, firstChildId}, null, 2));
+			const found = await store.call("calendar.day", {dateId, level: stopAt});
+			if (found.ok) {
+				return jsonResult({id: found.value.id, created: false, firstChildId: found.value.firstChildId});
+			}
+			if (found.status !== 404) {
+				return opError(found);
 			}
 			if (!ensure) {
-				return textResult(`No 📆 Calendar ${stopAt} for ${date} (pass ensure: true)`, true);
+				return errorResult(`No 📆 Calendar ${stopAt} for ${date} (pass ensure: true)`);
 			}
-			const adapter = getInternalAdapter();
-			if (adapter === undefined) {
-				return textResult(NO_AUTH, true);
+			const ensured = await store.call("calendar.ensure", {
+				dateId,
+				level: stopAt,
+				createChild: String(createChild ?? true),
+			});
+			if (!ensured.ok) {
+				return opError(ensured);
 			}
-			const ensured = await adapter.ensureCalendarDay(dateId, {stopAt, createChild: createChild ?? true});
-			return textResult(
-				JSON.stringify(
-					{id: ensured.dayId, created: ensured.created.length > 0, firstChildId: ensured.firstChildId},
-					null,
-					2,
-				),
-			);
+			const {dayId, created, firstChildId} = ensured.value;
+			return jsonResult({id: dayId, created: created.length > 0, firstChildId});
 		},
 	);
 }

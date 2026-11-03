@@ -3,12 +3,16 @@
 	"compilerOptions": {
 		"outDir": "dist",
 		"rootDir": "src",
-		"declaration": true
+		"declaration": true,
+		"types": ["node"]
 	},
 	"include": ["src/**/*"],
 	"references": [
 		{
 			"path": "../shared"
+		},
+		{
+			"path": "../web"
 		}
 	]
 }

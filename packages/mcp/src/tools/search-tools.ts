@@ -1,8 +1,9 @@
-import {z} from "zod";
-import {getCacheService} from "../services.js";
 import type {McpServer} from "@modelcontextprotocol/sdk/server/mcp.js";
+import type {StoreClient} from "@workflowy/web/node-host";
+import {z} from "zod";
+import {errorResult, jsonResult, nodeUrl, opError, textResult} from "./results.js";
 
-export function registerSearchTools(server: McpServer): void {
+export function registerSearchTools(server: McpServer, store: StoreClient): void {
 	server.registerTool(
 		"workflowy_search",
 		{
@@ -12,26 +13,19 @@ export function registerSearchTools(server: McpServer): void {
 				limit: z.number().optional().default(20).describe("Maximum number of results to return"),
 			},
 		},
-		({query, limit}) => {
+		async ({query, limit}) => {
 			if (!query.trim()) {
-				return {content: [{type: "text", text: "Query cannot be empty"}], isError: true};
+				return errorResult("Query cannot be empty");
 			}
-
-			const rows = getCacheService().searchText({query, limit});
-
-			if (rows.length === 0) {
-				return {content: [{type: "text", text: `No results found for: ${query}`}]};
+			const found = await store.call("search.text", {query, limit, offset: 0});
+			if (!found.ok) {
+				return opError(found);
 			}
-
-			const formattedResults = rows.map((node) => ({
-				id: node.id,
-				name: node.name,
-				note: node.note,
-				completedAt: node.completedAt ? node.completedAt.toISOString() : null,
-				url: `https://workflowy.com/#/${node.id.replaceAll("-", "")}`,
-			}));
-
-			return {content: [{type: "text", text: JSON.stringify(formattedResults, null, 2)}]};
+			const {results} = found.value;
+			if (results.length === 0) {
+				return textResult(`No results found for: ${query}`);
+			}
+			return jsonResult(results.map((result) => ({...result, url: nodeUrl(result.id)})));
 		},
 	);
 }
