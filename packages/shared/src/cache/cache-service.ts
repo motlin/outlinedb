@@ -17,6 +17,7 @@ import {
 } from "./cache-temporal.js";
 import {notBacklinkItem, recordItemRelationships, upstreamRelationshipMetadata} from "./item-relationships.js";
 import type {BacklinkItem, ItemRelationships, UpstreamRelationshipMetadata} from "./item-relationships.js";
+import {inIds} from "./in-ids.js";
 import {loadMirrorOriginals, notAMirror} from "./mirror-text.js";
 import {endNodeComposites, runUnitOfWork} from "./node-composite.js";
 import {NodeReader} from "./node-reader.js";
@@ -849,7 +850,6 @@ export class CacheService {
 	 * own children live under its original.
 	 */
 	getSubtreeMirrors(nodeId: string): SubtreeMirrors {
-		const chunkSize = 10_000;
 		const parents = new Map<string, string>();
 		const inside: string[] = [];
 		const nonMirrorIds: string[] = [nodeId];
@@ -857,28 +857,24 @@ export class CacheService {
 		while (level.length > 0) {
 			const levelIndex = new Map(level.map((id, index) => [id, index]));
 			const rows: {id: string; parentId: string; levelIndex: number; priority: number}[] = [];
-			for (let i = 0; i < level.length; i += chunkSize) {
-				const chunk = this.database
-					.select({id: nodeContent.id, parentId: nodeContent.parentId, priority: nodeMetadata.priority})
-					.from(nodeContent)
-					.leftJoin(nodeMetadata, and(eq(nodeMetadata.nodeId, nodeContent.id), currentVersion(nodeMetadata)))
-					.where(
-						and(inArray(nodeContent.parentId, level.slice(i, i + chunkSize)), currentVersion(nodeContent)),
-					)
-					.all();
-				for (const row of chunk) {
-					// The WHERE clause matched parentId against this level, so both lookups succeed.
-					const parentIndex = row.parentId === null ? undefined : levelIndex.get(row.parentId);
-					if (row.parentId === null || parentIndex === undefined) {
-						throw new Error(`Subtree row ${row.id} has a parent outside the current level`);
-					}
-					rows.push({
-						id: row.id,
-						parentId: row.parentId,
-						levelIndex: parentIndex,
-						priority: row.priority ?? 0,
-					});
+			const children = this.database
+				.select({id: nodeContent.id, parentId: nodeContent.parentId, priority: nodeMetadata.priority})
+				.from(nodeContent)
+				.leftJoin(nodeMetadata, and(eq(nodeMetadata.nodeId, nodeContent.id), currentVersion(nodeMetadata)))
+				.where(and(inIds(nodeContent.parentId, level), currentVersion(nodeContent)))
+				.all();
+			for (const row of children) {
+				// The WHERE clause matched parentId against this level, so both lookups succeed.
+				const parentIndex = row.parentId === null ? undefined : levelIndex.get(row.parentId);
+				if (row.parentId === null || parentIndex === undefined) {
+					throw new Error(`Subtree row ${row.id} has a parent outside the current level`);
 				}
+				rows.push({
+					id: row.id,
+					parentId: row.parentId,
+					levelIndex: parentIndex,
+					priority: row.priority ?? 0,
+				});
 			}
 			rows.sort((a, b) => a.levelIndex - b.levelIndex || a.priority - b.priority || a.id.localeCompare(b.id));
 			for (const row of rows) {
@@ -892,24 +888,22 @@ export class CacheService {
 		}
 
 		const mirrorIds = new Map<string, string[]>();
-		for (let i = 0; i < nonMirrorIds.length; i += chunkSize) {
-			const rows = this.database
-				.select({originalId: mirrors.originalId, mirrorId: mirrors.mirrorId})
-				.from(mirrors)
-				.innerJoin(nodeContent, and(eq(nodeContent.id, mirrors.mirrorId), currentVersion(nodeContent)))
-				.where(
-					and(
-						inArray(mirrors.originalId, nonMirrorIds.slice(i, i + chunkSize)),
-						currentVersion(mirrors),
-						// A backlink item mirrors its source but is never a promotion target:
-						// deleting the source leaves the item in place, as upstream does.
-						notBacklinkItem(),
-					),
-				)
-				.all();
-			for (const row of rows) {
-				mirrorIds.set(row.originalId, [...(mirrorIds.get(row.originalId) ?? []), row.mirrorId]);
-			}
+		const rows = this.database
+			.select({originalId: mirrors.originalId, mirrorId: mirrors.mirrorId})
+			.from(mirrors)
+			.innerJoin(nodeContent, and(eq(nodeContent.id, mirrors.mirrorId), currentVersion(nodeContent)))
+			.where(
+				and(
+					inIds(mirrors.originalId, nonMirrorIds),
+					currentVersion(mirrors),
+					// A backlink item mirrors its source but is never a promotion target:
+					// deleting the source leaves the item in place, as upstream does.
+					notBacklinkItem(),
+				),
+			)
+			.all();
+		for (const row of rows) {
+			mirrorIds.set(row.originalId, [...(mirrorIds.get(row.originalId) ?? []), row.mirrorId]);
 		}
 		const mirrorsOf = new Map<string, string[]>();
 		for (const id of nonMirrorIds) {

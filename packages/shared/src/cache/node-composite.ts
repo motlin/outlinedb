@@ -1,4 +1,4 @@
-import {getTableName, inArray, sql} from "drizzle-orm";
+import {getTableName, sql} from "drizzle-orm";
 import type {SQL} from "drizzle-orm";
 import type {SQLiteColumn, SQLiteTable} from "drizzle-orm/sqlite-core";
 import {
@@ -41,6 +41,7 @@ import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 import {assertWithinTransactionTimeout, startUnitOfWork} from "./system-time.js";
 import type {UnitOfWorkStart} from "./system-time.js";
 import {syncNodeTags} from "./node-tags.js";
+import {inIds} from "./in-ids.js";
 import {closeCurrentVersions} from "./temporal-merge.js";
 import type {TemporalTransaction} from "./temporal-merge.js";
 
@@ -166,8 +167,6 @@ export function runUnitOfWork<T>(
 	});
 }
 
-const ID_BATCH_SIZE = 500;
-
 const ROOT_AND_PARTS: readonly CompositePart[] = [NODE_COMPOSITE_ROOT, ...NODE_COMPOSITE_PARTS];
 
 function endRows(unitOfWork: UnitOfWork, part: CompositePart, where: SQL): void {
@@ -186,19 +185,19 @@ function endRows(unitOfWork: UnitOfWork, part: CompositePart, where: SQL): void 
  * close when either side dies.
  */
 export function endNodeComposites(unitOfWork: UnitOfWork, nodeIds: readonly string[]): void {
-	for (let start = 0; start < nodeIds.length; start += ID_BATCH_SIZE) {
-		const batch = nodeIds.slice(start, start + ID_BATCH_SIZE);
-		for (const part of ROOT_AND_PARTS) {
-			const columns = [part.owner, ...(part.endsWithReferences ?? [])];
-			endRows(
-				unitOfWork,
-				part,
-				sql.join(
-					columns.map((column) => inArray(column, batch)),
-					sql` OR `,
-				),
-			);
-		}
+	if (nodeIds.length === 0) {
+		return;
+	}
+	for (const part of ROOT_AND_PARTS) {
+		const columns = [part.owner, ...(part.endsWithReferences ?? [])];
+		endRows(
+			unitOfWork,
+			part,
+			sql.join(
+				columns.map((column) => inIds(column, nodeIds)),
+				sql` OR `,
+			),
+		);
 	}
 }
 
@@ -210,20 +209,20 @@ export function endNodeComposites(unitOfWork: UnitOfWork, nodeIds: readonly stri
  */
 export function withdrawNodeComposites(unitOfWork: UnitOfWork, nodeIds: readonly string[]): void {
 	const {tx, systemTime} = unitOfWork;
-	for (let start = 0; start < nodeIds.length; start += ID_BATCH_SIZE) {
-		const batch = nodeIds.slice(start, start + ID_BATCH_SIZE);
-		for (const part of ROOT_AND_PARTS) {
-			if (part.hardDelete) {
-				continue;
-			}
-			const owned = sql.join(
-				[part.owner, ...(part.endsWithReferences ?? [])].map((column) => inArray(column, batch)),
-				sql` OR `,
-			);
-			tx.run(
-				sql`DELETE FROM ${part.table} WHERE system_from = ${systemTime} AND system_to = ${FAR_FUTURE_DATE} AND (${owned})`,
-			);
+	if (nodeIds.length === 0) {
+		return;
+	}
+	for (const part of ROOT_AND_PARTS) {
+		if (part.hardDelete) {
+			continue;
 		}
+		const owned = sql.join(
+			[part.owner, ...(part.endsWithReferences ?? [])].map((column) => inIds(column, nodeIds)),
+			sql` OR `,
+		);
+		tx.run(
+			sql`DELETE FROM ${part.table} WHERE system_from = ${systemTime} AND system_to = ${FAR_FUTURE_DATE} AND (${owned})`,
+		);
 	}
 	endNodeComposites(unitOfWork, nodeIds);
 }

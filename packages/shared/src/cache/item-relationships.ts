@@ -9,11 +9,12 @@
  * {@link mergeItemRelationships}, so the parse and the merge live in one place.
  */
 
-import {and, eq, inArray, or, sql} from "drizzle-orm";
+import {and, eq, or, sql} from "drizzle-orm";
 import type {SQL} from "drizzle-orm";
 import {alias} from "drizzle-orm/sqlite-core";
 import {mirrors, nodeContent, referencesRoots} from "../db/schema.js";
 import {FAR_FUTURE_DATE} from "../temporal/index.js";
+import {inIds} from "./in-ids.js";
 import type {UnitOfWork} from "./node-composite.js";
 import type {NormalizedMirrorRow, NormalizedReferencesRootsRow} from "./normalized-rows.js";
 import {joinKey, temporalMerge} from "./temporal-merge.js";
@@ -163,8 +164,6 @@ export interface UpstreamRelationshipMetadata {
 	isReferencesRoot?: true;
 }
 
-const ID_BATCH_SIZE = 500;
-
 /** A backlink item: a mirror of `sourceId` under `targetId`'s references root. */
 export interface BacklinkItem {
 	nodeId: string;
@@ -222,41 +221,38 @@ export function upstreamRelationshipMetadata(
 ): Map<string, UpstreamRelationshipMetadata> {
 	const result = new Map<string, UpstreamRelationshipMetadata>(nodeIds.map((id) => [id, {}]));
 	const ids = [...result.keys()];
-	for (let start = 0; start < ids.length; start += ID_BATCH_SIZE) {
-		const batch = ids.slice(start, start + ID_BATCH_SIZE);
-		const touches = or(inArray(mirrors.mirrorId, batch), inArray(mirrors.originalId, batch));
-		const mirrorRows = tx
-			.select({mirrorId: mirrors.mirrorId, originalId: mirrors.originalId})
-			.from(mirrors)
-			.where(and(touches, eq(mirrors.systemTo, FAR_FUTURE_DATE)))
-			.all();
-		const backlinkItems = new Map(currentBacklinkItems(tx, touches).map((item) => [item.nodeId, item]));
-		for (const {mirrorId, originalId} of mirrorRows) {
-			const item = backlinkItems.get(mirrorId);
-			const asMirror = result.get(mirrorId);
-			if (asMirror !== undefined) {
-				asMirror.mirror = {...asMirror.mirror, originalId, isMirrorRoot: true};
-				if (item !== undefined) {
-					asMirror.backlink = {sourceID: item.sourceId, targetID: item.targetId};
-				}
-			}
-			const asOriginal = result.get(originalId);
-			if (asOriginal !== undefined) {
-				const mirror = (asOriginal.mirror ??= {});
-				const field = item === undefined ? "mirrorRootIds" : "backlinkMirrorRootIds";
-				mirror[field] = {...mirror[field], [mirrorId]: true};
+	const touches = or(inIds(mirrors.mirrorId, ids), inIds(mirrors.originalId, ids));
+	const mirrorRows = tx
+		.select({mirrorId: mirrors.mirrorId, originalId: mirrors.originalId})
+		.from(mirrors)
+		.where(and(touches, eq(mirrors.systemTo, FAR_FUTURE_DATE)))
+		.all();
+	const backlinkItems = new Map(currentBacklinkItems(tx, touches).map((item) => [item.nodeId, item]));
+	for (const {mirrorId, originalId} of mirrorRows) {
+		const item = backlinkItems.get(mirrorId);
+		const asMirror = result.get(mirrorId);
+		if (asMirror !== undefined) {
+			asMirror.mirror = {...asMirror.mirror, originalId, isMirrorRoot: true};
+			if (item !== undefined) {
+				asMirror.backlink = {sourceID: item.sourceId, targetID: item.targetId};
 			}
 		}
-		const rootRows = tx
-			.select({nodeId: referencesRoots.nodeId})
-			.from(referencesRoots)
-			.where(and(inArray(referencesRoots.nodeId, batch), eq(referencesRoots.systemTo, FAR_FUTURE_DATE)))
-			.all();
-		for (const {nodeId} of rootRows) {
-			const metadata = result.get(nodeId);
-			if (metadata !== undefined) {
-				metadata.isReferencesRoot = true;
-			}
+		const asOriginal = result.get(originalId);
+		if (asOriginal !== undefined) {
+			const mirror = (asOriginal.mirror ??= {});
+			const field = item === undefined ? "mirrorRootIds" : "backlinkMirrorRootIds";
+			mirror[field] = {...mirror[field], [mirrorId]: true};
+		}
+	}
+	const rootRows = tx
+		.select({nodeId: referencesRoots.nodeId})
+		.from(referencesRoots)
+		.where(and(inIds(referencesRoots.nodeId, ids), eq(referencesRoots.systemTo, FAR_FUTURE_DATE)))
+		.all();
+	for (const {nodeId} of rootRows) {
+		const metadata = result.get(nodeId);
+		if (metadata !== undefined) {
+			metadata.isReferencesRoot = true;
 		}
 	}
 	return result;

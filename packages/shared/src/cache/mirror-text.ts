@@ -7,13 +7,11 @@
 import type {AppDatabase} from "../db/types.js";
 import {mirrors, nodeContent} from "../db/schema.js";
 import {FAR_FUTURE_DATE} from "../temporal/constants.js";
-import {and, eq, inArray, sql} from "drizzle-orm";
+import {and, eq, sql} from "drizzle-orm";
 import type {SQL} from "drizzle-orm";
 import type {AnySQLiteColumn} from "drizzle-orm/sqlite-core";
 import {currentVersion} from "./cache-temporal.js";
-
-// Stay well under SQLite's variable limit (32766).
-const SQL_CHUNK_SIZE = 10_000;
+import {inIds} from "./in-ids.js";
 
 type Database = AppDatabase;
 
@@ -26,15 +24,13 @@ interface TextRow {
 /** Map each current mirror among `nodeIds` to its original's id. */
 export function loadMirrorOriginals(database: Database, nodeIds: string[]): Map<string, string> {
 	const originals = new Map<string, string>();
-	for (let i = 0; i < nodeIds.length; i += SQL_CHUNK_SIZE) {
-		const rows = database
-			.select({mirrorId: mirrors.mirrorId, originalId: mirrors.originalId})
-			.from(mirrors)
-			.where(and(inArray(mirrors.mirrorId, nodeIds.slice(i, i + SQL_CHUNK_SIZE)), currentVersion(mirrors)))
-			.all();
-		for (const row of rows) {
-			originals.set(row.mirrorId, row.originalId);
-		}
+	const rows = database
+		.select({mirrorId: mirrors.mirrorId, originalId: mirrors.originalId})
+		.from(mirrors)
+		.where(and(inIds(mirrors.mirrorId, nodeIds), currentVersion(mirrors)))
+		.all();
+	for (const row of rows) {
+		originals.set(row.mirrorId, row.originalId);
 	}
 	return originals;
 }
@@ -54,15 +50,13 @@ export function applyMirrorText<T extends TextRow>(
 	}
 	const originalIds = [...new Set(mirrorOriginals.values())];
 	const originalText = new Map<string, {name: string | null; note: string | null}>();
-	for (let i = 0; i < originalIds.length; i += SQL_CHUNK_SIZE) {
-		const originals = database
-			.select({id: nodeContent.id, name: nodeContent.name, note: nodeContent.note})
-			.from(nodeContent)
-			.where(and(inArray(nodeContent.id, originalIds.slice(i, i + SQL_CHUNK_SIZE)), currentVersion(nodeContent)))
-			.all();
-		for (const original of originals) {
-			originalText.set(original.id, {name: original.name, note: original.note});
-		}
+	const originals = database
+		.select({id: nodeContent.id, name: nodeContent.name, note: nodeContent.note})
+		.from(nodeContent)
+		.where(and(inIds(nodeContent.id, originalIds), currentVersion(nodeContent)))
+		.all();
+	for (const original of originals) {
+		originalText.set(original.id, {name: original.name, note: original.note});
 	}
 	return rows.map((row) => {
 		const originalId = mirrorOriginals.get(row.id);
