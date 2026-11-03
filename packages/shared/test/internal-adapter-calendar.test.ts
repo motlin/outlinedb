@@ -11,7 +11,13 @@ import {z} from "zod";
 import * as schema from "../src/db/schema.js";
 import {WorkflowyInternalAdapter} from "../src/internal/adapter.js";
 import type {MoveToInput} from "../src/internal/adapter.js";
-import {calendarDateId, calendarLevelMetadata, calendarLevelName, parseDateId} from "../src/internal/calendar-day.js";
+import {
+	CalendarRootMissing,
+	calendarDateId,
+	calendarLevelMetadata,
+	calendarLevelName,
+	parseDateId,
+} from "../src/internal/calendar-day.js";
 import {CALENDAR_ID_NAMESPACE, calendarNodeId, uuidv5} from "../src/internal/calendar-ids.js";
 import {PushAndPoll} from "../src/internal/push-and-poll.js";
 import {FAR_FUTURE_DATE} from "../src/temporal/constants.js";
@@ -68,6 +74,9 @@ function setup(options: {
 	cached?: Record<string, string[]>;
 	metadata: Record<string, unknown>;
 	session?: InternalSession;
+	/** What every bootstrap after the first returns; defaults to `session`. */
+	freshSession?: InternalSession;
+	standalone?: boolean;
 }) {
 	const sqlite = new DatabaseConstructor(":memory:");
 	const db = drizzle(sqlite, {schema});
@@ -102,7 +111,12 @@ function setup(options: {
 		Object.entries(options.cached ?? options.children).map(([parent, ids]) => [parent, [...ids]]),
 	);
 	const session = options.session ?? SESSION;
-	const client = {session, bootstrap: async () => Promise.resolve(session)} as unknown as WorkflowyInternalClient;
+	const freshSession = options.freshSession ?? session;
+	let bootstraps = 0;
+	const client = {
+		session,
+		bootstrap: async () => Promise.resolve(++bootstraps === 1 ? session : freshSession),
+	} as unknown as WorkflowyInternalClient;
 	const calls: unknown[] = [];
 	const writeThrough = {
 		liveChildren: async (parent: string | null) => {
@@ -110,6 +124,11 @@ function setup(options: {
 			return Promise.resolve((children.get(parent ?? "home") ?? []).map((id) => ({id})));
 		},
 		cachedChildIds: (parent: string | null) => cached.get(parent ?? "home") ?? [],
+		findLiveNode: async (id: string) => {
+			calls.push(["findLive", id]);
+			const parent = parentOf(id);
+			return Promise.resolve(parent === undefined ? null : {id, parent_id: parent === "home" ? null : parent});
+		},
 		refreshChildren: async (parentIds: (string | null)[]) => {
 			calls.push(["refreshChildren", parentIds]);
 			for (const parent of parentIds) {
@@ -130,6 +149,7 @@ function setup(options: {
 		client,
 		db,
 		writeThrough,
+		...(options.standalone === undefined ? {} : {standalone: options.standalone}),
 		now: () => 1_800_000_000_000,
 		generateId: () => `random-${++generated}`,
 	});
@@ -556,8 +576,12 @@ describe("WorkflowyInternalAdapter.ensureCalendarDay", () => {
 		expect(calls).toStrictEqual([["live", CAL], yearCreate(CAL), ["refresh", [CAL]]]);
 	});
 
-	it("creates the 📆 Calendar root at the end of Home and points calendar.rootId at it when none exists, like upstream's Calendar.ensure", async () => {
-		const {adapter, calls, children, cachedMetadata} = tracked({children: {home: ["a"]}, metadata: {}});
+	it("creates the 📆 Calendar root at the end of Home and points calendar.rootId at it when none exists in standalone mode, like upstream's Calendar.ensure", async () => {
+		const {adapter, calls, children, cachedMetadata} = tracked({
+			children: {home: ["a"]},
+			metadata: {},
+			standalone: true,
+		});
 		const root = uuidv5(`${ENTROPY}-calendar-root`, CALENDAR_ID_NAMESPACE);
 
 		const result = await adapter.ensureCalendarDay(20_261_017, {stopAt: "year", createChild: false});
@@ -596,6 +620,42 @@ describe("WorkflowyInternalAdapter.ensureCalendarDay", () => {
 			home: ["a", root],
 			rootMetadata: {calendar: {root: true}, restorableUniqueNode: true},
 			rootId: root,
+		});
+	});
+
+	it("re-syncs calendar.rootId from workflowy.com and walks from that live root when the cache misses it while connected", async () => {
+		const {adapter, calls} = tracked({
+			children: {home: ["a", "live-cal"], "live-cal": []},
+			cached: {home: ["a"]},
+			metadata: {},
+			freshSession: {...SESSION, rootMetadata: {...SESSION.rootMetadata, calendar: {rootId: "live-cal"}}},
+		});
+
+		const result = await adapter.ensureCalendarDay(20_261_017, {stopAt: "year", createChild: false});
+
+		expect({result, calls}).toStrictEqual({
+			result: {dayId: Y2026, firstChildId: null, created: [Y2026]},
+			calls: [
+				["findLive", "live-cal"],
+				["refreshChildren", [null]],
+				["live", "live-cal"],
+				yearCreate("live-cal"),
+				["refresh", ["live-cal"]],
+			],
+		});
+	});
+
+	it("fails loudly instead of creating a duplicate root when workflowy.com names no calendar root while connected", async () => {
+		const error = vi.spyOn(console, "error").mockImplementation(() => {});
+		const {adapter, calls, children} = tracked({children: {home: ["a"]}, metadata: {}});
+
+		await expect(adapter.ensureCalendarDay(20_261_017, {stopAt: "year", createChild: false})).rejects.toStrictEqual(
+			new CalendarRootMissing(),
+		);
+		expect({calls, home: children.get("home"), logged: error.mock.calls}).toStrictEqual({
+			calls: [],
+			home: ["a"],
+			logged: [[new CalendarRootMissing()]],
 		});
 	});
 });

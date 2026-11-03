@@ -384,6 +384,11 @@ export interface WorkflowyInternalAdapterOptions {
 	writeThrough?: WorkflowyWriteThroughClient;
 	/** Ids for created nodes; defaults to `crypto.randomUUID`. */
 	generateId?: () => string;
+	/**
+	 * Disconnected from workflowy.com, so a calendar root the cache lacks is created lazily.
+	 * Defaults to false: workflowy.com always has the root, so a cache miss re-syncs or fails loudly.
+	 */
+	standalone?: boolean;
 }
 
 /** Log a resync error at error level before it propagates, so a missing or stale seed never goes unnoticed. */
@@ -506,6 +511,7 @@ export class WorkflowyInternalAdapter {
 	private readonly pusher: PushAndPoll;
 	private readonly writeThrough: WorkflowyWriteThroughClient | undefined;
 	private readonly generateId: () => string;
+	private readonly standalone: boolean;
 	private accountRefresh: Promise<void> | undefined;
 	/** Bumped on every account snapshot store, so a background refresh never overwrites a newer write. */
 	private accountStores = 0;
@@ -528,6 +534,7 @@ export class WorkflowyInternalAdapter {
 		});
 		this.writeThrough = options.writeThrough;
 		this.generateId = options.generateId ?? (() => crypto.randomUUID());
+		this.standalone = options.standalone ?? false;
 	}
 
 	/**
@@ -1402,9 +1409,13 @@ export class WorkflowyInternalAdapter {
 
 	/**
 	 * Upstream's `Calendar.ensure`: the root {@link findTaggedCalendarRoot} finds (root metadata
-	 * `calendar.rootId` when it names a cached node, else the `calendar.root`-tagged node), or a new
-	 * `📆 Calendar` at the end of Home with id `uuidv5("calendar-root")` and
-	 * `{restorableUniqueNode, calendar: {root: true}}`, which `calendar.rootId` then names.
+	 * `calendar.rootId` when it names a cached node, else the `calendar.root`-tagged node).
+	 * Connected to workflowy.com, which always has the root, a miss re-syncs: a fresh bootstrap's
+	 * `calendar.rootId`, when Workflowy has that node, is cached and used, else it fails loudly
+	 * with {@link CalendarRootMissing} rather than create a duplicate root. Only in standalone
+	 * mode does a miss create a new `📆 Calendar` at the end of Home with id
+	 * `uuidv5("calendar-root")` and `{restorableUniqueNode, calendar: {root: true}}`, which
+	 * `calendar.rootId` then names.
 	 */
 	private async ensureCalendarRoot(): Promise<{id: string; levels: Record<string, boolean> | undefined}> {
 		const pointer = await this.getRootMeta(["calendar", "rootId"]);
@@ -1413,6 +1424,9 @@ export class WorkflowyInternalAdapter {
 		if (found !== undefined) {
 			const parsed = CalendarMetadataSchema.safeParse(this.readNodeMetadata(found));
 			return {id: found, levels: parsed.success ? parsed.data.calendar.levels : undefined};
+		}
+		if (!this.standalone) {
+			return {id: await this.resyncCalendarRoot(), levels: undefined};
 		}
 		const {entropyKey} = await this.session();
 		const {id} = await this.createAt({
@@ -1426,6 +1440,20 @@ export class WorkflowyInternalAdapter {
 		});
 		await this.setRootMetaValues([{path: ["calendar", "rootId"], value: id}]);
 		return {id, levels: undefined};
+	}
+
+	/** The calendar root workflowy.com's fresh `calendar.rootId` names, cached under its live parent, or a loud miss. */
+	private async resyncCalendarRoot(): Promise<string> {
+		const fresh = this.fromSession(await this.client.bootstrap());
+		this.store(fresh);
+		const pointer = getPath(fresh.rootMetadata, ["calendar", "rootId"]);
+		const tree = this.tree();
+		const live = typeof pointer === "string" ? await tree.findLiveNode(pointer) : null;
+		if (live === null) {
+			throw loud(new CalendarRootMissing());
+		}
+		await tree.refreshChildren([live.parent_id ?? null]);
+		return live.id;
 	}
 
 	/**
