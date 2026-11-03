@@ -42,6 +42,8 @@ export default class ImportApi extends Command {
 			this.log("Fetching all nodes from Workflowy API...");
 
 			const apiClient = new WorkflowyApiClient(apiKey, logger, process.env.WORKFLOWY_API_URL);
+			// Rows the cache writes after this instant are newer than the export, so the import leaves them alone.
+			const snapshotTakenAt = new Date();
 			const nodes = await apiClient.exportAllNodes();
 			const snapshot = await this.fetchTreeSnapshot();
 			const treeItems = snapshot?.items;
@@ -60,7 +62,14 @@ export default class ImportApi extends Command {
 			}
 
 			const database = createDatabase();
-			const result: ImportApiResult = importFromApi(database, nodes, flags.verbose, undefined, treeItems);
+			const result: ImportApiResult = importFromApi(
+				database,
+				nodes,
+				flags.verbose,
+				undefined,
+				treeItems,
+				snapshotTakenAt,
+			);
 
 			const totalElapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 

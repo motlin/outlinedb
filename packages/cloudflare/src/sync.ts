@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS sync_runs (
 	result_at INTEGER,
 	duration_ms INTEGER,
 	internal_sync_error TEXT,
+	snapshot_at INTEGER,
 	system_from TEXT NOT NULL,
 	system_to TEXT NOT NULL,
 	PRIMARY KEY (run_id, system_from)
@@ -124,6 +125,11 @@ interface Job {
 		"totalNodes" | "nodesAdded" | "nodesUpdated" | "nodesUnchanged" | "contentUpdated" | "metadataUpdated"
 	>;
 	startedAt: number;
+	/**
+	 * When the export was requested, in epoch ms on the system-time clock. The export cannot speak for rows written
+	 * after it, so the import leaves those alone; undefined until the fetch starts.
+	 */
+	snapshotAt?: number;
 	/** The run's result so far: a rate limit while it still fetches, or how it finished. */
 	result: SyncResult | null;
 }
@@ -172,6 +178,10 @@ export class SyncJob {
 			sql.exec("DROP TABLE sync_seen");
 		}
 		sql.exec(`DROP TABLE IF EXISTS sync_state; ${SYNC_TABLES}`);
+		const runColumns = sql.exec("SELECT name FROM pragma_table_info('sync_runs')").toArray();
+		if (!runColumns.some((row) => row.name === "snapshot_at")) {
+			sql.exec("ALTER TABLE sync_runs ADD COLUMN snapshot_at INTEGER");
+		}
 	}
 
 	private get sql(): SqlStorage {
@@ -218,8 +228,8 @@ export class SyncJob {
 		this.sql.exec(
 			"INSERT OR REPLACE INTO sync_runs (run_id, phase, export_key, applied, started_at, total_nodes, nodes_added, " +
 				"nodes_updated, nodes_unchanged, nodes_deleted, nodes_phased_out, content_updated, metadata_updated, " +
-				"priority_updated, status, message, result_at, duration_ms, internal_sync_error, system_from, system_to) " +
-				"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+				"priority_updated, status, message, result_at, duration_ms, internal_sync_error, snapshot_at, system_from, system_to) " +
+				"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 			job.runId,
 			job.phase,
 			job.exportKey,
@@ -239,6 +249,7 @@ export class SyncJob {
 			result === null ? null : result.status === "ok" ? result.finishedAt : result.at,
 			ok?.durationMs ?? null,
 			ok?.internalSyncError ?? null,
+			job.snapshotAt ?? null,
 			this.systemTime,
 			FAR_FUTURE_DATE,
 		);
@@ -368,6 +379,8 @@ export class SyncJob {
 			return undefined;
 		}
 		const base = (env.WORKFLOWY_API_URL === "" ? undefined : env.WORKFLOWY_API_URL) ?? "https://workflowy.com";
+		// Read before the request goes out: the same clock as system time, so later writes compare after it.
+		const snapshotAt = Date.now();
 		const response = await fetch(`${base}/api/v1/nodes-export`, {
 			headers: {Authorization: `Bearer ${env.WORKFLOWY_API_KEY}`},
 		});
@@ -395,14 +408,16 @@ export class SyncJob {
 		} else {
 			await env.SNAPSHOTS.put(exportKey, await response.arrayBuffer());
 		}
-		const next: Job = {...job, phase: "importing", exportKey};
+		const next: Job = {...job, phase: "importing", exportKey, snapshotAt};
 		this.writeJob(next);
 		return next;
 	}
 
 	/** This alarm run's import: a fresh system time, so the run is its own unit of work, resuming the run's totals. */
 	private importState(job: Job): ApiImportState {
-		const state = beginApiImport(this.deps.db);
+		const state = beginApiImport(this.deps.db, {
+			snapshotTakenAt: job.snapshotAt === undefined ? undefined : new Date(job.snapshotAt),
+		});
 		Object.assign(state, job.totals);
 		const seen = this.sql.exec(
 			"SELECT id FROM sync_seen WHERE run_id = ? AND system_to = ?",
@@ -552,6 +567,7 @@ function jobFromRow(row: Record<string, SqlStorageValue>): Job {
 		result = {status, message: text("message") ?? "", at: count("result_at")};
 	}
 	const phase = text("phase");
+	const snapshotAt = row.snapshot_at;
 	return {
 		runId: text("run_id") ?? "",
 		phase: phase === "fetching" || phase === "importing" ? phase : "idle",
@@ -559,6 +575,7 @@ function jobFromRow(row: Record<string, SqlStorageValue>): Job {
 		applied: count("applied"),
 		totals,
 		startedAt: count("started_at"),
+		...(typeof snapshotAt === "number" ? {snapshotAt} : {}),
 		result,
 	};
 }

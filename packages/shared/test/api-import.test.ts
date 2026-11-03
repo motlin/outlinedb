@@ -137,6 +137,97 @@ describe("shared API import", () => {
 		});
 	});
 
+	describe("rows written after the snapshot was taken", () => {
+		const SNAPSHOT_TAKEN = new Date("2026-03-01T12:00:00.000Z");
+		const WRITTEN_AFTER = new Date("2026-03-01T13:00:00.000Z");
+
+		function liveContent(db: ReturnType<typeof createDb>) {
+			return db
+				.select()
+				.from(schema.nodeContent)
+				.all()
+				.filter((row) => row.systemTo === FAR_FUTURE_DATE)
+				.map((row) => ({id: row.id, name: row.name}))
+				.toSorted((x, y) => x.id.localeCompare(y.id));
+		}
+
+		function invertedIntervals(db: ReturnType<typeof createDb>) {
+			return [
+				...db.select().from(schema.nodeContent).all(),
+				...db.select().from(schema.nodeMetadata).all(),
+			].filter((row) => row.systemTo < row.systemFrom);
+		}
+
+		function writeAfterSnapshot(db: ReturnType<typeof createDb>) {
+			vi.useFakeTimers({toFake: ["Date"], now: T0});
+			importFromApi(db, FIXTURE, {timestamp: T0});
+			vi.setSystemTime(WRITTEN_AFTER);
+			const cache = new CacheService(db);
+			cache.insertNode(apiNode("h", {parent_id: "a", priority: 7}), "a");
+			cache.insertNode(apiNode("b", {parent_id: "a", priority: 1, note: "a note", name: "Edited"}), "a");
+			cache.deleteNode("g");
+			vi.setSystemTime(T1);
+		}
+
+		it("keeps nodes created, edited or deleted after the snapshot as the later write left them", () => {
+			const db = createDb();
+			writeAfterSnapshot(db);
+
+			const state = beginApiImport(db, {timestamp: T1, snapshotTakenAt: SNAPSHOT_TAKEN});
+			applyApiBatch(state, FIXTURE.slice(0, 4));
+			applyApiBatch(state, FIXTURE.slice(4));
+			const result = finishApiImport(state);
+
+			expect({
+				live: liveContent(db),
+				inverted: invertedIntervals(db),
+				nodesDeleted: result.nodesDeleted,
+				nodesAdded: result.nodesAdded,
+				nodesUpdated: result.nodesUpdated,
+			}).toStrictEqual({
+				live: [
+					{id: "a", name: "Name a"},
+					{id: "b", name: "Edited"},
+					{id: "c", name: "Name c"},
+					{id: "d", name: "Name d"},
+					{id: "e", name: "Name e"},
+					{id: "f", name: "Name f"},
+					{id: "h", name: "Name h"},
+				],
+				inverted: [],
+				nodesDeleted: 0,
+				nodesAdded: 0,
+				nodesUpdated: 0,
+			});
+		});
+
+		it("guards the one-shot import too", () => {
+			const db = createDb();
+			writeAfterSnapshot(db);
+
+			importFromApi(db, FIXTURE, {timestamp: T1, snapshotTakenAt: SNAPSHOT_TAKEN});
+
+			expect(liveContent(db).map((row) => row.id)).toStrictEqual(["a", "b", "c", "d", "e", "f", "h"]);
+		});
+
+		it("still applies the snapshot over rows written before it was taken", () => {
+			const db = createDb();
+			writeAfterSnapshot(db);
+
+			importFromApi(db, FIXTURE, {timestamp: T1, snapshotTakenAt: T1});
+
+			expect(liveContent(db).map((row) => `${row.id}:${row.name}`)).toStrictEqual([
+				"a:Name a",
+				"b:Name b",
+				"c:Name c",
+				"d:Name d",
+				"e:Name e",
+				"f:Name f",
+				"g:Name g",
+			]);
+		});
+	});
+
 	it("does not phase out a node in an earlier batch when a later batch is applied", () => {
 		const db = createDb();
 		const state = beginApiImport(db, {timestamp: T0});

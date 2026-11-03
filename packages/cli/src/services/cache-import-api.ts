@@ -34,6 +34,12 @@ export function importFromApi(
 	verbose = false,
 	timestamp?: Date,
 	treeItems?: InternalTreeItem[],
+	snapshotTakenAt?: Date,
 ): ImportApiResult {
-	return sharedImportFromApi(database, apiNodes, {logger: cliImportLogger(verbose), timestamp, treeItems});
+	return sharedImportFromApi(database, apiNodes, {
+		logger: cliImportLogger(verbose),
+		timestamp,
+		treeItems,
+		snapshotTakenAt,
+	});
 }

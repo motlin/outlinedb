@@ -1,9 +1,9 @@
-import {and, eq, inArray, isNull} from "drizzle-orm";
+import {and, eq, gt, inArray, isNull, ne, or} from "drizzle-orm";
 import type {InternalTreeItem} from "../api/workflowy-internal-client.js";
 import {nodeContent, nodeMetadata} from "../db/schema.js";
 import type {NodeContentType, NodeMetadataType} from "../db/schema.js";
 import type {AppDatabase} from "../db/types.js";
-import {FAR_FUTURE_DATE} from "../temporal/index.js";
+import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "../temporal/index.js";
 import {WorkflowyNodeSchema} from "../types/index.js";
 import type {WorkflowyNode} from "../types/index.js";
 import {uuidToShortId} from "../workflowy/index.js";
@@ -46,6 +46,12 @@ export interface ImportFromApiOptions {
 	logger?: ImportLogger;
 	timestamp?: Date;
 	/**
+	 * When the export was requested. The snapshot cannot speak for a row the cache
+	 * wrote or closed after this instant, so such nodes are neither overwritten,
+	 * re-added nor ended. Without it the snapshot is applied verbatim.
+	 */
+	snapshotTakenAt?: Date;
+	/**
 	 * A full `/get_tree_data/` read. The public API carries no mirrors or
 	 * references roots; when given, those merge from its item
 	 * metadata in the same unit of work. Without it their rows are left untouched.
@@ -73,6 +79,8 @@ export interface ApiImportState {
 	readonly importTimestamp: Date;
 	/** The import's system time and start; the transaction timeout counts from it. */
 	readonly start: UnitOfWorkStart;
+	/** {@link ImportFromApiOptions.snapshotTakenAt} as a system timestamp; undefined applies the snapshot verbatim. */
+	readonly snapshotAt: string | undefined;
 	readonly seenIds: Set<string>;
 	/** Ids of nodes that failed validation: kept as they are, never ended as deleted. */
 	readonly invalidIds: Set<string>;
@@ -133,7 +141,7 @@ function processNodes(state: ApiImportState, apiNodes: WorkflowyNode[]): Process
  */
 export function beginApiImport(
 	database: AppDatabase,
-	options: {logger?: ImportLogger; timestamp?: Date} = {},
+	options: {logger?: ImportLogger; timestamp?: Date; snapshotTakenAt?: Date} = {},
 ): ApiImportState {
 	const start = startUnitOfWork(options.timestamp);
 	const startTime = start.startedAt;
@@ -144,6 +152,8 @@ export function beginApiImport(
 		logger: options.logger,
 		importTimestamp: options.timestamp ?? new Date(start.startedAt),
 		start,
+		snapshotAt:
+			options.snapshotTakenAt === undefined ? undefined : formatTemporalTimestamp(options.snapshotTakenAt),
 		seenIds: new Set(),
 		invalidIds: new Set(),
 		totalNodes: 0,
@@ -245,9 +255,64 @@ function keepEquivalentPriorities(
 	}
 }
 
+/**
+ * The ids among `ids` the cache wrote or closed after the snapshot was taken:
+ * a live content or metadata version opened after it, or a content version
+ * closed after it.
+ */
+function writtenAfterSnapshot(tx: UnitOfWork["tx"], ids: string[], snapshotAt: string): Set<string> {
+	const written = new Set<string>();
+	for (let start = 0; start < ids.length; start += LOOKUP_CHUNK_SIZE) {
+		const chunk = ids.slice(start, start + LOOKUP_CHUNK_SIZE);
+		for (const row of tx
+			.select({id: nodeContent.id})
+			.from(nodeContent)
+			.where(
+				and(
+					inArray(nodeContent.id, chunk),
+					or(
+						and(eq(nodeContent.systemTo, FAR_FUTURE_DATE), gt(nodeContent.systemFrom, snapshotAt)),
+						and(ne(nodeContent.systemTo, FAR_FUTURE_DATE), gt(nodeContent.systemTo, snapshotAt)),
+					),
+				),
+			)
+			.all()) {
+			written.add(row.id);
+		}
+		for (const row of tx
+			.select({id: nodeMetadata.nodeId})
+			.from(nodeMetadata)
+			.where(
+				and(
+					inArray(nodeMetadata.nodeId, chunk),
+					eq(nodeMetadata.systemTo, FAR_FUTURE_DATE),
+					gt(nodeMetadata.systemFrom, snapshotAt),
+				),
+			)
+			.all()) {
+			written.add(row.id);
+		}
+	}
+	return written;
+}
+
 function applyBatchIn(unitOfWork: UnitOfWork, state: ApiImportState, apiNodes: WorkflowyNode[]): void {
-	const nodes = processNodes(state, apiNodes);
 	const {tx} = unitOfWork;
+	let nodes = processNodes(state, apiNodes);
+	if (state.snapshotAt !== undefined) {
+		// The cache's later write wins: the node is left as it is and counts as seen.
+		const later = writtenAfterSnapshot(
+			tx,
+			nodes.map((node) => node.id),
+			state.snapshotAt,
+		);
+		for (const id of later) {
+			state.seenIds.add(id);
+		}
+		state.totalNodes += later.size;
+		state.nodesUnchanged += later.size;
+		nodes = nodes.filter((node) => !later.has(node.id));
+	}
 	const ids = nodes.map((node) => node.id);
 
 	// Classify against only this batch's current rows.
@@ -327,7 +392,7 @@ export function applyApiBatch(state: ApiImportState, apiNodes: WorkflowyNode[]):
 
 function finishIn(unitOfWork: UnitOfWork, state: ApiImportState, treeItems?: InternalTreeItem[]): ImportApiResult {
 	const {tx} = unitOfWork;
-	const unseen: string[] = [];
+	let unseen: string[] = [];
 	for (const row of tx
 		.select({id: nodeContent.id})
 		.from(nodeContent)
@@ -336,6 +401,11 @@ function finishIn(unitOfWork: UnitOfWork, state: ApiImportState, treeItems?: Int
 		if (!state.seenIds.has(row.id) && !state.invalidIds.has(row.id)) {
 			unseen.push(row.id);
 		}
+	}
+	if (state.snapshotAt !== undefined) {
+		// A node the cache wrote after the snapshot is absent from it, not deleted.
+		const later = writtenAfterSnapshot(tx, unseen, state.snapshotAt);
+		unseen = unseen.filter((id) => !later.has(id));
 	}
 	endNodeComposites(unitOfWork, unseen);
 

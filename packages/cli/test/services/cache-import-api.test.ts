@@ -819,5 +819,30 @@ describe("cache-import-api service", () => {
 			const node2 = testDatabase.db.select().from(nodeContent).where(eq(nodeContent.id, "node-2")).get()!;
 			expectActiveRecord(node2);
 		});
+
+		it("leaves a node the cache wrote after the snapshot was taken live", () => {
+			importFromApi(testDatabase.db, [createApiNode({id: "node-1", name: "Seed"})], false, DATE_LATER);
+
+			const result = importFromApi(
+				testDatabase.db,
+				[createApiNode({id: "node-2", name: "From the snapshot"})],
+				false,
+				DATE_REIMPORT,
+				undefined,
+				DATE_EARLIER,
+			);
+
+			const live = testDatabase.db
+				.select({id: nodeContent.id})
+				.from(nodeContent)
+				.where(eq(nodeContent.systemTo, FAR_FUTURE_DATE))
+				.all()
+				.map((row) => row.id)
+				.toSorted();
+			expect({live, nodesDeleted: result.nodesDeleted}).toStrictEqual({
+				live: ["node-1", "node-2"],
+				nodesDeleted: 0,
+			});
+		});
 	});
 });

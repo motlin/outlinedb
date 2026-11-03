@@ -330,6 +330,31 @@ describe("sync from a fake upstream", () => {
 		rmSync(persistDir, {recursive: true, force: true});
 	}, 180_000);
 
+	it("keeps a node written while a run is in flight instead of ending it as absent from the older export", async () => {
+		current = makeNodes(3000);
+		const h = await start(undefined, {SYNC_BATCHES_PER_TICK: "1", SYNC_TICK_DELAY_MS: "600000"});
+		await h.mf.dispatchFetch("http://localhost/api/admin/sync", {method: "POST"});
+		let parked: SyncStatus | undefined;
+		for (let i = 0; i < 100; i++) {
+			parked = await status(h);
+			if (parked.applied > 0) {
+				break;
+			}
+			await sleep(100);
+		}
+		expect(parked).toMatchObject({phase: "importing", applied: 2000});
+
+		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
+		const ns = (await h.mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace;
+		await ns.get(ns.idFromName("dev")).fetch("http://localhost/__seed?name=written-mid-run");
+
+		const done = await runToIdle(h);
+		expect(done.lastResult).toMatchObject({status: "ok", totalNodes: 3000, nodesPhasedOut: 0});
+		const ids = await liveIds(h);
+		expect({count: ids.length, kept: ids.includes("seed-node")}).toStrictEqual({count: 3001, kept: true});
+		await stop(h);
+	}, 180_000);
+
 	it("reads get_tree_data only on an explicit seed, then catches up from the transaction log with no tree read", async () => {
 		current = makeNodes(100);
 		treeData = () =>
