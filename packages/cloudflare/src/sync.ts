@@ -27,8 +27,8 @@ const SEED_HINT = "On the Worker, POST /api/admin/seed instead.";
 const RUN_BUDGET_MS = 30_000;
 
 /**
- * The sync job's own tables, temporal like every other table: a run's versions (one per alarm run), the ids each run
- * has seen (closed when the run ends) and the seed requests (closed when a run consumes one).
+ * The sync job's own tables, temporal like every other table: a run's versions (one per alarm run), the ids the run in
+ * progress has seen (scratch, deleted when the run ends) and the seed requests (closed when a run consumes one).
  */
 const SYNC_TABLES = `
 CREATE TABLE IF NOT EXISTS sync_runs (
@@ -259,7 +259,7 @@ export class SyncJob {
 	 * Close the live rows `where` selects at this alarm run's system time; a row this alarm run itself wrote was never
 	 * live at any other system time, so it goes instead of closing with zero width.
 	 */
-	private closeLive(table: "sync_seen" | "sync_seed_requests", where: string, ...bindings: string[]): void {
+	private closeLive(table: "sync_seed_requests", where: string, ...bindings: string[]): void {
 		this.sql.exec(`DELETE FROM ${table} WHERE ${where} AND system_from = ?`, ...bindings, this.systemTime);
 		this.sql.exec(
 			`UPDATE ${table} SET system_to = ? WHERE ${where} AND system_to = ?`,
@@ -361,7 +361,8 @@ export class SyncJob {
 
 	private finishRun(job: Job, result: SyncResult): void {
 		this.writeJob({...job, phase: "idle", result});
-		this.closeLive("sync_seen", "run_id = ?", job.runId);
+		// Only the run in progress reads its seen ids, so they go with it, along with any left by an abandoned run.
+		this.sql.exec("DELETE FROM sync_seen");
 	}
 
 	private async scheduleNextRun(): Promise<void> {

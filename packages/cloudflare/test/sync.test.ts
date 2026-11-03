@@ -314,8 +314,7 @@ describe("sync from a fake upstream", () => {
 		await expect(liveIds(second)).resolves.toHaveLength(5000);
 		// Each alarm run is its own unit of work with a fresh system time, so no stamp outlives one run.
 		await expect(rowsPerSystemTime(second)).resolves.toStrictEqual([2000, 2000, 1000]);
-		// One run version per alarm run; the seen ids of earlier alarms close when the run ends, the last alarm's never
-		// outlived it.
+		// One run version per alarm run; the seen ids are scratch for the run in progress, so none outlive the run.
 		await expect(syncTables(second)).resolves.toStrictEqual({
 			runs: [
 				{phase: "importing", applied: 2000, status: null, live: 0},
@@ -323,7 +322,7 @@ describe("sync from a fake upstream", () => {
 				{phase: "idle", applied: 5000, status: "ok", live: 1},
 			],
 			runSystemFroms: 3,
-			seen: [{live: 0, n: 4000}],
+			seen: [],
 			seedRequests: [],
 		});
 		await stop(second);
