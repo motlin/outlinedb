@@ -47,14 +47,24 @@ Show the cleaned item name (markup and due `<time>` stripped), `completedDate`, 
 
 ## Apply: Journal
 
-Find the date node whose `<time>` element matches `completedDate`. Older days are moved out of the root's `📅 Calendar` into `📅 Calendar > 🗃️ Archive > <year> > <month>`, so look in both places:
+Find the day node for `completedDate` in both the archive and the live calendar. Older days are moved out of the root's `📅 Calendar` into its `🗃️ Archive`, whose layout differs by root: Personal nests years under a decade node, Work does not. `<Month>` is the full English month name (`August`):
 
 ```bash
-./bin/run.js node get --path "<Personal|Work>,📅 Calendar" --depth 1 --json --fields id,name
-./bin/run.js node get --path "<Personal|Work>,📅 Calendar,🗃️ Archive,<YYYY>,<Month>" --depth 1 --json --fields id,name
+# Personal: decade node is "<YYY0> - <YYY9> decade", e.g. "2020 - 2029 decade"
+./bin/run.js node get --path "Personal,📅 Calendar,🗃️ Archive,<YYY0> - <YYY9> decade,<YYYY>,<Month>" --depth 1 --json --fields id,name,children
+# Work
+./bin/run.js node get --path "Work,📅 Calendar,🗃️ Archive,<YYYY>,<Month>" --depth 1 --json --fields id,name,children
+# Live calendar
+./bin/run.js node get --path "<Personal|Work>,📅 Calendar" --depth 1 --json --fields id,name,children
 ```
 
-Use the archived day node when it exists. If the date node is missing from both, create it with name `<time startYear="Y" startMonth="M" startDay="D">Ddd, Mmm D, YYYY</time>`: under the archive month node when that month is already archived, otherwise directly under the Calendar node (the date format is described in `plugins/workflowy/skills/workflowy-html.md`). Resolve its full UUID, and reuse it for every later row with the same `completedDate` instead of creating another. Then un-complete before moving, so the journal never holds a completed node:
+Keep `children` in `--fields`; without it the output drops the day list. Match a day by its `<time>` attributes (`startYear`, `startMonth`, `startDay`), never by exact name: some day names carry a trailing space. A month can be split, with its early days archived and its last days still live, so check both lists before creating anything.
+
+- **Day found** — use it, archived or live.
+- **Day missing, archive month exists** — create the day under that archive month node. Never create a live day node for an archived month.
+- **Day missing, no archive month** — create it directly under the root's `📅 Calendar`.
+
+Create a missing day with name `<time startYear="Y" startMonth="M" startDay="D">Ddd, Mmm D, YYYY</time>` (format in `plugins/workflowy/skills/workflowy-html.md`), at the position that keeps its siblings in date order. Resolve its full UUID, and reuse it for every later row with the same root and `completedDate` instead of creating another. Then un-complete before moving, so the journal never holds a completed node:
 
 ```bash
 ./bin/run.js node uncomplete --id <rowId>
