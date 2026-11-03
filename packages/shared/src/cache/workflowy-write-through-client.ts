@@ -97,6 +97,16 @@ export class WorkflowyWriteThroughClient {
 	}
 
 	/**
+	 * The parent to cache a freshly fetched node under: the cached one when the
+	 * node is cached, otherwise the parent the API just reported, so an uncached
+	 * node is not filed at Home.
+	 */
+	private cachedParentOr(nodeId: string, fetched: WorkflowyNode): string | null {
+		const cachedNode = this.cacheService.getNode(nodeId);
+		return cachedNode ? cachedNode.parentId : (fetched.parent_id ?? null);
+	}
+
+	/**
 	 * Update an existing node and update the cache. Updates on a mirror are
 	 * redirected to its original (see {@link resolveUpdateTarget}).
 	 * @param requestedId The node ID to update
@@ -108,8 +118,7 @@ export class WorkflowyWriteThroughClient {
 		await this.apiClient.updateNode(nodeId, options);
 		// Fetch fresh node data from API to update cache correctly
 		const updatedNode = await this.apiClient.getNode(nodeId);
-		const cachedNode = this.cacheService.getNode(nodeId);
-		const parentId = cachedNode?.parentId ?? null;
+		const parentId = this.cachedParentOr(nodeId, updatedNode);
 		await this.ensureParentInCache(parentId);
 		this.cacheService.insertNode(updatedNode, parentId);
 		return updatedNode;
@@ -360,8 +369,7 @@ export class WorkflowyWriteThroughClient {
 		await this.apiClient.completeNode(nodeId);
 		// Fetch fresh node data from API to update cache correctly
 		const completedNode = await this.apiClient.getNode(nodeId);
-		const cachedNode = this.cacheService.getNode(nodeId);
-		const parentId = cachedNode?.parentId ?? null;
+		const parentId = this.cachedParentOr(nodeId, completedNode);
 		await this.ensureParentInCache(parentId);
 		this.cacheService.insertNode(completedNode, parentId);
 		return completedNode;
@@ -378,8 +386,7 @@ export class WorkflowyWriteThroughClient {
 		await this.apiClient.uncompleteNode(nodeId);
 		// Fetch fresh node data from API to update cache correctly
 		const uncompletedNode = await this.apiClient.getNode(nodeId);
-		const cachedNode = this.cacheService.getNode(nodeId);
-		const parentId = cachedNode?.parentId ?? null;
+		const parentId = this.cachedParentOr(nodeId, uncompletedNode);
 		await this.ensureParentInCache(parentId);
 		this.cacheService.insertNode(uncompletedNode, parentId);
 		return uncompletedNode;
