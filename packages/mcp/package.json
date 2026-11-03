@@ -12,6 +12,13 @@
 	"type": "module",
 	"main": "dist/index.js",
 	"types": "dist/index.d.ts",
+	"exports": {
+		"./tools": {
+			"source": "./src/register.ts",
+			"types": "./dist/register.d.ts",
+			"import": "./dist/register.js"
+		}
+	},
 	"scripts": {
 		"build": "tsc -b",
 		"dev": "tsx src/index.ts",
