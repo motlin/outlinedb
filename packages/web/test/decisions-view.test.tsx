@@ -395,6 +395,95 @@ describe("DecisionPageView", () => {
 		});
 	});
 
+	it("shows a card's videos in the media row as inline players that load only metadata", async () => {
+		const [group] = PAGE.groups;
+		const [first] = group.items;
+		const images = [{src: "s/still.jpg", alt: "Still"}];
+		const videos = [{src: "s/clip one.mp4", poster: "s/clip one.jpg"}, {src: "s/b#2.webm"}];
+		stubFetch(defaultWrite, {...PAGE, groups: [{...group, items: [{...first, images, videos}]}]});
+		await mount();
+		const row = card("a-1").querySelector(".decisions-images");
+		expect({
+			beforeBody: row?.nextElementSibling?.className,
+			children: [...(row?.children ?? [])].map((element) => element.tagName),
+			players: [...(row?.querySelectorAll("video") ?? [])].map((video) => [
+				video.getAttribute("src"),
+				video.getAttribute("poster"),
+				video.hasAttribute("controls"),
+				video.hasAttribute("playsinline"),
+				video.getAttribute("preload"),
+				video.className,
+			]),
+		}).toStrictEqual({
+			beforeBody: "decisions-body",
+			children: ["A", "VIDEO", "VIDEO"],
+			players: [
+				[
+					"/api/v1/decisions/media/s/clip%20one.mp4",
+					"/api/v1/decisions/images/s/clip%20one.jpg",
+					true,
+					true,
+					"metadata",
+					"decisions-video",
+				],
+				["/api/v1/decisions/media/s/b%232.webm", null, true, true, "metadata", "decisions-video"],
+			],
+		});
+	});
+
+	it("shows a media row for an item with only videos", async () => {
+		const [group] = PAGE.groups;
+		const [first] = group.items;
+		stubFetch(defaultWrite, {...PAGE, groups: [{...group, items: [{...first, videos: [{src: "clip.mov"}]}]}]});
+		await mount();
+		expect([...card("a-1").children].map((element) => element.className).slice(0, 4)).toStrictEqual([
+			"decisions-group-heading",
+			"decisions-card-title",
+			"decisions-images",
+			"decisions-body",
+		]);
+	});
+
+	it("leaves space and arrow keys to a focused video's playback controls, but still answers with number keys", async () => {
+		const [group, standup] = PAGE.groups;
+		const [first, ...rest] = group.items;
+		stubFetch(defaultWrite, {
+			...PAGE,
+			groups: [{...group, items: [{...first, videos: [{src: "clip.mp4"}]}, ...rest]}, standup],
+		});
+		await mount();
+		const video = card("a-1").querySelector("video")!;
+		const presses: boolean[] = [];
+		for (const name of [" ", "ArrowRight", "ArrowLeft"]) {
+			const event = new KeyboardEvent("keydown", {key: name, bubbles: true, cancelable: true});
+			// One act at a time: overlapping acts would interleave React's update queue.
+			// oxlint-disable-next-line no-await-in-loop
+			await act(async () => {
+				video.dispatchEvent(event);
+				await Promise.resolve();
+			});
+			presses.push(event.defaultPrevented);
+		}
+		await flush();
+		const afterPlayback = {calls: calls.slice(1), cards: shownCards(), radios: radios("a-1"), presses};
+		await key(video, "2");
+		expect({afterPlayback, afterDigit: {calls: calls.slice(1), cards: shownCards()}}).toStrictEqual({
+			afterPlayback: {
+				calls: [],
+				cards: ["a-1"],
+				radios: [
+					["inbox", false],
+					["skip", false],
+				],
+				presses: [false, false, false],
+			},
+			afterDigit: {
+				calls: [{method: "PUT", url: "/api/v1/decisions/meetings/a-1", body: {choice: "skip", note: ""}}],
+				cards: ["b-1"],
+			},
+		});
+	});
+
 	it("renders no photo row for an item without images", async () => {
 		stubFetch();
 		await mount();

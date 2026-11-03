@@ -329,6 +329,36 @@
 	object-fit: contain;
 }
 
+/*
+ * Videos share the photo row. A lone video gets 60vh so a portrait clip is
+ * watchable without scrolling the options off a laptop screen.
+ */
+
+.decisions-video {
+	display: block;
+	flex: 0 1 auto;
+	min-width: 0;
+	max-width: 100%;
+	max-height: 45vh;
+	max-height: 45dvh;
+	width: auto;
+	height: auto;
+	border-radius: 8px;
+	border: 1px solid var(--border);
+	background: var(--muted);
+	object-fit: contain;
+}
+
+.decisions-video:only-child {
+	max-height: 60vh;
+	max-height: 60dvh;
+}
+
+.decisions-video:focus-visible {
+	outline: 2px solid var(--ring);
+	outline-offset: 2px;
+}
+
 .decisions-body-line {
 	color: var(--muted-foreground);
 	margin: 2px 0;

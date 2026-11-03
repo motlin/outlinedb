@@ -287,6 +287,10 @@ export function DecisionPageView({slug}: {slug: string}) {
 				return;
 			}
 			if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+				// A focused video seeks with the arrows.
+				if (event.target instanceof HTMLMediaElement) {
+					return;
+				}
 				// A focused radio would otherwise move its own selection, which saves an answer.
 				event.preventDefault();
 				goTo(index + (event.key === "ArrowLeft" ? -1 : 1));
@@ -444,9 +448,9 @@ function DecisionCard({group, item, state, onChoose, onNote, children}: Decision
 			<h2 className="decisions-card-title" id={titleId}>
 				{item.title}
 			</h2>
-			{item.images === undefined || item.images.length === 0 ? null : (
+			{(item.images ?? []).length === 0 && (item.videos ?? []).length === 0 ? null : (
 				<div className="decisions-images">
-					{item.images.map((image) => {
+					{(item.images ?? []).map((image) => {
 						const url = imageUrl(image.src);
 						return (
 							<a href={url} key={image.src} rel="noopener noreferrer" target="_blank" title={image.alt}>
@@ -460,6 +464,19 @@ function DecisionCard({group, item, state, onChoose, onNote, children}: Decision
 							</a>
 						);
 					})}
+					{(item.videos ?? []).map((video) => (
+						// Staged clips are the user's own phone videos, which come with no caption track.
+						// oxlint-disable-next-line jsx-a11y/media-has-caption
+						<video
+							className="decisions-video"
+							controls
+							key={video.src}
+							playsInline
+							poster={video.poster === undefined ? undefined : imageUrl(video.poster)}
+							preload="metadata"
+							src={mediaUrl(video.src)}
+						/>
+					))}
 				</div>
 			)}
 			{item.body.length > 0 ? (
@@ -534,9 +551,19 @@ function DecisionCard({group, item, state, onChoose, onNote, children}: Decision
 	);
 }
 
-/** Where the server serves an item image, its `src` path encoded one segment at a time. */
+/** A `src` path encoded one segment at a time. */
+function encodePath(src: string): string {
+	return src.split("/").map(encodeURIComponent).join("/");
+}
+
+/** Where the server serves an item image. */
 function imageUrl(src: string): string {
-	return `/api/v1/decisions/images/${src.split("/").map(encodeURIComponent).join("/")}`;
+	return `/api/v1/decisions/images/${encodePath(src)}`;
+}
+
+/** Where the server serves an item video, with the byte ranges players need to seek. */
+function mediaUrl(src: string): string {
+	return `/api/v1/decisions/media/${encodePath(src)}`;
 }
 
 /** A body line as plain text, with its dates, durations and counts wrapped for color. */
