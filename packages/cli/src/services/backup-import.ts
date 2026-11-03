@@ -18,6 +18,7 @@ export interface BackupImportStats {
 	priorityUpdated: number;
 	importTimestamp: Date;
 	nodesPreserved: number;
+	nodesKeptDeleted: number;
 	skipped?: boolean;
 	skipReason?: string;
 	localWatermark?: string | null;

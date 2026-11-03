@@ -1305,10 +1305,82 @@ describe("cache-import service", () => {
 				priorityUpdated: 0,
 				importTimestamp: DATE_LATER,
 				nodesPreserved: 0,
+				nodesKeptDeleted: 0,
 				skipped: false,
 				localWatermark: "2026-04-01 00:00:00.000",
 				incomingWatermark: "2026-04-10 00:00:00.000",
 			});
+		});
+
+		// Regression (daily review 2026-11-02): a backup snapshot taken before
+		// `cache import-api` saw a deletion re-added the deleted nodes, and the
+		// next import-api had to delete them again.
+		it("does not re-add a node the cache deleted after the snapshot was taken", async () => {
+			const seedPath = writeBackupFile([
+				{id: "node-1", nm: "Kept", ct: T_EARLIER, lm: T_EARLIER},
+				{id: "node-2", nm: "Deleted", ct: T_EARLIER, lm: T_EARLIER},
+			]);
+			await importBackup(testDatabase.db, seedPath, "backup.json", false, DATE_EARLIER);
+			const deletePath = writeBackupFile([{id: "node-1", nm: "Kept", ct: T_EARLIER, lm: T_EARLIER}]);
+			await importBackup(testDatabase.db, deletePath, "backup.json", false, DATE_LATER);
+
+			const stalePath = writeBackupFile([
+				{id: "node-1", nm: "Kept", ct: T_EARLIER, lm: T_EARLIER},
+				{id: "node-2", nm: "Deleted", ct: T_EARLIER, lm: T_MIDDLE},
+			]);
+			const result = await importBackup(testDatabase.db, stalePath, "backup.json", false, WRITE_1);
+
+			expect(result).toStrictEqual({
+				totalNodes: 1,
+				nodesAdded: 0,
+				nodesUpdated: 0,
+				nodesUnchanged: 1,
+				nodesDeleted: 0,
+				nodesPhasedOut: 0,
+				contentUpdated: 0,
+				metadataUpdated: 0,
+				priorityUpdated: 0,
+				importTimestamp: WRITE_1,
+				nodesPreserved: 0,
+				nodesKeptDeleted: 1,
+				skipped: false,
+				localWatermark: "2026-04-01 00:00:00.000",
+				incomingWatermark: "2026-04-05 00:00:00.000",
+			});
+			const activeIds = testDatabase.db
+				.select()
+				.from(nodeContent)
+				.where(eq(nodeContent.systemTo, FAR_FUTURE_DATE))
+				.all()
+				.map((n) => n.id);
+			expect(activeIds).toStrictEqual(["node-1"]);
+		});
+
+		it("re-adds a deleted node a snapshot newer than the deletion still holds", async () => {
+			const seedPath = writeBackupFile([
+				{id: "node-1", nm: "Kept", ct: T_EARLIER, lm: T_EARLIER},
+				{id: "node-2", nm: "Restored", ct: T_EARLIER, lm: T_EARLIER},
+			]);
+			await importBackup(testDatabase.db, seedPath, "backup.json", false, DATE_EARLIER);
+			const deletePath = writeBackupFile([{id: "node-1", nm: "Kept", ct: T_EARLIER, lm: T_EARLIER}]);
+			await importBackup(testDatabase.db, deletePath, "backup.json", false, DATE_MIDDLE);
+
+			const freshPath = writeBackupFile([
+				{id: "node-1", nm: "Kept", ct: T_EARLIER, lm: T_EARLIER},
+				{id: "node-2", nm: "Restored", ct: T_EARLIER, lm: T_LATER},
+			]);
+			const result = await importBackup(testDatabase.db, freshPath, "backup.json", false, WRITE_1);
+
+			expect(result.nodesAdded).toBe(1);
+			expect(result.nodesKeptDeleted).toBe(0);
+			const activeIds = testDatabase.db
+				.select()
+				.from(nodeContent)
+				.where(eq(nodeContent.systemTo, FAR_FUTURE_DATE))
+				.all()
+				.map((n) => n.id)
+				.toSorted();
+			expect(activeIds).toStrictEqual(["node-1", "node-2"]);
 		});
 
 		it("proceeds when the incoming watermark equals the local watermark", async () => {
@@ -1330,6 +1402,7 @@ describe("cache-import service", () => {
 				priorityUpdated: 0,
 				importTimestamp: DATE_LATER,
 				nodesPreserved: 0,
+				nodesKeptDeleted: 0,
 				skipped: false,
 				localWatermark: "2026-04-10 00:00:00.000",
 				incomingWatermark: "2026-04-10 00:00:00.000",
@@ -1352,6 +1425,7 @@ describe("cache-import service", () => {
 				priorityUpdated: 0,
 				importTimestamp: DATE_EARLIER,
 				nodesPreserved: 0,
+				nodesKeptDeleted: 0,
 				skipped: false,
 				localWatermark: null,
 				incomingWatermark: "2026-04-01 00:00:00.000",
@@ -1378,6 +1452,7 @@ describe("cache-import service", () => {
 				priorityUpdated: 0,
 				importTimestamp: reimportDate,
 				nodesPreserved: 0,
+				nodesKeptDeleted: 0,
 				skipped: false,
 				localWatermark: "2026-04-10 00:00:00.000",
 				incomingWatermark: "2026-04-01 00:00:00.000",

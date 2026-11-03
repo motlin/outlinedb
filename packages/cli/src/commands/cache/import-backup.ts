@@ -181,6 +181,11 @@ export default class ImportBackup extends Command {
 						`kept ${importStats.nodesPreserved.toLocaleString()} newer node(s) it does not describe.`,
 				);
 			}
+			if (importStats.nodesKeptDeleted > 0) {
+				this.log(
+					`\n🛡  Snapshot predates ${importStats.nodesKeptDeleted.toLocaleString()} deletion(s) in the cache; left those node(s) deleted.`,
+				);
+			}
 
 			const changedCount = importStats.nodesAdded + importStats.nodesUpdated + importStats.nodesDeleted;
 			if (changedCount === 0) {

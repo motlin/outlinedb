@@ -29,7 +29,7 @@ import {BackupFileSchema, BackupNodeSchema} from "@workflowy/shared/schemas";
 import type {BackupNode} from "@workflowy/shared/schemas";
 import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@workflowy/shared/temporal";
 import {backupToUnixTime, uuidToShortId} from "@workflowy/shared/workflowy";
-import {eq, max} from "drizzle-orm";
+import {and, eq, gt, max, ne} from "drizzle-orm";
 import type {BetterSQLite3Database} from "drizzle-orm/better-sqlite3";
 import {formatError, ZodError} from "zod";
 import {readBackupFile} from "../utils/backup-archive.js";
@@ -280,6 +280,27 @@ function latestBackupImportStamp(database: AppDatabase): string | null {
 	return row?.latest ?? null;
 }
 
+/** Ids with a node_content version closed after `systemTime`. */
+function closedSince(database: AppDatabase, systemTime: string): Set<string> {
+	const rows = database
+		.selectDistinct({id: nodeContent.id})
+		.from(nodeContent)
+		.where(and(gt(nodeContent.systemTo, systemTime), ne(nodeContent.systemTo, FAR_FUTURE_DATE)))
+		.all();
+	return new Set(rows.map((row) => row.id));
+}
+
+/** Remove, in place, the rows `keep` rejects. */
+function retainWhere<T>(rows: T[], keep: (row: T) => boolean): void {
+	let kept = 0;
+	for (const row of rows) {
+		if (keep(row)) {
+			rows[kept++] = row;
+		}
+	}
+	rows.length = kept;
+}
+
 export interface ImportBackupResult {
 	totalNodes: number;
 	nodesAdded: number;
@@ -293,6 +314,8 @@ export interface ImportBackupResult {
 	importTimestamp: Date;
 	/** Nodes newer than the snapshot that were kept instead of being tombstoned. */
 	nodesPreserved: number;
+	/** Nodes in the snapshot that the cache deleted after it was taken, left deleted instead of re-added. */
+	nodesKeptDeleted: number;
 	skipped?: boolean;
 	skipReason?: string;
 	localWatermark?: string | null;
@@ -578,6 +601,33 @@ export async function importBackup(
 	}
 	logTiming(`Protected ${protectedIds.size} nodes newer than the snapshot`);
 
+	// The other half of the stale-snapshot guard: a node the cache deleted after
+	// the snapshot's watermark was still alive when the snapshot was taken, so
+	// the snapshot cannot testify that it survives. Re-adding it would only make
+	// the next `cache import-api` delete it again. A deletion stamped at or
+	// before the watermark predates the snapshot, so a node the snapshot still
+	// holds was restored and is re-added.
+	const keptDeletedIds = new Set<string>();
+	if (!force && incomingWatermark !== null) {
+		const deletedAfterSnapshot = closedSince(database, incomingWatermark);
+		for (const node of nodesToProcess) {
+			if (deletedAfterSnapshot.has(node.id) && !existingContentMap.has(node.id)) {
+				keptDeletedIds.add(node.id);
+			}
+		}
+	}
+	if (keptDeletedIds.size > 0) {
+		const isKept = (row: {nodeId: string}) => !keptDeletedIds.has(row.nodeId);
+		retainWhere(nodesToProcess, (node) => !keptDeletedIds.has(node.id));
+		retainWhere(aiMetadataRecords, isKept);
+		retainWhere(s3FileRecords, isKept);
+		retainWhere(changesMetadataRecords, isKept);
+		retainWhere(calendarMetadataRecords, isKept);
+		retainWhere(calendarLevelsRecords, isKept);
+		retainWhere(relationships.referencesRoots, isKept);
+	}
+	logTiming(`Left ${keptDeletedIds.size} nodes the cache deleted after the snapshot deleted`);
+
 	// resolvedPriorities is populated by the classification block below and read
 	// when building the node_metadata rows.
 	const resolvedPriorities = new Map<string, number>();
@@ -811,6 +861,7 @@ export async function importBackup(
 		priorityUpdated,
 		importTimestamp,
 		nodesPreserved: protectedIds.size,
+		nodesKeptDeleted: keptDeletedIds.size,
 		skipped: false,
 		localWatermark,
 		incomingWatermark,

@@ -8,6 +8,7 @@ import {CacheService} from "../../services/cache.js";
 import {importFromApi} from "../../services/cache-import-api.js";
 import type {ImportApiResult} from "../../services/cache-import-api.js";
 import {logger} from "../../services/logger.js";
+import {describeError} from "../../utils/describe-error.js";
 
 export default class ImportApi extends Command {
 	static override description = "Import all nodes from Workflowy API export endpoint";
@@ -88,7 +89,7 @@ export default class ImportApi extends Command {
 			if (error instanceof Error && error.message.includes("429")) {
 				this.error("Rate limit exceeded. Please wait 1 minute before trying again.");
 			}
-			this.error(`Failed to import from API: ${String(error)}`);
+			this.error(`Failed to import from API: ${describeError(error)}`);
 		}
 	}
 
