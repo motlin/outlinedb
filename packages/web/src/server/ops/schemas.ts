@@ -83,6 +83,12 @@ export const NodeResponseSchema = z.strictObject({
 /** One node, as `GET /nodes/:id` and the single-node writes answer it. */
 export const NodeEnvelopeSchema = z.strictObject({node: NodeResponseSchema});
 
+/**
+ * `POST /nodes` answers the created node, plus a warning when a dated row landed under a 📆 Calendar month that
+ * could not be tagged as that day (no internal API).
+ */
+export const CreateNodeResponseSchema = z.strictObject({node: NodeResponseSchema, warning: z.string().optional()});
+
 /** A list of nodes, as `GET /nodes`, the moves and `POST /nodes/mirror` answer it. */
 export const NodeListSchema = z.strictObject({nodes: z.array(NodeResponseSchema)});
 

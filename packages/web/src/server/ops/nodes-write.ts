@@ -1,15 +1,23 @@
 import {z} from "zod";
 import {planBlockSlot} from "@workflowy/shared/cache";
 import type {SlotPlan} from "@workflowy/shared/cache";
-import type {RestoreInput} from "@workflowy/shared/internal";
-import {linkedSourcesInSubtree} from "@workflowy/shared/internal";
+import type {RestoreInput, WorkflowyInternalAdapter} from "@workflowy/shared/internal";
+import {calendarParentContext} from "@workflowy/shared/calendar-lookup";
+import {adoptAfterCreate, calendarAdoptWarning, datesInName, linkedSourcesInSubtree} from "@workflowy/shared/internal";
 import {HOME_TARGET} from "@workflowy/shared/types";
 import type {WorkflowyNode} from "@workflowy/shared/types";
 import type {NodeResponse, SaveEffects, UpdateNodeResponse} from "../../node-types.js";
 import {backlinksNeedSync, backlinkTargetsOfSource} from "../backlinks.js";
 import {INTERNAL_API_NOT_CONFIGURED} from "../internal-api.js";
 import {defineOp, fail, ok, toJson} from "./define.js";
-import {HomeResponseSchema, NoContentSchema, NodeEnvelopeSchema, UpdateNodeResponseSchema} from "./schemas.js";
+import type {ServerContext} from "../context.js";
+import {
+	CreateNodeResponseSchema,
+	HomeResponseSchema,
+	NoContentSchema,
+	NodeEnvelopeSchema,
+	UpdateNodeResponseSchema,
+} from "./schemas.js";
 import {
 	adapterParent,
 	childIds,
@@ -69,6 +77,26 @@ function wireNodeResponse(node: WorkflowyNode, parentId: string | null, hasUncom
 	};
 }
 
+/**
+ * Tag a dated row just created under a 📆 Calendar month as that day, as upstream's `mb1` hook does for web edits,
+ * so workflowy.com uses it as the day. Answers the warning to return when it needed tagging but there is no
+ * internal adapter to write the metadata.
+ */
+async function adoptUnderCalendar(
+	ctx: ServerContext,
+	adapter: WorkflowyInternalAdapter | undefined,
+	created: {id: string; name: string; parentId: string | null},
+): Promise<string | undefined> {
+	const {id, name, parentId} = created;
+	// Most creates are undated (every empty row the web app adds), so skip the calendar walk for them.
+	if (parentId === null || datesInName(name).length === 0) {
+		return undefined;
+	}
+	const context = calendarParentContext({db: ctx.db, cache: ctx.cacheService}, parentId);
+	const adoption = await adoptAfterCreate({id, name, context, adapter});
+	return adoption.status === "unadoptable" ? calendarAdoptWarning(name) : undefined;
+}
+
 // POST /api/v1/nodes - Create node at an exact `index` among all siblings (omitted = bottom)
 export const nodesCreate = defineOp({
 	input: z.object({
@@ -91,7 +119,7 @@ export const nodesCreate = defineOp({
 		 */
 		id: z.string().regex(CLIENT_ID_PATTERN).optional(),
 	}),
-	output: NodeEnvelopeSchema,
+	output: CreateNodeResponseSchema,
 	async run(ctx, body) {
 		const client = getWriteClient(ctx);
 		if (!client) {
@@ -120,6 +148,7 @@ export const nodesCreate = defineOp({
 				...(note === undefined ? {} : {note}),
 				...(layoutMode === undefined ? {} : {metadata: {layoutMode}}),
 			});
+			await adoptUnderCalendar(ctx, adapter, {id, name, parentId});
 			const node = await readNodeDto(ctx, id);
 			if (node === undefined) {
 				return fail(500, {error: `Created node ${id} is missing from the cache`});
@@ -143,7 +172,11 @@ export const nodesCreate = defineOp({
 		for (const siblingId of rotation.siblingIds) {
 			await client.moveNode(siblingId, parentId, publicMovePosition(rotation.position));
 		}
-		return ok(toJson({node: wireNodeResponse(createdNode, parentId, true)}), {created: true});
+		const warning = await adoptUnderCalendar(ctx, undefined, {id: createdNode.id, name, parentId});
+		return ok(
+			toJson({node: wireNodeResponse(createdNode, parentId, true), ...(warning === undefined ? {} : {warning})}),
+			{created: true},
+		);
 	},
 });
 

@@ -100,12 +100,13 @@ export function registerNodeTools(server: McpServer, store: StoreClient): void {
 			if (!created.ok) {
 				return opError(created);
 			}
-			const {node} = created.value;
+			const {node, warning} = created.value;
 			return jsonResult({
 				id: node.id,
 				name: node.name,
 				createdAt: node.createdAt === null ? null : new Date(node.createdAt * 1000).toISOString(),
 				url: nodeUrl(node.id),
+				...(warning === undefined ? {} : {warning}),
 			});
 		},
 	);

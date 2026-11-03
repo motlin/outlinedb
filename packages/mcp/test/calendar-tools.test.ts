@@ -1,6 +1,7 @@
-import {afterAll, beforeAll, describe, expect, it, vi} from "vite-plus/test";
+import {afterAll, afterEach, beforeAll, describe, expect, it, vi} from "vite-plus/test";
 import {storeInternalMetadata} from "@workflowy/shared/cache";
-import {WorkflowyInternalAdapter} from "@workflowy/shared/internal";
+import {calendarAdoptWarning, WorkflowyInternalAdapter} from "@workflowy/shared/internal";
+import {fakeNode, stubPublicApi} from "./fake-upstream.js";
 import {callTool, openHarness, seed} from "./harness.js";
 import type {Harness} from "./harness.js";
 
@@ -102,6 +103,93 @@ describe("workflowy_calendar_day", () => {
 		expect(result).toStrictEqual({
 			isError: true,
 			content: [{type: "text", text: 'Invalid date "Jan 15". Use YYYY-MM-DD.'}],
+		});
+	});
+});
+
+describe("workflowy_node_create under a calendar month", () => {
+	const name = '<time startYear="2026" startMonth="1" startDay="21">Wed, Jan 21, 2026</time>';
+
+	afterEach(() => {
+		vi.useRealTimers();
+		vi.restoreAllMocks();
+	});
+
+	it("tags the new row as that day through the adapter", async () => {
+		vi.spyOn(WorkflowyInternalAdapter.prototype, "createAt").mockImplementation(async (input) => {
+			seed(harness.cache, "new-day", input.name, "m01");
+			return Promise.resolve({id: "new-day"});
+		});
+		const setMeta = vi.spyOn(WorkflowyInternalAdapter.prototype, "setNodeMetaValues").mockResolvedValue();
+
+		const result = await callTool(harness.authStore, "workflowy_node_create", {parentId: "m01", name});
+
+		expect({result, calls: setMeta.mock.calls}).toStrictEqual({
+			result: {
+				isError: undefined,
+				content: [
+					{
+						type: "text",
+						text: JSON.stringify(
+							{
+								id: "new-day",
+								name,
+								createdAt: "1970-01-01T00:00:00.000Z",
+								url: "https://workflowy.com/#/newday",
+							},
+							null,
+							2,
+						),
+					},
+				],
+			},
+			calls: [
+				[
+					"new-day",
+					[
+						{
+							path: ["calendar"],
+							value: {
+								level: "day",
+								value: "21",
+								timestamp: new Date(2026, 0, 21).getTime(),
+								dateId: 20_260_121,
+							},
+						},
+					],
+				],
+			],
+		});
+	});
+
+	it("returns a warning without internal auth", async () => {
+		vi.useFakeTimers({toFake: ["Date"], now: new Date("2026-01-22T12:00:00Z")});
+		stubPublicApi([
+			fakeNode("outer", '<time startYear="2026" startMonth="1" startDay="15">Thu, Jan 15, 2026</time>', "m01", 0),
+			fakeNode("d14", '<time startYear="2026" startMonth="1" startDay="14">Wed, Jan 14, 2026</time>', "m01", 1),
+		]);
+		const warnName = '<time startYear="2026" startMonth="1" startDay="22">Thu, Jan 22, 2026</time>';
+
+		const result = await callTool(harness.store, "workflowy_node_create", {parentId: "m01", name: warnName});
+
+		expect(result).toStrictEqual({
+			isError: undefined,
+			content: [
+				{
+					type: "text",
+					text: JSON.stringify(
+						{
+							id: "created-1",
+							name: warnName,
+							createdAt: "2026-01-22T12:00:00.000Z",
+							url: "https://workflowy.com/#/created1",
+							warning: calendarAdoptWarning(warnName),
+						},
+						null,
+						2,
+					),
+				},
+			],
 		});
 	});
 });
