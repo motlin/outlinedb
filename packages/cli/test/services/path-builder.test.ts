@@ -70,6 +70,21 @@ describe("PathBuilder", () => {
 			expect(result.get("grandchild-id")).toBe("Root > Child > Grandchild");
 		});
 
+		it("stops the path where a stale cache's parent chain loops back on itself", () => {
+			seedTestData(
+				testDatabase,
+				nodeFixtures([
+					createTestNode({id: "a-id", name: "A", parentId: "b-id"}),
+					createTestNode({id: "b-id", name: "B", parentId: "a-id"}),
+					createTestNode({id: "leaf-id", name: "Leaf", parentId: "a-id"}),
+				]),
+			);
+
+			const result = pathBuilder.buildFullPathsBatch(["leaf-id"]);
+
+			expect(result).toStrictEqual(new Map([["leaf-id", "B > A > Leaf"]]));
+		});
+
 		it("handles nodes that share ancestors", () => {
 			seedTestData(
 				testDatabase,

@@ -1,5 +1,5 @@
 import {z} from "zod";
-import {NodeReader, NodeTreeReader, effectiveCompletedAt} from "@workflowy/shared/cache";
+import {NodeReader, NodeTreeReader, ancestorChain, effectiveCompletedAt} from "@workflowy/shared/cache";
 import {mirrors as mirrorsTable, nodeContent, nodeMetadata} from "@workflowy/shared/db";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
 import type {Node} from "@workflowy/shared/types";
@@ -534,19 +534,8 @@ export const nodesAncestors = defineOp({
 
 		// Build ancestor chain by following parent_id pointers
 		type Chain = NonNullable<ReturnType<NodeReader["getById"]>>[];
-		const chainTo = (nodeId: string): Chain => {
-			const links: Chain = [];
-			let currentId: string | null = nodeId;
-			while (currentId !== null) {
-				const node = reader.getById(currentId);
-				if (!node) {
-					break;
-				}
-				links.unshift(node);
-				currentId = node.parentId;
-			}
-			return links;
-		};
+		const chainTo = (nodeId: string): Chain =>
+			ancestorChain(nodeId, (linkId) => reader.getById(linkId)).toReversed();
 		let chain = chainTo(id);
 
 		// A row inside a mirror (`v_<child12>_<mirror12>[_<path>]`): the mirror's ancestors and the mirror, then the rows
@@ -617,19 +606,11 @@ async function readBacklinks(ctx: ServerContext, id: string): Promise<BacklinksR
 	const flags = childFlags(db, sourceIds);
 	const reader = new NodeReader(db);
 
-	const crumbsOf = (sourceId: string): BacklinkCrumb[] => {
-		const crumbs: BacklinkCrumb[] = [];
-		let currentId = reader.getById(sourceId)?.parentId ?? null;
-		while (currentId !== null) {
-			const ancestor = reader.getById(currentId);
-			if (!ancestor) {
-				break;
-			}
-			crumbs.unshift({id: ancestor.id, name: referencesRootLabel(db, ancestor.id) ?? ancestor.name ?? ""});
-			currentId = ancestor.parentId;
-		}
-		return crumbs;
-	};
+	const crumbsOf = (sourceId: string): BacklinkCrumb[] =>
+		ancestorChain(sourceId, (linkId) => reader.getById(linkId))
+			.slice(1)
+			.toReversed()
+			.map((ancestor) => ({id: ancestor.id, name: referencesRootLabel(db, ancestor.id) ?? ancestor.name ?? ""}));
 
 	const body: BacklinksResponse = {
 		rootId,
@@ -743,17 +724,9 @@ export const nodesMirrors = defineOp({
 
 		// Helper to build ancestor breadcrumb path for a node
 		function getAncestorPath(nodeId: string): {id: string; name: string}[] {
-			const path: {id: string; name: string}[] = [];
-			let currentId: string | null = nodeId;
-			while (currentId !== null) {
-				const node = reader.getById(currentId);
-				if (!node) {
-					break;
-				}
-				path.unshift({id: node.id, name: node.name ?? "Untitled"});
-				currentId = node.parentId;
-			}
-			return path;
+			return ancestorChain(nodeId, (linkId) => reader.getById(linkId))
+				.toReversed()
+				.map((node) => ({id: node.id, name: node.name ?? "Untitled"}));
 		}
 
 		// For each location, build the full ancestor path

@@ -1,4 +1,5 @@
 import {z} from "zod";
+import {ancestorChain} from "@workflowy/shared/cache";
 import {HOME_TARGET} from "@workflowy/shared/types";
 import {planSwapOrigin} from "../../swap-origin.js";
 import {MAX_COPY_ITEMS, copySubtree} from "../copy-tree.js";
@@ -47,11 +48,12 @@ export const nodesMirror = defineOp({
 		}
 		// A mirror parent writes into its original's child list.
 		const parentId = parent.parentId === null ? null : resolveMirrorToOriginal(ctx, parent.parentId);
-		// The parent and each of its ancestors, which no source may be.
-		const lineage = new Set<string>();
-		for (let current = parentId; current !== null; current = ctx.cacheService.getNode(current)?.parentId ?? null) {
-			lineage.add(current);
-		}
+		// The parent and each of its ancestors, which no source may be (an uncached parent still counts).
+		const lineage = new Set(
+			ancestorChain(parentId, (id) => ctx.cacheService.getNode(id) ?? {id, parentId: null}).map(
+				(node) => node.id,
+			),
+		);
 		if (originals.some((id) => lineage.has(id))) {
 			return fail(400, {error: "Cannot mirror an item into itself"});
 		}
@@ -157,14 +159,12 @@ export const nodesSwapMirrorOrigin = defineOp({
 			return fail(404, {error: "Original not found"});
 		}
 		// The original would land inside its own subtree.
-		for (
-			let current = node.parentId;
-			current !== null;
-			current = ctx.cacheService.getNode(current)?.parentId ?? null
+		if (
+			ancestorChain(node.parentId, (current) => ctx.cacheService.getNode(current)).some(
+				(ancestor) => ancestor.id === originalId,
+			)
 		) {
-			if (current === originalId) {
-				return fail(400, {error: "Cannot swap a mirror that sits inside its own original"});
-			}
+			return fail(400, {error: "Cannot swap a mirror that sits inside its own original"});
 		}
 		const orders = new Map<string | null, string[]>(
 			[node.parentId, original.parentId].map((parentId) => [

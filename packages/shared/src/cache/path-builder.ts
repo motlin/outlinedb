@@ -2,11 +2,13 @@ import type {AppDatabase} from "../db/types.js";
 import {nodeContent} from "../db/schema.js";
 import {stripHtmlTags} from "../html/strip-tags.js";
 import {and} from "drizzle-orm";
+import {ancestorChain} from "./ancestor-chain.js";
 import {currentVersion} from "./cache-temporal.js";
 import {inIds} from "./in-ids.js";
 import {withMirrorText} from "./mirror-text.js";
 
 interface NodeInfo {
+	id: string;
 	name: string | null;
 	parentId: string | null;
 }
@@ -73,6 +75,7 @@ export class PathBuilder {
 			for (const row of results) {
 				if (!nodeMap.has(row.id)) {
 					nodeMap.set(row.id, {
+						id: row.id,
 						name: row.name,
 						parentId: row.parentId,
 					});
@@ -89,23 +92,10 @@ export class PathBuilder {
 		const partsMap = new Map<string, string[]>();
 
 		for (const nodeId of nodeIds) {
-			const pathParts: string[] = [];
-			let currentId: string | null = nodeId;
-
-			while (currentId) {
-				const info = nodeMap.get(currentId);
-				if (!info) {
-					break;
-				}
-
-				const name = stripHtmlTags(info.name ?? "");
-				if (name) {
-					pathParts.unshift(name);
-				}
-
-				currentId = info.parentId;
-			}
-
+			const pathParts = ancestorChain(nodeId, (linkId) => nodeMap.get(linkId))
+				.map((info) => stripHtmlTags(info.name ?? ""))
+				.filter((name) => name !== "")
+				.toReversed();
 			partsMap.set(nodeId, pathParts);
 		}
 

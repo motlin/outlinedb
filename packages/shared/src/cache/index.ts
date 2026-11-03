@@ -1,3 +1,4 @@
+export {ancestorChain} from "./ancestor-chain.js";
 export {
 	type ApiImportState,
 	applyApiBatch,
