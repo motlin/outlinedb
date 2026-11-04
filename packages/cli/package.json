@@ -28,7 +28,7 @@
 		"prepack": "oclif manifest"
 	},
 	"dependencies": {
-		"@oclif/core": "^5.1.8",
+		"@oclif/core": "^5.1.10",
 		"@oclif/plugin-help": "^7",
 		"@tobilu/qmd": "^2.8.3",
 		"@workflowy/shared": "workspace:*",
