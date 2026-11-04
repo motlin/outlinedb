@@ -38,11 +38,29 @@ let server = new Map<string, NodeResponse>();
 /** Requests the app made, in order: `children:<id>` loads and `move:<id>:<body>` moves. */
 let calls: string[] = [];
 let root: Root | undefined;
+let mountedClient: InstanceType<typeof QueryClient> | undefined;
 
 function childrenOf(parentId: string | null): NodeResponse[] {
 	const siblings = [...server.values()].filter((node) => node.parent_id === parentId);
 	// oxlint-disable-next-line unicorn/no-array-sort -- the test tsconfig lib has no toSorted
 	return siblings.sort((a, b) => a.priority - b.priority);
+}
+
+/**
+ * Wait out the mounted outline's in-flight loads and writes, such as a move's follow-up sync. Left running, they
+ * would land in the next test's `calls` through the module-level children batcher and the re-stubbed `fetch`.
+ */
+async function drain(): Promise<void> {
+	const client = mountedClient;
+	const busy = (): boolean => client !== undefined && client.isFetching() + client.isMutating() > 0;
+	await act(async () => {
+		while (busy()) {
+			// oxlint-disable-next-line no-await-in-loop -- polls until the client is idle
+			await new Promise((resolve) => {
+				setTimeout(resolve, 0);
+			});
+		}
+	});
 }
 
 async function settle(): Promise<void> {
@@ -101,6 +119,7 @@ async function mountEditing(rows: NodeResponse[], editingId: string): Promise<vo
 	const queryClient = new QueryClient({
 		defaultOptions: {queries: {retry: false, staleTime: Number.POSITIVE_INFINITY}},
 	});
+	mountedClient = queryClient;
 	queryClient.setQueryData(nodeKeys.children(null), childrenOf(null));
 	for (const node of rows) {
 		queryClient.setQueryData(nodeKeys.detail(node.id), node);
@@ -145,11 +164,13 @@ beforeEach(() => {
 	);
 });
 
-afterEach(() => {
+afterEach(async () => {
+	await drain();
 	act(() => {
 		root?.unmount();
 	});
 	root = undefined;
+	mountedClient = undefined;
 	document.body.replaceChildren();
 	vi.unstubAllGlobals();
 });
