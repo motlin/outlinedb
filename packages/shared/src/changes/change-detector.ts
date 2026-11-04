@@ -1,10 +1,8 @@
-import {and, eq, gte, inArray, lte, ne} from "drizzle-orm";
+import {and, eq, gte, lte, ne} from "drizzle-orm";
 import {inIds} from "../cache/in-ids.js";
 import {mirrors, nodeContent, nodeMetadata} from "../db/schema.js";
 import type {AppDatabase} from "../db/types.js";
 import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "../temporal/constants.js";
-
-const SQL_CHUNK_SIZE = 10_000;
 
 export interface NodeChange {
 	id: string;
@@ -332,24 +330,21 @@ export class ChangeDetector {
 		while (currentIds.length > 0) {
 			const nextIds: string[] = [];
 
-			for (let i = 0; i < currentIds.length; i += SQL_CHUNK_SIZE) {
-				const chunk = currentIds.slice(i, i + SQL_CHUNK_SIZE);
-				const results = this.db
-					.select({
-						id: nodeContent.id,
-						name: nodeContent.name,
-						parentId: nodeContent.parentId,
-					})
-					.from(nodeContent)
-					.where(and(inArray(nodeContent.id, chunk), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
-					.all();
+			const results = this.db
+				.select({
+					id: nodeContent.id,
+					name: nodeContent.name,
+					parentId: nodeContent.parentId,
+				})
+				.from(nodeContent)
+				.where(and(inIds(nodeContent.id, currentIds), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
+				.all();
 
-				for (const row of results) {
-					if (!nodeInfoMap.has(row.id)) {
-						nodeInfoMap.set(row.id, {name: row.name, parentId: row.parentId});
-						if (row.parentId && !nodeInfoMap.has(row.parentId)) {
-							nextIds.push(row.parentId);
-						}
+			for (const row of results) {
+				if (!nodeInfoMap.has(row.id)) {
+					nodeInfoMap.set(row.id, {name: row.name, parentId: row.parentId});
+					if (row.parentId && !nodeInfoMap.has(row.parentId)) {
+						nextIds.push(row.parentId);
 					}
 				}
 			}
