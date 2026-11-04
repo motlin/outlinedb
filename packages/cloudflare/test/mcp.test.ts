@@ -84,6 +84,7 @@ describe("/mcp in the Worker", () => {
 				name: "Plan the remote MCP",
 				note: null,
 				parentPath: "",
+				completedAt: null,
 				url: "https://workflowy.com/#/seednode",
 			},
 		]);

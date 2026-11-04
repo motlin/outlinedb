@@ -6,6 +6,7 @@ import {buildSearchConditions, getScoringTerms, parseSearchQuery, resolveJoinedS
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
 import {stripHtmlTags} from "@workflowy/shared/html";
 import {and, eq, inArray, sql} from "drizzle-orm";
+import {toUnixSeconds} from "./nodes-shared.js";
 import {notReferencesContent} from "../backlinks.js";
 import {collectHelperTags} from "../helper-tags.js";
 import type {HelperTags} from "../helper-tags.js";
@@ -29,6 +30,8 @@ const SearchResultSchema = z.strictObject({
 	name: z.string().nullable(),
 	note: z.string().nullable(),
 	parentPath: z.string(),
+	/** Completion time in epoch seconds, or null when incomplete (as in the node responses). */
+	completedAt: z.number().nullable(),
 });
 
 type SearchResult = z.output<typeof SearchResultSchema>;
@@ -364,13 +367,17 @@ function textSearch(
 	// Apply pagination after scoring and sorting
 	const paginatedResults = scoredResults.slice(offset, offset + limit);
 
-	// Build parent paths in two batched queries (parentId lookup + PathBuilder) rather
-	// than walking the ancestor chain per result. The parent path excludes the result
+	// Build parent paths in two batched queries (parentId + completedAt lookup, then PathBuilder)
+	// rather than walking the ancestor chain per result. The parent path excludes the result
 	// node itself, so it is the full path of the node's parent.
-	const parentIdOf = new Map<string, string | null>(
+	const rowOf = new Map<string, {parentId: string | null; completedAt: Date | null}>(
 		database
-			.select({id: nodeContent.id, parentId: nodeContent.parentId})
+			.select({id: nodeContent.id, parentId: nodeContent.parentId, completedAt: nodeMetadata.completedAt})
 			.from(nodeContent)
+			.leftJoin(
+				nodeMetadata,
+				and(eq(nodeMetadata.nodeId, nodeContent.id), eq(nodeMetadata.systemTo, FAR_FUTURE_DATE)),
+			)
 			.where(
 				and(
 					inArray(
@@ -381,14 +388,23 @@ function textSearch(
 				),
 			)
 			.all()
-			.map((row) => [row.id, row.parentId]),
+			.map(({id, parentId: rowParentId, completedAt}) => [id, {parentId: rowParentId, completedAt}]),
 	);
-	const parentIds = [...new Set([...parentIdOf.values()].filter((id): id is string => id !== null))];
+	const parentIds = [
+		...new Set([...rowOf.values()].map((row) => row.parentId).filter((id): id is string => id !== null)),
+	];
 	const pathByParent = new PathBuilder(database).buildFullPathsBatch(parentIds);
 
 	const results: SearchResult[] = paginatedResults.map(({id, name, note}) => {
-		const nodeParentId = parentIdOf.get(id) ?? null;
-		return {id, name, note, parentPath: nodeParentId ? (pathByParent.get(nodeParentId) ?? "") : ""};
+		const row = rowOf.get(id);
+		const nodeParentId = row?.parentId ?? null;
+		return {
+			id,
+			name,
+			note,
+			parentPath: nodeParentId ? (pathByParent.get(nodeParentId) ?? "") : "",
+			completedAt: toUnixSeconds(row?.completedAt ?? null),
+		};
 	});
 
 	return {results, totalCount};

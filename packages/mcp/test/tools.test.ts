@@ -180,6 +180,7 @@ describe("MCP tools over a store", () => {
 					name: "Alpha project",
 					note: null,
 					parentPath: "Work > Projects",
+					completedAt: null,
 					url: "https://workflowy.com/#/alpha",
 				},
 			],

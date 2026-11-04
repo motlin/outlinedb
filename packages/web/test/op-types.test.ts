@@ -106,7 +106,13 @@ describe("OpInput and OpOutput pin the client-facing op types", () => {
 		expectTypeOf<OpOutput<"search.switcher">["results"][number]["starred"]>().toEqualTypeOf<boolean>();
 		expectTypeOf<OpOutput<"search.locations">["results"][number]["labelHtml"]>().toEqualTypeOf<string>();
 		expectTypeOf<OpOutput<"search.text">>().toEqualTypeOf<{
-			results: {id: string; name: string | null; note: string | null; parentPath: string}[];
+			results: {
+				id: string;
+				name: string | null;
+				note: string | null;
+				parentPath: string;
+				completedAt: number | null;
+			}[];
 			totalCount: number;
 		}>();
 		expectTypeOf<OpOutput<"related.find">>().toEqualTypeOf<{

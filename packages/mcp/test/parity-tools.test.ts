@@ -62,6 +62,32 @@ describe("workflowy_search filters", () => {
 		expect(searchIds(result).toSorted()).toStrictEqual(["p-alpha", "p-beta", "p-gamma", "p-projects", "p-work"]);
 	});
 
+	it("returns completedAt for completed and incomplete matches", async () => {
+		const result = await callTool(harness.store, "workflowy_search", {query: "beta OR alpha"});
+
+		expect({isError: result.isError, value: JSON.parse(text(result))}).toStrictEqual({
+			isError: undefined,
+			value: [
+				{
+					id: "p-alpha",
+					name: "Parity alpha task",
+					note: null,
+					parentPath: "Parity work > Parity projects",
+					completedAt: null,
+					url: "https://workflowy.com/#/palpha",
+				},
+				{
+					id: "p-beta",
+					name: "Parity beta task",
+					note: null,
+					parentPath: "Parity work > Parity projects",
+					completedAt: 1_600_000_100,
+					url: "https://workflowy.com/#/pbeta",
+				},
+			],
+		});
+	});
+
 	it("drops completed nodes with incomplete", async () => {
 		const result = await callTool(harness.store, "workflowy_search", {query: "task", incomplete: true});
 
