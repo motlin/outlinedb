@@ -31,12 +31,15 @@ afterEach(async () => {
 	useOutlineStore.setState({relatedNodesPanelOpen: false, lastEditedId: null});
 });
 
+/** Flush pending work a few macrotasks deep; under fake timers that is a zero-length advance, so the clock stays put. */
 async function settle(): Promise<void> {
 	for (let i = 0; i < 5; i++) {
 		await act(async () => {
-			await new Promise((resolve) => {
-				setTimeout(resolve, 0);
-			});
+			await (vi.isFakeTimers()
+				? vi.advanceTimersByTimeAsync(0)
+				: new Promise((resolve) => {
+						setTimeout(resolve, 0);
+					}));
 		});
 	}
 }
@@ -209,18 +212,19 @@ describe("RelatedNodesPanel AI enable flow", () => {
 		vi.useRealTimers();
 	});
 
-	/** Mount closed, then report whether the panel is open just before and after upstream's 3s boot delay. */
+	/**
+	 * Mount closed, then report whether the panel is open just before and after upstream's 3s boot delay. The fake
+	 * clock never follows the real one, so a slow mount cannot carry the delay past the `before` check.
+	 */
 	async function openedAfterDelay(account: Account): Promise<{before: boolean; after: boolean}> {
-		vi.useFakeTimers({shouldAdvanceTime: true});
+		vi.useFakeTimers();
 		await mount({...account, open: false});
 		await act(async () => {
-			vi.advanceTimersByTime(2900);
-			await Promise.resolve();
+			await vi.advanceTimersByTimeAsync(2900);
 		});
 		const before = useOutlineStore.getState().relatedNodesPanelOpen;
 		await act(async () => {
-			vi.advanceTimersByTime(200);
-			await Promise.resolve();
+			await vi.advanceTimersByTimeAsync(200);
 		});
 		return {before, after: useOutlineStore.getState().relatedNodesPanelOpen};
 	}
