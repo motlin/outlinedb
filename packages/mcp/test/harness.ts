@@ -10,6 +10,7 @@ import type {AppDatabase} from "@workflowy/shared/db";
 import {createServerContext, inProcessStore} from "@workflowy/web/node-host";
 import type {StoreClient} from "@workflowy/web/node-host";
 import {registerWorkflowyTools} from "../src/register.js";
+import type {ToolAccess} from "../src/register.js";
 
 declare module "vitest" {
 	export interface ProvidedContext {
@@ -76,10 +77,10 @@ export function seed(
 	cache.insertNode({id, name, note, priority: 0, createdAt: 0, modifiedAt: 0, completedAt: null}, parentId);
 }
 
-/** A client connected over an in-memory transport to a server carrying every Workflowy tool. */
-export async function connectClient(store: StoreClient): Promise<Client> {
+/** A client connected over an in-memory transport to a server carrying the Workflowy tools `access` allows. */
+export async function connectClient(store: StoreClient, access?: ToolAccess): Promise<Client> {
 	const server = new McpServer({name: "workflowy", version: "0.1.0"});
-	registerWorkflowyTools(server, store);
+	registerWorkflowyTools(server, store, access);
 	const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 	const client = new Client({name: "test", version: "0.0.0"});
 	await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);

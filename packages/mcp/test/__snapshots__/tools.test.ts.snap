@@ -58,6 +58,27 @@ exports[`MCP tools over a store > advertises every tool with its name, descripti
   {
     "_meta": undefined,
     "annotations": undefined,
+    "description": "Nodes added, deleted, edited, moved, completed or uncompleted since a cutoff: a flat change list, the changes as a tree with unchanged ancestors as context, and a summary",
+    "execution": {
+      "taskSupport": "forbidden",
+    },
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "since": {
+          "default": "1d",
+          "description": "Duration (e.g. 12h, 2d, 1w) or ISO date to report changes since",
+          "type": "string",
+        },
+      },
+      "type": "object",
+    },
+    "name": "workflowy_node_changes",
+    "title": undefined,
+  },
+  {
+    "_meta": undefined,
+    "annotations": undefined,
     "description": "Create a new node",
     "execution": {
       "taskSupport": "forbidden",
@@ -323,27 +344,6 @@ exports[`MCP tools over a store > advertises every tool with its name, descripti
       "type": "object",
     },
     "name": "workflowy_node_mirror",
-    "title": undefined,
-  },
-  {
-    "_meta": undefined,
-    "annotations": undefined,
-    "description": "Nodes added, deleted, edited, moved, completed or uncompleted since a cutoff: a flat change list, the changes as a tree with unchanged ancestors as context, and a summary",
-    "execution": {
-      "taskSupport": "forbidden",
-    },
-    "inputSchema": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "properties": {
-        "since": {
-          "default": "1d",
-          "description": "Duration (e.g. 12h, 2d, 1w) or ISO date to report changes since",
-          "type": "string",
-        },
-      },
-      "type": "object",
-    },
-    "name": "workflowy_node_changes",
     "title": undefined,
   },
   {

@@ -2,17 +2,19 @@
 	"name": "workflowy",
 	"main": "src/worker.ts",
 	"compatibility_date": "2026-08-01",
-	"compatibility_flags": ["nodejs_compat"],
+	"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
 	"limits": {"cpu_ms": 300000},
 	"assets": {
 		"directory": "../web/dist/client",
 		"binding": "ASSETS",
 		"not_found_handling": "single-page-application",
-		"run_worker_first": ["/health", "/api/*", "/mcp"],
+		"run_worker_first": ["/health", "/api/*", "/mcp", "/authorize", "/oauth/*", "/.well-known/*"],
 	},
 	"durable_objects": {
 		"bindings": [{"name": "USER_STORE", "class_name": "UserStore"}],
 	},
+	// OAuth clients, grants and hashed tokens for the MCP connector; deploy provisions the namespace when it has no id.
+	"kv_namespaces": [{"binding": "OAUTH_KV"}],
 	"r2_buckets": [{"binding": "SNAPSHOTS", "bucket_name": "workflowy-snapshots"}],
 	"migrations": [{"tag": "v1", "new_sqlite_classes": ["UserStore"]}],
 	// Access config (ACCESS_TEAM_DOMAIN, ACCESS_AUD, ALLOWED_EMAILS, ALLOWED_SERVICE_TOKENS) must not be vars: deploy would reset them. Set them as secrets; use .dev.vars locally (also ACCESS_DEV_IDENTITY).

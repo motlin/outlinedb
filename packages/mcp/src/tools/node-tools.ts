@@ -55,6 +55,7 @@ async function createChildren(store: StoreClient, parentId: string, specs: NodeT
 	return {ok: true, children};
 }
 
+/** The tools that read the outline. */
 export function registerNodeTools(server: McpServer, store: StoreClient): void {
 	server.registerTool(
 		"workflowy_node_get",
@@ -112,6 +113,28 @@ export function registerNodeTools(server: McpServer, store: StoreClient): void {
 		},
 	);
 
+	server.registerTool(
+		"workflowy_node_changes",
+		{
+			description:
+				"Nodes added, deleted, edited, moved, completed or uncompleted since a cutoff: a flat change list, the changes as a tree with unchanged ancestors as context, and a summary",
+			inputSchema: {
+				since: z
+					.string()
+					.optional()
+					.default("1d")
+					.describe("Duration (e.g. 12h, 2d, 1w) or ISO date to report changes since"),
+			},
+		},
+		async ({since}) => {
+			const changes = await store.call("changes.list", {since});
+			return changes.ok ? jsonResult(changes.value) : opError(changes);
+		},
+	);
+}
+
+/** The tools that change the outline; a read-only connection does not get them. */
+export function registerNodeWriteTools(server: McpServer, store: StoreClient): void {
 	server.registerTool(
 		"workflowy_node_create",
 		{
@@ -350,25 +373,6 @@ export function registerNodeTools(server: McpServer, store: StoreClient): void {
 				parentId: parent.id,
 				url: nodeUrl(mirror.id),
 			});
-		},
-	);
-
-	server.registerTool(
-		"workflowy_node_changes",
-		{
-			description:
-				"Nodes added, deleted, edited, moved, completed or uncompleted since a cutoff: a flat change list, the changes as a tree with unchanged ancestors as context, and a summary",
-			inputSchema: {
-				since: z
-					.string()
-					.optional()
-					.default("1d")
-					.describe("Duration (e.g. 12h, 2d, 1w) or ISO date to report changes since"),
-			},
-		},
-		async ({since}) => {
-			const changes = await store.call("changes.list", {since});
-			return changes.ok ? jsonResult(changes.value) : opError(changes);
 		},
 	);
 }

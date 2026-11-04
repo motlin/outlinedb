@@ -1,3 +1,4 @@
+import type {OAuthHelpers} from "@cloudflare/workers-oauth-provider";
 import {parseAccountState} from "@workflowy/shared/cache";
 import {createHttpApp} from "@workflowy/web/server-app";
 import type {StoreClient} from "@workflowy/web/server-app";
@@ -5,7 +6,7 @@ import {Hono} from "hono";
 import {createMiddleware} from "hono/factory";
 import {resolveIdentity} from "./access";
 import type {AccessEnv} from "./access";
-import {mcpHandler} from "./mcp";
+import {authorize, oauthProviderFor} from "./oauth";
 import {storeClient} from "./store-client";
 import type {UserStore} from "./user-store";
 
@@ -27,7 +28,7 @@ function passEncodedBody(response: Response): Response {
 	});
 }
 
-type WorkerEnv = Env & AccessEnv;
+type WorkerEnv = Env & AccessEnv & {OAUTH_PROVIDER: OAuthHelpers};
 interface WorkerApp {
 	Bindings: WorkerEnv;
 	Variables: {email: string; stub: DurableObjectStub<UserStore>};
@@ -57,10 +58,9 @@ const identity = createMiddleware<WorkerApp>(async (c, next) => {
 
 app.use("/health", identity);
 app.use("/api/*", identity);
-app.use("/mcp", identity);
 
-// MCP sits outside `createHttpApp`, so the API's compression never touches its JSON-RPC responses.
-app.all("/mcp", async (c) => mcpHandler(c.req.raw, c.var.email, c.env));
+// The OAuth consent page; it runs its own Access check, since the grant it issues acts as that email.
+app.on(["GET", "POST"], "/authorize", async (c) => authorize(c.req.raw, c.env));
 
 // Migrated routes are answered here over RPC.
 app.route(
@@ -112,4 +112,12 @@ app.all("/api/*", () => new Response("Not found", {status: 404}));
 
 app.all("*", async (c) => c.env.ASSETS.fetch(c.req.raw));
 
-export default app satisfies ExportedHandler<WorkerEnv>;
+/**
+ * The OAuth provider answers discovery, `/oauth/register`, `/oauth/token` and bearer-checked `/mcp` itself (outside
+ * `createHttpApp`, so the API's compression never touches MCP's JSON-RPC responses), and passes the rest to `app`.
+ */
+export default {
+	async fetch(request, env, ctx) {
+		return oauthProviderFor(new URL(request.url).origin, app).fetch(request, env, ctx);
+	},
+} satisfies ExportedHandler<WorkerEnv>;

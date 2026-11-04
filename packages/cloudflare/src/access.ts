@@ -40,6 +40,18 @@ function serviceTokenIdentities(raw: string | undefined): Map<string, string> {
 	return identities;
 }
 
+function allowedEmails(env: AccessEnv): string[] {
+	return (env.ALLOWED_EMAILS ?? "")
+		.split(",")
+		.map((entry) => entry.trim().toLowerCase())
+		.filter((entry) => entry !== "");
+}
+
+/** Whether `email` may still use the app: the local dev identity, or an email on the allowlist. */
+export function isAllowedEmail(email: string, env: AccessEnv): boolean {
+	return email === env.ACCESS_DEV_IDENTITY || allowedEmails(env).includes(email);
+}
+
 /** Verify the Cloudflare Access JWT and the email allowlist; the identity is the lowercased email. */
 export async function resolveIdentity(
 	request: Request,
@@ -67,11 +79,7 @@ export async function resolveIdentity(
 			return acting === undefined ? {status: 403} : {email: acting};
 		}
 		const email = typeof payload.email === "string" ? payload.email.toLowerCase() : undefined;
-		const allowed = (env.ALLOWED_EMAILS ?? "")
-			.split(",")
-			.map((entry) => entry.trim().toLowerCase())
-			.filter((entry) => entry !== "");
-		return email !== undefined && allowed.includes(email) ? {email} : {status: 403};
+		return email !== undefined && allowedEmails(env).includes(email) ? {email} : {status: 403};
 	} catch {
 		return {status: 403};
 	}

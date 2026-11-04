@@ -1,103 +1,195 @@
 import {afterAll, beforeAll, describe, expect, it} from "vite-plus/test";
 import {startHarness} from "./harness";
 import type {Harness} from "./harness";
+import {accessToken, approve, callback, exchange, mcpRpc, openConsent, origin} from "./oauth-flow";
 
-const url = "http://localhost/mcp";
-const headers = {
-	"content-type": "application/json",
-	accept: "application/json, text/event-stream",
-	"accept-encoding": "gzip",
-	"mcp-protocol-version": "2025-06-18",
-};
+const READ_TOOLS = [
+	"workflowy_cache_status",
+	"workflowy_calendar_day",
+	"workflowy_node_changes",
+	"workflowy_node_get",
+	"workflowy_node_list",
+	"workflowy_search",
+];
 
-describe("/mcp in the Worker", () => {
+const ALL_TOOLS = [
+	"workflowy_cache_status",
+	"workflowy_calendar_day",
+	"workflowy_node_changes",
+	"workflowy_node_complete",
+	"workflowy_node_create",
+	"workflowy_node_delete",
+	"workflowy_node_get",
+	"workflowy_node_list",
+	"workflowy_node_mirror",
+	"workflowy_node_move",
+	"workflowy_node_uncomplete",
+	"workflowy_node_update",
+	"workflowy_search",
+];
+
+function toolNames(body: string): string[] {
+	const parsed: {result: {tools: {name: string}[]}} = JSON.parse(body);
+	return parsed.result.tools.map((tool) => tool.name).toSorted();
+}
+
+describe("OAuth discovery", () => {
 	let h: Harness;
 
 	beforeAll(async () => {
-		h = await startHarness("./probe-entry.ts", "ProbeStore");
-		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
-		const ns = (await h.mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace;
-		await ns.get(ns.idFromName("dev")).fetch("http://localhost/__seed?name=Plan%20the%20remote%20MCP");
+		h = await startHarness("../src/worker.ts", "UserStore");
 	}, 120_000);
 
 	afterAll(async () => {
 		await h.dispose();
 	});
 
-	async function rpc(id: number, method: string, params: Record<string, unknown>) {
-		const response = await h.mf.dispatchFetch(url, {
-			method: "POST",
-			headers,
-			body: JSON.stringify({jsonrpc: "2.0", id, method, params}),
+	it("publishes authorization server metadata with PKCE, registration and both scopes", async () => {
+		const response = await h.mf.dispatchFetch(`${origin}/.well-known/oauth-authorization-server`);
+		expect(response.status).toBe(200);
+		await expect(response.json()).resolves.toMatchObject({
+			issuer: origin,
+			authorization_endpoint: `${origin}/authorize`,
+			token_endpoint: `${origin}/oauth/token`,
+			registration_endpoint: `${origin}/oauth/register`,
+			code_challenge_methods_supported: ["S256"],
+			scopes_supported: ["mcp:read", "mcp:write", "offline_access"],
 		});
-		return {
-			status: response.status,
-			type: response.headers.get("content-type"),
-			encoding: response.headers.get("content-encoding"),
-			body: await response.text(),
-		};
-	}
-
-	it("answers initialize, tools/list and tools/call workflowy_search with plain JSON over the stateless transport", async () => {
-		const init = await rpc(1, "initialize", {
-			protocolVersion: "2025-06-18",
-			capabilities: {},
-			clientInfo: {name: "test", version: "0"},
-		});
-		expect({status: init.status, type: init.type, encoding: init.encoding}).toStrictEqual({
-			status: 200,
-			type: "application/json",
-			encoding: null,
-		});
-		expect(JSON.parse(init.body)).toMatchObject({
-			jsonrpc: "2.0",
-			id: 1,
-			result: {serverInfo: {name: "workflowy"}},
-		});
-
-		const list = await rpc(2, "tools/list", {});
-		expect(list.status).toBe(200);
-		const names: string[] = JSON.parse(list.body).result.tools.map((tool: {name: string}) => tool.name);
-		expect(names.toSorted()).toStrictEqual([
-			"workflowy_cache_status",
-			"workflowy_calendar_day",
-			"workflowy_node_changes",
-			"workflowy_node_complete",
-			"workflowy_node_create",
-			"workflowy_node_delete",
-			"workflowy_node_get",
-			"workflowy_node_list",
-			"workflowy_node_mirror",
-			"workflowy_node_move",
-			"workflowy_node_uncomplete",
-			"workflowy_node_update",
-			"workflowy_search",
-		]);
-
-		const call = await rpc(3, "tools/call", {name: "workflowy_search", arguments: {query: "remote"}});
-		expect(call.status).toBe(200);
-		const parsed = JSON.parse(call.body);
-		expect(parsed.result.isError).toBeUndefined();
-		expect(JSON.parse(parsed.result.content[0].text)).toStrictEqual([
-			{
-				id: "seed-node",
-				name: "Plan the remote MCP",
-				note: null,
-				parentPath: "",
-				completedAt: null,
-				url: "https://workflowy.com/#/seednode",
-			},
-		]);
 	});
 
-	it("rejects GET and DELETE with 405, since stateless mode has no server-to-client stream", async () => {
-		const get = await h.mf.dispatchFetch(url, {headers: {accept: "text/event-stream"}});
-		const del = await h.mf.dispatchFetch(url, {method: "DELETE"});
-		expect([get.status, del.status]).toStrictEqual([405, 405]);
+	it("publishes protected resource metadata for /mcp", async () => {
+		const response = await h.mf.dispatchFetch(`${origin}/.well-known/oauth-protected-resource/mcp`);
+		expect(response.status).toBe(200);
+		await expect(response.json()).resolves.toMatchObject({
+			resource: `${origin}/mcp`,
+			authorization_servers: [origin],
+			scopes_supported: ["mcp:read"],
+		});
+	});
+
+	it("answers /mcp without a bearer with 401 pointing at the resource metadata", async () => {
+		const response = await h.mf.dispatchFetch(`${origin}/mcp`, {method: "POST"});
+		expect(response.status).toBe(401);
+		expect(response.headers.get("www-authenticate")).toContain(
+			`resource_metadata="${origin}/.well-known/oauth-protected-resource/mcp"`,
+		);
+	});
+
+	it("answers /mcp with an unknown bearer with 401", async () => {
+		expect((await mcpRpc(h.mf, "not-a-token", 1, "tools/list", {})).status).toBe(401);
+	});
+
+	it("registers a public client dynamically", async () => {
+		const response = await h.mf.dispatchFetch(`${origin}/oauth/register`, {
+			method: "POST",
+			headers: {"content-type": "application/json"},
+			body: JSON.stringify({
+				client_name: "Claude",
+				redirect_uris: [callback],
+				token_endpoint_auth_method: "none",
+			}),
+		});
+		expect(response.status).toBe(201);
+		await expect(response.json()).resolves.toMatchObject({
+			client_name: "Claude",
+			redirect_uris: [callback],
+			token_endpoint_auth_method: "none",
+		});
 	});
 });
 
-describe("/mcp behind Access", () => {
+describe("OAuth consent", () => {
+	let h: Harness;
+
+	beforeAll(async () => {
+		h = await startHarness("../src/worker.ts", "UserStore");
+	}, 120_000);
+
+	afterAll(async () => {
+		await h.dispose();
+	});
+
+	it("shows a consent page naming the client, where tokens go, and both access levels", async () => {
+		const page = await openConsent(h.mf);
+		expect(page.status).toBe(200);
+		expect(page.handle).not.toBe("");
+		expect(page.cookie).toMatch(/^__Host-oauth-consent-/u);
+		expect(page.html).toContain("Claude");
+		expect(page.html).toContain("claude.ai");
+		expect(page.html).toContain('name="access" value="read"');
+		expect(page.html).toContain('name="access" value="write" checked');
+	});
+
+	it("pre-selects read-only when the client asks only for mcp:read", async () => {
+		const page = await openConsent(h.mf, "mcp:read");
+		expect(page.html).toContain('name="access" value="read" checked');
+		expect(page.html).not.toContain('name="access" value="write" checked');
+	});
+
+	it("escapes the client's self-asserted name", async () => {
+		const response = await h.mf.dispatchFetch(`${origin}/oauth/register`, {
+			method: "POST",
+			headers: {"content-type": "application/json"},
+			body: JSON.stringify({
+				client_name: "<script>alert(1)</script>",
+				redirect_uris: [callback],
+				token_endpoint_auth_method: "none",
+			}),
+		});
+		const {client_id: clientId}: {client_id: string} = JSON.parse(await response.text());
+		const query = new URLSearchParams({
+			response_type: "code",
+			client_id: clientId,
+			redirect_uri: callback,
+			scope: "mcp:read",
+			code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+			code_challenge_method: "S256",
+		});
+		const html = await (await h.mf.dispatchFetch(`${origin}/authorize?${query}`)).text();
+		expect(html).not.toContain("<script>alert(1)</script>");
+		expect(html).toContain("&#60;script&#62;");
+	});
+
+	it("redirects to the client with a code and the state after approval", async () => {
+		const page = await openConsent(h.mf);
+		const redirect = await approve(h.mf, page, "write");
+		expect(`${redirect.origin}${redirect.pathname}`).toBe(callback);
+		expect(redirect.searchParams.get("state")).toBe("state-1");
+		expect(redirect.searchParams.get("code")).toBeTruthy();
+	});
+
+	it("redirects with access_denied when the user denies", async () => {
+		const page = await openConsent(h.mf);
+		const response = await h.mf.dispatchFetch(`${origin}/authorize`, {
+			method: "POST",
+			redirect: "manual",
+			headers: {"content-type": "application/x-www-form-urlencoded", cookie: page.cookie},
+			body: new URLSearchParams({handle: page.handle, decision: "deny"}).toString(),
+		});
+		expect(response.status).toBe(302);
+		const location = new URL(response.headers.get("location") ?? "");
+		expect([location.searchParams.get("error"), location.searchParams.get("state")]).toStrictEqual([
+			"access_denied",
+			"state-1",
+		]);
+	});
+
+	it("issues a read/write token for write access and a read-only token for read access", async () => {
+		const write = await accessToken(h.mf, "write");
+		const read = await accessToken(h.mf, "read");
+		expect([write.scope, read.scope]).toStrictEqual(["mcp:read mcp:write", "mcp:read"]);
+		expect([typeof write.refresh_token, typeof read.refresh_token]).toStrictEqual(["string", "string"]);
+	});
+
+	it("rejects a code exchange with the wrong PKCE verifier", async () => {
+		const page = await openConsent(h.mf);
+		const redirect = await approve(h.mf, page, "write");
+		const wrong = {...page, verifier: "wrong-verifier-wrong-verifier-wrong-verifier"};
+		await expect(exchange(h.mf, wrong, redirect)).rejects.toThrow(/token: 400/u);
+	});
+});
+
+describe("/authorize behind Access", () => {
 	let h: Harness;
 
 	beforeAll(async () => {
@@ -113,11 +205,110 @@ describe("/mcp behind Access", () => {
 	});
 
 	it("returns 401 without an Access identity", async () => {
-		const response = await h.mf.dispatchFetch(url, {
-			method: "POST",
-			headers,
-			body: JSON.stringify({jsonrpc: "2.0", id: 1, method: "tools/list", params: {}}),
-		});
-		expect(response.status).toBe(401);
+		const page = await openConsent(h.mf);
+		expect(page.status).toBe(401);
 	});
+});
+
+describe("/mcp with a bearer token", () => {
+	let h: Harness;
+
+	beforeAll(async () => {
+		h = await startHarness("./probe-entry.ts", "ProbeStore");
+		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
+		const ns = (await h.mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace;
+		await ns.get(ns.idFromName("dev")).fetch("http://localhost/__seed?name=Plan%20the%20remote%20MCP");
+	}, 120_000);
+
+	afterAll(async () => {
+		await h.dispose();
+	});
+
+	it("answers initialize, tools/list and tools/call workflowy_search from the user's Durable Object with plain JSON", async () => {
+		const {access_token: token} = await accessToken(h.mf, "write");
+
+		const init = await mcpRpc(h.mf, token, 1, "initialize", {
+			protocolVersion: "2025-06-18",
+			capabilities: {},
+			clientInfo: {name: "test", version: "0"},
+		});
+		expect({status: init.status, type: init.type, encoding: init.encoding}).toStrictEqual({
+			status: 200,
+			type: "application/json",
+			encoding: null,
+		});
+		expect(JSON.parse(init.body)).toMatchObject({jsonrpc: "2.0", id: 1, result: {serverInfo: {name: "workflowy"}}});
+
+		const list = await mcpRpc(h.mf, token, 2, "tools/list", {});
+		expect(list.status).toBe(200);
+		expect(toolNames(list.body)).toStrictEqual(ALL_TOOLS);
+
+		const call = await mcpRpc(h.mf, token, 3, "tools/call", {
+			name: "workflowy_search",
+			arguments: {query: "remote"},
+		});
+		expect(call.status).toBe(200);
+		const parsed = JSON.parse(call.body);
+		expect(parsed.result.isError).toBeUndefined();
+		expect(JSON.parse(parsed.result.content[0].text)).toStrictEqual([
+			{
+				id: "seed-node",
+				name: "Plan the remote MCP",
+				note: null,
+				parentPath: "",
+				completedAt: null,
+				url: "https://workflowy.com/#/seednode",
+			},
+		]);
+	});
+
+	it("lists and runs only the read tools for a read-only token", async () => {
+		const {access_token: token} = await accessToken(h.mf, "read");
+
+		const list = await mcpRpc(h.mf, token, 1, "tools/list", {});
+		expect(toolNames(list.body)).toStrictEqual(READ_TOOLS);
+
+		const search = await mcpRpc(h.mf, token, 2, "tools/call", {
+			name: "workflowy_search",
+			arguments: {query: "remote"},
+		});
+		expect(JSON.parse(search.body).result.isError).toBeUndefined();
+
+		const create = await mcpRpc(h.mf, token, 3, "tools/call", {
+			name: "workflowy_node_create",
+			arguments: {parentId: "seed-node", name: "Sneaky"},
+		});
+		expect(JSON.parse(create.body).result).toStrictEqual({
+			isError: true,
+			content: [{type: "text", text: "MCP error -32602: Tool workflowy_node_create not found"}],
+		});
+	});
+
+	it("rejects GET and DELETE with 405, since stateless mode has no server-to-client stream", async () => {
+		const {access_token: token} = await accessToken(h.mf, "write");
+		const authorization = `Bearer ${token}`;
+		const get = await h.mf.dispatchFetch(`${origin}/mcp`, {headers: {accept: "text/event-stream", authorization}});
+		const del = await h.mf.dispatchFetch(`${origin}/mcp`, {method: "DELETE", headers: {authorization}});
+		expect([get.status, del.status]).toStrictEqual([405, 405]);
+	});
+});
+
+describe("/mcp after the email leaves the allowlist", () => {
+	it("returns 403 for a still-live token", async () => {
+		const first = await startHarness("./probe-entry.ts", "ProbeStore");
+		const {access_token: token} = await accessToken(first.mf, "write");
+		expect((await mcpRpc(first.mf, token, 1, "tools/list", {})).status).toBe(200);
+		await first.dispose(true);
+
+		const second = await startHarness("./probe-entry.ts", "ProbeStore", first.persistDir, {
+			ACCESS_TEAM_DOMAIN: "team.example.com",
+			ACCESS_AUD: "aud",
+			ALLOWED_EMAILS: "alice@example.com",
+		});
+		try {
+			expect((await mcpRpc(second.mf, token, 1, "tools/list", {})).status).toBe(403);
+		} finally {
+			await second.dispose();
+		}
+	}, 240_000);
 });
