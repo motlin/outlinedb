@@ -17,6 +17,15 @@ describe("wrangler.jsonc", () => {
 		expect(readWranglerConfig().limits).toStrictEqual({cpu_ms: 300_000});
 	});
 
+	it("serves only the Access-protected custom domain, with workers.dev and preview URLs off", () => {
+		const {routes, workers_dev, preview_urls} = readWranglerConfig();
+		expect({routes, workers_dev, preview_urls}).toStrictEqual({
+			routes: [{pattern: "app.outlinedb.com", custom_domain: true}],
+			workers_dev: false,
+			preview_urls: false,
+		});
+	});
+
 	it("keeps the Access config out of vars so dashboard secrets are not reset on deploy", () => {
 		expect(readWranglerConfig().vars).toStrictEqual({SYNC_INTERVAL_MINUTES: "30"});
 	});
