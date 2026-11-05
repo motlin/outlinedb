@@ -34,6 +34,17 @@ describe("stripLabels", () => {
 	it("leaves untagged text alone", () => {
 		expect(stripLabels("Dentist at 3pm")).toStrictEqual({text: "Dentist at 3pm", labels: []});
 	});
+
+	it("keeps each tag's word as plain text in word mode, still hiding the tag itself", () => {
+		expect(stripLabels("#fasting day 1 with @AliceBrown, then #bike-ride", {tags: "word"})).toStrictEqual({
+			text: "fasting day 1 with Alice, then bike ride",
+			labels: [
+				{label: "#fasting", kind: "tag"},
+				{label: "@AliceBrown", kind: "person"},
+				{label: "#bike-ride", kind: "tag"},
+			],
+		});
+	});
 });
 
 describe("sampleStratified", () => {

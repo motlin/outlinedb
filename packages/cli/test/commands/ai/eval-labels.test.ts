@@ -153,6 +153,7 @@ describe("ai eval-labels command", () => {
 				entries: 3,
 				since: "2025-01",
 				seed: 1,
+				tagStrip: "drop",
 				targetPrecision: 0.9,
 				shortlist: {
 					model: "clef-flash",
@@ -243,6 +244,25 @@ describe("ai eval-labels command", () => {
 			arms: ["flash"],
 			firstStates: ["Played with Alice", "Played with Alice", "Paddles at the park", "Paddles at the park"],
 			secondStates: firstStates,
+		});
+	});
+
+	it("keeps each tag's plain word in the stripped text with --tag-strip word and records the mode", async () => {
+		const {stdout} = await evaluate("--sample", "10", "--since", "2025-01", "--tag-strip", "word");
+
+		expect({
+			tagStrip: JSON.parse(stdout).tagStrip,
+			states: run.mock.calls.map(([request]) => `${request.model} ${request.state.entry}`),
+		}).toStrictEqual({
+			tagStrip: "word",
+			states: [
+				"clef-flash Lunch with Bob",
+				"clef-flash Lunch with Bob",
+				"clef-flash Played pickleball with Alice",
+				"clef-flash Played pickleball with Alice",
+				"clef-flash Paddles at the park pickleball",
+				"clef-flash Paddles at the park pickleball",
+			],
 		});
 	});
 

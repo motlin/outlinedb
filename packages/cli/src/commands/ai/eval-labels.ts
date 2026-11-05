@@ -5,7 +5,14 @@ import path from "node:path";
 import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";
 import {clefClientFromEnv, readLabelRegistries} from "../../services/clef-setup.js";
-import {ARM_MODELS, EVAL_ARMS, buildEvalReport, sampleStratified, stripLabels} from "../../services/label-eval.js";
+import {
+	ARM_MODELS,
+	EVAL_ARMS,
+	TAG_STRIP_MODES,
+	buildEvalReport,
+	sampleStratified,
+	stripLabels,
+} from "../../services/label-eval.js";
 import type {EvalReport, EvalRun} from "../../services/label-eval.js";
 import {buildLabelPool} from "../../services/label-pool.js";
 import {
@@ -18,7 +25,7 @@ import {
 
 export default class EvalLabels extends Command {
 	static override description =
-		"Measure Clef label suggestions on held-out tagged journal entries: strip each sampled entry's @mentions (to first names) and #tags, run the Clef-flash shortlist once and each arm's verify pass, and report shortlist recall, precision/recall per threshold, the threshold reaching the target precision, latency and cost from usage.input_tokens, per arm and label kind";
+		"Measure Clef label suggestions on held-out tagged journal entries: strip each sampled entry's @mentions (to first names) and #tags (dropped, or kept as plain words with --tag-strip word), run the Clef-flash shortlist once and each arm's verify pass, and report shortlist recall, precision/recall per threshold, the threshold reaching the target precision, latency and cost from usage.input_tokens, per arm and label kind";
 
 	static override examples = [
 		"op run -- <%= config.bin %> <%= command.id %> --sample 500 --since 2025-01 --arms flash,clef --json",
@@ -52,6 +59,12 @@ export default class EvalLabels extends Command {
 			parse: async (input) => probability(input, "--target-precision"),
 		})(),
 		seed: Flags.integer({description: "Sampling seed", default: 1}),
+		"tag-strip": Flags.option({
+			description:
+				"How to hide #tags from Clef: drop removes them, word keeps the tag's word as plain text so evidence like '#fasting day 1' survives",
+			options: TAG_STRIP_MODES,
+			default: "drop",
+		})(),
 		"calendar-id": Flags.string({description: "Calendar root (full or short id); defaults to 📆 Calendar"}),
 		"metadata-dir": Flags.string({
 			description: "Directory holding people.json, hobbies-registry.json and tag-frequency.json",
@@ -87,7 +100,7 @@ export default class EvalLabels extends Command {
 
 		const candidates = calendarEntriesSince(cache, rootId, since).flatMap((nodeId) => {
 			const {state} = entryState(cache, nodeId);
-			const {text, labels} = stripLabels(state.entry);
+			const {text, labels} = stripLabels(state.entry, {tags: flags["tag-strip"]});
 			const truth = labels.filter(({label}) => poolLabels.has(label.toLowerCase()));
 			return truth.length === 0 ? [] : [{state: {...state, entry: text}, truth}];
 		});
@@ -111,6 +124,7 @@ export default class EvalLabels extends Command {
 		const report = buildEvalReport(runs, {
 			since: flags.since,
 			seed: flags.seed,
+			tagStrip: flags["tag-strip"],
 			targetPrecision: flags["target-precision"],
 			thresholds,
 			arms,
@@ -125,7 +139,7 @@ export default class EvalLabels extends Command {
 
 	private logSummary(report: EvalReport): void {
 		const {shortlist} = report;
-		this.log(`${report.entries} entries since ${report.since} (seed ${report.seed})`);
+		this.log(`${report.entries} entries since ${report.since} (seed ${report.seed}, tags ${report.tagStrip})`);
 		this.log(
 			`shortlist (${shortlist.model}): people recall ${pct(shortlist.person.recall)} (mean ${shortlist.person.meanSize.toFixed(1)}), tags recall ${pct(shortlist.tag.recall)} (mean ${shortlist.tag.meanSize.toFixed(1)}), p50 ${shortlist.latencyMs.p50}ms`,
 		);

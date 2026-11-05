@@ -32,17 +32,27 @@ export interface PrecisionRecall {
 }
 
 /**
- * Hides an entry's ground truth from Clef: each `@mention` becomes the person's first name (`@AliceBrown` → `Alice`)
- * and each `#tag` is removed. Returns the stripped text and the removed labels.
+ * How the eval hides `#tags`: `drop` removes them, `word` keeps the tag's word as plain text (`#bike-ride` → `bike
+ * ride`) so an entry like `#fasting day 1` keeps its evidence.
  */
-export function stripLabels(entry: string): {text: string; labels: KindedLabel[]} {
+export const TAG_STRIP_MODES = ["drop", "word"] as const;
+export type TagStripMode = (typeof TAG_STRIP_MODES)[number];
+
+/**
+ * Hides an entry's ground truth from Clef: each `@mention` becomes the person's first name (`@AliceBrown` → `Alice`)
+ * and each `#tag` is removed, or reduced to its plain word in `word` mode. Returns the stripped text and the labels.
+ */
+export function stripLabels(
+	entry: string,
+	{tags = "drop"}: {tags?: TagStripMode} = {},
+): {text: string; labels: KindedLabel[]} {
 	const labels: KindedLabel[] = [];
 	let text = "";
 	let cursor = 0;
 	for (const {index, tag} of findTags(entry)) {
 		const kind: LabelKind = tag.startsWith("@") ? "person" : "tag";
 		labels.push({label: tag, kind});
-		text += entry.slice(cursor, index) + (kind === "person" ? firstName(tag) : "");
+		text += entry.slice(cursor, index) + (kind === "person" ? firstName(tag) : tags === "word" ? tagWord(tag) : "");
 		cursor = index + tag.length;
 	}
 	text += entry.slice(cursor);
@@ -53,6 +63,10 @@ export function stripLabels(entry: string): {text: string; labels: KindedLabel[]
 			.trim(),
 		labels,
 	};
+}
+
+function tagWord(tag: string): string {
+	return tag.slice(1).replaceAll(/[_-]+/gu, " ");
 }
 
 function firstName(mention: string): string {
@@ -215,6 +229,7 @@ export interface EvalReport {
 	readonly entries: number;
 	readonly since: string;
 	readonly seed: number;
+	readonly tagStrip: TagStripMode;
 	readonly targetPrecision: number;
 	readonly shortlist: {
 		readonly model: ClefModel;
@@ -241,6 +256,7 @@ export function buildEvalReport(
 	options: {
 		since: string;
 		seed: number;
+		tagStrip: TagStripMode;
 		targetPrecision: number;
 		thresholds: readonly number[];
 		arms: readonly {arm: EvalArm; model: ClefModel}[];
@@ -264,6 +280,7 @@ export function buildEvalReport(
 		entries: runs.length,
 		since: options.since,
 		seed: options.seed,
+		tagStrip: options.tagStrip,
 		targetPrecision: options.targetPrecision,
 		shortlist: {
 			model: "clef-flash",
