@@ -20,6 +20,7 @@ import {
 	writeAccountSnapshot,
 } from "../cache/account-store.js";
 import type {AccountSnapshot, StoredAccount} from "../cache/account-store.js";
+import {applyMoveOps, isMoveReplayable} from "../cache/move-log.js";
 import {applyRelationshipOps, isReplayable} from "../cache/relationship-log.js";
 import {applyExpansionDelta, expansionVersion, readExpansion} from "../cache/expansion-store.js";
 import {advanceTreeTxId, readTreeTxId} from "../cache/tree-transaction.js";
@@ -565,8 +566,8 @@ export class WorkflowyInternalAdapter {
 	}
 
 	/**
-	 * Apply an accepted push's transactions to the edge rows, oldest first, and
-	 * store its id, in one unit of work. Our own server-run transaction can also
+	 * Apply an accepted push's transactions to the cached tree's moves and edge
+	 * rows, oldest first, and store its id, in one unit of work. Our own server-run transaction can also
 	 * come back among the remote ones, so a transaction id is applied once.
 	 */
 	private acceptTransactions(result: PushResult): void {
@@ -585,13 +586,14 @@ export class WorkflowyInternalAdapter {
 			if (id !== undefined) {
 				seen.add(id);
 			}
-			const unreplayable = transactionOps.find((op) => !isReplayable(op));
+			const unreplayable = transactionOps.find((op) => !isReplayable(op) || !isMoveReplayable(op));
 			if (unreplayable !== undefined) {
 				throw loud(new UnreplayableTransaction(id ?? "from our own push", unreplayable.type));
 			}
 			ops.push(...transactionOps);
 		}
 		runUnitOfWork(this.db, (unitOfWork) => {
+			applyMoveOps(unitOfWork, ops);
 			applyRelationshipOps(unitOfWork, ops);
 			advanceTreeTxId(unitOfWork, result.txId);
 		});
