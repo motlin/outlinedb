@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vite-plus/test";
-import {peekSwitcherText, rankSwitcher, warmSwitcher} from "../src/server/switcher-search.js";
+import {peekSwitcherText, rankSwitcher, rankSwitcherPaged, warmSwitcher} from "../src/server/switcher-search.js";
 import type {TreeSearchRow} from "../src/server/tree-search.js";
 
 const NOW_SEC = Date.UTC(2026, 9, 1) / 1000;
@@ -302,5 +302,82 @@ describe("rankSwitcher against upstream's worker (inline-search-ranking)", () =>
 			row("text", "hub", 2, "today is literal text"),
 		];
 		expect(rankedIds(rows, "Oct 1, 2026")).toStrictEqual(["due"]);
+	});
+});
+
+describe("rankSwitcherPaged", () => {
+	const PAGE_SIZE = 3;
+	const DATED_ROWS = [
+		...ROWS,
+		row(
+			"due",
+			"sandbox",
+			2,
+			'qwzx due <time startYear="2026" startMonth="10" startDay="1">Thu, Oct 1, 2026</time>',
+		),
+		row("mirror", "beta", 2, "qwzx alpha leaf", {isMirror: true}),
+	];
+	const skeleton = DATED_ROWS.map((full) => ({...full, name: null, note: null}));
+	const textById = new Map(DATED_ROWS.map(({id, name, note}) => [id, {name, note}]));
+
+	function paged(query: string, options: {showCompleted?: boolean; limit?: number} = {}) {
+		const requested: string[][] = [];
+		const response = rankSwitcherPaged(
+			skeleton,
+			query,
+			["beta"],
+			NOW_SEC,
+			{joinedSec: JOINED_SEC, ...options},
+			{
+				pageSize: PAGE_SIZE,
+				read: (ids) => {
+					requested.push([...ids]);
+					return new Map(ids.flatMap((id) => (textById.has(id) ? [[id, textById.get(id)!] as const] : [])));
+				},
+			},
+		);
+		return {response, requested};
+	}
+
+	it("answers exactly what rankSwitcher answers over the rows with their text, for every query kind", () => {
+		const queries: [string, {showCompleted?: boolean; limit?: number}][] = [
+			["qwzx", {}],
+			["qwzx", {limit: 2}],
+			["qwzx", {showCompleted: true}],
+			["par qwz", {}],
+			["parent > beta > qwzx", {}],
+			['"qwzx alpha"', {}],
+			["Oct 1, 2026", {}],
+			["nothingmatches", {}],
+		];
+		expect(queries.map(([query, options]) => paged(query, options).response)).toStrictEqual(
+			queries.map(([query, options]) =>
+				rankSwitcher(DATED_ROWS, query, ["beta"], NOW_SEC, {joinedSec: JOINED_SEC, ...options}),
+			),
+		);
+	});
+
+	it("reads the text one page at a time in tree preorder, never every row's text at once", () => {
+		const {requested} = paged("parent > beta > qwzx");
+		expect({
+			largestPage: Math.max(...requested.map((ids) => ids.length)),
+			scan: requested.flat().slice(0, skeleton.length),
+		}).toStrictEqual({
+			largestPage: PAGE_SIZE,
+			scan: [
+				"sandbox",
+				"parent",
+				"alpha",
+				"beta",
+				"deep",
+				"other",
+				"mirror",
+				"unrelated",
+				"done",
+				"underDone",
+				"base64",
+				"due",
+			],
+		});
 	});
 });

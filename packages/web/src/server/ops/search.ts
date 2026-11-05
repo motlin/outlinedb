@@ -12,17 +12,52 @@ import {collectHelperTags} from "../helper-tags.js";
 import type {HelperTags} from "../helper-tags.js";
 import type {ServerContext} from "../context.js";
 import {filterLocations} from "../location-search.js";
-import {rankSwitcher} from "../switcher-search.js";
+import {rankSwitcher, rankSwitcherPaged} from "../switcher-search.js";
+import type {RankSwitcherOptions, SwitcherResponse} from "../switcher-search.js";
 import {computeTreeSearch} from "../tree-search.js";
 import type {TreeSearchRow} from "../tree-search.js";
 import {defineOp, ok, toJson} from "./define.js";
-import {loadTreeRows, loadTreeRowsWithBacklinks, loadTreeSearchRows, queryNeedsBacklinks} from "../tree-snapshot.js";
+import {
+	loadTreeRowText,
+	loadTreeRows,
+	loadTreeRowsWithBacklinks,
+	loadTreeSearchRows,
+	loadTreeSkeletonRows,
+	queryNeedsBacklinks,
+} from "../tree-snapshot.js";
 
 type TreeLoader = (database: AppDatabase, rootId: string | null) => TreeSearchRow[];
 
 /** The snapshot loader, or the SQL subtree query when `features.treeSnapshot` is off (no whole tree held in memory). */
 function treeLoader(ctx: ServerContext): TreeLoader {
 	return ctx.config.features.treeSnapshot ? loadTreeRows : loadTreeSearchRows;
+}
+
+/** Rows of text per read when the jump menu pages the text (`features.treeSnapshot` off). */
+const SWITCHER_TEXT_PAGE_SIZE = 2000;
+
+type SwitcherRanker = (
+	rows: readonly TreeSearchRow[],
+	query: string,
+	starredIds: readonly string[],
+	nowSec: number,
+	options: RankSwitcherOptions,
+) => SwitcherResponse;
+
+/**
+ * The jump menu's rows and ranking: the snapshot with {@link rankSwitcher}, or, with `features.treeSnapshot` off
+ * (a Durable Object cannot hold every row's text), the text-free skeleton with {@link rankSwitcherPaged}.
+ */
+function switcherSearch(ctx: ServerContext): {rows: TreeSearchRow[]; rank: SwitcherRanker} {
+	if (ctx.config.features.treeSnapshot) {
+		return {rows: loadTreeRows(ctx.db, null), rank: rankSwitcher};
+	}
+	const source = {pageSize: SWITCHER_TEXT_PAGE_SIZE, read: (ids: readonly string[]) => loadTreeRowText(ctx.db, ids)};
+	return {
+		rows: loadTreeSkeletonRows(ctx.db),
+		rank: (rows, query, starredIds, nowSec, options) =>
+			rankSwitcherPaged(rows, query, starredIds, nowSec, options, source),
+	};
 }
 
 const SearchResultSchema = z.strictObject({
@@ -202,11 +237,11 @@ export const searchSwitcher = defineOp({
 	}),
 	output: SwitcherResponseSchema,
 	async run(ctx, {query, offset, limit, starredIds, showCompleted}) {
-		const rows = treeLoader(ctx)(ctx.db, null);
+		const {rows, rank} = switcherSearch(ctx);
 		const joinedSec = await loadJoinedSec(ctx, rows);
 		return ok(
 			toJson(
-				rankSwitcher(rows, query, starredIds, Math.floor(Date.now() / 1000), {
+				rank(rows, query, starredIds, Math.floor(Date.now() / 1000), {
 					joinedSec,
 					offset,
 					limit,
@@ -232,10 +267,12 @@ export const searchLocations = defineOp({
 	}),
 	output: LocationResponseSchema,
 	async run(ctx, {query, offset, limit, excludeId, starredIds, showCompleted}) {
-		const rows = treeLoader(ctx)(ctx.db, null);
+		const {rows, rank} = switcherSearch(ctx);
 		const joinedSec = await loadJoinedSec(ctx, rows);
 		return ok(
-			toJson(filterLocations(rows, {query, excludeId, offset, limit, joinedSec, starredIds, showCompleted})),
+			toJson(
+				filterLocations(rows, {query, excludeId, offset, limit, joinedSec, starredIds, showCompleted, rank}),
+			),
 		);
 	},
 });

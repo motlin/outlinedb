@@ -103,7 +103,7 @@ const LIVE_IN_CHAT = sql`(SELECT node_id FROM ${aiMetadata} WHERE in_chat = 1 AN
  * further down are still reachable through them. An `ai.inChat` row is included, flagged, but nothing below it.
  * A mirror takes its text from its live original.
  */
-function selectTreeRows(database: Database, seeds: SQL, recursive: boolean): TreeSqlRow[] {
+function selectTreeRows(database: Database, seeds: SQL, recursive: boolean, withText = true): TreeSqlRow[] {
 	const subtree = recursive
 		? sql`WITH RECURSIVE subtree(id, depth) AS (
 			${seeds}
@@ -119,8 +119,8 @@ function selectTreeRows(database: Database, seeds: SQL, recursive: boolean): Tre
 			c.id AS id,
 			c.parent_id AS parentId,
 			m.priority AS priority,
-			CASE WHEN o.id IS NULL THEN c.name ELSE o.name END AS name,
-			CASE WHEN o.id IS NULL THEN c.note ELSE o.note END AS note,
+			${withText ? sql`CASE WHEN o.id IS NULL THEN c.name ELSE o.name END` : sql`NULL`} AS name,
+			${withText ? sql`CASE WHEN o.id IS NULL THEN c.note ELSE o.note END` : sql`NULL`} AS note,
 			m.created_at AS createdAt,
 			m.modified_at AS modifiedAt,
 			CASE WHEN mi.mirror_id IS NULL THEN m.completed_at ELSE om.completed_at END AS completedAt,
@@ -159,6 +159,33 @@ export function loadTreeSearchRows(database: AppDatabase, rootId: string | null)
 			? TOP_LEVEL_SEEDS
 			: sql`SELECT id, 0 FROM node_content WHERE id = ${rootId} AND system_to = ${FAR_FUTURE_DATE}`;
 	return selectTreeRows(database, seeds, true).filter(isSearchable).map(toSearchRow);
+}
+
+/**
+ * {@link loadTreeSearchRows} for the whole tree without the text: `name` and `note` are null. What a search over
+ * a tree too large to hold with its text in memory (a 128 MB Durable Object) ranks on, reading text in
+ * {@link loadTreeRowText} pages.
+ */
+export function loadTreeSkeletonRows(database: AppDatabase): TreeSearchRow[] {
+	return selectTreeRows(database, TOP_LEVEL_SEEDS, true, false).filter(isSearchable).map(toSearchRow);
+}
+
+/** The live text of `ids` (a mirror's from its original), keyed by id; ids that are not live are absent. */
+export function loadTreeRowText(
+	database: AppDatabase,
+	ids: readonly string[],
+): Map<string, {name: string | null; note: string | null}> {
+	const rows = database.all<{id: string; name: string | null; note: string | null}>(sql`
+		SELECT
+			c.id AS id,
+			CASE WHEN o.id IS NULL THEN c.name ELSE o.name END AS name,
+			CASE WHEN o.id IS NULL THEN c.note ELSE o.note END AS note
+		FROM json_each(${JSON.stringify(ids)}) j
+		INNER JOIN node_content c ON c.id = j.value AND c.system_to = ${FAR_FUTURE_DATE}
+		LEFT JOIN mirrors mi ON mi.mirror_id = c.id AND mi.system_to = ${FAR_FUTURE_DATE}
+		LEFT JOIN node_content o ON o.id = mi.original_id AND o.system_to = ${FAR_FUTURE_DATE}
+	`);
+	return new Map(rows.map(({id, name, note}) => [id, {name, note}]));
 }
 
 /** Where a live node reachable from a top-level node sits, searchable or not. */

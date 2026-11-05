@@ -18,7 +18,9 @@ import {and, eq} from "drizzle-orm";
 import {
 	loadTreeRows,
 	loadTreeRowsWithBacklinks,
+	loadTreeRowText,
 	loadTreeSearchRows,
+	loadTreeSkeletonRows,
 	queryNeedsBacklinks,
 	peekTreeSnapshotBuild,
 	peekTreeSnapshotRows,
@@ -28,6 +30,8 @@ import {
 } from "../src/server/tree-snapshot.js";
 import {computeTreeSearch} from "../src/server/tree-search.js";
 import {peekSwitcherText} from "../src/server/switcher-search.js";
+import type {ServerContext} from "../src/server/context.js";
+import {httpAppFor} from "./http-app-for.js";
 
 const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 const SEEDED_AT = "2026-01-01 00:00:00.000";
@@ -124,6 +128,46 @@ function setup(path = ":memory:") {
 }
 
 const NO_META = {createdAt: null, modifiedAt: null, completedAt: null, layoutMode: null};
+
+describe("loadTreeSkeletonRows and loadTreeRowText", () => {
+	it("loads the whole-tree search rows without text, and the live text (a mirror's from its original) by id", () => {
+		const db = setup();
+		expect({
+			skeleton: loadTreeSkeletonRows(db),
+			text: loadTreeRowText(db, ["mirror", "a", "deleted", "missing"]),
+		}).toStrictEqual({
+			skeleton: loadTreeSearchRows(db, null).map((row) => ({...row, name: null, note: null})),
+			text: new Map([
+				["a", {name: "Alpha", note: null}],
+				["mirror", {name: "Other", note: "other note"}],
+			]),
+		});
+	});
+});
+
+describe("jump-menu search with the tree snapshot off", () => {
+	it("answers the switcher and the location picker exactly as the snapshot does", async () => {
+		const db = setup();
+		const post = async (treeSnapshot: boolean, path: string, body: object) => {
+			const ctx = {db, config: {features: {treeSnapshot}}} as unknown as ServerContext;
+			const response = await httpAppFor(ctx).fetch(
+				new Request(`http://x/api/search/${path}`, {method: "POST", body: JSON.stringify(body)}),
+			);
+			return (await response.json()) as {results: unknown[]};
+		};
+		const requests: [path: string, body: object][] = [
+			["switcher", {query: "other"}],
+			["switcher", {query: "root > child", showCompleted: true}],
+			["switcher", {query: "alpha", showCompleted: true}],
+			["locations", {query: "alpha", excludeId: "a1", showCompleted: true}],
+		];
+		const answers = async (treeSnapshot: boolean) =>
+			Promise.all(requests.map(async ([path, body]) => post(treeSnapshot, path, body)));
+		const paged = await answers(false);
+		expect(paged).toStrictEqual(await answers(true));
+		expect(paged.map((answer) => answer.results.length)).toStrictEqual([1, 1, 2, 1]);
+	});
+});
 
 describe("loadTreeSearchRows", () => {
 	it("loads the live subtree with metadata, mirror text and no references content", () => {

@@ -1,6 +1,6 @@
 import {matchField, splitIntoWords} from "@workflowy/shared/search";
 import {rankSwitcher} from "./switcher-search.js";
-import type {SwitcherAncestor} from "./switcher-search.js";
+import type {RankSwitcherOptions, SwitcherAncestor, SwitcherResponse} from "./switcher-search.js";
 import type {TreeSearchRow} from "./tree-search.js";
 
 export interface LocationResult {
@@ -25,6 +25,14 @@ export interface FilterLocationsOptions {
 	/** Page ids that get upstream's star boost (search stars' pages included). */
 	starredIds?: readonly string[];
 	showCompleted?: boolean;
+	/** The ranking, {@link rankSwitcher} unless the host pages the text (see {@link rankSwitcherPaged}). */
+	rank?: (
+		rows: readonly TreeSearchRow[],
+		query: string,
+		starredIds: readonly string[],
+		nowSec: number,
+		options: RankSwitcherOptions,
+	) => SwitcherResponse;
 }
 
 /** The query's word-start hits in `text`, each wrapped in `<b><u>`, with the rest HTML-escaped. */
@@ -47,9 +55,10 @@ export function filterLocations(
 		nowSec = Math.floor(Date.now() / 1000),
 		starredIds = [],
 		showCompleted,
+		rank = rankSwitcher,
 	}: FilterLocationsOptions,
 ): LocationResponse {
-	const {results, hasMore} = rankSwitcher(rows, query, starredIds, nowSec, {
+	const {results, hasMore} = rank(rows, query, starredIds, nowSec, {
 		joinedSec,
 		offset,
 		limit,

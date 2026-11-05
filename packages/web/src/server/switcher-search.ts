@@ -298,7 +298,7 @@ function needsTreeSearch(query: string): boolean {
 	return query.includes('"') || /\p{Emoji_Presentation}/u.test(query) || guessDates(query).length > 0;
 }
 
-function ancestorChain(row: TreeSearchRow, byId: Map<string, TreeSearchRow>): TreeSearchRow[] {
+function ancestorChain(row: TreeSearchRow, byId: ReadonlyMap<string, TreeSearchRow>): TreeSearchRow[] {
 	const chain: TreeSearchRow[] = [];
 	let parent = row.parentId === null ? undefined : byId.get(row.parentId);
 	while (parent) {
@@ -486,6 +486,229 @@ export function rankSwitcher(
 		results: scored.slice(offset, offset + limit).map(({row, completed}) =>
 			// matchSwitcherRow's label: the plain name highlighted (the row is known to match).
 			toResult(row, byId, matchField(words, rowText(row).plainName).html, completed, starred.has(row.id)),
+		),
+		hasMore: scored.length > offset + limit,
+	};
+}
+
+/** Where a paged search reads row text: `read` answers one page of at most `pageSize` ids. */
+export interface RowTextSource {
+	pageSize: number;
+	read(ids: readonly string[]): ReadonlyMap<string, {name: string | null; note: string | null}>;
+}
+
+interface Placed {
+	row: TreeSearchRow;
+	depth: number;
+	underCompleted: boolean;
+}
+
+/** The rows in tree preorder (children by priority) with their {@link placement}, computed on the walk. */
+function* placedPreorder(rows: readonly TreeSearchRow[], index: RowIndex): Generator<Placed> {
+	const children = childrenByParent(rows, index);
+	const stack: Placed[] = (children.get(null) ?? [])
+		.toReversed()
+		.map((row) => ({row, depth: 2, underCompleted: false}));
+	for (let placed = stack.pop(); placed !== undefined; placed = stack.pop()) {
+		yield placed;
+		const {row, depth, underCompleted} = placed;
+		const below = underCompleted || row.completedAt !== null;
+		for (const child of (children.get(row.id) ?? []).toReversed()) {
+			stack.push({row: child, depth: depth + 1, underCompleted: below});
+		}
+	}
+}
+
+/** `placed` in pages of `pageSize`, each row carrying its text read from `source` (rows without live text are dropped). */
+function* withTextPages(placed: Iterable<Placed>, source: RowTextSource): Generator<Placed> {
+	let page: Placed[] = [];
+	const flush = function* (): Generator<Placed> {
+		const text = source.read(page.map(({row}) => row.id));
+		for (const entry of page) {
+			const found = text.get(entry.row.id);
+			if (found !== undefined) {
+				yield {...entry, row: {...entry.row, name: found.name, note: found.note}};
+			}
+		}
+		page = [];
+	};
+	for (const entry of placed) {
+		page.push(entry);
+		if (page.length === source.pageSize) {
+			yield* flush();
+		}
+	}
+	if (page.length > 0) {
+		yield* flush();
+	}
+}
+
+/** The page's results: each row's text and its ancestors' names read from `source` once, then labelled by `label`. */
+function pagedResults(
+	hits: readonly {row: TreeSearchRow; completed: boolean}[],
+	byId: ReadonlyMap<string, TreeSearchRow>,
+	starred: ReadonlySet<string>,
+	source: RowTextSource,
+	label: (plainName: string) => string,
+): SwitcherResult[] {
+	const chains = hits.map(({row}) => ancestorChain(row, byId));
+	const ids = [...new Set([...hits.map(({row}) => row.id), ...chains.flat().map(({id}) => id)])];
+	const text = new Map<string, {name: string | null; note: string | null}>();
+	for (let start = 0; start < ids.length; start += source.pageSize) {
+		for (const [id, found] of source.read(ids.slice(start, start + source.pageSize))) {
+			text.set(id, found);
+		}
+	}
+	const nameOf = (id: string): string => stripHtmlTags(text.get(id)?.name ?? "");
+	return hits.map(({row, completed}, position) => ({
+		id: row.id,
+		labelHtml: label(nameOf(row.id)),
+		completed,
+		starred: starred.has(row.id),
+		ancestors: (chains[position] ?? []).map(({id}) => ({id, name: nameOf(id)})),
+	}));
+}
+
+/**
+ * {@link rankSwitcher} over a whole tree held without its text (`skeleton` rows have null `name` and `note`), for a
+ * host that cannot hold every row's text (a 128 MB Durable Object). The text is read a page at a time in tree
+ * preorder and dropped after each row is scored; a hit keeps only its score and the index words its tie order
+ * needs, and the returned page reads its own labels and ancestor names afterwards.
+ */
+export function rankSwitcherPaged(
+	skeleton: readonly TreeSearchRow[],
+	query: string,
+	starredIds: readonly string[],
+	nowSec: number,
+	options: RankSwitcherOptions,
+	source: RowTextSource,
+): SwitcherResponse {
+	const {joinedSec, offset = 0, limit = DEFAULT_LIMIT, excludeId, showCompleted = false} = options;
+	const starred = new Set(starredIds);
+	const index = rowIndex(skeleton);
+	const {byId, childCount} = index;
+	const rows = withTextPages(placedPreorder(skeleton, index), source);
+
+	if (needsTreeSearch(query)) {
+		const parsed = parseQuery(query, {now: nowSec * 1000});
+		if (parsed.isEmpty()) {
+			return {results: [], hasMore: false};
+		}
+		const hits: {row: TreeSearchRow; completed: boolean}[] = [];
+		for (const {row, underCompleted} of rows) {
+			const completed = underCompleted || row.completedAt !== null;
+			if (row.id === excludeId || (completed && !showCompleted)) {
+				continue;
+			}
+			if (parsed.matches(searchItem(row, childCount.get(row.id) ?? 0, underCompleted)).matches) {
+				hits.push({row: byId.get(row.id) ?? row, completed});
+			}
+		}
+		return {
+			results: pagedResults(hits.slice(offset, offset + limit), byId, starred, source, (plain) =>
+				highlight(plain, parsed.ranges(plain)),
+			),
+			hasMore: hits.length > offset + limit,
+		};
+	}
+
+	const segments = nestedSegments(query);
+	const words = splitIntoWords(segments.at(-1) ?? "");
+	if (words.length === 0) {
+		return {results: [], hasMore: false};
+	}
+	const longest = words.toSorted((a, b) => b.length - a.length)[0]?.slice(0, INDEX_WORD_LENGTH) ?? "";
+	const earlier = segments.slice(0, -1).map((segment) => parseQuery(segment));
+	// Which earlier segments each row matches; preorder scores every ancestor before its descendants.
+	const segmentHits = new Map<string, boolean[]>();
+	const ancestorsMatch = (row: TreeSearchRow): boolean => {
+		let remaining = earlier.length - 1;
+		let parent = row.parentId === null ? undefined : byId.get(row.parentId);
+		while (remaining >= 0 && parent) {
+			if (segmentHits.get(parent.id)?.[remaining] === true) {
+				remaining--;
+			}
+			parent = parent.parentId === null ? undefined : byId.get(parent.parentId);
+		}
+		return remaining < 0;
+	};
+	const longestAtWordStart = wordStart(longest);
+	const wordRegExps = words.map(wordStart);
+	const hitsEvery = (field: string): boolean => wordRegExps.every((regexp) => regexp.test(field));
+	const prefixWords = (text: string): string[] => indexWords(text).filter((word) => word.startsWith(longest));
+
+	const scored: {score: number; row: TreeSearchRow; completed: boolean; nameHit: boolean; words: string[]}[] = [];
+	for (const {row, depth, underCompleted} of rows) {
+		if (earlier.length > 0) {
+			const item = searchItem(row, childCount.get(row.id) ?? 0, false);
+			const matched = earlier.map((parsed) => parsed.matches(item).matches);
+			if (matched.includes(true)) {
+				segmentHits.set(row.id, matched);
+			}
+		}
+		if (row.id === excludeId || row.isMirror) {
+			continue;
+		}
+		const text = rowText(row);
+		if (!text.foldedName.includes(longest) && !text.foldedNote.includes(longest)) {
+			continue;
+		}
+		const completed = underCompleted || row.completedAt !== null;
+		if (completed && !showCompleted) {
+			continue;
+		}
+		const [plainNameField, rawNameField, noteField] = matchFields(row, text);
+		if (!hitsEvery(plainNameField) && !hitsEvery(rawNameField) && !hitsEvery(noteField)) {
+			continue;
+		}
+		if (earlier.length > 0 && !ancestorsMatch(row)) {
+			continue;
+		}
+		const nameHit = longestAtWordStart.test(plainNameField);
+		const noteHit = longestAtWordStart.test(noteField);
+		const score =
+			baseScore({
+				depth,
+				childCount: childCount.get(row.id) ?? 0,
+				completed,
+				lastModifiedSec: toSeconds(row.modifiedAt),
+				joinedSec,
+				nowSec,
+				layoutMode: row.layoutMode,
+				starred: starred.has(row.id),
+			}) *
+			nameBoost(row.name ?? "") *
+			textFactor(longest, text.indexName, text.indexNote, nameHit, noteHit);
+		const skeletonRow = byId.get(row.id) ?? row;
+		scored.push({
+			score,
+			row: skeletonRow,
+			completed,
+			nameHit,
+			words: prefixWords(nameHit ? text.indexName : text.indexNote),
+		});
+	}
+	// `scored` is in tree preorder, the index insertion order, so its position is the final tie-break.
+	const preorder = new Map(scored.map(({row}, position) => [row.id, position]));
+	const toEntries = (hits: typeof scored) => hits.map(({row, words: hitWords}) => ({id: row.id, words: hitWords}));
+	const position = new Map([
+		...gatherPositions(longest, toEntries(scored.filter(({nameHit}) => nameHit))),
+		...gatherPositions(longest, toEntries(scored.filter(({nameHit}) => !nameHit))),
+	]);
+	const at = (id: string): number => position.get(id) ?? Number.MAX_SAFE_INTEGER;
+	scored.sort(
+		(a, b) =>
+			b.score - a.score ||
+			at(a.row.id) - at(b.row.id) ||
+			(preorder.get(a.row.id) ?? 0) - (preorder.get(b.row.id) ?? 0),
+	);
+	return {
+		results: pagedResults(
+			scored.slice(offset, offset + limit),
+			byId,
+			starred,
+			source,
+			(plain) => matchField(words, plain).html,
 		),
 		hasMore: scored.length > offset + limit,
 	};
