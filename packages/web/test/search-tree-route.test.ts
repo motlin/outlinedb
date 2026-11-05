@@ -153,19 +153,37 @@ describe("jump-menu search with the tree snapshot off", () => {
 			const response = await httpAppFor(ctx).fetch(
 				new Request(`http://x/api/search/${path}`, {method: "POST", body: JSON.stringify(body)}),
 			);
-			return (await response.json()) as {results: unknown[]};
+			return (await response.json()) as {results: unknown[]} | {matchIds: unknown[]};
 		};
 		const requests: [path: string, body: object][] = [
 			["switcher", {query: "other"}],
 			["switcher", {query: "root > child", showCompleted: true}],
 			["switcher", {query: "alpha", showCompleted: true}],
 			["locations", {query: "alpha", excludeId: "a1", showCompleted: true}],
+			["tree", {query: "alpha", rootId: null}],
+			["tree", {query: "root > child", rootId: null}],
+			["tree", {query: "is:backlink", rootId: null}],
 		];
 		const answers = async (treeSnapshot: boolean) =>
 			Promise.all(requests.map(async ([path, body]) => post(treeSnapshot, path, body)));
 		const paged = await answers(false);
 		expect(paged).toStrictEqual(await answers(true));
-		expect(paged.map((answer) => answer.results.length)).toStrictEqual([1, 1, 2, 1]);
+		const sizes = paged.map((answer) => ("matchIds" in answer ? answer.matchIds : answer.results).length);
+		expect(sizes).toStrictEqual([1, 1, 2, 1, 2, 1, 1]);
+	});
+
+	it("answers the whole-tree helper tags exactly as the snapshot does", async () => {
+		const db = setup();
+		db.update(nodeContent).set({name: "Alpha #Tag @Pat"}).where(eq(nodeContent.id, "a")).run();
+		db.update(nodeContent).set({name: "Alpha child #tag @Pat"}).where(eq(nodeContent.id, "a1")).run();
+		const helpers = async (treeSnapshot: boolean) => {
+			const ctx = {db, config: {features: {treeSnapshot}}} as unknown as ServerContext;
+			const response = await httpAppFor(ctx).fetch(new Request("http://x/api/search/helpers?rootId="));
+			return (await response.json()) as unknown;
+		};
+		const paged = await helpers(false);
+		expect(paged).toStrictEqual(await helpers(true));
+		expect(paged).toStrictEqual({hashTags: ["#Tag"], atTags: ["@Pat"]});
 	});
 });
 

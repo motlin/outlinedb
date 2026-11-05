@@ -116,6 +116,106 @@ export function searchItem(row: TreeSearchRow, childCount: number, ancestorCompl
 	return item;
 }
 
+/** Where a paged search reads row text: `read` answers one page of at most `pageSize` ids. */
+export interface RowTextSource {
+	pageSize: number;
+	read(ids: readonly string[]): ReadonlyMap<string, {name: string | null; note: string | null}>;
+}
+
+/**
+ * `entries` in their order, read in pages of `source.pageSize`, each row carrying its text from `source`
+ * (rows without live text are dropped).
+ */
+export function* withRowText<T extends {row: TreeSearchRow}>(
+	entries: Iterable<T>,
+	source: RowTextSource,
+): Generator<T> {
+	let page: T[] = [];
+	const flush = function* (): Generator<T> {
+		const text = source.read(page.map(({row}) => row.id));
+		for (const entry of page) {
+			const found = text.get(entry.row.id);
+			if (found !== undefined) {
+				yield {...entry, row: {...entry.row, name: found.name, note: found.note}};
+			}
+		}
+		page = [];
+	};
+	for (const entry of entries) {
+		page.push(entry);
+		if (page.length === source.pageSize) {
+			yield* flush();
+		}
+	}
+	if (page.length > 0) {
+		yield* flush();
+	}
+}
+
+interface ParseOpts {
+	dateFormat?: string;
+	weekStartDay?: 0 | 1;
+}
+
+function parseTreeQuery(query: string, now: number, opts: ParseOpts) {
+	const parseOpts = {
+		now,
+		...(opts.dateFormat === undefined ? {} : {dateFormat: opts.dateFormat}),
+		...(opts.weekStartDay === undefined ? {} : {weekStartDay: opts.weekStartDay}),
+	};
+	const nested = parseNestedQuery(query, parseOpts);
+	return {nested, parsed: nested?.highlight ?? parseQuery(query, parseOpts)};
+}
+
+/** The result from `visits` (in document order) and the ids of the search root's children. */
+function summarize(
+	visits: readonly Visit[],
+	rootChildIds: readonly string[],
+	revealsCompleted: boolean,
+): TreeSearchResult {
+	// Children follow their parent in `visits`, so a reverse pass sees every child before its parent.
+	const hasDescendantMatch = new Set<string>();
+	const visible = new Set<string>();
+	for (const visit of visits.toReversed()) {
+		if (visit.childIds.some((id) => visible.has(id))) {
+			hasDescendantMatch.add(visit.id);
+		}
+		if (visit.matches || hasDescendantMatch.has(visit.id)) {
+			visible.add(visit.id);
+		}
+	}
+	const isHalfExpanded = (childIds: readonly string[]): boolean =>
+		childIds.some((id) => visible.has(id)) && childIds.some((id) => !visible.has(id));
+
+	const result = emptyResult(revealsCompleted);
+	for (const visit of visits) {
+		if (visit.matches) {
+			result.matchIds.push(visit.id);
+			result.matchCount += 1;
+			if (visit.completed) {
+				result.completedMatchCount += 1;
+			}
+			if (visit.nameMatches) {
+				result.nameMatchIds.push(visit.id);
+			}
+			if (visit.noteMatches) {
+				result.noteMatchIds.push(visit.id);
+			}
+			if (visit.metaMatches && !visit.nameMatches && !visit.noteMatches) {
+				result.metaMatchIds.push(visit.id);
+			}
+		}
+		if (hasDescendantMatch.has(visit.id)) {
+			result.ancestorIds.push(visit.id);
+			if (isHalfExpanded(visit.childIds)) {
+				result.halfExpandedIds.push(visit.id);
+			}
+		}
+	}
+	result.rootHalfExpanded = isHalfExpanded(rootChildIds);
+	return result;
+}
+
 /**
  * Port of upstream's in-place search: matches every descendant of `rootId` (the whole tree when null) against the
  * query AST, never the root itself, and reports ids in document order (parent, then children by priority).
@@ -125,15 +225,9 @@ export function computeTreeSearch(
 	rootId: string | null,
 	query: string,
 	now: number,
-	opts: {dateFormat?: string; weekStartDay?: 0 | 1} = {},
+	opts: ParseOpts = {},
 ): TreeSearchResult {
-	const parseOpts = {
-		now,
-		...(opts.dateFormat === undefined ? {} : {dateFormat: opts.dateFormat}),
-		...(opts.weekStartDay === undefined ? {} : {weekStartDay: opts.weekStartDay}),
-	};
-	const nested = parseNestedQuery(query, parseOpts);
-	const parsed = nested?.highlight ?? parseQuery(query, parseOpts);
+	const {nested, parsed} = parseTreeQuery(query, now, opts);
 	if (parsed.isEmpty()) {
 		return emptyResult(false);
 	}
@@ -175,46 +269,79 @@ export function computeTreeSearch(
 		}
 	};
 	walk(rootId, rootCompleted);
+	return summarize(
+		visits,
+		(children.get(rootId) ?? []).map((child) => child.id),
+		parsed.revealsCompleted(),
+	);
+}
 
-	// Children follow their parent in `visits`, so a reverse pass sees every child before its parent.
-	const hasDescendantMatch = new Set<string>();
-	const visible = new Set<string>();
-	for (const visit of visits.toReversed()) {
-		if (visit.childIds.some((id) => visible.has(id))) {
-			hasDescendantMatch.add(visit.id);
-		}
-		if (visit.matches || hasDescendantMatch.has(visit.id)) {
-			visible.add(visit.id);
+interface Placed {
+	row: TreeSearchRow;
+	depth: number;
+	ancestorCompleted: boolean;
+}
+
+/** Every row reachable from the top level in document order, with its depth and whether an ancestor is completed. */
+function* preorder(children: ReadonlyMap<string | null, TreeSearchRow[]>): Generator<Placed> {
+	const stack: Placed[] = (children.get(null) ?? [])
+		.toReversed()
+		.map((row) => ({row, depth: 0, ancestorCompleted: false}));
+	for (let placed = stack.pop(); placed !== undefined; placed = stack.pop()) {
+		yield placed;
+		const {row, depth, ancestorCompleted} = placed;
+		const below = ancestorCompleted || row.completedAt !== null;
+		for (const child of (children.get(row.id) ?? []).toReversed()) {
+			stack.push({row: child, depth: depth + 1, ancestorCompleted: below});
 		}
 	}
-	const isHalfExpanded = (childIds: string[]): boolean =>
-		childIds.some((id) => visible.has(id)) && childIds.some((id) => !visible.has(id));
+}
 
-	const result = emptyResult(parsed.revealsCompleted());
-	for (const visit of visits) {
-		if (visit.matches) {
-			result.matchIds.push(visit.id);
-			result.matchCount += 1;
-			if (visit.completed) {
-				result.completedMatchCount += 1;
-			}
-			if (visit.nameMatches) {
-				result.nameMatchIds.push(visit.id);
-			}
-			if (visit.noteMatches) {
-				result.noteMatchIds.push(visit.id);
-			}
-			if (visit.metaMatches && !visit.nameMatches && !visit.noteMatches) {
-				result.metaMatchIds.push(visit.id);
-			}
-		}
-		if (hasDescendantMatch.has(visit.id)) {
-			result.ancestorIds.push(visit.id);
-			if (isHalfExpanded(visit.childIds)) {
-				result.halfExpandedIds.push(visit.id);
-			}
-		}
+/**
+ * {@link computeTreeSearch} over the whole tree held without its text (`skeleton` rows have null `name` and
+ * `note`), for a host that cannot hold every row's text (a 128 MB Durable Object). The text is read a page at a
+ * time in document order and dropped once each row is matched; a nested query keeps only the current row's
+ * ancestor chain.
+ */
+export function computeTreeSearchPaged(
+	skeleton: TreeSearchRow[],
+	query: string,
+	now: number,
+	opts: ParseOpts,
+	source: RowTextSource,
+): TreeSearchResult {
+	const {nested, parsed} = parseTreeQuery(query, now, opts);
+	if (parsed.isEmpty()) {
+		return emptyResult(false);
 	}
-	result.rootHalfExpanded = isHalfExpanded((children.get(rootId) ?? []).map((child) => child.id));
-	return result;
+	const children = childrenByParent(skeleton);
+	const childIds = (id: string): string[] => (children.get(id) ?? []).map((child) => child.id);
+	const visits: Visit[] = [];
+	// The current row's ancestors with their text, root first (only for a nested query).
+	const path: {depth: number; item: SearchItem}[] = [];
+	for (const {row, depth, ancestorCompleted} of withRowText(preorder(children), source)) {
+		const count = children.get(row.id)?.length ?? 0;
+		const item = searchItem(row, count, ancestorCompleted);
+		let match: MatchResult;
+		if (nested) {
+			while ((path.at(-1)?.depth ?? -1) >= depth) {
+				path.pop();
+			}
+			match = matchNested(nested, {...item, ancestors: path.map((entry) => entry.item).toReversed()});
+			path.push({depth, item: searchItem(row, count, false)});
+		} else {
+			match = parsed.matches(item);
+		}
+		visits.push({
+			id: row.id,
+			childIds: childIds(row.id),
+			...match,
+			completed: ancestorCompleted || row.completedAt !== null,
+		});
+	}
+	return summarize(
+		visits,
+		(children.get(null) ?? []).map((child) => child.id),
+		parsed.revealsCompleted(),
+	);
 }

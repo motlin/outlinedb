@@ -13,8 +13,8 @@ import {
 	textFactor,
 	withMonthNames,
 } from "@workflowy/shared/search";
-import {searchItem} from "./tree-search.js";
-import type {TreeSearchRow} from "./tree-search.js";
+import {searchItem, withRowText} from "./tree-search.js";
+import type {RowTextSource, TreeSearchRow} from "./tree-search.js";
 
 /** Upstream's index keys words by their first 16 characters. */
 const INDEX_WORD_LENGTH = 16;
@@ -491,12 +491,6 @@ export function rankSwitcher(
 	};
 }
 
-/** Where a paged search reads row text: `read` answers one page of at most `pageSize` ids. */
-export interface RowTextSource {
-	pageSize: number;
-	read(ids: readonly string[]): ReadonlyMap<string, {name: string | null; note: string | null}>;
-}
-
 interface Placed {
 	row: TreeSearchRow;
 	depth: number;
@@ -516,30 +510,6 @@ function* placedPreorder(rows: readonly TreeSearchRow[], index: RowIndex): Gener
 		for (const child of (children.get(row.id) ?? []).toReversed()) {
 			stack.push({row: child, depth: depth + 1, underCompleted: below});
 		}
-	}
-}
-
-/** `placed` in pages of `pageSize`, each row carrying its text read from `source` (rows without live text are dropped). */
-function* withTextPages(placed: Iterable<Placed>, source: RowTextSource): Generator<Placed> {
-	let page: Placed[] = [];
-	const flush = function* (): Generator<Placed> {
-		const text = source.read(page.map(({row}) => row.id));
-		for (const entry of page) {
-			const found = text.get(entry.row.id);
-			if (found !== undefined) {
-				yield {...entry, row: {...entry.row, name: found.name, note: found.note}};
-			}
-		}
-		page = [];
-	};
-	for (const entry of placed) {
-		page.push(entry);
-		if (page.length === source.pageSize) {
-			yield* flush();
-		}
-	}
-	if (page.length > 0) {
-		yield* flush();
 	}
 }
 
@@ -587,7 +557,7 @@ export function rankSwitcherPaged(
 	const starred = new Set(starredIds);
 	const index = rowIndex(skeleton);
 	const {byId, childCount} = index;
-	const rows = withTextPages(placedPreorder(skeleton, index), source);
+	const rows = withRowText(placedPreorder(skeleton, index), source);
 
 	if (needsTreeSearch(query)) {
 		const parsed = parseQuery(query, {now: nowSec * 1000});

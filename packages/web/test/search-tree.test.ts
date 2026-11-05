@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vite-plus/test";
-import {computeTreeSearch} from "../src/server/tree-search.js";
+import {computeTreeSearch, computeTreeSearchPaged} from "../src/server/tree-search.js";
 import type {TreeSearchRow} from "../src/server/tree-search.js";
 
 const NOW = Date.UTC(2026, 9, 19, 12);
@@ -198,5 +198,63 @@ describe("computeTreeSearch", () => {
 			sundayStart: computeTreeSearch(dated, null, "this week", friday).matchIds,
 			mondayStart: computeTreeSearch(dated, null, "this week", friday, {weekStartDay: 1}).matchIds,
 		}).toStrictEqual({sundayStart: ["d18"], mondayStart: ["d25"]});
+	});
+});
+
+describe("computeTreeSearchPaged", () => {
+	const PAGE_SIZE = 3;
+	// ROWS as a whole tree: the root and the outsider are top-level.
+	const WHOLE = ROWS.map((full) => (full.id === "root" || full.id === "outsider" ? {...full, parentId: null} : full));
+	const skeleton = WHOLE.map((full) => ({...full, name: null, note: null}));
+	const textById = new Map(WHOLE.map(({id, name, note}) => [id, {name, note}]));
+
+	function paged(query: string, opts: {dateFormat?: string; weekStartDay?: 0 | 1} = {}) {
+		const requested: string[][] = [];
+		const result = computeTreeSearchPaged(skeleton, query, NOW, opts, {
+			pageSize: PAGE_SIZE,
+			read: (ids) => {
+				requested.push([...ids]);
+				return new Map(ids.flatMap((id) => (textById.has(id) ? [[id, textById.get(id)!] as const] : [])));
+			},
+		});
+		return {result, requested};
+	}
+
+	it("answers exactly what computeTreeSearch answers over the whole tree with its text", () => {
+		const queries = [
+			"apple",
+			"zebra",
+			"has:note",
+			"is:complete apple",
+			"-is:complete apple",
+			"root > apple",
+			"fruit > cherry > leaf",
+			"#fruitTag",
+			"   ",
+		];
+		expect(queries.map((query) => paged(query).result)).toStrictEqual(
+			queries.map((query) => computeTreeSearch(WHOLE, null, query, NOW)),
+		);
+	});
+
+	it("reads the text one page at a time in tree preorder, each row once", () => {
+		const {requested} = paged("root > apple");
+		expect({largestPage: Math.max(...requested.map((ids) => ids.length)), scan: requested.flat()}).toStrictEqual({
+			largestPage: PAGE_SIZE,
+			scan: [
+				"root",
+				"fruit",
+				"green",
+				"banana",
+				"cherry",
+				"deep",
+				"veg",
+				"carrot",
+				"potato",
+				"done",
+				"plain",
+				"outsider",
+			],
+		});
 	});
 });

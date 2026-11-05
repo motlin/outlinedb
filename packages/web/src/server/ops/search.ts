@@ -14,8 +14,8 @@ import type {ServerContext} from "../context.js";
 import {filterLocations} from "../location-search.js";
 import {rankSwitcher, rankSwitcherPaged} from "../switcher-search.js";
 import type {RankSwitcherOptions, SwitcherResponse} from "../switcher-search.js";
-import {computeTreeSearch} from "../tree-search.js";
-import type {TreeSearchRow} from "../tree-search.js";
+import {computeTreeSearch, computeTreeSearchPaged, withRowText} from "../tree-search.js";
+import type {RowTextSource, TreeSearchRow} from "../tree-search.js";
 import {defineOp, ok, toJson} from "./define.js";
 import {
 	loadTreeRowText,
@@ -33,8 +33,20 @@ function treeLoader(ctx: ServerContext): TreeLoader {
 	return ctx.config.features.treeSnapshot ? loadTreeRows : loadTreeSearchRows;
 }
 
-/** Rows of text per read when the jump menu pages the text (`features.treeSnapshot` off). */
-const SWITCHER_TEXT_PAGE_SIZE = 2000;
+/** Rows of text per read when a whole-tree search pages the text (`features.treeSnapshot` off). */
+const TEXT_PAGE_SIZE = 2000;
+
+function textSource(ctx: ServerContext): RowTextSource {
+	return {pageSize: TEXT_PAGE_SIZE, read: (ids) => loadTreeRowText(ctx.db, ids)};
+}
+
+/** `rows` in order, each with its text read from `source` a page at a time. */
+function* pagedRows(rows: readonly TreeSearchRow[], source: RowTextSource): Generator<TreeSearchRow> {
+	const entries = rows.map((skeletonRow) => ({row: skeletonRow}));
+	for (const {row} of withRowText(entries, source)) {
+		yield row;
+	}
+}
 
 type SwitcherRanker = (
 	rows: readonly TreeSearchRow[],
@@ -52,7 +64,7 @@ function switcherSearch(ctx: ServerContext): {rows: TreeSearchRow[]; rank: Switc
 	if (ctx.config.features.treeSnapshot) {
 		return {rows: loadTreeRows(ctx.db, null), rank: rankSwitcher};
 	}
-	const source = {pageSize: SWITCHER_TEXT_PAGE_SIZE, read: (ids: readonly string[]) => loadTreeRowText(ctx.db, ids)};
+	const source = textSource(ctx);
 	return {
 		rows: loadTreeSkeletonRows(ctx.db),
 		rank: (rows, query, starredIds, nowSec, options) =>
@@ -147,7 +159,13 @@ export function loadHelperTags(database: AppDatabase, rootId: string, load: Tree
 export const searchHelpers = defineOp({
 	input: z.object({rootId: z.string()}),
 	output: HelperTagsSchema,
-	run: (ctx, {rootId}) => ok(toJson(loadHelperTags(ctx.db, rootId, treeLoader(ctx)))),
+	run(ctx, {rootId}) {
+		if (rootId === "" && !ctx.config.features.treeSnapshot) {
+			// The whole tree's text in pages, in loadTreeSearchRows order (first-seen tag casing depends on it).
+			return ok(toJson(collectHelperTags(pagedRows(loadTreeSkeletonRows(ctx.db), textSource(ctx)))));
+		}
+		return ok(toJson(loadHelperTags(ctx.db, rootId, treeLoader(ctx))));
+	},
 });
 
 /** The account's stored date format (so strict `date:` queries parse it), or null when unset or unavailable. */
@@ -183,20 +201,25 @@ export const searchTree = defineOp({
 	input: z.object({query: z.string(), rootId: z.string().nullable()}),
 	output: TreeSearchResultSchema,
 	async run(ctx, {query, rootId}) {
+		const dateFormat = await loadDateFormat(ctx);
+		const weekStartDay = await loadWeekStartDay(ctx);
+		const opts = {
+			...(dateFormat === null ? {} : {dateFormat}),
+			...(weekStartDay === null ? {} : {weekStartDay}),
+		};
+		// Synchronous from here, so the skeleton and its text pages read one consistent database.
+		if (rootId === null && !ctx.config.features.treeSnapshot) {
+			// A Durable Object cannot hold every row's text: match over the text-free skeleton, reading text in pages.
+			const skeleton = queryNeedsBacklinks(query)
+				? loadTreeRowsWithBacklinks(ctx.db, null, (database) => loadTreeSkeletonRows(database))
+				: loadTreeSkeletonRows(ctx.db);
+			return ok(toJson(computeTreeSearchPaged(skeleton, query, Date.now(), opts, textSource(ctx))));
+		}
 		const load = treeLoader(ctx);
 		const rows = queryNeedsBacklinks(query)
 			? loadTreeRowsWithBacklinks(ctx.db, rootId, load)
 			: load(ctx.db, rootId);
-		const dateFormat = await loadDateFormat(ctx);
-		const weekStartDay = await loadWeekStartDay(ctx);
-		return ok(
-			toJson(
-				computeTreeSearch(rows, rootId, query, Date.now(), {
-					...(dateFormat === null ? {} : {dateFormat}),
-					...(weekStartDay === null ? {} : {weekStartDay}),
-				}),
-			),
-		);
+		return ok(toJson(computeTreeSearch(rows, rootId, query, Date.now(), opts)));
 	},
 });
 
