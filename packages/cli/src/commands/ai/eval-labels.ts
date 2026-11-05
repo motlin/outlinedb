@@ -1,6 +1,7 @@
 import {findCalendarRoot} from "@workflowy/shared/calendar-lookup";
 import {resolveIdOrShortId} from "@workflowy/shared/utils";
 import {Command, Flags} from "@oclif/core";
+import fs from "node:fs";
 import path from "node:path";
 import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";
@@ -8,6 +9,7 @@ import {clefClientFromEnv, readLabelRegistries} from "../../services/clef-setup.
 import {
 	ARM_MODELS,
 	EVAL_ARMS,
+	PEOPLE_CONTEXTS,
 	TAG_STRIP_MODES,
 	buildEvalReport,
 	sampleStratified,
@@ -15,13 +17,20 @@ import {
 } from "../../services/label-eval.js";
 import type {EvalReport, EvalRun} from "../../services/label-eval.js";
 import {buildLabelPool} from "../../services/label-pool.js";
+import {parsePeopleHints} from "../../services/people-hints.js";
 import {
 	calendarEntriesSince,
 	entryState,
 	parseYearMonth,
 	runShortlist,
 	runVerify,
+	siblingTexts,
 } from "../../services/suggest-labels.js";
+
+/** Word cap for person descriptions once disambiguation hints are folded in. */
+const HINTED_PERSON_WORDS = 40;
+/** Same-day entries added to state with `--people-context siblings`. */
+const MAX_SIBLINGS = 20;
 
 export default class EvalLabels extends Command {
 	static override description =
@@ -65,6 +74,23 @@ export default class EvalLabels extends Command {
 			options: TAG_STRIP_MODES,
 			default: "drop",
 		})(),
+		kind: Flags.option({
+			description:
+				"Evaluate one label kind: keep the sampled entries that carry it, only their labels of that kind, and a pool of that kind",
+			options: ["person", "tag"] as const,
+		})(),
+		"people-context": Flags.option({
+			description:
+				"Experimental extra context (default none): aliases folds people-disambiguation hints into person descriptions, siblings adds the day's other entries (stripped the same way) to state",
+			options: PEOPLE_CONTEXTS,
+			multiple: true,
+			delimiter: ",",
+			default: [],
+		})(),
+		"disambiguation-file": Flags.string({
+			description: "People-disambiguation markdown read by --people-context aliases",
+			default: path.join(".llm", "gtd", "people-disambiguation.md"),
+		}),
 		"calendar-id": Flags.string({description: "Calendar root (full or short id); defaults to 📆 Calendar"}),
 		"metadata-dir": Flags.string({
 			description: "Directory holding people.json, hobbies-registry.json and tag-frequency.json",
@@ -84,9 +110,18 @@ export default class EvalLabels extends Command {
 		);
 		const since = await parseYearMonth(flags.since, "--since");
 
+		const peopleContext = flags["people-context"];
 		const registries = readLabelRegistries(flags["metadata-dir"]);
-		const pool = buildLabelPool({...registries, entryLabels: []});
-		const poolLabels = new Map(pool.map((label) => [label.label.toLowerCase(), label]));
+		const fullPool = buildLabelPool({
+			...registries,
+			entryLabels: [],
+			...(peopleContext.includes("aliases") && {
+				personHints: parsePeopleHints(fs.readFileSync(flags["disambiguation-file"], "utf8")),
+				personDescriptionWords: HINTED_PERSON_WORDS,
+			}),
+		});
+		const poolLabels = new Map(fullPool.map((label) => [label.label.toLowerCase(), label]));
+		const pool = fullPool.filter(({kind}) => flags.kind === undefined || kind === flags.kind);
 
 		const database = createDatabase();
 		const cache = new CacheService(database);
@@ -98,16 +133,27 @@ export default class EvalLabels extends Command {
 			this.error("No 📆 Calendar root in the cache: pass --calendar-id", {exit: 1});
 		}
 
+		const strip = (text: string) => stripLabels(text, {tags: flags["tag-strip"]});
 		const candidates = calendarEntriesSince(cache, rootId, since).flatMap((nodeId) => {
 			const {state} = entryState(cache, nodeId);
-			const {text, labels} = stripLabels(state.entry, {tags: flags["tag-strip"]});
+			const {text, labels} = strip(state.entry);
 			const truth = labels.filter(({label}) => poolLabels.has(label.toLowerCase()));
-			return truth.length === 0 ? [] : [{state: {...state, entry: text}, truth}];
+			return truth.length === 0 ? [] : [{nodeId, state: {...state, entry: text}, truth}];
 		});
+		// Sample over every kind so --kind keeps the same entries as an unfiltered run with the same seed.
 		const sample = sampleStratified(candidates, {
 			size: flags.sample,
 			seed: flags.seed,
 			stratum: ({truth}) => (truth.some(({kind}) => kind === "person") ? "person" : "tag"),
+		}).flatMap(({nodeId, state, truth}) => {
+			const kept = truth.filter(({kind}) => flags.kind === undefined || kind === flags.kind);
+			if (kept.length === 0) {
+				return [];
+			}
+			const siblings = peopleContext.includes("siblings")
+				? {siblings: siblingTexts(cache, nodeId, MAX_SIBLINGS).map((text) => strip(text).text)}
+				: {};
+			return [{state: {...state, ...siblings}, truth: kept}];
 		});
 
 		const arms = flags.arms.map((arm) => ({arm, model: ARM_MODELS[arm]}));
@@ -125,6 +171,8 @@ export default class EvalLabels extends Command {
 			since: flags.since,
 			seed: flags.seed,
 			tagStrip: flags["tag-strip"],
+			kind: flags.kind ?? null,
+			peopleContext,
 			targetPrecision: flags["target-precision"],
 			thresholds,
 			arms,

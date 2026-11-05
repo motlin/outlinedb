@@ -12,7 +12,7 @@ export interface PoolLabel {
 	/** Canonical `@Name` or `#tag`. */
 	readonly label: string;
 	readonly kind: LabelKind;
-	/** At most {@link MAX_DESCRIPTION_WORDS} words for Clef to read. */
+	/** At most {@link MAX_DESCRIPTION_WORDS} words for Clef to read (people: `personDescriptionWords` if given). */
 	readonly description: string;
 }
 
@@ -25,6 +25,10 @@ export interface LabelPoolInput {
 	readonly entryLabels: readonly string[];
 	/** Frequency tags used fewer times than this are left out. */
 	readonly minTagCount?: number;
+	/** Extra phrases per lowercased `@name` (aliases, typos, homonym context), appended to that person's description. */
+	readonly personHints?: ReadonlyMap<string, readonly string[]>;
+	/** Word cap for person descriptions; defaults to {@link MAX_DESCRIPTION_WORDS}. */
+	readonly personDescriptionWords?: number;
 }
 
 /** Workflow, GTD-context and priority tags that are never content labels. */
@@ -65,22 +69,25 @@ export function buildLabelPool(input: LabelPoolInput): PoolLabel[] {
 	const excluded = new Set([...WORKFLOW_TAGS, ...input.entryLabels.map((label) => label.toLowerCase())]);
 	const pool = new Map<string, PoolLabel>();
 
-	const add = (label: string, kind: LabelKind, description: string): void => {
+	const add = (label: string, kind: LabelKind, description: string, words = MAX_DESCRIPTION_WORDS): void => {
 		const key = label.toLowerCase();
 		if (excluded.has(key)) {
 			return;
 		}
 		const existing = pool.get(key);
 		if (existing === undefined) {
-			pool.set(key, {optionId: optionIdFor(label, kind), label, kind, description: truncate(description)});
+			pool.set(key, {optionId: optionIdFor(label, kind), label, kind, description: truncate(description, words)});
 		} else if (existing.description === "" && description !== "") {
-			pool.set(key, {...existing, description: truncate(description)});
+			pool.set(key, {...existing, description: truncate(description, words)});
 		}
 	};
 
 	for (const node of walk(input.people)) {
 		if (PERSON_NAME.test(node.name)) {
-			add(node.name, "person", personDescription(node));
+			const hints = input.personHints?.get(node.name.toLowerCase()) ?? [];
+			const base = personDescription(node);
+			const description = hints.length === 0 ? base : `${base}; text may say ${hints.join(", ")}`;
+			add(node.name, "person", description, input.personDescriptionWords);
 		}
 	}
 
@@ -149,6 +156,6 @@ function humanizeTag(tag: string): string {
 	return tag.slice(1).replaceAll(/[-_]+/gu, " ");
 }
 
-function truncate(description: string): string {
-	return description.split(" ").slice(0, MAX_DESCRIPTION_WORDS).join(" ");
+function truncate(description: string, words: number): string {
+	return description.split(" ").slice(0, words).join(" ");
 }

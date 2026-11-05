@@ -70,6 +70,18 @@ export function entryState(cache: CacheService, nodeId: string): {state: ClefSta
 	return {state: {date, parent, entry}, labels: findTags(entry).map(({tag}) => tag)};
 }
 
+/** The text of the other entries under `nodeId`'s parent (its calendar day), in outline order, at most `limit`. */
+export function siblingTexts(cache: CacheService, nodeId: string, limit: number): string[] {
+	const parentId = cache.getNode(nodeId)?.parentId;
+	return parentId == null
+		? []
+		: cache
+				.getChildren(parentId)
+				.filter(({id}) => id !== nodeId)
+				.slice(0, limit)
+				.map(({name}) => stripHtmlTags(name));
+}
+
 /** One Clef pass over an entry: what it returned and the `usage.input_tokens` its requests cost. */
 export interface PassResult<T> {
 	readonly value: T;

@@ -39,6 +39,13 @@ export const TAG_STRIP_MODES = ["drop", "word"] as const;
 export type TagStripMode = (typeof TAG_STRIP_MODES)[number];
 
 /**
+ * Experimental people context: `aliases` folds people-disambiguation hints into person descriptions, `siblings` adds
+ * the day's other entries to state.
+ */
+export const PEOPLE_CONTEXTS = ["aliases", "siblings"] as const;
+export type PeopleContext = (typeof PEOPLE_CONTEXTS)[number];
+
+/**
  * Hides an entry's ground truth from Clef: each `@mention` becomes the person's first name (`@AliceBrown` → `Alice`)
  * and each `#tag` is removed, or reduced to its plain word in `word` mode. Returns the stripped text and the labels.
  */
@@ -230,6 +237,9 @@ export interface EvalReport {
 	readonly since: string;
 	readonly seed: number;
 	readonly tagStrip: TagStripMode;
+	/** The one label kind evaluated, or null for both. */
+	readonly kind: LabelKind | null;
+	readonly peopleContext: readonly PeopleContext[];
 	readonly targetPrecision: number;
 	readonly shortlist: {
 		readonly model: ClefModel;
@@ -257,6 +267,8 @@ export function buildEvalReport(
 		since: string;
 		seed: number;
 		tagStrip: TagStripMode;
+		kind: LabelKind | null;
+		peopleContext: readonly PeopleContext[];
 		targetPrecision: number;
 		thresholds: readonly number[];
 		arms: readonly {arm: EvalArm; model: ClefModel}[];
@@ -281,6 +293,8 @@ export function buildEvalReport(
 		since: options.since,
 		seed: options.seed,
 		tagStrip: options.tagStrip,
+		kind: options.kind,
+		peopleContext: options.peopleContext,
 		targetPrecision: options.targetPrecision,
 		shortlist: {
 			model: "clef-flash",

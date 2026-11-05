@@ -111,6 +111,37 @@ describe("buildLabelPool", () => {
 		]);
 	});
 
+	it("folds person hints into descriptions under a raised word cap, leaving people without hints and tags unchanged", () => {
+		expect(
+			buildLabelPool({
+				people,
+				hobbies: {name: "🎮 Hobbies Registry"},
+				tagFrequency: {"#home-repair": 9},
+				entryLabels: [],
+				personHints: new Map([
+					["@alicebrown", ["Alise", "Alice (book club)"]],
+					["@carol", ["Caro"]],
+				]),
+				personDescriptionWords: 14,
+			}),
+		).toStrictEqual([
+			{
+				optionId: "p.AliceBrown",
+				label: "@AliceBrown",
+				kind: "person",
+				description: "Alice Brown, book club friend; text may say Alise, Alice (book club)",
+			},
+			{optionId: "p.Bob", label: "@Bob", kind: "person", description: "Bob, neighbor"},
+			{
+				optionId: "p.AliceChen",
+				label: "@AliceChen",
+				kind: "person",
+				description: "Alice Chen, coworker on the platform team who sits next to me and runs",
+			},
+			{optionId: "t.home-repair", label: "#home-repair", kind: "tag", description: "home repair"},
+		]);
+	});
+
 	it("excludes workflow and GTD context tags even when they appear in the hobby registry", () => {
 		expect(
 			buildLabelPool({

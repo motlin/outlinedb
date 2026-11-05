@@ -154,6 +154,8 @@ describe("ai eval-labels command", () => {
 				since: "2025-01",
 				seed: 1,
 				tagStrip: "drop",
+				kind: null,
+				peopleContext: [],
 				targetPrecision: 0.9,
 				shortlist: {
 					model: "clef-flash",
@@ -262,6 +264,120 @@ describe("ai eval-labels command", () => {
 				"clef-flash Played pickleball with Alice",
 				"clef-flash Paddles at the park pickleball",
 				"clef-flash Paddles at the park pickleball",
+			],
+		});
+	});
+
+	it("with --kind person keeps the sample's person entries, their person labels and a people-only pool", async () => {
+		const {stdout} = await evaluate("--sample", "10", "--since", "2025-01", "--kind", "person");
+
+		const out = JSON.parse(stdout);
+		expect({
+			entries: out.entries,
+			kind: out.kind,
+			peopleContext: out.peopleContext,
+			shortlist: {person: out.shortlist.person, tag: out.shortlist.tag},
+			requests: run.mock.calls.map(([request]) => [
+				request.model,
+				request.state.entry,
+				Object.values(request.questions).flatMap((question) =>
+					question.type === "choice" ? Object.keys(question.criteria) : [question.instructions],
+				),
+			]),
+		}).toStrictEqual({
+			entries: 2,
+			kind: "person",
+			peopleContext: [],
+			shortlist: {person: {recall: 1, meanSize: 3}, tag: {recall: 1, meanSize: 0}},
+			requests: [
+				["clef-flash", "Lunch with Bob", ["p.AliceBrown", "p.AliceChen", "p.Bob", "none"]],
+				[
+					"clef-flash",
+					"Lunch with Bob",
+					[
+						"Does this journal entry involve @AliceBrown (Alice Brown, book club friend)?",
+						"Does this journal entry involve @AliceChen (Alice Chen, coworker)?",
+						"Does this journal entry involve @Bob (Bob)?",
+					],
+				],
+				["clef-flash", "Played with Alice", ["p.AliceBrown", "p.AliceChen", "p.Bob", "none"]],
+				[
+					"clef-flash",
+					"Played with Alice",
+					[
+						"Does this journal entry involve @AliceBrown (Alice Brown, book club friend)?",
+						"Does this journal entry involve @AliceChen (Alice Chen, coworker)?",
+						"Does this journal entry involve @Bob (Bob)?",
+					],
+				],
+			],
+		});
+	});
+
+	it("with --people-context aliases,siblings folds disambiguation hints into people and adds stripped same-day entries to state", async () => {
+		const disambiguation = path.join(tempDir, "people-disambiguation.md");
+		fs.writeFileSync(
+			disambiguation,
+			"## Typos\n\n| Name in text | Person | Notes |\n|---|---|---|\n| Alise | @AliceBrown | Typo |\n",
+		);
+
+		const {stdout} = await evaluate(
+			"--sample",
+			"1",
+			"--since",
+			"2025-01",
+			"--kind",
+			"person",
+			"--people-context",
+			"aliases,siblings",
+			"--disambiguation-file",
+			disambiguation,
+		);
+
+		const state = {
+			date: "2026-11-03",
+			parent: "📆 Calendar > 2026 > 11 > 11/3/2026",
+			entry: "Lunch with Bob",
+			siblings: ["Played with Alice", "Paddles at the park", "Read a book", "Played"],
+		};
+		expect({
+			peopleContext: JSON.parse(stdout).peopleContext,
+			requests: run.mock.calls.map(([request]) => request),
+		}).toStrictEqual({
+			peopleContext: ["aliases", "siblings"],
+			requests: [
+				{
+					model: "clef-flash",
+					state,
+					questions: {
+						"people.1": {
+							type: "choice",
+							instructions: "Which one of these people does this journal entry most likely involve?",
+							criteria: {
+								"p.AliceBrown": "Alice Brown, book club friend; text may say Alise",
+								"p.AliceChen": "Alice Chen, coworker",
+								"p.Bob": "Bob",
+								none: "None of these people",
+							},
+						},
+					},
+				},
+				{
+					model: "clef-flash",
+					state,
+					questions: {
+						"p.AliceBrown": {
+							type: "noul",
+							instructions:
+								"Does this journal entry involve @AliceBrown (Alice Brown, book club friend; text may say Alise)?",
+						},
+						"p.AliceChen": {
+							type: "noul",
+							instructions: "Does this journal entry involve @AliceChen (Alice Chen, coworker)?",
+						},
+						"p.Bob": {type: "noul", instructions: "Does this journal entry involve @Bob (Bob)?"},
+					},
+				},
 			],
 		});
 	});

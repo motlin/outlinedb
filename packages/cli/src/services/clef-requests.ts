@@ -8,6 +8,8 @@ export interface ClefState {
 	readonly date: string;
 	readonly parent: string;
 	readonly entry: string;
+	/** The other entries on the same calendar day, when the caller opts into that context. */
+	readonly siblings?: readonly string[];
 }
 
 export interface ChoiceQuestion {
