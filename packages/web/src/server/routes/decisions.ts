@@ -19,7 +19,7 @@ import {
 	parseDecisionDocument,
 	serializeDecisionAnswers,
 } from "../decisions.js";
-import type {DecisionAnswers, DecisionDocument, DecisionStore} from "../decisions.js";
+import type {DecisionAnswers, DecisionDocument, DecisionStore, DecisionSubmitResult} from "../decisions.js";
 
 export interface DecisionsRouterOptions {
 	now?: () => Date;
@@ -105,7 +105,7 @@ export function createDecisionsRouter(options: DecisionsRouterOptions = {}): Hon
 	);
 
 	router.post("/:slug/submit", async (c) =>
-		respond(c, async () => {
+		respond(c, async (): Promise<DecisionSubmitResult> => {
 			const {store, slug} = target(c);
 			await readDocument(store, slug);
 			const submittedAt = now().toISOString();

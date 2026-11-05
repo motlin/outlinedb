@@ -8,7 +8,7 @@
 import {useEffect, useMemo, useRef, useState} from "react";
 import type {ReactNode} from "react";
 import {useParams} from "react-router-dom";
-import type {DecisionItem, DecisionPage} from "../../server/decisions.js";
+import type {DecisionItem, DecisionPage, DecisionSubmitResult} from "../../server/decisions.js";
 import {bodyTokens} from "../decision-tokens.js";
 import "../decisions.css";
 import {hideLoadingScreenOnce} from "../loading-screen.js";
@@ -29,7 +29,11 @@ interface ItemState {
 	status: SaveStatus;
 }
 
-type SubmitState = {kind: "idle"} | {kind: "submitting"} | {kind: "submitted"} | {kind: "error"; message: string};
+type SubmitState =
+	| {kind: "idle"}
+	| {kind: "submitting"}
+	| {kind: "submitted"; at: string}
+	| {kind: "error"; message: string};
 
 /** The outcome of the most recent save, shown in the footer because the card that made it may be gone. */
 type LastSave = {card: number; error: string | null} | null;
@@ -54,6 +58,11 @@ const STATUS_TEXT: Record<Exclude<SaveStatus["kind"], "error">, string> = {idle:
 
 function statusText(status: SaveStatus): string {
 	return status.kind === "error" ? `Not saved: ${status.message}` : STATUS_TEXT[status.kind];
+}
+
+/** A submission time as the viewer's local clock time. */
+function clockTime(iso: string): string {
+	return new Date(iso).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"});
 }
 
 function messageOf(error: unknown): string {
@@ -134,14 +143,22 @@ export function DecisionPageView({slug}: {slug: string}) {
 	const [loadError, setLoadError] = useState<string | null>(null);
 	const [items, setItems] = useState<Record<string, ItemState>>({});
 	const [index, setIndex] = useState(0);
+	// Mirrors `index` so a save that resolves later sees the card on screen now.
+	const indexRef = useRef(0);
 	const [lastSave, setLastSave] = useState<LastSave>(null);
 	const [submit, setSubmit] = useState<SubmitState>({kind: "idle"});
+	// The All done page, shown in place of the cards once every card is answered.
+	const [done, setDone] = useState(false);
 	const cards = useMemo(() => (page === null ? [] : cardsOf(page)), [page]);
 	// Mirrors `items` so a debounced save sends the choice and note current when it fires.
 	const itemsRef = useRef<Record<string, ItemState>>({});
 	const noteTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 	// The latest render's key handler, so the window listener never sees stale state.
 	const onKeyRef = useRef<(event: KeyboardEvent) => void>(() => {});
+
+	useEffect(() => {
+		indexRef.current = index;
+	}, [index]);
 
 	// Only the outline view dismisses the boot screen; this route never mounts it.
 	useEffect(() => {
@@ -164,7 +181,9 @@ export function DecisionPageView({slug}: {slug: string}) {
 			setItems(itemsRef.current);
 			setIndex(resumeIndex(cardsOf(result.page), itemsRef.current));
 			setPage(result.page);
-			setSubmit(result.page.submittedAt === null ? {kind: "idle"} : {kind: "submitted"});
+			const {submittedAt} = result.page;
+			setSubmit(submittedAt === null ? {kind: "idle"} : {kind: "submitted", at: submittedAt});
+			setDone(submittedAt !== null && Object.values(itemsRef.current).every((state) => state.answered));
 		})();
 		return () => {
 			controller.abort();
@@ -223,11 +242,38 @@ export function DecisionPageView({slug}: {slug: string}) {
 		return false;
 	}
 
-	/** Moves on to the next unanswered card, unless the user already left the card that was saved. */
+	async function submitPage(): Promise<void> {
+		setSubmit({kind: "submitting"});
+		try {
+			const response = await fetchThroughRestarts(`${base}/submit`, {method: "POST"});
+			setSubmit(
+				response.ok
+					? {
+							kind: "submitted",
+							at: (await readJson<DecisionSubmitResult>(new Response(response.text))).submittedAt,
+						}
+					: {kind: "error", message: await errorOf(response)},
+			);
+		} catch (error) {
+			setSubmit({kind: "error", message: messageOf(error)});
+		}
+	}
+
+	/**
+	 * Moves on to the next unanswered card, unless the user already left the card that was saved.
+	 * Saving the last unanswered card submits the page and shows the All done page instead.
+	 */
 	function advanceFrom(id: string): void {
 		const from = cardNumber(id) - 1;
-		const next = nextUnanswered(cards, itemsRef.current, from);
-		setIndex((current) => (current === from ? next : current));
+		if (indexRef.current !== from) {
+			return;
+		}
+		if (Object.values(itemsRef.current).every((state) => state.answered)) {
+			setDone(true);
+			void submitPage();
+			return;
+		}
+		setIndex(nextUnanswered(cards, itemsRef.current, from));
 	}
 
 	async function saveAndAdvance(id: string): Promise<void> {
@@ -268,22 +314,19 @@ export function DecisionPageView({slug}: {slug: string}) {
 		setIndex(Math.min(Math.max(target, 0), cards.length - 1));
 	}
 
-	async function submitPage(): Promise<void> {
-		setSubmit({kind: "submitting"});
-		try {
-			const response = await fetchThroughRestarts(`${base}/submit`, {method: "POST"});
-			setSubmit(response.ok ? {kind: "submitted"} : {kind: "error", message: await errorOf(response)});
-		} catch (error) {
-			setSubmit({kind: "error", message: messageOf(error)});
-		}
-	}
-
 	const current = cards[index];
 
 	// Runs after every render so the window listener always acts on the card on screen.
 	useEffect(() => {
 		onKeyRef.current = (event) => {
-			if (current === undefined || event.altKey || event.ctrlKey || event.metaKey || isTyping(event.target)) {
+			if (
+				done ||
+				current === undefined ||
+				event.altKey ||
+				event.ctrlKey ||
+				event.metaKey ||
+				isTyping(event.target)
+			) {
 				return;
 			}
 			if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
@@ -332,12 +375,32 @@ export function DecisionPageView({slug}: {slug: string}) {
 					<ThemeToggle />
 				</header>
 				<div className="decisions-progress-row">
-					<p className="decisions-position">
-						Card {index + 1} of {cards.length}
-					</p>
+					{done ? null : (
+						<p className="decisions-position">
+							Card {index + 1} of {cards.length}
+						</p>
+					)}
 					<progress aria-label="Answered" className="decisions-bar" max={cards.length} value={answered} />
 				</div>
-				{current === undefined || currentState === undefined ? null : (
+				{done ? (
+					<section aria-live="polite" className="decisions-done">
+						<h2>All done</h2>
+						<p>All {cards.length} cards answered.</p>
+						<p>
+							<SubmitLine submit={submit} />
+						</p>
+						<button
+							className="decisions-nav-button"
+							onClick={() => {
+								setDone(false);
+								setIndex(0);
+							}}
+							type="button"
+						>
+							Review answers
+						</button>
+					</section>
+				) : current === undefined || currentState === undefined ? null : (
 					<section className="decisions-group" key={current.item.id}>
 						<DecisionCard
 							group={current.group}
@@ -419,6 +482,21 @@ export function DecisionPageView({slug}: {slug: string}) {
 			</footer>
 		</main>
 	);
+}
+
+/** The All done page's submission line: in flight, when it landed, or why it failed. */
+function SubmitLine({submit}: {submit: SubmitState}) {
+	if (submit.kind === "submitted") {
+		return (
+			<>
+				Submitted at <time dateTime={submit.at}>{clockTime(submit.at)}</time>. Tell Claude you&apos;re done.
+			</>
+		);
+	}
+	if (submit.kind === "error") {
+		return <>Not submitted: {submit.message}. Use Submit below to retry.</>;
+	}
+	return <>Submitting…</>;
 }
 
 interface DecisionCardProps {

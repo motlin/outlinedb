@@ -194,6 +194,11 @@ export interface DecisionPage extends Omit<DecisionDocument, "groups"> {
 	submittedAt: string | null;
 }
 
+/** What `POST /api/v1/decisions/:slug/submit` answers: when the page was submitted. */
+export interface DecisionSubmitResult {
+	submittedAt: string;
+}
+
 /** A staged or saved file that cannot be used; the route answers 500 with its message. */
 export class DecisionFileError extends Error {}
 

@@ -747,3 +747,21 @@ img.decisions-link-icon {
 .decisions-submit[data-ready="true"] {
 	box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 25%, transparent);
 }
+
+.decisions-done {
+	text-align: center;
+	padding: 48px 16px;
+}
+
+.decisions-done h2 {
+	color: var(--success);
+	margin: 0 0 12px;
+}
+
+.decisions-done p {
+	margin: 0 0 8px;
+}
+
+.decisions-done button {
+	margin-top: 16px;
+}

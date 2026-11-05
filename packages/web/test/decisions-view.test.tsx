@@ -173,6 +173,11 @@ function cardLayout(id: string): {card: string[]; main: string[]; side: string[]
 	};
 }
 
+/** How the All done page shows a submission time: the viewer's local clock time. */
+function submittedTime(iso: string): string {
+	return new Date(iso).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"});
+}
+
 function text(selector: string, within: ParentNode | undefined = host): string[] {
 	return [...(within?.querySelectorAll(selector) ?? [])].map((element) => element.textContent);
 }
@@ -554,24 +559,66 @@ describe("DecisionPageView", () => {
 		});
 	});
 
-	it("shows the saved choice when going back, and says when every card is answered", async () => {
+	it("submits and shows an All done page once the last unanswered card is saved", async () => {
 		stubFetch();
 		await mount();
 		await click(card("a-1").querySelector<HTMLInputElement>("input[value=inbox]"));
 		await click(card("b-1").querySelector<HTMLInputElement>("input[value=skip]"));
-		const afterLast = {
-			cards: shownCards(),
-			allAnswered: text(".decisions-footer .decisions-all-answered"),
-		};
-		await click(button("Back"));
-		await click(button("Back"));
 		expect({
-			afterLast,
+			calls: calls.slice(1),
+			cards: shownCards(),
+			position: text(".decisions-position"),
+			heading: text(".decisions-done h2"),
+			done: text(".decisions-done p"),
+			time: host?.querySelector(".decisions-done time")?.getAttribute("datetime"),
+			review: button("Review answers").disabled,
+		}).toStrictEqual({
+			calls: [
+				{method: "PUT", url: "/api/v1/decisions/meetings/a-1", body: {choice: "inbox", note: ""}},
+				{method: "PUT", url: "/api/v1/decisions/meetings/b-1", body: {choice: "skip", note: ""}},
+				{method: "POST", url: "/api/v1/decisions/meetings/submit", body: undefined},
+			],
+			cards: [],
+			position: [],
+			heading: ["All done"],
+			done: [
+				"All 3 cards answered.",
+				`Submitted at ${submittedTime("2026-10-27T15:00:00.000Z")}. Tell Claude you're done.`,
+			],
+			time: "2026-10-27T15:00:00.000Z",
+			review: false,
+		});
+	});
+
+	it("shows the All done page on reload of a submitted page, and goes back to the cards to review", async () => {
+		stubFetch(defaultWrite, {...pageAnswering(["a-1", "a-2", "b-1"]), submittedAt: "2026-10-27T15:00:00.000Z"});
+		await mount();
+		const loaded = {cards: shownCards(), heading: text(".decisions-done h2")};
+		await click(button("Review answers"));
+		expect({
+			loaded,
+			cards: shownCards(),
+			heading: text(".decisions-done h2"),
+			position: text(".decisions-position"),
+		}).toStrictEqual({
+			loaded: {cards: [], heading: ["All done"]},
+			cards: ["a-1"],
+			heading: [],
+			position: ["Card 1 of 3"],
+		});
+	});
+
+	it("shows the saved choice when going back from the All done page", async () => {
+		stubFetch();
+		await mount();
+		await click(card("a-1").querySelector<HTMLInputElement>("input[value=inbox]"));
+		await click(card("b-1").querySelector<HTMLInputElement>("input[value=skip]"));
+		await click(button("Review answers"));
+		expect({
 			cards: shownCards(),
 			radios: radios("a-1"),
 			position: text(".decisions-position"),
 		}).toStrictEqual({
-			afterLast: {cards: ["b-1"], allAnswered: ["All 3 answered. Submit when ready."]},
 			cards: ["a-1"],
 			radios: [
 				["inbox", true],
