@@ -1,4 +1,4 @@
-import {and, eq, inArray} from "drizzle-orm";
+import {and, asc, desc, eq, gte, inArray, ne} from "drizzle-orm";
 import {closeCurrentVersions} from "@workflowy/shared/cache";
 import type {TemporalTransaction} from "@workflowy/shared/cache";
 import {nodeContent, nodeLabelSuggestions} from "@workflowy/shared/db";
@@ -14,6 +14,18 @@ export interface LabelSuggestion {
 	readonly kind: LabelKind;
 	readonly source: SuggestionSource;
 	readonly score: number;
+}
+
+export interface LabelHint {
+	readonly label: string;
+	readonly kind: LabelKind;
+	readonly score: number;
+	readonly source: string;
+}
+
+export interface EntryHints {
+	readonly nodeId: string;
+	readonly suggestions: LabelHint[];
 }
 
 /** An entry to score, with the `node_content.system_from` its text was read at. */
@@ -99,4 +111,33 @@ export function saveLabelSuggestions(
 		}));
 		tx.insert(nodeLabelSuggestions).values(rows).run();
 	}
+}
+
+/** Each entry's live verify-pass suggestions at or above `threshold`, best first, in the order given. */
+export function liveHints(tx: TemporalTransaction, nodeIds: readonly string[], threshold: number): EntryHints[] {
+	const byNode = new Map<string, LabelHint[]>(nodeIds.map((id) => [id, []]));
+	for (const ids of chunks(nodeIds, ID_CHUNK)) {
+		const rows = tx
+			.select()
+			.from(nodeLabelSuggestions)
+			.where(
+				and(
+					inArray(nodeLabelSuggestions.nodeId, ids),
+					eq(nodeLabelSuggestions.systemTo, FAR_FUTURE_DATE),
+					ne(nodeLabelSuggestions.source, "clef-flash-shortlist"),
+					gte(nodeLabelSuggestions.score, threshold),
+				),
+			)
+			.orderBy(desc(nodeLabelSuggestions.score), asc(nodeLabelSuggestions.label))
+			.all();
+		for (const row of rows) {
+			byNode.get(row.nodeId)?.push({
+				label: row.label,
+				kind: row.labelKind === "person" ? "person" : "tag",
+				score: row.score,
+				source: row.source,
+			});
+		}
+	}
+	return [...byNode].map(([nodeId, suggestions]) => ({nodeId, suggestions}));
 }

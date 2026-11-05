@@ -34,6 +34,26 @@ export interface ChoiceAnswer {
 	readonly confidence: number;
 }
 
+export interface NoulAnswer {
+	readonly type: "noul";
+	/** Probability of yes, 0 to 1. */
+	readonly noul: number;
+}
+
+export type ClefAnswer = ChoiceAnswer | NoulAnswer;
+
+/** The unwrapped Workers AI `result` of a Clef run. */
+export interface ClefResult {
+	readonly model: string;
+	readonly answers: Record<string, ClefAnswer>;
+	readonly usage: {readonly input_tokens: number; readonly output_tokens: number};
+}
+
+/** Sends one Clef request and returns its unwrapped result. */
+export interface ClefClient {
+	run(request: ClefRequest<ChoiceQuestion | NoulQuestion>): Promise<ClefResult>;
+}
+
 export interface ShortlistEntry {
 	readonly label: PoolLabel;
 	/** Pass 1 choice probability, stored as `clef-flash-shortlist`. */
