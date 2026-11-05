@@ -119,7 +119,42 @@ const validateSourceLinks = (task: unknown, entry: JsonObject, index: number, er
 	}
 };
 
+// Advisory Clef hints from `ai suggest-labels`: verify-pass labels the tagger confirmed against the
+// entry text. The walk shows them; a hint is never an apply target.
+const HINT_LABEL = /^[@#][\p{L}\p{N}_-]+$/u;
+const HINT_KINDS = new Set(["person", "tag"]);
+const HINT_SOURCES = new Set(["clef-flash", "clef"]);
+const isHint = (hint: unknown): boolean =>
+	isObject(hint) &&
+	typeof hint.label === "string" &&
+	HINT_LABEL.test(hint.label) &&
+	typeof hint.kind === "string" &&
+	HINT_KINDS.has(hint.kind) &&
+	typeof hint.score === "number" &&
+	hint.score >= 0 &&
+	hint.score <= 1 &&
+	typeof hint.source === "string" &&
+	HINT_SOURCES.has(hint.source);
+
+const validateHints = (entry: JsonObject, index: number, errors: string[]): void => {
+	if (entry.hints === undefined) {
+		return;
+	}
+	if (!Array.isArray(entry.hints)) {
+		errors.push(`proposals[${index}]: hints must be an array`);
+		return;
+	}
+	for (const [hintIndex, hint] of entry.hints.entries()) {
+		if (!isHint(hint)) {
+			errors.push(
+				`proposals[${index}]: hints[${hintIndex}] needs label "@Name" or "#tag", kind person|tag, score 0 to 1 and source clef-flash|clef`,
+			);
+		}
+	}
+};
+
 const validateProposalEntry = (task: unknown, entry: JsonObject, index: number, errors: string[]): void => {
+	validateHints(entry, index, errors);
 	validateLedgerKey(task, entry, index, errors);
 	validateSourceMessage(task, entry, index, errors);
 	validateSourceLinks(task, entry, index, errors);

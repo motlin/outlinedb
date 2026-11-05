@@ -119,6 +119,7 @@ A prep command for an interactive task writes `.llm/gtd/review/proposals/<slug>.
 | `changes` | Array of `{ type, icon, detail }` describing each change (see icon table). |
 | `ambiguity` | Optional `{ prompt, options[] }` when prep could not decide. Replaces the standard Accept/Reject options for that item. |
 | `applyOps` | Array of exact CLI command strings the walk runs **verbatim** on Accept, never re-deriving them. Any `node update --name` op **must** carry `--expect-name '<before>'` (see below). |
+| `hints` | Optional array of advisory Clef label hints the prep confirmed, `{label, kind, score, source}`: `label` is `@Name` or `#tag`, `kind` is `person` or `tag`, `score` is the verify-pass probability (0 to 1), `source` is `clef-flash` or `clef`. Copied from `ai suggest-labels --json`. Informational only: the walk may show them as context, but they are never an apply target and never change `applyOps`. Only people hints ship today (`refine-journal-prep`). |
 | `chained` | Optional `{ task, before, after, applyOps }` staged when an earlier-presented task also proposes a rewrite of the same node. Its ops are keyed on that task's `after`; apply picks it over the fallback when the node's current name equals `chained.before`. Only `refine-exercise` uses it today (see `${CLAUDE_PLUGIN_ROOT}/commands/refine-exercise-apply.md` → Resolve chained ops). |
 
 #### One id per proposal
@@ -254,7 +255,7 @@ A re-run after a completed apply reads `status: "empty"` (prep found nothing new
 
 ## Verification
 
-- **Schema shape-check:** run the validator on each staged file before the walk consumes it. It exits non-zero and names the offending proposals on a stray id, a short-id `nodeId`, a `node update --name` op missing `--expect-name` (a `node create` needs no guard), a non-`ready` status carrying proposals, a missing required field, or an `email-calendar` proposal without a non-null ledger `key` or its source message fields (`account`, `mailbox`, `messageUid`) (see `${CLAUDE_PLUGIN_ROOT}/commands/email-calendar-prep.md`):
+- **Schema shape-check:** run the validator on each staged file before the walk consumes it. It exits non-zero and names the offending proposals on a stray id, a short-id `nodeId`, a `node update --name` op missing `--expect-name` (a `node create` needs no guard), a non-`ready` status carrying proposals, a missing required field, a malformed `hints[]` entry, or an `email-calendar` proposal without a non-null ledger `key` or its source message fields (`account`, `mailbox`, `messageUid`) (see `${CLAUDE_PLUGIN_ROOT}/commands/email-calendar-prep.md`):
 
     ```bash
     node ${CLAUDE_PLUGIN_ROOT}/scripts/validate-proposal.mts .llm/gtd/review/proposals/<slug>.json

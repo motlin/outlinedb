@@ -8,9 +8,13 @@ import {clefClientFromEnv, readLabelRegistries} from "../../services/clef-setup.
 import {ARM_MODELS, EVAL_ARMS, buildEvalReport, sampleStratified, stripLabels} from "../../services/label-eval.js";
 import type {EvalReport, EvalRun} from "../../services/label-eval.js";
 import {buildLabelPool} from "../../services/label-pool.js";
-import {calendarEntriesSince, entryState, runShortlist, runVerify} from "../../services/suggest-labels.js";
-
-const SINCE = /^(\d{4})-(\d{2})$/u;
+import {
+	calendarEntriesSince,
+	entryState,
+	parseYearMonth,
+	runShortlist,
+	runVerify,
+} from "../../services/suggest-labels.js";
 
 export default class EvalLabels extends Command {
 	static override description =
@@ -29,10 +33,7 @@ export default class EvalLabels extends Command {
 		since: Flags.string({
 			description: "Earliest calendar month to sample from (YYYY-MM)",
 			default: "2025-01",
-			parse: async (input) =>
-				SINCE.test(input)
-					? Promise.resolve(input)
-					: Promise.reject(new Error(`--since must be YYYY-MM, got "${input}"`)),
+			parse: async (input) => parseYearMonth(input, "--since").then(() => input),
 		}),
 		arms: Flags.option({
 			description: "Verify-pass models to compare: flash is Clef-flash, clef is full Clef",
@@ -68,7 +69,7 @@ export default class EvalLabels extends Command {
 		const thresholds = await Promise.all(
 			flags.thresholds.split(",").map(async (value) => probability(value.trim(), "--thresholds")),
 		);
-		const [, year = "", month = ""] = SINCE.exec(flags.since) ?? [];
+		const since = await parseYearMonth(flags.since, "--since");
 
 		const registries = readLabelRegistries(flags["metadata-dir"]);
 		const pool = buildLabelPool({...registries, entryLabels: []});
@@ -84,14 +85,12 @@ export default class EvalLabels extends Command {
 			this.error("No 📆 Calendar root in the cache: pass --calendar-id", {exit: 1});
 		}
 
-		const candidates = calendarEntriesSince(cache, rootId, {year: Number(year), month: Number(month)}).flatMap(
-			(nodeId) => {
-				const {state} = entryState(cache, nodeId);
-				const {text, labels} = stripLabels(state.entry);
-				const truth = labels.filter(({label}) => poolLabels.has(label.toLowerCase()));
-				return truth.length === 0 ? [] : [{state: {...state, entry: text}, truth}];
-			},
-		);
+		const candidates = calendarEntriesSince(cache, rootId, since).flatMap((nodeId) => {
+			const {state} = entryState(cache, nodeId);
+			const {text, labels} = stripLabels(state.entry);
+			const truth = labels.filter(({label}) => poolLabels.has(label.toLowerCase()));
+			return truth.length === 0 ? [] : [{state: {...state, entry: text}, truth}];
+		});
 		const sample = sampleStratified(candidates, {
 			size: flags.sample,
 			seed: flags.seed,

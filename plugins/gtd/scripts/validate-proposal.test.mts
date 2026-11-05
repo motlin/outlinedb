@@ -367,3 +367,25 @@ test("accepts an email-calendar toolRequest that stages calendar", () => {
 	);
 	assert.deepStrictEqual(result, {valid: true, errors: []});
 });
+
+test("accepts advisory Clef hints shaped {label, kind, score, source}", () => {
+	const hints = [{label: "@FrankWilson", kind: "person", score: 0.93, source: "clef"}];
+
+	assert.deepStrictEqual(validateProposal(staged({proposals: [proposal({hints})]})), {valid: true, errors: []});
+});
+
+test("rejects malformed hints", () => {
+	const hints = [
+		{label: "FrankWilson", kind: "person", score: 0.93, source: "clef"},
+		{label: "@FrankWilson", kind: "people", score: 1.5, source: "clef-flash-shortlist"},
+	];
+
+	assert.deepStrictEqual(validateProposal(staged({proposals: [proposal({hints}), proposal({hints: "x"})]})), {
+		valid: false,
+		errors: [
+			'proposals[0]: hints[0] needs label "@Name" or "#tag", kind person|tag, score 0 to 1 and source clef-flash|clef',
+			'proposals[0]: hints[1] needs label "@Name" or "#tag", kind person|tag, score 0 to 1 and source clef-flash|clef',
+			"proposals[1]: hints must be an array",
+		],
+	});
+});

@@ -18,6 +18,7 @@ This command runs inside a Phase 0 prep subagent (`${CLAUDE_PLUGIN_ROOT}/skills/
 - **No Scanner-State advance.** Do **not** add the archive month to `months_completed`, move `last_completed_month`, or write recent-live coverage. That happens only in `refine-journal-apply`, so an aborted prep never skips a month or marks live entries covered. You may set `current_month_in_progress` for visibility, but do not advance.
 - **Read, don't rebuild, metadata.** The DAG runs `metadata-sync` once before fan-out. Read the cached `.llm/gtd/metadata/` files; never trigger a concurrent rebuild.
 - **`--dry-run`** is the verification mode: compute and write the `.json`, but the assertion is that zero `node` writes happen — which is already true for prep. Honor it as a no-op that still stages.
+- **`--no-hints`** skips the Clef people hints (see Load advisory people hints) and tags from the text alone. Pair it with `--dry-run` to compare proposals with and without hints. `ai suggest-labels` writes only the CLI's local `node_label_suggestions` table, never a Workflowy node, so it is allowed in prep and in `--dry-run`.
 
 ## Scope: recent by default, archive only on request
 
@@ -166,6 +167,23 @@ When scanning the live tree:
 - Use the entry date from the calendar node header, not modified time.
 - De-duplicate by full node UUID if an entry appears in both the archive fetch and live fetch.
 
+## Load advisory people hints (Clef)
+
+Hosted Clef on Workers AI scores which registry people each entry involves. Its verify-pass scores are **hints**, never decisions; the People tagging rules below still make every call. Hints are people only: the eval found Clef tag hints too imprecise, so never request or use tag hints.
+
+Run it on the live calendar root from the prior month on, and in archive mode once more on the archive month node:
+
+```bash
+# Recent live window: <prior-yyyy-mm> is the prior calendar month, e.g. 2026-10
+op run -- ./bin/run.js ai suggest-labels --parent-id 6bf42551caa3 --since <prior-yyyy-mm> --kind person --verifier clef --threshold 0.77 --json
+# Archive mode only: the archive month's node id and that month
+op run -- ./bin/run.js ai suggest-labels --parent-id <archive-month-id> --since <archive-yyyy-mm> --kind person --verifier clef --threshold 0.77 --json
+```
+
+- The output is `[{nodeId, suggestions: [{label, kind, score, source}]}]`. Index it by `nodeId` (full UUID). Entries already scored against their current text are not rescored, so a daily run only pays for new or edited entries.
+- `0.77` with the full-Clef verifier is the measured cut for 0.90 precision; below it, ignore the suggestion.
+- Any non-zero exit (missing `CLOUDFLARE_AI_TOKEN`, API error) or a `--no-hints` run: skip hints and tag people exactly as the rules below describe. Hints are an optimization; prep never fails for lack of them.
+
 ## Load the decline ledger
 
 Read `.llm/gtd/review/refine-journal-declined.json` before computing anything (treat a missing file as `[]`). It is an array of `{nodeId, before, after, declinedAt}` objects that `refine-journal-apply` appends on every Reject, modeled on the email-calendar decisions ledger. A rejection is final: the user said "keep as written", and the same refinement must not come back the next morning.
@@ -208,6 +226,8 @@ Read `.llm/gtd/journal-vocabulary.md` when it exists (gitignored; holds the hous
 
 - Match person names (first, last, or full) against the `👥 People` metadata tree
 - Check `.llm/gtd/people-disambiguation.md` for known nickname/typo mappings
+- Use the entry's Clef people hints (see Load advisory people hints) as a checklist of people to look for, not as answers. Tag a hinted person only when the entry text actually names or clearly refers to them (a first name, nickname, or relational reference that resolves to that person). Never insert a hinted `@Name` the text does not support, and never let a hint override `.llm/gtd/people-disambiguation.md`, a homonym ⚠️ `ambiguity`, or the decline ledger. A person the text names but no hint covers is still tagged as usual.
+- Hint noise to reject (seen in the first live run): the journal's own author, hinted on first-person words (`I`, `me`, `we`), since the journal never tags its author; fictional characters or public figures who share a registry first name (a TV character, an author being discussed); and a hint for a reference the entry already tags under another `@Name`.
 - Generic references like "my parents", "Mom", "Dad" — tag as the specific individuals **only when it is a genuine relational reference**, never when the word is part of an event or place name (e.g. a "Parents Night Out" event)
 - Re-tagging is a judgment call, not a script — follow `${CLAUDE_PLUGIN_ROOT}/skills/refinement-text-rules.md`
 
@@ -428,6 +448,7 @@ Run every computed proposal through the decline ledger first (see Load the decli
 - `header` — the entry date (e.g. `"Feb 9"`).
 - `before` / `after` — the **full** original and proposed text, never truncated.
 - `changes[]` — one `{ type, icon, detail }` per change, using the indicators above.
+- `hints[]` — optional; the Clef people hints for this entry (`{label, kind, score, source}`, copied from `ai suggest-labels`) that prep confirmed and used in a 👤 change. Omit hints it rejected and omit the field when there are none.
 - `ambiguity` — present only on ⚠️ proposals: `{ prompt, options[] }` (e.g. `@FrankWilson` / `@EvanMiller` / `Skip tagging`).
 - `applyOps[]` — the **exact** `./bin/run.js node update --id <full-uuid> --name '<final after text>' --expect-name '<full before text>'` command(s) the apply walk runs verbatim on Accept. The `--expect-name` guard is **mandatory** (see `${CLAUDE_PLUGIN_ROOT}/skills/review-proposal-staging.md` → Stale-write guard): it makes the CLI refuse the write if the entry changed between prep and apply, so a live edit is never silently clobbered. Pass the proposal's full `before` string as `--expect-name`. Entries with apostrophes use `'"'"'` escaping inside **both** single-quoted values. For a ⚠️ proposal where the final text depends on the user's choice, stage the op for the most-likely option (still with `--expect-name '<before>'`) or omit `applyOps` and let the apply command build it (it appends `--expect-name` too) — the apply command resolves the ambiguity before running.
 
@@ -445,6 +466,6 @@ Set top-level fields:
 - `generatedAt`: ISO-8601 timestamp with offset.
 - `status`: `"ready"` if any proposals; `"empty"` if the combined archive plus recent live scope is already fully refined or every computed proposal was dropped by the decline ledger (idempotent re-run); `"error"` if prep failed.
 - `presentation`: `"Refine calendar journal"`.
-- `summary`: `{ archiveMonth, recentLiveMonths, entriesReviewed, archiveEntriesReviewed, recentLiveEntriesReviewed, proposalsStaged, droppedDeclined, emojiLessEntries, emojiProposalsStaged }` plus a breakdown by change type (people/hobby/category/media/typo/emoji counts) for the final review summary. `emojiLessEntries` must equal `emojiProposalsStaged` (coverage invariant).
+- `summary`: `{ archiveMonth, recentLiveMonths, entriesReviewed, archiveEntriesReviewed, recentLiveEntriesReviewed, proposalsStaged, droppedDeclined, emojiLessEntries, emojiProposalsStaged, peopleHints, peopleHintsUsed }` (`peopleHints` is the number of hints at or above the cut, `peopleHintsUsed` how many ended up in a 👤 change; both 0 when hints were skipped) plus a breakdown by change type (people/hobby/category/media/typo/emoji counts) for the final review summary. `emojiLessEntries` must equal `emojiProposalsStaged` (coverage invariant).
 
 Do **not** mutate any node and do **not** advance Scanner-State. Return a one-line summary of what was staged (archive month, recent live months, entries reviewed with archive/recent split, proposals staged, dropped by the decline ledger, emoji coverage `emojiProposalsStaged/emojiLessEntries`, status) and stop.

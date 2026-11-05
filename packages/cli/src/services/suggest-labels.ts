@@ -20,6 +20,16 @@ export function scopeEntries(cache: CacheService, rootId: string): string[] {
 		);
 }
 
+const YEAR_MONTH = /^(\d{4})-(\d{2})$/u;
+
+/** Parses a `YYYY-MM` flag value for {@link calendarEntriesSince}. */
+export async function parseYearMonth(input: string, flag: string): Promise<{year: number; month: number}> {
+	const [, year, month] = YEAR_MONTH.exec(input) ?? [];
+	return year === undefined || month === undefined
+		? Promise.reject(new Error(`${flag} must be YYYY-MM, got "${input}"`))
+		: Promise.resolve({year: Number(year), month: Number(month)});
+}
+
 /** Calendar > 🗃️ Archive > decade > year > month > week > day. */
 const MAX_DAY_DEPTH = 6;
 
