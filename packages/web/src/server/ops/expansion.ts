@@ -46,12 +46,13 @@ function stateOf(ctx: ServerContext): ExpansionState {
 	return state;
 }
 
-function flush(state: ExpansionState, adapter: WorkflowyInternalAdapter) {
+function flush(ctx: ServerContext, state: ExpansionState, adapter: WorkflowyInternalAdapter) {
 	const changes = state.pending;
 	state.pending = {};
 	adapter.setExpanded(changes).then(
 		() => {
 			state.failures = 0;
+			ctx.expansionWritten?.();
 			return;
 		},
 		(error: unknown) => {
@@ -67,7 +68,7 @@ function flush(state: ExpansionState, adapter: WorkflowyInternalAdapter) {
 			console.error(`Failed to push expansion changes; retrying in ${delay}ms`, error);
 			clearTimeout(state.timer);
 			state.timer = setTimeout(() => {
-				flush(state, adapter);
+				flush(ctx, state, adapter);
 			}, delay);
 		},
 	);
@@ -105,7 +106,7 @@ export const expansionPatch = defineOp({
 		state.pending = {...state.pending, ...changes};
 		clearTimeout(state.timer);
 		state.timer = setTimeout(() => {
-			flush(state, adapter);
+			flush(ctx, state, adapter);
 		}, FLUSH_DELAY_MS);
 		return ok(null);
 	},
@@ -137,9 +138,15 @@ export const expansionLeftBarPatch = defineOp({
 		state.rawTimer = setTimeout(() => {
 			const raw = state.pendingRaw;
 			state.pendingRaw = {};
-			adapter.setRawExpansionKeys(raw).catch((error: unknown) => {
-				console.error("Failed to push left-bar expansion changes", error);
-			});
+			adapter.setRawExpansionKeys(raw).then(
+				() => {
+					ctx.expansionWritten?.();
+					return;
+				},
+				(error: unknown) => {
+					console.error("Failed to push left-bar expansion changes", error);
+				},
+			);
 		}, FLUSH_DELAY_MS);
 		return ok(null);
 	},

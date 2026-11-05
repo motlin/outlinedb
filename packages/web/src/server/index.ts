@@ -6,7 +6,8 @@ import {inProcessStore} from "./store.js";
 import {httpLoggingEnabled, loggingFetch} from "./http-logger.js";
 import {createServerContext} from "./node-context.js";
 import {ladderSocketHandlers} from "./ladder-socket.js";
-import {TreeEventBus, withTreeChangePublish} from "./node-events.js";
+import {expansionVersion, readExpansion} from "@workflowy/shared/cache";
+import {TreeEventBus, expansionChangePublisher, withTreeChangePublish} from "./node-events.js";
 import {nodeEventsSocketHandlers} from "./node-events-socket.js";
 import {createDecisionsApp} from "./routes/decisions.js";
 import {resolvePort} from "./port.js";
@@ -25,6 +26,20 @@ if (httpLoggingEnabled(process.env)) {
 const serverContext = createServerContext();
 /** Announces each committed tree write, local or caught up from upstream, to open outline tabs. */
 const treeEvents = new TreeEventBus();
+/**
+ * Announces the expanded keys' new version after a tree write (an import reseeds them) and after each debounced
+ * expansion push, so open tabs poll the expansion feed only when it moved.
+ */
+const checkExpansion = expansionChangePublisher(treeEvents, () => {
+	const keys = readExpansion(serverContext.db);
+	return keys === undefined ? undefined : expansionVersion(keys);
+});
+treeEvents.subscribe((event) => {
+	if (event.type === "tree.changed") {
+		checkExpansion();
+	}
+});
+serverContext.expansionWritten = checkExpansion;
 const store = inProcessStore(serverContext, undefined, {
 	keepSnapshotWarm: serverContext.config.features.treeSnapshot,
 	treeEvents,

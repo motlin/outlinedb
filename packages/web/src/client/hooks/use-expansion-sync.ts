@@ -1,7 +1,8 @@
 /**
  * Expansion state synced with the server's expansion store: hydrate `expandedIds` from `GET /api/v1/expansion` on app
  * load, then poll its change feed (`?version=<version>`, the keys' content version) on a TanStack Query refetch
- * interval and on tab focus, so changes made in another tab, or by an import, show up. A poll costs one SQLite read
+ * interval, on tab focus, and on each `expansion.changed` frame the events socket carries with a new version, so changes
+ * made in another tab, or by an import, show up. A poll costs one SQLite read
  * and answers no ids while the keys still match. The outline store PATCHes each local change itself.
  *
  * The server's store is the source of truth: workflowy.com's own list is read only by whole-tree imports, so an
@@ -10,6 +11,7 @@
  */
 
 import {useQuery} from "@tanstack/react-query";
+import type {QueryClient} from "@tanstack/react-query";
 import {useEffect} from "react";
 import type {ExpansionChangesResponse} from "../../node-types.js";
 import {readJson} from "../read-json.js";
@@ -183,6 +185,17 @@ export const expansionPollQuery = {
 	refetchOnWindowFocus: true,
 	staleTime: EXPANSION_POLL_MS,
 } as const;
+
+/**
+ * The events socket announced the server's keys at `announced` (an `expansion.changed` frame): poll the change feed
+ * now, unless the tab already holds that version or has none to ask from yet.
+ */
+export function expansionVersionAnnounced(queryClient: QueryClient, announced: string): void {
+	if (version === undefined || announced === version) {
+		return;
+	}
+	void queryClient.invalidateQueries({queryKey: expansionPollQuery.queryKey});
+}
 
 export function useExpansionSync(): void {
 	useEffect(() => {

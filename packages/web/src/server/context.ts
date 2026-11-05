@@ -26,6 +26,11 @@ export interface ServerContext {
 	decisions?: DecisionStore;
 	/** The Workflowy API key, or undefined when write operations are unavailable. */
 	apiKey?: string;
+	/**
+	 * Called after a debounced expansion push lands in the expansion store, outside any op's unit of work; the Node
+	 * host announces the new version on the events socket.
+	 */
+	expansionWritten?: () => void;
 	/** Internal-API auth (saved session cookie and/or login), or undefined when internal-API routes are unavailable. */
 	internalAuth?: InternalAuth;
 	/**

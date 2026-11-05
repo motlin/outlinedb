@@ -6,7 +6,7 @@ import {z} from "zod";
 import * as schema from "@workflowy/shared/db";
 import type {AppDatabase} from "@workflowy/shared/db";
 import type {ServerContext} from "../src/server/context.js";
-import {TreeEventBus, withTreeChangePublish} from "../src/server/node-events.js";
+import {TreeEventBus, expansionChangePublisher, withTreeChangePublish} from "../src/server/node-events.js";
 import {nodeEventsSocketHandlers} from "../src/server/node-events-socket.js";
 import {defineOp, ok} from "../src/server/ops/define.js";
 import {inProcessStore} from "../src/server/store.js";
@@ -150,5 +150,21 @@ describe("inProcessStore with treeEvents", () => {
 		const frames = framesOf(ws) as {type: string; latest: string}[];
 		expect(frames.map(({type}) => type)).toStrictEqual(["tree.changed"]);
 		expect(frames[0].latest).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$/u);
+	});
+});
+
+describe("expansionChangePublisher", () => {
+	it("sends one expansion.changed frame when the keys' version moves, and none while it holds", () => {
+		const bus = new TreeEventBus();
+		const {ws} = connect(bus);
+		let current: string | undefined = "aaaaaaaaaaaaaaaa";
+		const check = expansionChangePublisher(bus, () => current);
+		check();
+		current = "bbbbbbbbbbbbbbbb";
+		check();
+		check();
+		current = undefined;
+		check();
+		expect(ws.send.mock.calls).toStrictEqual([['{"type":"expansion.changed","version":"bbbbbbbbbbbbbbbb"}']]);
 	});
 });

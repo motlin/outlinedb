@@ -3,11 +3,13 @@
  * catch-up. The server sends one `{"type":"tree.changed"}` frame on `GET /api/v1/nodes/events` per committed tree
  * write, and each frame is answered with one change-feed read (`syncNodeChanges`). Frames in the same tick share one
  * read, and frames that arrive during a read queue at most one more. A dropped socket reconnects on upstream's backoff
- * and reads once on reopening; while it is down, the tab reads when it becomes visible.
+ * and reads once on reopening; while it is down, the tab reads when it becomes visible. The same socket carries
+ * `{"type":"expansion.changed","version"}` frames, handed to the expansion sync instead of the tree read.
  */
 
 import {useQueryClient} from "@tanstack/react-query";
 import {useEffect} from "react";
+import {expansionVersionAnnounced} from "./use-expansion-sync.js";
 import {syncNodeChanges} from "./use-nodes.js";
 
 /** Upstream's reconnect delay: `(1000 + rand * 4000) * 2^failures`, capped at 3 minutes. */
@@ -17,8 +19,24 @@ function reconnectDelayMs(failures: number, random: number): number {
 
 const OPEN = 1;
 
+/** The version an `expansion.changed` frame carries, or undefined for any other frame (read as a tree change). */
+function expansionFrameVersion(data: unknown): string | undefined {
+	if (typeof data !== "string") {
+		return undefined;
+	}
+	try {
+		const frame: unknown = JSON.parse(data);
+		if (typeof frame !== "object" || frame === null || !("type" in frame) || !("version" in frame)) {
+			return undefined;
+		}
+		return frame.type === "expansion.changed" && typeof frame.version === "string" ? frame.version : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 /** Open the events socket and sync on its frames, reconnects and visibility; returns the teardown. */
-function startOutlineLiveSync(sync: () => Promise<void>): () => void {
+function startOutlineLiveSync(sync: () => Promise<void>, onExpansion: (version: string) => void): () => void {
 	const state = {
 		disposed: false,
 		socket: undefined as WebSocket | undefined,
@@ -63,8 +81,13 @@ function startOutlineLiveSync(sync: () => Promise<void>): () => void {
 			}
 			state.opened = true;
 		});
-		socket.addEventListener("message", () => {
-			requestSync();
+		socket.addEventListener("message", (event: MessageEvent) => {
+			const expansionVersion = expansionFrameVersion(event.data);
+			if (expansionVersion === undefined) {
+				requestSync();
+			} else {
+				onExpansion(expansionVersion);
+			}
 		});
 		socket.addEventListener("close", () => {
 			if (state.disposed || state.socket !== socket) {
@@ -93,5 +116,14 @@ function startOutlineLiveSync(sync: () => Promise<void>): () => void {
 
 export function useOutlineLiveSync(): void {
 	const queryClient = useQueryClient();
-	useEffect(() => startOutlineLiveSync(async () => syncNodeChanges(queryClient)), [queryClient]);
+	useEffect(
+		() =>
+			startOutlineLiveSync(
+				async () => syncNodeChanges(queryClient),
+				(version) => {
+					expansionVersionAnnounced(queryClient, version);
+				},
+			),
+		[queryClient],
+	);
 }

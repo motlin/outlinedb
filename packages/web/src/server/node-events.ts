@@ -6,7 +6,9 @@
  * invisible until reload. This bus announces each committed unit of work that
  * wrote, and the socket in `node-events-socket.ts` forwards it; a tab then runs
  * one `/api/v1/nodes/changes` read. The frame is only a nudge, like upstream's
- * signal socket: it carries the watermark, never tree data.
+ * signal socket: it carries the watermark, never tree data. The same bus
+ * carries `expansion.changed` frames (see {@link expansionChangePublisher}),
+ * so a tab polls the expansion feed only when the stored keys moved.
  */
 
 import {sql} from "drizzle-orm";
@@ -19,7 +21,15 @@ export interface TreeChangedEvent {
 	latest: string;
 }
 
-export type TreeChangeListener = (event: TreeChangedEvent) => void;
+export interface ExpansionChangedEvent {
+	type: "expansion.changed";
+	/** The expanded keys' content version, as `GET /api/v1/expansion` answers it. */
+	version: string;
+}
+
+export type NodeEvent = TreeChangedEvent | ExpansionChangedEvent;
+
+export type TreeChangeListener = (event: NodeEvent) => void;
 
 export class TreeEventBus {
 	readonly #listeners = new Set<TreeChangeListener>();
@@ -32,7 +42,14 @@ export class TreeEventBus {
 	}
 
 	publish(latest: string): void {
-		const event: TreeChangedEvent = {type: "tree.changed", latest};
+		this.#emit({type: "tree.changed", latest});
+	}
+
+	publishExpansion(version: string): void {
+		this.#emit({type: "expansion.changed", version});
+	}
+
+	#emit(event: NodeEvent): void {
 		// Copied: a throwing listener is dropped, and a listener may unsubscribe itself mid-notification.
 		// oxlint-disable-next-line no-useless-spread
 		for (const listener of [...this.#listeners]) {
@@ -68,4 +85,19 @@ export async function withTreeChangePublish<T>(
 			bus.publish(now());
 		}
 	}
+}
+
+/**
+ * Returns a check that publishes `expansion.changed` when `readVersion` answers a version other than the last one
+ * seen (the first read is the baseline). An unseeded store (undefined) publishes nothing and keeps the baseline.
+ */
+export function expansionChangePublisher(bus: TreeEventBus, readVersion: () => string | undefined): () => void {
+	let last = readVersion();
+	return () => {
+		const current = readVersion();
+		if (current !== undefined && current !== last) {
+			last = current;
+			bus.publishExpansion(current);
+		}
+	};
 }
