@@ -436,117 +436,128 @@ function DecisionCard({group, item, state, onChoose, onNote, children}: Decision
 	const titleId = `decision-title-${item.id}`;
 	return (
 		<article className="decisions-card" data-item-id={item.id} data-status={state.status.kind}>
-			<p className="decisions-group-heading">
-				{group.link === undefined ? (
-					group.heading
-				) : (
-					<a href={group.link} rel="noopener noreferrer" target="_blank">
-						{group.heading}
-					</a>
+			{/* What the card is about; wide screens set it beside the answer column. */}
+			<div className="decisions-card-main">
+				<p className="decisions-group-heading">
+					{group.link === undefined ? (
+						group.heading
+					) : (
+						<a href={group.link} rel="noopener noreferrer" target="_blank">
+							{group.heading}
+						</a>
+					)}
+				</p>
+				<h2 className="decisions-card-title" id={titleId}>
+					{item.title}
+				</h2>
+				{(item.images ?? []).length === 0 && (item.videos ?? []).length === 0 ? null : (
+					<div className="decisions-images">
+						{(item.images ?? []).map((image) => {
+							const url = imageUrl(image.src);
+							return (
+								<a
+									href={url}
+									key={image.src}
+									rel="noopener noreferrer"
+									target="_blank"
+									title={image.alt}
+								>
+									<img
+										alt={image.alt}
+										className="decisions-image"
+										decoding="async"
+										loading="lazy"
+										src={url}
+									/>
+								</a>
+							);
+						})}
+						{(item.videos ?? []).map((video) => (
+							// Staged clips are the user's own phone videos, which come with no caption track.
+							// oxlint-disable-next-line jsx-a11y/media-has-caption
+							<video
+								className="decisions-video"
+								controls
+								key={video.src}
+								playsInline
+								poster={video.poster === undefined ? undefined : imageUrl(video.poster)}
+								preload="metadata"
+								src={mediaUrl(video.src)}
+							/>
+						))}
+					</div>
 				)}
-			</p>
-			<h2 className="decisions-card-title" id={titleId}>
-				{item.title}
-			</h2>
-			{(item.images ?? []).length === 0 && (item.videos ?? []).length === 0 ? null : (
-				<div className="decisions-images">
-					{(item.images ?? []).map((image) => {
-						const url = imageUrl(image.src);
-						return (
-							<a href={url} key={image.src} rel="noopener noreferrer" target="_blank" title={image.alt}>
-								<img
-									alt={image.alt}
-									className="decisions-image"
-									decoding="async"
-									loading="lazy"
-									src={url}
-								/>
-							</a>
-						);
-					})}
-					{(item.videos ?? []).map((video) => (
-						// Staged clips are the user's own phone videos, which come with no caption track.
-						// oxlint-disable-next-line jsx-a11y/media-has-caption
-						<video
-							className="decisions-video"
-							controls
-							key={video.src}
-							playsInline
-							poster={video.poster === undefined ? undefined : imageUrl(video.poster)}
-							preload="metadata"
-							src={mediaUrl(video.src)}
-						/>
-					))}
-				</div>
-			)}
-			{item.body.length > 0 ? (
-				<div className="decisions-body">
-					{item.body.map((line, index) => (
-						// Body lines are plain text that may repeat, so their position is their identity.
-						// oxlint-disable-next-line react/no-array-index-key
-						<p className="decisions-body-line" key={index}>
-							<BodyLine line={line} />
-						</p>
-					))}
-				</div>
-			) : null}
-			{item.links.length > 0 ? (
-				<ul className="decisions-links">
-					{item.links.map((link) => (
-						<li key={link.href}>
-							<a href={link.href} rel="noopener noreferrer" target="_blank" title={link.label}>
-								<LinkIcon href={link.href} />
-								<span>{link.label}</span>
-							</a>
-						</li>
-					))}
-				</ul>
-			) : null}
-			<div aria-labelledby={titleId} className="decisions-options" role="radiogroup">
-				{item.options.map((option, index) => (
-					<label className="decisions-option" key={option.value}>
-						<input
-							checked={state.choice === option.value}
-							name={`decision-${item.id}`}
-							onChange={() => {
-								onChoose(option.value);
-							}}
-							type="radio"
-							value={option.value}
-						/>
-						<span className="decisions-option-text">
-							{index < 9 ? (
-								<kbd aria-hidden="true" className="decisions-option-key">
-									{index + 1}
-								</kbd>
-							) : null}
-							<span className="decisions-option-label">{option.label}</span>
-							{item.default === option.value ? (
-								<span className="decisions-suggested">suggested</span>
-							) : null}
-							{option.description === undefined ? null : (
-								<span className="decisions-option-description">{option.description}</span>
-							)}
-						</span>
-					</label>
-				))}
+				{item.body.length > 0 ? (
+					<div className="decisions-body">
+						{item.body.map((line, index) => (
+							// Body lines are plain text that may repeat, so their position is their identity.
+							// oxlint-disable-next-line react/no-array-index-key
+							<p className="decisions-body-line" key={index}>
+								<BodyLine line={line} />
+							</p>
+						))}
+					</div>
+				) : null}
+				{item.links.length > 0 ? (
+					<ul className="decisions-links">
+						{item.links.map((link) => (
+							<li key={link.href}>
+								<a href={link.href} rel="noopener noreferrer" target="_blank" title={link.label}>
+									<LinkIcon href={link.href} />
+									<span>{link.label}</span>
+								</a>
+							</li>
+						))}
+					</ul>
+				) : null}
 			</div>
-			<label className="decisions-note-label" htmlFor={noteId}>
-				Other / note (type it before picking an option to save both)
-			</label>
-			<textarea
-				className="decisions-note"
-				id={noteId}
-				onChange={(event) => {
-					onNote(event.target.value);
-				}}
-				rows={2}
-				value={state.note}
-			/>
-			<span aria-live="polite" className="decisions-status">
-				{statusText(state.status)}
-			</span>
-			{children}
+			<div className="decisions-card-side">
+				<div aria-labelledby={titleId} className="decisions-options" role="radiogroup">
+					{item.options.map((option, index) => (
+						<label className="decisions-option" key={option.value}>
+							<input
+								checked={state.choice === option.value}
+								name={`decision-${item.id}`}
+								onChange={() => {
+									onChoose(option.value);
+								}}
+								type="radio"
+								value={option.value}
+							/>
+							<span className="decisions-option-text">
+								{index < 9 ? (
+									<kbd aria-hidden="true" className="decisions-option-key">
+										{index + 1}
+									</kbd>
+								) : null}
+								<span className="decisions-option-label">{option.label}</span>
+								{item.default === option.value ? (
+									<span className="decisions-suggested">suggested</span>
+								) : null}
+								{option.description === undefined ? null : (
+									<span className="decisions-option-description">{option.description}</span>
+								)}
+							</span>
+						</label>
+					))}
+				</div>
+				<label className="decisions-note-label" htmlFor={noteId}>
+					Other / note (type it before picking an option to save both)
+				</label>
+				<textarea
+					className="decisions-note"
+					id={noteId}
+					onChange={(event) => {
+						onNote(event.target.value);
+					}}
+					rows={2}
+					value={state.note}
+				/>
+				<span aria-live="polite" className="decisions-status">
+					{statusText(state.status)}
+				</span>
+				{children}
+			</div>
 		</article>
 	);
 }

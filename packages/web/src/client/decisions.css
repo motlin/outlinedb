@@ -26,6 +26,8 @@
 	--duration: #b45309;
 	--warning: #c2410c;
 	--shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+	/* The column's inner width, shared by the card column and the footer's padding. */
+	--content-width: 648px;
 
 	background: var(--background);
 	color: var(--foreground);
@@ -98,7 +100,7 @@
 
 .decisions-wrap {
 	width: 100%;
-	max-width: 680px;
+	max-width: calc(var(--content-width) + 32px);
 	margin: 0 auto;
 	padding: 0 16px 24px;
 	flex: 1;
@@ -111,7 +113,7 @@
 	align-items: flex-start;
 	justify-content: space-between;
 	gap: 16px;
-	padding-block: 28px 16px;
+	padding-block: 20px 12px;
 }
 
 .decisions-head-text {
@@ -235,7 +237,31 @@
 	border-radius: 999px;
 }
 
-/* Card */
+/*
+ * Card: one column on narrow screens. Wide screens set the question (title, photos,
+ * body, links) beside the answers (options, note, buttons), so a full card with
+ * five or six options fits a 1440x900 laptop without scrolling.
+ */
+
+@media (min-width: 1100px) {
+	.decisions-page {
+		--content-width: 1100px;
+	}
+
+	.decisions-card {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+		gap: 28px;
+	}
+
+	.decisions-card-title {
+		font-size: 20px;
+	}
+
+	.decisions-card-side .decisions-options {
+		margin-top: 0;
+	}
+}
 
 .decisions-card {
 	background: var(--card);
@@ -243,7 +269,7 @@
 	border: 1px solid var(--border);
 	border-radius: 12px;
 	box-shadow: var(--shadow);
-	padding: 24px;
+	padding: 20px 24px;
 }
 
 @media (max-width: 480px) {
@@ -433,8 +459,8 @@ img.decisions-link-icon {
 
 .decisions-options {
 	display: grid;
-	gap: 8px;
-	margin: 20px 0 16px;
+	gap: 6px;
+	margin: 16px 0 12px;
 }
 
 .decisions-option {
@@ -442,7 +468,7 @@ img.decisions-link-icon {
 	display: flex;
 	gap: 12px;
 	align-items: flex-start;
-	padding: 12px 14px;
+	padding: 8px 12px;
 	border: 1px solid var(--border);
 	border-radius: 8px;
 	cursor: pointer;
@@ -552,7 +578,7 @@ img.decisions-link-icon {
 .decisions-note {
 	display: block;
 	width: 100%;
-	min-height: 64px;
+	min-height: 56px;
 	font: inherit;
 	color: var(--foreground);
 	background: transparent;
@@ -600,8 +626,8 @@ img.decisions-link-icon {
 .decisions-nav {
 	display: flex;
 	gap: 8px;
-	margin-top: 16px;
-	padding-top: 16px;
+	margin-top: 12px;
+	padding-top: 12px;
 	border-top: 1px solid var(--border);
 }
 
@@ -681,7 +707,7 @@ img.decisions-link-icon {
 	flex-wrap: wrap;
 	align-items: center;
 	gap: 8px 16px;
-	padding: 12px max(16px, calc((100% - 648px) / 2));
+	padding: 10px max(16px, calc((100% - var(--content-width)) / 2));
 	background: color-mix(in srgb, var(--background) 85%, transparent);
 	backdrop-filter: blur(8px);
 	border-top: 1px solid var(--border);

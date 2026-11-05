@@ -159,6 +159,20 @@ function card(id: string): HTMLElement {
 	return element;
 }
 
+function classesOf(element: Element | null): string[] {
+	return [...(element?.children ?? [])].map((child) => child.className);
+}
+
+/** The card's two columns and what each holds, by class name. */
+function cardLayout(id: string): {card: string[]; main: string[]; side: string[]} {
+	const element = card(id);
+	return {
+		card: classesOf(element),
+		main: classesOf(element.querySelector(":scope > .decisions-card-main")),
+		side: classesOf(element.querySelector(":scope > .decisions-card-side")),
+	};
+}
+
 function text(selector: string, within: ParentNode | undefined = host): string[] {
 	return [...(within?.querySelectorAll(selector) ?? [])].map((element) => element.textContent);
 }
@@ -436,11 +450,12 @@ describe("DecisionPageView", () => {
 		const [first] = group.items;
 		stubFetch(defaultWrite, {...PAGE, groups: [{...group, items: [{...first, videos: [{src: "clip.mov"}]}]}]});
 		await mount();
-		expect([...card("a-1").children].map((element) => element.className).slice(0, 4)).toStrictEqual([
+		expect(cardLayout("a-1").main).toStrictEqual([
 			"decisions-group-heading",
 			"decisions-card-title",
 			"decisions-images",
 			"decisions-body",
+			"decisions-links",
 		]);
 	});
 
@@ -487,17 +502,11 @@ describe("DecisionPageView", () => {
 	it("renders no photo row for an item without images", async () => {
 		stubFetch();
 		await mount();
-		expect([...card("a-1").children].map((element) => element.className)).toStrictEqual([
-			"decisions-group-heading",
-			"decisions-card-title",
-			"decisions-body",
-			"decisions-links",
-			"decisions-options",
-			"decisions-note-label",
-			"decisions-note",
-			"decisions-status",
-			"decisions-nav",
-		]);
+		expect(cardLayout("a-1")).toStrictEqual({
+			card: ["decisions-card-main", "decisions-card-side"],
+			main: ["decisions-group-heading", "decisions-card-title", "decisions-body", "decisions-links"],
+			side: ["decisions-options", "decisions-note-label", "decisions-note", "decisions-status", "decisions-nav"],
+		});
 	});
 
 	it("resumes at the first unanswered card on reload", async () => {
