@@ -213,6 +213,25 @@ describe("moving the edited row", () => {
 		expect(calls.slice(0, 2)).toStrictEqual(["children:Delta", 'move:Bravo:{"parent_id":"Delta","index":1}']);
 	});
 
+	it("loads the previous sibling's never-opened children while the row is edited, so Tab moves without a round trip", async () => {
+		await mountEditing([row("Delta", null, 0, true), row("Bravo", null, 1), row("D1", "Delta", 0)], "Bravo");
+		const loadedWhileEditing = [...calls];
+
+		// Only microtasks run here: no request can answer, so the row must move on the loaded children alone.
+		await act(async () => {
+			activeCommandRegistry().indent.execute({items: ["Bravo"], zoomedId: null});
+			await Promise.resolve();
+		});
+		const deltaChildren = mountedClient
+			?.getQueryData<NodeResponse[]>(nodeKeys.children("Delta"))
+			?.map((node) => node.id);
+
+		expect({loadedWhileEditing, deltaChildren}).toStrictEqual({
+			loadedWhileEditing: ["children:Delta"],
+			deltaChildren: ["D1", "Bravo"],
+		});
+	});
+
 	it("loads a never-opened target's children before a move up into it, then lands first in the collapsed row", async () => {
 		await mountEditing(
 			[row("Delta", null, 0, true), row("Bravo", null, 1, true), row("B1", "Bravo", 0), row("D1", "Delta", 0)],

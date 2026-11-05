@@ -112,4 +112,18 @@ describe("OutlineView render count", () => {
 		await settle();
 		expect(renders.get("OutlineView") ?? 0).toBe(0);
 	});
+
+	it("re-renders no component when a keystroke types into the edited row", async () => {
+		const editor = document.querySelector<HTMLElement>('.innerContentContainer.editing[data-node-id="alice"]');
+		renders.clear();
+		act(() => {
+			editor?.append("x");
+			editor?.dispatchEvent(new InputEvent("input", {bubbles: true, data: "x", inputType: "insertText"}));
+		});
+		await settle();
+		expect({editing: editor !== null, renders: Object.fromEntries(renders)}).toStrictEqual({
+			editing: true,
+			renders: {},
+		});
+	});
 });

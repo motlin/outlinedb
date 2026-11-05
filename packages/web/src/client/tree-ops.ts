@@ -464,6 +464,20 @@ export function planIndent(
 }
 
 /**
+ * The previous sibling whose children Tab on `node` would have to load before it can move (a collapsed row that was
+ * never opened), or null. Loading them while the row is edited lets Tab move at once instead of after a round trip.
+ */
+export function indentChildrenToLoad(queryClient: QueryClient, node: PlanNode): string | null {
+	const target = planIndent(queryClient, node, new Set())?.parent_id;
+	return target === undefined || target === null || childrenCached(queryClient, target) ? null : target;
+}
+
+/** Whether `id`'s children are known: cached, or none at all. */
+function childrenCached(queryClient: QueryClient, id: string): boolean {
+	return readChildren(queryClient, id) !== undefined || readNode(queryClient, id)?.hasChildren === false;
+}
+
+/**
  * Outdent `node` to sit right after its parent among the grandparent's children.
  * Null at root, or when the parent is the zoom root (the node would leave the page).
  */
@@ -562,8 +576,7 @@ export function cacheMoveTree(
 ): BlockMoveTree {
 	return {
 		parentOf: (id) => readNode(queryClient, id)?.parent_id ?? null,
-		childrenLoaded: (id) =>
-			readChildren(queryClient, id) !== undefined || readNode(queryClient, id)?.hasChildren === false,
+		childrenLoaded: (id) => childrenCached(queryClient, id),
 		childrenOf: (id) => sortByPriority(readChildren(queryClient, id) ?? []).map((child) => child.id),
 		isExpanded: (id) => expandedIds.has(id),
 		isVisible: (id) => {

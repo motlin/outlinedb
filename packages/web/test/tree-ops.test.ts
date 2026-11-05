@@ -14,6 +14,7 @@ import {
 	planBlockMove,
 	planDuplicate,
 	planIndent,
+	indentChildrenToLoad,
 	isPotentiallyVisible,
 	nextPotentiallyVisibleSibling,
 	planFocusParent,
@@ -139,6 +140,28 @@ describe("planIndent", () => {
 	it("returns null for the first sibling", () => {
 		const qc = seed({p: siblings});
 		expect(planIndent(qc, siblings[0], collapsed)).toBeNull();
+	});
+});
+
+describe("indentChildrenToLoad", () => {
+	it("names the previous sibling when it has children that are not cached, so Tab would wait to load them", () => {
+		const qc = seed({p: [siblings[0], {...siblings[1], hasChildren: true}, siblings[2]]});
+		expect(indentChildrenToLoad(qc, siblings[2])).toBe("b");
+	});
+
+	it("is null when the previous sibling's children are cached", () => {
+		const qc = seed({p: [siblings[0], {...siblings[1], hasChildren: true}, siblings[2]], b: []});
+		expect(indentChildrenToLoad(qc, siblings[2])).toBeNull();
+	});
+
+	it("is null when the previous sibling is a leaf", () => {
+		const qc = seed({p: [siblings[0], {...siblings[1], hasChildren: false}, siblings[2]]});
+		expect(indentChildrenToLoad(qc, siblings[2])).toBeNull();
+	});
+
+	it("is null for the first sibling, which Tab cannot indent", () => {
+		const qc = seed({p: siblings});
+		expect(indentChildrenToLoad(qc, siblings[0])).toBeNull();
 	});
 });
 

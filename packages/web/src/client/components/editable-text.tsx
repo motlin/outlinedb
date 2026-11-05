@@ -16,6 +16,7 @@ import {planCellKey} from "../table.js";
 import {makeTableDeps} from "../hooks/use-table-actions.js";
 import {
 	applySplitPlan,
+	indentChildrenToLoad,
 	isEmptyForReturn,
 	planBackspaceAtStart,
 	planDeleteAtEnd,
@@ -51,7 +52,14 @@ import {nodeKeys, patchCachedNode, readChildren, readDetail, readNode} from "../
 import {collectVisibleNodeIds} from "../hooks/use-visible-nodes.js";
 import {currentSelectionView, freshSelection, scrollRowIntoView} from "../hooks/use-selection-keymap.js";
 import {editorSelectAllTakesOver, editorShiftArrowTakesOver} from "../item-selection.js";
-import {toggleComplete, useCreateNode, useDeleteNode, useMoveNode, useUpdateNode} from "../hooks/use-nodes.js";
+import {
+	fetchChildren,
+	toggleComplete,
+	useCreateNode,
+	useDeleteNode,
+	useMoveNode,
+	useUpdateNode,
+} from "../hooks/use-nodes.js";
 import {useLatest} from "../hooks/use-latest.js";
 import {captureOutlineView, runInUndoBatch} from "../undo-batch.js";
 import {createEditDebouncer, TEXT_SAVE_DEBOUNCE_MS} from "../edit-debouncer.js";
@@ -308,6 +316,24 @@ function EditingText({
 			nameSaver.flush();
 		};
 	}, [isEditing, saveInPlace, nameSaver]);
+
+	// Tab into a collapsed, never-opened previous sibling must first load its children; load them while the row is
+	// edited, so Tab moves at once instead of after a round trip.
+	useEffect(() => {
+		const target = isEditing
+			? indentChildrenToLoad(queryClient, {id: nodeId, parent_id: parentId, priority})
+			: null;
+		if (target !== null) {
+			// A failed load is retried by the Tab that needs it.
+			queryClient
+				.query({
+					queryKey: nodeKeys.children(target),
+					queryFn: async () => fetchChildren(target),
+					staleTime: "static",
+				})
+				.catch(() => {});
+		}
+	}, [isEditing, nodeId, parentId, priority, queryClient]);
 
 	const insertDate = useCallback(
 		(attrs: TimeAttrs, offset: number, replaceEnd?: number, addSpaceBefore?: boolean) => {
