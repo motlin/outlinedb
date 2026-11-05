@@ -6,6 +6,10 @@ export function stripHtmlTags(html: string | null): string {
 	if (!html) {
 		return "";
 	}
+	// Without a tag or an entity there is nothing to strip, and most rows have neither.
+	if (!html.includes("<") && !html.includes("&")) {
+		return html.trim();
+	}
 	return html
 		.replaceAll(TAG_PATTERN, "")
 		.replaceAll("&nbsp;", " ")

@@ -67,6 +67,9 @@ interface RowText {
 	plainNote: string;
 	foldedName: string;
 	foldedNote: string;
+	/** Whether the raw name and note are ASCII, so folding them per character only lowercases. */
+	asciiName: boolean;
+	asciiNote: boolean;
 	/** Upstream's `zb` text of the name and note, whose lengths rank a hit; filled on first use, so only for hits. */
 	index?: IndexText;
 	/** matchField's per-character folding of the plain name, raw name and plain note, filled on first use. */
@@ -96,22 +99,42 @@ function same(fresh: string, held: string): string {
 	return fresh === held ? held : fresh;
 }
 
+type RowContent = Pick<TreeSearchRow, "name" | "note">;
+
+const ASCII_TEXT = /^\p{ASCII}*$/u;
+
+/** `plain` folded for search; ASCII text (whose stripped text stays ASCII) only lowercases. */
+function fold(plain: string, ascii: boolean): string {
+	return same(ascii ? plain.toLowerCase() : normalizeForSearch(plain), plain);
+}
+
+function computeRowText(row: RowContent): RowText {
+	const name = row.name ?? "";
+	const note = row.note ?? "";
+	const asciiName = ASCII_TEXT.test(name);
+	const asciiNote = ASCII_TEXT.test(note);
+	const plainName = same(stripHtmlTags(name), name);
+	const plainNote = same(stripHtmlTags(note), note);
+	return {
+		plainName,
+		plainNote,
+		foldedName: fold(plainName, asciiName),
+		foldedNote: fold(plainNote, asciiNote),
+		asciiName,
+		asciiNote,
+	};
+}
+
 function rowText(row: TreeSearchRow): RowText {
 	let text = textCache.get(row);
 	if (text === undefined) {
-		const name = row.name ?? "";
-		const note = row.note ?? "";
-		const plainName = same(stripHtmlTags(name), name);
-		const plainNote = same(stripHtmlTags(note), note);
-		const foldedName = same(normalizeForSearch(plainName), plainName);
-		const foldedNote = same(normalizeForSearch(plainNote), plainNote);
-		text = {plainName, plainNote, foldedName, foldedNote};
+		text = computeRowText(row);
 		textCache.set(row, text);
 	}
 	return text;
 }
 
-function indexTexts(row: TreeSearchRow, text: RowText): IndexText {
+function indexTexts(row: RowContent, text: RowText): IndexText {
 	if (text.index === undefined) {
 		const indexName = indexText(withMonthNames(row.name ?? ""));
 		const indexNote = indexText(withMonthNames(row.note ?? ""));
@@ -180,12 +203,13 @@ function preorderIndex(rows: readonly TreeSearchRow[], index: RowIndex): Map<str
 	return index.preorder;
 }
 
-function matchFields(row: TreeSearchRow, text: RowText): [string, string, string] {
+function matchFields(row: RowContent, text: RowText): [string, string, string] {
 	if (text.fields === undefined) {
 		// Reuse an equal string already held, so a row whose fields fold the same way keeps one copy, not three.
-		const plainName = same(foldPerCharacter(text.plainName), text.foldedName);
-		const rawName = same(foldPerCharacter(row.name ?? ""), plainName);
-		const plainNote = same(foldPerCharacter(text.plainNote), text.foldedNote);
+		const plainName = text.asciiName ? text.foldedName : same(foldPerCharacter(text.plainName), text.foldedName);
+		const raw = row.name ?? "";
+		const rawName = same(text.asciiName ? raw.toLowerCase() : foldPerCharacter(raw), plainName);
+		const plainNote = text.asciiNote ? text.foldedNote : same(foldPerCharacter(text.plainNote), text.foldedNote);
 		text.fields = [plainName, rawName, plainNote];
 	}
 	return text.fields;
@@ -296,6 +320,13 @@ function gatherPositions(
 	};
 	visit(start);
 	return positions;
+}
+
+/** `indexWords(text)` that start with `prefix` (letters, digits, # and @ only), without splitting out every word. */
+function wordsStartingWith(prefix: string): (text: string) => string[] {
+	const runs = new RegExp(`(?<![\\p{L}\\p{N}#@])${prefix}[\\p{L}\\p{N}#@]*`, "gu");
+	return (text) =>
+		text.includes(prefix) ? (text.match(runs) ?? []).map((word) => word.slice(0, INDEX_WORD_LENGTH)) : [];
 }
 
 function indexWords(text: string): string[] {
@@ -691,6 +722,196 @@ export function rankSwitcherPaged(
 			source,
 			(plain) => matchField(words, plain).html,
 		),
+		hasMore: scored.length > offset + limit,
+	};
+}
+
+/** Skeleton flag bits. */
+const COMPLETED = 1;
+const UNDER_COMPLETED = 2;
+const MIRROR = 4;
+
+/**
+ * The jump menu's whole tree without text, in tree preorder and in typed arrays: small enough (about a tenth of the
+ * row objects) for a 128 MB Durable Object to keep between keystrokes. Index `i` is the row's preorder position.
+ */
+export interface SwitcherSkeleton {
+	ids: string[];
+	position: Map<string, number>;
+	/** The parent's index, or -1 for a row hanging at the top. */
+	parent: Int32Array;
+	/** Counted from Home, so a top-level row is 2. */
+	depth: Uint16Array;
+	childCount: Uint32Array;
+	/** Milliseconds, NaN when unknown. */
+	modifiedMs: Float64Array;
+	flags: Uint8Array;
+	/** The few rows with a layout mode, by index. */
+	layoutModes: Map<number, string>;
+	/** The earliest creation time of any row (Infinity when none), for the joined-at fallback. */
+	earliestCreatedMs: number;
+}
+
+/** {@link SwitcherSkeleton} of text-free skeleton rows; the rows can be dropped afterwards. */
+export function compactSwitcherSkeleton(rows: readonly TreeSearchRow[]): SwitcherSkeleton {
+	const index = rowIndex(rows);
+	const placed = [...placedPreorder(rows, index)];
+	const size = placed.length;
+	const skeleton: SwitcherSkeleton = {
+		ids: placed.map(({row}) => row.id),
+		position: new Map(),
+		parent: new Int32Array(size),
+		depth: new Uint16Array(size),
+		childCount: new Uint32Array(size),
+		modifiedMs: new Float64Array(size),
+		flags: new Uint8Array(size),
+		layoutModes: new Map(),
+		earliestCreatedMs: Infinity,
+	};
+	placed.forEach(({row}, i) => {
+		skeleton.position.set(row.id, i);
+	});
+	placed.forEach(({row, depth, underCompleted}, i) => {
+		skeleton.parent[i] = row.parentId === null ? -1 : (skeleton.position.get(row.parentId) ?? -1);
+		skeleton.depth[i] = depth;
+		skeleton.childCount[i] = index.childCount.get(row.id) ?? 0;
+		skeleton.modifiedMs[i] = row.modifiedAt ?? Number.NaN;
+		skeleton.flags[i] =
+			(row.completedAt === null ? 0 : COMPLETED) |
+			(underCompleted ? UNDER_COMPLETED : 0) |
+			(row.isMirror ? MIRROR : 0);
+		if (row.layoutMode !== null) {
+			skeleton.layoutModes.set(i, row.layoutMode);
+		}
+		if (row.createdAt !== null && row.createdAt < skeleton.earliestCreatedMs) {
+			skeleton.earliestCreatedMs = row.createdAt;
+		}
+	});
+	return skeleton;
+}
+
+/** Whether {@link rankSwitcherCompact} answers `query`; quoted, emoji, date and nested `a > b` queries need the full rows. */
+export function isCompactSwitcherQuery(query: string): boolean {
+	return !needsTreeSearch(query) && nestedSegments(query).length <= 1;
+}
+
+const PLAIN_WORD = /^[a-z\d#@]+$/u;
+
+/**
+ * The longest query word as a case-insensitive SQL LIKE fragment, or null when it is not plain ASCII (folding could
+ * then map other text onto it). A row whose folded text holds the word holds it in its raw text too, unless the raw
+ * text has a tag (stripping can join letters) or non-ASCII characters (folding can map them to ASCII).
+ */
+export function scanFragment(longest: string): string | null {
+	return PLAIN_WORD.test(longest) ? longest : null;
+}
+
+/** Live rows with their text: every row whose raw name or note might fold to hold `fragment` (all rows when null), in any order. */
+export type SwitcherTextScan = (
+	fragment: string | null,
+) => Iterable<{id: string; name: string | null; note: string | null}>;
+
+/**
+ * {@link rankSwitcher} over a cached {@link SwitcherSkeleton}: `scan` answers only the rows that may hold the longest
+ * query word, in any order, and each is scored and dropped; the page's labels and ancestor names are read from
+ * `source` afterwards. For {@link isCompactSwitcherQuery} queries only.
+ */
+export function rankSwitcherCompact(
+	skeleton: SwitcherSkeleton,
+	query: string,
+	starredIds: readonly string[],
+	nowSec: number,
+	options: RankSwitcherOptions,
+	scan: SwitcherTextScan,
+	source: RowTextSource,
+): SwitcherResponse {
+	const {joinedSec, offset = 0, limit = DEFAULT_LIMIT, excludeId, showCompleted = false} = options;
+	const starred = new Set(starredIds);
+	const words = splitIntoWords(nestedSegments(query).at(-1) ?? "");
+	if (words.length === 0) {
+		return {results: [], hasMore: false};
+	}
+	const longest = words.toSorted((a, b) => b.length - a.length)[0]?.slice(0, INDEX_WORD_LENGTH) ?? "";
+	const longestAtWordStart = wordStart(longest);
+	const wordRegExps = words.map(wordStart);
+	const hitsEvery = (field: string): boolean => wordRegExps.every((regexp) => regexp.test(field));
+	const prefixWords = wordsStartingWith(longest);
+	const {ids, position, flags, depth, childCount, modifiedMs, layoutModes} = skeleton;
+
+	const scored: {score: number; at: number; completed: boolean; nameHit: boolean; words: string[]}[] = [];
+	for (const found of scan(scanFragment(longest))) {
+		const at = position.get(found.id);
+		if (at === undefined || found.id === excludeId) {
+			continue;
+		}
+		const flag = flags[at] ?? 0;
+		const completed = (flag & (COMPLETED | UNDER_COMPLETED)) !== 0;
+		if ((flag & MIRROR) !== 0 || (completed && !showCompleted)) {
+			continue;
+		}
+		// Scanned rows are dropped after scoring, so their text is not cached.
+		const row = found;
+		const text = computeRowText(row);
+		if (!text.foldedName.includes(longest) && !text.foldedNote.includes(longest)) {
+			continue;
+		}
+		const [plainNameField, rawNameField, noteField] = matchFields(row, text);
+		if (!hitsEvery(plainNameField) && !hitsEvery(rawNameField) && !hitsEvery(noteField)) {
+			continue;
+		}
+		const nameHit = longestAtWordStart.test(plainNameField);
+		const noteHit = longestAtWordStart.test(noteField);
+		const {indexName, indexNote} = indexTexts(row, text);
+		const modified = modifiedMs[at] ?? Number.NaN;
+		const score =
+			baseScore({
+				depth: depth[at] ?? 0,
+				childCount: childCount[at] ?? 0,
+				completed,
+				lastModifiedSec: Number.isNaN(modified) ? null : Math.floor(modified / 1000),
+				joinedSec,
+				nowSec,
+				layoutMode: layoutModes.get(at) ?? null,
+				starred: starred.has(found.id),
+			}) *
+			nameBoost(found.name ?? "") *
+			textFactor(longest, indexName, indexNote, nameHit, noteHit);
+		scored.push({score, at, completed, nameHit, words: prefixWords(nameHit ? indexName : indexNote)});
+	}
+	// Preorder is the index insertion order that the trie gather order refines, and the final tie-break.
+	scored.sort((a, b) => a.at - b.at);
+	const toEntries = (hits: typeof scored) => hits.map((hit) => ({id: ids[hit.at] ?? "", words: hit.words}));
+	const gather = new Map([
+		...gatherPositions(longest, toEntries(scored.filter(({nameHit}) => nameHit))),
+		...gatherPositions(longest, toEntries(scored.filter(({nameHit}) => !nameHit))),
+	]);
+	const gathered = (hit: (typeof scored)[number]): number => gather.get(ids[hit.at] ?? "") ?? Number.MAX_SAFE_INTEGER;
+	scored.sort((a, b) => b.score - a.score || gathered(a) - gathered(b) || a.at - b.at);
+
+	const page = scored.slice(offset, offset + limit);
+	const chains = page.map(({at}) => {
+		const chain: number[] = [];
+		for (let up = skeleton.parent[at] ?? -1; up >= 0; up = skeleton.parent[up] ?? -1) {
+			chain.push(up);
+		}
+		return chain.toReversed();
+	});
+	const wanted = [...new Set([...page.map(({at}) => at), ...chains.flat()])].map((at) => ids[at] ?? "");
+	const names = new Map<string, string>();
+	for (let start = 0; start < wanted.length; start += source.pageSize) {
+		for (const [id, found] of source.read(wanted.slice(start, start + source.pageSize))) {
+			names.set(id, stripHtmlTags(found.name ?? ""));
+		}
+	}
+	const nameOf = (at: number): string => names.get(ids[at] ?? "") ?? "";
+	return {
+		results: page.map(({at, completed}, i) => ({
+			id: ids[at] ?? "",
+			labelHtml: matchField(words, nameOf(at)).html,
+			completed,
+			starred: starred.has(ids[at] ?? ""),
+			ancestors: (chains[i] ?? []).map((up) => ({id: ids[up] ?? "", name: nameOf(up)})),
+		})),
 		hasMore: scored.length > offset + limit,
 	};
 }

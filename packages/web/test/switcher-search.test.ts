@@ -1,5 +1,13 @@
 import {describe, expect, it} from "vite-plus/test";
-import {peekSwitcherText, rankSwitcher, rankSwitcherPaged, warmSwitcher} from "../src/server/switcher-search.js";
+import {
+	compactSwitcherSkeleton,
+	peekSwitcherText,
+	rankSwitcher,
+	rankSwitcherCompact,
+	rankSwitcherPaged,
+	scanFragment,
+	warmSwitcher,
+} from "../src/server/switcher-search.js";
 import type {TreeSearchRow} from "../src/server/tree-search.js";
 
 const NOW_SEC = Date.UTC(2026, 9, 1) / 1000;
@@ -153,6 +161,8 @@ describe("warmSwitcher", () => {
 			plainNote: "Beta Note",
 			foldedName: "alpha page",
 			foldedNote: "beta note",
+			asciiName: true,
+			asciiNote: true,
 			index: {indexName: "alpha page", indexNote: "beta note"},
 			fields: ["alpha page", "<b>alpha</b> page", "beta note"],
 		});
@@ -378,5 +388,93 @@ describe("rankSwitcherPaged", () => {
 				"due",
 			],
 		});
+	});
+});
+
+describe("rankSwitcherCompact", () => {
+	const ROWS_WITH_TEXT = [
+		...ROWS,
+		row("mirror", "beta", 2, "qwzx alpha leaf", {isMirror: true}),
+		row("accent", "sandbox", 2, "Qwzx \u00E9t\u00E9 plans", {layoutMode: "h1"}),
+		row("tagged", "sandbox", 3, "qw<b>zx</b> bold", {createdAt: Date.UTC(2017, 0, 1)}),
+	];
+	const skeleton = compactSwitcherSkeleton(ROWS_WITH_TEXT.map((full) => ({...full, name: null, note: null})));
+	const textById = new Map(ROWS_WITH_TEXT.map(({id, name, note}) => [id, {name, note}]));
+
+	function compact(query: string, options: {showCompleted?: boolean; limit?: number; excludeId?: string} = {}) {
+		const fragments: (string | null)[] = [];
+		const response = rankSwitcherCompact(
+			skeleton,
+			query,
+			["beta"],
+			NOW_SEC,
+			{joinedSec: JOINED_SEC, ...options},
+			(fragment) => {
+				fragments.push(fragment);
+				// Like the SQL prefilter: an ASCII LIKE on the raw text, plus every row holding a tag or non-ASCII text.
+				const matching = ROWS_WITH_TEXT.filter(
+					({name, note}) =>
+						fragment === null ||
+						[name, note].some(
+							(text) =>
+								text !== null &&
+								(text.toLowerCase().includes(fragment) ||
+									text.includes("<") ||
+									!/^\p{ASCII}*$/u.test(text)),
+						),
+				);
+				// Out of tree order, as SQL answers them.
+				return matching.flatMap((_, i) => matching.slice(matching.length - 1 - i, matching.length - i));
+			},
+			{
+				pageSize: 2,
+				read: (ids) =>
+					new Map(ids.flatMap((id) => (textById.has(id) ? [[id, textById.get(id)!] as const] : []))),
+			},
+		);
+		return {response, fragments};
+	}
+
+	it("answers exactly what rankSwitcher answers over the rows with their text", () => {
+		const queries: [string, {showCompleted?: boolean; limit?: number; excludeId?: string}][] = [
+			["qwzx", {}],
+			["qwzx", {limit: 2}],
+			["qwzx", {showCompleted: true}],
+			["qwzx", {excludeId: "alpha"}],
+			["par qwz", {}],
+			["ete", {}],
+			["QWZX bold", {}],
+			["nothingmatches", {}],
+		];
+		expect(queries.map(([query, options]) => compact(query, options).response)).toStrictEqual(
+			queries.map(([query, options]) =>
+				rankSwitcher(ROWS_WITH_TEXT, query, ["beta"], NOW_SEC, {joinedSec: JOINED_SEC, ...options}),
+			),
+		);
+	});
+
+	it("scans with the folded longest word as the prefilter fragment", () => {
+		expect(["par QWZX", "\u00E9t\u00E9", "\u00DF"].map((query) => compact(query).fragments)).toStrictEqual([
+			["qwzx"],
+			["ete"],
+			[null],
+		]);
+	});
+
+	it("keeps the earliest creation time for the joined-at fallback", () => {
+		expect(skeleton.earliestCreatedMs).toBe(Date.UTC(2017, 0, 1));
+	});
+});
+
+describe("scanFragment", () => {
+	it("is the longest word when it is plain ASCII letters, digits, # or @, and null otherwise", () => {
+		expect(["te", "#tag", "@pat", "x1", "\u00DF", "\u0131"].map(scanFragment)).toStrictEqual([
+			"te",
+			"#tag",
+			"@pat",
+			"x1",
+			null,
+			null,
+		]);
 	});
 });

@@ -21,6 +21,8 @@ import {
 	loadTreeRowText,
 	loadTreeSearchRows,
 	loadTreeSkeletonRows,
+	loadSwitcherSkeleton,
+	scanSwitcherText,
 	queryNeedsBacklinks,
 	peekTreeSnapshotBuild,
 	peekTreeSnapshotRows,
@@ -170,6 +172,68 @@ describe("jump-menu search with the tree snapshot off", () => {
 		expect(paged).toStrictEqual(await answers(true));
 		const sizes = paged.map((answer) => ("matchIds" in answer ? answer.matchIds : answer.results).length);
 		expect(sizes).toStrictEqual([1, 1, 2, 1, 2, 1, 1]);
+	});
+
+	it("answers accented, tagged and paged switcher queries exactly as the snapshot does", async () => {
+		const db = setup();
+		db.update(nodeContent).set({name: "Al<b>pha</b> \u00E9t\u00E9"}).where(eq(nodeContent.id, "a")).run();
+		db.update(nodeContent).set({name: "Alpha child ete"}).where(eq(nodeContent.id, "a1")).run();
+		const post = async (treeSnapshot: boolean, query: string, extra: object = {}) => {
+			const ctx = {db, config: {features: {treeSnapshot}}} as unknown as ServerContext;
+			const response = await httpAppFor(ctx).fetch(
+				new Request("http://x/api/search/switcher", {
+					method: "POST",
+					body: JSON.stringify({query, showCompleted: true, ...extra}),
+				}),
+			);
+			return (await response.json()) as {results: {id: string}[]};
+		};
+		const requests: [string, object][] = [
+			["alpha", {}],
+			["ete", {}],
+			["\u00E9t\u00E9", {}],
+			["alpha", {limit: 1}],
+			["alpha", {offset: 1}],
+			["oth", {}],
+		];
+		const answers = async (treeSnapshot: boolean) =>
+			Promise.all(requests.map(async ([query, extra]) => post(treeSnapshot, query, extra)));
+		const paged = await answers(false);
+		expect(paged).toStrictEqual(await answers(true));
+		expect(paged.map(({results}) => results.map(({id}) => id))).toStrictEqual([
+			["a", "a1"],
+			["a", "a1"],
+			["a", "a1"],
+			["a"],
+			["a1"],
+			["other"],
+		]);
+	});
+
+	it("keeps the compact switcher skeleton between queries until the database changes", () => {
+		const db = setup();
+		const first = loadSwitcherSkeleton(db);
+		const again = loadSwitcherSkeleton(db);
+		db.update(nodeContent).set({name: "Renamed"}).where(eq(nodeContent.id, "a1")).run();
+		const afterWrite = loadSwitcherSkeleton(db);
+		expect({same: again === first, rebuilt: afterWrite !== first, ids: afterWrite.ids}).toStrictEqual({
+			same: true,
+			rebuilt: true,
+			ids: ["root", "a", "a1", "mirror", "other"],
+		});
+	});
+
+	it("scans live text a page at a time, keeping LIKE hits and every row with a tag or non-ASCII text", () => {
+		const db = setup();
+		db.update(nodeContent).set({name: "R<i>oo</i>t"}).where(eq(nodeContent.id, "root")).run();
+		db.update(nodeContent).set({note: "caf\u00E9"}).where(eq(nodeContent.id, "a1")).run();
+		expect({
+			filtered: new Set([...scanSwitcherText(db, "alp", 1)].map(({id}) => id)),
+			all: new Set([...scanSwitcherText(db, null, 2)].map(({id}) => id)),
+		}).toStrictEqual({
+			filtered: new Set(["a", "a1", "root"]),
+			all: new Set(["a", "a1", "bl", "mirror", "other", "refs", "root"]),
+		});
 	});
 
 	it("answers the whole-tree helper tags exactly as the snapshot does", async () => {

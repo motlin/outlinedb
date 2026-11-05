@@ -12,7 +12,7 @@ import {collectHelperTags} from "../helper-tags.js";
 import type {HelperTags} from "../helper-tags.js";
 import type {ServerContext} from "../context.js";
 import {filterLocations} from "../location-search.js";
-import {rankSwitcher, rankSwitcherPaged} from "../switcher-search.js";
+import {isCompactSwitcherQuery, rankSwitcher, rankSwitcherCompact, rankSwitcherPaged} from "../switcher-search.js";
 import type {RankSwitcherOptions, SwitcherResponse} from "../switcher-search.js";
 import {computeTreeSearch, computeTreeSearchPaged, withRowText} from "../tree-search.js";
 import type {RowTextSource, TreeSearchRow} from "../tree-search.js";
@@ -22,8 +22,10 @@ import {
 	loadTreeRows,
 	loadTreeRowsWithBacklinks,
 	loadTreeSearchRows,
+	loadSwitcherSkeleton,
 	loadTreeSkeletonRows,
 	queryNeedsBacklinks,
+	scanSwitcherText,
 } from "../tree-snapshot.js";
 
 type TreeLoader = (database: AppDatabase, rootId: string | null) => TreeSearchRow[];
@@ -56,19 +58,52 @@ type SwitcherRanker = (
 	options: RankSwitcherOptions,
 ) => SwitcherResponse;
 
+interface SwitcherSearch {
+	rows: TreeSearchRow[];
+	/** The earliest creation time of any row (Infinity when none), for the joined-at fallback. */
+	earliestCreatedMs: number;
+	rank: SwitcherRanker;
+}
+
+function earliestCreated(rows: readonly TreeSearchRow[]): number {
+	// A loop, not Math.min(...), so a large tree cannot overflow the call stack.
+	let earliest = Infinity;
+	for (const row of rows) {
+		if (row.createdAt !== null && row.createdAt < earliest) {
+			earliest = row.createdAt;
+		}
+	}
+	return earliest;
+}
+
 /**
- * The jump menu's rows and ranking: the snapshot with {@link rankSwitcher}, or, with `features.treeSnapshot` off
- * (a Durable Object cannot hold every row's text), the text-free skeleton with {@link rankSwitcherPaged}.
+ * The jump menu's rows and ranking for `query`: the snapshot with {@link rankSwitcher}, or, with
+ * `features.treeSnapshot` off (a Durable Object cannot hold every row's text), the cached compact skeleton with
+ * {@link rankSwitcherCompact} over a prefiltered text scan, or for quoted, emoji, date and nested queries the
+ * text-free skeleton rows with {@link rankSwitcherPaged}.
  */
-function switcherSearch(ctx: ServerContext): {rows: TreeSearchRow[]; rank: SwitcherRanker} {
+function switcherSearch(ctx: ServerContext, query: string): SwitcherSearch {
 	if (ctx.config.features.treeSnapshot) {
-		return {rows: loadTreeRows(ctx.db, null), rank: rankSwitcher};
+		const rows = loadTreeRows(ctx.db, null);
+		return {rows, earliestCreatedMs: earliestCreated(rows), rank: rankSwitcher};
 	}
 	const source = textSource(ctx);
+	if (isCompactSwitcherQuery(query)) {
+		const skeleton = loadSwitcherSkeleton(ctx.db);
+		const scan = (fragment: string | null) => scanSwitcherText(ctx.db, fragment, TEXT_PAGE_SIZE);
+		return {
+			rows: [],
+			earliestCreatedMs: skeleton.earliestCreatedMs,
+			rank: (_rows, rankedQuery, starredIds, nowSec, options) =>
+				rankSwitcherCompact(skeleton, rankedQuery, starredIds, nowSec, options, scan, source),
+		};
+	}
+	const rows = loadTreeSkeletonRows(ctx.db);
 	return {
-		rows: loadTreeSkeletonRows(ctx.db),
-		rank: (rows, query, starredIds, nowSec, options) =>
-			rankSwitcherPaged(rows, query, starredIds, nowSec, options, source),
+		rows,
+		earliestCreatedMs: earliestCreated(rows),
+		rank: (skeletonRows, rankedQuery, starredIds, nowSec, options) =>
+			rankSwitcherPaged(skeletonRows, rankedQuery, starredIds, nowSec, options, source),
 	};
 }
 
@@ -226,14 +261,7 @@ export const searchTree = defineOp({
 let joinedSecPromise: Promise<number> | undefined;
 
 /** The account join date (once per server), else the earliest cached `created_at`, for switcher recency. */
-async function loadJoinedSec(ctx: ServerContext, rows: TreeSearchRow[]): Promise<number> {
-	// A loop, not Math.min(...), so a large tree cannot overflow the call stack.
-	let earliestCreatedMs = Infinity;
-	for (const row of rows) {
-		if (row.createdAt !== null && row.createdAt < earliestCreatedMs) {
-			earliestCreatedMs = row.createdAt;
-		}
-	}
+async function loadJoinedSec(ctx: ServerContext, earliestCreatedMs: number): Promise<number> {
 	const earliestCreatedSec = Number.isFinite(earliestCreatedMs) ? Math.floor(earliestCreatedMs / 1000) : 0;
 	const adapter = ctx.internalAdapter?.();
 	if (!adapter) {
@@ -260,8 +288,8 @@ export const searchSwitcher = defineOp({
 	}),
 	output: SwitcherResponseSchema,
 	async run(ctx, {query, offset, limit, starredIds, showCompleted}) {
-		const {rows, rank} = switcherSearch(ctx);
-		const joinedSec = await loadJoinedSec(ctx, rows);
+		const {rows, earliestCreatedMs: earliest, rank} = switcherSearch(ctx, query);
+		const joinedSec = await loadJoinedSec(ctx, earliest);
 		return ok(
 			toJson(
 				rank(rows, query, starredIds, Math.floor(Date.now() / 1000), {
@@ -290,8 +318,8 @@ export const searchLocations = defineOp({
 	}),
 	output: LocationResponseSchema,
 	async run(ctx, {query, offset, limit, excludeId, starredIds, showCompleted}) {
-		const {rows, rank} = switcherSearch(ctx);
-		const joinedSec = await loadJoinedSec(ctx, rows);
+		const {rows, earliestCreatedMs: earliest, rank} = switcherSearch(ctx, query);
+		const joinedSec = await loadJoinedSec(ctx, earliest);
 		return ok(
 			toJson(
 				filterLocations(rows, {query, excludeId, offset, limit, joinedSec, starredIds, showCompleted, rank}),

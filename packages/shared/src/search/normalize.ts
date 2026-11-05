@@ -28,12 +28,35 @@ export function foldPerCharacter(s: string): string {
 	if (ASCII.test(s)) {
 		return s.toLowerCase();
 	}
+	// ASCII runs lowercase in one slice; other characters fold through a memo, since text reuses few of them.
 	const pieces: string[] = [];
-	for (const ch of s) {
-		pieces.push(normalizeForSearch(ch));
+	let runStart = 0;
+	let i = 0;
+	while (i < s.length) {
+		if ((s.codePointAt(i) ?? 0) < 0x80) {
+			i++;
+			continue;
+		}
+		if (runStart < i) {
+			pieces.push(s.slice(runStart, i).toLowerCase());
+		}
+		const ch = String.fromCodePoint(s.codePointAt(i) ?? 0);
+		let folded = foldedCharacters.get(ch);
+		if (folded === undefined) {
+			folded = normalizeForSearch(ch);
+			foldedCharacters.set(ch, folded);
+		}
+		pieces.push(folded);
+		i += ch.length;
+		runStart = i;
+	}
+	if (runStart < s.length) {
+		pieces.push(s.slice(runStart).toLowerCase());
 	}
 	return pieces.join("");
 }
+
+const foldedCharacters = new Map<string, string>();
 
 /** Normalize `s` while tracking how each normalized code unit maps back to the original string. */
 export function normalizeWithOffsets(s: string): NormalizedText {

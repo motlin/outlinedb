@@ -3,7 +3,8 @@ import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
 import {sql} from "drizzle-orm";
 import type {SQL} from "drizzle-orm";
 import type {AppDatabase} from "@workflowy/shared/db";
-import {warmSwitcher} from "./switcher-search.js";
+import {compactSwitcherSkeleton, warmSwitcher} from "./switcher-search.js";
+import type {SwitcherSkeleton} from "./switcher-search.js";
 import {changedNodeIds, changesSince, latestSystemTime, readConsistently} from "./system-changes.js";
 import type {TreeSearchRow} from "./tree-search.js";
 
@@ -186,6 +187,69 @@ export function loadTreeRowText(
 		LEFT JOIN node_content o ON o.id = mi.original_id AND o.system_to = ${FAR_FUTURE_DATE}
 	`);
 	return new Map(rows.map(({id, name, note}) => [id, {name, note}]));
+}
+
+const switcherSkeletons = new WeakMap<Database, {state: ChangeState; skeleton: SwitcherSkeleton}>();
+
+/**
+ * The jump menu's compact whole-tree skeleton, kept per database until it changes, so a burst of keystrokes builds it
+ * once instead of rerunning the recursive tree query for each. Built afresh each call when no tree host is bound.
+ */
+export function loadSwitcherSkeleton(database: Database): SwitcherSkeleton {
+	if (!hosts.has(database)) {
+		// Without a change source nothing tells a cached skeleton is stale.
+		return compactSwitcherSkeleton(loadTreeSkeletonRows(database));
+	}
+	const state = changeState(database);
+	const cached = switcherSkeletons.get(database);
+	if (
+		cached !== undefined &&
+		cached.state.dataVersion === state.dataVersion &&
+		cached.state.changes === state.changes
+	) {
+		return cached.skeleton;
+	}
+	const skeleton = compactSwitcherSkeleton(loadTreeSkeletonRows(database));
+	switcherSkeletons.set(database, {state, skeleton});
+	return skeleton;
+}
+
+/**
+ * Live `node_content` rows with their own text, read `pageSize` at a time in rowid order: with a `fragment`, only rows
+ * whose name or note holds it (ASCII case-insensitive LIKE) or holds a tag or non-ASCII text, which folding could make
+ * hold it. Mirrors carry their own stale text; the jump menu skips them.
+ */
+export function* scanSwitcherText(
+	database: Database,
+	fragment: string | null,
+	pageSize: number,
+): Generator<{id: string; name: string | null; note: string | null}> {
+	const pattern = `%${fragment}%`;
+	const filter =
+		fragment === null
+			? sql``
+			: sql`AND (
+				c.name LIKE ${pattern} OR c.note LIKE ${pattern}
+				OR instr(c.name, '<') OR instr(c.note, '<')
+				OR length(c.name) <> octet_length(c.name) OR length(c.note) <> octet_length(c.note)
+			)`;
+	let after = -1;
+	for (;;) {
+		const page = database.all<{rowid: number; id: string; name: string | null; note: string | null}>(sql`
+			SELECT c.rowid AS rowid, c.id AS id, c.name AS name, c.note AS note
+			FROM node_content c
+			WHERE c.rowid > ${after} AND c.system_to = ${FAR_FUTURE_DATE} ${filter}
+			ORDER BY c.rowid
+			LIMIT ${pageSize}
+		`);
+		for (const {id, name, note} of page) {
+			yield {id, name, note};
+		}
+		if (page.length < pageSize) {
+			return;
+		}
+		after = page.at(-1)?.rowid ?? after;
+	}
 }
 
 /** Where a live node reachable from a top-level node sits, searchable or not. */
