@@ -20,8 +20,8 @@ export function scopeEntries(cache: CacheService, rootId: string): string[] {
 		);
 }
 
-/** Calendar > year > month > week > day. */
-const MAX_DAY_DEPTH = 4;
+/** Calendar > 🗃️ Archive > decade > year > month > week > day. */
+const MAX_DAY_DEPTH = 6;
 
 /**
  * The journal entries (children of calendar days) under `rootId` on days in or after `since`, in outline order.

@@ -246,6 +246,27 @@ describe("ai eval-labels command", () => {
 		});
 	});
 
+	it("samples archived days five levels below the calendar root", async () => {
+		seedTestData(testDatabase, {
+			...nodeFixtures([
+				createTestNode({id: "cal", name: "📆 Calendar", parentId: null}),
+				createTestNode({id: "arch", name: "🗃️ Archive", parentId: "cal"}),
+				createTestNode({id: "decade", name: "2020 - 2029 decade", parentId: "arch"}),
+				createTestNode({id: "y2025", name: "2025", parentId: "decade"}),
+				createTestNode({id: "m2501", name: "January", parentId: "y2025"}),
+				createTestNode({id: "d250106", name: dayTime(2025, 1, 6), parentId: "m2501"}),
+				createTestNode({id: "a1", name: "Lunch with @Bob", parentId: "d250106"}),
+			]),
+		});
+
+		await evaluate("--sample", "10", "--since", "2025-01");
+
+		expect(run.mock.calls.map(([request]) => `${request.model} ${request.state.entry}`)).toStrictEqual([
+			"clef-flash Lunch with Bob",
+			"clef-flash Lunch with Bob",
+		]);
+	});
+
 	it("exits 1 with a clear error and no Clef calls when the token is missing", async () => {
 		delete process.env.CLOUDFLARE_AI_TOKEN;
 
