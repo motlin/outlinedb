@@ -29,7 +29,7 @@ export default class SuggestLabels extends Command {
 		"op run -- <%= config.bin %> <%= command.id %> --id 6b7118a90648 --json",
 		"op run -- <%= config.bin %> <%= command.id %> --parent-id <month or Inbox id> --threshold 0.9 --json",
 		"op run -- <%= config.bin %> <%= command.id %> --parent-id <month id> --verifier clef --force",
-		"op run -- <%= config.bin %> <%= command.id %> --parent-id <calendar id> --since 2026-10 --kind person --verifier clef --threshold 0.77 --json",
+		"op run -- <%= config.bin %> <%= command.id %> --parent-id <calendar id> --since 2026-10 --kind person --verifier clef --threshold 0.84 --json",
 	];
 
 	static override flags = {

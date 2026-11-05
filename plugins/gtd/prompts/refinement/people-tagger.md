@@ -11,7 +11,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/refinement-tagger.md` and follow it for fetch
 Before matching, fetch advisory people hints from hosted Clef for this one item:
 
 ```bash
-HINTS=$(op run -- ./bin/run.js ai suggest-labels --id "$ITEM_ID" --kind person --verifier clef --threshold 0.77 --json 2>/dev/null) || HINTS='[]'
+HINTS=$(op run -- ./bin/run.js ai suggest-labels --id "$ITEM_ID" --kind person --verifier clef --threshold 0.84 --json 2>/dev/null) || HINTS='[]'
 echo "$HINTS" | jq -r '.[0].suggestions[]? | "\(.label) \(.score)"'
 ```
 

@@ -175,13 +175,13 @@ Run it on the live calendar root from the prior month on, and in archive mode on
 
 ```bash
 # Recent live window: <prior-yyyy-mm> is the prior calendar month, e.g. 2026-10
-op run -- ./bin/run.js ai suggest-labels --parent-id 6bf42551caa3 --since <prior-yyyy-mm> --kind person --verifier clef --threshold 0.77 --json
+op run -- ./bin/run.js ai suggest-labels --parent-id 6bf42551caa3 --since <prior-yyyy-mm> --kind person --verifier clef --threshold 0.84 --json
 # Archive mode only: the archive month's node id and that month
-op run -- ./bin/run.js ai suggest-labels --parent-id <archive-month-id> --since <archive-yyyy-mm> --kind person --verifier clef --threshold 0.77 --json
+op run -- ./bin/run.js ai suggest-labels --parent-id <archive-month-id> --since <archive-yyyy-mm> --kind person --verifier clef --threshold 0.84 --json
 ```
 
 - The output is `[{nodeId, suggestions: [{label, kind, score, source}]}]`. Index it by `nodeId` (full UUID). Entries already scored against their current text are not rescored, so a daily run only pays for new or edited entries.
-- `0.77` with the full-Clef verifier is the measured cut for 0.90 precision; below it, ignore the suggestion.
+- `0.84` with the full-Clef verifier and people-only scoring (`--kind person`) is the measured cut for 0.90 precision; below it, ignore the suggestion.
 - Any non-zero exit (missing `CLOUDFLARE_AI_TOKEN`, API error) or a `--no-hints` run: skip hints and tag people exactly as the rules below describe. Hints are an optimization; prep never fails for lack of them.
 
 ## Load the decline ledger
