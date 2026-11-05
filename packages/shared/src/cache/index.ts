@@ -73,6 +73,7 @@ export {
 	type StoredAccount,
 	writeAccountRows,
 	writeAccountSnapshot,
+	writeEnabledFeatures,
 } from "./account-store.js";
 export {EXPANDED_NODES_IMPORT_NAME, expansionVersion, readExpansion, replaceExpansion} from "./expansion-store.js";
 export {markWhatsNewRead, readWhatsNewReads} from "./whats-new-store.js";

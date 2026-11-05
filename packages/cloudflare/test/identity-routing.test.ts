@@ -167,7 +167,31 @@ describe("worker routes each Access email to its own Durable Object", () => {
 
 		expect(viaDo).toStrictEqual([404, 404, 404, 404, 404, 404, 404, 404, 404, 404]);
 		expect(viaWorker.map(({status}) => status)).toStrictEqual([200, 200, 200, 200, 503, 503, 503, 503, 503]);
-		expect(viaWorker[0]?.body).toStrictEqual({visible: [], enabled: {}, available: false});
+		// A fresh database with no workflowy.com account still answers the 20 Settings rows and the default flags.
+		const features = viaWorker[0]?.body as {visible: unknown[]; enabled: Record<string, true>; available: boolean};
+		expect({...features, visible: features.visible.length}).toStrictEqual({
+			visible: 20,
+			enabled: {
+				always_visible_controls: true,
+				bdl: true,
+				beta_redirect: true,
+				calendar_node: true,
+				dates: true,
+				full_width_page: true,
+				keep_keyboard_on_scroll: true,
+				markdown_pasting: true,
+				nested_search: true,
+				numbered_list: true,
+				open_links_in_desktop: true,
+				present: true,
+				rich_tags: true,
+				side_pane: true,
+				table: true,
+				templates: true,
+				update_notifications: true,
+			},
+			available: false,
+		});
 		expect(viaWorker[1]?.body).toMatchObject({rootId: null, rootChildren: []});
 		expect(viaWorker[3]?.body).toStrictEqual({tags: []});
 

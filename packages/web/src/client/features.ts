@@ -4,7 +4,11 @@
  * `localStorage["wf.features.<name>"] === "on"` override applies, then `DEFAULT_FEATURES`.
  */
 
-/** The 20 visible codenames plus the hidden ones the client reads. */
+import {DEFAULT_FEATURES} from "../feature-catalog.js";
+
+export {DEFAULT_FEATURES};
+
+/** The 20 visible codenames (upstream's Settings > Features rows). */
 export type FeatureName =
 	| "beta_redirect"
 	| "open_links_in_desktop"
@@ -25,34 +29,7 @@ export type FeatureName =
 	| "calendar_node"
 	| "numbered_list"
 	| "table"
-	| "side_pane"
-	| "check"
-	| "slash-command"
-	| "trash";
-
-/** The enabled dict of the account the clone tracks (measured 2026-10-26): dashboards, conversations and ai are off. */
-export const DEFAULT_FEATURES: Readonly<Record<string, true>> = {
-	always_visible_controls: true,
-	bdl: true,
-	beta_redirect: true,
-	calendar_node: true,
-	check: true,
-	dates: true,
-	full_width_page: true,
-	keep_keyboard_on_scroll: true,
-	markdown_pasting: true,
-	nested_search: true,
-	numbered_list: true,
-	open_links_in_desktop: true,
-	present: true,
-	rich_tags: true,
-	side_pane: true,
-	"slash-command": true,
-	table: true,
-	templates: true,
-	trash: true,
-	update_notifications: true,
-};
+	| "side_pane";
 
 let accountFeatures: Readonly<Record<string, true>> | null = null;
 

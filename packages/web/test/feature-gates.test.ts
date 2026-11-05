@@ -48,14 +48,10 @@ describe("numbered_list flag", () => {
 	});
 });
 
-describe("check flag", () => {
-	it("drops the checkmark class when off", () => {
-		const defaults = resolveLayoutMode("todo", false).projectClasses;
-		without("check");
-		expect({defaults, off: resolveLayoutMode("todo", false).projectClasses}).toStrictEqual({
-			defaults: ["checkmark"],
-			off: [],
-		});
+describe("check (no longer a flag)", () => {
+	it("keeps the checkmark class even when the account dict lacks check", () => {
+		setAccountFeatures({});
+		expect(resolveLayoutMode("todo", false).projectClasses).toStrictEqual(["checkmark"]);
 	});
 });
 
@@ -82,11 +78,10 @@ describe("nested_search flag", () => {
 	});
 });
 
-describe("slash-command flag", () => {
-	it("never opens the slash menu when off", () => {
-		const defaults = planSlashOpen("/", 0);
-		without("slash-command");
-		expect({defaults, off: planSlashOpen("/", 0)}).toStrictEqual({defaults: {start: 0, end: 1}, off: null});
+describe("slash-command (no longer a flag)", () => {
+	it("opens the slash menu even when the account dict lacks slash-command", () => {
+		setAccountFeatures({});
+		expect(planSlashOpen("/", 0)).toStrictEqual({start: 0, end: 1});
 	});
 });
 

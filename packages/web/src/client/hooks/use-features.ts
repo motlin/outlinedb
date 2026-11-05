@@ -8,13 +8,13 @@ import {useQuery, useQueryClient} from "@tanstack/react-query";
 import type {QueryClient} from "@tanstack/react-query";
 import {useEffect} from "react";
 import type {FeatureSetResponse, FeaturesResponse} from "../../node-types.js";
-import {isFeatureOn, setAccountFeatures} from "../features.js";
+import {DEFAULT_FEATURES, isFeatureOn, setAccountFeatures} from "../features.js";
 import type {FeatureName} from "../features.js";
 import {readJson} from "../read-json.js";
 
 export const featureKeys = {all: ["features"] as const};
 
-const LOADING: FeaturesResponse = {visible: [], enabled: {}, available: false};
+const LOADING: FeaturesResponse = {visible: [], enabled: DEFAULT_FEATURES, available: false};
 
 async function fetchFeatures(): Promise<FeaturesResponse> {
 	const response = await fetch("/api/v1/features");

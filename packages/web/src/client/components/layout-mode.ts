@@ -14,7 +14,6 @@
  * Styling lives in styles.css keyed on `.project.<class>`. See
  * `.llm/web/node-type-coverage.md` for the upstream capture.
  */
-import {isFeatureOn} from "../features.js";
 import {dashboardsOn} from "../dashboard.js";
 
 /** Upstream's divider `.project` classes, in upstream order. */
@@ -71,7 +70,7 @@ export function resolveLayoutMode(
 	}
 
 	if (layoutMode === "todo" || layoutMode === "check") {
-		return rendering(isFeatureOn("check") ? ["checkmark"] : [], true);
+		return rendering(["checkmark"], true);
 	}
 
 	if (layoutMode === "code-block") {

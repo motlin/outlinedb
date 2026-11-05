@@ -6,6 +6,8 @@ import {describe, expect, it, vi} from "vite-plus/test";
 import * as schema from "@workflowy/shared/db";
 import type {WorkflowyInternalAdapter} from "@workflowy/shared/internal";
 import type {ServerContext} from "../src/server/context.js";
+import {DEFAULT_FEATURES, VISIBLE_FEATURES} from "../src/feature-catalog.js";
+import upstreamFeatures from "./fixtures/upstream-settings-features.json" with {type: "json"};
 import {httpAppFor} from "./http-app-for.js";
 
 const VISIBLE = [
@@ -42,6 +44,16 @@ function setup(withAdapter: boolean) {
 	return {adapter, db, request};
 }
 
+describe("feature catalog", () => {
+	it("matches upstream's measured Settings rows, and its defaults drop only the hidden check, slash-command and trash", () => {
+		const {check: _check, "slash-command": _slash, trash: _trash, ...visibleDefaults} = upstreamFeatures.enabled;
+		expect({visible: VISIBLE_FEATURES, enabled: DEFAULT_FEATURES}).toStrictEqual({
+			visible: upstreamFeatures.visible,
+			enabled: visibleDefaults,
+		});
+	});
+});
+
 describe("/api/v1/features", () => {
 	it("GET answers the visible list and enabled dict from the adapter", async () => {
 		const {request} = setup(true);
@@ -65,16 +77,16 @@ describe("/api/v1/features", () => {
 
 		await expect(request("GET", "")).resolves.toStrictEqual({
 			status: 200,
-			body: {visible: [], enabled: {table: true}, available: false},
+			body: {visible: VISIBLE_FEATURES, enabled: {table: true}, available: false},
 		});
 	});
 
-	it("GET without the adapter or a durable copy answers an empty dict", async () => {
+	it("GET without the adapter or a durable copy answers the default dict and the visible catalog", async () => {
 		const {request} = setup(false);
 
 		await expect(request("GET", "")).resolves.toStrictEqual({
 			status: 200,
-			body: {visible: [], enabled: {}, available: false},
+			body: {visible: VISIBLE_FEATURES, enabled: DEFAULT_FEATURES, available: false},
 		});
 	});
 
@@ -97,9 +109,21 @@ describe("/api/v1/features", () => {
 		expect(adapter.setFeature).not.toHaveBeenCalled();
 	});
 
-	it("POST without the adapter answers 503", async () => {
+	it("POST without the adapter persists the toggle locally on top of the defaults", async () => {
 		const {request} = setup(false);
+		const {dates: _dates, ...withoutDates} = DEFAULT_FEATURES;
 
-		expect((await request("POST", "/dates", {on: false})).status).toBe(503);
+		const off = await request("POST", "/dates", {on: false});
+		const on = await request("POST", "/dashboards", {on: true});
+		const after = await request("GET", "");
+
+		expect({off, on, after}).toStrictEqual({
+			off: {status: 200, body: {enabled: withoutDates}},
+			on: {status: 200, body: {enabled: {...withoutDates, dashboards: true}}},
+			after: {
+				status: 200,
+				body: {visible: VISIBLE_FEATURES, enabled: {...withoutDates, dashboards: true}, available: false},
+			},
+		});
 	});
 });

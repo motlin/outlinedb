@@ -1,7 +1,8 @@
 import {z} from "zod";
-import {readEnabledFeatures} from "@workflowy/shared/cache";
-import {INTERNAL_API_NOT_CONFIGURED} from "../internal-api-error.js";
-import {defineOp, fail, ok, toJson} from "./define.js";
+import {readEnabledFeatures, writeEnabledFeatures} from "@workflowy/shared/cache";
+import type {TemporalTransaction} from "@workflowy/shared/cache";
+import {DEFAULT_FEATURES, VISIBLE_FEATURES} from "../../feature-catalog.js";
+import {defineOp, ok, toJson} from "./define.js";
 
 const CODENAME = /^[a-z0-9_-]+$/u;
 const EnabledSchema = z.record(z.string(), z.literal(true));
@@ -20,7 +21,22 @@ export const FeaturesResponseSchema = z.strictObject({
 /** The enabled dict after a toggle. */
 export const FeatureSetResponseSchema = z.strictObject({enabled: EnabledSchema});
 
-/** The server's visible feature list and enabled dict; without the internal API, the stored `enabled_features` with `available: false`. */
+/** The stored flags (codename -> on), or the defaults when the account has never stored any (fresh or standalone database). */
+function localFeatures(db: TemporalTransaction): Record<string, boolean> {
+	const stored = readEnabledFeatures(db);
+	return Object.keys(stored).length > 0 ? stored : {...DEFAULT_FEATURES};
+}
+
+function enabledOnly(features: Readonly<Record<string, boolean>>): Record<string, true> {
+	return Object.fromEntries(
+		Object.entries(features).flatMap(([codename, on]) => (on ? [[codename, true as const]] : [])),
+	);
+}
+
+/**
+ * The server's visible feature list and enabled dict. Without the internal API: the catalog's visible rows and the
+ * stored `enabled_features` (the defaults when nothing is stored), with `available: false`.
+ */
 export const featuresGet = defineOp({
 	input: z.object({}),
 	output: FeaturesResponseSchema,
@@ -35,24 +51,21 @@ export const featuresGet = defineOp({
 				}),
 			);
 		}
-		const enabled = Object.fromEntries(
-			Object.entries(readEnabledFeatures(ctx.db)).flatMap(([codename, on]) =>
-				on ? [[codename, true as const]] : [],
-			),
-		);
-		return ok({visible: [], enabled, available: false});
+		return ok(toJson({visible: VISIBLE_FEATURES, enabled: enabledOnly(localFeatures(ctx.db)), available: false}));
 	},
 });
 
-/** Turns a feature on or off; a write needs the account, so no adapter means 503. */
+/** Turns a feature on or off through the account, or, without the internal API, in the local `enabled_features`. */
 export const featuresSet = defineOp({
 	input: z.object({codename: z.string().regex(CODENAME), on: z.boolean()}).strict(),
 	output: FeatureSetResponseSchema,
 	async run(ctx, {codename, on}) {
 		const adapter = ctx.internalAdapter?.();
-		if (!adapter) {
-			return fail(503, {error: INTERNAL_API_NOT_CONFIGURED});
+		if (adapter) {
+			return ok({enabled: await adapter.setFeature(codename, on)});
 		}
-		return ok({enabled: await adapter.setFeature(codename, on)});
+		const next = {...localFeatures(ctx.db), [codename]: on};
+		writeEnabledFeatures(ctx.db, next);
+		return ok({enabled: enabledOnly(next)});
 	},
 });

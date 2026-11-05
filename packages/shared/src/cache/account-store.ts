@@ -32,6 +32,7 @@ import {
 	visibleFeatures,
 } from "../db/schema.js";
 import {FAR_FUTURE_DATE} from "../temporal/constants.js";
+import {runUnitOfWork} from "./node-composite.js";
 import type {UnitOfWork} from "./node-composite.js";
 import {joinKey, temporalMerge} from "./temporal-merge.js";
 import type {TemporalTransaction} from "./temporal-merge.js";
@@ -597,6 +598,20 @@ export function readEnabledFeatures(tx: TemporalTransaction): Record<string, boo
 			.all()
 			.map((row) => [row.codename, row.enabled === 1]),
 	);
+}
+
+/**
+ * Replace the live enabled-feature flags with `features` (codename -> on) in one unit of work, keeping off flags as
+ * `enabled = 0` rows so a deliberately empty dict still reads as stored. For an account with no internal API.
+ */
+export function writeEnabledFeatures(database: TemporalTransaction, features: Readonly<Record<string, boolean>>): void {
+	runUnitOfWork(database, (unitOfWork) => {
+		mergeTable(
+			unitOfWork,
+			TABLES.enabledFeatures,
+			Object.entries(features).map(([codename, on]) => ({codename, enabled: on ? 1 : 0})),
+		);
+	});
 }
 
 /** The `api_import_timestamp` name of the account tables' refresh time. */

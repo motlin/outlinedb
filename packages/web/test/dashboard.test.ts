@@ -56,7 +56,7 @@ describe("isFeatureOn with the account dict", () => {
 			true,
 			false,
 		]);
-		expect(Object.keys(DEFAULT_FEATURES)).toHaveLength(20);
+		expect(Object.keys(DEFAULT_FEATURES)).toHaveLength(17);
 	});
 });
 
