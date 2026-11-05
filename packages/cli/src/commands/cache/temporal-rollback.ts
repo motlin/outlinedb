@@ -15,6 +15,7 @@ export const TEMPORAL_TABLES = [
 	"node_embeddings",
 	"mirrors",
 	"ai_metadata",
+	"node_label_suggestions",
 	"s3_files",
 	"changes_metadata",
 	"references_roots",

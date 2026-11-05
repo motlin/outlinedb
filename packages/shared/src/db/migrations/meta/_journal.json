@@ -22,6 +22,13 @@
 			"when": 1793714498827,
 			"tag": "0002_close_system_target_placeholders",
 			"breakpoints": true
+		},
+		{
+			"idx": 3,
+			"version": "6",
+			"when": 1793840935404,
+			"tag": "0003_node_label_suggestions",
+			"breakpoints": true
 		}
 	]
 }

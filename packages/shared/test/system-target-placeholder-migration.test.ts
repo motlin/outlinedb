@@ -16,7 +16,11 @@ function beforeCleanupFolder(): string {
 	const journal = JSON.parse(readFileSync(path.join(migrationsFolder, "meta/_journal.json"), "utf8")) as {
 		entries: {tag: string}[];
 	};
-	const entries = journal.entries.filter((entry) => entry.tag !== "0002_close_system_target_placeholders");
+	// Drizzle skips any migration older than the newest applied one, so stop before the cleanup, not just without it.
+	const entries = journal.entries.slice(
+		0,
+		journal.entries.findIndex((entry) => entry.tag === "0002_close_system_target_placeholders"),
+	);
 	writeFileSync(path.join(folder, "meta/_journal.json"), JSON.stringify({...journal, entries}));
 	for (const {tag} of entries) {
 		copyFileSync(path.join(migrationsFolder, `${tag}.sql`), path.join(folder, `${tag}.sql`));

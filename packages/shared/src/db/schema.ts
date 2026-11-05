@@ -146,6 +146,35 @@ export const nodeEmbeddings = sqliteTable(
 );
 
 /**
+ * node_label_suggestions: Clef probabilities that a label (`#tag` or `@Name`) belongs on a node, one row per (node, label, source).
+ * - labelKind: "tag" | "person"
+ * - source: "clef-flash-shortlist" | "clef-flash" | "clef"
+ * - contentFrom: the node_content.system_from the score was computed against, so rows for edited nodes read as stale
+ */
+export const nodeLabelSuggestions = sqliteTable(
+	"node_label_suggestions",
+	{
+		nodeId: text("node_id").notNull(),
+		label: text("label").notNull(),
+		labelKind: text("label_kind").notNull(),
+		source: text("source").notNull(),
+		score: real("score").notNull(),
+		contentFrom: text("content_from").notNull(),
+
+		systemFrom: text("system_from").notNull(),
+		systemTo: text("system_to").notNull(),
+	},
+	(table) => [
+		primaryKey({columns: [table.nodeId, table.label, table.source, table.systemFrom]}),
+		uniqueIndex("node_label_suggestions_system_to_idx").on(table.nodeId, table.label, table.source, table.systemTo),
+		// Partial: a full system_to index would win every live-row lookup (system_to = far future).
+		index("node_label_suggestions_closed_at_idx")
+			.on(table.systemTo)
+			.where(sql`system_to < '9999-12-31 23:59:59'`),
+	],
+);
+
+/**
  * mirrors: Normalized mirror relationships
  * - originalId: The original node being mirrored
  * - mirrorId: The node that is a mirror/copy
@@ -935,6 +964,8 @@ export type NewNodeMetadata = InferInsertModel<typeof nodeMetadata>;
 
 export type NodeEmbedding = InferSelectModel<typeof nodeEmbeddings>;
 export type NewNodeEmbedding = InferInsertModel<typeof nodeEmbeddings>;
+export type NodeLabelSuggestion = InferSelectModel<typeof nodeLabelSuggestions>;
+export type NewNodeLabelSuggestion = InferInsertModel<typeof nodeLabelSuggestions>;
 export type Mirror = InferSelectModel<typeof mirrors>;
 export type NewMirror = InferInsertModel<typeof mirrors>;
 export type AiMetadata = InferSelectModel<typeof aiMetadata>;

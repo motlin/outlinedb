@@ -63,6 +63,7 @@ describe("round-trip test infrastructure", () => {
 				"node_fts_data",
 				"node_fts_docsize",
 				"node_fts_idx",
+				"node_label_suggestions",
 				"node_metadata",
 				"node_table_cell_sizes",
 				"node_tags",
@@ -87,7 +88,7 @@ describe("round-trip test infrastructure", () => {
 
 			const result = database.get<{count: number}>(sql`SELECT COUNT(*) AS count FROM __drizzle_migrations`);
 
-			expect(result.count).toBe(3);
+			expect(result.count).toBe(4);
 
 			sqlite.close();
 		});
