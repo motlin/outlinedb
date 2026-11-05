@@ -66,12 +66,15 @@ A task that names a project (tag, link, or name) with no row in the project tabl
 
 ## Check for already-done work
 
-Before asking about any candidate, look for evidence it is already finished in its project:
+Before asking about any candidate, look for evidence it is already finished. Work on a project often happens in a sibling repo or on an unmerged branch, so search the whole repo family, not just the matched project:
 
-- Grep the project's `.llm/todo.md` for checked items (`- [x]`) matching the task's Workflowy link or key phrase.
-- Grep `git -C <path> log --oneline -i --grep=<key phrase>` for a matching commit.
+- Build the repo family: the matched project's `path`, every Project Directories row sharing one of its `tags` or its name stem, and every git toplevel under `projectsDirectory` whose directory name contains that stem (for a `#widget` task, `<projectsDirectory>/*widget*`). Include worktree peers.
+- In each repo, grep `.llm/todo.md` and archived task lists (`.llm/*-todo*.md`) for items (`- [x]` done, `- [ ]` queued, `- [!]` blocked) matching the task's Workflowy link or key phrase.
+- In each repo, run `git -C <repo> log --all --oneline -i --grep=<key phrase>` so commits on every local and remote-tracking branch count, not only the checked-out one. Try two or three distinctive phrases from the task, not just its title.
 
-When evidence exists, show it in the question (the matching line or commit) and list **Complete** first: complete the Workflowy task with `./bin/run.js node complete --id <uuid>` and confirm it reads back completed, without appending anything to the project. Otherwise continue to drafting.
+Classify the result as **full** (a matching commit or `- [x]` item covers the whole task), **partial** (some of it is committed or queued, or the match sits on an unmerged branch), or **none**. Always state the classification and which repos and branches were searched in the question, with each matching line or commit (`repo@branch sha subject`).
+
+When evidence is full, list **Complete** first: complete the Workflowy task with `./bin/run.js node complete --id <uuid>` and confirm it reads back completed, without appending anything to the project. When evidence is partial, name the remaining work in the drafted task text so the project session only does what is left. When there is none, continue to drafting.
 
 ## Draft the task text
 
