@@ -1,0 +1,51 @@
+{
+	"request": {
+		"model": "clef-flash",
+		"state": {
+			"date": "2026-11-03",
+			"parent": "📆 Calendar > 2026 > November > Mon, Nov 3",
+			"entry": "Played pickleball with Alice after work"
+		},
+		"questions": {
+			"p.AliceBrown": {
+				"type": "noul",
+				"instructions": "Does this journal entry involve @AliceBrown (Alice Brown, book club friend)?"
+			},
+			"p.AliceChen": {
+				"type": "noul",
+				"instructions": "Does this journal entry involve @AliceChen (Alice Chen, coworker)?"
+			},
+			"t.pickleball": {
+				"type": "noul",
+				"instructions": "Does this journal entry describe doing #pickleball (Pickleball)?"
+			}
+		}
+	},
+	"status": 200,
+	"body": {
+		"result": {
+			"model": "clef-flash",
+			"answers": {
+				"p.AliceBrown": {
+					"type": "noul",
+					"noul": 0.1329
+				},
+				"p.AliceChen": {
+					"type": "noul",
+					"noul": 0.1798
+				},
+				"t.pickleball": {
+					"type": "noul",
+					"noul": 0.9526
+				}
+			},
+			"usage": {
+				"input_tokens": 386,
+				"output_tokens": 0
+			}
+		},
+		"success": true,
+		"errors": [],
+		"messages": []
+	}
+}

@@ -1,0 +1,19 @@
+{
+	"request": {
+		"model": "clef-flash",
+		"state": "Played pickleball",
+		"questions": {}
+	},
+	"status": 400,
+	"body": {
+		"errors": [
+			{
+				"message": "AiError: Bad input: Error: required properties at '/' are 'model,state,questions' (d5394f7b-41fc-4782-bb5d-5bdcd611e63e)",
+				"code": 5006
+			}
+		],
+		"success": false,
+		"result": {},
+		"messages": []
+	}
+}
