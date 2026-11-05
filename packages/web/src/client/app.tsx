@@ -50,6 +50,7 @@ import {MobileTabBar} from "./components/mobile-tab-bar.js";
 import {MobileTopBar} from "./components/mobile-top-bar.js";
 import {TopBar} from "./components/top-bar.js";
 import {useExpansionSync} from "./hooks/use-expansion-sync.js";
+import {useOutlineLiveSync} from "./hooks/use-outline-live-sync.js";
 import {useCommandRegistry} from "./hooks/use-command-registry.js";
 import {StableNavigateProvider} from "./hooks/use-stable-navigate.js";
 import {useCopyCut} from "./hooks/use-copy-cut.js";
@@ -408,6 +409,12 @@ function ExpansionSync() {
 	return null;
 }
 
+/** Pulls tree changes made elsewhere (another tab, the CLI, an upstream catch-up) into the open outline. */
+function OutlineLiveSync() {
+	useOutlineLiveSync();
+	return null;
+}
+
 /** Dims item-selection tints while the window is blurred (`body.wf-dom-window-blurred`). */
 function WindowBlurredClass() {
 	useEffect(() => installWindowBlurredClass(window, document.body), []);
@@ -429,6 +436,7 @@ export function App() {
 				<FeatureFlagsSync />
 				<ShowKeyboardShortcutsSync />
 				<ExpansionSync />
+				<OutlineLiveSync />
 				<MenusHost />
 				<ImageViewerHost />
 				{/* Location updates render synchronously, in the same commit as the zoom a navigation sets in the store. */}

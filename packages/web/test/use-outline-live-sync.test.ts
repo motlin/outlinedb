@@ -1,0 +1,246 @@
+// @vitest-environment happy-dom
+import {afterEach, beforeAll, beforeEach, describe, expect, it, vi} from "vite-plus/test";
+import type {Root} from "react-dom/client";
+import type {NodeChangesResponse, NodeResponse} from "../src/node-types.js";
+
+declare global {
+	// React reads this to know act() wraps every update.
+	var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
+}
+
+const {act, createElement} = await import("react");
+const {createRoot} = await import("react-dom/client");
+const {QueryClient, QueryClientProvider} = await import("@tanstack/react-query");
+const {nodeKeys} = await import("../src/client/node-cache.js");
+const {syncNodeChanges} = await import("../src/client/hooks/use-nodes.js");
+const {useOutlineLiveSync} = await import("../src/client/hooks/use-outline-live-sync.js");
+
+/** A WebSocket the test opens, drops and feeds frames to by hand. */
+class FakeSocket {
+	static readonly instances: FakeSocket[] = [];
+	readyState = 0;
+	readonly url: string;
+	readonly #listeners = new Map<string, ((event: {data?: string}) => void)[]>();
+
+	constructor(url: string) {
+		this.url = url;
+		FakeSocket.instances.push(this);
+	}
+
+	addEventListener(name: string, callback: (event: {data?: string}) => void): void {
+		this.#listeners.set(name, [...(this.#listeners.get(name) ?? []), callback]);
+	}
+
+	close(): void {
+		this.readyState = 3;
+	}
+
+	emit(name: "open" | "close" | "message", data?: string): void {
+		this.readyState = name === "open" ? 1 : name === "close" ? 3 : this.readyState;
+		for (const callback of this.#listeners.get(name) ?? []) {
+			callback({data});
+		}
+	}
+
+	frame(latest: string): void {
+		this.emit("message", JSON.stringify({type: "tree.changed", latest}));
+	}
+}
+
+function row(id: string, parentId: string | null): NodeResponse {
+	return {
+		id,
+		parent_id: parentId,
+		name: id,
+		note: null,
+		priority: 100,
+		data: {layoutMode: null},
+		createdAt: 0,
+		modifiedAt: 0,
+		completedAt: null,
+		hasChildren: false,
+		hasUncompletedChildren: false,
+		isMirror: false,
+	};
+}
+
+/** Each test's marks run past the last test's, since the change feed's mark is module state. */
+let mark = 0;
+const nextMark = () => String(++mark).padStart(6, "0");
+
+let root: Root | undefined;
+let client: InstanceType<typeof QueryClient>;
+let changesSince: (string | null)[];
+let answer: () => NodeChangesResponse;
+
+beforeAll(async () => {
+	globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+	// Seed the shared change feed so later syncs read `?since=` instead of refetching everything.
+	vi.stubGlobal(
+		"fetch",
+		vi.fn(async () =>
+			Promise.resolve(
+				Response.json({latest: nextMark(), reset: false, changedIds: [], deletedIds: [], children: []}),
+			),
+		),
+	);
+	await syncNodeChanges(new QueryClient());
+});
+
+beforeEach(() => {
+	vi.useFakeTimers();
+	FakeSocket.instances.length = 0;
+	changesSince = [];
+	answer = () => ({latest: nextMark(), reset: false, changedIds: [], deletedIds: [], children: []});
+	vi.stubGlobal("WebSocket", FakeSocket);
+	vi.stubGlobal(
+		"fetch",
+		vi.fn(async (input: string) => {
+			const url = new URL(input, "http://example.com");
+			if (url.pathname !== "/api/v1/nodes/changes") {
+				throw new Error(`Unexpected fetch ${input}`);
+			}
+			changesSince.push(url.searchParams.get("since"));
+			return Promise.resolve(Response.json(answer()));
+		}),
+	);
+	client = new QueryClient();
+	const container = document.createElement("div");
+	document.body.append(container);
+	root = createRoot(container);
+	act(() => {
+		root?.render(createElement(QueryClientProvider, {client}, createElement(Harness)));
+	});
+});
+
+afterEach(() => {
+	act(() => {
+		root?.unmount();
+	});
+	root = undefined;
+	document.body.innerHTML = "";
+	vi.useRealTimers();
+});
+
+function Harness(): null {
+	useOutlineLiveSync();
+	return null;
+}
+
+/** Let queued promises (the sync and its fetch) run. */
+async function settle(): Promise<void> {
+	await act(async () => {
+		await vi.advanceTimersByTimeAsync(0);
+	});
+}
+
+const socket = () => FakeSocket.instances.at(-1)!;
+const listIds = (parentId: string) =>
+	client.getQueryData<NodeResponse[]>(nodeKeys.children(parentId))?.map((node) => node.id);
+
+describe("useOutlineLiveSync", () => {
+	it("opens the events socket and patches both parents of a remote move on a frame", async () => {
+		client.setQueryData(nodeKeys.children("P1"), [row("X", "P1"), row("Y", "P1")]);
+		client.setQueryData(nodeKeys.children("P2"), []);
+		answer = () => ({
+			latest: nextMark(),
+			reset: false,
+			changedIds: ["X"],
+			deletedIds: [],
+			children: [
+				{parentId: "P1", nodes: [row("Y", "P1")]},
+				{parentId: "P2", nodes: [row("X", "P2")]},
+			],
+		});
+		socket().emit("open");
+		socket().frame("ignored");
+		await settle();
+
+		expect({
+			url: socket().url,
+			fetches: changesSince.length,
+			p1: listIds("P1"),
+			p2: listIds("P2"),
+		}).toStrictEqual({
+			url: `ws://${globalThis.location.host}/api/v1/nodes/events`,
+			fetches: 1,
+			p1: ["Y"],
+			p2: ["X"],
+		});
+	});
+
+	it("coalesces two frames in the same tick into one changes read", async () => {
+		socket().emit("open");
+		socket().frame("a");
+		socket().frame("b");
+		await settle();
+		expect(changesSince).toHaveLength(1);
+	});
+
+	it("reads once more for frames that arrive while a read is in flight", async () => {
+		let release!: () => void;
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const fetchMock = vi.mocked(fetch);
+		const fallback = fetchMock.getMockImplementation()!;
+		fetchMock.mockImplementationOnce(async (input) => {
+			await gate;
+			return fallback(input);
+		});
+		socket().emit("open");
+		socket().frame("a");
+		await settle();
+		socket().frame("b");
+		socket().frame("c");
+		release();
+		await settle();
+		await settle();
+		expect(changesSince).toHaveLength(2);
+	});
+
+	it("does not read on the first open, then reads once after a drop and reconnect", async () => {
+		const first = socket();
+		first.emit("open");
+		await settle();
+		expect(changesSince).toHaveLength(0);
+
+		vi.spyOn(Math, "random").mockReturnValue(0);
+		first.emit("close");
+		await settle();
+		expect(FakeSocket.instances).toHaveLength(1);
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(1000);
+		});
+		expect(FakeSocket.instances).toHaveLength(2);
+		socket().emit("open");
+		await settle();
+		expect(changesSince).toHaveLength(1);
+	});
+
+	it("catches up when the tab becomes visible while the socket is down", async () => {
+		socket().emit("open");
+		socket().emit("close");
+		vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+		document.dispatchEvent(new Event("visibilitychange"));
+		await settle();
+		expect(changesSince).toHaveLength(1);
+	});
+
+	it("closes the socket and stops reconnecting on unmount", async () => {
+		const first = socket();
+		first.emit("open");
+		act(() => {
+			root?.unmount();
+		});
+		root = undefined;
+		first.emit("close");
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(200_000);
+		});
+		expect({readyState: first.readyState, sockets: FakeSocket.instances.length}).toStrictEqual({
+			readyState: 3,
+			sockets: 1,
+		});
+	});
+});
