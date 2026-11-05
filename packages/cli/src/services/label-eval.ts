@@ -1,5 +1,7 @@
 import {findTags} from "@workflowy/shared/tags";
+import type {ClefModel, ShortlistEntry} from "./clef-requests.js";
 import type {LabelKind} from "./label-pool.js";
+import type {PassResult} from "./suggest-labels.js";
 
 export interface KindedLabel {
 	/** Canonical `@Name` or `#tag`; compared case-insensitively. */
@@ -169,4 +171,144 @@ function labelKeys(labels: readonly KindedLabel[], kind: LabelKind): Set<string>
 
 function ratio(numerator: number, denominator: number, empty: number): number {
 	return denominator === 0 ? empty : numerator / denominator;
+}
+
+/** A verify-pass arm of the eval and the Clef model it runs. */
+export const EVAL_ARMS = ["flash", "clef"] as const;
+export type EvalArm = (typeof EVAL_ARMS)[number];
+export const ARM_MODELS: Readonly<Record<EvalArm, ClefModel>> = {flash: "clef-flash", clef: "clef"};
+
+/** US dollars per 1M input tokens; output tokens are free. */
+const PRICE_PER_MILLION: Readonly<Record<ClefModel, number>> = {"clef-flash": 0.038, clef: 0.24};
+
+/** A pass's Clef results for one entry, and how long its requests took. */
+export interface TimedPass<T> {
+	readonly result: PassResult<T>;
+	readonly ms: number;
+}
+
+/** One sampled entry: its true labels and the shortlist and per-arm verify passes run on its stripped text. */
+export interface EvalRun {
+	readonly truth: readonly KindedLabel[];
+	readonly shortlist: TimedPass<readonly ShortlistEntry[]>;
+	verify: Partial<Record<EvalArm, TimedPass<readonly ScoredLabel[]>>>;
+}
+
+export interface UsageReport {
+	readonly requests: number;
+	readonly inputTokens: number;
+	readonly inputTokensPerEntry: number;
+	readonly costPer100Entries: number;
+}
+
+export interface LatencyReport {
+	readonly p50: number;
+	readonly p95: number;
+}
+
+export interface KindReport {
+	readonly thresholds: PrecisionRecall[];
+	readonly atTargetPrecision: PrecisionRecall | null;
+}
+
+export interface EvalReport {
+	readonly entries: number;
+	readonly since: string;
+	readonly seed: number;
+	readonly targetPrecision: number;
+	readonly shortlist: {
+		readonly model: ClefModel;
+		readonly person: {recall: number; meanSize: number};
+		readonly tag: {recall: number; meanSize: number};
+		readonly usage: UsageReport;
+		readonly latencyMs: LatencyReport;
+	};
+	readonly arms: {
+		readonly arm: EvalArm;
+		readonly model: ClefModel;
+		readonly person: KindReport;
+		readonly tag: KindReport;
+		readonly usage: UsageReport;
+		readonly latencyMs: LatencyReport;
+		/** Shortlist plus this arm's verify pass, in US dollars. */
+		readonly costPer100Entries: number;
+	}[];
+}
+
+/** Aggregates eval runs into the per-arm, per-label-kind report; cost comes from `usage.input_tokens`. Pure. */
+export function buildEvalReport(
+	runs: readonly EvalRun[],
+	options: {
+		since: string;
+		seed: number;
+		targetPrecision: number;
+		thresholds: readonly number[];
+		arms: readonly {arm: EvalArm; model: ClefModel}[];
+	},
+): EvalReport {
+	const shortlistPasses = runs.map(({shortlist}) => shortlist);
+	const shortlistUsage = usageReport(shortlistPasses, runs.length, "clef-flash");
+	const cases = (arm: EvalArm): EvalCase[] =>
+		runs.map(({truth, shortlist, verify}) => ({
+			truth,
+			shortlist: shortlist.result.value.map(({label}) => label),
+			verify: verify[arm]?.result.value ?? [],
+		}));
+	const kindReport = (armCases: readonly EvalCase[], kind: LabelKind): KindReport => ({
+		thresholds: options.thresholds.map((threshold) => precisionRecallAt(armCases, kind, threshold)),
+		atTargetPrecision: thresholdForPrecision(armCases, kind, options.targetPrecision) ?? null,
+	});
+	const shortlistCases = cases(options.arms[0]?.arm ?? "flash");
+
+	return {
+		entries: runs.length,
+		since: options.since,
+		seed: options.seed,
+		targetPrecision: options.targetPrecision,
+		shortlist: {
+			model: "clef-flash",
+			person: shortlistRecall(shortlistCases, "person"),
+			tag: shortlistRecall(shortlistCases, "tag"),
+			usage: shortlistUsage,
+			latencyMs: latencyReport(shortlistPasses),
+		},
+		arms: options.arms.map(({arm, model}) => {
+			const armCases = cases(arm);
+			const passes = runs.flatMap(({verify}) => verify[arm] ?? []);
+			const usage = usageReport(passes, runs.length, model);
+			return {
+				arm,
+				model,
+				person: kindReport(armCases, "person"),
+				tag: kindReport(armCases, "tag"),
+				usage,
+				latencyMs: latencyReport(passes),
+				costPer100Entries: dollars(shortlistUsage.costPer100Entries + usage.costPer100Entries),
+			};
+		}),
+	};
+}
+
+function usageReport(passes: readonly TimedPass<unknown>[], entries: number, model: ClefModel): UsageReport {
+	const requests = passes.reduce((sum, {result}) => sum + result.requests, 0);
+	const inputTokens = passes.reduce((sum, {result}) => sum + result.inputTokens, 0);
+	const inputTokensPerEntry = ratio(inputTokens, entries, 0);
+	return {
+		requests,
+		inputTokens,
+		inputTokensPerEntry,
+		costPer100Entries: dollars((inputTokensPerEntry * 100 * PRICE_PER_MILLION[model]) / 1_000_000),
+	};
+}
+
+/** Nearest-rank percentiles of the per-entry pass durations. */
+function latencyReport(passes: readonly TimedPass<unknown>[]): LatencyReport {
+	const sorted = passes.map(({ms}) => ms).toSorted((a, b) => a - b);
+	const percentile = (p: number): number => sorted[Math.max(0, Math.ceil(p * sorted.length) - 1)] ?? 0;
+	return {p50: percentile(0.5), p95: percentile(0.95)};
+}
+
+/** Rounds to a millionth of a dollar, hiding floating-point noise. */
+function dollars(value: number): number {
+	return Math.round(value * 1_000_000) / 1_000_000;
 }

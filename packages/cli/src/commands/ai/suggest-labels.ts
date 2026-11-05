@@ -1,23 +1,15 @@
 import {newSystemTimestamp} from "@workflowy/shared/cache";
 import {resolveIdOrShortId} from "@workflowy/shared/utils";
 import {Command, Flags} from "@oclif/core";
-import fs from "node:fs";
 import path from "node:path";
-import {z} from "zod";
 import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";
 import type {ClefModel} from "../../services/clef-requests.js";
+import {clefClientFromEnv, readLabelRegistries} from "../../services/clef-setup.js";
 import {buildLabelPool} from "../../services/label-pool.js";
-import type {RegistryNode} from "../../services/label-pool.js";
 import {entriesToScore, liveHints, saveLabelSuggestions} from "../../services/label-suggestions.js";
 import type {EntryHints} from "../../services/label-suggestions.js";
 import {entryState, scopeEntries, scoreEntry} from "../../services/suggest-labels.js";
-import {WorkersAiClefClient} from "../../services/workers-ai-client.js";
-
-const RegistryNodeSchema: z.ZodType<RegistryNode> = z.lazy(() =>
-	z.object({name: z.string(), children: z.array(RegistryNodeSchema).optional()}),
-);
-const TagFrequencySchema = z.object({tags: z.record(z.string(), z.number())});
 
 const VERIFIERS = ["clef-flash", "clef"] as const satisfies readonly ClefModel[];
 
@@ -62,24 +54,11 @@ export default class SuggestLabels extends Command {
 
 	public async run(): Promise<EntryHints[]> {
 		const {flags} = await this.parse(SuggestLabels);
-		const token = process.env.CLOUDFLARE_AI_TOKEN;
-		if (!token) {
-			this.error(
-				"CLOUDFLARE_AI_TOKEN is not set: add it to .envrc as an op:// reference and run through `op run --`",
-				{exit: 1},
-			);
+		const client = clefClientFromEnv();
+		if ("error" in client) {
+			this.error(client.error, {exit: 1});
 		}
-		const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-		if (!accountId) {
-			this.error("CLOUDFLARE_ACCOUNT_ID is not set: add it to .envrc", {exit: 1});
-		}
-		const client = new WorkersAiClefClient(accountId, token);
-
-		const readJson = <T>(file: string, schema: z.ZodType<T>): T =>
-			schema.parse(JSON.parse(fs.readFileSync(path.join(flags["metadata-dir"], file), "utf8")));
-		const people = readJson("people.json", RegistryNodeSchema);
-		const hobbies = readJson("hobbies-registry.json", RegistryNodeSchema);
-		const tagFrequency = readJson("tag-frequency.json", TagFrequencySchema).tags;
+		const {people, hobbies, tagFrequency} = readLabelRegistries(flags["metadata-dir"]);
 
 		const database = createDatabase();
 		const cache = new CacheService(database);
