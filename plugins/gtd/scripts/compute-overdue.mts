@@ -362,7 +362,7 @@ export interface SkipStreak {
 	skippedSince: string | null;
 }
 
-function parseSkipLog(text: string): SkipEntry[] {
+export function parseSkipLog(text: string): SkipEntry[] {
 	const entries: SkipEntry[] = [];
 	for (const line of text.split("\n")) {
 		if (!line.trim()) {

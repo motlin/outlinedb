@@ -1,19 +1,19 @@
 ---
-description: Daily review orchestrator — run the full morning routine in order: execute due automated LLM tasks, relink orphaned items, review meeting follow-ups, give the morning overview, distribute project tasks into each project's .llm/todo.md, rebalance the asap ladders, process the inbox, file loose tasks, clean up completed tasks, group related tasks, walk every dated item that needs handling today, and close by offering to work through the most pressing items together. Use whenever the user asks to do, start, or run their daily review or morning GTD routine.
+description: Daily review orchestrator — run the full morning routine in order: execute due automated LLM tasks, relink orphaned items, review meeting follow-ups, give the morning overview, distribute project tasks into each project's .llm/todo.md, rebalance the asap ladders, process the inbox, file loose tasks, clean up completed tasks, group related tasks, walk every dated item that needs handling today, list everything skipped with a chance to check off what got done, and close by offering to work through the most pressing items together. Use whenever the user asks to do, start, or run their daily review or morning GTD routine.
 ---
 
 # Daily Review
 
-Run the full daily review: execute overdue LLM tasks, tidy misfiled items off the navigation links, get oriented with the morning overview, push project-shaped tasks out to their projects' task lists on disk, set the day's goals by rebalancing the asap ladders, empty the inbox, file loose tasks, group related ones into projects, walk everything dated that needs handling today, and close by offering to do the most pressing work together.
+Run the full daily review: execute overdue LLM tasks, tidy misfiled items off the navigation links, get oriented with the morning overview, push project-shaped tasks out to their projects' task lists on disk, set the day's goals by rebalancing the asap ladders, empty the inbox, file loose tasks, group related ones into projects, walk everything dated that needs handling today, list everything skipped so the ones done since can be checked off, and close by offering to do the most pressing work together.
 
 The phases run in dependency order — each one's output feeds the next, ending with the walk that asks what's actually done and then the offer to do the work that remains:
 
 ```text
-LLM Tasks → Relink → Meetings → Overview → Distribute → Rebalance Ladders → Process Inbox → File Loose Tasks → Clean Up Completed → Group Tasks → Recurring Review → Work Together
+LLM Tasks → Relink → Meetings → Overview → Distribute → Rebalance Ladders → Process Inbox → File Loose Tasks → Clean Up Completed → Group Tasks → Recurring Review → Skipped Today → Work Together
                                                                (producers of ladder and dated tasks) ────────────────────────────↗
 ```
 
-The Meeting Follow-up Review, Morning Overview, Distribute Project Tasks, Rebalance Ladders, File Loose Tasks, Clean Up Completed, Group Related Tasks, Recurring Review, and Work Together phases delegate to `/gtd:review:daily:meetings`, `:overview`, `:distribute`, `:rebalance`, `:file-tasks`, `:cleanup-completed`, `:group-tasks`, `:due`, and `:work-together`, each of which already carries the "do not use the built-in task list" rule — don't create built-in tasks (`TaskCreate` / `TaskUpdate` / `TodoWrite`) for the LLM Tasks phase either.
+The Meeting Follow-up Review, Morning Overview, Distribute Project Tasks, Rebalance Ladders, File Loose Tasks, Clean Up Completed, Group Related Tasks, Recurring Review, and Work Together phases delegate to `/gtd:review:daily:meetings`, `:overview`, `:distribute`, `:rebalance`, `:file-tasks`, `:cleanup-completed`, `:group-tasks`, `:due`, and `:work-together`, each of which already carries the "do not use the built-in task list" rule — don't create built-in tasks (`TaskCreate` / `TaskUpdate` / `TodoWrite`) for the LLM Tasks or Skipped Today phases either.
 
 ## When a skill breaks, fix the skill first
 
@@ -95,6 +95,7 @@ Run the mandatory import barrier, then execute due tasks from `Personal > 🔄 R
 
 ```bash
 mkdir -p .llm/gtd/review
+date -u +%Y-%m-%dT%H:%M:%SZ > .llm/gtd/review/run-started.txt
 ./bin/run.js node get --path "Personal,🔄 Review,🔄 Daily Review,LLM Tasks:" --depth 6 --json --fields name,shortId,id,children,completedAt > .llm/gtd/review/phase0-llm-tasks.json
 node ${CLAUDE_PLUGIN_ROOT}/scripts/compute-llm-dag.mts .llm/gtd/review/phase0-llm-tasks.json > .llm/gtd/review/phase0-plan.json
 ```
@@ -222,11 +223,30 @@ Invoke `/gtd:review:daily:due` — two segments walked back to back: overdue rec
 
 **Note:** LLM tasks already processed in the LLM Tasks phase will have updated dates and won't appear as overdue here.
 
+## Skipped Today
+
+List every item skipped during this run on one decision page, so the user can check off the ones they have since done. Saying "did it" item by item during the walk takes too long; this page is where those answers land. The run start was written to `.llm/gtd/review/run-started.txt` at the top of the review (see [Fetch and validate the plan](#fetch-and-validate-the-plan)).
+
+```bash
+node ${CLAUDE_PLUGIN_ROOT}/scripts/stage-skipped-page.mts --run-started "$(cat .llm/gtd/review/run-started.txt)" \
+  > .llm/gtd/review/skipped-today.json
+```
+
+The script reads `.llm/gtd/review/skip-log.jsonl` for keys whose last outcome since the run start is `skip`, so an item skipped and then handled later in the run is left out. It looks each key up in the staged `overdue.json` and `due-items.json`, stages one card per item at `.llm/gtd/review/decisions/skipped-<date>.json` with **Did it** and **Still skipped**, and prints `{slug, items}`. Each manifest item carries its skip-log key, title, `segment` (`recurring`, `due`, or `null` for a key with no staged row), `source`, and the staged `done` command. Silent-skip when `items` is empty: the script writes no page.
+
+Show the page per **Decision page** in `${CLAUDE_PLUGIN_ROOT}/skills/review-proposal-staging.md`: put the URL from `decision-page.mts url <slug>` in the `AskUserQuestion`, wait for the user to say they submitted, then read `decision-page.mts answers <slug>`.
+
+- **Did it** — apply the same Done logic as the walk, per `${CLAUDE_PLUGIN_ROOT}/skills/due-item-walk.md`. Read the subtree first. A recurring item runs its manifest `done` (the row's `applyOp`) verbatim to advance its date; a `null` `done` means the row needs an interval, so ask for one as the recurring walk does. A due item runs its `done` (`ops.complete`) verbatim; batch Apple Reminders writes as `daily/due.md` requires. A `null` segment has no staged row, so look the item up and confirm with the user before writing. Verify each write, then record `done` with `compute-overdue.mts --record <key> --outcome done` so the skip streak resets.
+- **Still skipped** or unanswered — write nothing and record nothing; the skip is already in the log and the item resurfaces next run.
+- A note that changes the answer (a reschedule, a drop) — apply that outcome as the walk would, and record its outcome instead.
+
+Runs after Recurring Review because that is where skips are recorded, and before Work Together so items marked done here are not offered as work.
+
 ## Work Together
 
 Invoke `/gtd:review:daily:work-together` — with the ladders ranked and the dated items walked, offer to do real work on what is left, in three categories: items overdue, due now, or due within the week; the `1st` tier of both asap ladders; and items this run filed while their context is still fresh. Each candidate comes with the concrete help on offer (draft the email, write the code in its project directory, research the question) and is its own question. Accepted items are worked on the spot, one at a time.
 
-**This phase runs last, and the order matters.** It needs the Recurring Review's handled outcomes so it never offers help on something the user just said is done, and the rebalanced `1st` tier so the ranking it reads is today's. Silent when no candidate has help Claude can actually give.
+**This phase runs last, and the order matters.** It needs the Recurring Review's and Skipped Today's handled outcomes so it never offers help on something the user just said is done, and the rebalanced `1st` tier so the ranking it reads is today's. Silent when no candidate has help Claude can actually give.
 
 ## No "remember to" loose ends in the final summary
 

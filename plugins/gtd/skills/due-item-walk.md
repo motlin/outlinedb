@@ -154,7 +154,7 @@ Showing an item's children to the user is not reading them. Skipping this step p
 
 A long review crosses midnight, and every staged `applyOp` baked in the local date at the moment prep ran. Running a stale op verbatim writes yesterday's arithmetic — the wrong next date, the wrong weekday label.
 
-Before each segment, compare the prep date staged in `overdue.json` against the current local date. When they differ, re-run `${CLAUDE_PLUGIN_ROOT}/scripts/compute-overdue.mts --today YYYY-MM-DD --run-started <iso>` with today's date and the ISO timestamp this review run began, and walk the fresh rows. Pass `--run-started` on every recompute: it drops rows whose skip-log entry has any outcome at or after the run start, so items already answered this run are not asked again after the rollover. This is the same guard `birthdays-prep.md` / `birthdays-apply.md` apply through `generatedFor`.
+Before each segment, compare the prep date staged in `overdue.json` against the current local date. When they differ, re-run `${CLAUDE_PLUGIN_ROOT}/scripts/compute-overdue.mts --today YYYY-MM-DD --run-started <iso>` with today's date and the ISO timestamp this review run began (`.llm/gtd/review/run-started.txt`, written at the top of `/gtd:review:daily`), and walk the fresh rows. Pass `--run-started` on every recompute: it drops rows whose skip-log entry has any outcome at or after the run start, so items already answered this run are not asked again after the rollover. This is the same guard `birthdays-prep.md` / `birthdays-apply.md` apply through `generatedFor`.
 
 ## Run staged ops verbatim
 
