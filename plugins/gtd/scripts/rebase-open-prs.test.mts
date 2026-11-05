@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-floating-promises -- node:test test() calls are fire-and-forget by design */
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {execFileSync} from "node:child_process";
+import {execFileSync, spawnSync} from "node:child_process";
 import {mkdirSync, mkdtempSync, realpathSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
@@ -203,6 +203,9 @@ function fixture(opts: {conflict?: boolean} = {}): Fixture {
 	const clone = join(root, "projects", "widgets");
 	mkdirSync(clone, {recursive: true});
 	git(clone, "init", "-q", "-b", "main");
+	// the user's global config may set core.fsmonitor=true; processStack's git inherits it and would leave a
+	// fsmonitor--daemon running per temp repo (and its worktrees) long after the temp dir is gone
+	git(clone, "config", "core.fsmonitor", "false");
 	git(clone, "remote", "add", "origin", bare);
 	commitFile(clone, "base.txt", "base\n", "base");
 	git(clone, "push", "-q", "origin", "main");
@@ -284,6 +287,34 @@ test("processStack never touches a stack containing an approved PR", () => {
 	const before = git(f.bare, "rev-parse", "a", "b");
 	assert.strictEqual(processStack({repoPath: f.clone, stack, worktreeRoot: f.work, apply: true}).status, "approved");
 	assert.strictEqual(git(f.bare, "rev-parse", "a", "b"), before);
+});
+
+test("processStack starts no git fsmonitor daemon even when the user's global config enables core.fsmonitor", () => {
+	const f = fixture();
+	const globalConfig = join(f.root, "global.gitconfig");
+	writeFileSync(globalConfig, "[core]\n\tfsmonitor = true\n");
+	const saved = process.env.GIT_CONFIG_GLOBAL;
+	process.env.GIT_CONFIG_GLOBAL = globalConfig;
+	const [stack] = buildStacks(stackPrs());
+	assert.ok(stack);
+	let outcome: StackOutcome;
+	try {
+		outcome = processStack({repoPath: f.clone, stack, worktreeRoot: f.work, apply: true});
+	} finally {
+		if (saved === undefined) {
+			delete process.env.GIT_CONFIG_GLOBAL;
+		} else {
+			process.env.GIT_CONFIG_GLOBAL = saved;
+		}
+	}
+	const watching =
+		spawnSync("git", ["-C", f.clone, "fsmonitor--daemon", "status"], {
+			env: {...process.env, GIT_CONFIG_GLOBAL: "/dev/null"},
+		}).status === 0;
+	if (watching) {
+		git(f.clone, "fsmonitor--daemon", "stop");
+	}
+	assert.deepStrictEqual({status: outcome.status, watching}, {status: "rebased", watching: false});
 });
 
 test("findLocalRepo finds the checkout whose remote matches", () => {
