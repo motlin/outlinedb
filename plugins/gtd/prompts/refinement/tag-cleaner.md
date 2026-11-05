@@ -13,6 +13,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/refinement-tagger.md` and follow it for fetch
 - **Registries** (a tag is _registered_ if it appears in any of these):
     - `.llm/gtd/metadata/context-tags.json` — energy/mode/location tags (`#deep-work`, `#call`, `#home`, …).
     - `.llm/gtd/metadata/hobbies-registry.json` — hobby and exercise-program tags (`#onewheel`, `#yoga`, `#boardgame`, …).
+    - `.llm/gtd/metadata/document-tags.json` — per-document-type tags (`#statement`, `#invoice`, `#quote`, …), when the section exists.
     - `.llm/gtd/metadata/projects/*.json` — project `#tags`.
 - **Frequency map**: `.llm/gtd/metadata/tag-frequency.json` — `{ "tags": { "#tag": count, … } }`, the count of current nodes using each tag across the whole tree. Use `jq` to pull individual counts; do not read the whole file into reasoning if it is large.
 

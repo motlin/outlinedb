@@ -161,6 +161,15 @@ When an item's work extracts content from a photo, scan, PDF, or other document 
 
 Filing beside the match follows **Match the existing placement** above: read the match's parent subtree and place the new node among its siblings in their format.
 
+## Tag recurring documents by type
+
+A statement, invoice, quote, bill, or payslip comes back every month or every job. When the extracted content is journaled, tag the entry with one stable per-document-type tag so every past copy can be found later with a single tag search, instead of a fresh tag being invented each time.
+
+- **Read the registry first.** Per-document-type tags live in the `📄 Document Tags` section under `Metadata`, synced to `.llm/gtd/metadata/document-tags.json`. Each child lists one document type and its tag (`Statements: #statement`, `Invoices: #invoice`, `Quotes: #quote`). Reuse the registered tag that fits the document.
+- **Propose a new tag when none fits.** Offer it in the `AskUserQuestion` alongside the placement, with the registry line it would add, and add the tag to `📄 Document Tags` only after the user accepts. When the section does not exist yet, the proposal also creates it under `Metadata`. Never write an unregistered tag on the entry without that confirmation.
+- **A tag must start with a letter.** Workflowy does not treat `#529` or `#4` as tags, so a proposed tag whose first character after `#` is a digit is invalid. Check this before offering it, and rename it to lead with a word (`#week4`, `#invoice-529`). Use lowercase letters, digits, and hyphens after that first letter.
+- **Tag the type, not the instance.** Account numbers, invoice numbers, months, and vendor names belong in the entry's text, not in the tag. One type gets one tag, whichever vendor sent it.
+
 ## Recompute when the date rolls over
 
 A long review crosses midnight, and every staged `applyOp` baked in the local date at the moment prep ran. Running a stale op verbatim writes yesterday's arithmetic — the wrong next date, the wrong weekday label.

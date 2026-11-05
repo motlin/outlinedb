@@ -140,6 +140,17 @@ When content extracted from a receipt, document, whiteboard, or screenshot gets 
 
 Record the best match, and at most two runners-up, under `metadata.relatedPlacement`: each with the node's `id`, its full `path`, `position` (`sibling` to place next to it, `child` to place under it), and a short `reason`. Leave the array empty when nothing matches. The capture orchestrator must offer `relatedPlacement[0]` as the first placement option, showing its path, instead of asking an open-ended where.
 
+## Propose a Document Tag
+
+Statements, invoices, quotes, bills, and payslips recur, and each type gets one stable tag so every copy can be found with one tag search. When a photo is one of these recurring documents, pick its tag here so the orchestrator journals it consistently.
+
+- **Reuse a registered tag.** Per-document-type tags live in the `📄 Document Tags` section under `Metadata`, cached at `.llm/gtd/metadata/document-tags.json` (one child per type, such as `Statements: #statement`). Record the tag that fits under `metadata.documentTag` with `"registered": true`.
+- **Propose one when none fits.** Record the proposed tag with `"registered": false` and the registry line it would add, such as `Payslips: #payslip`. The orchestrator asks before using it and adds it to the registry only on acceptance. The scanner never writes to the registry.
+- **Start the tag with a letter.** Workflowy does not treat `#529` or `#4` as tags. Reject any proposal whose first character after `#` is a digit, and lead with a word instead (`#week4`, `#invoice-529`).
+- **Tag the type, not the instance.** Account numbers, invoice numbers, months, and vendors go in the entry text, never in the tag.
+
+Omit `metadata.documentTag` for photos that are not recurring documents. Shape: `{"tag": "#statement", "registered": true}` or `{"tag": "#payslip", "registered": false, "registryLine": "Payslips: #payslip"}`.
+
 ## Write Output
 
 Write results to `.llm/gtd/capture/scans/photos.json`.
