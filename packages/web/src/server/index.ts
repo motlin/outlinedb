@@ -8,6 +8,7 @@ import {ladderSocketHandlers} from "./ladder-socket.js";
 import {createDecisionsApp} from "./routes/decisions.js";
 import {resolvePort} from "./port.js";
 import {warmTreeSnapshot} from "./tree-snapshot.js";
+import {nodeSignalSocket, startUpstreamSignal} from "./upstream-signal.js";
 
 process.title = "workflowy-web-server";
 
@@ -46,3 +47,24 @@ const server = serve({fetch: app.fetch, hostname: "127.0.0.1", port}, (info) => 
 	});
 });
 nodeWebSocket.injectWebSocket(server);
+
+/**
+ * Edits made on workflowy.com reach the cache within about a second: upstream's
+ * signal socket nudges, and each nudge runs one coalesced catch-up poll.
+ */
+const internalAuth = serverContext.internalAuth;
+const internalAdapter = serverContext.internalAdapter?.();
+if (internalAuth && internalAdapter) {
+	startUpstreamSignal({
+		connect: async () => {
+			const clientId = await internalAdapter.clientId();
+			const cookie = internalAuth.sessionStore.read();
+			if (cookie === undefined) {
+				throw new Error("no saved Workflowy session cookie");
+			}
+			return {clientId, cookie};
+		},
+		openSocket: nodeSignalSocket,
+		catchUp: async () => internalAdapter.catchUp(),
+	});
+}

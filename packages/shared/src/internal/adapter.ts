@@ -549,6 +549,11 @@ export class WorkflowyInternalAdapter {
 		await this.pusher.pushAndPoll();
 	}
 
+	/** The session's `wfclientid`, which names this client's `/ws/signal/<client_id>/` channel. */
+	async clientId(): Promise<string> {
+		return (await this.session()).clientId;
+	}
+
 	/** Where every push starts: the stored tree transaction id, or a loud error without one. */
 	private startTxId(): string {
 		const txId = readTreeTxId(this.db);
