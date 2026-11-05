@@ -122,37 +122,76 @@ describe("buildShortlistRequests", () => {
 });
 
 describe("selectShortlist", () => {
-	it("takes the top 8 per shard plus any option at or above 0.05, minus none, best first", () => {
-		const pool = [...people(12), pickleball, watched];
+	it("takes the top 16 people and top 8 tags per shard plus any option at or above 0.05, minus none, best first", () => {
+		const pool = [...people(20), ...tags(10)];
 		const peopleProbabilities: Record<string, number> = {none: 0.3};
-		const scores = [0.2, 0.1, 0.08, 0.07, 0.06, 0.055, 0.05, 0.04, 0.03, 0.002, 0.002, 0.001];
-		for (const [index, score] of scores.entries()) {
-			peopleProbabilities[`p.Person${index}`] = score;
+		for (let index = 0; index < 20; index++) {
+			peopleProbabilities[`p.Person${index}`] = (20 - index) / 1000;
+		}
+		const tagProbabilities: Record<string, number> = {none: 0.06};
+		for (let index = 0; index < 10; index++) {
+			tagProbabilities[`t.tag${index}`] = (10 - index) / 10_000;
 		}
 		const shortlist = selectShortlist(pool, {
 			"people.1": {type: "choice", choice: "none", probabilities: peopleProbabilities, confidence: 0.3},
-			"tags.1": {
-				type: "choice",
-				choice: "t.pickleball",
-				probabilities: {"t.pickleball": 0.9, none: 0.06, "t.watched": 0.04},
-				confidence: 0.9,
-			},
+			"tags.1": {type: "choice", choice: "none", probabilities: tagProbabilities, confidence: 0.06},
 		});
 		expect(shortlist.map(({label, score}) => [label.label, score])).toStrictEqual([
-			["#pickleball", 0.9],
-			["@Person0", 0.2],
-			["@Person1", 0.1],
-			["@Person2", 0.08],
-			["@Person3", 0.07],
-			["@Person4", 0.06],
-			["@Person5", 0.055],
-			["@Person6", 0.05],
-			["@Person7", 0.04],
-			["#watched", 0.04],
+			["@Person0", 0.02],
+			["@Person1", 0.019],
+			["@Person2", 0.018],
+			["@Person3", 0.017],
+			["@Person4", 0.016],
+			["@Person5", 0.015],
+			["@Person6", 0.014],
+			["@Person7", 0.013],
+			["@Person8", 0.012],
+			["@Person9", 0.011],
+			["@Person10", 0.01],
+			["@Person11", 0.009],
+			["@Person12", 0.008],
+			["@Person13", 0.007],
+			["@Person14", 0.006],
+			["@Person15", 0.005],
+			["#tag0", 0.001],
+			["#tag1", 0.0009],
+			["#tag2", 0.0008],
+			["#tag3", 0.0007],
+			["#tag4", 0.0006],
+			["#tag5", 0.0005],
+			["#tag6", 0.0004],
+			["#tag7", 0.0003],
 		]);
 	});
 
-	it("keeps options at or above 0.05 beyond the top 8 and ignores unknown option ids", () => {
+	it("takes the top K per label kind from the given limits", () => {
+		const pool = [...people(4), pickleball, watched];
+		const shortlist = selectShortlist(
+			pool,
+			{
+				"people.1": {
+					type: "choice",
+					choice: "p.Person0",
+					probabilities: {"p.Person0": 0.04, "p.Person1": 0.03, "p.Person2": 0.02, "p.Person3": 0.01},
+					confidence: 0.04,
+				},
+				"tags.1": {
+					type: "choice",
+					choice: "t.pickleball",
+					probabilities: {"t.pickleball": 0.9, "t.watched": 0.04},
+					confidence: 0.9,
+				},
+			},
+			{person: 2, tag: 1},
+		);
+		expect(shortlist.map(({label, score}) => [label.label, score])).toStrictEqual([
+			["#pickleball", 0.9],
+			["@Person0", 0.04],
+			["@Person1", 0.03],
+		]);
+	});
+
+	it("keeps options at or above 0.05 beyond the top K and ignores unknown option ids", () => {
 		const pool = people(10);
 		const probabilities: Record<string, number> = {"p.Ghost": 0.5};
 		for (const [index] of pool.entries()) {

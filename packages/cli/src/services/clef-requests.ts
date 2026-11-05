@@ -66,7 +66,8 @@ const NONE_OPTION = "none";
 const MAX_QUESTIONS = 64;
 /** Stays well under Clef-flash's 24,576-token window. */
 const MAX_REQUEST_TOKENS = 20_000;
-const SHORTLIST_TOP_PER_SHARD = 8;
+/** Pass 1 options kept per shard, by label kind; people get more because homonyms spread their probability. */
+const SHORTLIST_TOP_PER_SHARD: Readonly<Record<LabelKind, number>> = {person: 16, tag: 8};
 const SHORTLIST_MIN_PROBABILITY = 0.05;
 
 const CLEF_ID = /^[A-Za-z0-9_.-]{1,100}$/u;
@@ -138,12 +139,14 @@ export function buildShortlistRequests(
 }
 
 /**
- * Picks the shortlist from pass 1 answers: per shard the top 8 options plus any at or above 0.05,
- * minus `none` and unknown ids, deduplicated, best first. Pure.
+ * Picks the shortlist from pass 1 answers: per shard the top K options for the label kind
+ * (default {@link SHORTLIST_TOP_PER_SHARD}) plus any at or above 0.05, minus `none` and unknown ids,
+ * deduplicated, best first. Pure.
  */
 export function selectShortlist(
 	pool: readonly PoolLabel[],
 	answers: Readonly<Record<string, ChoiceAnswer>>,
+	topPerShard: Readonly<Record<LabelKind, number>> = SHORTLIST_TOP_PER_SHARD,
 ): ShortlistEntry[] {
 	const byId = new Map(pool.map((label) => [label.optionId, label]));
 	const selected = new Map<string, ShortlistEntry>();
@@ -157,7 +160,7 @@ export function selectShortlist(
 		for (const [index, entry] of ranked.entries()) {
 			const previous = selected.get(entry.label.optionId);
 			if (
-				(index < SHORTLIST_TOP_PER_SHARD || entry.score >= SHORTLIST_MIN_PROBABILITY) &&
+				(index < topPerShard[entry.label.kind] || entry.score >= SHORTLIST_MIN_PROBABILITY) &&
 				(previous === undefined || previous.score < entry.score)
 			) {
 				selected.set(entry.label.optionId, entry);
