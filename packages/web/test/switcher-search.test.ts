@@ -8,6 +8,7 @@ import {
 	scanFragment,
 	warmSwitcher,
 } from "../src/server/switcher-search.js";
+import type {SwitcherTextScan} from "../src/server/switcher-search.js";
 import type {TreeSearchRow} from "../src/server/tree-search.js";
 
 const NOW_SEC = Date.UTC(2026, 9, 1) / 1000;
@@ -391,6 +392,51 @@ describe("rankSwitcherPaged", () => {
 	});
 });
 
+/**
+ * A {@link SwitcherTextScan} over fixture rows like the SQL one: an ASCII LIKE on the raw text plus every row holding a
+ * tag or non-ASCII text, sized and read out of tree order, as SQL answers them.
+ */
+function fixtureScan(
+	rows: readonly TreeSearchRow[],
+	pageSize: number,
+	onSizes: (fragment: string | null) => void = () => {},
+): SwitcherTextScan {
+	const byId = new Map(rows.map((full) => [full.id, full]));
+	// Out of tree order, as SQL answers them.
+	const reversed = <T>(items: readonly T[]): T[] =>
+		items.flatMap((_, i) => items.slice(items.length - 1 - i, items.length - i));
+	return {
+		pageSize,
+		sizes(fragment) {
+			onSizes(fragment);
+			return reversed(
+				rows.filter(
+					({name, note}) =>
+						fragment === null ||
+						[name, note].some(
+							(text) =>
+								text !== null &&
+								(text.toLowerCase().includes(fragment) ||
+									text.includes("<") ||
+									!/^\p{ASCII}*$/u.test(text)),
+						),
+				),
+			).map(({id, name}) => ({
+				id,
+				nameLength: name?.length ?? 0,
+				simpleName: name !== null && /^\p{ASCII}*$/u.test(name) && !name.includes("<") && !name.includes("&"),
+				taggedName: name !== null && (name.includes("#") || name.includes("@")),
+			}));
+		},
+		read(ids) {
+			return reversed(ids).flatMap((id) => {
+				const found = byId.get(id);
+				return found === undefined ? [] : [{id, name: found.name, note: found.note}];
+			});
+		},
+	};
+}
+
 describe("rankSwitcherCompact", () => {
 	const ROWS_WITH_TEXT = [
 		...ROWS,
@@ -409,23 +455,9 @@ describe("rankSwitcherCompact", () => {
 			["beta"],
 			NOW_SEC,
 			{joinedSec: JOINED_SEC, ...options},
-			(fragment) => {
+			fixtureScan(ROWS_WITH_TEXT, 2, (fragment) => {
 				fragments.push(fragment);
-				// Like the SQL prefilter: an ASCII LIKE on the raw text, plus every row holding a tag or non-ASCII text.
-				const matching = ROWS_WITH_TEXT.filter(
-					({name, note}) =>
-						fragment === null ||
-						[name, note].some(
-							(text) =>
-								text !== null &&
-								(text.toLowerCase().includes(fragment) ||
-									text.includes("<") ||
-									!/^\p{ASCII}*$/u.test(text)),
-						),
-				);
-				// Out of tree order, as SQL answers them.
-				return matching.flatMap((_, i) => matching.slice(matching.length - 1 - i, matching.length - i));
-			},
+			}),
 			{
 				pageSize: 2,
 				read: (ids) =>
@@ -451,6 +483,92 @@ describe("rankSwitcherCompact", () => {
 				rankSwitcher(ROWS_WITH_TEXT, query, ["beta"], NOW_SEC, {joinedSec: JOINED_SEC, ...options}),
 			),
 		);
+	});
+
+	it("answers exactly what rankSwitcher answers when equal scores straddle or fill the page", () => {
+		// Plain ASCII leaves with equal static scores and name lengths tie; the trie gather order then breaks the ties.
+		const tied = [
+			row("box", null, 0, "Box"),
+			// First in preorder but ranked low, so its "to" key comes first though it never reaches the page.
+			row("tomato", "box", -1, "tomato and a much longer name"),
+			row("tea", "box", 0, "tea two"),
+			row("toe", "box", 1, "toe two"),
+			row("ten", "box", 2, "ten two"),
+			row("t2", "box", 3, "t2t two"),
+			row("tab", "box", 4, "tab"),
+			row("todo", "box", 5, "todo  with longer name", {modifiedAt: MODIFIED_MS - 86_400_000}),
+			row("old", "box", 6, "tick", {modifiedAt: null}),
+			row("noted", "box", 7, "plain", {note: "tea note"}),
+			row("noted2", "box", 8, "plain", {note: "tea note"}),
+			row("amp", "box", 9, "tea &amp; toast"),
+			row("hash", "box", 10, "tea #tag"),
+			row("lead", "box", 11, "  tea two"),
+			row("mid", "box", 12, "at-tea"),
+		];
+		const tiedSkeleton = compactSwitcherSkeleton(tied.map((full) => ({...full, name: null, note: null})));
+		const tiedText = new Map(tied.map(({id, name, note}) => [id, {name, note}]));
+		const cases: [string, {limit?: number; offset?: number}][] = [
+			["t", {}],
+			["t", {limit: 1}],
+			["t", {limit: 2}],
+			["t", {limit: 3, offset: 1}],
+			["t", {limit: 2, offset: 5}],
+			["t", {limit: 20, offset: 9}],
+			["te", {}],
+			["te", {limit: 1}],
+			["tea", {limit: 1, offset: 1}],
+			["two t", {}],
+			["ta", {limit: 1}],
+		];
+		const ranked = (query: string, options: {limit?: number; offset?: number}) =>
+			rankSwitcherCompact(
+				tiedSkeleton,
+				query,
+				[],
+				NOW_SEC,
+				{joinedSec: JOINED_SEC, ...options},
+				fixtureScan(tied, 2),
+				{
+					pageSize: 3,
+					read: (ids) =>
+						new Map(ids.flatMap((id) => (tiedText.has(id) ? [[id, tiedText.get(id)!] as const] : []))),
+				},
+			);
+		expect(cases.map(([query, options]) => ranked(query, options))).toStrictEqual(
+			cases.map(([query, options]) =>
+				rankSwitcher(tied, query, [], NOW_SEC, {joinedSec: JOINED_SEC, ...options}),
+			),
+		);
+	});
+
+	it("reads text from the highest score bound down and stops once the page's scores beat every unread bound", () => {
+		// Recent short names bound high; old leaves with long names bound far below them.
+		const old = Array.from({length: 6}, (_, i) =>
+			row(`old${i}`, "box", i + 2, `topic ${"x".repeat(40)} ${i}`, {modifiedAt: null}),
+		);
+		const rows = [row("box", null, 0, "Box"), row("top", "box", 0, "Top"), row("tip", "box", 1, "Tip two"), ...old];
+		const scan = fixtureScan(rows, 2);
+		const read: string[] = [];
+		const response = rankSwitcherCompact(
+			compactSwitcherSkeleton(rows.map((full) => ({...full, name: null, note: null}))),
+			"t",
+			[],
+			NOW_SEC,
+			{joinedSec: JOINED_SEC, limit: 1},
+			{
+				...scan,
+				read(ids) {
+					read.push(...ids);
+					return scan.read(ids);
+				},
+			},
+			{pageSize: 5, read: (ids) => new Map(rows.filter(({id}) => ids.includes(id)).map((r) => [r.id, r]))},
+		);
+		expect({ids: response.results.map(({id}) => id), hasMore: response.hasMore, read}).toStrictEqual({
+			ids: ["top"],
+			hasMore: true,
+			read: ["top", "tip"],
+		});
 	});
 
 	it("scans with the folded longest word as the prefilter fragment", () => {

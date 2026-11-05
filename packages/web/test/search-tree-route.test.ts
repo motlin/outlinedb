@@ -22,7 +22,9 @@ import {
 	loadTreeSearchRows,
 	loadTreeSkeletonRows,
 	loadSwitcherSkeleton,
-	scanSwitcherText,
+	buildSwitcherSkeleton,
+	peekSwitcherSkeleton,
+	switcherTextScan,
 	queryNeedsBacklinks,
 	peekTreeSnapshotBuild,
 	peekTreeSnapshotRows,
@@ -31,7 +33,7 @@ import {
 	bindTreeHost,
 } from "../src/server/tree-snapshot.js";
 import {computeTreeSearch} from "../src/server/tree-search.js";
-import {peekSwitcherText} from "../src/server/switcher-search.js";
+import {compactSwitcherSkeleton, peekSwitcherText} from "../src/server/switcher-search.js";
 import type {ServerContext} from "../src/server/context.js";
 import {httpAppFor} from "./http-app-for.js";
 
@@ -223,16 +225,67 @@ describe("jump-menu search with the tree snapshot off", () => {
 		});
 	});
 
-	it("scans live text a page at a time, keeping LIKE hits and every row with a tag or non-ASCII text", () => {
+	it("builds the switcher skeleton from flat rows exactly as from the recursive tree rows", () => {
+		const db = setup();
+		const add = (id: string, parentId: string | null, priority: number, extra: {completed?: boolean} = {}) => {
+			db.insert(nodeContent)
+				.values({id, name: id, note: null, parentId, systemFrom: SEEDED_AT, systemTo: FAR_FUTURE_DATE})
+				.run();
+			db.insert(nodeMetadata)
+				.values({
+					nodeId: id,
+					priority,
+					modifiedAt: MODIFIED,
+					completedAt: extra.completed === true ? COMPLETED : null,
+					systemFrom: SEEDED_AT,
+					systemTo: FAR_FUTURE_DATE,
+				})
+				.run();
+		};
+		// A backlink item's child hangs at the top; nothing below an `ai.inChat` item is reached; equal priorities keep
+		// depth-then-id order; a row under a missing parent is unreachable.
+		add("blChild", "bl", 0);
+		add("chat", "root", 7);
+		add("chatChild", "chat", 0);
+		add("tieB", "other", 1);
+		add("tieA", "other", 1);
+		add("doneParent", "other", 2, {completed: true});
+		add("underDone", "doneParent", 0);
+		add("orphan", "missing", 0);
+		db.insert(aiMetadata)
+			.values({nodeId: "chat", inChat: 1, systemFrom: SEEDED_AT, systemTo: FAR_FUTURE_DATE})
+			.run();
+		expect(buildSwitcherSkeleton(db)).toStrictEqual(compactSwitcherSkeleton(loadTreeSkeletonRows(db)));
+	});
+
+	it("sizes live rows holding the LIKE fragment, a tag or non-ASCII text, and reads their own text by id", () => {
 		const db = setup();
 		db.update(nodeContent).set({name: "R<i>oo</i>t"}).where(eq(nodeContent.id, "root")).run();
 		db.update(nodeContent).set({note: "caf\u00E9"}).where(eq(nodeContent.id, "a1")).run();
+		db.update(nodeContent).set({name: "#tag &amp; @who"}).where(eq(nodeContent.id, "other")).run();
+		const scan = switcherTextScan(db, 2);
+		const byId = <T extends {id: string}>(rows: Iterable<T>): T[] =>
+			// oxlint-disable-next-line unicorn/no-array-sort -- a fresh copy; the test lib has no toSorted
+			[...rows].sort((a, b) => a.id.localeCompare(b.id));
 		expect({
-			filtered: new Set([...scanSwitcherText(db, "alp", 1)].map(({id}) => id)),
-			all: new Set([...scanSwitcherText(db, null, 2)].map(({id}) => id)),
+			filtered: new Set([...scan.sizes("alp")].map(({id}) => id)),
+			all: byId(scan.sizes(null)),
+			text: byId(scan.read(["mirror", "a", "deleted"])),
 		}).toStrictEqual({
 			filtered: new Set(["a", "a1", "root"]),
-			all: new Set(["a", "a1", "bl", "mirror", "other", "refs", "root"]),
+			all: byId([
+				{id: "a", nameLength: 5, simpleName: true, taggedName: false},
+				{id: "a1", nameLength: 11, simpleName: true, taggedName: false},
+				{id: "bl", nameLength: 0, simpleName: true, taggedName: false},
+				{id: "mirror", nameLength: 5, simpleName: true, taggedName: false},
+				{id: "other", nameLength: 15, simpleName: false, taggedName: true},
+				{id: "refs", nameLength: 0, simpleName: true, taggedName: false},
+				{id: "root", nameLength: 11, simpleName: false, taggedName: false},
+			]),
+			text: byId([
+				{id: "a", name: "Alpha", note: null},
+				{id: "mirror", name: "stale", note: null},
+			]),
 		});
 	});
 
@@ -539,6 +592,55 @@ describe("loadTreeRows", () => {
 		expect(idSet(peekTreeSnapshotRows(db) ?? [])).toStrictEqual(
 			new Set(["a", "a1", "mine", "mirror", "other", "root", "theirs"]),
 		);
+	});
+
+	it("rebuilds a held switcher skeleton in the background after an op that wrote, never a skeleton not yet held", async () => {
+		vi.useFakeTimers();
+		const db = setup();
+		const store = inProcessStore(
+			buildServerContext({
+				db,
+				config: {
+					accountEmail: "",
+					sqlQueryLogging: false,
+					calendarEnsureEnabled: false,
+					calendarLayoutEnabled: false,
+					features: {embeddings: false, treeSnapshot: false},
+				},
+				ladderEvents: new LadderEventBus(),
+			}),
+			{
+				write: defineOp({
+					input: z.object({id: z.string()}),
+					output: z.null(),
+					run: (_ctx, {id}) => {
+						insertNode(db, id, "root", id);
+						return ok(null);
+					},
+				}),
+			},
+			{keepSwitcherSkeletonWarm: true},
+		);
+		await store.call("write" as never, {id: "cold"} as never);
+		vi.advanceTimersByTime(500);
+		const unheld = peekSwitcherSkeleton(db);
+		const first = loadSwitcherSkeleton(db);
+		await store.call("write" as never, {id: "warm"} as never);
+		vi.advanceTimersByTime(400);
+		const pending = peekSwitcherSkeleton(db);
+		vi.advanceTimersByTime(100);
+		const rebuilt = peekSwitcherSkeleton(db);
+		expect({
+			unheld,
+			pendingIsFirst: pending === first,
+			rebuiltIds: rebuilt?.ids,
+			servedFromCache: loadSwitcherSkeleton(db) === rebuilt,
+		}).toStrictEqual({
+			unheld: undefined,
+			pendingIsFirst: true,
+			rebuiltIds: ["root", "cold", "warm", "a", "a1", "mirror", "other"],
+			servedFromCache: true,
+		});
 	});
 
 	it("skips a scheduled rebuild once the database is closed", () => {

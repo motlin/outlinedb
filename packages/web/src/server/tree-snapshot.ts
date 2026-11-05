@@ -4,7 +4,7 @@ import {sql} from "drizzle-orm";
 import type {SQL} from "drizzle-orm";
 import type {AppDatabase} from "@workflowy/shared/db";
 import {compactSwitcherSkeleton, warmSwitcher} from "./switcher-search.js";
-import type {SwitcherSkeleton} from "./switcher-search.js";
+import type {SwitcherSkeleton, SwitcherTextScan} from "./switcher-search.js";
 import {changedNodeIds, changesSince, latestSystemTime, readConsistently} from "./system-changes.js";
 import type {TreeSearchRow} from "./tree-search.js";
 
@@ -189,6 +189,96 @@ export function loadTreeRowText(
 	return new Map(rows.map(({id, name, note}) => [id, {name, note}]));
 }
 
+interface FlatSkeletonSqlRow {
+	id: string;
+	parentId: string | null;
+	priority: number | null;
+	createdAt: number | null;
+	modifiedAt: number | null;
+	completedAt: number | null;
+	layoutMode: string | null;
+	isMirror: number;
+	isReferencesRoot: number;
+	isInChat: number;
+}
+
+/**
+ * The jump menu's {@link SwitcherSkeleton} from one flat query over every live row, the tree walked in memory: the same
+ * rows, order and placement as {@link loadTreeSkeletonRows}' recursive query, which costs several times more on a
+ * Durable Object.
+ */
+export function buildSwitcherSkeleton(database: Database): SwitcherSkeleton {
+	const flat = database.all<FlatSkeletonSqlRow>(sql`
+		SELECT
+			c.id AS id,
+			c.parent_id AS parentId,
+			m.priority AS priority,
+			m.created_at AS createdAt,
+			m.modified_at AS modifiedAt,
+			CASE WHEN mi.mirror_id IS NULL THEN m.completed_at ELSE om.completed_at END AS completedAt,
+			m.layout_mode AS layoutMode,
+			mi.mirror_id IS NOT NULL AS isMirror,
+			c.id IN ${LIVE_REFERENCES_ROOTS} AS isReferencesRoot,
+			c.id IN ${LIVE_IN_CHAT} AS isInChat
+		FROM node_content c
+		LEFT JOIN node_metadata m ON m.node_id = c.id AND m.system_to = ${FAR_FUTURE_DATE}
+		LEFT JOIN mirrors mi ON mi.mirror_id = c.id AND mi.system_to = ${FAR_FUTURE_DATE}
+		LEFT JOIN node_metadata om ON om.node_id = mi.original_id AND om.system_to = ${FAR_FUTURE_DATE}
+		WHERE c.system_to = ${FAR_FUTURE_DATE}
+	`);
+	const children = new Map<string, FlatSkeletonSqlRow[]>();
+	const referencesRootIds = new Set<string>();
+	let level: FlatSkeletonSqlRow[] = [];
+	for (const row of flat) {
+		if (row.isReferencesRoot === 1) {
+			referencesRootIds.add(row.id);
+		}
+		if (row.parentId === null) {
+			level.push(row);
+			continue;
+		}
+		const siblings = children.get(row.parentId);
+		if (siblings) {
+			siblings.push(row);
+		} else {
+			children.set(row.parentId, [row]);
+		}
+	}
+	// Breadth first, each depth by id, as the recursive query orders them; nothing below an `ai.inChat` item.
+	const reached: FlatSkeletonSqlRow[] = [];
+	while (level.length > 0) {
+		level.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+		// A loop, not push(...level), so a wide level cannot overflow the call stack.
+		for (const row of level) {
+			reached.push(row);
+		}
+		level = level.flatMap((row) => (row.isInChat === 1 ? [] : (children.get(row.id) ?? [])));
+	}
+	return compactSwitcherSkeleton(
+		reached
+			.filter(
+				(row) =>
+					row.isReferencesRoot === 0 &&
+					row.isInChat === 0 &&
+					(row.parentId === null || !referencesRootIds.has(row.parentId)),
+			)
+			.map((row) => ({
+				id: row.id,
+				parentId: row.parentId,
+				priority: row.priority,
+				name: null,
+				note: null,
+				createdAt: toMillis(row.createdAt),
+				modifiedAt: toMillis(row.modifiedAt),
+				completedAt: toMillis(row.completedAt),
+				layoutMode: row.layoutMode,
+				isMirror: row.isMirror === 1,
+				isBacklink: false,
+				fileType: null,
+			})),
+	);
+}
+
 const switcherSkeletons = new WeakMap<Database, {state: ChangeState; skeleton: SwitcherSkeleton}>();
 
 /**
@@ -198,7 +288,7 @@ const switcherSkeletons = new WeakMap<Database, {state: ChangeState; skeleton: S
 export function loadSwitcherSkeleton(database: Database): SwitcherSkeleton {
 	if (!hosts.has(database)) {
 		// Without a change source nothing tells a cached skeleton is stale.
-		return compactSwitcherSkeleton(loadTreeSkeletonRows(database));
+		return buildSwitcherSkeleton(database);
 	}
 	const state = changeState(database);
 	const cached = switcherSkeletons.get(database);
@@ -209,47 +299,86 @@ export function loadSwitcherSkeleton(database: Database): SwitcherSkeleton {
 	) {
 		return cached.skeleton;
 	}
-	const skeleton = compactSwitcherSkeleton(loadTreeSkeletonRows(database));
+	const skeleton = buildSwitcherSkeleton(database);
 	switcherSkeletons.set(database, {state, skeleton});
 	return skeleton;
 }
 
+/** The held switcher skeleton without checking for writes or rebuilding, for tests. */
+export function peekSwitcherSkeleton(database: Database): SwitcherSkeleton | undefined {
+	return switcherSkeletons.get(database)?.skeleton;
+}
+
+const skeletonTimers = new WeakMap<Database, () => void>();
+
 /**
- * Live `node_content` rows with their own text, read `pageSize` at a time in rowid order: with a `fragment`, only rows
- * whose name or note holds it (ASCII case-insensitive LIKE) or holds a tag or non-ASCII text, which folding could make
- * hold it. Mirrors carry their own stale text; the jump menu skips them.
+ * Runs `run`, then, when it changed the database and a switcher skeleton is held, rebuilds the skeleton
+ * {@link REBUILD_DEBOUNCE_MS} after the last such write, off the request path, so the next jump-menu keystroke does not
+ * pay for it. A skeleton not yet held is left for the first jump-menu query, so writes on a freshly woken Durable Object
+ * never start a build nobody asked for.
  */
-export function* scanSwitcherText(
-	database: Database,
-	fragment: string | null,
-	pageSize: number,
-): Generator<{id: string; name: string | null; note: string | null}> {
-	const pattern = `%${fragment}%`;
-	const filter =
-		fragment === null
-			? sql``
-			: sql`AND (
-				c.name LIKE ${pattern} OR c.note LIKE ${pattern}
-				OR instr(c.name, '<') OR instr(c.note, '<')
-				OR length(c.name) <> octet_length(c.name) OR length(c.note) <> octet_length(c.note)
-			)`;
-	let after = -1;
-	for (;;) {
-		const page = database.all<{rowid: number; id: string; name: string | null; note: string | null}>(sql`
-			SELECT c.rowid AS rowid, c.id AS id, c.name AS name, c.note AS note
-			FROM node_content c
-			WHERE c.rowid > ${after} AND c.system_to = ${FAR_FUTURE_DATE} ${filter}
-			ORDER BY c.rowid
-			LIMIT ${pageSize}
-		`);
-		for (const {id, name, note} of page) {
-			yield {id, name, note};
+export async function withSwitcherSkeletonRebuild<T>(database: Database, run: () => Promise<T>): Promise<T> {
+	const before = changeState(database).changes;
+	try {
+		return await run();
+	} finally {
+		if (switcherSkeletons.has(database) && changeState(database).changes !== before) {
+			skeletonTimers.get(database)?.();
+			const {changeSource, scheduler} = hostOf(database);
+			const cancel = scheduler.setTimer(() => {
+				skeletonTimers.delete(database);
+				if (changeSource.isOpen()) {
+					loadSwitcherSkeleton(database);
+				}
+			}, REBUILD_DEBOUNCE_MS);
+			skeletonTimers.set(database, cancel);
 		}
-		if (page.length < pageSize) {
-			return;
-		}
-		after = page.at(-1)?.rowid ?? after;
 	}
+}
+
+/**
+ * The jump menu's {@link SwitcherTextScan} over live `node_content` rows and their own text (mirrors carry their own
+ * stale text; the jump menu skips them). With a `fragment`, only rows whose name or note holds it (ASCII
+ * case-insensitive LIKE) or holds a tag or non-ASCII text, which folding could make hold it, are sized.
+ */
+export function switcherTextScan(database: Database, pageSize: number): SwitcherTextScan {
+	return {
+		pageSize,
+		sizes(fragment) {
+			const pattern = `%${fragment}%`;
+			const filter =
+				fragment === null
+					? sql``
+					: sql`AND (
+						c.name LIKE ${pattern} OR c.note LIKE ${pattern}
+						OR instr(c.name, '<') OR instr(c.note, '<')
+						OR length(c.name) <> octet_length(c.name) OR length(c.note) <> octet_length(c.note)
+					)`;
+			return database
+				.all<{id: string; nameLength: number | null; simpleName: number | null; taggedName: number | null}>(sql`
+					SELECT
+						c.id AS id,
+						length(c.name) AS nameLength,
+						length(c.name) = octet_length(c.name) AND instr(c.name, '<') = 0 AND instr(c.name, '&') = 0 AS simpleName,
+						instr(c.name, '#') > 0 OR instr(c.name, '@') > 0 AS taggedName
+					FROM node_content c
+					WHERE c.system_to = ${FAR_FUTURE_DATE} ${filter}
+				`)
+				.map(({id, nameLength, simpleName, taggedName}) => ({
+					id,
+					nameLength: nameLength ?? 0,
+					simpleName: simpleName === 1,
+					taggedName: taggedName === 1,
+				}));
+		},
+		read(ids) {
+			return database.all<{id: string; name: string | null; note: string | null}>(sql`
+				SELECT c.id AS id, c.name AS name, c.note AS note
+				FROM json_each(${JSON.stringify(ids)}) j
+				INNER JOIN node_content c ON c.id = j.value AND c.system_to = ${FAR_FUTURE_DATE}
+			`);
+		},
+	};
 }
 
 /** Where a live node reachable from a top-level node sits, searchable or not. */

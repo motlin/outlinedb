@@ -25,7 +25,7 @@ import {
 	loadSwitcherSkeleton,
 	loadTreeSkeletonRows,
 	queryNeedsBacklinks,
-	scanSwitcherText,
+	switcherTextScan,
 } from "../tree-snapshot.js";
 
 type TreeLoader = (database: AppDatabase, rootId: string | null) => TreeSearchRow[];
@@ -37,6 +37,8 @@ function treeLoader(ctx: ServerContext): TreeLoader {
 
 /** Rows of text per read when a whole-tree search pages the text (`features.treeSnapshot` off). */
 const TEXT_PAGE_SIZE = 2000;
+/** Rows the jump menu reads per text page from the highest score bound down; small, since it usually stops early. */
+const SWITCHER_PAGE_SIZE = 500;
 
 function textSource(ctx: ServerContext): RowTextSource {
 	return {pageSize: TEXT_PAGE_SIZE, read: (ids) => loadTreeRowText(ctx.db, ids)};
@@ -90,7 +92,7 @@ function switcherSearch(ctx: ServerContext, query: string): SwitcherSearch {
 	const source = textSource(ctx);
 	if (isCompactSwitcherQuery(query)) {
 		const skeleton = loadSwitcherSkeleton(ctx.db);
-		const scan = (fragment: string | null) => scanSwitcherText(ctx.db, fragment, TEXT_PAGE_SIZE);
+		const scan = switcherTextScan(ctx.db, SWITCHER_PAGE_SIZE);
 		return {
 			rows: [],
 			earliestCreatedMs: skeleton.earliestCreatedMs,

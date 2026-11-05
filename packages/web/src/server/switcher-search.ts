@@ -754,11 +754,51 @@ export interface SwitcherSkeleton {
 
 /** {@link SwitcherSkeleton} of text-free skeleton rows; the rows can be dropped afterwards. */
 export function compactSwitcherSkeleton(rows: readonly TreeSearchRow[]): SwitcherSkeleton {
-	const index = rowIndex(rows);
-	const placed = [...placedPreorder(rows, index)];
-	const size = placed.length;
+	const count = rows.length;
+	const indexOf = new Map<string, number>();
+	rows.forEach((row, i) => {
+		indexOf.set(row.id, i);
+	});
+	// Typed arrays and index lists rather than per-row maps and objects: this runs on every jump-menu rebuild.
+	const parentOf = new Int32Array(count);
+	const childCount = new Uint32Array(count);
+	rows.forEach((row, i) => {
+		const parent = row.parentId === null ? -1 : (indexOf.get(row.parentId) ?? -1);
+		parentOf[i] = parent;
+		if (parent >= 0) {
+			childCount[parent] = (childCount[parent] ?? 0) + 1;
+		}
+	});
+	// Children grouped by parent (a row whose parent is not a row hangs at the top), each group by priority, stably.
+	const top: number[] = [];
+	const children: (number[] | undefined)[] = Array.from({length: count});
+	for (let i = 0; i < count; i++) {
+		const parent = parentOf[i] ?? -1;
+		if (parent < 0) {
+			top.push(i);
+		} else {
+			(children[parent] ??= []).push(i);
+		}
+	}
+	const byPriority = (a: number, b: number) => (rows[a]?.priority ?? 0) - (rows[b]?.priority ?? 0) || a - b;
+	top.sort(byPriority);
+	for (const group of children) {
+		group?.sort(byPriority);
+	}
+	const order: number[] = [];
+	const stack = top.toReversed();
+	for (let i = stack.pop(); i !== undefined; i = stack.pop()) {
+		order.push(i);
+		const group = children[i];
+		if (group) {
+			for (let j = group.length - 1; j >= 0; j--) {
+				stack.push(group[j] ?? 0);
+			}
+		}
+	}
+	const size = order.length;
 	const skeleton: SwitcherSkeleton = {
-		ids: placed.map(({row}) => row.id),
+		ids: order.map((i) => rows[i]?.id ?? ""),
 		position: new Map(),
 		parent: new Int32Array(size),
 		depth: new Uint16Array(size),
@@ -768,20 +808,30 @@ export function compactSwitcherSkeleton(rows: readonly TreeSearchRow[]): Switche
 		layoutModes: new Map(),
 		earliestCreatedMs: Infinity,
 	};
-	placed.forEach(({row}, i) => {
-		skeleton.position.set(row.id, i);
+	const preorderOf = new Int32Array(count).fill(-1);
+	order.forEach((i, at) => {
+		preorderOf[i] = at;
+		skeleton.position.set(rows[i]?.id ?? "", at);
 	});
-	placed.forEach(({row, depth, underCompleted}, i) => {
-		skeleton.parent[i] = row.parentId === null ? -1 : (skeleton.position.get(row.parentId) ?? -1);
-		skeleton.depth[i] = depth;
-		skeleton.childCount[i] = index.childCount.get(row.id) ?? 0;
-		skeleton.modifiedMs[i] = row.modifiedAt ?? Number.NaN;
-		skeleton.flags[i] =
+	order.forEach((i, at) => {
+		const row = rows[i];
+		if (row === undefined) {
+			return;
+		}
+		const parentRow = parentOf[i] ?? -1;
+		// Preorder places a parent before its children, so its depth and flags are already set.
+		const parent = parentRow < 0 ? -1 : (preorderOf[parentRow] ?? -1);
+		const parentFlags = parent < 0 ? 0 : (skeleton.flags[parent] ?? 0);
+		skeleton.parent[at] = row.parentId === null ? -1 : (skeleton.position.get(row.parentId) ?? -1);
+		skeleton.depth[at] = parent < 0 ? 2 : (skeleton.depth[parent] ?? 0) + 1;
+		skeleton.childCount[at] = childCount[i] ?? 0;
+		skeleton.modifiedMs[at] = row.modifiedAt ?? Number.NaN;
+		skeleton.flags[at] =
 			(row.completedAt === null ? 0 : COMPLETED) |
-			(underCompleted ? UNDER_COMPLETED : 0) |
+			((parentFlags & (COMPLETED | UNDER_COMPLETED)) === 0 ? 0 : UNDER_COMPLETED) |
 			(row.isMirror ? MIRROR : 0);
 		if (row.layoutMode !== null) {
-			skeleton.layoutModes.set(i, row.layoutMode);
+			skeleton.layoutModes.set(at, row.layoutMode);
 		}
 		if (row.createdAt !== null && row.createdAt < skeleton.earliestCreatedMs) {
 			skeleton.earliestCreatedMs = row.createdAt;
@@ -806,15 +856,100 @@ export function scanFragment(longest: string): string | null {
 	return PLAIN_WORD.test(longest) ? longest : null;
 }
 
-/** Live rows with their text: every row whose raw name or note might fold to hold `fragment` (all rows when null), in any order. */
-export type SwitcherTextScan = (
-	fragment: string | null,
-) => Iterable<{id: string; name: string | null; note: string | null}>;
+/** What a row's jump-menu score upper bound needs from its name, without reading the name itself. */
+export interface SwitcherRowSize {
+	id: string;
+	/** The raw name's length in characters, 0 when null. */
+	nameLength: number;
+	/** Whether the raw name is ASCII without `<` or `&`, so its index text is just its lowercase copy. */
+	simpleName: boolean;
+	/** Whether the raw name holds `#` or `@`, which the tag boost needs. */
+	taggedName: boolean;
+}
+
+/** Live rows' own text (mirrors carry their own stale text): their sizes up front, then their text by id. */
+export interface SwitcherTextScan {
+	/** Every row whose raw name or note might fold to hold `fragment` (all rows when null), in any order. */
+	sizes(fragment: string | null): Iterable<SwitcherRowSize>;
+	/** The text of `ids` (at most `pageSize` of them), in any order. */
+	read(ids: readonly string[]): Iterable<{id: string; name: string | null; note: string | null}>;
+	pageSize: number;
+}
+
+/** The page's results: labels and ancestor names read from `source` once, ancestors from the skeleton's parents. */
+function compactPage(
+	skeleton: SwitcherSkeleton,
+	page: readonly {at: number; completed: boolean}[],
+	words: readonly string[],
+	starred: ReadonlySet<string>,
+	source: RowTextSource,
+): SwitcherResult[] {
+	const {ids} = skeleton;
+	const chains = page.map(({at}) => {
+		const chain: number[] = [];
+		for (let up = skeleton.parent[at] ?? -1; up >= 0; up = skeleton.parent[up] ?? -1) {
+			chain.push(up);
+		}
+		return chain.toReversed();
+	});
+	const wanted = [...new Set([...page.map(({at}) => at), ...chains.flat()])].map((at) => ids[at] ?? "");
+	const names = new Map<string, string>();
+	for (let start = 0; start < wanted.length; start += source.pageSize) {
+		for (const [id, found] of source.read(wanted.slice(start, start + source.pageSize))) {
+			names.set(id, stripHtmlTags(found.name ?? ""));
+		}
+	}
+	const nameOf = (at: number): string => names.get(ids[at] ?? "") ?? "";
+	return page.map(({at, completed}, i) => ({
+		id: ids[at] ?? "",
+		labelHtml: matchField(words, nameOf(at)).html,
+		completed,
+		starred: starred.has(ids[at] ?? ""),
+		ancestors: (chains[i] ?? []).map((up) => ({id: ids[up] ?? "", name: nameOf(up)})),
+	}));
+}
 
 /**
- * {@link rankSwitcher} over a cached {@link SwitcherSkeleton}: `scan` answers only the rows that may hold the longest
- * query word, in any order, and each is scored and dropped; the page's labels and ancestor names are read from
- * `source` afterwards. For {@link isCompactSwitcherQuery} queries only.
+ * Text of printable ASCII, tabs and line breaks without a tag or an entity: stripping leaves it whole, and folding and
+ * indexing only lowercase it. Anything else takes the exact path.
+ */
+const NOT_SIMPLE = /[^\t\n\r -%'-;=-~]/u;
+
+function isSimpleText(text: string | null): boolean {
+	return text === null || !NOT_SIMPLE.test(text);
+}
+
+/** An ASCII letter or digit, `#` or `@`: what precedes a word without starting it, in ASCII text. */
+function isAsciiWordChar(code: number | undefined): boolean {
+	if (code === undefined) {
+		return false;
+	}
+	return (
+		(code >= 0x61 && code <= 0x7a) ||
+		(code >= 0x41 && code <= 0x5a) ||
+		(code >= 0x30 && code <= 0x39) ||
+		code === 0x23 ||
+		code === 0x40
+	);
+}
+
+/** matchField's word-start test of a plain ASCII `word` in lowercased ASCII `text`, without a regexp. */
+function asciiWordStart(text: string, word: string): boolean {
+	for (let i = text.indexOf(word); i !== -1; i = text.indexOf(word, i + 1)) {
+		if (i === 0 || !isAsciiWordChar(text.codePointAt(i - 1))) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * {@link rankSwitcher} over a cached {@link SwitcherSkeleton}, reading only as much text as the page needs: `scan`
+ * sizes the rows that may hold the longest query word, each gets an upper bound on its score from its skeleton entry
+ * and name length, and text is read a page at a time from the highest bound down, each row scored and dropped. The
+ * read stops once enough hits beat every unread bound, unless the page's score ties need the trie gather order's
+ * first insertions, which only every hit can tell. Labels and ancestor names are read from `source` afterwards. For
+ * {@link isCompactSwitcherQuery} queries only.
  */
 export function rankSwitcherCompact(
 	skeleton: SwitcherSkeleton,
@@ -834,14 +969,26 @@ export function rankSwitcherCompact(
 	const longest = words.toSorted((a, b) => b.length - a.length)[0]?.slice(0, INDEX_WORD_LENGTH) ?? "";
 	const longestAtWordStart = wordStart(longest);
 	const wordRegExps = words.map(wordStart);
+	const asciiWords = words.every((word) => PLAIN_WORD.test(word));
 	const hitsEvery = (field: string): boolean => wordRegExps.every((regexp) => regexp.test(field));
+	const simpleHitsEvery = asciiWords
+		? (field: string): boolean => words.every((word) => asciiWordStart(field, word))
+		: hitsEvery;
+	const simpleAtWordStart = asciiWords
+		? (field: string): boolean => asciiWordStart(field, longest)
+		: (field: string): boolean => longestAtWordStart.test(field);
 	const prefixWords = wordsStartingWith(longest);
-	const {ids, position, flags, depth, childCount, modifiedMs, layoutModes} = skeleton;
+	const {position, flags, depth, childCount, modifiedMs, layoutModes} = skeleton;
 
-	const scored: {score: number; at: number; completed: boolean; nameHit: boolean; words: string[]}[] = [];
-	for (const found of scan(scanFragment(longest))) {
-		const at = position.get(found.id);
-		if (at === undefined || found.id === excludeId) {
+	// Each candidate's skeleton position, static score and score bound; a name hit's text factor is at most
+	// 10 x query length / index name length, and a simple name's index text is as long as the name.
+	const candidateAt: number[] = [];
+	const candidateIds: string[] = [];
+	const candidateBase: number[] = [];
+	const candidateBound: number[] = [];
+	for (const size of scan.sizes(scanFragment(longest))) {
+		const at = position.get(size.id);
+		if (at === undefined || size.id === excludeId) {
 			continue;
 		}
 		const flag = flags[at] ?? 0;
@@ -849,69 +996,266 @@ export function rankSwitcherCompact(
 		if ((flag & MIRROR) !== 0 || (completed && !showCompleted)) {
 			continue;
 		}
-		// Scanned rows are dropped after scoring, so their text is not cached.
-		const row = found;
-		const text = computeRowText(row);
-		if (!text.foldedName.includes(longest) && !text.foldedNote.includes(longest)) {
-			continue;
-		}
-		const [plainNameField, rawNameField, noteField] = matchFields(row, text);
-		if (!hitsEvery(plainNameField) && !hitsEvery(rawNameField) && !hitsEvery(noteField)) {
-			continue;
-		}
-		const nameHit = longestAtWordStart.test(plainNameField);
-		const noteHit = longestAtWordStart.test(noteField);
-		const {indexName, indexNote} = indexTexts(row, text);
 		const modified = modifiedMs[at] ?? Number.NaN;
-		const score =
-			baseScore({
-				depth: depth[at] ?? 0,
-				childCount: childCount[at] ?? 0,
-				completed,
-				lastModifiedSec: Number.isNaN(modified) ? null : Math.floor(modified / 1000),
-				joinedSec,
-				nowSec,
-				layoutMode: layoutModes.get(at) ?? null,
-				starred: starred.has(found.id),
-			}) *
-			nameBoost(found.name ?? "") *
-			textFactor(longest, indexName, indexNote, nameHit, noteHit);
-		scored.push({score, at, completed, nameHit, words: prefixWords(nameHit ? indexName : indexNote)});
-	}
-	// Preorder is the index insertion order that the trie gather order refines, and the final tie-break.
-	scored.sort((a, b) => a.at - b.at);
-	const toEntries = (hits: typeof scored) => hits.map((hit) => ({id: ids[hit.at] ?? "", words: hit.words}));
-	const gather = new Map([
-		...gatherPositions(longest, toEntries(scored.filter(({nameHit}) => nameHit))),
-		...gatherPositions(longest, toEntries(scored.filter(({nameHit}) => !nameHit))),
-	]);
-	const gathered = (hit: (typeof scored)[number]): number => gather.get(ids[hit.at] ?? "") ?? Number.MAX_SAFE_INTEGER;
-	scored.sort((a, b) => b.score - a.score || gathered(a) - gathered(b) || a.at - b.at);
-
-	const page = scored.slice(offset, offset + limit);
-	const chains = page.map(({at}) => {
-		const chain: number[] = [];
-		for (let up = skeleton.parent[at] ?? -1; up >= 0; up = skeleton.parent[up] ?? -1) {
-			chain.push(up);
-		}
-		return chain.toReversed();
-	});
-	const wanted = [...new Set([...page.map(({at}) => at), ...chains.flat()])].map((at) => ids[at] ?? "");
-	const names = new Map<string, string>();
-	for (let start = 0; start < wanted.length; start += source.pageSize) {
-		for (const [id, found] of source.read(wanted.slice(start, start + source.pageSize))) {
-			names.set(id, stripHtmlTags(found.name ?? ""));
-		}
-	}
-	const nameOf = (at: number): string => names.get(ids[at] ?? "") ?? "";
-	return {
-		results: page.map(({at, completed}, i) => ({
-			id: ids[at] ?? "",
-			labelHtml: matchField(words, nameOf(at)).html,
+		const base = baseScore({
+			depth: depth[at] ?? 0,
+			childCount: childCount[at] ?? 0,
 			completed,
-			starred: starred.has(ids[at] ?? ""),
-			ancestors: (chains[i] ?? []).map((up) => ({id: ids[up] ?? "", name: nameOf(up)})),
-		})),
-		hasMore: scored.length > offset + limit,
+			lastModifiedSec: Number.isNaN(modified) ? null : Math.floor(modified / 1000),
+			joinedSec,
+			nowSec,
+			layoutMode: layoutModes.get(at) ?? null,
+			starred: starred.has(size.id),
+		});
+		let bound: number;
+		if (size.nameLength === 0) {
+			bound = 0;
+		} else if (size.simpleName) {
+			bound = base * (size.taggedName ? 2 : 1) * ((longest.length / size.nameLength) * 10);
+		} else {
+			// Stripping, folding and decoding can shorten the name to a single character.
+			bound = base * 4 * (longest.length * 10);
+		}
+		candidateAt.push(at);
+		candidateIds.push(size.id);
+		candidateBase.push(base);
+		candidateBound.push(bound);
+	}
+	const order = Uint32Array.from(candidateAt, (_, i) => i).toSorted(
+		(a, b) => (candidateBound[b] ?? 0) - (candidateBound[a] ?? 0),
+	);
+	const baseOf = new Map<string, number>();
+	const atOf = new Map<string, number>();
+
+	const hits: CompactHit[] = [];
+	const score = (found: {id: string; name: string | null; note: string | null}): void => {
+		const at = atOf.get(found.id);
+		const base = baseOf.get(found.id);
+		if (at === undefined || base === undefined) {
+			return;
+		}
+		const completed = ((flags[at] ?? 0) & (COMPLETED | UNDER_COMPLETED)) !== 0;
+		const name = found.name ?? "";
+		let nameHit: boolean;
+		let noteHit: boolean;
+		let indexName: string;
+		let indexNote: string;
+		let boost: number;
+		let hitWords: string[];
+		if (isSimpleText(found.name) && isSimpleText(found.note)) {
+			// Stripping only trims and folding only lowercases, which moves no word start, so one lowercase copy serves
+			// every field; with no tag, entity or time pill the index text is that copy too.
+			const lowerName = name.toLowerCase();
+			const lowerNote = (found.note ?? "").toLowerCase();
+			if (!lowerName.includes(longest) && !lowerNote.includes(longest)) {
+				return;
+			}
+			if (!simpleHitsEvery(lowerName) && !simpleHitsEvery(lowerNote)) {
+				return;
+			}
+			nameHit = simpleAtWordStart(lowerName);
+			noteHit = simpleAtWordStart(lowerNote);
+			indexName = lowerName;
+			indexNote = lowerNote;
+			// The markup boost needs a tag, and the tag boost a # or @.
+			boost = name.includes("#") || name.includes("@") ? nameBoost(name) : 1;
+			hitWords = asciiWordsStartingWith(nameHit ? lowerName : lowerNote, longest);
+		} else {
+			const text = computeRowText(found);
+			if (!text.foldedName.includes(longest) && !text.foldedNote.includes(longest)) {
+				return;
+			}
+			const [plainNameField, rawNameField, noteField] = matchFields(found, text);
+			if (!hitsEvery(plainNameField) && !hitsEvery(rawNameField) && !hitsEvery(noteField)) {
+				return;
+			}
+			nameHit = longestAtWordStart.test(plainNameField);
+			noteHit = longestAtWordStart.test(noteField);
+			({indexName, indexNote} = indexTexts(found, text));
+			boost = nameBoost(name);
+			hitWords = prefixWords(nameHit ? indexName : indexNote);
+		}
+		hits.push({
+			score: base * boost * textFactor(longest, indexName, indexNote, nameHit, noteHit),
+			at,
+			completed,
+			nameHit,
+			words: hitWords,
+		});
 	};
+
+	const end = offset + limit;
+	const rank = (complete: boolean): SwitcherResult[] | undefined => {
+		const descending = Float64Array.from(hits, (hit) => hit.score)
+			.toSorted()
+			.toReversed();
+		// The page holds the scores from the offset-th highest down to the end-th highest, ties included.
+		const highest = descending[offset] ?? Number.NEGATIVE_INFINITY;
+		const lowest = descending[Math.min(end, descending.length) - 1] ?? Number.POSITIVE_INFINITY;
+		const above = descending.findIndex((hitScore) => hitScore <= highest);
+		const tied = hits.filter((hit) => hit.score >= lowest && hit.score <= highest);
+		const gathered = gatherOrder(longest, complete ? hits : undefined, tied);
+		const onPage = tied.toSorted((a, b) => b.score - a.score || gathered.compare(a, b) || a.at - b.at);
+		if (gathered.incomplete) {
+			return undefined;
+		}
+		const start = offset - (above === -1 ? 0 : above);
+		return compactPage(skeleton, onPage.slice(start, start + limit), words, starred, source);
+	};
+
+	let read = 0;
+	while (read < order.length) {
+		const ids: string[] = [];
+		for (const index of order.subarray(read, read + scan.pageSize)) {
+			const id = candidateIds[index] ?? "";
+			ids.push(id);
+			atOf.set(id, candidateAt[index] ?? 0);
+			baseOf.set(id, candidateBase[index] ?? 0);
+		}
+		read += ids.length;
+		for (const found of scan.read(ids)) {
+			score(found);
+		}
+		const unreadBound = candidateBound[order[read] ?? 0] ?? 0;
+		// Every unread row scores at most its bound, so once the end-th score beats the highest unread bound, no unread row
+		// reaches or ties the page, and one more hit than the page shows there are more.
+		if (read < order.length && hits.length > end) {
+			const endScore = Float64Array.from(hits, (hit) => hit.score)
+				.toSorted()
+				.at(-end);
+			if (endScore !== undefined && endScore > unreadBound) {
+				const results = rank(false);
+				if (results !== undefined) {
+					return {results, hasMore: true};
+				}
+			}
+		}
+	}
+	return {results: rank(true) ?? [], hasMore: hits.length > end};
+}
+
+interface CompactHit {
+	score: number;
+	/** Preorder position: the index insertion order, and the last tie-break. */
+	at: number;
+	completed: boolean;
+	nameHit: boolean;
+	/** The index words starting with the longest query word, of the name for a name hit and the note otherwise. */
+	words: string[];
+}
+
+/** `indexWords(text)` that start with the plain ASCII `prefix`, for lowercased ASCII `text`, without a regexp. */
+function asciiWordsStartingWith(text: string, prefix: string): string[] {
+	const found: string[] = [];
+	for (let i = text.indexOf(prefix); i !== -1; i = text.indexOf(prefix, i + 1)) {
+		if (i > 0 && isAsciiWordChar(text.codePointAt(i - 1))) {
+			continue;
+		}
+		let stop = i + prefix.length;
+		while (stop < text.length && isAsciiWordChar(text.codePointAt(stop))) {
+			stop++;
+		}
+		found.push(text.slice(i, Math.min(stop, i + INDEX_WORD_LENGTH)));
+	}
+	return found;
+}
+
+function isDigit(code: number): boolean {
+	return code >= 0x30 && code <= 0x39;
+}
+
+/** A position in the index insertion order: an entry's preorder position, then a word's place in it. */
+type Insertion = [at: number, word: number];
+
+/**
+ * Upstream's trie gather order (see {@link gatherPositions}) between `candidates`, without building the trie: the
+ * name hits and the other hits gather separately, an id sits at its earliest-visited word, words visit depth first
+ * (a word before its extensions, digit keys first, other keys in the order the whole group first inserted them),
+ * and ids at one word in insertion order. Only the candidates' prefixes need their first insertions, so each of
+ * `hits` is checked against those alone. Without `hits` (not every hit is known), a comparison that needs a first
+ * insertion answers 0 and sets `incomplete`.
+ */
+function gatherOrder(
+	longest: string,
+	hits: readonly CompactHit[] | undefined,
+	candidates: readonly CompactHit[],
+): {compare: (a: CompactHit, b: CompactHit) => number; incomplete: boolean} {
+	const tracked = [new Map<string, Insertion>(), new Map<string, Insertion>()] as const;
+	const groupOf = (hit: CompactHit) => tracked[hit.nameHit ? 0 : 1];
+	if (hits !== undefined) {
+		for (const hit of candidates) {
+			const firstInsertions = groupOf(hit);
+			for (const word of hit.words) {
+				for (let length = longest.length + 1; length <= word.length; length++) {
+					firstInsertions.set(word.slice(0, length), [Number.POSITIVE_INFINITY, 0]);
+				}
+			}
+		}
+		for (const hit of hits) {
+			const firstInsertions = groupOf(hit);
+			hit.words.forEach((word, index) => {
+				// Tracked prefixes are closed under shortening, so the first untracked one ends the walk.
+				for (let length = longest.length + 1; length <= word.length; length++) {
+					const first = firstInsertions.get(word.slice(0, length));
+					if (first === undefined) {
+						break;
+					}
+					if (hit.at < first[0] || (hit.at === first[0] && index < first[1])) {
+						first[0] = hit.at;
+						first[1] = index;
+					}
+				}
+			});
+		}
+	}
+	const result = {compare: (_a: CompactHit, _b: CompactHit): number => 0, incomplete: false};
+	const visitedBefore = (firstInsertions: Map<string, Insertion>, a: string, b: string): number => {
+		let common = 0;
+		while (common < a.length && common < b.length && a[common] === b[common]) {
+			common++;
+		}
+		if (common === a.length || common === b.length) {
+			return a.length - b.length;
+		}
+		const keyA = a.codePointAt(common) ?? 0;
+		const keyB = b.codePointAt(common) ?? 0;
+		if (isDigit(keyA) || isDigit(keyB)) {
+			return isDigit(keyA) && isDigit(keyB) ? keyA - keyB : isDigit(keyA) ? -1 : 1;
+		}
+		if (hits === undefined) {
+			result.incomplete = true;
+			return 0;
+		}
+		const firstA = firstInsertions.get(a.slice(0, common + 1)) ?? [Number.POSITIVE_INFINITY, 0];
+		const firstB = firstInsertions.get(b.slice(0, common + 1)) ?? [Number.POSITIVE_INFINITY, 0];
+		return firstA[0] - firstB[0] || firstA[1] - firstB[1];
+	};
+	const earliestWord = new Map<CompactHit, string | undefined>();
+	const earliest = (hit: CompactHit): string | undefined => {
+		if (!earliestWord.has(hit)) {
+			const firstInsertions = groupOf(hit);
+			earliestWord.set(
+				hit,
+				hit.words.reduce<string | undefined>(
+					(best, word) =>
+						best === undefined || visitedBefore(firstInsertions, word, best) < 0 ? word : best,
+					undefined,
+				),
+			);
+		}
+		return earliestWord.get(hit);
+	};
+	result.compare = (a, b) => {
+		if (a.nameHit !== b.nameHit) {
+			return 0;
+		}
+		const wordA = earliest(a);
+		const wordB = earliest(b);
+		if (wordA === undefined || wordB === undefined) {
+			// A hit without an index word is never gathered, so it follows every gathered one.
+			return wordA === wordB ? 0 : wordA === undefined ? 1 : -1;
+		}
+		return wordA === wordB ? a.at - b.at : visitedBefore(groupOf(a), wordA, wordB);
+	};
+	return result;
 }

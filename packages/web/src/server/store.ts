@@ -5,7 +5,7 @@ import {Ops} from "./ops/index.js";
 import type {OpInput, OpName, OpOutput} from "./ops/index.js";
 import {withTreeChangePublish} from "./node-events.js";
 import type {TreeEventBus} from "./node-events.js";
-import {withTreeSnapshotRebuild} from "./tree-snapshot.js";
+import {withSwitcherSkeletonRebuild, withTreeSnapshotRebuild} from "./tree-snapshot.js";
 import type {z} from "zod";
 import {TreeResyncRequired} from "@workflowy/shared/internal";
 
@@ -26,12 +26,13 @@ function typed<K extends OpName>(result: OpResult<Json>): OpResult<OpOutput<K>> 
  * Runs ops in this process (the Node host and the Durable Object). A thrown error becomes a 500, as Hono does,
  * except a tree resync error, which becomes a 503 carrying its message.
  * With `keepSnapshotWarm` (the host bound a tree snapshot), an op that wrote schedules a background rebuild, so searches rarely wait on the ~800ms reload.
+ * With `keepSwitcherSkeletonWarm` (no tree snapshot), an op that wrote rebuilds a held jump-menu skeleton in the background.
  * With `treeEvents`, an op that wrote is announced on that bus, so open tabs pull the change.
  */
 export function inProcessStore(
 	ctx: ServerContext,
 	ops: AnyOps = Ops,
-	options: {keepSnapshotWarm?: boolean; treeEvents?: TreeEventBus} = {},
+	options: {keepSnapshotWarm?: boolean; keepSwitcherSkeletonWarm?: boolean; treeEvents?: TreeEventBus} = {},
 ): StoreClient {
 	return {
 		async call<K extends OpName>(op: K, input: OpInput<K>): Promise<OpResult<OpOutput<K>>> {
@@ -42,7 +43,11 @@ export function inProcessStore(
 				}
 				const {treeEvents} = options;
 				const execute = async () => definition.run(ctx, input);
-				const run = treeEvents ? async () => withTreeChangePublish(ctx.db, treeEvents, execute) : execute;
+				const published = treeEvents ? async () => withTreeChangePublish(ctx.db, treeEvents, execute) : execute;
+				const run =
+					options.keepSwitcherSkeletonWarm === true
+						? async () => withSwitcherSkeletonRebuild(ctx.db, published)
+						: published;
 				return typed<K>(
 					options.keepSnapshotWarm === true ? await withTreeSnapshotRebuild(ctx.db, run) : await run(),
 				);

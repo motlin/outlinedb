@@ -101,7 +101,10 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 				ladderEvents: this.ladderEvents,
 				internalAuth: readWorkerInternalAuth(env, this.sessionStore),
 			});
-			this.store = inProcessStore(serverContext, undefined, {keepSnapshotWarm: this.treeSnapshotEnabled});
+			this.store = inProcessStore(serverContext, undefined, {
+				keepSnapshotWarm: this.treeSnapshotEnabled,
+				keepSwitcherSkeletonWarm: !this.treeSnapshotEnabled,
+			});
 			const internalAuth = readWorkerInternalAuth(env, this.sessionStore);
 			this.sync = new SyncJob({
 				storage: ctx.storage,
