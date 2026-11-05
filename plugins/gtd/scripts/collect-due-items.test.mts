@@ -734,3 +734,36 @@ test("rows flag #llm-task items so batch pages can exclude them mechanically", (
 		[false],
 	);
 });
+
+test("rows flag Workflowy tasks whose children say Claude runs them but lack #llm-task", () => {
+	const withChild = (node: TreeNode, child: string): TreeNode => ({...node, children: [{name: child}]});
+	const rows = fromWorkflowy(
+		[
+			workflowyRoot({
+				tasks: [
+					withChild(
+						dated("Add photos to Status", "2026-08-01", "aaaaaaaaaaaa1111"),
+						"Claude does this end to end.",
+					),
+					withChild(dated("Call the allergist", "2026-08-01", "bbbbbbbbbbbb2222"), "Ask about the refill."),
+				],
+			}),
+		],
+		TODAY,
+	);
+	assert.deepStrictEqual(
+		rows.map((r) => [r.title, r.missingLlmTag]),
+		[
+			["Add photos to Status", true],
+			["Call the allergist", false],
+		],
+	);
+	assert.deepStrictEqual(
+		fromThings({due: [{id: "t1", title: "Sort album", due: "2026-08-01"}]}, TODAY).map((r) => r.missingLlmTag),
+		[false],
+	);
+	assert.deepStrictEqual(
+		fromReminders({overdue: [{title: "Pay rent", dueDate: "2026-08-01"}]}, TODAY).map((r) => r.missingLlmTag),
+		[false],
+	);
+});

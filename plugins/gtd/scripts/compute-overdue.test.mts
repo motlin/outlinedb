@@ -712,6 +712,7 @@ test("hard deadlines become due three days early and retain the external cycle a
 		weekday: null,
 		overdueByDays: 4,
 		isLlmTask: false,
+		missingLlmTag: false,
 		url: "https://workflowy.com/#/test-short",
 		note: null,
 		modifiedAt: null,
@@ -871,4 +872,41 @@ test("lengthening a weekday-anchored item keeps the weekday", () => {
 	const row = at(computeOverdue(tree, "2000-01-05"), 0);
 	// Next rung above Weekly is Monthly: last Saturday on or before Feb 5 is Feb 5 itself.
 	assert.strictEqual(row.lengthen?.nextDate, "2000-02-05");
+});
+
+test("computeOverdue flags items whose children say Claude runs them but lack #llm-task", () => {
+	const item = (id: string, name: string, children: string[]): TreeNode => ({
+		name: `${name} ${buildTimeElement("2026-06-20")}`,
+		id,
+		shortId: id,
+		children: children.map((child) => ({name: child})),
+	});
+	const tree = {
+		children: [
+			{
+				name: "⬆️ Frequently Important",
+				children: [
+					item("alice", "Add photos", ["Claude does this whole item end to end."]),
+					item("bob", "Export photos", [`Export: osascript -e 'tell application "Photos"'`]),
+					item("carol", "Attach images", ["Attach with /workflowy:upload-attachment, one per child."]),
+					item("dave", "Create entries", ["./bin/run.js node create --parent-id X --name ''"]),
+					item("erin", "Tagged already #llm-task", ["Claude does this whole item end to end."]),
+					item("frank", "Clean up Desktop", ["cd ~/Desktop &amp;&amp; claude", "Claude does it"]),
+					item("grace", "Call the dentist", ["Ask for the earliest slot; just past noon works."]),
+				],
+			},
+		],
+	};
+	assert.deepStrictEqual(
+		computeOverdue(tree, "2026-06-26").map((r) => [r.id, r.missingLlmTag]),
+		[
+			["alice", true],
+			["bob", true],
+			["carol", true],
+			["dave", true],
+			["erin", false],
+			["frank", false],
+			["grace", false],
+		],
+	);
 });

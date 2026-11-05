@@ -215,6 +215,25 @@ export function nodeContext(node: TreeNode): NodeContext {
 	};
 }
 
+// Children that say Claude does the item: a CLI or script command, a slash command, or the words
+// themselves. Such an item is an #llm-task in all but tag, so the walk must not ask it as a card.
+const CLAUDE_RUNS_IT_RE =
+	/\.\/bin\/run\.js|\bosascript\b|\bnode (?:plugins|scripts)\/|\bsqlite3\b|(?:^|[\s(])\/[a-z][\w-]*:[\w:-]+|\bClaude (?:does|runs|handles)\b/iu;
+// `cd <dir> && claude` marks a directory launch, which runs without the tag on purpose.
+const SESSION_LAUNCH_RE = /(?:&&|&amp;&amp;)\s*claude\b/u;
+
+export const isLlmTaskName = (name: string): boolean => /#llm-task/u.test(name);
+
+export function missingLlmTag(node: TreeNode): boolean {
+	if (isLlmTaskName(node.name)) {
+		return false;
+	}
+	const texts = (node.children ?? [])
+		.filter((kid) => kid.completedAt == null)
+		.map((kid) => `${kid.name} ${kid.note ?? ""}`);
+	return !texts.some((text) => SESSION_LAUNCH_RE.test(text)) && texts.some((text) => CLAUDE_RUNS_IT_RE.test(text));
+}
+
 export function intervalForSection(sectionName: string): Interval | null {
 	const name = sectionName;
 	for (const [pattern, interval] of SECTION_INTERVALS) {
@@ -551,6 +570,8 @@ export interface OverdueRow extends NodeContext {
 	weekday: string | null;
 	overdueByDays: number;
 	isLlmTask: boolean;
+	// Children say Claude runs it, but the name lacks #llm-task: tag it and run it as one.
+	missingLlmTag: boolean;
 	url: string | null;
 	interval: Interval | null;
 	needsInterval: boolean;
@@ -636,7 +657,8 @@ export function computeOverdue(
 						hardDeadline: hardDeadline ? {...hardDeadline, nextDate: nextStoredDate} : null,
 						weekday,
 						overdueByDays: daysBetween(due, todayISO),
-						isLlmTask: /#llm-task/u.test(child.name),
+						isLlmTask: isLlmTaskName(child.name),
+						missingLlmTag: missingLlmTag(child),
 						url: workflowyUrl(child.shortId),
 						...nodeContext(child),
 						interval,
@@ -726,6 +748,7 @@ function main(argv: string[]): void {
 		for (const row of items) {
 			const tags = [
 				row.isLlmTask ? "[#llm-task]" : "",
+				row.missingLlmTag ? "⚠️ missing #llm-task" : "",
 				row.hardDeadline
 					? `⚠️ HARD deadline ${row.hardDeadline.date}; review ${row.hardDeadline.leadDays} days before`
 					: "",
