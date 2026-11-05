@@ -1,10 +1,13 @@
 import {serve} from "@hono/node-server";
 import {createNodeWebSocket} from "@hono/node-ws";
+import {Hono} from "hono";
 import {createHttpApp} from "./http/app.js";
 import {inProcessStore} from "./store.js";
 import {httpLoggingEnabled, loggingFetch} from "./http-logger.js";
 import {createServerContext} from "./node-context.js";
 import {ladderSocketHandlers} from "./ladder-socket.js";
+import {TreeEventBus, withTreeChangePublish} from "./node-events.js";
+import {nodeEventsSocketHandlers} from "./node-events-socket.js";
 import {createDecisionsApp} from "./routes/decisions.js";
 import {resolvePort} from "./port.js";
 import {warmTreeSnapshot} from "./tree-snapshot.js";
@@ -20,20 +23,35 @@ if (httpLoggingEnabled(process.env)) {
 
 // Composition root: build the server context once and expose it to every router.
 const serverContext = createServerContext();
-const store = inProcessStore(serverContext, undefined, {keepSnapshotWarm: serverContext.config.features.treeSnapshot});
-const app = createHttpApp({resolveStore: () => store, corsOrigin: "http://localhost:5173"});
-app.route("/", createDecisionsApp(serverContext));
+/** Announces each committed tree write, local or caught up from upstream, to open outline tabs. */
+const treeEvents = new TreeEventBus();
+const store = inProcessStore(serverContext, undefined, {
+	keepSnapshotWarm: serverContext.config.features.treeSnapshot,
+	treeEvents,
+});
+const httpApp = createHttpApp({resolveStore: () => store, corsOrigin: "http://localhost:5173"});
+httpApp.route("/", createDecisionsApp(serverContext));
+
+/** The served app: sockets first, so `/api/v1/nodes/events` is not taken by the HTTP routes' `GET /api/v1/nodes/:id`. */
+const app = new Hono();
+const nodeWebSocket = createNodeWebSocket({app});
 
 /**
  * Every ladder write, streamed as one frame per write. Monitor's `ws:` source
  * turns each frame into a notification, so a Claude session watching this URL
  * is woken by an edit instead of having to poll for one.
  */
-const nodeWebSocket = createNodeWebSocket({app});
 app.get(
 	"/api/v1/ladder/events",
 	nodeWebSocket.upgradeWebSocket(() => ladderSocketHandlers(serverContext.ladderEvents)),
 );
+
+/** One `{"type":"tree.changed","latest":...}` frame per committed tree write; an open tab answers with one changes read. */
+app.get(
+	"/api/v1/nodes/events",
+	nodeWebSocket.upgradeWebSocket(() => nodeEventsSocketHandlers(treeEvents)),
+);
+app.route("/", httpApp);
 
 const port = resolvePort(process.env);
 
@@ -65,6 +83,6 @@ if (internalAuth && internalAdapter) {
 			return {clientId, cookie};
 		},
 		openSocket: nodeSignalSocket,
-		catchUp: async () => internalAdapter.catchUp(),
+		catchUp: async () => withTreeChangePublish(serverContext.db, treeEvents, async () => internalAdapter.catchUp()),
 	});
 }
