@@ -20,7 +20,7 @@ import {
 	writeAccountSnapshot,
 } from "../cache/account-store.js";
 import type {AccountSnapshot, StoredAccount} from "../cache/account-store.js";
-import {applyMoveOps, isMoveReplayable} from "../cache/move-log.js";
+import {applyNodeOps, isNodeReplayable} from "../cache/node-log.js";
 import {applyRelationshipOps, isReplayable} from "../cache/relationship-log.js";
 import {applyExpansionDelta, expansionVersion, readExpansion} from "../cache/expansion-store.js";
 import {advanceTreeTxId, readTreeTxId} from "../cache/tree-transaction.js";
@@ -566,9 +566,10 @@ export class WorkflowyInternalAdapter {
 	}
 
 	/**
-	 * Apply an accepted push's transactions to the cached tree's moves and edge
+	 * Apply an accepted push's transactions to the cached tree's nodes and edge
 	 * rows, oldest first, and store its id, in one unit of work. Our own server-run transaction can also
-	 * come back among the remote ones, so a transaction id is applied once.
+	 * come back among the remote ones, so a transaction id is applied once. Our own ops' content is
+	 * already written through, so of those only the moves replay into the nodes.
 	 */
 	private acceptTransactions(result: PushResult): void {
 		if (result.needsRefresh) {
@@ -576,6 +577,7 @@ export class WorkflowyInternalAdapter {
 		}
 		const seen = new Set<string>();
 		const ops: InternalOp[] = [];
+		const ownOps = new Set<InternalOp>();
 		for (const {id, ops: transactionOps} of [
 			...result.remote,
 			{...(result.serverRunId === undefined ? {} : {id: result.serverRunId}), ops: result.serverRun},
@@ -586,15 +588,21 @@ export class WorkflowyInternalAdapter {
 			if (id !== undefined) {
 				seen.add(id);
 			}
-			const unreplayable = transactionOps.find((op) => !isReplayable(op) || !isMoveReplayable(op));
+			const unreplayable = transactionOps.find((op) => !isReplayable(op) || !isNodeReplayable(op));
 			if (unreplayable !== undefined) {
 				throw loud(new UnreplayableTransaction(id ?? "from our own push", unreplayable.type));
 			}
 			ops.push(...transactionOps);
+			if (id === undefined || id === result.serverRunId) {
+				for (const op of transactionOps) {
+					ownOps.add(op);
+				}
+			}
 		}
 		runUnitOfWork(this.db, (unitOfWork) => {
-			applyMoveOps(unitOfWork, ops);
+			// Edges first: their delete replay reads the subtree's node rows before the node replay ends them.
 			applyRelationshipOps(unitOfWork, ops);
+			applyNodeOps(unitOfWork, ops, ownOps);
 			advanceTreeTxId(unitOfWork, result.txId);
 		});
 	}

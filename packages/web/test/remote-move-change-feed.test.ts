@@ -69,6 +69,32 @@ function setup() {
 	return {sqlite, api, adapter, changes};
 }
 
+/** Answer the next `/push_and_poll` with `transactions`, logged after transaction 100. */
+function respondWith(api: ReturnType<typeof createFakeInternalApi>, transactions: string[], latest: string): void {
+	api.respondOnce("/push_and_poll", () =>
+		json({
+			results: [
+				{
+					new_most_recent_operation_transaction_id: latest,
+					concurrent_remote_operation_transactions: transactions,
+				},
+			],
+		}),
+	);
+}
+
+/** Each listed node's name, note and completion, by id. */
+function contents(body: NodeChangesResponse) {
+	return Object.fromEntries(
+		body.children.flatMap(({nodes}) =>
+			nodes.map((node) => [node.id, {name: node.name, note: node.note, completedAt: node.completedAt}]),
+		),
+	);
+}
+
+/** The unit of work's system time, in seconds, at which the replayed catch-up runs. */
+const REPLAY_SEC = Math.floor((T0 + TRANSACTION_TIMEOUT_MS + 70_000) / 1000);
+
 function shape(body: NodeChangesResponse) {
 	return {
 		reset: body.reset,
@@ -150,6 +176,166 @@ describe("remote transactions reach the nodes change feed", () => {
 			changedIds: new Set(["Y", "Z", "P2"]),
 			deletedIds: new Set(),
 			children: {home: ["P1", "Y", "Z", "P2"], P1: ["X"], P2: []},
+		});
+	});
+	it("a remote edit renames the node and replaces its note", async () => {
+		const {sqlite, api, adapter, changes} = setup();
+		open.push(sqlite);
+		const seeded = await changes(null);
+		vi.setSystemTime(T0 + TRANSACTION_TIMEOUT_MS + 70_000);
+		respondWith(
+			api,
+			[transaction(101, [{type: "edit", data: {projectid: "X", name: "Renamed", description: "A note"}}])],
+			"101",
+		);
+
+		await adapter.catchUp();
+		const body = await changes(seeded.latest);
+
+		expect({...shape(body), contents: contents(body)}).toStrictEqual({
+			reset: false,
+			changedIds: new Set(["X"]),
+			deletedIds: new Set(),
+			children: {P1: ["X", "Y"]},
+			contents: {
+				X: {name: "Renamed", note: "A note", completedAt: null},
+				Y: {name: "Y", note: null, completedAt: null},
+			},
+		});
+	});
+
+	it("a remote bulk_create inserts the trees at starting_priority with their children", async () => {
+		const {sqlite, api, adapter, changes} = setup();
+		open.push(sqlite);
+		const seeded = await changes(null);
+		vi.setSystemTime(T0 + TRANSACTION_TIMEOUT_MS + 70_000);
+		respondWith(
+			api,
+			[
+				transaction(101, [
+					{
+						type: "bulk_create",
+						data: {
+							parentid: "P1",
+							starting_priority: 1,
+							project_trees: JSON.stringify([
+								{id: "N", nm: "New", no: "Its note", ct: 1000, ch: [{id: "C", nm: "Child", ct: 1000}]},
+							]),
+							isForSearch: false,
+						},
+					},
+				]),
+			],
+			"101",
+		);
+
+		await adapter.catchUp();
+		const body = await changes(seeded.latest);
+
+		expect({...shape(body), contents: contents(body)}).toStrictEqual({
+			reset: false,
+			changedIds: new Set(["N", "C", "Y"]),
+			deletedIds: new Set(),
+			children: {P1: ["X", "N", "Y"], N: ["C"]},
+			contents: {
+				X: {name: "X", note: null, completedAt: null},
+				N: {name: "New", note: "Its note", completedAt: null},
+				Y: {name: "Y", note: null, completedAt: null},
+				C: {name: "Child", note: null, completedAt: null},
+			},
+		});
+	});
+
+	it("a remote bulk_create under an uncached parent is skipped", async () => {
+		const {sqlite, api, adapter, changes} = setup();
+		open.push(sqlite);
+		const seeded = await changes(null);
+		vi.setSystemTime(T0 + TRANSACTION_TIMEOUT_MS + 70_000);
+		respondWith(
+			api,
+			[
+				transaction(101, [
+					{
+						type: "bulk_create",
+						data: {
+							parentid: "Q",
+							starting_priority: 0,
+							project_trees: JSON.stringify([{id: "N", nm: "New", ct: 1000}]),
+						},
+					},
+				]),
+			],
+			"101",
+		);
+
+		await adapter.catchUp();
+		const body = await changes(seeded.latest);
+
+		expect(shape(body)).toStrictEqual({
+			reset: false,
+			changedIds: new Set(),
+			deletedIds: new Set(),
+			children: {},
+		});
+	});
+
+	it("a remote complete then uncomplete sets and clears completedAt", async () => {
+		const {sqlite, api, adapter, changes} = setup();
+		open.push(sqlite);
+		const seeded = await changes(null);
+		vi.setSystemTime(T0 + TRANSACTION_TIMEOUT_MS + 70_000);
+		respondWith(api, [transaction(101, [{type: "complete", data: {projectid: "X"}}])], "101");
+
+		await adapter.catchUp();
+		const completed = await changes(seeded.latest);
+
+		vi.setSystemTime(T0 + 2 * TRANSACTION_TIMEOUT_MS + 140_000);
+		respondWith(api, [transaction(102, [{type: "uncomplete", data: {projectid: "X"}}])], "102");
+		await adapter.catchUp();
+		const uncompleted = await changes(completed.latest);
+
+		expect({
+			completed: {...shape(completed), contents: contents(completed)},
+			uncompleted: {...shape(uncompleted), contents: contents(uncompleted)},
+		}).toStrictEqual({
+			completed: {
+				reset: false,
+				changedIds: new Set(["X"]),
+				deletedIds: new Set(),
+				children: {P1: ["X", "Y"]},
+				contents: {
+					X: {name: "X", note: null, completedAt: REPLAY_SEC},
+					Y: {name: "Y", note: null, completedAt: null},
+				},
+			},
+			uncompleted: {
+				reset: false,
+				changedIds: new Set(["X"]),
+				deletedIds: new Set(),
+				children: {P1: ["X", "Y"]},
+				contents: {
+					X: {name: "X", note: null, completedAt: null},
+					Y: {name: "Y", note: null, completedAt: null},
+				},
+			},
+		});
+	});
+
+	it("a remote delete ends the node's subtree and closes the gap among its siblings", async () => {
+		const {sqlite, api, adapter, changes} = setup();
+		open.push(sqlite);
+		const seeded = await changes(null);
+		vi.setSystemTime(T0 + TRANSACTION_TIMEOUT_MS + 70_000);
+		respondWith(api, [transaction(101, [{type: "delete", data: {projectid: "P1"}}])], "101");
+
+		await adapter.catchUp();
+		const body = await changes(seeded.latest);
+
+		expect(shape(body)).toStrictEqual({
+			reset: false,
+			changedIds: new Set(["P1", "X", "Y", "P2"]),
+			deletedIds: new Set(["P1", "X", "Y"]),
+			children: {home: ["P2"]},
 		});
 	});
 });

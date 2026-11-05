@@ -30,6 +30,8 @@ import {closeCurrentVersions, joinKey} from "./temporal-merge.js";
 export interface LoggedOp {
 	type: string;
 	data: Record<string, unknown>;
+	/** The transaction's client timestamp: seconds since the account's join date. */
+	client_timestamp?: number;
 }
 
 interface LoggedTree {
