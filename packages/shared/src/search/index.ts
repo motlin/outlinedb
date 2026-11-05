@@ -1,5 +1,5 @@
 export {buildSearchConditions, getScoringTerms, type SearchConditions} from "./conditions.js";
-export {normalizeForSearch, normalizeWithOffsets} from "./normalize.js";
+export {foldPerCharacter, normalizeForSearch, normalizeWithOffsets} from "./normalize.js";
 export {
 	matchNested,
 	type MatchResult,

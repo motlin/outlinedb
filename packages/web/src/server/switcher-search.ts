@@ -7,8 +7,8 @@ import {
 	matchField,
 	nameBoost,
 	parseQuery,
+	foldPerCharacter,
 	normalizeForSearch,
-	normalizeWithOffsets,
 	splitIntoWords,
 	textFactor,
 	withMonthNames,
@@ -57,14 +57,18 @@ function wordStart(word: string): RegExp {
 	return new RegExp(`${START_OF_WORD_CHUNK}(${word})`, "iu");
 }
 
+interface IndexText {
+	indexName: string;
+	indexNote: string;
+}
+
 interface RowText {
 	plainName: string;
 	plainNote: string;
 	foldedName: string;
 	foldedNote: string;
-	/** Upstream's `zb` text of the name and note, whose lengths rank a hit. */
-	indexName: string;
-	indexNote: string;
+	/** Upstream's `zb` text of the name and note, whose lengths rank a hit; filled on first use, so only for hits. */
+	index?: IndexText;
 	/** matchField's per-character folding of the plain name, raw name and plain note, filled on first use. */
 	fields?: [plainName: string, rawName: string, plainNote: string];
 }
@@ -101,19 +105,22 @@ function rowText(row: TreeSearchRow): RowText {
 		const plainNote = same(stripHtmlTags(note), note);
 		const foldedName = same(normalizeForSearch(plainName), plainName);
 		const foldedNote = same(normalizeForSearch(plainNote), plainNote);
-		const indexName = indexText(withMonthNames(name));
-		const indexNote = indexText(withMonthNames(note));
-		text = {
-			plainName,
-			plainNote,
-			foldedName,
-			foldedNote,
-			indexName: same(same(indexName, plainName), foldedName),
-			indexNote: same(same(indexNote, plainNote), foldedNote),
-		};
+		text = {plainName, plainNote, foldedName, foldedNote};
 		textCache.set(row, text);
 	}
 	return text;
+}
+
+function indexTexts(row: TreeSearchRow, text: RowText): IndexText {
+	if (text.index === undefined) {
+		const indexName = indexText(withMonthNames(row.name ?? ""));
+		const indexNote = indexText(withMonthNames(row.note ?? ""));
+		text.index = {
+			indexName: same(same(indexName, text.plainName), text.foldedName),
+			indexNote: same(same(indexNote, text.plainNote), text.foldedNote),
+		};
+	}
+	return text.index;
 }
 
 function rowIndex(rows: readonly TreeSearchRow[]): RowIndex {
@@ -176,9 +183,9 @@ function preorderIndex(rows: readonly TreeSearchRow[], index: RowIndex): Map<str
 function matchFields(row: TreeSearchRow, text: RowText): [string, string, string] {
 	if (text.fields === undefined) {
 		// Reuse an equal string already held, so a row whose fields fold the same way keeps one copy, not three.
-		const plainName = same(normalizeWithOffsets(text.plainName).text, text.foldedName);
-		const rawName = same(normalizeWithOffsets(row.name ?? "").text, plainName);
-		const plainNote = same(normalizeWithOffsets(text.plainNote).text, text.foldedNote);
+		const plainName = same(foldPerCharacter(text.plainName), text.foldedName);
+		const rawName = same(foldPerCharacter(row.name ?? ""), plainName);
+		const plainNote = same(foldPerCharacter(text.plainNote), text.foldedNote);
 		text.fields = [plainName, rawName, plainNote];
 	}
 	return text.fields;
@@ -191,7 +198,9 @@ function matchFields(row: TreeSearchRow, text: RowText): [string, string, string
 export function warmSwitcher(rows: readonly TreeSearchRow[]): void {
 	const index = rowIndex(rows);
 	for (const row of rows) {
-		matchFields(row, rowText(row));
+		const text = rowText(row);
+		matchFields(row, text);
+		indexTexts(row, text);
 		placement(row, index);
 	}
 	preorderIndex(rows, index);
@@ -440,6 +449,7 @@ export function rankSwitcher(
 		}
 		const nameHit = longestAtWordStart.test(plainNameField);
 		const noteHit = longestAtWordStart.test(noteField);
+		const {indexName, indexNote} = indexTexts(row, text);
 		const score =
 			baseScore({
 				depth,
@@ -452,12 +462,12 @@ export function rankSwitcher(
 				starred: starred.has(row.id),
 			}) *
 			nameBoost(row.name ?? "") *
-			textFactor(longest, text.indexName, text.indexNote, nameHit, noteHit);
+			textFactor(longest, indexName, indexNote, nameHit, noteHit);
 		scored.push({score, row, completed, nameHit});
 	}
 	// `scored` is in tree preorder, which is the index insertion order that the trie gather order refines.
 	const toEntries = (hits: typeof scored, field: "indexName" | "indexNote") =>
-		hits.map(({row}) => ({id: row.id, words: indexWords(rowText(row)[field])}));
+		hits.map(({row}) => ({id: row.id, words: indexWords(indexTexts(row, rowText(row))[field])}));
 	const position = new Map([
 		...gatherPositions(
 			longest,
@@ -636,6 +646,7 @@ export function rankSwitcherPaged(
 		}
 		const nameHit = longestAtWordStart.test(plainNameField);
 		const noteHit = longestAtWordStart.test(noteField);
+		const {indexName, indexNote} = indexTexts(row, text);
 		const score =
 			baseScore({
 				depth,
@@ -648,14 +659,14 @@ export function rankSwitcherPaged(
 				starred: starred.has(row.id),
 			}) *
 			nameBoost(row.name ?? "") *
-			textFactor(longest, text.indexName, text.indexNote, nameHit, noteHit);
+			textFactor(longest, indexName, indexNote, nameHit, noteHit);
 		const skeletonRow = byId.get(row.id) ?? row;
 		scored.push({
 			score,
 			row: skeletonRow,
 			completed,
 			nameHit,
-			words: prefixWords(nameHit ? text.indexName : text.indexNote),
+			words: prefixWords(nameHit ? indexName : indexNote),
 		});
 	}
 	// `scored` is in tree preorder, the index insertion order, so its position is the final tie-break.

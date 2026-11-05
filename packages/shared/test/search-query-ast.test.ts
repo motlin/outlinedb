@@ -1,6 +1,7 @@
 import {describe, expect, it} from "vite-plus/test";
 import {
 	matchNested,
+	foldPerCharacter,
 	normalizeForSearch,
 	normalizeWithOffsets,
 	parseNestedQuery,
@@ -22,6 +23,21 @@ describe("normalizeWithOffsets", () => {
 			starts: [0, 1, 3, 4],
 			ends: [1, 3, 4, 5],
 		});
+	});
+});
+
+describe("foldPerCharacter", () => {
+	it("returns normalizeWithOffsets' text without building the offset arrays", () => {
+		const samples = ["Ab<C", "Ce\u0301 X", "Café Ünïcode", "ΟΔΟΣ ΟΔΟΣ", "", "plain ascii text"];
+		expect(samples.map(foldPerCharacter)).toStrictEqual([
+			"ab<c",
+			"ce x",
+			"cafe unicode",
+			"οδοσ οδοσ",
+			"",
+			"plain ascii text",
+		]);
+		expect(samples.map(foldPerCharacter)).toStrictEqual(samples.map((sample) => normalizeWithOffsets(sample).text));
 	});
 });
 

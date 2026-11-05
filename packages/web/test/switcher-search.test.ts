@@ -153,8 +153,7 @@ describe("warmSwitcher", () => {
 			plainNote: "Beta Note",
 			foldedName: "alpha page",
 			foldedNote: "beta note",
-			indexName: "alpha page",
-			indexNote: "beta note",
+			index: {indexName: "alpha page", indexNote: "beta note"},
 			fields: ["alpha page", "<b>alpha</b> page", "beta note"],
 		});
 	});

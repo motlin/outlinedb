@@ -1,12 +1,16 @@
+const ASCII = /^\p{ASCII}*$/u;
+
 /** Fold a string for search: strip diacritics (NFD + drop combining marks) and lowercase. */
 export function normalizeForSearch(s: string): string {
+	// ASCII has no combining marks and is already NFD, and skipping NFD and the mark scan halves a whole-tree jump-menu pass.
+	if (ASCII.test(s)) {
+		return s.toLowerCase();
+	}
 	return s
 		.normalize("NFD")
 		.replaceAll(/\p{M}+/gu, "")
 		.toLowerCase();
 }
-
-const ASCII = /^\p{ASCII}*$/u;
 
 export interface NormalizedText {
 	text: string;
@@ -14,6 +18,21 @@ export interface NormalizedText {
 	starts: number[];
 	/** Original end offset for each normalized code unit (extended over dropped combining marks). */
 	ends: number[];
+}
+
+/**
+ * {@link normalizeWithOffsets}' text alone, without the two offset arrays: folds one character at a time, so it can
+ * differ from {@link normalizeForSearch} (a word-final capital sigma folds to σ, not ς).
+ */
+export function foldPerCharacter(s: string): string {
+	if (ASCII.test(s)) {
+		return s.toLowerCase();
+	}
+	const pieces: string[] = [];
+	for (const ch of s) {
+		pieces.push(normalizeForSearch(ch));
+	}
+	return pieces.join("");
 }
 
 /** Normalize `s` while tracking how each normalized code unit maps back to the original string. */
