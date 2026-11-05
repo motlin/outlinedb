@@ -6,8 +6,8 @@ import {inProcessStore} from "./store.js";
 import {httpLoggingEnabled, loggingFetch} from "./http-logger.js";
 import {createServerContext} from "./node-context.js";
 import {ladderSocketHandlers} from "./ladder-socket.js";
-import {expansionVersion, readExpansion} from "@workflowy/shared/cache";
-import {TreeEventBus, expansionChangePublisher, withTreeChangePublish} from "./node-events.js";
+import {accountVersion, expansionVersion, readAccountRows, readExpansion} from "@workflowy/shared/cache";
+import {TreeEventBus, accountChangePublisher, expansionChangePublisher, withTreeChangePublish} from "./node-events.js";
 import {nodeEventsSocketHandlers} from "./node-events-socket.js";
 import {createDecisionsApp} from "./routes/decisions.js";
 import {resolvePort} from "./port.js";
@@ -34,9 +34,12 @@ const checkExpansion = expansionChangePublisher(treeEvents, () => {
 	const keys = readExpansion(serverContext.db);
 	return keys === undefined ? undefined : expansionVersion(keys);
 });
+/** Announces the account tables' new version after a tree write (an import or catch-up rewrites them), so open tabs re-read their flags. */
+const checkAccount = accountChangePublisher(treeEvents, () => accountVersion(readAccountRows(serverContext.db)));
 treeEvents.subscribe((event) => {
 	if (event.type === "tree.changed") {
 		checkExpansion();
+		checkAccount();
 	}
 });
 serverContext.expansionWritten = checkExpansion;

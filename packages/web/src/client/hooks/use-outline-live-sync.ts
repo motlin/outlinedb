@@ -4,12 +4,16 @@
  * write, and each frame is answered with one change-feed read (`syncNodeChanges`). Frames in the same tick share one
  * read, and frames that arrive during a read queue at most one more. A dropped socket reconnects on upstream's backoff
  * and reads once on reopening; while it is down, the tab reads when it becomes visible. The same socket carries
- * `{"type":"expansion.changed","version"}` frames, handed to the expansion sync instead of the tree read.
+ * `{"type":"expansion.changed","version"}` frames, handed to the expansion sync instead of the tree read, and
+ * `{"type":"account.changed","version"}` frames after a sync, import or seed rewrote the account tables, which re-read
+ * the feature flags and preferences so a tab opened before the first sync picks them up without a reload.
  */
 
 import {useQueryClient} from "@tanstack/react-query";
 import {useEffect} from "react";
 import {expansionVersionAnnounced} from "./use-expansion-sync.js";
+import {featureKeys} from "./use-features.js";
+import {preferenceKeys} from "./use-preferences.js";
 import {syncNodeChanges} from "./use-nodes.js";
 
 /** Upstream's reconnect delay: `(1000 + rand * 4000) * 2^failures`, capped at 3 minutes. */
@@ -19,8 +23,13 @@ function reconnectDelayMs(failures: number, random: number): number {
 
 const OPEN = 1;
 
-/** The version an `expansion.changed` frame carries, or undefined for any other frame (read as a tree change). */
-function expansionFrameVersion(data: unknown): string | undefined {
+interface VersionFrame {
+	type: "expansion.changed" | "account.changed";
+	version: string;
+}
+
+/** An `expansion.changed` or `account.changed` frame, or undefined for any other frame (read as a tree change). */
+function versionFrame(data: unknown): VersionFrame | undefined {
 	if (typeof data !== "string") {
 		return undefined;
 	}
@@ -29,14 +38,21 @@ function expansionFrameVersion(data: unknown): string | undefined {
 		if (typeof frame !== "object" || frame === null || !("type" in frame) || !("version" in frame)) {
 			return undefined;
 		}
-		return frame.type === "expansion.changed" && typeof frame.version === "string" ? frame.version : undefined;
+		const {type, version} = frame;
+		return (type === "expansion.changed" || type === "account.changed") && typeof version === "string"
+			? {type, version}
+			: undefined;
 	} catch {
 		return undefined;
 	}
 }
 
 /** Open the events socket and sync on its frames, reconnects and visibility; returns the teardown. */
-function startOutlineLiveSync(sync: () => Promise<void>, onExpansion: (version: string) => void): () => void {
+function startOutlineLiveSync(
+	sync: () => Promise<void>,
+	onExpansion: (version: string) => void,
+	onAccount: () => void,
+): () => void {
 	const state = {
 		disposed: false,
 		socket: undefined as WebSocket | undefined,
@@ -82,11 +98,13 @@ function startOutlineLiveSync(sync: () => Promise<void>, onExpansion: (version: 
 			state.opened = true;
 		});
 		socket.addEventListener("message", (event: MessageEvent) => {
-			const expansionVersion = expansionFrameVersion(event.data);
-			if (expansionVersion === undefined) {
+			const frame = versionFrame(event.data);
+			if (frame === undefined) {
 				requestSync();
+			} else if (frame.type === "expansion.changed") {
+				onExpansion(frame.version);
 			} else {
-				onExpansion(expansionVersion);
+				onAccount();
 			}
 		});
 		socket.addEventListener("close", () => {
@@ -122,6 +140,10 @@ export function useOutlineLiveSync(): void {
 				async () => syncNodeChanges(queryClient),
 				(version) => {
 					expansionVersionAnnounced(queryClient, version);
+				},
+				() => {
+					void queryClient.invalidateQueries({queryKey: featureKeys.all});
+					void queryClient.invalidateQueries({queryKey: preferenceKeys.all});
 				},
 			),
 		[queryClient],

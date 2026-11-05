@@ -2,8 +2,9 @@ import {QueryClient, QueryClientProvider} from "@tanstack/react-query";
 import {memo, useEffect, useState} from "react";
 import {useNode} from "./hooks/use-nodes.js";
 import {dashboardClasses, dashboardsOn} from "./dashboard.js";
-import {featureStoreState, setFeatureWriter} from "./features.js";
-import {setFeature, useFeatures} from "./hooks/use-features.js";
+import {setFeatureWriter} from "./features.js";
+import {setFeature} from "./hooks/use-features.js";
+import {useFeatureStoreSync} from "./hooks/use-feature-store-sync.js";
 import {createPortal} from "react-dom";
 import {BrowserRouter, Navigate, Route, Routes, useParams} from "react-router-dom";
 
@@ -229,15 +230,8 @@ export function pageShell({
 	);
 }
 
-/** Keeps the store fields that mirror account flags in step with the features query, as upstream re-renders at once. */
 function FeatureFlagsSync() {
-	const {enabled, available, visible} = useFeatures();
-	const loaded = available || visible.length > 0 || Object.keys(enabled).length > 0;
-	useEffect(() => {
-		if (loaded) {
-			useOutlineStore.setState(featureStoreState(enabled));
-		}
-	}, [enabled, loaded]);
+	useFeatureStoreSync();
 	return null;
 }
 

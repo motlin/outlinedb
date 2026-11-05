@@ -47,7 +47,7 @@ export function expansionVersion(keys: ReadonlySet<string>): string {
  * A 64-bit string hash (cyrb53's mixing, both 32-bit halves kept) as 16 hex chars. Synchronous and free of Node
  * builtins, since the browser bundle reaches this module.
  */
-function hash64(text: string): string {
+export function hash64(text: string): string {
 	let h1 = 0xde_ad_be_ef;
 	let h2 = 0x41_c6_ce_57;
 	for (let index = 0; index < text.length; index++) {

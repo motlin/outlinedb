@@ -6,7 +6,12 @@ import {z} from "zod";
 import * as schema from "@workflowy/shared/db";
 import type {AppDatabase} from "@workflowy/shared/db";
 import type {ServerContext} from "../src/server/context.js";
-import {TreeEventBus, expansionChangePublisher, withTreeChangePublish} from "../src/server/node-events.js";
+import {
+	TreeEventBus,
+	accountChangePublisher,
+	expansionChangePublisher,
+	withTreeChangePublish,
+} from "../src/server/node-events.js";
 import {nodeEventsSocketHandlers} from "../src/server/node-events-socket.js";
 import {defineOp, ok} from "../src/server/ops/define.js";
 import {inProcessStore} from "../src/server/store.js";
@@ -166,5 +171,19 @@ describe("expansionChangePublisher", () => {
 		current = undefined;
 		check();
 		expect(ws.send.mock.calls).toStrictEqual([['{"type":"expansion.changed","version":"bbbbbbbbbbbbbbbb"}']]);
+	});
+});
+
+describe("accountChangePublisher", () => {
+	it("sends one account.changed frame when the account tables' version moves, and none while it holds", () => {
+		const bus = new TreeEventBus();
+		const {ws} = connect(bus);
+		let current = "aaaaaaaaaaaaaaaa";
+		const check = accountChangePublisher(bus, () => current);
+		check();
+		current = "bbbbbbbbbbbbbbbb";
+		check();
+		check();
+		expect(ws.send.mock.calls).toStrictEqual([['{"type":"account.changed","version":"bbbbbbbbbbbbbbbb"}']]);
 	});
 });

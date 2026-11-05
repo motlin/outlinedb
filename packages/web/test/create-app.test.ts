@@ -30,6 +30,8 @@ describe("server-app exports", () => {
 		// oxlint-disable-next-line unicorn/no-array-sort -- the test tsconfig lib has no toSorted
 		expect(Object.keys(serverApp).sort()).toStrictEqual([
 			"LadderEventBus",
+			"TreeEventBus",
+			"accountChangePublisher",
 			"bindTreeHost",
 			"buildServerContext",
 			"createHttpApp",

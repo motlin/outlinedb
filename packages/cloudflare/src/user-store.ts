@@ -1,7 +1,9 @@
 import {DurableObject} from "cloudflare:workers";
 import {
 	accountRowTotal,
+	accountVersion,
 	ensureNodeTags,
+	readAccountRows,
 	readAccountState,
 	runUnitOfWork,
 	writeAccountState,
@@ -10,6 +12,8 @@ import type {AccountState} from "@workflowy/shared/cache";
 import * as schema from "@workflowy/shared/db";
 import {
 	LadderEventBus,
+	TreeEventBus,
+	accountChangePublisher,
 	bindTreeHost,
 	buildServerContext,
 	inProcessStore,
@@ -27,7 +31,10 @@ import type {SyncEnv, SyncStatus} from "./sync";
 import {readWorkerConfig, readWorkerInternalAuth} from "./worker-config";
 import type {WorkerSecrets} from "./worker-config";
 
-/** One user's outline: a SQLite-backed Durable Object answering RPC over its own database, plus the ladder WebSocket upgrade. */
+/**
+ * One user's outline: a SQLite-backed Durable Object answering RPC over its own database, plus the ladder and nodes
+ * events WebSocket upgrades.
+ */
 export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 	/** How many migrations this boot applied; zero when the database was already current. */
 	protected appliedOnBoot = 0;
@@ -35,6 +42,10 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 	protected readonly sessionStore = kvSessionStore(this.ctx.storage.kv, this.env.WORKFLOWY_SESSION_COOKIE);
 	/** Announces ladder writes; every accepted ladder socket receives each event. */
 	protected readonly ladderEvents = new LadderEventBus();
+	/** Announces `account.changed` to every accepted nodes events socket after a sync or seed rewrote the account tables. */
+	protected readonly nodeEvents = new TreeEventBus();
+	/** Publishes `account.changed` when the account tables' version moved since the last check. */
+	private checkAccount: () => void = () => {};
 	private sync!: SyncJob;
 	private db!: ReturnType<typeof drizzle<typeof schema>>;
 	private treeSnapshotEnabled = true;
@@ -53,6 +64,16 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 				}
 			}
 		});
+		this.nodeEvents.subscribe((event) => {
+			const frame = JSON.stringify(event);
+			for (const socket of ctx.getWebSockets("nodes")) {
+				try {
+					socket.send(frame);
+				} catch {
+					// A socket that just closed must not stop the others.
+				}
+			}
+		});
 		void ctx.blockConcurrencyWhile(async () => {
 			const db = drizzle(ctx.storage, {schema});
 			this.db = db;
@@ -61,6 +82,7 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 			await migrate(db, doMigrationConfig);
 			ensureNodeTags(db);
 			this.appliedOnBoot = countApplied(ctx) - before;
+			this.checkAccount = accountChangePublisher(this.nodeEvents, () => accountVersion(readAccountRows(db)));
 			bindTreeHost(db, {
 				// Only this object writes its database, so no other connection can bump the version.
 				changeSource: {dataVersion: () => "durable-object", isOpen: () => true},
@@ -156,6 +178,7 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 		runUnitOfWork(this.db, (unitOfWork) => {
 			writeAccountState(unitOfWork, state, Date.now());
 		});
+		this.checkAccount();
 		return {
 			rows: accountRowTotal(state.rows),
 			expandedKeys: state.expandedKeys?.length ?? null,
@@ -163,22 +186,30 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 	}
 
 	override async alarm(): Promise<void> {
-		await this.sync.tick();
+		try {
+			await this.sync.tick();
+		} finally {
+			this.checkAccount();
+		}
 	}
 
 	override fetch(request: Request): Response {
-		if (
-			new URL(request.url).pathname === "/api/v1/ladder/events" &&
-			request.headers.get("Upgrade")?.toLowerCase() === "websocket"
-		) {
+		const tag = EVENT_SOCKET_TAGS[new URL(request.url).pathname];
+		if (tag !== undefined && request.headers.get("Upgrade")?.toLowerCase() === "websocket") {
 			// The Worker has already checked auth and the upgrade header; hibernation needs the DO to accept the socket.
 			const pair = new WebSocketPair();
-			this.ctx.acceptWebSocket(pair[1], ["ladder"]);
+			this.ctx.acceptWebSocket(pair[1], [tag]);
 			return new Response(null, {status: 101, webSocket: pair[0]});
 		}
 		return new Response("Not found", {status: 404});
 	}
 }
+
+/** The WebSocket paths the Durable Object accepts, by the tag its broadcasts select sockets with. */
+const EVENT_SOCKET_TAGS: Partial<Record<string, string>> = {
+	"/api/v1/ladder/events": "ladder",
+	"/api/v1/nodes/events": "nodes",
+};
 
 export interface AdminStatus {
 	databaseSize: number;

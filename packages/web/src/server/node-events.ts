@@ -8,7 +8,8 @@
  * one `/api/v1/nodes/changes` read. The frame is only a nudge, like upstream's
  * signal socket: it carries the watermark, never tree data. The same bus
  * carries `expansion.changed` frames (see {@link expansionChangePublisher}),
- * so a tab polls the expansion feed only when the stored keys moved.
+ * so a tab polls the expansion feed only when the stored keys moved, and `account.changed` frames (see
+ * {@link accountChangePublisher}), so a tab re-reads its feature flags and preferences after a sync, import or seed.
  */
 
 import {sql} from "drizzle-orm";
@@ -27,7 +28,13 @@ export interface ExpansionChangedEvent {
 	version: string;
 }
 
-export type NodeEvent = TreeChangedEvent | ExpansionChangedEvent;
+export interface AccountChangedEvent {
+	type: "account.changed";
+	/** The account tables' content version (see `accountVersion`). */
+	version: string;
+}
+
+export type NodeEvent = TreeChangedEvent | ExpansionChangedEvent | AccountChangedEvent;
 
 export type TreeChangeListener = (event: NodeEvent) => void;
 
@@ -47,6 +54,10 @@ export class TreeEventBus {
 
 	publishExpansion(version: string): void {
 		this.#emit({type: "expansion.changed", version});
+	}
+
+	publishAccount(version: string): void {
+		this.#emit({type: "account.changed", version});
 	}
 
 	#emit(event: NodeEvent): void {
@@ -88,16 +99,33 @@ export async function withTreeChangePublish<T>(
 }
 
 /**
- * Returns a check that publishes `expansion.changed` when `readVersion` answers a version other than the last one
- * seen (the first read is the baseline). An unseeded store (undefined) publishes nothing and keeps the baseline.
+ * Returns a check that calls `publish` when `readVersion` answers a version other than the last one seen (the first
+ * read is the baseline). An undefined version publishes nothing and keeps the baseline.
  */
-export function expansionChangePublisher(bus: TreeEventBus, readVersion: () => string | undefined): () => void {
+function versionChangePublisher(publish: (version: string) => void, readVersion: () => string | undefined): () => void {
 	let last = readVersion();
 	return () => {
 		const current = readVersion();
 		if (current !== undefined && current !== last) {
 			last = current;
-			bus.publishExpansion(current);
+			publish(current);
 		}
 	};
+}
+
+/**
+ * Returns a check that publishes `expansion.changed` when `readVersion` answers a version other than the last one
+ * seen (the first read is the baseline). An unseeded store (undefined) publishes nothing and keeps the baseline.
+ */
+export function expansionChangePublisher(bus: TreeEventBus, readVersion: () => string | undefined): () => void {
+	return versionChangePublisher((version) => {
+		bus.publishExpansion(version);
+	}, readVersion);
+}
+
+/** Returns a check that publishes `account.changed` when the account tables' version moved since the last check. */
+export function accountChangePublisher(bus: TreeEventBus, readVersion: () => string): () => void {
+	return versionChangePublisher((version) => {
+		bus.publishAccount(version);
+	}, readVersion);
 }

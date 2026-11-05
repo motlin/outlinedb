@@ -62,6 +62,17 @@ app.use("/api/*", identity);
 // The OAuth consent page; it runs its own Access check, since the grant it issues acts as that email.
 app.on(["GET", "POST"], "/authorize", async (c) => authorize(c.req.raw, c.env));
 
+// The DO's only HTTP surfaces: a WebSocket cannot cross RPC, and hibernation needs the DO to accept it.
+// Registered before the HTTP app, so `/api/v1/nodes/events` is not taken by its `GET /api/v1/nodes/:id`.
+for (const path of ["/api/v1/ladder/events", "/api/v1/nodes/events"]) {
+	app.get(path, async (c) => {
+		if (c.req.header("Upgrade")?.toLowerCase() !== "websocket") {
+			return new Response("Expected a WebSocket upgrade", {status: 426});
+		}
+		return c.var.stub.fetch(c.req.raw);
+	});
+}
+
 // Migrated routes are answered here over RPC.
 app.route(
 	"/",
@@ -99,14 +110,6 @@ app.put("/api/admin/account-state", async (c) => {
 	return c.json(await c.var.stub.putAccountState(state));
 });
 app.all("/api/admin/account-state", methodNotAllowed);
-
-// The one HTTP surface the DO keeps: a WebSocket cannot cross RPC, and hibernation needs the DO to accept it.
-app.get("/api/v1/ladder/events", async (c) => {
-	if (c.req.header("Upgrade")?.toLowerCase() !== "websocket") {
-		return new Response("Expected a WebSocket upgrade", {status: 426});
-	}
-	return c.var.stub.fetch(c.req.raw);
-});
 
 app.all("/api/*", () => new Response("Not found", {status: 404}));
 

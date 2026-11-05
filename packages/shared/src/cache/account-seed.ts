@@ -5,8 +5,8 @@
  */
 
 import {ACCOUNT_IMPORT_NAME, readAccountRows, stampImportTime, writeAccountRows} from "./account-store.js";
-import type {AccountState} from "./account-store.js";
-import {readExpansion, replaceExpansion} from "./expansion-store.js";
+import type {AccountRows, AccountState} from "./account-store.js";
+import {hash64, readExpansion, replaceExpansion} from "./expansion-store.js";
 import type {UnitOfWork} from "./node-composite.js";
 import type {TemporalTransaction} from "./temporal-merge.js";
 
@@ -23,4 +23,16 @@ export function writeAccountState(unitOfWork: UnitOfWork, state: AccountState, a
 	if (state.expandedKeys !== null) {
 		replaceExpansion(unitOfWork, state.expandedKeys, at);
 	}
+}
+
+/**
+ * A version of the account tables' live rows that changes exactly when their content does, ignoring row order: an open
+ * tab's cue to re-read its features and preferences after a sync, import or seed rewrote them.
+ */
+export function accountVersion(rows: AccountRows): string {
+	const tables = Object.entries(rows).map(([name, tableRows]: [string, unknown[]]) => [
+		name,
+		tableRows.map((row) => JSON.stringify(row)).toSorted(),
+	]);
+	return hash64(JSON.stringify(tables.toSorted(([a], [b]) => String(a).localeCompare(String(b)))));
 }

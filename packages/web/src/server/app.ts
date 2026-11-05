@@ -3,6 +3,7 @@ export {buildServerContext} from "./context.js";
 export type {ServerContext, ServerContextDeps} from "./context.js";
 export type {ServerConfig} from "./config.js";
 export {LadderEventBus} from "./ladder-events.js";
+export {TreeEventBus, accountChangePublisher} from "./node-events.js";
 export {bindTreeHost, peekTreeSnapshotRows} from "./tree-snapshot.js";
 export {createHttpApp} from "./http/app.js";
 export type {HttpAppOptions} from "./http/app.js";

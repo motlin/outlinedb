@@ -14,6 +14,8 @@ const {QueryClient, QueryClientProvider} = await import("@tanstack/react-query")
 const {nodeKeys} = await import("../src/client/node-cache.js");
 const {syncNodeChanges} = await import("../src/client/hooks/use-nodes.js");
 const {useOutlineLiveSync} = await import("../src/client/hooks/use-outline-live-sync.js");
+const {useFeatureStoreSync} = await import("../src/client/hooks/use-feature-store-sync.js");
+const {useOutlineStore} = await import("../src/client/stores/outline.js");
 
 /** A WebSocket the test opens, drops and feeds frames to by hand. */
 class FakeSocket {
@@ -72,6 +74,8 @@ let root: Root | undefined;
 let client: InstanceType<typeof QueryClient>;
 let changesSince: (string | null)[];
 let answer: () => NodeChangesResponse;
+let enabledFeatures: Record<string, true>;
+let featureReads: number;
 
 beforeAll(async () => {
 	globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -92,11 +96,18 @@ beforeEach(() => {
 	FakeSocket.instances.length = 0;
 	changesSince = [];
 	answer = () => ({latest: nextMark(), reset: false, changedIds: [], deletedIds: [], children: []});
+	enabledFeatures = {};
+	featureReads = 0;
+	useOutlineStore.setState({fullWidthPage: false, alwaysVisibleControls: false});
 	vi.stubGlobal("WebSocket", FakeSocket);
 	vi.stubGlobal(
 		"fetch",
 		vi.fn(async (input: string) => {
 			const url = new URL(input, "http://example.com");
+			if (url.pathname === "/api/v1/features") {
+				featureReads += 1;
+				return Promise.resolve(Response.json({visible: [], enabled: enabledFeatures, available: true}));
+			}
 			if (url.pathname !== "/api/v1/nodes/changes") {
 				throw new Error(`Unexpected fetch ${input}`);
 			}
@@ -124,6 +135,7 @@ afterEach(() => {
 
 function Harness(): null {
 	useOutlineLiveSync();
+	useFeatureStoreSync();
 	return null;
 }
 
@@ -225,6 +237,22 @@ describe("useOutlineLiveSync", () => {
 		document.dispatchEvent(new Event("visibilitychange"));
 		await settle();
 		expect(changesSince).toHaveLength(1);
+	});
+
+	it("re-fetches the account's feature flags on an account.changed frame, so full width turns on without a reload", async () => {
+		await settle();
+		const before = {reads: featureReads, fullWidthPage: useOutlineStore.getState().fullWidthPage};
+		enabledFeatures = {full_width_page: true};
+		socket().emit("open");
+		socket().emit("message", JSON.stringify({type: "account.changed", version: "bbbbbbbbbbbbbbbb"}));
+		await settle();
+		await settle();
+		expect({
+			before,
+			reads: featureReads,
+			changesReads: changesSince.length,
+			fullWidthPage: useOutlineStore.getState().fullWidthPage,
+		}).toStrictEqual({before: {reads: 1, fullWidthPage: false}, reads: 2, changesReads: 0, fullWidthPage: true});
 	});
 
 	it("closes the socket and stops reconnecting on unmount", async () => {
