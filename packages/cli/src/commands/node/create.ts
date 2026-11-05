@@ -65,7 +65,8 @@ export default class Create extends Command {
 	static override flags = {
 		name: Flags.string({
 			char: "n",
-			description: 'Name of the new node (use "-" to read from stdin; markdown will be parsed into children)',
+			description:
+				'Name of the new node (use "-" to read from stdin; an indented bullet outline becomes a nested tree per top-level bullet)',
 			exclusive: ["json", "json-file"],
 		}),
 		json: Flags.string({
@@ -154,6 +155,18 @@ export default class Create extends Command {
 			} catch (error) {
 				this.error(error instanceof Error ? error.message : "Failed to read from stdin");
 			}
+		}
+
+		// An indented bullet outline on stdin becomes a node tree per top-level bullet
+		const outline = flags.name === "-" ? parseBulletOutline(name) : [];
+		if (outline.length > 0) {
+			// Each tree lands at the same end of the parent, so --position top creates them last-first.
+			const ordered = flags.position === "top" ? outline.toReversed() : outline;
+			for (const tree of ordered) {
+				// oxlint-disable-next-line no-await-in-loop -- trees must be created in order
+				await this.createTree(tree, flags, parentId, apiClient, cacheService, database);
+			}
+			return;
 		}
 
 		// Handle single node creation mode (original behavior)
@@ -318,8 +331,20 @@ export default class Create extends Command {
 			this.error(`Invalid JSON structure: ${parseResult.error.message}`);
 		}
 
-		const nodeTree = parseResult.data;
+		await this.createTree(parseResult.data, flags, parentId, apiClient, cacheService, database);
+	}
 
+	/**
+	 * Create one node tree under the parent (or preview it with --dry-run)
+	 */
+	private async createTree(
+		nodeTree: NodeTreeSpec,
+		flags: {"dry-run": boolean; position?: "top" | "bottom"},
+		parentId: string | null,
+		apiClient: WorkflowyApiClient,
+		cacheService: CacheService,
+		database: ReturnType<typeof createDatabase>,
+	): Promise<void> {
 		if (flags["dry-run"]) {
 			this.dryRunJsonMode(nodeTree, parentId, database);
 			return;
@@ -467,4 +492,39 @@ function linkedCreatedNodes(spec: NodeTreeSpec, created: CreatedNodeTree): {id: 
 			return createdChild === undefined ? [] : linkedCreatedNodes(child, createdChild);
 		}),
 	];
+}
+
+const BULLET_LINE = /^(?<indent>[ \t]*)[-*+][ \t]+(?<text>.*)$/u;
+
+/**
+ * Parse a markdown bullet outline into one tree per top-level bullet, nesting by indentation
+ * (a tab counts as four spaces). Blank lines are skipped. Returns [] when any other line is not a
+ * bullet, so headings, paragraphs, and continuation lines keep the single-node path.
+ */
+function parseBulletOutline(input: string): NodeTreeSpec[] {
+	const roots: NodeTreeSpec[] = [];
+	const stack: {indent: number; node: NodeTreeSpec}[] = [];
+	for (const line of input.split(/\r?\n/u)) {
+		if (line.trim() === "") {
+			continue;
+		}
+		const match = BULLET_LINE.exec(line);
+		const {indent: indentText, text: bulletText} = match?.groups ?? {};
+		if (indentText === undefined || bulletText === undefined) {
+			return [];
+		}
+		const indent = indentText.replaceAll("\t", "    ").length;
+		const node: NodeTreeSpec = {name: bulletText.trimEnd()};
+		while ((stack.at(-1)?.indent ?? -1) >= indent) {
+			stack.pop();
+		}
+		const parent = stack.at(-1)?.node;
+		if (parent === undefined) {
+			roots.push(node);
+		} else {
+			(parent.children ??= []).push(node);
+		}
+		stack.push({indent, node});
+	}
+	return roots;
 }

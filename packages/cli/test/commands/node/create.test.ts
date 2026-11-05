@@ -6,6 +6,7 @@ import {and, eq} from "drizzle-orm";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import {Readable} from "node:stream";
 import type {MockInstance} from "vite-plus/test";
 import {z} from "zod";
 import {WorkflowyInternalAdapter} from "@workflowy/shared/internal";
@@ -744,6 +745,86 @@ describe("node create command", () => {
 			await expect(
 				Create.run(["--parent-id", "parent-id", "--json-file", "/nonexistent/file.json"]),
 			).rejects.toThrow("File not found");
+		});
+	});
+
+	describe("stdin markdown mode", () => {
+		let stdinDescriptor: PropertyDescriptor | undefined;
+
+		beforeEach(() => {
+			stdinDescriptor = Object.getOwnPropertyDescriptor(process, "stdin");
+		});
+
+		afterEach(() => {
+			if (stdinDescriptor) {
+				Object.defineProperty(process, "stdin", stdinDescriptor);
+			}
+		});
+
+		function pipeStdin(input: string): void {
+			Object.defineProperty(process, "stdin", {value: Readable.from([input]), configurable: true});
+		}
+
+		it("nests an indented 3-level bullet outline exactly like the equivalent --json tree", async () => {
+			seedTestData(
+				testDatabase,
+				nodeFixtures([createTestNode({id: "parent-id", name: "Parent", parentId: null})]),
+			);
+
+			const bodies = fakeCreates("node-1", "node-2", "node-3", "node-4");
+			pipeStdin("- Project\n  - Task 1\n    - Step A\n\n  - Task 2\n");
+
+			const {stdout} = await captureOutput(async () => {
+				await Create.run(["--parent-id", "parent-id", "--name", "-"]);
+			});
+
+			expect(bodies).toStrictEqual([
+				{parent_id: "parent-id", name: "Project"},
+				{parent_id: "node-1", name: "Task 1", position: "bottom"},
+				{parent_id: "node-2", name: "Step A", position: "bottom"},
+				{parent_id: "node-1", name: "Task 2", position: "bottom"},
+			]);
+			expect(stdout).toBe(
+				'Creating node tree...\nParent: Parent\n\nSuccessfully created node tree:\n- Project\n  ID: node-1\n  URL: https://workflowy.com/#/node1\n  - Task 1\n    ID: node-2\n    URL: https://workflowy.com/#/node2\n    - Step A\n      ID: node-3\n      URL: https://workflowy.com/#/node3\n  - Task 2\n    ID: node-4\n    URL: https://workflowy.com/#/node4\n\nCreated node IDs (JSON):\n[\n  {\n    "id": "node-1",\n    "name": "Project",\n    "parentId": null\n  },\n  {\n    "id": "node-2",\n    "name": "Task 1",\n    "parentId": "node-1"\n  },\n  {\n    "id": "node-3",\n    "name": "Step A",\n    "parentId": "node-2"\n  },\n  {\n    "id": "node-4",\n    "name": "Task 2",\n    "parentId": "node-1"\n  }\n]\n',
+			);
+		});
+
+		it("creates each top-level bullet as its own tree under the parent, in order", async () => {
+			seedTestData(
+				testDatabase,
+				nodeFixtures([createTestNode({id: "parent-id", name: "Parent", parentId: null})]),
+			);
+
+			const bodies = fakeCreates("node-1", "node-2", "node-3");
+			pipeStdin("* First\n\t* Child\n* Second\n");
+
+			await captureOutput(async () => {
+				await Create.run(["--parent-id", "parent-id", "--name", "-"]);
+			});
+
+			expect(bodies).toStrictEqual([
+				{parent_id: "parent-id", name: "First"},
+				{parent_id: "node-1", name: "Child", position: "bottom"},
+				{parent_id: "parent-id", name: "Second"},
+			]);
+		});
+
+		it("sends non-outline markdown as a single node name", async () => {
+			seedTestData(
+				testDatabase,
+				nodeFixtures([createTestNode({id: "parent-id", name: "Parent", parentId: null})]),
+			);
+
+			const bodies = fakeCreates("node-1");
+			pipeStdin("## Section 1\n\nParagraph text\n- a bullet\n");
+
+			await captureOutput(async () => {
+				await Create.run(["--parent-id", "parent-id", "--name", "-"]);
+			});
+
+			expect(bodies).toStrictEqual([
+				{parent_id: "parent-id", name: "## Section 1\n\nParagraph text\n- a bullet\n"},
+			]);
 		});
 	});
 
