@@ -22,7 +22,8 @@ export function normalizeWithOffsets(s: string): NormalizedText {
 		// ASCII has no combining marks and lowercases one code unit to one, so offsets are the identity.
 		return {text: s.toLowerCase(), starts: Array.from(s, (_, i) => i), ends: Array.from(s, (_, i) => i + 1)};
 	}
-	let text = "";
+	// Collect pieces and join once: `text += piece` per character leaves a rope of one cons cell per character, ~10x the flat string's memory.
+	const pieces: string[] = [];
 	const starts: number[] = [];
 	const ends: number[] = [];
 	let offset = 0;
@@ -38,9 +39,9 @@ export function normalizeWithOffsets(s: string): NormalizedText {
 				starts.push(offset);
 				ends.push(end);
 			}
-			text += folded;
+			pieces.push(folded);
 		}
 		offset = end;
 	}
-	return {text, starts, ends};
+	return {text: pieces.join(""), starts, ends};
 }

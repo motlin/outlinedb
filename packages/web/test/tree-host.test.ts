@@ -13,6 +13,7 @@ import {
 	peekTreeSnapshotRows,
 	scheduleTreeSnapshotRebuild,
 	warmTreeSnapshot,
+	withTreeSnapshotRebuild,
 } from "../src/server/tree-snapshot.js";
 import type {ChangeSource, TreeScheduler} from "../src/server/tree-snapshot.js";
 
@@ -114,5 +115,39 @@ describe("tree snapshot host seams", () => {
 		const {db} = setup();
 		warmTreeSnapshot(db);
 		expect(peekTreeSnapshotRows(db)?.map((row) => row.id)).toStrictEqual(["a"]);
+	});
+
+	it("does not cold-build a snapshot in the background after a write when none is loaded", async () => {
+		const {db, scheduler} = setup();
+		await withTreeSnapshotRebuild(db, async () => {
+			insertNode(db, "b", "Beta", 1);
+			await Promise.resolve();
+		});
+		expect({pending: scheduler.pending.size, rows: peekTreeSnapshotRows(db)}).toStrictEqual({
+			pending: 0,
+			rows: undefined,
+		});
+	});
+
+	it("coalesces back-to-back writes into one patch of the loaded snapshot", async () => {
+		const {db, scheduler} = setup();
+		warmTreeSnapshot(db);
+		for (const [id, name, priority] of [
+			["b", "Beta", 1],
+			["c", "Gamma", 2],
+			["d", "Delta", 3],
+		] as const) {
+			await withTreeSnapshotRebuild(db, async () => {
+				insertNode(db, id, name, priority);
+				await Promise.resolve();
+			});
+		}
+		expect(scheduler.pending.size).toBe(1);
+		scheduler.runAll();
+		expect({
+			build: peekTreeSnapshotBuild(db),
+			ids: peekTreeSnapshotRows(db)?.map((row) => row.id),
+			pending: scheduler.pending.size,
+		}).toStrictEqual({build: "patch", ids: ["a", "b", "c", "d"], pending: 0});
 	});
 });

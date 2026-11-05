@@ -87,18 +87,29 @@ interface RowIndex {
 const textCache = new WeakMap<TreeSearchRow, RowText>();
 const indexCache = new WeakMap<readonly TreeSearchRow[], RowIndex>();
 
+/** `held` when it equals `fresh`, so the fresh copy can be collected. */
+function same(fresh: string, held: string): string {
+	return fresh === held ? held : fresh;
+}
+
 function rowText(row: TreeSearchRow): RowText {
 	let text = textCache.get(row);
 	if (text === undefined) {
-		const plainName = stripHtmlTags(row.name ?? "");
-		const plainNote = stripHtmlTags(row.note ?? "");
+		const name = row.name ?? "";
+		const note = row.note ?? "";
+		const plainName = same(stripHtmlTags(name), name);
+		const plainNote = same(stripHtmlTags(note), note);
+		const foldedName = same(normalizeForSearch(plainName), plainName);
+		const foldedNote = same(normalizeForSearch(plainNote), plainNote);
+		const indexName = indexText(withMonthNames(name));
+		const indexNote = indexText(withMonthNames(note));
 		text = {
 			plainName,
 			plainNote,
-			foldedName: normalizeForSearch(plainName),
-			foldedNote: normalizeForSearch(plainNote),
-			indexName: indexText(withMonthNames(row.name ?? "")),
-			indexNote: indexText(withMonthNames(row.note ?? "")),
+			foldedName,
+			foldedNote,
+			indexName: same(same(indexName, plainName), foldedName),
+			indexNote: same(same(indexNote, plainNote), foldedNote),
 		};
 		textCache.set(row, text);
 	}
@@ -163,11 +174,13 @@ function preorderIndex(rows: readonly TreeSearchRow[], index: RowIndex): Map<str
 }
 
 function matchFields(row: TreeSearchRow, text: RowText): [string, string, string] {
-	text.fields ??= [
-		normalizeWithOffsets(text.plainName).text,
-		normalizeWithOffsets(row.name ?? "").text,
-		normalizeWithOffsets(text.plainNote).text,
-	];
+	if (text.fields === undefined) {
+		// Reuse an equal string already held, so a row whose fields fold the same way keeps one copy, not three.
+		const plainName = same(normalizeWithOffsets(text.plainName).text, text.foldedName);
+		const rawName = same(normalizeWithOffsets(row.name ?? "").text, plainName);
+		const plainNote = same(normalizeWithOffsets(text.plainNote).text, text.foldedNote);
+		text.fields = [plainName, rawName, plainNote];
+	}
 	return text.fields;
 }
 

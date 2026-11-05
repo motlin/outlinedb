@@ -498,13 +498,17 @@ export function peekTreeSnapshotBuild(database: Database): TreeSnapshot["build"]
 	return snapshots.get(database)?.build;
 }
 
-/** Runs `run`, then schedules a background snapshot rebuild when it changed the database (the RPC path has no HTTP method to key on). */
+/**
+ * Runs `run`, then schedules a background snapshot rebuild when it changed the database (the RPC path has no HTTP method to key on).
+ * Only a loaded snapshot is kept warm: a write never cold-builds the whole tree in the background, so on a freshly woken
+ * Durable Object a burst of edits cannot start a build that outgrows its isolate; the first search builds it instead.
+ */
 export async function withTreeSnapshotRebuild<T>(database: Database, run: () => Promise<T>): Promise<T> {
 	const before = changeState(database).changes;
 	try {
 		return await run();
 	} finally {
-		if (changeState(database).changes !== before) {
+		if (snapshots.has(database) && changeState(database).changes !== before) {
 			scheduleTreeSnapshotRebuild(database);
 		}
 	}
