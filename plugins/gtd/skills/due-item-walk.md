@@ -150,6 +150,17 @@ Then conform to what is already there:
 
 Showing an item's children to the user is not reading them. Skipping this step produces writes that look plausible and are structurally wrong.
 
+## File extracted content beside related notes
+
+When an item's work extracts content from a photo, scan, PDF, or other document (a letter's details, a receipt, a form's answers) and that content needs a home, the user usually already has notes on the same subject. An open-ended "where should this go?" makes them go look for those notes themselves. Find them first:
+
+- **Search the cache for the subject.** Run `./bin/run.js node search -q "<term>" --json` for the organization, person, account, or subject the document names, one term per search. The cache can miss new nodes, so refresh a candidate's subtree with `./bin/run.js cache sync-node --id <id> --recursive` before trusting it.
+- **Check calendar days near the document date.** Read the `📆 Calendar > YYYY > MM > <date>` day nodes within a few days of the document's date (and of today, when the document arrived today) for entries on the same subject.
+- **Offer the best match as the first option.** Put it first in the `AskUserQuestion`, labelled with the placement (`Next to "<sibling>"` or `Under "<node>"`) and with the match's full path in the description, e.g. `📆 Calendar > 2026 > 10 > Oct 28 > Called the insurer about the claim`. Offer a second match or a sibling-versus-child choice as the next option when both fit, and keep the usual destinations after them.
+- **Fall back to the open question only when nothing matches.** Say that you searched and what for, so the user knows the absence is real.
+
+Filing beside the match follows **Match the existing placement** above: read the match's parent subtree and place the new node among its siblings in their format.
+
 ## Recompute when the date rolls over
 
 A long review crosses midnight, and every staged `applyOp` baked in the local date at the moment prep ran. Running a stale op verbatim writes yesterday's arithmetic — the wrong next date, the wrong weekday label.

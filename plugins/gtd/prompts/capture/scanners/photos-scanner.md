@@ -16,6 +16,7 @@ This scanner is read-only: it identifies capturable items but never modifies or 
 - Look for task-suggestive content types
 - Filter out already-declined items
 - Assess confidence for each item
+- Find related existing notes for document-like items
 - Write results to `.llm/gtd/capture/scans/photos.json`
 
 ## Setup
@@ -130,6 +131,15 @@ Create descriptive titles based on photo metadata:
 - Whiteboards: "Process whiteboard: [date]"
 - Generic: "Review photo: [date] [filename]"
 
+## Find Related Placement
+
+When content extracted from a receipt, document, whiteboard, or screenshot gets filed, the user usually already has notes on the same subject, and an open-ended "where should this go?" makes them go find those notes. Find them here so the orchestrator can offer the best match as the first placement option. Both lookups read the cache only, so the scanner stays read-only.
+
+- **Search by subject.** For each organization, person, account, or subject the photo's text or filename names, run `./bin/run.js node search -q "<term>" --json` once per term.
+- **Check calendar days near the photo date.** Read the `📆 Calendar > YYYY > MM > <date>` day nodes within a few days of `metadata.date` for entries on the same subject.
+
+Record the best match, and at most two runners-up, under `metadata.relatedPlacement`: each with the node's `id`, its full `path`, `position` (`sibling` to place next to it, `child` to place under it), and a short `reason`. Leave the array empty when nothing matches. The capture orchestrator must offer `relatedPlacement[0]` as the first placement option, showing its path, instead of asking an open-ended where.
+
 ## Write Output
 
 Write results to `.llm/gtd/capture/scans/photos.json`.
@@ -178,7 +188,15 @@ Each item includes `children` with provenance info:
 				"filename": "business_receipt.jpg",
 				"date": "2025-12-29T14:22:10Z",
 				"type": "receipt",
-				"detectedText": null
+				"detectedText": null,
+				"relatedPlacement": [
+					{
+						"id": "<node-uuid>",
+						"path": "📆 Calendar > 2025 > 12 > Dec 29 > Lunch with @Alice",
+						"position": "child",
+						"reason": "Same merchant and date as the receipt"
+					}
+				]
 			}
 		},
 		{
