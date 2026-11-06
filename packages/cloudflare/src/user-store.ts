@@ -19,12 +19,25 @@ import {
 	inProcessStore,
 	peekTreeSnapshotRows,
 } from "@workflowy/web/server-app";
-import type {OpInput, OpName, OpOutput, OpResult, StoreClient} from "@workflowy/web/server-app";
+import type {
+	Awaitable,
+	EmbeddingIndex,
+	OpInput,
+	OpName,
+	OpOutput,
+	OpResult,
+	StoreClient,
+} from "@workflowy/web/server-app";
 import {WorkflowyInternalClient} from "@workflowy/shared/api";
 import {drizzle} from "drizzle-orm/durable-sqlite";
 import {migrate} from "drizzle-orm/durable-sqlite/migrator";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {AlarmSchedule} from "./alarm-schedule";
 import {doMigrationConfig} from "./do-migrations";
+import {EmbeddingJob} from "./embedding-job";
+import type {EmbeddingStatus} from "./embedding-job";
+import {vectorizeIndex, workersAiEmbedder} from "./embeddings";
+import type {Embedder} from "./embeddings";
 import {kvSessionStore} from "./session-store";
 import {SyncJob} from "./sync";
 import type {SyncEnv, SyncStatus} from "./sync";
@@ -46,7 +59,11 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 	protected readonly nodeEvents = new TreeEventBus();
 	/** Publishes `account.changed` when the account tables' version moved since the last check. */
 	private checkAccount: () => void = () => {};
+	/** The one alarm, shared by the sync and the embedding job. */
+	private readonly alarms = new AlarmSchedule(this.ctx.storage);
 	private sync!: SyncJob;
+	/** Keeps the related-notes index current; undefined without the AI and RELATED_INDEX bindings. */
+	private embeddings: EmbeddingJob | undefined;
 	private db!: ReturnType<typeof drizzle<typeof schema>>;
 	private treeSnapshotEnabled = true;
 	private store!: StoreClient;
@@ -82,6 +99,7 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 			await migrate(db, doMigrationConfig);
 			ensureNodeTags(db);
 			this.appliedOnBoot = countApplied(ctx) - before;
+			await this.alarms.adoptLegacyAlarm();
 			this.checkAccount = accountChangePublisher(this.nodeEvents, () => accountVersion(readAccountRows(db)));
 			bindTreeHost(db, {
 				// Only this object writes its database, so no other connection can bump the version.
@@ -95,12 +113,25 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 					},
 				},
 			});
+			const config = readWorkerConfig(env);
+			const embedding = config.features.embeddings ? this.embeddingBindings() : undefined;
 			const serverContext = buildServerContext({
 				db,
-				config: readWorkerConfig(env),
+				config,
 				ladderEvents: this.ladderEvents,
 				internalAuth: readWorkerInternalAuth(env, this.sessionStore),
+				embeddingIndex: embedding && (() => embedding.index),
 			});
+			this.embeddings =
+				embedding &&
+				new EmbeddingJob({
+					storage: ctx.storage,
+					db,
+					index: embedding.index,
+					embedder: embedding.embedder,
+					markFinished: async () => this.markEmbeddingsFinished(),
+					alarm: this.alarms.for("embeddings"),
+				});
 			this.store = inProcessStore(serverContext, undefined, {
 				keepSnapshotWarm: this.treeSnapshotEnabled,
 				keepSwitcherSkeletonWarm: !this.treeSnapshotEnabled,
@@ -124,6 +155,7 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 						return {userId: session.userId, dateJoinedSec: session.dateJoinedSec};
 					}),
 				catchUp: internalAuth && (async () => serverContext.internalAdapter?.()?.catchUp()),
+				alarm: this.alarms.for("sync"),
 			});
 		});
 	}
@@ -133,9 +165,45 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 		socket.close(code === 1005 || code === 1006 ? 1000 : code);
 	}
 
+	/**
+	 * Vectorize and Workers AI from the bindings, the related-notes index namespaced to this object; the embedding
+	 * test overrides it with in-memory fakes, since Miniflare has neither.
+	 */
+	protected embeddingBindings(): {index: EmbeddingIndex; embedder: Embedder} {
+		return {
+			index: vectorizeIndex(this.env.RELATED_INDEX, this.ctx.id.toString()),
+			embedder: workersAiEmbedder(this.env.AI),
+		};
+	}
+
+	/** Set `ai.embeddingStatus` to "finished" through the preferences op, so workflowy.com and the cache both see it. */
+	protected markEmbeddingsFinished(): Awaitable<void> {
+		return this.patchEmbeddingStatus("finished");
+	}
+
+	private async patchEmbeddingStatus(aiEmbeddingStatus: string): Promise<void> {
+		const result = await this.store.call("preferences.patch", {patch: {aiEmbeddingStatus}});
+		if (!result.ok) {
+			throw new Error(`Could not set ai.embeddingStatus: ${JSON.stringify(result.body)}`);
+		}
+	}
+
+	/** Queue embedding work for what changed; a failure is logged and the next write or sync retries the scan. */
+	private async noticeEmbeddings(): Promise<void> {
+		try {
+			await this.embeddings?.notice();
+		} catch (error) {
+			console.error("Embedding change scan failed", error);
+		}
+	}
+
 	/** The one entry point for app operations: runs an op over this object's database; errors come back as values. */
 	async call<K extends OpName>(op: K, input: OpInput<K>): Promise<OpResult<OpOutput<K>>> {
-		return this.store.call(op, input);
+		try {
+			return await this.store.call(op, input);
+		} finally {
+			await this.noticeEmbeddings();
+		}
 	}
 
 	/** Start a sync run, or continue the one in progress, on the next alarm. */
@@ -166,6 +234,7 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 			nodeCount: Number(count),
 			lastSync: (await this.sync.status()).lastResult,
 			snapshot: {enabled: this.treeSnapshotEnabled, warm: peekTreeSnapshotRows(this.db) !== undefined},
+			embeddings: this.embeddings?.status() ?? null,
 		};
 	}
 
@@ -190,9 +259,16 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 
 	override async alarm(): Promise<void> {
 		try {
-			await this.sync.tick();
+			if (this.alarms.take("sync", Date.now())) {
+				await this.sync.tick();
+			}
+			await this.noticeEmbeddings();
+			if (this.embeddings !== undefined && this.alarms.take("embeddings", Date.now())) {
+				await this.embeddings.tick();
+			}
 		} finally {
 			this.checkAccount();
+			await this.alarms.arm();
 		}
 	}
 
@@ -219,6 +295,8 @@ export interface AdminStatus {
 	nodeCount: number;
 	lastSync: SyncStatus["lastResult"];
 	snapshot: {enabled: boolean; warm: boolean};
+	/** The related-notes index job, or null without the AI and RELATED_INDEX bindings. */
+	embeddings: EmbeddingStatus | null;
 }
 
 function countApplied(ctx: DurableObjectState): number {

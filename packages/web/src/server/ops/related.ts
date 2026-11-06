@@ -1,10 +1,11 @@
 import {z} from "zod";
-import {notAMirror, PathBuilder} from "@workflowy/shared/cache";
-import {and, count, eq, ne, sql} from "drizzle-orm";
-import {nodeContent, nodeEmbeddings} from "@workflowy/shared/db";
+import {inIds, notAMirror, PathBuilder} from "@workflowy/shared/cache";
+import {and, eq} from "drizzle-orm";
+import {nodeContent} from "@workflowy/shared/db";
 import type {AppDatabase} from "@workflowy/shared/db";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
 import {stripHtmlTags} from "@workflowy/shared/html";
+import type {EmbeddingNeighbour} from "../embedding-index.js";
 import {defineOp, fail, ok} from "./define.js";
 
 type RelatedType = "similar" | "parent-candidates" | "link-targets";
@@ -29,67 +30,50 @@ function fillPaths(database: AppDatabase, nodes: RelatedNode[]): void {
 	}
 }
 
-function findSimilarNodes(
-	database: AppDatabase,
-	sourceEmbedding: Buffer,
-	sourceNodeId: string,
-	model: string,
-	limit: number,
-	threshold: number,
-): RelatedNode[] {
-	const results = database
-		.select({
-			nodeId: nodeEmbeddings.nodeId,
-			distance: sql<number>`vec_distance_cosine(${nodeEmbeddings.embedding}, vec_f32(${sourceEmbedding}))`,
-			name: nodeContent.name,
-			note: nodeContent.note,
-		})
-		.from(nodeEmbeddings)
-		.innerJoin(
-			nodeContent,
-			and(eq(nodeEmbeddings.nodeId, nodeContent.id), eq(nodeContent.systemTo, FAR_FUTURE_DATE)),
-		)
-		.where(
-			and(
-				eq(nodeEmbeddings.model, model),
-				eq(nodeEmbeddings.systemTo, FAR_FUTURE_DATE),
-				notAMirror(nodeContent.id),
-				ne(nodeEmbeddings.nodeId, sourceNodeId),
-				sql`vec_distance_cosine(${nodeEmbeddings.embedding}, vec_f32(${sourceEmbedding})) < ${threshold}`,
-			),
-		)
-		.orderBy(sql`vec_distance_cosine(${nodeEmbeddings.embedding}, vec_f32(${sourceEmbedding}))`)
-		.limit(limit)
-		.all();
+/** The most neighbours one query asks for: Vectorize's `topK` ceiling. */
+const MAX_NEIGHBOURS = 100;
 
-	const nodes: RelatedNode[] = results.map((result) => ({
-		id: result.nodeId,
-		name: result.name,
-		note: result.note,
-		distance: result.distance,
-		path: [],
-	}));
-	fillPaths(database, nodes);
-	return nodes;
+interface Candidate extends RelatedNode {
+	parentId: string | null;
 }
 
-function findParentCandidates(
+/** The neighbours that are current, non-mirror nodes other than the source and inside the threshold, nearest first. */
+function loadCandidates(
 	database: AppDatabase,
-	sourceEmbedding: Buffer,
+	neighbours: EmbeddingNeighbour[],
 	sourceNodeId: string,
-	model: string,
-	limit: number,
 	threshold: number,
-): RelatedNode[] {
-	// Parent candidates are nodes that:
-	// 1. Are semantically similar to the source
-	// 2. Already have children (are likely container nodes)
-	// 3. Are not the source node itself or its ancestors/descendants
+): Candidate[] {
+	const near = neighbours.filter((n) => n.id !== sourceNodeId && n.distance < threshold);
+	if (near.length === 0) {
+		return [];
+	}
+	const rows = database
+		.select({id: nodeContent.id, name: nodeContent.name, note: nodeContent.note, parentId: nodeContent.parentId})
+		.from(nodeContent)
+		.where(
+			and(
+				inIds(
+					nodeContent.id,
+					near.map((n) => n.id),
+				),
+				eq(nodeContent.systemTo, FAR_FUTURE_DATE),
+				notAMirror(nodeContent.id),
+			),
+		)
+		.all();
+	const byId = new Map(rows.map((row) => [row.id, row]));
+	return near.flatMap((n) => {
+		const row = byId.get(n.id);
+		return row === undefined ? [] : [{...row, distance: n.distance, path: []}];
+	});
+}
 
-	// Get current parent chain to exclude
+/** The source node and its ancestors up to Home. */
+function ancestorIds(database: AppDatabase, sourceNodeId: string): Set<string> {
 	const ancestors = new Set<string>();
 	let currentId: string | null = sourceNodeId;
-	while (currentId) {
+	while (currentId !== null && !ancestors.has(currentId)) {
 		ancestors.add(currentId);
 		const node = database
 			.select({parentId: nodeContent.parentId})
@@ -98,122 +82,36 @@ function findParentCandidates(
 			.get();
 		currentId = node?.parentId ?? null;
 	}
-
-	// Find similar nodes that have children
-	const results = database
-		.select({
-			nodeId: nodeEmbeddings.nodeId,
-			distance: sql<number>`vec_distance_cosine(${nodeEmbeddings.embedding}, vec_f32(${sourceEmbedding}))`,
-			name: nodeContent.name,
-			note: nodeContent.note,
-		})
-		.from(nodeEmbeddings)
-		.innerJoin(
-			nodeContent,
-			and(eq(nodeEmbeddings.nodeId, nodeContent.id), eq(nodeContent.systemTo, FAR_FUTURE_DATE)),
-		)
-		.where(
-			and(
-				eq(nodeEmbeddings.model, model),
-				eq(nodeEmbeddings.systemTo, FAR_FUTURE_DATE),
-				notAMirror(nodeContent.id),
-				ne(nodeEmbeddings.nodeId, sourceNodeId),
-				sql`vec_distance_cosine(${nodeEmbeddings.embedding}, vec_f32(${sourceEmbedding})) < ${threshold}`,
-			),
-		)
-		.orderBy(sql`vec_distance_cosine(${nodeEmbeddings.embedding}, vec_f32(${sourceEmbedding}))`)
-		.limit(limit * 3) // Fetch more since we'll filter
-		.all();
-
-	// Filter and enhance results
-	const candidates: RelatedNode[] = [];
-	for (const result of results) {
-		if (ancestors.has(result.nodeId)) {
-			continue;
-		}
-
-		// Check if this node has children (makes it a good parent candidate)
-		const childCount = database
-			.select({count: count()})
-			.from(nodeContent)
-			.where(and(eq(nodeContent.parentId, result.nodeId), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
-			.get();
-
-		if (childCount && childCount.count > 0) {
-			candidates.push({
-				id: result.nodeId,
-				name: result.name,
-				note: result.note,
-				distance: result.distance,
-				path: [],
-			});
-
-			if (candidates.length >= limit) {
-				break;
-			}
-		}
-	}
-
-	fillPaths(database, candidates);
-	return candidates;
+	return ancestors;
 }
 
-function findLinkTargets(
-	database: AppDatabase,
-	sourceEmbedding: Buffer,
-	sourceNodeId: string,
-	model: string,
-	limit: number,
-	threshold: number,
-): RelatedNode[] {
-	// Link targets prioritize nodes with meaningful names (not just empty/bullet points)
-	// and are not the source node itself
-	const results = database
-		.select({
-			nodeId: nodeEmbeddings.nodeId,
-			distance: sql<number>`vec_distance_cosine(${nodeEmbeddings.embedding}, vec_f32(${sourceEmbedding}))`,
-			name: nodeContent.name,
-			note: nodeContent.note,
-		})
-		.from(nodeEmbeddings)
-		.innerJoin(
-			nodeContent,
-			and(eq(nodeEmbeddings.nodeId, nodeContent.id), eq(nodeContent.systemTo, FAR_FUTURE_DATE)),
-		)
-		.where(
-			and(
-				eq(nodeEmbeddings.model, model),
-				eq(nodeEmbeddings.systemTo, FAR_FUTURE_DATE),
-				notAMirror(nodeContent.id),
-				ne(nodeEmbeddings.nodeId, sourceNodeId),
-				sql`vec_distance_cosine(${nodeEmbeddings.embedding}, vec_f32(${sourceEmbedding})) < ${threshold}`,
-			),
-		)
-		.orderBy(sql`vec_distance_cosine(${nodeEmbeddings.embedding}, vec_f32(${sourceEmbedding}))`)
-		.limit(limit * 2) // Fetch more to filter empty names
+/** Which of `ids` have at least one current child. */
+function withChildren(database: AppDatabase, ids: string[]): Set<string> {
+	const rows = database
+		.selectDistinct({parentId: nodeContent.parentId})
+		.from(nodeContent)
+		.where(and(inIds(nodeContent.parentId, ids), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
 		.all();
+	return new Set(rows.flatMap((row) => (row.parentId === null ? [] : [row.parentId])));
+}
 
-	// Filter to nodes with meaningful names
-	const targets: RelatedNode[] = [];
-	for (const result of results) {
-		const plainName = result.name ? stripHtmlTags(result.name) : "";
-		if (plainName.length > 0) {
-			targets.push({
-				id: result.nodeId,
-				name: result.name,
-				note: result.note,
-				distance: result.distance,
-				path: [],
-			});
-
-			if (targets.length >= limit) {
-				break;
-			}
-		}
+/**
+ * Narrow the candidates by type: `similar` keeps them all, `parent-candidates` keeps containers outside the source's
+ * ancestry, and `link-targets` keeps nodes with a visible name.
+ */
+function narrow(database: AppDatabase, type: RelatedType, candidates: Candidate[], sourceNodeId: string): Candidate[] {
+	if (type === "parent-candidates") {
+		const ancestors = ancestorIds(database, sourceNodeId);
+		const containers = withChildren(
+			database,
+			candidates.map((c) => c.id),
+		);
+		return candidates.filter((c) => !ancestors.has(c.id) && containers.has(c.id));
 	}
-
-	fillPaths(database, targets);
-	return targets;
+	if (type === "link-targets") {
+		return candidates.filter((c) => (c.name ? stripHtmlTags(c.name) : "").length > 0);
+	}
+	return candidates;
 }
 
 /** Finds related nodes using semantic similarity; the required fields are validated here so each 400 names what is missing. */
@@ -226,7 +124,7 @@ export const relatedFind = defineOp({
 		model: z.string().optional(),
 	}),
 	output: RelatedResponseSchema,
-	run(ctx, {nodeId, type, limit = 10, threshold = 0.5, model = "minilm"}) {
+	async run(ctx, {nodeId, type, limit = 10, threshold = 0.5, model = "minilm"}) {
 		if (!nodeId) {
 			return fail(400, {error: "nodeId is required"});
 		}
@@ -241,48 +139,25 @@ export const relatedFind = defineOp({
 			return fail(400, {error: `type must be one of: ${validTypes.join(", ")}`});
 		}
 
-		// Without embeddings (no vector extension) there is nothing to rank: the empty result clients already handle.
+		// Without an index (no vector store bound) there is nothing to rank: the empty result clients already handle.
 		const {db: database, config} = ctx;
-		if (!config.features.embeddings) {
+		const index = config.features.embeddings ? ctx.embeddingIndex?.(model) : undefined;
+		if (!index) {
 			return ok({results: []});
 		}
 
-		// Get the source node's embedding
-		const sourceEmbedding = database
-			.select({embedding: nodeEmbeddings.embedding})
-			.from(nodeEmbeddings)
-			.where(
-				and(
-					eq(nodeEmbeddings.nodeId, nodeId),
-					eq(nodeEmbeddings.model, model),
-					eq(nodeEmbeddings.systemTo, FAR_FUTURE_DATE),
-				),
-			)
-			.get();
-
-		if (!sourceEmbedding) {
+		const vector = await index.vectorFor(nodeId);
+		if (!vector) {
 			return fail(404, {error: "Node embedding not found. Ensure embeddings have been generated."});
 		}
 
-		const embeddingBuffer = sourceEmbedding.embedding;
-
-		let results: RelatedNode[];
-
-		switch (relatedType) {
-			case "similar": {
-				results = findSimilarNodes(database, embeddingBuffer, nodeId, model, limit, threshold);
-				break;
-			}
-			case "parent-candidates": {
-				results = findParentCandidates(database, embeddingBuffer, nodeId, model, limit, threshold);
-				break;
-			}
-			case "link-targets": {
-				results = findLinkTargets(database, embeddingBuffer, nodeId, model, limit, threshold);
-				break;
-			}
-		}
-
+		// Fetch extra neighbours: the source, mirrors and the type's filter drop some of them.
+		const neighbours = await index.query(vector, Math.min(MAX_NEIGHBOURS, limit * 3 + 1));
+		const candidates = loadCandidates(database, neighbours, nodeId, threshold);
+		const results: RelatedNode[] = narrow(database, relatedType, candidates, nodeId)
+			.slice(0, limit)
+			.map(({parentId: _parentId, ...node}) => node);
+		fillPaths(database, results);
 		return ok({results});
 	},
 });

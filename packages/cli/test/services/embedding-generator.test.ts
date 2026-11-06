@@ -1,7 +1,8 @@
 import {beforeEach, vi, afterEach, describe, expect, it} from "vite-plus/test";
 import {nodeEmbeddings} from "@workflowy/shared/db";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
-import {EmbeddingGeneratorService, loadEmbeddableNodes} from "../../src/services/embedding-generator.js";
+import {loadEmbeddableNodes} from "@workflowy/shared/cache";
+import {EmbeddingGeneratorService} from "../../src/services/embedding-generator.js";
 import {embeddingService} from "../../src/services/embeddings.js";
 import {cleanupTestDatabase, createInMemoryTestDatabase, nodeFixtures, seedTestData} from "../db/migration-helper.js";
 import type {TestDatabase} from "../db/migration-helper.js";

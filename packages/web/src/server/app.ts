@@ -11,3 +11,6 @@ export {inProcessStore} from "./store.js";
 export type {StoreClient} from "./store.js";
 export type {OpName, OpInput, OpOutput} from "./ops/index.js";
 export type {OpResult} from "./ops/define.js";
+export {MemoryEmbeddingIndex} from "./embedding-index.js";
+export type {Awaitable, EmbeddingIndex, EmbeddingNeighbour, EmbeddingRow} from "./embedding-index.js";
+export {changeWatermark} from "./system-changes.js";

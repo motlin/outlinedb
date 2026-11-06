@@ -1,29 +1,11 @@
-import {mirrors, nodeContent, nodeEmbeddings} from "@workflowy/shared/db";
-import type {NodeContentType} from "@workflowy/shared/db";
+import {mirrors, nodeEmbeddings} from "@workflowy/shared/db";
 import type * as schema from "@workflowy/shared/db";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
 import {and, eq, inArray, sql} from "drizzle-orm";
 import type {BetterSQLite3Database} from "drizzle-orm/better-sqlite3";
 import {DEFAULT_MODELS, embeddingService} from "./embeddings.js";
 import type {EmbeddingModelKey} from "./embeddings.js";
-import {newSystemTimestamp, notAMirror, PathBuilder} from "@workflowy/shared/cache";
-
-/**
- * The current nodes worth indexing: those with children, excluding mirrors,
- * which have no text of their own (their original is indexed instead).
- */
-export function loadEmbeddableNodes(
-	database: BetterSQLite3Database<typeof schema>,
-	pathBuilder = new PathBuilder(database),
-): NodeContentType[] {
-	const currentNodes = database
-		.select()
-		.from(nodeContent)
-		.where(and(eq(nodeContent.systemTo, FAR_FUTURE_DATE), notAMirror(nodeContent.id)))
-		.all();
-	const nonLeafIds = pathBuilder.getNonLeafNodeIds(currentNodes.map((n) => n.id));
-	return currentNodes.filter((node) => nonLeafIds.has(node.id));
-}
+import {buildEmbedTexts, loadEmbeddableNodes, newSystemTimestamp, PathBuilder} from "@workflowy/shared/cache";
 
 /** Delete every embedding, of any model or version, keyed to a current mirror. Returns the count. */
 function pruneMirrorEmbeddings(database: BetterSQLite3Database<typeof schema>): number {
@@ -161,11 +143,12 @@ export class EmbeddingGeneratorService {
 				message: `🔄 Starting ${model}: ${nodesToProcess.length} nodes to process`,
 			});
 
-			// Pre-fetch all paths, content, and children in batch (O(depth) queries instead of O(nodes × depth))
-			const nodeIds = nodesToProcess.map((n) => n.id);
-			const pathMap = this.pathBuilder.buildFullPathsBatch(nodeIds);
-			const contentMap = this.pathBuilder.buildTextContentBatch(nodeIds);
-			const childrenMap = this.pathBuilder.buildChildrenTextBatch(nodeIds);
+			// Build every document in batch (O(depth) queries instead of O(nodes × depth))
+			const texts = buildEmbedTexts(
+				this.database,
+				nodesToProcess.map((n) => n.id),
+				this.pathBuilder,
+			);
 
 			for (let index = 0; index < nodesToProcess.length; index += options.batchSize) {
 				const batch = nodesToProcess.slice(index, index + options.batchSize);
@@ -176,13 +159,7 @@ export class EmbeddingGeneratorService {
 				}[] = [];
 
 				for (const node of batch) {
-					const fullPath = pathMap.get(node.id) ?? "";
-					const textContent = contentMap.get(node.id) ?? "";
-					const childrenText = childrenMap.get(node.id) ?? "";
-
-					const combinedText = childrenText
-						? `PATH: ${fullPath}\nCONTENT: ${textContent}\nCHILDREN:\n${childrenText}`
-						: `PATH: ${fullPath}\nCONTENT: ${textContent}`;
+					const combinedText = texts.get(node.id) ?? "";
 					const embedding = await embeddingService.generateEmbedding(combinedText, model, {isQuery: false});
 
 					embeddingRows.push({
@@ -252,23 +229,14 @@ export class EmbeddingGeneratorService {
 			return;
 		}
 
-		const pathMap = this.pathBuilder.buildFullPathsBatch(nodeIds);
-		const contentMap = this.pathBuilder.buildTextContentBatch(nodeIds);
-		const childrenMap = this.pathBuilder.buildChildrenTextBatch(nodeIds);
+		const texts = buildEmbedTexts(this.database, nodeIds, this.pathBuilder);
 
 		// Clear and repopulate FTS index
 		this.database.run(sql`DELETE FROM node_fts`);
 
 		let populated = 0;
 		for (const node of nonLeafNodes) {
-			const fullPath = pathMap.get(node.id) ?? "";
-			const textContent = contentMap.get(node.id) ?? "";
-			const childrenText = childrenMap.get(node.id) ?? "";
-
-			const combinedText = childrenText
-				? `PATH: ${fullPath}\nCONTENT: ${textContent}\nCHILDREN:\n${childrenText}`
-				: `PATH: ${fullPath}\nCONTENT: ${textContent}`;
-
+			const combinedText = texts.get(node.id) ?? "";
 			this.database.run(sql`INSERT INTO node_fts(node_id, content) VALUES(${node.id}, ${combinedText})`);
 			populated++;
 		}

@@ -1,4 +1,6 @@
 export {ancestorChain} from "./ancestor-chain.js";
+export {buildEmbedTexts, filterEmbeddable, loadEmbeddableNodes} from "./embed-text.js";
+export {inIds} from "./in-ids.js";
 export {
 	type ApiImportState,
 	applyApiBatch,

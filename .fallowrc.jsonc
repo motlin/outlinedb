@@ -13,6 +13,7 @@
 		"packages/web/src/client/dev-reload.ts",
 		// Bundled by esbuild in the Worker tests rather than imported.
 		"packages/cloudflare/test/probe-entry.ts",
+		"packages/cloudflare/test/embedding-probe-entry.ts",
 		// Passed to `vp dev -c` and `vp build -c` by `just dev`, `just cf-build` and `just cf-smoke`.
 		"packages/web/vite.worker.config.ts",
 		// Run by `just cf-smoke`, outside verify.

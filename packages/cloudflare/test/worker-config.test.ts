@@ -47,6 +47,13 @@ describe("readWorkerConfig", () => {
 		});
 	});
 
+	it("turns embeddings on only when both the AI and the RELATED_INDEX bindings exist", () => {
+		const binding = {};
+		expect(readWorkerConfig({AI: binding, RELATED_INDEX: binding}).features.embeddings).toBe(true);
+		expect(readWorkerConfig({AI: binding}).features.embeddings).toBe(false);
+		expect(readWorkerConfig({RELATED_INDEX: binding}).features.embeddings).toBe(false);
+	});
+
 	it("treats empty bindings as unset", () => {
 		expect(readWorkerConfig({WORKFLOWY_API_KEY: "", WORKFLOWY_API_URL: ""})).toMatchObject({
 			apiKey: undefined,

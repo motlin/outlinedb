@@ -10,6 +10,7 @@ import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
 import {nodeTreeHost} from "../src/server/node-host.js";
 import {bindTreeHost} from "../src/server/tree-snapshot.js";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
+import {MemoryEmbeddingIndex} from "../src/server/embedding-index.js";
 import {httpAppFor} from "./http-app-for.js";
 
 const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
@@ -110,8 +111,9 @@ describe("routers read the database from the request context", () => {
 		});
 	});
 
-	it("related reports a missing embedding from the context database when embeddings are on", async () => {
-		const app = appWith({db: memoryDb(), config: config(true)});
+	it("related reports a missing embedding from the context's index when embeddings are on", async () => {
+		const index = new MemoryEmbeddingIndex();
+		const app = appWith({db: memoryDb(), config: config(true), embeddingIndex: () => index});
 		await expect(call(app, "POST", "/api/related", {nodeId: "root", type: "similar"})).resolves.toStrictEqual({
 			status: 404,
 			body: {error: "Node embedding not found. Ensure embeddings have been generated."},

@@ -7,6 +7,7 @@ interface AdminStatus {
 	nodeCount: number;
 	lastSync: unknown;
 	snapshot: {enabled: boolean; warm: boolean};
+	embeddings: unknown;
 }
 
 async function adminStatus(h: Harness): Promise<AdminStatus> {
@@ -46,7 +47,7 @@ describe("GET /api/admin/status", () => {
 		await cold.dispose();
 	});
 
-	it("reports database size, live node count, last sync and a cold snapshot", async () => {
+	it("reports database size, live node count, last sync, a cold snapshot and no embedding job without bindings", async () => {
 		const status = await adminStatus(warm);
 		expect(status.databaseSize).toBeGreaterThan(0);
 		expect({...status, databaseSize: 0}).toStrictEqual({
@@ -54,6 +55,7 @@ describe("GET /api/admin/status", () => {
 			nodeCount: 1,
 			lastSync: null,
 			snapshot: {enabled: true, warm: false},
+			embeddings: null,
 		});
 	});
 

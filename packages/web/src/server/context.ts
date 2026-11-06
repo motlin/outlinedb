@@ -5,6 +5,7 @@ import {WorkflowyInternalAdapter} from "@workflowy/shared/internal";
 import type {AppDatabase} from "@workflowy/shared/db";
 import type {ServerConfig} from "./config.js";
 import type {DecisionStore} from "./decisions.js";
+import type {EmbeddingIndex} from "./embedding-index.js";
 import type {LadderEventBus} from "./ladder-events.js";
 
 type ServerDatabase = AppDatabase;
@@ -50,6 +51,8 @@ export interface ServerContext {
 	 * deletes level nodes account-wide, behind a confirm dialog and a one-shot Undo.
 	 */
 	calendarLayoutEnabled?: boolean;
+	/** The vector index for an embedding model, or undefined when the host has no vector store. */
+	embeddingIndex?: (model: string) => EmbeddingIndex;
 }
 
 /** Hono environment: routers read the {@link ServerContext} via `c.get('ctx')`. */
@@ -66,11 +69,13 @@ export interface ServerContextDeps {
 	decisions?: DecisionStore;
 	/** Undefined when the host has no internal-API credentials. */
 	internalAuth?: InternalAuth;
+	/** Undefined when the host has no vector store; related notes then answer an empty list. */
+	embeddingIndex?: (model: string) => EmbeddingIndex;
 }
 
 /** Assemble a {@link ServerContext} from host-supplied dependencies, with no process or filesystem access. */
 export function buildServerContext(deps: ServerContextDeps): ServerContext {
-	const {db, config, ladderEvents, decisions, internalAuth} = deps;
+	const {db, config, ladderEvents, decisions, internalAuth, embeddingIndex} = deps;
 	const cacheService = new CacheService(db);
 	const apiKey = config.apiKey;
 	let adapter: WorkflowyInternalAdapter | undefined;
@@ -82,6 +87,7 @@ export function buildServerContext(deps: ServerContextDeps): ServerContext {
 		decisions,
 		apiKey,
 		internalAuth,
+		embeddingIndex,
 		calendarEnsureEnabled: config.calendarEnsureEnabled,
 		calendarLayoutEnabled: config.calendarLayoutEnabled,
 		internalAdapter: () => {

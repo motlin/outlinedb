@@ -13,8 +13,7 @@ import type {
 	SearchResult as QmdSearchResult,
 	QMDStore,
 } from "@tobilu/qmd";
-import {PathBuilder} from "@workflowy/shared/cache";
-import {loadEmbeddableNodes} from "./embedding-generator.js";
+import {buildEmbedTexts, loadEmbeddableNodes, PathBuilder} from "@workflowy/shared/cache";
 import {logger} from "./logger.js";
 import {nullable} from "../utils/nullable.js";
 
@@ -120,9 +119,7 @@ export class QmdSearchService {
 		onProgress?.(`Found ${nonLeafNodes.length} non-leaf nodes (leaf nodes and mirrors skipped)`);
 
 		const nodeIds = nonLeafNodes.map((n) => n.id);
-		const pathMap = this.pathBuilder.buildFullPathsBatch(nodeIds);
-		const contentMap = this.pathBuilder.buildTextContentBatch(nodeIds);
-		const childrenMap = this.pathBuilder.buildChildrenTextBatch(nodeIds);
+		const texts = buildEmbedTexts(this.database, nodeIds, this.pathBuilder);
 
 		let inserted = 0;
 		let updated = 0;
@@ -131,13 +128,7 @@ export class QmdSearchService {
 		const processedPaths = new Set<string>();
 
 		for (const [i, node] of nonLeafNodes.entries()) {
-			const fullPath = pathMap.get(node.id) ?? "";
-			const textContent = contentMap.get(node.id) ?? "";
-			const childrenText = childrenMap.get(node.id) ?? "";
-
-			const combinedText = childrenText
-				? `PATH: ${fullPath}\nCONTENT: ${textContent}\nCHILDREN:\n${childrenText}`
-				: `PATH: ${fullPath}\nCONTENT: ${textContent}`;
+			const combinedText = texts.get(node.id) ?? "";
 
 			const nodePath = node.id;
 			processedPaths.add(nodePath);

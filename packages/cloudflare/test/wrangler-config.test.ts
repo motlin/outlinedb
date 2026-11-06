@@ -29,4 +29,12 @@ describe("wrangler.jsonc", () => {
 	it("keeps the Access config out of vars so dashboard secrets are not reset on deploy", () => {
 		expect(readWranglerConfig().vars).toStrictEqual({SYNC_INTERVAL_MINUTES: "30"});
 	});
+
+	it("binds Workers AI and the related-notes Vectorize index", () => {
+		const {ai, vectorize} = readWranglerConfig();
+		expect({ai, vectorize}).toStrictEqual({
+			ai: {binding: "AI"},
+			vectorize: [{binding: "RELATED_INDEX", index_name: "workflowy-related"}],
+		});
+	});
 });

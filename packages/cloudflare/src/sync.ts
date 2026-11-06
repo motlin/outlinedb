@@ -14,6 +14,7 @@ import type {TreeSnapshot} from "@workflowy/shared/api";
 import type {AppDatabase} from "@workflowy/shared/db";
 import {TreeResyncRequired} from "@workflowy/shared/internal";
 import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import type {JobAlarm} from "./alarm-schedule";
 import {nodeBatches} from "./export-stream";
 
 const BATCH_SIZE = 2000;
@@ -109,6 +110,8 @@ export interface SyncDeps {
 	 * `signal` aborts when the run's transaction timeout runs out.
 	 */
 	readAccount?: (signal: AbortSignal) => Promise<StoredAccount> | undefined;
+	/** Where the next run is scheduled; the object's own alarm unless the alarm is shared with other jobs. */
+	alarm?: JobAlarm;
 	now?: () => number;
 }
 
@@ -182,6 +185,10 @@ export class SyncJob {
 		if (!runColumns.some((row) => row.name === "snapshot_at")) {
 			sql.exec("ALTER TABLE sync_runs ADD COLUMN snapshot_at INTEGER");
 		}
+	}
+
+	private get alarm(): JobAlarm {
+		return this.deps.alarm ?? this.deps.storage;
 	}
 
 	private get sql(): SqlStorage {
@@ -278,7 +285,7 @@ export class SyncJob {
 
 	/** Make a run start (or continue) as soon as possible. */
 	async syncNow(): Promise<SyncStatus> {
-		await this.deps.storage.setAlarm(this.now());
+		await this.alarm.setAlarm(this.now());
 		return this.status();
 	}
 
@@ -302,7 +309,7 @@ export class SyncJob {
 		return {
 			phase: job?.phase ?? "idle",
 			applied: job?.applied ?? 0,
-			nextAlarmAt: await this.deps.storage.getAlarm(),
+			nextAlarmAt: await this.alarm.getAlarm(),
 			lastResult: this.readLastResult(),
 		};
 	}
@@ -369,7 +376,7 @@ export class SyncJob {
 	private async scheduleNextRun(): Promise<void> {
 		const minutes = Number(this.deps.env.SYNC_INTERVAL_MINUTES);
 		const interval = (Number.isFinite(minutes) && minutes > 0 ? minutes : DEFAULT_INTERVAL_MINUTES) * 60_000;
-		await this.deps.storage.setAlarm(this.now() + interval);
+		await this.alarm.setAlarm(this.now() + interval);
 	}
 
 	/** GET the export and tee it into R2. Returns undefined when the run was rescheduled instead. */
@@ -395,7 +402,7 @@ export class SyncJob {
 				...job,
 				result: {status: "rate_limited", message: "Workflowy answered 429", at: this.now()},
 			});
-			await this.deps.storage.setAlarm(this.now() + delay);
+			await this.alarm.setAlarm(this.now() + delay);
 			return undefined;
 		}
 		if (!response.ok || response.body === null) {
@@ -487,7 +494,7 @@ export class SyncJob {
 		}
 		if (yielded || (batches > 0 && overBudget())) {
 			const delay = Number(env.SYNC_TICK_DELAY_MS);
-			await storage.setAlarm(this.now() + (Number.isFinite(delay) && delay > 0 ? delay : 0));
+			await this.alarm.setAlarm(this.now() + (Number.isFinite(delay) && delay > 0 ? delay : 0));
 			return;
 		}
 

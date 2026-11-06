@@ -11,6 +11,10 @@ export interface WorkerSecrets {
 	WORKFLOWY_API_URL?: string;
 	/** Var; "false" serves search from SQL instead of an in-memory whole-tree snapshot. */
 	TREE_SNAPSHOT?: string;
+	/** Workers AI; with RELATED_INDEX it turns related notes on. */
+	AI?: unknown;
+	/** The Vectorize index holding node vectors; with AI it turns related notes on. */
+	RELATED_INDEX?: unknown;
 }
 
 /** Parse {@link ServerConfig} from Worker bindings; an empty binding counts as unset. */
@@ -22,7 +26,10 @@ export function readWorkerConfig(env: WorkerSecrets): ServerConfig {
 		sqlQueryLogging: false,
 		calendarEnsureEnabled: true,
 		calendarLayoutEnabled: true,
-		features: {embeddings: false, treeSnapshot: env.TREE_SNAPSHOT !== "false"},
+		features: {
+			embeddings: env.AI !== undefined && env.RELATED_INDEX !== undefined,
+			treeSnapshot: env.TREE_SNAPSHOT !== "false",
+		},
 	};
 }
 
