@@ -82,7 +82,7 @@ cf-smoke: build-shared
 cf-seed-account url:
     ./bin/run.js cache seed-account-state --url {{ url }}
 
-# Deploy the Worker to Cloudflare; refuses unless CONFIRM_DEPLOY=1 and is never part of verify
+# Deploy the Worker by hand; CI deploys on every push to main (push.yml), so prefer pushing. Refuses unless CONFIRM_DEPLOY=1; never part of verify
 [group('web')]
 cf-deploy:
     #!/usr/bin/env bash

@@ -85,3 +85,32 @@ describe("built wrangler.json", () => {
 		).toStrictEqual([]);
 	}, 240_000);
 });
+
+describe("deploy on push to main", () => {
+	const workflow = readFileSync(`${root}.github/workflows/push.yml`, "utf8");
+	const job = (name: string) => {
+		const start = workflow.indexOf(`\n  ${name}:\n`);
+		expect(start, `job ${name}`).toBeGreaterThan(-1);
+		const next = workflow.slice(start + 1).search(/\n {2}[a-z][\w-]*:\n/u);
+		return next === -1 ? workflow.slice(start) : workflow.slice(start, start + 1 + next);
+	};
+
+	it("runs on push to main and never cancels a deploy in progress", () => {
+		expect(workflow).toContain("on:\n  push:\n    branches:\n      - main\n");
+		expect(workflow).toContain("cancel-in-progress: false");
+	});
+
+	it("tests before deploying", () => {
+		expect(job("test")).toContain("- run: just test");
+		expect(job("deploy")).toContain("needs: [test]");
+	});
+
+	it("deploys the generated wrangler.json the way cf-deploy does, with the Cloudflare secrets", () => {
+		const deploy = job("deploy");
+		expect(deploy).toContain("- run: just cf-build");
+		expect(deploy).toContain("vp exec wrangler deploy -c dist/workflowy/worker/wrangler.json");
+		expect(deploy).toContain("CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}");
+		expect(deploy).toContain("CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}");
+		expect(deploy).not.toContain("CONFIRM_DEPLOY");
+	});
+});
