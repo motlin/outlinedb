@@ -278,9 +278,6 @@ export function useCommandRegistry(): CommandRegistry {
 				return;
 			}
 			const {expandParentId, ...payload} = plan;
-			if (expandParentId !== undefined && expandParentId !== null) {
-				expand(expandParentId);
-			}
 			const editor = editorElement(payload.nodeId);
 			if (editor) {
 				const {start, end, reversed} = selectionTextRange(editor);
@@ -288,10 +285,12 @@ export function useCommandRegistry(): CommandRegistry {
 			} else {
 				holdEditing(Number.MAX_SAFE_INTEGER);
 			}
-			moveNodeMutation.mutate(payload, {onSettled: releaseEditing});
+			// The plan only ever expands the new parent; the mutation opens it in the same render as the splice.
+			const expandParent = expandParentId !== undefined && expandParentId !== null;
+			moveNodeMutation.mutate({...payload, expandParent}, {onSettled: releaseEditing});
 			revealRowsAfterPaint([payload.nodeId], reveal);
 		},
-		[expand, holdEditing, releaseEditing, moveNodeMutation],
+		[holdEditing, releaseEditing, moveNodeMutation],
 	);
 
 	/**

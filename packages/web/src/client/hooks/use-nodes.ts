@@ -925,9 +925,12 @@ export function useDeleteNode() {
 	return {...mutation, mutate};
 }
 
-const moveUndos = new HeldUndos<NodeListResponse, MoveNodeRequest & {nodeId: string}>();
+/** A single-node move; `expandParent` (client only) opens the new parent in the same render as the splice. */
+type MoveNodeVariables = MoveNodeRequest & {nodeId: string; expandParent?: boolean};
 
-function planMove(request: MoveNodeRequest & {nodeId: string}, queryClient: QueryClient): UndoPlan<unknown> {
+const moveUndos = new HeldUndos<NodeListResponse, MoveNodeVariables>();
+
+function planMove(request: MoveNodeVariables, queryClient: QueryClient): UndoPlan<unknown> {
 	return cachedOps(queryClient, {
 		kind: "move",
 		ids: [request.nodeId],
@@ -945,18 +948,22 @@ export function useMoveNode() {
 	const addErrorNotification = useOutlineStore((state) => state.addErrorNotification);
 
 	const mutation = useMutationRunner({
-		mutationFn: async ({nodeId, ...request}: MoveNodeRequest & {nodeId: string}) => moveNode(nodeId, request),
+		mutationFn: async ({nodeId, expandParent: _expandParent, ...request}: MoveNodeVariables) =>
+			moveNode(nodeId, request),
 		async onMutate(request) {
 			pendingMoves.begin(request, [readNode(queryClient, request.nodeId)?.parent_id ?? null, request.parent_id]);
 			await queryClient.cancelQueries({queryKey: nodeKeys.all});
 			const node = readNode(queryClient, request.nodeId);
-			return node
-				? notifyManager.batch(() =>
-						spliceMovedRows(queryClient, [node], request.parent_id, (count) =>
-							requestedIndex(request, count),
-						),
-					)
-				: [];
+			return notifyManager.batch(() => {
+				if (request.expandParent === true && request.parent_id !== null) {
+					// After the cancel, in the same task as the splice, so the new parent opens with the row already in it:
+					// expanding before `mutate` painted the parent open a commit ahead of the move.
+					useOutlineStore.getState().expand(request.parent_id);
+				}
+				return node
+					? spliceMovedRows(queryClient, [node], request.parent_id, (count) => requestedIndex(request, count))
+					: [];
+			});
 		},
 		onSuccess(data, variables) {
 			moveUndos.settle(variables, {data});
