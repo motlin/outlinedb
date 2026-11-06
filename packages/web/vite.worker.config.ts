@@ -22,6 +22,8 @@ export default defineConfig(({command}) =>
 		server: {proxy: {}},
 		// Kept apart from dist/client, which the Node host and the plain build own: the plugin nests worker/ and client/ under this.
 		build: {outDir: "../../dist/workflowy"},
+		// Workspace packages (@workflowy/mcp, web, shared) resolve from source, so the Worker never builds against a missing or stale dist.
+		environments: {worker: {resolve: {conditions: ["source"]}}},
 		plugins: [
 			cloudflare({
 				configPath: `${cloudflareDir}wrangler.jsonc`,
