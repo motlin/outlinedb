@@ -1579,6 +1579,12 @@ body.moving .expand {
 	overflow-wrap: break-word;
 }
 
+/* Upstream makes the full-width .content editable; ours is the span, which collapses to zero width
+   as a flex item when empty, and Chrome draws no caret in a zero-width box. */
+.innerContentContainer.editing {
+	min-width: 1px;
+}
+
 /* No focus ring on the editable text - production workflowy.com shows only the caret */
 .innerContentContainer.editing:focus {
 	outline: none;

@@ -497,6 +497,10 @@ describe("node row anatomy styles guard", () => {
 		});
 	});
 
+	it("keeps a non-zero caret box on an empty editing span, which shrinks to zero width as a flex item", () => {
+		expect(cssBlock(styles, ".innerContentContainer.editing")).toStrictEqual({"min-width": "1px"});
+	});
+
 	it("ports the remaining wf-base row rules", () => {
 		expect({
 			hover: normalizedBlocks(
