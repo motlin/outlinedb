@@ -17,7 +17,7 @@
 		"@workflowy/web": "workspace:*",
 		"drizzle-orm": "^0.45.3",
 		"hono": "^4.13.14",
-		"jose": "^6.2.13"
+		"jose": "^6.2.14"
 	},
 	"devDependencies": {
 		"esbuild": "^0.28.0",
