@@ -56,6 +56,7 @@ export default defineConfig({
 				test: {
 					name: "cloudflare",
 					include: ["packages/cloudflare/test/**/*.test.ts"],
+					globalSetup: ["packages/cloudflare/test/setup/build-client.ts"],
 				},
 			},
 		],

@@ -1,5 +1,4 @@
-import {execFileSync} from "node:child_process";
-import {existsSync, mkdtempSync, rmSync} from "node:fs";
+import {mkdtempSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {build} from "esbuild";
@@ -7,13 +6,6 @@ import {Miniflare} from "miniflare";
 import type {MiniflareOptions} from "miniflare";
 
 const clientDir = new URL("../../web/dist/client", import.meta.url).pathname;
-
-/** The Worker serves the built client as static assets, so build it once when it is missing. */
-function ensureClientBuilt(): void {
-	if (!existsSync(join(clientDir, "index.html"))) {
-		execFileSync("vp", ["run", "--filter", "@workflowy/web", "build"], {stdio: "inherit"});
-	}
-}
 
 /** Bundle a Worker entry for workerd, resolving workspace packages through their `source` export. */
 async function bundleWorker(entry: string): Promise<string> {
@@ -44,7 +36,6 @@ export async function startHarness(
 	bindings: Record<string, string> = {ACCESS_DEV_IDENTITY: "dev"},
 	extra: {outboundService?: Extract<MiniflareOptions, {modules: true}>["outboundService"]} = {},
 ): Promise<Harness> {
-	ensureClientBuilt();
 	const script = await bundleWorker(entry);
 	const persistDir = existingPersistDir ?? mkdtempSync(join(tmpdir(), "wf-cf-"));
 	const mf = new Miniflare({
