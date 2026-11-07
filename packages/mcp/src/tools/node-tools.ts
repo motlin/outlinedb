@@ -1,6 +1,6 @@
 import type {McpServer} from "@modelcontextprotocol/sdk/server/mcp.js";
 import type {CallToolResult} from "@modelcontextprotocol/sdk/types.js";
-import type {StoreClient} from "@workflowy/web/node-host";
+import type {StoreClient} from "@workflowy/web/server-app";
 import {z} from "zod";
 import {resolve} from "./resolve.js";
 import {errorResult, jsonResult, nodeUrl, opError, textResult} from "./results.js";
