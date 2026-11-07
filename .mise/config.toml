@@ -1,7 +1,7 @@
 [tools]
 just = "1.59.0"
 node = "24.22.0"
-pnpm = "12.16.1"
+pnpm = "12.18.0"
 pre-commit = "4.7.0"
 python = "3.15.0"
 
