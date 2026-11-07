@@ -11,7 +11,7 @@
 	},
 	"dependencies": {
 		"@cloudflare/workers-oauth-provider": "^1.2.4",
-		"@modelcontextprotocol/sdk": "^1.32.1",
+		"@modelcontextprotocol/sdk": "^1.32.2",
 		"@workflowy/mcp": "workspace:*",
 		"@workflowy/shared": "workspace:*",
 		"@workflowy/web": "workspace:*",
