@@ -6,17 +6,11 @@ import {useCustomThemesStore} from "../stores/custom-themes.js";
 import {isRegisteredTheme} from "../themes.js";
 import {applyEmoji, serverEmoji} from "../emoji-apply.js";
 import {applyFont} from "../font-apply.js";
-import {
-	fetchPreferences,
-	preferenceKeys,
-	serverFont,
-	serverShowKeyboardShortcuts,
-	serverTheme,
-} from "./use-preferences.js";
+import {preferencesQuery, serverFont, serverShowKeyboardShortcuts, serverTheme} from "./use-preferences.js";
 
 /** Adopt the account's `showKeyboardShortcuts` whenever `/api/v1/preferences` reports a value. */
 export function useShowKeyboardShortcutsSync(): void {
-	const {data} = useQuery({queryKey: preferenceKeys.all, queryFn: fetchPreferences});
+	const {data} = useQuery(preferencesQuery);
 	const showKeyboardShortcuts = serverShowKeyboardShortcuts(data);
 	useEffect(() => {
 		if (showKeyboardShortcuts !== null) {
@@ -32,7 +26,7 @@ export function themeFromAccount(name: string | null): Theme | null {
 
 /** Adopt the account's `theme` over this browser's saved one whenever `/api/v1/preferences` reports a known value. */
 export function useThemeSync(): void {
-	const {data} = useQuery({queryKey: preferenceKeys.all, queryFn: fetchPreferences});
+	const {data} = useQuery(preferencesQuery);
 	// Custom themes register late; re-resolve the account theme when they do.
 	useCustomThemesStore((state) => state.themes);
 	const theme = themeFromAccount(serverTheme(data));
@@ -45,7 +39,7 @@ export function useThemeSync(): void {
 
 /** Adopt the account's emoji style (`emoji.options.selected`) whenever `/api/v1/preferences` reports one. */
 export function useEmojiSync(): void {
-	const {data} = useQuery({queryKey: preferenceKeys.all, queryFn: fetchPreferences});
+	const {data} = useQuery(preferencesQuery);
 	const emoji = serverEmoji(data);
 	useEffect(() => {
 		if (emoji !== null) {
@@ -56,7 +50,7 @@ export function useEmojiSync(): void {
 
 /** Adopt the account's `font` as body class `font-<name>` whenever `/api/v1/preferences` reports one. */
 export function useFontSync(): void {
-	const {data} = useQuery({queryKey: preferenceKeys.all, queryFn: fetchPreferences});
+	const {data} = useQuery(preferencesQuery);
 	const font = serverFont(data);
 	useEffect(() => {
 		if (font !== null) {

@@ -1,13 +1,16 @@
 import type {QueryClient, QueryKey} from "@tanstack/react-query";
 import type {BacklinksResponse, FoundDatesResponse, NodeChangesResponse, NodeResponse} from "../node-types.js";
 import {nodeKeys} from "./node-cache.js";
+import {shareById} from "./structural-sharing.js";
 
 /**
  * Patch the cache with what the server says changed after a write (see `GET /api/v1/nodes/changes`), instead of
  * refetching every node query. Each refreshed children list replaces the cached list of its parent and of the parent's
  * mirrors (a mirror lists its original's children) and resets the parent's children flags; each changed node's detail
  * takes its new row. Only queries that show a changed node and are not patched here are invalidated: ancestor chains
- * through it, Backlinks and Found Dates lists naming it, and the details of deleted nodes.
+ * through it, Backlinks and Found Dates lists naming it, and the details of deleted nodes. A cache entry the change
+ * leaves as it was is not written at all, so a one-row edit under a parent with thousands of children notifies only the
+ * entries it alters instead of every cached row.
  */
 export function applyNodeChanges(queryClient: QueryClient, changes: NodeChangesResponse): void {
 	const changed = new Set([...changes.changedIds, ...changes.deletedIds]);
@@ -17,7 +20,8 @@ export function applyNodeChanges(queryClient: QueryClient, changes: NodeChangesR
 			rows.set(node.id, node);
 		}
 		for (const listParent of [parentId, ...(parentId === null ? [] : cachedMirrorIds(queryClient, parentId))]) {
-			if (queryClient.getQueryData(nodeKeys.children(listParent)) !== undefined) {
+			const cachedList = queryClient.getQueryData<NodeResponse[]>(nodeKeys.children(listParent));
+			if (cachedList !== undefined && shareById(cachedList, nodes) !== cachedList) {
 				queryClient.setQueryData<NodeResponse[]>(nodeKeys.children(listParent), nodes);
 			}
 		}
@@ -27,8 +31,12 @@ export function applyNodeChanges(queryClient: QueryClient, changes: NodeChangesR
 	}
 	for (const id of changes.changedIds) {
 		const node = rows.get(id);
-		if (node !== undefined) {
-			queryClient.setQueryData<NodeResponse>(nodeKeys.detail(id), (old) => (old ? {...old, ...node} : old));
+		const old = queryClient.getQueryData<NodeResponse>(nodeKeys.detail(id));
+		if (node !== undefined && old !== undefined) {
+			const next = {...old, ...node};
+			if (shareById(old, next) !== old) {
+				queryClient.setQueryData<NodeResponse>(nodeKeys.detail(id), next);
+			}
 		}
 	}
 	for (const id of changes.deletedIds) {
@@ -70,12 +78,16 @@ function setChildFlags(queryClient: QueryClient, parentId: string, children: rea
 		shows(node) && (node.hasChildren !== hasChildren || node.hasUncompletedChildren !== hasUncompletedChildren)
 			? {...node, hasChildren, hasUncompletedChildren}
 			: node;
-	queryClient.setQueriesData<NodeResponse[]>({queryKey: [...nodeKeys.all, "children"]}, (list) =>
-		list?.some((node) => flag(node) !== node) === true ? list.map(flag) : list,
-	);
-	queryClient.setQueriesData<NodeResponse>({queryKey: [...nodeKeys.all, "detail"]}, (node) =>
-		node === undefined ? node : flag(node),
-	);
+	for (const [key, list] of queryClient.getQueriesData<NodeResponse[]>({queryKey: [...nodeKeys.all, "children"]})) {
+		if (list?.some((node) => flag(node) !== node) === true) {
+			queryClient.setQueryData<NodeResponse[]>(key, list.map(flag));
+		}
+	}
+	for (const [key, node] of queryClient.getQueriesData<NodeResponse>({queryKey: [...nodeKeys.all, "detail"]})) {
+		if (node !== undefined && flag(node) !== node) {
+			queryClient.setQueryData<NodeResponse>(key, flag(node));
+		}
+	}
 }
 
 /** Invalidate each of the cached `entries` whose data `shows` a change. */
@@ -134,15 +146,23 @@ export class ChangeFeed {
 		}
 	}
 
-	/** Patch the cache with every change since the mark; without a mark, or when too much changed, refetch everything. */
-	async sync(queryClient: QueryClient): Promise<void> {
-		const run = this.#queue.then(async () => this.#syncNow(queryClient));
+	/**
+	 * Patch the cache with every change since the mark; without a mark, or when too much changed, refetch everything.
+	 * With `announced`, the watermark a live-sync frame carried at publish time, the sync is skipped when, once its turn
+	 * comes, the mark is already past it: a read that late already saw that write, as with the echo of the tab's own
+	 * write arriving after (or during) the write's settle sync.
+	 */
+	async sync(queryClient: QueryClient, announced?: string): Promise<void> {
+		const run = this.#queue.then(async () => this.#syncNow(queryClient, announced));
 		this.#queue = run.catch(() => {});
 		await run;
 	}
 
-	async #syncNow(queryClient: QueryClient): Promise<void> {
+	async #syncNow(queryClient: QueryClient, announced: string | undefined): Promise<void> {
 		const since = this.#mark;
+		if (announced !== undefined && since !== undefined && since > announced) {
+			return;
+		}
 		if (since === undefined) {
 			await Promise.all([this.seed(), queryClient.invalidateQueries({queryKey: nodeKeys.all})]);
 			return;

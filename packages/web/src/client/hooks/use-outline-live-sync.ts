@@ -1,8 +1,9 @@
 /**
  * Keeps an open tab's outline in step with tree changes made elsewhere: another tab, the CLI, or the server's upstream
  * catch-up. The server sends one `{"type":"tree.changed"}` frame on `GET /api/v1/nodes/events` per committed tree
- * write, and each frame is answered with one change-feed read (`syncNodeChanges`). Frames in the same tick share one
- * read, and frames that arrive during a read queue at most one more. A dropped socket reconnects on upstream's backoff
+ * write, carrying the change-feed watermark at publish time, and each frame is answered with one change-feed read
+ * (`syncNodeChanges`) unless an earlier read already got past that watermark, as the tab's own write's settle read
+ * does for its echo. Frames in the same tick share one read, and frames that arrive during a read queue at most one more. A dropped socket reconnects on upstream's backoff
  * and reads once on reopening; while it is down, the tab reads when it becomes visible. The same socket carries
  * `{"type":"expansion.changed","version"}` frames, handed to the expansion sync instead of the tree read, and
  * `{"type":"account.changed","version"}` frames after a sync, import or seed rewrote the account tables, which re-read
@@ -28,6 +29,21 @@ interface VersionFrame {
 	version: string;
 }
 
+/** A `tree.changed` frame's watermark, or undefined when the frame carries none (read unconditionally). */
+function announcedLatest(data: unknown): string | undefined {
+	if (typeof data !== "string") {
+		return undefined;
+	}
+	try {
+		const frame: unknown = JSON.parse(data);
+		return typeof frame === "object" && frame !== null && "latest" in frame && typeof frame.latest === "string"
+			? frame.latest
+			: undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 /** An `expansion.changed` or `account.changed` frame, or undefined for any other frame (read as a tree change). */
 function versionFrame(data: unknown): VersionFrame | undefined {
 	if (typeof data !== "string") {
@@ -49,7 +65,7 @@ function versionFrame(data: unknown): VersionFrame | undefined {
 
 /** Open the events socket and sync on its frames, reconnects and visibility; returns the teardown. */
 function startOutlineLiveSync(
-	sync: () => Promise<void>,
+	sync: (announced: string | undefined) => Promise<void>,
 	onExpansion: (version: string) => void,
 	onAccount: () => void,
 ): () => void {
@@ -60,6 +76,8 @@ function startOutlineLiveSync(
 		failures: 0,
 		reconnectTimer: undefined as ReturnType<typeof setTimeout> | undefined,
 		dirty: false,
+		/** The newest watermark the pending frames announced, or undefined when a pending request must read regardless. */
+		announced: undefined as string | undefined,
 		draining: false,
 	};
 
@@ -69,16 +87,22 @@ function startOutlineLiveSync(
 		await Promise.resolve();
 		while (state.dirty && !state.disposed) {
 			state.dirty = false;
+			const {announced} = state;
+			state.announced = undefined;
 			try {
 				// oxlint-disable-next-line no-await-in-loop -- reads run one at a time by design.
-				await sync();
+				await sync(announced);
 			} catch (error) {
 				console.error("Failed to sync tree changes", error);
 			}
 		}
 		state.draining = false;
 	};
-	const requestSync = () => {
+	/** Ask for a read; `announced` (a frame's watermark) lets it be skipped when already covered, none forces it. */
+	const requestSync = (announced?: string) => {
+		const pending = state.dirty ? state.announced : "";
+		state.announced =
+			pending === undefined || announced === undefined ? undefined : pending > announced ? pending : announced;
 		state.dirty = true;
 		if (!state.draining) {
 			void drain();
@@ -100,7 +124,7 @@ function startOutlineLiveSync(
 		socket.addEventListener("message", (event: MessageEvent) => {
 			const frame = versionFrame(event.data);
 			if (frame === undefined) {
-				requestSync();
+				requestSync(announcedLatest(event.data));
 			} else if (frame.type === "expansion.changed") {
 				onExpansion(frame.version);
 			} else {
@@ -137,7 +161,7 @@ export function useOutlineLiveSync(): void {
 	useEffect(
 		() =>
 			startOutlineLiveSync(
-				async () => syncNodeChanges(queryClient),
+				async (announced) => syncNodeChanges(queryClient, announced),
 				(version) => {
 					expansionVersionAnnounced(queryClient, version);
 				},

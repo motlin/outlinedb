@@ -211,6 +211,43 @@ describe("useOutlineLiveSync", () => {
 		expect(changesSince).toHaveLength(2);
 	});
 
+	it("skips a frame its last read already covers, such as the echo of the tab's own write, and reads a newer one", async () => {
+		socket().emit("open");
+		// The tab's own write settles with a read, moving the mark past the watermark its echo frame carries.
+		const echo = "000000";
+		await act(async () => syncNodeChanges(client));
+		socket().frame(echo);
+		await settle();
+		const afterEcho = changesSince.length;
+		socket().frame("999999");
+		await settle();
+		expect({afterEcho, reads: changesSince.length}).toStrictEqual({afterEcho: 1, reads: 2});
+	});
+
+	it("skips an echo frame that arrives while the tab's own settle read is in flight", async () => {
+		let release!: () => void;
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const fetchMock = vi.mocked(fetch);
+		const fallback = fetchMock.getMockImplementation()!;
+		fetchMock.mockImplementationOnce(async (input) => {
+			await gate;
+			return fallback(input);
+		});
+		socket().emit("open");
+		let settled!: Promise<void>;
+		act(() => {
+			settled = syncNodeChanges(client);
+		});
+		socket().frame("000000");
+		await settle();
+		release();
+		await act(async () => settled);
+		await settle();
+		expect(changesSince).toHaveLength(1);
+	});
+
 	it("does not read on the first open, then reads once after a drop and reconnect", async () => {
 		const first = socket();
 		first.emit("open");

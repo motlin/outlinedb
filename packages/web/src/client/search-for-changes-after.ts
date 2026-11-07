@@ -1,6 +1,6 @@
 import {useQuery, useQueryClient} from "@tanstack/react-query";
 import {useEffect, useRef} from "react";
-import {fetchPreferences, preferenceKeys, setPreferences} from "./hooks/use-preferences.js";
+import {preferencesQuery, setPreferences} from "./hooks/use-preferences.js";
 import type {PreferencesPatch, PreferencesState} from "./hooks/use-preferences.js";
 
 /**
@@ -18,7 +18,7 @@ export function searchForChangesAfterPatch(state: PreferencesState | undefined, 
 /** Once preferences load, start the account's change tracking as upstream does on startup. */
 export function useSearchForChangesAfterSync(): void {
 	const queryClient = useQueryClient();
-	const {data} = useQuery({queryKey: preferenceKeys.all, queryFn: fetchPreferences});
+	const {data} = useQuery(preferencesQuery);
 	const done = useRef(false);
 	useEffect(() => {
 		if (done.current || data === undefined) {

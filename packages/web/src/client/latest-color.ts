@@ -1,7 +1,7 @@
 import {useQuery, useQueryClient} from "@tanstack/react-query";
 import {useEffect, useSyncExternalStore} from "react";
 import type {ColorName} from "../color-palette.js";
-import {fetchPreferences, preferenceKeys, setPreferences} from "./hooks/use-preferences.js";
+import {preferencesQuery, setPreferences} from "./hooks/use-preferences.js";
 import {toggleColor} from "./rich-text.js";
 import type {ColorChoice, ColorKind} from "./rich-text.js";
 
@@ -89,7 +89,7 @@ export function useLatestColorClass(): string {
 /** Adopt the account's latest color whenever preferences load, and save picks back to the account. */
 export function useLatestColorSync(): void {
 	const queryClient = useQueryClient();
-	const {data} = useQuery({queryKey: preferenceKeys.all, queryFn: fetchPreferences});
+	const {data} = useQuery(preferencesQuery);
 	const account = data?.available === true ? data.preferences.latestColor : undefined;
 	useEffect(() => {
 		if (account !== undefined) {

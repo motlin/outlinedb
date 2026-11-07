@@ -73,6 +73,13 @@ export async function fetchPreferences(): Promise<PreferencesState> {
 	return {preferences: await readJson<Preferences>(response), available: true, error: null};
 }
 
+/**
+ * The preferences query every reader shares. Preferences change only through `setPreferences` (which writes the cache)
+ * or a sync, import or seed (which announces `account.changed` and invalidates them), so they never go stale on a timer:
+ * a row mounting minutes after the first read reuses the cached answer instead of refetching it.
+ */
+export const preferencesQuery = {queryKey: preferenceKeys.all, queryFn: fetchPreferences, staleTime: Infinity} as const;
+
 /** Apply `patch` to the cache, PATCH it, then store the server's answer (or restore on failure). */
 export async function setPreferences(queryClient: QueryClient, patch: PreferencesPatch): Promise<void> {
 	await queryClient.cancelQueries({queryKey: preferenceKeys.all});
@@ -112,7 +119,7 @@ export async function markSlashDiscovered(queryClient: QueryClient): Promise<voi
 
 /** Whether the slash menu has been discovered on this account (true while loading or unavailable). */
 export function useSlashDiscovered(): boolean {
-	const {data} = useQuery({queryKey: preferenceKeys.all, queryFn: fetchPreferences});
+	const {data} = useQuery(preferencesQuery);
 	return slashDiscoveredFrom(data);
 }
 
@@ -129,7 +136,7 @@ export function calendarTooltipSeenFrom(state: PreferencesState | undefined): bo
 
 /** Whether the calendar onboarding tooltip has been seen; null while loading. */
 export function useCalendarTooltipSeen(): boolean | null {
-	const {data} = useQuery({queryKey: preferenceKeys.all, queryFn: fetchPreferences});
+	const {data} = useQuery(preferencesQuery);
 	return calendarTooltipSeenFrom(data);
 }
 
@@ -163,7 +170,7 @@ export function aiEmbeddingStageFrom(state: PreferencesState | undefined): AiEmb
 
 /** The account's AI embedding onboarding stage. */
 export function useAiEmbeddingStage(): AiEmbeddingStage {
-	const {data} = useQuery({queryKey: preferenceKeys.all, queryFn: fetchPreferences});
+	const {data} = useQuery(preferencesQuery);
 	return aiEmbeddingStageFrom(data);
 }
 
@@ -182,7 +189,7 @@ export interface UsePreferences extends PreferencesState {
 
 export function usePreferences(): UsePreferences {
 	const queryClient = useQueryClient();
-	const {data = LOADING} = useQuery({queryKey: preferenceKeys.all, queryFn: fetchPreferences});
+	const {data = LOADING} = useQuery(preferencesQuery);
 	const dateSettings = useMemo(() => resolveDateSettings(data.preferences), [data.preferences]);
 	return {
 		...data,
@@ -219,8 +226,7 @@ export function serverFont(state: PreferencesState | undefined): string | null {
 /** The embed a row's first link gets under the account's embed flags, or null; a row re-renders only when its own embed changes. */
 export function useRowEmbed(nameHtml: string | null): Embed | null {
 	const {data} = useQuery({
-		queryKey: preferenceKeys.all,
-		queryFn: fetchPreferences,
+		...preferencesQuery,
 		select: (state): Embed | null => {
 			const href = firstLinkHref(nameHtml);
 			return href === null ? null : embedFor(href, state.preferences);

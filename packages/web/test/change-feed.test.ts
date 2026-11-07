@@ -118,6 +118,69 @@ describe("applyNodeChanges", () => {
 			gone: stale(client, nodeKeys.detail("gone")),
 		}).toStrictEqual({deep: true, other: false, t1: true, t2: false, t3: true, gone: true});
 	});
+	it("touches only the cache entries a change alters when one row of a big parent changed", () => {
+		const client = new QueryClient();
+		const parent = row("P", null, {hasChildren: true, hasUncompletedChildren: true});
+		const children = Array.from({length: 300}, (_, index) => row(`n${index}`, "P"));
+		client.setQueryData(nodeKeys.children(null), [parent]);
+		client.setQueryData(nodeKeys.detail("P"), parent);
+		client.setQueryData(nodeKeys.children("P"), children);
+		for (const node of children) {
+			client.setQueryData(nodeKeys.detail(node.id), node);
+		}
+		const updated: string[] = [];
+		const unsubscribe = client.getQueryCache().subscribe((event) => {
+			if (event.type === "updated") {
+				updated.push(JSON.stringify(event.query.queryKey));
+			}
+		});
+
+		applyNodeChanges(
+			client,
+			changes({
+				changedIds: ["n5"],
+				children: [
+					{
+						parentId: "P",
+						nodes: children.map((node) =>
+							node.id === "n5" ? row("n5", "P", {name: "renamed"}) : row(node.id, "P"),
+						),
+					},
+				],
+			}),
+		);
+		unsubscribe();
+
+		expect({
+			updated,
+			name: client.getQueryData<NodeResponse>(nodeKeys.detail("n5"))?.name,
+			sharedRow: client.getQueryData<NodeResponse[]>(nodeKeys.children("P"))?.[4] === children[4],
+		}).toStrictEqual({
+			updated: [JSON.stringify(nodeKeys.children("P")), JSON.stringify(nodeKeys.detail("n5"))],
+			name: "renamed",
+			sharedRow: true,
+		});
+	});
+
+	it("leaves the cache untouched when a refreshed list matches what it holds", () => {
+		const client = new QueryClient();
+		const children = [row("a", "P"), row("b", "P")];
+		client.setQueryData(nodeKeys.children("P"), children);
+		const updated: string[] = [];
+		const unsubscribe = client.getQueryCache().subscribe((event) => {
+			if (event.type === "updated") {
+				updated.push(JSON.stringify(event.query.queryKey));
+			}
+		});
+
+		applyNodeChanges(client, changes({children: [{parentId: "P", nodes: [row("a", "P"), row("b", "P")]}]}));
+		unsubscribe();
+
+		expect({updated, same: client.getQueryData(nodeKeys.children("P")) === children}).toStrictEqual({
+			updated: [],
+			same: true,
+		});
+	});
 });
 
 describe("ChangeFeed", () => {
@@ -220,5 +283,23 @@ describe("ChangeFeed", () => {
 			home: ["a", "b", "pending"],
 			moving: ["m"],
 		});
+	});
+
+	it("skips an announced change its mark already covers, after any sync queued before it", async () => {
+		const client = new QueryClient();
+		const asked: (string | undefined)[] = [];
+		const answers = [changes({latest: "5"}), changes({latest: "8"}), changes({latest: "9"})];
+		const feed = new ChangeFeed(async (since) => {
+			asked.push(since);
+			return Promise.resolve(answers.shift() ?? changes({}));
+		});
+
+		await feed.seed();
+		// The tab's own write syncs, and its echo frame (announced at "6") arrives while that read is in flight.
+		await Promise.all([feed.sync(client), feed.sync(client, "6")]);
+		// Another tab's write announced after the mark still reads.
+		await feed.sync(client, "8");
+
+		expect(asked).toStrictEqual([undefined, "5", "8"]);
 	});
 });

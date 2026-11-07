@@ -127,9 +127,12 @@ const changeFeed = new ChangeFeed(fetchChanges, (parentId, nodes) =>
 	pendingMoves.has(parentId) ? undefined : pendingCreates.withPending(parentId, nodes),
 );
 
-/** Patch the cache with every tree change since the last sync; the settle step of each successful tree write. */
-export async function syncNodeChanges(queryClient: QueryClient): Promise<void> {
-	await changeFeed.sync(queryClient);
+/**
+ * Patch the cache with every tree change since the last sync; the settle step of each successful tree write. With
+ * `announced` (a live-sync frame's watermark), skipped when an earlier sync already read past it.
+ */
+export async function syncNodeChanges(queryClient: QueryClient, announced?: string): Promise<void> {
+	await changeFeed.sync(queryClient, announced);
 }
 
 /** A parent's children (Home's for `null`); loads requested in the same tick share one batch request. */

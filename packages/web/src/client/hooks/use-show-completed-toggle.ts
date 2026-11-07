@@ -4,7 +4,7 @@ import {navigableIds} from "../caret-navigation.js";
 import {readNode} from "../node-cache.js";
 import {runShowCompletedToggle} from "../show-completed-toggle.js";
 import {flushEditing, useOutlineStore} from "../stores/outline.js";
-import {fetchPreferences, preferenceKeys, serverShowCompleted} from "./use-preferences.js";
+import {preferencesQuery, serverShowCompleted} from "./use-preferences.js";
 import {collectVisibleNodeIds} from "./use-visible-nodes.js";
 
 /** Show/hide completed with upstream's slide animations and caret fallback. */
@@ -36,7 +36,7 @@ export function useShowCompletedToggle(): () => void {
 
 /** Adopt the account's show-completed setting whenever `/api/v1/preferences` reports a value. */
 export function useShowCompletedSync(): void {
-	const {data} = useQuery({queryKey: preferenceKeys.all, queryFn: fetchPreferences});
+	const {data} = useQuery(preferencesQuery);
 	const showCompleted = serverShowCompleted(data);
 	useEffect(() => {
 		if (showCompleted !== null) {
