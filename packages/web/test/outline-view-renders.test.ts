@@ -32,13 +32,17 @@ const alice: NodeResponse = {
 
 const queryClient = new QueryClient({defaultOptions: {queries: {retry: false, staleTime: Number.POSITIVE_INFINITY}}});
 let root: Root | undefined;
+const slowResponseMs = 300;
 
+/** Wait out pending renders and every in-flight query, so a late response never lands in the next measured window. */
 async function settle(): Promise<void> {
-	await act(async () => {
-		await new Promise((resolve) => {
-			setTimeout(resolve, 20);
+	do {
+		await act(async () => {
+			await new Promise((resolve) => {
+				setTimeout(resolve, 20);
+			});
 		});
-	});
+	} while (queryClient.isFetching() > 0);
 }
 
 beforeAll(async () => {
@@ -48,9 +52,14 @@ beforeAll(async () => {
 		vi.fn<typeof fetch>(async (input) => {
 			const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
 			// Only the root's children answer; every other endpoint is missing, so its query errors and stays empty.
-			return Promise.resolve(
-				url.includes("/children") ? Response.json([alice]) : Response.json({}, {status: 404}),
-			);
+			// The misses answer later than one settle(), as on a loaded CI runner, so no test may measure before they land.
+			if (url.includes("/children")) {
+				return Response.json([alice]);
+			}
+			await new Promise((resolve) => {
+				setTimeout(resolve, slowResponseMs);
+			});
+			return Response.json({}, {status: 404});
 		}),
 	);
 	queryClient.setQueryData(nodeKeys.children(null), [alice]);
@@ -115,13 +124,19 @@ describe("OutlineView render count", () => {
 
 	it("re-renders no component when a keystroke types into the edited row", async () => {
 		const editor = document.querySelector<HTMLElement>('.innerContentContainer.editing[data-node-id="alice"]');
+		const fetchingWhenMeasured = queryClient.isFetching();
 		renders.clear();
 		act(() => {
 			editor?.append("x");
 			editor?.dispatchEvent(new InputEvent("input", {bubbles: true, data: "x", inputType: "insertText"}));
 		});
 		await settle();
-		expect({editing: editor !== null, renders: Object.fromEntries(renders)}).toStrictEqual({
+		expect({
+			fetchingWhenMeasured,
+			editing: editor !== null,
+			renders: Object.fromEntries(renders),
+		}).toStrictEqual({
+			fetchingWhenMeasured: 0,
 			editing: true,
 			renders: {},
 		});
