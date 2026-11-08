@@ -1,19 +1,21 @@
 import {AuthorizationError, CimdFetchError, OAuthProvider, insufficientScope} from "@cloudflare/workers-oauth-provider";
 import type {ConsentDescription, OAuthHelpers, OAuthResourceContext} from "@cloudflare/workers-oauth-provider";
-import {isAllowedEmail, resolveIdentity} from "./access";
 import type {AccessEnv} from "./access";
+import type {ProvisionEnv} from "./auth/provision";
 import {mcpHandler} from "./mcp";
+import {resolvePrincipal} from "./principal";
+import type {SessionReader} from "./principal";
 
 const READ_SCOPE = "mcp:read";
 const WRITE_SCOPE = "mcp:write";
 const OFFLINE_SCOPE = "offline_access";
 
-/** What a grant stores: the Access email whose Durable Object the token reads and writes. */
+/** What a grant stores: the OutlineDB user whose Durable Object the token reads and writes. */
 interface McpProps {
-	email: string;
+	userId: string;
 }
 
-type OAuthEnv = Env & AccessEnv;
+type OAuthEnv = Env & AccessEnv & ProvisionEnv;
 
 const escapeHtml = (value: string): string => value.replaceAll(/[&<>"']/gu, (char) => `&#${char.codePointAt(0)};`);
 
@@ -31,7 +33,7 @@ function consentPage(details: ConsentDescription, handle: string, email: string)
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Authorize ${name}</title>
 <style>body{font:16px/1.5 system-ui,sans-serif;max-width:32rem;margin:3rem auto;padding:0 1rem}label{display:block;margin:.5rem 0}</style>
-<h1>Allow ${name} to access your Workflowy outline?</h1>
+<h1>Allow ${name} to access your OutlineDB outline?</h1>
 <p>${origin} Access will be sent to <strong>${escapeHtml(details.redirectHost)}</strong>, acting as ${escapeHtml(email)}.</p>
 ${loopback}
 <form method="post">
@@ -51,13 +53,17 @@ function textResponse(message: string, status: number): Response {
 	return new Response(message, {status, headers: {"content-type": "text/plain; charset=utf-8"}});
 }
 
-async function authorizeSteps(request: Request, oauth: OAuthHelpers, email: string): Promise<Response> {
+async function authorizeSteps(
+	request: Request,
+	oauth: OAuthHelpers,
+	user: {userId: string; email: string},
+): Promise<Response> {
 	if (request.method === "GET") {
 		const authRequest = await oauth.parseAuthRequest(request);
 		const details = await oauth.describeConsent(authRequest);
 		const consent = await oauth.beginConsent(authRequest);
 		consent.headers.set("content-type", "text/html; charset=utf-8");
-		return new Response(consentPage(details, consent.handle, email), {headers: consent.headers});
+		return new Response(consentPage(details, consent.handle, user.email), {headers: consent.headers});
 	}
 	if (request.method !== "POST") {
 		return textResponse("Method not allowed", 405);
@@ -74,26 +80,41 @@ async function authorizeSteps(request: Request, oauth: OAuthHelpers, email: stri
 	const approved = await oauth.approveConsent(request, handle, {scope: grantedScopes(form)});
 	const {redirectTo} = await oauth.completeAuthorization({
 		request: approved.request,
-		userId: email,
+		userId: user.userId,
 		metadata: {},
 		scope: approved.request.scope,
-		props: {email} satisfies McpProps,
+		props: {userId: user.userId} satisfies McpProps,
 	});
 	approved.headers.set("location", redirectTo);
 	return new Response(null, {status: 302, headers: approved.headers});
 }
 
+/** `/login`, coming back to this `/authorize` request (path and query) once signed in. */
+function loginRedirect(request: Request): Response {
+	const url = new URL(request.url);
+	const next = encodeURIComponent(`${url.pathname}${url.search}`);
+	return new Response(null, {status: 302, headers: {location: `/login?next=${next}`}});
+}
+
 /**
- * The consent page at `/authorize`. It sits behind Access like the rest of the app, so the browser that starts the
- * connection has already signed in; the grant acts as that Access email.
+ * The consent page at `/authorize`, for the signed-in OutlineDB user: a Better Auth session, or an Access identity
+ * whose email has a verified user. With no sign-in it sends the browser to `/login` and back; the grant acts as that
+ * user.
  */
-export async function authorize(request: Request, env: OAuthEnv & {OAUTH_PROVIDER: OAuthHelpers}): Promise<Response> {
-	const identity = await resolveIdentity(request, env);
-	if ("status" in identity) {
-		return textResponse(identity.status === 401 ? "Unauthorized" : "Forbidden", identity.status);
+export async function authorize(
+	request: Request,
+	env: OAuthEnv & {OAUTH_PROVIDER: OAuthHelpers},
+	auth: () => SessionReader | undefined,
+): Promise<Response> {
+	const principal = await resolvePrincipal(request, {...env, ACCESS_DEV_IDENTITY: undefined}, auth);
+	if ("status" in principal) {
+		return principal.status === 401 ? loginRedirect(request) : textResponse("Forbidden", 403);
+	}
+	if (principal.userId === null) {
+		return textResponse(`Sign up for OutlineDB as ${principal.email} before connecting an app.`, 403);
 	}
 	try {
-		return await authorizeSteps(request, env.OAUTH_PROVIDER, identity.email);
+		return await authorizeSteps(request, env.OAUTH_PROVIDER, {userId: principal.userId, email: principal.email});
 	} catch (error) {
 		if (error instanceof AuthorizationError && error.redirectTo) {
 			return Response.redirect(error.redirectTo, 302);
@@ -108,20 +129,28 @@ export async function authorize(request: Request, env: OAuthEnv & {OAUTH_PROVIDE
 	}
 }
 
+/** Whether `userId` is still a verified D1 user. */
+async function isVerifiedUser(env: Pick<ProvisionEnv, "AUTH_DB">, userId: string): Promise<boolean> {
+	const row = await env.AUTH_DB.prepare('SELECT 1 AS ok FROM "user" WHERE id = ? AND emailVerified = 1')
+		.bind(userId)
+		.first<{ok: number}>();
+	return row !== null;
+}
+
 /**
- * `/mcp` behind a bearer token. The email is re-checked against the allowlist on every request, so removing it
- * cuts off live tokens; a token without `mcp:write` gets the read tools only.
+ * `/mcp` behind a bearer token. The user is re-checked in D1 on every request, so deleting or unverifying them cuts
+ * off live tokens; a token without `mcp:write` gets the read tools only.
  */
 const mcpApiHandler = {
 	async fetch(request: Request, env: OAuthEnv, ctx: OAuthResourceContext<McpProps>): Promise<Response> {
-		const {email} = ctx.props;
-		if (!isAllowedEmail(email, env)) {
+		const {userId} = ctx.props;
+		if (typeof userId !== "string" || !(await isVerifiedUser(env, userId))) {
 			return textResponse("Forbidden", 403);
 		}
 		if (!ctx.auth.scope.includes(READ_SCOPE)) {
 			return insufficientScope(ctx.auth, [READ_SCOPE]);
 		}
-		return mcpHandler(request, email, env, {readOnly: !ctx.auth.scope.includes(WRITE_SCOPE)});
+		return mcpHandler(request, userId, env, {readOnly: !ctx.auth.scope.includes(WRITE_SCOPE)});
 	},
 };
 
@@ -148,7 +177,7 @@ export function oauthProviderFor(origin: string, defaultHandler: ExportedHandler
 			resourceMetadata: {
 				resource: `${origin}/mcp`,
 				authorization_servers: [origin],
-				resource_name: "Workflowy",
+				resource_name: "OutlineDB",
 			},
 			clientIdMetadataDocumentEnabled: true,
 		});

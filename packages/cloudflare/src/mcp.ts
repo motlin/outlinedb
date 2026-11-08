@@ -5,19 +5,19 @@ import type {ToolAccess} from "@workflowy/mcp/tools";
 import {storeClient} from "./store-client";
 
 /**
- * Serves one MCP request for `email`'s outline: a fresh server and stateless Streamable HTTP transport per request, so no
+ * Serves one MCP request for user `userId`'s outline: a fresh server and stateless Streamable HTTP transport per request, so no
  * session state outlives it. Stateless mode has no server-to-client stream, so only POST is served.
  */
 export async function mcpHandler(
 	request: Request,
-	email: string,
+	userId: string,
 	env: Pick<Env, "USER_STORE">,
 	access: ToolAccess = {},
 ): Promise<Response> {
 	if (request.method !== "POST") {
 		return new Response("Method not allowed", {status: 405, headers: {allow: "POST"}});
 	}
-	const store = storeClient(env.USER_STORE.get(env.USER_STORE.idFromName(email)));
+	const store = storeClient(env.USER_STORE.getByName(userId));
 	const server = new McpServer({name: "workflowy", version: "0.1.0"});
 	registerWorkflowyTools(server, store, access);
 	const transport = new WebStandardStreamableHTTPServerTransport({

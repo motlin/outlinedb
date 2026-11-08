@@ -16,20 +16,20 @@ Node tools accept a full or short id, or a comma path. Read results use the same
 
 ## Connect to the deployed Worker
 
-`/mcp` takes OAuth bearer tokens only. The Worker is its own authorization server (`@cloudflare/workers-oauth-provider`). Login goes through the existing Cloudflare Access app: the `/authorize` consent page sits behind Access, and it grants the token to the Access email that signed in. Service-token headers do not work on `/mcp`.
+`/mcp` takes OAuth bearer tokens only. The Worker is its own authorization server (`@cloudflare/workers-oauth-provider`). Login is your OutlineDB account: the `/authorize` consent page needs a signed-in session, and without one it sends the browser to `/login` and back. The token acts as that OutlineDB user and reads and writes that user's outline. A Cloudflare Access identity also works when its email has a verified OutlineDB account. Service-token headers do not work on `/mcp`.
 
 The consent page offers two levels:
 
 - **Read only** (`mcp:read`): the client sees only the read tools. `workflowy_calendar_day` with `ensure` is refused.
 - **Read and write** (`mcp:read mcp:write`): all tools.
 
-To change the level, remove the connection and connect again. The email is checked against `ALLOWED_EMAILS` on every request, so removing it from the allowlist cuts off live tokens immediately.
+To change the level, remove the connection and connect again. The user is checked on every request, so deleting the account or un-verifying its email cuts off live tokens immediately.
 
 ### claude.ai (web, Desktop, mobile)
 
 - Settings → Connectors → Add custom connector.
 - URL: `https://<host>/mcp`. Leave the OAuth client id and secret empty. Claude registers itself (CIMD, or DCR as a fallback).
-- Connect, sign in to Access in the popup, choose the access level and click Allow.
+- Connect, log in to OutlineDB in the popup if asked, choose the access level and click Allow.
 
 ### Claude Code
 
@@ -37,7 +37,7 @@ To change the level, remove the connection and connect again. The email is check
 claude mcp add --transport http workflowy https://<host>/mcp
 ```
 
-Then run `/mcp` in Claude Code, pick `workflowy` and authenticate. The browser opens the same Access login and consent page. Claude Code identifies itself with its own client metadata document and receives the token on a loopback redirect.
+Then run `/mcp` in Claude Code, pick `workflowy` and authenticate. The browser opens the same OutlineDB login and consent page. Claude Code identifies itself with its own client metadata document and receives the token on a loopback redirect.
 
 ### Other MCP clients
 

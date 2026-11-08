@@ -1,6 +1,6 @@
 import type {Miniflare} from "miniflare";
+import {origin} from "./auth-harness";
 
-export const origin = "http://localhost";
 export const callback = "https://claude.ai/api/mcp/auth_callback";
 
 const mcpHeaders = {
@@ -50,6 +50,10 @@ async function registerClient(mf: Miniflare): Promise<string> {
 
 export interface ConsentPage {
 	status: number;
+	/** Where `/authorize` redirected, or null when it answered itself. */
+	location: string | null;
+	/** The signed-in user's session Cookie header, sent with every `/authorize` request. */
+	session: string;
 	html: string;
 	handle: string;
 	cookie: string;
@@ -57,8 +61,15 @@ export interface ConsentPage {
 	clientId: string;
 }
 
-/** Start an authorization with PKCE and return the consent page with its form handle and binding cookie. */
-export async function openConsent(mf: Miniflare, scope = "mcp:read mcp:write offline_access"): Promise<ConsentPage> {
+/**
+ * Start an authorization with PKCE as the user whose session Cookie header is `session` (empty for none), and return
+ * the consent page with its form handle and binding cookie.
+ */
+export async function openConsent(
+	mf: Miniflare,
+	session: string,
+	scope = "mcp:read mcp:write offline_access",
+): Promise<ConsentPage> {
 	const clientId = await registerClient(mf);
 	const verifier = base64url(crypto.getRandomValues(new Uint8Array(32)));
 	const challenge = base64url(
@@ -74,11 +85,28 @@ export async function openConsent(mf: Miniflare, scope = "mcp:read mcp:write off
 		code_challenge_method: "S256",
 		resource: `${origin}/mcp`,
 	});
-	const response = await mf.dispatchFetch(`${origin}/authorize?${query}`);
+	const response = await mf.dispatchFetch(`${origin}/authorize?${query}`, {
+		redirect: "manual",
+		headers: session === "" ? {} : {cookie: session},
+	});
 	const html = await response.text();
 	const handle = /name="handle" value="([^"]+)"/u.exec(html)?.[1] ?? "";
 	const cookie = (response.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
-	return {status: response.status, html, handle, cookie, verifier, clientId};
+	return {
+		status: response.status,
+		location: response.headers.get("location"),
+		session,
+		html,
+		handle,
+		cookie,
+		verifier,
+		clientId,
+	};
+}
+
+/** The Cookie header for posting the consent form: its binding cookie plus the user's session. */
+export function consentCookies(page: ConsentPage): string {
+	return [page.cookie, page.session].filter((pair) => pair !== "").join("; ");
 }
 
 /** Approve the consent page with `access` and return the redirect back to the client. */
@@ -86,7 +114,7 @@ export async function approve(mf: Miniflare, page: ConsentPage, access: "read" |
 	const response = await mf.dispatchFetch(`${origin}/authorize`, {
 		method: "POST",
 		redirect: "manual",
-		headers: {"content-type": "application/x-www-form-urlencoded", cookie: page.cookie},
+		headers: {"content-type": "application/x-www-form-urlencoded", cookie: consentCookies(page)},
 		body: new URLSearchParams({handle: page.handle, access, decision: "approve"}).toString(),
 	});
 	if (response.status !== 302) {
@@ -126,9 +154,9 @@ export async function exchange(mf: Miniflare, page: ConsentPage, redirect: URL):
 	};
 }
 
-/** The whole browser flow: register, consent with `access`, and exchange the code for an access token. */
-export async function accessToken(mf: Miniflare, access: "read" | "write"): Promise<TokenResponse> {
-	const page = await openConsent(mf);
+/** The whole browser flow as the `session` user: register, consent with `access`, and exchange the code for an access token. */
+export async function accessToken(mf: Miniflare, session: string, access: "read" | "write"): Promise<TokenResponse> {
+	const page = await openConsent(mf, session);
 	return exchange(mf, page, await approve(mf, page, access));
 }
 

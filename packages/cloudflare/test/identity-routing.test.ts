@@ -1,7 +1,7 @@
 import {afterAll, beforeAll, describe, expect, it} from "vite-plus/test";
 import {SignJWT, exportJWK, generateKeyPair} from "jose";
 import {createHttpApp} from "@workflowy/web/server-app";
-import {cookiesFrom, drainEmails, linkIn, origin, post, startAuthHarness, turnstile} from "./auth-harness";
+import {origin, signUp, startAuthHarness, turnstile} from "./auth-harness";
 import {applyD1Migrations, authDb, countStoreCalls, readJson, startHarness} from "./harness";
 import type {Harness} from "./harness";
 import {storeClient} from "../src/store-client";
@@ -335,29 +335,6 @@ describe("worker routes each Access email to its own Durable Object", () => {
 });
 
 const secret = "test-secret-0123456789abcdef0123456789abcdef";
-const password = "correct horse battery staple";
-
-interface SignedUp {
-	userId: string;
-	/** The Cookie header Better Auth's verification link set: the session token and its cookie cache. */
-	cookie: string;
-}
-
-/** Sign up an invited email from its own client IP (so rate limits never collide), open its verification link, and read its session. */
-async function signUp(h: Harness, email: string): Promise<SignedUp> {
-	const ip = {"cf-connecting-ip": `198.51.100.${email.length}`};
-	const signup = await post(h, "/sign-up/email", {email, password, name: email}, ip);
-	expect(signup.status).toBe(200);
-	const [verification] = await drainEmails(h);
-	if (!verification) {
-		throw new Error(`No verification email for ${email}`);
-	}
-	const verified = await h.mf.dispatchFetch(`${origin}${linkIn(verification)}`, {redirect: "manual"});
-	const cookie = cookiesFrom(verified);
-	const session = await h.mf.dispatchFetch(`${origin}/api/auth/get-session`, {headers: {cookie}});
-	const body = (await session.json()) as {user: {id: string}};
-	return {userId: body.user.id, cookie};
-}
 
 /** Only the session token pair of a Cookie header, so the session is read from D1 rather than the cookie cache. */
 function tokenOnly(cookie: string): string {

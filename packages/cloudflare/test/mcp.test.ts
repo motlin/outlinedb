@@ -1,7 +1,10 @@
 import {afterAll, beforeAll, describe, expect, it} from "vite-plus/test";
-import {startHarness} from "./harness";
+import {origin, signUp, startAuthHarness, turnstile} from "./auth-harness";
+import type {AuthHarness, SignedUp} from "./auth-harness";
+import {authDb, startHarness} from "./harness";
 import type {Harness} from "./harness";
-import {accessToken, approve, callback, exchange, mcpRpc, openConsent, origin} from "./oauth-flow";
+import {accessToken, approve, callback, consentCookies, exchange, mcpRpc, openConsent} from "./oauth-flow";
+import type {UserStore} from "../src/user-store";
 
 const READ_TOOLS = [
 	"workflowy_cache_status",
@@ -27,6 +30,26 @@ const ALL_TOOLS = [
 	"workflowy_node_update",
 	"workflowy_search",
 ];
+
+/** Better Auth on, with invite-only signup for `invites`, and no ACCESS_DEV_IDENTITY, so a request has a session or nothing. */
+async function startSessionHarness(invites: string, persistDir?: string): Promise<AuthHarness> {
+	return startAuthHarness(
+		{
+			BETTER_AUTH_SECRET: "test-secret-0123456789abcdef0123456789abcdef",
+			SIGNUP_MODE: "invite",
+			SIGNUP_INVITES: invites,
+			TURNSTILE_SECRET_KEY: turnstile.passSecret,
+			TURNSTILE_SITE_KEY: turnstile.siteKey,
+		},
+		{className: "ProbeStore", persistDir},
+	);
+}
+
+async function seedStore(h: Harness, name: string, nodeName: string): Promise<void> {
+	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
+	const ns = (await h.mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace<UserStore>;
+	await ns.get(ns.idFromName(name)).fetch(`http://localhost/__seed?name=${encodeURIComponent(nodeName)}`);
+}
 
 function toolNames(body: string): string[] {
 	const parsed: {result: {tools: {name: string}[]}} = JSON.parse(body);
@@ -99,10 +122,12 @@ describe("OAuth discovery", () => {
 });
 
 describe("OAuth consent", () => {
-	let h: Harness;
+	let h: AuthHarness;
+	let alice: SignedUp;
 
 	beforeAll(async () => {
-		h = await startHarness("../src/worker.ts", "UserStore");
+		h = await startSessionHarness("alice@example.com");
+		alice = await signUp(h, "alice@example.com");
 	}, 120_000);
 
 	afterAll(async () => {
@@ -110,18 +135,20 @@ describe("OAuth consent", () => {
 	});
 
 	it("shows a consent page naming the client, where tokens go, and both access levels", async () => {
-		const page = await openConsent(h.mf);
+		const page = await openConsent(h.mf, alice.cookie);
 		expect(page.status).toBe(200);
 		expect(page.handle).not.toBe("");
 		expect(page.cookie).toMatch(/^__Host-oauth-consent-/u);
 		expect(page.html).toContain("Claude");
+		expect(page.html).toContain("OutlineDB");
+		expect(page.html).toContain("alice@example.com");
 		expect(page.html).toContain("claude.ai");
 		expect(page.html).toContain('name="access" value="read"');
 		expect(page.html).toContain('name="access" value="write" checked');
 	});
 
 	it("pre-selects read-only when the client asks only for mcp:read", async () => {
-		const page = await openConsent(h.mf, "mcp:read");
+		const page = await openConsent(h.mf, alice.cookie, "mcp:read");
 		expect(page.html).toContain('name="access" value="read" checked');
 		expect(page.html).not.toContain('name="access" value="write" checked');
 	});
@@ -145,13 +172,15 @@ describe("OAuth consent", () => {
 			code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
 			code_challenge_method: "S256",
 		});
-		const html = await (await h.mf.dispatchFetch(`${origin}/authorize?${query}`)).text();
+		const html = await (
+			await h.mf.dispatchFetch(`${origin}/authorize?${query}`, {headers: {cookie: alice.cookie}})
+		).text();
 		expect(html).not.toContain("<script>alert(1)</script>");
 		expect(html).toContain("&#60;script&#62;");
 	});
 
 	it("redirects to the client with a code and the state after approval", async () => {
-		const page = await openConsent(h.mf);
+		const page = await openConsent(h.mf, alice.cookie);
 		const redirect = await approve(h.mf, page, "write");
 		expect(`${redirect.origin}${redirect.pathname}`).toBe(callback);
 		expect(redirect.searchParams.get("state")).toBe("state-1");
@@ -159,11 +188,11 @@ describe("OAuth consent", () => {
 	});
 
 	it("redirects with access_denied when the user denies", async () => {
-		const page = await openConsent(h.mf);
+		const page = await openConsent(h.mf, alice.cookie);
 		const response = await h.mf.dispatchFetch(`${origin}/authorize`, {
 			method: "POST",
 			redirect: "manual",
-			headers: {"content-type": "application/x-www-form-urlencoded", cookie: page.cookie},
+			headers: {"content-type": "application/x-www-form-urlencoded", cookie: consentCookies(page)},
 			body: new URLSearchParams({handle: page.handle, decision: "deny"}).toString(),
 		});
 		expect(response.status).toBe(302);
@@ -175,49 +204,63 @@ describe("OAuth consent", () => {
 	});
 
 	it("issues a read/write token for write access and a read-only token for read access", async () => {
-		const write = await accessToken(h.mf, "write");
-		const read = await accessToken(h.mf, "read");
+		const write = await accessToken(h.mf, alice.cookie, "write");
+		const read = await accessToken(h.mf, alice.cookie, "read");
 		expect([write.scope, read.scope]).toStrictEqual(["mcp:read mcp:write", "mcp:read"]);
 		expect([typeof write.refresh_token, typeof read.refresh_token]).toStrictEqual(["string", "string"]);
 	});
 
 	it("rejects a code exchange with the wrong PKCE verifier", async () => {
-		const page = await openConsent(h.mf);
+		const page = await openConsent(h.mf, alice.cookie);
 		const redirect = await approve(h.mf, page, "write");
 		const wrong = {...page, verifier: "wrong-verifier-wrong-verifier-wrong-verifier"};
 		await expect(exchange(h.mf, wrong, redirect)).rejects.toThrow(/token: 400/u);
 	});
 });
 
-describe("/authorize behind Access", () => {
-	let h: Harness;
+describe("/authorize without a session", () => {
+	let h: AuthHarness;
 
 	beforeAll(async () => {
-		h = await startHarness("../src/worker.ts", "UserStore", undefined, {
-			ACCESS_TEAM_DOMAIN: "team.example.com",
-			ACCESS_AUD: "aud",
-			ALLOWED_EMAILS: "alice@example.com",
-		});
+		h = await startSessionHarness("alice@example.com");
 	}, 120_000);
 
 	afterAll(async () => {
 		await h.dispose();
 	});
 
-	it("returns 401 without an Access identity", async () => {
-		const page = await openConsent(h.mf);
-		expect(page.status).toBe(401);
+	it("redirects to /login with the whole /authorize path and query as next", async () => {
+		const page = await openConsent(h.mf, "");
+		const location = new URL(page.location ?? "", origin);
+		const next = new URL(location.searchParams.get("next") ?? "", origin);
+		expect({status: page.status, path: location.pathname, nextPath: next.pathname}).toStrictEqual({
+			status: 302,
+			path: "/login",
+			nextPath: "/authorize",
+		});
+		expect([next.searchParams.get("client_id"), next.searchParams.get("state")]).toStrictEqual([
+			page.clientId,
+			"state-1",
+		]);
+	});
+
+	it("redirects a forged session token to /login too", async () => {
+		const page = await openConsent(h.mf, "better-auth.session_token=forged.token");
+		expect([page.status, new URL(page.location ?? "", origin).pathname]).toStrictEqual([302, "/login"]);
 	});
 });
 
 describe("/mcp with a bearer token", () => {
-	let h: Harness;
+	let h: AuthHarness;
+	let alice: SignedUp;
+	let bob: SignedUp;
 
 	beforeAll(async () => {
-		h = await startHarness("./probe-entry.ts", "ProbeStore");
-		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
-		const ns = (await h.mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace;
-		await ns.get(ns.idFromName("dev")).fetch("http://localhost/__seed?name=Plan%20the%20remote%20MCP");
+		h = await startSessionHarness("alice@example.com, bob@example.com");
+		alice = await signUp(h, "alice@example.com");
+		bob = await signUp(h, "bob@example.com");
+		await seedStore(h, alice.userId, "Plan the remote MCP");
+		await seedStore(h, bob.userId, "Bob's remote node");
 	}, 120_000);
 
 	afterAll(async () => {
@@ -225,7 +268,7 @@ describe("/mcp with a bearer token", () => {
 	});
 
 	it("answers initialize, tools/list and tools/call workflowy_search from the user's Durable Object with plain JSON", async () => {
-		const {access_token: token} = await accessToken(h.mf, "write");
+		const {access_token: token} = await accessToken(h.mf, alice.cookie, "write");
 
 		const init = await mcpRpc(h.mf, token, 1, "initialize", {
 			protocolVersion: "2025-06-18",
@@ -263,7 +306,7 @@ describe("/mcp with a bearer token", () => {
 	});
 
 	it("lists and runs only the read tools for a read-only token", async () => {
-		const {access_token: token} = await accessToken(h.mf, "read");
+		const {access_token: token} = await accessToken(h.mf, alice.cookie, "read");
 
 		const list = await mcpRpc(h.mf, token, 1, "tools/list", {});
 		expect(toolNames(list.body)).toStrictEqual(READ_TOOLS);
@@ -284,8 +327,23 @@ describe("/mcp with a bearer token", () => {
 		});
 	});
 
+	it("reaches each user's own Durable Object", async () => {
+		const tokens = await Promise.all([alice, bob].map(async ({cookie}) => accessToken(h.mf, cookie, "read")));
+		const names = await Promise.all(
+			tokens.map(async ({access_token: token}) => {
+				const call = await mcpRpc(h.mf, token, 1, "tools/call", {
+					name: "workflowy_search",
+					arguments: {query: "remote"},
+				});
+				const rows: {name: string}[] = JSON.parse(JSON.parse(call.body).result.content[0].text);
+				return rows.map(({name}) => name);
+			}),
+		);
+		expect(names).toStrictEqual([["Plan the remote MCP"], ["Bob's remote node"]]);
+	});
+
 	it("rejects GET and DELETE with 405, since stateless mode has no server-to-client stream", async () => {
-		const {access_token: token} = await accessToken(h.mf, "write");
+		const {access_token: token} = await accessToken(h.mf, alice.cookie, "write");
 		const authorization = `Bearer ${token}`;
 		const get = await h.mf.dispatchFetch(`${origin}/mcp`, {headers: {accept: "text/event-stream", authorization}});
 		const del = await h.mf.dispatchFetch(`${origin}/mcp`, {method: "DELETE", headers: {authorization}});
@@ -293,22 +351,31 @@ describe("/mcp with a bearer token", () => {
 	});
 });
 
-describe("/mcp after the email leaves the allowlist", () => {
-	it("returns 403 for a still-live token", async () => {
-		const first = await startHarness("./probe-entry.ts", "ProbeStore");
-		const {access_token: token} = await accessToken(first.mf, "write");
-		expect((await mcpRpc(first.mf, token, 1, "tools/list", {})).status).toBe(200);
-		await first.dispose(true);
+describe("/mcp after the user is deleted or unverified", () => {
+	let h: AuthHarness;
 
-		const second = await startHarness("./probe-entry.ts", "ProbeStore", first.persistDir, {
-			ACCESS_TEAM_DOMAIN: "team.example.com",
-			ACCESS_AUD: "aud",
-			ALLOWED_EMAILS: "alice@example.com",
-		});
-		try {
-			expect((await mcpRpc(second.mf, token, 1, "tools/list", {})).status).toBe(403);
-		} finally {
-			await second.dispose();
-		}
-	}, 240_000);
+	beforeAll(async () => {
+		h = await startSessionHarness("carol@example.com, dave@example.com");
+	}, 120_000);
+
+	afterAll(async () => {
+		await h.dispose();
+	});
+
+	it("returns 403 for a deleted user's still-live token", async () => {
+		const carol = await signUp(h, "carol@example.com");
+		const {access_token: token} = await accessToken(h.mf, carol.cookie, "write");
+		expect((await mcpRpc(h.mf, token, 1, "tools/list", {})).status).toBe(200);
+
+		await (await authDb(h.mf)).prepare('DELETE FROM "user" WHERE id = ?').bind(carol.userId).run();
+		expect((await mcpRpc(h.mf, token, 2, "tools/list", {})).status).toBe(403);
+	});
+
+	it("returns 403 for a user whose email is no longer verified", async () => {
+		const dave = await signUp(h, "dave@example.com");
+		const {access_token: token} = await accessToken(h.mf, dave.cookie, "read");
+
+		await (await authDb(h.mf)).prepare('UPDATE "user" SET emailVerified = 0 WHERE id = ?').bind(dave.userId).run();
+		expect((await mcpRpc(h.mf, token, 1, "tools/list", {})).status).toBe(403);
+	});
 });

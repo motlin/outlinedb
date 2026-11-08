@@ -47,11 +47,6 @@ function allowedEmails(env: AccessEnv): string[] {
 		.filter((entry) => entry !== "");
 }
 
-/** Whether `email` may still use the app: the local dev identity, or an email on the allowlist. */
-export function isAllowedEmail(email: string, env: AccessEnv): boolean {
-	return email === env.ACCESS_DEV_IDENTITY || allowedEmails(env).includes(email);
-}
-
 /** Verify the Cloudflare Access JWT and the email allowlist; the identity is the lowercased email. */
 export async function resolveIdentity(
 	request: Request,

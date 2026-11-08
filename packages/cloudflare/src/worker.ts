@@ -106,8 +106,8 @@ app.use("/api/admin/*", async (c, next) =>
 	c.var.principal.kind === "access" ? next() : c.json({error: "access-required"}, 403),
 );
 
-// The OAuth consent page; it runs its own Access check, since the grant it issues acts as that email.
-app.on(["GET", "POST"], "/authorize", async (c) => authorize(c.req.raw, c.env));
+// The OAuth consent page; it resolves its own principal, sending a signed-out browser to /login and back.
+app.on(["GET", "POST"], "/authorize", async (c) => authorize(c.req.raw, c.env, () => authFor(c.env)));
 
 // The DO's only HTTP surfaces: a WebSocket cannot cross RPC, and hibernation needs the DO to accept it.
 // Registered before the HTTP app, so `/api/v1/nodes/events` is not taken by its `GET /api/v1/nodes/:id`.

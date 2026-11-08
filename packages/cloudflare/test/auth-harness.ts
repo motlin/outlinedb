@@ -111,3 +111,35 @@ export function cookiesFrom(response: {headers: {getSetCookie(): string[]}}): st
 		.map((cookie) => cookie.split(";")[0])
 		.join("; ");
 }
+
+/** The password `signUp` gives every test user. */
+const password = "correct horse battery staple";
+
+export interface SignedUp {
+	userId: string;
+	/** The Cookie header Better Auth's verification link set: the session token and its cookie cache. */
+	cookie: string;
+}
+
+/** Sign up an invited email from its own client IP (so rate limits never collide), open its verification link, and read its session. */
+export async function signUp(h: Harness, email: string): Promise<SignedUp> {
+	const ip = {"cf-connecting-ip": `198.51.100.${email.length}`};
+	const signup = await post(h, "/sign-up/email", {email, password, name: email}, ip);
+	if (signup.status !== 200) {
+		throw new Error(`sign-up ${email}: ${signup.status} ${await signup.text()}`);
+	}
+	const [verification] = await drainEmails(h);
+	if (!verification) {
+		throw new Error(`No verification email for ${email}`);
+	}
+	const verified = await h.mf.dispatchFetch(`${origin}${linkIn(verification)}`, {redirect: "manual"});
+	const cookie = cookiesFrom(verified);
+	const session = await h.mf.dispatchFetch(`${origin}/api/auth/get-session`, {headers: {cookie}});
+	const body: unknown = await session.json();
+	const user: unknown = typeof body === "object" && body !== null ? Reflect.get(body, "user") : undefined;
+	const userId: unknown = typeof user === "object" && user !== null ? Reflect.get(user, "id") : undefined;
+	if (typeof userId !== "string") {
+		throw new TypeError(`No session for ${email}`);
+	}
+	return {userId, cookie};
+}
