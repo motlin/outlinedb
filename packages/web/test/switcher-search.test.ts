@@ -6,6 +6,7 @@ import {
 	rankSwitcherCompact,
 	rankSwitcherPaged,
 	scanFragment,
+	switcherTextFlags,
 	warmSwitcher,
 } from "../src/server/switcher-search.js";
 import type {SwitcherTextScan} from "../src/server/switcher-search.js";
@@ -393,13 +394,13 @@ describe("rankSwitcherPaged", () => {
 });
 
 /**
- * A {@link SwitcherTextScan} over fixture rows like the SQL one: an ASCII LIKE on the raw text plus every row holding a
- * tag or non-ASCII text, sized and read out of tree order, as SQL answers them.
+ * A {@link SwitcherTextScan} over fixture rows like the SQL one: an ASCII case-insensitive LIKE on the raw text, ids
+ * and text answered out of tree order, as SQL answers them.
  */
 function fixtureScan(
 	rows: readonly TreeSearchRow[],
 	pageSize: number,
-	onSizes: (fragment: string | null) => void = () => {},
+	onHolding: (fragment: string) => void = () => {},
 ): SwitcherTextScan {
 	const byId = new Map(rows.map((full) => [full.id, full]));
 	// Out of tree order, as SQL answers them.
@@ -407,26 +408,11 @@ function fixtureScan(
 		items.flatMap((_, i) => items.slice(items.length - 1 - i, items.length - i));
 	return {
 		pageSize,
-		sizes(fragment) {
-			onSizes(fragment);
+		holding(fragment) {
+			onHolding(fragment);
 			return reversed(
-				rows.filter(
-					({name, note}) =>
-						fragment === null ||
-						[name, note].some(
-							(text) =>
-								text !== null &&
-								(text.toLowerCase().includes(fragment) ||
-									text.includes("<") ||
-									!/^\p{ASCII}*$/u.test(text)),
-						),
-				),
-			).map(({id, name}) => ({
-				id,
-				nameLength: name?.length ?? 0,
-				simpleName: name !== null && /^\p{ASCII}*$/u.test(name) && !name.includes("<") && !name.includes("&"),
-				taggedName: name !== null && (name.includes("#") || name.includes("@")),
-			}));
+				rows.filter(({name, note}) => [name, note].some((text) => text?.toLowerCase().includes(fragment))),
+			).map(({id}) => id);
 		},
 		read(ids) {
 			return reversed(ids).flatMap((id) => {
@@ -444,7 +430,7 @@ describe("rankSwitcherCompact", () => {
 		row("accent", "sandbox", 2, "Qwzx \u00E9t\u00E9 plans", {layoutMode: "h1"}),
 		row("tagged", "sandbox", 3, "qw<b>zx</b> bold", {createdAt: Date.UTC(2017, 0, 1)}),
 	];
-	const skeleton = compactSwitcherSkeleton(ROWS_WITH_TEXT.map((full) => ({...full, name: null, note: null})));
+	const skeleton = compactSwitcherSkeleton(ROWS_WITH_TEXT);
 	const textById = new Map(ROWS_WITH_TEXT.map(({id, name, note}) => [id, {name, note}]));
 
 	function compact(query: string, options: {showCompleted?: boolean; limit?: number; excludeId?: string} = {}) {
@@ -505,7 +491,7 @@ describe("rankSwitcherCompact", () => {
 			row("lead", "box", 11, "  tea two"),
 			row("mid", "box", 12, "at-tea"),
 		];
-		const tiedSkeleton = compactSwitcherSkeleton(tied.map((full) => ({...full, name: null, note: null})));
+		const tiedSkeleton = compactSwitcherSkeleton(tied);
 		const tiedText = new Map(tied.map(({id, name, note}) => [id, {name, note}]));
 		const cases: [string, {limit?: number; offset?: number}][] = [
 			["t", {}],
@@ -546,12 +532,17 @@ describe("rankSwitcherCompact", () => {
 		const old = Array.from({length: 6}, (_, i) =>
 			row(`old${i}`, "box", i + 2, `topic ${"x".repeat(40)} ${i}`, {modifiedAt: null}),
 		);
-		const rows = [row("box", null, 0, "Box"), row("top", "box", 0, "Top"), row("tip", "box", 1, "Tip two"), ...old];
+		const rows = [
+			row("box", null, 0, "Box"),
+			row("top", "box", 0, "Top"),
+			row("tip", "box", 1, "Tip tour"),
+			...old,
+		];
 		const scan = fixtureScan(rows, 2);
 		const read: string[] = [];
 		const response = rankSwitcherCompact(
-			compactSwitcherSkeleton(rows.map((full) => ({...full, name: null, note: null}))),
-			"t",
+			compactSwitcherSkeleton(rows),
+			"to",
 			[],
 			NOW_SEC,
 			{joinedSec: JOINED_SEC, limit: 1},
@@ -571,11 +562,41 @@ describe("rankSwitcherCompact", () => {
 		});
 	});
 
-	it("scans with the folded longest word as the prefilter fragment", () => {
-		expect(["par QWZX", "\u00E9t\u00E9", "\u00DF"].map((query) => compact(query).fragments)).toStrictEqual([
-			["qwzx"],
-			["ete"],
-			[null],
+	it("scans with the folded longest word as the prefilter fragment, and skips the scan for one letter", () => {
+		expect(
+			["par QWZX", "\u00E9t\u00E9", "\u00DF", "q", "Q a"].map((query) => compact(query).fragments),
+		).toStrictEqual([["qwzx"], ["ete"], [], [], []]);
+	});
+
+	it("answers one-letter and unscannable queries exactly as rankSwitcher does", () => {
+		const queries = ["q", "e", "\u00E9", "a", "\u00DF"];
+		expect(queries.map((query) => compact(query).response)).toStrictEqual(
+			queries.map((query) => rankSwitcher(ROWS_WITH_TEXT, query, ["beta"], NOW_SEC, {joinedSec: JOINED_SEC})),
+		);
+	});
+
+	it("sizes each row's own text in the skeleton: name length, simple and tagged names, and text that folds", () => {
+		const sized = compactSwitcherSkeleton([
+			row("plain", null, 0, "Plain"),
+			row("tagged", null, 1, "#tag &amp; @who"),
+			row("markup", null, 2, "R<i>oo</i>t"),
+			row("accentNote", null, 3, "cafe", {note: "caf\u00E9"}),
+			row("empty", null, 4, ""),
+			row("mirror", null, 5, "caf\u00E9 <b>x</b>", {isMirror: true}),
+		]);
+		expect(
+			sized.ids.map((id, at) => ({
+				id,
+				nameLength: sized.nameLength[at],
+				...switcherTextFlags(sized.flags[at] ?? 0),
+			})),
+		).toStrictEqual([
+			{id: "plain", nameLength: 5, simpleName: true, taggedName: false, folds: false},
+			{id: "tagged", nameLength: 15, simpleName: false, taggedName: true, folds: false},
+			{id: "markup", nameLength: 11, simpleName: false, taggedName: false, folds: true},
+			{id: "accentNote", nameLength: 4, simpleName: true, taggedName: false, folds: true},
+			{id: "empty", nameLength: 0, simpleName: true, taggedName: false, folds: false},
+			{id: "mirror", nameLength: 0, simpleName: false, taggedName: false, folds: false},
 		]);
 	});
 

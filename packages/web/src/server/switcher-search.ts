@@ -730,6 +730,47 @@ export function rankSwitcherPaged(
 const COMPLETED = 1;
 const UNDER_COMPLETED = 2;
 const MIRROR = 4;
+/** The raw name is ASCII without `<` or `&`, so its index text is just its lowercase copy. */
+const SIMPLE_NAME = 8;
+/** The raw name holds `#` or `@`, which the tag boost needs. */
+const TAGGED_NAME = 16;
+/** The raw name or note holds a tag or non-ASCII text, so its folded text can hold a word its raw text lacks. */
+const FOLDS = 32;
+
+/** What a row's jump-menu score bound and prefilter need from its own text, without holding the text. */
+export interface SwitcherTextSize {
+	/** The raw name's length in code points, 0 when null. */
+	nameLength: number;
+	simpleName: boolean;
+	taggedName: boolean;
+	folds: boolean;
+}
+
+const UNSIZED: SwitcherTextSize = {nameLength: 0, simpleName: false, taggedName: false, folds: false};
+
+const ASCII_SIMPLE_NAME = /^[\0-\x25\x27-\x3B\x3D-\x7F]*$/u;
+const FOLDING_TEXT = /[<\u0080-\u{10FFFF}]/u;
+
+/** {@link SwitcherTextSize} of a row's own name and note, as `buildSwitcherSkeleton` measures them in SQL. */
+function textSize(name: string | null, note: string | null): SwitcherTextSize {
+	return {
+		// Code points, as SQLite's length() counts them.
+		// oxlint-disable-next-line typescript/no-misused-spread -- code points are the point here
+		nameLength: name === null ? 0 : [...name].length,
+		simpleName: name !== null && ASCII_SIMPLE_NAME.test(name),
+		taggedName: name !== null && (name.includes("#") || name.includes("@")),
+		folds: [name, note].some((text) => text !== null && FOLDING_TEXT.test(text)),
+	};
+}
+
+/** The text-size bits of a skeleton row's flags, for tests. */
+export function switcherTextFlags(flag: number): Omit<SwitcherTextSize, "nameLength"> {
+	return {
+		simpleName: (flag & SIMPLE_NAME) !== 0,
+		taggedName: (flag & TAGGED_NAME) !== 0,
+		folds: (flag & FOLDS) !== 0,
+	};
+}
 
 /**
  * The jump menu's whole tree without text, in tree preorder and in typed arrays: small enough (about a tenth of the
@@ -743,6 +784,8 @@ export interface SwitcherSkeleton {
 	/** Counted from Home, so a top-level row is 2. */
 	depth: Uint16Array;
 	childCount: Uint32Array;
+	/** The raw name's length in code points; 0 for a mirror, which the jump menu skips. */
+	nameLength: Uint32Array;
 	/** Milliseconds, NaN when unknown. */
 	modifiedMs: Float64Array;
 	flags: Uint8Array;
@@ -752,8 +795,14 @@ export interface SwitcherSkeleton {
 	earliestCreatedMs: number;
 }
 
-/** {@link SwitcherSkeleton} of text-free skeleton rows; the rows can be dropped afterwards. */
-export function compactSwitcherSkeleton(rows: readonly TreeSearchRow[]): SwitcherSkeleton {
+/**
+ * {@link SwitcherSkeleton} of tree rows; the rows can be dropped afterwards. Each row's {@link SwitcherTextSize} is
+ * `sizes[i]`, or else measured from the row's own text; a mirror's is left unsized.
+ */
+export function compactSwitcherSkeleton(
+	rows: readonly TreeSearchRow[],
+	sizes?: readonly SwitcherTextSize[],
+): SwitcherSkeleton {
 	const count = rows.length;
 	const indexOf = new Map<string, number>();
 	rows.forEach((row, i) => {
@@ -803,6 +852,7 @@ export function compactSwitcherSkeleton(rows: readonly TreeSearchRow[]): Switche
 		parent: new Int32Array(size),
 		depth: new Uint16Array(size),
 		childCount: new Uint32Array(size),
+		nameLength: new Uint32Array(size),
 		modifiedMs: new Float64Array(size),
 		flags: new Uint8Array(size),
 		layoutModes: new Map(),
@@ -826,10 +876,15 @@ export function compactSwitcherSkeleton(rows: readonly TreeSearchRow[]): Switche
 		skeleton.depth[at] = parent < 0 ? 2 : (skeleton.depth[parent] ?? 0) + 1;
 		skeleton.childCount[at] = childCount[i] ?? 0;
 		skeleton.modifiedMs[at] = row.modifiedAt ?? Number.NaN;
+		const text = row.isMirror ? UNSIZED : (sizes?.[i] ?? textSize(row.name, row.note));
+		skeleton.nameLength[at] = text.nameLength;
 		skeleton.flags[at] =
 			(row.completedAt === null ? 0 : COMPLETED) |
 			((parentFlags & (COMPLETED | UNDER_COMPLETED)) === 0 ? 0 : UNDER_COMPLETED) |
-			(row.isMirror ? MIRROR : 0);
+			(row.isMirror ? MIRROR : 0) |
+			(text.simpleName ? SIMPLE_NAME : 0) |
+			(text.taggedName ? TAGGED_NAME : 0) |
+			(text.folds ? FOLDS : 0);
 		if (row.layoutMode !== null) {
 			skeleton.layoutModes.set(at, row.layoutMode);
 		}
@@ -856,21 +911,10 @@ export function scanFragment(longest: string): string | null {
 	return PLAIN_WORD.test(longest) ? longest : null;
 }
 
-/** What a row's jump-menu score upper bound needs from its name, without reading the name itself. */
-export interface SwitcherRowSize {
-	id: string;
-	/** The raw name's length in characters, 0 when null. */
-	nameLength: number;
-	/** Whether the raw name is ASCII without `<` or `&`, so its index text is just its lowercase copy. */
-	simpleName: boolean;
-	/** Whether the raw name holds `#` or `@`, which the tag boost needs. */
-	taggedName: boolean;
-}
-
-/** Live rows' own text (mirrors carry their own stale text): their sizes up front, then their text by id. */
+/** Live rows' own text (mirrors carry their own stale text): which hold a fragment, then their text by id. */
 export interface SwitcherTextScan {
-	/** Every row whose raw name or note might fold to hold `fragment` (all rows when null), in any order. */
-	sizes(fragment: string | null): Iterable<SwitcherRowSize>;
+	/** The ids of live rows whose raw name or note holds `fragment`, ASCII case-insensitively, in any order. */
+	holding(fragment: string): Iterable<string>;
 	/** The text of `ids` (at most `pageSize` of them), in any order. */
 	read(ids: readonly string[]): Iterable<{id: string; name: string | null; note: string | null}>;
 	pageSize: number;
@@ -944,9 +988,9 @@ function asciiWordStart(text: string, word: string): boolean {
 }
 
 /**
- * {@link rankSwitcher} over a cached {@link SwitcherSkeleton}, reading only as much text as the page needs: `scan`
- * sizes the rows that may hold the longest query word, each gets an upper bound on its score from its skeleton entry
- * and name length, and text is read a page at a time from the highest bound down, each row scored and dropped. The
+ * {@link rankSwitcher} over a cached {@link SwitcherSkeleton}, reading only as much text as the page needs: the rows
+ * that may hold the longest query word (those `scan` finds holding it plus those whose text folds; every row for one
+ * letter) each get an upper bound on their score from their skeleton entry, and text is read a page at a time from the highest bound down, each row scored and dropped. The
  * read stops once enough hits beat every unread bound, unless the page's score ties need the trie gather order's
  * first insertions, which only every hit can tell. Labels and ancestor names are read from `source` afterwards. For
  * {@link isCompactSwitcherQuery} queries only.
@@ -978,7 +1022,7 @@ export function rankSwitcherCompact(
 		? (field: string): boolean => asciiWordStart(field, longest)
 		: (field: string): boolean => longestAtWordStart.test(field);
 	const prefixWords = wordsStartingWith(longest);
-	const {position, flags, depth, childCount, modifiedMs, layoutModes} = skeleton;
+	const {ids: skeletonIds, position, flags, depth, childCount, nameLength, modifiedMs, layoutModes} = skeleton;
 
 	// Each candidate's skeleton position, static score and score bound; a name hit's text factor is at most
 	// 10 x query length / index name length, and a simple name's index text is as long as the name.
@@ -986,15 +1030,12 @@ export function rankSwitcherCompact(
 	const candidateIds: string[] = [];
 	const candidateBase: number[] = [];
 	const candidateBound: number[] = [];
-	for (const size of scan.sizes(scanFragment(longest))) {
-		const at = position.get(size.id);
-		if (at === undefined || size.id === excludeId) {
-			continue;
-		}
+	const consider = (at: number): void => {
+		const id = skeletonIds[at] ?? "";
 		const flag = flags[at] ?? 0;
 		const completed = (flag & (COMPLETED | UNDER_COMPLETED)) !== 0;
-		if ((flag & MIRROR) !== 0 || (completed && !showCompleted)) {
-			continue;
+		if ((flag & MIRROR) !== 0 || (completed && !showCompleted) || id === excludeId) {
+			return;
 		}
 		const modified = modifiedMs[at] ?? Number.NaN;
 		const base = baseScore({
@@ -1005,21 +1046,45 @@ export function rankSwitcherCompact(
 			joinedSec,
 			nowSec,
 			layoutMode: layoutModes.get(at) ?? null,
-			starred: starred.has(size.id),
+			starred: starred.has(id),
 		});
+		const length = nameLength[at] ?? 0;
 		let bound: number;
-		if (size.nameLength === 0) {
+		if (length === 0) {
 			bound = 0;
-		} else if (size.simpleName) {
-			bound = base * (size.taggedName ? 2 : 1) * ((longest.length / size.nameLength) * 10);
-		} else {
+		} else if ((flag & SIMPLE_NAME) === 0) {
 			// Stripping, folding and decoding can shorten the name to a single character.
 			bound = base * 4 * (longest.length * 10);
+		} else {
+			bound = base * ((flag & TAGGED_NAME) === 0 ? 1 : 2) * ((longest.length / length) * 10);
 		}
 		candidateAt.push(at);
-		candidateIds.push(size.id);
+		candidateIds.push(id);
 		candidateBase.push(base);
 		candidateBound.push(bound);
+	};
+	const fragment = scanFragment(longest);
+	if (fragment === null || fragment.length === 1) {
+		// Nearly every row holds one letter, so a scan would filter out little at the cost of reading every row.
+		for (let at = 0; at < skeletonIds.length; at++) {
+			consider(at);
+		}
+	} else {
+		// A row holds the fragment in its folded text only if its raw text holds it, or folding can change the text.
+		const considered = new Uint8Array(skeletonIds.length);
+		for (let at = 0; at < skeletonIds.length; at++) {
+			if (((flags[at] ?? 0) & FOLDS) !== 0) {
+				considered[at] = 1;
+				consider(at);
+			}
+		}
+		for (const id of scan.holding(fragment)) {
+			const at = position.get(id);
+			if (at !== undefined && considered[at] === 0) {
+				considered[at] = 1;
+				consider(at);
+			}
+		}
 	}
 	const order = Uint32Array.from(candidateAt, (_, i) => i).toSorted(
 		(a, b) => (candidateBound[b] ?? 0) - (candidateBound[a] ?? 0),

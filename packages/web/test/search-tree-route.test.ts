@@ -255,33 +255,26 @@ describe("jump-menu search with the tree snapshot off", () => {
 		db.insert(aiMetadata)
 			.values({nodeId: "chat", inChat: 1, systemFrom: SEEDED_AT, systemTo: FAR_FUTURE_DATE})
 			.run();
-		expect(buildSwitcherSkeleton(db)).toStrictEqual(compactSwitcherSkeleton(loadTreeSkeletonRows(db)));
+		// Sizes come from each row's own text; a mirror's is left unsized.
+		db.update(nodeContent).set({name: "R<i>oo</i>t #x"}).where(eq(nodeContent.id, "root")).run();
+		db.update(nodeContent).set({note: "caf\u00E9"}).where(eq(nodeContent.id, "a1")).run();
+		db.update(nodeContent).set({name: "@who &amp; co"}).where(eq(nodeContent.id, "other")).run();
+		expect(buildSwitcherSkeleton(db)).toStrictEqual(compactSwitcherSkeleton(loadTreeSearchRows(db, null)));
 	});
 
-	it("sizes live rows holding the LIKE fragment, a tag or non-ASCII text, and reads their own text by id", () => {
+	it("finds live rows whose raw text holds the LIKE fragment, and reads their own text by id", () => {
 		const db = setup();
 		db.update(nodeContent).set({name: "R<i>oo</i>t"}).where(eq(nodeContent.id, "root")).run();
-		db.update(nodeContent).set({note: "caf\u00E9"}).where(eq(nodeContent.id, "a1")).run();
-		db.update(nodeContent).set({name: "#tag &amp; @who"}).where(eq(nodeContent.id, "other")).run();
+		db.update(nodeContent).set({note: "ALPine caf\u00E9"}).where(eq(nodeContent.id, "other")).run();
 		const scan = switcherTextScan(db, 2);
 		const byId = <T extends {id: string}>(rows: Iterable<T>): T[] =>
 			// oxlint-disable-next-line unicorn/no-array-sort -- a fresh copy; the test lib has no toSorted
 			[...rows].sort((a, b) => a.id.localeCompare(b.id));
 		expect({
-			filtered: new Set([...scan.sizes("alp")].map(({id}) => id)),
-			all: byId(scan.sizes(null)),
+			holding: new Set(scan.holding("alp")),
 			text: byId(scan.read(["mirror", "a", "deleted"])),
 		}).toStrictEqual({
-			filtered: new Set(["a", "a1", "root"]),
-			all: byId([
-				{id: "a", nameLength: 5, simpleName: true, taggedName: false},
-				{id: "a1", nameLength: 11, simpleName: true, taggedName: false},
-				{id: "bl", nameLength: 0, simpleName: true, taggedName: false},
-				{id: "mirror", nameLength: 5, simpleName: true, taggedName: false},
-				{id: "other", nameLength: 15, simpleName: false, taggedName: true},
-				{id: "refs", nameLength: 0, simpleName: true, taggedName: false},
-				{id: "root", nameLength: 11, simpleName: false, taggedName: false},
-			]),
+			holding: new Set(["a", "a1", "other"]),
 			text: byId([
 				{id: "a", name: "Alpha", note: null},
 				{id: "mirror", name: "stale", note: null},

@@ -200,6 +200,10 @@ interface FlatSkeletonSqlRow {
 	isMirror: number;
 	isReferencesRoot: number;
 	isInChat: number;
+	nameLength: number | null;
+	simpleName: number | null;
+	taggedName: number | null;
+	folds: number;
 }
 
 /**
@@ -219,7 +223,15 @@ export function buildSwitcherSkeleton(database: Database): SwitcherSkeleton {
 			m.layout_mode AS layoutMode,
 			mi.mirror_id IS NOT NULL AS isMirror,
 			c.id IN ${LIVE_REFERENCES_ROOTS} AS isReferencesRoot,
-			c.id IN ${LIVE_IN_CHAT} AS isInChat
+			c.id IN ${LIVE_IN_CHAT} AS isInChat,
+			length(c.name) AS nameLength,
+			length(c.name) = octet_length(c.name) AND instr(c.name, '<') = 0 AND instr(c.name, '&') = 0 AS simpleName,
+			instr(c.name, '#') > 0 OR instr(c.name, '@') > 0 AS taggedName,
+			coalesce(
+				instr(c.name, '<') > 0 OR instr(c.note, '<') > 0
+				OR length(c.name) <> octet_length(c.name) OR length(c.note) <> octet_length(c.note),
+				0
+			) AS folds
 		FROM node_content c
 		LEFT JOIN node_metadata m ON m.node_id = c.id AND m.system_to = ${FAR_FUTURE_DATE}
 		LEFT JOIN mirrors mi ON mi.mirror_id = c.id AND mi.system_to = ${FAR_FUTURE_DATE}
@@ -254,28 +266,33 @@ export function buildSwitcherSkeleton(database: Database): SwitcherSkeleton {
 		}
 		level = level.flatMap((row) => (row.isInChat === 1 ? [] : (children.get(row.id) ?? [])));
 	}
+	const searchable = reached.filter(
+		(row) =>
+			row.isReferencesRoot === 0 &&
+			row.isInChat === 0 &&
+			(row.parentId === null || !referencesRootIds.has(row.parentId)),
+	);
 	return compactSwitcherSkeleton(
-		reached
-			.filter(
-				(row) =>
-					row.isReferencesRoot === 0 &&
-					row.isInChat === 0 &&
-					(row.parentId === null || !referencesRootIds.has(row.parentId)),
-			)
-			.map((row) => ({
-				id: row.id,
-				parentId: row.parentId,
-				priority: row.priority,
-				name: null,
-				note: null,
-				createdAt: toMillis(row.createdAt),
-				modifiedAt: toMillis(row.modifiedAt),
-				completedAt: toMillis(row.completedAt),
-				layoutMode: row.layoutMode,
-				isMirror: row.isMirror === 1,
-				isBacklink: false,
-				fileType: null,
-			})),
+		searchable.map((row) => ({
+			id: row.id,
+			parentId: row.parentId,
+			priority: row.priority,
+			name: null,
+			note: null,
+			createdAt: toMillis(row.createdAt),
+			modifiedAt: toMillis(row.modifiedAt),
+			completedAt: toMillis(row.completedAt),
+			layoutMode: row.layoutMode,
+			isMirror: row.isMirror === 1,
+			isBacklink: false,
+			fileType: null,
+		})),
+		searchable.map((row) => ({
+			nameLength: row.nameLength ?? 0,
+			simpleName: row.simpleName === 1,
+			taggedName: row.taggedName === 1,
+			folds: row.folds === 1,
+		})),
 	);
 }
 
@@ -338,38 +355,20 @@ export async function withSwitcherSkeletonRebuild<T>(database: Database, run: ()
 
 /**
  * The jump menu's {@link SwitcherTextScan} over live `node_content` rows and their own text (mirrors carry their own
- * stale text; the jump menu skips them). With a `fragment`, only rows whose name or note holds it (ASCII
- * case-insensitive LIKE) or holds a tag or non-ASCII text, which folding could make hold it, are sized.
+ * stale text; the jump menu skips them): an ASCII case-insensitive LIKE for the rows holding a fragment.
  */
 export function switcherTextScan(database: Database, pageSize: number): SwitcherTextScan {
 	return {
 		pageSize,
-		sizes(fragment) {
+		holding(fragment) {
 			const pattern = `%${fragment}%`;
-			const filter =
-				fragment === null
-					? sql``
-					: sql`AND (
-						c.name LIKE ${pattern} OR c.note LIKE ${pattern}
-						OR instr(c.name, '<') OR instr(c.note, '<')
-						OR length(c.name) <> octet_length(c.name) OR length(c.note) <> octet_length(c.note)
-					)`;
 			return database
-				.all<{id: string; nameLength: number | null; simpleName: number | null; taggedName: number | null}>(sql`
-					SELECT
-						c.id AS id,
-						length(c.name) AS nameLength,
-						length(c.name) = octet_length(c.name) AND instr(c.name, '<') = 0 AND instr(c.name, '&') = 0 AS simpleName,
-						instr(c.name, '#') > 0 OR instr(c.name, '@') > 0 AS taggedName
+				.all<{id: string}>(sql`
+					SELECT c.id AS id
 					FROM node_content c
-					WHERE c.system_to = ${FAR_FUTURE_DATE} ${filter}
+					WHERE c.system_to = ${FAR_FUTURE_DATE} AND (c.name LIKE ${pattern} OR c.note LIKE ${pattern})
 				`)
-				.map(({id, nameLength, simpleName, taggedName}) => ({
-					id,
-					nameLength: nameLength ?? 0,
-					simpleName: simpleName === 1,
-					taggedName: taggedName === 1,
-				}));
+				.map(({id}) => id);
 		},
 		read(ids) {
 			return database.all<{id: string; name: string | null; note: string | null}>(sql`
