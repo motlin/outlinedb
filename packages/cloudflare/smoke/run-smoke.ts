@@ -87,6 +87,7 @@ const wrangler = spawn("vp", ["dev", "-c", "vite.worker.config.ts", "--port", po
 		ACCESS_DEV_IDENTITY: "dev",
 		WORKFLOWY_API_URL: upstream.url,
 		WORKFLOWY_API_KEY: "fake-smoke-key",
+		WORKFLOWY_ENV_OWNERS: "dev",
 	},
 	stdio: ["ignore", "inherit", "inherit"],
 	// Own process group, so the kill below also reaches the node and workerd children of vp.

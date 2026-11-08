@@ -80,7 +80,13 @@ describe("built wrangler.json", () => {
 		const names = Object.keys(built.vars ?? {});
 		expect(
 			names.filter((name) =>
-				["ACCESS_TEAM_DOMAIN", "ACCESS_AUD", "ALLOWED_EMAILS", "ALLOWED_SERVICE_TOKENS"].includes(name),
+				[
+					"ACCESS_TEAM_DOMAIN",
+					"ACCESS_AUD",
+					"ALLOWED_EMAILS",
+					"ALLOWED_SERVICE_TOKENS",
+					"WORKFLOWY_ENV_OWNERS",
+				].includes(name),
 			),
 		).toStrictEqual([]);
 	}, 240_000);

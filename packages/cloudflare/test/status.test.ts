@@ -3,6 +3,8 @@ import {probeStore, readJson, startHarness} from "./harness";
 import type {Harness} from "./harness";
 
 interface AdminStatus {
+	storeName: string | null;
+	mode: string;
 	databaseSize: number;
 	nodeCount: number;
 	lastSync: unknown;
@@ -51,6 +53,8 @@ describe("GET /api/admin/status", () => {
 		const status = await adminStatus(warm);
 		expect(status.databaseSize).toBeGreaterThan(0);
 		expect({...status, databaseSize: 0}).toStrictEqual({
+			storeName: "dev",
+			mode: "standalone",
 			databaseSize: 0,
 			nodeCount: 1,
 			lastSync: null,

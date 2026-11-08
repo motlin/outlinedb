@@ -41,7 +41,7 @@ import type {Embedder} from "./embeddings";
 import {kvSessionStore} from "./session-store";
 import {SyncJob} from "./sync";
 import type {SyncEnv, SyncStatus} from "./sync";
-import {readWorkerConfig, readWorkerInternalAuth} from "./worker-config";
+import {isStoreOwner, readWorkerConfig, readWorkerInternalAuth} from "./worker-config";
 import type {WorkerSecrets} from "./worker-config";
 
 /**
@@ -51,8 +51,16 @@ import type {WorkerSecrets} from "./worker-config";
 export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 	/** How many migrations this boot applied; zero when the database was already current. */
 	protected appliedOnBoot = 0;
-	/** Persists the Workflowy session cookie in this object's storage. */
-	protected readonly sessionStore = kvSessionStore(this.ctx.storage.kv, this.env.WORKFLOWY_SESSION_COOKIE);
+	/**
+	 * Whether this object mirrors workflowy.com: only the owner's object gets the Workflowy secrets and the sync, so
+	 * another user's object can never read or write the owner's account.
+	 */
+	private readonly isOwner = isStoreOwner(this.ctx.id.name, this.env);
+	/** Persists the Workflowy session cookie in this object's storage; only the owner is seeded from the binding. */
+	protected readonly sessionStore = kvSessionStore(
+		this.ctx.storage.kv,
+		this.isOwner ? this.env.WORKFLOWY_SESSION_COOKIE : undefined,
+	);
 	/** Announces ladder writes; every accepted ladder socket receives each event. */
 	protected readonly ladderEvents = new LadderEventBus();
 	/** Announces `account.changed` to every accepted nodes events socket after a sync or seed rewrote the account tables. */
@@ -94,7 +102,8 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 		void ctx.blockConcurrencyWhile(async () => {
 			const db = drizzle(ctx.storage, {schema});
 			this.db = db;
-			this.treeSnapshotEnabled = readWorkerConfig(env).features.treeSnapshot;
+			const config = readWorkerConfig(env, this.isOwner);
+			this.treeSnapshotEnabled = config.features.treeSnapshot;
 			const before = countApplied(ctx);
 			await migrate(db, doMigrationConfig);
 			ensureNodeTags(db);
@@ -113,13 +122,12 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 					},
 				},
 			});
-			const config = readWorkerConfig(env);
 			const embedding = config.features.embeddings ? this.embeddingBindings() : undefined;
 			const serverContext = buildServerContext({
 				db,
 				config,
 				ladderEvents: this.ladderEvents,
-				internalAuth: readWorkerInternalAuth(env, this.sessionStore),
+				internalAuth: readWorkerInternalAuth(env, this.sessionStore, this.isOwner),
 				embeddingIndex: embedding && (() => embedding.index),
 			});
 			this.embeddings =
@@ -136,11 +144,11 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 				keepSnapshotWarm: this.treeSnapshotEnabled,
 				keepSwitcherSkeletonWarm: !this.treeSnapshotEnabled,
 			});
-			const internalAuth = readWorkerInternalAuth(env, this.sessionStore);
+			const internalAuth = readWorkerInternalAuth(env, this.sessionStore, this.isOwner);
 			this.sync = new SyncJob({
 				storage: ctx.storage,
 				db,
-				env,
+				env: {...env, WORKFLOWY_API_KEY: config.apiKey},
 				readTreeSnapshot:
 					internalAuth &&
 					(async (signal) =>
@@ -208,14 +216,14 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 
 	/** Start a sync run, or continue the one in progress, on the next alarm. */
 	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
-	async syncNow(): Promise<SyncStatus> {
-		return this.sync.syncNow();
+	async syncNow(): Promise<SyncStatus | SyncDisabled> {
+		return this.isOwner ? this.sync.syncNow() : SYNC_DISABLED;
 	}
 
 	/** Reseed the edge tables from one whole-tree read at the end of the next sync run; the only get_tree_data path. */
 	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
-	async seedTree(): Promise<SyncStatus> {
-		return this.sync.seed();
+	async seedTree(): Promise<SyncStatus | SyncDisabled> {
+		return this.isOwner ? this.sync.seed() : SYNC_DISABLED;
 	}
 
 	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
@@ -230,6 +238,8 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 			.exec("SELECT count(*) AS n FROM node_content WHERE system_to = ?", FAR_FUTURE_DATE)
 			.one().n;
 		return {
+			storeName: this.ctx.id.name ?? null,
+			mode: this.isOwner ? "mirror" : "standalone",
 			databaseSize: this.ctx.storage.sql.databaseSize,
 			nodeCount: Number(count),
 			lastSync: (await this.sync.status()).lastResult,
@@ -259,7 +269,8 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 
 	override async alarm(): Promise<void> {
 		try {
-			if (this.alarms.take("sync", Date.now())) {
+			// A non-owner's sync slot is cleared without a run: it has nothing to sync from.
+			if (this.alarms.take("sync", Date.now()) && this.isOwner) {
 				await this.sync.tick();
 			}
 			await this.noticeEmbeddings();
@@ -290,7 +301,18 @@ const EVENT_SOCKET_TAGS: Partial<Record<string, string>> = {
 	"/api/v1/nodes/events": "nodes",
 };
 
+/** What the sync entry points answer on an object that does not mirror workflowy.com. */
+export interface SyncDisabled {
+	state: "disabled";
+}
+
+const SYNC_DISABLED: SyncDisabled = {state: "disabled"};
+
 export interface AdminStatus {
+	/** This object's name, or null when workerd did not give it one. */
+	storeName: string | null;
+	/** "mirror" for the owner's object, which syncs from and writes through to workflowy.com; "standalone" otherwise. */
+	mode: "mirror" | "standalone";
 	databaseSize: number;
 	nodeCount: number;
 	lastSync: SyncStatus["lastResult"];
