@@ -1,44 +1,13 @@
 import {afterAll, beforeAll, describe, expect, it} from "vite-plus/test";
-import {applyD1Migrations, startHarness} from "./harness";
+import {drainEmails, origin, post, startAuthHarness, turnstile} from "./auth-harness";
+import type {SentEmail} from "./auth-harness";
 import type {Harness} from "./harness";
 import {signupAllowed} from "../src/auth/signup-gate";
 
-const origin = "http://localhost";
 const secret = "test-secret-0123456789abcdef0123456789abcdef";
 const invited = "invited@example.com";
 const password = "correct horse battery staple";
-
-interface SentEmail {
-	from: string;
-	to: string;
-	subject: string;
-	text: string;
-	html: string;
-}
-
-const authBindings = {
-	APP_ORIGIN: origin,
-	EMAIL_PROVIDER: "cloudflare",
-	EMAIL_FROM: "no-reply@outlinedb.com",
-};
-
-async function startAuthHarness(bindings: Record<string, string>): Promise<Harness> {
-	const harness = await startHarness("./auth-entry.ts", "UserStore", undefined, {...authBindings, ...bindings});
-	await applyD1Migrations(harness.mf);
-	return harness;
-}
-
-async function post(h: Harness, path: string, body: unknown, headers: Record<string, string> = {}) {
-	return h.mf.dispatchFetch(`${origin}/api/auth${path}`, {
-		method: "POST",
-		headers: {"content-type": "application/json", origin, ...headers},
-		body: JSON.stringify(body),
-	});
-}
-
-async function drainEmails(h: Harness): Promise<SentEmail[]> {
-	return (await (await h.mf.dispatchFetch(`${origin}/__emails`)).json()) as SentEmail[];
-}
+const captchaKeys = {TURNSTILE_SECRET_KEY: turnstile.passSecret, TURNSTILE_SITE_KEY: turnstile.siteKey};
 
 /** The one link in an email's text, as a path on this origin. */
 function linkIn(email: SentEmail): string {
@@ -76,7 +45,7 @@ describe("Better Auth with signup closed by default", () => {
 	let h: Harness;
 
 	beforeAll(async () => {
-		h = await startAuthHarness({BETTER_AUTH_SECRET: secret});
+		h = await startAuthHarness({...captchaKeys, BETTER_AUTH_SECRET: secret});
 	}, 120_000);
 
 	afterAll(async () => {
@@ -122,6 +91,7 @@ describe("Better Auth in invite mode", () => {
 
 	beforeAll(async () => {
 		h = await startAuthHarness({
+			...captchaKeys,
 			BETTER_AUTH_SECRET: secret,
 			SIGNUP_MODE: "invite",
 			SIGNUP_INVITES: `other@example.com, ${invited.toUpperCase()}`,

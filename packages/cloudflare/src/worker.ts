@@ -6,7 +6,7 @@ import {Hono} from "hono";
 import {createMiddleware} from "hono/factory";
 import {resolveIdentity} from "./access";
 import type {AccessEnv} from "./access";
-import {createAuth} from "./auth/auth";
+import {authConfig, captchaMissing, createAuth} from "./auth/auth";
 import type {AuthEnv} from "./auth/auth";
 import {authorize, oauthProviderFor} from "./oauth";
 import {storeClient} from "./store-client";
@@ -58,6 +58,9 @@ app.on(["GET", "POST"], "/api/auth/*", async (c) => {
 	if (!secret) {
 		return c.json({error: "auth-not-configured"}, 503);
 	}
+	if (captchaMissing(c.env, c.req.path)) {
+		return c.json({error: "captcha-not-configured"}, 503);
+	}
 	let auth = auths.get(c.env.AUTH_DB);
 	if (!auth) {
 		auth = createAuth({...c.env, BETTER_AUTH_SECRET: secret});
@@ -65,6 +68,9 @@ app.on(["GET", "POST"], "/api/auth/*", async (c) => {
 	}
 	return auth.handler(c.req.raw);
 });
+
+// Public: the sign-in page reads it before anyone is signed in. Shadows the Node host's `{hosted: false}`.
+app.get("/api/auth-config", (c) => c.json(authConfig(c.env)));
 
 // Access gates everything dynamic; the identity names the user's Durable Object.
 const identity = createMiddleware<WorkerApp>(async (c, next) => {

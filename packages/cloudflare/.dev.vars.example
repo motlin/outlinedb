@@ -12,3 +12,6 @@ SIGNUP_INVITES=
 # Local dev serves on another origin than the committed var; set it to the dev server's origin, e.g. http://localhost:5173.
 # APP_ORIGIN=
 # SIGNUP_MODE=invite
+# Turnstile: sign-up, sign-in and password reset answer 503 until both are set. Locally, uncomment these always-pass test keys.
+# TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
+# TURNSTILE_SITE_KEY=1x00000000000000000000AA

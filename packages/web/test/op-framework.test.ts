@@ -174,4 +174,17 @@ describe("createHttpApp", () => {
 			body: {status: "ok"},
 		});
 	});
+
+	it("serves /api/auth-config as not hosted, without touching the store", async () => {
+		const app = createHttpApp({
+			resolveStore: () => {
+				throw new Error("unused");
+			},
+		});
+		const response = await app.request("/api/auth-config");
+		expect({status: response.status, body: await response.json()}).toStrictEqual({
+			status: 200,
+			body: {hosted: false},
+		});
+	});
 });

@@ -19,7 +19,7 @@ interface Spec {
 
 const ERROR_REF = {description: "Error", content: {"application/json": {schema: {$ref: "#/components/schemas/Error"}}}};
 
-const DOC_PATHS = new Set(["/health", "/api/openapi.json", "/api/docs"]);
+const DOC_PATHS = new Set(["/health", "/api/auth-config", "/api/openapi.json", "/api/docs"]);
 
 function app() {
 	return createHttpApp({resolveStore: () => inProcessStore({} as unknown as ServerContext)});

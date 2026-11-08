@@ -69,6 +69,8 @@ export function createHttpApp(options: HttpAppOptions): Hono {
 	}
 	app.use("/api/*", apiCompression());
 	app.get("/health", (c) => c.json({status: "ok"}));
+	// The hosted Worker answers this route itself, ahead of this app; the Node host has no accounts.
+	app.get("/api/auth-config", (c) => c.json({hosted: false}));
 	const routes = createHttpRoutes(options.resolveStore);
 	let spec: ReturnType<typeof openApiDocument> | undefined;
 	app.get("/api/openapi.json", (c) => c.json((spec ??= openApiDocument(routes.routes))));
