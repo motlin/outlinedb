@@ -33,9 +33,14 @@
 	// local simulator, so `wrangler dev` runs without it unless the binding gets "remote": true.
 	"ai": {"binding": "AI"},
 	"vectorize": [{"binding": "RELATED_INDEX", "index_name": "workflowy-related"}],
+	// Cloudflare Email Service sends Better Auth mail from EMAIL_FROM; no destination restriction so any user can be mailed
+	// (Workers Paid). Deploys without the domain onboarded; only send() fails, with E_SENDER_DOMAIN_NOT_AVAILABLE.
+	"send_email": [{"name": "EMAIL"}],
 	"migrations": [{"tag": "v1", "new_sqlite_classes": ["UserStore"]}],
 	// Access config (ACCESS_TEAM_DOMAIN, ACCESS_AUD, ALLOWED_EMAILS, ALLOWED_SERVICE_TOKENS) must not be vars: deploy would reset them. Set them as secrets; use .dev.vars locally (also ACCESS_DEV_IDENTITY).
 	"vars": {
 		"SYNC_INTERVAL_MINUTES": "30",
+		"EMAIL_PROVIDER": "cloudflare",
+		"EMAIL_FROM": "no-reply@outlinedb.com",
 	},
 }

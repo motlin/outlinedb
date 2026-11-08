@@ -27,7 +27,20 @@ describe("wrangler.jsonc", () => {
 	});
 
 	it("keeps the Access config out of vars so dashboard secrets are not reset on deploy", () => {
-		expect(readWranglerConfig().vars).toStrictEqual({SYNC_INTERVAL_MINUTES: "30"});
+		expect(readWranglerConfig().vars).toStrictEqual({
+			SYNC_INTERVAL_MINUTES: "30",
+			EMAIL_PROVIDER: "cloudflare",
+			EMAIL_FROM: "no-reply@outlinedb.com",
+		});
+	});
+
+	it("never ships the log email sender", () => {
+		const vars = readWranglerConfig().vars as Record<string, unknown>;
+		expect(vars.EMAIL_PROVIDER).not.toBe("log");
+	});
+
+	it("binds Cloudflare Email Service as EMAIL with no destination restriction", () => {
+		expect(readWranglerConfig().send_email).toStrictEqual([{name: "EMAIL"}]);
 	});
 
 	it("binds Workers AI and the related-notes Vectorize index", () => {
