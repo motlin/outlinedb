@@ -36,6 +36,8 @@ const view: OutlineViewResponse = {
 
 /** What the API answers on page load, keyed by path. Anything else is a request this test does not expect. */
 const responses: Partial<Record<string, () => Response>> = {
+	// The refused nodes socket below makes the client ask whether the session is still signed in.
+	"/health": () => Response.json({status: "ok"}),
 	"/api/v1/expansion": () => Response.json({expandedIds: ["alice"]}),
 	"/api/v1/expansion/left-bar": () => Response.json({keys: []}),
 	"/api/v1/home": () => Response.json({layoutMode: "bullets"}),
@@ -76,9 +78,25 @@ const {App} = await import("../src/client/app.js");
 let root: Root | undefined;
 let unexpected: string[] = [];
 
+/** A nodes socket the server refuses: it closes without ever opening, which makes the client probe `/health`. */
+class RefusedWebSocket extends EventTarget {
+	readyState = 0;
+	constructor(_url: string) {
+		super();
+		queueMicrotask(() => {
+			this.readyState = 3;
+			this.dispatchEvent(new Event("close"));
+		});
+	}
+	close(): void {
+		this.readyState = 3;
+	}
+}
+
 beforeEach(() => {
 	globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 	unexpected = [];
+	vi.stubGlobal("WebSocket", RefusedWebSocket);
 	vi.stubGlobal(
 		"fetch",
 		vi.fn<typeof fetch>(async (input) => {
