@@ -31,6 +31,8 @@ describe("wrangler.jsonc", () => {
 			SYNC_INTERVAL_MINUTES: "30",
 			EMAIL_PROVIDER: "cloudflare",
 			EMAIL_FROM: "no-reply@outlinedb.com",
+			APP_ORIGIN: "https://app.outlinedb.com",
+			SIGNUP_MODE: "closed",
 		});
 	});
 

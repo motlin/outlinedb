@@ -5,3 +5,10 @@ WORKFLOWY_PASSWORD=
 WORKFLOWY_SESSION_COOKIE=
 # WORKFLOWY_API_URL=
 # ACCESS_DEV_IDENTITY=dev
+# Better Auth: /api/auth/* answers 503 until this is set (openssl rand -base64 32).
+BETTER_AUTH_SECRET=
+# Comma-separated emails allowed to sign up when SIGNUP_MODE=invite.
+SIGNUP_INVITES=
+# Local dev serves on another origin than the committed var; set it to the dev server's origin, e.g. http://localhost:5173.
+# APP_ORIGIN=
+# SIGNUP_MODE=invite

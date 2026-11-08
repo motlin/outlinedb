@@ -6,6 +6,8 @@ import {Hono} from "hono";
 import {createMiddleware} from "hono/factory";
 import {resolveIdentity} from "./access";
 import type {AccessEnv} from "./access";
+import {createAuth} from "./auth/auth";
+import type {AuthEnv} from "./auth/auth";
 import {authorize, oauthProviderFor} from "./oauth";
 import {storeClient} from "./store-client";
 import type {UserStore} from "./user-store";
@@ -28,7 +30,7 @@ function passEncodedBody(response: Response): Response {
 	});
 }
 
-type WorkerEnv = Env & AccessEnv & {OAUTH_PROVIDER: OAuthHelpers};
+type WorkerEnv = Env & AccessEnv & AuthEnv & {OAUTH_PROVIDER: OAuthHelpers};
 interface WorkerApp {
 	Bindings: WorkerEnv;
 	Variables: {email: string; stub: DurableObjectStub<UserStore>};
@@ -41,6 +43,27 @@ const stores = new WeakMap<Request, StoreClient>();
 app.use("*", async (c, next) => {
 	await next();
 	c.res = passEncodedBody(c.res);
+});
+
+/**
+ * One Better Auth per isolate (bindings, vars and secrets are fixed for its life), so its one-time schema check and
+ * setup are not repeated on every request.
+ */
+const auths = new WeakMap<D1Database, ReturnType<typeof createAuth>>();
+
+// Better Auth answers its own routes ahead of the Access identity, and stays off (503) until its secret is set,
+// so the Access path never depends on it.
+app.on(["GET", "POST"], "/api/auth/*", async (c) => {
+	const secret = c.env.BETTER_AUTH_SECRET;
+	if (!secret) {
+		return c.json({error: "auth-not-configured"}, 503);
+	}
+	let auth = auths.get(c.env.AUTH_DB);
+	if (!auth) {
+		auth = createAuth({...c.env, BETTER_AUTH_SECRET: secret});
+		auths.set(c.env.AUTH_DB, auth);
+	}
+	return auth.handler(c.req.raw);
 });
 
 // Access gates everything dynamic; the identity names the user's Durable Object.

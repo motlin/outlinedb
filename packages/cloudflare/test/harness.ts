@@ -39,8 +39,9 @@ export async function startHarness(
 	const script = await bundleWorker(entry);
 	const persistDir = existingPersistDir ?? mkdtempSync(join(tmpdir(), "wf-cf-"));
 	const mf = new Miniflare({
-		modules: true,
-		script,
+		// Listed explicitly, so Miniflare skips its import scan, which rejects the non-literal `import()` Better Auth's
+		// Kysely adapter keeps for node:sqlite (never reached with D1).
+		modules: [{type: "ESModule", path: "worker.mjs", contents: script}],
 		compatibilityDate: "2026-08-01",
 		compatibilityFlags: ["nodejs_compat", "global_fetch_strictly_public"],
 		bindings,

@@ -42,5 +42,9 @@
 		"SYNC_INTERVAL_MINUTES": "30",
 		"EMAIL_PROVIDER": "cloudflare",
 		"EMAIL_FROM": "no-reply@outlinedb.com",
+		// Better Auth's link origin and only trusted origin. /api/auth/* answers 503 until the BETTER_AUTH_SECRET secret is set.
+		"APP_ORIGIN": "https://app.outlinedb.com",
+		// closed, invite (emails in the SIGNUP_INVITES secret) or open.
+		"SIGNUP_MODE": "closed",
 	},
 }
