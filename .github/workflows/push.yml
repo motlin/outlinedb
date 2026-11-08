@@ -60,6 +60,13 @@ jobs:
           path: ~/.local/share/pnpm/store
           key: pnpm-${{ hashFiles('pnpm-lock.yaml') }}
       - run: just cf-build
+      # Schema first, so the Worker never runs ahead of it. Applies only unapplied files, so a re-run is a no-op.
+      - name: Apply the AUTH_DB migrations
+        working-directory: packages/cloudflare
+        run: vp exec wrangler d1 migrations apply AUTH_DB --remote
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Deploy the Worker
         working-directory: packages/web
         run: vp exec wrangler deploy -c dist/workflowy/worker/wrangler.json

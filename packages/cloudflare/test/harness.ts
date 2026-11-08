@@ -1,4 +1,4 @@
-import {mkdtempSync, rmSync} from "node:fs";
+import {mkdtempSync, readFileSync, readdirSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {build} from "esbuild";
@@ -51,6 +51,8 @@ export async function startHarness(
 		r2Persist: join(persistDir, "r2"),
 		kvNamespaces: ["OAUTH_KV"],
 		kvPersist: join(persistDir, "kv"),
+		d1Databases: ["AUTH_DB"],
+		d1Persist: join(persistDir, "d1"),
 		assets: {
 			directory: clientDir,
 			binding: "ASSETS",
@@ -69,6 +71,48 @@ export async function startHarness(
 			}
 		},
 	};
+}
+
+/** The AUTH_DB D1 binding, typed with the Workers types. */
+export async function authDb(mf: Miniflare): Promise<D1Database> {
+	// Miniflare's D1 return type does not resolve here, so the linter sees an error type; cast to the Workers type.
+	// oxlint-disable-next-line typescript/no-unsafe-type-assertion, typescript/no-unnecessary-type-assertion
+	return (await mf.getD1Database("AUTH_DB")) as unknown as D1Database;
+}
+
+const migrationsDir = new URL("../migrations/", import.meta.url);
+
+/**
+ * Apply the AUTH_DB migrations not yet recorded in `d1_migrations` (the table wrangler uses), in file-name order.
+ * Returns the names it applied, so a re-run returns `[]`.
+ */
+export async function applyD1Migrations(mf: Miniflare): Promise<string[]> {
+	const db = await authDb(mf);
+	await db
+		.prepare(
+			"CREATE TABLE IF NOT EXISTS d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL)",
+		)
+		.run();
+	const applied = new Set(
+		(await db.prepare("SELECT name FROM d1_migrations").all<{name: string}>()).results.map((row) => row.name),
+	);
+	const pending = readdirSync(migrationsDir)
+		.filter((name) => name.endsWith(".sql") && !applied.has(name))
+		.toSorted();
+	for (const name of pending) {
+		const statements = readFileSync(new URL(name, migrationsDir), "utf8")
+			.split("\n")
+			.filter((line) => !line.trim().startsWith("--"))
+			.join("\n")
+			.split(";")
+			.map((statement) => statement.trim())
+			.filter((statement) => statement !== "");
+		await db.batch([
+			...statements.map((statement) => db.prepare(statement)),
+			db.prepare("INSERT INTO d1_migrations (name) VALUES (?)").bind(name),
+		]);
+	}
+	return pending;
 }
 
 /** Read a response body as JSON, inflating it first when the app compressed it (Miniflare drops the header). */

@@ -19,6 +19,15 @@
 	},
 	// OAuth clients, grants and hashed tokens for the MCP connector; deploy provisions the namespace when it has no id.
 	"kv_namespaces": [{"binding": "OAUTH_KV"}],
+	// Better Auth users, sessions and verification tokens. CI applies migrations/ remotely before each deploy.
+	"d1_databases": [
+		{
+			"binding": "AUTH_DB",
+			"database_name": "outlinedb-auth",
+			"database_id": "754f5300-f773-489b-8ca1-89dd8d6077f3",
+			"migrations_dir": "migrations",
+		},
+	],
 	"r2_buckets": [{"binding": "SNAPSHOTS", "bucket_name": "workflowy-snapshots"}],
 	// Related notes: Workers AI embeds with @cf/baai/bge-m3, Vectorize stores and ranks the vectors. Vectorize has no
 	// local simulator, so `wrangler dev` runs without it unless the binding gets "remote": true.

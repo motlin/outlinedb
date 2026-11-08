@@ -64,8 +64,13 @@ cf-test: build-shared
 
 # Run the SPA and the Worker together in local workerd (Cloudflare Vite plugin; R2 and Durable Objects simulated, no Cloudflare account needed) with a fixed dev identity; state persists in packages/cloudflare/.wrangler/state. `dev-node` keeps the two-process Node host over workflowy.sqlite
 [group('web')]
-dev *args: build-shared
+dev *args: build-shared cf-d1-migrate-local
     cd packages/web && ACCESS_DEV_IDENTITY="${ACCESS_DEV_IDENTITY:-dev}" vp dev -c vite.worker.config.ts {{ args }}
+
+# Apply the AUTH_DB D1 migrations to the local state `just dev` uses (WORKER_PERSIST_DIR overrides it, as in vite.worker.config.ts)
+[group('web')]
+cf-d1-migrate-local:
+    cd packages/cloudflare && vp exec wrangler d1 migrations apply AUTH_DB --local --persist-to "${WORKER_PERSIST_DIR:-.wrangler/state}"
 
 # Build the client and the Worker with the Cloudflare Vite plugin; writes packages/web/dist/workflowy/worker/wrangler.json for cf-deploy
 [group('web')]

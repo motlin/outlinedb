@@ -37,4 +37,36 @@ describe("wrangler.jsonc", () => {
 			vectorize: [{binding: "RELATED_INDEX", index_name: "workflowy-related"}],
 		});
 	});
+
+	it("binds the outlinedb-auth D1 database as AUTH_DB with a real id and the migrations dir", () => {
+		const databases = readWranglerConfig().d1_databases;
+		expect(Array.isArray(databases)).toBe(true);
+		const [database] = databases as Record<string, unknown>[];
+		expect(database?.database_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u);
+		expect(database?.database_id).not.toBe("00000000-0000-0000-0000-000000000000");
+		expect(databases).toStrictEqual([
+			{
+				binding: "AUTH_DB",
+				database_name: "outlinedb-auth",
+				database_id: database?.database_id,
+				migrations_dir: "migrations",
+			},
+		]);
+	});
+});
+
+describe("push.yml deploy job", () => {
+	const workflow = readFileSync(new URL("../../../.github/workflows/push.yml", import.meta.url), "utf8");
+	const deployJob = workflow.slice(workflow.indexOf("\n  deploy:"));
+
+	it("applies the remote AUTH_DB migrations from packages/cloudflare before deploying the Worker", () => {
+		const migrate = deployJob.indexOf("wrangler d1 migrations apply AUTH_DB --remote");
+		const deploy = deployJob.indexOf("wrangler deploy");
+		expect({migrateFound: migrate !== -1, beforeDeploy: migrate < deploy}).toStrictEqual({
+			migrateFound: true,
+			beforeDeploy: true,
+		});
+		const step = deployJob.slice(deployJob.lastIndexOf("- name:", migrate), migrate);
+		expect(step).toContain("working-directory: packages/cloudflare");
+	});
 });
