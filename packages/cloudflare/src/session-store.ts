@@ -13,10 +13,15 @@ const SEEDED_KEY = "workflowy-session-seeded";
 /**
  * A session store over a Durable Object's key-value storage. The first use copies the
  * `WORKFLOWY_SESSION_COOKIE` binding in; after that the stored cookie wins, so a rotated
- * login survives restarts and a cleared session is not resurrected from the binding.
+ * login survives restarts and a cleared session is not resurrected from the binding. With `seed: false` the store
+ * neither seeds nor marks itself seeded, so a later owner store over the same storage still copies the binding in.
  */
-export function kvSessionStore(kv: KvLike, seedCookie: string | undefined): SessionCookieStore {
-	if (kv.get(SEEDED_KEY) === undefined) {
+export function kvSessionStore(
+	kv: KvLike,
+	seedCookie: string | undefined,
+	{seed = true}: {seed?: boolean} = {},
+): SessionCookieStore {
+	if (seed && kv.get(SEEDED_KEY) === undefined) {
 		kv.put(SEEDED_KEY, "1");
 		if (seedCookie) {
 			kv.put(COOKIE_KEY, seedCookie);

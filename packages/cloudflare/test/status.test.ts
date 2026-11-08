@@ -55,6 +55,7 @@ describe("GET /api/admin/status", () => {
 		expect({...status, databaseSize: 0}).toStrictEqual({
 			storeName: "dev",
 			mode: "standalone",
+			profile: null,
 			databaseSize: 0,
 			nodeCount: 1,
 			lastSync: null,

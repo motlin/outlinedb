@@ -60,13 +60,19 @@ export async function startAuthHarness(
 	{
 		className = "UserStore",
 		otherwise = unexpectedOutbound,
-	}: {className?: string; otherwise?: (request: Request) => Response | Promise<Response>} = {},
+		persistDir,
+	}: {
+		className?: string;
+		otherwise?: (request: Request) => Response | Promise<Response>;
+		/** A previous harness's directory, kept by `dispose(true)`, to restart over the same D1 and Durable Objects. */
+		persistDir?: string;
+	} = {},
 ): Promise<AuthHarness> {
 	const siteverify: unknown[] = [];
 	const harness = await startHarness(
 		"./auth-entry.ts",
 		className,
-		undefined,
+		persistDir,
 		{...authBindings, ...bindings},
 		{outboundService: async (request: Request) => fakeSiteverify(request, siteverify, otherwise)},
 	);

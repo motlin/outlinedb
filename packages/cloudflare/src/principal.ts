@@ -1,6 +1,8 @@
 import {getSessionCookie} from "better-auth/cookies";
 import {resolveIdentity} from "./access";
 import type {AccessEnv} from "./access";
+import {provisionUser} from "./auth/provision";
+import type {ProvisionEnv} from "./auth/provision";
 
 /** Who a request acts as, and the name of the Durable Object that holds their outline. */
 export type Principal =
@@ -12,7 +14,9 @@ export type PrincipalResult = Principal | {status: 401 | 403; error: string};
 /** The one Better Auth call a principal needs; absent while `BETTER_AUTH_SECRET` is unset. */
 export interface SessionReader {
 	api: {
-		getSession(context: {headers: Headers}): Promise<{user: {id: string; emailVerified: boolean}} | null>;
+		getSession(context: {headers: Headers}): Promise<{
+			user: {id: string; email: string; emailVerified: boolean; provisionedAt?: Date | null};
+		} | null>;
 	};
 }
 
@@ -20,24 +24,33 @@ const UNAUTHENTICATED = {status: 401, error: "unauthenticated"} as const;
 
 /**
  * An Access identity's Durable Object: its verified Better Auth user's id once that user signs up, so the CLI and
- * admin routes reach the same outline as the web session; until then the email itself.
+ * admin routes reach the same outline as the web session; until then the email itself. A verified user not yet
+ * provisioned is provisioned here first.
  */
-async function accessStoreName(db: D1Database, email: string): Promise<string> {
-	const row = await db
-		.prepare('SELECT id FROM "user" WHERE lower(email) = ? AND emailVerified = 1')
+async function accessStoreName(env: ProvisionEnv, email: string): Promise<string> {
+	const row = await env.AUTH_DB.prepare(
+		'SELECT id, email, provisioned_at FROM "user" WHERE lower(email) = ? AND emailVerified = 1',
+	)
 		.bind(email)
-		.first<{id: string}>();
-	return row?.id ?? email;
+		.first<{id: string; email: string; provisioned_at: string | null}>();
+	if (!row) {
+		return email;
+	}
+	if (row.provisioned_at === null) {
+		await provisionUser(env, row);
+	}
+	return row.id;
 }
 
 /**
  * Resolve a request's principal. A valid Access JWT or service token wins; otherwise a Better Auth session cookie,
- * which must belong to a verified email; `auth` is called only then. `ACCESS_DEV_IDENTITY` stands in for Access only on requests with no session
+ * which must belong to a verified email; `auth` is called only then. A verified user whose provisioning never landed
+ * (a failed hook) is provisioned lazily: one extra Durable Object RPC, on that first request only. `ACCESS_DEV_IDENTITY` stands in for Access only on requests with no session
  * cookie, so local dev can still sign in as a session user.
  */
 export async function resolvePrincipal(
 	request: Request,
-	env: AccessEnv & {AUTH_DB: D1Database},
+	env: AccessEnv & ProvisionEnv,
 	auth: () => SessionReader | undefined,
 ): Promise<PrincipalResult> {
 	const hasSession = getSessionCookie(request) !== null;
@@ -51,7 +64,7 @@ export async function resolvePrincipal(
 			return {
 				kind: "access",
 				email: identity.email,
-				storeName: await accessStoreName(env.AUTH_DB, identity.email),
+				storeName: await accessStoreName(env, identity.email),
 			};
 		}
 		accessFailure = identity.status === 401 ? UNAUTHENTICATED : {status: 403, error: "forbidden"};
@@ -66,6 +79,9 @@ export async function resolvePrincipal(
 	}
 	if (!session.user.emailVerified) {
 		return {status: 403, error: "email-unverified"};
+	}
+	if (!session.user.provisionedAt) {
+		await provisionUser(env, session.user);
 	}
 	return {kind: "user", userId: session.user.id, storeName: session.user.id};
 }

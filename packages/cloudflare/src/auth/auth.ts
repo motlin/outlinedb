@@ -47,8 +47,18 @@ function linkEmail(to: string, subject: string, intro: string, url: string) {
 	};
 }
 
-/** Better Auth over AUTH_DB: email and password with required verification; signup gated by `SIGNUP_MODE`. */
-export function createAuth(env: AuthEnv & {BETTER_AUTH_SECRET: string}, sender: EmailSender = senderFor(env)) {
+/** Gives a newly verified user their Durable Object; see `provisionUser`. */
+export type Provision = (user: {id: string; email: string}) => Promise<void>;
+
+/**
+ * Better Auth over AUTH_DB: email and password with required verification; signup gated by `SIGNUP_MODE`. A user is
+ * provisioned once their email is verified, never before.
+ */
+export function createAuth(
+	env: AuthEnv & {BETTER_AUTH_SECRET: string},
+	provision: Provision,
+	sender: EmailSender = senderFor(env),
+) {
 	const origin = env.APP_ORIGIN;
 	return betterAuth({
 		appName: "OutlineDB",
@@ -71,9 +81,30 @@ export function createAuth(env: AuthEnv & {BETTER_AUTH_SECRET: string}, sender: 
 				);
 			},
 		},
+		user: {
+			additionalFields: {
+				// Set by `provisionUser`, never by a client; the session carries it, so a provisioned user's request needs no D1 read.
+				provisionedAt: {type: "date", required: false, input: false, fieldName: "provisioned_at"},
+			},
+		},
+		databaseHooks: {
+			user: {
+				create: {
+					// A user created already verified (OAuth) never passes through verify-email.
+					async after(user) {
+						if (user.emailVerified) {
+							await provision(user);
+						}
+					},
+				},
+			},
+		},
 		emailVerification: {
 			sendOnSignUp: true,
 			autoSignInAfterVerification: true,
+			async afterEmailVerification(user) {
+				await provision(user);
+			},
 			async sendVerificationEmail({user, url}) {
 				await sender.send(
 					linkEmail(

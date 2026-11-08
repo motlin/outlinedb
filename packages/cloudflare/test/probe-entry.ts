@@ -3,6 +3,7 @@ import * as dbSchema from "@workflowy/shared/db";
 import {drizzle} from "drizzle-orm/durable-sqlite";
 import type {OpInput, OpName, OpOutput, OpResult} from "@workflowy/web/server-app";
 import {UserStore} from "../src/user-store";
+import type {ProvisionInput, ProvisionResult} from "../src/user-store";
 import worker from "../src/worker";
 
 /** Test-only subclass exposing the DO's raw SQLite state. */
@@ -15,8 +16,17 @@ export class ProbeStore extends UserStore {
 		return super.call(op, input);
 	}
 
+	/** Counts every `provision` RPC, kept in storage so the count survives a restart. */
+	override provision(input: ProvisionInput): ProvisionResult {
+		this.ctx.storage.kv.put("__provisions", String(Number(this.ctx.storage.kv.get("__provisions") ?? 0) + 1));
+		return super.provision(input);
+	}
+
 	override fetch(request: Request): Response {
 		const url = new URL(request.url);
+		if (url.pathname === "/__provisions") {
+			return Response.json({provisions: Number(this.ctx.storage.kv.get("__provisions") ?? 0)});
+		}
 		if (url.pathname === "/__probe") {
 			const names = this.ctx.storage.sql
 				.exec("SELECT name FROM sqlite_master ORDER BY name")

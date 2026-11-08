@@ -105,6 +105,12 @@ describe("kvSessionStore", () => {
 	it("reads undefined with no seed and nothing stored", () => {
 		expect(kvSessionStore(fakeKv(), undefined).read()).toBeUndefined();
 	});
+
+	it("leaves the seed for a later store when built with seed: false", () => {
+		const kv = fakeKv();
+		const unseeded = kvSessionStore(kv, undefined, {seed: false}).read();
+		expect([unseeded, kvSessionStore(kv, "sessionid=seed").read()]).toStrictEqual([undefined, "sessionid=seed"]);
+	});
 });
 
 describe("readWorkerInternalAuth", () => {
