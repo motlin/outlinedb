@@ -7,6 +7,8 @@ import {useFeatureOn, useFeatures} from "../hooks/use-features.js";
 import {usePreferences} from "../hooks/use-preferences.js";
 import type {Preferences, PreferencesPatch} from "../hooks/use-preferences.js";
 import {currentVersionLabel} from "../app-version.js";
+import {authClient} from "../auth/auth-client.js";
+import {useAuthConfig} from "../auth/auth-config.js";
 import {useFlash} from "../hooks/use-flash.js";
 import {EMOJI_OPTIONS, applyEmoji, storedEmoji} from "../emoji-apply.js";
 import {FONT_OPTIONS, applyFont} from "../font-apply.js";
@@ -235,17 +237,40 @@ function MfaBlock({mfa}: {mfa: Preferences["mfa"]}) {
 	);
 }
 
+/** Ends the OutlineDB session and goes to login. Only the hosted app has one; the Node host never signs in. */
+function LogOutBlock() {
+	return (
+		<ActionBlock label="Log out" hint="Sign out of OutlineDB in this browser.">
+			<SettingsButton
+				onClick={() => {
+					void authClient.signOut().finally(() => {
+						globalThis.location.assign("/login");
+					});
+				}}
+			>
+				Log out
+			</SettingsButton>
+		</ActionBlock>
+	);
+}
+
 function AccountSection({preferences}: SectionProps) {
 	const {account} = preferences;
-	if (account === null) {
+	const hosted = useAuthConfig().data?.hosted === true;
+	if (account === null && !hosted) {
 		return null;
 	}
 	return (
 		<SettingsSection title="Account">
 			<SectionBody>
-				<ReadOnlyField label="Name" value={account.username} />
-				<ReadOnlyField label="Email" value={account.email} />
-				<MfaBlock mfa={preferences.mfa} />
+				{account !== null && (
+					<>
+						<ReadOnlyField label="Name" value={account.username} />
+						<ReadOnlyField label="Email" value={account.email} />
+						<MfaBlock mfa={preferences.mfa} />
+					</>
+				)}
+				{hosted && <LogOutBlock />}
 			</SectionBody>
 		</SettingsSection>
 	);

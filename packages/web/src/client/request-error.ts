@@ -1,3 +1,5 @@
+import {redirectToLogin} from "./auth/login-redirect.js";
+
 /** A failed API request that keeps its HTTP status, so callers can branch on it. */
 export class RequestStatusError extends Error {
 	constructor(
@@ -9,8 +11,14 @@ export class RequestStatusError extends Error {
 	}
 }
 
-/** Builds the error for a failed response, preferring the server's `{error}` message over the status text. */
+/**
+ * Builds the error for a failed response, preferring the server's `{error}` message over the status text. A 401 (signed
+ * out) also sends the user to login.
+ */
 export async function toRequestStatusError(prefix: string, response: Response): Promise<RequestStatusError> {
+	if (response.status === 401) {
+		redirectToLogin();
+	}
 	let detail = response.statusText;
 	try {
 		const body: unknown = await response.json();

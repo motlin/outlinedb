@@ -1,4 +1,4 @@
-import {QueryClient, QueryClientProvider} from "@tanstack/react-query";
+import {MutationCache, QueryCache, QueryClient, QueryClientProvider} from "@tanstack/react-query";
 import {memo, useEffect, useState} from "react";
 import {useNode} from "./hooks/use-nodes.js";
 import {dashboardClasses, dashboardsOn} from "./dashboard.js";
@@ -87,7 +87,9 @@ import {mobileSearchVisible} from "./mobile-search-model.js";
 import {shouldClearSelectionOnPageMouseDown} from "./page-mousedown.js";
 import {useRowHoverController} from "./hooks/use-row-hover.js";
 import {installSaveTracking} from "./hooks/use-saving.js";
-import {queryClientDefaults} from "./query-retry.js";
+import {queryClientDefaults, redirectOnAuthError} from "./query-retry.js";
+import {AuthApp} from "./auth/auth-pages.js";
+import {isAuthPath} from "./auth/login-redirect.js";
 import "./reset.css";
 import "./wf-tailwind.css";
 import "./styles.css";
@@ -110,7 +112,11 @@ import "./themes/one_dark.css";
 // Before any query exists: a navigation mounts hundreds of observers, each arming a stale timer.
 installCoalescingTimeoutProvider();
 
-const queryClient = new QueryClient({defaultOptions: queryClientDefaults});
+const queryClient = new QueryClient({
+	defaultOptions: queryClientDefaults,
+	queryCache: new QueryCache({onError: redirectOnAuthError}),
+	mutationCache: new MutationCache({onError: redirectOnAuthError}),
+});
 setFeatureWriter(async (codename, on) => setFeature(queryClient, codename, on));
 watchMutations(queryClient, (event) => {
 	useOutlineStore.getState().recordSyncEvent(event);
@@ -418,6 +424,14 @@ function WindowBlurredClass() {
 }
 
 export function App() {
+	// The sign-in screens stand alone: none of the outline's account syncs run before anyone is signed in.
+	if (isAuthPath(globalThis.location.pathname)) {
+		return (
+			<ErrorBoundary>
+				<AuthApp />
+			</ErrorBoundary>
+		);
+	}
 	return (
 		<ErrorBoundary>
 			<QueryClientProvider client={queryClient}>

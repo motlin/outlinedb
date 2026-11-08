@@ -44,6 +44,7 @@ const calls = {
 };
 const fetchStub = vi.fn<typeof fetch>();
 let featuresBody: unknown = {visible: [], enabled: {...DEFAULT_FEATURES}, available: true};
+let authConfigBody: unknown = {hosted: false};
 
 beforeAll(() => {
 	globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -54,6 +55,7 @@ beforeEach(() => {
 	vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
 	vi.stubGlobal("fetch", fetchStub);
 	featuresBody = {visible: [], enabled: {...DEFAULT_FEATURES}, available: true};
+	authConfigBody = {hosted: false};
 	store.state = {
 		settingsOpen: true,
 		settingsSection: null,
@@ -82,6 +84,13 @@ async function open(preferences: Partial<Preferences> = {}, opened: string | nul
 		if (urlOf(input).startsWith("/api/v1/features")) {
 			return Promise.resolve(Response.json(featuresBody));
 		}
+		const path = new URL(urlOf(input), globalThis.location.origin).pathname;
+		if (path === "/api/auth-config") {
+			return Promise.resolve(Response.json(authConfigBody));
+		}
+		if (path === "/api/auth/sign-out") {
+			return Promise.resolve(Response.json({success: true}));
+		}
 		const patch: unknown = JSON.parse(typeof init?.body === "string" ? init.body : "{}");
 		Object.assign(preferences, patch);
 		return Promise.resolve(Response.json({...EMPTY_PREFERENCES, ...preferences}));
@@ -105,6 +114,17 @@ async function open(preferences: Partial<Preferences> = {}, opened: string | nul
 /** The writes: a mounted dialog also re-reads preferences, which is not one. */
 function patches() {
 	return fetchStub.mock.calls.filter(([, init]) => init?.method === "PATCH");
+}
+
+/** Lets queued fetches and the renders they cause settle. */
+async function settleFetches(): Promise<void> {
+	for (let turn = 0; turn < 5; turn++) {
+		await act(async () => {
+			await new Promise<void>((resolve) => {
+				setTimeout(resolve, 5);
+			});
+		});
+	}
 }
 
 function urlOf(input: Parameters<typeof fetch>[0]): string {
@@ -225,6 +245,42 @@ describe("Settings dialog", () => {
 			absent: ["Name", "Email"],
 			patch: [],
 		});
+	});
+
+	it("offers Log out under Account on the hosted app, which signs out and goes to login", async () => {
+		authConfigBody = {
+			hosted: true,
+			turnstileSiteKey: null,
+			providers: {google: false, magicLink: false},
+			signupMode: "closed",
+		};
+		const assigned: string[] = [];
+		vi.spyOn(globalThis.location, "assign").mockImplementation((url: string | URL) => {
+			assigned.push(String(url));
+		});
+		await open();
+		await settleFetches();
+		const titles = sectionTitles();
+		const button = [...section("Account").querySelectorAll("button")].find((b) => b.textContent === "Log out");
+		await run(() => {
+			button?.click();
+		});
+		await settleFetches();
+
+		expect({
+			first: titles[0],
+			signOuts: fetchStub.mock.calls
+				.map(([input, init]) => [new URL(urlOf(input), globalThis.location.origin).pathname, init?.method])
+				.filter(([path]) => path === "/api/auth/sign-out"),
+			assigned,
+		}).toStrictEqual({first: "Account", signOuts: [["/api/auth/sign-out", "POST"]], assigned: ["/login"]});
+	});
+
+	it("has no Log out on the Node host", async () => {
+		await open({account: {username: "Alice", email: "alice@example.com"}});
+		await settleFetches();
+
+		expect(section("Account").textContent.includes("Log out")).toBe(false);
 	});
 
 	it("offers Jump to for every registered section and labels it with the opened section", async () => {

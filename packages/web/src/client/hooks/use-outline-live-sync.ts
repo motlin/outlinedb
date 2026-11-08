@@ -7,11 +7,13 @@
  * and reads once on reopening; while it is down, the tab reads when it becomes visible. The same socket carries
  * `{"type":"expansion.changed","version"}` frames, handed to the expansion sync instead of the tree read, and
  * `{"type":"account.changed","version"}` frames after a sync, import or seed rewrote the account tables, which re-read
- * the feature flags and preferences so a tab opened before the first sync picks them up without a reload.
+ * the feature flags and preferences so a tab opened before the first sync picks them up without a reload. A socket that
+ * closes without ever opening may have been refused with a 401, which the page cannot see, so it checks the sign-in.
  */
 
 import {useQueryClient} from "@tanstack/react-query";
 import {useEffect} from "react";
+import {redirectIfSignedOut} from "../auth/login-redirect.js";
 import {expansionVersionAnnounced} from "./use-expansion-sync.js";
 import {featureKeys} from "./use-features.js";
 import {preferenceKeys} from "./use-preferences.js";
@@ -113,7 +115,9 @@ function startOutlineLiveSync(
 		const protocol = globalThis.location.protocol === "https:" ? "wss" : "ws";
 		const socket = new WebSocket(`${protocol}://${globalThis.location.host}/api/v1/nodes/events`);
 		state.socket = socket;
+		let socketOpened = false;
 		socket.addEventListener("open", () => {
+			socketOpened = true;
 			state.failures = 0;
 			if (state.opened) {
 				// Anything written while the socket was down sent no frame.
@@ -134,6 +138,9 @@ function startOutlineLiveSync(
 		socket.addEventListener("close", () => {
 			if (state.disposed || state.socket !== socket) {
 				return;
+			}
+			if (!socketOpened) {
+				void redirectIfSignedOut();
 			}
 			state.reconnectTimer = setTimeout(connect, reconnectDelayMs(state.failures, Math.random()));
 			state.failures += 1;

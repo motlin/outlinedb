@@ -1,0 +1,137 @@
+.auth-page {
+	display: flex;
+	min-height: 100vh;
+	align-items: center;
+	justify-content: center;
+	padding: 24px 16px;
+	background: #f4f5f7;
+	color: #2a3135;
+	font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.auth-card {
+	width: 100%;
+	max-width: 380px;
+	padding: 32px 28px;
+	border-radius: 12px;
+	background: #fff;
+	box-shadow: 0 1px 3px rgb(0 0 0 / 12%);
+}
+
+.auth-brand {
+	margin-bottom: 20px;
+	font-size: 22px;
+	font-weight: 700;
+	letter-spacing: -0.01em;
+}
+
+.auth-title {
+	margin: 0 0 20px;
+	font-size: 17px;
+	font-weight: 600;
+}
+
+.auth-form {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+
+.auth-field {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	font-size: 13px;
+	font-weight: 500;
+}
+
+.auth-field input {
+	padding: 9px 11px;
+	border: 1px solid #cfd4d9;
+	border-radius: 6px;
+	background: transparent;
+	color: inherit;
+	font-size: 15px;
+}
+
+.auth-field input:focus {
+	border-color: #49baf2;
+	outline: none;
+}
+
+.auth-submit {
+	padding: 10px;
+	border: none;
+	border-radius: 6px;
+	background: #2a3135;
+	color: #fff;
+	font-size: 15px;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.auth-submit:disabled {
+	opacity: 0.6;
+	cursor: default;
+}
+
+.auth-alert,
+.auth-notice,
+.auth-text {
+	margin: 0;
+	font-size: 14px;
+	line-height: 1.45;
+}
+
+.auth-alert {
+	color: #c0392b;
+}
+
+.auth-link-button {
+	align-self: flex-start;
+	padding: 0;
+	border: none;
+	background: none;
+	color: #3a8cc7;
+	font-size: 14px;
+	cursor: pointer;
+}
+
+.auth-links {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: space-between;
+	gap: 8px;
+	margin: 20px 0 0;
+	font-size: 14px;
+}
+
+.auth-links a,
+.auth-notice a {
+	color: #3a8cc7;
+}
+
+@media (prefers-color-scheme: dark) {
+	.auth-page {
+		background: #1c1f22;
+		color: #e4e6e8;
+	}
+
+	.auth-card {
+		background: #262a2e;
+		box-shadow: none;
+	}
+
+	.auth-field input {
+		border-color: #454b51;
+	}
+
+	.auth-submit {
+		background: #e4e6e8;
+		color: #1c1f22;
+	}
+
+	.auth-alert {
+		color: #ff8a80;
+	}
+}

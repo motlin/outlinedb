@@ -308,4 +308,39 @@ describe("useOutlineLiveSync", () => {
 			sockets: 1,
 		});
 	});
+	it("sends the user to login when the socket upgrade fails while signed out", async () => {
+		const assigned: string[] = [];
+		vi.spyOn(globalThis.location, "assign").mockImplementation((url: string | URL) => {
+			assigned.push(String(url));
+		});
+		const fetchMock = vi.mocked(fetch);
+		const fallback = fetchMock.getMockImplementation()!;
+		const probes: string[] = [];
+		fetchMock.mockImplementation(async (input) => {
+			if (input === "/health") {
+				probes.push(input);
+				return Response.json({error: "unauthenticated"}, {status: 401});
+			}
+			return fallback(input);
+		});
+
+		socket().emit("open");
+		socket().emit("close");
+		await settle();
+		const afterDrop = probes.length;
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(10_000);
+		});
+		socket().emit("close");
+		await settle();
+
+		expect({afterDrop, probes, assigned}).toStrictEqual({
+			afterDrop: 0,
+			probes: ["/health"],
+			assigned: [
+				`/login?next=${encodeURIComponent(`${globalThis.location.pathname}${globalThis.location.search}${globalThis.location.hash}`)}`,
+			],
+		});
+		vi.restoreAllMocks();
+	});
 });

@@ -1,3 +1,4 @@
+import {redirectToLogin} from "./auth/login-redirect.js";
 import {RequestStatusError} from "./request-error.js";
 import {shareById} from "./structural-sharing.js";
 
@@ -19,6 +20,13 @@ export function shouldRetry(failureCount: number, error: Error): boolean {
 		return false;
 	}
 	return true;
+}
+
+/** The query and mutation caches' `onError`: a 401 means the session ended, so the user goes to login. */
+export function redirectOnAuthError(error: Error): void {
+	if (error instanceof RequestStatusError && error.status === 401) {
+		redirectToLogin();
+	}
 }
 
 /** Exponential backoff: 1s, 2s, 4s. */
