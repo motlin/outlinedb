@@ -2,6 +2,7 @@ import type {EmailBinding} from "../src/email/send";
 import worker from "../src/worker";
 
 export {UserStore} from "../src/worker";
+export {ProbeStore} from "./probe-entry";
 
 /** Every message the Worker handed to the `EMAIL` binding, oldest first, until `/__emails` drains it. */
 const sent: unknown[] = [];

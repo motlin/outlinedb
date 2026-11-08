@@ -1,6 +1,5 @@
 import {afterAll, beforeAll, describe, expect, it} from "vite-plus/test";
-import {drainEmails, origin, post, startAuthHarness, turnstile} from "./auth-harness";
-import type {SentEmail} from "./auth-harness";
+import {cookiesFrom, drainEmails, linkIn, origin, post, startAuthHarness, turnstile} from "./auth-harness";
 import type {Harness} from "./harness";
 import {signupAllowed} from "../src/auth/signup-gate";
 
@@ -8,24 +7,6 @@ const secret = "test-secret-0123456789abcdef0123456789abcdef";
 const invited = "invited@example.com";
 const password = "correct horse battery staple";
 const captchaKeys = {TURNSTILE_SECRET_KEY: turnstile.passSecret, TURNSTILE_SITE_KEY: turnstile.siteKey};
-
-/** The one link in an email's text, as a path on this origin. */
-function linkIn(email: SentEmail): string {
-	const match = /https?:\/\/\S+/u.exec(email.text);
-	if (!match) {
-		throw new Error(`No link in ${email.text}`);
-	}
-	const url = new URL(match[0]);
-	return `${url.pathname}${url.search}`;
-}
-
-/** The `name=value` pairs of a response's Set-Cookie headers, joined for a Cookie header. */
-function cookiesFrom(response: {headers: {getSetCookie(): string[]}}): string {
-	return response.headers
-		.getSetCookie()
-		.map((cookie) => cookie.split(";")[0])
-		.join("; ");
-}
 
 describe("signupAllowed", () => {
 	it("is closed by default, admits only invited emails in invite mode, and admits anyone when open", () => {

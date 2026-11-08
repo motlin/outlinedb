@@ -1,6 +1,8 @@
 import {afterAll, beforeAll, describe, expect, it} from "vite-plus/test";
 import {SignJWT, exportJWK, generateKeyPair} from "jose";
-import {countStoreCalls, startHarness} from "./harness";
+import {createHttpApp} from "@workflowy/web/server-app";
+import {cookiesFrom, drainEmails, linkIn, origin, post, startAuthHarness, turnstile} from "./auth-harness";
+import {applyD1Migrations, authDb, countStoreCalls, readJson, startHarness} from "./harness";
 import type {Harness} from "./harness";
 import {storeClient} from "../src/store-client";
 import type {UserStore} from "../src/user-store";
@@ -55,6 +57,7 @@ describe("worker routes each Access email to its own Durable Object", () => {
 						: new Response("unexpected", {status: 500}),
 			},
 		);
+		await applyD1Migrations(h.mf);
 	}, 120_000);
 
 	afterAll(async () => {
@@ -328,5 +331,223 @@ describe("worker routes each Access email to its own Durable Object", () => {
 		}
 
 		expect(counts).toStrictEqual(routes.map(() => 1));
+	});
+});
+
+const secret = "test-secret-0123456789abcdef0123456789abcdef";
+const password = "correct horse battery staple";
+
+interface SignedUp {
+	userId: string;
+	/** The Cookie header Better Auth's verification link set: the session token and its cookie cache. */
+	cookie: string;
+}
+
+/** Sign up an invited email from its own client IP (so rate limits never collide), open its verification link, and read its session. */
+async function signUp(h: Harness, email: string): Promise<SignedUp> {
+	const ip = {"cf-connecting-ip": `198.51.100.${email.length}`};
+	const signup = await post(h, "/sign-up/email", {email, password, name: email}, ip);
+	expect(signup.status).toBe(200);
+	const [verification] = await drainEmails(h);
+	if (!verification) {
+		throw new Error(`No verification email for ${email}`);
+	}
+	const verified = await h.mf.dispatchFetch(`${origin}${linkIn(verification)}`, {redirect: "manual"});
+	const cookie = cookiesFrom(verified);
+	const session = await h.mf.dispatchFetch(`${origin}/api/auth/get-session`, {headers: {cookie}});
+	const body = (await session.json()) as {user: {id: string}};
+	return {userId: body.user.id, cookie};
+}
+
+/** Only the session token pair of a Cookie header, so the session is read from D1 rather than the cookie cache. */
+function tokenOnly(cookie: string): string {
+	return cookie
+		.split("; ")
+		.filter((pair) => pair.startsWith("better-auth.session_token="))
+		.join("; ");
+}
+
+async function stubNamed(h: Harness, name: string): Promise<DurableObjectStub<UserStore>> {
+	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
+	const ns = (await h.mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace<UserStore>;
+	return ns.get(ns.idFromName(name));
+}
+
+async function nodeNames(h: Harness, headers: Record<string, string>): Promise<{status: number; body: unknown}> {
+	const response = await h.mf.dispatchFetch(`${origin}/api/v1/nodes`, {headers});
+	const body = await readJson(response);
+	const nodes = (body as {nodes?: {name: string}[]}).nodes;
+	return {status: response.status, body: nodes ? nodes.map(({name}) => name) : body};
+}
+
+describe("worker resolves a principal from Access or a Better Auth session", () => {
+	let h: Harness;
+	let privateKey: CryptoKey;
+
+	beforeAll(async () => {
+		const pair = await generateKeyPair("RS256");
+		privateKey = pair.privateKey;
+		const jwks = JSON.stringify({keys: [{...(await exportJWK(pair.publicKey)), alg: "RS256", use: "sig"}]});
+		h = await startAuthHarness(
+			{
+				ACCESS_TEAM_DOMAIN: teamDomain,
+				ACCESS_AUD: audience,
+				ALLOWED_EMAILS: "alice@example.com, bob@example.com",
+				BETTER_AUTH_SECRET: secret,
+				SIGNUP_MODE: "invite",
+				SIGNUP_INVITES:
+					"alice@example.com, carol@example.com, dave@example.com, erin@example.com, gina@example.com",
+				TURNSTILE_SECRET_KEY: turnstile.passSecret,
+				TURNSTILE_SITE_KEY: turnstile.siteKey,
+			},
+			{
+				className: "ProbeStore",
+				otherwise: (request) =>
+					new URL(request.url).pathname === "/cdn-cgi/access/certs"
+						? new Response(jwks, {headers: {"content-type": "application/json"}})
+						: new Response("unexpected", {status: 500}),
+			},
+		);
+	}, 120_000);
+
+	afterAll(async () => {
+		await h.dispose();
+	});
+
+	async function accessJwt(email: string): Promise<string> {
+		return new SignJWT({email})
+			.setProtectedHeader({alg: "RS256"})
+			.setAudience(audience)
+			.setIssuer(`https://${teamDomain}`)
+			.setIssuedAt()
+			.setExpirationTime("1h")
+			.sign(privateKey);
+	}
+
+	it("routes a verified session user to the Durable Object named by its user id, and keeps two users apart", async () => {
+		const carol = await signUp(h, "carol@example.com");
+		const dave = await signUp(h, "dave@example.com");
+		const carolStore = await stubNamed(h, carol.userId);
+		await carolStore.fetch("http://localhost/__seed?name=Carol%27s%20node");
+
+		await expect(nodeNames(h, {cookie: carol.cookie})).resolves.toStrictEqual({
+			status: 200,
+			body: ["Carol's node"],
+		});
+		await expect(nodeNames(h, {cookie: dave.cookie})).resolves.toStrictEqual({status: 200, body: []});
+		const status = await carolStore.adminStatus();
+		expect(status.storeName).toBe(carol.userId);
+	});
+
+	it("routes an Access email to its email-named Durable Object, or to its user's once it has a verified D1 user", async () => {
+		const tags = [{tag: "#b", colorIndex: 2}];
+		const put = async (email: string, tagColors: unknown[]) =>
+			h.mf.dispatchFetch(`${origin}/api/admin/account-state`, {
+				method: "PUT",
+				headers: {"Cf-Access-Jwt-Assertion": await accessJwt(email), "content-type": "application/json"},
+				body: JSON.stringify(stateWith(tagColors)),
+			});
+
+		expect((await put("bob@example.com", tags)).status).toBe(200);
+		const alice = await signUp(h, "alice@example.com");
+		expect((await put("alice@example.com", [{tag: "#a", colorIndex: 1}])).status).toBe(200);
+
+		const states = await Promise.all(
+			["bob@example.com", alice.userId, "alice@example.com"].map(async (name) =>
+				JSON.stringify(await (await stubNamed(h, name)).getAccountState()),
+			),
+		);
+		expect(states).toStrictEqual([
+			JSON.stringify(stateWith(tags)),
+			JSON.stringify(stateWith([{tag: "#a", colorIndex: 1}])),
+			JSON.stringify(stateWith([])),
+		]);
+	});
+
+	it("refuses a session on /api/admin/* with 403, so only Access reaches the admin routes", async () => {
+		const {cookie} = await signUp(h, "gina@example.com");
+		const responses = await Promise.all(
+			["/api/admin/status", "/api/admin/account-state"].map(async (path) => {
+				const response = await h.mf.dispatchFetch(`${origin}${path}`, {headers: {cookie}});
+				return {status: response.status, body: await response.json()};
+			}),
+		);
+		expect(responses).toStrictEqual([
+			{status: 403, body: {error: "access-required"}},
+			{status: 403, body: {error: "access-required"}},
+		]);
+	});
+
+	it("refuses a session whose email is unverified with 403 email-unverified", async () => {
+		const erin = await signUp(h, "erin@example.com");
+		const db = await authDb(h.mf);
+		await db.prepare("UPDATE user SET emailVerified = 0 WHERE id = ?").bind(erin.userId).run();
+
+		await expect(nodeNames(h, {cookie: tokenOnly(erin.cookie)})).resolves.toStrictEqual({
+			status: 403,
+			body: {error: "email-unverified"},
+		});
+	});
+
+	it("answers 401 JSON unauthenticated with no credentials or an unknown session token", async () => {
+		await expect(
+			Promise.all([nodeNames(h, {}), nodeNames(h, {cookie: "better-auth.session_token=forged.token"})]),
+		).resolves.toStrictEqual([
+			{status: 401, body: {error: "unauthenticated"}},
+			{status: 401, body: {error: "unauthenticated"}},
+		]);
+	});
+
+	it("answers 401 on every registered /api/v1/* route without credentials", async () => {
+		const routes = createHttpApp({
+			resolveStore: () => {
+				throw new Error("unreachable");
+			},
+		})
+			.routes.filter(({method, path}) => method !== "ALL" && path.startsWith("/api/v1/"))
+			.map(({method, path}) => ({method, path: path.replaceAll(/:\w+(\{[^}]*\})?/gu, "x")}));
+		const sockets = ["/api/v1/ladder/events", "/api/v1/nodes/events"].map((path) => ({method: "GET", path}));
+		const all = [...routes, ...sockets];
+		expect(all.length).toBeGreaterThan(40);
+
+		const statuses = await Promise.all(
+			all.map(async ({method, path}) => {
+				const response = await h.mf.dispatchFetch(`${origin}${path}`, {method});
+				return `${method} ${path} ${response.status}`;
+			}),
+		);
+		expect(statuses).toStrictEqual(all.map(({method, path}) => `${method} ${path} 401`));
+	});
+});
+
+describe("worker uses ACCESS_DEV_IDENTITY only when no session cookie is present", () => {
+	let h: Harness;
+
+	beforeAll(async () => {
+		h = await startAuthHarness(
+			{
+				ACCESS_DEV_IDENTITY: "dev",
+				BETTER_AUTH_SECRET: secret,
+				SIGNUP_MODE: "invite",
+				SIGNUP_INVITES: "frank@example.com",
+				TURNSTILE_SECRET_KEY: turnstile.passSecret,
+				TURNSTILE_SITE_KEY: turnstile.siteKey,
+			},
+			{className: "ProbeStore"},
+		);
+	}, 120_000);
+
+	afterAll(async () => {
+		await h.dispose();
+	});
+
+	it("routes a session to its user's Durable Object and a cookieless request to dev", async () => {
+		const frank = await signUp(h, "frank@example.com");
+		await (await stubNamed(h, "dev")).fetch("http://localhost/__seed?name=dev%20node");
+
+		await expect(Promise.all([nodeNames(h, {cookie: frank.cookie}), nodeNames(h, {})])).resolves.toStrictEqual([
+			{status: 200, body: []},
+			{status: 200, body: ["dev node"]},
+		]);
 	});
 });

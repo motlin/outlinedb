@@ -32,9 +32,13 @@ const authBindings = {
 };
 
 /** Answers siteverify like Cloudflare does for its test secrets: success only for the always-pass one. */
-async function fakeSiteverify(request: Request, posted: unknown[]): Promise<Response> {
+async function fakeSiteverify(
+	request: Request,
+	posted: unknown[],
+	otherwise: (request: Request) => Response | Promise<Response>,
+): Promise<Response> {
 	if (request.url !== SITEVERIFY_URL) {
-		return new Response("unexpected outbound fetch", {status: 500});
+		return otherwise(request);
 	}
 	const body: unknown = await request.json();
 	posted.push(body);
@@ -45,15 +49,26 @@ async function fakeSiteverify(request: Request, posted: unknown[]): Promise<Resp
 		: Response.json({success: false, "error-codes": ["invalid-input-response"]});
 }
 
-/** The auth test Worker over migrated D1, with siteverify answered by a fake that records what it was sent. */
-export async function startAuthHarness(bindings: Record<string, string>): Promise<AuthHarness> {
+const unexpectedOutbound = () => new Response("unexpected outbound fetch", {status: 500});
+
+/**
+ * The auth test Worker over migrated D1, with siteverify answered by a fake that records what it was sent and every
+ * other outbound fetch answered by `otherwise`. `className` picks the Durable Object class `auth-entry.ts` exports.
+ */
+export async function startAuthHarness(
+	bindings: Record<string, string>,
+	{
+		className = "UserStore",
+		otherwise = unexpectedOutbound,
+	}: {className?: string; otherwise?: (request: Request) => Response | Promise<Response>} = {},
+): Promise<AuthHarness> {
 	const siteverify: unknown[] = [];
 	const harness = await startHarness(
 		"./auth-entry.ts",
-		"UserStore",
+		className,
 		undefined,
 		{...authBindings, ...bindings},
-		{outboundService: async (request: Request) => fakeSiteverify(request, siteverify)},
+		{outboundService: async (request: Request) => fakeSiteverify(request, siteverify, otherwise)},
 	);
 	await applyD1Migrations(harness.mf);
 	return Object.assign(harness, {siteverify});
@@ -71,4 +86,22 @@ export async function post(h: Harness, path: string, body: unknown, headers: Rec
 export async function drainEmails(h: Harness): Promise<SentEmail[]> {
 	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the test entry's own /__emails, which returns SentEmail[]
 	return (await (await h.mf.dispatchFetch(`${origin}/__emails`)).json()) as SentEmail[];
+}
+
+/** The one link in an email's text, as a path on this origin. */
+export function linkIn(email: SentEmail): string {
+	const match = /https?:\/\/\S+/u.exec(email.text);
+	if (!match) {
+		throw new Error(`No link in ${email.text}`);
+	}
+	const url = new URL(match[0]);
+	return `${url.pathname}${url.search}`;
+}
+
+/** The `name=value` pairs of a response's Set-Cookie headers, joined for a Cookie header. */
+export function cookiesFrom(response: {headers: {getSetCookie(): string[]}}): string {
+	return response.headers
+		.getSetCookie()
+		.map((cookie) => cookie.split(";")[0])
+		.join("; ");
 }

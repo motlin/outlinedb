@@ -4,11 +4,12 @@ import {createHttpApp} from "@workflowy/web/server-app";
 import type {StoreClient} from "@workflowy/web/server-app";
 import {Hono} from "hono";
 import {createMiddleware} from "hono/factory";
-import {resolveIdentity} from "./access";
 import type {AccessEnv} from "./access";
 import {authConfig, captchaMissing, createAuth} from "./auth/auth";
 import type {AuthEnv} from "./auth/auth";
 import {authorize, oauthProviderFor} from "./oauth";
+import {resolvePrincipal} from "./principal";
+import type {Principal} from "./principal";
 import {storeClient} from "./store-client";
 import type {UserStore} from "./user-store";
 
@@ -33,7 +34,7 @@ function passEncodedBody(response: Response): Response {
 type WorkerEnv = Env & AccessEnv & AuthEnv & {OAUTH_PROVIDER: OAuthHelpers};
 interface WorkerApp {
 	Bindings: WorkerEnv;
-	Variables: {email: string; stub: DurableObjectStub<UserStore>};
+	Variables: {principal: Principal; stub: DurableObjectStub<UserStore>};
 }
 
 const app = new Hono<WorkerApp>();
@@ -51,42 +52,58 @@ app.use("*", async (c, next) => {
  */
 const auths = new WeakMap<D1Database, ReturnType<typeof createAuth>>();
 
+/**
+ * This isolate's Better Auth, or undefined while `BETTER_AUTH_SECRET` is unset. Build it only in a request that goes on
+ * to use it: its setup does D1 I/O that a later request cannot finish once the request that started it has ended.
+ */
+function authFor(env: WorkerEnv): ReturnType<typeof createAuth> | undefined {
+	const secret = env.BETTER_AUTH_SECRET;
+	if (!secret) {
+		return undefined;
+	}
+	let auth = auths.get(env.AUTH_DB);
+	if (!auth) {
+		auth = createAuth({...env, BETTER_AUTH_SECRET: secret});
+		auths.set(env.AUTH_DB, auth);
+	}
+	return auth;
+}
+
 // Better Auth answers its own routes ahead of the Access identity, and stays off (503) until its secret is set,
 // so the Access path never depends on it.
 app.on(["GET", "POST"], "/api/auth/*", async (c) => {
-	const secret = c.env.BETTER_AUTH_SECRET;
-	if (!secret) {
+	if (!c.env.BETTER_AUTH_SECRET) {
 		return c.json({error: "auth-not-configured"}, 503);
 	}
 	if (captchaMissing(c.env, c.req.path)) {
 		return c.json({error: "captcha-not-configured"}, 503);
 	}
-	let auth = auths.get(c.env.AUTH_DB);
-	if (!auth) {
-		auth = createAuth({...c.env, BETTER_AUTH_SECRET: secret});
-		auths.set(c.env.AUTH_DB, auth);
-	}
-	return auth.handler(c.req.raw);
+	return authFor(c.env)?.handler(c.req.raw);
 });
 
 // Public: the sign-in page reads it before anyone is signed in. Shadows the Node host's `{hosted: false}`.
 app.get("/api/auth-config", (c) => c.json(authConfig(c.env)));
 
-// Access gates everything dynamic; the identity names the user's Durable Object.
-const identity = createMiddleware<WorkerApp>(async (c, next) => {
-	const result = await resolveIdentity(c.req.raw, c.env);
+// Access or a verified Better Auth session gates everything dynamic; the principal names the user's Durable Object.
+const principal = createMiddleware<WorkerApp>(async (c, next) => {
+	const result = await resolvePrincipal(c.req.raw, c.env, () => authFor(c.env));
 	if ("status" in result) {
-		return new Response(result.status === 401 ? "Unauthorized" : "Forbidden", {status: result.status});
+		return c.json({error: result.error}, result.status);
 	}
-	c.set("email", result.email);
-	const stub = c.env.USER_STORE.get(c.env.USER_STORE.idFromName(result.email));
+	c.set("principal", result);
+	const stub = c.env.USER_STORE.getByName(result.storeName);
 	c.set("stub", stub);
 	stores.set(c.req.raw, storeClient(stub));
 	return next();
 });
 
-app.use("/health", identity);
-app.use("/api/*", identity);
+app.use("/health", principal);
+app.use("/api/*", principal);
+
+// The admin routes act on a whole store (seed, sync, account state), so only Access identities reach them.
+app.use("/api/admin/*", async (c, next) =>
+	c.var.principal.kind === "access" ? next() : c.json({error: "access-required"}, 403),
+);
 
 // The OAuth consent page; it runs its own Access check, since the grant it issues acts as that email.
 app.on(["GET", "POST"], "/authorize", async (c) => authorize(c.req.raw, c.env));
