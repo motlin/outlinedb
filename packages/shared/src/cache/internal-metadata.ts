@@ -31,6 +31,7 @@ import {replaceExpansion} from "./expansion-store.js";
 import {runUnitOfWork} from "./node-composite.js";
 import type {UnitOfWork} from "./node-composite.js";
 import type {NormalizedCalendarLevelsRow, NormalizedCalendarMetadataRow} from "./normalized-rows.js";
+import {inIds} from "./in-ids.js";
 import {closeCurrentVersions, joinKey, temporalMerge} from "./temporal-merge.js";
 import type {TemporalTransaction} from "./temporal-merge.js";
 import {replaceTreeTxId} from "./tree-transaction.js";
@@ -228,13 +229,11 @@ function liveRows<TTable extends SQLiteTable>(
 	if (ownerIds === undefined) {
 		return tx.select().from(table).where(version).all();
 	}
-	return chunks(ownerIds).flatMap((chunk) =>
-		tx
-			.select()
-			.from(table)
-			.where(and(version, inArray(ownerColumn, chunk)))
-			.all(),
-	);
+	return tx
+		.select()
+		.from(table)
+		.where(and(version, inIds(ownerColumn, ownerIds)))
+		.all();
 }
 
 /** True when every one of `fields` is equal on both rows, a missing field counting as null. */

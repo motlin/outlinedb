@@ -17,11 +17,12 @@ import type {
 } from "../../node-types.js";
 import {
 	childFlags,
-	currentBacklinkSources,
+	currentBacklinkSourcesUnder,
 	findReferencesRoot,
 	findReferencesRoots,
 	notReferencesRoot,
 	referencesRootLabel,
+	referencesRootLabels,
 } from "../backlinks.js";
 import {loadCalendarInfo} from "../calendar-day.js";
 import {findFoundDates} from "../calendar-found.js";
@@ -276,6 +277,14 @@ export const nodesView = defineOp({
 /**
  * Read the lists a view will show one level at a time: all of a level's parents in one batch, then the expanded rows
  * among their children as the next level, until the row budget is spent. {@link visit} then finds each list ready.
+ *
+ * A Reladomo-style deep fetch: each table is one query per level (children, mirrors, flags, attachments, metadata,
+ * calendar, references roots, Backlinks sections), the level's ids bound as one JSON parameter (`inIds`), so the
+ * statement count follows the depth, never the row count, and a wide level stays under the Durable Object's
+ * 100-parameter cap. One recursive CTE is not used: which rows expand is decided per row in JS (request ids, the
+ * account's stored expansion, mirror-instance keys derived from the parent's path), not by a column SQL can join.
+ * Measured (better-sqlite3, every row expanded, each with a Backlinks item): 150 parents x 3 levels went from 9076
+ * statements / 1109 ms to 109 / 35 ms; 400 x 2 from 16084 / 2395 ms to 76 / 47 ms.
  */
 async function prefetchViewLevels(
 	ctx: ServerContext,
@@ -305,17 +314,12 @@ async function prefetchViewLevels(
 			ctx.db,
 			toRead.flatMap((original) => original ?? []),
 		);
+		const sections = await readBacklinksOfMany(ctx, roots);
 		for (const original of toRead) {
-			const rootId = original === null ? undefined : roots.get(original);
 			prefetched.set(original, {
 				nodes: lists.get(original) ?? [],
 				// Home has no Backlinks section; a node with no references root has an empty one.
-				backlinks:
-					original === null
-						? null
-						: rootId === undefined
-							? {rootId: null, items: []}
-							: await readBacklinks(ctx, original),
+				backlinks: original === null ? null : (sections.get(original) ?? {rootId: null, items: []}),
 			});
 		}
 		const next: typeof level = [];
@@ -585,18 +589,37 @@ export const nodesBacklinks = defineOp({
 
 /** The Backlinks section of the resolved node `id` (a mirror shows its original's). */
 async function readBacklinks(ctx: ServerContext, id: string): Promise<BacklinksResponse> {
-	const {db} = ctx;
-	const rootId = findReferencesRoot(db, resolveMirrorToOriginal(ctx, id));
+	const original = resolveMirrorToOriginal(ctx, id);
+	const rootId = findReferencesRoot(ctx.db, original);
 	if (rootId === null) {
 		return {rootId: null, items: []};
 	}
+	return (await readBacklinksOfMany(ctx, new Map([[original, rootId]]))).get(original) ?? {rootId, items: []};
+}
 
-	const sourceByItem = currentBacklinkSources(db, rootId);
-	const entries = (await new NodeTreeReader(ctx.cacheService).readChildren(rootId, {depth: 0})).flatMap((item) => {
-		const sourceId = sourceByItem.get(item.id);
-		return sourceId === undefined ? [] : [{item, sourceId}];
-	});
-	const sourceIds = entries.map(({sourceId}) => sourceId);
+/**
+ * The Backlinks sections of many nodes, keyed by node, from each node's references root (`rootOf`). Each concern
+ * (items, their sources, child flags, crumb labels) is one query for the whole batch, and the crumbs' ancestors one
+ * query per ancestor level, so the statement count does not grow with the number of sections or items.
+ */
+async function readBacklinksOfMany(
+	ctx: ServerContext,
+	rootOf: ReadonlyMap<string, string>,
+): Promise<Map<string, BacklinksResponse>> {
+	const {db} = ctx;
+	const rootIds = [...new Set(rootOf.values())];
+	const sourceByItem = currentBacklinkSourcesUnder(db, rootIds);
+	const itemsByRoot = new NodeTreeReader(ctx.cacheService).readChildrenOfMany(rootIds);
+	const entriesByRoot = new Map(
+		rootIds.map((rootId) => [
+			rootId,
+			(itemsByRoot.get(rootId) ?? []).flatMap((item) => {
+				const sourceId = sourceByItem.get(item.id);
+				return sourceId === undefined ? [] : [{item, sourceId}];
+			}),
+		]),
+	);
+	const sourceIds = [...new Set([...entriesByRoot.values()].flat().map(({sourceId}) => sourceId))];
 	const sources = new Map(
 		(await new NodeTreeReader(ctx.cacheService).readNodes(sourceIds, {depth: 0})).map((source) => [
 			source.id,
@@ -604,17 +627,18 @@ async function readBacklinks(ctx: ServerContext, id: string): Promise<BacklinksR
 		]),
 	);
 	const flags = childFlags(db, sourceIds);
-	const reader = new NodeReader(db);
+	const ancestors = loadAncestors(ctx, sourceIds);
+	const labels = referencesRootLabels(db, [...ancestors.keys()]);
 
 	const crumbsOf = (sourceId: string): BacklinkCrumb[] =>
-		ancestorChain(sourceId, (linkId) => reader.getById(linkId))
+		ancestorChain(sourceId, (linkId) => ancestors.get(linkId))
 			.slice(1)
 			.toReversed()
-			.map((ancestor) => ({id: ancestor.id, name: referencesRootLabel(db, ancestor.id) ?? ancestor.name ?? ""}));
+			.map((ancestor) => ({id: ancestor.id, name: labels.get(ancestor.id) ?? ancestor.name ?? ""}));
 
-	const body: BacklinksResponse = {
+	const sectionOf = (rootId: string): BacklinksResponse => ({
 		rootId,
-		items: entries.flatMap(({item, sourceId}) => {
+		items: (entriesByRoot.get(rootId) ?? []).flatMap(({item, sourceId}) => {
 			const source = sources.get(sourceId);
 			if (!source) {
 				return [];
@@ -637,8 +661,29 @@ async function readBacklinks(ctx: ServerContext, id: string): Promise<BacklinksR
 				},
 			];
 		}),
-	};
-	return body;
+	});
+	return new Map([...rootOf].map(([nodeId, rootId]) => [nodeId, sectionOf(rootId)]));
+}
+
+/** `ids` and all their ancestors, by id, read one ancestor level per query for the whole batch. */
+function loadAncestors(ctx: ServerContext, ids: readonly string[]): Map<string, Node> {
+	const reader = new NodeReader(ctx.db);
+	const found = new Map<string, Node>();
+	let frontier = [...new Set(ids)];
+	while (frontier.length > 0) {
+		const level = reader.getMany(frontier);
+		for (const [id, node] of level) {
+			found.set(id, node);
+		}
+		frontier = [
+			...new Set(
+				[...level.values()].flatMap((node) =>
+					node.parentId === null || found.has(node.parentId) ? [] : [node.parentId],
+				),
+			),
+		];
+	}
+	return found;
 }
 
 // GET /api/v1/nodes/:id/found-dates - A day page's Found Dates section: the nodes

@@ -7,7 +7,7 @@ import type {Node} from "../types/node.js";
 import {isSystemTarget} from "../types/targets.js";
 import type {WorkflowyNode} from "../types/workflowy.js";
 import {uuidToShortId} from "../workflowy/constants.js";
-import {and, eq, inArray, isNull, like, notInArray, or, sql} from "drizzle-orm";
+import {and, eq, isNull, like, notInArray, or, sql} from "drizzle-orm";
 import {
 	contentMatches,
 	currentVersion,
@@ -509,7 +509,7 @@ export class CacheService {
 
 		const results = this.database.query.nodeContent
 			.findMany({
-				where: and(inArray(nodeContent.id, nodeIds), currentVersion(nodeContent)),
+				where: and(inIds(nodeContent.id, nodeIds), currentVersion(nodeContent)),
 				with: {
 					metadata: true,
 					mirrorsAsOriginal: {where: currentVersion(mirrors)},
@@ -709,7 +709,7 @@ export class CacheService {
 
 		const children = this.database.query.nodeContent
 			.findMany({
-				where: and(inArray(nodeContent.parentId, parentIds), currentVersion(nodeContent)),
+				where: and(inIds(nodeContent.parentId, parentIds), currentVersion(nodeContent)),
 				with: {
 					metadata: true,
 					mirrorsAsOriginal: {
@@ -805,7 +805,7 @@ export class CacheService {
 
 		const results = this.database.query.nodeMetadata
 			.findMany({
-				where: and(inArray(nodeMetadata.shortId, shortIds), currentVersion(nodeMetadata)),
+				where: and(inIds(nodeMetadata.shortId, shortIds), currentVersion(nodeMetadata)),
 				columns: {nodeId: true, shortId: true},
 			})
 			.sync();

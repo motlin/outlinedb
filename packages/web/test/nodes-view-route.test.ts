@@ -206,3 +206,133 @@ describe("POST /api/v1/nodes/view", () => {
 		]);
 	});
 });
+
+/** Durable Object SQLite rejects a statement with more than 100 bound parameters. */
+const DURABLE_OBJECT_PARAMETER_CAP = 100;
+
+/**
+ * Home holds `Root`, which holds `width` rows `P000..`, each the top of a chain `depth` rows deep. Every row is
+ * expanded. With `backlinks`, every row also has a references root holding one backlink item from its own source
+ * row under Home's `Sources > Group`. Statements past the Durable Object's bound-parameter cap fail the way workerd
+ * does, and every prepared statement during a request is counted.
+ */
+function wideSetup(width: number, depth: number, {backlinks = false} = {}) {
+	const sqlite = new DatabaseConstructor(":memory:");
+	const db = drizzle(sqlite, {schema});
+	migrate(db, {migrationsFolder});
+	const cacheService = new CacheService(db);
+	cacheService.insertNode(apiNode("Root", null, 0), null);
+	cacheService.insertNode(apiNode("Sources", null, 1), null);
+	cacheService.insertNode(apiNode("Group", "Sources", 0), "Sources");
+	const live = ["2000-01-01T00:00:00.000Z", FAR_FUTURE_DATE];
+	/** Give `target` a references root holding a backlink item from a new source row. */
+	const backlinkTo = (target: string) => {
+		cacheService.insertNode(apiNode(`S-${target}`, "Group", 0), "Group");
+		cacheService.insertNode(apiNode(`R-${target}`, target, 99), target);
+		cacheService.insertNode(apiNode(`I-${target}`, `R-${target}`, 0), `R-${target}`);
+		sqlite
+			.prepare("INSERT INTO references_roots (node_id, system_from, system_to) VALUES (?, ?, ?)")
+			.run(`R-${target}`, ...live);
+		sqlite
+			.prepare("INSERT INTO mirrors (mirror_id, original_id, system_from, system_to) VALUES (?, ?, ?, ?)")
+			.run(`I-${target}`, `S-${target}`, ...live);
+	};
+	const expandedIds = ["Root"];
+	for (let index = 0; index < width; index += 1) {
+		let parentId = "Root";
+		for (let level = 0; level < depth; level += 1) {
+			const id = `P${String(index).padStart(3, "0")}-${level}`;
+			cacheService.insertNode(apiNode(id, parentId, level === 0 ? index : 0), parentId);
+			expandedIds.push(id);
+			if (backlinks) {
+				backlinkTo(id);
+			}
+			parentId = id;
+		}
+	}
+	let statements = 0;
+	const prepare = sqlite.prepare.bind(sqlite);
+	sqlite.prepare = (source: string) => {
+		statements += 1;
+		const parameters = source.match(/\?/gu)?.length ?? 0;
+		if (parameters > DURABLE_OBJECT_PARAMETER_CAP) {
+			throw new Error(`too many SQL variables: ${parameters}`);
+		}
+		return prepare(source);
+	};
+	const ctx = {db, cacheService, internalAdapter: () => {}} as unknown as ServerContext;
+	const app = new Hono<AppEnv>();
+	app.use("*", async (c, next) => {
+		c.set("ctx", ctx);
+		await next();
+	});
+	app.route("/", httpAppFor(ctx));
+	const view = async () => {
+		statements = 0;
+		const res = await app.fetch(
+			new Request("http://x/api/v1/nodes/view", {
+				method: "POST",
+				headers: {"Content-Type": "application/json"},
+				body: JSON.stringify({rootId: "Root", expandedIds, limit: 100_000, showCompleted: false}),
+			}),
+		);
+		// A failed view answers {error} without lists.
+		const {lists: viewLists = []} = (await res.json()) as {lists?: ListBody[]};
+		return {status: res.status, lists: viewLists, listCount: viewLists.length, statements};
+	};
+	return {view};
+}
+
+describe("POST /api/v1/nodes/view deep fetch", () => {
+	it("reads a level of more expanded parents than a Durable Object statement may bind", async () => {
+		const {view} = wideSetup(150, 2);
+
+		const {status, listCount} = await view();
+
+		expect({status, listCount}).toStrictEqual({status: 200, listCount: 1 + 150 * 2});
+	});
+
+	it("runs the same statements per level however many parents a level holds", async () => {
+		const narrow = await wideSetup(3, 2).view();
+		const wide = await wideSetup(150, 2).view();
+
+		expect(wide.statements).toBe(narrow.statements);
+	});
+
+	it("adds a constant number of statements per level of depth", async () => {
+		const two = await wideSetup(20, 2).view();
+		const three = await wideSetup(20, 3).view();
+		const four = await wideSetup(20, 4).view();
+
+		expect(four.statements - three.statements).toBe(three.statements - two.statements);
+	});
+
+	it("reads every expanded row's Backlinks section in the same statements however many rows have one", async () => {
+		const narrow = await wideSetup(3, 2, {backlinks: true}).view();
+		const wide = await wideSetup(150, 2, {backlinks: true}).view();
+
+		expect({
+			statements: wide.statements,
+			last: wide.lists.at(-1),
+		}).toStrictEqual({
+			statements: narrow.statements,
+			last: {
+				parentId: "P149-1",
+				nodes: [],
+				backlinks: {
+					rootId: "R-P149-1",
+					items: [
+						{
+							node: expect.objectContaining({id: "I-P149-1", isMirror: true, originalNodeId: "S-P149-1"}),
+							sourceId: "S-P149-1",
+							crumbs: [
+								{id: "Sources", name: "Sources"},
+								{id: "Group", name: "Group"},
+							],
+						},
+					],
+				},
+			},
+		});
+	});
+});

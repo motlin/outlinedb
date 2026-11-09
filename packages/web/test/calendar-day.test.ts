@@ -303,5 +303,8 @@ describe("GET /api/v1/calendar/day/:dateId", () => {
 
 /** A query that reads calendar_metadata without naming node ids: a scan by root, level or dateId, not a lookup by id. */
 function isCalendarScan(sql: string): boolean {
-	return sql.includes('from "calendar_metadata"') && !sql.includes('"calendar_metadata"."node_id" in');
+	return (
+		sql.includes('from "calendar_metadata"') &&
+		!sql.includes('"calendar_metadata"."node_id" IN (SELECT value FROM json_each(')
+	);
 }

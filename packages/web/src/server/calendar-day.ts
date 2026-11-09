@@ -3,9 +3,10 @@
  * this module adds the node DTO's calendar role and the root's picker settings.
  */
 
-import {and, eq, inArray} from "drizzle-orm";
+import {and, eq} from "drizzle-orm";
 import {dayNameDate, findCalendarRoot, findTaggedCalendarRoot} from "@outlinedb/shared/calendar-lookup";
 import type {CalendarDayDeps} from "@outlinedb/shared/calendar-lookup";
+import {inIds} from "@outlinedb/shared/cache";
 import type {CacheService} from "@outlinedb/shared/cache";
 import {calendarMetadata, nodeDisplayMetadata} from "@outlinedb/shared/db";
 import type {CalendarDate} from "@outlinedb/shared/internal";
@@ -53,7 +54,7 @@ export function loadCalendarInfo(
 			.from(nodeDisplayMetadata)
 			.where(
 				and(
-					inArray(nodeDisplayMetadata.nodeId, ids),
+					inIds(nodeDisplayMetadata.nodeId, ids),
 					eq(nodeDisplayMetadata.systemTo, FAR_FUTURE_DATE),
 					eq(nodeDisplayMetadata.restorableUniqueNode, 1),
 				),
@@ -64,7 +65,7 @@ export function loadCalendarInfo(
 	const calendarRows = deps.db
 		.select()
 		.from(calendarMetadata)
-		.where(and(inArray(calendarMetadata.nodeId, ids), eq(calendarMetadata.systemTo, FAR_FUTURE_DATE)))
+		.where(and(inIds(calendarMetadata.nodeId, ids), eq(calendarMetadata.systemTo, FAR_FUTURE_DATE)))
 		.all();
 	for (const row of calendarRows) {
 		map.set(row.nodeId, {

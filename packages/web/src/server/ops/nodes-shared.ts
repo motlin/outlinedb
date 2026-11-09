@@ -14,7 +14,13 @@ import type {
 	TableMetadata,
 	UpdateNodeResponse,
 } from "../../node-types.js";
-import {NodeReader, NodeTreeReader, WorkflowyWriteThroughClient, readInternalMetadata} from "@outlinedb/shared/cache";
+import {
+	NodeReader,
+	NodeTreeReader,
+	WorkflowyWriteThroughClient,
+	inIds,
+	readInternalMetadata,
+} from "@outlinedb/shared/cache";
 import type {ExactMover, SlotPlan} from "@outlinedb/shared/cache";
 import {MAX_COPY_ITEMS} from "../copy-tree.js";
 import {mirrors as mirrorsTable, s3Files} from "@outlinedb/shared/db";
@@ -23,7 +29,7 @@ import type {RestoreInput, WorkflowyInternalAdapter, NewTree} from "@outlinedb/s
 import type {Node} from "@outlinedb/shared/types";
 import {HOME_TARGET} from "@outlinedb/shared/types";
 import {internalLinkShortIds, isShortId, parseVirtualShortId} from "@outlinedb/shared/workflowy";
-import {and, eq, inArray} from "drizzle-orm";
+import {and, eq} from "drizzle-orm";
 import {childFlags, referencesRootLabel} from "../backlinks.js";
 import {loadCalendarInfo} from "../calendar-day.js";
 import {timesDiffer} from "../calendar-found.js";
@@ -160,7 +166,7 @@ export function loadAttachments(ctx: ServerContext, nodeIds: string[]): Map<stri
 			isDeleted: s3Files.isDeleted,
 		})
 		.from(s3Files)
-		.where(and(inArray(s3Files.nodeId, nodeIds), eq(s3Files.systemTo, FAR_FUTURE_DATE)))
+		.where(and(inIds(s3Files.nodeId, nodeIds), eq(s3Files.systemTo, FAR_FUTURE_DATE)))
 		.all();
 	for (const row of rows) {
 		map.set(row.nodeId, {
@@ -248,7 +254,7 @@ export function originalsWithMirrors(ctx: ServerContext, ids: string[]): Set<str
 	const rows = ctx.db
 		.selectDistinct({originalId: mirrorsTable.originalId})
 		.from(mirrorsTable)
-		.where(and(inArray(mirrorsTable.originalId, ids), eq(mirrorsTable.systemTo, FAR_FUTURE_DATE)))
+		.where(and(inIds(mirrorsTable.originalId, ids), eq(mirrorsTable.systemTo, FAR_FUTURE_DATE)))
 		.all();
 	return new Set(rows.map((row) => row.originalId));
 }

@@ -4,7 +4,7 @@
  * ids and calendar metadata; older days only carry a `<time>` name.
  */
 
-import {and, between, eq, exists, inArray, sql} from "drizzle-orm";
+import {and, between, eq, exists, sql} from "drizzle-orm";
 import type {SQL} from "drizzle-orm";
 import {parseTimeAttrs} from "../dates/date-markup.js";
 import type {AppDatabase} from "../db/types.js";
@@ -16,6 +16,7 @@ import type {AuditNode, CalendarAuditFinding, CalendarParentContext, CalendarTag
 import {calendarNodeId} from "../internal/calendar-ids.js";
 import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 import type {CacheService} from "./cache-service.js";
+import {inIds} from "./in-ids.js";
 
 export interface CalendarDayDeps {
 	db: AppDatabase;
@@ -91,11 +92,8 @@ function rootLevels(deps: Pick<CalendarDayDeps, "db">, root: string): Readonly<R
 /** The `level` and `dateId` of each id's cached `metadata.calendar`; ids without one are absent. */
 function calendarTags(deps: Pick<CalendarDayDeps, "db">, ids: readonly string[]): Map<string, CalendarTag> {
 	const tags = new Map<string, CalendarTag>();
-	for (let start = 0; start < ids.length; start += ID_CHUNK) {
-		const chunk = ids.slice(start, start + ID_CHUNK);
-		for (const {id, calendar} of calendarRows(deps, inArray(calendarMetadata.nodeId, chunk), {liveOnly: false})) {
-			tags.set(id, calendar);
-		}
+	for (const {id, calendar} of calendarRows(deps, inIds(calendarMetadata.nodeId, ids), {liveOnly: false})) {
+		tags.set(id, calendar);
 	}
 	return tags;
 }
@@ -322,9 +320,6 @@ function pointedCalendarRoot(deps: Pick<CalendarDayDeps, "db">): string | undefi
 		.where(and(eq(rootPreferences.systemTo, FAR_FUTURE_DATE), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
 		.get()?.id;
 }
-
-/** Durable Object SQLite caps a statement at 100 bound parameters. */
-const ID_CHUNK = 90;
 
 /** Nodes (only live ones unless `liveOnly` is false) whose stored calendar matches `where`, with that calendar's tag. */
 function calendarRows(deps: Pick<CalendarDayDeps, "db">, where: SQL | undefined, {liveOnly = true} = {}) {

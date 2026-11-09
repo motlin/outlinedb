@@ -2,8 +2,9 @@ import type * as schema from "../db/schema.js";
 import type {AppDatabase} from "../db/types.js";
 import {nodeContent} from "../db/schema.js";
 import type {Node} from "../types/node.js";
-import {and, eq, inArray, isNull} from "drizzle-orm";
+import {and, eq, isNull} from "drizzle-orm";
 import {currentVersion} from "./cache-temporal.js";
+import {inIds} from "./in-ids.js";
 import {applyMirrorText, loadMirrorOriginals} from "./mirror-text.js";
 
 /**
@@ -89,7 +90,7 @@ export class NodeReader {
 
 		const results = this.database.query.nodeContent
 			.findMany({
-				where: and(inArray(nodeContent.id, ids), currentVersion(nodeContent)),
+				where: and(inIds(nodeContent.id, ids), currentVersion(nodeContent)),
 				with: {metadata: true},
 			})
 			.sync();
