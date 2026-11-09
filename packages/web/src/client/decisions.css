@@ -765,3 +765,50 @@ img.decisions-link-icon {
 .decisions-done button {
 	margin-top: 16px;
 }
+
+/* A proposed rewrite as a code-review diff: a red removed line, a green added line, changed words marked darker. */
+
+.decisions-diff {
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	overflow: hidden;
+	margin: 8px 0;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 13px;
+}
+
+.decisions-diff-line {
+	display: flex;
+	gap: 8px;
+	margin: 0;
+	padding: 4px 8px;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.decisions-diff-line[data-kind="removed"] {
+	background: color-mix(in srgb, var(--destructive) 10%, transparent);
+}
+
+.decisions-diff-line[data-kind="added"] {
+	background: color-mix(in srgb, var(--success) 10%, transparent);
+}
+
+.decisions-diff-sign {
+	flex: none;
+	user-select: none;
+	color: var(--muted-foreground);
+}
+
+.decisions-diff-line mark {
+	color: inherit;
+	border-radius: 2px;
+}
+
+.decisions-diff-line[data-kind="removed"] mark {
+	background: color-mix(in srgb, var(--destructive) 35%, transparent);
+}
+
+.decisions-diff-line[data-kind="added"] mark {
+	background: color-mix(in srgb, var(--success) 35%, transparent);
+}

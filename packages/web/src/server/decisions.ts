@@ -148,6 +148,8 @@ const ItemSchema = z.strictObject({
 	images: z.array(ImageSchema).optional(),
 	/** Videos shown in the same row; `src` and the optional `poster` image are relative to the photos directory. */
 	videos: z.array(VideoSchema).optional(),
+	/** A proposed text rewrite, shown as a removed line and an added line with the changed words marked. */
+	diff: z.strictObject({before: z.string(), after: z.string()}).optional(),
 	options: z.array(OptionSchema).min(1),
 	default: z.string().nullable().default(null),
 });

@@ -199,6 +199,18 @@ describe("GET /api/v1/decisions/:slug", () => {
 		});
 	});
 
+	it("passes an item's before/after diff through to the page", async () => {
+		const diff = {before: "Ran 5k with Gary", after: "Ran 5k with Frank"};
+		const item = {...DOCUMENT.groups[0].items[0], diff};
+		const request = setup({
+			"meetings.json": JSON.stringify({...DOCUMENT, groups: [{heading: "x", items: [item]}]}),
+		});
+		await expect(request("GET", "/meetings")).resolves.toStrictEqual({
+			status: 200,
+			body: {...DOCUMENT, groups: [{heading: "x", items: [{...item, answer: null}]}], submittedAt: null},
+		});
+	});
+
 	it("passes an item's videos, with and without a poster, through to the page", async () => {
 		const videos = [{src: "status-2026-11-03/clip.mp4", poster: "status-2026-11-03/clip.jpg"}, {src: "b.webm"}];
 		const item = {...DOCUMENT.groups[0].items[0], videos};

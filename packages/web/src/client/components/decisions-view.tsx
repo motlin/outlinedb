@@ -5,6 +5,7 @@
  * only records choices; the agent reads the answers back and does the writes.
  */
 
+import {diffWordsWithSpace} from "diff";
 import {useEffect, useMemo, useRef, useState} from "react";
 import type {ReactNode} from "react";
 import {useParams} from "react-router-dom";
@@ -528,6 +529,7 @@ function DecisionCard({group, item, state, onChoose, onNote, children}: Decision
 				<h2 className="decisions-card-title" id={titleId}>
 					{item.title}
 				</h2>
+				{item.diff === undefined ? null : <DiffBlock after={item.diff.after} before={item.diff.before} />}
 				{(item.images ?? []).length === 0 && (item.videos ?? []).length === 0 ? null : (
 					<div className="decisions-images">
 						{(item.images ?? []).map((image) => {
@@ -771,5 +773,50 @@ function ThemeToggle() {
 				</button>
 			))}
 		</fieldset>
+	);
+}
+
+interface DiffPart {
+	text: string;
+	changed: boolean;
+}
+
+/** One side of a word diff: the text shared with the other side, plus the words only this side has, marked. */
+function diffSide(before: string, after: string, side: "removed" | "added"): DiffPart[] {
+	const parts: DiffPart[] = [];
+	for (const change of diffWordsWithSpace(before, after)) {
+		if (side === "removed" ? change.added : change.removed) {
+			continue;
+		}
+		const changed = side === "removed" ? change.removed : change.added;
+		const last = parts.at(-1);
+		if (last?.changed === changed) {
+			last.text += change.value;
+		} else {
+			parts.push({text: change.value, changed});
+		}
+	}
+	return parts;
+}
+
+/** A proposed rewrite rendered the way code review shows a changed line: `-` before, `+` after, changed words marked. */
+function DiffBlock({before, after}: {before: string; after: string}): ReactNode {
+	return (
+		<div className="decisions-diff">
+			{(["removed", "added"] as const).map((side) => (
+				<p className="decisions-diff-line" data-kind={side} key={side}>
+					<span aria-hidden="true" className="decisions-diff-sign">
+						{side === "removed" ? "-" : "+"}
+					</span>
+					<span className="decisions-diff-text">
+						{diffSide(before, after, side).map((part, index) =>
+							// Parts are positional slices of one line, so their position is their identity.
+							// oxlint-disable-next-line react/no-array-index-key
+							part.changed ? <mark key={index}>{part.text}</mark> : <span key={index}>{part.text}</span>,
+						)}
+					</span>
+				</p>
+			))}
+		</div>
 	);
 }

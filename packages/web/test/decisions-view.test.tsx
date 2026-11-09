@@ -504,6 +504,49 @@ describe("DecisionPageView", () => {
 		});
 	});
 
+	it("shows a card's diff as a removed line and an added line, marking the words that changed", async () => {
+		const [group] = PAGE.groups;
+		const [first] = group.items;
+		const diff = {before: "Ran 5k with Gary in the morning", after: "Ran 5k with Frank in the morning #exercise"};
+		stubFetch(defaultWrite, {...PAGE, groups: [{...group, items: [{...first, diff}]}]});
+		await mount();
+		const block = card("a-1").querySelector(".decisions-diff");
+		expect({
+			afterTitle: block?.previousElementSibling?.className,
+			lines: [...(block?.querySelectorAll(".decisions-diff-line") ?? [])].map((line) => ({
+				kind: line.getAttribute("data-kind"),
+				sign: line.querySelector(".decisions-diff-sign")?.textContent,
+				parts: [...line.querySelectorAll(".decisions-diff-text > *")].map((part) => [
+					part.tagName.toLowerCase(),
+					part.textContent,
+				]),
+			})),
+		}).toStrictEqual({
+			afterTitle: "decisions-card-title",
+			lines: [
+				{
+					kind: "removed",
+					sign: "-",
+					parts: [
+						["span", "Ran 5k with "],
+						["mark", "Gary"],
+						["span", " in the morning"],
+					],
+				},
+				{
+					kind: "added",
+					sign: "+",
+					parts: [
+						["span", "Ran 5k with "],
+						["mark", "Frank"],
+						["span", " in the morning"],
+						["mark", " #exercise"],
+					],
+				},
+			],
+		});
+	});
+
 	it("renders no photo row for an item without images", async () => {
 		stubFetch();
 		await mount();
