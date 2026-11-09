@@ -30,6 +30,10 @@ import type {
 	UpdateNodeResponse,
 } from "../../node-types.js";
 import type {OutlineViewRequest} from "../outline-view.js";
+import {seedOutlineView} from "../outline-view.js";
+import {initialRowBudget} from "../render-window.js";
+import {paneExpandedIds} from "../pane-ids.js";
+import {usePaneId} from "../components/pane-context.js";
 import {expandOrCollapseAll} from "../expansion.js";
 import type {TreeIndex} from "../expansion.js";
 import {
@@ -381,11 +385,72 @@ export function useFoundDates(dayId: string | null) {
 	});
 }
 
-export function useChildren(parentId: string | null, enabled = true) {
+/**
+ * A parent's children. With `subtree` (an expanded row outside a search and a mirror instance), the first load brings
+ * the row's whole expanded subtree (every expanded descendant's list and Backlinks section, within the row budget) in
+ * one view request seeded in one batch, so an expand renders every level in one commit instead of one children
+ * request, backlinks GET and commit per depth level. Once the list is cached (a write's refetch), it is a plain load.
+ */
+export function useChildren(parentId: string | null, enabled = true, subtree = false) {
+	const queryClient = useQueryClient();
+	const paneId = usePaneId();
 	return useQuery({
 		queryKey: nodeKeys.children(parentId),
-		queryFn: async () => fetchChildren(parentId),
+		queryFn: async () =>
+			subtree && parentId !== null && queryClient.getQueryData(nodeKeys.children(parentId)) === undefined
+				? loadRowSubtree(queryClient, parentId, paneId)
+				: fetchChildren(parentId),
 		enabled,
+	});
+}
+
+interface SubtreeLoad {
+	queryClient: QueryClient;
+	request: OutlineViewRequest & {rootId: string};
+	resolve: (nodes: NodeResponse[] | undefined) => void;
+}
+
+let subtreeQueue: SubtreeLoad[] = [];
+
+/**
+ * Queue a row's subtree load. Rows expanded together (an expand-all, siblings opened in one update) ask in the same
+ * tick: their views load in parallel and seed the cache in one batch, so they render in one commit rather than one per
+ * reply. A failed view leaves its row to a plain children load.
+ */
+async function loadRowSubtree(queryClient: QueryClient, rowId: string, paneId: string): Promise<NodeResponse[]> {
+	await pendingMoves.settled(rowId);
+	const state = useOutlineStore.getState();
+	const request = {
+		rootId: rowId,
+		expandedIds: [...paneExpandedIds(state, paneId)],
+		limit: initialRowBudget(typeof window === "undefined" ? 0 : window.innerHeight),
+		showCompleted: state.showCompleted,
+	};
+	const nodes = await new Promise<NodeResponse[] | undefined>((resolve) => {
+		if (subtreeQueue.length === 0) {
+			setTimeout(() => {
+				void flushSubtreeLoads();
+			}, 0);
+		}
+		subtreeQueue.push({queryClient, request, resolve});
+	});
+	return nodes ?? fetchChildren(rowId);
+}
+
+async function flushSubtreeLoads(): Promise<void> {
+	const batch = subtreeQueue;
+	subtreeQueue = [];
+	const views = await Promise.all(batch.map(async ({request}) => fetchOutlineView(request).catch(() => {})));
+	notifyManager.batch(() => {
+		batch.forEach(({queryClient, request: {rootId}, resolve}, index) => {
+			const view = views[index];
+			if (view === undefined) {
+				resolve(undefined);
+				return;
+			}
+			seedOutlineView(queryClient, rootId, view);
+			resolve(queryClient.getQueryData<NodeResponse[]>(nodeKeys.children(rootId)));
+		});
 	});
 }
 

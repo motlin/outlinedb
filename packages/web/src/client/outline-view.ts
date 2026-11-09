@@ -90,20 +90,32 @@ export async function loadOutlineView(
 	});
 	notifyManager.batch(() => {
 		accountExpansion?.(expandedIds ?? []);
-		for (const {parentId, nodes, backlinks} of lists) {
-			if (queryClient.getQueryData(nodeKeys.children(parentId)) === undefined && !pendingMoves.has(parentId)) {
-				queryClient.setQueryData(nodeKeys.children(parentId), pendingCreates.withPending(parentId, nodes));
-			}
-			if (
-				parentId !== null &&
-				backlinks !== null &&
-				queryClient.getQueryData(nodeKeys.backlinks(parentId)) === undefined
-			) {
-				queryClient.setQueryData(nodeKeys.backlinks(parentId), backlinks);
-			}
-		}
-		if (rootId !== null && foundDates !== undefined && !foundDatesCached(queryClient, rootId)) {
-			queryClient.setQueryData(nodeKeys.foundDates(rootId), foundDates);
-		}
+		seedOutlineView(queryClient, rootId, {lists, foundDates});
 	});
+}
+
+/**
+ * Seed the cache with a view's lists, Backlinks sections and Found Dates, keeping the lists it already holds (they may
+ * carry optimistic writes) and a list a pending move touches. Call inside `notifyManager.batch` to render once.
+ */
+export function seedOutlineView(
+	queryClient: QueryClient,
+	rootId: string | null,
+	{lists, foundDates}: Pick<OutlineViewResponse, "lists" | "foundDates">,
+): void {
+	for (const {parentId, nodes, backlinks} of lists) {
+		if (queryClient.getQueryData(nodeKeys.children(parentId)) === undefined && !pendingMoves.has(parentId)) {
+			queryClient.setQueryData(nodeKeys.children(parentId), pendingCreates.withPending(parentId, nodes));
+		}
+		if (
+			parentId !== null &&
+			backlinks !== null &&
+			queryClient.getQueryData(nodeKeys.backlinks(parentId)) === undefined
+		) {
+			queryClient.setQueryData(nodeKeys.backlinks(parentId), backlinks);
+		}
+	}
+	if (rootId !== null && foundDates !== undefined && !foundDatesCached(queryClient, rootId)) {
+		queryClient.setQueryData(nodeKeys.foundDates(rootId), foundDates);
+	}
 }

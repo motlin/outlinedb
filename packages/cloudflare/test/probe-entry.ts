@@ -131,17 +131,18 @@ export class ProbeStore extends UserStore {
 			);
 		}
 		if (url.pathname === "/__seed") {
+			const parentId = url.searchParams.get("parent");
 			new CacheService(drizzle(this.ctx.storage, {schema: dbSchema})).insertNode(
 				{
-					id: "seed-node",
+					id: url.searchParams.get("id") ?? "seed-node",
 					name: url.searchParams.get("name") ?? "seeded",
 					note: null,
-					parent_id: null,
-					priority: 100,
+					parent_id: parentId,
+					priority: Number(url.searchParams.get("priority") ?? 100),
 					createdAt: 1,
 					modifiedAt: 1,
 				},
-				null,
+				parentId,
 			);
 			return Response.json({ok: true});
 		}

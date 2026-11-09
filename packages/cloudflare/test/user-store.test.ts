@@ -107,6 +107,52 @@ describe("user store Durable Object behind the Worker", () => {
 		});
 	});
 
+	it("serves an expanded row's whole expanded subtree in one view request", async () => {
+		// subtree-a > {subtree-b > subtree-c > subtree-d, subtree-e > subtree-f}, with b and c expanded but not e.
+		const tree = [
+			["subtree-a", null, 200],
+			["subtree-b", "subtree-a", 0],
+			["subtree-e", "subtree-a", 1],
+			["subtree-c", "subtree-b", 0],
+			["subtree-d", "subtree-c", 0],
+			["subtree-f", "subtree-e", 0],
+		] as const;
+		for (const [id, parent, priority] of tree) {
+			const params = new URLSearchParams({id, name: id, priority: String(priority), ...(parent ? {parent} : {})});
+			await probeStore(harness.mf, `/__seed?${params}`);
+		}
+
+		const response = await harness.mf.dispatchFetch("http://localhost/api/v1/nodes/view", {
+			method: "POST",
+			headers: {"content-type": "application/json"},
+			body: JSON.stringify({
+				rootId: "subtree-a",
+				expandedIds: ["subtree-a", "subtree-b", "subtree-c"],
+				limit: 100,
+				showCompleted: false,
+			}),
+		});
+		const body = (await readJson(response)) as {
+			lists: {parentId: string; nodes: {id: string}[]; backlinks: unknown}[];
+		};
+
+		expect({
+			status: response.status,
+			lists: body.lists.map(({parentId, nodes, backlinks}) => [
+				parentId,
+				nodes.map((node) => node.id),
+				backlinks,
+			]),
+		}).toStrictEqual({
+			status: 200,
+			lists: [
+				["subtree-a", ["subtree-b", "subtree-e"], {rootId: null, items: []}],
+				["subtree-b", ["subtree-c"], {rootId: null, items: []}],
+				["subtree-c", ["subtree-d"], {rootId: null, items: []}],
+			],
+		});
+	});
+
 	it("serves the SPA index.html for a client route", async () => {
 		const response = await harness.mf.dispatchFetch("http://localhost/some/client/route", {
 			headers: {"sec-fetch-mode": "navigate", accept: "text/html"},

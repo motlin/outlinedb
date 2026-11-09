@@ -767,18 +767,20 @@ export function OutlineChildren({
 	/** The zoomed day page's Found Dates (root only): its day id and the cached list, or null elsewhere. */
 	found?: {dayId: string; response: FoundDatesResponse | undefined} | null;
 }): ReactNode {
-	const {data: nodes} = useChildren(parentId);
 	const search = useOutlineSearchFilter();
+	const instance = useContext(MirrorInstanceContext);
+	// The root's view loads in one request already; an expanded row's first load brings its whole expanded subtree.
+	const {data: nodes} = useChildren(parentId, true, !isRoot && search === null && instance === null);
 	const dashboard = parentId !== null && ownerDashboard;
-	// A search leaves the Backlinks section out, so its rows skip the fetch.
-	const {data: backlinks} = useBacklinks(search === null ? parentId : null);
+	// A search leaves the Backlinks section out, so its rows skip the fetch; the rest wait for the children load,
+	// which a subtree load seeds the section with.
+	const {data: backlinks} = useBacklinks(search === null && nodes !== undefined ? parentId : null);
 	const {showCompleted, animatingCompletionIds} = useOutlineStore(
 		useShallow((state) => ({
 			showCompleted: state.showCompleted,
 			animatingCompletionIds: state.animatingCompletionIds,
 		})),
 	);
-	const instance = useContext(MirrorInstanceContext);
 	const visibleNodes = nodes?.filter((node) =>
 		rendersInstanceRow(node, instance, showCompleted, animatingCompletionIds, search),
 	);
