@@ -143,7 +143,7 @@ export default class ImportBackup extends Command {
 						} else if (progress.message?.includes("Generated embeddings")) {
 							const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
 							this.log(`\n✅ ${progress.message} in ${totalTime}s`);
-							this.log(`\n🔍 You can now search with: workflowy search --query "your query"`);
+							this.log(`\n🔍 You can now search with: outlinedb search --query "your query"`);
 						} else if (progress.message?.includes("Failed")) {
 							this.warn(progress.message);
 						} else if (progress.current > 0 && progress.current % 10 === 0) {
@@ -295,7 +295,7 @@ export default class ImportBackup extends Command {
 		const backupsDirectory = resolveBackupsDirectory();
 
 		if (!fs.existsSync(backupsDirectory)) {
-			this.error("No backups directory found. Download a backup first with: workflowy dropbox:download-backup");
+			this.error("No backups directory found. Download a backup first with: outlinedb dropbox:download-backup");
 		}
 
 		const allBackupFiles: {path: string; date: Date}[] = [];

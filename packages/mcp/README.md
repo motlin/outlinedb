@@ -12,7 +12,7 @@ Both hosts send every tool through the web app's ops, so MCP, the web UI and the
 - Read: `outlinedb_node_get`, `outlinedb_node_list`, `outlinedb_node_changes`, `outlinedb_search`, `outlinedb_calendar_day`, `outlinedb_cache_status`.
 - Write: `outlinedb_node_create`, `outlinedb_node_update`, `outlinedb_node_delete`, `outlinedb_node_complete`, `outlinedb_node_uncomplete`, `outlinedb_node_move`, `outlinedb_node_mirror`.
 
-Node tools accept a full or short id, or a comma path. Read results use the same JSON shape as the CLI (`workflowy node schema`).
+Node tools accept a full or short id, or a comma path. Read results use the same JSON shape as the CLI (`outlinedb node schema`).
 
 ## Connect to the deployed Worker
 

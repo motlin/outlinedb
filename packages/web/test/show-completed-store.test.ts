@@ -56,12 +56,12 @@ describe("showCompleted initial value", () => {
 		expect(store.getState().showCompleted).toBe(false);
 	});
 
-	it("migrates the legacy key to completedMode", async () => {
+	it("ignores the old workflowy-show-completed key", async () => {
 		stored.set("workflowy-show-completed", "false");
 		const store = await loadStore();
 		expect({showCompleted: store.getState().showCompleted, stored: Object.fromEntries(stored)}).toStrictEqual({
-			showCompleted: false,
-			stored: {completedMode: "hide"},
+			showCompleted: true,
+			stored: {"workflowy-show-completed": "false"},
 		});
 	});
 });

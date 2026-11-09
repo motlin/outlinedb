@@ -2,7 +2,7 @@
 	"name": "@outlinedb/cloudflare",
 	"version": "0.0.0",
 	"private": true,
-	"description": "Cloudflare Worker host for the Workflowy web app",
+	"description": "Cloudflare Worker host for the OutlineDB web app",
 	"type": "module",
 	"scripts": {
 		"dev": "wrangler dev",

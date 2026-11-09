@@ -45,7 +45,7 @@ export default class QmdEmbed extends Command {
 				`\nEmbed complete: ${embedResult.docsProcessed} docs, ${embedResult.chunksEmbedded} chunks in ${(embedResult.durationMs / 1000).toFixed(1)}s`,
 			);
 
-			this.log('\nYou can now search with: workflowy ai:qmd-search --query "your query"');
+			this.log('\nYou can now search with: outlinedb ai:qmd-search --query "your query"');
 		} finally {
 			await service.close();
 		}

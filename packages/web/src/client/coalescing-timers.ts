@@ -95,7 +95,7 @@ export function createCoalescingTimeoutProvider(): TimeoutProvider {
 }
 
 /** The page's one provider lives on the global object, outside any module a hot update re-runs. */
-const PAGE_PROVIDER = Symbol.for("workflowy.coalescingTimeoutProvider");
+const PAGE_PROVIDER = Symbol.for("outlinedb.coalescingTimeoutProvider");
 
 type ProviderScope = typeof globalThis & {[PAGE_PROVIDER]?: TimeoutProvider};
 

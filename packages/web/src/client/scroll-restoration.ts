@@ -10,7 +10,7 @@ export interface ScrollWindow extends EventTarget {
 }
 
 /** Where the saved scroll positions survive a reload, as the browser's own restoration does. */
-const STORAGE_KEY = "workflowy.scroll-positions";
+const STORAGE_KEY = "outlinedb.scroll-positions";
 
 /** Each history entry's last scroll position, by entry key. */
 const positions = new Map<string, number>();

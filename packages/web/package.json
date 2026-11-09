@@ -1,7 +1,7 @@
 {
 	"name": "@outlinedb/web",
 	"version": "0.0.0",
-	"description": "Web UI for Workflowy with React frontend and Hono API server",
+	"description": "Web UI for OutlineDB with React frontend and Hono API server",
 	"type": "module",
 	"main": "dist/server/index.js",
 	"types": "dist/server/index.d.ts",

@@ -240,7 +240,7 @@ export default class DownloadBackup extends Command {
 					this.error(
 						"Dropbox authentication failed. Your credentials may be missing or invalid.\n\n" +
 							"To authenticate with Dropbox, run:\n" +
-							"  workflowy dropbox:auth\n\n" +
+							"  outlinedb dropbox:auth\n\n" +
 							"Alternatively, set environment variables:\n" +
 							"  DROPBOX_REFRESH_TOKEN, DROPBOX_APP_KEY, and DROPBOX_APP_SECRET\n" +
 							"  or DROPBOX_ACCESS_TOKEN",

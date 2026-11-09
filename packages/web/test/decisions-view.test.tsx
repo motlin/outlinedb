@@ -696,7 +696,7 @@ describe("DecisionPageView", () => {
 			pressed: pressedThemes(),
 			icons: themeButtons().map((element) => element.querySelectorAll("svg").length),
 			theme: document.documentElement.dataset.theme,
-			stored: localStorage.getItem("workflowy-theme"),
+			stored: localStorage.getItem("outlinedb-theme"),
 		}).toStrictEqual({
 			labels: [
 				["Light theme", "Light"],
@@ -717,7 +717,7 @@ describe("DecisionPageView", () => {
 		const dark = {
 			pressed: pressedThemes(),
 			theme: document.documentElement.dataset.theme,
-			stored: localStorage.getItem("workflowy-theme"),
+			stored: localStorage.getItem("outlinedb-theme"),
 		};
 		await click(themeButton("Light theme"));
 		expect({
@@ -725,7 +725,7 @@ describe("DecisionPageView", () => {
 			light: {
 				pressed: pressedThemes(),
 				theme: document.documentElement.dataset.theme,
-				stored: localStorage.getItem("workflowy-theme"),
+				stored: localStorage.getItem("outlinedb-theme"),
 			},
 		}).toStrictEqual({
 			dark: {pressed: ["Dark theme"], theme: "dark", stored: "dark"},
@@ -749,7 +749,7 @@ describe("DecisionPageView", () => {
 	});
 
 	it("restores the remembered theme on reload, and falls back to System when storage is unreadable", async () => {
-		localStorage.setItem("workflowy-theme", "dark");
+		localStorage.setItem("outlinedb-theme", "dark");
 		vi.resetModules();
 		const remembered = (await import("../src/client/stores/outline.js")).useOutlineStore.getState().theme;
 		const rememberedDataTheme = document.documentElement.dataset.theme;

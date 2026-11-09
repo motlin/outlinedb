@@ -3,7 +3,7 @@
 import {effectiveTheme, isDarkTheme, isRegisteredTheme} from "./themes.js";
 import type {ThemeName} from "./themes.js";
 
-export const THEME_STORAGE_KEY = "workflowy-theme";
+export const THEME_STORAGE_KEY = "outlinedb-theme";
 /** Stands in for upstream's `wire_theme_current` cookie: the effective theme name. */
 const THEME_CURRENT_KEY = "wire_theme_current";
 const LOADING_BACKGROUND_KEY = "loadingBackground";

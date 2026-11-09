@@ -139,7 +139,7 @@ export default class Search extends Command {
 				this.log("No results found. Try:");
 				this.log("  • Using different search terms");
 				this.log("  • Increasing the threshold with --threshold");
-				this.log("  • Generating embeddings if you haven't: workflowy ai:embed");
+				this.log("  • Generating embeddings if you haven't: outlinedb ai:embed");
 			}
 			return transformedResults;
 		}

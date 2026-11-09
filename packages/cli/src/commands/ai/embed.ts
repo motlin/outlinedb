@@ -61,6 +61,6 @@ export default class Embed extends Command {
 		}
 
 		this.log(`\n✅ Generated embeddings for ${result.totalProcessed} nodes in ${result.totalTime.toFixed(1)}s`);
-		this.log(`\n🔍 You can now search with: workflowy ai:search --query "your query"`);
+		this.log(`\n🔍 You can now search with: outlinedb ai:search --query "your query"`);
 	}
 }

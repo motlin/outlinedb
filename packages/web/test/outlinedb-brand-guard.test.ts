@@ -15,9 +15,8 @@ const UPSTREAM_REFERENCES = [
 	/\bWorkflowy[A-Z]\w*/gu,
 ];
 
-/** Remaining non-brand mentions, as "file: trimmed line". Storage keys and ids are renamed by later scrub tasks. */
+/** Remaining mentions that name upstream, as "file: trimmed line": upstream menu keys, the workflowy.com link icon and system mention. */
 const ALLOWED = [
-	'src/client/coalescing-timers.ts: const PAGE_PROVIDER = Symbol.for("workflowy.coalescingTimeoutProvider");',
 	'src/client/components/decisions-view.tsx: data-icon="workflowy"',
 	'src/client/components/main-menu-model.ts: "workflowy.help",',
 	'src/client/components/main-menu-model.ts: "workflowy.community",',
@@ -25,12 +24,8 @@ const ALLOWED = [
 	'src/client/components/main-menu-model.ts: "workflowy.help": {',
 	'src/client/components/main-menu-model.ts: "workflowy.community": {label: "Community", onSelect: link(COMMUNITY_URL)},',
 	'src/client/components/main-menu-model.ts: "workflowy.blog": {label: "Blog", onSelect: link(BLOG_URL)},',
-	'src/client/hooks/use-starred.ts: export const LAST_VIEWED_STORAGE_KEY = "workflowy-star-last-viewed";',
 	// Upstream's built-in "-2" system mention, rendered as upstream names it.
 	'src/client/mention-pills.ts: return "Workflowy";',
-	'src/client/scroll-restoration.ts: const STORAGE_KEY = "workflowy.scroll-positions";',
-	'src/client/stores/outline.ts: const LEGACY_SHOW_COMPLETED_STORAGE_KEY = "workflowy-show-completed";',
-	'src/client/theme-apply.ts: export const THEME_STORAGE_KEY = "workflowy-theme";',
 ];
 
 function sourceFiles(dir: string): string[] {

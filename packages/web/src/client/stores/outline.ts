@@ -39,7 +39,6 @@ import type {SwitcherCloseMode, SwitcherReturn} from "../switcher-close.js";
 
 /** Upstream's per-browser mirror of the account's `show_completed` setting, for first paint. */
 const COMPLETED_MODE_STORAGE_KEY = "completedMode";
-const LEGACY_SHOW_COMPLETED_STORAGE_KEY = "workflowy-show-completed";
 
 /** A registered theme name (`default`, `dark`, `system`, `space`, ...). */
 export type Theme = ThemeName;
@@ -151,21 +150,10 @@ function writeCompletedMode(showCompleted: boolean): void {
 	}
 }
 
-/** `completedMode` (default show), migrating the old `workflowy-show-completed` key once. */
+/** `completedMode`, defaulting to show. */
 function getInitialShowCompleted(): boolean {
 	try {
-		const mode = localStorage.getItem(COMPLETED_MODE_STORAGE_KEY);
-		if (mode === "show" || mode === "hide") {
-			return mode === "show";
-		}
-		const legacy = localStorage.getItem(LEGACY_SHOW_COMPLETED_STORAGE_KEY);
-		if (legacy === null) {
-			return true;
-		}
-		const showCompleted = legacy !== "false";
-		writeCompletedMode(showCompleted);
-		localStorage.removeItem(LEGACY_SHOW_COMPLETED_STORAGE_KEY);
-		return showCompleted;
+		return localStorage.getItem(COMPLETED_MODE_STORAGE_KEY) !== "hide";
 	} catch {
 		return true;
 	}

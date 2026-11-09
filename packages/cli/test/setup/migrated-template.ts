@@ -16,7 +16,7 @@ declare module "vitest" {
  * helper module was rebuilt by every database-backed file inside its first beforeEach.
  */
 export function setup(project: TestProject): () => void {
-	const templateDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-db-template-"));
+	const templateDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-db-template-"));
 	const templatePath = path.join(templateDir, "template.sqlite");
 	const template = createDatabase(templatePath).$client;
 	// Rollback journaling keeps the bytes loadable as an in-memory database; each copy picks its own mode on open.

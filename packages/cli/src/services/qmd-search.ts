@@ -21,7 +21,7 @@ function hashContent(content: string): string {
 	return createHash("sha256").update(content).digest("hex");
 }
 
-const COLLECTION_NAME = "workflowy";
+const COLLECTION_NAME = "outlinedb";
 const QMD_DB_DIR = ".cache/qmd";
 const QMD_DB_FILE = "outlinedb.sqlite";
 
@@ -59,7 +59,7 @@ export interface QmdSearchResultItem {
 }
 
 function extractNodeId(virtualPath: string): string {
-	// qmd virtual paths are like: qmd://workflowy/node-uuid
+	// qmd virtual paths are like: qmd://outlinedb/node-uuid
 	const prefix = `qmd://${COLLECTION_NAME}/`;
 	if (virtualPath.startsWith(prefix)) {
 		return virtualPath.slice(prefix.length);
@@ -97,7 +97,7 @@ export class QmdSearchService {
 			config: {
 				collections: {
 					[COLLECTION_NAME]: {
-						path: "/virtual/workflowy",
+						path: "/virtual/outlinedb",
 						pattern: "**/*",
 					},
 				},

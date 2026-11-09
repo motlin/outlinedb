@@ -115,7 +115,7 @@ export default class QmdSearch extends Command {
 					this.log("No results found. Try:");
 					this.log("  - Using different search terms");
 					this.log("  - Lowering the threshold with --threshold");
-					this.log("  - Running embeddings if you haven't: workflowy ai:qmd-embed");
+					this.log("  - Running embeddings if you haven't: outlinedb ai:qmd-embed");
 				}
 				return transformedResults;
 			}
