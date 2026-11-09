@@ -4,11 +4,11 @@
 # usage: scripts/build-fresh-database.sh [--offline | --swap-only]
 # Craig runs it as `op run -- just build-fresh-database`.
 #
-# The database rebuilt is $WORKFLOWY_DB_PATH, or workflowy.sqlite in the repo root.
+# The database rebuilt is $WORKFLOWY_DB_PATH, or outlinedb.sqlite in the repo root.
 # --offline skips every step that needs credentials or the network (Dropbox
 # download, account state, import-api) and needs WORKFLOWY_EPOCH;
 # it exists to rehearse the pipeline against a scratch copy.
-# --swap-only skips the rebuild and swaps an existing workflowy.rebuilding.sqlite in,
+# --swap-only skips the rebuild and swaps an existing outlinedb.rebuilding.sqlite in,
 # for a run that finished but refused its swap; the old database is moved aside as a pre-rebuild backup.
 set -euo pipefail
 
@@ -28,7 +28,7 @@ done
 repo=$(cd "$(dirname "$0")/.." && pwd -P)
 cd "$repo"
 run="$repo/bin/run.js"
-target="${WORKFLOWY_DB_PATH:-$repo/workflowy.sqlite}"
+target="${WORKFLOWY_DB_PATH:-$repo/outlinedb.sqlite}"
 target="$(cd "$(dirname "$target")" && pwd)/$(basename "$target")"
 stamp=$(date +%Y-%m-%d-%H%M%S)
 base="${target%.sqlite}"

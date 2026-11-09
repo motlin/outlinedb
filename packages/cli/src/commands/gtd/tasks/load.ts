@@ -6,6 +6,7 @@ import {z} from "zod";
 import {createDatabase} from "../../../db/index.js";
 import {CacheService} from "../../../services/cache.js";
 import {localLookbackCutoff} from "../../../utils/local-date.js";
+import {DEFAULT_DB_FILE} from "../../../db/default-db-file.js";
 
 interface Task {
 	id: string;
@@ -402,7 +403,7 @@ export default class Load extends Command {
 		let dir = process.cwd();
 
 		while (dir !== "/") {
-			if (fs.existsSync(path.join(dir, "workflowy.sqlite")) || fs.existsSync(path.join(dir, "package.json"))) {
+			if (fs.existsSync(path.join(dir, DEFAULT_DB_FILE)) || fs.existsSync(path.join(dir, "package.json"))) {
 				return dir;
 			}
 			dir = path.dirname(dir);

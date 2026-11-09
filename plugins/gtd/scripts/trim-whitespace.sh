@@ -15,7 +15,7 @@
 set -Eeuo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-DB="$PROJECT_ROOT/workflowy.sqlite"
+DB="$PROJECT_ROOT/outlinedb.sqlite"
 CLI="$PROJECT_ROOT/bin/run.js"
 APPLY=0
 [ "${1:-}" = "--apply" ] && APPLY=1

@@ -23,7 +23,7 @@ function hashContent(content: string): string {
 
 const COLLECTION_NAME = "workflowy";
 const QMD_DB_DIR = ".cache/qmd";
-const QMD_DB_FILE = "workflowy.sqlite";
+const QMD_DB_FILE = "outlinedb.sqlite";
 
 export type QmdSearchMode = "hybrid" | "vector" | "keyword";
 

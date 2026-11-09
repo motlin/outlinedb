@@ -28,7 +28,7 @@ export default class ImportLocalState extends Command {
 	static override description =
 		"Copy the state no Workflowy backup can rebuild from an old cache database, opened read-only, into this one: every version of the account tables and file_blobs (so their history carries over). Run it on a new database before import-api and import-account, which then merge the current values on top";
 
-	static override examples = ["<%= config.bin %> cache:import-local-state --from workflowy.pre-rebuild.sqlite"];
+	static override examples = ["<%= config.bin %> cache:import-local-state --from outlinedb.pre-rebuild.sqlite"];
 
 	static override flags = {
 		from: Flags.string({description: "Old cache database to copy from (opened read-only)", required: true}),

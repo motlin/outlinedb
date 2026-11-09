@@ -20,6 +20,7 @@ import type * as schema from "@outlinedb/shared/db";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {and, eq, isNull, or} from "drizzle-orm";
 import type {BetterSQLite3Database} from "drizzle-orm/better-sqlite3";
+import {DEFAULT_DB_FILE} from "../db/default-db-file.js";
 
 const DEFAULT_CONCURRENCY = 3;
 const DEFAULT_MAX_ATTEMPTS = 3;
@@ -30,14 +31,14 @@ const STORE_DIR_NAME = "files-mirror";
 
 /**
  * `WORKFLOWY_FILES_DIR`, else a `files-mirror` directory beside the cache database
- * (`WORKFLOWY_DB_PATH`, default `workflowy.sqlite` in the working directory).
+ * (`WORKFLOWY_DB_PATH`, default `outlinedb.sqlite` in the working directory).
  */
 export function defaultStoreDir(env: NodeJS.ProcessEnv, cwd: string): string {
 	const configured = env.WORKFLOWY_FILES_DIR ?? "";
 	if (configured !== "") {
 		return path.resolve(cwd, configured);
 	}
-	const dbPath = (env.WORKFLOWY_DB_PATH ?? "") || "workflowy.sqlite";
+	const dbPath = (env.WORKFLOWY_DB_PATH ?? "") || DEFAULT_DB_FILE;
 	return path.join(path.dirname(path.resolve(cwd, dbPath)), STORE_DIR_NAME);
 }
 

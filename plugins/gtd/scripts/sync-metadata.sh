@@ -114,7 +114,7 @@ done
 # Gives refinement agents the "how many nodes use this tag" signal they need to
 # tell a canonical tag (used widely) from a one-off typo/junk tag (used once).
 # Read-only query against the cache — never mutates it.
-DB="$PROJECT_ROOT/workflowy.sqlite"
+DB="$PROJECT_ROOT/outlinedb.sqlite"
 if command -v python3 >/dev/null 2>&1 && [ -f "$DB" ]; then
     python3 - "$DB" "$OUTPUT_DIR/metadata/tag-frequency.json" <<'PY'
 import sqlite3, re, sys, json
@@ -134,7 +134,7 @@ for (nm,) in rows:
     for m in tagre.findall(htmlre.sub(' ', nm)):
         c['#' + m] += 1
 data = {
-    "generatedFrom": "workflowy.sqlite",
+    "generatedFrom": "outlinedb.sqlite",
     "distinctTags": len(c),
     "taggedRowsScanned": len(rows),
     "tags": dict(sorted(c.items(), key=lambda kv: (-kv[1], kv[0]))),
@@ -144,7 +144,7 @@ with open(out, "w") as f:
 print(f"Phase 3: tag-frequency.json ({len(c)} distinct tags)")
 PY
 else
-    echo "Phase 3: skipped tag-frequency.json (python3 or workflowy.sqlite missing)" >&2
+    echo "Phase 3: skipped tag-frequency.json (python3 or outlinedb.sqlite missing)" >&2
 fi
 
 echo ""

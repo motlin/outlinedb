@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {createDatabase} from "../../../db/index.js";
 import {CacheService} from "../../../services/cache.js";
+import {DEFAULT_DB_FILE} from "../../../db/default-db-file.js";
 
 interface ProjectItem {
 	id: string;
@@ -428,7 +429,7 @@ export default class Sync extends Command {
 		let dir = process.cwd();
 
 		while (dir !== "/") {
-			if (fs.existsSync(path.join(dir, "workflowy.sqlite")) || fs.existsSync(path.join(dir, "package.json"))) {
+			if (fs.existsSync(path.join(dir, DEFAULT_DB_FILE)) || fs.existsSync(path.join(dir, "package.json"))) {
 				return dir;
 			}
 			dir = path.dirname(dir);

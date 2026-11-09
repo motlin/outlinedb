@@ -6,6 +6,7 @@ import {createDatabase} from "../../../db/index.js";
 import {CacheService} from "../../../services/cache.js";
 import {loadExistingEntries} from "../../../services/journal-existing-entries.js";
 import {parseStrictNumber} from "../../../utils/parse-strict-number.js";
+import {DEFAULT_DB_FILE} from "../../../db/default-db-file.js";
 
 interface ScannedItem {
 	title: string;
@@ -88,7 +89,7 @@ export default class Dedup extends Command {
 		}
 		const projectRoot = this.findProjectRoot();
 		const scansDir = path.join(projectRoot, ".llm", "gtd", "journal", "scans");
-		const dbPath = path.join(projectRoot, "workflowy.sqlite");
+		const dbPath = path.join(projectRoot, DEFAULT_DB_FILE);
 		const outputPath = path.join(projectRoot, ".llm", "gtd", "journal", "dedup-analysis.json");
 
 		// Load scanned events
@@ -435,7 +436,7 @@ export default class Dedup extends Command {
 		let dir = process.cwd();
 
 		while (dir !== "/") {
-			if (fs.existsSync(path.join(dir, "workflowy.sqlite")) || fs.existsSync(path.join(dir, "package.json"))) {
+			if (fs.existsSync(path.join(dir, DEFAULT_DB_FILE)) || fs.existsSync(path.join(dir, "package.json"))) {
 				return dir;
 			}
 			dir = path.dirname(dir);

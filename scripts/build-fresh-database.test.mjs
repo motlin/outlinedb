@@ -92,7 +92,7 @@ describe("build-fresh-database.sh", () => {
 
 			expect({status: result.status, stderr: result.stderr}).toStrictEqual({
 				status: 1,
-				stderr: `❌ --swap-only needs ${join(repo, "workflowy.rebuilding.sqlite")}, which does not exist\n`,
+				stderr: `❌ --swap-only needs ${join(repo, "outlinedb.rebuilding.sqlite")}, which does not exist\n`,
 			});
 		} finally {
 			rmSync(other, {recursive: true, force: true});
@@ -101,8 +101,8 @@ describe("build-fresh-database.sh", () => {
 
 	test("--swap-only swaps the existing rebuilt database in", () => {
 		repo = scratchRepo();
-		const target = join(repo, "workflowy.sqlite");
-		const building = join(repo, "workflowy.rebuilding.sqlite");
+		const target = join(repo, "outlinedb.sqlite");
+		const building = join(repo, "outlinedb.rebuilding.sqlite");
 		sqlite(target, "create table t(v); insert into t values ('old')");
 		sqlite(building, "pragma journal_mode=wal; create table t(v); insert into t values ('new'), ('new2')");
 
@@ -116,7 +116,7 @@ describe("build-fresh-database.sh", () => {
 			rows: sqlite(target, "select group_concat(v) from t"),
 			journalMode: sqlite(target, "pragma journal_mode"),
 			backups: readdirSync(repo)
-				.filter((name) => name.startsWith("workflowy.pre-rebuild-"))
+				.filter((name) => name.startsWith("outlinedb.pre-rebuild-"))
 				.map((name) => sqlite(join(repo, name), "select group_concat(v) from t")),
 		}).toStrictEqual({
 			status: 0,

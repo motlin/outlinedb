@@ -8,7 +8,7 @@
 // rather than skipping them.
 //
 // Usage:
-//   node plugins/gtd/scripts/photo-caption-prep.mts [--days 14] [--out .llm/gtd/photo-captions] [--workflowy-db workflowy.sqlite]
+//   node plugins/gtd/scripts/photo-caption-prep.mts [--days 14] [--out .llm/gtd/photo-captions] [--workflowy-db outlinedb.sqlite]
 //   node plugins/gtd/scripts/photo-caption-prep.mts --count-only [--days 14]
 //
 // Each manifest photo carries journalSeeds: that day's journal entries from the
@@ -346,7 +346,7 @@ export function buildManifest({
 }
 
 function parseArgs(argv: string[]): Args {
-	const args: Args = {days: 14, out: ".llm/gtd/photo-captions", countOnly: false, workflowyDb: "workflowy.sqlite"};
+	const args: Args = {days: 14, out: ".llm/gtd/photo-captions", countOnly: false, workflowyDb: "outlinedb.sqlite"};
 	for (let i = 0; i < argv.length; i++) {
 		if (argv[i] === "--days") {
 			args.days = Number(argv[++i]);

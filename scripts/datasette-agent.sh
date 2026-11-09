@@ -6,7 +6,7 @@
 # plain-English questions about a SQLite database by writing and running SQL.
 # See: https://datasette.io/blog/2026/datasette-agent/
 #
-# This reads the LIVE workflowy.sqlite from the main working tree, opened
+# This reads the LIVE outlinedb.sqlite from the main working tree, opened
 # read-only (datasette never writes to the data database; its own state goes to
 # the --internal db).
 #
@@ -19,7 +19,7 @@
 # Env overrides:
 #   DATASETTE_AGENT_MODEL  model id         (default: openai-codex/gpt-5.5)
 #   DATASETTE_LLM_PLUGIN   llm model plugin (default: llm-openai-via-codex)
-#   WORKFLOWY_DB_PATH      path to the SQLite db (default: <main-tree>/workflowy.sqlite)
+#   WORKFLOWY_DB_PATH      path to the SQLite db (default: <main-tree>/outlinedb.sqlite)
 #   DATASETTE_PORT         port to serve on (default: 8001)
 #
 # Other backends (swap both vars together):
@@ -34,7 +34,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # main working tree (the parent of the shared .git common dir).
 MAIN_TREE="$(dirname "$(git -C "$REPO_ROOT" rev-parse --git-common-dir)")"
 
-DB_PATH="${WORKFLOWY_DB_PATH:-$MAIN_TREE/workflowy.sqlite}"
+DB_PATH="${WORKFLOWY_DB_PATH:-$MAIN_TREE/outlinedb.sqlite}"
 MODEL="${DATASETTE_AGENT_MODEL:-openai-codex/gpt-5.5}"
 LLM_PLUGIN="${DATASETTE_LLM_PLUGIN:-llm-openai-via-codex}"
 PORT="${DATASETTE_PORT:-8001}"

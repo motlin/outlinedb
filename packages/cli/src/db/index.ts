@@ -7,12 +7,13 @@ import * as schema from "@outlinedb/shared/db";
 import {join} from "node:path";
 import {sqlLogger} from "../services/sql-logger.js";
 import {nonEmpty} from "../utils/non-empty.js";
+import {DEFAULT_DB_FILE} from "./default-db-file.js";
 
 /** Open (and migrate) the cache database; a Buffer opens an in-memory copy of that serialized database. */
 export function createDatabase(dbPath?: string | Buffer) {
 	const source = Buffer.isBuffer(dbPath)
 		? dbPath
-		: (nonEmpty(dbPath) ?? nonEmpty(process.env.WORKFLOWY_DB_PATH) ?? "workflowy.sqlite");
+		: (nonEmpty(dbPath) ?? nonEmpty(process.env.WORKFLOWY_DB_PATH) ?? DEFAULT_DB_FILE);
 	const sqlite = new DatabaseConstructor(source);
 
 	sqliteVec.load(sqlite);

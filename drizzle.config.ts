@@ -5,6 +5,6 @@ export default {
 	out: "./packages/shared/src/db/migrations",
 	dialect: "sqlite",
 	dbCredentials: {
-		url: "./workflowy.sqlite",
+		url: "./outlinedb.sqlite",
 	},
 } satisfies Config;

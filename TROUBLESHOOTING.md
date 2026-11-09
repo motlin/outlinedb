@@ -7,10 +7,10 @@
 SQLite queries like the following return 0 or empty results:
 
 ```bash
-sqlite3 workflowy.sqlite "SELECT COUNT(*) FROM nodes"
+sqlite3 outlinedb.sqlite "SELECT COUNT(*) FROM nodes"
 # Returns: 0
 
-sqlite3 workflowy.sqlite "SELECT name FROM nodes WHERE completed_at IS NOT NULL LIMIT 10"
+sqlite3 outlinedb.sqlite "SELECT name FROM nodes WHERE completed_at IS NOT NULL LIMIT 10"
 # Returns: (empty)
 ```
 
@@ -42,10 +42,10 @@ export WORKFLOWY_SQL_RESULTS_LOGGING=true
 After importing, the nodes table will be populated and queries will return data:
 
 ```bash
-sqlite3 workflowy.sqlite "SELECT COUNT(*) FROM nodes"
+sqlite3 outlinedb.sqlite "SELECT COUNT(*) FROM nodes"
 # Returns: 95009
 
-sqlite3 workflowy.sqlite "SELECT name FROM nodes WHERE completed_at IS NOT NULL LIMIT 10"
+sqlite3 outlinedb.sqlite "SELECT name FROM nodes WHERE completed_at IS NOT NULL LIMIT 10"
 # Returns: (list of completed nodes)
 ```
 

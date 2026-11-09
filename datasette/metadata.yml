@@ -1,8 +1,8 @@
 # Datasette metadata: human/agent-facing descriptions for the Workflowy cache.
-# Loaded via `datasette -m metadata.yml`. The database name `workflowy` is
-# derived from the filename workflowy.sqlite.
+# Loaded via `datasette -m metadata.yml`. The database name `outlinedb` is
+# derived from the filename outlinedb.sqlite.
 databases:
-  workflowy:
+  outlinedb:
     description: >-
       Read-only, write-through cache of Workflowy. Bitemporal: most tables keep historical versions. A row is CURRENT when system_to = '9999-12-31 23:59:59'; always filter on that to see the live tree unless you want history. Never write to this database.
 

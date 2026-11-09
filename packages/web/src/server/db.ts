@@ -16,7 +16,7 @@ export function getDatabase() {
 		return dbInstance;
 	}
 
-	const dbPath = (process.env.WORKFLOWY_DB_PATH ?? "") || "workflowy.sqlite";
+	const dbPath = (process.env.WORKFLOWY_DB_PATH ?? "") || "outlinedb.sqlite";
 	const sqlite = new Database(dbPath);
 
 	sqliteVec.load(sqlite);

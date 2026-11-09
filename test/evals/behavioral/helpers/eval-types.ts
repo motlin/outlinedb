@@ -32,7 +32,7 @@ export interface SubagentExecution {
 }
 
 export interface EvalContext {
-	/** Path to the temporary copy of workflowy.sqlite */
+	/** Path to the temporary copy of outlinedb.sqlite */
 	dbPath: string;
 	/** Path to the temporary .llm/ directory for intermediate files */
 	llmDir: string;

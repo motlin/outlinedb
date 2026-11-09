@@ -85,7 +85,7 @@ describe("Behavioral Eval: sync-metadata.sh", () => {
 					"tags",
 				]);
 				const tagFrequency = TagFrequencySchema.parse(parsed);
-				expect(tagFrequency.generatedFrom).toBe("workflowy.sqlite");
+				expect(tagFrequency.generatedFrom).toBe("outlinedb.sqlite");
 				expect(tagFrequency.distinctTags).toBe(Object.keys(tagFrequency.tags).length);
 				continue;
 			}

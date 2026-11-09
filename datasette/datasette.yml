@@ -7,7 +7,7 @@ settings:
   max_returned_rows: 2000
 
 databases:
-  workflowy:
+  outlinedb:
     queries:
       current_nodes:
         title: Current node versions

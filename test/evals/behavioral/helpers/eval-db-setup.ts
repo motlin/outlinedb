@@ -1,7 +1,7 @@
 /**
  * Database setup for behavioral evals.
  *
- * Copies the real workflowy.sqlite to a temp directory and configures
+ * Copies the real outlinedb.sqlite to a temp directory and configures
  * environment variables so CLI commands and scripts read from the copy.
  */
 
@@ -15,7 +15,7 @@ const PROJECT_ROOT = path.resolve(import.meta.dirname, "../../../..");
 /**
  * Creates an isolated eval context with a copy of the production database.
  *
- * - Copies workflowy.sqlite to a temp directory
+ * - Copies outlinedb.sqlite to a temp directory
  * - Creates a temp .llm/ directory for intermediate files, seeded with the synced metadata cache
  * - Sets WORKFLOWY_DB_PATH so CLI commands use the copy
  * - Unsets WORKFLOWY_API_KEY to prevent accidental API calls
@@ -26,17 +26,17 @@ const PROJECT_ROOT = path.resolve(import.meta.dirname, "../../../..");
  * @param options.mockServerPort - Port for the mock Workflowy HTTP server
  */
 export function createEvalContext(options?: {mockServerPort?: number}): EvalContext {
-	const sourceDb = (process.env.WORKFLOWY_EVAL_SOURCE_DB ?? "") || path.join(PROJECT_ROOT, "workflowy.sqlite");
+	const sourceDb = (process.env.WORKFLOWY_EVAL_SOURCE_DB ?? "") || path.join(PROJECT_ROOT, "outlinedb.sqlite");
 
 	if (!fs.existsSync(sourceDb)) {
 		throw new Error(
 			`Eval source database not found at ${sourceDb}. ` +
-				"Set WORKFLOWY_EVAL_SOURCE_DB to point to a valid workflowy.sqlite file.",
+				"Set WORKFLOWY_EVAL_SOURCE_DB to point to a valid outlinedb.sqlite file.",
 		);
 	}
 
 	const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-eval-"));
-	const dbPath = path.join(tempDir, "workflowy.sqlite");
+	const dbPath = path.join(tempDir, "outlinedb.sqlite");
 	const llmDir = path.join(tempDir, ".llm");
 
 	// Copy database to temp directory

@@ -34,7 +34,7 @@ ensure-sqlite-native:
 
 # Run dev server, node host (shared code live from source; see `web`)
 dev-node *args: build-shared
-    WORKFLOWY_DB_PATH={{ justfile_directory() }}/workflowy.sqlite vp run --filter @outlinedb/web dev {{ args }}
+    WORKFLOWY_DB_PATH={{ justfile_directory() }}/outlinedb.sqlite vp run --filter @outlinedb/web dev {{ args }}
 
 # Run linter
 [group('lint')]
@@ -62,7 +62,7 @@ test *args: build-shared
 cf-test: build-shared
     vp test run --project cloudflare
 
-# Run the SPA and the Worker together in local workerd (Cloudflare Vite plugin; R2 and Durable Objects simulated, no Cloudflare account needed) with a fixed dev identity; state persists in packages/cloudflare/.wrangler/state. `dev-node` keeps the two-process Node host over workflowy.sqlite
+# Run the SPA and the Worker together in local workerd (Cloudflare Vite plugin; R2 and Durable Objects simulated, no Cloudflare account needed) with a fixed dev identity; state persists in packages/cloudflare/.wrangler/state. `dev-node` keeps the two-process Node host over outlinedb.sqlite
 [group('web')]
 dev *args: build-shared cf-d1-migrate-local
     cd packages/web && ACCESS_DEV_IDENTITY="${ACCESS_DEV_IDENTITY:-dev}" vp dev -c vite.worker.config.ts {{ args }}
@@ -237,11 +237,11 @@ precommit quick="": (verify quick)
 backup-db:
     #!/usr/bin/env bash
     set -euo pipefail
-    if [ -f workflowy.sqlite ]; then
-        cp workflowy.sqlite workflowy.sqlite.bak
-        echo "Database backed up to workflowy.sqlite.bak"
+    if [ -f outlinedb.sqlite ]; then
+        cp outlinedb.sqlite outlinedb.sqlite.bak
+        echo "Database backed up to outlinedb.sqlite.bak"
     else
-        echo "No database to backup (workflowy.sqlite not found)"
+        echo "No database to backup (outlinedb.sqlite not found)"
     fi
 
 # Run daily workflow: build the CLI, import backup files, then update from API, generate embeddings, then reclaim dead pages
@@ -263,26 +263,26 @@ build-fresh-database *args: build manifest
 demo:
     @./scripts/demo.sh
 
-# `open -a "DB Browser for SQLite" workflowy.sqlite`
+# `open -a "DB Browser for SQLite" outlinedb.sqlite`
 [group('database')]
 db-browser:
-    open -a "DB Browser for SQLite" workflowy.sqlite
+    open -a "DB Browser for SQLite" outlinedb.sqlite
 
-# `sqlite3 workflowy.sqlite`
+# `sqlite3 outlinedb.sqlite`
 [group('database')]
 db-cli:
-    sqlite3 workflowy.sqlite
+    sqlite3 outlinedb.sqlite
 
-# `datasette workflowy.sqlite`
+# `datasette outlinedb.sqlite`
 [group('database')]
 db-web:
-    datasette workflowy.sqlite
+    datasette outlinedb.sqlite
 
 # The API server's `tsx watch` runs with `--conditions=source`, so @outlinedb/shared resolves to packages/shared/src (its exports' `source` condition), not dist: shared edits restart the server live and it never runs stale built code.
 # Start web app with API server and Vite dev server (shared code live from source)
 [group('web')]
 web: build-shared
-    WORKFLOWY_DB_PATH={{ justfile_directory() }}/workflowy.sqlite vp run --filter @outlinedb/web dev
+    WORKFLOWY_DB_PATH={{ justfile_directory() }}/outlinedb.sqlite vp run --filter @outlinedb/web dev
 
 # Download all available Dropbox backups that aren't already downloaded
 [group('backup')]

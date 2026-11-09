@@ -3,7 +3,7 @@ import {setDefaultAutoSelectFamily} from "node:net";
 import {execute} from "@oclif/core";
 import {join} from "node:path";
 
-process.title = "workflowy-cli";
+process.title = "outlinedb-cli";
 
 // Disable Happy Eyeballs (RFC 8305) auto-selection between IPv4/IPv6.
 // Node.js's implementation has a race condition that produces transient

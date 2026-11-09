@@ -7,6 +7,7 @@ import {z} from "zod";
 import {createDatabase} from "../../../db/index.js";
 import {CacheService} from "../../../services/cache.js";
 import {logger} from "../../../services/logger.js";
+import {DEFAULT_DB_FILE} from "../../../db/default-db-file.js";
 
 const MeetingSchema = z.object({
 	otid: z.string(),
@@ -345,7 +346,7 @@ export default class Import extends Command {
 		let dir = process.cwd();
 
 		while (dir !== "/") {
-			if (fs.existsSync(path.join(dir, "workflowy.sqlite")) || fs.existsSync(path.join(dir, "package.json"))) {
+			if (fs.existsSync(path.join(dir, DEFAULT_DB_FILE)) || fs.existsSync(path.join(dir, "package.json"))) {
 				return dir;
 			}
 			dir = path.dirname(dir);

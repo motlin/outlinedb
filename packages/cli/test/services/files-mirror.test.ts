@@ -351,7 +351,7 @@ describe("defaultStoreDir", () => {
 		expect(defaultStoreDir({WORKFLOWY_DB_PATH: "/db/w.sqlite"}, "/cwd")).toBe("/db/files-mirror");
 	});
 
-	it("falls back to files-mirror in the working directory, next to the default workflowy.sqlite", () => {
+	it("falls back to files-mirror in the working directory, next to the default outlinedb.sqlite", () => {
 		expect(defaultStoreDir({}, "/cwd")).toBe("/cwd/files-mirror");
 	});
 });

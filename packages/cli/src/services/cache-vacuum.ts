@@ -4,6 +4,7 @@ import type {BetterSQLite3Database} from "drizzle-orm/better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 import {nonEmpty} from "../utils/non-empty.js";
+import {DEFAULT_DB_FILE} from "../db/default-db-file.js";
 
 export interface VacuumResult {
 	path: string;
@@ -21,7 +22,7 @@ export class CacheVacuumService {
 	}
 
 	vacuum(): VacuumResult {
-		const dbPath = path.resolve(nonEmpty(process.env.WORKFLOWY_DB_PATH) ?? "workflowy.sqlite");
+		const dbPath = path.resolve(nonEmpty(process.env.WORKFLOWY_DB_PATH) ?? DEFAULT_DB_FILE);
 
 		// In WAL mode pages live in the -wal file until a checkpoint, so both sizes are
 		// measured against a checkpointed database or the before/after comparison is

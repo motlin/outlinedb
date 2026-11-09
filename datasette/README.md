@@ -1,6 +1,6 @@
 # Datasette Agent for the Workflowy cache
 
-[Datasette Agent](https://datasette.io/blog/2026/datasette-agent/) (Simon Willison, May 2026) is an LLM assistant that answers plain-English questions about a SQLite database by writing and running SQL. This wires it up against this project's `workflowy.sqlite` cache.
+[Datasette Agent](https://datasette.io/blog/2026/datasette-agent/) (Simon Willison, May 2026) is an LLM assistant that answers plain-English questions about a SQLite database by writing and running SQL. This wires it up against this project's `outlinedb.sqlite` cache.
 
 ## Run
 
@@ -17,7 +17,7 @@ Then open <http://localhost:8001> and use the agent panel. Stop with Ctrl-C.
 
 ## What it does
 
-- Reads the **live** `workflowy.sqlite` from the **main working tree** (the file is gitignored, so it isn't present inside a worktree). Datasette never writes to the data database — its own state goes to `.llm/datasette-internal.db` (gitignored).
+- Reads the **live** `outlinedb.sqlite` from the **main working tree** (the file is gitignored, so it isn't present inside a worktree). Datasette never writes to the data database — its own state goes to `.llm/datasette-internal.db` (gitignored).
 - Default model is `openai-codex/gpt-5.5` (routed through the Codex subscription).
 
 ## Env overrides
@@ -26,7 +26,7 @@ Then open <http://localhost:8001> and use the agent panel. Stop with Ctrl-C.
 | ----------------------- | ------------------------------ | ---------------------------------- |
 | `DATASETTE_AGENT_MODEL` | `openai-codex/gpt-5.5`         | Any `llm` model id.                |
 | `DATASETTE_LLM_PLUGIN`  | `llm-openai-via-codex`         | The `llm` model plugin to install. |
-| `WORKFLOWY_DB_PATH`     | `<main-tree>/workflowy.sqlite` | Point at a different SQLite file.  |
+| `WORKFLOWY_DB_PATH`     | `<main-tree>/outlinedb.sqlite` | Point at a different SQLite file.  |
 | `DATASETTE_PORT`        | `8001`                         | Port to serve on.                  |
 
 > To use another backend, set **both** the model and its plugin, e.g. Anthropic API key: `DATASETTE_AGENT_MODEL=anthropic/claude-sonnet-4-6 DATASETTE_LLM_PLUGIN=llm-anthropic`, or a local LM Studio model: `DATASETTE_AGENT_MODEL=lmstudio/<model> DATASETTE_LLM_PLUGIN=llm-lmstudio`.

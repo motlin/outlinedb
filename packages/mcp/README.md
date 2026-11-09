@@ -2,7 +2,7 @@
 
 MCP server for an OutlineDB outline. One set of tool definitions (`registerOutlineTools` in `src/register.ts`, exported as `@outlinedb/mcp/tools`) runs on two hosts:
 
-- **stdio**, over the local `workflowy.sqlite` cache (`src/index.ts`).
+- **stdio**, over the local `outlinedb.sqlite` cache (`src/index.ts`).
 - **Streamable HTTP**, at `/mcp` on the Cloudflare Worker, over the signed-in user's Durable Object (`packages/cloudflare/src/mcp.ts`). This is the outline the deployed web app shows.
 
 Both hosts send every tool through the web app's ops, so MCP, the web UI and the CLI share one write path.
@@ -45,12 +45,12 @@ Any client that supports Streamable HTTP and MCP OAuth (PKCE S256, with CIMD or 
 
 ## Run locally over stdio
 
-Build it, then point the client at `bin/mcp.js`. It reads `WORKFLOWY_DB_PATH` (default: `workflowy.sqlite` in the working directory) and needs `WORKFLOWY_API_KEY` for writes.
+Build it, then point the client at `bin/mcp.js`. It reads `WORKFLOWY_DB_PATH` (default: `outlinedb.sqlite` in the working directory) and needs `WORKFLOWY_API_KEY` for writes.
 
 ```sh
 just build
 claude mcp add outlinedb-local \
-  -e WORKFLOWY_DB_PATH=/abs/path/workflowy.sqlite \
+  -e WORKFLOWY_DB_PATH=/abs/path/outlinedb.sqlite \
   -e WORKFLOWY_API_KEY=... \
   -- node /abs/path/packages/mcp/bin/mcp.js
 ```

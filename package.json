@@ -6,12 +6,12 @@
 		"api",
 		"cli",
 		"oclif",
-		"workflowy"
+		"outlinedb"
 	],
 	"license": "Apache 2.0",
 	"author": "Craig P. Motlin",
 	"bin": {
-		"workflowy": "./bin/run.js"
+		"outlinedb": "./bin/run.js"
 	},
 	"files": [
 		"./bin",
@@ -71,9 +71,9 @@
 		"zod": "^4.6.7"
 	},
 	"oclif": {
-		"bin": "workflowy",
+		"bin": "outlinedb",
 		"commands": "./packages/cli/dist/commands",
-		"dirname": "workflowy",
+		"dirname": "outlinedb",
 		"plugins": [
 			"@oclif/plugin-help"
 		],
