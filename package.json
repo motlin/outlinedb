@@ -48,7 +48,7 @@
 		"prepare": "VITE_GIT_HOOKS=0 vp config"
 	},
 	"dependencies": {
-		"@oclif/core": "^5.1.10",
+		"@oclif/core": "^5.1.11",
 		"@oclif/plugin-help": "^7",
 		"@outlinedb/shared": "workspace:*",
 		"better-sqlite3": "13.0.3",

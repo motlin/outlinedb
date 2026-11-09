@@ -28,7 +28,7 @@
 		"prepack": "oclif manifest"
 	},
 	"dependencies": {
-		"@oclif/core": "^5.1.10",
+		"@oclif/core": "^5.1.11",
 		"@oclif/plugin-help": "^7",
 		"@outlinedb/shared": "workspace:*",
 		"@tobilu/qmd": "^2.8.3",
