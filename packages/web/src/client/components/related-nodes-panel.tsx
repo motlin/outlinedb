@@ -77,7 +77,7 @@ function AiEnablePrompt({onNotNow, onEnable}: {onNotNow: () => void; onEnable: (
 					This will send all your notes to third-party AI services for processing. &nbsp;
 					<a
 						href="https://workflowy.com/ai-terms"
-						title="Workflowy AI terms and conditions"
+						title="workflowy.com AI terms and conditions"
 						target="_blank"
 						rel="noreferrer"
 						className="underline"

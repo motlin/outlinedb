@@ -12,7 +12,7 @@ const toggleStar = vi.fn<(loc: {nodeId: string | null; query: string | null}) =>
 );
 
 vi.mock("../src/client/hooks/use-starred.js", () => ({
-	STARS_UNAVAILABLE_TOOLTIP: "Stars need Workflowy login",
+	STARS_UNAVAILABLE_TOOLTIP: "Stars need a workflowy.com login",
 	useStarActions: () => ({toggleStar}),
 	useStars: () => ({stars: starState.keys.map((key) => ({key})), unavailable: starState.unavailable}),
 }));
@@ -89,7 +89,7 @@ describe("StarButton", () => {
 		render({nodeId: "alice"});
 		captured.props?.onClick?.({} as never);
 		expect({tooltip: captured.props?.tooltip, calls: toggleStar.mock.calls.length}).toStrictEqual({
-			tooltip: "Stars need Workflowy login",
+			tooltip: "Stars need a workflowy.com login",
 			calls: 0,
 		});
 		starState.unavailable = false;

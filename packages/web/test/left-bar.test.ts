@@ -42,7 +42,7 @@ const toggleStarMock = vi.fn<(loc: {nodeId: string | null; query: string | null}
 const nodesById: Record<string, {id: string; name: string; completedAt: null}> = {};
 
 vi.mock("../src/client/hooks/use-starred.js", () => ({
-	STARS_UNAVAILABLE_TOOLTIP: "Stars need Workflowy login",
+	STARS_UNAVAILABLE_TOOLTIP: "Stars need a workflowy.com login",
 	useRecordStarViews: () => {},
 	useStarActions: () => ({toggleStar: toggleStarMock, renameStar: async () => Promise.resolve()}),
 	useStarredLocations: () => starred,

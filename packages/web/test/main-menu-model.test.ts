@@ -148,17 +148,17 @@ describe("Help submenu rows", () => {
 		const entries = helpEntries(helpOptions());
 		expect(names(buildMenuRows(HELP_SUBMENU_GROUPS, entries))).toStrictEqual([
 			"What's New",
-			"Learn WorkFlowy",
+			"Learn workflowy.com",
 			"Community",
 			"Blog",
 		]);
 	});
 
-	it("shows Help between Learn WorkFlowy and Community once the dialog exists", () => {
+	it("shows Help between Learn workflowy.com and Community once the dialog exists", () => {
 		const entries = helpEntries(helpOptions({hasHelpDialog: true}));
 		expect(names(buildMenuRows(HELP_SUBMENU_GROUPS, entries))).toStrictEqual([
 			"What's New",
-			"Learn WorkFlowy",
+			"Learn workflowy.com",
 			"Help",
 			"Community",
 			"Blog",

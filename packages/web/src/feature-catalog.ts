@@ -14,10 +14,10 @@ export interface VisibleFeature {
 export const VISIBLE_FEATURES: readonly VisibleFeature[] = [
 	{
 		codename: "beta_redirect",
-		name: "Workflowy Labs",
+		name: "OutlineDB Labs",
 		label: null,
 		description:
-			"Give us feedback on new Workflowy features as they come out! Be the first to know about new features and help our team improve the product.",
+			"Give us feedback on new OutlineDB features as they come out! Be the first to know about new features and help our team improve the product.",
 	},
 	{
 		codename: "open_links_in_desktop",
@@ -37,7 +37,7 @@ export const VISIBLE_FEATURES: readonly VisibleFeature[] = [
 		name: "Full width page",
 		label: null,
 		description:
-			"Lines wrapping getting you down? Turn this on, and WorkFlowy will spread luxuriously across all the screen space you give it.",
+			"Lines wrapping getting you down? Turn this on, and OutlineDB will spread luxuriously across all the screen space you give it.",
 	},
 	{
 		codename: "templates",
@@ -50,7 +50,7 @@ export const VISIBLE_FEATURES: readonly VisibleFeature[] = [
 		name: "Backlinks",
 		label: null,
 		description:
-			"When you create an internal link to another part of your Workflowy, it is tracked in a 'Backlinks' section at the bottom of the destination link/bullet. \r\nUse [[inline linking]] or copy/paste URLs to create internal links.",
+			"When you create an internal link to another part of your OutlineDB, it is tracked in a 'Backlinks' section at the bottom of the destination link/bullet. \r\nUse [[inline linking]] or copy/paste URLs to create internal links.",
 	},
 	{
 		codename: "keep_keyboard_on_scroll",
@@ -84,7 +84,7 @@ export const VISIBLE_FEATURES: readonly VisibleFeature[] = [
 		name: "Fractal Comments",
 		label: null,
 		description:
-			"Leave comments on any node in Workflowy. Comments have infinite threading so you can have deep, open-ended or infinitely detailed conversations.",
+			"Leave comments on any node in OutlineDB. Comments have infinite threading so you can have deep, open-ended or infinitely detailed conversations.",
 	},
 	{
 		codename: "dashboards",
@@ -95,7 +95,7 @@ export const VISIBLE_FEATURES: readonly VisibleFeature[] = [
 	},
 	{
 		codename: "ai",
-		name: "Workflowy AI",
+		name: "OutlineDB AI",
 		label: "LABS",
 		description:
 			"Ask questions about your notes, discover new insights, and turn your ideas into action. (note: page reload is required).",
@@ -119,7 +119,7 @@ export const VISIBLE_FEATURES: readonly VisibleFeature[] = [
 		name: "Recognize markdown pasting",
 		label: null,
 		description:
-			"If the text you paste looks like Markdown, do our best to convert it to WorkFlowy formatting options",
+			"If the text you paste looks like Markdown, do our best to convert it to OutlineDB formatting options",
 	},
 	{
 		codename: "calendar_node",
@@ -147,7 +147,7 @@ export const VISIBLE_FEATURES: readonly VisibleFeature[] = [
 		name: "Panes",
 		label: null,
 		description:
-			"Open nodes in separate panes to view and work with multiple parts of your WorkFlowy side by side.",
+			"Open nodes in separate panes to view and work with multiple parts of your OutlineDB side by side.",
 	},
 ];
 

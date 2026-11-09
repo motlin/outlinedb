@@ -98,15 +98,15 @@ describe("web manifest", () => {
 		readFileSync(new URL("../src/client/public/manifest.webmanifest", import.meta.url), "utf8"),
 	);
 
-	it("is linked from index.html and registers 'Share to Workflowy' as a GET share target into the Inbox", () => {
+	it("is linked from index.html and registers 'Share to OutlineDB' as a GET share target into the Inbox", () => {
 		expect({
 			linked: html.includes('<link rel="manifest" href="/manifest.webmanifest" />'),
 			manifest,
 		}).toStrictEqual({
 			linked: true,
 			manifest: {
-				name: "Workflowy",
-				short_name: "Workflowy",
+				name: "OutlineDB",
+				short_name: "OutlineDB",
 				start_url: "/",
 				scope: "/",
 				display: "standalone",

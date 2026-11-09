@@ -10,7 +10,7 @@ const BUTTON =
 	'<button type="button" class="bg-transparent border-0 p-0 text-primary font-semibold underline cursor-pointer">Try syncing now</button>';
 
 function bar(entered: boolean): string {
-	return `<div class="fixed right-sar border-t border-b border-solid border-primary text-center text-primary transition-transform duration-200 ease-base print:hidden flex flex-wrap items-center justify-center gap-x-m gap-y-xs px-l py-s text-s leading-base bg-warning offlineNotice" style="bottom:0;top:unset;left:0px;transform:translateY(${entered ? "0" : "100%"});z-index:500"><span><strong>Changes are not syncing.</strong> Keep Workflowy app open while we reconnect.</span>${BUTTON}</div>`;
+	return `<div class="fixed right-sar border-t border-b border-solid border-primary text-center text-primary transition-transform duration-200 ease-base print:hidden flex flex-wrap items-center justify-center gap-x-m gap-y-xs px-l py-s text-s leading-base bg-warning offlineNotice" style="bottom:0;top:unset;left:0px;transform:translateY(${entered ? "0" : "100%"});z-index:500"><span><strong>Changes are not syncing.</strong> Keep the OutlineDB app open while we reconnect.</span>${BUTTON}</div>`;
 }
 
 describe("offline notice", () => {

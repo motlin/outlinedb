@@ -1,7 +1,7 @@
 import {htmlToText} from "@workflowy/shared/html";
 
 /** Upstream's `config("location").autotitle.noname`. */
-export const NONAME_TITLE = "WorkFlowy - Organize your brain.";
+export const NONAME_TITLE = "OutlineDB - Organize your brain.";
 
 const MAX_LABEL = 100;
 
@@ -13,7 +13,7 @@ export function documentTitleFor(nameHtml: string | null | undefined, render?: (
 		return NONAME_TITLE;
 	}
 	const shown = label.length > MAX_LABEL ? `${label.slice(0, MAX_LABEL)}...` : label;
-	return `${shown} - WorkFlowy`;
+	return `${shown} - OutlineDB`;
 }
 
 export interface TitleState {

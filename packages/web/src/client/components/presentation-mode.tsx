@@ -220,7 +220,7 @@ export function PresentationMode() {
 				totalSlides={slides.length}
 			/>
 
-			<div className="presentation-footer">Made with Workflowy</div>
+			<div className="presentation-footer">Made with OutlineDB</div>
 		</dialog>
 	);
 }

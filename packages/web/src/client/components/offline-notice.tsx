@@ -23,7 +23,7 @@ export function OfflineNoticeBar({entered, left, onRetry}: OfflineNoticeBarProps
 			}}
 		>
 			<span>
-				<strong>Changes are not syncing.</strong> Keep Workflowy app open while we reconnect.
+				<strong>Changes are not syncing.</strong> Keep the OutlineDB app open while we reconnect.
 			</span>
 			<button
 				type="button"

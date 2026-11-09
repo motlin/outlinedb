@@ -16,7 +16,7 @@ const INVALIDATING_FAILURES = new Map<number, string>([
 	[409, "Couldn't undo: the item was already restored"],
 	[
 		503,
-		"Couldn't undo: undo of delete needs the Workflowy internal API (set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD)",
+		"Couldn't undo: undo of delete needs the workflowy.com internal API (set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD)",
 	],
 ]);
 

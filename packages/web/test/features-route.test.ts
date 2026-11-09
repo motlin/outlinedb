@@ -45,10 +45,15 @@ function setup(withAdapter: boolean) {
 }
 
 describe("feature catalog", () => {
-	it("matches upstream's measured Settings rows, and its defaults drop only the hidden check, slash-command and trash", () => {
+	it("matches upstream's measured Settings rows renamed to OutlineDB, and its defaults drop only the hidden check, slash-command and trash", () => {
 		const {check: _check, "slash-command": _slash, trash: _trash, ...visibleDefaults} = upstreamFeatures.enabled;
+		const rebrand = (text: string | null) => text?.replaceAll(/WorkFlowy|Workflowy/gu, "OutlineDB") ?? null;
 		expect({visible: VISIBLE_FEATURES, enabled: DEFAULT_FEATURES}).toStrictEqual({
-			visible: upstreamFeatures.visible,
+			visible: upstreamFeatures.visible.map((feature) => ({
+				...feature,
+				name: rebrand(feature.name),
+				description: rebrand(feature.description),
+			})),
 			enabled: visibleDefaults,
 		});
 	});

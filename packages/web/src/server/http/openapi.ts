@@ -262,7 +262,7 @@ export function openApiDocument(routes: readonly RouterRoute[]): Schema {
 	}
 	return {
 		openapi: "3.1.0",
-		info: {title: "Workflowy API", version: "1.0.0"},
+		info: {title: "OutlineDB API", version: "1.0.0"},
 		paths,
 		components: {schemas: {Error: ERROR_SCHEMA}},
 	};
@@ -276,7 +276,7 @@ export const API_DOCS_HTML = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Workflowy API</title>
+<title>OutlineDB API</title>
 <link rel="stylesheet" href="${SWAGGER_UI}swagger-ui.css">
 </head>
 <body>

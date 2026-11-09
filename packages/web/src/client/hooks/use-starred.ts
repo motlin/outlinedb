@@ -23,7 +23,7 @@ export interface StarsState {
 
 export const starKeys = {all: ["stars"] as const};
 
-export const STARS_UNAVAILABLE_TOOLTIP = "Stars need Workflowy login (WORKFLOWY_USERNAME/PASSWORD)";
+export const STARS_UNAVAILABLE_TOOLTIP = "Stars need a workflowy.com login (WORKFLOWY_USERNAME/PASSWORD)";
 
 export const LAST_VIEWED_STORAGE_KEY = "workflowy-star-last-viewed";
 

@@ -200,7 +200,7 @@ const SETTINGS_SECTION_TITLES = [
 ] as const;
 
 const DAILY_SUMMARY_HINT =
-	"Note: enabling this option means all content you add to WorkFlowy will be emailed to you. You'll receive a breakdown of the number of additions, edits, moves, completions, uncompletions and deletions made the previous day \u2013 both in private and shared lists. If collaborators in shared lists have made any changes, the summary will indicate who has done what.";
+	"Note: enabling this option means all content you add to OutlineDB will be emailed to you. You'll receive a breakdown of the number of additions, edits, moves, completions, uncompletions and deletions made the previous day \u2013 both in private and shared lists. If collaborators in shared lists have made any changes, the summary will indicate who has done what.";
 
 interface SectionProps {
 	preferences: Preferences;
@@ -396,7 +396,7 @@ function BackupSection({preferences, change}: SectionProps) {
 			<SectionBody>
 				<ActionBlock
 					label="Dropbox Auto-backup"
-					hint="Automatically back up your WorkFlowy to Dropbox every day."
+					hint="Automatically back up your workflowy.com account to Dropbox every day."
 				>
 					<SettingsButton
 						onClick={() => {

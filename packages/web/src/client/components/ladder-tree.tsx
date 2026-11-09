@@ -30,7 +30,7 @@ export function LadderTree({item, onClose}: {item: {id: string; name: string}; o
 				<div>
 					<h2 id="ladder-tree-title">{item.name}</h2>
 					<a href={getWorkflowyUrl(item.id)} target="_blank" rel="noreferrer">
-						Open in Workflowy ↗
+						Open in workflowy.com ↗
 					</a>
 				</div>
 				<button type="button" onClick={onClose} autoFocus aria-label="Close task tree">

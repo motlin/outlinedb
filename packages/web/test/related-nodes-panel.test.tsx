@@ -173,7 +173,7 @@ describe("RelatedNodesPanel AI embedding onboarding", () => {
 		}).toStrictEqual({
 			href: "https://workflowy.com/ai-terms",
 			target: "_blank",
-			title: "Workflowy AI terms and conditions",
+			title: "workflowy.com AI terms and conditions",
 		});
 	});
 

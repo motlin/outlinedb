@@ -1,6 +1,6 @@
 {
-	"name": "Workflowy",
-	"short_name": "Workflowy",
+	"name": "OutlineDB",
+	"short_name": "OutlineDB",
 	"start_url": "/",
 	"scope": "/",
 	"display": "standalone",

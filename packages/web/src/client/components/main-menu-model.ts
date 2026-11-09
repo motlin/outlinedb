@@ -247,7 +247,7 @@ export function helpEntries({
 	};
 	return {
 		"changelog.show": {label: "What's New", blueDot: changelogUnread, onSelect: openChangelog},
-		"changelog.learn": {label: "Learn WorkFlowy", onSelect: link(LEARN_URL)},
+		"changelog.learn": {label: "Learn workflowy.com", onSelect: link(LEARN_URL)},
 		"show.show-help-dialog": {label: "Help", handbook: "help.show", hidden: !hasHelpDialog},
 		"show.report-problem": {label: "Report a problem", handbook: "bug.report", hidden: true},
 		"workflowy.community": {label: "Community", onSelect: link(COMMUNITY_URL)},
