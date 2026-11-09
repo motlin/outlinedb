@@ -664,3 +664,46 @@ test("guessWorkouts counts a day with any known exercise hashtag as logged, even
 		[{date: "2026-10-21", nodeId: oct21, after: finisher}],
 	);
 });
+
+test("guessWorkouts counts a program entry with phase/week/day as a logged session even when voice-to-text wrote 'hashtag exercise'", () => {
+	const dictated = {id: uuid(), name: "#ProgramX phase 1, week 2, day 3: pull 1, 1 hashtag exercise. "};
+	const bareStub = {id: uuid(), name: "#programx "};
+	const tree = calendar(firstPass(), [
+		dayNode("2026-10-20", "Tue, Oct 20, 2026", ["💪 #ProgramX phase 1, week 2, day 2, Legs 1 #exercise"]),
+		{id: uuid(), name: timeElement("2026-10-21", "Wed, Oct 21, 2026"), children: [dictated]},
+		{id: uuid(), name: timeElement("2026-10-22", "Thu, Oct 22, 2026"), children: [bareStub]},
+	]);
+
+	const staged = guessWorkouts({
+		tree,
+		today: "2026-10-22",
+		template: TEMPLATE,
+		programs: ["#ProgramX"],
+		restDays: [],
+		maxDays: 7,
+		generatedAt: "x",
+	});
+
+	assert.deepStrictEqual(
+		{
+			summary: staged.summary,
+			proposals: staged.proposals.map(({nodeId, date, before, after}) => ({nodeId, date, before, after})),
+		},
+		{
+			summary: {
+				lastLogged: {date: "2026-10-21", text: dictated.name},
+				daysUnlogged: 1,
+				proposalsStaged: 1,
+				remainingDays: 0,
+			},
+			proposals: [
+				{
+					nodeId: bareStub.id,
+					date: "2026-10-22",
+					before: bareStub.name,
+					after: "💪 #ProgramX phase 1, week 2, day 4, The Finisher #exercise",
+				},
+			],
+		},
+	);
+});

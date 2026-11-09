@@ -130,7 +130,8 @@ function findField(text: string, label: string, allowRoman: boolean): FieldMatch
 }
 
 function cleanTail(raw: string): string {
-	const beforeTag = raw.replace(/#exercise\b[\s\S]*$/iu, "");
+	// Voice-to-text writes the tag as "hashtag exercise"; it ends the tail the same as #exercise.
+	const beforeTag = raw.replace(/(?:#|\bhashtag\s+)exercise\b[\s\S]*$/iu, "");
 	const segments = beforeTag
 		.replace(/^[\s,:;.\-–—]+/u, "")
 		.replace(/[\s,:;.\-–—]+$/u, "")
@@ -145,11 +146,16 @@ function cleanTail(raw: string): string {
 /**
  * Parse one journal entry into a program session, or null when it is not one. A session carries
  * #exercise and a program hashtag, plus at least one phase/week/day field unless the program is
- * listed in `programs` (whose casing then wins).
+ * listed in `programs` (whose casing then wins). `requireExerciseTag: false` reads an entry whose
+ * #exercise tag is missing, such as one dictated as "hashtag exercise".
  */
-export function parseEntry(name: string, programs: readonly string[] = []): ParsedEntry | null {
+export function parseEntry(
+	name: string,
+	programs: readonly string[] = [],
+	{requireExerciseTag = true}: {requireExerciseTag?: boolean} = {},
+): ParsedEntry | null {
 	const text = stripTags(name).replaceAll(/\s+/gu, " ");
-	if (!/#exercise\b/iu.test(text)) {
+	if (requireExerciseTag && !/#exercise\b/iu.test(text)) {
 		return null;
 	}
 	const listed = new Map(programs.map((tag) => [tag.replace(/^#/u, "").toLowerCase(), tag]));
@@ -446,7 +452,8 @@ function readCalendar(tree: CalendarNode, programs: readonly string[], exerciseT
 			if (entryDate === null) {
 				continue;
 			}
-			const parsed = parseEntry(name, programs);
+			// A program-hashtag entry is a workout even without #exercise; only its detail decides whether it is a stub.
+			const parsed = parseEntry(name, programs, {requireExerciseTag: !hasProgramTag(name)});
 			const bare =
 				parsed === null ||
 				(parsed.phase === null && parsed.week === null && parsed.day === null && parsed.tail === "");
@@ -459,7 +466,7 @@ function readCalendar(tree: CalendarNode, programs: readonly string[], exerciseT
 			if (hasProgramTag(name) || hasTagIn(name, knownExerciseTags)) {
 				exerciseDates.add(entryDate);
 			}
-			if (/#exercise\b/iu.test(name)) {
+			if (/#exercise\b/iu.test(name) || hasProgramTag(name)) {
 				exerciseDates.add(entryDate);
 				if (parsed !== null) {
 					const session = {...parsed, date: entryDate};
