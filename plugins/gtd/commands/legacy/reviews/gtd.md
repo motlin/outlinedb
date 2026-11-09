@@ -65,8 +65,8 @@ If > 7 days since last weekly:
 ### Check Inbox Status
 
 ```bash
-./bin/run.js workflowy utils path-to-id --path "📥 Inbox" --data-source cache | xargs -I{} ./bin/run.js node list --parent-id {}
-./bin/run.js workflowy utils path-to-id --path "📥 Inbox" --data-source cache | xargs -I{} ./bin/run.js node list --parent-id {}
+./bin/run.js utils path-to-id --path "📥 Inbox" --data-source cache | xargs -I{} ./bin/run.js node list --parent-id {}
+./bin/run.js utils path-to-id --path "📥 Inbox" --data-source cache | xargs -I{} ./bin/run.js node list --parent-id {}
 ```
 
 Count total inbox items.

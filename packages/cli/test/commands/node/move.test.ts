@@ -24,7 +24,7 @@ describe("node:move command", () => {
 	beforeEach(() => {
 		originalEnv = {...process.env};
 
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-move-test-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-move-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
 		process.env.OUTLINEDB_DB_PATH = testDbPath;

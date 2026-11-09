@@ -53,10 +53,10 @@ The link points to the content root node containing Ideas/Drafts/Scheduled/Publi
 
 ```bash
 # Get the Content root path from your configuration, then:
-./bin/run.js workflowy utils path-to-id --path "📝 Content,💡 Ideas" --data-source cache | xargs -I{} ./bin/run.js node list --parent-id {}
-./bin/run.js workflowy utils path-to-id --path "📝 Content,📄 Drafts" --data-source cache | xargs -I{} ./bin/run.js node list --parent-id {}
-./bin/run.js workflowy utils path-to-id --path "📝 Content,📅 Scheduled" --data-source cache | xargs -I{} ./bin/run.js node list --parent-id {}
-./bin/run.js workflowy utils path-to-id --path "📝 Content,✅ Published" --data-source cache | xargs -I{} ./bin/run.js node list --parent-id {}
+./bin/run.js utils path-to-id --path "📝 Content,💡 Ideas" --data-source cache | xargs -I{} ./bin/run.js node list --parent-id {}
+./bin/run.js utils path-to-id --path "📝 Content,📄 Drafts" --data-source cache | xargs -I{} ./bin/run.js node list --parent-id {}
+./bin/run.js utils path-to-id --path "📝 Content,📅 Scheduled" --data-source cache | xargs -I{} ./bin/run.js node list --parent-id {}
+./bin/run.js utils path-to-id --path "📝 Content,✅ Published" --data-source cache | xargs -I{} ./bin/run.js node list --parent-id {}
 ```
 
 ### Extracting Date Information

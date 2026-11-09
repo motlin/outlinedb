@@ -4,10 +4,10 @@ import {captureOutput} from "@oclif/test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import PathToId from "../../../../src/commands/workflowy/utils/path-to-id.js";
-import {cleanupTestDatabase, createTestDatabase} from "../../../db/migration-helper.js";
-import type {TestDatabase} from "../../../db/migration-helper.js";
-import {createTestNode, splitNodeIntoContentAndMetadata} from "../../../helpers/node-fixtures.js";
+import PathToId from "../../../src/commands/utils/path-to-id.js";
+import {cleanupTestDatabase, createTestDatabase} from "../../db/migration-helper.js";
+import type {TestDatabase} from "../../db/migration-helper.js";
+import {createTestNode, splitNodeIntoContentAndMetadata} from "../../helpers/node-fixtures.js";
 
 function insertTestNodes(
 	db: ReturnType<typeof createTestDatabase>["db"],
@@ -19,7 +19,7 @@ function insertTestNodes(
 	db.insert(nodeMetadata).values(metadatas).run();
 }
 
-describe("workflowy:utils:path-to-id command", () => {
+describe("utils:path-to-id command", () => {
 	let originalEnv: typeof process.env;
 	let mockFetch: typeof globalThis.fetch;
 	let tempDir: string;
@@ -29,7 +29,7 @@ describe("workflowy:utils:path-to-id command", () => {
 		originalEnv = process.env;
 		mockFetch = globalThis.fetch;
 
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-test-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
 		process.env.OUTLINEDB_DB_PATH = testDbPath;

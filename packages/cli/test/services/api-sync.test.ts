@@ -30,7 +30,7 @@ describe("API Sync with Cache", () => {
 	let fetchStub: MockInstance;
 
 	beforeEach(() => {
-		const tempDbPath = path.join(os.tmpdir(), `test-workflowy-${randomUUID()}.sqlite`);
+		const tempDbPath = path.join(os.tmpdir(), `test-outlinedb-${randomUUID()}.sqlite`);
 		testDatabase = createTestDatabase(tempDbPath);
 
 		cacheService = new CacheService(testDatabase.db);

@@ -6,7 +6,7 @@ import {stubPublicApi} from "./fake-upstream.js";
 let harness: Harness;
 
 beforeAll(() => {
-	harness = openHarness("workflowy-mcp-read-only-test-");
+	harness = openHarness("outlinedb-mcp-read-only-test-");
 	seed(harness.cache, "work", "Work");
 	seed(harness.cache, "plan", "Plan the trip", "work");
 });

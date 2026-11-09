@@ -34,7 +34,7 @@ describe("planLinkPaste (upstream pJ1)", () => {
 		]);
 	});
 
-	it("inserts a workflowy target's name, falling back to the href when blank", () => {
+	it("inserts an internal target's name, falling back to the href when blank", () => {
 		const resolve = (href: string): string | null =>
 			href === "https://workflowy.com/#/abc" ? "Target" : href === "https://workflowy.com/#/blank" ? "" : null;
 		expect([

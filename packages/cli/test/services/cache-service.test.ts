@@ -38,7 +38,7 @@ describe("CacheService (shared)", () => {
 	let cacheService: CacheService;
 
 	beforeEach(() => {
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-cache-test-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-cache-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
 		cacheService = new CacheService(testDatabase.db);

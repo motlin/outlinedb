@@ -21,7 +21,7 @@ describe("node:list command", () => {
 		originalEnv = process.env;
 		mockFetch = globalThis.fetch;
 
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-test-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
 		process.env.OUTLINEDB_DB_PATH = testDbPath;

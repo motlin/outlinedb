@@ -22,7 +22,7 @@ describe("cache:import-backup --backup-system-time", () => {
 	const savedEnv: Record<string, string | undefined> = {};
 
 	beforeEach(() => {
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-import-backup-test-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-import-backup-test-"));
 		backupsDir = path.join(tempDir, "backups");
 		fs.mkdirSync(path.join(backupsDir, "Data"), {recursive: true});
 		const testDbPath = path.join(tempDir, "test.sqlite");

@@ -16,7 +16,7 @@ describe("cache:import-local-state command", () => {
 	let originalDbPath: string | undefined;
 
 	beforeEach(() => {
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-local-state-test-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-local-state-test-"));
 		const targetPath = path.join(tempDir, "new.sqlite");
 		sourcePath = path.join(tempDir, "old.sqlite");
 		target = createTestDatabase(targetPath);

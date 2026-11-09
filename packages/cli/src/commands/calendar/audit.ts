@@ -15,7 +15,7 @@ const BRACKET_DAY = /^\[(\d{4})-(\d{2})-(\d{2})\]$/u;
 
 export default class CalendarAudit extends Command {
 	static override description =
-		"Find 📆 Calendar nodes that workflowy.com cannot use as days (name-only <time> or [YYYY-MM-DD] days, nested tagged days, duplicate dates, name-only years and months), and with --fix adopt the safe ones by writing their calendar metadata";
+		"Find 📆 Calendar nodes that workflowy.com cannot use as days (name-only `<time>` or [YYYY-MM-DD] days, nested tagged days, duplicate dates, name-only years and months), and with --fix adopt the safe ones by writing their calendar metadata";
 
 	static override examples = [
 		"<%= config.bin %> <%= command.id %>",

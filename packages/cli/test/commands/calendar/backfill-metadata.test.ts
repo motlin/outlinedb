@@ -15,7 +15,7 @@ describe("calendar backfill-metadata command", () => {
 
 	beforeEach(() => {
 		originalEnv = {...process.env};
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-calendar-backfill-test-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-calendar-backfill-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
 		process.env.OUTLINEDB_DB_PATH = testDbPath;

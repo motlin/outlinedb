@@ -63,7 +63,6 @@ oclif.manifest.json
 
 # SQLite database
 *.db
-workflowy.db*
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal

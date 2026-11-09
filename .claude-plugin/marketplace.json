@@ -1,7 +1,7 @@
 {
 	"$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
 	"name": "workflowy-gtd",
-	"description": "Workflowy CLI tooling and a GTD system built on top of it — one product, two plugins",
+	"description": "OutlineDB CLI tooling and a GTD system built on top of it — one product, two plugins",
 	"owner": {
 		"name": "Craig Motlin"
 	},

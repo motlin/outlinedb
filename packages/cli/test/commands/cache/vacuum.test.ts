@@ -18,7 +18,7 @@ describe("cache:vacuum command", () => {
 	let originalDbPath: string | undefined;
 
 	beforeEach(() => {
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-vacuum-test-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-vacuum-test-"));
 		testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
 

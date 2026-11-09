@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Workflowy CLI Demo
+# OutlineDB CLI Demo
 # Demonstrates all CLI functionality with data flowing from one step to the next
 
 CLI="./bin/run.js"
@@ -30,7 +30,7 @@ capture() {
     echo -e "${GREEN}→ Captured $1=$2${NC}"
 }
 
-echo "🎯 Workflowy CLI Demo - Comprehensive CLI Exploration"
+echo "🎯 OutlineDB CLI Demo - Comprehensive CLI Exploration"
 echo "Press Enter to continue through each step, or Ctrl+C to exit."
 echo ""
 echo "This demo captures IDs from earlier commands and uses them in later commands."
@@ -107,8 +107,8 @@ echo "$OUTPUT" | jq
 NODES_0_NAME=$(echo "$OUTPUT" | jq -r '.name')
 capture "NODES_0_NAME" "$NODES_0_NAME"
 
-step "4.3 Convert path to ID" "$CLI workflowy utils path-to-id --path \"$NODES_0_NAME\""
-$CLI workflowy utils path-to-id --path "$NODES_0_NAME"
+step "4.3 Convert path to ID" "$CLI utils path-to-id --path \"$NODES_0_NAME\""
+$CLI utils path-to-id --path "$NODES_0_NAME"
 step "4.4 Get same node via path" "$CLI node get --path \"$NODES_0_NAME\""
 $CLI node get --path "$NODES_0_NAME"
 echo ""

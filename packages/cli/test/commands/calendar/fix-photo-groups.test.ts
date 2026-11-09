@@ -64,7 +64,7 @@ describe("calendar:fix-photo-groups command", () => {
 	beforeEach(() => {
 		originalEnv = {...process.env};
 
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-photo-groups-test-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-photo-groups-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
 		process.env.OUTLINEDB_DB_PATH = testDbPath;

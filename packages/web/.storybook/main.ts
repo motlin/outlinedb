@@ -1,6 +1,6 @@
 import type {StorybookConfig} from "@storybook/react-vite";
 
-process.title = "workflowy-storybook";
+process.title = "outlinedb-storybook";
 
 const config: StorybookConfig = {
 	stories: ["../src/**/*.mdx", "../src/**/*.stories.@(js|jsx|mjs|ts|tsx)"],

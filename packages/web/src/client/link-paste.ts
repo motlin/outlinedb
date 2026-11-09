@@ -1,6 +1,6 @@
 /**
  * Pasting a URL as a link, ported from upstream's `pJ1`: a pasted URL formats the selected text as a link, replaces a
- * selection that is itself a URL, or inserts at a collapsed caret (as the target's name for a workflowy link).
+ * selection that is itself a URL, or inserts at a collapsed caret (as the target's name for an internal link).
  */
 import type {QueryClient} from "@tanstack/react-query";
 import {findAutoLinks} from "./auto-link.js";
@@ -16,7 +16,7 @@ export interface LinkPasteInput {
 	selectionText: string;
 	collapsed: boolean;
 	inCode: boolean;
-	/** The name of the workflowy item `href` points at ("" when blank), or null when it is not a resolvable target. */
+	/** The name of the item `href` points at ("" when blank), or null when it is not a resolvable target. */
 	resolveTargetName: (href: string) => string | null;
 }
 
@@ -80,7 +80,7 @@ export function applyLinkPaste(
 	};
 }
 
-/** The plain name of the cached workflowy item an internal link points at, or null when it is not one. */
+/** The plain name of the cached item an internal link points at, or null when it is not one. */
 export function cachedLinkTargetName(queryClient: QueryClient, href: string): string | null {
 	const id = internalLinkId(href, globalThis.location.origin);
 	const node = id === null ? undefined : readNode(queryClient, id);

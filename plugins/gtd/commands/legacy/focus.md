@@ -43,8 +43,8 @@ Use AskUserQuestion to understand current situation:
 ```bash
 TODAY=$(date +%Y-%m-%d)
 HOUR=$(date +%H)
-./bin/run.js workflowy utils path-to-id --path "📅 Calendar,$TODAY" --data-source cache | xargs -I{} ./bin/run.js node list --parent-id {}
-./bin/run.js workflowy utils path-to-id --path "📅 Calendar,$TODAY" --data-source cache | xargs -I{} ./bin/run.js node list --parent-id {}
+./bin/run.js utils path-to-id --path "📅 Calendar,$TODAY" --data-source cache | xargs -I{} ./bin/run.js node list --parent-id {}
+./bin/run.js utils path-to-id --path "📅 Calendar,$TODAY" --data-source cache | xargs -I{} ./bin/run.js node list --parent-id {}
 ```
 
 Note any upcoming meetings or commitments that constrain available time.
@@ -52,8 +52,8 @@ Note any upcoming meetings or commitments that constrain available time.
 ### Fetch Next Actions
 
 ```bash
-./bin/run.js workflowy utils path-to-id --path "☑️ Next Actions" --data-source cache | xargs -I{} ./bin/run.js node list --parent-id {}
-./bin/run.js workflowy utils path-to-id --path "☑️ Next Actions" --data-source cache | xargs -I{} ./bin/run.js node list --parent-id {}
+./bin/run.js utils path-to-id --path "☑️ Next Actions" --data-source cache | xargs -I{} ./bin/run.js node list --parent-id {}
+./bin/run.js utils path-to-id --path "☑️ Next Actions" --data-source cache | xargs -I{} ./bin/run.js node list --parent-id {}
 ```
 
 ### Filter and Score

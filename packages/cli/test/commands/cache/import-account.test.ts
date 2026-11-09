@@ -16,7 +16,7 @@ describe("cache:import-account command", () => {
 	const savedEnv: Record<string, string | undefined> = {};
 
 	beforeEach(() => {
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-import-account-test-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-import-account-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
 		for (const key of ENV_KEYS) {

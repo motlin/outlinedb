@@ -24,7 +24,7 @@ describe("cache:status command", () => {
 		vi.useFakeTimers({shouldAdvanceTime: true});
 		vi.setSystemTime(new Date("2026-01-01T12:00:00.000Z"));
 
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-test-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-test-"));
 		testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
 

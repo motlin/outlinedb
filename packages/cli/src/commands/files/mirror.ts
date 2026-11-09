@@ -23,7 +23,7 @@ export default class FilesMirror extends Command {
 	static override examples = [
 		"<%= config.bin %> files mirror --dry-run",
 		"<%= config.bin %> files mirror --limit 3",
-		"<%= config.bin %> files mirror --dir /Volumes/archive/workflowy-files --concurrency 4",
+		"<%= config.bin %> files mirror --dir /Volumes/archive/outlinedb-files --concurrency 4",
 	];
 
 	static override flags = {

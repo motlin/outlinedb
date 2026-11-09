@@ -69,7 +69,7 @@ describe("ai suggest-labels command", () => {
 
 	beforeEach(() => {
 		originalEnv = {...process.env};
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-suggest-labels-test-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-suggest-labels-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
 		process.env.OUTLINEDB_DB_PATH = testDbPath;

@@ -32,7 +32,7 @@ describe("calendar level/levels invariant", () => {
 		originalEpoch = process.env.WORKFLOWY_EPOCH;
 		process.env.WORKFLOWY_EPOCH = "0";
 
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-calendar-test-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-calendar-test-"));
 		testDatabase = createTestDatabase(path.join(tempDir, "test.sqlite"));
 	});
 

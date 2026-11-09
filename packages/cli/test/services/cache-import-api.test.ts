@@ -59,7 +59,7 @@ describe("cache-import-api service", () => {
 	let testDatabase: TestDatabase;
 
 	beforeEach(() => {
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-api-import-test-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-api-import-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
 	});

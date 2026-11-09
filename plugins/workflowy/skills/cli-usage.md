@@ -1,8 +1,8 @@
 ---
-description: Rules for running Workflowy CLI commands. MUST be followed when executing CLI invocations.
+description: Rules for running OutlineDB CLI commands. MUST be followed when executing CLI invocations.
 ---
 
-# Workflowy CLI Usage Rules
+# OutlineDB CLI Usage Rules
 
 - **Never add `2>/dev/null`** to CLI commands. Errors must be visible so you can debug them. Silent failures lead to wrong improvised fallbacks.
 - **Never improvise alternative CLI commands** when a command from a prompt file fails. Instead, debug the failure using `--help` to check flags.

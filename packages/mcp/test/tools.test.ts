@@ -14,7 +14,7 @@ const OUTLINE: FakeNode[] = [
 ];
 
 beforeAll(() => {
-	harness = openHarness("workflowy-mcp-tools-test-");
+	harness = openHarness("outlinedb-mcp-tools-test-");
 });
 
 beforeEach(() => {

@@ -2,7 +2,7 @@ import {text} from "node:stream/consumers";
 import {getWorkflowyUrl} from "@outlinedb/shared/workflowy";
 import {Command} from "@oclif/core";
 import {z} from "zod";
-import {htmlToAnsi} from "../../../utils/html-to-ansi.js";
+import {htmlToAnsi} from "../../utils/html-to-ansi.js";
 
 /**
  * Schema for the expected JSON node input

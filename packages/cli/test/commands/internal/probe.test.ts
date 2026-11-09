@@ -67,7 +67,7 @@ describe("internal probe command", () => {
 	beforeEach(() => {
 		vi.useFakeTimers({toFake: ["Date"]});
 		vi.setSystemTime(new Date("2026-10-18T12:00:00.000Z"));
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-probe-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-probe-"));
 		outPath = path.join(tempDir, "probes.md");
 		process.env.WORKFLOWY_USERNAME = "alice@example.com";
 		process.env.WORKFLOWY_PASSWORD = "hunter2";
@@ -291,7 +291,7 @@ describe("internal probe error-shape", () => {
 	beforeEach(() => {
 		vi.useFakeTimers({toFake: ["Date"]});
 		vi.setSystemTime(new Date("2026-10-18T12:00:00.000Z"));
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-probe-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-probe-"));
 		outPath = path.join(tempDir, "probes.md");
 		process.env.WORKFLOWY_USERNAME = "alice@example.com";
 		process.env.WORKFLOWY_PASSWORD = "hunter2";
@@ -390,7 +390,7 @@ describe("internal probe index", () => {
 	const savedEnv = {...process.env};
 
 	beforeEach(() => {
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-probe-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-probe-"));
 		outPath = path.join(tempDir, "probes.md");
 		process.env.WORKFLOWY_USERNAME = "alice@example.com";
 		process.env.WORKFLOWY_PASSWORD = "hunter2";
@@ -437,7 +437,7 @@ describe("internal probe restore", () => {
 	const savedEnv = {...process.env};
 
 	beforeEach(() => {
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-probe-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-probe-"));
 		outPath = path.join(tempDir, "probes.md");
 		process.env.WORKFLOWY_USERNAME = "alice@example.com";
 		process.env.WORKFLOWY_PASSWORD = "hunter2";
@@ -484,7 +484,7 @@ describe("internal probe meta", () => {
 	const savedEnv = {...process.env};
 
 	beforeEach(() => {
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-probe-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-probe-"));
 		outPath = path.join(tempDir, "probes.md");
 		process.env.WORKFLOWY_USERNAME = "alice@example.com";
 		process.env.WORKFLOWY_PASSWORD = "hunter2";
@@ -531,7 +531,7 @@ describe("internal probe expansion", () => {
 	const savedEnv = {...process.env};
 
 	beforeEach(() => {
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-probe-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-probe-"));
 		outPath = path.join(tempDir, "probes.md");
 		process.env.WORKFLOWY_USERNAME = "alice@example.com";
 		process.env.WORKFLOWY_PASSWORD = "hunter2";
@@ -675,7 +675,7 @@ describe("internal probe root-meta", () => {
 	beforeEach(() => {
 		vi.useFakeTimers({toFake: ["Date"]});
 		vi.setSystemTime(new Date("2026-10-18T12:00:00.000Z"));
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-probe-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-probe-"));
 		outPath = path.join(tempDir, "probes.md");
 		process.env.WORKFLOWY_USERNAME = "alice@example.com";
 		process.env.WORKFLOWY_PASSWORD = "hunter2";
@@ -843,7 +843,7 @@ describe("internal probe settings", () => {
 	beforeEach(() => {
 		vi.useFakeTimers({toFake: ["Date"]});
 		vi.setSystemTime(new Date("2026-10-18T12:00:00.000Z"));
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-probe-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-probe-"));
 		outPath = path.join(tempDir, "probes.md");
 		process.env.WORKFLOWY_USERNAME = "alice@example.com";
 		process.env.WORKFLOWY_PASSWORD = "hunter2";
@@ -923,7 +923,7 @@ describe("internal probe calendar-ids", () => {
 	beforeEach(() => {
 		vi.useFakeTimers({toFake: ["Date"]});
 		vi.setSystemTime(new Date("2026-10-18T12:00:00.000Z"));
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-probe-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-probe-"));
 		outPath = path.join(tempDir, "probes.md");
 		process.env.WORKFLOWY_USERNAME = "alice@example.com";
 		process.env.WORKFLOWY_PASSWORD = "hunter2";

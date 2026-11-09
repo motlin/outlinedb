@@ -6,13 +6,13 @@ description: Deprecated legacy GTD setup wizard — first-run configuration of W
 
 > Legacy command. First-run setup only; use when explicitly invoked.
 
-Walks through the complete setup for GTD automation with Workflowy CLI, including discovery of people, projects, and contexts from your data sources.
+Walks through the complete setup for GTD automation with OutlineDB CLI, including discovery of people, projects, and contexts from your data sources.
 
 ## Overview
 
 This command guides users through:
 
-- Prerequisites check (Workflowy CLI, iMCP, GitHub CLI)
+- Prerequisites check (OutlineDB CLI, iMCP, GitHub CLI)
 - GTD path configuration in Workflowy
 - **Data source discovery** - contacts, recent Workflowy activity
 - **People interview** - identify key relationships
@@ -24,7 +24,7 @@ This command guides users through:
 
 ## Prerequisites
 
-### Workflowy CLI
+### OutlineDB CLI
 
 ```bash
 ./bin/run.js --version
@@ -328,9 +328,9 @@ Set up content/blog tracking for writers who want to maintain a publishing caden
 ### Check for Existing Content Structure
 
 ```bash
-./bin/run.js workflowy utils path-to-id --path "📝 Content" 2>/dev/null | xargs -I{} ./bin/run.js node list --parent-id {} || echo "Not found"
-./bin/run.js workflowy utils path-to-id --path "📝 Blog" 2>/dev/null | xargs -I{} ./bin/run.js node list --parent-id {} || echo "Not found"
-./bin/run.js workflowy utils path-to-id --path "📝 Writing" 2>/dev/null | xargs -I{} ./bin/run.js node list --parent-id {} || echo "Not found"
+./bin/run.js utils path-to-id --path "📝 Content" 2>/dev/null | xargs -I{} ./bin/run.js node list --parent-id {} || echo "Not found"
+./bin/run.js utils path-to-id --path "📝 Blog" 2>/dev/null | xargs -I{} ./bin/run.js node list --parent-id {} || echo "Not found"
+./bin/run.js utils path-to-id --path "📝 Writing" 2>/dev/null | xargs -I{} ./bin/run.js node list --parent-id {} || echo "Not found"
 ```
 
 ### Content Interview
@@ -441,14 +441,14 @@ Create a context reference in Metadata:
 ### Run Verification Checks
 
 ```bash
-# Check Workflowy CLI
-./bin/run.js node list 2>/dev/null && echo "✓ Workflowy CLI"
+# Check OutlineDB CLI
+./bin/run.js node list 2>/dev/null && echo "✓ OutlineDB CLI"
 
 # Check Metadata structure
-./bin/run.js workflowy utils path-to-id --path "Metadata,👥 People" | xargs -I{} ./bin/run.js node list --parent-id {} && echo "✓ People configured"
-./bin/run.js workflowy utils path-to-id --path "Metadata,📁 Projects" | xargs -I{} ./bin/run.js node list --parent-id {} && echo "✓ Projects configured"
-./bin/run.js workflowy utils path-to-id --path "Metadata,🎮 Hobbies Registry" | xargs -I{} ./bin/run.js node list --parent-id {} && echo "✓ Hobbies configured"
-./bin/run.js workflowy utils path-to-id --path "Metadata,Content" 2>/dev/null | xargs -I{} ./bin/run.js node list --parent-id {} && echo "✓ Content configured" || echo "- Content not configured (optional)"
+./bin/run.js utils path-to-id --path "Metadata,👥 People" | xargs -I{} ./bin/run.js node list --parent-id {} && echo "✓ People configured"
+./bin/run.js utils path-to-id --path "Metadata,📁 Projects" | xargs -I{} ./bin/run.js node list --parent-id {} && echo "✓ Projects configured"
+./bin/run.js utils path-to-id --path "Metadata,🎮 Hobbies Registry" | xargs -I{} ./bin/run.js node list --parent-id {} && echo "✓ Hobbies configured"
+./bin/run.js utils path-to-id --path "Metadata,Content" 2>/dev/null | xargs -I{} ./bin/run.js node list --parent-id {} && echo "✓ Content configured" || echo "- Content not configured (optional)"
 
 # Check iMCP
 claude mcp list 2>&1 | grep -q "imcp.*Connected" && echo "✓ iMCP connected"
@@ -464,7 +464,7 @@ GTD SETUP COMPLETE
 ════════════════════════════════════════
 
 Infrastructure:
-  Workflowy CLI:     ✓ Working
+  OutlineDB CLI:     ✓ Working
   GTD Paths:         ✓ Configured
   iMCP:              ✓ Connected
     - Calendar:      ✓ Working

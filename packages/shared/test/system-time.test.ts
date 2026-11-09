@@ -23,7 +23,7 @@ describe("one application UTC system time per unit of work", () => {
 	let connections: DatabaseConstructor.Database[];
 
 	beforeEach(() => {
-		tempDir = fs.mkdtempSync(join(os.tmpdir(), "workflowy-system-time-test-"));
+		tempDir = fs.mkdtempSync(join(os.tmpdir(), "outlinedb-system-time-test-"));
 		connections = [];
 	});
 

@@ -30,7 +30,7 @@ describe("node-resolver service", () => {
 	};
 
 	beforeEach(() => {
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-resolver-test-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-resolver-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
 		cacheService = new CacheService(testDatabase.db);

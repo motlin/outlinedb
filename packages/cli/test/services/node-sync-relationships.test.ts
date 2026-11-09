@@ -19,7 +19,7 @@ describe("NodeSyncService relationships", () => {
 	let cacheService: CacheService;
 
 	beforeEach(() => {
-		testDatabase = createTestDatabase(path.join(os.tmpdir(), `test-workflowy-${randomUUID()}.sqlite`));
+		testDatabase = createTestDatabase(path.join(os.tmpdir(), `test-outlinedb-${randomUUID()}.sqlite`));
 		cacheService = new CacheService(testDatabase.db);
 		cacheService.storeApiResponse(
 			[createApiNode({id: "target", name: "Target"}), createApiNode({id: "source", name: "Links to Target"})],

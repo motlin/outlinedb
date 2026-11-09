@@ -8,7 +8,7 @@ import type {Harness} from "./harness.js";
 let harness: Harness;
 
 beforeAll(() => {
-	harness = openHarness("workflowy-mcp-calendar-test-");
+	harness = openHarness("outlinedb-mcp-calendar-test-");
 	const {cache} = harness;
 	const insert = (id: string, name: string, parentId: string | null, calendar?: unknown) => {
 		seed(cache, id, name, parentId);

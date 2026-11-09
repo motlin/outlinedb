@@ -16,7 +16,7 @@ const OUTLINE: FakeNode[] = [
 ];
 
 beforeAll(() => {
-	harness = openHarness("workflowy-mcp-parity-test-");
+	harness = openHarness("outlinedb-mcp-parity-test-");
 });
 
 beforeEach(() => {

@@ -26,8 +26,8 @@ Look for nodes like "Personal", "Work", or similar top-level organizational node
 For each root node (e.g., Personal, Work), find the GTD-style lists:
 
 ```bash
-./bin/run.js workflowy utils path-to-id --path "Personal" --data-source api | xargs -I{} ./bin/run.js node list --parent-id {}
-./bin/run.js workflowy utils path-to-id --path "Work" --data-source api | xargs -I{} ./bin/run.js node list --parent-id {}
+./bin/run.js utils path-to-id --path "Personal" --data-source api | xargs -I{} ./bin/run.js node list --parent-id {}
+./bin/run.js utils path-to-id --path "Work" --data-source api | xargs -I{} ./bin/run.js node list --parent-id {}
 ```
 
 Look for nodes matching GTD concepts:
@@ -49,10 +49,10 @@ Look for nodes matching GTD concepts:
 ./bin/run.js node list --data-source api
 
 # List children of a path
-./bin/run.js workflowy utils path-to-id --path "📥 Inbox" --data-source api | xargs -I{} ./bin/run.js node list --parent-id {}
+./bin/run.js utils path-to-id --path "📥 Inbox" --data-source api | xargs -I{} ./bin/run.js node list --parent-id {}
 
 # Use cache for speed (may be stale)
-./bin/run.js workflowy utils path-to-id --path "📥 Inbox" --data-source cache | xargs -I{} ./bin/run.js node list --parent-id {}
+./bin/run.js utils path-to-id --path "📥 Inbox" --data-source cache | xargs -I{} ./bin/run.js node list --parent-id {}
 ```
 
 ### Creating Nodes
@@ -90,8 +90,8 @@ After configuration, verify paths work:
 
 ```bash
 # Test each configured path
-./bin/run.js workflowy utils path-to-id --path "<personal-inbox-path>" --data-source api | xargs -I{} ./bin/run.js node list --parent-id {}
-./bin/run.js workflowy utils path-to-id --path "<work-inbox-path>" --data-source api | xargs -I{} ./bin/run.js node list --parent-id {}
+./bin/run.js utils path-to-id --path "<personal-inbox-path>" --data-source api | xargs -I{} ./bin/run.js node list --parent-id {}
+./bin/run.js utils path-to-id --path "<work-inbox-path>" --data-source api | xargs -I{} ./bin/run.js node list --parent-id {}
 # ... etc
 ```
 

@@ -58,13 +58,13 @@ describe("LadderService.move", () => {
 
 	it("does not publish an event when the write fails", async () => {
 		const {service, events} = makeService({
-			moveNode: vi.fn<LadderServiceOptions["moveNode"]>(async () => Promise.reject(new Error("workflowy 500"))),
+			moveNode: vi.fn<LadderServiceOptions["moveNode"]>(async () => Promise.reject(new Error("upstream 500"))),
 		});
 		const seen: unknown[] = [];
 		events.subscribe((e) => {
 			seen.push(e);
 		});
-		await expect(service.move({root: "work", nodeId: "a", toTier: "2nd"})).rejects.toThrow("workflowy 500");
+		await expect(service.move({root: "work", nodeId: "a", toTier: "2nd"})).rejects.toThrow("upstream 500");
 		expect(seen).toStrictEqual([]);
 	});
 

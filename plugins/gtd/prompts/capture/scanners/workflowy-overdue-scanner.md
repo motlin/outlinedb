@@ -41,7 +41,7 @@ The metadata is stored in a hierarchical structure. First, check the root index 
 jq -r '.. | objects | select(.name == "🔄 Review") | .id' .llm/gtd/metadata/scanner-state.json 2>/dev/null
 ```
 
-Or look it up directly from the Workflowy CLI:
+Or look it up directly from the OutlineDB CLI:
 
 > Run `./bin/run.js node get --help` to verify available flags before constructing commands.
 

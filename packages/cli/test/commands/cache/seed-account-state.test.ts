@@ -18,7 +18,7 @@ describe("cache:seed-account-state command", () => {
 	let receivedHeaders: http.IncomingHttpHeaders[];
 
 	beforeEach(async () => {
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-seed-test-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-seed-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
 		originalDbPath = process.env.OUTLINEDB_DB_PATH;

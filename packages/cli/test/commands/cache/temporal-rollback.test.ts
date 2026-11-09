@@ -16,7 +16,7 @@ describe("cache:temporal-rollback command", () => {
 	let originalDbPath: string | undefined;
 
 	beforeEach(() => {
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-rollback-test-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-rollback-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
 		originalDbPath = process.env.OUTLINEDB_DB_PATH;

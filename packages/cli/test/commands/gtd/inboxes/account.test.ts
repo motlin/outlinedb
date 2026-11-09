@@ -16,7 +16,7 @@ describe("gtd inboxes account command", () => {
 
 	beforeEach(() => {
 		originalEnv = {...process.env};
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-account-inbox-test-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-account-inbox-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
 		process.env.OUTLINEDB_DB_PATH = testDbPath;

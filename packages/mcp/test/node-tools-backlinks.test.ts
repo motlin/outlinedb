@@ -42,7 +42,7 @@ const LINK = '<a href="https://workflowy.com/#/0123456789ab">t</a>';
 let harness: Harness;
 
 beforeAll(() => {
-	harness = openHarness("workflowy-mcp-backlinks-test-");
+	harness = openHarness("outlinedb-mcp-backlinks-test-");
 });
 
 afterAll(() => {

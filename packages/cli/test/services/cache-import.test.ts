@@ -67,7 +67,7 @@ describe("cache-import service", () => {
 		originalEpoch = process.env.WORKFLOWY_EPOCH;
 		process.env.WORKFLOWY_EPOCH = "0";
 
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-import-test-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-import-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
 	});

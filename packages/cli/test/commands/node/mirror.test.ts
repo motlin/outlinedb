@@ -35,7 +35,7 @@ describe("node:mirror command", () => {
 	beforeEach(() => {
 		originalEnv = {...process.env};
 
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-mirror-test-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-mirror-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
 		process.env.OUTLINEDB_DB_PATH = testDbPath;

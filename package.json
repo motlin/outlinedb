@@ -1,7 +1,7 @@
 {
 	"name": "outlinedb",
 	"version": "0.1.0",
-	"description": "CLI for managing Workflowy nodes via API",
+	"description": "CLI for OutlineDB, an outliner compatible with workflowy.com",
 	"keywords": [
 		"api",
 		"cli",

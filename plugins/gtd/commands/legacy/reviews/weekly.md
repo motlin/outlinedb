@@ -29,7 +29,7 @@ This returns all configured lists from Metadata. **Do not hardcode paths like "�
 Before starting, check Session Memory for incomplete reviews:
 
 ```bash
-./bin/run.js workflowy utils path-to-id --path "Metadata,🧠 Session Memory" --data-source api | xargs -I{} ./bin/run.js node list --parent-id {}
+./bin/run.js utils path-to-id --path "Metadata,🧠 Session Memory" --data-source api | xargs -I{} ./bin/run.js node list --parent-id {}
 ```
 
 Look for entries like `weekly-review: started, step X of 6`. If found, use AskUserQuestion:
@@ -66,8 +66,8 @@ Review folders are optional and may not be configured in all setups. Check if th
 
 ```bash
 # Review folders are optional - check if they exist before listing
-./bin/run.js workflowy utils path-to-id --path "🔄 Review" --data-source api 2>/dev/null | xargs -I{} ./bin/run.js node list --parent-id {}
-./bin/run.js workflowy utils path-to-id --path "🔄 Review" --data-source api 2>/dev/null | xargs -I{} ./bin/run.js node list --parent-id {}
+./bin/run.js utils path-to-id --path "🔄 Review" --data-source api 2>/dev/null | xargs -I{} ./bin/run.js node list --parent-id {}
+./bin/run.js utils path-to-id --path "🔄 Review" --data-source api 2>/dev/null | xargs -I{} ./bin/run.js node list --parent-id {}
 ```
 
 If Review folders exist and have items, present them for processing.
@@ -245,7 +245,7 @@ When user selects "Promote to Projects", invoke the `create-project.md` skill:
 Review goals from the Metadata node:
 
 ```bash
-./bin/run.js workflowy utils path-to-id --path "Metadata,🎯 Goals" --data-source api | xargs -I{} ./bin/run.js node list --parent-id {}
+./bin/run.js utils path-to-id --path "Metadata,🎯 Goals" --data-source api | xargs -I{} ./bin/run.js node list --parent-id {}
 ```
 
 For each goal, review its sub-structure:

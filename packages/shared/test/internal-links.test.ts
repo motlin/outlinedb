@@ -2,7 +2,7 @@ import {describe, expect, it} from "vite-plus/test";
 import {hasInternalLink, internalLinkShortIds} from "../src/workflowy/internal-links.js";
 
 describe("internalLinkShortIds", () => {
-	it("reads a short id from a workflowy link", () => {
+	it("reads a short id from a workflowy.com link", () => {
 		expect(internalLinkShortIds('<a href="https://workflowy.com/#/81df3e9581ea">a</a>')).toStrictEqual([
 			"81df3e9581ea",
 		]);

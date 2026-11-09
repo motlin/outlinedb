@@ -25,7 +25,7 @@ describe("QueryHelpers", () => {
 	let queryHelpers: QueryHelpers;
 
 	beforeEach(() => {
-		const tempDbPath = path.join(os.tmpdir(), `test-workflowy-${randomUUID()}.sqlite`);
+		const tempDbPath = path.join(os.tmpdir(), `test-outlinedb-${randomUUID()}.sqlite`);
 		testDatabase = createTestDatabase(tempDbPath);
 
 		queryHelpers = new QueryHelpers(testDatabase.db);

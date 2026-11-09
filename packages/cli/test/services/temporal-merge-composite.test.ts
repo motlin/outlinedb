@@ -37,7 +37,7 @@ describe("temporalMerge with a composite key", () => {
 	const from = formatTemporalTimestamp(new Date(Date.now() - 1000));
 
 	beforeEach(() => {
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-merge-test-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-merge-test-"));
 		testDatabase = createTestDatabase(path.join(tempDir, "test.sqlite"));
 	});
 	afterEach(() => {

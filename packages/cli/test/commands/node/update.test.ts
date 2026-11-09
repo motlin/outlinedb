@@ -22,7 +22,7 @@ describe("node update command", () => {
 	beforeEach(() => {
 		originalEnv = {...process.env};
 
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-update-test-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-update-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
 		process.env.OUTLINEDB_DB_PATH = testDbPath;

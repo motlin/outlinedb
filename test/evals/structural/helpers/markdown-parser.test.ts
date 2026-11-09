@@ -9,8 +9,8 @@ describe("markdown-parser", () => {
 		});
 
 		it("resolves three-word command", () => {
-			const result = resolveCommandId(["workflowy", "utils", "path-to-id"]);
-			expect(result).toStrictEqual({command: "workflowy:utils:path-to-id", remaining: []});
+			const result = resolveCommandId(["utils", "path-to-id"]);
+			expect(result).toStrictEqual({command: "utils:path-to-id", remaining: []});
 		});
 
 		it("resolves four-word command", () => {
@@ -77,11 +77,11 @@ describe("markdown-parser", () => {
 
 		it("handles pipe with xargs leading to second invocation", () => {
 			const content =
-				'./bin/run.js workflowy utils path-to-id --path "Next Actions" --data-source cache | xargs -I{} ./bin/run.js node list --parent-id {} --verbose';
+				'./bin/run.js utils path-to-id --path "Next Actions" --data-source cache | xargs -I{} ./bin/run.js node list --parent-id {} --verbose';
 			const analysis = parseMarkdownContent("test.md", content);
 			expect(analysis.cliInvocations).toStrictEqual([
 				{
-					command: "workflowy:utils:path-to-id",
+					command: "utils:path-to-id",
 					flags: ["path", "data-source"],
 					line: 1,
 					raw: content,
@@ -145,14 +145,14 @@ describe("markdown-parser", () => {
 			]);
 		});
 
-		it("handles three-word command (workflowy utils path-to-id)", () => {
-			const analysis = parseMarkdownContent("test.md", './bin/run.js workflowy utils path-to-id --path "Test"');
+		it("handles three-word command (utils path-to-id)", () => {
+			const analysis = parseMarkdownContent("test.md", './bin/run.js utils path-to-id --path "Test"');
 			expect(analysis.cliInvocations).toStrictEqual([
 				{
-					command: "workflowy:utils:path-to-id",
+					command: "utils:path-to-id",
 					flags: ["path"],
 					line: 1,
-					raw: './bin/run.js workflowy utils path-to-id --path "Test"',
+					raw: './bin/run.js utils path-to-id --path "Test"',
 				},
 			]);
 		});

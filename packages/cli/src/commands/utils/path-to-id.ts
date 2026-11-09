@@ -1,9 +1,9 @@
 import {WorkflowyApiClient} from "@outlinedb/shared/api";
 import {Command, Flags} from "@oclif/core";
-import {createDatabase} from "../../../db/index.js";
-import {CacheService} from "../../../services/cache.js";
-import {logger} from "../../../services/logger.js";
-import {PathResolutionService} from "../../../services/path-resolution.js";
+import {createDatabase} from "../../db/index.js";
+import {CacheService} from "../../services/cache.js";
+import {logger} from "../../services/logger.js";
+import {PathResolutionService} from "../../services/path-resolution.js";
 
 export default class PathToId extends Command {
 	static override description = "Resolve a Workflowy path to a node ID";

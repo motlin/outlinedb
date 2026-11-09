@@ -35,7 +35,7 @@ export function createEvalContext(options?: {mockServerPort?: number}): EvalCont
 		);
 	}
 
-	const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-eval-"));
+	const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-eval-"));
 	const dbPath = path.join(tempDir, "outlinedb.sqlite");
 	const llmDir = path.join(tempDir, ".llm");
 

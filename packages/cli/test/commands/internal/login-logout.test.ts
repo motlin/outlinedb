@@ -14,7 +14,7 @@ describe("internal login and logout", () => {
 	const savedEnv = {...process.env};
 
 	beforeEach(() => {
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-login-"));
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-login-"));
 		sessionFile = path.join(tempDir, "workflowy-session");
 		process.env.OUTLINEDB_SESSION_FILE = sessionFile;
 		process.env.WORKFLOWY_USERNAME = "alice@example.com";
