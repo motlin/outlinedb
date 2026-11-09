@@ -1,6 +1,6 @@
-import type {NewNodeContent, NewNodeMetadata} from "@workflowy/shared/db";
-import type {WorkflowyNode} from "@workflowy/shared/types";
-import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@workflowy/shared/temporal";
+import type {NewNodeContent, NewNodeMetadata} from "@outlinedb/shared/db";
+import type {WorkflowyNode} from "@outlinedb/shared/types";
+import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@outlinedb/shared/temporal";
 import crypto from "node:crypto";
 
 export interface TestNode {

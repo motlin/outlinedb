@@ -1,4 +1,4 @@
-import {stripHtmlTags} from "@workflowy/shared/html";
+import {stripHtmlTags} from "@outlinedb/shared/html";
 import {useQueryClient} from "@tanstack/react-query";
 import type {QueryClient} from "@tanstack/react-query";
 import {useStableNavigate} from "./use-stable-navigate.js";

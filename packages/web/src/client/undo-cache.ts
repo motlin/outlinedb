@@ -12,7 +12,7 @@ import {
 import {pendingMoves} from "./pending-moves.js";
 import {tagColorKeys} from "./tag-color-keys.js";
 import type {UndoOp} from "./undo-history.js";
-import {HOME_TARGET} from "@workflowy/shared/types";
+import {HOME_TARGET} from "@outlinedb/shared/types";
 
 /** A removed row with the cached children lists of its subtree, as they stood before the delete. */
 interface RemovedRow {

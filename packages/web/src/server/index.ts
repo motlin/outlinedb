@@ -6,7 +6,7 @@ import {inProcessStore} from "./store.js";
 import {httpLoggingEnabled, loggingFetch} from "./http-logger.js";
 import {createServerContext} from "./node-context.js";
 import {ladderSocketHandlers} from "./ladder-socket.js";
-import {accountVersion, expansionVersion, readAccountRows, readExpansion} from "@workflowy/shared/cache";
+import {accountVersion, expansionVersion, readAccountRows, readExpansion} from "@outlinedb/shared/cache";
 import {TreeEventBus, accountChangePublisher, expansionChangePublisher, withTreeChangePublish} from "./node-events.js";
 import {nodeEventsSocketHandlers} from "./node-events-socket.js";
 import {createDecisionsApp} from "./routes/decisions.js";
@@ -14,7 +14,7 @@ import {resolvePort} from "./port.js";
 import {warmTreeSnapshot} from "./tree-snapshot.js";
 import {nodeSignalSocket, startUpstreamSignal} from "./upstream-signal.js";
 
-process.title = "workflowy-web-server";
+process.title = "outlinedb-web-server";
 
 if (httpLoggingEnabled(process.env)) {
 	globalThis.fetch = loggingFetch(globalThis.fetch, (line) => {

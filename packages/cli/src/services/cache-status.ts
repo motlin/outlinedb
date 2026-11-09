@@ -1,8 +1,8 @@
-import {countStrandedRows} from "@workflowy/shared/cache";
-import type {StrandedRowCounts} from "@workflowy/shared/cache";
-import {backupImports, nodeContent, nodeMetadata} from "@workflowy/shared/db";
-import type * as schema from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {countStrandedRows} from "@outlinedb/shared/cache";
+import type {StrandedRowCounts} from "@outlinedb/shared/cache";
+import {backupImports, nodeContent, nodeMetadata} from "@outlinedb/shared/db";
+import type * as schema from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {and, count, desc, eq, isNotNull, isNull} from "drizzle-orm";
 import type {BetterSQLite3Database} from "drizzle-orm/better-sqlite3";
 import fs from "node:fs";

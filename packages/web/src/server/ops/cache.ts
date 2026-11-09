@@ -1,5 +1,5 @@
-import {backupImports, nodeContent, nodeMetadata} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {backupImports, nodeContent, nodeMetadata} from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {and, count, desc, eq, isNotNull, isNull, max} from "drizzle-orm";
 import {z} from "zod";
 import {defineOp, ok} from "./define.js";

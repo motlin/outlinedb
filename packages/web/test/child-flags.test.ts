@@ -3,9 +3,9 @@ import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
-import * as schema from "@workflowy/shared/db";
-import {mirrors, nodeContent, nodeMetadata, referencesRoots} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import * as schema from "@outlinedb/shared/db";
+import {mirrors, nodeContent, nodeMetadata, referencesRoots} from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {childFlags, childFlagsFromRows} from "../src/server/backlinks.js";
 
 describe("childFlagsFromRows", () => {

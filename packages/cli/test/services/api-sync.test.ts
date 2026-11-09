@@ -1,6 +1,6 @@
-import {WorkflowyApiClient} from "@workflowy/shared/api";
-import {mirrors, nodeContent, nodeMetadata} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {WorkflowyApiClient} from "@outlinedb/shared/api";
+import {mirrors, nodeContent, nodeMetadata} from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {and, eq} from "drizzle-orm";
 import {randomUUID} from "node:crypto";
 import os from "node:os";

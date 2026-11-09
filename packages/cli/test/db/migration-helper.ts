@@ -1,5 +1,5 @@
 import {inject} from "vite-plus/test";
-import * as schema from "@workflowy/shared/db";
+import * as schema from "@outlinedb/shared/db";
 import type {
 	NewAiMetadata,
 	NewBackupImport,
@@ -9,7 +9,7 @@ import type {
 	NewNodeMetadata,
 	NewReferencesRoot,
 	NewS3File,
-} from "@workflowy/shared/db";
+} from "@outlinedb/shared/db";
 import {splitNodeIntoContentAndMetadata} from "../helpers/node-fixtures.js";
 import type {TestNode} from "../helpers/node-fixtures.js";
 import type Database from "better-sqlite3";

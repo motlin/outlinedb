@@ -1,6 +1,6 @@
 import {useCallback, useEffect, useRef, useState} from "react";
 import type {KeyboardEvent, ReactNode} from "react";
-import {formatPillLabel} from "@workflowy/shared";
+import {formatPillLabel} from "@outlinedb/shared";
 import {dateFormatOptions, timeFormatOptions, weekStartPatch} from "../date-settings.js";
 import type {FormatOption} from "../date-settings.js";
 import {useFeatureOn, useFeatures} from "../hooks/use-features.js";

@@ -1,4 +1,4 @@
-import {NodeReader} from "@workflowy/shared/cache";
+import {NodeReader} from "@outlinedb/shared/cache";
 import {describe, expect, it} from "vite-plus/test";
 import {buildTestDb, bulkImportWithWatermarkGuard, loadFixtureBackup} from "./helpers/round-trip-helpers.js";
 

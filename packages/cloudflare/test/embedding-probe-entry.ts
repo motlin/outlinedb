@@ -1,6 +1,6 @@
-import {CacheService} from "@workflowy/shared/cache";
-import * as dbSchema from "@workflowy/shared/db";
-import {MemoryEmbeddingIndex} from "@workflowy/web/server-app";
+import {CacheService} from "@outlinedb/shared/cache";
+import * as dbSchema from "@outlinedb/shared/db";
+import {MemoryEmbeddingIndex} from "@outlinedb/web/server-app";
 import {drizzle} from "drizzle-orm/durable-sqlite";
 import type {Embedder} from "../src/embeddings";
 import {UserStore} from "../src/user-store";

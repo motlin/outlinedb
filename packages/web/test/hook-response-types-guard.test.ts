@@ -106,7 +106,7 @@ describe("client modules read op responses as schema-inferred types", () => {
 					'import {type Mixed, value} from "./mirror-menu.js";',
 					'import type {NodeResponse} from "../../node-types.js";',
 					'import type {SwitcherResponse} from "../../server/switcher-search.js";',
-					'import type {Star} from "@workflowy/shared";',
+					'import type {Star} from "@outlinedb/shared";',
 				].join("\n"),
 			),
 		]).toStrictEqual(["Copy", "Renamed", "Mixed", "value"]);

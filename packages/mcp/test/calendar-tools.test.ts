@@ -1,6 +1,6 @@
 import {afterAll, afterEach, beforeAll, describe, expect, it, vi} from "vite-plus/test";
-import {storeInternalMetadata} from "@workflowy/shared/cache";
-import {calendarAdoptWarning, WorkflowyInternalAdapter} from "@workflowy/shared/internal";
+import {storeInternalMetadata} from "@outlinedb/shared/cache";
+import {calendarAdoptWarning, WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import {fakeNode, stubPublicApi} from "./fake-upstream.js";
 import {callTool, openHarness, seed} from "./harness.js";
 import type {Harness} from "./harness.js";

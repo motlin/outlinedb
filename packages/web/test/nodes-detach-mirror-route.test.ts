@@ -4,17 +4,17 @@ import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {Hono} from "hono";
 import {join} from "node:path";
-import type * as SharedCache from "@workflowy/shared/cache";
-import * as schema from "@workflowy/shared/db";
-import type {WorkflowyInternalAdapter} from "@workflowy/shared/internal";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
-import type {WorkflowyNode} from "@workflowy/shared/types";
+import type * as SharedCache from "@outlinedb/shared/cache";
+import * as schema from "@outlinedb/shared/db";
+import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import type {WorkflowyNode} from "@outlinedb/shared/types";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
 import {httpAppFor} from "./http-app-for.js";
 
 const deleteNode = vi.hoisted(() => vi.fn<SharedCache.WorkflowyWriteThroughClient["deleteNode"]>());
 
-vi.mock("@workflowy/shared/cache", async (importOriginal) => {
+vi.mock("@outlinedb/shared/cache", async (importOriginal) => {
 	const actual = await importOriginal<typeof SharedCache>();
 	return {
 		...actual,
@@ -24,7 +24,7 @@ vi.mock("@workflowy/shared/cache", async (importOriginal) => {
 	};
 });
 
-const {CacheService} = await import("@workflowy/shared/cache");
+const {CacheService} = await import("@outlinedb/shared/cache");
 
 const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 

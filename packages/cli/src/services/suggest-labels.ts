@@ -1,8 +1,8 @@
-import {ancestorChain} from "@workflowy/shared/cache";
-import type {CacheService} from "@workflowy/shared/cache";
-import {dayNameDate} from "@workflowy/shared/calendar-lookup";
-import {stripHtmlTags} from "@workflowy/shared/html";
-import {findTags} from "@workflowy/shared/tags";
+import {ancestorChain} from "@outlinedb/shared/cache";
+import type {CacheService} from "@outlinedb/shared/cache";
+import {dayNameDate} from "@outlinedb/shared/calendar-lookup";
+import {stripHtmlTags} from "@outlinedb/shared/html";
+import {findTags} from "@outlinedb/shared/tags";
 import {buildShortlistRequests, buildVerifyRequest, selectShortlist} from "./clef-requests.js";
 import type {ChoiceAnswer, ClefClient, ClefModel, ClefState, ShortlistEntry} from "./clef-requests.js";
 import type {PoolLabel} from "./label-pool.js";

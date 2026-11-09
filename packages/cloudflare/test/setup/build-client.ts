@@ -9,6 +9,6 @@ const indexHtml = new URL("../../../web/dist/client/index.html", import.meta.url
  */
 export function setup(): void {
 	if (!existsSync(indexHtml)) {
-		execFileSync("vp", ["run", "--filter", "@workflowy/web", "build"], {stdio: "inherit"});
+		execFileSync("vp", ["run", "--filter", "@outlinedb/web", "build"], {stdio: "inherit"});
 	}
 }

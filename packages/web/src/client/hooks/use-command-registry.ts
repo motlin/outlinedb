@@ -3,7 +3,7 @@ import {makeTableDeps} from "./use-table-actions.js";
 import {cellDelete, duplicateColumn, moveCell, structureTable} from "../table-actions.js";
 import type {TableDeps} from "../table-actions.js";
 import {locateCell} from "../table-cache.js";
-import {HOME_TARGET} from "@workflowy/shared/types";
+import {HOME_TARGET} from "@outlinedb/shared/types";
 import {useCallback} from "react";
 import {flushSync} from "react-dom";
 import {notifyManager, useQueryClient} from "@tanstack/react-query";

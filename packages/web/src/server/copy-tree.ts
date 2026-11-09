@@ -1,6 +1,6 @@
-import {NodeTreeReader} from "@workflowy/shared/cache";
-import type {CacheService, NodeTree} from "@workflowy/shared/cache";
-import type {NewTree} from "@workflowy/shared/internal";
+import {NodeTreeReader} from "@outlinedb/shared/cache";
+import type {CacheService, NodeTree} from "@outlinedb/shared/cache";
+import type {NewTree} from "@outlinedb/shared/internal";
 
 /** The largest subtree a detach copies (upstream's `Detaching mirror subtrees containing more than 2000 items` guard). */
 export const MAX_COPY_ITEMS = 2000;

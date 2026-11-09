@@ -1,7 +1,7 @@
-import {applyRows, NodeReader, runUnitOfWork} from "@workflowy/shared/cache";
+import {applyRows, NodeReader, runUnitOfWork} from "@outlinedb/shared/cache";
 import {eq, sql} from "drizzle-orm";
-import {nodeContent, nodeMetadata} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {nodeContent, nodeMetadata} from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {describe, expect, it} from "vite-plus/test";
 import {
 	buildTestDb,

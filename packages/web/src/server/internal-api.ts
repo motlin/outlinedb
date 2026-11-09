@@ -1,6 +1,6 @@
 import type {Context} from "hono";
 import {createMiddleware} from "hono/factory";
-import type {WorkflowyInternalAdapter} from "@workflowy/shared/internal";
+import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import type {AppEnv} from "./context.js";
 
 import {INTERNAL_API_NOT_CONFIGURED} from "./internal-api-error.js";

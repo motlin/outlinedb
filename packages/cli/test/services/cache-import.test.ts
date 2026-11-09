@@ -1,6 +1,6 @@
-import {countStrandedRows, currentBacklinkItems, TRANSACTION_TIMEOUT_MS} from "@workflowy/shared/cache";
-import {mirrors, nodeContent, nodeMetadata} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@workflowy/shared/temporal";
+import {countStrandedRows, currentBacklinkItems, TRANSACTION_TIMEOUT_MS} from "@outlinedb/shared/cache";
+import {mirrors, nodeContent, nodeMetadata} from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@outlinedb/shared/temporal";
 import {and, eq} from "drizzle-orm";
 import fs from "node:fs";
 import os from "node:os";

@@ -8,10 +8,10 @@ import {join} from "node:path";
 import {createElement} from "react";
 import {renderToStaticMarkup} from "react-dom/server";
 import {afterEach, beforeEach, describe, expect, it, vi} from "vite-plus/test";
-import type * as SharedApi from "@workflowy/shared/api";
-import type * as SharedCache from "@workflowy/shared/cache";
-import * as schema from "@workflowy/shared/db";
-import type {WorkflowyNode} from "@workflowy/shared/types";
+import type * as SharedApi from "@outlinedb/shared/api";
+import type * as SharedCache from "@outlinedb/shared/cache";
+import * as schema from "@outlinedb/shared/db";
+import type {WorkflowyNode} from "@outlinedb/shared/types";
 import type {NodeResponse} from "../src/node-types.js";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
 import {
@@ -53,19 +53,19 @@ vi.mock("../src/client/stores/outline.js", () => ({
 	activePaneView: () => ({expandedIds: new Set(), showCompleted: true, replaceExpanded() {}}),
 }));
 
-vi.mock("@workflowy/shared/cache", async (importOriginal) => {
+vi.mock("@outlinedb/shared/cache", async (importOriginal) => {
 	const actual = await importOriginal<typeof SharedCache>();
 	const {FakeWriteThroughClient} = await import("./helpers/fake-workflowy.js");
 	return {...actual, WorkflowyWriteThroughClient: FakeWriteThroughClient};
 });
 
-vi.mock("@workflowy/shared/api", async (importOriginal) => {
+vi.mock("@outlinedb/shared/api", async (importOriginal) => {
 	const actual = await importOriginal<typeof SharedApi>();
 	const {FakeApiClient} = await import("./helpers/fake-workflowy.js");
 	return {...actual, WorkflowyApiClient: FakeApiClient};
 });
 
-const {CacheService} = await import("@workflowy/shared/cache");
+const {CacheService} = await import("@outlinedb/shared/cache");
 const {
 	fetchChildren,
 	fetchNode,

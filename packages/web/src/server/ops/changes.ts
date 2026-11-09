@@ -1,5 +1,5 @@
 import {z} from "zod";
-import {ChangeDetector, parseSince} from "@workflowy/shared/changes";
+import {ChangeDetector, parseSince} from "@outlinedb/shared/changes";
 import {defineOp, fail, ok, toJson} from "./define.js";
 
 const NodeChangeSchema = z.strictObject({

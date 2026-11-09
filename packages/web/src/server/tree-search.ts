@@ -1,5 +1,5 @@
-import {matchNested, parseNestedQuery, parseQuery} from "@workflowy/shared/search";
-import type {MatchResult, SearchItem} from "@workflowy/shared/search";
+import {matchNested, parseNestedQuery, parseQuery} from "@outlinedb/shared/search";
+import type {MatchResult, SearchItem} from "@outlinedb/shared/search";
 
 /** A live node as loaded for tree search. Timestamps are epoch milliseconds. */
 export interface TreeSearchRow {

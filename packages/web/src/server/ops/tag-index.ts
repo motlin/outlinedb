@@ -12,10 +12,10 @@
  * `fallback=0`.
  */
 
-import {nodeContent, nodeMetadata, nodeTags} from "@workflowy/shared/db";
-import {itemTags} from "@workflowy/shared/tags";
-import type {TaggedText} from "@workflowy/shared/tags";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {nodeContent, nodeMetadata, nodeTags} from "@outlinedb/shared/db";
+import {itemTags} from "@outlinedb/shared/tags";
+import type {TaggedText} from "@outlinedb/shared/tags";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {and, eq, sql} from "drizzle-orm";
 import type {SQL} from "drizzle-orm";
 import {z} from "zod";

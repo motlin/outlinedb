@@ -1,5 +1,5 @@
 {
-	"name": "@workflowy/cloudflare",
+	"name": "@outlinedb/cloudflare",
 	"version": "0.0.0",
 	"private": true,
 	"description": "Cloudflare Worker host for the Workflowy web app",
@@ -12,9 +12,9 @@
 	"dependencies": {
 		"@cloudflare/workers-oauth-provider": "^1.2.4",
 		"@modelcontextprotocol/sdk": "^1.32.2",
-		"@workflowy/mcp": "workspace:*",
-		"@workflowy/shared": "workspace:*",
-		"@workflowy/web": "workspace:*",
+		"@outlinedb/mcp": "workspace:*",
+		"@outlinedb/shared": "workspace:*",
+		"@outlinedb/web": "workspace:*",
 		"better-auth": "1.7.18",
 		"drizzle-orm": "^0.45.3",
 		"hono": "^4.13.14",

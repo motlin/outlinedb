@@ -1,8 +1,8 @@
-import {buildEmbedTexts, filterEmbeddable, newSystemTimestamp, PathBuilder} from "@workflowy/shared/cache";
-import type {AppDatabase} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
-import type {Awaitable, EmbeddingIndex} from "@workflowy/web/server-app";
-import {changeWatermark} from "@workflowy/web/server-app";
+import {buildEmbedTexts, filterEmbeddable, newSystemTimestamp, PathBuilder} from "@outlinedb/shared/cache";
+import type {AppDatabase} from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import type {Awaitable, EmbeddingIndex} from "@outlinedb/web/server-app";
+import {changeWatermark} from "@outlinedb/web/server-app";
 import type {JobAlarm} from "./alarm-schedule";
 import type {Embedder} from "./embeddings";
 

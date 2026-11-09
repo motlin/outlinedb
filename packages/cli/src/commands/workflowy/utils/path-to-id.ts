@@ -1,4 +1,4 @@
-import {WorkflowyApiClient} from "@workflowy/shared/api";
+import {WorkflowyApiClient} from "@outlinedb/shared/api";
 import {Command, Flags} from "@oclif/core";
 import {createDatabase} from "../../../db/index.js";
 import {CacheService} from "../../../services/cache.js";

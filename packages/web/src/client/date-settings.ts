@@ -1,5 +1,5 @@
-import {DATE_FORMATS_SHORT, TIME_FORMATS, formatPillLabel} from "@workflowy/shared";
-import type {TimeAttrs} from "@workflowy/shared";
+import {DATE_FORMATS_SHORT, TIME_FORMATS, formatPillLabel} from "@outlinedb/shared";
+import type {TimeAttrs} from "@outlinedb/shared";
 
 export interface DateSettings {
 	dateFormat: string;

@@ -17,7 +17,7 @@ When no web app is available, use an Artifact only where claude.ai is reachable 
 
 **Long walks switch surfaces.** When a walk will put more than about 8 questions to the user, stop using `AskUserQuestion` and present all the items on one decision page instead, chosen by the ladder above (local web app, then Artifact, then static HTML). Count the questions the walk would ask, not the items scanned. Walks of 8 or fewer stay in `AskUserQuestion`. The commands that walk items (`skills/due-item-walk.md`, `commands/inbox.md`, `commands/review/daily/meetings.md`) apply this threshold.
 
-Every UI a review depends on must have checked-in source, a reproducible generator/build, and tests. Never hand-build a replacement in a published Artifact. For the ladder, `rebalance-ui.mts` generates the local app link or launcher by default; `vp run --filter @workflowy/web build` builds the React route. Explicit `--html` generates the tested Queue template for the fallback.
+Every UI a review depends on must have checked-in source, a reproducible generator/build, and tests. Never hand-build a replacement in a published Artifact. For the ladder, `rebalance-ui.mts` generates the local app link or launcher by default; `vp run --filter @outlinedb/web build` builds the React route. Explicit `--html` generates the tested Queue template for the fallback.
 
 ### Decision page
 

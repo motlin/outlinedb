@@ -1,4 +1,4 @@
-import {getEndingTagText} from "@workflowy/shared/tags";
+import {getEndingTagText} from "@outlinedb/shared/tags";
 import {splitHtml} from "./rich-text.js";
 
 /**

@@ -2,8 +2,8 @@ import {useQuery, useQueryClient} from "@tanstack/react-query";
 import {useEffect, useLayoutEffect, useRef, useState} from "react";
 import {createPortal} from "react-dom";
 import {useStableNavigate} from "../hooks/use-stable-navigate.js";
-import {dateId, dayTimestamp, formatPillLabel, guessDates, presetDate, stripModel} from "@workflowy/shared";
-import type {CalendarLevel, DatePreset} from "@workflowy/shared";
+import {dateId, dayTimestamp, formatPillLabel, guessDates, presetDate, stripModel} from "@outlinedb/shared";
+import type {CalendarLevel, DatePreset} from "@outlinedb/shared";
 import type {CalendarDotsResponse, NodeResponse} from "../../node-types.js";
 import {prefetchCalendarDays, useCalendarEventDays} from "../hooks/use-calendar-event-days.js";
 import {

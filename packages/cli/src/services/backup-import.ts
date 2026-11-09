@@ -1,4 +1,4 @@
-import {BackupFileSchema} from "@workflowy/shared/schemas";
+import {BackupFileSchema} from "@outlinedb/shared/schemas";
 import type {createDatabase} from "../db/index.js";
 import {CacheService} from "./cache.js";
 import type {BackupSystemTime} from "./cache-import.js";

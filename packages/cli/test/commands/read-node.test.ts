@@ -1,5 +1,5 @@
 import {beforeEach, vi, afterEach, describe, expect, it} from "vite-plus/test";
-import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@workflowy/shared/temporal";
+import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@outlinedb/shared/temporal";
 import {captureOutput} from "@oclif/test";
 import fs from "node:fs";
 import os from "node:os";

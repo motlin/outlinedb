@@ -3,7 +3,7 @@ import {captureOutput} from "@oclif/test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import {WorkflowyInternalAdapter} from "@workflowy/shared/internal";
+import {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import CalendarBackfillMetadata from "../../../src/commands/calendar/backfill-metadata.js";
 import {cleanupTestDatabase, createTestDatabase} from "../../db/migration-helper.js";
 import type {TestDatabase} from "../../db/migration-helper.js";

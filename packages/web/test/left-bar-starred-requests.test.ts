@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import {afterEach, beforeEach, describe, expect, it, vi} from "vite-plus/test";
 import type {Root} from "react-dom/client";
-import type {Star} from "@workflowy/shared";
+import type {Star} from "@outlinedb/shared";
 import type {NodeResponse} from "../src/node-types.js";
 
 declare global {

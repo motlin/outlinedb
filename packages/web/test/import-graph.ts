@@ -40,8 +40,8 @@ function resolveSpecifier(specifier: string, importer: string): string | undefin
 	if (specifier.startsWith(".")) {
 		return resolveFile(path.resolve(path.dirname(importer), specifier));
 	}
-	if (specifier === "@workflowy/shared" || specifier.startsWith("@workflowy/shared/")) {
-		const subpath = `.${specifier.slice("@workflowy/shared".length)}`;
+	if (specifier === "@outlinedb/shared" || specifier.startsWith("@outlinedb/shared/")) {
+		const subpath = `.${specifier.slice("@outlinedb/shared".length)}`;
 		const entry = sharedExports[subpath];
 		if (entry === undefined) {
 			throw new Error(`${importer} imports unexported ${specifier}`);

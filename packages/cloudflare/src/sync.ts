@@ -8,12 +8,12 @@ import {
 	runUnitOfWork,
 	seedAccount,
 	unitOfWorkSignal,
-} from "@workflowy/shared/cache";
-import type {ApiImportState, ImportApiResult, StoredAccount} from "@workflowy/shared/cache";
-import type {TreeSnapshot} from "@workflowy/shared/api";
-import type {AppDatabase} from "@workflowy/shared/db";
-import {TreeResyncRequired} from "@workflowy/shared/internal";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+} from "@outlinedb/shared/cache";
+import type {ApiImportState, ImportApiResult, StoredAccount} from "@outlinedb/shared/cache";
+import type {TreeSnapshot} from "@outlinedb/shared/api";
+import type {AppDatabase} from "@outlinedb/shared/db";
+import {TreeResyncRequired} from "@outlinedb/shared/internal";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import type {JobAlarm} from "./alarm-schedule";
 import {nodeBatches} from "./export-stream";
 

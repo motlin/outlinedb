@@ -1,9 +1,9 @@
-import {backlinkItemParent, currentBacklinkItems, effectiveCompletedAt} from "@workflowy/shared/cache";
-import {aiMetadata, mirrors, nodeContent, nodeMetadata, referencesRoots} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {backlinkItemParent, currentBacklinkItems, effectiveCompletedAt} from "@outlinedb/shared/cache";
+import {aiMetadata, mirrors, nodeContent, nodeMetadata, referencesRoots} from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {and, eq, inArray, sql} from "drizzle-orm";
 import type {SQL} from "drizzle-orm";
-import {internalLinkShortIds} from "@workflowy/shared/workflowy";
+import {internalLinkShortIds} from "@outlinedb/shared/workflowy";
 import {backlinksLabel} from "../backlinks-label.js";
 import type {ServerContext} from "./context.js";
 

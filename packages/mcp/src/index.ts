@@ -1,6 +1,6 @@
 import {McpServer} from "@modelcontextprotocol/sdk/server/mcp.js";
 import {StdioServerTransport} from "@modelcontextprotocol/sdk/server/stdio.js";
-import {createServerContext, inProcessStore} from "@workflowy/web/node-host";
+import {createServerContext, inProcessStore} from "@outlinedb/web/node-host";
 import {registerOutlineTools} from "./register.js";
 
 process.title = "outlinedb-mcp";

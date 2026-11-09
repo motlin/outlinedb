@@ -1,6 +1,6 @@
-import {CacheService, PathBuilder} from "@workflowy/shared/cache";
-import type {TextSearchOptions} from "@workflowy/shared/cache";
-import type * as schema from "@workflowy/shared/db";
+import {CacheService, PathBuilder} from "@outlinedb/shared/cache";
+import type {TextSearchOptions} from "@outlinedb/shared/cache";
+import type * as schema from "@outlinedb/shared/db";
 import type {BetterSQLite3Database} from "drizzle-orm/better-sqlite3";
 import {logger} from "./logger.js";
 

@@ -1,17 +1,17 @@
 import {Args, Command, Flags} from "@oclif/core";
 import fs from "node:fs";
 import path from "node:path";
-import {WorkflowyApiClient, WorkflowyInternalClient} from "@workflowy/shared/api";
-import type {InternalSession} from "@workflowy/shared/api";
+import {WorkflowyApiClient, WorkflowyInternalClient} from "@outlinedb/shared/api";
+import type {InternalSession} from "@outlinedb/shared/api";
 import {
 	CALENDAR_ID_NAMESPACE,
 	WorkflowyInternalAdapter,
 	calendarNodeId,
 	editOp,
 	moveOp,
-} from "@workflowy/shared/internal";
-import type {CalendarIdLevel, EnsuredCalendarDay} from "@workflowy/shared/internal";
-import {readInternalAuth} from "@workflowy/shared/node";
+} from "@outlinedb/shared/internal";
+import type {CalendarIdLevel, EnsuredCalendarDay} from "@outlinedb/shared/internal";
+import {readInternalAuth} from "@outlinedb/shared/node";
 import {isDeepStrictEqual} from "node:util";
 import {
 	WorkflowyWriteThroughClient,
@@ -19,9 +19,9 @@ import {
 	readNodeInternalMetadata,
 	normalizeLayoutMode,
 	storeTreeTxId,
-} from "@workflowy/shared/cache";
+} from "@outlinedb/shared/cache";
 import {sql} from "drizzle-orm";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";
 

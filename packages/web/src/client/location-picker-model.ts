@@ -1,6 +1,6 @@
-import {mostRecent} from "@workflowy/shared";
-import type {Star} from "@workflowy/shared";
-import {stripHtmlTags} from "@workflowy/shared/html";
+import {mostRecent} from "@outlinedb/shared";
+import type {Star} from "@outlinedb/shared";
+import {stripHtmlTags} from "@outlinedb/shared/html";
 
 // Upstream's location-picker row list (results list `KM` + the bottomSticky create footer).
 // An empty query lists recent then starred locations above two disabled create rows; a query

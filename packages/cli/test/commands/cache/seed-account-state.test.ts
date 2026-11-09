@@ -1,5 +1,5 @@
 import {afterEach, beforeEach, describe, expect, it} from "vite-plus/test";
-import {readAccountState, replaceExpansion, runUnitOfWork, writeAccountSnapshot} from "@workflowy/shared/cache";
+import {readAccountState, replaceExpansion, runUnitOfWork, writeAccountSnapshot} from "@outlinedb/shared/cache";
 import {captureOutput} from "@oclif/test";
 import fs from "node:fs";
 import http from "node:http";

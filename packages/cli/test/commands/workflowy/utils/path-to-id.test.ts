@@ -1,5 +1,5 @@
 import {it, afterEach, expect, describe, beforeEach} from "vite-plus/test";
-import {nodeContent, nodeMetadata} from "@workflowy/shared/db";
+import {nodeContent, nodeMetadata} from "@outlinedb/shared/db";
 import {captureOutput} from "@oclif/test";
 import fs from "node:fs";
 import os from "node:os";

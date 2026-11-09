@@ -5,11 +5,11 @@
  * exactly those with `system_from` or a closing `system_to` after the cache's last system time.
  */
 
-import {TRANSACTION_TIMEOUT_MS} from "@workflowy/shared/cache";
-import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@workflowy/shared/temporal";
+import {TRANSACTION_TIMEOUT_MS} from "@outlinedb/shared/cache";
+import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@outlinedb/shared/temporal";
 import {sql} from "drizzle-orm";
 import type {SQL} from "drizzle-orm";
-import type {AppDatabase} from "@workflowy/shared/db";
+import type {AppDatabase} from "@outlinedb/shared/db";
 
 type Database = AppDatabase;
 

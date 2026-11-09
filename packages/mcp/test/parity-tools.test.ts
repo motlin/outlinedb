@@ -1,5 +1,5 @@
 import {afterAll, beforeAll, beforeEach, describe, expect, it} from "vite-plus/test";
-import type {StoreClient} from "@workflowy/web/node-host";
+import type {StoreClient} from "@outlinedb/web/node-host";
 import {callTool, openHarness} from "./harness.js";
 import type {Harness} from "./harness.js";
 import {fakeNode, stubPublicApi} from "./fake-upstream.js";

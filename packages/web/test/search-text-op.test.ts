@@ -3,9 +3,9 @@ import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
 import {afterEach, describe, expect, it} from "vite-plus/test";
-import * as schema from "@workflowy/shared/db";
-import {nodeContent, nodeMetadata} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import * as schema from "@outlinedb/shared/db";
+import {nodeContent, nodeMetadata} from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {searchText} from "../src/server/ops/search.js";
 import type {ServerContext} from "../src/server/context.js";
 

@@ -1,7 +1,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from "vite-plus/test";
 import {captureOutput} from "@oclif/test";
-import {storeInternalMetadata} from "@workflowy/shared/cache";
-import {WorkflowyInternalAdapter} from "@workflowy/shared/internal";
+import {storeInternalMetadata} from "@outlinedb/shared/cache";
+import {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";

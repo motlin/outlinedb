@@ -1,10 +1,10 @@
 import {z} from "zod";
-import {inIds, notAMirror, PathBuilder} from "@workflowy/shared/cache";
+import {inIds, notAMirror, PathBuilder} from "@outlinedb/shared/cache";
 import {and, eq} from "drizzle-orm";
-import {nodeContent} from "@workflowy/shared/db";
-import type {AppDatabase} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
-import {stripHtmlTags} from "@workflowy/shared/html";
+import {nodeContent} from "@outlinedb/shared/db";
+import type {AppDatabase} from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {stripHtmlTags} from "@outlinedb/shared/html";
 import type {EmbeddingNeighbour} from "../embedding-index.js";
 import {defineOp, fail, ok} from "./define.js";
 

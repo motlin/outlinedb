@@ -1,6 +1,6 @@
-import {NodeTreeReader} from "@workflowy/shared/cache";
-import type {NodeTree} from "@workflowy/shared/cache";
-import {isShortId} from "@workflowy/shared/workflowy";
+import {NodeTreeReader} from "@outlinedb/shared/cache";
+import type {NodeTree} from "@outlinedb/shared/cache";
+import {isShortId} from "@outlinedb/shared/workflowy";
 import {Flags} from "@oclif/core";
 import {logger} from "../../services/logger.js";
 import {htmlToAnsi} from "../../utils/html-to-ansi.js";

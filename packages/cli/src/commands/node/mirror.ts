@@ -1,13 +1,13 @@
-import {WorkflowyApiClient, WorkflowyInternalClient} from "@workflowy/shared/api";
-import {PathBuilder, WorkflowyWriteThroughClient} from "@workflowy/shared/cache";
-import {HOME, WorkflowyInternalAdapter} from "@workflowy/shared/internal";
-import {readInternalAuth} from "@workflowy/shared/node";
-import type {NodeMirrorResult} from "@workflowy/shared/types";
+import {WorkflowyApiClient, WorkflowyInternalClient} from "@outlinedb/shared/api";
+import {PathBuilder, WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
+import {HOME, WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
+import {readInternalAuth} from "@outlinedb/shared/node";
+import type {NodeMirrorResult} from "@outlinedb/shared/types";
 import {Command, Flags} from "@oclif/core";
 import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";
 import {logger} from "../../services/logger.js";
-import {resolveNodeId, resolveParent} from "@workflowy/shared/utils";
+import {resolveNodeId, resolveParent} from "@outlinedb/shared/utils";
 
 export default class Mirror extends Command {
 	static override description = "Create or remove a live Workflowy mirror of a node";

@@ -1,4 +1,4 @@
-import type * as schema from "@workflowy/shared/db";
+import type * as schema from "@outlinedb/shared/db";
 import {sql} from "drizzle-orm";
 import type {BetterSQLite3Database} from "drizzle-orm/better-sqlite3";
 import fs from "node:fs";

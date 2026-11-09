@@ -1,6 +1,6 @@
 import {QueryClient} from "@tanstack/react-query";
 import {afterEach, beforeEach, describe, expect, it, vi} from "vite-plus/test";
-import type {Star} from "@workflowy/shared";
+import type {Star} from "@outlinedb/shared";
 
 vi.mock("../src/client/stores/outline.js", () => ({useOutlineStore: () => {}}));
 

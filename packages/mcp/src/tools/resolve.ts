@@ -1,5 +1,5 @@
 import type {CallToolResult} from "@modelcontextprotocol/sdk/types.js";
-import type {OpInput, StoreClient} from "@workflowy/web/server-app";
+import type {OpInput, StoreClient} from "@outlinedb/web/server-app";
 import {opError} from "./results.js";
 
 export type Resolved = {ok: true; id: string | null} | {ok: false; error: CallToolResult};

@@ -1,10 +1,10 @@
 import {z} from "zod";
-import {PathBuilder} from "@workflowy/shared/cache";
-import {nodeContent, nodeMetadata} from "@workflowy/shared/db";
-import type {AppDatabase} from "@workflowy/shared/db";
-import {buildSearchConditions, getScoringTerms, parseSearchQuery, resolveJoinedSec} from "@workflowy/shared/search";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
-import {stripHtmlTags} from "@workflowy/shared/html";
+import {PathBuilder} from "@outlinedb/shared/cache";
+import {nodeContent, nodeMetadata} from "@outlinedb/shared/db";
+import type {AppDatabase} from "@outlinedb/shared/db";
+import {buildSearchConditions, getScoringTerms, parseSearchQuery, resolveJoinedSec} from "@outlinedb/shared/search";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {stripHtmlTags} from "@outlinedb/shared/html";
 import {and, eq, inArray, sql} from "drizzle-orm";
 import {toUnixSeconds} from "./nodes-shared.js";
 import {notReferencesContent} from "../backlinks.js";

@@ -1,4 +1,4 @@
-import {locationKey} from "@workflowy/shared";
+import {locationKey} from "@outlinedb/shared";
 import {STARS_UNAVAILABLE_TOOLTIP, useStarActions, useStars} from "../hooks/use-starred.js";
 import {useOutlineStore} from "../stores/outline.js";
 import {IconButton} from "./icon-button.js";

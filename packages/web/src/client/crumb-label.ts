@@ -1,5 +1,5 @@
-import {formatTimeLabel, friendlyPrefix, parseTimeAttrsLoose} from "@workflowy/shared";
-import {stripHtmlTags} from "@workflowy/shared/html";
+import {formatTimeLabel, friendlyPrefix, parseTimeAttrsLoose} from "@outlinedb/shared";
+import {stripHtmlTags} from "@outlinedb/shared/html";
 import {MENTION_PATTERN, parseMentionAttrs, resolveMentionName} from "./mention-pills.js";
 import type {MentionAccount} from "./mention-pills.js";
 

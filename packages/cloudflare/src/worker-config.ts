@@ -1,5 +1,5 @@
-import type {InternalAuth, SessionCookieStore} from "@workflowy/shared/api";
-import type {ServerConfig} from "@workflowy/web/server-app";
+import type {InternalAuth, SessionCookieStore} from "@outlinedb/shared/api";
+import type {ServerConfig} from "@outlinedb/web/server-app";
 
 /** Optional secret bindings and vars; set as Wrangler secrets (locally in `.dev.vars`). */
 export interface WorkerSecrets {

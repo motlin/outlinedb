@@ -8,7 +8,7 @@
  */
 
 import {z} from "zod";
-import type {ServerSetting, WorkflowyInternalAdapter} from "@workflowy/shared/internal";
+import type {ServerSetting, WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import {reapplyWeekLayout} from "../calendar-layout.js";
 import {COLOR_VALUE, isColorName} from "../../color-palette.js";
 import {TAG_COLORS} from "../../tag-colors.js";

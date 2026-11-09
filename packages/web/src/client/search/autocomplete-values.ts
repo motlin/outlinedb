@@ -1,7 +1,7 @@
 // Port of upstream's search box autocomplete data (`WF.SearchBox.autocomplete`): the operator option table
 // (`zw.autocomplete`) and the `#`/`@` tag rows. Local-only operators are left out, as in search-operators.
 
-import {formatDatePattern} from "@workflowy/shared";
+import {formatDatePattern} from "@outlinedb/shared";
 import type {FaIconKey} from "../components/fa-icons.js";
 
 export type AutocompleteIcon = FaIconKey | {swatch: "text" | "background"; color: string};

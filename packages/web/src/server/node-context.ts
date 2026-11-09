@@ -1,4 +1,4 @@
-import {readInternalAuth} from "@workflowy/shared/node";
+import {readInternalAuth} from "@outlinedb/shared/node";
 import {readNodeConfig} from "./config.js";
 import {buildServerContext} from "./context.js";
 import type {ServerContext} from "./context.js";

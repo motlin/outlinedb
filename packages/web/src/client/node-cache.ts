@@ -1,6 +1,6 @@
 import type {QueryClient} from "@tanstack/react-query";
 import type {BacklinkCrumb, BacklinksResponse, FoundDatesResponse, NodeResponse, SaveEffects} from "../node-types.js";
-import {parseVirtualShortId, virtualShortId} from "@workflowy/shared/workflowy";
+import {parseVirtualShortId, virtualShortId} from "@outlinedb/shared/workflowy";
 import type {MirrorInstance} from "../mirror-path.js";
 import {shortId} from "./location.js";
 import {sortByPriority} from "./tree-position.js";

@@ -9,7 +9,7 @@ import {
 } from "@tanstack/react-query";
 import {useCallback} from "react";
 import {useMutationRunner} from "./use-mutation-runner.js";
-import {HOME_TARGET} from "@workflowy/shared/types";
+import {HOME_TARGET} from "@outlinedb/shared/types";
 import type {MutateOptions, MutationObserverOptions, QueryClient} from "@tanstack/react-query";
 import type {
 	AncestorsResponse,

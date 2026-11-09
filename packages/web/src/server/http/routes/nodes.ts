@@ -1,5 +1,5 @@
 import {Hono} from "hono";
-import {HOME_TARGET} from "@workflowy/shared/types";
+import {HOME_TARGET} from "@outlinedb/shared/types";
 import {callOp} from "../response.js";
 import type {ResolveStore} from "../response.js";
 

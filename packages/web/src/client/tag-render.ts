@@ -1,4 +1,4 @@
-import {findTags} from "@workflowy/shared/tags";
+import {findTags} from "@outlinedb/shared/tags";
 import {plainLength as caretUnitLength} from "./rich-text.js";
 import {escapeRegExp} from "./search/helper-insert.js";
 

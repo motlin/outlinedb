@@ -1,6 +1,6 @@
-import {WorkflowyInternalClient} from "@workflowy/shared/api";
-import {WorkflowyInternalAdapter} from "@workflowy/shared/internal";
-import {readInternalAuth} from "@workflowy/shared/node";
+import {WorkflowyInternalClient} from "@outlinedb/shared/api";
+import {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
+import {readInternalAuth} from "@outlinedb/shared/node";
 import {Command} from "@oclif/core";
 import {createDatabase} from "../../db/index.js";
 

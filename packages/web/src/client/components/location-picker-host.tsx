@@ -1,5 +1,5 @@
 import {useQueries, useQueryClient} from "@tanstack/react-query";
-import {stripHtmlTags} from "@workflowy/shared/html";
+import {stripHtmlTags} from "@outlinedb/shared/html";
 import {useEffect, useMemo, useState} from "react";
 import {useAiEmbeddingStage, usePreferences} from "../hooks/use-preferences.js";
 import {fetchAncestors, useCreateNode} from "../hooks/use-nodes.js";

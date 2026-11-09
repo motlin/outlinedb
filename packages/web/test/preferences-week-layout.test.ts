@@ -3,10 +3,10 @@ import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
 import {afterEach, describe, expect, it} from "vite-plus/test";
-import {CacheService, storeInternalMetadata} from "@workflowy/shared/cache";
-import * as schema from "@workflowy/shared/db";
-import type {WorkflowyInternalAdapter} from "@workflowy/shared/internal";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {CacheService, storeInternalMetadata} from "@outlinedb/shared/cache";
+import * as schema from "@outlinedb/shared/db";
+import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import type {ServerContext} from "../src/server/context.js";
 import {httpAppFor} from "./http-app-for.js";
 

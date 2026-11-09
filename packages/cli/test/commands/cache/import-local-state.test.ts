@@ -1,5 +1,5 @@
 import {afterEach, beforeEach, describe, expect, it} from "vite-plus/test";
-import {apiImportTimestamp, fileBlobs, tagColors} from "@workflowy/shared/db";
+import {apiImportTimestamp, fileBlobs, tagColors} from "@outlinedb/shared/db";
 import {captureOutput} from "@oclif/test";
 import fs from "node:fs";
 import os from "node:os";

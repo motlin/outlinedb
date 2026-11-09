@@ -1,7 +1,7 @@
 import {McpServer} from "@modelcontextprotocol/sdk/server/mcp.js";
 import {WebStandardStreamableHTTPServerTransport} from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import {registerOutlineTools} from "@workflowy/mcp/tools";
-import type {ToolAccess} from "@workflowy/mcp/tools";
+import {registerOutlineTools} from "@outlinedb/mcp/tools";
+import type {ToolAccess} from "@outlinedb/mcp/tools";
 import {storeClient} from "./store-client";
 
 /**

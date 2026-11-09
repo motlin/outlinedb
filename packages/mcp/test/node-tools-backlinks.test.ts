@@ -1,5 +1,5 @@
 import {afterAll, beforeAll, beforeEach, describe, expect, it, vi} from "vite-plus/test";
-import {storeTreeTxId} from "@workflowy/shared/cache";
+import {storeTreeTxId} from "@outlinedb/shared/cache";
 import {callTool, openHarness, seed as seedNode} from "./harness.js";
 import type {Harness} from "./harness.js";
 

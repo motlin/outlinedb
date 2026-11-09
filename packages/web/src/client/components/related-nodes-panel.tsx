@@ -5,7 +5,7 @@ import {setFeature, useFeatureOn} from "../hooks/use-features.js";
 import {markAiEmbeddingTooltipDismissed, setPreferences, useAiEmbeddingStage} from "../hooks/use-preferences.js";
 import {Button} from "./button.js";
 import {nodeUrl} from "../navigation.js";
-import {stripHtmlTags as stripHtml} from "@workflowy/shared/html";
+import {stripHtmlTags as stripHtml} from "@outlinedb/shared/html";
 import {useStableNavigate} from "../hooks/use-stable-navigate.js";
 import {useOutlineStore} from "../stores/outline.js";
 import type {OpErrorBody, RelatedResponse} from "../../node-types.js";

@@ -1,7 +1,7 @@
 import {it, vi, afterEach, expect, describe, beforeEach} from "vite-plus/test";
 import {captureOutput} from "@oclif/test";
-import {storeTreeTxId} from "@workflowy/shared/cache";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {storeTreeTxId} from "@outlinedb/shared/cache";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";

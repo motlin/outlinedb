@@ -1,12 +1,12 @@
 import {adoptUnderCalendar} from "../../services/calendar-adoption.js";
-import {WorkflowyApiClient} from "@workflowy/shared/api";
-import {PathBuilder, WorkflowyWriteThroughClient} from "@workflowy/shared/cache";
-import {HOME_TARGET} from "@workflowy/shared/types";
+import {WorkflowyApiClient} from "@outlinedb/shared/api";
+import {PathBuilder, WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
+import {HOME_TARGET} from "@outlinedb/shared/types";
 import {Command, Flags} from "@oclif/core";
 import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";
 import {logger} from "../../services/logger.js";
-import {resolveNodeId, resolveParent} from "@workflowy/shared/utils";
+import {resolveNodeId, resolveParent} from "@outlinedb/shared/utils";
 
 export default class Move extends Command {
 	static override description = "Move a single node to a new location by ID or path";

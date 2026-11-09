@@ -1,4 +1,4 @@
-import {ancestorChain} from "@workflowy/shared/cache";
+import {ancestorChain} from "@outlinedb/shared/cache";
 import {describe, expect, it} from "vite-plus/test";
 
 interface Row {

@@ -1,10 +1,10 @@
 import {z} from "zod";
-import {NodeReader, NodeTreeReader, ancestorChain, effectiveCompletedAt} from "@workflowy/shared/cache";
-import {mirrors as mirrorsTable, nodeContent, nodeMetadata} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
-import type {Node} from "@workflowy/shared/types";
-import {HOME_TARGET} from "@workflowy/shared/types";
-import {isShortId, parseVirtualShortId} from "@workflowy/shared/workflowy";
+import {NodeReader, NodeTreeReader, ancestorChain, effectiveCompletedAt} from "@outlinedb/shared/cache";
+import {mirrors as mirrorsTable, nodeContent, nodeMetadata} from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import type {Node} from "@outlinedb/shared/types";
+import {HOME_TARGET} from "@outlinedb/shared/types";
+import {isShortId, parseVirtualShortId} from "@outlinedb/shared/workflowy";
 import {and, eq} from "drizzle-orm";
 import type {
 	BacklinkCrumb,

@@ -1,17 +1,17 @@
-import type {InternalTreeItem, WorkflowyApiClient} from "@workflowy/shared/api";
+import type {InternalTreeItem, WorkflowyApiClient} from "@outlinedb/shared/api";
 import {
 	applyRows,
 	collectItemRelationships,
 	emptyItemRelationships,
 	mergeItemRelationships,
 	runUnitOfWork,
-} from "@workflowy/shared/cache";
-import {nodeContent} from "@workflowy/shared/db";
-import type * as schema from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+} from "@outlinedb/shared/cache";
+import {nodeContent} from "@outlinedb/shared/db";
+import type * as schema from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {eq} from "drizzle-orm";
 import type {BetterSQLite3Database} from "drizzle-orm/better-sqlite3";
-import type {WorkflowyNode} from "@workflowy/shared/types";
+import type {WorkflowyNode} from "@outlinedb/shared/types";
 import type {CacheService} from "./cache.js";
 import {nonEmpty} from "../utils/non-empty.js";
 

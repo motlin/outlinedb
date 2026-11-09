@@ -1,6 +1,6 @@
 import {defineConfig} from "vite-plus";
 
-// Tests load @workflowy/shared from its "source" export condition, as the dev server's --conditions=source does, so they never run against a stale gitignored dist build. Production builds keep the default conditions.
+// Tests load @outlinedb/shared from its "source" export condition, as the dev server's --conditions=source does, so they never run against a stale gitignored dist build. Production builds keep the default conditions.
 const sourceFirst = (conditions: string[]): string[] => ["source", ...conditions];
 
 export default defineConfig({

@@ -1,5 +1,5 @@
 {
-	"name": "@workflowy/cli",
+	"name": "@outlinedb/cli",
 	"version": "0.1.0",
 	"description": "CLI for managing Workflowy nodes via API",
 	"keywords": [
@@ -30,8 +30,8 @@
 	"dependencies": {
 		"@oclif/core": "^5.1.10",
 		"@oclif/plugin-help": "^7",
+		"@outlinedb/shared": "workspace:*",
 		"@tobilu/qmd": "^2.8.3",
-		"@workflowy/shared": "workspace:*",
 		"@xenova/transformers": "^2.17.2",
 		"better-sqlite3": "^13.0.3",
 		"chalk": "^6.0.1",

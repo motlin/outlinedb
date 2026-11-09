@@ -1,5 +1,5 @@
 import {afterEach, beforeEach, describe, expect, it} from "vite-plus/test";
-import {CacheService} from "@workflowy/shared/cache";
+import {CacheService} from "@outlinedb/shared/cache";
 import {loadExistingEntries} from "../../src/services/journal-existing-entries.js";
 import {cleanupTestDatabase, createInMemoryTestDatabase} from "../db/migration-helper.js";
 import type {TestDatabase} from "../db/migration-helper.js";

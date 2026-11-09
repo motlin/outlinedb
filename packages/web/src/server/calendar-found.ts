@@ -6,11 +6,11 @@
  */
 
 import {and, eq, like, or} from "drizzle-orm";
-import {parseTimeAttrs} from "@workflowy/shared";
-import type {CacheService} from "@workflowy/shared/cache";
-import {nodeContent} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
-import type {Node} from "@workflowy/shared/types";
+import {parseTimeAttrs} from "@outlinedb/shared";
+import type {CacheService} from "@outlinedb/shared/cache";
+import {nodeContent} from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import type {Node} from "@outlinedb/shared/types";
 import type {BacklinkCrumb} from "../node-types.js";
 import {loadCalendarInfo, readCalendarSettings} from "./calendar-day.js";
 import type {CalendarDayDeps} from "./calendar-day.js";

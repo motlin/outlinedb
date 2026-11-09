@@ -10,7 +10,7 @@ import {IconButton} from "./icon-button.js";
 import {CALENDAR_KEYS, nextCalendarFocus} from "./date-picker-keyboard.js";
 import type {CalendarFocusTarget} from "./date-picker-keyboard.js";
 import {Toggle} from "./toggle.js";
-import type {DatePreset} from "@workflowy/shared";
+import type {DatePreset} from "@outlinedb/shared";
 import {useCalendarEventDays} from "../hooks/use-calendar-event-days.js";
 import type {CalendarMonth} from "../hooks/use-calendar-event-days.js";
 

@@ -1,5 +1,5 @@
 {
-	"name": "@workflowy/shared",
+	"name": "@outlinedb/shared",
 	"version": "0.0.0",
 	"description": "Shared code between CLI and web packages",
 	"files": [

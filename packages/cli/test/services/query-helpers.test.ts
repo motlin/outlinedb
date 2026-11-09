@@ -1,6 +1,6 @@
 import {beforeEach, afterEach, describe, expect, it} from "vite-plus/test";
-import {nodeContent, nodeMetadata} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {nodeContent, nodeMetadata} from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {randomUUID} from "node:crypto";
 import os from "node:os";
 import path from "node:path";

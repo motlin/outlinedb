@@ -1,5 +1,5 @@
 import type {McpServer} from "@modelcontextprotocol/sdk/server/mcp.js";
-import type {StoreClient} from "@workflowy/web/server-app";
+import type {StoreClient} from "@outlinedb/web/server-app";
 import {jsonResult, opError} from "./results.js";
 
 export function registerCacheTools(server: McpServer, store: StoreClient): void {

@@ -4,9 +4,9 @@
  */
 
 import {z} from "zod";
-import {locationKey} from "@workflowy/shared";
-import type {Star} from "@workflowy/shared";
-import {stripHtmlTags} from "@workflowy/shared/html";
+import {locationKey} from "@outlinedb/shared";
+import type {Star} from "@outlinedb/shared";
+import {stripHtmlTags} from "@outlinedb/shared/html";
 import {
 	orderChanges,
 	renameChanges,
@@ -15,8 +15,8 @@ import {
 	starsFromRootMeta,
 	toggleSavedView,
 	unstarChanges,
-} from "@workflowy/shared/internal";
-import type {StarNodes, WorkflowyInternalAdapter} from "@workflowy/shared/internal";
+} from "@outlinedb/shared/internal";
+import type {StarNodes, WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import type {ServerContext} from "../context.js";
 import {INTERNAL_API_NOT_CONFIGURED} from "../internal-api-error.js";
 import type {NodeResponse} from "../../node-types.js";

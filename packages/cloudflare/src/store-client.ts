@@ -1,4 +1,4 @@
-import type {OpInput, OpName, OpOutput, OpResult, StoreClient} from "@workflowy/web/server-app";
+import type {OpInput, OpName, OpOutput, OpResult, StoreClient} from "@outlinedb/web/server-app";
 import type {UserStore} from "./user-store";
 
 /**

@@ -1,7 +1,7 @@
 import {z} from "zod";
-import {planBlockSlot} from "@workflowy/shared/cache";
-import type {WorkflowyWriteThroughClient} from "@workflowy/shared/cache";
-import type {NewTree} from "@workflowy/shared/internal";
+import {planBlockSlot} from "@outlinedb/shared/cache";
+import type {WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
+import type {NewTree} from "@outlinedb/shared/internal";
 import {MAX_COPY_ITEMS, copySubtree} from "../copy-tree.js";
 import type {ServerContext} from "../context.js";
 import {INTERNAL_API_NOT_CONFIGURED} from "../internal-api.js";

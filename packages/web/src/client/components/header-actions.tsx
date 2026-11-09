@@ -1,7 +1,7 @@
 import {selectCompletedVisibility} from "../completed-visibility.js";
 import type {ReactNode} from "react";
-import {locationKey} from "@workflowy/shared";
-import {HOME_TARGET} from "@workflowy/shared/types";
+import {locationKey} from "@outlinedb/shared";
+import {HOME_TARGET} from "@outlinedb/shared/types";
 import {useChildren, useHome, useNode} from "../hooks/use-nodes.js";
 import {useShowCompletedToggle} from "../hooks/use-show-completed-toggle.js";
 import {useStarActions, useStars} from "../hooks/use-starred.js";

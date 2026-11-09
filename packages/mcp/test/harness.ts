@@ -5,10 +5,10 @@ import {inject} from "vite-plus/test";
 import {Client} from "@modelcontextprotocol/sdk/client/index.js";
 import {InMemoryTransport} from "@modelcontextprotocol/sdk/inMemory.js";
 import {McpServer} from "@modelcontextprotocol/sdk/server/mcp.js";
-import type {CacheService} from "@workflowy/shared/cache";
-import type {AppDatabase} from "@workflowy/shared/db";
-import {createServerContext, inProcessStore} from "@workflowy/web/node-host";
-import type {StoreClient} from "@workflowy/web/node-host";
+import type {CacheService} from "@outlinedb/shared/cache";
+import type {AppDatabase} from "@outlinedb/shared/db";
+import {createServerContext, inProcessStore} from "@outlinedb/web/node-host";
+import type {StoreClient} from "@outlinedb/web/node-host";
 import {registerOutlineTools} from "../src/register.js";
 import type {ToolAccess} from "../src/register.js";
 

@@ -1,4 +1,4 @@
-import {parseQuery} from "@workflowy/shared/search-query";
+import {parseQuery} from "@outlinedb/shared/search-query";
 
 export interface CompletedVisibility {
 	/** Whether completed rows render: the preference, or a revealing query forcing them. */

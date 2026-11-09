@@ -6,8 +6,8 @@ import {
 	parseTimeAttrs,
 	parseTimeAttrsLoose,
 	toTimeMarkup,
-} from "@workflowy/shared";
-import type {DatePhrase, TimeAttrs} from "@workflowy/shared";
+} from "@outlinedb/shared";
+import type {DatePhrase, TimeAttrs} from "@outlinedb/shared";
 import {plainCharAt, plainLength, plainText, splitHtml} from "./rich-text.js";
 import type {DateSettings} from "./date-settings.js";
 

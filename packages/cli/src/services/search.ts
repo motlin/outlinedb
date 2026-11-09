@@ -1,14 +1,14 @@
-import {nodeEmbeddings} from "@workflowy/shared/db";
-import * as schema from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
-import type {WorkflowyNode} from "@workflowy/shared/types";
+import {nodeEmbeddings} from "@outlinedb/shared/db";
+import * as schema from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import type {WorkflowyNode} from "@outlinedb/shared/types";
 import {and, eq, sql} from "drizzle-orm";
 import type {BetterSQLite3Database} from "drizzle-orm/better-sqlite3";
 import {embeddingService, getEmbeddingModel} from "./embeddings.js";
 import type {EmbeddingModelKey} from "./embeddings.js";
 import {logger} from "./logger.js";
 import {nullable} from "../utils/nullable.js";
-import {notAMirror, PathBuilder} from "@workflowy/shared/cache";
+import {notAMirror, PathBuilder} from "@outlinedb/shared/cache";
 
 export type SearchMode = "vector" | "keyword" | "hybrid";
 

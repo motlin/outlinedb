@@ -1,6 +1,6 @@
 import {beforeEach, afterEach, describe, expect, inject, it} from "vite-plus/test";
 import Database from "better-sqlite3";
-import {nodeContent} from "@workflowy/shared/db";
+import {nodeContent} from "@outlinedb/shared/db";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";

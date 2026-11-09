@@ -1,6 +1,6 @@
 // The `((` inline mirror popup (upstream MIRROR_SEARCH_POPUP): pure planners for typing `((`, finding the typed query,
 // and what choosing a location does to the row.
-import {stripHtmlTags} from "@workflowy/shared/html";
+import {stripHtmlTags} from "@outlinedb/shared/html";
 import type {SuggestRange} from "./hooks/use-suggest.js";
 
 export const MIRROR_FROM_HEADER = "mirror from";

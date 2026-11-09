@@ -1,5 +1,5 @@
-import {stripHtmlTags} from "@workflowy/shared/html";
-import {findTags} from "@workflowy/shared/tags";
+import {stripHtmlTags} from "@outlinedb/shared/html";
+import {findTags} from "@outlinedb/shared/tags";
 
 export interface HelperTags {
 	hashTags: string[];

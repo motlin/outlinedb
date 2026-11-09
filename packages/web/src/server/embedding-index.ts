@@ -1,7 +1,7 @@
-import {newSystemTimestamp} from "@workflowy/shared/cache";
-import {nodeEmbeddings} from "@workflowy/shared/db";
-import type {AppDatabase} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {newSystemTimestamp} from "@outlinedb/shared/cache";
+import {nodeEmbeddings} from "@outlinedb/shared/db";
+import type {AppDatabase} from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {and, eq, inArray, sql} from "drizzle-orm";
 
 /** A stored vector's neighbour: cosine distance, so 0 is identical and the related panel's threshold reads the same everywhere. */

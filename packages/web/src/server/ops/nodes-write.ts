@@ -1,11 +1,11 @@
 import {z} from "zod";
-import {planBlockSlot} from "@workflowy/shared/cache";
-import type {SlotPlan} from "@workflowy/shared/cache";
-import type {RestoreInput, WorkflowyInternalAdapter} from "@workflowy/shared/internal";
-import {calendarParentContext} from "@workflowy/shared/calendar-lookup";
-import {adoptAfterCreate, calendarAdoptWarning, datesInName, linkedSourcesInSubtree} from "@workflowy/shared/internal";
-import {HOME_TARGET} from "@workflowy/shared/types";
-import type {WorkflowyNode} from "@workflowy/shared/types";
+import {planBlockSlot} from "@outlinedb/shared/cache";
+import type {SlotPlan} from "@outlinedb/shared/cache";
+import type {RestoreInput, WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
+import {calendarParentContext} from "@outlinedb/shared/calendar-lookup";
+import {adoptAfterCreate, calendarAdoptWarning, datesInName, linkedSourcesInSubtree} from "@outlinedb/shared/internal";
+import {HOME_TARGET} from "@outlinedb/shared/types";
+import type {WorkflowyNode} from "@outlinedb/shared/types";
 import type {NodeResponse, SaveEffects, UpdateNodeResponse} from "../../node-types.js";
 import {backlinksNeedSync, backlinkTargetsOfSource} from "../backlinks.js";
 import {INTERNAL_API_NOT_CONFIGURED} from "../internal-api.js";

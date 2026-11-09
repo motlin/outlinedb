@@ -4,7 +4,7 @@ import {fileURLToPath} from "node:url";
 import {cssPreludes} from "./helpers/css-block.js";
 import {createElement} from "react";
 import {renderToStaticMarkup} from "react-dom/server";
-import type {Star} from "@workflowy/shared";
+import type {Star} from "@outlinedb/shared";
 import type {LeftBarMode} from "../src/client/stores/outline.js";
 import type * as ExpansionsModule from "../src/client/stores/left-bar-expansions.js";
 

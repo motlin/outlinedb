@@ -1,5 +1,5 @@
-import {starCurrentLocation} from "@workflowy/shared";
-import type {StarredLocation} from "@workflowy/shared";
+import {starCurrentLocation} from "@outlinedb/shared";
+import type {StarredLocation} from "@outlinedb/shared";
 import type {Command} from "./keys/dispatch.js";
 
 /**

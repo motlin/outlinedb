@@ -1,7 +1,7 @@
 import {useQueryClient} from "@tanstack/react-query";
 import {lineSplitRequests} from "../line-split.js";
 import {plainText} from "../rich-text.js";
-import {HOME_TARGET} from "@workflowy/shared/types";
+import {HOME_TARGET} from "@outlinedb/shared/types";
 import {readChildren, readNode} from "../node-cache.js";
 import type {ItemTypeSelectDeps} from "../item-type-select.js";
 import {activePaneView, useOutlineStore} from "../stores/outline.js";

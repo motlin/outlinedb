@@ -1,8 +1,8 @@
-import {WorkflowyApiClient, WorkflowyInternalClient} from "@workflowy/shared/api";
-import type {InternalAuth} from "@workflowy/shared/api";
-import {CacheService, WorkflowyWriteThroughClient} from "@workflowy/shared/cache";
-import {WorkflowyInternalAdapter} from "@workflowy/shared/internal";
-import type {AppDatabase} from "@workflowy/shared/db";
+import {WorkflowyApiClient, WorkflowyInternalClient} from "@outlinedb/shared/api";
+import type {InternalAuth} from "@outlinedb/shared/api";
+import {CacheService, WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
+import {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
+import type {AppDatabase} from "@outlinedb/shared/db";
 import type {ServerConfig} from "./config.js";
 import type {DecisionStore} from "./decisions.js";
 import type {EmbeddingIndex} from "./embedding-index.js";

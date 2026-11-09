@@ -1,4 +1,4 @@
-import {parseVirtualShortId} from "@workflowy/shared/workflowy";
+import {parseVirtualShortId} from "@outlinedb/shared/workflowy";
 import {skipToken, useQuery, useQueryClient} from "@tanstack/react-query";
 import {useLayoutEffect, useRef} from "react";
 import {useLocation, useNavigate} from "react-router-dom";

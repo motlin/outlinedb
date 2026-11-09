@@ -1,6 +1,6 @@
 import {isFeatureOn} from "./features.js";
-import {dateId} from "@workflowy/shared";
-import type {CalendarLevel} from "@workflowy/shared";
+import {dateId} from "@outlinedb/shared";
+import type {CalendarLevel} from "@outlinedb/shared";
 import type {CalendarDayResponse, CalendarEnsureResponse} from "../node-types.js";
 import {readJson} from "./read-json.js";
 

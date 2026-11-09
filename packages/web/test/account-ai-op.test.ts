@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vite-plus/test";
-import type {WorkflowyInternalAdapter} from "@workflowy/shared/internal";
+import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import {createHttpApp} from "../src/server/http/app.js";
 import {inProcessStore} from "../src/server/store.js";
 import {INTERNAL_API_NOT_CONFIGURED} from "../src/server/internal-api-error.js";

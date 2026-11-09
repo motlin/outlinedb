@@ -1,5 +1,5 @@
 import {expect} from "vite-plus/test";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 
 interface TemporalRecord {
 	systemTo: string;

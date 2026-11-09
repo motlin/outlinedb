@@ -11,13 +11,13 @@ import {
 	nodeMetadata,
 	referencesRoots,
 	s3Files,
-} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@workflowy/shared/temporal";
+} from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@outlinedb/shared/temporal";
 import {eq} from "drizzle-orm";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import {CacheService} from "@workflowy/shared/cache";
+import {CacheService} from "@outlinedb/shared/cache";
 import {cleanupTestDatabase, createTestDatabase, nodeFixtures, seedTestData} from "../db/migration-helper.js";
 import type {TestDatabase} from "../db/migration-helper.js";
 import {

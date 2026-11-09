@@ -1,6 +1,6 @@
-import {CacheService, ensureNodeTags} from "@workflowy/shared/cache";
-import {nodeContent} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {CacheService, ensureNodeTags} from "@outlinedb/shared/cache";
+import {nodeContent} from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {sql} from "drizzle-orm";
 import {describe, expect, it} from "vite-plus/test";
 import {buildTestDb} from "./helpers/round-trip-helpers.js";

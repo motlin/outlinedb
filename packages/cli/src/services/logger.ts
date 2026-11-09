@@ -1,4 +1,4 @@
-import type {ApiLogger} from "@workflowy/shared/api";
+import type {ApiLogger} from "@outlinedb/shared/api";
 import pino from "pino";
 import pinoPretty from "pino-pretty";
 import {format} from "sql-formatter";

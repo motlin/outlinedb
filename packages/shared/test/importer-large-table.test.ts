@@ -1,5 +1,5 @@
-import {applyRows, runUnitOfWork} from "@workflowy/shared/cache";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {applyRows, runUnitOfWork} from "@outlinedb/shared/cache";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {describe, expect, it} from "vite-plus/test";
 import {buildTestDb} from "./helpers/round-trip-helpers.js";
 

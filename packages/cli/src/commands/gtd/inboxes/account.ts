@@ -1,5 +1,5 @@
 import {Command} from "@oclif/core";
-import {findInbox, PathBuilder} from "@workflowy/shared/cache";
+import {findInbox, PathBuilder} from "@outlinedb/shared/cache";
 import {createDatabase} from "../../../db/index.js";
 
 interface AccountInboxOutput {

@@ -1,4 +1,4 @@
-import type {Node} from "@workflowy/shared/types";
+import type {Node} from "@outlinedb/shared/types";
 
 /**
  * CLI-facing serialization of a canonical {@link Node}.

@@ -1,8 +1,8 @@
 import DatabaseConstructor from "better-sqlite3";
 import {Command, Flags} from "@oclif/core";
-import {ACCOUNT_COMPOSITE_TABLES, ACCOUNT_IMPORT_NAME, EXPANDED_NODES_IMPORT_NAME} from "@workflowy/shared/cache";
-import * as schema from "@workflowy/shared/db";
-import {account, apiImportTimestamp, fileBlobs} from "@workflowy/shared/db";
+import {ACCOUNT_COMPOSITE_TABLES, ACCOUNT_IMPORT_NAME, EXPANDED_NODES_IMPORT_NAME} from "@outlinedb/shared/cache";
+import * as schema from "@outlinedb/shared/db";
+import {account, apiImportTimestamp, fileBlobs} from "@outlinedb/shared/db";
 import {getTableName, inArray} from "drizzle-orm";
 import type {SQLiteTable} from "drizzle-orm/sqlite-core";
 import {drizzle} from "drizzle-orm/better-sqlite3";

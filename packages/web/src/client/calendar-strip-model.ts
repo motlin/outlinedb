@@ -1,5 +1,5 @@
-import {CALENDAR_LEVELS, navTooltips, nextOf, prevOf} from "@workflowy/shared";
-import type {CalendarLevel} from "@workflowy/shared";
+import {CALENDAR_LEVELS, navTooltips, nextOf, prevOf} from "@outlinedb/shared";
+import type {CalendarLevel} from "@outlinedb/shared";
 import {MOVE_VERB, moveToastText} from "./move-to.js";
 import type {MoveToToast} from "./move-to.js";
 import type {CalendarTarget} from "./today.js";

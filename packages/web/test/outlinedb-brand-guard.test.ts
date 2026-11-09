@@ -10,7 +10,7 @@ const EXTRA_FILES = ["src/feature-catalog.ts", "src/server/http/openapi.ts"];
 const UPSTREAM_REFERENCES = [
 	/[\w.-]*workflowy\.com\b/giu,
 	/\bWORKFLOWY_[A-Z_]+/gu,
-	/@workflowy\/shared[\w/-]*/gu,
+	/@outlinedb\/shared\/workflowy\b/gu,
 	/\b[a-z]\w*Workflowy\w*/gu,
 	/\bWorkflowy[A-Z]\w*/gu,
 ];

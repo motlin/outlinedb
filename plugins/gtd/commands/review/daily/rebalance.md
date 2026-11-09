@@ -61,7 +61,7 @@ Follow **Choose the presentation surface** in `${CLAUDE_PLUGIN_ROOT}/skills/revi
 node ${CLAUDE_PLUGIN_ROOT}/scripts/rebalance-ui.mts
 ```
 
-Open the printed `/ladder` URL. `REBALANCE_WEB_APP_URL=http://localhost:5175` selects a local dev server; `--output .llm/gtd/review/rebalance.html` generates a small launcher without exporting task names. The route is built from checked-in React source with `vp run --filter @workflowy/web build`. Preserve its root tabs, range selection, touch handles, tier buttons, per-row Done and immediate persistence.
+Open the printed `/ladder` URL. `REBALANCE_WEB_APP_URL=http://localhost:5175` selects a local dev server; `--output .llm/gtd/review/rebalance.html` generates a small launcher without exporting task names. The route is built from checked-in React source with `vp run --filter @outlinedb/web build`. Preserve its root tabs, range selection, touch handles, tier buttons, per-row Done and immediate persistence.
 
 The app applies the user's gestures through local API endpoints immediately. Never replay those writes with the CLI. Observe `/api/v1/ladder/events` and refresh `/api/v1/ladder` plus the live bucket exports to verify outcomes. A disconnected event stream or successful click is not verification. Record only verified changes; report failed requests by item and let the user retry. Adding a tier uses the existing node-create endpoint and refreshes the ladder before it becomes a move target. No task data is uploaded to claude.ai.
 

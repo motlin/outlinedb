@@ -1,5 +1,5 @@
 import {afterEach, beforeEach, describe, expect, it} from "vite-plus/test";
-import {ACCOUNT_COMPOSITE_TABLES} from "@workflowy/shared/cache";
+import {ACCOUNT_COMPOSITE_TABLES} from "@outlinedb/shared/cache";
 import {captureOutput} from "@oclif/test";
 import fs from "node:fs";
 import os from "node:os";

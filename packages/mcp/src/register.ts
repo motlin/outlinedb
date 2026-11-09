@@ -1,5 +1,5 @@
 import type {McpServer} from "@modelcontextprotocol/sdk/server/mcp.js";
-import type {OpInput, OpName, OpOutput, OpResult, StoreClient} from "@workflowy/web/server-app";
+import type {OpInput, OpName, OpOutput, OpResult, StoreClient} from "@outlinedb/web/server-app";
 import {registerCacheTools} from "./tools/cache-tools.js";
 import {registerCalendarTools} from "./tools/calendar-tools.js";
 import {registerNodeTools, registerNodeWriteTools} from "./tools/node-tools.js";

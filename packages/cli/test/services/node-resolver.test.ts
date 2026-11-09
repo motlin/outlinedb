@@ -2,7 +2,7 @@ import {beforeEach, vi, afterEach, describe, expect, it} from "vite-plus/test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import {WorkflowyApiClient} from "@workflowy/shared/api";
+import {WorkflowyApiClient} from "@outlinedb/shared/api";
 import type {MockInstance} from "vite-plus/test";
 import {CacheService} from "../../src/services/cache.js";
 import {
@@ -11,7 +11,7 @@ import {
 	resolveOptionalParent,
 	resolveOrCreateNodePath,
 	resolveParent,
-} from "@workflowy/shared/utils";
+} from "@outlinedb/shared/utils";
 import {cleanupTestDatabase, createTestDatabase, nodeFixtures, seedTestData} from "../db/migration-helper.js";
 import type {TestDatabase} from "../db/migration-helper.js";
 import {createApiNode, createTestNode} from "../helpers/node-fixtures.js";

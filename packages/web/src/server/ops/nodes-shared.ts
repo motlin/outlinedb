@@ -1,5 +1,5 @@
 import {z} from "zod";
-import {WorkflowyApiClient} from "@workflowy/shared/api";
+import {WorkflowyApiClient} from "@outlinedb/shared/api";
 import type {
 	BacklinkCrumb,
 	BacklinksResponse,
@@ -14,15 +14,15 @@ import type {
 	TableMetadata,
 	UpdateNodeResponse,
 } from "../../node-types.js";
-import {NodeReader, NodeTreeReader, WorkflowyWriteThroughClient, readInternalMetadata} from "@workflowy/shared/cache";
-import type {ExactMover, SlotPlan} from "@workflowy/shared/cache";
+import {NodeReader, NodeTreeReader, WorkflowyWriteThroughClient, readInternalMetadata} from "@outlinedb/shared/cache";
+import type {ExactMover, SlotPlan} from "@outlinedb/shared/cache";
 import {MAX_COPY_ITEMS} from "../copy-tree.js";
-import {mirrors as mirrorsTable, s3Files} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
-import type {RestoreInput, WorkflowyInternalAdapter, NewTree} from "@workflowy/shared/internal";
-import type {Node} from "@workflowy/shared/types";
-import {HOME_TARGET} from "@workflowy/shared/types";
-import {internalLinkShortIds, isShortId, parseVirtualShortId} from "@workflowy/shared/workflowy";
+import {mirrors as mirrorsTable, s3Files} from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import type {RestoreInput, WorkflowyInternalAdapter, NewTree} from "@outlinedb/shared/internal";
+import type {Node} from "@outlinedb/shared/types";
+import {HOME_TARGET} from "@outlinedb/shared/types";
+import {internalLinkShortIds, isShortId, parseVirtualShortId} from "@outlinedb/shared/workflowy";
 import {and, eq, inArray} from "drizzle-orm";
 import {childFlags, referencesRootLabel} from "../backlinks.js";
 import {loadCalendarInfo} from "../calendar-day.js";

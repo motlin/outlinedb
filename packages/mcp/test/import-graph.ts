@@ -11,7 +11,7 @@ const packageJson = z.object({
 	exports: z.partialRecord(z.string(), z.object({source: z.string()})),
 });
 
-/** Source file behind every `@workflowy/*` package export, keyed by the full specifier. */
+/** Source file behind every `@outlinedb/*` package export, keyed by the full specifier. */
 function workspaceExports(): Map<string, string> {
 	const sources = new Map<string, string>();
 	for (const dir of fs.readdirSync(PACKAGES_ROOT)) {
@@ -67,7 +67,7 @@ export interface ImportGraph {
 	packages: string[];
 }
 
-/** Every runtime import reachable from the entry, following relative and `@workflowy/*` imports across packages. */
+/** Every runtime import reachable from the entry, following relative and `@outlinedb/*` imports across packages. */
 export function importGraphFrom(entry: string): ImportGraph {
 	const exports = workspaceExports();
 	const graph: ImportGraph = {files: [], builtins: [], packages: []};
@@ -89,7 +89,7 @@ export function importGraphFrom(entry: string): ImportGraph {
 				if (resolved !== undefined) {
 					queue.push(resolved);
 				}
-			} else if (specifier.startsWith("@workflowy/")) {
+			} else if (specifier.startsWith("@outlinedb/")) {
 				const resolved = exports.get(specifier);
 				if (resolved === undefined) {
 					throw new Error(`${relative} imports unexported ${specifier}`);

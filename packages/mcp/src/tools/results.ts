@@ -1,5 +1,5 @@
 import type {CallToolResult} from "@modelcontextprotocol/sdk/types.js";
-import type {OpResult} from "@workflowy/web/server-app";
+import type {OpResult} from "@outlinedb/web/server-app";
 
 export function textResult(text: string): CallToolResult {
 	return {content: [{type: "text", text}]};

@@ -1,6 +1,6 @@
 import {z} from "zod";
-import {ancestorChain} from "@workflowy/shared/cache";
-import {HOME_TARGET} from "@workflowy/shared/types";
+import {ancestorChain} from "@outlinedb/shared/cache";
+import {HOME_TARGET} from "@outlinedb/shared/types";
 import {planSwapOrigin} from "../../swap-origin.js";
 import {MAX_COPY_ITEMS, copySubtree} from "../copy-tree.js";
 import {INTERNAL_API_NOT_CONFIGURED} from "../internal-api.js";

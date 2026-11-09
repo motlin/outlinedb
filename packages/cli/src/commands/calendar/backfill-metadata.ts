@@ -1,6 +1,6 @@
-import {WorkflowyApiClient} from "@workflowy/shared/api";
-import {WorkflowyWriteThroughClient} from "@workflowy/shared/cache";
-import {internalAdapter} from "@workflowy/shared/node";
+import {WorkflowyApiClient} from "@outlinedb/shared/api";
+import {WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
+import {internalAdapter} from "@outlinedb/shared/node";
 import {Command, Flags} from "@oclif/core";
 import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";

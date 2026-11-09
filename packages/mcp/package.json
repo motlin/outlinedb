@@ -1,5 +1,5 @@
 {
-	"name": "@workflowy/mcp",
+	"name": "@outlinedb/mcp",
 	"version": "0.1.0",
 	"description": "MCP server for Workflowy",
 	"bin": {
@@ -26,8 +26,8 @@
 	},
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.32.2",
-		"@workflowy/shared": "workspace:*",
-		"@workflowy/web": "workspace:*",
+		"@outlinedb/shared": "workspace:*",
+		"@outlinedb/web": "workspace:*",
 		"zod": "^4.6.7"
 	},
 	"devDependencies": {

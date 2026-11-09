@@ -1,5 +1,5 @@
 import {Command, Flags} from "@oclif/core";
-import {accountRowTotal, readAccountState} from "@workflowy/shared/cache";
+import {accountRowTotal, readAccountState} from "@outlinedb/shared/cache";
 import {createDatabase} from "../../db/index.js";
 
 export interface SeedAccountStateResult {

@@ -1,6 +1,6 @@
 import {useEffect, useState} from "react";
 import type {ReactNode} from "react";
-import {stripHtmlTags as stripHtml} from "@workflowy/shared/html";
+import {stripHtmlTags as stripHtml} from "@outlinedb/shared/html";
 import {useNodeNavigation} from "../navigation.js";
 import {readJson} from "../read-json.js";
 import {useOutlineStore} from "../stores/outline.js";

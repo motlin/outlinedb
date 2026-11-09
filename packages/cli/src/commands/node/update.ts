@@ -1,11 +1,11 @@
-import {WorkflowyApiClient} from "@workflowy/shared/api";
-import {PathBuilder, WorkflowyWriteThroughClient} from "@workflowy/shared/cache";
+import {WorkflowyApiClient} from "@outlinedb/shared/api";
+import {PathBuilder, WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
 import {Command, Flags} from "@oclif/core";
 import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";
-import {syncBacklinksIfLinked} from "@workflowy/shared/node";
+import {syncBacklinksIfLinked} from "@outlinedb/shared/node";
 import {logger} from "../../services/logger.js";
-import {resolveNodeId} from "@workflowy/shared/utils";
+import {resolveNodeId} from "@outlinedb/shared/utils";
 
 export default class Update extends Command {
 	static override description = "Update a Workflowy node";

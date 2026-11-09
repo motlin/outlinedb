@@ -1,7 +1,7 @@
-import {CacheService} from "@workflowy/shared/cache";
-import * as dbSchema from "@workflowy/shared/db";
+import {CacheService} from "@outlinedb/shared/cache";
+import * as dbSchema from "@outlinedb/shared/db";
 import {drizzle} from "drizzle-orm/durable-sqlite";
-import type {OpInput, OpName, OpOutput, OpResult} from "@workflowy/web/server-app";
+import type {OpInput, OpName, OpOutput, OpResult} from "@outlinedb/web/server-app";
 import {UserStore} from "../src/user-store";
 import type {ProvisionInput, ProvisionResult} from "../src/user-store";
 import worker from "../src/worker";

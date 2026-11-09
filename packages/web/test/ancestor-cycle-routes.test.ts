@@ -4,11 +4,11 @@ import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {Hono} from "hono";
 import {join} from "node:path";
-import * as schema from "@workflowy/shared/db";
+import * as schema from "@outlinedb/shared/db";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
 import {httpAppFor} from "./http-app-for.js";
 
-const {CacheService} = await import("@workflowy/shared/cache");
+const {CacheService} = await import("@outlinedb/shared/cache");
 
 const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 const A = "aaaa1111-0000-4000-8000-a0a0a0a0a0a0";

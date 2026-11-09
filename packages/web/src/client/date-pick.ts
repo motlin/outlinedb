@@ -1,5 +1,5 @@
 import {timeAttrsFromDates} from "./date-pills.js";
-import type {TimeAttrs} from "@workflowy/shared";
+import type {TimeAttrs} from "@outlinedb/shared";
 
 /**
  * What a date-picker pick does: with `onSelect` set (upstream `for()`'s custom onSelect, Move to Date), a non-empty

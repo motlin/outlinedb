@@ -1,8 +1,8 @@
 import {useCallback, useRef, useState} from "react";
 import type {ReactNode} from "react";
 import {createPortal} from "react-dom";
-import {formatPillLabel, guessDates, presetDate} from "@workflowy/shared";
-import type {DatePreset, TimeAttrs} from "@workflowy/shared";
+import {formatPillLabel, guessDates, presetDate} from "@outlinedb/shared";
+import type {DatePreset, TimeAttrs} from "@outlinedb/shared";
 import {applyDatePick} from "../date-pick.js";
 import {caretTextOffset} from "../caret-dom.js";
 import {shouldTriggerDatePopup, timeAttrsFromDates} from "../date-pills.js";

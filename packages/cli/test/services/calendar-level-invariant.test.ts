@@ -1,6 +1,6 @@
 import {beforeEach, afterEach, describe, expect, it} from "vite-plus/test";
-import {calendarLevels, calendarMetadata} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {calendarLevels, calendarMetadata} from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {eq} from "drizzle-orm";
 import fs from "node:fs";
 import os from "node:os";

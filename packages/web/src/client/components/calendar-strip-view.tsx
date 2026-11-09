@@ -1,5 +1,5 @@
 import type {ReactNode, Ref} from "react";
-import {dateId, dayTimestamp, stripModel} from "@workflowy/shared";
+import {dateId, dayTimestamp, stripModel} from "@outlinedb/shared";
 import {monthCellTarget, stripDropKey, stripNav} from "../calendar-strip-model.js";
 import type {StripLevel} from "../calendar-strip-model.js";
 import type {CalendarTarget} from "../today.js";

@@ -1,5 +1,5 @@
 import {Command} from "@oclif/core";
-import {fileSessionStore, sessionFilePath} from "@workflowy/shared/node";
+import {fileSessionStore, sessionFilePath} from "@outlinedb/shared/node";
 
 export default class Logout extends Command {
 	static override description = "Delete the saved Workflowy internal-API session cookie";

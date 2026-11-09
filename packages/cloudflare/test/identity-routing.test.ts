@@ -1,6 +1,6 @@
 import {afterAll, beforeAll, describe, expect, it} from "vite-plus/test";
 import {SignJWT, exportJWK, generateKeyPair} from "jose";
-import {createHttpApp} from "@workflowy/web/server-app";
+import {createHttpApp} from "@outlinedb/web/server-app";
 import {origin, signUp, startAuthHarness, turnstile} from "./auth-harness";
 import {applyD1Migrations, authDb, countStoreCalls, readJson, startHarness} from "./harness";
 import type {Harness} from "./harness";

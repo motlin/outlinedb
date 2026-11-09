@@ -1,7 +1,7 @@
 import type {OAuthHelpers} from "@cloudflare/workers-oauth-provider";
-import {parseAccountState} from "@workflowy/shared/cache";
-import {createHttpApp} from "@workflowy/web/server-app";
-import type {StoreClient} from "@workflowy/web/server-app";
+import {parseAccountState} from "@outlinedb/shared/cache";
+import {createHttpApp} from "@outlinedb/web/server-app";
+import type {StoreClient} from "@outlinedb/web/server-app";
 import {Hono} from "hono";
 import {createMiddleware} from "hono/factory";
 import type {AccessEnv} from "./access";

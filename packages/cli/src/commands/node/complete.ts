@@ -1,4 +1,4 @@
-import type {WorkflowyWriteThroughClient} from "@workflowy/shared/cache";
+import type {WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
 import {BaseCompletionCommand} from "../base-completion-command.js";
 
 export default class Complete extends BaseCompletionCommand {

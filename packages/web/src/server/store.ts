@@ -7,7 +7,7 @@ import {withTreeChangePublish} from "./node-events.js";
 import type {TreeEventBus} from "./node-events.js";
 import {withSwitcherSkeletonRebuild, withTreeSnapshotRebuild} from "./tree-snapshot.js";
 import type {z} from "zod";
-import {TreeResyncRequired} from "@workflowy/shared/internal";
+import {TreeResyncRequired} from "@outlinedb/shared/internal";
 
 /** What the HTTP layer talks to: one `call` per request. A Durable Object stub and the Node host both implement it. */
 export interface StoreClient {

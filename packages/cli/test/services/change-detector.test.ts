@@ -1,6 +1,6 @@
 import {beforeEach, afterEach, describe, expect, it} from "vite-plus/test";
-import {ChangeDetector} from "@workflowy/shared/changes";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {ChangeDetector} from "@outlinedb/shared/changes";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {cleanupTestDatabase, createInMemoryTestDatabase, seedTestData} from "../db/migration-helper.js";
 import type {TestDatabase} from "../db/migration-helper.js";
 

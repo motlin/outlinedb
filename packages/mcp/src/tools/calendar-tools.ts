@@ -1,6 +1,6 @@
 import type {McpServer} from "@modelcontextprotocol/sdk/server/mcp.js";
-import {CALENDAR_LEVELS} from "@workflowy/shared/internal";
-import type {StoreClient} from "@workflowy/web/server-app";
+import {CALENDAR_LEVELS} from "@outlinedb/shared/internal";
+import type {StoreClient} from "@outlinedb/web/server-app";
 import {z} from "zod";
 import {errorResult, jsonResult, opError} from "./results.js";
 

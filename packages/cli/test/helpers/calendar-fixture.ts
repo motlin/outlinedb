@@ -1,4 +1,4 @@
-import {storeInternalMetadata} from "@workflowy/shared/cache";
+import {storeInternalMetadata} from "@outlinedb/shared/cache";
 import {createTestNode} from "./node-fixtures.js";
 import {nodeFixtures, seedTestData} from "../db/migration-helper.js";
 import type {TestDatabase} from "../db/migration-helper.js";

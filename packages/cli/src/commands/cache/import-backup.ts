@@ -1,5 +1,5 @@
-import {backupImports} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@workflowy/shared/temporal";
+import {backupImports} from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@outlinedb/shared/temporal";
 import {Command, Flags} from "@oclif/core";
 import {and, desc, eq} from "drizzle-orm";
 import {logger} from "../../services/logger.js";

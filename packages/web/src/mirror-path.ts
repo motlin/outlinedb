@@ -4,7 +4,7 @@
  * the first four characters of each row's id (`Fp.isCyclical`, `mirrorPath`). A mirror whose path repeats one chunk
  * three times is cyclical: it renders collapsed and no walker descends into it.
  */
-import {virtualId} from "@workflowy/shared/workflowy";
+import {virtualId} from "@outlinedb/shared/workflowy";
 
 const MIRROR_CHUNK = 4;
 const CYCLICAL_REPEATS = 3;

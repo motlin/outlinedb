@@ -1,11 +1,11 @@
-import {mirrors, nodeEmbeddings} from "@workflowy/shared/db";
-import type * as schema from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {mirrors, nodeEmbeddings} from "@outlinedb/shared/db";
+import type * as schema from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {and, eq, inArray, sql} from "drizzle-orm";
 import type {BetterSQLite3Database} from "drizzle-orm/better-sqlite3";
 import {DEFAULT_MODELS, embeddingService} from "./embeddings.js";
 import type {EmbeddingModelKey} from "./embeddings.js";
-import {buildEmbedTexts, loadEmbeddableNodes, newSystemTimestamp, PathBuilder} from "@workflowy/shared/cache";
+import {buildEmbedTexts, loadEmbeddableNodes, newSystemTimestamp, PathBuilder} from "@outlinedb/shared/cache";
 
 /** Delete every embedding, of any model or version, keyed to a current mirror. Returns the count. */
 function pruneMirrorEmbeddings(database: BetterSQLite3Database<typeof schema>): number {

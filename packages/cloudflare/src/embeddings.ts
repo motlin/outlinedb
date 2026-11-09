@@ -1,4 +1,4 @@
-import type {Awaitable, EmbeddingIndex} from "@workflowy/web/server-app";
+import type {Awaitable, EmbeddingIndex} from "@outlinedb/web/server-app";
 
 /** The Workers AI model: 1024 dimensions, an 8,192-token context, and the cheapest embedding model on Workers AI. */
 export const CF_EMBEDDING_MODEL = "@cf/baai/bge-m3";

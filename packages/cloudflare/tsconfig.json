@@ -10,8 +10,8 @@
 		"skipLibCheck": true,
 		"types": [],
 		"paths": {
-			"@workflowy/mcp/tools": ["../mcp/src/register.ts"],
-			"@workflowy/web/server-app": ["../web/src/server/app.ts"]
+			"@outlinedb/mcp/tools": ["../mcp/src/register.ts"],
+			"@outlinedb/web/server-app": ["../web/src/server/app.ts"]
 		}
 	},
 	"include": ["src/**/*", "test/**/*", "smoke/**/*", "worker-configuration.d.ts"]

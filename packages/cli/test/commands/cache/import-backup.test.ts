@@ -1,7 +1,7 @@
 import {afterEach, beforeEach, describe, expect, it} from "vite-plus/test";
-import {runUnitOfWork, seedAccount} from "@workflowy/shared/cache";
-import {backupImports, nodeContent} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {runUnitOfWork, seedAccount} from "@outlinedb/shared/cache";
+import {backupImports, nodeContent} from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {captureOutput} from "@oclif/test";
 import {asc} from "drizzle-orm";
 import fs from "node:fs";

@@ -3,9 +3,9 @@ import {memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState
 import type {KeyboardEvent, UIEvent} from "react";
 import {useStableNavigate} from "../hooks/use-stable-navigate.js";
 import {isMacPlatform} from "../editable-text-keys.js";
-import {mostRecent} from "@workflowy/shared";
-import type {Star} from "@workflowy/shared";
-import {stripHtmlTags} from "@workflowy/shared/html";
+import {mostRecent} from "@outlinedb/shared";
+import type {Star} from "@outlinedb/shared";
+import {stripHtmlTags} from "@outlinedb/shared/html";
 import type {SwitcherResponse, SwitcherResult} from "../../server/switcher-search.js";
 import {fetchAncestors} from "../hooks/use-nodes.js";
 import {readLastViewed, useStars} from "../hooks/use-starred.js";

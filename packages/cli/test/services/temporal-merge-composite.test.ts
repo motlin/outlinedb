@@ -1,7 +1,7 @@
 import {beforeEach, afterEach, describe, expect, it} from "vite-plus/test";
-import {joinKey, temporalMerge} from "@workflowy/shared/cache";
-import {mirrors} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@workflowy/shared/temporal";
+import {joinKey, temporalMerge} from "@outlinedb/shared/cache";
+import {mirrors} from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@outlinedb/shared/temporal";
 import {eq} from "drizzle-orm";
 import fs from "node:fs";
 import os from "node:os";

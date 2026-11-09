@@ -1,7 +1,7 @@
-import {WorkflowyApiClient, WorkflowyInternalClient} from "@workflowy/shared/api";
-import type {TreeSnapshot} from "@workflowy/shared/api";
-import {importInternalMetadata, WorkflowyWriteThroughClient} from "@workflowy/shared/cache";
-import {internalAdapter, readInternalAuth} from "@workflowy/shared/node";
+import {WorkflowyApiClient, WorkflowyInternalClient} from "@outlinedb/shared/api";
+import type {TreeSnapshot} from "@outlinedb/shared/api";
+import {importInternalMetadata, WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
+import {internalAdapter, readInternalAuth} from "@outlinedb/shared/node";
 import {Command, Flags} from "@oclif/core";
 import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";

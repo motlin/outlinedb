@@ -1,6 +1,6 @@
 import {Command} from "@oclif/core";
-import {readWorkflowyCredentials, WorkflowyInternalClient} from "@workflowy/shared/api";
-import {fileSessionStore, sessionFilePath} from "@workflowy/shared/node";
+import {readWorkflowyCredentials, WorkflowyInternalClient} from "@outlinedb/shared/api";
+import {fileSessionStore, sessionFilePath} from "@outlinedb/shared/node";
 
 export default class Login extends Command {
 	static override description =

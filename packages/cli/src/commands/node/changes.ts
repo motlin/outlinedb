@@ -1,8 +1,8 @@
 import {Command, Flags} from "@oclif/core";
 import chalk from "chalk";
-import {ChangeDetector, parseSince} from "@workflowy/shared/changes";
-import type {ChangeSummary, ChangeTreeNode, NodeChange} from "@workflowy/shared/changes";
-import {stripHtmlTags} from "@workflowy/shared/html";
+import {ChangeDetector, parseSince} from "@outlinedb/shared/changes";
+import type {ChangeSummary, ChangeTreeNode, NodeChange} from "@outlinedb/shared/changes";
+import {stripHtmlTags} from "@outlinedb/shared/html";
 import {createDatabase} from "../../db/index.js";
 import {htmlToAnsi} from "../../utils/html-to-ansi.js";
 

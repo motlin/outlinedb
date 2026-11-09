@@ -1,8 +1,8 @@
 import {it, vi, afterEach, expect, describe, beforeEach} from "vite-plus/test";
 import {captureOutput} from "@oclif/test";
-import {mirrors, nodeContent, nodeMetadata} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
-import {storeTreeTxId} from "@workflowy/shared/cache";
+import {mirrors, nodeContent, nodeMetadata} from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {storeTreeTxId} from "@outlinedb/shared/cache";
 import {and, eq} from "drizzle-orm";
 import {z} from "zod";
 import fs from "node:fs";

@@ -1,5 +1,5 @@
-import {stripHtmlTags} from "@workflowy/shared/html";
-import {getWorkflowyUrl} from "@workflowy/shared/workflowy";
+import {stripHtmlTags} from "@outlinedb/shared/html";
+import {getWorkflowyUrl} from "@outlinedb/shared/workflowy";
 import {useEffect, useRef} from "react";
 import type {NodeResponse} from "../../node-types.js";
 import {useChildren, useNode} from "../hooks/use-nodes.js";

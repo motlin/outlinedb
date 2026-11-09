@@ -37,8 +37,8 @@ import {
 	calendarLayoutNeedsConfirm,
 	parseDateId,
 	planCalendarLayout,
-} from "@workflowy/shared/internal";
-import type {CalendarLevel, LayoutTimings} from "@workflowy/shared/internal";
+} from "@outlinedb/shared/internal";
+import type {CalendarLevel, LayoutTimings} from "@outlinedb/shared/internal";
 import {z} from "zod";
 import {findCalendarDay, findCalendarDays, findTaggedCalendarRoot, readCalendarSettings} from "../calendar-day.js";
 import {foundDaysInMonth} from "../calendar-found.js";

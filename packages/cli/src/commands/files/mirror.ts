@@ -1,5 +1,5 @@
-import {WorkflowyInternalClient} from "@workflowy/shared/api";
-import {readInternalAuth} from "@workflowy/shared/node";
+import {WorkflowyInternalClient} from "@outlinedb/shared/api";
+import {readInternalAuth} from "@outlinedb/shared/node";
 import {Command, Flags} from "@oclif/core";
 import {createDatabase} from "../../db/index.js";
 import {defaultStoreDir, mirrorFiles} from "../../services/files-mirror.js";

@@ -1,4 +1,4 @@
-import type {WorkflowyNode} from "@workflowy/shared/types";
+import type {WorkflowyNode} from "@outlinedb/shared/types";
 
 export interface NodeBatchOptions {
 	/** Nodes per batch. */

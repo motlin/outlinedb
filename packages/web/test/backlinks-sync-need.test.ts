@@ -3,10 +3,10 @@ import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
 import {describe, expect, it} from "vite-plus/test";
-import {CacheService} from "@workflowy/shared/cache";
-import * as schema from "@workflowy/shared/db";
-import {mirrors, nodeContent, nodeMetadata, referencesRoots} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {CacheService} from "@outlinedb/shared/cache";
+import * as schema from "@outlinedb/shared/db";
+import {mirrors, nodeContent, nodeMetadata, referencesRoots} from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {backlinkTargetsOfSource, backlinksNeedSync} from "../src/server/backlinks.js";
 import type {ServerContext} from "../src/server/context.js";
 

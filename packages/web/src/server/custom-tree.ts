@@ -4,8 +4,8 @@
  * non-completed top-level node named `Custom`, unless an id was chosen explicitly.
  */
 
-import {stripHtmlTags} from "@workflowy/shared/html";
-import type {CacheService} from "@workflowy/shared/cache";
+import {stripHtmlTags} from "@outlinedb/shared/html";
+import type {CacheService} from "@outlinedb/shared/cache";
 
 export interface CustomNode {
 	name: string;

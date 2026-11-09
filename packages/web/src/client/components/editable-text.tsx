@@ -76,8 +76,8 @@ import {
 	retagEditor,
 	serializeEditorHtml,
 } from "../editor-html.js";
-import {formatPillLabel} from "@workflowy/shared";
-import type {TimeAttrs} from "@workflowy/shared";
+import {formatPillLabel} from "@outlinedb/shared";
+import type {TimeAttrs} from "@outlinedb/shared";
 import {useBangDatePicker} from "./bang-date-picker.js";
 import {useDateAutocomplete} from "./date-autocomplete.js";
 import {routeTypedInput} from "../inline-input-router.js";

@@ -4,7 +4,7 @@ import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {sql} from "drizzle-orm";
 import {join} from "node:path";
 import {describe, expect, it} from "vite-plus/test";
-import * as schema from "@workflowy/shared/db";
+import * as schema from "@outlinedb/shared/db";
 import type {ServerContext} from "../src/server/context.js";
 import {httpAppFor} from "./http-app-for.js";
 

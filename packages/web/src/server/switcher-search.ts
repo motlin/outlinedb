@@ -1,5 +1,5 @@
-import {stripHtmlTags} from "@workflowy/shared/html";
-import {guessDates} from "@workflowy/shared";
+import {stripHtmlTags} from "@outlinedb/shared/html";
+import {guessDates} from "@outlinedb/shared";
 import {
 	baseScore,
 	highlight,
@@ -12,7 +12,7 @@ import {
 	splitIntoWords,
 	textFactor,
 	withMonthNames,
-} from "@workflowy/shared/search";
+} from "@outlinedb/shared/search";
 import {searchItem, withRowText} from "./tree-search.js";
 import type {RowTextSource, TreeSearchRow} from "./tree-search.js";
 

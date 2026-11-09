@@ -1,6 +1,6 @@
-import {WorkflowyInternalClient} from "@workflowy/shared/api";
-import {backupImports, nodeContent, nodeMetadata} from "@workflowy/shared/db";
-import type {NodeContentType, NodeMetadataType, AppDatabase} from "@workflowy/shared/db";
+import {WorkflowyInternalClient} from "@outlinedb/shared/api";
+import {backupImports, nodeContent, nodeMetadata} from "@outlinedb/shared/db";
+import type {NodeContentType, NodeMetadataType, AppDatabase} from "@outlinedb/shared/db";
 import {
 	applyRows,
 	calendarRows,
@@ -14,7 +14,7 @@ import {
 	readWorkflowyEpoch,
 	runUnitOfWork,
 	seedAccount,
-} from "@workflowy/shared/cache";
+} from "@outlinedb/shared/cache";
 import type {
 	ItemRelationships,
 	TemporalTransaction,
@@ -26,11 +26,11 @@ import type {
 	NormalizedNodeMetadataRow,
 	NormalizedReferencesRootsRow,
 	NormalizedS3FileRow,
-} from "@workflowy/shared/cache";
-import {BackupFileSchema} from "@workflowy/shared/schemas";
-import type {BackupNode} from "@workflowy/shared/schemas";
-import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@workflowy/shared/temporal";
-import {backupToUnixTime, uuidToShortId} from "@workflowy/shared/workflowy";
+} from "@outlinedb/shared/cache";
+import {BackupFileSchema} from "@outlinedb/shared/schemas";
+import type {BackupNode} from "@outlinedb/shared/schemas";
+import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@outlinedb/shared/temporal";
+import {backupToUnixTime, uuidToShortId} from "@outlinedb/shared/workflowy";
 import {and, eq, gt, max, ne} from "drizzle-orm";
 import type {BetterSQLite3Database} from "drizzle-orm/better-sqlite3";
 import {readBackupFile} from "../utils/backup-archive.js";

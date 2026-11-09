@@ -1,8 +1,8 @@
 import {beforeEach, vi, afterEach, describe, expect, it} from "vite-plus/test";
-import {backupImports, mirrors, nodeContent, nodeMetadata, referencesRoots} from "@workflowy/shared/db";
+import {backupImports, mirrors, nodeContent, nodeMetadata, referencesRoots} from "@outlinedb/shared/db";
 import {z} from "zod";
-import {formatTemporalTimestamp} from "@workflowy/shared/temporal";
-import type {NewNodeContent, NewNodeMetadata} from "@workflowy/shared/db";
+import {formatTemporalTimestamp} from "@outlinedb/shared/temporal";
+import type {NewNodeContent, NewNodeMetadata} from "@outlinedb/shared/db";
 import {captureOutput} from "@oclif/test";
 import fs from "node:fs";
 import os from "node:os";

@@ -1,6 +1,6 @@
 import {afterEach, beforeEach, describe, expect, it} from "vite-plus/test";
-import {ACCOUNT_COMPOSITE_TABLES} from "@workflowy/shared/cache";
-import {rootPreferences} from "@workflowy/shared/db";
+import {ACCOUNT_COMPOSITE_TABLES} from "@outlinedb/shared/cache";
+import {rootPreferences} from "@outlinedb/shared/db";
 import {captureOutput} from "@oclif/test";
 import {getTableName} from "drizzle-orm";
 import fs from "node:fs";

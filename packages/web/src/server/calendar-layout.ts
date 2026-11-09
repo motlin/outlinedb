@@ -7,15 +7,15 @@
  */
 
 import {and, eq} from "drizzle-orm";
-import {calendarLevels} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {calendarLevels} from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import type {
 	CalendarLayoutLevels,
 	CalendarLayoutSnapshot,
 	LayoutNode,
 	WorkflowyInternalAdapter,
-} from "@workflowy/shared/internal";
-import type {Node} from "@workflowy/shared/types";
+} from "@outlinedb/shared/internal";
+import type {Node} from "@outlinedb/shared/types";
 import {findTaggedCalendarRoot, loadCalendarInfo} from "./calendar-day.js";
 import type {CalendarDayDeps} from "./calendar-day.js";
 import type {ServerContext} from "./context.js";

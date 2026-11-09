@@ -1,4 +1,4 @@
-import {parseVirtualShortId, virtualShortId} from "@workflowy/shared/workflowy";
+import {parseVirtualShortId, virtualShortId} from "@outlinedb/shared/workflowy";
 import type {MirrorInstance} from "../mirror-path.js";
 
 /** Upstream item URLs use the last 12 characters of the uuid. */

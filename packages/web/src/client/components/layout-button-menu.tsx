@@ -1,4 +1,4 @@
-import {HOME_TARGET} from "@workflowy/shared/types";
+import {HOME_TARGET} from "@outlinedb/shared/types";
 import {useItemTypeSelectDeps} from "../hooks/use-item-type-select-deps.js";
 import {pickerItemTypes, selectItemType} from "../item-type-select.js";
 import {captureOutlineView, runInUndoBatch} from "../undo-batch.js";

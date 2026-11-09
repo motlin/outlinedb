@@ -1,5 +1,5 @@
-import {WorkflowyApiClient} from "@workflowy/shared/api";
-import {WorkflowyWriteThroughClient} from "@workflowy/shared/cache";
+import {WorkflowyApiClient} from "@outlinedb/shared/api";
+import {WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
 import {Command, Flags} from "@oclif/core";
 import fs from "node:fs";
 import path from "node:path";

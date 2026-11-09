@@ -28,7 +28,7 @@
 	"workspaces": {
 		"patterns": ["packages/*"],
 	},
-	"publicPackages": ["@workflowy/shared"],
+	"publicPackages": ["@outlinedb/shared"],
 	"ignorePatterns": [
 		".storybook/**",
 		"**/dist/**",
@@ -46,7 +46,7 @@
 	"rules": {
 		"unused-dependencies": "error",
 	},
-	// Resolve @workflowy/shared imports to src/ (via the "source" export condition) instead of dist/,
+	// Resolve @outlinedb/shared imports to src/ (via the "source" export condition) instead of dist/,
 	// so cross-package usages of shared class members are seen.
 	"resolve": {
 		"conditions": ["source"],

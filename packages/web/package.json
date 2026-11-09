@@ -1,5 +1,5 @@
 {
-	"name": "@workflowy/web",
+	"name": "@outlinedb/web",
 	"version": "0.0.0",
 	"description": "Web UI for Workflowy with React frontend and Hono API server",
 	"type": "module",
@@ -35,9 +35,9 @@
 	"dependencies": {
 		"@hono/node-server": "^2.1.5",
 		"@hono/node-ws": "^1.3.1",
+		"@outlinedb/shared": "workspace:*",
 		"@rehookify/datepicker": "^6.6.8",
 		"@tanstack/react-query": "^5.105.0",
-		"@workflowy/shared": "workspace:*",
 		"better-auth": "1.7.18",
 		"better-sqlite3": "^13.0.3",
 		"diff": "^9.0.0",

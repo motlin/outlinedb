@@ -1,5 +1,5 @@
 {
-	"name": "workflowy-cli",
+	"name": "outlinedb",
 	"version": "0.1.0",
 	"description": "CLI for managing Workflowy nodes via API",
 	"keywords": [
@@ -50,7 +50,7 @@
 	"dependencies": {
 		"@oclif/core": "^5.1.10",
 		"@oclif/plugin-help": "^7",
-		"@workflowy/shared": "workspace:*",
+		"@outlinedb/shared": "workspace:*",
 		"better-sqlite3": "13.0.3",
 		"drizzle-orm": "^0.45.3"
 	},

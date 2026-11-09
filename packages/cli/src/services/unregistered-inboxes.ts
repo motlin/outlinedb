@@ -1,6 +1,6 @@
-import {CacheService, findInbox, PathBuilder} from "@workflowy/shared/cache";
-import type * as schema from "@workflowy/shared/db";
-import {stripHtmlTags} from "@workflowy/shared/html";
+import {CacheService, findInbox, PathBuilder} from "@outlinedb/shared/cache";
+import type * as schema from "@outlinedb/shared/db";
+import {stripHtmlTags} from "@outlinedb/shared/html";
 import type {BetterSQLite3Database} from "drizzle-orm/better-sqlite3";
 
 export function findUnregisteredInboxes(

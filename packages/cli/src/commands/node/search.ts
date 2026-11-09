@@ -1,5 +1,5 @@
 import {Command, Flags} from "@oclif/core";
-import {stripHtmlTags} from "@workflowy/shared/html";
+import {stripHtmlTags} from "@outlinedb/shared/html";
 import {createDatabase} from "../../db/index.js";
 import {TextSearchService} from "../../services/text-search.js";
 import type {TextSearchResult} from "../../services/text-search.js";

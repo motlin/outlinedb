@@ -1,5 +1,5 @@
 import {text} from "node:stream/consumers";
-import {getWorkflowyUrl} from "@workflowy/shared/workflowy";
+import {getWorkflowyUrl} from "@outlinedb/shared/workflowy";
 import {Command} from "@oclif/core";
 import {z} from "zod";
 import {htmlToAnsi} from "../../../utils/html-to-ansi.js";

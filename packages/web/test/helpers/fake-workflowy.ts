@@ -1,12 +1,12 @@
-import type {CacheService} from "@workflowy/shared/cache";
-import {anchoredIndex} from "@workflowy/shared/internal";
-import type {CreateAtInput, RestoreInput} from "@workflowy/shared/internal";
-import type {Node, WorkflowyNode} from "@workflowy/shared/types";
+import type {CacheService} from "@outlinedb/shared/cache";
+import {anchoredIndex} from "@outlinedb/shared/internal";
+import type {CreateAtInput, RestoreInput} from "@outlinedb/shared/internal";
+import type {Node, WorkflowyNode} from "@outlinedb/shared/types";
 
 /**
  * A fake Workflowy behind the real local server: its writes land straight in the server's cache, as the real
  * write-through client's do once Workflowy answers. Only type imports here, so a test's `vi.mock` factory for
- * `@workflowy/shared/cache` can load these classes without importing the module it replaces.
+ * `@outlinedb/shared/cache` can load these classes without importing the module it replaces.
  */
 
 let clock = 1_000_000;

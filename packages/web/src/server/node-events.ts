@@ -13,7 +13,7 @@
  */
 
 import {sql} from "drizzle-orm";
-import type {AppDatabase} from "@workflowy/shared/db";
+import type {AppDatabase} from "@outlinedb/shared/db";
 import {changeWatermark} from "./system-changes.js";
 
 export interface TreeChangedEvent {

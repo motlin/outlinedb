@@ -4,14 +4,14 @@ import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {Hono} from "hono";
 import {join} from "node:path";
-import {TRANSACTION_TIMEOUT_MS} from "@workflowy/shared/cache";
-import * as schema from "@workflowy/shared/db";
-import type {WorkflowyNode} from "@workflowy/shared/types";
+import {TRANSACTION_TIMEOUT_MS} from "@outlinedb/shared/cache";
+import * as schema from "@outlinedb/shared/db";
+import type {WorkflowyNode} from "@outlinedb/shared/types";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
 import type {NodeChangesResponse} from "../src/node-types.js";
 import {httpAppFor} from "./http-app-for.js";
 
-const {CacheService} = await import("@workflowy/shared/cache");
+const {CacheService} = await import("@outlinedb/shared/cache");
 
 const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 

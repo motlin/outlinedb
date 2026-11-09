@@ -1,4 +1,4 @@
-import {htmlToText} from "@workflowy/shared/html";
+import {htmlToText} from "@outlinedb/shared/html";
 
 /** Upstream's `config("location").autotitle.noname`. */
 export const NONAME_TITLE = "OutlineDB - Organize your brain.";

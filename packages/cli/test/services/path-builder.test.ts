@@ -1,5 +1,5 @@
 import {beforeEach, beforeAll, afterAll, describe, expect, it} from "vite-plus/test";
-import {PathBuilder} from "@workflowy/shared/cache";
+import {PathBuilder} from "@outlinedb/shared/cache";
 import {cleanupTestDatabase, createInMemoryTestDatabase, nodeFixtures, seedTestData} from "../db/migration-helper.js";
 import type {TestDatabase} from "../db/migration-helper.js";
 import {createTestNode} from "../helpers/node-fixtures.js";

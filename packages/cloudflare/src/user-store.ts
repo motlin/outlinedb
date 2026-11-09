@@ -7,9 +7,9 @@ import {
 	readAccountState,
 	runUnitOfWork,
 	writeAccountState,
-} from "@workflowy/shared/cache";
-import type {AccountState} from "@workflowy/shared/cache";
-import * as schema from "@workflowy/shared/db";
+} from "@outlinedb/shared/cache";
+import type {AccountState} from "@outlinedb/shared/cache";
+import * as schema from "@outlinedb/shared/db";
 import {
 	LadderEventBus,
 	TreeEventBus,
@@ -18,7 +18,7 @@ import {
 	buildServerContext,
 	inProcessStore,
 	peekTreeSnapshotRows,
-} from "@workflowy/web/server-app";
+} from "@outlinedb/web/server-app";
 import type {
 	Awaitable,
 	EmbeddingIndex,
@@ -27,12 +27,12 @@ import type {
 	OpOutput,
 	OpResult,
 	StoreClient,
-} from "@workflowy/web/server-app";
-import {WorkflowyInternalClient} from "@workflowy/shared/api";
-import type {SessionCookieStore} from "@workflowy/shared/api";
+} from "@outlinedb/web/server-app";
+import {WorkflowyInternalClient} from "@outlinedb/shared/api";
+import type {SessionCookieStore} from "@outlinedb/shared/api";
 import {drizzle} from "drizzle-orm/durable-sqlite";
 import {migrate} from "drizzle-orm/durable-sqlite/migrator";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {AlarmSchedule} from "./alarm-schedule";
 import {doMigrationConfig} from "./do-migrations";
 import {EmbeddingJob} from "./embedding-job";

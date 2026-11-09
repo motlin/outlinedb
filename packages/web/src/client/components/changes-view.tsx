@@ -1,5 +1,5 @@
 import {useQuery} from "@tanstack/react-query";
-import {stripHtmlTags as stripHtml} from "@workflowy/shared/html";
+import {stripHtmlTags as stripHtml} from "@outlinedb/shared/html";
 import {useState} from "react";
 import {useSearchParams} from "react-router-dom";
 import {diffChars} from "diff";

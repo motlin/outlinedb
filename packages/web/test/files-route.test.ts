@@ -3,11 +3,11 @@ import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
-import {CacheService} from "@workflowy/shared/cache";
-import * as schema from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
-import type {WorkflowyInternalAdapter} from "@workflowy/shared/internal";
-import type {WorkflowyNode} from "@workflowy/shared/types";
+import {CacheService} from "@outlinedb/shared/cache";
+import * as schema from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
+import type {WorkflowyNode} from "@outlinedb/shared/types";
 import type {ServerContext} from "../src/server/context.js";
 import {httpAppFor} from "./http-app-for.js";
 

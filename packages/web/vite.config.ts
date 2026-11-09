@@ -4,7 +4,7 @@ import {z} from "zod";
 import {defineConfig} from "vite-plus";
 import {resolvePort} from "./src/server/port.js";
 
-process.title = "workflowy-web-dev";
+process.title = "outlinedb-web-dev";
 
 const PackageSchema = z.object({version: z.string()});
 const {version} = PackageSchema.parse(JSON.parse(readFileSync(new URL("package.json", import.meta.url), "utf8")));

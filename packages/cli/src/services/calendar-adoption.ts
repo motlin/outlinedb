@@ -1,7 +1,7 @@
-import type {WorkflowyWriteThroughClient} from "@workflowy/shared/cache";
-import {calendarParentContext, CALENDAR_ROOT_NAME} from "@workflowy/shared/calendar-lookup";
-import {adoptAfterCreate, calendarAdoptWarning} from "@workflowy/shared/internal";
-import {internalAdapter} from "@workflowy/shared/node";
+import type {WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
+import {calendarParentContext, CALENDAR_ROOT_NAME} from "@outlinedb/shared/calendar-lookup";
+import {adoptAfterCreate, calendarAdoptWarning} from "@outlinedb/shared/internal";
+import {internalAdapter} from "@outlinedb/shared/node";
 import type {createDatabase} from "../db/index.js";
 import type {CacheService} from "./cache.js";
 

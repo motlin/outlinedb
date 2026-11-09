@@ -10,7 +10,7 @@ const TOOLS_SOURCE = manifest.exports?.["./tools"]?.source;
 const ALLOWED_BUILTIN = / -> node:(?:crypto|buffer)$/u;
 const FORBIDDEN_PACKAGE = /(?: -> )(better-sqlite3|sqlite-vec|drizzle-orm\/better-sqlite3.*)$/u;
 
-describe("@workflowy/mcp/tools worker-safe import graph", () => {
+describe("@outlinedb/mcp/tools worker-safe import graph", () => {
 	it("exports ./tools from src/register.ts", () => {
 		expect(TOOLS_SOURCE).toBe("./src/register.ts");
 	});

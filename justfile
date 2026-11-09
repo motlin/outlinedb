@@ -34,7 +34,7 @@ ensure-sqlite-native:
 
 # Run dev server, node host (shared code live from source; see `web`)
 dev-node *args: build-shared
-    WORKFLOWY_DB_PATH={{ justfile_directory() }}/workflowy.sqlite vp run --filter @workflowy/web dev {{ args }}
+    WORKFLOWY_DB_PATH={{ justfile_directory() }}/workflowy.sqlite vp run --filter @outlinedb/web dev {{ args }}
 
 # Run linter
 [group('lint')]
@@ -109,9 +109,9 @@ test-plugins:
 [group('build')]
 typecheck: build-shared
     vp run typecheck
-    vp run --filter @workflowy/web typecheck
-    vp run --filter @workflowy/web build:types
-    vp run --filter @workflowy/cloudflare typecheck
+    vp run --filter @outlinedb/web typecheck
+    vp run --filter @outlinedb/web build:types
+    vp run --filter @outlinedb/cloudflare typecheck
 
 # Remove all dist dirs and tsbuildinfo to prevent stale artifacts (used by git-test)
 [group('build')]
@@ -150,12 +150,12 @@ fallow-check: install
 # Build the shared package
 [group('build')]
 build-shared: install
-    vp run --filter @workflowy/shared build
+    vp run --filter @outlinedb/shared build
 
-# `vp run --filter @workflowy/cli prepack`
+# `vp run --filter @outlinedb/cli prepack`
 [group('build')]
 manifest: install
-    vp run --filter @workflowy/cli prepack
+    vp run --filter @outlinedb/cli prepack
 
 # Run structural eval tests against .claude/ markdown files
 [group('test')]
@@ -278,11 +278,11 @@ db-cli:
 db-web:
     datasette workflowy.sqlite
 
-# The API server's `tsx watch` runs with `--conditions=source`, so @workflowy/shared resolves to packages/shared/src (its exports' `source` condition), not dist: shared edits restart the server live and it never runs stale built code.
+# The API server's `tsx watch` runs with `--conditions=source`, so @outlinedb/shared resolves to packages/shared/src (its exports' `source` condition), not dist: shared edits restart the server live and it never runs stale built code.
 # Start web app with API server and Vite dev server (shared code live from source)
 [group('web')]
 web: build-shared
-    WORKFLOWY_DB_PATH={{ justfile_directory() }}/workflowy.sqlite vp run --filter @workflowy/web dev
+    WORKFLOWY_DB_PATH={{ justfile_directory() }}/workflowy.sqlite vp run --filter @outlinedb/web dev
 
 # Download all available Dropbox backups that aren't already downloaded
 [group('backup')]

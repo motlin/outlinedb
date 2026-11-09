@@ -1,8 +1,8 @@
 import {and, asc, desc, eq, gte, inArray, ne} from "drizzle-orm";
-import {closeCurrentVersions} from "@workflowy/shared/cache";
-import type {TemporalTransaction} from "@workflowy/shared/cache";
-import {nodeContent, nodeLabelSuggestions} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {closeCurrentVersions} from "@outlinedb/shared/cache";
+import type {TemporalTransaction} from "@outlinedb/shared/cache";
+import {nodeContent, nodeLabelSuggestions} from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import type {LabelKind} from "./label-pool.js";
 
 /** Which Clef pass produced a score: the pass 1 shortlist, or the pass 2 verifier model. */

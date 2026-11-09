@@ -1,5 +1,5 @@
-import {CALENDAR_LEVELS, dateId} from "@workflowy/shared";
-import type {CalendarLevel} from "@workflowy/shared";
+import {CALENDAR_LEVELS, dateId} from "@outlinedb/shared";
+import type {CalendarLevel} from "@outlinedb/shared";
 import type {CalendarInfo} from "../node-types.js";
 import type {AppMessageAction, AppMessageType} from "./stores/outline.js";
 import {defaultIndexIn} from "./tree-ops.js";

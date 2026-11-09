@@ -1,5 +1,5 @@
 import {describe, expect, it, vi} from "vite-plus/test";
-import type {WorkflowyInternalAdapter} from "@workflowy/shared/internal";
+import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import {createHttpApp} from "../src/server/http/app.js";
 import {Ops} from "../src/server/ops/index.js";
 import {starsListWith} from "../src/server/ops/stars.js";

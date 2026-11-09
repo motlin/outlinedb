@@ -1,6 +1,6 @@
 import {describe, expect, it} from "vite-plus/test";
 import {z} from "zod";
-import {TreeNotSeeded} from "@workflowy/shared/internal";
+import {TreeNotSeeded} from "@outlinedb/shared/internal";
 import {fail, ok, defineOp} from "../src/server/ops/define.js";
 import {createHttpApp, parseInput, toResponse} from "../src/server/http/app.js";
 import {inProcessStore} from "../src/server/store.js";

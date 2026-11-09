@@ -1,4 +1,4 @@
-import type {EnhancedWorkflowyNode} from "@workflowy/shared/types";
+import type {EnhancedWorkflowyNode} from "@outlinedb/shared/types";
 import {Command, Flags} from "@oclif/core";
 import fs from "node:fs";
 import path from "node:path";

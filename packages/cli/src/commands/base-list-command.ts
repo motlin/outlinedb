@@ -1,7 +1,7 @@
-import {WorkflowyApiClient} from "@workflowy/shared/api";
-import {NodeTreeReader, PathBuilder, systemFromToDate} from "@workflowy/shared/cache";
-import type {NodeTree} from "@workflowy/shared/cache";
-import type {WorkflowyNode} from "@workflowy/shared/types";
+import {WorkflowyApiClient} from "@outlinedb/shared/api";
+import {NodeTreeReader, PathBuilder, systemFromToDate} from "@outlinedb/shared/cache";
+import type {NodeTree} from "@outlinedb/shared/cache";
+import type {WorkflowyNode} from "@outlinedb/shared/types";
 import {Command, Flags} from "@oclif/core";
 import {createDatabase} from "../db/index.js";
 import {CacheService} from "../services/cache.js";

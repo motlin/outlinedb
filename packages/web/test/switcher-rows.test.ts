@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vite-plus/test";
-import type {Star} from "@workflowy/shared";
+import type {Star} from "@outlinedb/shared";
 import type {SwitcherResult} from "../src/server/switcher-search.js";
 import {buildSwitcherRows, starredNodeIds} from "../src/client/switcher-rows.js";
 import type {StarredEntry} from "../src/client/switcher-rows.js";

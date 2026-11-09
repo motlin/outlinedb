@@ -1,6 +1,6 @@
-import type {CacheService} from "@workflowy/shared/cache";
-import {findCalendarDay} from "@workflowy/shared/calendar-lookup";
-import type {CalendarDayDeps} from "@workflowy/shared/calendar-lookup";
+import type {CacheService} from "@outlinedb/shared/cache";
+import {findCalendarDay} from "@outlinedb/shared/calendar-lookup";
+import type {CalendarDayDeps} from "@outlinedb/shared/calendar-lookup";
 
 type Database = CalendarDayDeps["db"];
 

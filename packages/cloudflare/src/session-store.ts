@@ -1,4 +1,4 @@
-import type {SessionCookieStore} from "@workflowy/shared/api";
+import type {SessionCookieStore} from "@outlinedb/shared/api";
 
 /** The synchronous key-value surface of `DurableObjectStorage.kv`. */
 export interface KvLike {

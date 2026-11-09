@@ -1,4 +1,4 @@
-import {isShortId, parseVirtualShortId, virtualShortId} from "@workflowy/shared/workflowy";
+import {isShortId, parseVirtualShortId, virtualShortId} from "@outlinedb/shared/workflowy";
 import type {MirrorInstance} from "../mirror-path.js";
 import {useQueryClient} from "@tanstack/react-query";
 import {useEffect, useRef} from "react";

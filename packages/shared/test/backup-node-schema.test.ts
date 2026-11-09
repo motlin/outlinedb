@@ -1,4 +1,4 @@
-import {BackupNodeSchema, MetadataSchema} from "@workflowy/shared/schemas";
+import {BackupNodeSchema, MetadataSchema} from "@outlinedb/shared/schemas";
 import {describe, expect, it} from "vite-plus/test";
 
 /**

@@ -1,8 +1,8 @@
-import {aiMetadata, referencesRoots} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {aiMetadata, referencesRoots} from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {sql} from "drizzle-orm";
 import type {SQL} from "drizzle-orm";
-import type {AppDatabase} from "@workflowy/shared/db";
+import type {AppDatabase} from "@outlinedb/shared/db";
 import {compactSwitcherSkeleton, warmSwitcher} from "./switcher-search.js";
 import type {SwitcherSkeleton, SwitcherTextScan} from "./switcher-search.js";
 import {changedNodeIds, changesSince, latestSystemTime, readConsistently} from "./system-changes.js";

@@ -7,7 +7,7 @@ import {isValidLeftBarParent, planLeftBarDrop, rowMovingStyle} from "../left-bar
 import {readChildren, readNode} from "../node-cache.js";
 import {useStableNavigate} from "../hooks/use-stable-navigate.js";
 import type {NodeResponse} from "../../node-types.js";
-import {friendlyPrefix} from "@workflowy/shared";
+import {friendlyPrefix} from "@outlinedb/shared";
 import {useDayPrefix} from "../hooks/use-calendar-settings.js";
 import {useChildren} from "../hooks/use-nodes.js";
 import {useDateSettings} from "../hooks/use-preferences.js";

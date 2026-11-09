@@ -1,6 +1,6 @@
 import {beforeEach, afterEach, describe, expect, it} from "vite-plus/test";
-import {nodeContent} from "@workflowy/shared/db";
-import type {NewNodeContent} from "@workflowy/shared/db";
+import {nodeContent} from "@outlinedb/shared/db";
+import type {NewNodeContent} from "@outlinedb/shared/db";
 import {captureOutput} from "@oclif/test";
 import {sql} from "drizzle-orm";
 import fs from "node:fs";

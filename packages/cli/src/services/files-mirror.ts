@@ -14,10 +14,10 @@ import fs from "node:fs";
 import path from "node:path";
 import {pipeline} from "node:stream/promises";
 import {setTimeout as sleep} from "node:timers/promises";
-import {closeCurrentVersions, runUnitOfWork, startUnitOfWork} from "@workflowy/shared/cache";
-import {fileBlobs, s3Files} from "@workflowy/shared/db";
-import type * as schema from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {closeCurrentVersions, runUnitOfWork, startUnitOfWork} from "@outlinedb/shared/cache";
+import {fileBlobs, s3Files} from "@outlinedb/shared/db";
+import type * as schema from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {and, eq, isNull, or} from "drizzle-orm";
 import type {BetterSQLite3Database} from "drizzle-orm/better-sqlite3";
 

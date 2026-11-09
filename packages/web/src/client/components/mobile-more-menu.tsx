@@ -1,6 +1,6 @@
 import {useQueryClient} from "@tanstack/react-query";
 import {useState} from "react";
-import {HOME_TARGET} from "@workflowy/shared/types";
+import {HOME_TARGET} from "@outlinedb/shared/types";
 import {openMenuExport} from "../export-entry.js";
 import {useExpandAll, useDeleteNode} from "../hooks/use-nodes.js";
 import {activeCommandRegistry} from "../hooks/use-global-keymap.js";

@@ -1,5 +1,5 @@
-import {parseNestedQuery, parseQuery} from "@workflowy/shared/search";
-import type {QueryNode} from "@workflowy/shared/search";
+import {parseNestedQuery, parseQuery} from "@outlinedb/shared/search";
+import type {QueryNode} from "@outlinedb/shared/search";
 import {isFeatureOn} from "./features.js";
 import {decodeSegment} from "./tag-render.js";
 

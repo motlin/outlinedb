@@ -2,8 +2,8 @@ import {afterEach, beforeEach, describe, expect, it, vi} from "vite-plus/test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import {calendarNodeId} from "@workflowy/shared/internal";
-import {storeInternalMetadata} from "@workflowy/shared/cache";
+import {calendarNodeId} from "@outlinedb/shared/internal";
+import {storeInternalMetadata} from "@outlinedb/shared/cache";
 import {createDatabase} from "../../../src/db/index.js";
 import Probe, {SANDBOX_ID, assertUnderSandbox, expectedMove, typeShape} from "../../../src/commands/internal/probe.js";
 

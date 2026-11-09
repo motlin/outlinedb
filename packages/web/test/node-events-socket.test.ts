@@ -3,8 +3,8 @@ import {sql} from "drizzle-orm";
 import {drizzle} from "drizzle-orm/better-sqlite3";
 import {afterEach, describe, expect, it, vi} from "vite-plus/test";
 import {z} from "zod";
-import * as schema from "@workflowy/shared/db";
-import type {AppDatabase} from "@workflowy/shared/db";
+import * as schema from "@outlinedb/shared/db";
+import type {AppDatabase} from "@outlinedb/shared/db";
 import type {ServerContext} from "../src/server/context.js";
 import {
 	TreeEventBus,

@@ -6,7 +6,7 @@
  * Inbox, 503 without the internal API.
  */
 
-import {InboxMissing} from "@workflowy/shared/internal";
+import {InboxMissing} from "@outlinedb/shared/internal";
 import {z} from "zod";
 import type {ServerContext} from "../context.js";
 import {INTERNAL_API_NOT_CONFIGURED} from "../internal-api-error.js";

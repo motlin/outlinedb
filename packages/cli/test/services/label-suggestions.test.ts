@@ -1,6 +1,6 @@
 import {afterEach, beforeEach, describe, expect, it} from "vite-plus/test";
-import {nodeContent, nodeLabelSuggestions} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {nodeContent, nodeLabelSuggestions} from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {asc} from "drizzle-orm";
 import {entriesToScore, saveLabelSuggestions} from "../../src/services/label-suggestions.js";
 import {cleanupTestDatabase, createInMemoryTestDatabase} from "../db/migration-helper.js";

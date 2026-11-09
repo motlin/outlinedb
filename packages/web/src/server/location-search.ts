@@ -1,4 +1,4 @@
-import {matchField, splitIntoWords} from "@workflowy/shared/search";
+import {matchField, splitIntoWords} from "@outlinedb/shared/search";
 import {rankSwitcher} from "./switcher-search.js";
 import type {RankSwitcherOptions, SwitcherAncestor, SwitcherResponse} from "./switcher-search.js";
 import type {TreeSearchRow} from "./tree-search.js";

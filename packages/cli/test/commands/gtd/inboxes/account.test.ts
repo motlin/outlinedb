@@ -1,5 +1,5 @@
 import {captureOutput} from "@oclif/test";
-import {runUnitOfWork, writeAccountSnapshot} from "@workflowy/shared/cache";
+import {runUnitOfWork, writeAccountSnapshot} from "@outlinedb/shared/cache";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";

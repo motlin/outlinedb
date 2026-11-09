@@ -1,19 +1,19 @@
 /**
- * The 📆 Calendar lookups live in `@workflowy/shared/calendar-lookup`;
+ * The 📆 Calendar lookups live in `@outlinedb/shared/calendar-lookup`;
  * this module adds the node DTO's calendar role and the root's picker settings.
  */
 
 import {and, eq, inArray} from "drizzle-orm";
-import {dayNameDate, findCalendarRoot, findTaggedCalendarRoot} from "@workflowy/shared/calendar-lookup";
-import type {CalendarDayDeps} from "@workflowy/shared/calendar-lookup";
-import type {CacheService} from "@workflowy/shared/cache";
-import {calendarMetadata, nodeDisplayMetadata} from "@workflowy/shared/db";
-import type {CalendarDate} from "@workflowy/shared/internal";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {dayNameDate, findCalendarRoot, findTaggedCalendarRoot} from "@outlinedb/shared/calendar-lookup";
+import type {CalendarDayDeps} from "@outlinedb/shared/calendar-lookup";
+import type {CacheService} from "@outlinedb/shared/cache";
+import {calendarMetadata, nodeDisplayMetadata} from "@outlinedb/shared/db";
+import type {CalendarDate} from "@outlinedb/shared/internal";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import type {CalendarInfo} from "../node-types.js";
 
-export {findCalendarDay, findCalendarDays, findTaggedCalendarRoot} from "@workflowy/shared/calendar-lookup";
-export type {CalendarDayDeps} from "@workflowy/shared/calendar-lookup";
+export {findCalendarDay, findCalendarDays, findTaggedCalendarRoot} from "@outlinedb/shared/calendar-lookup";
+export type {CalendarDayDeps} from "@outlinedb/shared/calendar-lookup";
 
 /** The 📆 Calendar root's picker settings (upstream `T10`/`k10`): each is true unless the root sets it false. */
 interface CalendarSettings {

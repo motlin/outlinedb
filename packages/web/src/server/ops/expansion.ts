@@ -9,7 +9,7 @@
  * lives per server context, i.e. per Durable Object or Node host.
  */
 
-import type {WorkflowyInternalAdapter} from "@workflowy/shared/internal";
+import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import {z} from "zod";
 import type {ServerContext} from "../context.js";
 import {INTERNAL_API_NOT_CONFIGURED} from "../internal-api-error.js";

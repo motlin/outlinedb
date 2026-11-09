@@ -1,8 +1,8 @@
-import {nodeContent, nodeMetadata} from "@workflowy/shared/db";
-import type * as schema from "@workflowy/shared/db";
-import {NodeReader} from "@workflowy/shared/cache";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
-import type {Node} from "@workflowy/shared/types";
+import {nodeContent, nodeMetadata} from "@outlinedb/shared/db";
+import type * as schema from "@outlinedb/shared/db";
+import {NodeReader} from "@outlinedb/shared/cache";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import type {Node} from "@outlinedb/shared/types";
 import {and, asc, eq, isNotNull} from "drizzle-orm";
 import type {BetterSQLite3Database} from "drizzle-orm/better-sqlite3";
 import {logger} from "./logger.js";

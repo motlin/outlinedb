@@ -1,6 +1,6 @@
 import {z} from "zod";
-import {readEnabledFeatures, writeEnabledFeatures} from "@workflowy/shared/cache";
-import type {TemporalTransaction} from "@workflowy/shared/cache";
+import {readEnabledFeatures, writeEnabledFeatures} from "@outlinedb/shared/cache";
+import type {TemporalTransaction} from "@outlinedb/shared/cache";
 import {DEFAULT_FEATURES, VISIBLE_FEATURES} from "../../feature-catalog.js";
 import {defineOp, ok, toJson} from "./define.js";
 

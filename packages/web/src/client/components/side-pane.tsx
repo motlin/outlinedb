@@ -4,7 +4,7 @@ import {createPortal} from "react-dom";
 import {useQueryClient} from "@tanstack/react-query";
 import type {QueryClient} from "@tanstack/react-query";
 import {useNavigate} from "react-router-dom";
-import {stripHtmlTags} from "@workflowy/shared/html";
+import {stripHtmlTags} from "@outlinedb/shared/html";
 import {useNavigateToToday} from "../hooks/use-navigate-to-today.js";
 import {useCalendarTooltipSeen} from "../hooks/use-preferences.js";
 import {CalendarTodayControl} from "./calendar-today-control.js";

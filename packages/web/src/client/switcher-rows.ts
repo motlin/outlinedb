@@ -1,10 +1,10 @@
 // Upstream's switcher row list: an empty filter lists the starred locations (`useMostRecentStarred`);
 // a filter lists the starred entries that match it, then the server's results without their duplicates.
 
-import {label} from "@workflowy/shared";
-import {stripHtmlTags} from "@workflowy/shared/html";
-import type {Star} from "@workflowy/shared";
-import {matchSwitcherRow} from "@workflowy/shared/search";
+import {label} from "@outlinedb/shared";
+import {stripHtmlTags} from "@outlinedb/shared/html";
+import type {Star} from "@outlinedb/shared";
+import {matchSwitcherRow} from "@outlinedb/shared/search";
 import type {SwitcherAncestor, SwitcherResult} from "../server/switcher-search.js";
 
 /** A starred location with its node's text; callers pass these in `mostRecent` order. */

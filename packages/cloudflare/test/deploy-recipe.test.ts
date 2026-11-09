@@ -52,7 +52,7 @@ describe("Worker dev through the Cloudflare Vite plugin", () => {
 	it("runs dev as vp dev with the worker config, and keeps the Node host as dev-node", () => {
 		expect(recipe("dev *args")).toContain("vp dev -c vite.worker.config.ts");
 		expect(recipe("dev *args")).not.toContain("wrangler dev");
-		expect(recipe("dev-node")).toContain("vp run --filter @workflowy/web dev");
+		expect(recipe("dev-node")).toContain("vp run --filter @outlinedb/web dev");
 	});
 
 	it("builds with cf-build and deploys the generated wrangler.json", () => {

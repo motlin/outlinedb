@@ -1,6 +1,6 @@
 import {assert, beforeEach, vi, afterEach, describe, expect, it} from "vite-plus/test";
-import {CacheService, NodeTreeReader} from "@workflowy/shared/cache";
-import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@workflowy/shared/temporal";
+import {CacheService, NodeTreeReader} from "@outlinedb/shared/cache";
+import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@outlinedb/shared/temporal";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";

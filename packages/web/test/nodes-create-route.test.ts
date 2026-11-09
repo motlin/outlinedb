@@ -1,12 +1,12 @@
 import {beforeEach, describe, expect, it, vi} from "vite-plus/test";
 import {Hono} from "hono";
-import type * as SharedCache from "@workflowy/shared/cache";
+import type * as SharedCache from "@outlinedb/shared/cache";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
 import {httpAppFor} from "./http-app-for.js";
 
 const createNode = vi.hoisted(() => vi.fn<SharedCache.WorkflowyWriteThroughClient["createNode"]>());
 
-vi.mock("@workflowy/shared/cache", async (importOriginal) => {
+vi.mock("@outlinedb/shared/cache", async (importOriginal) => {
 	const actual = await importOriginal<typeof SharedCache>();
 	return {
 		...actual,

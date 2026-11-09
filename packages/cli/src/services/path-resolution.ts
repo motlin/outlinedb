@@ -1,4 +1,4 @@
-import type {WorkflowyApiClient} from "@workflowy/shared/api";
+import type {WorkflowyApiClient} from "@outlinedb/shared/api";
 import type {CacheService} from "./cache.js";
 
 export interface PathResolutionResult {

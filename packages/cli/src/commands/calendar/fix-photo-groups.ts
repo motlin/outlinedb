@@ -1,7 +1,7 @@
-import {WorkflowyApiClient} from "@workflowy/shared/api";
-import {WorkflowyWriteThroughClient} from "@workflowy/shared/cache";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
-import {resolveIdOrShortId} from "@workflowy/shared/utils";
+import {WorkflowyApiClient} from "@outlinedb/shared/api";
+import {WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {resolveIdOrShortId} from "@outlinedb/shared/utils";
 import {Command, Flags} from "@oclif/core";
 import {sql} from "drizzle-orm";
 import {createDatabase} from "../../db/index.js";

@@ -1,9 +1,9 @@
-import {WorkflowyApiClient} from "@workflowy/shared/api";
-import type {InternalTreeItem} from "@workflowy/shared/api";
-import type {WorkflowyNode} from "@workflowy/shared/types";
-import {currentBacklinkItems} from "@workflowy/shared/cache";
-import {referencesRoots} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {WorkflowyApiClient} from "@outlinedb/shared/api";
+import type {InternalTreeItem} from "@outlinedb/shared/api";
+import type {WorkflowyNode} from "@outlinedb/shared/types";
+import {currentBacklinkItems} from "@outlinedb/shared/cache";
+import {referencesRoots} from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {randomUUID} from "node:crypto";
 import os from "node:os";
 import path from "node:path";

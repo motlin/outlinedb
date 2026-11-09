@@ -1,5 +1,5 @@
-import {CacheService as BaseCacheService} from "@workflowy/shared/cache";
-import type {Node} from "@workflowy/shared/types";
+import {CacheService as BaseCacheService} from "@outlinedb/shared/cache";
+import type {Node} from "@outlinedb/shared/types";
 import {importBackup} from "./cache-import.js";
 import type {BackupSystemTime, ImportBackupResult} from "./cache-import.js";
 import {logger} from "./logger.js";

@@ -1,5 +1,5 @@
 import {describe, expect, it, vi} from "vite-plus/test";
-import type {StarredLocation} from "@workflowy/shared";
+import type {StarredLocation} from "@outlinedb/shared";
 import {starCurrentItemCommand} from "../src/client/star-commands.js";
 
 function run(zoomedId: string | null, query: string | null): StarredLocation[] {

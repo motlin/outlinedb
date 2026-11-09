@@ -1,5 +1,5 @@
 import {useState} from "react";
-import {friendlyPrefix} from "@workflowy/shared";
+import {friendlyPrefix} from "@outlinedb/shared";
 import type {NodeResponse} from "../../node-types.js";
 import {useDayPrefix} from "../hooks/use-calendar-settings.js";
 import {useAncestors} from "../hooks/use-nodes.js";

@@ -8,7 +8,7 @@
  */
 
 import type {LadderEvent, LadderEventBus} from "./ladder-events.js";
-import {planSlot} from "@workflowy/shared/cache";
+import {planSlot} from "@outlinedb/shared/cache";
 import {planTierMove, toLadder} from "./ladder-model.js";
 import type {Ladder, RawNode} from "./ladder-model.js";
 

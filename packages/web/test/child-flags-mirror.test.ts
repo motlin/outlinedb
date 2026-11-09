@@ -3,13 +3,13 @@ import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
-import * as schema from "@workflowy/shared/db";
-import type {WorkflowyNode} from "@workflowy/shared/types";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import * as schema from "@outlinedb/shared/db";
+import type {WorkflowyNode} from "@outlinedb/shared/types";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import type {ServerContext} from "../src/server/context.js";
 import {childFlags} from "../src/server/backlinks.js";
 
-const {CacheService} = await import("@workflowy/shared/cache");
+const {CacheService} = await import("@outlinedb/shared/cache");
 
 const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 

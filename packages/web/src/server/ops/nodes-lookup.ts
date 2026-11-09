@@ -1,6 +1,6 @@
 import {z} from "zod";
-import {NodeTreeReader} from "@workflowy/shared/cache";
-import {resolveNodeId, resolveOrCreateNodePath, resolveParent} from "@workflowy/shared/utils";
+import {NodeTreeReader} from "@outlinedb/shared/cache";
+import {resolveNodeId, resolveOrCreateNodePath, resolveParent} from "@outlinedb/shared/utils";
 import {defineOp, fail, ok, toJson} from "./define.js";
 import {getApiClient} from "./nodes-shared.js";
 

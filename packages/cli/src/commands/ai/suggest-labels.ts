@@ -1,5 +1,5 @@
-import {newSystemTimestamp} from "@workflowy/shared/cache";
-import {resolveIdOrShortId} from "@workflowy/shared/utils";
+import {newSystemTimestamp} from "@outlinedb/shared/cache";
+import {resolveIdOrShortId} from "@outlinedb/shared/utils";
 import {Command, Flags} from "@oclif/core";
 import path from "node:path";
 import {createDatabase} from "../../db/index.js";

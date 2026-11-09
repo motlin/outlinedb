@@ -4,7 +4,7 @@
  */
 
 import {z} from "zod";
-import {markWhatsNewRead, readWhatsNewReads} from "@workflowy/shared/cache";
+import {markWhatsNewRead, readWhatsNewReads} from "@outlinedb/shared/cache";
 import {defineOp, ok} from "./define.js";
 
 /** Every entry id of ours that was read, sorted. */

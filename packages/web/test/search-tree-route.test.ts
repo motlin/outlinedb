@@ -11,9 +11,9 @@ import {buildServerContext} from "../src/server/context.js";
 import {LadderEventBus} from "../src/server/ladder-events.js";
 import {defineOp, ok} from "../src/server/ops/define.js";
 import {inProcessStore} from "../src/server/store.js";
-import * as schema from "@workflowy/shared/db";
-import {aiMetadata, mirrors, nodeContent, nodeMetadata, referencesRoots} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@workflowy/shared/temporal";
+import * as schema from "@outlinedb/shared/db";
+import {aiMetadata, mirrors, nodeContent, nodeMetadata, referencesRoots} from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@outlinedb/shared/temporal";
 import {and, eq} from "drizzle-orm";
 import {
 	loadTreeRows,

@@ -1,4 +1,4 @@
-import {HOME_TARGET} from "@workflowy/shared/types";
+import {HOME_TARGET} from "@outlinedb/shared/types";
 import {availableItemTypes, escapeBlockText, planBlockTypeChange} from "./layout-types.js";
 import type {ItemType} from "./layout-types.js";
 

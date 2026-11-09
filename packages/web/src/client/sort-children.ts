@@ -1,5 +1,5 @@
-import {parseTimeAttrs} from "@workflowy/shared";
-import {stripHtmlTags} from "@workflowy/shared/html";
+import {parseTimeAttrs} from "@outlinedb/shared";
+import {stripHtmlTags} from "@outlinedb/shared/html";
 
 export type SortDirection = "asc" | "desc";
 

@@ -1,5 +1,5 @@
-import {findInbox, runUnitOfWork, writeAccountSnapshot} from "@workflowy/shared/cache";
-import {rootPreferences} from "@workflowy/shared/db";
+import {findInbox, runUnitOfWork, writeAccountSnapshot} from "@outlinedb/shared/cache";
+import {rootPreferences} from "@outlinedb/shared/db";
 import {afterAll, beforeAll, beforeEach, describe, expect, it} from "vite-plus/test";
 import {findUnregisteredInboxes} from "../../src/services/unregistered-inboxes.js";
 import {cleanupTestDatabase, createInMemoryTestDatabase, nodeFixtures, seedTestData} from "../db/migration-helper.js";

@@ -1,9 +1,9 @@
 import {assert, beforeEach, vi, afterEach, describe, expect, it} from "vite-plus/test";
-import {mirrors, nodeContent, nodeEmbeddings, nodeMetadata, referencesRoots} from "@workflowy/shared/db";
-import type {InternalTreeItem} from "@workflowy/shared/api";
-import {countStrandedRows, currentBacklinkItems, SameMillisecondOverwriteError} from "@workflowy/shared/cache";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
-import type {WorkflowyNode} from "@workflowy/shared/types";
+import {mirrors, nodeContent, nodeEmbeddings, nodeMetadata, referencesRoots} from "@outlinedb/shared/db";
+import type {InternalTreeItem} from "@outlinedb/shared/api";
+import {countStrandedRows, currentBacklinkItems, SameMillisecondOverwriteError} from "@outlinedb/shared/cache";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import type {WorkflowyNode} from "@outlinedb/shared/types";
 import {eq} from "drizzle-orm";
 import fs from "node:fs";
 import os from "node:os";

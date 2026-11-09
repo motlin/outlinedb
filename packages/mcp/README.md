@@ -1,6 +1,6 @@
-# @workflowy/mcp
+# @outlinedb/mcp
 
-MCP server for an OutlineDB outline. One set of tool definitions (`registerOutlineTools` in `src/register.ts`, exported as `@workflowy/mcp/tools`) runs on two hosts:
+MCP server for an OutlineDB outline. One set of tool definitions (`registerOutlineTools` in `src/register.ts`, exported as `@outlinedb/mcp/tools`) runs on two hosts:
 
 - **stdio**, over the local `workflowy.sqlite` cache (`src/index.ts`).
 - **Streamable HTTP**, at `/mcp` on the Cloudflare Worker, over the signed-in user's Durable Object (`packages/cloudflare/src/mcp.ts`). This is the outline the deployed web app shows.

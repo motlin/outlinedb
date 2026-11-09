@@ -1,5 +1,5 @@
-import {findCalendarRoot} from "@workflowy/shared/calendar-lookup";
-import {resolveIdOrShortId} from "@workflowy/shared/utils";
+import {findCalendarRoot} from "@outlinedb/shared/calendar-lookup";
+import {resolveIdOrShortId} from "@outlinedb/shared/utils";
 import {Command, Flags} from "@oclif/core";
 import fs from "node:fs";
 import path from "node:path";

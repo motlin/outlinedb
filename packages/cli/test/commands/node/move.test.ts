@@ -1,7 +1,7 @@
 import {it, vi, afterEach, expect, describe, beforeEach} from "vite-plus/test";
 import {captureOutput} from "@oclif/test";
-import {nodeContent} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {nodeContent} from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {and, eq} from "drizzle-orm";
 import fs from "node:fs";
 import os from "node:os";
@@ -12,7 +12,7 @@ import {cleanupTestDatabase, createTestDatabase, nodeFixtures, seedTestData} fro
 import type {TestDatabase} from "../../db/migration-helper.js";
 import {seedTaggedCalendar} from "../../helpers/calendar-fixture.js";
 import {createTestNode} from "../../helpers/node-fixtures.js";
-import {WorkflowyInternalAdapter} from "@workflowy/shared/internal";
+import {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import {requestJson} from "../../helpers/request-body.js";
 
 describe("node:move command", () => {

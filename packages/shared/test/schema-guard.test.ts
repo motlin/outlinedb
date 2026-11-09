@@ -1,6 +1,6 @@
 import DatabaseConstructor from "better-sqlite3";
 import type {Database} from "better-sqlite3";
-import {runUnitOfWork} from "@workflowy/shared/cache";
+import {runUnitOfWork} from "@outlinedb/shared/cache";
 import {afterEach, describe, expect, it} from "vite-plus/test";
 import {writeAccountSnapshot} from "../src/cache/account-store.js";
 import {buildTestDb, bulkImportWithWatermarkGuard, loadFixtureBackup} from "./helpers/round-trip-helpers.js";

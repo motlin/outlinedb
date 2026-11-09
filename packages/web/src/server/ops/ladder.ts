@@ -6,9 +6,9 @@
  * {@link createLadderOps} so a test can drive them against a fake service with no database and no API key.
  */
 
-import {WorkflowyApiClient} from "@workflowy/shared/api";
-import {NodeTreeReader, WorkflowyWriteThroughClient} from "@workflowy/shared/cache";
-import type {NodeTree} from "@workflowy/shared/cache";
+import {WorkflowyApiClient} from "@outlinedb/shared/api";
+import {NodeTreeReader, WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
+import type {NodeTree} from "@outlinedb/shared/cache";
 import {z} from "zod";
 import type {ServerContext} from "../context.js";
 import {LadderService} from "../ladder-service.js";

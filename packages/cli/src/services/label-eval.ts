@@ -1,4 +1,4 @@
-import {findTags} from "@workflowy/shared/tags";
+import {findTags} from "@outlinedb/shared/tags";
 import type {ClefModel, ShortlistEntry} from "./clef-requests.js";
 import type {LabelKind} from "./label-pool.js";
 import type {PassResult} from "./suggest-labels.js";

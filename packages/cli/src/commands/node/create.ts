@@ -1,15 +1,15 @@
 import {text} from "node:stream/consumers";
-import {WorkflowyApiClient} from "@workflowy/shared/api";
-import {createNodeTree, NodeTreeSpecSchema, PathBuilder, WorkflowyWriteThroughClient} from "@workflowy/shared/cache";
-import type {CreatedNodeTree, NodeTreeSpec} from "@workflowy/shared/cache";
-import {getWorkflowyUrl, hasInternalLink} from "@workflowy/shared/workflowy";
+import {WorkflowyApiClient} from "@outlinedb/shared/api";
+import {createNodeTree, NodeTreeSpecSchema, PathBuilder, WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
+import type {CreatedNodeTree, NodeTreeSpec} from "@outlinedb/shared/cache";
+import {getWorkflowyUrl, hasInternalLink} from "@outlinedb/shared/workflowy";
 import {Command, Flags} from "@oclif/core";
 import fs from "node:fs";
 import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";
-import {syncBacklinksIfLinked, internalAdapter} from "@workflowy/shared/node";
+import {syncBacklinksIfLinked, internalAdapter} from "@outlinedb/shared/node";
 import {logger} from "../../services/logger.js";
-import {resolveOrCreateNodePath, resolveParent} from "@workflowy/shared/utils";
+import {resolveOrCreateNodePath, resolveParent} from "@outlinedb/shared/utils";
 import {adoptUnderCalendar, calendarMonthPath} from "../../services/calendar-adoption.js";
 
 /**

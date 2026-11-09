@@ -1,7 +1,7 @@
 import {beforeEach, vi, afterEach, expect, describe, it} from "vite-plus/test";
 import {captureOutput} from "@oclif/test";
-import {nodeContent} from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {nodeContent} from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {and, eq} from "drizzle-orm";
 import fs from "node:fs";
 import os from "node:os";

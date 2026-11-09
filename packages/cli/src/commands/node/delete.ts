@@ -1,12 +1,12 @@
-import {WorkflowyApiClient} from "@workflowy/shared/api";
-import {deletePlanCalls, PathBuilder, WorkflowyWriteThroughClient} from "@workflowy/shared/cache";
+import {WorkflowyApiClient} from "@outlinedb/shared/api";
+import {deletePlanCalls, PathBuilder, WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
 import {Command, Flags} from "@oclif/core";
-import {linkedSourcesInSubtree} from "@workflowy/shared/internal";
+import {linkedSourcesInSubtree} from "@outlinedb/shared/internal";
 import {createDatabase} from "../../db/index.js";
-import {deleteBacklinksOfDeleted} from "@workflowy/shared/node";
+import {deleteBacklinksOfDeleted} from "@outlinedb/shared/node";
 import {CacheService} from "../../services/cache.js";
 import {logger} from "../../services/logger.js";
-import {resolveNodeId} from "@workflowy/shared/utils";
+import {resolveNodeId} from "@outlinedb/shared/utils";
 
 export default class Delete extends Command {
 	static override description = "Delete a Workflowy node";

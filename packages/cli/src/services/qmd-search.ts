@@ -1,5 +1,5 @@
-import * as schema from "@workflowy/shared/db";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import * as schema from "@outlinedb/shared/db";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {and, eq} from "drizzle-orm";
 import type {BetterSQLite3Database} from "drizzle-orm/better-sqlite3";
 import {existsSync, mkdirSync} from "node:fs";
@@ -13,7 +13,7 @@ import type {
 	SearchResult as QmdSearchResult,
 	QMDStore,
 } from "@tobilu/qmd";
-import {buildEmbedTexts, loadEmbeddableNodes, PathBuilder} from "@workflowy/shared/cache";
+import {buildEmbedTexts, loadEmbeddableNodes, PathBuilder} from "@outlinedb/shared/cache";
 import {logger} from "./logger.js";
 import {nullable} from "../utils/nullable.js";
 

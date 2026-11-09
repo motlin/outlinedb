@@ -1,8 +1,8 @@
 import {expect, describe, beforeEach, beforeAll, vi, it, afterEach, afterAll} from "vite-plus/test";
-import {CacheService, NodeTreeReader, PathBuilder} from "@workflowy/shared/cache";
-import {nodeContent} from "@workflowy/shared/db";
-import {buildSearchConditions, parseSearchQuery} from "@workflowy/shared/search";
-import {FAR_FUTURE_DATE} from "@workflowy/shared/temporal";
+import {CacheService, NodeTreeReader, PathBuilder} from "@outlinedb/shared/cache";
+import {nodeContent} from "@outlinedb/shared/db";
+import {buildSearchConditions, parseSearchQuery} from "@outlinedb/shared/search";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {and} from "drizzle-orm";
 import {cleanupTestDatabase, createInMemoryTestDatabase, nodeFixtures, seedTestData} from "../db/migration-helper.js";
 import type {TestDatabase} from "../db/migration-helper.js";
