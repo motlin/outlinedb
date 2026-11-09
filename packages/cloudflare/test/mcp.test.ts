@@ -7,28 +7,28 @@ import {accessToken, approve, callback, consentCookies, exchange, mcpRpc, openCo
 import type {UserStore} from "../src/user-store";
 
 const READ_TOOLS = [
-	"workflowy_cache_status",
-	"workflowy_calendar_day",
-	"workflowy_node_changes",
-	"workflowy_node_get",
-	"workflowy_node_list",
-	"workflowy_search",
+	"outlinedb_cache_status",
+	"outlinedb_calendar_day",
+	"outlinedb_node_changes",
+	"outlinedb_node_get",
+	"outlinedb_node_list",
+	"outlinedb_search",
 ];
 
 const ALL_TOOLS = [
-	"workflowy_cache_status",
-	"workflowy_calendar_day",
-	"workflowy_node_changes",
-	"workflowy_node_complete",
-	"workflowy_node_create",
-	"workflowy_node_delete",
-	"workflowy_node_get",
-	"workflowy_node_list",
-	"workflowy_node_mirror",
-	"workflowy_node_move",
-	"workflowy_node_uncomplete",
-	"workflowy_node_update",
-	"workflowy_search",
+	"outlinedb_cache_status",
+	"outlinedb_calendar_day",
+	"outlinedb_node_changes",
+	"outlinedb_node_complete",
+	"outlinedb_node_create",
+	"outlinedb_node_delete",
+	"outlinedb_node_get",
+	"outlinedb_node_list",
+	"outlinedb_node_mirror",
+	"outlinedb_node_move",
+	"outlinedb_node_uncomplete",
+	"outlinedb_node_update",
+	"outlinedb_search",
 ];
 
 /** Better Auth on, with invite-only signup for `invites`, and no ACCESS_DEV_IDENTITY, so a request has a session or nothing. */
@@ -267,7 +267,7 @@ describe("/mcp with a bearer token", () => {
 		await h.dispose();
 	});
 
-	it("answers initialize, tools/list and tools/call workflowy_search from the user's Durable Object with plain JSON", async () => {
+	it("answers initialize, tools/list and tools/call outlinedb_search from the user's Durable Object with plain JSON", async () => {
 		const {access_token: token} = await accessToken(h.mf, alice.cookie, "write");
 
 		const init = await mcpRpc(h.mf, token, 1, "initialize", {
@@ -280,14 +280,14 @@ describe("/mcp with a bearer token", () => {
 			type: "application/json",
 			encoding: null,
 		});
-		expect(JSON.parse(init.body)).toMatchObject({jsonrpc: "2.0", id: 1, result: {serverInfo: {name: "workflowy"}}});
+		expect(JSON.parse(init.body)).toMatchObject({jsonrpc: "2.0", id: 1, result: {serverInfo: {name: "outlinedb"}}});
 
 		const list = await mcpRpc(h.mf, token, 2, "tools/list", {});
 		expect(list.status).toBe(200);
 		expect(toolNames(list.body)).toStrictEqual(ALL_TOOLS);
 
 		const call = await mcpRpc(h.mf, token, 3, "tools/call", {
-			name: "workflowy_search",
+			name: "outlinedb_search",
 			arguments: {query: "remote"},
 		});
 		expect(call.status).toBe(200);
@@ -312,18 +312,18 @@ describe("/mcp with a bearer token", () => {
 		expect(toolNames(list.body)).toStrictEqual(READ_TOOLS);
 
 		const search = await mcpRpc(h.mf, token, 2, "tools/call", {
-			name: "workflowy_search",
+			name: "outlinedb_search",
 			arguments: {query: "remote"},
 		});
 		expect(JSON.parse(search.body).result.isError).toBeUndefined();
 
 		const create = await mcpRpc(h.mf, token, 3, "tools/call", {
-			name: "workflowy_node_create",
+			name: "outlinedb_node_create",
 			arguments: {parentId: "seed-node", name: "Sneaky"},
 		});
 		expect(JSON.parse(create.body).result).toStrictEqual({
 			isError: true,
-			content: [{type: "text", text: "MCP error -32602: Tool workflowy_node_create not found"}],
+			content: [{type: "text", text: "MCP error -32602: Tool outlinedb_node_create not found"}],
 		});
 	});
 
@@ -332,7 +332,7 @@ describe("/mcp with a bearer token", () => {
 		const names = await Promise.all(
 			tokens.map(async ({access_token: token}) => {
 				const call = await mcpRpc(h.mf, token, 1, "tools/call", {
-					name: "workflowy_search",
+					name: "outlinedb_search",
 					arguments: {query: "remote"},
 				});
 				const rows: {name: string}[] = JSON.parse(JSON.parse(call.body).result.content[0].text);

@@ -48,7 +48,7 @@ describe("MCP tools over a store", () => {
 	});
 
 	it("parses tool arguments before invoking the handler", async () => {
-		await expect(callTool(harness.store, "workflowy_search", {query: "   "})).resolves.toStrictEqual({
+		await expect(callTool(harness.store, "outlinedb_search", {query: "   "})).resolves.toStrictEqual({
 			isError: true,
 			content: [{type: "text", text: "Query cannot be empty"}],
 		});
@@ -57,7 +57,7 @@ describe("MCP tools over a store", () => {
 	it("gets a node by path in the NodeTreeReader shape", async () => {
 		stubPublicApi(OUTLINE);
 
-		const result = await callTool(harness.store, "workflowy_node_get", {path: "Work,Projects"});
+		const result = await callTool(harness.store, "outlinedb_node_get", {path: "Work,Projects"});
 
 		expect({isError: result.isError, node: stableJson(result)}).toMatchSnapshot();
 	});
@@ -65,7 +65,7 @@ describe("MCP tools over a store", () => {
 	it("reports an unknown path as an error", async () => {
 		stubPublicApi(OUTLINE);
 
-		await expect(callTool(harness.store, "workflowy_node_get", {path: "Work,Nowhere"})).resolves.toStrictEqual({
+		await expect(callTool(harness.store, "outlinedb_node_get", {path: "Work,Nowhere"})).resolves.toStrictEqual({
 			isError: true,
 			content: [{type: "text", text: "Node not found at path: Work > Nowhere"}],
 		});
@@ -74,7 +74,7 @@ describe("MCP tools over a store", () => {
 	it("lists a parent's children to the requested depth", async () => {
 		stubPublicApi(OUTLINE);
 
-		const result = await callTool(harness.store, "workflowy_node_list", {parentPath: "Work", depth: 2});
+		const result = await callTool(harness.store, "outlinedb_node_list", {parentPath: "Work", depth: 2});
 
 		expect({isError: result.isError, nodes: stableJson(result)}).toMatchSnapshot();
 	});
@@ -82,7 +82,7 @@ describe("MCP tools over a store", () => {
 	it("creates a node under a path it creates", async () => {
 		const upstream = stubPublicApi(OUTLINE);
 
-		const result = await callTool(harness.store, "workflowy_node_create", {
+		const result = await callTool(harness.store, "outlinedb_node_create", {
 			parentPath: "Work,Ideas",
 			createPath: true,
 			name: "Write the plan",
@@ -114,7 +114,7 @@ describe("MCP tools over a store", () => {
 	it("updates a node's name", async () => {
 		stubPublicApi(OUTLINE);
 
-		const result = await callTool(harness.store, "workflowy_node_update", {id: "alpha", name: "Alpha 2"});
+		const result = await callTool(harness.store, "outlinedb_node_update", {id: "alpha", name: "Alpha 2"});
 
 		expect({isError: result.isError, value: JSON.parse(text(result))}).toStrictEqual({
 			isError: undefined,
@@ -125,8 +125,8 @@ describe("MCP tools over a store", () => {
 	it("completes and uncompletes a node", async () => {
 		stubPublicApi(OUTLINE);
 
-		const completed = await callTool(harness.store, "workflowy_node_complete", {id: "alpha"});
-		const uncompleted = await callTool(harness.store, "workflowy_node_uncomplete", {id: "alpha"});
+		const completed = await callTool(harness.store, "outlinedb_node_complete", {id: "alpha"});
+		const uncompleted = await callTool(harness.store, "outlinedb_node_uncomplete", {id: "alpha"});
 
 		expect({completed, uncompleted}).toStrictEqual({
 			completed: {
@@ -143,7 +143,7 @@ describe("MCP tools over a store", () => {
 	it("moves a node to the top of a parent found by path", async () => {
 		const upstream = stubPublicApi(OUTLINE);
 
-		const result = await callTool(harness.store, "workflowy_node_move", {
+		const result = await callTool(harness.store, "outlinedb_node_move", {
 			nodeId: "beta",
 			parentPath: "Work",
 			position: "top",
@@ -161,7 +161,7 @@ describe("MCP tools over a store", () => {
 	it("deletes a node", async () => {
 		const upstream = stubPublicApi(OUTLINE);
 
-		const result = await callTool(harness.store, "workflowy_node_delete", {id: "beta"});
+		const result = await callTool(harness.store, "outlinedb_node_delete", {id: "beta"});
 
 		expect({result, deleted: !upstream.has("beta")}).toStrictEqual({
 			result: {isError: undefined, content: [{type: "text", text: "Successfully deleted node: beta"}]},
@@ -170,7 +170,7 @@ describe("MCP tools over a store", () => {
 	});
 
 	it("searches node text", async () => {
-		const result = await callTool(harness.store, "workflowy_search", {query: "Alpha project"});
+		const result = await callTool(harness.store, "outlinedb_search", {query: "Alpha project"});
 
 		expect({isError: result.isError, value: JSON.parse(text(result))}).toStrictEqual({
 			isError: undefined,
@@ -188,7 +188,7 @@ describe("MCP tools over a store", () => {
 	});
 
 	it("reports cache counts", async () => {
-		const result = await callTool(harness.store, "workflowy_cache_status", {});
+		const result = await callTool(harness.store, "outlinedb_cache_status", {});
 
 		expect({isError: result.isError, value: JSON.parse(text(result))}).toStrictEqual({
 			isError: undefined,

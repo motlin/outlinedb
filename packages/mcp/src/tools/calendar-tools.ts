@@ -6,7 +6,7 @@ import {errorResult, jsonResult, opError} from "./results.js";
 
 export function registerCalendarTools(server: McpServer, store: StoreClient): void {
 	server.registerTool(
-		"workflowy_calendar_day",
+		"outlinedb_calendar_day",
 		{
 			description:
 				"Find the 📆 Calendar day node workflowy.com uses for a date (strict metadata.calendar walk), or with ensure create it, and any missing year/month, with calendar metadata. Always use this instead of creating date nodes by name under the 📆 Calendar.",

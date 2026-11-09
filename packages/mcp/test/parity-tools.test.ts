@@ -55,15 +55,15 @@ function searchIds(result: {content: unknown}): string[] {
 	return (JSON.parse(text(result)) as {id: string}[]).map(({id}) => id);
 }
 
-describe("workflowy_search filters", () => {
+describe("outlinedb_search filters", () => {
 	it("keeps completed matches without a filter", async () => {
-		const result = await callTool(harness.store, "workflowy_search", {query: "Parity"});
+		const result = await callTool(harness.store, "outlinedb_search", {query: "Parity"});
 
 		expect(searchIds(result).toSorted()).toStrictEqual(["p-alpha", "p-beta", "p-gamma", "p-projects", "p-work"]);
 	});
 
 	it("returns completedAt for completed and incomplete matches", async () => {
-		const result = await callTool(harness.store, "workflowy_search", {query: "beta OR alpha"});
+		const result = await callTool(harness.store, "outlinedb_search", {query: "beta OR alpha"});
 
 		expect({isError: result.isError, value: JSON.parse(text(result))}).toStrictEqual({
 			isError: undefined,
@@ -89,7 +89,7 @@ describe("workflowy_search filters", () => {
 	});
 
 	it("drops completed nodes with incomplete", async () => {
-		const result = await callTool(harness.store, "workflowy_search", {query: "task", incomplete: true});
+		const result = await callTool(harness.store, "outlinedb_search", {query: "task", incomplete: true});
 
 		expect(searchIds(result).toSorted()).toStrictEqual(["p-alpha", "p-gamma"]);
 	});
@@ -97,7 +97,7 @@ describe("workflowy_search filters", () => {
 	it("scopes to the descendants of a parent path", async () => {
 		stubPublicApi(OUTLINE);
 
-		const result = await callTool(harness.store, "workflowy_search", {
+		const result = await callTool(harness.store, "outlinedb_search", {
 			query: "task",
 			parentPath: "Parity work,Parity projects",
 		});
@@ -108,7 +108,7 @@ describe("workflowy_search filters", () => {
 	it("passes limit and offset through for paging", async () => {
 		const {store, calls} = recording();
 
-		await callTool(store, "workflowy_search", {query: "task", parentId: "p-work", limit: 2, offset: 1});
+		await callTool(store, "outlinedb_search", {query: "task", parentId: "p-work", limit: 2, offset: 1});
 
 		expect(calls).toStrictEqual([
 			{op: "nodes.resolve", input: {id: "p-work", path: undefined, parent: true}},
@@ -117,12 +117,12 @@ describe("workflowy_search filters", () => {
 	});
 });
 
-describe("workflowy_node_update clearNote", () => {
+describe("outlinedb_node_update clearNote", () => {
 	it("clears the note", async () => {
 		const upstream = stubPublicApi([{...fakeNode("p-noted", "Noted", null), note: "old note"}]);
 		harness.cache.insertNode({...fakeNode("p-noted", "Noted", null), note: "old note"}, null);
 
-		const result = await callTool(harness.store, "workflowy_node_update", {id: "p-noted", clearNote: true});
+		const result = await callTool(harness.store, "outlinedb_node_update", {id: "p-noted", clearNote: true});
 
 		expect({
 			isError: result.isError,
@@ -137,7 +137,7 @@ describe("workflowy_node_update clearNote", () => {
 
 	it("rejects clearNote together with a note", async () => {
 		await expect(
-			callTool(harness.store, "workflowy_node_update", {id: "p-alpha", note: "x", clearNote: true}),
+			callTool(harness.store, "outlinedb_node_update", {id: "p-alpha", note: "x", clearNote: true}),
 		).resolves.toStrictEqual({
 			isError: true,
 			content: [{type: "text", text: "note and clearNote cannot be used together"}],
@@ -145,11 +145,11 @@ describe("workflowy_node_update clearNote", () => {
 	});
 });
 
-describe("workflowy_node_create children", () => {
+describe("outlinedb_node_create children", () => {
 	it("creates a tree depth-first under the new node", async () => {
 		const upstream = stubPublicApi(OUTLINE);
 
-		const result = await callTool(harness.store, "workflowy_node_create", {
+		const result = await callTool(harness.store, "outlinedb_node_create", {
 			parentId: "p-work",
 			name: "Plan",
 			children: [{name: "Step 1", note: "first", children: [{name: "Step 1a"}]}, {name: "Step 2"}],
@@ -190,11 +190,11 @@ describe("workflowy_node_create children", () => {
 	});
 });
 
-describe("workflowy_node_changes", () => {
+describe("outlinedb_node_changes", () => {
 	it("answers the changes.list op since the default one day", async () => {
 		const {store, calls} = recording();
 
-		const result = await callTool(store, "workflowy_node_changes", {});
+		const result = await callTool(store, "outlinedb_node_changes", {});
 		const direct = await harness.store.call("changes.list", {since: "1d"});
 		const withoutCutoff = (value: object) => ({...value, cutoffDate: "<cutoff>"});
 
@@ -210,14 +210,14 @@ describe("workflowy_node_changes", () => {
 	});
 
 	it("reports an invalid since", async () => {
-		await expect(callTool(harness.store, "workflowy_node_changes", {since: "soon"})).resolves.toStrictEqual({
+		await expect(callTool(harness.store, "outlinedb_node_changes", {since: "soon"})).resolves.toStrictEqual({
 			isError: true,
 			content: [{type: "text", text: 'Invalid since parameter: "soon"'}],
 		});
 	});
 });
 
-describe("workflowy_node_mirror", () => {
+describe("outlinedb_node_mirror", () => {
 	const MIRROR = {
 		id: "p-mirror",
 		parent_id: "p-projects",
@@ -236,7 +236,7 @@ describe("workflowy_node_mirror", () => {
 		stubPublicApi(OUTLINE);
 		const {store, calls} = recording({"nodes.mirror": {ok: true, value: {nodes: [MIRROR]}}});
 
-		const result = await callTool(store, "workflowy_node_mirror", {
+		const result = await callTool(store, "outlinedb_node_mirror", {
 			nodeId: "p-gamma",
 			parentPath: "Parity work,Parity projects",
 		});
@@ -260,7 +260,7 @@ describe("workflowy_node_mirror", () => {
 	it("places the mirror at the bottom on request", async () => {
 		const {store, calls} = recording({"nodes.mirror": {ok: true, value: {nodes: [MIRROR]}}});
 
-		await callTool(store, "workflowy_node_mirror", {nodeId: "p-gamma", parentId: "p-projects", position: "bottom"});
+		await callTool(store, "outlinedb_node_mirror", {nodeId: "p-gamma", parentId: "p-projects", position: "bottom"});
 
 		expect(calls.find(({op}) => op === "nodes.mirror")).toStrictEqual({
 			op: "nodes.mirror",
@@ -270,7 +270,7 @@ describe("workflowy_node_mirror", () => {
 
 	it("reports the op's error without the internal API", async () => {
 		await expect(
-			callTool(harness.store, "workflowy_node_mirror", {nodeId: "p-gamma", parentId: "p-projects"}),
+			callTool(harness.store, "outlinedb_node_mirror", {nodeId: "p-gamma", parentId: "p-projects"}),
 		).resolves.toStrictEqual({
 			isError: true,
 			content: [

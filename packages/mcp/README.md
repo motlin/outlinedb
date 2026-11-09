@@ -1,6 +1,6 @@
 # @workflowy/mcp
 
-MCP server for a Workflowy outline. One set of tool definitions (`registerWorkflowyTools` in `src/register.ts`, exported as `@workflowy/mcp/tools`) runs on two hosts:
+MCP server for an OutlineDB outline. One set of tool definitions (`registerOutlineTools` in `src/register.ts`, exported as `@workflowy/mcp/tools`) runs on two hosts:
 
 - **stdio**, over the local `workflowy.sqlite` cache (`src/index.ts`).
 - **Streamable HTTP**, at `/mcp` on the Cloudflare Worker, over the signed-in user's Durable Object (`packages/cloudflare/src/mcp.ts`). This is the outline the deployed web app shows.
@@ -9,8 +9,8 @@ Both hosts send every tool through the web app's ops, so MCP, the web UI and the
 
 ## Tools
 
-- Read: `workflowy_node_get`, `workflowy_node_list`, `workflowy_node_changes`, `workflowy_search`, `workflowy_calendar_day`, `workflowy_cache_status`.
-- Write: `workflowy_node_create`, `workflowy_node_update`, `workflowy_node_delete`, `workflowy_node_complete`, `workflowy_node_uncomplete`, `workflowy_node_move`, `workflowy_node_mirror`.
+- Read: `outlinedb_node_get`, `outlinedb_node_list`, `outlinedb_node_changes`, `outlinedb_search`, `outlinedb_calendar_day`, `outlinedb_cache_status`.
+- Write: `outlinedb_node_create`, `outlinedb_node_update`, `outlinedb_node_delete`, `outlinedb_node_complete`, `outlinedb_node_uncomplete`, `outlinedb_node_move`, `outlinedb_node_mirror`.
 
 Node tools accept a full or short id, or a comma path. Read results use the same JSON shape as the CLI (`workflowy node schema`).
 
@@ -20,7 +20,7 @@ Node tools accept a full or short id, or a comma path. Read results use the same
 
 The consent page offers two levels:
 
-- **Read only** (`mcp:read`): the client sees only the read tools. `workflowy_calendar_day` with `ensure` is refused.
+- **Read only** (`mcp:read`): the client sees only the read tools. `outlinedb_calendar_day` with `ensure` is refused.
 - **Read and write** (`mcp:read mcp:write`): all tools.
 
 To change the level, remove the connection and connect again. The user is checked on every request, so deleting the account or un-verifying its email cuts off live tokens immediately.
@@ -34,10 +34,10 @@ To change the level, remove the connection and connect again. The user is checke
 ### Claude Code
 
 ```sh
-claude mcp add --transport http workflowy https://<host>/mcp
+claude mcp add --transport http outlinedb https://<host>/mcp
 ```
 
-Then run `/mcp` in Claude Code, pick `workflowy` and authenticate. The browser opens the same OutlineDB login and consent page. Claude Code identifies itself with its own client metadata document and receives the token on a loopback redirect.
+Then run `/mcp` in Claude Code, pick `outlinedb` and authenticate. The browser opens the same OutlineDB login and consent page. Claude Code identifies itself with its own client metadata document and receives the token on a loopback redirect.
 
 ### Other MCP clients
 
@@ -49,7 +49,7 @@ Build it, then point the client at `bin/mcp.js`. It reads `WORKFLOWY_DB_PATH` (d
 
 ```sh
 just build
-claude mcp add workflowy-local \
+claude mcp add outlinedb-local \
   -e WORKFLOWY_DB_PATH=/abs/path/workflowy.sqlite \
   -e WORKFLOWY_API_KEY=... \
   -- node /abs/path/packages/mcp/bin/mcp.js

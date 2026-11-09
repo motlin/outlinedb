@@ -466,7 +466,7 @@ export class CacheService {
 	/**
 	 * Substring-search node names and notes, returning the current version of each
 	 * matching node. The single text-search primitive behind both the CLI `node
-	 * search` command and the MCP `workflowy_search` tool; each adapter formats the
+	 * search` command and the MCP `outlinedb_search` tool; each adapter formats the
 	 * rows its own way (CLI adds a path, MCP a URL).
 	 */
 	searchText(options: TextSearchOptions): TextSearchRow[] {

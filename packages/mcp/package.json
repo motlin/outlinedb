@@ -3,7 +3,7 @@
 	"version": "0.1.0",
 	"description": "MCP server for Workflowy",
 	"bin": {
-		"workflowy-mcp": "./bin/mcp.js"
+		"outlinedb-mcp": "./bin/mcp.js"
 	},
 	"files": [
 		"./bin",

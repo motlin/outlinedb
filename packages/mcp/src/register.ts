@@ -40,11 +40,11 @@ function readOnlyStore(store: StoreClient): StoreClient {
 }
 
 /**
- * Every Workflowy tool, each a thin adapter over the store's ops. The stdio host passes an in-process store over the
+ * Every OutlineDB tool, each a thin adapter over the store's ops. The stdio host passes an in-process store over the
  * local cache; a Worker can pass a Durable Object's store client. With `readOnly`, the write tools are not registered
  * and the store refuses write ops.
  */
-export function registerWorkflowyTools(server: McpServer, store: StoreClient, access: ToolAccess = {}): void {
+export function registerOutlineTools(server: McpServer, store: StoreClient, access: ToolAccess = {}): void {
 	const scoped = access.readOnly === true ? readOnlyStore(store) : store;
 	registerNodeTools(server, scoped);
 	if (access.readOnly !== true) {

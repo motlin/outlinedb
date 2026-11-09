@@ -147,7 +147,7 @@ describe("MCP node tools backlinks", () => {
 		seed("parent-1", "Parent");
 		const internal = stubCreate("parent-1", `see ${LINK}`);
 
-		const error = await call("workflowy_node_create", {parentId: "parent-1", name: `see ${LINK}`});
+		const error = await call("outlinedb_node_create", {parentId: "parent-1", name: `see ${LINK}`});
 
 		expect({error, internal}).toStrictEqual({error: undefined, internal: [...SYNCED, ...SYNCED]});
 	});
@@ -156,7 +156,7 @@ describe("MCP node tools backlinks", () => {
 		seed("parent-2", "Parent");
 		const internal = stubCreate("parent-2", "plain");
 
-		const error = await call("workflowy_node_create", {parentId: "parent-2", name: "plain"});
+		const error = await call("outlinedb_node_create", {parentId: "parent-2", name: "plain"});
 
 		expect({error, internal}).toStrictEqual({error: undefined, internal: SYNCED});
 	});
@@ -165,7 +165,7 @@ describe("MCP node tools backlinks", () => {
 		seed("source-3", `see ${LINK}`);
 		const internal = stubApis({id: "source-3", name: "plain", note: null});
 
-		const error = await call("workflowy_node_update", {id: "source-3", name: "plain"});
+		const error = await call("outlinedb_node_update", {id: "source-3", name: "plain"});
 
 		expect({error, internal}).toStrictEqual({error: undefined, internal: SYNCED});
 	});
@@ -174,7 +174,7 @@ describe("MCP node tools backlinks", () => {
 		seed("source-4", "Old");
 		const internal = stubApis({id: "source-4", name: "plain", note: null});
 
-		const error = await call("workflowy_node_update", {id: "source-4", name: "plain"});
+		const error = await call("outlinedb_node_update", {id: "source-4", name: "plain"});
 
 		expect({error, internal}).toStrictEqual({error: undefined, internal: []});
 	});
@@ -184,7 +184,7 @@ describe("MCP node tools backlinks", () => {
 		seed("linked-5", "child", "delete-5", LINK);
 		const internal = stubApis({id: "delete-5", name: "root", note: null});
 
-		const error = await call("workflowy_node_delete", {id: "delete-5"});
+		const error = await call("outlinedb_node_delete", {id: "delete-5"});
 
 		expect({error, internal}).toStrictEqual({error: undefined, internal: SYNCED});
 	});
@@ -193,7 +193,7 @@ describe("MCP node tools backlinks", () => {
 		seed("delete-6", "plain");
 		const internal = stubApis({id: "delete-6", name: "plain", note: null});
 
-		const error = await call("workflowy_node_delete", {id: "delete-6"});
+		const error = await call("outlinedb_node_delete", {id: "delete-6"});
 
 		expect({error, internal}).toStrictEqual({error: undefined, internal: []});
 	});

@@ -1,6 +1,6 @@
 import {McpServer} from "@modelcontextprotocol/sdk/server/mcp.js";
 import {WebStandardStreamableHTTPServerTransport} from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import {registerWorkflowyTools} from "@workflowy/mcp/tools";
+import {registerOutlineTools} from "@workflowy/mcp/tools";
 import type {ToolAccess} from "@workflowy/mcp/tools";
 import {storeClient} from "./store-client";
 
@@ -18,8 +18,8 @@ export async function mcpHandler(
 		return new Response("Method not allowed", {status: 405, headers: {allow: "POST"}});
 	}
 	const store = storeClient(env.USER_STORE.getByName(userId));
-	const server = new McpServer({name: "workflowy", version: "0.1.0"});
-	registerWorkflowyTools(server, store, access);
+	const server = new McpServer({name: "outlinedb", version: "0.1.0"});
+	registerOutlineTools(server, store, access);
 	const transport = new WebStandardStreamableHTTPServerTransport({
 		sessionIdGenerator: undefined,
 		enableJsonResponse: true,

@@ -33,11 +33,11 @@ afterAll(() => {
 	harness.restoreEnv();
 });
 
-describe("workflowy_calendar_day", () => {
+describe("outlinedb_calendar_day", () => {
 	it("finds a tagged day without calling ensure", async () => {
 		const ensure = vi.spyOn(WorkflowyInternalAdapter.prototype, "ensureCalendarDay");
 
-		const result = await callTool(harness.store, "workflowy_calendar_day", {date: "2026-01-14", ensure: true});
+		const result = await callTool(harness.store, "outlinedb_calendar_day", {date: "2026-01-14", ensure: true});
 
 		expect({result, calls: ensure.mock.calls}).toStrictEqual({
 			result: {
@@ -56,7 +56,7 @@ describe("workflowy_calendar_day", () => {
 			.spyOn(WorkflowyInternalAdapter.prototype, "ensureCalendarDay")
 			.mockResolvedValue({dayId: "v5day", firstChildId: "kid2", created: ["v5day", "kid2"]});
 
-		const result = await callTool(harness.authStore, "workflowy_calendar_day", {date: "2026-10-22", ensure: true});
+		const result = await callTool(harness.authStore, "outlinedb_calendar_day", {date: "2026-10-22", ensure: true});
 
 		expect({result, calls: ensure.mock.calls}).toStrictEqual({
 			result: {
@@ -72,7 +72,7 @@ describe("workflowy_calendar_day", () => {
 	it("errors without internal auth and makes no call", async () => {
 		const ensure = vi.spyOn(WorkflowyInternalAdapter.prototype, "ensureCalendarDay");
 
-		const result = await callTool(harness.store, "workflowy_calendar_day", {date: "2026-10-22", ensure: true});
+		const result = await callTool(harness.store, "outlinedb_calendar_day", {date: "2026-10-22", ensure: true});
 
 		expect({result, calls: ensure.mock.calls}).toStrictEqual({
 			result: {
@@ -89,7 +89,7 @@ describe("workflowy_calendar_day", () => {
 	});
 
 	it("treats a name-only day as missing without ensure", async () => {
-		const result = await callTool(harness.store, "workflowy_calendar_day", {date: "2026-01-15"});
+		const result = await callTool(harness.store, "outlinedb_calendar_day", {date: "2026-01-15"});
 
 		expect(result).toStrictEqual({
 			isError: true,
@@ -98,7 +98,7 @@ describe("workflowy_calendar_day", () => {
 	});
 
 	it("rejects a malformed date", async () => {
-		const result = await callTool(harness.store, "workflowy_calendar_day", {date: "Jan 15"});
+		const result = await callTool(harness.store, "outlinedb_calendar_day", {date: "Jan 15"});
 
 		expect(result).toStrictEqual({
 			isError: true,
@@ -107,7 +107,7 @@ describe("workflowy_calendar_day", () => {
 	});
 });
 
-describe("workflowy_node_create under a calendar month", () => {
+describe("outlinedb_node_create under a calendar month", () => {
 	const name = '<time startYear="2026" startMonth="1" startDay="21">Wed, Jan 21, 2026</time>';
 
 	afterEach(() => {
@@ -122,7 +122,7 @@ describe("workflowy_node_create under a calendar month", () => {
 		});
 		const setMeta = vi.spyOn(WorkflowyInternalAdapter.prototype, "setNodeMetaValues").mockResolvedValue();
 
-		const result = await callTool(harness.authStore, "workflowy_node_create", {parentId: "m01", name});
+		const result = await callTool(harness.authStore, "outlinedb_node_create", {parentId: "m01", name});
 
 		expect({result, calls: setMeta.mock.calls}).toStrictEqual({
 			result: {
@@ -170,7 +170,7 @@ describe("workflowy_node_create under a calendar month", () => {
 		]);
 		const warnName = '<time startYear="2026" startMonth="1" startDay="22">Thu, Jan 22, 2026</time>';
 
-		const result = await callTool(harness.store, "workflowy_node_create", {parentId: "m01", name: warnName});
+		const result = await callTool(harness.store, "outlinedb_node_create", {parentId: "m01", name: warnName});
 
 		expect(result).toStrictEqual({
 			isError: undefined,

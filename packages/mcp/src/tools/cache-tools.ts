@@ -4,7 +4,7 @@ import {jsonResult, opError} from "./results.js";
 
 export function registerCacheTools(server: McpServer, store: StoreClient): void {
 	server.registerTool(
-		"workflowy_cache_status",
+		"outlinedb_cache_status",
 		{description: "Get cache database status and statistics", inputSchema: {}},
 		async () => {
 			const status = await store.call("cache.status", {});

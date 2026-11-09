@@ -23,7 +23,7 @@ exports[`MCP tools over a store > advertises every tool with its name, descripti
       },
       "type": "object",
     },
-    "name": "workflowy_node_get",
+    "name": "outlinedb_node_get",
     "title": undefined,
   },
   {
@@ -52,7 +52,7 @@ exports[`MCP tools over a store > advertises every tool with its name, descripti
       },
       "type": "object",
     },
-    "name": "workflowy_node_list",
+    "name": "outlinedb_node_list",
     "title": undefined,
   },
   {
@@ -73,7 +73,7 @@ exports[`MCP tools over a store > advertises every tool with its name, descripti
       },
       "type": "object",
     },
-    "name": "workflowy_node_changes",
+    "name": "outlinedb_node_changes",
     "title": undefined,
   },
   {
@@ -153,7 +153,7 @@ exports[`MCP tools over a store > advertises every tool with its name, descripti
       ],
       "type": "object",
     },
-    "name": "workflowy_node_create",
+    "name": "outlinedb_node_create",
     "title": undefined,
   },
   {
@@ -190,7 +190,7 @@ exports[`MCP tools over a store > advertises every tool with its name, descripti
       },
       "type": "object",
     },
-    "name": "workflowy_node_update",
+    "name": "outlinedb_node_update",
     "title": undefined,
   },
   {
@@ -214,7 +214,7 @@ exports[`MCP tools over a store > advertises every tool with its name, descripti
       },
       "type": "object",
     },
-    "name": "workflowy_node_delete",
+    "name": "outlinedb_node_delete",
     "title": undefined,
   },
   {
@@ -238,7 +238,7 @@ exports[`MCP tools over a store > advertises every tool with its name, descripti
       },
       "type": "object",
     },
-    "name": "workflowy_node_complete",
+    "name": "outlinedb_node_complete",
     "title": undefined,
   },
   {
@@ -262,7 +262,7 @@ exports[`MCP tools over a store > advertises every tool with its name, descripti
       },
       "type": "object",
     },
-    "name": "workflowy_node_uncomplete",
+    "name": "outlinedb_node_uncomplete",
     "title": undefined,
   },
   {
@@ -302,7 +302,7 @@ exports[`MCP tools over a store > advertises every tool with its name, descripti
       },
       "type": "object",
     },
-    "name": "workflowy_node_move",
+    "name": "outlinedb_node_move",
     "title": undefined,
   },
   {
@@ -343,7 +343,7 @@ exports[`MCP tools over a store > advertises every tool with its name, descripti
       },
       "type": "object",
     },
-    "name": "workflowy_node_mirror",
+    "name": "outlinedb_node_mirror",
     "title": undefined,
   },
   {
@@ -384,7 +384,7 @@ exports[`MCP tools over a store > advertises every tool with its name, descripti
       ],
       "type": "object",
     },
-    "name": "workflowy_calendar_day",
+    "name": "outlinedb_calendar_day",
     "title": undefined,
   },
   {
@@ -399,7 +399,7 @@ exports[`MCP tools over a store > advertises every tool with its name, descripti
       "properties": {},
       "type": "object",
     },
-    "name": "workflowy_cache_status",
+    "name": "outlinedb_cache_status",
     "title": undefined,
   },
   {
@@ -445,7 +445,7 @@ exports[`MCP tools over a store > advertises every tool with its name, descripti
       ],
       "type": "object",
     },
-    "name": "workflowy_search",
+    "name": "outlinedb_search",
     "title": undefined,
   },
 ]

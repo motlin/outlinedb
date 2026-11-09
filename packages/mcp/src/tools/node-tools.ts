@@ -58,7 +58,7 @@ async function createChildren(store: StoreClient, parentId: string, specs: NodeT
 /** The tools that read the outline. */
 export function registerNodeTools(server: McpServer, store: StoreClient): void {
 	server.registerTool(
-		"workflowy_node_get",
+		"outlinedb_node_get",
 		{
 			description: "Get a node by ID or path",
 			inputSchema: {
@@ -85,7 +85,7 @@ export function registerNodeTools(server: McpServer, store: StoreClient): void {
 	);
 
 	server.registerTool(
-		"workflowy_node_list",
+		"outlinedb_node_list",
 		{
 			description: "List children of a node",
 			inputSchema: {
@@ -114,7 +114,7 @@ export function registerNodeTools(server: McpServer, store: StoreClient): void {
 	);
 
 	server.registerTool(
-		"workflowy_node_changes",
+		"outlinedb_node_changes",
 		{
 			description:
 				"Nodes added, deleted, edited, moved, completed or uncompleted since a cutoff: a flat change list, the changes as a tree with unchanged ancestors as context, and a summary",
@@ -136,7 +136,7 @@ export function registerNodeTools(server: McpServer, store: StoreClient): void {
 /** The tools that change the outline; a read-only connection does not get them. */
 export function registerNodeWriteTools(server: McpServer, store: StoreClient): void {
 	server.registerTool(
-		"workflowy_node_create",
+		"outlinedb_node_create",
 		{
 			description: "Create a new node",
 			inputSchema: {
@@ -192,7 +192,7 @@ export function registerNodeWriteTools(server: McpServer, store: StoreClient): v
 	);
 
 	server.registerTool(
-		"workflowy_node_update",
+		"outlinedb_node_update",
 		{
 			description: "Update an existing node",
 			inputSchema: {
@@ -232,7 +232,7 @@ export function registerNodeWriteTools(server: McpServer, store: StoreClient): v
 	);
 
 	server.registerTool(
-		"workflowy_node_delete",
+		"outlinedb_node_delete",
 		{
 			description: "Delete a node",
 			inputSchema: {
@@ -259,7 +259,7 @@ export function registerNodeWriteTools(server: McpServer, store: StoreClient): v
 		["uncomplete", "uncompleted", "Mark a node as not completed"],
 	] as const) {
 		server.registerTool(
-			`workflowy_node_${operation}`,
+			`outlinedb_node_${operation}`,
 			{
 				description,
 				inputSchema: {
@@ -286,7 +286,7 @@ export function registerNodeWriteTools(server: McpServer, store: StoreClient): v
 	}
 
 	server.registerTool(
-		"workflowy_node_move",
+		"outlinedb_node_move",
 		{
 			description: "Move a node to a new parent",
 			inputSchema: {
@@ -327,7 +327,7 @@ export function registerNodeWriteTools(server: McpServer, store: StoreClient): v
 	);
 
 	server.registerTool(
-		"workflowy_node_mirror",
+		"outlinedb_node_mirror",
 		{
 			description:
 				"Create a live mirror of a node under a parent (a mirror of a mirror mirrors its original); needs the internal API",

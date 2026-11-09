@@ -6,7 +6,7 @@ import {errorResult, jsonResult, nodeUrl, opError, textResult} from "./results.j
 
 export function registerSearchTools(server: McpServer, store: StoreClient): void {
 	server.registerTool(
-		"workflowy_search",
+		"outlinedb_search",
 		{
 			description:
 				"Search for nodes by text query (supports operators such as is:complete, is:incomplete and quoted phrases)",

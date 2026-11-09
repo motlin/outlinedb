@@ -35,12 +35,12 @@ describe("read-only tool access", () => {
 		try {
 			const {tools} = await client.listTools();
 			expect(tools.map((tool) => tool.name).toSorted()).toStrictEqual([
-				"workflowy_cache_status",
-				"workflowy_calendar_day",
-				"workflowy_node_changes",
-				"workflowy_node_get",
-				"workflowy_node_list",
-				"workflowy_search",
+				"outlinedb_cache_status",
+				"outlinedb_calendar_day",
+				"outlinedb_node_changes",
+				"outlinedb_node_get",
+				"outlinedb_node_list",
+				"outlinedb_search",
 			]);
 		} finally {
 			await client.close();
@@ -50,7 +50,7 @@ describe("read-only tool access", () => {
 	it("still reads the outline", async () => {
 		stubPublicApi([]);
 
-		const result = await readOnlyCall("workflowy_search", {query: "trip"});
+		const result = await readOnlyCall("outlinedb_search", {query: "trip"});
 
 		expect(result.isError).toBeUndefined();
 		expect(JSON.parse((result.content as {text: string}[])[0]?.text ?? "")).toStrictEqual([
@@ -66,15 +66,15 @@ describe("read-only tool access", () => {
 	});
 
 	it("answers a write tool with an error instead of running it", async () => {
-		await expect(readOnlyCall("workflowy_node_create", {parentId: "work", name: "Sneaky"})).resolves.toStrictEqual({
+		await expect(readOnlyCall("outlinedb_node_create", {parentId: "work", name: "Sneaky"})).resolves.toStrictEqual({
 			isError: true,
-			content: [{type: "text", text: "MCP error -32602: Tool workflowy_node_create not found"}],
+			content: [{type: "text", text: "MCP error -32602: Tool outlinedb_node_create not found"}],
 		});
 		expect(harness.cache.getChildren("work").map((node) => node.name)).toStrictEqual(["Plan the trip"]);
 	});
 
 	it("refuses to create a missing calendar day even with internal-API credentials", async () => {
-		const result = readOnlyCall("workflowy_calendar_day", {date: "2026-10-22", ensure: true}, harness.authStore);
+		const result = readOnlyCall("outlinedb_calendar_day", {date: "2026-10-22", ensure: true}, harness.authStore);
 
 		await expect(result).resolves.toStrictEqual({
 			isError: true,
