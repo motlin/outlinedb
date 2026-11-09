@@ -8,7 +8,7 @@ import ImportAccount from "../../../src/commands/cache/import-account.js";
 import {cleanupTestDatabase, createTestDatabase} from "../../db/migration-helper.js";
 import type {TestDatabase} from "../../db/migration-helper.js";
 
-const ENV_KEYS = ["WORKFLOWY_DB_PATH", "WORKFLOWY_USERNAME", "WORKFLOWY_PASSWORD", "WORKFLOWY_SESSION_FILE"];
+const ENV_KEYS = ["OUTLINEDB_DB_PATH", "WORKFLOWY_USERNAME", "WORKFLOWY_PASSWORD", "OUTLINEDB_SESSION_FILE"];
 
 describe("cache:import-account command", () => {
 	let tempDir: string;
@@ -23,8 +23,8 @@ describe("cache:import-account command", () => {
 			savedEnv[key] = process.env[key];
 			Reflect.deleteProperty(process.env, key);
 		}
-		process.env.WORKFLOWY_DB_PATH = testDbPath;
-		process.env.WORKFLOWY_SESSION_FILE = path.join(tempDir, "no-session");
+		process.env.OUTLINEDB_DB_PATH = testDbPath;
+		process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "no-session");
 	});
 
 	afterEach(() => {

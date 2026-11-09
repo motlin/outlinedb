@@ -1,8 +1,8 @@
 /**
  * The Node host's {@link DecisionStore}: `<slug>.json` and `<slug>.answers.json`
  * in one directory, the repo's `.llm/gtd/review/decisions` unless
- * `WORKFLOWY_DECISIONS_DIR` points elsewhere. Item images and videos are read from the
- * repo's `.llm/photos` unless `WORKFLOWY_DECISION_PHOTOS_DIR` points elsewhere.
+ * `OUTLINEDB_DECISIONS_DIR` points elsewhere. Item images and videos are read from the
+ * repo's `.llm/photos` unless `OUTLINEDB_DECISION_PHOTOS_DIR` points elsewhere.
  */
 
 import {randomUUID} from "node:crypto";
@@ -17,12 +17,12 @@ const REPO_ROOT = join(import.meta.dirname, "../../../..");
 const DEFAULT_DIRECTORY = join(REPO_ROOT, ".llm/gtd/review/decisions");
 const DEFAULT_PHOTOS_DIRECTORY = join(REPO_ROOT, ".llm/photos");
 
-export function decisionsDirectory(env: {WORKFLOWY_DECISIONS_DIR?: string | undefined}): string {
-	return env.WORKFLOWY_DECISIONS_DIR ?? DEFAULT_DIRECTORY;
+export function decisionsDirectory(env: {OUTLINEDB_DECISIONS_DIR?: string | undefined}): string {
+	return env.OUTLINEDB_DECISIONS_DIR ?? DEFAULT_DIRECTORY;
 }
 
-export function decisionPhotosDirectory(env: {WORKFLOWY_DECISION_PHOTOS_DIR?: string | undefined}): string {
-	return env.WORKFLOWY_DECISION_PHOTOS_DIR ?? DEFAULT_PHOTOS_DIRECTORY;
+export function decisionPhotosDirectory(env: {OUTLINEDB_DECISION_PHOTOS_DIR?: string | undefined}): string {
+	return env.OUTLINEDB_DECISION_PHOTOS_DIR ?? DEFAULT_PHOTOS_DIRECTORY;
 }
 
 /** `photosDirectory` undefined means the host serves no images or videos. */

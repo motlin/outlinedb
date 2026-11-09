@@ -72,7 +72,7 @@ describe("internal probe command", () => {
 		process.env.WORKFLOWY_USERNAME = "alice@example.com";
 		process.env.WORKFLOWY_PASSWORD = "hunter2";
 		sessionFile = path.join(tempDir, "workflowy-session");
-		process.env.WORKFLOWY_SESSION_FILE = sessionFile;
+		process.env.OUTLINEDB_SESSION_FILE = sessionFile;
 	});
 
 	afterEach(() => {
@@ -295,7 +295,7 @@ describe("internal probe error-shape", () => {
 		outPath = path.join(tempDir, "probes.md");
 		process.env.WORKFLOWY_USERNAME = "alice@example.com";
 		process.env.WORKFLOWY_PASSWORD = "hunter2";
-		process.env.WORKFLOWY_SESSION_FILE = path.join(tempDir, "workflowy-session");
+		process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "workflowy-session");
 		process.env.WORKFLOWY_API_KEY = "test-key";
 		delete process.env.WORKFLOWY_API_URL;
 	});
@@ -394,9 +394,9 @@ describe("internal probe index", () => {
 		outPath = path.join(tempDir, "probes.md");
 		process.env.WORKFLOWY_USERNAME = "alice@example.com";
 		process.env.WORKFLOWY_PASSWORD = "hunter2";
-		process.env.WORKFLOWY_SESSION_FILE = path.join(tempDir, "workflowy-session");
+		process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "workflowy-session");
 		process.env.WORKFLOWY_API_KEY = "test-key";
-		process.env.WORKFLOWY_DB_PATH = path.join(tempDir, "cache.sqlite");
+		process.env.OUTLINEDB_DB_PATH = path.join(tempDir, "cache.sqlite");
 		delete process.env.WORKFLOWY_API_URL;
 	});
 
@@ -441,9 +441,9 @@ describe("internal probe restore", () => {
 		outPath = path.join(tempDir, "probes.md");
 		process.env.WORKFLOWY_USERNAME = "alice@example.com";
 		process.env.WORKFLOWY_PASSWORD = "hunter2";
-		process.env.WORKFLOWY_SESSION_FILE = path.join(tempDir, "workflowy-session");
+		process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "workflowy-session");
 		process.env.WORKFLOWY_API_KEY = "test-key";
-		process.env.WORKFLOWY_DB_PATH = path.join(tempDir, "cache.sqlite");
+		process.env.OUTLINEDB_DB_PATH = path.join(tempDir, "cache.sqlite");
 		delete process.env.WORKFLOWY_API_URL;
 	});
 
@@ -488,9 +488,9 @@ describe("internal probe meta", () => {
 		outPath = path.join(tempDir, "probes.md");
 		process.env.WORKFLOWY_USERNAME = "alice@example.com";
 		process.env.WORKFLOWY_PASSWORD = "hunter2";
-		process.env.WORKFLOWY_SESSION_FILE = path.join(tempDir, "workflowy-session");
+		process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "workflowy-session");
 		process.env.WORKFLOWY_API_KEY = "test-key";
-		process.env.WORKFLOWY_DB_PATH = path.join(tempDir, "cache.sqlite");
+		process.env.OUTLINEDB_DB_PATH = path.join(tempDir, "cache.sqlite");
 		delete process.env.WORKFLOWY_API_URL;
 	});
 
@@ -535,9 +535,9 @@ describe("internal probe expansion", () => {
 		outPath = path.join(tempDir, "probes.md");
 		process.env.WORKFLOWY_USERNAME = "alice@example.com";
 		process.env.WORKFLOWY_PASSWORD = "hunter2";
-		process.env.WORKFLOWY_SESSION_FILE = path.join(tempDir, "workflowy-session");
+		process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "workflowy-session");
 		process.env.WORKFLOWY_API_KEY = "test-key";
-		process.env.WORKFLOWY_DB_PATH = path.join(tempDir, "cache.sqlite");
+		process.env.OUTLINEDB_DB_PATH = path.join(tempDir, "cache.sqlite");
 		delete process.env.WORKFLOWY_API_URL;
 	});
 
@@ -679,7 +679,7 @@ describe("internal probe root-meta", () => {
 		outPath = path.join(tempDir, "probes.md");
 		process.env.WORKFLOWY_USERNAME = "alice@example.com";
 		process.env.WORKFLOWY_PASSWORD = "hunter2";
-		process.env.WORKFLOWY_SESSION_FILE = path.join(tempDir, "workflowy-session");
+		process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "workflowy-session");
 	});
 
 	afterEach(() => {
@@ -847,7 +847,7 @@ describe("internal probe settings", () => {
 		outPath = path.join(tempDir, "probes.md");
 		process.env.WORKFLOWY_USERNAME = "alice@example.com";
 		process.env.WORKFLOWY_PASSWORD = "hunter2";
-		process.env.WORKFLOWY_SESSION_FILE = path.join(tempDir, "workflowy-session");
+		process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "workflowy-session");
 	});
 
 	afterEach(() => {
@@ -927,8 +927,8 @@ describe("internal probe calendar-ids", () => {
 		outPath = path.join(tempDir, "probes.md");
 		process.env.WORKFLOWY_USERNAME = "alice@example.com";
 		process.env.WORKFLOWY_PASSWORD = "hunter2";
-		process.env.WORKFLOWY_SESSION_FILE = path.join(tempDir, "workflowy-session");
-		process.env.WORKFLOWY_DB_PATH = path.join(tempDir, "cache.sqlite");
+		process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "workflowy-session");
+		process.env.OUTLINEDB_DB_PATH = path.join(tempDir, "cache.sqlite");
 	});
 
 	afterEach(() => {

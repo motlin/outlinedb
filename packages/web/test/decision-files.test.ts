@@ -134,8 +134,8 @@ describe("fileDecisionStore openMedia", () => {
 });
 
 describe("decisionPhotosDirectory", () => {
-	it("honors WORKFLOWY_DECISION_PHOTOS_DIR", () => {
-		expect(decisionPhotosDirectory({WORKFLOWY_DECISION_PHOTOS_DIR: "/pics"})).toBe("/pics");
+	it("honors OUTLINEDB_DECISION_PHOTOS_DIR", () => {
+		expect(decisionPhotosDirectory({OUTLINEDB_DECISION_PHOTOS_DIR: "/pics"})).toBe("/pics");
 	});
 
 	it("defaults to the repo's .llm/photos", () => {
@@ -144,8 +144,8 @@ describe("decisionPhotosDirectory", () => {
 });
 
 describe("decisionsDirectory", () => {
-	it("honors WORKFLOWY_DECISIONS_DIR", () => {
-		expect(decisionsDirectory({WORKFLOWY_DECISIONS_DIR: "/somewhere"})).toBe("/somewhere");
+	it("honors OUTLINEDB_DECISIONS_DIR", () => {
+		expect(decisionsDirectory({OUTLINEDB_DECISIONS_DIR: "/somewhere"})).toBe("/somewhere");
 	});
 
 	it("defaults to the repo's .llm/gtd/review/decisions", () => {

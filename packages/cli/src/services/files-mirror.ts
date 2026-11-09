@@ -30,15 +30,15 @@ const DEFAULT_RETRY_DELAY_MS = 1000;
 const STORE_DIR_NAME = "files-mirror";
 
 /**
- * `WORKFLOWY_FILES_DIR`, else a `files-mirror` directory beside the cache database
- * (`WORKFLOWY_DB_PATH`, default `outlinedb.sqlite` in the working directory).
+ * `OUTLINEDB_FILES_DIR`, else a `files-mirror` directory beside the cache database
+ * (`OUTLINEDB_DB_PATH`, default `outlinedb.sqlite` in the working directory).
  */
 export function defaultStoreDir(env: NodeJS.ProcessEnv, cwd: string): string {
-	const configured = env.WORKFLOWY_FILES_DIR ?? "";
+	const configured = env.OUTLINEDB_FILES_DIR ?? "";
 	if (configured !== "") {
 		return path.resolve(cwd, configured);
 	}
-	const dbPath = (env.WORKFLOWY_DB_PATH ?? "") || DEFAULT_DB_FILE;
+	const dbPath = (env.OUTLINEDB_DB_PATH ?? "") || DEFAULT_DB_FILE;
 	return path.join(path.dirname(path.resolve(cwd, dbPath)), STORE_DIR_NAME);
 }
 

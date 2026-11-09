@@ -24,9 +24,9 @@ export function fileSessionStore(file: string): SessionCookieStore {
 	};
 }
 
-/** `WORKFLOWY_SESSION_FILE`, or {@link DEFAULT_SESSION_FILE}. */
+/** `OUTLINEDB_SESSION_FILE`, or {@link DEFAULT_SESSION_FILE}. */
 export function sessionFilePath(env: NodeJS.ProcessEnv = process.env): string {
-	return (env.WORKFLOWY_SESSION_FILE ?? "") || DEFAULT_SESSION_FILE;
+	return (env.OUTLINEDB_SESSION_FILE ?? "") || DEFAULT_SESSION_FILE;
 }
 
 /**

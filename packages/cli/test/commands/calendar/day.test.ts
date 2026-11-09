@@ -19,10 +19,10 @@ describe("calendar day command", () => {
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-calendar-day-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
-		process.env.WORKFLOWY_DB_PATH = testDbPath;
+		process.env.OUTLINEDB_DB_PATH = testDbPath;
 		delete process.env.WORKFLOWY_USERNAME;
 		delete process.env.WORKFLOWY_PASSWORD;
-		delete process.env.WORKFLOWY_SESSION_FILE;
+		delete process.env.OUTLINEDB_SESSION_FILE;
 		process.env.WORKFLOWY_API_KEY = "test-api-key";
 		seedTaggedCalendar(testDatabase);
 	});
@@ -109,7 +109,7 @@ describe("calendar day command", () => {
 
 	it("errors before any write when --ensure has no internal auth", async () => {
 		const ensure = vi.spyOn(WorkflowyInternalAdapter.prototype, "ensureCalendarDay");
-		process.env.WORKFLOWY_SESSION_FILE = path.join(tempDir, "no-session.json");
+		process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "no-session.json");
 
 		const {error} = await captureOutput(async () => {
 			await CalendarDay.run(["--date", "2026-10-22", "--ensure"]);

@@ -31,7 +31,7 @@ describe("node create command", () => {
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-create-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
-		process.env.WORKFLOWY_DB_PATH = testDbPath;
+		process.env.OUTLINEDB_DB_PATH = testDbPath;
 		process.env.WORKFLOWY_API_KEY = "test-api-key";
 
 		fetchStub = vi.spyOn(globalThis, "fetch");
@@ -273,7 +273,7 @@ describe("node create command", () => {
 		it("syncs the new node's backlinks through the internal API when its text links to a node", async () => {
 			process.env.WORKFLOWY_USERNAME = "alice@example.com";
 			process.env.WORKFLOWY_PASSWORD = "hunter2";
-			process.env.WORKFLOWY_SESSION_FILE = path.join(tempDir, "workflowy-session");
+			process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "workflowy-session");
 			seedTestData(
 				testDatabase,
 				nodeFixtures([createTestNode({id: "parent-id", name: "Parent", parentId: null})]),
@@ -317,7 +317,7 @@ describe("node create command", () => {
 		it("syncs the backlinks of every node a --json tree creates with a link, in one call", async () => {
 			process.env.WORKFLOWY_USERNAME = "alice@example.com";
 			process.env.WORKFLOWY_PASSWORD = "hunter2";
-			process.env.WORKFLOWY_SESSION_FILE = path.join(tempDir, "workflowy-session");
+			process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "workflowy-session");
 			seedTestData(
 				testDatabase,
 				nodeFixtures([createTestNode({id: "parent-id", name: "Parent", parentId: null})]),
@@ -364,7 +364,7 @@ describe("node create command", () => {
 		const useInternalAuth = () => {
 			process.env.WORKFLOWY_USERNAME = "alice@example.com";
 			process.env.WORKFLOWY_PASSWORD = "hunter2";
-			process.env.WORKFLOWY_SESSION_FILE = path.join(tempDir, "workflowy-session");
+			process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "workflowy-session");
 		};
 		// The fake clock stands still between its 20 ms steps, so step past the seed's millisecond before the command re-reads a seeded row.
 		const seedCalendar = () => {
@@ -374,7 +374,7 @@ describe("node create command", () => {
 		const noInternalAuth = () => {
 			delete process.env.WORKFLOWY_USERNAME;
 			delete process.env.WORKFLOWY_PASSWORD;
-			process.env.WORKFLOWY_SESSION_FILE = path.join(tempDir, "no-session");
+			process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "no-session");
 		};
 
 		it("tags a dated row created under a calendar month as that day", async () => {

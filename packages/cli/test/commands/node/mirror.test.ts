@@ -38,7 +38,7 @@ describe("node:mirror command", () => {
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-mirror-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
-		process.env.WORKFLOWY_DB_PATH = testDbPath;
+		process.env.OUTLINEDB_DB_PATH = testDbPath;
 		process.env.WORKFLOWY_API_KEY = "test-api-key";
 		delete process.env.WORKFLOWY_API_URL;
 
@@ -300,7 +300,7 @@ describe("node:mirror command", () => {
 		beforeEach(() => {
 			process.env.WORKFLOWY_USERNAME = "alice@example.com";
 			process.env.WORKFLOWY_PASSWORD = "hunter2";
-			process.env.WORKFLOWY_SESSION_FILE = path.join(tempDir, "workflowy-session");
+			process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "workflowy-session");
 			vi.useFakeTimers({toFake: ["Date"]});
 			// A whole-tree import seeded the transaction-log position, a millisecond before the frozen test time.
 			vi.setSystemTime(new Date("2026-10-18T11:59:59.999Z"));

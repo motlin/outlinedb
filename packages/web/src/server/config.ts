@@ -21,7 +21,7 @@ export function readNodeConfig(env: Record<string, string | undefined>): ServerC
 		apiKey: env.WORKFLOWY_API_KEY,
 		apiUrl: env.WORKFLOWY_API_URL,
 		accountEmail: env.WORKFLOWY_USERNAME ?? "",
-		sqlQueryLogging: env.WORKFLOWY_SQL_QUERY_LOGGING === "true",
+		sqlQueryLogging: env.OUTLINEDB_SQL_QUERY_LOGGING === "true",
 		calendarEnsureEnabled: env.CALENDAR_ENSURE_ENABLED !== "false",
 		calendarLayoutEnabled: env.CALENDAR_LAYOUT_ENABLED !== "false",
 		features: {embeddings: true, treeSnapshot: true},

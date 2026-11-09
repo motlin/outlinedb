@@ -54,7 +54,7 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 	/** How many migrations this boot applied; zero when the database was already current. */
 	protected appliedOnBoot = 0;
 	/**
-	 * Whether this object mirrors workflowy.com: its name is in `WORKFLOWY_ENV_OWNERS`, or its profile was provisioned
+	 * Whether this object mirrors workflowy.com: its name is in `OUTLINEDB_ENV_OWNERS`, or its profile was provisioned
 	 * as a mirror. Only such an object gets the Workflowy secrets and the sync, so another user's object can never read
 	 * or write the owner's account.
 	 */

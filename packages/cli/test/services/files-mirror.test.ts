@@ -341,14 +341,14 @@ describe("mirrorFiles", () => {
 });
 
 describe("defaultStoreDir", () => {
-	it("prefers WORKFLOWY_FILES_DIR", () => {
+	it("prefers OUTLINEDB_FILES_DIR", () => {
 		expect(
-			defaultStoreDir({WORKFLOWY_FILES_DIR: "/data/attachments", WORKFLOWY_DB_PATH: "/db/w.sqlite"}, "/cwd"),
+			defaultStoreDir({OUTLINEDB_FILES_DIR: "/data/attachments", OUTLINEDB_DB_PATH: "/db/w.sqlite"}, "/cwd"),
 		).toBe("/data/attachments");
 	});
 
 	it("sits beside the database file", () => {
-		expect(defaultStoreDir({WORKFLOWY_DB_PATH: "/db/w.sqlite"}, "/cwd")).toBe("/db/files-mirror");
+		expect(defaultStoreDir({OUTLINEDB_DB_PATH: "/db/w.sqlite"}, "/cwd")).toBe("/db/files-mirror");
 	});
 
 	it("falls back to files-mirror in the working directory, next to the default outlinedb.sqlite", () => {

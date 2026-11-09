@@ -22,7 +22,7 @@ export class CacheVacuumService {
 	}
 
 	vacuum(): VacuumResult {
-		const dbPath = path.resolve(nonEmpty(process.env.WORKFLOWY_DB_PATH) ?? DEFAULT_DB_FILE);
+		const dbPath = path.resolve(nonEmpty(process.env.OUTLINEDB_DB_PATH) ?? DEFAULT_DB_FILE);
 
 		// In WAL mode pages live in the -wal file until a checkpoint, so both sizes are
 		// measured against a checkpointed database or the before/after comparison is

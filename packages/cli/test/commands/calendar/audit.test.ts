@@ -23,11 +23,11 @@ describe("calendar audit command", () => {
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-calendar-audit-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
-		process.env.WORKFLOWY_DB_PATH = testDbPath;
+		process.env.OUTLINEDB_DB_PATH = testDbPath;
 		process.env.WORKFLOWY_API_KEY = "test-api-key";
 		process.env.WORKFLOWY_USERNAME = "alice@example.com";
 		process.env.WORKFLOWY_PASSWORD = "secret";
-		process.env.WORKFLOWY_SESSION_FILE = path.join(tempDir, "session");
+		process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "session");
 	});
 
 	afterEach(() => {

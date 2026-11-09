@@ -21,17 +21,17 @@ describe("cache:import-local-state command", () => {
 		sourcePath = path.join(tempDir, "old.sqlite");
 		target = createTestDatabase(targetPath);
 		source = createTestDatabase(sourcePath);
-		originalDbPath = process.env.WORKFLOWY_DB_PATH;
-		process.env.WORKFLOWY_DB_PATH = targetPath;
+		originalDbPath = process.env.OUTLINEDB_DB_PATH;
+		process.env.OUTLINEDB_DB_PATH = targetPath;
 	});
 
 	afterEach(() => {
 		cleanupTestDatabase(target);
 		cleanupTestDatabase(source);
 		if (originalDbPath === undefined) {
-			delete process.env.WORKFLOWY_DB_PATH;
+			delete process.env.OUTLINEDB_DB_PATH;
 		} else {
-			process.env.WORKFLOWY_DB_PATH = originalDbPath;
+			process.env.OUTLINEDB_DB_PATH = originalDbPath;
 		}
 		fs.rmSync(tempDir, {recursive: true, force: true});
 	});

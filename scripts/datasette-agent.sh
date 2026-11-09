@@ -19,7 +19,7 @@
 # Env overrides:
 #   DATASETTE_AGENT_MODEL  model id         (default: openai-codex/gpt-5.5)
 #   DATASETTE_LLM_PLUGIN   llm model plugin (default: llm-openai-via-codex)
-#   WORKFLOWY_DB_PATH      path to the SQLite db (default: <main-tree>/outlinedb.sqlite)
+#   OUTLINEDB_DB_PATH      path to the SQLite db (default: <main-tree>/outlinedb.sqlite)
 #   DATASETTE_PORT         port to serve on (default: 8001)
 #
 # Other backends (swap both vars together):
@@ -34,7 +34,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # main working tree (the parent of the shared .git common dir).
 MAIN_TREE="$(dirname "$(git -C "$REPO_ROOT" rev-parse --git-common-dir)")"
 
-DB_PATH="${WORKFLOWY_DB_PATH:-$MAIN_TREE/outlinedb.sqlite}"
+DB_PATH="${OUTLINEDB_DB_PATH:-$MAIN_TREE/outlinedb.sqlite}"
 MODEL="${DATASETTE_AGENT_MODEL:-openai-codex/gpt-5.5}"
 LLM_PLUGIN="${DATASETTE_LLM_PLUGIN:-llm-openai-via-codex}"
 PORT="${DATASETTE_PORT:-8001}"
@@ -43,7 +43,7 @@ INTERNAL_DB="$REPO_ROOT/.llm/datasette-internal.db"  # .llm/ is gitignored
 
 if [[ ! -f "$DB_PATH" ]]; then
   echo "error: SQLite db not found at: $DB_PATH" >&2
-  echo "       set WORKFLOWY_DB_PATH to override." >&2
+  echo "       set OUTLINEDB_DB_PATH to override." >&2
   exit 1
 fi
 

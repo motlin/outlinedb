@@ -16,29 +16,29 @@ export function getDatabase() {
 		return dbInstance;
 	}
 
-	const dbPath = (process.env.WORKFLOWY_DB_PATH ?? "") || "outlinedb.sqlite";
+	const dbPath = (process.env.OUTLINEDB_DB_PATH ?? "") || "outlinedb.sqlite";
 	const sqlite = new Database(dbPath);
 
 	sqliteVec.load(sqlite);
 
-	if (!process.env.WORKFLOWY_DB_PATH) {
+	if (!process.env.OUTLINEDB_DB_PATH) {
 		sqlite.pragma("journal_mode = WAL");
 	}
 
 	dbInstance = drizzle(sqlite, {
 		schema,
-		logger: createSqlLogger(process.env.WORKFLOWY_SQL_QUERY_LOGGING === "true"),
+		logger: createSqlLogger(process.env.OUTLINEDB_SQL_QUERY_LOGGING === "true"),
 	});
 
 	bindTreeHost(dbInstance, nodeTreeHost(sqlite));
 
-	if (process.env.WORKFLOWY_SKIP_MIGRATIONS !== "true") {
+	if (process.env.OUTLINEDB_SKIP_MIGRATIONS !== "true") {
 		const migrationsFolder = join(import.meta.dirname, "../../../shared/dist/db/migrations");
 		migrate(dbInstance, {migrationsFolder});
 		ensureNodeTags(dbInstance);
 	}
 
-	if (process.env.WORKFLOWY_TEST_DISABLE_FK !== "true") {
+	if (process.env.OUTLINEDB_TEST_DISABLE_FK !== "true") {
 		sqlite.pragma("foreign_keys = ON");
 	}
 

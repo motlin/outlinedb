@@ -23,14 +23,14 @@ function stubAuthEnv(username: string, password: string, sessionCookie?: string)
 	vi.stubEnv("WORKFLOWY_USERNAME", username);
 	vi.stubEnv("WORKFLOWY_PASSWORD", password);
 	if (sessionCookie === undefined) {
-		vi.stubEnv("WORKFLOWY_SESSION_FILE", NO_SESSION_FILE);
+		vi.stubEnv("OUTLINEDB_SESSION_FILE", NO_SESSION_FILE);
 		return;
 	}
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "wf-session-"));
 	tempDirs.push(dir);
 	const file = path.join(dir, "workflowy-session");
 	fs.writeFileSync(file, sessionCookie);
-	vi.stubEnv("WORKFLOWY_SESSION_FILE", file);
+	vi.stubEnv("OUTLINEDB_SESSION_FILE", file);
 }
 
 afterEach(() => {

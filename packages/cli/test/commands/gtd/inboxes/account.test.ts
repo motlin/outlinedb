@@ -19,7 +19,7 @@ describe("gtd inboxes account command", () => {
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-account-inbox-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
-		process.env.WORKFLOWY_DB_PATH = testDbPath;
+		process.env.OUTLINEDB_DB_PATH = testDbPath;
 	});
 
 	afterEach(() => {

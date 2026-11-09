@@ -34,7 +34,7 @@ ensure-sqlite-native:
 
 # Run dev server, node host (shared code live from source; see `web`)
 dev-node *args: build-shared
-    WORKFLOWY_DB_PATH={{ justfile_directory() }}/outlinedb.sqlite vp run --filter @outlinedb/web dev {{ args }}
+    OUTLINEDB_DB_PATH={{ justfile_directory() }}/outlinedb.sqlite vp run --filter @outlinedb/web dev {{ args }}
 
 # Run linter
 [group('lint')]
@@ -282,7 +282,7 @@ db-web:
 # Start web app with API server and Vite dev server (shared code live from source)
 [group('web')]
 web: build-shared
-    WORKFLOWY_DB_PATH={{ justfile_directory() }}/outlinedb.sqlite vp run --filter @outlinedb/web dev
+    OUTLINEDB_DB_PATH={{ justfile_directory() }}/outlinedb.sqlite vp run --filter @outlinedb/web dev
 
 # Download all available Dropbox backups that aren't already downloaded
 [group('backup')]

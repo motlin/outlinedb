@@ -22,7 +22,7 @@ function scratchRepo() {
  * @param {string[]} args
  */
 function runScript(repo, args) {
-	const {WORKFLOWY_DB_PATH: _unused, ...env} = process.env;
+	const {OUTLINEDB_DB_PATH: _unused, ...env} = process.env;
 	return spawnSync("bash", [join(repo, "scripts", "build-fresh-database.sh"), ...args], {
 		encoding: "utf8",
 		env: {...env, WORKFLOWY_EPOCH: "2020-01-01"},

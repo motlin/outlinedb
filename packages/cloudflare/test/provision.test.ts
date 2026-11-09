@@ -10,7 +10,7 @@ const bindings = {
 	SIGNUP_INVITES: "owner@example.com, sam@example.com, uma@example.com, rita@example.com, lou@example.com",
 	TURNSTILE_SECRET_KEY: turnstile.passSecret,
 	TURNSTILE_SITE_KEY: turnstile.siteKey,
-	WORKFLOWY_ENV_OWNERS: "Owner@example.com",
+	OUTLINEDB_ENV_OWNERS: "Owner@example.com",
 };
 const password = "correct horse battery staple";
 

@@ -33,10 +33,10 @@ To see verbose SQL logging, set the environment variables:
 
 ```bash
 # Log SQL queries (SELECT, INSERT, UPDATE, DELETE statements)
-export WORKFLOWY_SQL_QUERY_LOGGING=true
+export OUTLINEDB_SQL_QUERY_LOGGING=true
 
 # Log SQL query results (full JSON output)
-export WORKFLOWY_SQL_RESULTS_LOGGING=true
+export OUTLINEDB_SQL_RESULTS_LOGGING=true
 ```
 
 After importing, the nodes table will be populated and queries will return data:

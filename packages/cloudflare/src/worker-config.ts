@@ -19,7 +19,7 @@ export interface WorkerSecrets {
 	 * Comma-separated Durable Object names that mirror workflowy.com and so get the secrets above; falls back to
 	 * ALLOWED_EMAILS when unset, so the Access-named owner object keeps working with no new secret.
 	 */
-	WORKFLOWY_ENV_OWNERS?: string;
+	OUTLINEDB_ENV_OWNERS?: string;
 	ALLOWED_EMAILS?: string;
 }
 
@@ -28,7 +28,7 @@ export function isStoreOwner(storeName: string | undefined, env: WorkerSecrets):
 	if (storeName === undefined) {
 		return false;
 	}
-	const owners = (nonEmpty(env.WORKFLOWY_ENV_OWNERS) ?? env.ALLOWED_EMAILS ?? "")
+	const owners = (nonEmpty(env.OUTLINEDB_ENV_OWNERS) ?? env.ALLOWED_EMAILS ?? "")
 		.split(",")
 		.map((entry) => entry.trim().toLowerCase())
 		.filter((entry) => entry !== "");

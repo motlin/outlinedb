@@ -17,21 +17,21 @@ const PROJECT_ROOT = path.resolve(import.meta.dirname, "../../../..");
  *
  * - Copies outlinedb.sqlite to a temp directory
  * - Creates a temp .llm/ directory for intermediate files, seeded with the synced metadata cache
- * - Sets WORKFLOWY_DB_PATH so CLI commands use the copy
+ * - Sets OUTLINEDB_DB_PATH so CLI commands use the copy
  * - Unsets WORKFLOWY_API_KEY to prevent accidental API calls
  *
- * Source DB is configurable via WORKFLOWY_EVAL_SOURCE_DB env var.
+ * Source DB is configurable via OUTLINEDB_EVAL_SOURCE_DB env var.
  *
  * @param options - Optional configuration
  * @param options.mockServerPort - Port for the mock Workflowy HTTP server
  */
 export function createEvalContext(options?: {mockServerPort?: number}): EvalContext {
-	const sourceDb = (process.env.WORKFLOWY_EVAL_SOURCE_DB ?? "") || path.join(PROJECT_ROOT, "outlinedb.sqlite");
+	const sourceDb = (process.env.OUTLINEDB_EVAL_SOURCE_DB ?? "") || path.join(PROJECT_ROOT, "outlinedb.sqlite");
 
 	if (!fs.existsSync(sourceDb)) {
 		throw new Error(
 			`Eval source database not found at ${sourceDb}. ` +
-				"Set WORKFLOWY_EVAL_SOURCE_DB to point to a valid outlinedb.sqlite file.",
+				"Set OUTLINEDB_EVAL_SOURCE_DB to point to a valid outlinedb.sqlite file.",
 		);
 	}
 
@@ -55,7 +55,7 @@ export function createEvalContext(options?: {mockServerPort?: number}): EvalCont
 	fs.symlinkSync(path.join(PROJECT_ROOT, "bin"), path.join(tempDir, "bin"));
 
 	const env: Record<string, string> = {
-		WORKFLOWY_DB_PATH: dbPath,
+		OUTLINEDB_DB_PATH: dbPath,
 	};
 
 	// If a mock server port is provided, configure API URL and key for write-through
@@ -63,7 +63,7 @@ export function createEvalContext(options?: {mockServerPort?: number}): EvalCont
 	if (mockServerPort !== 0) {
 		env.WORKFLOWY_API_KEY = "eval-test-key";
 		env.WORKFLOWY_API_URL = `http://localhost:${mockServerPort}`;
-		env.WORKFLOWY_DATA_SOURCE = "cache";
+		env.OUTLINEDB_DATA_SOURCE = "cache";
 	}
 
 	const cleanup = () => {

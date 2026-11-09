@@ -146,8 +146,8 @@ describe("readWorkerInternalAuth", () => {
 });
 
 describe("isStoreOwner", () => {
-	it("matches the store name against WORKFLOWY_ENV_OWNERS, ignoring case and spaces", () => {
-		const env = {WORKFLOWY_ENV_OWNERS: "dev, Craig@Example.com", ALLOWED_EMAILS: "other@example.com"};
+	it("matches the store name against OUTLINEDB_ENV_OWNERS, ignoring case and spaces", () => {
+		const env = {OUTLINEDB_ENV_OWNERS: "dev, Craig@Example.com", ALLOWED_EMAILS: "other@example.com"};
 		expect(
 			["dev", "craig@example.com", "other@example.com", "user-123", undefined].map((name) =>
 				isStoreOwner(name, env),
@@ -155,10 +155,10 @@ describe("isStoreOwner", () => {
 		).toStrictEqual([true, true, false, false, false]);
 	});
 
-	it("falls back to ALLOWED_EMAILS when WORKFLOWY_ENV_OWNERS is unset or empty", () => {
+	it("falls back to ALLOWED_EMAILS when OUTLINEDB_ENV_OWNERS is unset or empty", () => {
 		const allowed = "Alice@example.com, bob@example.com";
 		expect(
-			[{ALLOWED_EMAILS: allowed}, {ALLOWED_EMAILS: allowed, WORKFLOWY_ENV_OWNERS: ""}].map((env) => [
+			[{ALLOWED_EMAILS: allowed}, {ALLOWED_EMAILS: allowed, OUTLINEDB_ENV_OWNERS: ""}].map((env) => [
 				isStoreOwner("alice@example.com", env),
 				isStoreOwner("user-123", env),
 			]),

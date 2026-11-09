@@ -2,7 +2,7 @@
  * Outbound HTTP logging for the Node host: wraps `fetch` so every call the
  * server makes to workflowy.com (public API and internal API alike) is logged
  * with method, URL, request headers and body, status, elapsed time and response
- * body. Enabled by `WORKFLOWY_HTTP_LOGGING=true`. Credentials are replaced with
+ * body. Enabled by `OUTLINEDB_HTTP_LOGGING=true`. Credentials are replaced with
  * {@link REDACTED}: the authorization, cookie and set-cookie headers, and form
  * fields named like passwords, session ids or tokens. JSON and response bodies
  * are logged as sent.
@@ -26,7 +26,7 @@ export interface LoggingFetchOptions {
 }
 
 export function httpLoggingEnabled(env: Record<string, string | undefined>): boolean {
-	return env.WORKFLOWY_HTTP_LOGGING === "true";
+	return env.OUTLINEDB_HTTP_LOGGING === "true";
 }
 
 function truncate(text: string, max: number): string {

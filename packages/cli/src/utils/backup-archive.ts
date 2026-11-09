@@ -158,11 +158,11 @@ export function materializeBackup(location: BackupLocation): MaterializedBackup 
 
 /**
  * Where backups live. Defaults to `backups/` under the working directory, but
- * `WORKFLOWY_BACKUPS_DIR` overrides it so tests can point at a scratch directory
+ * `OUTLINEDB_BACKUPS_DIR` overrides it so tests can point at a scratch directory
  * instead of decompressing the developer's real monthly archives.
  */
 export function resolveBackupsDirectory(): string {
-	return nonEmpty(process.env.WORKFLOWY_BACKUPS_DIR) ?? path.join(process.cwd(), "backups");
+	return nonEmpty(process.env.OUTLINEDB_BACKUPS_DIR) ?? path.join(process.cwd(), "backups");
 }
 
 /**

@@ -50,7 +50,7 @@ test("answers prints the saved answers JSON", () => {
 			submittedAt: "2026-10-27T15:05:00.000Z",
 		};
 		writeFileSync(join(directory, "meetings.answers.json"), JSON.stringify(answers));
-		assert.deepStrictEqual(run(["answers", "meetings"], {WORKFLOWY_DECISIONS_DIR: directory}), {
+		assert.deepStrictEqual(run(["answers", "meetings"], {OUTLINEDB_DECISIONS_DIR: directory}), {
 			status: 0,
 			stdout: `${JSON.stringify(answers, null, 2)}\n`,
 			stderr: "",
@@ -60,7 +60,7 @@ test("answers prints the saved answers JSON", () => {
 
 test("answers exits non-zero naming the missing file when nothing was answered", () => {
 	withDirectory((directory) => {
-		assert.deepStrictEqual(run(["answers", "meetings"], {WORKFLOWY_DECISIONS_DIR: directory}), {
+		assert.deepStrictEqual(run(["answers", "meetings"], {OUTLINEDB_DECISIONS_DIR: directory}), {
 			status: 1,
 			stdout: "",
 			stderr: `No answers saved for decision page meetings (${join(directory, "meetings.answers.json")})\n`,

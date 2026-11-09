@@ -18,37 +18,37 @@ interface CategoryFilter {
  * Each env var can enable multiple category/subcategory combinations.
  */
 const CATEGORY_FILTERS: Record<string, CategoryFilter[]> = {
-	WORKFLOWY_SQL_READ_LOGGING: [{category: "sql", subcategory: "read"}],
-	WORKFLOWY_SQL_WRITE_LOGGING: [{category: "sql", subcategory: "write"}],
-	WORKFLOWY_SQL_SCHEMA_LOGGING: [{category: "sql", subcategory: "schema"}],
-	WORKFLOWY_SQL_BULK_LOGGING: [{category: "sql", subcategory: "bulk"}],
-	WORKFLOWY_SQL_QUERY_LOGGING: [
+	OUTLINEDB_SQL_READ_LOGGING: [{category: "sql", subcategory: "read"}],
+	OUTLINEDB_SQL_WRITE_LOGGING: [{category: "sql", subcategory: "write"}],
+	OUTLINEDB_SQL_SCHEMA_LOGGING: [{category: "sql", subcategory: "schema"}],
+	OUTLINEDB_SQL_BULK_LOGGING: [{category: "sql", subcategory: "bulk"}],
+	OUTLINEDB_SQL_QUERY_LOGGING: [
 		{category: "sql", subcategory: "read"},
 		{category: "sql", subcategory: "write"},
 		{category: "sql", subcategory: "schema"},
 		{category: "sql", subcategory: "bulk"},
 	],
-	WORKFLOWY_SQL_RESULTS_LOGGING: [{category: "sql", subcategory: "result"}],
-	WORKFLOWY_REST_LOGGING: [
+	OUTLINEDB_SQL_RESULTS_LOGGING: [{category: "sql", subcategory: "result"}],
+	OUTLINEDB_REST_LOGGING: [
 		{category: "rest", subcategory: "request"},
 		{category: "rest", subcategory: "response"},
 		{category: "rest", subcategory: "error"},
 	],
-	WORKFLOWY_GENERAL_LOGGING: [{category: "general"}],
+	OUTLINEDB_GENERAL_LOGGING: [{category: "general"}],
 };
 
 /**
  * Check if any logging category is enabled via environment variables.
  */
 const anyLoggingEnabled =
-	process.env.WORKFLOWY_SQL_QUERY_LOGGING === "true" ||
-	process.env.WORKFLOWY_SQL_READ_LOGGING === "true" ||
-	process.env.WORKFLOWY_SQL_WRITE_LOGGING === "true" ||
-	process.env.WORKFLOWY_SQL_SCHEMA_LOGGING === "true" ||
-	process.env.WORKFLOWY_SQL_BULK_LOGGING === "true" ||
-	process.env.WORKFLOWY_SQL_RESULTS_LOGGING === "true" ||
-	process.env.WORKFLOWY_REST_LOGGING === "true" ||
-	process.env.WORKFLOWY_GENERAL_LOGGING === "true";
+	process.env.OUTLINEDB_SQL_QUERY_LOGGING === "true" ||
+	process.env.OUTLINEDB_SQL_READ_LOGGING === "true" ||
+	process.env.OUTLINEDB_SQL_WRITE_LOGGING === "true" ||
+	process.env.OUTLINEDB_SQL_SCHEMA_LOGGING === "true" ||
+	process.env.OUTLINEDB_SQL_BULK_LOGGING === "true" ||
+	process.env.OUTLINEDB_SQL_RESULTS_LOGGING === "true" ||
+	process.env.OUTLINEDB_REST_LOGGING === "true" ||
+	process.env.OUTLINEDB_GENERAL_LOGGING === "true";
 
 /**
  * Check if a log object should be shown based on its category/subcategory
@@ -110,11 +110,11 @@ function formatParams(params: unknown[], colorize: boolean): string {
 
 /**
  * Pino log level:
- * - Uses WORKFLOWY_LOG_LEVEL if set
+ * - Uses OUTLINEDB_LOG_LEVEL if set
  * - Otherwise 'debug' if any logging is enabled (to allow filtering)
  * - Otherwise 'silent' to disable all logging
  */
-const level = process.env.WORKFLOWY_LOG_LEVEL ?? (anyLoggingEnabled ? "debug" : "silent");
+const level = process.env.OUTLINEDB_LOG_LEVEL ?? (anyLoggingEnabled ? "debug" : "silent");
 
 function optionalString(value: unknown): string | undefined {
 	return typeof value === "string" ? value : undefined;

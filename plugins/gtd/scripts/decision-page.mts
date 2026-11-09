@@ -1,7 +1,7 @@
 // Agent side of a decision page: print its URL for the user, then read back what they chose.
 //
 // The review stages `.llm/gtd/review/decisions/<slug>.json`; the web app saves each answer to
-// `<slug>.answers.json` beside it. WORKFLOWY_DECISIONS_DIR overrides the directory, as it does for the server.
+// `<slug>.answers.json` beside it. OUTLINEDB_DECISIONS_DIR overrides the directory, as it does for the server.
 
 import {existsSync, readFileSync} from "node:fs";
 import {join} from "node:path";
@@ -12,7 +12,7 @@ const USAGE = "Usage: decision-page.mts url <slug> | answers <slug>";
 const SLUG = /^[a-z0-9-]+$/u;
 
 function decisionsDirectory(): string {
-	return process.env.WORKFLOWY_DECISIONS_DIR ?? join(import.meta.dirname, "../../../.llm/gtd/review/decisions");
+	return process.env.OUTLINEDB_DECISIONS_DIR ?? join(import.meta.dirname, "../../../.llm/gtd/review/decisions");
 }
 
 function fail(status: number, message: string): never {

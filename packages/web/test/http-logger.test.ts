@@ -121,9 +121,9 @@ describe("loggingFetch", () => {
 });
 
 describe("httpLoggingEnabled", () => {
-	it("is on only for WORKFLOWY_HTTP_LOGGING=true, like the SQL query log switch", () => {
-		expect(httpLoggingEnabled({WORKFLOWY_HTTP_LOGGING: "true"})).toBe(true);
-		expect(httpLoggingEnabled({WORKFLOWY_HTTP_LOGGING: "1"})).toBe(false);
+	it("is on only for OUTLINEDB_HTTP_LOGGING=true, like the SQL query log switch", () => {
+		expect(httpLoggingEnabled({OUTLINEDB_HTTP_LOGGING: "true"})).toBe(true);
+		expect(httpLoggingEnabled({OUTLINEDB_HTTP_LOGGING: "1"})).toBe(false);
 		expect(httpLoggingEnabled({})).toBe(false);
 	});
 });

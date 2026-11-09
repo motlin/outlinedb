@@ -40,7 +40,7 @@ export class CacheStatusService {
 		const lastSync = this.getLastSync();
 		const lastBackupImport = this.getLastImportDate();
 
-		const dbPath = path.resolve(nonEmpty(process.env.WORKFLOWY_DB_PATH) ?? DEFAULT_DB_FILE);
+		const dbPath = path.resolve(nonEmpty(process.env.OUTLINEDB_DB_PATH) ?? DEFAULT_DB_FILE);
 		const dbSize = this.getDatabaseSize(dbPath);
 
 		return {

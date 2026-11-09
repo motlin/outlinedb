@@ -19,16 +19,16 @@ describe("cache:temporal-rollback command", () => {
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-rollback-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
-		originalDbPath = process.env.WORKFLOWY_DB_PATH;
-		process.env.WORKFLOWY_DB_PATH = testDbPath;
+		originalDbPath = process.env.OUTLINEDB_DB_PATH;
+		process.env.OUTLINEDB_DB_PATH = testDbPath;
 	});
 
 	afterEach(() => {
 		cleanupTestDatabase(testDatabase);
 		if (originalDbPath === undefined) {
-			delete process.env.WORKFLOWY_DB_PATH;
+			delete process.env.OUTLINEDB_DB_PATH;
 		} else {
-			process.env.WORKFLOWY_DB_PATH = originalDbPath;
+			process.env.OUTLINEDB_DB_PATH = originalDbPath;
 		}
 		fs.rmSync(tempDir, {recursive: true, force: true});
 	});

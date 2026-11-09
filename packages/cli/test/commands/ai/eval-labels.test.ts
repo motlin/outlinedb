@@ -61,7 +61,7 @@ describe("ai eval-labels command", () => {
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-eval-labels-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
-		process.env.WORKFLOWY_DB_PATH = testDbPath;
+		process.env.OUTLINEDB_DB_PATH = testDbPath;
 		process.env.CLOUDFLARE_ACCOUNT_ID = "test-account";
 		process.env.CLOUDFLARE_AI_TOKEN = "test-token";
 

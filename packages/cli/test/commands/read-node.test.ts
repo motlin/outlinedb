@@ -34,7 +34,7 @@ describe("node get command", () => {
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-read-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
-		process.env.WORKFLOWY_DB_PATH = testDbPath;
+		process.env.OUTLINEDB_DB_PATH = testDbPath;
 		process.env.WORKFLOWY_API_KEY = "test-api-key";
 
 		vi.spyOn(globalThis, "fetch");

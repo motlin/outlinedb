@@ -24,7 +24,7 @@ describe("node:list command", () => {
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
-		process.env.WORKFLOWY_DB_PATH = testDbPath;
+		process.env.OUTLINEDB_DB_PATH = testDbPath;
 
 		testDatabase.db.run("PRAGMA foreign_keys = OFF");
 		testDatabase.db.delete(nodeContent).run();

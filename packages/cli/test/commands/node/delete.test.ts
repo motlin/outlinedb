@@ -29,7 +29,7 @@ describe("node delete command", () => {
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-delete-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
-		process.env.WORKFLOWY_DB_PATH = testDbPath;
+		process.env.OUTLINEDB_DB_PATH = testDbPath;
 		process.env.WORKFLOWY_API_KEY = "test-api-key";
 
 		fetchStub = vi.spyOn(globalThis, "fetch");
@@ -134,7 +134,7 @@ describe("node delete command", () => {
 		beforeEach(() => {
 			process.env.WORKFLOWY_USERNAME = "alice@example.com";
 			process.env.WORKFLOWY_PASSWORD = "hunter2";
-			process.env.WORKFLOWY_SESSION_FILE = path.join(tempDir, "workflowy-session");
+			process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "workflowy-session");
 		});
 
 		it("deletes the backlink items of the subtree's linked sources after the node is deleted", async () => {

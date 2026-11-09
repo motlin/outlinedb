@@ -60,7 +60,7 @@ export default class ImportLocalState extends Command {
 		if (!migrated) {
 			sqlite.close();
 			this.error(
-				`${flags.from} predates the current schema; migrate it first by opening it once: WORKFLOWY_DB_PATH=${flags.from} ./bin/run.js cache status`,
+				`${flags.from} predates the current schema; migrate it first by opening it once: OUTLINEDB_DB_PATH=${flags.from} ./bin/run.js cache status`,
 			);
 		}
 		let accountRows: [SQLiteTable, Record<string, unknown>[]][];

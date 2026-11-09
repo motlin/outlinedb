@@ -43,7 +43,7 @@ interface SyncStatus {
 
 const bindings = {
 	ACCESS_DEV_IDENTITY: "dev",
-	WORKFLOWY_ENV_OWNERS: "dev",
+	OUTLINEDB_ENV_OWNERS: "dev",
 	WORKFLOWY_API_KEY: "fake-key-value",
 	WORKFLOWY_API_URL: "http://upstream.test",
 };

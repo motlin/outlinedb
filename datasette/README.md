@@ -26,7 +26,7 @@ Then open <http://localhost:8001> and use the agent panel. Stop with Ctrl-C.
 | ----------------------- | ------------------------------ | ---------------------------------- |
 | `DATASETTE_AGENT_MODEL` | `openai-codex/gpt-5.5`         | Any `llm` model id.                |
 | `DATASETTE_LLM_PLUGIN`  | `llm-openai-via-codex`         | The `llm` model plugin to install. |
-| `WORKFLOWY_DB_PATH`     | `<main-tree>/outlinedb.sqlite` | Point at a different SQLite file.  |
+| `OUTLINEDB_DB_PATH`     | `<main-tree>/outlinedb.sqlite` | Point at a different SQLite file.  |
 | `DATASETTE_PORT`        | `8001`                         | Port to serve on.                  |
 
 > To use another backend, set **both** the model and its plugin, e.g. Anthropic API key: `DATASETTE_AGENT_MODEL=anthropic/claude-sonnet-4-6 DATASETTE_LLM_PLUGIN=llm-anthropic`, or a local LM Studio model: `DATASETTE_AGENT_MODEL=lmstudio/<model> DATASETTE_LLM_PLUGIN=llm-lmstudio`.

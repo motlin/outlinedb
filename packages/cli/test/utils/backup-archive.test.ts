@@ -244,31 +244,31 @@ describe("backup-archive", () => {
 		let originalEnv: string | undefined;
 
 		beforeEach(() => {
-			originalEnv = process.env.WORKFLOWY_BACKUPS_DIR;
+			originalEnv = process.env.OUTLINEDB_BACKUPS_DIR;
 		});
 
 		afterEach(() => {
 			if (originalEnv === undefined) {
-				delete process.env.WORKFLOWY_BACKUPS_DIR;
+				delete process.env.OUTLINEDB_BACKUPS_DIR;
 			} else {
-				process.env.WORKFLOWY_BACKUPS_DIR = originalEnv;
+				process.env.OUTLINEDB_BACKUPS_DIR = originalEnv;
 			}
 		});
 
 		it("defaults to the backups directory under the working directory", () => {
-			delete process.env.WORKFLOWY_BACKUPS_DIR;
+			delete process.env.OUTLINEDB_BACKUPS_DIR;
 
 			expect(resolveBackupsDirectory()).toBe(path.join(process.cwd(), "backups"));
 		});
 
-		it("honors WORKFLOWY_BACKUPS_DIR so tests never touch the real backups", () => {
-			process.env.WORKFLOWY_BACKUPS_DIR = tmpDir;
+		it("honors OUTLINEDB_BACKUPS_DIR so tests never touch the real backups", () => {
+			process.env.OUTLINEDB_BACKUPS_DIR = tmpDir;
 
 			expect(resolveBackupsDirectory()).toBe(tmpDir);
 		});
 
-		it("ignores an empty WORKFLOWY_BACKUPS_DIR", () => {
-			process.env.WORKFLOWY_BACKUPS_DIR = "";
+		it("ignores an empty OUTLINEDB_BACKUPS_DIR", () => {
+			process.env.OUTLINEDB_BACKUPS_DIR = "";
 
 			expect(resolveBackupsDirectory()).toBe(path.join(process.cwd(), "backups"));
 		});

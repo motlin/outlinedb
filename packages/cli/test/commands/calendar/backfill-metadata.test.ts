@@ -18,10 +18,10 @@ describe("calendar backfill-metadata command", () => {
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-calendar-backfill-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
-		process.env.WORKFLOWY_DB_PATH = testDbPath;
+		process.env.OUTLINEDB_DB_PATH = testDbPath;
 		delete process.env.WORKFLOWY_USERNAME;
 		delete process.env.WORKFLOWY_PASSWORD;
-		delete process.env.WORKFLOWY_SESSION_FILE;
+		delete process.env.OUTLINEDB_SESSION_FILE;
 		process.env.WORKFLOWY_API_KEY = "test-api-key";
 	});
 
@@ -68,7 +68,7 @@ describe("calendar backfill-metadata command", () => {
 
 	it("errors before any write without internal auth", async () => {
 		const backfill = vi.spyOn(WorkflowyInternalAdapter.prototype, "backfillCalendarMetadata");
-		process.env.WORKFLOWY_SESSION_FILE = path.join(tempDir, "no-session.json");
+		process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "no-session.json");
 
 		const {error} = await captureOutput(async () => {
 			await CalendarBackfillMetadata.run([]);

@@ -51,7 +51,7 @@ describe("write-through against a fake upstream", () => {
 			undefined,
 			{
 				ACCESS_DEV_IDENTITY: "dev",
-				WORKFLOWY_ENV_OWNERS: "dev",
+				OUTLINEDB_ENV_OWNERS: "dev",
 				WORKFLOWY_API_KEY: "fake-key-value",
 				WORKFLOWY_API_URL: "http://upstream.test",
 			},
@@ -106,7 +106,7 @@ describe("a rotated session cookie", () => {
 	it("persists across Durable Object restarts", async () => {
 		const first = await startHarness("./probe-entry.ts", "ProbeStore", undefined, {
 			ACCESS_DEV_IDENTITY: "dev",
-			WORKFLOWY_ENV_OWNERS: "dev",
+			OUTLINEDB_ENV_OWNERS: "dev",
 			WORKFLOWY_SESSION_COOKIE: "sessionid=seed",
 		});
 		try {
@@ -117,7 +117,7 @@ describe("a rotated session cookie", () => {
 			await first.dispose(true);
 			const second = await startHarness("./probe-entry.ts", "ProbeStore", first.persistDir, {
 				ACCESS_DEV_IDENTITY: "dev",
-				WORKFLOWY_ENV_OWNERS: "dev",
+				OUTLINEDB_ENV_OWNERS: "dev",
 				WORKFLOWY_SESSION_COOKIE: "sessionid=seed",
 			});
 			try {

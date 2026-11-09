@@ -7,7 +7,7 @@ WORKFLOWY_SESSION_COOKIE=
 # ACCESS_DEV_IDENTITY=dev
 # Comma-separated Durable Object names (Access emails, or dev) that get the Workflowy secrets above and the sync;
 # falls back to ALLOWED_EMAILS when unset. Every other object runs standalone.
-# WORKFLOWY_ENV_OWNERS=dev
+# OUTLINEDB_ENV_OWNERS=dev
 # Better Auth: /api/auth/* answers 503 until this is set (openssl rand -base64 32).
 BETTER_AUTH_SECRET=
 # Comma-separated emails allowed to sign up when SIGNUP_MODE=invite.

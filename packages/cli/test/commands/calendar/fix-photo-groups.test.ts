@@ -67,12 +67,12 @@ describe("calendar:fix-photo-groups command", () => {
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-photo-groups-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
-		process.env.WORKFLOWY_DB_PATH = testDbPath;
+		process.env.OUTLINEDB_DB_PATH = testDbPath;
 		process.env.WORKFLOWY_API_KEY = "test-api-key";
 		// Without this the staleness check decompresses every real monthly backup
 		// archive on disk, costing ~1.5s per test and coupling results to the
 		// developer's machine.
-		process.env.WORKFLOWY_BACKUPS_DIR = path.join(tempDir, "backups");
+		process.env.OUTLINEDB_BACKUPS_DIR = path.join(tempDir, "backups");
 
 		requests = [];
 		const movedToBottom: string[] = [];

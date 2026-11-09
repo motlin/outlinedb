@@ -10,7 +10,7 @@ describe("readNodeConfig", () => {
 				WORKFLOWY_API_KEY: "key",
 				WORKFLOWY_API_URL: "http://localhost:9",
 				WORKFLOWY_USERNAME: "user@example.com",
-				WORKFLOWY_SQL_QUERY_LOGGING: "true",
+				OUTLINEDB_SQL_QUERY_LOGGING: "true",
 				CALENDAR_ENSURE_ENABLED: "false",
 				CALENDAR_LAYOUT_ENABLED: "false",
 			}),

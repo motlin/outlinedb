@@ -111,7 +111,7 @@ const wrangler = spawn("vp", ["dev", "-c", "vite.worker.config.ts", "--port", po
 		ACCESS_DEV_IDENTITY: "dev",
 		WORKFLOWY_API_URL: upstream.url,
 		WORKFLOWY_API_KEY: "fake-smoke-key",
-		WORKFLOWY_ENV_OWNERS: "dev",
+		OUTLINEDB_ENV_OWNERS: "dev",
 		...authVars,
 	},
 	stdio: ["ignore", "pipe", "inherit"],

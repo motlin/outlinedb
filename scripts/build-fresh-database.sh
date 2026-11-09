@@ -4,7 +4,7 @@
 # usage: scripts/build-fresh-database.sh [--offline | --swap-only]
 # Craig runs it as `op run -- just build-fresh-database`.
 #
-# The database rebuilt is $WORKFLOWY_DB_PATH, or outlinedb.sqlite in the repo root.
+# The database rebuilt is $OUTLINEDB_DB_PATH, or outlinedb.sqlite in the repo root.
 # --offline skips every step that needs credentials or the network (Dropbox
 # download, account state, import-api) and needs WORKFLOWY_EPOCH;
 # it exists to rehearse the pipeline against a scratch copy.
@@ -28,7 +28,7 @@ done
 repo=$(cd "$(dirname "$0")/.." && pwd -P)
 cd "$repo"
 run="$repo/bin/run.js"
-target="${WORKFLOWY_DB_PATH:-$repo/outlinedb.sqlite}"
+target="${OUTLINEDB_DB_PATH:-$repo/outlinedb.sqlite}"
 target="$(cd "$(dirname "$target")" && pwd)/$(basename "$target")"
 stamp=$(date +%Y-%m-%d-%H%M%S)
 base="${target%.sqlite}"
@@ -120,15 +120,15 @@ else
     fi
 
     # WAL is persistent in the file, so every CLI step writes the new database the way `daily` writes the live one
-    # (the CLI only switches to WAL itself when WORKFLOWY_DB_PATH is unset).
+    # (the CLI only switches to WAL itself when OUTLINEDB_DB_PATH is unset).
     sqlite3 "$building" "pragma journal_mode=wal" >/dev/null
-    export WORKFLOWY_DB_PATH="$building"
+    export OUTLINEDB_DB_PATH="$building"
 
     if [ -n "$backup" ]; then
         # Before import-account and import-api, which merge the current values on top as new versions.
         step "Carrying over the account tables' history and file_blobs from the previous database"
         # Opening the backup migrates it, so an old schema's account state reaches the typed account tables first.
-        WORKFLOWY_DB_PATH="$backup" "$run" cache status >/dev/null
+        OUTLINEDB_DB_PATH="$backup" "$run" cache status >/dev/null
         "$run" cache import-local-state --from "$backup"
     fi
 

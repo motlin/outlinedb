@@ -21,8 +21,8 @@ describe("cache:seed-account-state command", () => {
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-seed-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
-		originalDbPath = process.env.WORKFLOWY_DB_PATH;
-		process.env.WORKFLOWY_DB_PATH = testDbPath;
+		originalDbPath = process.env.OUTLINEDB_DB_PATH;
+		process.env.OUTLINEDB_DB_PATH = testDbPath;
 		received = [];
 		receivedHeaders = [];
 		server = http.createServer((request, response) => {
@@ -52,9 +52,9 @@ describe("cache:seed-account-state command", () => {
 		});
 		cleanupTestDatabase(testDatabase);
 		if (originalDbPath === undefined) {
-			delete process.env.WORKFLOWY_DB_PATH;
+			delete process.env.OUTLINEDB_DB_PATH;
 		} else {
-			process.env.WORKFLOWY_DB_PATH = originalDbPath;
+			process.env.OUTLINEDB_DB_PATH = originalDbPath;
 		}
 		fs.rmSync(tempDir, {recursive: true, force: true});
 	});

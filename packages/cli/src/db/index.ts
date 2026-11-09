@@ -13,12 +13,12 @@ import {DEFAULT_DB_FILE} from "./default-db-file.js";
 export function createDatabase(dbPath?: string | Buffer) {
 	const source = Buffer.isBuffer(dbPath)
 		? dbPath
-		: (nonEmpty(dbPath) ?? nonEmpty(process.env.WORKFLOWY_DB_PATH) ?? DEFAULT_DB_FILE);
+		: (nonEmpty(dbPath) ?? nonEmpty(process.env.OUTLINEDB_DB_PATH) ?? DEFAULT_DB_FILE);
 	const sqlite = new DatabaseConstructor(source);
 
 	sqliteVec.load(sqlite);
 
-	if (!process.env.WORKFLOWY_DB_PATH) {
+	if (!process.env.OUTLINEDB_DB_PATH) {
 		sqlite.pragma("journal_mode = WAL");
 	}
 
@@ -27,13 +27,13 @@ export function createDatabase(dbPath?: string | Buffer) {
 		logger: sqlLogger,
 	});
 
-	if (process.env.WORKFLOWY_SKIP_MIGRATIONS !== "true") {
+	if (process.env.OUTLINEDB_SKIP_MIGRATIONS !== "true") {
 		const migrationsFolder = join(import.meta.dirname, "../../../shared/dist/db/migrations");
 		migrate(db, {migrationsFolder});
 		ensureNodeTags(db);
 	}
 
-	if (process.env.WORKFLOWY_TEST_DISABLE_FK !== "true") {
+	if (process.env.OUTLINEDB_TEST_DISABLE_FK !== "true") {
 		sqlite.pragma("foreign_keys = ON");
 	}
 

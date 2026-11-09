@@ -28,7 +28,7 @@ export default class FilesMirror extends Command {
 
 	static override flags = {
 		dir: Flags.string({
-			description: "Store directory (default: WORKFLOWY_FILES_DIR, else files-mirror/ beside the cache database)",
+			description: "Store directory (default: OUTLINEDB_FILES_DIR, else files-mirror/ beside the cache database)",
 		}),
 		limit: Flags.integer({description: "Download at most this many attachments not yet mirrored", min: 1}),
 		concurrency: Flags.integer({description: "Downloads in flight at once", default: 3, min: 1, max: 16}),

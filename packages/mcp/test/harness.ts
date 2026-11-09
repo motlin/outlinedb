@@ -40,10 +40,10 @@ export function openHarness(prefix: string): Harness {
 	const dbPath = path.join(tempDir, "test.sqlite");
 	fs.copyFileSync(inject("migratedDatabaseTemplate"), dbPath);
 	Object.assign(process.env, {
-		WORKFLOWY_DB_PATH: dbPath,
-		WORKFLOWY_SKIP_MIGRATIONS: "true",
+		OUTLINEDB_DB_PATH: dbPath,
+		OUTLINEDB_SKIP_MIGRATIONS: "true",
 		WORKFLOWY_API_KEY: "test-api-key",
-		WORKFLOWY_SESSION_FILE: path.join(tempDir, "workflowy-session"),
+		OUTLINEDB_SESSION_FILE: path.join(tempDir, "workflowy-session"),
 	});
 	delete process.env.WORKFLOWY_USERNAME;
 	delete process.env.WORKFLOWY_PASSWORD;

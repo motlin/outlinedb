@@ -27,7 +27,7 @@ describe("node:move command", () => {
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "workflowy-move-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
-		process.env.WORKFLOWY_DB_PATH = testDbPath;
+		process.env.OUTLINEDB_DB_PATH = testDbPath;
 		process.env.WORKFLOWY_API_KEY = "test-api-key";
 
 		fetchStub = vi.spyOn(globalThis, "fetch");
@@ -240,7 +240,7 @@ describe("node:move command", () => {
 			seedTaggedCalendar(testDatabase);
 			process.env.WORKFLOWY_USERNAME = "alice@example.com";
 			process.env.WORKFLOWY_PASSWORD = "hunter2";
-			process.env.WORKFLOWY_SESSION_FILE = path.join(tempDir, "workflowy-session");
+			process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "workflowy-session");
 			fakeMove({id: "stray", name: day21, parent_id: "m10", priority: 0});
 			const moveApi = fetchStub.getMockImplementation()!;
 			fetchStub.mockImplementation(async (url: RequestInfo | URL, init?: RequestInit) => {

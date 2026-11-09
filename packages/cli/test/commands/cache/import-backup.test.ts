@@ -28,12 +28,12 @@ describe("cache:import-backup --backup-system-time", () => {
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
 
-		for (const key of ["WORKFLOWY_DB_PATH", "WORKFLOWY_EPOCH", "WORKFLOWY_BACKUPS_DIR"]) {
+		for (const key of ["OUTLINEDB_DB_PATH", "WORKFLOWY_EPOCH", "OUTLINEDB_BACKUPS_DIR"]) {
 			savedEnv[key] = process.env[key];
 		}
-		process.env.WORKFLOWY_DB_PATH = testDbPath;
+		process.env.OUTLINEDB_DB_PATH = testDbPath;
 		process.env.WORKFLOWY_EPOCH = EPOCH;
-		process.env.WORKFLOWY_BACKUPS_DIR = backupsDir;
+		process.env.OUTLINEDB_BACKUPS_DIR = backupsDir;
 	});
 
 	afterEach(() => {

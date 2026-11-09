@@ -163,14 +163,14 @@ describe("readInternalAuth", () => {
 	});
 
 	it("is undefined with neither credentials nor a session file", () => {
-		expect(readInternalAuth({WORKFLOWY_SESSION_FILE: tempFile()})).toBeUndefined();
+		expect(readInternalAuth({OUTLINEDB_SESSION_FILE: tempFile()})).toBeUndefined();
 	});
 
 	it("is configured by a session file alone", () => {
 		const file = tempFile();
 		fs.writeFileSync(file, SAVED_COOKIE);
 
-		const auth = readInternalAuth({WORKFLOWY_SESSION_FILE: file});
+		const auth = readInternalAuth({OUTLINEDB_SESSION_FILE: file});
 
 		expect(auth?.credentials).toBeUndefined();
 		expect(auth?.sessionStore.read()).toBe(SAVED_COOKIE);
@@ -178,7 +178,7 @@ describe("readInternalAuth", () => {
 
 	it("is configured by credentials alone", () => {
 		const auth = readInternalAuth({
-			WORKFLOWY_SESSION_FILE: tempFile(),
+			OUTLINEDB_SESSION_FILE: tempFile(),
 			WORKFLOWY_USERNAME: CREDENTIALS.username,
 			WORKFLOWY_PASSWORD: CREDENTIALS.password,
 		});

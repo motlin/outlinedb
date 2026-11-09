@@ -45,12 +45,12 @@ Any client that supports Streamable HTTP and MCP OAuth (PKCE S256, with CIMD or 
 
 ## Run locally over stdio
 
-Build it, then point the client at `bin/mcp.js`. It reads `WORKFLOWY_DB_PATH` (default: `outlinedb.sqlite` in the working directory) and needs `WORKFLOWY_API_KEY` for writes.
+Build it, then point the client at `bin/mcp.js`. It reads `OUTLINEDB_DB_PATH` (default: `outlinedb.sqlite` in the working directory) and needs `WORKFLOWY_API_KEY` for writes.
 
 ```sh
 just build
 claude mcp add outlinedb-local \
-  -e WORKFLOWY_DB_PATH=/abs/path/outlinedb.sqlite \
+  -e OUTLINEDB_DB_PATH=/abs/path/outlinedb.sqlite \
   -e WORKFLOWY_API_KEY=... \
   -- node /abs/path/packages/mcp/bin/mcp.js
 ```
