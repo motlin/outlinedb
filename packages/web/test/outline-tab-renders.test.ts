@@ -44,12 +44,23 @@ const queryClient = new QueryClient({
 const requests: string[] = [];
 let root: Root | undefined;
 
+/** A `.children` slide still running: it holds its inline `will-change` until the slide ends. */
+function sliding(): boolean {
+	return [...document.querySelectorAll<HTMLElement>(".children")].some((el) => el.style.willChange !== "");
+}
+
+/**
+ * Wait out pending renders, every in-flight query and every running slide, so neither a late response nor a slide
+ * ending (a 220 ms fallback timer, which a loaded CI runner stretches) lands outside the measured window.
+ */
 async function settle(): Promise<void> {
-	await act(async () => {
-		await new Promise((resolve) => {
-			setTimeout(resolve, 50);
+	do {
+		await act(async () => {
+			await new Promise((resolve) => {
+				setTimeout(resolve, 50);
+			});
 		});
-	});
+	} while (queryClient.isFetching() > 0 || queryClient.isMutating() > 0 || sliding());
 }
 
 beforeAll(async () => {
@@ -146,14 +157,15 @@ describe("Tab render and request count on a large outline", () => {
 			newParentChildren: queryClient
 				.getQueryData<NodeResponse[]>(nodeKeys.children("n9"))
 				?.map((node) => node.id),
-			// The previous sibling once as it opens with the row spliced in, the row once as it mounts under it, and
-			// the previous sibling once more when its slide-down ends; no other row of the 300.
+			// The previous sibling once as it opens with the row spliced in and the row once as it mounts under it,
+			// then the previous sibling once as its `.children` element mounts and starts the slide-down and once
+			// more when the slide ends; no other row of the 300.
 			outlineRows: renders.get("OutlineRow") ?? 0,
 			nodeRequests: requests.filter((request) => request.includes("/api/v1/nodes")),
 		}).toStrictEqual({
 			editing: true,
 			newParentChildren: ["n10"],
-			outlineRows: 3,
+			outlineRows: 4,
 			nodeRequests: [
 				"GET /api/v1/nodes/n9/backlinks",
 				"POST /api/v1/nodes/n10/move",
