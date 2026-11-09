@@ -37,6 +37,8 @@ export interface Favorite {
 	directory: string;
 	filename: string;
 	originalFilename: string;
+	/** EXIF orientation from Photos (1 = upright, 3/6/8 = rotated); 0 when unknown. */
+	orientation: number;
 }
 
 type ManifestFavorite = Pick<Favorite, "uuid" | "created" | "originalFilename">;
@@ -104,7 +106,7 @@ export function favoritesQuery(days: unknown): string {
 		throw new Error(`days must be a positive integer, got ${String(days)}`);
 	}
 	return (
-		"SELECT A.ZUUID AS uuid, datetime(A.ZDATECREATED+978307200,'unixepoch','localtime') AS created, A.ZDIRECTORY AS directory, A.ZFILENAME AS filename, COALESCE(B.ZORIGINALFILENAME,'') AS originalFilename" +
+		"SELECT A.ZUUID AS uuid, datetime(A.ZDATECREATED+978307200,'unixepoch','localtime') AS created, A.ZDIRECTORY AS directory, A.ZFILENAME AS filename, COALESCE(B.ZORIGINALFILENAME,'') AS originalFilename, A.ZORIENTATION AS orientation" +
 		" FROM ZASSET A LEFT JOIN ZADDITIONALASSETATTRIBUTES B ON A.Z_PK=B.ZASSET" +
 		" WHERE A.ZFAVORITE=1 AND A.ZTRASHEDSTATE=0 AND A.ZHIDDEN=0 AND A.ZKIND=0" +
 		` AND A.ZDATECREATED > strftime('%s','now','-${days} days')-978307200` +
@@ -370,6 +372,7 @@ function toFavorite(row: JsonObject): Favorite {
 		directory: stringField(row, "directory") ?? "",
 		filename: stringField(row, "filename") ?? "",
 		originalFilename: stringField(row, "originalFilename") ?? "",
+		orientation: typeof row.orientation === "number" ? row.orientation : 0,
 	};
 }
 
@@ -426,8 +429,20 @@ function sqliteJson(dbPath: string, sql: string): JsonObject[] {
 		: [];
 }
 
-function toViewJpeg(source: string, viewPath: string): boolean {
-	const result = spawnSync("sips", ["-s", "format", "jpeg", "-Z", "900", source, "--out", viewPath], {
+/** Clockwise degrees `sips -r` needs to show an image upright, by EXIF orientation. */
+const ROTATION: Readonly<Record<number, string>> = {3: "180", 6: "90", 8: "270"};
+
+/**
+ * The sips arguments for a 900px view JPEG. sips drops the EXIF orientation flag when it
+ * converts, so a rotated original comes out sideways unless the pixels are rotated too.
+ */
+export function viewJpegArgs(source: string, viewPath: string, orientation: number): string[] {
+	const rotation = ROTATION[orientation];
+	return ["-s", "format", "jpeg", "-Z", "900", ...(rotation ? ["-r", rotation] : []), source, "--out", viewPath];
+}
+
+function toViewJpeg(source: string, viewPath: string, orientation: number): boolean {
+	const result = spawnSync("sips", viewJpegArgs(source, viewPath, orientation), {
 		encoding: "utf8",
 	});
 	return result.status === 0 && existsSync(viewPath);
@@ -468,7 +483,7 @@ function run(args: Args, libraryPath: string, outDir: string, dbPath: string): v
 	const views: Record<string, string> = {};
 	for (const favorite of local) {
 		const viewPath = join(viewDir, `${favorite.uuid}.jpg`);
-		if (toViewJpeg(favorite.originalPath, viewPath)) {
+		if (toViewJpeg(favorite.originalPath, viewPath, favorite.orientation)) {
 			views[favorite.uuid] = viewPath;
 		}
 	}
@@ -487,7 +502,8 @@ function run(args: Args, libraryPath: string, outDir: string, dbPath: string): v
 			const folder = join(exportDir, favorite.uuid);
 			const [file] = readdirSync(folder);
 			const viewPath = join(viewDir, `${favorite.uuid}.jpg`);
-			if (file && toViewJpeg(join(folder, file), viewPath)) {
+			// Photos applies the orientation when it exports, so the exported file is already upright.
+			if (file && toViewJpeg(join(folder, file), viewPath, 1)) {
 				views[favorite.uuid] = viewPath;
 			}
 		}
