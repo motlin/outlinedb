@@ -1,7 +1,12 @@
 import type {Awaitable, EmbeddingIndex} from "@outlinedb/web/server-app";
 
-/** The Workers AI model: 1024 dimensions, an 8,192-token context, and the cheapest embedding model on Workers AI. */
-export const CF_EMBEDDING_MODEL = "@cf/baai/bge-m3";
+/**
+ * The Workers AI model: Qwen3-Embedding-0.6B, the strongest embedding model Workers AI hosts. It returns 1024
+ * dimensions, already unit length, from an 8,192-token context. Texts go in as `text`, which the model embeds like
+ * `documents`, with no instruction; related notes compares stored note vectors with each other, so both sides of every
+ * similarity are embedded the same way. (`queries` would prepend a web-search instruction and skew note-to-note scores.)
+ */
+const CF_EMBEDDING_MODEL = "@cf/qwen/qwen3-embedding-0.6b";
 
 /** The most ids one Vectorize mutation takes. */
 const MUTATION_BATCH = 1000;
@@ -66,7 +71,7 @@ function isVector(value: unknown): value is number[] {
 	return Array.isArray(value) && value.every((n) => typeof n === "number");
 }
 
-/** Workers AI bge-m3 as the embedder: one model call per batch of texts. */
+/** Workers AI Qwen3-Embedding as the embedder: one model call per batch of texts. */
 export function workersAiEmbedder(ai: AiBinding): Embedder {
 	return {
 		async embed(texts) {

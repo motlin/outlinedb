@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vite-plus/test";
-import {CF_EMBEDDING_MODEL, vectorizeIndex, workersAiEmbedder} from "../src/embeddings";
+import {vectorizeIndex, workersAiEmbedder} from "../src/embeddings";
 import type {VectorizeBinding} from "../src/embeddings";
 
 function fakeVectorize(): VectorizeBinding & {calls: unknown[]} {
@@ -65,7 +65,7 @@ describe("vectorizeIndex", () => {
 });
 
 describe("workersAiEmbedder", () => {
-	it("embeds a batch of texts with bge-m3 in one call", async () => {
+	it("embeds a batch of texts as Qwen3 documents, with no query instruction, in one call", async () => {
 		const runs: unknown[] = [];
 		const embedder = workersAiEmbedder({
 			run(model: string, input: unknown) {
@@ -83,7 +83,7 @@ describe("workersAiEmbedder", () => {
 			[1, 0],
 			[0, 1],
 		]);
-		expect(runs).toStrictEqual([{model: CF_EMBEDDING_MODEL, input: {text: ["one", "two"]}}]);
+		expect(runs).toStrictEqual([{model: "@cf/qwen/qwen3-embedding-0.6b", input: {text: ["one", "two"]}}]);
 	});
 
 	it("rejects a response without one vector per text", async () => {

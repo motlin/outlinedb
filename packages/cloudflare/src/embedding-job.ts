@@ -9,7 +9,7 @@ import type {Embedder} from "./embeddings";
 /** Texts per Workers AI call. */
 const EMBED_BATCH = 100;
 /**
- * The longest document sent, in characters: about 4,000 tokens of English, well inside bge-m3's 8,192-token context
+ * The longest document sent, in characters: about 4,000 tokens of English, well inside Qwen3-Embedding's 8,192-token context
  * even for denser scripts, so one oversized container never fails its whole batch.
  */
 const MAX_TEXT_CHARS = 16_000;

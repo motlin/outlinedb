@@ -29,8 +29,8 @@
 		},
 	],
 	"r2_buckets": [{"binding": "SNAPSHOTS", "bucket_name": "workflowy-snapshots"}],
-	// Related notes: Workers AI embeds with @cf/baai/bge-m3, Vectorize stores and ranks the vectors. Vectorize has no
-	// local simulator, so `wrangler dev` runs without it unless the binding gets "remote": true.
+	// Related notes: Workers AI embeds with @cf/qwen/qwen3-embedding-0.6b (1024 dims), Vectorize stores and ranks the
+	// vectors. Vectorize has no local simulator, so `wrangler dev` runs without it unless the binding gets "remote": true.
 	"ai": {"binding": "AI"},
 	"vectorize": [{"binding": "RELATED_INDEX", "index_name": "workflowy-related"}],
 	// Cloudflare Email Service sends Better Auth mail from EMAIL_FROM; no destination restriction so any user can be mailed
