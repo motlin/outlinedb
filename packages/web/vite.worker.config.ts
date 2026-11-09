@@ -36,7 +36,7 @@ export default defineConfig(({command}) =>
 		// The Worker owns /api, so the Node API proxy of the base config does not apply.
 		server: {proxy: {}},
 		// Kept apart from dist/client, which the Node host and the plain build own: the plugin nests worker/ and client/ under this.
-		build: {outDir: "../../dist/workflowy"},
+		build: {outDir: "../../dist/outlinedb"},
 		// Workspace packages (@outlinedb/mcp, web, shared) resolve from source, so the Worker never builds against a missing or stale dist.
 		environments: {worker: {resolve: {conditions: ["source"]}}},
 		plugins: [

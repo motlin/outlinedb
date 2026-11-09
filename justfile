@@ -72,7 +72,7 @@ dev *args: build-shared cf-d1-migrate-local
 cf-d1-migrate-local:
     cd packages/cloudflare && vp exec wrangler d1 migrations apply AUTH_DB --local --persist-to "${WORKER_PERSIST_DIR:-.wrangler/state}"
 
-# Build the client and the Worker with the Cloudflare Vite plugin; writes packages/web/dist/workflowy/worker/wrangler.json for cf-deploy
+# Build the client and the Worker with the Cloudflare Vite plugin; writes packages/web/dist/outlinedb/worker/wrangler.json for cf-deploy
 [group('web')]
 cf-build: build-shared
     cd packages/web && vp build -c vite.worker.config.ts
@@ -97,7 +97,7 @@ cf-deploy:
         exit 1
     fi
     just cf-build
-    cd packages/web && vp exec wrangler deploy -c dist/workflowy/worker/wrangler.json
+    cd packages/web && vp exec wrangler deploy -c dist/outlinedb/worker/wrangler.json
 
 # Run the plugin script tests, which vitest does not glob
 [group('test')]

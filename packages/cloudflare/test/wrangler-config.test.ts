@@ -13,6 +13,14 @@ function readWranglerConfig(): Record<string, unknown> {
 }
 
 describe("wrangler.jsonc", () => {
+	it("names the Worker outlinedb and its R2 snapshots bucket outlinedb-snapshots", () => {
+		const {name, r2_buckets} = readWranglerConfig();
+		expect({name, r2_buckets}).toStrictEqual({
+			name: "outlinedb",
+			r2_buckets: [{binding: "SNAPSHOTS", bucket_name: "outlinedb-snapshots"}],
+		});
+	});
+
 	it("raises the CPU limit so the alarm-driven import is not cut off at 30 s", () => {
 		expect(readWranglerConfig().limits).toStrictEqual({cpu_ms: 300_000});
 	});
@@ -49,7 +57,7 @@ describe("wrangler.jsonc", () => {
 		const {ai, vectorize} = readWranglerConfig();
 		expect({ai, vectorize}).toStrictEqual({
 			ai: {binding: "AI"},
-			vectorize: [{binding: "RELATED_INDEX", index_name: "workflowy-related"}],
+			vectorize: [{binding: "RELATED_INDEX", index_name: "outlinedb-related"}],
 		});
 	});
 

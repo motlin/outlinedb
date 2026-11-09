@@ -58,7 +58,7 @@ describe("Worker dev through the Cloudflare Vite plugin", () => {
 	it("builds with cf-build and deploys the generated wrangler.json", () => {
 		expect(recipe("cf-build")).toContain("vp build -c vite.worker.config.ts");
 		expect(recipe("cf-deploy")).toContain("wrangler deploy -c");
-		expect(recipe("cf-deploy")).toContain("dist/workflowy/worker/wrangler.json");
+		expect(recipe("cf-deploy")).toContain("dist/outlinedb/worker/wrangler.json");
 	});
 
 	it("has a worker Vite config that uses the plugin against the Cloudflare wrangler.jsonc", () => {
@@ -75,7 +75,7 @@ describe("built wrangler.json", () => {
 		const build = spawnSync("just", ["--no-deps", "cf-build"], {cwd: root, encoding: "utf8"});
 		expect(build.status, build.stderr).toBe(0);
 		const built: {vars?: Record<string, string>} = JSON.parse(
-			readFileSync(`${root}packages/web/dist/workflowy/worker/wrangler.json`, "utf8"),
+			readFileSync(`${root}packages/web/dist/outlinedb/worker/wrangler.json`, "utf8"),
 		);
 		const names = Object.keys(built.vars ?? {});
 		expect(
@@ -114,7 +114,7 @@ describe("deploy on push to main", () => {
 	it("deploys the generated wrangler.json the way cf-deploy does, with the Cloudflare secrets", () => {
 		const deploy = job("deploy");
 		expect(deploy).toContain("- run: just cf-build");
-		expect(deploy).toContain("vp exec wrangler deploy -c dist/workflowy/worker/wrangler.json");
+		expect(deploy).toContain("vp exec wrangler deploy -c dist/outlinedb/worker/wrangler.json");
 		expect(deploy).toContain("CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}");
 		expect(deploy).toContain("CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}");
 		expect(deploy).not.toContain("CONFIRM_DEPLOY");

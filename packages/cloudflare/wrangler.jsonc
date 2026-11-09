@@ -1,5 +1,5 @@
 {
-	"name": "workflowy",
+	"name": "outlinedb",
 	"main": "src/worker.ts",
 	"compatibility_date": "2026-08-01",
 	"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
@@ -28,11 +28,11 @@
 			"migrations_dir": "migrations",
 		},
 	],
-	"r2_buckets": [{"binding": "SNAPSHOTS", "bucket_name": "workflowy-snapshots"}],
+	"r2_buckets": [{"binding": "SNAPSHOTS", "bucket_name": "outlinedb-snapshots"}],
 	// Related notes: Workers AI embeds with @cf/qwen/qwen3-embedding-0.6b (1024 dims), Vectorize stores and ranks the
 	// vectors. Vectorize has no local simulator, so `wrangler dev` runs without it unless the binding gets "remote": true.
 	"ai": {"binding": "AI"},
-	"vectorize": [{"binding": "RELATED_INDEX", "index_name": "workflowy-related"}],
+	"vectorize": [{"binding": "RELATED_INDEX", "index_name": "outlinedb-related"}],
 	// Cloudflare Email Service sends Better Auth mail from EMAIL_FROM; no destination restriction so any user can be mailed
 	// (Workers Paid). Deploys without the domain onboarded; only send() fails, with E_SENDER_DOMAIN_NOT_AVAILABLE.
 	"send_email": [{"name": "EMAIL"}],
