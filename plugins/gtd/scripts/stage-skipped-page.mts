@@ -44,6 +44,8 @@ export interface SkippedOverdueRow {
 	overdueByDays: number;
 	url: string | null;
 	applyOp: string | null;
+	isLlmTask?: boolean | undefined;
+	missingLlmTag?: boolean | undefined;
 }
 
 export interface SkippedDueRow {
@@ -126,6 +128,9 @@ export function buildSkippedPage({
 	overdueRows: readonly SkippedOverdueRow[];
 	dueRows: readonly SkippedDueRow[];
 }) {
+	// Claude runs #llm-task rows (tagged or not yet tagged) itself; a skip there means it was blocked, not
+	// that the user owes it, so those rows never become a card for the user.
+	const claudeRuns = new Set(overdueRows.filter((row) => row.isLlmTask || row.missingLlmTag).map((row) => row.id));
 	const overdueByKey = new Map(overdueRows.filter((row) => row.id).map((row) => [row.id, row]));
 	const dueByKey = new Map(dueRows.flatMap((row) => dueKeys(row).map((key) => [key, row] as const)));
 
@@ -135,6 +140,9 @@ export function buildSkippedPage({
 	const items: SkippedManifestItem[] = [];
 
 	for (const key of keys) {
+		if (claudeRuns.has(key)) {
+			continue;
+		}
 		const overdue = overdueByKey.get(key);
 		const dueRow = dueByKey.get(key);
 		if (overdue) {

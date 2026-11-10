@@ -160,16 +160,34 @@ test("buildSkippedPage stages one Did it / Still skipped card per skipped item, 
 	});
 });
 
-test("buildSkippedPage omits empty groups and stages no groups when nothing was skipped", () => {
-	assert.deepStrictEqual(buildSkippedPage({keys: [], today: "2026-11-05", overdueRows: [], dueRows: []}), {
-		page: {
-			slug: "skipped-2026-11-05",
-			title: "Skipped today",
-			intro: "Everything you skipped during the daily review. Mark the ones you have since done.",
-			groups: [],
+test("buildSkippedPage omits empty groups and Claude's own #llm-task rows, staging no groups when nothing else was skipped", () => {
+	const llmRow = {
+		id: "llm-1",
+		name: "Check the routes #llm-task",
+		section: "🔄 Weekly Review",
+		overdueByDays: 3,
+		url: null,
+		applyOp: "x",
+		isLlmTask: true,
+	};
+	const untaggedRow = {...llmRow, id: "llm-2", name: "Run the sync", isLlmTask: false, missingLlmTag: true};
+	assert.deepStrictEqual(
+		buildSkippedPage({
+			keys: ["llm-1", "llm-2"],
+			today: "2026-11-05",
+			overdueRows: [llmRow, untaggedRow],
+			dueRows: [],
+		}),
+		{
+			page: {
+				slug: "skipped-2026-11-05",
+				title: "Skipped today",
+				intro: "Everything you skipped during the daily review. Mark the ones you have since done.",
+				groups: [],
+			},
+			items: [],
 		},
-		items: [],
-	});
+	);
 });
 
 function withDirectory(body: (directory: string) => void): void {
