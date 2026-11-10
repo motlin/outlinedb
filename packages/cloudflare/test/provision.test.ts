@@ -295,38 +295,144 @@ describe("UserStore.provision", () => {
 		expect(plain((await stub.adminStatus()).mode)).toBe("standalone");
 	});
 
-	it("seeds a new standalone account with an Inbox and a welcome with tips, once, and a mirror with nothing", async () => {
-		const names = async (stub: DurableObjectStub<UserStore>, parentId?: string) => {
+	it("seeds a new standalone account with an Inbox and a collapsed welcome tutorial, once, and a mirror with nothing", async () => {
+		interface Seeded {
+			name: string | null;
+			children?: Seeded[];
+		}
+		const names = new Map<string, string | null>();
+		const tree = async (stub: DurableObjectStub<UserStore>, parentId?: string): Promise<Seeded[]> => {
 			const result = await storeClient(stub).call("nodes.list", parentId === undefined ? {} : {parentId});
 			if (!result.ok) {
 				throw new Error(JSON.stringify(result.body));
 			}
-			return result.value.nodes.map((node) => ({id: node.id, name: node.name}));
+			return Promise.all(
+				result.value.nodes.map(async (node) => {
+					names.set(node.id, node.name);
+					const children = await tree(stub, node.id);
+					return children.length === 0 ? {name: node.name} : {name: node.name, children};
+				}),
+			);
 		};
 		const standalone = await stubNamed(h, "user-s");
 		await standalone.provision({userId: "user-s", email: "s@example.com", mode: "standalone"});
 		await standalone.provision({userId: "user-s", email: "s@example.com", mode: "standalone"});
-		const top = await names(standalone);
-		const welcome = top.find((node) => node.name === "Welcome to OutlineDB");
-		const tips = welcome === undefined ? [] : await names(standalone, welcome.id);
+		const seeded = await tree(standalone);
+		const expansion = await storeClient(standalone).call("expansion.get", {});
+		if (!expansion.ok) {
+			throw new Error(JSON.stringify(expansion.body));
+		}
 
 		const mirror = await stubNamed(h, "user-n");
 		await mirror.provision({userId: "user-n", email: "n@example.com", mode: "mirror"});
 
+		const leaves = (...leafNames: string[]): Seeded[] => leafNames.map((name) => ({name}));
 		expect({
-			top: top.map((node) => node.name),
-			tips: tips.map((node) => node.name),
-			mirror: await names(mirror),
+			seeded,
+			expanded: expansion.value.expandedIds?.map((id) => names.get(id)),
+			mirror: await tree(mirror),
 		}).toStrictEqual({
-			top: ["Inbox", "Welcome to OutlineDB"],
-			tips: [
-				"Press Enter to add a bullet, Tab to indent it and Shift+Tab to outdent it",
-				"Click a bullet to zoom into it; the breadcrumbs at the top take you back out",
-				"Press Ctrl+K (Cmd+K on a Mac) to jump to any item by name, or type in the search box to filter",
-				"Type #tags or @mentions anywhere in a bullet, then click one to see everything that has it",
-				"Press Ctrl+Enter (Cmd+Enter on a Mac) to complete an item",
-				"Drop quick thoughts into the Inbox and sort them later. Delete this welcome whenever you like",
+			seeded: [
+				{name: "Inbox"},
+				{
+					name: "Welcome to OutlineDB",
+					children: [
+						{
+							name: "👀 Start here: click this bullet",
+							children: [
+								{
+									name: "Every bullet can hold more bullets, as deep as you like",
+									children: [
+										{
+											name: "Click the dot at the left of this line to open it on its own page",
+											children: [
+												{
+													name: "Keep going, this one opens too",
+													children: leaves("The breadcrumbs at the top take you back out"),
+												},
+											],
+										},
+									],
+								},
+								{
+									name: "Click the arrow beside a bullet to show or hide what is inside it",
+									children: leaves("Try hiding the first bullet on this page"),
+								},
+								{
+									name: "Drag a bullet by its dot to move it",
+									children: leaves("Move me below the next bullet", "Drop it under this one"),
+								},
+								{name: "Press Enter at the end of a bullet to start a new one"},
+								{name: "Press Tab to indent a bullet and Shift+Tab to outdent it"},
+								{name: "Hover over a bullet's dot to open its menu and see what else it can do"},
+								{name: "That's the basics. Click Home at the top to go back and find more tips"},
+							],
+						},
+						{
+							name: "🚀 More tips",
+							children: [
+								{
+									name: "🏷️ Tags and completing",
+									children: [
+										{
+											name: "Type a #tag anywhere, like #example, then click it to see everything tagged with it",
+										},
+										{name: "Use @mentions the same way for people"},
+										{
+											name: "Press Ctrl+Enter (Cmd+Enter on a Mac) to complete a bullet",
+											children: leaves(
+												"Try completing this one, then press it again to bring it back",
+											),
+										},
+										{name: "Press Shift+Enter to add a note below a bullet's text"},
+									],
+								},
+								{
+									name: "⌨️ Keyboard",
+									children: [
+										{
+											name: "Ctrl+Down shows a bullet's children and Ctrl+Up hides them (Cmd on a Mac)",
+										},
+										{
+											name: "Alt+Shift+Up and Down move a bullet (Cmd+Shift on a Mac)",
+											children: leaves("Move me around"),
+										},
+										{name: "Ctrl+Z undoes your last change (Cmd+Z on a Mac)"},
+									],
+								},
+								{
+									name: "🧭 Search and jumping",
+									children: leaves(
+										"Press Ctrl+K (Cmd+K on a Mac) to jump to any bullet by name",
+										"Type in the search box to filter the whole outline",
+										"Press Ctrl+Shift+8 (Cmd+Shift+8 on a Mac) to star the page you are on and keep it in the sidebar",
+									),
+								},
+								{
+									name: "🪄 Boards",
+									children: [
+										{
+											name: "Turn a bullet into a board from its menu, and its children become columns",
+										},
+										{name: "Try it on this bullet", children: leaves("To do", "Doing", "Done")},
+									],
+								},
+								{
+									name: "🔗 Links",
+									children: leaves(
+										"Type [[ and pick a bullet to link to it",
+										"Paste a web address and it becomes a link",
+									),
+								},
+							],
+						},
+						{
+							name: "Put quick thoughts in the Inbox and sort them later. Delete this welcome whenever you like",
+						},
+					],
+				},
 			],
+			expanded: ["Welcome to OutlineDB"],
 			mirror: [],
 		});
 	});

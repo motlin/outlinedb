@@ -578,22 +578,14 @@ describe("OutlineTree empty account", () => {
 		);
 	}
 
-	it("welcomes a signed-in user whose outline is empty with tips, above the add-child button", () => {
+	it("points a signed-in user whose outline is empty at the add-child button, with no tips of its own", () => {
 		accountSync = {phase: "idle", applied: 0};
 		const html = render();
 		expect({
 			text: emptyOutlineText(html),
 			beforeAddChild: html.indexOf("empty-outline") < html.indexOf("addChildButton"),
 		}).toStrictEqual({
-			text: [
-				"Welcome to OutlineDB",
-				"Your outline is empty. Click the + below to add your first bullet.",
-				"Press Enter to add a bullet, Tab to indent it and Shift+Tab to outdent it",
-				"Click a bullet to zoom into it; the breadcrumbs at the top take you back out",
-				"Press Ctrl+K (Cmd+K on a Mac) to jump to any item by name, or type in the search box to filter",
-				"Type #tags or @mentions anywhere in a bullet, then click one to see everything that has it",
-				"Press Ctrl+Enter (Cmd+Enter on a Mac) to complete an item",
-			],
+			text: ["Your outline is empty. Click the + below to add your first bullet."],
 			beforeAddChild: true,
 		});
 	});
