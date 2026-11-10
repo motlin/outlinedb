@@ -96,7 +96,7 @@ Run the mandatory import barrier, then execute due tasks from `Personal > 🔄 R
 ```bash
 mkdir -p .llm/gtd/review
 date -u +%Y-%m-%dT%H:%M:%SZ > .llm/gtd/review/run-started.txt
-./bin/run.js node get --path "Personal,🔄 Review,🔄 Daily Review,LLM Tasks:" --depth 12 --json --fields name,note,shortId,id,children,completedAt > .llm/gtd/review/phase0-llm-tasks.json
+./bin/run.js node get --path "Personal,🔄 Review,🔄 Daily Review,LLM Tasks:" --depth 10 --json --fields name,note,shortId,id,children,completedAt > .llm/gtd/review/phase0-llm-tasks.json
 node ${CLAUDE_PLUGIN_ROOT}/scripts/compute-llm-dag.mts .llm/gtd/review/phase0-llm-tasks.json --files-dir .llm/gtd/review/scripts > .llm/gtd/review/phase0-plan.json
 ```
 
@@ -126,7 +126,7 @@ LLM Tasks:
       /gtd:refine-journal-apply
 ```
 
-Prep and presentation pair by their identical date-stripped task names. The planner infers the artifact slug from the prep command by removing a trailing `-prep` or `-auto`; `/gtd:email-calendar-prep` therefore stages `email-calendar`. A prep task with no plugin command is inline: its children are the instructions, and its slug is the kebab-case of its name, so `Daily disk cleanup` stages `daily-disk-cleanup`. A `File: <name>` child holds a script in its note; the planner writes every one verbatim to `.llm/gtd/review/scripts/<name>` before anything runs, and instructions run it from there. `Interval` is optional and defaults to `1d`; supported units are `d`, `m`, and `y`. `Auto` is only for prep tasks that have no presentation entry. Presentation inherits its due state, slug, and interval from prep, so it carries no date. Placement already identifies prep versus presentation; `Key:`, `#llm-task`, `· prep`, `· apply`, marker emoji, and duplicate dates are invalid clutter.
+Prep and presentation pair by their identical date-stripped task names. The planner infers the artifact slug from the prep command by removing a trailing `-prep` or `-auto`; `/gtd:email-calendar-prep` therefore stages `email-calendar`. A prep task with no plugin command is inline: its children are the instructions, and its slug is the kebab-case of its name, so `Daily disk cleanup` stages `daily-disk-cleanup`. A `File: <name>` child holds a script in its note; the planner writes every one verbatim to `.llm/gtd/review/scripts/<name>` before anything runs, and instructions run it from there. In inline instructions, `${CLAUDE_PLUGIN_ROOT}` means this gtd plugin's root, so hand subagents the resolved path. `Interval` is optional and defaults to `1d`; supported units are `d`, `m`, and `y`. `Auto` is only for prep tasks that have no presentation entry. Presentation inherits its due state, slug, and interval from prep, so it carries no date. Placement already identifies prep versus presentation; `Key:`, `#llm-task`, `· prep`, `· apply`, marker emoji, and duplicate dates are invalid clutter.
 
 The planner rejects unexpected root children, obsolete `Key:` markers, duplicate or unmatched task names, duplicate inferred slugs, invalid intervals, missing prep dates, dates on presentation tasks, and presentation entries for auto tasks. Any validation error halts the review.
 

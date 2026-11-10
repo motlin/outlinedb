@@ -7,7 +7,7 @@ description: Auto half of daily-review Otter ingestion — scan Otter.ai for mee
 
 Ingest new Otter.ai meetings into the Workflowy `📆 Calendar` without prompting. Cursor-based dedup plus a calendar-match backstop ensure only new meetings are created. The live prep task carries `Auto`, so it stages a briefing fragment instead of a confirmable proposal.
 
-It is the head of `Serial: Calendar journal`: it creates the entries that `refine-journal-prep` and `refine-exercise-prep` then refine.
+It is the head of `Serial: Calendar journal`: it creates the entries that `refine-journal-prep` and the inline Refine exercise task then refine.
 
 ## Auto contract (read this first)
 

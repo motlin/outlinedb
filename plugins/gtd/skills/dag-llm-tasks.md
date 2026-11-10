@@ -24,15 +24,14 @@ LLM Tasks:
         /gtd:refine-journal-prep
     Process inbox <time...>
       /gtd:refine-inbox
-    Time Machine exclusions <time...>
-      /gtd:time-machine-exclusions-prep
+    Daily disk cleanup <time...>
+      Thin Time Machine local snapshots: tmutil thinlocalsnapshots / 200000000000 4
+      Auto
   Presentation
     Refine calendar journal
       /gtd:refine-journal-apply
     Process inbox
       /gtd:inbox
-    Time Machine exclusions
-      /gtd:time-machine-exclusions-apply
 ```
 
 The schema is strict:

@@ -45,12 +45,6 @@ describe("Structural Eval: No Personal Vocabulary", () => {
 		expect(scanTracked(EXERCISE_PROGRAMS)).toStrictEqual([]);
 	});
 
-	it("refine-exercise-prep reads program formats from the private exercise-formats file", () => {
-		const prep = readFileSync(join(PROJECT_ROOT, "plugins/gtd/commands/refine-exercise-prep.md"), "utf8");
-
-		expect(prep).toContain(".llm/gtd/exercise-formats.md");
-	});
-
 	it("refine-journal-prep reads holiday emoji from the private journal vocabulary", () => {
 		const prep = readFileSync(join(PROJECT_ROOT, "plugins/gtd/commands/refine-journal-prep.md"), "utf8");
 
