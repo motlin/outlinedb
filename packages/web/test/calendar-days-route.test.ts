@@ -94,8 +94,8 @@ describe("GET /api/v1/calendar/days", () => {
 		scans.length = 0;
 
 		await expect(get("year=2026&month=10&found=1")).resolves.toStrictEqual({status: 200, body: {days: [1]}});
-		// Only root lookups (the settings, the days, the Found Dates' calendar info, twice each for the node role); the strict walk reads children by id, not by scanning.
-		expect(scans.filter(isCalendarScan)).toHaveLength(6);
+		// Only root lookups (the settings, the days, the Found Dates' calendar info; a node role with stored metadata needs none); the strict walk reads children by id, not by scanning.
+		expect(scans.filter(isCalendarScan)).toHaveLength(5);
 	});
 
 	it("rejects a missing or out-of-range year or month", async () => {

@@ -81,7 +81,14 @@ export {EXPANDED_NODES_IMPORT_NAME, expansionVersion, readExpansion, replaceExpa
 export {markWhatsNewRead, readWhatsNewReads} from "./whats-new-store.js";
 export {accountVersion, readAccountState, writeAccountState} from "./account-seed.js";
 export {effectiveCompletedAt} from "./effective-completion.js";
-export {applyMirrorText, loadMirrorOriginals, notAMirror, withMirrorText} from "./mirror-text.js";
+export {
+	applyMirrorText,
+	loadMirrorOriginals,
+	mirrorOriginalText,
+	notAMirror,
+	relationalRowId,
+	withMirrorText,
+} from "./mirror-text.js";
 export {NodeReader} from "./node-reader.js";
 export {PathBuilder} from "./path-builder.js";
 export {type LinkTarget, type NodeTree, NodeTreeReader, type ReadTreeOptions} from "./node-tree-reader.js";

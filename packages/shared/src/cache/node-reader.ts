@@ -1,18 +1,37 @@
 import type * as schema from "../db/schema.js";
 import type {AppDatabase} from "../db/types.js";
-import {nodeContent} from "../db/schema.js";
+import {mirrors, nodeContent} from "../db/schema.js";
 import type {Node} from "../types/node.js";
 import {and, eq, isNull} from "drizzle-orm";
 import {currentVersion} from "./cache-temporal.js";
 import {inIds} from "./in-ids.js";
-import {applyMirrorText, loadMirrorOriginals} from "./mirror-text.js";
+import {mirrorOriginalText, relationalRowId} from "./mirror-text.js";
 
 /**
- * Raw joined row shape returned by the nodeContent + nodeMetadata queries.
+ * Raw joined row shape returned by the nodeContent + nodeMetadata queries: the row, its metadata, its current
+ * mirror relationship and that original's text, all read by one statement.
  */
 type ContentWithMetadata = schema.NodeContentType & {
 	metadata: schema.NodeMetadataType | null;
+	mirrorsAsCopy: {originalId: string}[];
+	originalName: string | null;
+	originalNote: string | null;
 };
+
+/**
+ * What every read nests beside the row: its metadata, its current mirror relationship and, for a mirror, the
+ * original's text, so a mirror needs no second statement.
+ */
+const NODE_SHAPE = {
+	with: {
+		metadata: true,
+		mirrorsAsCopy: {where: currentVersion(mirrors), columns: {originalId: true}},
+	},
+	extras: {
+		originalName: mirrorOriginalText(relationalRowId, "name").as("original_name"),
+		originalNote: mirrorOriginalText(relationalRowId, "note").as("original_note"),
+	},
+} as const;
 
 /**
  * Single read service for loading current nodes from the SQLite cache.
@@ -42,7 +61,7 @@ export class NodeReader {
 		const result = this.database.query.nodeContent
 			.findFirst({
 				where: and(eq(nodeContent.id, id), currentVersion(nodeContent)),
-				with: {metadata: true},
+				...NODE_SHAPE,
 			})
 			.sync();
 		if (!result) {
@@ -64,7 +83,7 @@ export class NodeReader {
 		const results = this.database.query.nodeContent
 			.findMany({
 				where: whereClause,
-				with: {metadata: true},
+				...NODE_SHAPE,
 			})
 			.sync();
 
@@ -91,7 +110,7 @@ export class NodeReader {
 		const results = this.database.query.nodeContent
 			.findMany({
 				where: and(inIds(nodeContent.id, ids), currentVersion(nodeContent)),
-				with: {metadata: true},
+				...NODE_SHAPE,
 			})
 			.sync();
 
@@ -100,16 +119,16 @@ export class NodeReader {
 
 	/**
 	 * Construct `Node` DTOs for a batch of rows, giving each mirror its
-	 * original's id and text.
+	 * original's id and text (null when the original is not current).
 	 */
 	private toNodes(rows: ContentWithMetadata[]): Node[] {
-		const mirrorOriginals = loadMirrorOriginals(
-			this.database,
-			rows.map((row) => row.id),
-		);
-		return applyMirrorText(this.database, rows, mirrorOriginals).map((row) =>
-			this.toNode(row, mirrorOriginals.get(row.id) ?? null),
-		);
+		return rows.map((row) => {
+			const originalId = row.mirrorsAsCopy[0]?.originalId ?? null;
+			return this.toNode(
+				originalId === null ? row : {...row, name: row.originalName, note: row.originalNote},
+				originalId,
+			);
+		});
 	}
 
 	/**

@@ -7,6 +7,7 @@ import {join} from "node:path";
 import * as schema from "@outlinedb/shared/db";
 import type {WorkflowyNode} from "@outlinedb/shared/types";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {upstreamExpansionKey} from "@outlinedb/shared/workflowy";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
 import {httpAppFor} from "./http-app-for.js";
 
@@ -42,8 +43,19 @@ function setup(accountExpanded?: readonly string[]) {
 	cacheService.insertNode(apiNode("A1a", "A1", 0), "A1");
 	cacheService.insertNode(apiNode("A2a", "A2", 0), "A2");
 	cacheService.insertNode(apiNode("B1", "Beta", 0), "Beta");
+	// The account's expansion lives in `expanded_nodes` under upstream's keys, which the internal API tests ids against.
+	for (const key of new Set(accountExpanded?.map(upstreamExpansionKey))) {
+		sqlite
+			.prepare("INSERT INTO expanded_nodes (short_key, system_from, system_to) VALUES (?, ?, ?)")
+			.run(key, "2000-01-01T00:00:00.000Z", FAR_FUTURE_DATE);
+	}
 	const adapter =
-		accountExpanded === undefined ? undefined : {expansionTest: () => (id: string) => accountExpanded.includes(id)};
+		accountExpanded === undefined
+			? undefined
+			: {
+					expansionTest: () => (id: string) =>
+						accountExpanded.map(upstreamExpansionKey).includes(upstreamExpansionKey(id)),
+				};
 	const ctx = {db, cacheService, internalAdapter: () => adapter} as unknown as ServerContext;
 	const app = new Hono<AppEnv>();
 	app.use("*", async (c, next) => {
@@ -68,7 +80,19 @@ function setup(accountExpanded?: readonly string[]) {
 			.prepare("INSERT INTO mirrors (mirror_id, original_id, system_from, system_to) VALUES (?, ?, ?, ?)")
 			.run(mirrorId, originalId, "2000-01-01T00:00:00.000Z", FAR_FUTURE_DATE);
 	};
-	return {post, mirror};
+	/** Add `id` under `parentId`; without metadata its priority and creation time read as 0. */
+	const add = (
+		id: string,
+		parentId: string,
+		priority: number,
+		{completedAt, metadata = true} = {} as {completedAt?: number; metadata?: boolean},
+	) => {
+		cacheService.insertNode(apiNode(id, parentId, priority, completedAt), parentId);
+		if (!metadata) {
+			sqlite.prepare("DELETE FROM node_metadata WHERE node_id = ?").run(id);
+		}
+	};
+	return {post, mirror, add};
 }
 
 interface ListBody {
@@ -163,6 +187,56 @@ describe("POST /api/v1/nodes/view", () => {
 			["A1", ["A1a", "Mmmm"], NO_BACKLINKS],
 			["Mmmm", ["A1", "A2"], NO_BACKLINKS],
 		]);
+	});
+
+	it("orders siblings by priority then creation time and spends the budget in that order", async () => {
+		const {post, add} = setup();
+		add("Neg", "Beta", -5);
+		add("Huge", "Beta", 2 ** 40);
+		add("H1", "Huge", 0);
+		add("NoMeta", "Beta", 3, {metadata: false});
+
+		const {body} = await post({rootId: "Beta", expandedIds: ["Huge", "B1"], limit: 3, showCompleted: false});
+
+		expect(lists(body)).toStrictEqual([
+			["Beta", ["Neg", "NoMeta", "B1", "Huge"], NO_BACKLINKS],
+			["B1", [], NO_BACKLINKS],
+		]);
+	});
+
+	it("neither counts nor expands a hidden completed row", async () => {
+		const {post, add} = setup();
+		add("A0", "Alpha", -1, {completedAt: 300});
+		add("A0a", "A0", 0);
+
+		const {body} = await post({rootId: "Alpha", expandedIds: ["A0", "A1"], limit: 1, showCompleted: false});
+
+		expect(lists(body)).toStrictEqual([
+			["Alpha", ["A0", "A1", "A2"], NO_BACKLINKS],
+			["A1", ["A1a"], NO_BACKLINKS],
+		]);
+	});
+
+	it("expands a row inside a mirror by its instance key, not its own id", async () => {
+		const {post, mirror} = setup();
+		mirror("M", "Beta", "Alpha");
+
+		const [instance, plain] = await Promise.all([
+			post({rootId: "Beta", expandedIds: ["M", "virtual_A1_M_M"], limit: 100, showCompleted: false}),
+			post({rootId: "Beta", expandedIds: ["M", "A1"], limit: 100, showCompleted: false}),
+		]);
+
+		expect({instance: lists(instance.body), plain: lists(plain.body)}).toStrictEqual({
+			instance: [
+				["Beta", ["B1", "M"], NO_BACKLINKS],
+				["M", ["A1", "A2"], NO_BACKLINKS],
+				["A1", ["A1a"], NO_BACKLINKS],
+			],
+			plain: [
+				["Beta", ["B1", "M"], NO_BACKLINKS],
+				["M", ["A1", "A2"], NO_BACKLINKS],
+			],
+		});
 	});
 
 	it("expands the account's expanded rows for null expandedIds, returning those the view reached", async () => {
@@ -292,19 +366,16 @@ describe("POST /api/v1/nodes/view deep fetch", () => {
 		expect({status, listCount}).toStrictEqual({status: 200, listCount: 1 + 150 * 2});
 	});
 
-	it("runs the same statements per level however many parents a level holds", async () => {
+	it("reads the whole tree in one statement however wide or deep the view", async () => {
 		const narrow = await wideSetup(3, 2).view();
 		const wide = await wideSetup(150, 2).view();
+		const deep = await wideSetup(20, 6).view();
 
-		expect(wide.statements).toBe(narrow.statements);
-	});
-
-	it("adds a constant number of statements per level of depth", async () => {
-		const two = await wideSetup(20, 2).view();
-		const three = await wideSetup(20, 3).view();
-		const four = await wideSetup(20, 4).view();
-
-		expect(four.statements - three.statements).toBe(three.statements - two.statements);
+		expect({narrow: narrow.statements, wide: wide.statements, deep: deep.statements}).toStrictEqual({
+			narrow: 1,
+			wide: 1,
+			deep: 1,
+		});
 	});
 
 	it("reads every expanded row's Backlinks section in the same statements however many rows have one", async () => {
@@ -312,10 +383,10 @@ describe("POST /api/v1/nodes/view deep fetch", () => {
 		const wide = await wideSetup(150, 2, {backlinks: true}).view();
 
 		expect({
-			statements: wide.statements,
+			statements: [narrow.statements, wide.statements],
 			last: wide.lists.at(-1),
 		}).toStrictEqual({
-			statements: narrow.statements,
+			statements: [11, 11],
 			last: {
 				parentId: "P149-1",
 				nodes: [],

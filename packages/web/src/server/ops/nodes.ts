@@ -9,6 +9,7 @@ import {and, eq} from "drizzle-orm";
 import type {
 	BacklinkCrumb,
 	BacklinksResponse,
+	CalendarInfo,
 	FoundDatesResponse,
 	NodeChangesResponse,
 	NodeResponse,
@@ -19,7 +20,6 @@ import {
 	childFlags,
 	currentBacklinkSourcesUnder,
 	findReferencesRoot,
-	findReferencesRoots,
 	notReferencesRoot,
 	referencesRootLabel,
 	referencesRootLabels,
@@ -31,6 +31,8 @@ import type {MirrorInstance} from "../../mirror-path.js";
 import {childInstance, expansionId} from "../../mirror-path.js";
 import {INTERNAL_API_NOT_CONFIGURED} from "../internal-api.js";
 import {changeWatermark, changesAfter, liveParents, readConsistently} from "../system-changes.js";
+import {readViewTree} from "../view-tree.js";
+import type {ViewExpansion} from "../view-tree.js";
 import {defineOp, fail, ok, toJson} from "./define.js";
 import {
 	AncestorsResponseSchema,
@@ -220,32 +222,20 @@ export const nodesView = defineOp({
 		if (rootId !== null && resolvedRoot === null) {
 			return fail(404, {error: "Node not found"});
 		}
-		const isExpanded = viewExpansionTest(ctx, body.expandedIds);
-		const lists: OutlineViewList[] = [];
+		const {expansion, isExpanded} = viewExpansion(ctx, body.expandedIds);
+		// Every list the view sends, chosen and read by one statement; visit only assembles them, agreeing with the
+		// statement's walk about order, budget and expansion.
+		const tree = readViewTree(ctx, {rootId: resolvedRoot, expansion, limit, showCompleted});
+		// Each list sent, with the node whose children it holds (a mirror's original; null for Home).
+		const lists: {list: OutlineViewList; original: string | null}[] = [];
 		let used = 0;
-		// Each list read for the view, by the node whose children it holds (a mirror's original), filled a level at a
-		// time so the statement count follows the view's depth, not its row count.
-		const prefetched = new Map<string | null, {nodes: NodeResponse[]; backlinks: BacklinksResponse | null}>();
-		const originalOfId = new Map<string, string>();
-		await prefetchViewLevels(ctx, resolvedRoot, isExpanded, {limit, showCompleted}, prefetched, originalOfId);
-		// A parent's list is sent once however often it repeats, and a cyclical mirror instance is not expanded.
+		// A parent's list is sent once however often it repeats.
 		const listed = new Set<string | null>();
-		const visit = async (
-			parentId: string | null,
-			resolved: string | null,
-			instance: MirrorInstance | null,
-		): Promise<void> => {
-			const original =
-				resolved === null ? null : (originalOfId.get(resolved) ?? resolveMirrorToOriginal(ctx, resolved));
-			const hit = prefetched.get(original);
-			const nodes = hit?.nodes ?? readChildDtos(ctx, original);
+		const visit = (parentId: string | null, original: string | null, instance: MirrorInstance | null): void => {
+			const nodes = tree.childrenOf(original);
 			if (!listed.has(parentId)) {
 				listed.add(parentId);
-				lists.push({
-					parentId,
-					nodes,
-					backlinks: resolved === null ? null : (hit?.backlinks ?? (await readBacklinks(ctx, resolved))),
-				});
+				lists.push({list: {parentId, nodes, backlinks: null}, original});
 			}
 			for (const node of nodes) {
 				if (used >= limit) {
@@ -256,17 +246,31 @@ export const nodesView = defineOp({
 				}
 				used += 1;
 				if (isExpanded(expansionId(node.id, instance))) {
-					await visit(node.id, node.id, childInstance(node, instance));
+					visit(node.id, node.originalNodeId ?? node.id, childInstance(node, instance));
 				}
 			}
 		};
-		await visit(rootId, resolvedRoot, null);
-		const rootNode = resolvedRoot === null ? undefined : ctx.cacheService.getNode(resolvedRoot);
-		const foundDates = rootNode === undefined ? null : await readFoundDates(ctx, rootNode);
+		visit(rootId, tree.rootListParent, null);
+		// Each listed node's Backlinks section (Home has none; a node with no references root has an empty one), all
+		// read in one batch.
+		const sections = await readBacklinksOfMany(
+			ctx,
+			new Map(
+				lists.flatMap(({original}) => {
+					const root = original === null ? undefined : tree.referencesRootOf.get(original);
+					return original === null || root === undefined ? [] : [[original, root] as const];
+				}),
+			),
+		);
+		for (const {list, original} of lists) {
+			list.backlinks = original === null ? null : (sections.get(original) ?? {rootId: null, items: []});
+		}
+		const foundDates =
+			tree.root === undefined ? null : await readFoundDates(ctx, tree.root, tree.rootCalendar ?? null);
 		const response: OutlineViewResponse = {
-			lists,
+			lists: lists.map(({list}) => list),
 			...(body.expandedIds === null
-				? {expandedIds: lists.flatMap((list) => list.nodes.map((node) => node.id).filter(isExpanded))}
+				? {expandedIds: lists.flatMap(({list}) => list.nodes.map((node) => node.id).filter(isExpanded))}
 				: {}),
 			...(foundDates === null ? {} : {foundDates}),
 		};
@@ -275,77 +279,21 @@ export const nodesView = defineOp({
 });
 
 /**
- * Read the lists a view will show one level at a time: all of a level's parents in one batch, then the expanded rows
- * among their children as the next level, until the row budget is spent. {@link visit} then finds each list ready.
- *
- * A Reladomo-style deep fetch: each table is one query per level (children, mirrors, flags, attachments, metadata,
- * calendar, references roots, Backlinks sections), the level's ids bound as one JSON parameter (`inIds`), so the
- * statement count follows the depth, never the row count, and a wide level stays under the Durable Object's
- * 100-parameter cap. One recursive CTE is not used: which rows expand is decided per row in JS (request ids, the
- * account's stored expansion, mirror-instance keys derived from the parent's path), not by a column SQL can join.
- * Measured (better-sqlite3, every row expanded, each with a Backlinks item): 150 parents x 3 levels went from 9076
- * statements / 1109 ms to 109 / 35 ms; 400 x 2 from 16084 / 2395 ms to 76 / 47 ms.
+ * The view's expansion: the requested ids, or for null the account's stored expansion (nothing without the internal
+ * API), as the walk's SQL source and the same test in JS.
  */
-async function prefetchViewLevels(
+function viewExpansion(
 	ctx: ServerContext,
-	rootResolved: string | null,
-	isExpanded: (id: string) => boolean,
-	{limit, showCompleted}: {limit: number; showCompleted: boolean},
-	prefetched: Map<string | null, {nodes: NodeResponse[]; backlinks: BacklinksResponse | null}>,
-	originalOfId: Map<string, string>,
-): Promise<void> {
-	let level: {resolved: string | null; instance: MirrorInstance | null}[] = [
-		{resolved: rootResolved, instance: null},
-	];
-	let seen = 0;
-	while (level.length > 0 && seen < limit) {
-		const resolvedIds = [...new Set(level.flatMap(({resolved}) => resolved ?? []))];
-		const originals = resolveMirrorsToOriginals(ctx, resolvedIds);
-		for (const [id, original] of originals) {
-			originalOfId.set(id, original);
-		}
-		const originalOf = (resolved: string | null) =>
-			resolved === null ? null : (originals.get(resolved) ?? resolved);
-		const toRead = [...new Set(level.map(({resolved}) => originalOf(resolved)))].filter(
-			(original) => !prefetched.has(original),
-		);
-		const lists = readChildDtoLists(ctx, toRead);
-		const roots = findReferencesRoots(
-			ctx.db,
-			toRead.flatMap((original) => original ?? []),
-		);
-		const sections = await readBacklinksOfMany(ctx, roots);
-		for (const original of toRead) {
-			prefetched.set(original, {
-				nodes: lists.get(original) ?? [],
-				// Home has no Backlinks section; a node with no references root has an empty one.
-				backlinks: original === null ? null : (sections.get(original) ?? {rootId: null, items: []}),
-			});
-		}
-		const next: typeof level = [];
-		for (const {resolved, instance} of level) {
-			for (const node of prefetched.get(originalOf(resolved))?.nodes ?? []) {
-				seen += 1;
-				if (!showCompleted && node.completedAt !== null) {
-					continue;
-				}
-				if (isExpanded(expansionId(node.id, instance))) {
-					next.push({resolved: node.id, instance: childInstance(node, instance)});
-				}
-			}
-		}
-		level = next;
-	}
-}
-
-/** The requested expanded ids, or for null the account's expansion (nothing without the internal API). */
-function viewExpansionTest(ctx: ServerContext, expandedIds: string[] | null): (id: string) => boolean {
+	expandedIds: string[] | null,
+): {expansion: ViewExpansion; isExpanded: (id: string) => boolean} {
 	if (expandedIds !== null) {
 		const ids = new Set(expandedIds);
-		return (id) => ids.has(id);
+		return {expansion: {kind: "ids", ids: [...ids]}, isExpanded: (id) => ids.has(id)};
 	}
 	const adapter = ctx.internalAdapter?.();
-	return adapter === undefined ? () => false : adapter.expansionTest();
+	return adapter === undefined
+		? {expansion: {kind: "none"}, isExpanded: () => false}
+		: {expansion: {kind: "stored"}, isExpanded: adapter.expansionTest()};
 }
 
 /** Fetch a node missing from the cache through the write-through client, cache it with its ancestors, and read it. */
@@ -701,10 +649,17 @@ export const nodesFoundDates = defineOp({
 	},
 });
 
-/** `node`'s Found Dates section when it is a day page, else null. */
-async function readFoundDates(ctx: ServerContext, node: Node): Promise<FoundDatesResponse | null> {
+/**
+ * `node`'s Found Dates section when it is a day page, else null. `known` is the node's calendar role when the caller
+ * already read it (null: none); undefined reads it.
+ */
+async function readFoundDates(
+	ctx: ServerContext,
+	node: Node,
+	known?: CalendarInfo | null,
+): Promise<FoundDatesResponse | null> {
 	const deps = {db: ctx.db, cache: ctx.cacheService};
-	const calendar = loadCalendarInfo(deps, [node]).get(node.id);
+	const calendar = known === undefined ? loadCalendarInfo(deps, [node]).get(node.id) : known;
 	if (calendar?.level !== "day") {
 		return null;
 	}

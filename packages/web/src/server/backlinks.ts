@@ -164,31 +164,6 @@ export function findReferencesRoot(db: ServerDatabase, targetId: string): string
 	return row?.id ?? null;
 }
 
-/** The current references root under each of `targetIds`, in one query. Targets without one are absent. */
-export function findReferencesRoots(db: ServerDatabase, targetIds: string[]): Map<string, string> {
-	if (targetIds.length === 0) {
-		return new Map();
-	}
-	const rows = db
-		.select({id: nodeContent.id, parentId: nodeContent.parentId})
-		.from(nodeContent)
-		.where(
-			and(
-				inIds(nodeContent.parentId, targetIds),
-				eq(nodeContent.systemTo, FAR_FUTURE_DATE),
-				sql`${nodeContent.id} IN ${currentReferencesRootIds}`,
-			),
-		)
-		.all();
-	const roots = new Map<string, string>();
-	for (const {id, parentId} of rows) {
-		if (parentId !== null && !roots.has(parentId)) {
-			roots.set(parentId, id);
-		}
-	}
-	return roots;
-}
-
 /**
  * The backlink items under `rootId` whose source is a current node, mapped to
  * that source id. Whether the source text still links to the target is not

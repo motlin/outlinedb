@@ -879,6 +879,18 @@ export const nodeContentRelations = relations(nodeContent, ({one, many}) => ({
 		references: [calendarMetadata.nodeId, calendarMetadata.systemTo],
 	}),
 	nodeEmbeddings: many(nodeEmbeddings),
+	displayMetadata: one(nodeDisplayMetadata, {
+		fields: [nodeContent.id, nodeContent.systemTo],
+		references: [nodeDisplayMetadata.nodeId, nodeDisplayMetadata.systemTo],
+	}),
+	tableCellSizes: many(nodeTableCellSizes),
+}));
+
+export const nodeTableCellSizesRelations = relations(nodeTableCellSizes, ({one}) => ({
+	content: one(nodeContent, {
+		fields: [nodeTableCellSizes.nodeId],
+		references: [nodeContent.id],
+	}),
 }));
 
 export const nodeMetadataRelations = relations(nodeMetadata, ({one}) => ({

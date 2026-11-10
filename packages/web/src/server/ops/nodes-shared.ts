@@ -217,6 +217,47 @@ export function loadInternalMetadataFields(ctx: ServerContext, nodeIds: string[]
 }
 
 /**
+ * {@link loadInternalMetadataFields} over rows a shaped read already holds: the node's current
+ * `node_display_metadata` row and its current table cell sizes. Undefined when they set none of the fields.
+ */
+export function displayMetadataFields(
+	display: {
+		numberedStart: number | null;
+		priorityDefaultToBottom: number | null;
+		tableHeaders: number | null;
+		tableSkipHeaders: number | null;
+		tableBg: string | null;
+	} | null,
+	sizes: readonly {cellId: string; size: number}[],
+): InternalMetadataFields | undefined {
+	const table: Record<string, unknown> = {};
+	if (display?.tableHeaders != null) {
+		table.headers = display.tableHeaders === 1;
+	}
+	if (display?.tableSkipHeaders != null) {
+		table.skipHeaders = display.tableSkipHeaders === 1;
+	}
+	if (display?.tableBg != null) {
+		table.bg = display.tableBg;
+	}
+	if (sizes.length > 0) {
+		table.sizes = Object.fromEntries(sizes.map(({cellId, size}) => [cellId, size]));
+	}
+	const hasTable = Object.keys(table).length > 0;
+	const numberedStart = display?.numberedStart ?? null;
+	const defaultToBottom = display?.priorityDefaultToBottom ?? null;
+	if (numberedStart === null && defaultToBottom === null && !hasTable) {
+		return undefined;
+	}
+	const parsedTable = TableMetadataSchema.safeParse(hasTable ? table : undefined);
+	return {
+		numberedStart,
+		defaultToBottom: defaultToBottom === 1,
+		table: parsedTable.success ? parsedTable.data : null,
+	};
+}
+
+/**
  * Build the write-through client from the context, or undefined when no API key
  * is configured (read-only mode).
  */

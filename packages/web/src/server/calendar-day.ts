@@ -68,41 +68,67 @@ export function loadCalendarInfo(
 		.where(and(inIds(calendarMetadata.nodeId, ids), eq(calendarMetadata.systemTo, FAR_FUTURE_DATE)))
 		.all();
 	for (const row of calendarRows) {
-		map.set(row.nodeId, {
-			level: row.level,
-			dateId: row.dateId,
-			root: row.root === 1,
-			foundDates: intToBoolean(row.foundDates),
-			dayPrefix: intToBoolean(row.dayPrefix),
-			restorableUniqueNode: restorable.has(row.nodeId),
-		});
+		map.set(row.nodeId, calendarInfoOfRow(row, restorable.has(row.nodeId)));
 	}
-	if (findTaggedCalendarRoot(deps) !== undefined) {
-		// Upstream's metadata is authoritative once imported: a node without it is no calendar node.
-		return map;
-	}
-	if (!fromNames) {
-		return map;
-	}
-	let root: string | undefined;
-	for (const node of nodes) {
-		const date = map.has(node.id) ? undefined : dayNameDate(node.name);
-		if (date !== undefined) {
-			root ??= findCalendarRoot(deps);
-			if (root !== undefined && sitsInMonth(deps.cache, node.parentId, root, date)) {
-				const dateId = date.year * 10_000 + date.month * 100 + date.day;
-				map.set(node.id, {
-					level: "day",
-					dateId,
-					root: false,
-					foundDates: null,
-					dayPrefix: null,
-					restorableUniqueNode: false,
-				});
-			}
-		}
+	if (fromNames) {
+		addNamedCalendarDays(deps, nodes, map);
 	}
 	return map;
+}
+
+/** A stored `calendar_metadata` row as the node DTO's calendar role, with the node's `restorableUniqueNode`. */
+export function calendarInfoOfRow(
+	row: {
+		level: string | null;
+		dateId: number | null;
+		root: number | null;
+		foundDates: number | null;
+		dayPrefix: number | null;
+	},
+	restorableUniqueNode: boolean,
+): CalendarInfo {
+	return {
+		level: row.level,
+		dateId: row.dateId,
+		root: row.root === 1,
+		foundDates: intToBoolean(row.foundDates),
+		dayPrefix: intToBoolean(row.dayPrefix),
+		restorableUniqueNode,
+	};
+}
+
+/**
+ * Add to `map` (each node's stored calendar role) every node without one whose name is a date-only `<time>` under
+ * root > `YYYY` > `MM` (or `M`): a day created since the last import. Not once the calendar root's internal metadata
+ * is cached, as upstream's metadata is then authoritative; that lookup runs only when some node's name is a date.
+ */
+export function addNamedCalendarDays(
+	deps: Pick<CalendarDayDeps, "db" | "cache">,
+	nodes: readonly {id: string; parentId: string | null; name: string | null}[],
+	map: Map<string, CalendarInfo>,
+): void {
+	const named = nodes.flatMap((node) => {
+		const date = map.has(node.id) ? undefined : dayNameDate(node.name);
+		return date === undefined ? [] : [{node, date}];
+	});
+	if (named.length === 0 || findTaggedCalendarRoot(deps) !== undefined) {
+		return;
+	}
+	let root: string | undefined;
+	for (const {node, date} of named) {
+		root ??= findCalendarRoot(deps);
+		if (root !== undefined && sitsInMonth(deps.cache, node.parentId, root, date)) {
+			const dateId = date.year * 10_000 + date.month * 100 + date.day;
+			map.set(node.id, {
+				level: "day",
+				dateId,
+				root: false,
+				foundDates: null,
+				dayPrefix: null,
+				restorableUniqueNode: false,
+			});
+		}
+	}
 }
 
 /** A nullable 0/1 column as a boolean, keeping null. */

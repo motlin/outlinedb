@@ -81,6 +81,23 @@ export function withMirrorText<T extends TextRow>(database: Database, rows: T[])
 }
 
 /**
+ * The outer row's id inside a correlated subquery of a `db.query.nodeContent` read's `extras`. Drizzle renders a
+ * column there unqualified (`"id"`), which a subquery reading `node_content` itself would bind to its own row, so
+ * this names the alias drizzle gives the queried table instead.
+ */
+export const relationalRowId = sql.raw('"nodeContent"."id"');
+
+/**
+ * SQL for the current original's `name` or `note` when the row `id` is a current mirror, else null: the text
+ * {@link applyMirrorText} would give the row, as a correlated subquery a shaped read selects beside the row.
+ */
+export function mirrorOriginalText(id: SQL, column: "name" | "note"): SQL<string | null> {
+	return sql<
+		string | null
+	>`(SELECT o.${sql.raw(column)} FROM ${mirrors} mi JOIN ${nodeContent} o ON o.id = mi.original_id AND o.system_to = ${FAR_FUTURE_DATE} WHERE mi.mirror_id = ${id} AND mi.system_to = ${FAR_FUTURE_DATE} LIMIT 1)`;
+}
+
+/**
  * SQL condition that `idColumn` is not a current mirror. Text matching skips
  * mirrors, whose stored text is never meaningful; the original matches instead.
  */
