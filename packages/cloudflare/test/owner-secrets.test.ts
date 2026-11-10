@@ -75,17 +75,43 @@ describe("Workflowy secrets reach only the owner's Durable Object", () => {
 		expect(calls).toStrictEqual([{method: "GET", path: "/api/v1/nodes", auth: "Bearer fake-key-value"}]);
 	});
 
-	it("refuses a create from another object without touching the upstream", async () => {
+	it("creates locally in another object without touching the upstream", async () => {
 		calls.length = 0;
-		const result = await storeClient(await named("user-123")).call("nodes.create", {
-			parent_id: "None",
-			name: "not mine",
+		const client = storeClient(await named("user-123"));
+		const created = plain(await client.call("nodes.create", {parent_id: "None", name: "not mine"}));
+		if (typeof created !== "object" || created === null || !("value" in created)) {
+			throw new Error(`create failed: ${JSON.stringify(created)}`);
+		}
+		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the id and clock are the store's to choose
+		const {node} = created.value as {node: {id: string; createdAt: number}};
+		expect(created).toStrictEqual({
+			ok: true,
+			value: {
+				node: {
+					id: node.id,
+					parent_id: null,
+					name: "not mine",
+					note: null,
+					priority: 0,
+					data: {layoutMode: null},
+					numberedStart: null,
+					createdAt: node.createdAt,
+					modifiedAt: node.createdAt,
+					completedAt: null,
+					hasChildren: false,
+					hasUncompletedChildren: false,
+					isMirror: false,
+					hasMirrors: false,
+					originalNodeId: null,
+					attachment: null,
+					defaultToBottom: false,
+					calendar: null,
+					table: null,
+				},
+			},
+			meta: {created: true},
 		});
-		expect(plain(result)).toStrictEqual({
-			ok: false,
-			status: 500,
-			body: {error: "WORKFLOWY_API_KEY environment variable is required"},
-		});
+		expect(plain(await client.call("nodes.get", {id: node.id}))).toStrictEqual({ok: true, value: created.value});
 		expect(calls).toStrictEqual([]);
 	});
 

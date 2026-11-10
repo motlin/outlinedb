@@ -1,6 +1,7 @@
 import {z} from "zod";
 import {planBlockSlot} from "@outlinedb/shared/cache";
 import type {WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
+import type {NodeWriter} from "./nodes-shared.js";
 import type {NewTree} from "@outlinedb/shared/internal";
 import {MAX_COPY_ITEMS, copySubtree} from "../copy-tree.js";
 import type {ServerContext} from "../context.js";
@@ -14,7 +15,7 @@ import {
 	childIds,
 	countChildren,
 	getAdapter,
-	getWriteClient,
+	getNodeWriter,
 	openCopies,
 	originalsWithMirrors,
 	AfterIdSchema,
@@ -158,13 +159,15 @@ interface MoveBlock {
 
 /**
  * Move each block in turn, then answer `{nodes}`: the refreshed children of
- * every affected parent. Through the internal API all the blocks go in one
- * push of exact-index ops; without it only the two ends work (a top block
- * moves last-first so it keeps its order), and any other slot answers 503.
+ * every affected parent. A standalone account moves every block locally in one
+ * unit of work. Through the internal API all the blocks go in one push of
+ * exact-index ops; without it each block is placed through the public API's two
+ * ends (a top block moves last-first so it keeps its order, a middle slot adds
+ * a rotation of the siblings).
  */
 async function moveNodes(
 	ctx: ServerContext,
-	client: WorkflowyWriteThroughClient,
+	writer: NodeWriter,
 	rawBlocks: MoveBlock[],
 ): Promise<OpResult<z.output<typeof NodeListSchema>>> {
 	const blocks: {ids: string[]; parentId: string | null; index: number | undefined}[] = [];
@@ -177,8 +180,10 @@ async function moveNodes(
 	}
 	const oldParents = blocks.flatMap(({ids}) => ids.map((id) => ctx.cacheService.getNode(id)?.parentId ?? null));
 
-	const adapter = getAdapter(ctx);
-	if (adapter) {
+	const adapter = writer.mode === "mirror" ? getAdapter(ctx) : undefined;
+	if (writer.mode === "standalone") {
+		writer.local.moveBlocks(blocks);
+	} else if (adapter) {
 		const moves = blocks.map(({ids, parentId, index}) => ({
 			ids,
 			parentId: adapterParent(parentId),
@@ -188,7 +193,7 @@ async function moveNodes(
 	} else {
 		for (const block of blocks) {
 			// oxlint-disable-next-line no-await-in-loop -- each block is planned against the outline the previous one left
-			await movePublic(ctx, client, block);
+			await movePublic(ctx, writer.client, block);
 		}
 	}
 
@@ -230,8 +235,8 @@ export const nodesMove = defineOp({
 	input: z.union([MoveBlockSchema, z.object({moves: z.array(MoveBlockSchema).min(1)})]),
 	output: NodeListSchema,
 	async run(ctx, body) {
-		const client = getWriteClient(ctx);
-		if (!client) {
+		const writer = getNodeWriter(ctx);
+		if (!writer) {
 			return fail(500, {error: WRITE_CLIENT_REQUIRED});
 		}
 		const blocks: MoveBlock[] = [];
@@ -246,7 +251,7 @@ export const nodesMove = defineOp({
 			}
 			blocks.push({ids, rawParent: block.parent_id, index: block.index});
 		}
-		return moveNodes(ctx, client, blocks);
+		return moveNodes(ctx, writer, blocks);
 	},
 });
 
@@ -262,15 +267,15 @@ export const nodesMoveOne = defineOp({
 	}),
 	output: NodeListSchema,
 	async run(ctx, body) {
-		const client = getWriteClient(ctx);
-		if (!client) {
+		const writer = getNodeWriter(ctx);
+		if (!writer) {
 			return fail(500, {error: WRITE_CLIENT_REQUIRED});
 		}
 		const id = resolveNodeId(ctx, body.id);
 		if (id === null || !ctx.cacheService.getNode(id)) {
 			return fail(404, {error: "Node not found"});
 		}
-		return moveNodes(ctx, client, [
+		return moveNodes(ctx, writer, [
 			{ids: [id], rawParent: body.parent_id, index: slotIndex(body.index, body.position)},
 		]);
 	},

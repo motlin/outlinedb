@@ -15,6 +15,7 @@ describe("readNodeConfig", () => {
 				CALENDAR_LAYOUT_ENABLED: "false",
 			}),
 		).toStrictEqual({
+			mode: "mirror",
 			apiKey: "key",
 			apiUrl: "http://localhost:9",
 			accountEmail: "user@example.com",
@@ -25,8 +26,9 @@ describe("readNodeConfig", () => {
 		});
 	});
 
-	it("defaults: flags on, logging off, no key, empty email", () => {
+	it("defaults: flags on, logging off, no key so standalone, empty email", () => {
 		expect(readNodeConfig({})).toStrictEqual({
+			mode: "standalone",
 			apiKey: undefined,
 			apiUrl: undefined,
 			accountEmail: "",

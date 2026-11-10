@@ -12,6 +12,7 @@ import {LadderEventBus} from "../src/server/ladder-events.js";
 const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 
 const baseConfig: ServerConfig = {
+	mode: "mirror",
 	accountEmail: "",
 	sqlQueryLogging: false,
 	calendarEnsureEnabled: false,
@@ -55,6 +56,7 @@ describe("buildServerContext", () => {
 		expect({
 			db: ctx.db === db,
 			bus: ctx.ladderEvents === ladderEvents,
+			mode: ctx.mode,
 			apiKey: ctx.apiKey,
 			ensure: ctx.calendarEnsureEnabled,
 			layout: ctx.calendarLayoutEnabled,
@@ -63,6 +65,7 @@ describe("buildServerContext", () => {
 		}).toStrictEqual({
 			db: true,
 			bus: true,
+			mode: "mirror",
 			apiKey: "key",
 			ensure: true,
 			layout: false,

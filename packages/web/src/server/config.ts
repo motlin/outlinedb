@@ -1,5 +1,12 @@
+export type ServerMode = "mirror" | "standalone";
+
 /** Settings the server reads, parsed once by the host so routers never touch `process.env`. */
 export interface ServerConfig {
+	/**
+	 * Where node writes go: "mirror" writes through to workflowy.com and persists the result locally; "standalone"
+	 * has no workflowy.com behind it and writes straight into the local node tables.
+	 */
+	mode: ServerMode;
 	/** The Workflowy API key, or undefined when write operations are unavailable. */
 	apiKey?: string;
 	/** Override for the Workflowy API base URL (tests, proxies). */
@@ -18,6 +25,7 @@ export interface ServerConfig {
 /** Parse {@link ServerConfig} from a Node-style environment. */
 export function readNodeConfig(env: Record<string, string | undefined>): ServerConfig {
 	return {
+		mode: env.WORKFLOWY_API_KEY ? "mirror" : "standalone",
 		apiKey: env.WORKFLOWY_API_KEY,
 		apiUrl: env.WORKFLOWY_API_URL,
 		accountEmail: env.WORKFLOWY_USERNAME ?? "",

@@ -15,6 +15,7 @@ import type {
 	UpdateNodeResponse,
 } from "../../node-types.js";
 import {
+	LocalTreeWriter,
 	NodeReader,
 	NodeTreeReader,
 	WorkflowyWriteThroughClient,
@@ -276,6 +277,23 @@ export function getWriteClient(ctx: ServerContext): WorkflowyWriteThroughClient 
 		moveTo: async ({ids, parentId, index}) => adapter.moveTo({ids, parentId: adapterParent(parentId), index}),
 	};
 	return new WorkflowyWriteThroughClient(apiClient, ctx.cacheService, exactMover);
+}
+
+/** Where a node write goes: the local node tables (standalone) or workflowy.com through the write-through client (mirror). */
+export type NodeWriter =
+	| {mode: "standalone"; local: LocalTreeWriter}
+	| {mode: "mirror"; client: WorkflowyWriteThroughClient};
+
+/**
+ * The context's node writer, chosen by its mode; undefined for a mirror with no API key, which answers 500 rather than
+ * forking local-only nodes that the next sync would phase out.
+ */
+export function getNodeWriter(ctx: ServerContext): NodeWriter | undefined {
+	if (ctx.mode === "standalone") {
+		return {mode: "standalone", local: new LocalTreeWriter(ctx.db)};
+	}
+	const client = getWriteClient(ctx);
+	return client && {mode: "mirror", client};
 }
 
 /**

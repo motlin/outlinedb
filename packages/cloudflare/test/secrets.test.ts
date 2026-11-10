@@ -27,17 +27,40 @@ describe("a Durable Object with no secrets", () => {
 		});
 	});
 
-	it("refuses a node update because no API key is configured", async () => {
+	it("updates a node locally because it is standalone", async () => {
 		await seedNode(harness.mf);
 		const response = await harness.mf.dispatchFetch("http://localhost/api/v1/nodes/seed-node", {
 			method: "PATCH",
 			headers: {"content-type": "application/json"},
 			body: JSON.stringify({name: "changed"}),
 		});
-		expect(response.status).toBe(500);
-		await expect(readJson(response)).resolves.toStrictEqual({
-			error: "WORKFLOWY_API_KEY environment variable is required",
-		});
+		expect(response.status).toBe(200);
+		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the edit time is the store's clock
+		const body = (await readJson(response)) as {node: {modifiedAt: number}};
+		const node = {
+			id: "seed-node",
+			parent_id: null,
+			name: "changed",
+			note: null,
+			priority: 100,
+			data: {layoutMode: null},
+			numberedStart: null,
+			createdAt: 1,
+			modifiedAt: body.node.modifiedAt,
+			completedAt: null,
+			hasChildren: false,
+			hasUncompletedChildren: false,
+			isMirror: false,
+			hasMirrors: false,
+			originalNodeId: null,
+			attachment: null,
+			defaultToBottom: false,
+			calendar: null,
+			table: null,
+		};
+		expect(body).toStrictEqual({node, effects: {backlinkTargets: [], dates: false}});
+		const readBack = await harness.mf.dispatchFetch("http://localhost/api/v1/nodes/seed-node");
+		await expect(readJson(readBack)).resolves.toStrictEqual({node});
 	});
 });
 

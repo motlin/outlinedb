@@ -286,6 +286,8 @@ describe("worker routes each Access email to its own Durable Object", () => {
 			headers: {"content-type": "application/json", "Cf-Access-Jwt-Assertion": jwt},
 			body: JSON.stringify({parent_id: null, name: ""}),
 		});
+		// Alice owns her object through ALLOWED_EMAILS, so it is a mirror; with no API key bound it fails loudly
+		// instead of writing a local-only node that the next sync would phase out.
 		expect(createViaWorker.status).toBe(500);
 		await expect(createViaWorker.json()).resolves.toStrictEqual({
 			error: "WORKFLOWY_API_KEY environment variable is required",

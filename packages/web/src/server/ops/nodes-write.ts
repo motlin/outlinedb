@@ -10,6 +10,7 @@ import type {NodeResponse, SaveEffects, UpdateNodeResponse} from "../../node-typ
 import {backlinksNeedSync, backlinkTargetsOfSource} from "../backlinks.js";
 import {INTERNAL_API_NOT_CONFIGURED} from "../internal-api.js";
 import {defineOp, fail, ok, toJson} from "./define.js";
+import type {OpResult} from "./define.js";
 import type {ServerContext} from "../context.js";
 import {
 	CreateNodeResponseSchema,
@@ -24,7 +25,7 @@ import {
 	countChildren,
 	getAdapter,
 	getApiClient,
-	getWriteClient,
+	getNodeWriter,
 	AfterIdSchema,
 	IndexSchema,
 	LegacyPositionSchema,
@@ -44,6 +45,8 @@ const unvalidatedText = z.custom<string>(() => true).optional();
 const CLIENT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
 const WRITE_CLIENT_REQUIRED = "WORKFLOWY_API_KEY environment variable is required";
+
+const STANDALONE_METADATA_UNAVAILABLE = "numberedStart and tableSet are not available in a standalone account yet";
 
 /** A `layoutMode` as a metadata value: `"bullets"` is upstream's default, stored as no key. */
 function layoutModeValue(layoutMode: string): string | undefined {
@@ -97,6 +100,18 @@ async function adoptUnderCalendar(
 	return adoption.status === "unadoptable" ? calendarAdoptWarning(name) : undefined;
 }
 
+/** The create reply for a node the cache now holds. */
+async function createdNodeResult(
+	ctx: ServerContext,
+	id: string,
+): Promise<OpResult<z.output<typeof CreateNodeResponseSchema>>> {
+	const node = await readNodeDto(ctx, id);
+	if (node === undefined) {
+		return fail(500, {error: `Created node ${id} is missing from the cache`});
+	}
+	return ok(toJson({node}), {created: true});
+}
+
 // POST /api/v1/nodes - Create node at an exact `index` among all siblings (omitted = bottom)
 export const nodesCreate = defineOp({
 	input: z.object({
@@ -121,8 +136,8 @@ export const nodesCreate = defineOp({
 	}),
 	output: CreateNodeResponseSchema,
 	async run(ctx, body) {
-		const client = getWriteClient(ctx);
-		if (!client) {
+		const writer = getNodeWriter(ctx);
+		if (!writer) {
 			return fail(500, {error: WRITE_CLIENT_REQUIRED});
 		}
 		const {name, note, layoutMode, after_id: afterId} = body;
@@ -135,6 +150,23 @@ export const nodesCreate = defineOp({
 		if (body.id !== undefined && ctx.cacheService.getNode(body.id)) {
 			return fail(409, {error: `Node already exists: ${body.id}`});
 		}
+
+		if (writer.mode === "standalone") {
+			if (parentId !== null && !ctx.cacheService.getNode(parentId)) {
+				return fail(404, {error: "Parent node not found"});
+			}
+			const {id} = writer.local.createAt({
+				parentId,
+				...(index === undefined ? {} : {index}),
+				...(afterId === undefined || index === undefined ? {} : {afterId}),
+				name,
+				...(body.id === undefined ? {} : {id: body.id}),
+				...(note === undefined ? {} : {note}),
+				...(layoutMode === undefined ? {} : {layoutMode}),
+			});
+			return createdNodeResult(ctx, id);
+		}
+		const {client} = writer;
 		const count = countChildren(ctx, parentId);
 
 		const adapter = getAdapter(ctx);
@@ -149,11 +181,7 @@ export const nodesCreate = defineOp({
 				...(layoutMode === undefined ? {} : {metadata: {layoutMode}}),
 			});
 			await adoptUnderCalendar(ctx, adapter, {id, name, parentId});
-			const node = await readNodeDto(ctx, id);
-			if (node === undefined) {
-				return fail(500, {error: `Created node ${id} is missing from the cache`});
-			}
-			return ok(toJson({node}), {created: true});
+			return createdNodeResult(ctx, id);
 		}
 
 		// Without the internal API a middle slot is the nearer end plus a rotation of the siblings on the shorter side.
@@ -207,8 +235,8 @@ export const nodesUpdate = defineOp({
 	}),
 	output: UpdateNodeResponseSchema,
 	async run(ctx, body) {
-		const client = getWriteClient(ctx);
-		if (!client) {
+		const writer = getNodeWriter(ctx);
+		if (!writer) {
 			return fail(500, {error: WRITE_CLIENT_REQUIRED});
 		}
 
@@ -236,6 +264,30 @@ export const nodesUpdate = defineOp({
 		if (!existingNode) {
 			return fail(404, {error: "Node not found"});
 		}
+
+		if (writer.mode === "standalone") {
+			if (numberedStart !== undefined || tableChanges.length > 0) {
+				return fail(503, {error: STANDALONE_METADATA_UNAVAILABLE});
+			}
+			// Local backlinks come later: the effects report changed links, but no backlink items are written.
+			const effects = saveEffects(
+				ctx,
+				cacheService.getNode(cacheService.getMirrorOriginal(id) ?? id),
+				name,
+				note,
+			);
+			writer.local.updateNode(id, {
+				...(name === undefined ? {} : {name}),
+				...(note === undefined ? {} : {note}),
+				...(layoutMode === undefined ? {} : {layoutMode}),
+			});
+			const node = await readNodeDto(ctx, id);
+			if (node === undefined) {
+				return fail(404, {error: "Node not found"});
+			}
+			return ok(toJson({node, effects} satisfies UpdateNodeResponse));
+		}
+		const {client} = writer;
 
 		// Metadata goes through the internal API as one edit when it is configured;
 		// without it only layoutMode can be written (through the public API).
@@ -303,8 +355,8 @@ export const nodesDelete = defineOp({
 	input: z.object({id: z.string()}),
 	output: NoContentSchema,
 	async run(ctx, {id: rawId}) {
-		const client = getWriteClient(ctx);
-		if (!client) {
+		const writer = getNodeWriter(ctx);
+		if (!writer) {
 			return fail(500, {error: WRITE_CLIENT_REQUIRED});
 		}
 
@@ -317,6 +369,12 @@ export const nodesDelete = defineOp({
 		if (!ctx.cacheService.getNode(id)) {
 			return fail(404, {error: "Node not found"});
 		}
+
+		if (writer.mode === "standalone") {
+			writer.local.deleteNode(id);
+			return ok(null);
+		}
+		const {client} = writer;
 
 		// Upstream's client deletes a deleted source's backlink items; read the linked
 		// sources before the delete drops the subtree from the cache.
@@ -338,8 +396,8 @@ function completionOp(operation: CompletionOp) {
 		input: z.object({id: z.string()}),
 		output: NodeEnvelopeSchema,
 		async run(ctx, {id: rawId}) {
-			const client = getWriteClient(ctx);
-			if (!client) {
+			const writer = getNodeWriter(ctx);
+			if (!writer) {
 				return fail(500, {error: WRITE_CLIENT_REQUIRED});
 			}
 
@@ -354,6 +412,16 @@ function completionOp(operation: CompletionOp) {
 				return fail(404, {error: "Node not found"});
 			}
 
+			if (writer.mode === "standalone") {
+				if (operation === "complete") {
+					writer.local.completeNode(id);
+				} else {
+					writer.local.uncompleteNode(id);
+				}
+				const node = await readNodeDto(ctx, id);
+				return node === undefined ? fail(404, {error: "Node not found"}) : ok(toJson({node}));
+			}
+			const {client} = writer;
 			const changed = await (operation === "complete" ? client.completeNode(id) : client.uncompleteNode(id));
 
 			const cached = await readNodeDto(ctx, id);

@@ -20,6 +20,7 @@ function fakeKv(): KvLike & {data: Map<string, string>} {
 describe("readWorkerConfig", () => {
 	it("leaves writes unavailable and embeddings off when no secrets are bound", () => {
 		expect(readWorkerConfig({}, true)).toStrictEqual({
+			mode: "mirror",
 			apiKey: undefined,
 			apiUrl: undefined,
 			accountEmail: "",
@@ -43,7 +44,7 @@ describe("readWorkerConfig", () => {
 		).toMatchObject({apiKey: "k", apiUrl: "http://upstream.test", accountEmail: "a@example.com"});
 	});
 
-	it("gives a non-owner no API key but keeps the upstream URL and features", () => {
+	it("makes a non-owner standalone with no API key but keeps the upstream URL and features", () => {
 		expect(
 			readWorkerConfig(
 				{
@@ -54,6 +55,7 @@ describe("readWorkerConfig", () => {
 				false,
 			),
 		).toStrictEqual({
+			mode: "standalone",
 			apiKey: undefined,
 			apiUrl: "http://upstream.test",
 			accountEmail: "",

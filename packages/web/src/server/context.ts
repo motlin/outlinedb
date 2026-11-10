@@ -3,7 +3,7 @@ import type {InternalAuth} from "@outlinedb/shared/api";
 import {CacheService, WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
 import {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import type {AppDatabase} from "@outlinedb/shared/db";
-import type {ServerConfig} from "./config.js";
+import type {ServerConfig, ServerMode} from "./config.js";
 import type {DecisionStore} from "./decisions.js";
 import type {EmbeddingIndex} from "./embedding-index.js";
 import type {LadderEventBus} from "./ladder-events.js";
@@ -25,6 +25,8 @@ export interface ServerContext {
 	ladderEvents: LadderEventBus;
 	/** Where decision pages are staged and answered, or undefined when the host has no such files. */
 	decisions?: DecisionStore;
+	/** Where node writes go; see {@link ServerConfig.mode}. Never inferred from a missing API key. */
+	mode: ServerMode;
 	/** The Workflowy API key, or undefined when write operations are unavailable. */
 	apiKey?: string;
 	/**
@@ -85,6 +87,7 @@ export function buildServerContext(deps: ServerContextDeps): ServerContext {
 		config,
 		ladderEvents,
 		decisions,
+		mode: config.mode,
 		apiKey,
 		internalAuth,
 		embeddingIndex,

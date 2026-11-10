@@ -37,10 +37,11 @@ export function isStoreOwner(storeName: string | undefined, env: WorkerSecrets):
 
 /**
  * Parse {@link ServerConfig} from Worker bindings; an empty binding counts as unset. A non-owner gets no API key and
- * no account email, so it can never write to the owner's workflowy.com account.
+ * no account email, so it can never write to the owner's workflowy.com account; it is standalone and writes locally.
  */
 export function readWorkerConfig(env: WorkerSecrets, isOwner: boolean): ServerConfig {
 	return {
+		mode: isOwner ? "mirror" : "standalone",
 		apiKey: isOwner ? nonEmpty(env.WORKFLOWY_API_KEY) : undefined,
 		apiUrl: nonEmpty(env.WORKFLOWY_API_URL),
 		accountEmail: isOwner ? (env.WORKFLOWY_USERNAME ?? "") : "",

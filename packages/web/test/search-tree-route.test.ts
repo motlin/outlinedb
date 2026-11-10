@@ -553,6 +553,7 @@ describe("loadTreeRows", () => {
 			buildServerContext({
 				db,
 				config: {
+					mode: "standalone",
 					accountEmail: "",
 					sqlQueryLogging: false,
 					calendarEnsureEnabled: false,
@@ -594,6 +595,7 @@ describe("loadTreeRows", () => {
 			buildServerContext({
 				db,
 				config: {
+					mode: "standalone",
 					accountEmail: "",
 					sqlQueryLogging: false,
 					calendarEnsureEnabled: false,
