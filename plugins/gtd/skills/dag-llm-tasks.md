@@ -42,6 +42,7 @@ The schema is strict:
 - A paired presentation task has the identical date-stripped name and no date.
 - The prep command supplies the artifact slug after removing a trailing `-prep` or `-auto`; an inline task's slug is the kebab-case of its name. Presentation inherits that slug.
 - `Interval: <amount><unit>` is optional on prep and defaults to `1d`; units are `d`, `m`, and `y`.
+- `File: <name>` on any task holds a script, its note being the exact file content. File names are unique across the tree; the planner writes each to `.llm/gtd/review/scripts/<name>` (executable) when run with `--files-dir`.
 - `Auto` marks prep that completes without presentation. Auto task names must not appear under `Presentation`.
 - `Serial: <name>` groups prep tasks that must run top-to-bottom. Other direct children of `Prep` are independent parallel branches.
 - Do not add `Key:`, `#llm-task`, `prep`, `apply`, or marker emoji to task names or children; names, commands, placement, and optional markers already carry that information.

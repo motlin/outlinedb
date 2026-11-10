@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-floating-promises -- node:test test() calls are fire-and-forget by design */
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {computeLlmDag} from "./compute-llm-dag.mts";
+import {computeLlmDag, taskFiles} from "./compute-llm-dag.mts";
 import type {TreeNode} from "./compute-overdue.mts";
 import {at} from "./test-helpers.mts";
 
@@ -272,4 +272,39 @@ test("computeLlmDag rejects a task with two plugin commands", () => {
 		() => computeLlmDag(tree, "2000-01-01"),
 		/prep task "Daily task" must have at most one plugin command/u,
 	);
+});
+
+test("computeLlmDag keeps File nodes out of a task's instructions", () => {
+	const tree = fixture();
+	ownChildren(firstChildOf(tree, "Prep")).push({name: "File: tool.mts", note: "console.log(1);", children: []});
+
+	const plan = computeLlmDag(tree, "2000-01-01");
+	assert.deepStrictEqual(
+		at(at(plan.prepBranches, 0).tasks, 0).instructions.map((item) => item.name),
+		["/gtd:daily-prep"],
+	);
+});
+
+test("taskFiles collects every File node's note from prep and presentation tasks", () => {
+	const tree = fixture();
+	ownChildren(firstChildOf(tree, "Prep")).push({name: "File: tool.mts", note: "const a = 1 * 2;\n", children: []});
+	ownChildren(firstChildOf(tree, "Presentation")).push({name: "File: run.sh", note: "echo <hi>", children: []});
+
+	assert.deepStrictEqual(taskFiles(tree), [
+		{name: "tool.mts", content: "const a = 1 * 2;\n"},
+		{name: "run.sh", content: "echo <hi>"},
+	]);
+});
+
+test("taskFiles rejects duplicate names, paths, and File nodes without a note", () => {
+	const withFiles = (...files: TreeNode[]): TreeNode => {
+		const tree = fixture();
+		ownChildren(firstChildOf(tree, "Prep")).push(...files);
+		return tree;
+	};
+	const file = (name: string, note: string | null): TreeNode => ({name: `File: ${name}`, note, children: []});
+
+	assert.throws(() => taskFiles(withFiles(file("a.sh", "x"), file("a.sh", "y"))), /duplicate File "a.sh"/u);
+	assert.throws(() => taskFiles(withFiles(file("../a.sh", "x"))), /File "..\/a.sh" must be a plain file name/u);
+	assert.throws(() => taskFiles(withFiles(file("a.sh", null))), /File "a.sh" has no note/u);
 });

@@ -10,10 +10,14 @@ import {
 import type {Interval, TreeNode, TreeRoot} from "./compute-overdue.mts";
 import {takeValue} from "./cli-args.mts";
 import {isMain} from "./is-main.mts";
+import {chmodSync, mkdirSync, writeFileSync} from "node:fs";
+import {join} from "node:path";
 
 const ROOT_NAMES = new Set(["Import", "Prep", "Presentation"]);
 const PLAN_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
 const INTERVAL_PREFIX = "Interval: ";
+const FILE_PREFIX = "File: ";
+const FILE_NAME_PATTERN = /^[\w.-]+$/u;
 const INTERVAL_PATTERN = /^(\d+)([dmy])$/u;
 const TASK_COMMAND_PATTERN = /^\/[a-z0-9-]+:([a-z0-9-]+)(?:\s|$)/u;
 
@@ -49,7 +53,7 @@ function parseInterval(node: TreeNode, context: string): Interval {
 
 function isMarker(child: TreeNode): boolean {
 	const name = child.name;
-	return name.startsWith(INTERVAL_PREFIX) || name === "Auto";
+	return name.startsWith(INTERVAL_PREFIX) || name.startsWith(FILE_PREFIX) || name === "Auto";
 }
 
 function instructions(node: TreeNode, context: string): TreeNode[] {
@@ -270,14 +274,59 @@ export function computeLlmDag(tree: TreeRoot, today: string) {
 	};
 }
 
+export interface TaskFile {
+	name: string;
+	content: string;
+}
+
+/**
+ * Every `File: <name>` node in the tree, in document order. Its note is the file's exact content,
+ * so a task's scripts live in Workflowy and are written to disk before the tasks run.
+ */
+export function taskFiles(tree: TreeNode): TaskFile[] {
+	const files: TaskFile[] = [];
+	const visit = (node: TreeNode): void => {
+		if (node.name.startsWith(FILE_PREFIX)) {
+			const name = node.name.slice(FILE_PREFIX.length).trim();
+			if (!FILE_NAME_PATTERN.test(name) || name.startsWith(".")) {
+				throw new Error(`File "${name}" must be a plain file name`);
+			}
+			if (node.note == null || node.note === "") {
+				throw new Error(`File "${name}" has no note`);
+			}
+			if (files.some((file) => file.name === name)) {
+				throw new Error(`duplicate File "${name}"`);
+			}
+			files.push({name, content: node.note});
+		}
+		for (const child of node.children ?? []) {
+			visit(child);
+		}
+	};
+	visit(tree);
+	return files;
+}
+
+function writeTaskFiles(files: TaskFile[], directory: string): void {
+	mkdirSync(directory, {recursive: true});
+	for (const {name, content} of files) {
+		const path = join(directory, name);
+		writeFileSync(path, content);
+		chmodSync(path, 0o755);
+	}
+}
+
 function main(arguments_: string[]): void {
 	const argumentsList = arguments_.slice(2);
 	let inputPath = ".llm/gtd/review/phase0-llm-tasks.json";
 	let today = localTodayISO();
+	let filesDirectory: string | null = null;
 	const argumentIterator = argumentsList[Symbol.iterator]();
 	for (const argument of argumentIterator) {
 		if (argument === "--today") {
 			today = takeValue(argumentIterator, argument);
+		} else if (argument === "--files-dir") {
+			filesDirectory = takeValue(argumentIterator, argument);
 		} else if (argument.startsWith("--")) {
 			throw new Error(`unknown option: ${argument}`);
 		} else {
@@ -285,7 +334,11 @@ function main(arguments_: string[]): void {
 		}
 	}
 	const tree = readTreeFile(inputPath);
-	process.stdout.write(`${JSON.stringify(computeLlmDag(tree, today), null, 2)}\n`);
+	const plan = computeLlmDag(tree, today);
+	if (filesDirectory !== null) {
+		writeTaskFiles(taskFiles(tree), filesDirectory);
+	}
+	process.stdout.write(`${JSON.stringify(plan, null, 2)}\n`);
 }
 
 if (isMain(import.meta.url)) {
