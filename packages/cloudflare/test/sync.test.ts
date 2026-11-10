@@ -428,6 +428,8 @@ describe("sync from a fake upstream", () => {
 		await h.mf.dispatchFetch("http://localhost/api/admin/sync", {method: "POST"});
 		await reached;
 		await sleep(50);
+		const accountSync = async () => readJson(await h.mf.dispatchFetch("http://localhost/api/v1/sync-status"));
+		const whileFetching = await accountSync();
 		const seed = await h.mf.dispatchFetch("http://localhost/api/admin/seed", {method: "POST"});
 		expect(seed.status).toBe(202);
 		release();
@@ -442,6 +444,11 @@ describe("sync from a fake upstream", () => {
 			await sleep(100);
 		}
 		expect(done?.lastResult).toMatchObject({status: "ok", totalNodes: 100});
+		// The signed-in user's own view of the sync, which the empty outline shows while the first import runs.
+		expect({whileFetching, afterwards: await accountSync()}).toStrictEqual({
+			whileFetching: {phase: "fetching", applied: 0},
+			afterwards: {phase: "idle", applied: 0},
+		});
 		expect(internalCalls.filter((path) => path === "/get_tree_data/")).toContain("/get_tree_data/");
 		// The request was never live before the run's system time, so closing it there would invert its interval.
 		await expect(syncTables(h).then((tables) => tables.seedRequests)).resolves.toStrictEqual([]);

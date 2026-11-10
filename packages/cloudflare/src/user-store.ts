@@ -42,6 +42,7 @@ import type {Embedder} from "./embeddings";
 import {kvSessionStore} from "./session-store";
 import type {KvLike} from "./session-store";
 import {SyncJob} from "./sync";
+import {seedWelcomeContent} from "./welcome-content";
 import type {SyncEnv, SyncStatus} from "./sync";
 import {isStoreOwner, readWorkerConfig, readWorkerInternalAuth} from "./worker-config";
 import type {WorkerSecrets} from "./worker-config";
@@ -184,7 +185,8 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 
 	/**
 	 * Record which user this object belongs to and its mode, once. A repeat for the same user is a no-op that keeps
-	 * the first profile; another user gets 409. Provisioning as a mirror switches this object to mirror at once.
+	 * the first profile; another user gets 409. Provisioning as a mirror switches this object to mirror at once;
+	 * provisioning standalone seeds an empty outline with an Inbox and a welcome.
 	 */
 	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
 	provision(input: ProvisionInput): ProvisionResult {
@@ -202,6 +204,10 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 		kv.put(PROFILE_KEYS.userId, profile.userId);
 		if (profile.mode === "mirror" && !this.isOwner) {
 			this.configure();
+		}
+		// A mirror's nodes come only from workflowy.com, so only a standalone account starts with local content.
+		if (profile.mode === "standalone" && !this.isOwner) {
+			seedWelcomeContent(this.db);
 		}
 		return {ok: true, created: true, profile};
 	}
@@ -267,6 +273,16 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
 	async syncStatus(): Promise<SyncStatus> {
 		return this.sync.status();
+	}
+
+	/** The signed-in user's view of the sync: its phase and how many items the run applied; idle for a standalone. */
+	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
+	async accountSync(): Promise<AccountSync> {
+		if (!this.isOwner) {
+			return {phase: "idle", applied: 0};
+		}
+		const {phase, applied} = await this.sync.status();
+		return {phase, applied};
 	}
 
 	/** Database size, live node count, the last sync result and whether the in-memory tree snapshot is held. */
@@ -341,6 +357,9 @@ const EVENT_SOCKET_TAGS: Partial<Record<string, string>> = {
 };
 
 export type StoreMode = "mirror" | "standalone";
+
+/** What `GET /api/v1/sync-status` tells the signed-in user about their account's import. */
+export type AccountSync = Pick<SyncStatus, "phase" | "applied">;
 
 /** The user an object was provisioned for, and whether it mirrors workflowy.com. */
 export interface Profile {

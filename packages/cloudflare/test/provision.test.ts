@@ -2,6 +2,7 @@ import {afterAll, beforeAll, describe, expect, it} from "vite-plus/test";
 import {cookiesFrom, drainEmails, linkIn, origin, post, startAuthHarness, turnstile} from "./auth-harness";
 import type {AuthHarness} from "./auth-harness";
 import {authDb, countStoreCalls} from "./harness";
+import {storeClient} from "../src/store-client";
 import type {UserStore} from "../src/user-store";
 
 const bindings = {
@@ -190,6 +191,42 @@ describe("UserStore.provision", () => {
 			{ok: false, status: 409, error: "store-provisioned-for-another-user"},
 		]);
 		expect(plain((await stub.adminStatus()).mode)).toBe("standalone");
+	});
+
+	it("seeds a new standalone account with an Inbox and a welcome with tips, once, and a mirror with nothing", async () => {
+		const names = async (stub: DurableObjectStub<UserStore>, parentId?: string) => {
+			const result = await storeClient(stub).call("nodes.list", parentId === undefined ? {} : {parentId});
+			if (!result.ok) {
+				throw new Error(JSON.stringify(result.body));
+			}
+			return result.value.nodes.map((node) => ({id: node.id, name: node.name}));
+		};
+		const standalone = await stubNamed(h, "user-s");
+		await standalone.provision({userId: "user-s", email: "s@example.com", mode: "standalone"});
+		await standalone.provision({userId: "user-s", email: "s@example.com", mode: "standalone"});
+		const top = await names(standalone);
+		const welcome = top.find((node) => node.name === "Welcome to OutlineDB");
+		const tips = welcome === undefined ? [] : await names(standalone, welcome.id);
+
+		const mirror = await stubNamed(h, "user-n");
+		await mirror.provision({userId: "user-n", email: "n@example.com", mode: "mirror"});
+
+		expect({
+			top: top.map((node) => node.name),
+			tips: tips.map((node) => node.name),
+			mirror: await names(mirror),
+		}).toStrictEqual({
+			top: ["Inbox", "Welcome to OutlineDB"],
+			tips: [
+				"Press Enter to add a bullet, Tab to indent it and Shift+Tab to outdent it",
+				"Click a bullet to zoom into it; the breadcrumbs at the top take you back out",
+				"Press Ctrl+K (Cmd+K on a Mac) to jump to any item by name, or type in the search box to filter",
+				"Type #tags or @mentions anywhere in a bullet, then click one to see everything that has it",
+				"Press Ctrl+Enter (Cmd+Enter on a Mac) to complete an item",
+				"Drop quick thoughts into the Inbox and sort them later. Delete this welcome whenever you like",
+			],
+			mirror: [],
+		});
 	});
 
 	it("switches a fresh object to mirror mode when provisioned as one", async () => {

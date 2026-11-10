@@ -407,11 +407,15 @@ describe("worker resolves a principal from Access or a Better Auth session", () 
 		const carolStore = await stubNamed(h, carol.userId);
 		await carolStore.fetch("http://localhost/__seed?name=Carol%27s%20node");
 
+		// Each standalone signup starts with the provisioned Inbox and welcome; only Carol's store holds her node.
 		await expect(nodeNames(h, {cookie: carol.cookie})).resolves.toStrictEqual({
 			status: 200,
-			body: ["Carol's node"],
+			body: ["Inbox", "Welcome to OutlineDB", "Carol's node"],
 		});
-		await expect(nodeNames(h, {cookie: dave.cookie})).resolves.toStrictEqual({status: 200, body: []});
+		await expect(nodeNames(h, {cookie: dave.cookie})).resolves.toStrictEqual({
+			status: 200,
+			body: ["Inbox", "Welcome to OutlineDB"],
+		});
 		const status = await carolStore.adminStatus();
 		expect(status.storeName).toBe(carol.userId);
 	});
@@ -523,7 +527,7 @@ describe("worker uses ACCESS_DEV_IDENTITY only when no session cookie is present
 		await (await stubNamed(h, "dev")).fetch("http://localhost/__seed?name=dev%20node");
 
 		await expect(Promise.all([nodeNames(h, {cookie: frank.cookie}), nodeNames(h, {})])).resolves.toStrictEqual([
-			{status: 200, body: []},
+			{status: 200, body: ["Inbox", "Welcome to OutlineDB"]},
 			{status: 200, body: ["dev node"]},
 		]);
 	});

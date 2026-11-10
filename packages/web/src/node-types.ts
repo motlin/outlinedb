@@ -129,6 +129,15 @@ export interface OpErrorBody {
 	error?: string;
 }
 
+/**
+ * `GET /api/v1/sync-status`, answered by the Cloudflare Worker itself rather than an op (its `UserStore.accountSync`):
+ * whether the signed-in account's sync is fetching or importing, and how many items the run has applied.
+ */
+export interface AccountSync {
+	phase: "idle" | "fetching" | "importing";
+	applied: number;
+}
+
 /** One tree of a `POST /api/v1/nodes/trees` body. */
 export interface BulkTree {
 	name: string;

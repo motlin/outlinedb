@@ -125,6 +125,8 @@ vi.mock("../src/client/components/editable-note.js", async () => {
 	};
 });
 vi.mock("../src/client/components/node-context-menu.js", () => ({ItemMenuTrigger: () => null}));
+let accountSync: {phase: "idle" | "fetching" | "importing"; applied: number} | undefined;
+vi.mock("../src/client/hooks/use-account-sync.js", () => ({useAccountSync: () => accountSync}));
 
 const {AddChildButton, AddSiblingButton, OutlineTree} = await import("../src/client/components/outline-tree.js");
 const {PaneContext} = await import("../src/client/components/pane-context.js");
@@ -553,6 +555,76 @@ describe("OutlineTree add-child button", () => {
 
 const ADD_SIBLING_MARKUP =
 	'<svg viewBox="0 0 20 20" class="absolute left-[-11px] bottom-[3px] w-[20px] h-[20px] block opacity-0 hover:opacity-70 active:opacity-100 addSiblingButton"><circle cx="10.5" cy="10.5" r="9" fill="var(--wf-background-quaternary)"></circle><line x1="6" y1="10.5" x2="15" y2="10.5" stroke="var(--wf-text-quaternary)" stroke-width="1"></line><line x1="10.5" y1="6" x2="10.5" y2="15" stroke="var(--wf-text-quaternary)" stroke-width="1"></line></svg>';
+
+describe("OutlineTree empty account", () => {
+	beforeEach(() => {
+		childrenByParent.set(null, []);
+	});
+
+	afterEach(() => {
+		childrenByParent.set(null, [makeNode({hasChildren: true})]);
+		accountSync = undefined;
+	});
+
+	/** The empty-outline panel's text, one entry per block, or null when none renders. */
+	function emptyOutlineText(html: string): string[] | null {
+		const start = html.indexOf('<section class="empty-outline');
+		if (start === -1) {
+			return null;
+		}
+		const panel = html.slice(start, html.indexOf("</section>", start));
+		return [...panel.matchAll(/<(?:h2|p|li)[^>]*>(.*?)<\/(?:h2|p|li)>/gu)].map(([, text]) =>
+			text.replaceAll(/<[^>]+>/gu, ""),
+		);
+	}
+
+	it("welcomes a signed-in user whose outline is empty with tips, above the add-child button", () => {
+		accountSync = {phase: "idle", applied: 0};
+		const html = render();
+		expect({
+			text: emptyOutlineText(html),
+			beforeAddChild: html.indexOf("empty-outline") < html.indexOf("addChildButton"),
+		}).toStrictEqual({
+			text: [
+				"Welcome to OutlineDB",
+				"Your outline is empty. Click the + below to add your first bullet.",
+				"Press Enter to add a bullet, Tab to indent it and Shift+Tab to outdent it",
+				"Click a bullet to zoom into it; the breadcrumbs at the top take you back out",
+				"Press Ctrl+K (Cmd+K on a Mac) to jump to any item by name, or type in the search box to filter",
+				"Type #tags or @mentions anywhere in a bullet, then click one to see everything that has it",
+				"Press Ctrl+Enter (Cmd+Enter on a Mac) to complete an item",
+			],
+			beforeAddChild: true,
+		});
+	});
+
+	it("shows the import's progress instead of the welcome while the first sync is still running", () => {
+		accountSync = {phase: "importing", applied: 1234};
+		expect(emptyOutlineText(render())).toStrictEqual([
+			"Importing your outline",
+			"1,234 items imported so far. They appear here as soon as the import finishes.",
+		]);
+	});
+
+	it("shows the import starting before any item has arrived", () => {
+		accountSync = {phase: "fetching", applied: 0};
+		expect(emptyOutlineText(render())).toStrictEqual([
+			"Importing your outline",
+			"Fetching your items. They appear here as soon as the import finishes.",
+		]);
+	});
+
+	it("leaves the panel out of an empty zoomed item and out of a non-empty outline", () => {
+		childrenByParent.set("bob", []);
+		try {
+			const zoomed = render("bob");
+			childrenByParent.set(null, [makeNode({hasChildren: true})]);
+			expect([emptyOutlineText(zoomed), emptyOutlineText(render())]).toStrictEqual([null, null]);
+		} finally {
+			childrenByParent.delete("bob");
+		}
+	});
+});
 
 describe("OutlineTree add-sibling button", () => {
 	beforeEach(() => {

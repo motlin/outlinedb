@@ -5,6 +5,7 @@ import {CopyCodeButton} from "./copy-code-button.js";
 import type {ReactNode, Ref} from "react";
 import type {BacklinkItem, FoundDateItem, FoundDatesResponse, NodeResponse} from "../../node-types.js";
 import {hideLoadingScreenOnce} from "../loading-screen.js";
+import {RootEmptyOutline} from "./empty-outline.js";
 import {useContext, useEffect, useLayoutEffect, useMemo, useRef, useState} from "react";
 import {useQueryClient} from "@tanstack/react-query";
 import {backlinksLabel, isBacklinksSectionVisible} from "../backlinks.js";
@@ -810,7 +811,12 @@ export function OutlineChildren({
 				<DashboardBottomButton parentId={parentId} />
 			</div>
 		) : isRoot ? (
-			(addChild ?? null)
+			<>
+				{parentId === null && search === null && instance === null && visibleNodes !== undefined ? (
+					<RootEmptyOutline />
+				) : null}
+				{addChild ?? null}
+			</>
 		) : null;
 	}
 

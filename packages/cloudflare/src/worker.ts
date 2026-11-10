@@ -120,6 +120,9 @@ for (const path of ["/api/v1/ladder/events", "/api/v1/nodes/events"]) {
 	});
 }
 
+// Any signed-in user's own import progress, which the empty outline shows while the first sync runs.
+app.get("/api/v1/sync-status", async (c) => c.json(await c.var.stub.accountSync()));
+
 // Migrated routes are answered here over RPC.
 app.route(
 	"/",
