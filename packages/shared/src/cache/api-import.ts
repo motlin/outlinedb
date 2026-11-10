@@ -416,6 +416,7 @@ function finishIn(unitOfWork: UnitOfWork, state: ApiImportState, treeItems?: Int
 		}
 		const rowsByTable: NormalizedRowsByTable = {
 			referencesRoots: relationships.referencesRoots.filter((row) => state.seenIds.has(row.nodeId)),
+			aiMetadata: relationships.aiMetadata.filter((row) => state.seenIds.has(row.nodeId)),
 		};
 		applyRows(unitOfWork, rowsByTable, undefined);
 		mergeItemRelationships(unitOfWork, relationships, state.seenIds);

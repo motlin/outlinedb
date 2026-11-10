@@ -1,5 +1,5 @@
 import {assert, beforeEach, vi, afterEach, describe, expect, it} from "vite-plus/test";
-import {mirrors, nodeContent, nodeEmbeddings, nodeMetadata, referencesRoots} from "@outlinedb/shared/db";
+import {aiMetadata, mirrors, nodeContent, nodeEmbeddings, nodeMetadata, referencesRoots} from "@outlinedb/shared/db";
 import type {InternalTreeItem} from "@outlinedb/shared/api";
 import {countStrandedRows, currentBacklinkItems, SameMillisecondOverwriteError} from "@outlinedb/shared/cache";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
@@ -637,6 +637,9 @@ describe("cache-import-api service", () => {
 			createApiNode({id: "source", name: "Links to Target"}),
 			createApiNode({id: "original", name: "Original"}),
 			createApiNode({id: "mirror", name: ""}),
+			// Upstream's "AI Messages" mailbox: the public API omits `data.ai`, so only the tree data marks it.
+			createApiNode({id: "mailbox", name: "AI Messages"}),
+			createApiNode({id: "not-chat", name: "Not chat"}),
 		];
 
 		const treeItems: InternalTreeItem[] = [
@@ -651,8 +654,17 @@ describe("cache-import-api service", () => {
 			},
 			{id: "original", metadata: {mirror: {mirrorRootIds: {mirror: true}}}},
 			{id: "mirror", metadata: {mirror: {originalId: "original", isMirrorRoot: true}}},
+			{id: "mailbox", metadata: {ai: {inChat: true}}},
+			{id: "not-chat", metadata: {ai: {inChat: false}}},
 			// Items the export does not carry get no rows.
-			{id: "ghost", metadata: {isReferencesRoot: true, backlink: {sourceID: "source", targetID: "target"}}},
+			{
+				id: "ghost",
+				metadata: {
+					isReferencesRoot: true,
+					ai: {inChat: true},
+					backlink: {sourceID: "source", targetID: "target"},
+				},
+			},
 		];
 
 		function relationshipRows() {
@@ -677,10 +689,20 @@ describe("cache-import-api service", () => {
 					})
 					.from(referencesRoots)
 					.all(),
+				aiMetadata: db
+					.select({
+						nodeId: aiMetadata.nodeId,
+						inChat: aiMetadata.inChat,
+						systemFrom: aiMetadata.systemFrom,
+						systemTo: aiMetadata.systemTo,
+					})
+					.from(aiMetadata)
+					.orderBy(aiMetadata.nodeId)
+					.all(),
 			};
 		}
 
-		it("inserts mirrors and references roots from the tree data, from which backlinks derive", () => {
+		it("inserts mirrors, references roots and AI chat flags from the tree data, from which backlinks derive", () => {
 			importFromApi(testDatabase.db, apiNodes, false, T0, treeItems);
 
 			expect(relationshipRows()).toStrictEqual({
@@ -690,6 +712,10 @@ describe("cache-import-api service", () => {
 				],
 				backlinks: [{nodeId: "item", sourceId: "source", targetId: "target"}],
 				referencesRoots: [{nodeId: "refs", systemFrom: AT_T0, systemTo: FAR_FUTURE_DATE}],
+				aiMetadata: [
+					{nodeId: "mailbox", inChat: 1, systemFrom: AT_T0, systemTo: FAR_FUTURE_DATE},
+					{nodeId: "not-chat", inChat: 0, systemFrom: AT_T0, systemTo: FAR_FUTURE_DATE},
+				],
 			});
 		});
 
@@ -709,6 +735,10 @@ describe("cache-import-api service", () => {
 				],
 				backlinks: [],
 				referencesRoots: [{nodeId: "refs", systemFrom: AT_T0, systemTo: AT_T1}],
+				aiMetadata: [
+					{nodeId: "mailbox", inChat: 1, systemFrom: AT_T0, systemTo: AT_T1},
+					{nodeId: "not-chat", inChat: 0, systemFrom: AT_T0, systemTo: AT_T1},
+				],
 			});
 		});
 

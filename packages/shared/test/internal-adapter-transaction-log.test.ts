@@ -199,6 +199,7 @@ describe("WorkflowyInternalAdapter transaction log", () => {
 		cache.recordRelationships({
 			mirrors: [{mirrorId: "m2", originalId: "o2"}],
 			referencesRoots: [],
+			aiMetadata: [],
 		});
 		api.respondOnce(
 			"/push_and_poll",
@@ -239,6 +240,7 @@ describe("WorkflowyInternalAdapter transaction log", () => {
 				{mirrorId: "bl", originalId: "src"},
 			],
 			referencesRoots: [{nodeId: "rr"}],
+			aiMetadata: [],
 		});
 		api.respondOnce(
 			"/push_and_poll",
@@ -283,6 +285,7 @@ describe("WorkflowyInternalAdapter transaction log", () => {
 				{mirrorId: "m9", originalId: "o9"},
 			],
 			referencesRoots: [{nodeId: "p"}],
+			aiMetadata: [],
 		});
 		api.respondOnce(
 			"/push_and_poll",

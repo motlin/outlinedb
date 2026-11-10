@@ -1,7 +1,8 @@
 /**
  * Item relationships carried only in Workflowy's per-item `metadata` (a backup
  * file or the internal `/get_tree_data/` read), never by the public REST API:
- * mirrors and references roots. Backlinks are not stored: a backlink item is a
+ * mirrors, references roots, and the `ai.inChat` flag that marks upstream's
+ * hidden "AI Messages" mailboxes. Backlinks are not stored: a backlink item is a
  * live mirror whose parent is a references root (see {@link currentBacklinkItems}).
  *
  * Both import adapters normalize item metadata through
@@ -16,13 +17,14 @@ import {mirrors, nodeContent, referencesRoots} from "../db/schema.js";
 import {FAR_FUTURE_DATE} from "../temporal/index.js";
 import {inIds} from "./in-ids.js";
 import type {UnitOfWork} from "./node-composite.js";
-import type {NormalizedMirrorRow, NormalizedReferencesRootsRow} from "./normalized-rows.js";
+import type {NormalizedAiMetadataRow, NormalizedMirrorRow, NormalizedReferencesRootsRow} from "./normalized-rows.js";
 import {joinKey, temporalMerge} from "./temporal-merge.js";
 import type {TemporalMergeResult, TemporalTransaction} from "./temporal-merge.js";
 
 export interface ItemRelationships {
 	mirrors: NormalizedMirrorRow[];
 	referencesRoots: NormalizedReferencesRootsRow[];
+	aiMetadata: NormalizedAiMetadataRow[];
 }
 
 export interface MergeItemRelationshipsResult {
@@ -30,7 +32,7 @@ export interface MergeItemRelationshipsResult {
 }
 
 export function emptyItemRelationships(): ItemRelationships {
-	return {mirrors: [], referencesRoots: []};
+	return {mirrors: [], referencesRoots: [], aiMetadata: []};
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -52,6 +54,9 @@ export function collectItemRelationships(into: ItemRelationships, id: string, me
 	}
 	if (metadata.isReferencesRoot === true) {
 		into.referencesRoots.push({nodeId: id});
+	}
+	if (isRecord(metadata.ai) && typeof metadata.ai.inChat === "boolean") {
+		into.aiMetadata.push({nodeId: id, inChat: metadata.ai.inChat ? 1 : 0});
 	}
 	const {mirror, backlink} = metadata;
 	if (isRecord(mirror)) {

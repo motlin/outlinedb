@@ -110,7 +110,11 @@ describe("CacheService upstream relationship view", () => {
 
 		collectItemRelationships(relationships, ITEM, {backlink: {sourceID: ORIGINAL, targetID: TARGET}});
 
-		expect(relationships).toStrictEqual({mirrors: [{mirrorId: ITEM, originalId: ORIGINAL}], referencesRoots: []});
+		expect(relationships).toStrictEqual({
+			mirrors: [{mirrorId: ITEM, originalId: ORIGINAL}],
+			referencesRoots: [],
+			aiMetadata: [],
+		});
 	});
 
 	it("reads a mirror whose references root ended as a plain mirror", () => {

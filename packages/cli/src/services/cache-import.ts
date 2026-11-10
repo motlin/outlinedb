@@ -469,7 +469,6 @@ export async function importBackup(
 	}[] = [];
 	// Mirrors (backlink items included) and references roots, parsed by the shared item-metadata normalizer.
 	const relationships = emptyItemRelationships();
-	const aiMetadataRecords: {nodeId: string; inChat: number}[] = [];
 	const s3FileRecords: {
 		nodeId: string;
 		fileName: string;
@@ -502,13 +501,6 @@ export async function importBackup(
 		});
 
 		collectItemRelationships(relationships, validatedNode.id, validatedNode.metadata);
-
-		if (validatedNode.metadata.ai) {
-			aiMetadataRecords.push({
-				nodeId: validatedNode.id,
-				inChat: validatedNode.metadata.ai.inChat ? 1 : 0,
-			});
-		}
 
 		if (validatedNode.metadata.s3File) {
 			s3FileRecords.push({
@@ -646,7 +638,7 @@ export async function importBackup(
 		}
 		const isKept = (row: {nodeId: string}) => !ids.has(row.nodeId);
 		retainWhere(nodesToProcess, (node) => !ids.has(node.id));
-		retainWhere(aiMetadataRecords, isKept);
+		retainWhere(relationships.aiMetadata, isKept);
 		retainWhere(s3FileRecords, isKept);
 		retainWhere(changesMetadataRecords, isKept);
 		retainWhere(calendarMetadataRecords, isKept);
@@ -861,7 +853,7 @@ export async function importBackup(
 	const metadataChunks = byChunk(nodeMetadataRows, (row) => row.nodeId);
 	const calendarMetadataChunks = byChunk(calendarMetadataRecords, (row) => row.nodeId);
 	const calendarLevelsChunks = byChunk(calendarLevelsRecords, (row) => row.nodeId);
-	const aiMetadataChunks = byChunk<NormalizedAiMetadataRow>(aiMetadataRecords, (row) => row.nodeId);
+	const aiMetadataChunks = byChunk<NormalizedAiMetadataRow>(relationships.aiMetadata, (row) => row.nodeId);
 	const s3FileChunks = byChunk<NormalizedS3FileRow>(s3FileRecords, (row) => row.nodeId);
 	const changesMetadataChunks = byChunk<NormalizedChangesMetadataRow>(changesMetadataRecords, (row) => row.nodeId);
 	const referencesRootsChunks = byChunk<NormalizedReferencesRootsRow>(
