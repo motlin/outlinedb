@@ -59,7 +59,7 @@ jobs:
           git config --global user.name "GitHub Actions"
           git config --global user.email "github-actions@github.com"
 
-      - name: Run vp run check --fix
+      - name: Run vp run check --fix and oxfmt-next-line
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
@@ -67,6 +67,8 @@ jobs:
           pnpm install --no-frozen-lockfile
           CHECK_STATUS=0
           pnpm exec vp run check --fix || CHECK_STATUS=$?
+          # vp check skips formatting (check.fmt: false), and `pnpm install` runs `vp config`, which rewrites CLAUDE.md's Vite+ section wrapped at 80 columns.
+          oxfmt-next-line --no-error-on-unmatched-pattern || CHECK_STATUS=$?
 
           if [[ -n $(git status --porcelain) ]]; then
             FIX_BRANCH="fix-${{ github.event.pull_request.number }}-check"
