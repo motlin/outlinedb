@@ -1,5 +1,5 @@
 import {z} from "zod";
-import {planBlockSlot} from "@outlinedb/shared/cache";
+import {LocalTreeWriter, planBlockSlot} from "@outlinedb/shared/cache";
 import type {WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
 import type {NodeWriter} from "./nodes-shared.js";
 import type {NewTree} from "@outlinedb/shared/internal";
@@ -88,16 +88,22 @@ export const nodesTrees = defineOp({
 		if (total > MAX_BULK_NODES) {
 			return fail(400, {error: `Too many nodes: ${total} (max ${MAX_BULK_NODES})`});
 		}
+		const slot = {
+			...(body.index === undefined ? {} : {index: body.index}),
+			...(body.after_id === undefined ? {} : {afterId: body.after_id}),
+			trees: toNewTrees(body.trees),
+		};
+		if (ctx.mode === "standalone") {
+			if (parent.parentId !== null && !ctx.cacheService.getNode(parent.parentId)) {
+				return fail(404, {error: "Parent node not found"});
+			}
+			return ok(new LocalTreeWriter(ctx.db).createTreesAt({parentId: parent.parentId, ...slot}), {created: true});
+		}
 		const adapter = getAdapter(ctx);
 		if (!adapter) {
 			return fail(503, {error: INTERNAL_API_NOT_CONFIGURED});
 		}
-		const {ids} = await adapter.createTreesAt({
-			parentId: adapterParent(parent.parentId),
-			...(body.index === undefined ? {} : {index: body.index}),
-			...(body.after_id === undefined ? {} : {afterId: body.after_id}),
-			trees: toNewTrees(body.trees),
-		});
+		const {ids} = await adapter.createTreesAt({parentId: adapterParent(parent.parentId), ...slot});
 		return ok({ids}, {created: true});
 	},
 });
@@ -111,9 +117,13 @@ export const nodesDuplicate = defineOp({
 		if (!parent.ok) {
 			return fail(parent.status, {error: parent.error});
 		}
-		const adapter = getAdapter(ctx);
-		if (!adapter) {
+		const standalone = ctx.mode === "standalone";
+		const adapter = standalone ? undefined : getAdapter(ctx);
+		if (!standalone && !adapter) {
 			return fail(503, {error: INTERNAL_API_NOT_CONFIGURED});
+		}
+		if (standalone && parent.parentId !== null && !ctx.cacheService.getNode(parent.parentId)) {
+			return fail(404, {error: "Parent node not found"});
 		}
 		const trees: NewTree[] = [];
 		const sourceToNew = new Map<string, string>();
@@ -140,11 +150,12 @@ export const nodesDuplicate = defineOp({
 				sourceToNew.set(source === sourceId ? resolved : source, copy);
 			}
 		}
-		const {ids} = await adapter.createTreesAt({
-			parentId: adapterParent(parent.parentId),
-			...(body.index === undefined ? {} : {index: body.index}),
-			trees,
-		});
+		const slot = {...(body.index === undefined ? {} : {index: body.index}), trees};
+		if (!adapter) {
+			// Expansion is upstream state; a standalone copy starts collapsed.
+			return ok(new LocalTreeWriter(ctx.db).createTreesAt({parentId: parent.parentId, ...slot}), {created: true});
+		}
+		const {ids} = await adapter.createTreesAt({parentId: adapterParent(parent.parentId), ...slot});
 		await openCopies(adapter, sourceToNew);
 		return ok({ids}, {created: true});
 	},

@@ -107,11 +107,62 @@ describe("node writes in a standalone context", () => {
 		await expect(store.call("nodes.get", {id: "a"})).resolves.toStrictEqual({ok: true, value: {node: updated}});
 	});
 
-	it("refuses metadata a standalone account cannot write yet", async () => {
+	it("writes numberedStart locally", async () => {
 		await expect(store.call("nodes.update", {id: "a", numberedStart: 3})).resolves.toStrictEqual({
+			ok: true,
+			value: {
+				node: dto("a", {parent_id: "p", numberedStart: 3, modifiedAt: NOW}),
+				effects: {backlinkTargets: [], dates: false},
+			},
+		});
+	});
+
+	it("creates several trees at one slot", async () => {
+		const result = await store.call("nodes.trees", {
+			parent_id: "p",
+			after_id: "a",
+			trees: [
+				{name: "t1", children: [{name: "t2"}]},
+				{name: "t3", completed: true},
+			],
+		});
+		const children = await store.call("nodes.children", {parentIds: ["p"]});
+
+		expect(
+			children.ok && result.ok
+				? {
+						ids: result.value.ids.length,
+						names: children.value.children.p.map((node) => [node.name, node.hasChildren, node.completedAt]),
+					}
+				: {result, children},
+		).toStrictEqual({
+			ids: 2,
+			names: [
+				["a", false, null],
+				["t1", true, null],
+				["t3", false, NOW],
+				["b", false, null],
+			],
+		});
+	});
+
+	it("restores a deleted node under its original id, and answers 409 for a live one", async () => {
+		await store.call("nodes.delete", {id: "a"});
+		vi.setSystemTime((NOW + 1) * 1000);
+
+		await expect(store.call("nodes.restore", {id: "a"})).resolves.toStrictEqual({
+			ok: true,
+			value: {node: dto("a", {parent_id: "p"})},
+		});
+		await expect(store.call("nodes.restore", {id: "b"})).resolves.toStrictEqual({
 			ok: false,
-			status: 503,
-			body: {error: "numberedStart and tableSet are not available in a standalone account yet"},
+			status: 409,
+			body: {error: "Node is not deleted"},
+		});
+		await expect(store.call("nodes.restore", {id: "4d7c2f10-0000-4000-8000-000000000000"})).resolves.toStrictEqual({
+			ok: false,
+			status: 404,
+			body: {error: "Node not found"},
 		});
 	});
 

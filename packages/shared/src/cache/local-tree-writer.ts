@@ -1,12 +1,17 @@
-import {and, asc, eq, isNull, sql} from "drizzle-orm";
-import {mirrors, nodeContent, nodeMetadata} from "../db/schema.js";
+import {and, asc, desc, eq, isNull, lte, gt, ne, sql} from "drizzle-orm";
+import type {AnySQLiteColumn} from "drizzle-orm/sqlite-core";
+import {account, mirrors, nodeContent, nodeMetadata, rootPreferences} from "../db/schema.js";
 import type {AppDatabase} from "../db/types.js";
+import type {NewTree} from "../internal/ops.js";
 import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 import {HOME_TARGET} from "../types/targets.js";
 import {uuidToShortId} from "../workflowy/constants.js";
 import {currentVersion, normalizeLayoutMode} from "./cache-temporal.js";
+import {readNodeInternalMetadata, writeInternalMetadata} from "./internal-metadata.js";
+import type {InternalMetadata} from "./internal-metadata.js";
 import {endNodeComposites, runUnitOfWork} from "./node-composite.js";
 import type {UnitOfWork} from "./node-composite.js";
+import {readSubtreeAt, systemTimeJustBefore} from "./subtree-history.js";
 import {closeCurrentVersions} from "./temporal-merge.js";
 import type {TemporalTransaction} from "./temporal-merge.js";
 
@@ -31,6 +36,8 @@ export interface LocalUpdateInput {
 	name?: string;
 	note?: string | null;
 	layoutMode?: string | null;
+	/** Other metadata writes in the same unit of work, as {@link LocalTreeWriter.setNodeMetaValues} takes them. */
+	metadata?: readonly LocalMetaChange[];
 }
 
 export interface LocalMoveInput {
@@ -41,6 +48,30 @@ export interface LocalMoveInput {
 	 * Insertion slot among the target's current children, moved ones included (counted BEFORE removal): the nodes land
 	 * right before the child now at `index`. Clamped to `[0, children]`. Omitted = the bottom.
 	 */
+	index?: number;
+}
+
+export interface LocalCreateTreesInput {
+	/** The parent node id; `null` or `home` for Home. */
+	parentId: Parent;
+	/** 0-based slot of the first tree among all current siblings, clamped. Omitted = the bottom. */
+	index?: number;
+	/** The sibling the first tree follows (null: first); while it is a live sibling it decides the slot over `index`. */
+	afterId?: string | null;
+	trees: readonly NewTree[];
+}
+
+/** One metadata write at an upstream key path; an undefined value removes the key. */
+export interface LocalMetaChange {
+	path: readonly string[];
+	value?: unknown;
+}
+
+export interface LocalRestoreInput {
+	id: string;
+	/** The parent to restore under (`null` or `home` for Home); omitted = where it was deleted from. */
+	parentId?: Parent;
+	/** Slot under the parent, clamped; omitted = its old slot without `parentId`, else the bottom. */
 	index?: number;
 }
 
@@ -65,6 +96,47 @@ function clampIndex(index: number, length: number): number {
 
 function noteOrNull(note: string | null | undefined): string | null {
 	return note === undefined || note === null || note === "" ? null : note;
+}
+
+/** The slot a create lands at: right after a live `afterId`, first for a null one, else `index` clamped (bottom when omitted). */
+function anchoredSlot(order: readonly string[], afterId: string | null | undefined, index: number | undefined): number {
+	if (afterId === null) {
+		return 0;
+	}
+	const anchor = order.indexOf(afterId ?? "");
+	return anchor === -1 ? clampIndex(index ?? order.length, order.length) : anchor + 1;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Set (or, for undefined, remove) `value` at `path` inside `target`, creating objects along the way. */
+function applyPath(target: Record<string, unknown>, path: readonly string[], value: unknown): void {
+	const last = path.at(-1);
+	if (last === undefined) {
+		return;
+	}
+	let current = target;
+	for (const key of path.slice(0, -1)) {
+		const next = current[key];
+		if (isRecord(next)) {
+			const copy = {...next};
+			current[key] = copy;
+			current = copy;
+		} else if (value === undefined) {
+			return;
+		} else {
+			const created: Record<string, unknown> = {};
+			current[key] = created;
+			current = created;
+		}
+	}
+	if (value === undefined) {
+		Reflect.deleteProperty(current, last);
+	} else {
+		current[last] = value;
+	}
 }
 
 function samePatch(current: Readonly<Record<string, unknown>>, patch: Readonly<Record<string, unknown>>): boolean {
@@ -214,6 +286,17 @@ function subtreeIds(tx: TemporalTransaction, id: string): string[] {
 	return ids;
 }
 
+/** Home's stored layout mode (`root_preferences.home_layout_mode`), null for the default. */
+export function readHomeLayoutMode(tx: TemporalTransaction): string | null {
+	return (
+		tx
+			.select({homeLayoutMode: rootPreferences.homeLayoutMode})
+			.from(rootPreferences)
+			.where(eq(rootPreferences.systemTo, FAR_FUTURE_DATE))
+			.get()?.homeLayoutMode ?? null
+	);
+}
+
 /**
  * Writes the outline of a standalone account, which has no workflowy.com behind it, straight into the temporal node
  * tables. Each write is one unit of work. Sibling order is `node_metadata.priority`: after a write, every touched
@@ -254,13 +337,7 @@ export class LocalTreeWriter {
 				throw new Error(`Node ${id} already exists`);
 			}
 			const order = pending.order(parentId);
-			const anchor = input.afterId === null ? -1 : order.indexOf(input.afterId ?? "");
-			const index =
-				input.afterId === null
-					? 0
-					: anchor === -1
-						? clampIndex(input.index ?? order.length, order.length)
-						: anchor + 1;
+			const index = anchoredSlot(order, input.afterId, input.index);
 			order.splice(index, 0, id);
 			const now = this.nowDate();
 			tx.insert(nodeContent)
@@ -290,9 +367,253 @@ export class LocalTreeWriter {
 		});
 	}
 
+	/**
+	 * Create a forest of new trees at one slot under a parent, in one unit of work: names, notes, completion, kept
+	 * metadata (typed tables), children, and the mirror row of each `metadata.mirror` root. Returns the top ids.
+	 */
+	createTreesAt(input: LocalCreateTreesInput): {ids: string[]} {
+		const parentId = toParent(input.parentId);
+		return this.write((pending, unitOfWork) => {
+			const {tx, systemTime} = unitOfWork;
+			requireParent(tx, parentId);
+			const now = this.nowDate();
+			const metadataById = new Map<string, InternalMetadata | undefined>();
+			const insert = (tree: NewTree, treeParent: string | null, priority: number): string => {
+				const id = tree.id ?? this.generateId();
+				if (currentContent(tx, id) !== undefined) {
+					throw new Error(`Node ${id} already exists`);
+				}
+				const metadata = tree.metadata ?? {};
+				const layoutMode = typeof metadata.layoutMode === "string" ? metadata.layoutMode : null;
+				tx.insert(nodeContent)
+					.values({
+						id,
+						name: tree.name,
+						note: noteOrNull(tree.note),
+						parentId: treeParent,
+						systemFrom: systemTime,
+						systemTo: FAR_FUTURE_DATE,
+					})
+					.run();
+				tx.insert(nodeMetadata)
+					.values({
+						nodeId: id,
+						shortId: uuidToShortId(id),
+						priority,
+						createdAt: now,
+						modifiedAt: now,
+						completedAt: tree.completed === true ? now : null,
+						layoutMode: normalizeLayoutMode(layoutMode),
+						systemFrom: systemTime,
+						systemTo: FAR_FUTURE_DATE,
+					})
+					.run();
+				metadataById.set(id, metadata);
+				const {mirror} = metadata;
+				if (isRecord(mirror) && typeof mirror.originalId === "string" && mirror.isMirrorRoot === true) {
+					tx.insert(mirrors)
+						.values({
+							mirrorId: id,
+							originalId: mirror.originalId,
+							systemFrom: systemTime,
+							systemTo: FAR_FUTURE_DATE,
+						})
+						.run();
+				}
+				for (const [childPriority, child] of (tree.children ?? []).entries()) {
+					insert(child, id, childPriority);
+				}
+				return id;
+			};
+			const order = pending.order(parentId);
+			const index = anchoredSlot(order, input.afterId, input.index);
+			const ids = input.trees.map((tree, offset) => insert(tree, parentId, index + offset));
+			order.splice(index, 0, ...ids);
+			writeInternalMetadata(unitOfWork, metadataById);
+			return {ids};
+		});
+	}
+
+	/**
+	 * Write metadata values at upstream key paths (`layoutMode`, `numbered_start`, `priority.defaultToBottom`,
+	 * `table...`) to the typed tables, merged over the node's current metadata; a mirror's go to its original. Home
+	 * (`home`) takes only `layoutMode`, stored as `root_preferences.home_layout_mode`.
+	 */
+	setNodeMetaValues(requestedId: string, changes: readonly LocalMetaChange[]): void {
+		this.write((pending, unitOfWork) => {
+			if (requestedId === HOME_TARGET) {
+				this.writeHomeLayoutMode(unitOfWork, changes);
+				return;
+			}
+			requireNode(unitOfWork.tx, requestedId);
+			const id = writeTarget(unitOfWork.tx, requestedId);
+			this.applyMetaChanges(pending, unitOfWork, id, changes);
+			pending.setMetadata(id, {modifiedAt: this.nowDate()});
+		});
+	}
+
+	/**
+	 * `layoutMode` lives on `node_metadata`, which {@link PendingWrites} versions once per unit; every other key goes
+	 * through {@link writeInternalMetadata} with `layoutMode` held at its stored value so that call leaves the row alone.
+	 */
+	private applyMetaChanges(
+		pending: PendingWrites,
+		unitOfWork: UnitOfWork,
+		id: string,
+		changes: readonly LocalMetaChange[],
+	): void {
+		const others = changes.filter(({path}) => !(path.length === 1 && path[0] === "layoutMode"));
+		for (const {path, value} of changes) {
+			if (path.length === 1 && path[0] === "layoutMode") {
+				pending.setMetadata(id, {layoutMode: normalizeLayoutMode(typeof value === "string" ? value : null)});
+			}
+		}
+		if (others.length === 0) {
+			return;
+		}
+		const metadata = readNodeInternalMetadata(unitOfWork.tx, id);
+		for (const {path, value} of others) {
+			applyPath(metadata, path, value);
+		}
+		writeInternalMetadata(unitOfWork, new Map([[id, metadata]]));
+	}
+
+	private writeHomeLayoutMode({tx, systemTime}: UnitOfWork, changes: readonly LocalMetaChange[]): void {
+		const change = changes.findLast(({path}) => path.length === 1 && path[0] === "layoutMode");
+		if (change === undefined || changes.length !== 1) {
+			throw new Error("Home accepts only layoutMode");
+		}
+		const homeLayoutMode = normalizeLayoutMode(typeof change.value === "string" ? change.value : null);
+		const current = tx.select().from(rootPreferences).where(eq(rootPreferences.systemTo, FAR_FUTURE_DATE)).get();
+		if (current !== undefined) {
+			if (current.homeLayoutMode === homeLayoutMode) {
+				return;
+			}
+			closeCurrentVersions(tx, rootPreferences, systemTime, eq(rootPreferences.userId, current.userId));
+		}
+		const userId =
+			current?.userId ??
+			tx.select({userId: account.userId}).from(account).where(eq(account.systemTo, FAR_FUTURE_DATE)).get()
+				?.userId ??
+			0;
+		tx.insert(rootPreferences)
+			.values({...current, userId, homeLayoutMode, systemFrom: systemTime, systemTo: FAR_FUTURE_DATE})
+			.run();
+	}
+
+	/**
+	 * Bring a deleted node back under its original id with its subtree as it was just before the delete, at the
+	 * requested parent and slot (default: where it was). Answers false when the node never existed; throws while it is
+	 * live.
+	 */
+	restoreNode(input: LocalRestoreInput): boolean {
+		return this.write((pending, unitOfWork) => {
+			const {tx, systemTime} = unitOfWork;
+			if (currentContent(tx, input.id) !== undefined) {
+				throw new Error(`Node ${input.id} is not deleted`);
+			}
+			const closed = tx
+				.select({systemTo: nodeContent.systemTo})
+				.from(nodeContent)
+				.where(and(eq(nodeContent.id, input.id), ne(nodeContent.systemTo, FAR_FUTURE_DATE)))
+				.orderBy(desc(nodeContent.systemTo))
+				.get();
+			if (closed === undefined) {
+				return false;
+			}
+			const asOf = systemTimeJustBefore(closed.systemTo);
+			const at = (table: {systemFrom: AnySQLiteColumn; systemTo: AnySQLiteColumn}) =>
+				and(lte(table.systemFrom, asOf), gt(table.systemTo, asOf));
+			const rowAt = (id: string) => ({
+				content: tx
+					.select()
+					.from(nodeContent)
+					.where(and(eq(nodeContent.id, id), at(nodeContent)))
+					.get(),
+				metadata: tx
+					.select()
+					.from(nodeMetadata)
+					.where(and(eq(nodeMetadata.nodeId, id), at(nodeMetadata)))
+					.get(),
+			});
+			const root = rowAt(input.id);
+			if (root.content === undefined) {
+				return false;
+			}
+			const parentId = input.parentId === undefined ? root.content.parentId : toParent(input.parentId);
+			requireParent(tx, parentId);
+			const order = pending.order(parentId);
+			const index = clampIndex(
+				input.index ??
+					(input.parentId === undefined ? (root.metadata?.priority ?? order.length) : order.length),
+				order.length,
+			);
+			const subtree = readSubtreeAt(tx, input.id, asOf);
+			const restored: string[] = [];
+			const reopen = (id: string, nodeParent: string | null, priority: number): void => {
+				if (currentContent(tx, id) !== undefined) {
+					return;
+				}
+				const {content, metadata} = rowAt(id);
+				if (content === undefined) {
+					return;
+				}
+				tx.insert(nodeContent)
+					.values({...content, parentId: nodeParent, systemFrom: systemTime, systemTo: FAR_FUTURE_DATE})
+					.run();
+				if (metadata !== undefined) {
+					tx.insert(nodeMetadata)
+						.values({...metadata, priority, systemFrom: systemTime, systemTo: FAR_FUTURE_DATE})
+						.run();
+				}
+				restored.push(id);
+				for (const [childPriority, childId] of (subtree.children.get(id) ?? []).entries()) {
+					reopen(childId, id, childPriority);
+				}
+			};
+			reopen(input.id, parentId, index);
+			order.splice(index, 0, input.id);
+			writeInternalMetadata(unitOfWork, new Map(restored.map((id) => [id, subtree.metadata.get(id)])));
+			this.reopenMirrors(unitOfWork, restored, asOf);
+			return true;
+		});
+	}
+
+	/** Reopen the mirror rows live at `asOf` that join a restored node to a node live now (or restored too). */
+	private reopenMirrors({tx, systemTime}: UnitOfWork, restored: readonly string[], asOf: string): void {
+		const ids = new Set(restored);
+		const rows = tx
+			.select()
+			.from(mirrors)
+			.where(and(lte(mirrors.systemFrom, asOf), gt(mirrors.systemTo, asOf)))
+			.all()
+			.filter((row) => ids.has(row.mirrorId) || ids.has(row.originalId));
+		for (const row of rows) {
+			const live =
+				currentContent(tx, row.mirrorId) !== undefined && currentContent(tx, row.originalId) !== undefined;
+			const open = tx
+				.select()
+				.from(mirrors)
+				.where(
+					and(
+						eq(mirrors.mirrorId, row.mirrorId),
+						eq(mirrors.originalId, row.originalId),
+						currentVersion(mirrors),
+					),
+				)
+				.get();
+			if (live && open === undefined) {
+				tx.insert(mirrors)
+					.values({...row, systemFrom: systemTime, systemTo: FAR_FUTURE_DATE})
+					.run();
+			}
+		}
+	}
+
 	/** Edit a node's name, note or layout; a mirror's edit goes to its original. Returns the node written. */
 	updateNode(requestedId: string, input: LocalUpdateInput): string {
-		return this.write((pending, {tx}) => {
+		return this.write((pending, unitOfWork) => {
+			const {tx} = unitOfWork;
 			requireNode(tx, requestedId);
 			const id = writeTarget(tx, requestedId);
 			const content: ContentPatch = {};
@@ -308,6 +629,7 @@ export class LocalTreeWriter {
 				metadata.layoutMode = normalizeLayoutMode(input.layoutMode);
 			}
 			pending.setMetadata(id, metadata);
+			this.applyMetaChanges(pending, unitOfWork, id, input.metadata ?? []);
 			return id;
 		});
 	}

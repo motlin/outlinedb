@@ -1,6 +1,6 @@
 import {z} from "zod";
-import {planBlockSlot} from "@outlinedb/shared/cache";
-import type {SlotPlan} from "@outlinedb/shared/cache";
+import {LocalTreeWriter, planBlockSlot} from "@outlinedb/shared/cache";
+import type {LocalRestoreInput, SlotPlan} from "@outlinedb/shared/cache";
 import type {RestoreInput, WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import {calendarParentContext} from "@outlinedb/shared/calendar-lookup";
 import {adoptAfterCreate, calendarAdoptWarning, datesInName, linkedSourcesInSubtree} from "@outlinedb/shared/internal";
@@ -45,8 +45,6 @@ const unvalidatedText = z.custom<string>(() => true).optional();
 const CLIENT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
 const WRITE_CLIENT_REQUIRED = "WORKFLOWY_API_KEY environment variable is required";
-
-const STANDALONE_METADATA_UNAVAILABLE = "numberedStart and tableSet are not available in a standalone account yet";
 
 /** A `layoutMode` as a metadata value: `"bullets"` is upstream's default, stored as no key. */
 function layoutModeValue(layoutMode: string): string | undefined {
@@ -214,11 +212,16 @@ export const nodesSetHome = defineOp({
 	input: z.strictObject({layoutMode: z.enum(["bullets", "board"])}),
 	output: HomeResponseSchema,
 	async run(ctx, {layoutMode}) {
+		const changes = [{path: ["layoutMode"], value: layoutModeValue(layoutMode)}];
+		if (ctx.mode === "standalone") {
+			new LocalTreeWriter(ctx.db).setNodeMetaValues(HOME_TARGET, changes);
+			return ok({layoutMode});
+		}
 		const adapter = getAdapter(ctx);
 		if (!adapter) {
 			return fail(503, {error: INTERNAL_API_NOT_CONFIGURED});
 		}
-		await adapter.setNodeMetaValues(HOME_TARGET, [{path: ["layoutMode"], value: layoutModeValue(layoutMode)}]);
+		await adapter.setNodeMetaValues(HOME_TARGET, changes);
 		return ok({layoutMode});
 	},
 });
@@ -266,9 +269,6 @@ export const nodesUpdate = defineOp({
 		}
 
 		if (writer.mode === "standalone") {
-			if (numberedStart !== undefined || tableChanges.length > 0) {
-				return fail(503, {error: STANDALONE_METADATA_UNAVAILABLE});
-			}
 			// Local backlinks come later: the effects report changed links, but no backlink items are written.
 			const effects = saveEffects(
 				ctx,
@@ -280,6 +280,12 @@ export const nodesUpdate = defineOp({
 				...(name === undefined ? {} : {name}),
 				...(note === undefined ? {} : {note}),
 				...(layoutMode === undefined ? {} : {layoutMode}),
+				metadata: [
+					...(numberedStart === undefined
+						? []
+						: [{path: ["numbered_start"], value: numberedStart ?? undefined}]),
+					...tableChanges,
+				],
 			});
 			const node = await readNodeDto(ctx, id);
 			if (node === undefined) {
@@ -439,11 +445,44 @@ export const nodesComplete = completionOp("complete");
 // POST /api/v1/nodes/:id/uncomplete - Mark node as not completed
 export const nodesUncomplete = completionOp("uncomplete");
 
+/** Restore in a standalone account: reopen the node's subtree from its last closed versions; the cache is the truth. */
+async function restoreLocally(
+	ctx: ServerContext,
+	body: {id: string; parent_id?: string | null | undefined; index?: number | undefined},
+): Promise<OpResult<z.output<typeof NodeEnvelopeSchema>>> {
+	const {id} = body;
+	if (ctx.cacheService.getNode(id)) {
+		return fail(409, {error: "Node is not deleted"});
+	}
+	const input: LocalRestoreInput = {id};
+	if (body.parent_id !== undefined) {
+		const parent = parseParent(ctx, body.parent_id);
+		if (!parent.ok) {
+			return fail(parent.status, {error: parent.error});
+		}
+		if (parent.parentId !== null && !ctx.cacheService.getNode(parent.parentId)) {
+			return fail(404, {error: "Parent node not found"});
+		}
+		input.parentId = parent.parentId;
+	}
+	if (body.index !== undefined) {
+		input.index = body.index;
+	}
+	if (!new LocalTreeWriter(ctx.db).restoreNode(input)) {
+		return fail(404, {error: "Node not found"});
+	}
+	const node = await readNodeDto(ctx, id);
+	return node === undefined ? fail(404, {error: "Node not found"}) : ok(toJson({node}));
+}
+
 // POST /api/v1/nodes/:id/restore - Bring back a deleted node under its ORIGINAL id
 export const nodesRestore = defineOp({
 	input: z.object({id: z.string(), parent_id: ParentIdSchema.optional(), index: IndexSchema}),
 	output: NodeEnvelopeSchema,
 	async run(ctx, body) {
+		if (ctx.mode === "standalone") {
+			return restoreLocally(ctx, body);
+		}
 		const adapter = getAdapter(ctx);
 		const apiClient = getApiClient(ctx);
 		if (!adapter || !apiClient) {

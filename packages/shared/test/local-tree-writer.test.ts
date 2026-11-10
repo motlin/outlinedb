@@ -6,7 +6,14 @@ import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
 import {LocalTreeWriter} from "../src/cache/local-tree-writer.js";
 import * as schema from "../src/db/schema.js";
-import {mirrors, nodeContent, nodeMetadata} from "../src/db/schema.js";
+import {
+	mirrors,
+	nodeContent,
+	nodeDisplayMetadata,
+	nodeMetadata,
+	nodeTableCellSizes,
+	rootPreferences,
+} from "../src/db/schema.js";
 import {FAR_FUTURE_DATE} from "../src/temporal/constants.js";
 
 const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
@@ -117,7 +124,33 @@ function setup() {
 
 	const mirrorVersions = () => database.select().from(mirrors).all();
 
-	return {writer, siblings, metadataVersions, contentVersions, mirrorVersions};
+	const displayVersions = () =>
+		database.select().from(nodeDisplayMetadata).orderBy(asc(nodeDisplayMetadata.systemFrom)).all();
+
+	const cellSizeVersions = () => database.select().from(nodeTableCellSizes).all();
+
+	const homeLayoutVersions = () =>
+		database
+			.select({
+				userId: rootPreferences.userId,
+				homeLayoutMode: rootPreferences.homeLayoutMode,
+				systemFrom: rootPreferences.systemFrom,
+				systemTo: rootPreferences.systemTo,
+			})
+			.from(rootPreferences)
+			.orderBy(asc(rootPreferences.systemFrom))
+			.all();
+
+	return {
+		writer,
+		siblings,
+		metadataVersions,
+		contentVersions,
+		mirrorVersions,
+		displayVersions,
+		cellSizeVersions,
+		homeLayoutVersions,
+	};
 }
 
 /** A metadata version a seeded node keeps, or the one it ends at `NOW`. */
@@ -427,5 +460,214 @@ describe("LocalTreeWriter", () => {
 			],
 			mirrors: [{mirrorId: "m", originalId: "c1", systemFrom: SEEDED_AT, systemTo: "2026-03-02 00:00:00.000"}],
 		});
+	});
+
+	it("creates a forest of trees at one slot with notes, completion, metadata, children and child mirrors", () => {
+		const {writer, siblings, metadataVersions, contentVersions, mirrorVersions, displayVersions} = setup();
+
+		const result = writer.createTreesAt({
+			parentId: "p",
+			afterId: "a",
+			index: 0,
+			trees: [
+				{
+					id: "t1",
+					name: "t1",
+					note: "a note",
+					completed: true,
+					metadata: {layoutMode: "board", numbered_start: 3},
+					children: [
+						{id: "t2", name: "t2"},
+						{id: "t3", name: "", metadata: {mirror: {originalId: "x", isMirrorRoot: true}}},
+					],
+				},
+				{name: "t4"},
+			],
+		});
+		const [, t4 = ""] = result.ids;
+		const created = (nodeId: string, priority: number, extra: object = {}) => ({
+			nodeId,
+			priority,
+			createdAt: NOW_DATE,
+			modifiedAt: NOW_DATE,
+			completedAt: null,
+			layoutMode: null,
+			systemFrom: NOW,
+			systemTo: FAR_FUTURE_DATE,
+			...extra,
+		});
+
+		expect({
+			result,
+			t4: UUID.test(t4),
+			siblings: siblings("p"),
+			children: siblings("t1"),
+			metadata: metadataVersions(["t1", "t2", "t3", t4]),
+			content: contentVersions(["t1", "t3"]),
+			mirrors: mirrorVersions(),
+			display: displayVersions(),
+		}).toStrictEqual({
+			result: {ids: ["t1", t4]},
+			t4: true,
+			siblings: [
+				{id: "a", name: "a", priority: 0},
+				{id: "t1", name: "t1", priority: 1},
+				{id: t4, name: "t4", priority: 2},
+				{id: "b", name: "b", priority: 3},
+				{id: "c", name: "c", priority: 4},
+			],
+			children: [
+				{id: "t2", name: "t2", priority: 0},
+				{id: "t3", name: "", priority: 1},
+			],
+			metadata: [
+				created("t1", 1, {completedAt: NOW_DATE, layoutMode: "board"}),
+				created("t2", 0),
+				created("t3", 1),
+				created(t4, 2),
+			].toSorted((left, right) => left.nodeId.localeCompare(right.nodeId)),
+			content: [
+				{id: "t1", name: "t1", note: "a note", parentId: "p", systemFrom: NOW, systemTo: FAR_FUTURE_DATE},
+				{id: "t3", name: "", note: null, parentId: "t1", systemFrom: NOW, systemTo: FAR_FUTURE_DATE},
+			],
+			mirrors: [
+				{mirrorId: "m", originalId: "c1", systemFrom: SEEDED_AT, systemTo: FAR_FUTURE_DATE},
+				{mirrorId: "t3", originalId: "x", systemFrom: NOW, systemTo: FAR_FUTURE_DATE},
+			],
+			display: [
+				{
+					nodeId: "t1",
+					numberedStart: 3,
+					restorableUniqueNode: null,
+					tableHeaders: null,
+					tableSkipHeaders: null,
+					tableBg: null,
+					priorityDefaultToBottom: null,
+					systemFrom: NOW,
+					systemTo: FAR_FUTURE_DATE,
+				},
+			],
+		});
+	});
+
+	it("sets a node's metadata values in the typed tables and removes a key for an undefined value", () => {
+		const {writer, metadataVersions, displayVersions, cellSizeVersions} = setup();
+		const LATER = "2026-03-02 00:00:00.000";
+		const LATER_DATE = new Date("2026-03-02T00:00:00.000Z");
+
+		writer.setNodeMetaValues("a", [
+			{path: ["layoutMode"], value: "numbered"},
+			{path: ["numbered_start"], value: 5},
+			{path: ["priority", "defaultToBottom"], value: true},
+			{path: ["table", "sizes", "c1"], value: 200},
+		]);
+		vi.setSystemTime(LATER_DATE);
+		writer.setNodeMetaValues("a", [{path: ["numbered_start"], value: undefined}]);
+
+		const display = {
+			nodeId: "a",
+			numberedStart: 5,
+			restorableUniqueNode: null,
+			tableHeaders: null,
+			tableSkipHeaders: null,
+			tableBg: null,
+			priorityDefaultToBottom: 1,
+		};
+		expect({
+			metadata: metadataVersions(["a"]),
+			display: displayVersions(),
+			sizes: cellSizeVersions(),
+		}).toStrictEqual({
+			metadata: [
+				seeded("a", 0, NOW),
+				{...renumbered("a", 0), modifiedAt: NOW_DATE, layoutMode: "numbered", systemTo: LATER},
+				{...renumbered("a", 0), modifiedAt: LATER_DATE, layoutMode: "numbered", systemFrom: LATER},
+			],
+			display: [
+				{...display, systemFrom: NOW, systemTo: LATER},
+				{...display, numberedStart: null, systemFrom: LATER, systemTo: FAR_FUTURE_DATE},
+			],
+			sizes: [{nodeId: "a", cellId: "c1", size: 200, systemFrom: NOW, systemTo: FAR_FUTURE_DATE}],
+		});
+	});
+
+	it("sets Home's layout in the root preferences", () => {
+		const {writer, homeLayoutVersions} = setup();
+		const LATER = "2026-03-02 00:00:00.000";
+
+		writer.setNodeMetaValues("home", [{path: ["layoutMode"], value: "board"}]);
+		vi.setSystemTime(new Date("2026-03-02T00:00:00.000Z"));
+		writer.setNodeMetaValues("home", [{path: ["layoutMode"], value: undefined}]);
+
+		expect(homeLayoutVersions()).toStrictEqual([
+			{userId: 0, homeLayoutMode: "board", systemFrom: NOW, systemTo: LATER},
+			{userId: 0, homeLayoutMode: null, systemFrom: LATER, systemTo: FAR_FUTURE_DATE},
+		]);
+	});
+
+	it("restores a deleted subtree where it was, from its last closed versions under the original ids", () => {
+		const {writer, siblings, metadataVersions, contentVersions, mirrorVersions} = setup();
+		const LATER = "2026-03-02 00:00:00.000";
+
+		writer.deleteNode("c");
+		vi.setSystemTime(new Date("2026-03-02T00:00:00.000Z"));
+		const restored = writer.restoreNode({id: "c"});
+
+		expect({
+			restored,
+			siblings: siblings("p"),
+			metadata: metadataVersions(["c", "c1"]),
+			content: contentVersions(["c1"]),
+			mirrors: mirrorVersions(),
+		}).toStrictEqual({
+			restored: true,
+			siblings: [
+				{id: "a", name: "a", priority: 0},
+				{id: "b", name: "b", priority: 1},
+				{id: "c", name: "c", priority: 2},
+			],
+			metadata: [
+				seeded("c", 2, NOW),
+				{...seeded("c", 2), systemFrom: LATER},
+				seeded("c1", 0, NOW),
+				{...seeded("c1", 0), systemFrom: LATER},
+			],
+			content: [
+				{id: "c1", name: "c1", note: null, parentId: "c", systemFrom: SEEDED_AT, systemTo: NOW},
+				{id: "c1", name: "c1", note: null, parentId: "c", systemFrom: LATER, systemTo: FAR_FUTURE_DATE},
+			],
+			mirrors: [
+				{mirrorId: "m", originalId: "c1", systemFrom: SEEDED_AT, systemTo: NOW},
+				{mirrorId: "m", originalId: "c1", systemFrom: LATER, systemTo: FAR_FUTURE_DATE},
+			],
+		});
+	});
+
+	it("restores a deleted node at a requested parent and slot, and refuses a live or unknown node", () => {
+		const {writer, siblings} = setup();
+
+		writer.deleteNode("b");
+		vi.setSystemTime(new Date("2026-03-02T00:00:00.000Z"));
+		const restored = writer.restoreNode({id: "b", parentId: "q", index: 0});
+
+		expect({
+			restored,
+			unknown: writer.restoreNode({id: "nope"}),
+			p: siblings("p"),
+			q: siblings("q"),
+		}).toStrictEqual({
+			restored: true,
+			unknown: false,
+			p: [
+				{id: "a", name: "a", priority: 0},
+				{id: "c", name: "c", priority: 1},
+			],
+			q: [
+				{id: "b", name: "b", priority: 0},
+				{id: "x", name: "x", priority: 1},
+				{id: "m", name: null, priority: 2},
+			],
+		});
+		expect(() => writer.restoreNode({id: "a"})).toThrow("Node a is not deleted");
 	});
 });

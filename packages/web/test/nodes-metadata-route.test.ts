@@ -1,4 +1,4 @@
-import {beforeEach, describe, expect, it, vi} from "vite-plus/test";
+import {afterEach, beforeEach, describe, expect, it, vi} from "vite-plus/test";
 import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
@@ -83,7 +83,7 @@ interface FakeAdapter {
 }
 
 /** Home holds `n1`; the fake adapter writes metadata changes to the cache as the real one does. */
-function setup(configured: boolean, rootLayoutMode?: string) {
+function setup(configured: boolean, rootLayoutMode?: string, mode: "mirror" | "standalone" = "mirror") {
 	const sqlite = new DatabaseConstructor(":memory:");
 	const db = drizzle(sqlite, {schema});
 	migrate(db, {migrationsFolder});
@@ -117,7 +117,8 @@ function setup(configured: boolean, rootLayoutMode?: string) {
 	const ctx = {
 		db,
 		cacheService,
-		apiKey: "test-key",
+		mode,
+		apiKey: mode === "standalone" ? undefined : "test-key",
 		config: {} as ServerContext["config"],
 		internalAuth: configured ? {} : undefined,
 		internalAdapter: () => (configured ? (adapter as unknown as WorkflowyInternalAdapter) : undefined),
@@ -528,5 +529,59 @@ describe("PATCH /api/v1/nodes/:id tableSet", () => {
 		const res = await request("GET", "/nodes/n1");
 
 		expect(res.body).toStrictEqual({node: dto("n1", null, null, false, {sizes: {c1: 200}})});
+	});
+});
+
+describe("node metadata in a standalone context", () => {
+	beforeEach(() => {
+		vi.useFakeTimers({toFake: ["Date"], now: 1_699_999_999_000});
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it("writes layoutMode, numberedStart and tableSet to the local tables with no adapter", async () => {
+		const {adapter, request} = setup(false, undefined, "standalone");
+		// A write may not replace a version from its own millisecond.
+		vi.setSystemTime(1_700_000_000_000);
+
+		const res = await request("PATCH", "/nodes/n1", {
+			layoutMode: "numbered",
+			numberedStart: 5,
+			tableSet: [{path: ["table", "sizes", "c1"], value: 200}],
+		});
+
+		expect({
+			res,
+			get: await request("GET", "/nodes/n1"),
+			calls: adapter.setNodeMetaValues.mock.calls,
+		}).toStrictEqual({
+			res: {
+				status: 200,
+				body: {
+					node: {...dto("n1", "numbered", 5, false, {sizes: {c1: 200}}), modifiedAt: 1_700_000_000},
+					effects: {backlinkTargets: [], dates: false},
+				},
+			},
+			get: {
+				status: 200,
+				body: {node: {...dto("n1", "numbered", 5, false, {sizes: {c1: 200}}), modifiedAt: 1_700_000_000}},
+			},
+			calls: [],
+		});
+	});
+
+	it("sets and reads Home's layout from the root preferences", async () => {
+		const {request} = setup(false, undefined, "standalone");
+
+		const before = await request("GET", "/home");
+		const set = await request("PATCH", "/nodes/home", {layoutMode: "board"});
+
+		expect({before, set, after: await request("GET", "/home")}).toStrictEqual({
+			before: {status: 200, body: {layoutMode: "bullets"}},
+			set: {status: 200, body: {layoutMode: "board"}},
+			after: {status: 200, body: {layoutMode: "board"}},
+		});
 	});
 });

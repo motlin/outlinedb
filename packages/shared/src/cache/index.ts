@@ -36,10 +36,14 @@ export {
 export {findInbox, INBOX_NAME, type InboxLookup} from "./inbox-lookup.js";
 export {
 	type LocalCreateInput,
+	type LocalCreateTreesInput,
+	type LocalMetaChange,
 	type LocalMoveInput,
+	type LocalRestoreInput,
 	LocalTreeWriter,
 	type LocalTreeWriterOptions,
 	type LocalUpdateInput,
+	readHomeLayoutMode,
 } from "./local-tree-writer.js";
 export {type ApplyRowsResult, applyNodeRowsBatch, applyRows, type NormalizedRowsByTable} from "./importer.js";
 export {

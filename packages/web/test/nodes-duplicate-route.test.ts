@@ -34,7 +34,7 @@ function apiNode(
 }
 
 /** Home holds P and O; O (completed, note "n") holds C (with G) and E, a mirror of X; X holds Y. */
-function setup(expanded: string[] = []) {
+function setup(expanded: string[] = [], mode: "mirror" | "standalone" = "mirror") {
 	const sqlite = new DatabaseConstructor(":memory:");
 	const db = drizzle(sqlite, {schema});
 	migrate(db, {migrationsFolder});
@@ -60,7 +60,8 @@ function setup(expanded: string[] = []) {
 	const ctx = {
 		db,
 		cacheService,
-		apiKey: "test-key",
+		mode,
+		apiKey: mode === "standalone" ? undefined : "test-key",
 		internalAuth: {},
 		internalAdapter: () => ({createTreesAt, setExpanded, expansionTest}) as unknown as WorkflowyInternalAdapter,
 	} as unknown as ServerContext;
@@ -78,7 +79,7 @@ function setup(expanded: string[] = []) {
 				body: JSON.stringify(body),
 			}),
 		);
-	return {createTreesAt, setExpanded, post};
+	return {createTreesAt, setExpanded, post, cacheService};
 }
 
 const anyId = expect.any(String) as string;
@@ -143,6 +144,48 @@ describe("POST /api/v1/nodes/duplicate", () => {
 		expect({empty: empty.status, unknown: unknown.status, calls: createTreesAt.mock.calls.length}).toStrictEqual({
 			empty: 400,
 			unknown: 404,
+			calls: 0,
+		});
+	});
+
+	it("deep-copies into the local tables in a standalone context, with no adapter", async () => {
+		const {createTreesAt, post, cacheService} = setup([], "standalone");
+		const shape = (parentId: string | null): unknown[] =>
+			cacheService.getChildren(parentId).map((node) => ({
+				name: node.name,
+				note: node.note,
+				completed: node.completedAt !== null,
+				mirrorOf: cacheService.getMirrorOriginal(node.id) ?? null,
+				children: shape(node.id),
+			}));
+
+		const res = await post({ids: ["O"], parent_id: "P", index: 0});
+		const {ids} = (await res.json()) as {ids: string[]};
+
+		expect({
+			status: res.status,
+			copy: shape("P")[0],
+			first: ids[0] === cacheService.getChildren("P")[0]?.id,
+			calls: createTreesAt.mock.calls.length,
+		}).toStrictEqual({
+			status: 201,
+			copy: {
+				name: "o",
+				note: "n",
+				completed: true,
+				mirrorOf: null,
+				children: [
+					{
+						name: "c",
+						note: null,
+						completed: false,
+						mirrorOf: null,
+						children: [{name: "g", note: null, completed: false, mirrorOf: null, children: []}],
+					},
+					{name: "x", note: null, completed: false, mirrorOf: "X", children: []},
+				],
+			},
+			first: true,
 			calls: 0,
 		});
 	});

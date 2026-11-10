@@ -1,5 +1,11 @@
 import {z} from "zod";
-import {NodeReader, NodeTreeReader, ancestorChain, effectiveCompletedAt} from "@outlinedb/shared/cache";
+import {
+	NodeReader,
+	NodeTreeReader,
+	ancestorChain,
+	effectiveCompletedAt,
+	readHomeLayoutMode,
+} from "@outlinedb/shared/cache";
 import {mirrors as mirrorsTable, nodeContent, nodeMetadata} from "@outlinedb/shared/db";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import type {Node} from "@outlinedb/shared/types";
@@ -658,6 +664,9 @@ export const homeGet = defineOp({
 	input: z.object({}),
 	output: HomeResponseSchema,
 	async run(ctx) {
+		if (ctx.mode === "standalone") {
+			return ok(toJson({layoutMode: readHomeLayoutMode(ctx.db) ?? "bullets"}));
+		}
 		const adapter = getAdapter(ctx);
 		if (!adapter) {
 			return fail(503, {error: INTERNAL_API_NOT_CONFIGURED});
