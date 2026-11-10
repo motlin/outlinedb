@@ -34,6 +34,13 @@ export {
 	systemFromToDate,
 } from "./cache-temporal.js";
 export {findInbox, INBOX_NAME, type InboxLookup} from "./inbox-lookup.js";
+export {
+	type LocalCreateInput,
+	type LocalMoveInput,
+	LocalTreeWriter,
+	type LocalTreeWriterOptions,
+	type LocalUpdateInput,
+} from "./local-tree-writer.js";
 export {type ApplyRowsResult, applyNodeRowsBatch, applyRows, type NormalizedRowsByTable} from "./importer.js";
 export {
 	calendarRows,
