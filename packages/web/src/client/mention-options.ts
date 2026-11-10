@@ -19,7 +19,7 @@ export function mentionGroups({
 	tags,
 }: {
 	term: string;
-	account: {userId: number; fullName: string | null} | null;
+	account: {userId: number | string; fullName: string | null} | null;
 	tags: readonly string[];
 }): MentionGroup[] {
 	const groups: MentionGroup[] = [];

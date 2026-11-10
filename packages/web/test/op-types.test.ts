@@ -18,7 +18,7 @@ describe("OpInput and OpOutput pin the client-facing op types", () => {
 	it("account.get takes no fields and returns the account", () => {
 		expectTypeOf<OpInput<"account.get">>().toEqualTypeOf<Record<string, never>>();
 		expectTypeOf<OpOutput<"account.get">>().toEqualTypeOf<{
-			userId: number;
+			userId: number | string;
 			joinedAt: string;
 			fullName: string | null;
 			email: string;

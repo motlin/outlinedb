@@ -1,6 +1,6 @@
 /**
- * Stars (starred pages and saved searches), stored in upstream's account-global root
- * metadata through the internal API, so they match workflowy.com.
+ * Stars (starred pages and saved searches), stored in upstream's account-global root metadata: through the internal
+ * API when there is one, so they match workflowy.com, and in the local tables otherwise.
  */
 
 import {z} from "zod";
@@ -16,9 +16,10 @@ import {
 	toggleSavedView,
 	unstarChanges,
 } from "@outlinedb/shared/internal";
-import type {StarNodes, WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
+import type {StarNodes} from "@outlinedb/shared/internal";
+import {accountState} from "../account-state.js";
+import type {AccountState} from "../account-state.js";
 import type {ServerContext} from "../context.js";
-import {INTERNAL_API_NOT_CONFIGURED} from "../internal-api-error.js";
 import type {NodeResponse} from "../../node-types.js";
 import {readNodeDto} from "./nodes-shared.js";
 import {defineOp, fail, ok, toJson} from "./define.js";
@@ -35,12 +36,12 @@ function starNodes(ctx: ServerContext): StarNodes {
 	};
 }
 
-async function savedViewsJson(adapter: WorkflowyInternalAdapter): Promise<string | undefined> {
+async function savedViewsJson(adapter: AccountState): Promise<string | undefined> {
 	const json = await adapter.getSetting("saved_views_json");
 	return typeof json === "string" ? json : undefined;
 }
 
-async function readStars(ctx: ServerContext, adapter: WorkflowyInternalAdapter) {
+async function readStars(ctx: ServerContext, adapter: AccountState) {
 	return starsFromRootMeta(await adapter.getRootMeta([]), starNodes(ctx), await savedViewsJson(adapter));
 }
 
@@ -48,7 +49,7 @@ async function readStars(ctx: ServerContext, adapter: WorkflowyInternalAdapter) 
  * Upstream `toggleLocation`: toggle `key` in root metadata and in the legacy saved views
  * (`saved_views_json`), whose map an unsynced account copies into its locations.
  */
-async function toggleStar(ctx: ServerContext, adapter: WorkflowyInternalAdapter, key: string, starred: boolean) {
+async function toggleStar(ctx: ServerContext, adapter: AccountState, key: string, starred: boolean) {
 	const legacy = toggleSavedView(await savedViewsJson(adapter), key, starred, starNodes(ctx));
 	const meta = await adapter.getRootMeta([]);
 	const toggle = starred ? starChanges : unstarChanges;
@@ -73,13 +74,12 @@ async function starredNodes(ctx: ServerContext, stars: readonly Star[], readNode
 	return nodes.filter((node) => node !== undefined);
 }
 
-/** Runs `body` with the internal adapter, or answers 503 when it is not configured. */
+/** Runs `body` with the account state. */
 async function withAdapter<T extends Json>(
 	ctx: ServerContext,
-	body: (adapter: WorkflowyInternalAdapter) => Promise<OpResult<T>>,
+	body: (adapter: AccountState) => Promise<OpResult<T>>,
 ): Promise<OpResult<T>> {
-	const adapter = ctx.internalAdapter?.();
-	return adapter ? body(adapter) : fail(503, {error: INTERNAL_API_NOT_CONFIGURED});
+	return body(accountState(ctx));
 }
 
 /** The stars and each starred node once. */

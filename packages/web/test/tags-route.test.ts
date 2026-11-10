@@ -1,21 +1,12 @@
-import {describe, expect, it, vi} from "vite-plus/test";
+import {afterEach, describe, expect, it, vi} from "vite-plus/test";
 import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import type {ServerContext} from "../src/server/context.js";
+import {standaloneContext} from "./helpers/local-context.js";
 import {httpAppFor} from "./http-app-for.js";
 
-const NOT_CONFIGURED =
-	"Workflowy internal API is not configured (set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD, or run './bin/run.js internal login')";
-
-function setup(tagMeta: Record<string, unknown> | undefined) {
-	const adapter = {
-		getRootMeta: vi.fn<WorkflowyInternalAdapter["getRootMeta"]>(async () => Promise.resolve(tagMeta)),
-		setRootMeta: vi.fn<WorkflowyInternalAdapter["setRootMeta"]>(async () => Promise.resolve()),
-	};
-	const ctx = {
-		internalAdapter: () => (tagMeta === undefined ? undefined : (adapter as unknown as WorkflowyInternalAdapter)),
-	} as unknown as ServerContext;
+function requester(ctx: ServerContext) {
 	const app = httpAppFor(ctx);
-	const request = async (method: string, path: string, body?: unknown) => {
+	return async (method: string, path: string, body?: unknown) => {
 		const res = await app.fetch(
 			new Request(`http://x/api/v1/tags${path}`, {
 				method,
@@ -25,7 +16,15 @@ function setup(tagMeta: Record<string, unknown> | undefined) {
 		);
 		return {status: res.status, body: (await res.json()) as unknown};
 	};
-	return {adapter, request};
+}
+
+function setup(tagMeta: Record<string, unknown>) {
+	const adapter = {
+		getRootMeta: vi.fn<WorkflowyInternalAdapter["getRootMeta"]>(async () => Promise.resolve(tagMeta)),
+		setRootMeta: vi.fn<WorkflowyInternalAdapter["setRootMeta"]>(async () => Promise.resolve()),
+	};
+	const ctx = {internalAdapter: () => adapter as unknown as WorkflowyInternalAdapter} as unknown as ServerContext;
+	return {adapter, request: requester(ctx)};
 }
 
 describe("GET /api/v1/tags", () => {
@@ -47,13 +46,35 @@ describe("GET /api/v1/tags", () => {
 		expect(adapter.getRootMeta.mock.calls).toStrictEqual([[["color", "tags"]]]);
 	});
 
-	it("answers an empty map when none are stored, and 503 without the internal API", async () => {
+	it("answers an empty map when none are stored", async () => {
 		const {request} = setup({});
-		const unconfigured = setup(undefined);
 		await expect(request("GET", "")).resolves.toStrictEqual({status: 200, body: {colors: {}}});
-		await expect(unconfigured.request("GET", "")).resolves.toStrictEqual({
-			status: 503,
-			body: {error: NOT_CONFIGURED},
+	});
+});
+
+describe("tag colors in a standalone context", () => {
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it("sets, reads back and clears colors in the local tables with no internal API", async () => {
+		vi.useFakeTimers({toFake: ["Date"], now: 1_700_000_000_000});
+		const request = requester(standaloneContext());
+
+		const before = await request("GET", "");
+		const set = await request("PUT", "/%40Alice", {color: "red"});
+		vi.setSystemTime(1_700_000_001_000);
+		await request("PUT", "/%23Home", {color: "teal"});
+		const afterSet = await request("GET", "");
+		vi.setSystemTime(1_700_000_002_000);
+		const cleared = await request("DELETE", "/%40alice");
+
+		expect({before, set, afterSet, cleared, afterClear: await request("GET", "")}).toStrictEqual({
+			before: {status: 200, body: {colors: {}}},
+			set: {status: 200, body: {name: "@Alice", color: "red"}},
+			afterSet: {status: 200, body: {colors: {"@alice": "red", "#home": "teal"}}},
+			cleared: {status: 200, body: {name: "@alice"}},
+			afterClear: {status: 200, body: {colors: {"#home": "teal"}}},
 		});
 	});
 });

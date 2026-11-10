@@ -169,7 +169,8 @@ describe("worker routes each Access email to its own Durable Object", () => {
 		);
 
 		expect(viaDo).toStrictEqual([404, 404, 404, 404, 404, 404, 404, 404, 404, 404]);
-		expect(viaWorker.map(({status}) => status)).toStrictEqual([200, 200, 200, 200, 503, 503, 503, 503, 503]);
+		// Tags, stars, preferences and expansion read the local tables; files stay 503 until attachments are local.
+		expect(viaWorker.map(({status}) => status)).toStrictEqual([200, 200, 200, 200, 200, 200, 200, 200, 503]);
 		// A fresh database with no workflowy.com account still answers the 20 Settings rows and the default flags.
 		const features = viaWorker[0]?.body as {visible: unknown[]; enabled: Record<string, true>; available: boolean};
 		expect({...features, visible: features.visible.length}).toStrictEqual({

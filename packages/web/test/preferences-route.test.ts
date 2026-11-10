@@ -2,11 +2,12 @@ import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
-import {describe, expect, it, vi} from "vite-plus/test";
+import {afterEach, describe, expect, it, vi} from "vite-plus/test";
 import {CacheService} from "@outlinedb/shared/cache";
 import * as schema from "@outlinedb/shared/db";
 import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import type {ServerContext} from "../src/server/context.js";
+import {standaloneContext} from "./helpers/local-context.js";
 import {httpAppFor} from "./http-app-for.js";
 
 const NOT_CONFIGURED =
@@ -322,13 +323,53 @@ describe("GET /api/v1/preferences", () => {
 
 		await expect(request("GET", "/preferences")).resolves.toStrictEqual({status: 200, body: EMPTY});
 	});
+});
 
-	it("answers 503 without the internal API", async () => {
-		const {request} = setup(undefined);
+describe("preferences in a standalone context", () => {
+	afterEach(() => {
+		vi.useRealTimers();
+	});
 
-		await expect(request("GET", "/preferences")).resolves.toStrictEqual({
-			status: 503,
-			body: {error: NOT_CONFIGURED},
+	it("writes root-metadata preferences and settings to the local tables and reads them back, with no internal API", async () => {
+		vi.useFakeTimers({toFake: ["Date"], now: 1_700_000_000_000});
+		const app = httpAppFor(standaloneContext());
+		const request = async (method: string, body?: unknown) => {
+			const res = await app.fetch(
+				new Request("http://x/api/v1/preferences", {
+					method,
+					headers: {"content-type": "application/json"},
+					...(body === undefined ? {} : {body: JSON.stringify(body)}),
+				}),
+			);
+			return {status: res.status, body: (await res.json()) as unknown};
+		};
+
+		const before = await request("GET");
+		const patched = await request("PATCH", {
+			dateFormat: "DD/MM/YYYY",
+			weekStartDay: 1,
+			latestColor: {kind: "highlight", color: "teal"},
+			searchForChangesAfter: "2023-11-14T22:13:20.000Z",
+			showCompleted: true,
+			theme: "dark",
+		});
+		vi.setSystemTime(1_700_000_001_000);
+		const cleared = await request("PATCH", {dateFormat: null, showCompleted: false});
+
+		const written = {
+			...EMPTY,
+			dateFormat: "DD/MM/YYYY",
+			weekStartDay: 1,
+			latestColor: {kind: "highlight", color: "teal"},
+			searchForChangesAfter: "2023-11-14T22:13:20.000Z",
+			showCompleted: true,
+			theme: "dark",
+		};
+		expect({before, patched, cleared, after: await request("GET")}).toStrictEqual({
+			before: {status: 200, body: EMPTY},
+			patched: {status: 200, body: written},
+			cleared: {status: 200, body: {...written, dateFormat: null, showCompleted: false}},
+			after: {status: 200, body: {...written, dateFormat: null, showCompleted: false}},
 		});
 	});
 });
@@ -597,9 +638,19 @@ describe("GET /api/v1/account", () => {
 		});
 	});
 
-	it("answers 503 without the internal API", async () => {
-		const {request} = setup(undefined);
+	it("answers the provisioned identity without the internal API, and 503 when there is none", async () => {
+		const identity = {userId: "user-a", email: "a@example.com", joinedAt: "2023-11-14T22:13:20.000Z"};
+		const request = async (ctx: ServerContext) => {
+			const res = await httpAppFor(ctx).fetch(new Request("http://x/api/v1/account"));
+			return {status: res.status, body: (await res.json()) as unknown};
+		};
 
-		await expect(request("GET", "/account")).resolves.toStrictEqual({status: 503, body: {error: NOT_CONFIGURED}});
+		expect({
+			provisioned: await request(standaloneContext(identity)),
+			unprovisioned: await request(standaloneContext()),
+		}).toStrictEqual({
+			provisioned: {status: 200, body: {...identity, fullName: null}},
+			unprovisioned: {status: 503, body: {error: NOT_CONFIGURED}},
+		});
 	});
 });

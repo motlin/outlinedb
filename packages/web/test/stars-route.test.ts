@@ -1,4 +1,4 @@
-import {describe, expect, it, vi} from "vite-plus/test";
+import {afterEach, describe, expect, it, vi} from "vite-plus/test";
 import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import {createHttpApp} from "../src/server/http/app.js";
 import {Ops} from "../src/server/ops/index.js";
@@ -6,9 +6,8 @@ import {starsListWith} from "../src/server/ops/stars.js";
 import {inProcessStore} from "../src/server/store.js";
 import type {ServerContext} from "../src/server/context.js";
 import type {NodeResponse} from "../src/node-types.js";
-
-const NOT_CONFIGURED =
-	"Workflowy internal API is not configured (set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD, or run './bin/run.js internal login')";
+import {standaloneContext} from "./helpers/local-context.js";
+import {httpAppFor} from "./http-app-for.js";
 const P1 = "1a2b3c4d-0000-4000-8000-000000000001";
 const P2 = "5e6f7a8b-0000-4000-8000-000000000002";
 
@@ -16,6 +15,11 @@ const NAMES: Record<string, string> = {[P1]: "<b>Zulu</b>", [P2]: "Bravo"};
 
 function view(projectid: string, searchQuery: string) {
 	return {zoomedProject: {projectid, auxiliaryRootProjectId: "None"}, searchQuery};
+}
+
+async function readResponse(res: Response) {
+	const text = await res.text();
+	return {status: res.status, body: text === "" ? null : (JSON.parse(text) as unknown)};
 }
 
 function setup(meta: Record<string, unknown> | undefined, savedViews?: string) {
@@ -116,11 +120,69 @@ describe("GET /api/v1/stars", () => {
 			},
 		});
 	});
+});
 
-	it("answers 503 without the internal API", async () => {
-		const {request} = setup(undefined);
+describe("stars in a standalone context", () => {
+	afterEach(() => {
+		vi.useRealTimers();
+	});
 
-		await expect(request("GET")).resolves.toStrictEqual({status: 503, body: {error: NOT_CONFIGURED}});
+	it("stars, renames, orders and unstars in the local tables with no internal API", async () => {
+		vi.useFakeTimers({toFake: ["Date"], now: 1_700_000_000_000});
+		const app = httpAppFor(standaloneContext());
+		const request = async (method: string, path = "", body?: unknown) =>
+			readResponse(
+				await app.fetch(
+					new Request(`http://x/api/v1/stars${path}`, {
+						method,
+						headers: {"content-type": "application/json"},
+						...(body === undefined ? {} : {body: JSON.stringify(body)}),
+					}),
+				),
+			);
+		// Each write is its own unit of work; a row may not be replaced in the millisecond it was written.
+		let now = 1_700_000_000_000;
+		const later = () => {
+			now += 1000;
+			vi.setSystemTime(now);
+		};
+
+		const before = await request("GET");
+		const starred = await request("PUT", "/None_%23todo", {nodeId: null, query: "#todo"});
+		later();
+		await request("PUT", "/None", {nodeId: null, query: null});
+		later();
+		await request("PATCH", "/None_%23todo", {name: "Triage"});
+		later();
+		await request("PUT", "/order", {keys: ["None", "None_#todo"]});
+		const afterWrites = await request("GET");
+		later();
+		await request("DELETE", "/None");
+
+		expect({before, starred, afterWrites, afterRemove: await request("GET")}).toStrictEqual({
+			before: {status: 200, body: {stars: [], nodes: []}},
+			starred: {
+				status: 201,
+				body: {key: "None_#todo", nodeId: null, query: "#todo", name: null, position: 0},
+			},
+			afterWrites: {
+				status: 200,
+				body: {
+					stars: [
+						{key: "None", nodeId: null, query: null, name: null, position: 0},
+						{key: "None_#todo", nodeId: null, query: "#todo", name: "Triage", position: 1},
+					],
+					nodes: [],
+				},
+			},
+			afterRemove: {
+				status: 200,
+				body: {
+					stars: [{key: "None_#todo", nodeId: null, query: "#todo", name: "Triage", position: 0}],
+					nodes: [],
+				},
+			},
+		});
 	});
 });
 

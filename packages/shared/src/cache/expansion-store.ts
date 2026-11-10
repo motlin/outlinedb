@@ -1,6 +1,7 @@
-import {eq, inArray} from "drizzle-orm";
-import {expandedNodes} from "../db/schema.js";
+import {and, eq, inArray, like} from "drizzle-orm";
+import {expandedNodes, mirrors as mirrorsTable, nodeContent} from "../db/schema.js";
 import {FAR_FUTURE_DATE} from "../temporal/constants.js";
+import {upstreamExpansionKey as expansionKey, virtualId} from "../workflowy/virtual-id.js";
 import {readImportTime, stampImportTime} from "./account-store.js";
 import type {UnitOfWork} from "./node-composite.js";
 import {closeCurrentVersions, temporalMerge} from "./temporal-merge.js";
@@ -19,6 +20,9 @@ export const EXPANDED_NODES_IMPORT_NAME = "expanded_nodes";
 
 /** Durable Object SQLite caps a statement at 100 bound parameters. */
 const KEY_CHUNK = 90;
+
+/** The id-prefix length of each chunk of a `v_` mirror-instance key. */
+const PREFIX_CHUNK = 4;
 
 /** The stored keys, or undefined before any import seeded them. */
 export function readExpansion(tx: TemporalTransaction): Set<string> | undefined {
@@ -131,4 +135,91 @@ export function applyExpansionDelta(unitOfWork: UnitOfWork, delta: Record<string
 		keys.add(key);
 	}
 	return keys;
+}
+
+/**
+ * Apply an expansion delta in a context with no workflowy.com account, where no import ever seeds the store: an
+ * unseeded store is seeded empty first, so the delta's keys are the whole expanded set.
+ */
+export function applyLocalExpansionDelta(unitOfWork: UnitOfWork, delta: Record<string, boolean>): void {
+	if (readExpansion(unitOfWork.tx) === undefined) {
+		replaceExpansion(unitOfWork, [], Date.now());
+	}
+	applyExpansionDelta(unitOfWork, delta);
+}
+
+/**
+ * Every cached node the stored  expand. Upstream keys expansion by the first 8 chars of the id, so a key
+ * resolves to every cached id it prefixes (twins expand together, as upstream) and keys with no cached node are
+ * dropped; a `v_` key resolves to the mirror instances it names.
+ */
+export function resolveExpandedIds(tx: TemporalTransaction, keys: ReadonlySet<string>): string[] {
+	const plain = tx
+		.select({id: nodeContent.id})
+		.from(nodeContent)
+		.where(eq(nodeContent.systemTo, FAR_FUTURE_DATE))
+		.orderBy(nodeContent.id)
+		.all()
+		.map(({id}) => id)
+		.filter((id) => keys.has(expansionKey(id)));
+	const instances = [...keys].filter((key) => key.startsWith("v_")).flatMap((key) => instanceIds(tx, key));
+	return [...plain, ...instances];
+}
+
+/**
+ * The virtual ids a `v_<child4><mirror4><path>` key expands. The key holds only id prefixes, so it is read back by
+ * walking: from each mirror root whose id starts with the mirror chunk, down the original's rows (children of a
+ * mirror are its original's), following only the rows whose chunk is the key path's next one. A row met when the
+ * walk's path equals the key's path and whose id starts with the child chunk is an expanded instance.
+ */
+function instanceIds(tx: TemporalTransaction, key: string): string[] {
+	const child = key.slice(2, 2 + PREFIX_CHUNK);
+	const mirror = key.slice(2 + PREFIX_CHUNK, 2 + 2 * PREFIX_CHUNK);
+	const path = key.slice(2 + 2 * PREFIX_CHUNK);
+	if (child.length < PREFIX_CHUNK || mirror.length < PREFIX_CHUNK || !path.startsWith(mirror)) {
+		return [];
+	}
+	const roots = tx
+		.select({id: mirrorsTable.mirrorId, originalId: mirrorsTable.originalId})
+		.from(mirrorsTable)
+		.where(and(like(mirrorsTable.mirrorId, `${mirror}%`), eq(mirrorsTable.systemTo, FAR_FUTURE_DATE)))
+		.all();
+	const found: string[] = [];
+	const walk = (rootId: string, rowId: string, walked: string): void => {
+		const childIds = shownChildIds(tx, rowId);
+		if (walked === path) {
+			found.push(
+				...childIds
+					.filter((id) => id.startsWith(child))
+					.map((id) => virtualId({childId: id, mirrorRootId: rootId, path})),
+			);
+			return;
+		}
+		const chunk = path.slice(walked.length, walked.length + PREFIX_CHUNK);
+		for (const id of childIds) {
+			if (id.startsWith(chunk)) {
+				walk(rootId, id, walked + chunk);
+			}
+		}
+	};
+	for (const root of roots) {
+		walk(root.id, root.id, mirror);
+	}
+	return found;
+}
+
+/** The ids of a row's current children, taken from its original when it is a mirror. */
+function shownChildIds(tx: TemporalTransaction, rowId: string): string[] {
+	const original = tx
+		.select({originalId: mirrorsTable.originalId})
+		.from(mirrorsTable)
+		.where(and(eq(mirrorsTable.mirrorId, rowId), eq(mirrorsTable.systemTo, FAR_FUTURE_DATE)))
+		.get();
+	return tx
+		.select({id: nodeContent.id})
+		.from(nodeContent)
+		.where(and(eq(nodeContent.parentId, original?.originalId ?? rowId), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
+		.orderBy(nodeContent.id)
+		.all()
+		.map(({id}) => id);
 }

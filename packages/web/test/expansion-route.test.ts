@@ -1,39 +1,17 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from "vite-plus/test";
 import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import type {ServerContext} from "../src/server/context.js";
+import {standaloneContext} from "./helpers/local-context.js";
 import {httpAppFor} from "./http-app-for.js";
 
-const NOT_CONFIGURED =
-	"Workflowy internal API is not configured (set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD, or run './bin/run.js internal login')";
 const ALPHA = "1a2b3c4d-0000-4000-8000-000000000001";
 const BRAVO = "5e6f7a8b-0000-4000-8000-000000000002";
 const CURRENT = "aaaaaaaaaaaaaaaa";
 const OLDER = "bbbbbbbbbbbbbbbb";
 
-function setup(configured: boolean) {
-	const adapter = {
-		getExpansionChanges: vi.fn<WorkflowyInternalAdapter["getExpansionChanges"]>(() => ({
-			version: CURRENT,
-			expandedIds: [ALPHA],
-		})),
-		setExpanded: vi.fn<WorkflowyInternalAdapter["setExpanded"]>(async () => Promise.resolve()),
-		getLeftBarExpansionKeys: vi.fn<WorkflowyInternalAdapter["getLeftBarExpansionKeys"]>(() => [
-			"leftbar__home__None/x/__abcdefgh",
-		]),
-		setRawExpansionKeys: vi.fn<WorkflowyInternalAdapter["setRawExpansionKeys"]>(async () => Promise.resolve()),
-	};
-	const ctx = {
-		internalAuth: configured ? {} : undefined,
-		internalAdapter: () => (configured ? (adapter as unknown as WorkflowyInternalAdapter) : undefined),
-	} as unknown as ServerContext;
+function requester(ctx: ServerContext) {
 	const app = httpAppFor(ctx);
-	const request = async (
-		method: string,
-		body?: unknown,
-		query = "",
-		path = "",
-		headers: Record<string, string> = {},
-	) => {
+	return async (method: string, body?: unknown, query = "", path = "", headers: Record<string, string> = {}) => {
 		const res = await app.fetch(
 			new Request(`http://x/api/v1/expansion${path}${query}`, {
 				method,
@@ -48,7 +26,39 @@ function setup(configured: boolean) {
 			etag: res.headers.get("etag"),
 		};
 	};
-	return {adapter, request};
+}
+
+function setup() {
+	const adapter = {
+		getExpansionChanges: vi.fn<WorkflowyInternalAdapter["getExpansionChanges"]>(() => ({
+			version: CURRENT,
+			expandedIds: [ALPHA],
+		})),
+		setExpanded: vi.fn<WorkflowyInternalAdapter["setExpanded"]>(async () => Promise.resolve()),
+		getLeftBarExpansionKeys: vi.fn<WorkflowyInternalAdapter["getLeftBarExpansionKeys"]>(() => [
+			"leftbar__home__None/x/__abcdefgh",
+		]),
+		setRawExpansionKeys: vi.fn<WorkflowyInternalAdapter["setRawExpansionKeys"]>(async () => Promise.resolve()),
+	};
+	const ctx = {
+		internalAuth: {},
+		internalAdapter: () => adapter as unknown as WorkflowyInternalAdapter,
+	} as unknown as ServerContext;
+	return {adapter, request: requester(ctx)};
+}
+
+/** A standalone context whose cache holds ALPHA and BRAVO at Home. */
+function standaloneSetup() {
+	const ctx = standaloneContext();
+	for (const id of [ALPHA, BRAVO]) {
+		ctx.cacheService.insertNode(
+			{id, name: id, note: null, parent_id: null, priority: 0, createdAt: 100, modifiedAt: 200},
+			null,
+		);
+	}
+	const expansionWritten = vi.fn<() => void>();
+	ctx.expansionWritten = expansionWritten;
+	return {expansionWritten, request: requester(ctx)};
 }
 
 beforeEach(() => {
@@ -61,7 +71,7 @@ afterEach(() => {
 
 describe("GET /api/v1/expansion", () => {
 	it("returns the stored keys' version and the expanded ids", async () => {
-		const {adapter, request} = setup(true);
+		const {adapter, request} = setup();
 
 		const res = await request("GET");
 
@@ -72,7 +82,7 @@ describe("GET /api/v1/expansion", () => {
 	});
 
 	it("asks the change feed whether the keys differ from ?version=<version>, answering null ids when not", async () => {
-		const {adapter, request} = setup(true);
+		const {adapter, request} = setup();
 		adapter.getExpansionChanges.mockReturnValueOnce({version: CURRENT, expandedIds: null});
 
 		const unchanged = await request("GET", undefined, `?version=${CURRENT}`);
@@ -86,7 +96,7 @@ describe("GET /api/v1/expansion", () => {
 	});
 
 	it("answers 400 for a version that is not one", async () => {
-		const {adapter, request} = setup(true);
+		const {adapter, request} = setup();
 
 		const res = await request("GET", undefined, "?version=yesterday");
 
@@ -95,17 +105,11 @@ describe("GET /api/v1/expansion", () => {
 			calls: [],
 		});
 	});
-
-	it("answers 503 without the internal API", async () => {
-		const {request} = setup(false);
-
-		await expect(request("GET")).resolves.toStrictEqual({status: 503, body: {error: NOT_CONFIGURED}, etag: null});
-	});
 });
 
 describe("PATCH /api/v1/expansion", () => {
 	it("debounces PATCHes into one push 500ms after the last, the latest value per id winning", async () => {
-		const {adapter, request} = setup(true);
+		const {adapter, request} = setup();
 
 		const first = await request("PATCH", {changes: {[ALPHA]: false, [BRAVO]: false}});
 		await vi.advanceTimersByTimeAsync(200);
@@ -123,7 +127,7 @@ describe("PATCH /api/v1/expansion", () => {
 	});
 
 	it("starts a new batch after a flush", async () => {
-		const {adapter, request} = setup(true);
+		const {adapter, request} = setup();
 
 		await request("PATCH", {changes: {[ALPHA]: true}});
 		await vi.advanceTimersByTimeAsync(500);
@@ -134,7 +138,7 @@ describe("PATCH /api/v1/expansion", () => {
 	});
 
 	it.each([[{}], [{changes: {[ALPHA]: "yes"}}], [{changes: [ALPHA]}]])("rejects %j", async (body) => {
-		const {adapter, request} = setup(true);
+		const {adapter, request} = setup();
 
 		const res = await request("PATCH", body);
 		await vi.advanceTimersByTimeAsync(500);
@@ -145,18 +149,8 @@ describe("PATCH /api/v1/expansion", () => {
 		});
 	});
 
-	it("answers 503 without the internal API", async () => {
-		const {request} = setup(false);
-
-		await expect(request("PATCH", {changes: {[ALPHA]: true}})).resolves.toStrictEqual({
-			status: 503,
-			body: {error: NOT_CONFIGURED},
-			etag: null,
-		});
-	});
-
 	it("retries a failed push with the failed changes merged under newer PATCHes", async () => {
-		const {adapter, request} = setup(true);
+		const {adapter, request} = setup();
 		adapter.setExpanded.mockRejectedValueOnce(new Error("push failed"));
 		vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -169,7 +163,7 @@ describe("PATCH /api/v1/expansion", () => {
 	});
 
 	it("retries with the newer value when a later PATCH overrides a failed change", async () => {
-		const {adapter, request} = setup(true);
+		const {adapter, request} = setup();
 		adapter.setExpanded.mockRejectedValueOnce(new Error("push failed"));
 		vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -182,7 +176,7 @@ describe("PATCH /api/v1/expansion", () => {
 	});
 
 	it("retries on a 1s/2s/4s/8s backoff, gives up after 4 retries and logs", async () => {
-		const {adapter, request} = setup(true);
+		const {adapter, request} = setup();
 		adapter.setExpanded.mockRejectedValue(new Error("push failed"));
 		const errors = vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -207,7 +201,7 @@ describe("PATCH /api/v1/expansion", () => {
 
 describe("/api/v1/expansion/left-bar", () => {
 	it("lists the adapter's left-bar keys", async () => {
-		const {request} = setup(true);
+		const {request} = setup();
 
 		await expect(request("GET", undefined, "", "/left-bar")).resolves.toStrictEqual({
 			status: 200,
@@ -217,7 +211,7 @@ describe("/api/v1/expansion/left-bar", () => {
 	});
 
 	it("pushes raw keys once, 500ms after the last PATCH", async () => {
-		const {adapter, request} = setup(true);
+		const {adapter, request} = setup();
 
 		const first = await request("PATCH", {changes: {"leftbar__home__None/x/__abcdefgh": true}}, "", "/left-bar");
 		await vi.advanceTimersByTimeAsync(499);
@@ -232,7 +226,7 @@ describe("/api/v1/expansion/left-bar", () => {
 	});
 
 	it("rejects keys that are not left-bar keys", async () => {
-		const {adapter, request} = setup(true);
+		const {adapter, request} = setup();
 
 		const res = await request("PATCH", {changes: {main__abc: true}}, "", "/left-bar");
 		await vi.advanceTimersByTimeAsync(1000);
@@ -240,6 +234,45 @@ describe("/api/v1/expansion/left-bar", () => {
 		expect({status: res.status, calls: adapter.setRawExpansionKeys.mock.calls}).toStrictEqual({
 			status: 400,
 			calls: [],
+		});
+	});
+});
+
+describe("expansion in a standalone context", () => {
+	it("applies each PATCH at once to the local store and reads it back, with no internal API", async () => {
+		const {expansionWritten, request} = standaloneSetup();
+
+		const before = await request("GET");
+		const patched = await request("PATCH", {changes: {[ALPHA]: true, [BRAVO]: true}});
+		vi.advanceTimersByTime(1000);
+		await request("PATCH", {changes: {[BRAVO]: false}});
+		const after = await request("GET");
+		const unchanged = await request("GET", undefined, `?version=${(after.body as {version: string}).version}`);
+
+		expect({
+			before: before.body,
+			patched,
+			expandedIds: (after.body as {expandedIds: unknown}).expandedIds,
+			unchanged: (unchanged.body as {expandedIds: unknown}).expandedIds,
+			announced: expansionWritten.mock.calls.length,
+		}).toStrictEqual({
+			before: {version: expect.stringMatching(/^[0-9a-f]{16}$/u), expandedIds: []},
+			patched: {status: 204, body: null, etag: null},
+			expandedIds: [ALPHA],
+			unchanged: null,
+			announced: 2,
+		});
+	});
+
+	it("stores raw left-bar keys and lists them back", async () => {
+		const {request} = standaloneSetup();
+
+		await request("PATCH", {changes: {"leftbar__starred__None/x/__abcdefgh": true}}, "", "/left-bar");
+
+		await expect(request("GET", undefined, "", "/left-bar")).resolves.toStrictEqual({
+			status: 200,
+			body: {keys: ["leftbar__starred__None/x/__abcdefgh"]},
+			etag: null,
 		});
 	});
 });

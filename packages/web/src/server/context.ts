@@ -41,6 +41,8 @@ export interface ServerContext {
 	 * undefined when internal-API auth is not configured.
 	 */
 	internalAdapter?: () => WorkflowyInternalAdapter | undefined;
+	/** A standalone context's provisioned identity, or undefined before provisioning or on a host that has none. */
+	identity?: () => LocalIdentity | undefined;
 	/**
 	 * Whether `POST /api/v1/calendar/day/:dateId/ensure` may create day nodes
 	 * (`CALENDAR_ENSURE_ENABLED`, on unless `false`): the M2-74 calendar-adopt
@@ -55,6 +57,13 @@ export interface ServerContext {
 	calendarLayoutEnabled?: boolean;
 	/** The vector index for an embedding model, or undefined when the host has no vector store. */
 	embeddingIndex?: (model: string) => EmbeddingIndex;
+}
+
+/** Whom a standalone context was provisioned for: the sign-in user id and email, and when (ISO). */
+export interface LocalIdentity {
+	userId: string;
+	email: string;
+	joinedAt: string;
 }
 
 /** Hono environment: routers read the {@link ServerContext} via `c.get('ctx')`. */
@@ -73,11 +82,13 @@ export interface ServerContextDeps {
 	internalAuth?: InternalAuth;
 	/** Undefined when the host has no vector store; related notes then answer an empty list. */
 	embeddingIndex?: (model: string) => EmbeddingIndex;
+	/** Undefined when the host provisions no identity (a Node host). */
+	identity?: () => LocalIdentity | undefined;
 }
 
 /** Assemble a {@link ServerContext} from host-supplied dependencies, with no process or filesystem access. */
 export function buildServerContext(deps: ServerContextDeps): ServerContext {
-	const {db, config, ladderEvents, decisions, internalAuth, embeddingIndex} = deps;
+	const {db, config, ladderEvents, decisions, internalAuth, embeddingIndex, identity} = deps;
 	const cacheService = new CacheService(db);
 	const apiKey = config.apiKey;
 	let adapter: WorkflowyInternalAdapter | undefined;
@@ -91,6 +102,7 @@ export function buildServerContext(deps: ServerContextDeps): ServerContext {
 		apiKey,
 		internalAuth,
 		embeddingIndex,
+		identity,
 		calendarEnsureEnabled: config.calendarEnsureEnabled,
 		calendarLayoutEnabled: config.calendarLayoutEnabled,
 		internalAdapter: () => {

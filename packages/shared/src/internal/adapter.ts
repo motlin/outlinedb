@@ -1,4 +1,4 @@
-import {and, eq, inArray, like} from "drizzle-orm";
+import {and, eq, inArray} from "drizzle-orm";
 import type {BaseSQLiteDatabase} from "drizzle-orm/sqlite-core";
 import {z} from "zod";
 import type {CreateMirrorResult} from "../api/workflowy-client.js";
@@ -22,14 +22,15 @@ import {
 import type {AccountSnapshot, StoredAccount} from "../cache/account-store.js";
 import {applyNodeOps, isNodeReplayable} from "../cache/node-log.js";
 import {applyRelationshipOps, isReplayable} from "../cache/relationship-log.js";
-import {applyExpansionDelta, expansionVersion, readExpansion} from "../cache/expansion-store.js";
+import {withRootMetaChanges, withSetting} from "../cache/local-account.js";
+import {applyExpansionDelta, expansionVersion, readExpansion, resolveExpandedIds} from "../cache/expansion-store.js";
 import {advanceTreeTxId, readTreeTxId} from "../cache/tree-transaction.js";
 import type {ItemRelationships} from "../cache/item-relationships.js";
 import {calendarLayoutApplies, mirrors as mirrorsTable, nodeContent} from "../db/schema.js";
 import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 import {HOME_TARGET} from "../types/targets.js";
 import {hasInternalLink, internalLinkShortIds} from "../workflowy/internal-links.js";
-import {upstreamExpansionKey, virtualId} from "../workflowy/virtual-id.js";
+import {upstreamExpansionKey} from "../workflowy/virtual-id.js";
 import {
 	CALENDAR_LEVELS,
 	DEFAULT_CALENDAR_LEVELS,
@@ -168,7 +169,6 @@ function internalParent(parent: PublicParent): string {
 
 /** Upstream's expansion key for a node: the first 8 chars of its id, or `v_<child4><mirror4><path>` for a mirror instance. */
 const expansionKey = upstreamExpansionKey;
-const KEY_CHUNK = 4;
 
 function clampIndex(index: number, length: number): number {
 	return Math.min(Math.max(Math.trunc(index), 0), length);
@@ -1954,7 +1954,7 @@ export class WorkflowyInternalAdapter {
 	 * to workflowy.com. Without a seed this fails loudly ({@link ExpansionNotSeeded}).
 	 */
 	getExpandedIds(): string[] {
-		return this.resolveExpandedIds(this.storedExpansion().keys);
+		return resolveExpandedIds(this.db, this.storedExpansion().keys);
 	}
 
 	/**
@@ -1964,7 +1964,7 @@ export class WorkflowyInternalAdapter {
 	getExpansionChanges(version: string | undefined): ExpansionChanges {
 		const {keys} = this.storedExpansion();
 		const current = expansionVersion(keys);
-		return {version: current, expandedIds: version === current ? null : this.resolveExpandedIds(keys)};
+		return {version: current, expandedIds: version === current ? null : resolveExpandedIds(this.db, keys)};
 	}
 
 	/** The stored expansion, or a loud {@link ExpansionNotSeeded} before any import seeded it. */
@@ -1974,79 +1974,6 @@ export class WorkflowyInternalAdapter {
 			throw loud(new ExpansionNotSeeded());
 		}
 		return {keys};
-	}
-
-	private resolveExpandedIds(keys: Set<string>): string[] {
-		const plain = this.db
-			.select({id: nodeContent.id})
-			.from(nodeContent)
-			.where(eq(nodeContent.systemTo, FAR_FUTURE_DATE))
-			.orderBy(nodeContent.id)
-			.all()
-			.map(({id}) => id)
-			.filter((id) => keys.has(expansionKey(id)));
-		const instances = [...keys].filter((key) => key.startsWith("v_")).flatMap((key) => this.instanceIds(key));
-		return [...plain, ...instances];
-	}
-
-	/**
-	 * The virtual ids a `v_<child4><mirror4><path>` key expands. The key holds only id prefixes, so it is read back by
-	 * walking: from each mirror root whose id starts with the mirror chunk, down the original's rows (children of a
-	 * mirror are its original's), following only the rows whose chunk is the key path's next one. A row met when the
-	 * walk's path equals the key's path and whose id starts with the child chunk is an expanded instance.
-	 */
-	private instanceIds(key: string): string[] {
-		const child = key.slice(2, 2 + KEY_CHUNK);
-		const mirror = key.slice(2 + KEY_CHUNK, 2 + 2 * KEY_CHUNK);
-		const path = key.slice(2 + 2 * KEY_CHUNK);
-		if (child.length < KEY_CHUNK || mirror.length < KEY_CHUNK || !path.startsWith(mirror)) {
-			return [];
-		}
-		const roots = this.db
-			.select({id: mirrorsTable.mirrorId, originalId: mirrorsTable.originalId})
-			.from(mirrorsTable)
-			.where(and(like(mirrorsTable.mirrorId, `${mirror}%`), eq(mirrorsTable.systemTo, FAR_FUTURE_DATE)))
-			.all();
-		const found: string[] = [];
-		const walk = (rootId: string, rowId: string, walked: string): void => {
-			const childIds = this.shownChildIds(rowId);
-			if (walked === path) {
-				found.push(
-					...childIds
-						.filter((id) => id.startsWith(child))
-						.map((id) => virtualId({childId: id, mirrorRootId: rootId, path})),
-				);
-				return;
-			}
-			const chunk = path.slice(walked.length, walked.length + KEY_CHUNK);
-			for (const id of childIds) {
-				if (id.startsWith(chunk)) {
-					walk(rootId, id, walked + chunk);
-				}
-			}
-		};
-		for (const root of roots) {
-			walk(root.id, root.id, mirror);
-		}
-		return found;
-	}
-
-	/** The ids of a row's current children, taken from its original when it is a mirror. */
-	private shownChildIds(rowId: string): string[] {
-		const original = this.db
-			.select({originalId: mirrorsTable.originalId})
-			.from(mirrorsTable)
-			.where(and(eq(mirrorsTable.mirrorId, rowId), eq(mirrorsTable.systemTo, FAR_FUTURE_DATE)))
-			.get();
-		return this.db
-			.select({id: nodeContent.id})
-			.from(nodeContent)
-			.where(
-				and(eq(nodeContent.parentId, original?.originalId ?? rowId), eq(nodeContent.systemTo, FAR_FUTURE_DATE)),
-			)
-			.orderBy(nodeContent.id)
-			.all()
-			.map(({id}) => id);
 	}
 
 	/**
@@ -2149,7 +2076,7 @@ export class WorkflowyInternalAdapter {
 	async setRootMetaValues(changes: MetadataChange[]): Promise<void> {
 		const session = await this.client.bootstrap();
 		const fresh = this.fromSession(session);
-		const {patches, inverse} = buildMetadataChanges(fresh.rootMetadata, changes);
+		const {patches, inverse, snapshot} = withRootMetaChanges(fresh, changes);
 		if (patches.length > 0) {
 			const op = editOp({
 				id: ROOT_PROJECT_ID,
@@ -2160,7 +2087,7 @@ export class WorkflowyInternalAdapter {
 			});
 			await this.pusher.pushAndPoll({ops: [op]});
 		}
-		this.store({...fresh, rootMetadata: applyMetadataPatches(fresh.rootMetadata, patches)});
+		this.store(snapshot);
 	}
 
 	async getSetting(name: string): Promise<unknown> {
@@ -2211,7 +2138,7 @@ export class WorkflowyInternalAdapter {
 		const wireValue = typeof value === "boolean" ? (value ? "yes" : "no") : value;
 		await this.postOk("/change_settings", new URLSearchParams({[name]: wireValue, clientId: session.clientId}));
 		const current = await this.snapshotToWrite();
-		this.store({...current, settings: {...current.settings, [name]: value}});
+		this.store(withSetting(current, name, value));
 	}
 
 	/**
@@ -2225,7 +2152,7 @@ export class WorkflowyInternalAdapter {
 			new URLSearchParams({saved_views_json_delta: delta, clientId: session.clientId}),
 		);
 		const current = await this.snapshotToWrite();
-		this.store({...current, settings: {...current.settings, saved_views_json: json}});
+		this.store(withSetting(current, "saved_views_json", json));
 	}
 
 	/**

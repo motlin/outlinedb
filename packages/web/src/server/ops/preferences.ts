@@ -1,19 +1,21 @@
 /**
  * Account-global preferences stored in upstream's root (Home) metadata and
- * server-saved account settings through the internal API, so they match
- * workflowy.com.
+ * server-saved account settings: through the internal API in a mirror, so they
+ * match workflowy.com, and in the local tables when there is no internal API.
  *
  * `GET /` -> preferences; `PATCH /` with any subset -> the full preferences.
  * A `null` removes the stored value.
  */
 
 import {z} from "zod";
-import type {ServerSetting, WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
+import {LocalAccount} from "@outlinedb/shared/cache";
+import type {ServerSetting} from "@outlinedb/shared/internal";
+import {accountState, pushingAdapter} from "../account-state.js";
+import type {AccountState} from "../account-state.js";
 import {reapplyWeekLayout} from "../calendar-layout.js";
 import {COLOR_VALUE, isColorName} from "../../color-palette.js";
 import {TAG_COLORS} from "../../tag-colors.js";
-import {INTERNAL_API_NOT_CONFIGURED} from "../internal-api-error.js";
-import {defineOp, fail, ok} from "./define.js";
+import {defineOp, ok} from "./define.js";
 
 /** The toolbar's latest color as the client sees it: a text or highlight color from the palette. */
 const LatestColorSchema = z.strictObject({kind: z.enum(["text", "highlight"]), color: z.enum(TAG_COLORS)});
@@ -145,7 +147,7 @@ function changelogReadFrom(raw: unknown): Record<string, boolean> | null {
 const SEARCH_FOR_CHANGES_AFTER_PATH = ["searchForChangesAfter"];
 
 /** A stored client timestamp as an ISO date, or null when it is not a number. */
-async function searchForChangesAfterFrom(adapter: WorkflowyInternalAdapter, raw: unknown): Promise<string | null> {
+async function searchForChangesAfterFrom(adapter: AccountState, raw: unknown): Promise<string | null> {
 	if (typeof raw !== "number") {
 		return null;
 	}
@@ -154,7 +156,7 @@ async function searchForChangesAfterFrom(adapter: WorkflowyInternalAdapter, raw:
 }
 
 /** Upstream's `getClientTimestampForTimestamp`: whole seconds from the join date to `iso`. */
-async function searchForChangesAfterTo(adapter: WorkflowyInternalAdapter, iso: string): Promise<number> {
+async function searchForChangesAfterTo(adapter: AccountState, iso: string): Promise<number> {
 	const {joinedAt} = await adapter.getAccount();
 	return Math.floor((Date.parse(iso) - joinedAt.getTime()) / 1000);
 }
@@ -206,7 +208,7 @@ function mfaFrom(raw: unknown): {enabled: boolean} | null {
 }
 
 /** Read the preferences, treating missing or mistyped values as null (false for the flag). */
-async function readPreferences(adapter: WorkflowyInternalAdapter): Promise<Preferences> {
+async function readPreferences(adapter: AccountState): Promise<Preferences> {
 	const [
 		rootValues,
 		latestColor,
@@ -266,15 +268,12 @@ async function readPreferences(adapter: WorkflowyInternalAdapter): Promise<Prefe
 	};
 }
 
-const notConfigured = () => fail(503, {error: INTERNAL_API_NOT_CONFIGURED});
-
 /** The account-global preferences. */
 export const preferencesGet = defineOp({
 	input: z.object({}),
 	output: PreferencesSchema,
 	async run(ctx) {
-		const adapter = ctx.internalAdapter?.();
-		return adapter ? ok(await readPreferences(adapter)) : notConfigured();
+		return ok(await readPreferences(accountState(ctx)));
 	},
 });
 
@@ -283,18 +282,15 @@ export const preferencesPatch = defineOp({
 	input: z.object({patch: PreferencesPatchSchema}),
 	output: PreferencesSchema,
 	async run(ctx, {patch}) {
-		const adapter = ctx.internalAdapter?.();
-		if (!adapter) {
-			return notConfigured();
-		}
+		const adapter = accountState(ctx);
 		const previousWeekStartDay =
 			patch.weekStartDay === undefined ? undefined : await adapter.getRootMeta(PATHS.weekStartDay);
-		const changes: Parameters<WorkflowyInternalAdapter["setRootMetaValues"]>[0] = KEYS.filter(
-			(key) => key in patch,
-		).map((key) => ({
-			path: PATHS[key],
-			value: patch[key] ?? undefined,
-		}));
+		const changes: Parameters<AccountState["setRootMetaValues"]>[0] = KEYS.filter((key) => key in patch).map(
+			(key) => ({
+				path: PATHS[key],
+				value: patch[key] ?? undefined,
+			}),
+		);
 		if (patch.latestColor !== undefined) {
 			changes.push({
 				path: LATEST_COLOR_PATH,
@@ -310,26 +306,32 @@ export const preferencesPatch = defineOp({
 						: await searchForChangesAfterTo(adapter, patch.searchForChangesAfter),
 			});
 		}
+		const settings: [ServerSetting, string | boolean][] = [
+			...FLAG_KEYS.flatMap((key): [ServerSetting, boolean][] => {
+				const value = patch[key];
+				return value === undefined ? [] : [[SETTINGS[key], value]];
+			}),
+			...(patch.theme === undefined ? [] : [[STRING_SETTINGS.theme, patch.theme] as [ServerSetting, string]]),
+			...(patch.font === undefined ? [] : [[STRING_SETTINGS.font, patch.font] as [ServerSetting, string]]),
+		];
+		const internal = pushingAdapter(ctx);
+		if (internal === undefined) {
+			// One unit of work: separate writes would replace the settings row within its own millisecond.
+			new LocalAccount(ctx.db).change(changes, settings);
+			return ok(await readPreferences(adapter));
+		}
 		if (changes.length > 0) {
-			await adapter.setRootMetaValues(changes);
+			await internal.setRootMetaValues(changes);
 		}
-		for (const key of FLAG_KEYS) {
-			const value = patch[key];
-			if (value !== undefined) {
-				await adapter.setSetting(SETTINGS[key], value);
-			}
+		for (const [name, value] of settings) {
+			await internal.setSetting(name, value);
 		}
-		if (patch.theme !== undefined) {
-			await adapter.setSetting(STRING_SETTINGS.theme, patch.theme);
-		}
-		if (patch.font !== undefined) {
-			await adapter.setSetting(STRING_SETTINGS.font, patch.font);
-		}
+		// Re-laying out the calendar's weeks writes through the internal API; without one the layout stays as it is.
 		if (
 			patch.weekStartDay !== undefined &&
 			(patch.weekStartDay ?? undefined) !== (previousWeekStartDay ?? undefined)
 		) {
-			await reapplyWeekLayout(ctx, adapter);
+			await reapplyWeekLayout(ctx, internal);
 		}
 		return ok(await readPreferences(adapter));
 	},

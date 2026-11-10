@@ -2,7 +2,8 @@
 
 /** `assistantNames`: settings `ai.assistants` names by system user id, which upstream merges into its participant names. */
 export type MentionAccount = {
-	userId: number;
+	/** A workflowy.com account's numeric id, or a standalone profile's id. */
+	userId: number | string;
 	fullName: string | null;
 	joinedAt?: string;
 	assistantNames?: Record<string, string>;

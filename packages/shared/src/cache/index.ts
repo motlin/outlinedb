@@ -88,7 +88,15 @@ export {
 	writeAccountSnapshot,
 	writeEnabledFeatures,
 } from "./account-store.js";
-export {EXPANDED_NODES_IMPORT_NAME, expansionVersion, readExpansion, replaceExpansion} from "./expansion-store.js";
+export {
+	applyLocalExpansionDelta,
+	EXPANDED_NODES_IMPORT_NAME,
+	expansionVersion,
+	readExpansion,
+	replaceExpansion,
+	resolveExpandedIds,
+} from "./expansion-store.js";
+export {LocalAccount, withRootMetaChanges, withSetting} from "./local-account.js";
 export {markWhatsNewRead, readWhatsNewReads} from "./whats-new-store.js";
 export {accountVersion, readAccountState, writeAccountState} from "./account-seed.js";
 export {effectiveCompletedAt} from "./effective-completion.js";
