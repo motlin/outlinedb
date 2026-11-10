@@ -92,7 +92,14 @@ function setup(accountExpanded?: readonly string[]) {
 			sqlite.prepare("DELETE FROM node_metadata WHERE node_id = ?").run(id);
 		}
 	};
-	return {post, mirror, add};
+	/** Make `id` (a new child of `targetId`) `targetId`'s references root. */
+	const referencesRoot = (id: string, targetId: string) => {
+		cacheService.insertNode(apiNode(id, targetId, 99), targetId);
+		sqlite
+			.prepare("INSERT INTO references_roots (node_id, system_from, system_to) VALUES (?, ?, ?)")
+			.run(id, "2000-01-01T00:00:00.000Z", FAR_FUTURE_DATE);
+	};
+	return {post, mirror, add, referencesRoot};
 }
 
 interface ListBody {
@@ -107,6 +114,47 @@ function lists(body: {lists: ListBody[]}): [string | null, string[], unknown][] 
 }
 
 const NO_BACKLINKS = {rootId: null, items: []};
+
+/**
+ * A Backlinks section item as the view sends it: the item row (named after its source, priority 9 from `mirror`)
+ * carrying its source's text, completion and child flags. A crumb given as a string is a node named after its id.
+ */
+function backlinkItem(
+	id: string,
+	rootId: string,
+	sourceId: string,
+	{
+		completedAt = null,
+		children = false,
+		crumbs,
+	}: {completedAt?: number | null; children?: boolean; crumbs: (string | {id: string; name: string})[]},
+) {
+	return {
+		node: {
+			id,
+			parent_id: rootId,
+			name: sourceId,
+			note: null,
+			priority: 9,
+			data: {layoutMode: null},
+			numberedStart: null,
+			createdAt: 100,
+			modifiedAt: 200,
+			completedAt,
+			hasChildren: children,
+			hasUncompletedChildren: children,
+			isMirror: true,
+			hasMirrors: false,
+			originalNodeId: sourceId,
+			attachment: null,
+			defaultToBottom: false,
+			calendar: null,
+			table: null,
+		},
+		sourceId,
+		crumbs: crumbs.map((crumb) => (typeof crumb === "string" ? {id: crumb, name: crumb} : crumb)),
+	};
+}
 
 describe("POST /api/v1/nodes/view", () => {
 	it("lists the root's and every expanded rendered row's children depth-first, with their Backlinks", async () => {
@@ -266,6 +314,67 @@ describe("POST /api/v1/nodes/view", () => {
 		});
 	});
 
+	it("sends each listed parent's whole Backlinks section", async () => {
+		const {post, mirror, add, referencesRoot} = setup();
+		add("D1", "B1", 0);
+		add("D2", "D1", 0);
+		add("D3", "D2", 0);
+		add("Cmp", "Beta", 5, {completedAt: 300});
+		// Alpha: a deep source, a completed source, and an item whose source is not cached.
+		referencesRoot("RA", "Alpha");
+		mirror("IA1", "RA", "D3");
+		mirror("IA2", "RA", "Cmp");
+		mirror("IA3", "RA", "Nope");
+		// Beta's references root holds a plain row too, the source of A1's only backlink: its crumbs show the label.
+		referencesRoot("RB", "Beta");
+		mirror("IB", "RB", "D2");
+		add("Nested", "RB", 0);
+		referencesRoot("RA1", "A1");
+		mirror("IX", "RA1", "Nested");
+		// B1's section is empty.
+		referencesRoot("RB1", "B1");
+		mirror("M", "Beta", "Alpha");
+
+		const {body} = await post({
+			rootId: null,
+			expandedIds: ["Alpha", "A1", "Beta", "B1", "M"],
+			limit: 100,
+			showCompleted: true,
+		});
+
+		const alpha = {
+			rootId: "RA",
+			items: [
+				backlinkItem("IA1", "RA", "D3", {crumbs: ["Beta", "B1", "D1", "D2"]}),
+				backlinkItem("IA2", "RA", "Cmp", {completedAt: 300, crumbs: ["Beta"]}),
+			],
+		};
+		expect(body.lists.map((list: ListBody) => [list.parentId, list.backlinks])).toStrictEqual([
+			[null, null],
+			["Alpha", alpha],
+			[
+				"A1",
+				{
+					rootId: "RA1",
+					items: [
+						backlinkItem("IX", "RA1", "Nested", {
+							crumbs: ["Beta", {id: "RB", name: "1 Backlink"}],
+						}),
+					],
+				},
+			],
+			[
+				"Beta",
+				{
+					rootId: "RB",
+					items: [backlinkItem("IB", "RB", "D2", {children: true, crumbs: ["Beta", "B1", "D1"]})],
+				},
+			],
+			["B1", {rootId: "RB1", items: []}],
+			["M", alpha],
+		]);
+	});
+
 	it("answers 404 for an unresolvable short root id and 400 for a malformed body", async () => {
 		const {post} = setup();
 
@@ -290,7 +399,7 @@ const DURABLE_OBJECT_PARAMETER_CAP = 100;
  * row under Home's `Sources > Group`. Statements past the Durable Object's bound-parameter cap fail the way workerd
  * does, and every prepared statement during a request is counted.
  */
-function wideSetup(width: number, depth: number, {backlinks = false} = {}) {
+function wideSetup(width: number, depth: number, {backlinks = false, sourceDepth = 2} = {}) {
 	const sqlite = new DatabaseConstructor(":memory:");
 	const db = drizzle(sqlite, {schema});
 	migrate(db, {migrationsFolder});
@@ -298,10 +407,16 @@ function wideSetup(width: number, depth: number, {backlinks = false} = {}) {
 	cacheService.insertNode(apiNode("Root", null, 0), null);
 	cacheService.insertNode(apiNode("Sources", null, 1), null);
 	cacheService.insertNode(apiNode("Group", "Sources", 0), "Sources");
+	// Every source sits `sourceDepth` levels under Home: Sources > Group > Group-2 > ...
+	let sourceParent = "Group";
+	for (let level = 2; level < sourceDepth; level += 1) {
+		cacheService.insertNode(apiNode(`Group-${level}`, sourceParent, 0), sourceParent);
+		sourceParent = `Group-${level}`;
+	}
 	const live = ["2000-01-01T00:00:00.000Z", FAR_FUTURE_DATE];
 	/** Give `target` a references root holding a backlink item from a new source row. */
 	const backlinkTo = (target: string) => {
-		cacheService.insertNode(apiNode(`S-${target}`, "Group", 0), "Group");
+		cacheService.insertNode(apiNode(`S-${target}`, sourceParent, 0), sourceParent);
 		cacheService.insertNode(apiNode(`R-${target}`, target, 99), target);
 		cacheService.insertNode(apiNode(`I-${target}`, `R-${target}`, 0), `R-${target}`);
 		sqlite
@@ -378,15 +493,16 @@ describe("POST /api/v1/nodes/view deep fetch", () => {
 		});
 	});
 
-	it("reads every expanded row's Backlinks section in the same statements however many rows have one", async () => {
+	it("reads every expanded row's Backlinks section in one more statement however many rows have one or how deep their sources sit", async () => {
 		const narrow = await wideSetup(3, 2, {backlinks: true}).view();
 		const wide = await wideSetup(150, 2, {backlinks: true}).view();
+		const deepSources = await wideSetup(3, 2, {backlinks: true, sourceDepth: 8}).view();
 
 		expect({
-			statements: [narrow.statements, wide.statements],
+			statements: [narrow.statements, wide.statements, deepSources.statements],
 			last: wide.lists.at(-1),
 		}).toStrictEqual({
-			statements: [11, 11],
+			statements: [2, 2, 2],
 			last: {
 				parentId: "P149-1",
 				nodes: [],

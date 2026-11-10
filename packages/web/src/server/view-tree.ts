@@ -8,14 +8,19 @@
  * (`expansionId` in `mirror-path.ts`): a row's key is its id outside any mirror and the instance key inside one, where
  * an instance is the outermost mirror root plus the first four characters of each row on the way down. The walk is
  * nested in the shaped query's criteria, so the ids it produces are never bound back.
+ *
+ * The listed rows' Backlinks sections are one more statement nesting the same walk: every backlink item under a list
+ * parent's references root, shaped with its source's text, completion, child flags and ancestor crumbs.
  */
 import {currentVersion, mirrorOriginalText, relationalRowId} from "@outlinedb/shared/cache";
 import {mirrors, nodeContent, nodeTableCellSizes} from "@outlinedb/shared/db";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import type {Node} from "@outlinedb/shared/types";
 import {and, eq, isNull, or, sql} from "drizzle-orm";
+import {z} from "zod";
 import type {SQL} from "drizzle-orm";
-import type {CalendarInfo, NodeAttachment, NodeResponse} from "../node-types.js";
+import {backlinksLabel} from "../backlinks-label.js";
+import type {BacklinkItem, CalendarInfo, NodeAttachment, NodeResponse} from "../node-types.js";
 import {addNamedCalendarDays, calendarInfoOfRow} from "./calendar-day.js";
 import type {ServerContext} from "./context.js";
 import {displayMetadataFields, nodeToRestDto} from "./ops/nodes-shared.js";
@@ -335,4 +340,131 @@ export function readViewTree(ctx: ServerContext, query: ViewTreeQuery): ViewTree
 		childrenOf: (parentId) => lists.get(parentId) ?? [],
 		referencesRootOf,
 	};
+}
+
+/** The parents whose lists the view sends (see {@link listParents}), as a parenthesized subquery for an `IN`. */
+export function viewListParents(query: ViewTreeQuery): SQL {
+	return sql`(${listParents(query)})`;
+}
+
+/** The source of the backlink item `id`: its current mirror row's original. */
+function backlinkSource(id: SQL): SQL<string | null> {
+	return sql<
+		string | null
+	>`(SELECT bs.original_id FROM mirrors bs WHERE bs.mirror_id = ${id} AND bs.system_to = ${LIVE} LIMIT 1)`;
+}
+
+/**
+ * The ancestors of the node `id` (not itself), as one JSON array of `{id, name, depth, backlinks}`: a current
+ * ancestor chain walked up `parent_id` whatever its depth, stopping at a missing parent or a cycle. `name` is a
+ * mirror's original's; `backlinks` is a references root's backlink item count (null for any other node), counting
+ * only items whose source is current.
+ */
+function ancestorCrumbsSql(id: SQL): SQL<string> {
+	const name = sql`CASE WHEN EXISTS (SELECT 1 FROM mirrors am WHERE am.mirror_id = a.id AND am.system_to = ${LIVE}) THEN ${mirrorOriginalText(sql`a.id`, "name")} ELSE a.name END`;
+	return sql<string>`(WITH RECURSIVE up(id, parent_id, name, depth, seen) AS (
+			SELECT a.id, a.parent_id, a.name, 0, '/' || a.id || '/' FROM node_content a WHERE a.id = ${id} AND a.system_to = ${LIVE}
+			UNION ALL
+			SELECT a.id, a.parent_id, ${name}, up.depth + 1, up.seen || a.id || '/'
+			FROM up JOIN node_content a ON a.id = up.parent_id AND a.system_to = ${LIVE}
+			WHERE instr(up.seen, '/' || a.id || '/') = 0
+		)
+		SELECT json_group_array(json_object('id', up.id, 'name', up.name, 'depth', up.depth, 'backlinks',
+			CASE WHEN up.id IN ${REFERENCES_ROOTS} THEN (SELECT count(*) FROM node_content ci
+				JOIN mirrors cm ON cm.mirror_id = ci.id AND cm.system_to = ${LIVE}
+				JOIN node_content co ON co.id = cm.original_id AND co.system_to = ${LIVE}
+				WHERE ci.parent_id = up.id AND ci.system_to = ${LIVE}) END))
+		FROM up WHERE up.depth > 0)`;
+}
+
+/**
+ * The backlink items under the references roots of `targets` (a parenthesized subquery or list of node ids), in one
+ * statement: each current item whose source is current, shaped with its source's text, completion, child flags and
+ * ancestor crumbs through correlated subqueries.
+ */
+function selectBacklinkItems(ctx: ServerContext, targets: SQL) {
+	const source = backlinkSource(relationalRowId);
+	return ctx.db.query.nodeContent
+		.findMany({
+			where: and(
+				currentVersion(nodeContent),
+				sql`${nodeContent.parentId} IN (SELECT r.id FROM node_content r WHERE r.parent_id IN ${targets} AND r.system_to = ${LIVE} AND r.id IN ${REFERENCES_ROOTS})`,
+				sql`EXISTS (SELECT 1 FROM mirrors im JOIN node_content s ON s.id = im.original_id AND s.system_to = ${LIVE} WHERE im.mirror_id = ${relationalRowId} AND im.system_to = ${LIVE})`,
+			),
+			with: {metadata: true},
+			extras: {
+				sourceId: source.as("source_id"),
+				sourceName: mirrorOriginalText(relationalRowId, "name").as("source_name"),
+				sourceNote: mirrorOriginalText(relationalRowId, "note").as("source_note"),
+				sourceCompletedAt: originalCompletedAt(relationalRowId).as("source_completed_at"),
+				sourceHasChildren: childFlagSql(source, false).as("source_has_children"),
+				sourceHasUncompletedChildren: childFlagSql(source, true).as("source_has_uncompleted_children"),
+				crumbs: ancestorCrumbsSql(source).as("crumbs"),
+			},
+		})
+		.sync();
+}
+
+/** The JSON array {@link ancestorCrumbsSql} returns. */
+const CrumbRowsSchema = z.array(
+	z.object({id: z.string(), name: z.string().nullable(), depth: z.number(), backlinks: z.number().nullable()}),
+);
+
+/**
+ * The Backlinks items of every references root under `targets` (see {@link selectBacklinkItems}), keyed by the
+ * references root, in sibling order. Each item is a mirror row of its source: the source's text, completion and child
+ * flags, with the source's ancestors from the top down as crumbs (a references root shown by its label).
+ */
+export function readBacklinkItems(ctx: ServerContext, targets: SQL): Map<string, BacklinkItem[]> {
+	const byRoot = new Map<string, {node: Node; item: BacklinkItem}[]>();
+	for (const row of selectBacklinkItems(ctx, targets)) {
+		const {sourceId, parentId} = row;
+		if (sourceId === null || parentId === null) {
+			continue;
+		}
+		const metadata = nullable(row.metadata);
+		const node: Node = {
+			id: row.id,
+			shortId: metadata?.shortId ?? null,
+			parentId,
+			name: row.sourceName,
+			note: row.sourceNote,
+			priority: metadata?.priority ?? 0,
+			layoutMode: metadata?.layoutMode ?? null,
+			createdAt: metadata?.createdAt ?? null,
+			modifiedAt: metadata?.modifiedAt ?? null,
+			completedAt: row.sourceCompletedAt === null ? null : new Date(row.sourceCompletedAt * 1000),
+			collapsed: false,
+			mirror: {isMirror: true, originalNodeId: sourceId},
+			systemFrom: row.systemFrom,
+			systemTo: row.systemTo,
+		};
+		const crumbs = CrumbRowsSchema.parse(JSON.parse(row.crumbs))
+			.toSorted((a, b) => b.depth - a.depth)
+			.map((crumb) => ({
+				id: crumb.id,
+				name: crumb.backlinks === null ? (crumb.name ?? "") : backlinksLabel(crumb.backlinks),
+			}));
+		const items = byRoot.get(parentId) ?? [];
+		items.push({
+			node,
+			item: {
+				node: nodeToRestDto(node, {
+					hasChildren: Boolean(row.sourceHasChildren),
+					hasUncompletedChildren: Boolean(row.sourceHasUncompletedChildren),
+					name: node.name,
+					note: node.note,
+				}),
+				sourceId,
+				crumbs,
+			},
+		});
+		byRoot.set(parentId, items);
+	}
+	return new Map(
+		[...byRoot].map(([rootId, items]) => [
+			rootId,
+			items.toSorted((a, b) => compareSiblings(a.node, b.node)).map(({item}) => item),
+		]),
+	);
 }

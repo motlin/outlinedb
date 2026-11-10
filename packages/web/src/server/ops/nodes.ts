@@ -5,9 +5,9 @@ import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import type {Node} from "@outlinedb/shared/types";
 import {HOME_TARGET} from "@outlinedb/shared/types";
 import {isShortId, parseVirtualShortId} from "@outlinedb/shared/workflowy";
-import {and, eq} from "drizzle-orm";
+import {and, eq, sql} from "drizzle-orm";
 import type {
-	BacklinkCrumb,
+	BacklinkItem,
 	BacklinksResponse,
 	CalendarInfo,
 	FoundDatesResponse,
@@ -16,14 +16,7 @@ import type {
 	OutlineViewList,
 	OutlineViewResponse,
 } from "../../node-types.js";
-import {
-	childFlags,
-	currentBacklinkSourcesUnder,
-	findReferencesRoot,
-	notReferencesRoot,
-	referencesRootLabel,
-	referencesRootLabels,
-} from "../backlinks.js";
+import {childFlags, findReferencesRoot, notReferencesRoot, referencesRootLabel} from "../backlinks.js";
 import {loadCalendarInfo} from "../calendar-day.js";
 import {findFoundDates} from "../calendar-found.js";
 import type {ServerContext} from "../context.js";
@@ -31,7 +24,7 @@ import type {MirrorInstance} from "../../mirror-path.js";
 import {childInstance, expansionId} from "../../mirror-path.js";
 import {INTERNAL_API_NOT_CONFIGURED} from "../internal-api.js";
 import {changeWatermark, changesAfter, liveParents, readConsistently} from "../system-changes.js";
-import {readViewTree} from "../view-tree.js";
+import {readBacklinkItems, readViewTree, viewListParents} from "../view-tree.js";
 import type {ViewExpansion} from "../view-tree.js";
 import {defineOp, fail, ok, toJson} from "./define.js";
 import {
@@ -60,7 +53,6 @@ import {
 	resolveMirrorToOriginal,
 	resolveMirrorsToOriginals,
 	resolveNodeId,
-	toUnixSeconds,
 } from "./nodes-shared.js";
 
 const IdInput = z.object({id: z.string()});
@@ -225,7 +217,8 @@ export const nodesView = defineOp({
 		const {expansion, isExpanded} = viewExpansion(ctx, body.expandedIds);
 		// Every list the view sends, chosen and read by one statement; visit only assembles them, agreeing with the
 		// statement's walk about order, budget and expansion.
-		const tree = readViewTree(ctx, {rootId: resolvedRoot, expansion, limit, showCompleted});
+		const query = {rootId: resolvedRoot, expansion, limit, showCompleted};
+		const tree = readViewTree(ctx, query);
 		// Each list sent, with the node whose children it holds (a mirror's original; null for Home).
 		const lists: {list: OutlineViewList; original: string | null}[] = [];
 		let used = 0;
@@ -252,18 +245,19 @@ export const nodesView = defineOp({
 		};
 		visit(rootId, tree.rootListParent, null);
 		// Each listed node's Backlinks section (Home has none; a node with no references root has an empty one), all
-		// read in one batch.
-		const sections = await readBacklinksOfMany(
-			ctx,
-			new Map(
-				lists.flatMap(({original}) => {
-					const root = original === null ? undefined : tree.referencesRootOf.get(original);
-					return original === null || root === undefined ? [] : [[original, root] as const];
-				}),
-			),
-		);
+		// read by one statement nesting the tree's list parents, and only when some listed node has a references root.
+		const itemsByRoot =
+			tree.referencesRootOf.size === 0
+				? new Map<string, BacklinkItem[]>()
+				: readBacklinkItems(ctx, viewListParents(query));
 		for (const {list, original} of lists) {
-			list.backlinks = original === null ? null : (sections.get(original) ?? {rootId: null, items: []});
+			const root = original === null ? undefined : tree.referencesRootOf.get(original);
+			list.backlinks =
+				original === null
+					? null
+					: root === undefined
+						? {rootId: null, items: []}
+						: {rootId: root, items: itemsByRoot.get(root) ?? []};
 		}
 		const foundDates =
 			tree.root === undefined ? null : await readFoundDates(ctx, tree.root, tree.rootCalendar ?? null);
@@ -526,112 +520,23 @@ export const nodesAncestors = defineOp({
 export const nodesBacklinks = defineOp({
 	input: IdInput,
 	output: BacklinksResponseSchema,
-	async run(ctx, {id: rawId}) {
+	run(ctx, {id: rawId}) {
 		const id = resolveNodeId(ctx, rawId);
 		if (!id) {
 			return fail(404, {error: "Node not found"});
 		}
-		return ok(toJson(await readBacklinks(ctx, id)));
+		return ok(toJson(readBacklinks(ctx, id)));
 	},
 });
 
 /** The Backlinks section of the resolved node `id` (a mirror shows its original's). */
-async function readBacklinks(ctx: ServerContext, id: string): Promise<BacklinksResponse> {
+function readBacklinks(ctx: ServerContext, id: string): BacklinksResponse {
 	const original = resolveMirrorToOriginal(ctx, id);
 	const rootId = findReferencesRoot(ctx.db, original);
 	if (rootId === null) {
 		return {rootId: null, items: []};
 	}
-	return (await readBacklinksOfMany(ctx, new Map([[original, rootId]]))).get(original) ?? {rootId, items: []};
-}
-
-/**
- * The Backlinks sections of many nodes, keyed by node, from each node's references root (`rootOf`). Each concern
- * (items, their sources, child flags, crumb labels) is one query for the whole batch, and the crumbs' ancestors one
- * query per ancestor level, so the statement count does not grow with the number of sections or items.
- */
-async function readBacklinksOfMany(
-	ctx: ServerContext,
-	rootOf: ReadonlyMap<string, string>,
-): Promise<Map<string, BacklinksResponse>> {
-	const {db} = ctx;
-	const rootIds = [...new Set(rootOf.values())];
-	const sourceByItem = currentBacklinkSourcesUnder(db, rootIds);
-	const itemsByRoot = new NodeTreeReader(ctx.cacheService).readChildrenOfMany(rootIds);
-	const entriesByRoot = new Map(
-		rootIds.map((rootId) => [
-			rootId,
-			(itemsByRoot.get(rootId) ?? []).flatMap((item) => {
-				const sourceId = sourceByItem.get(item.id);
-				return sourceId === undefined ? [] : [{item, sourceId}];
-			}),
-		]),
-	);
-	const sourceIds = [...new Set([...entriesByRoot.values()].flat().map(({sourceId}) => sourceId))];
-	const sources = new Map(
-		(await new NodeTreeReader(ctx.cacheService).readNodes(sourceIds, {depth: 0})).map((source) => [
-			source.id,
-			source,
-		]),
-	);
-	const flags = childFlags(db, sourceIds);
-	const ancestors = loadAncestors(ctx, sourceIds);
-	const labels = referencesRootLabels(db, [...ancestors.keys()]);
-
-	const crumbsOf = (sourceId: string): BacklinkCrumb[] =>
-		ancestorChain(sourceId, (linkId) => ancestors.get(linkId))
-			.slice(1)
-			.toReversed()
-			.map((ancestor) => ({id: ancestor.id, name: labels.get(ancestor.id) ?? ancestor.name ?? ""}));
-
-	const sectionOf = (rootId: string): BacklinksResponse => ({
-		rootId,
-		items: (entriesByRoot.get(rootId) ?? []).flatMap(({item, sourceId}) => {
-			const source = sources.get(sourceId);
-			if (!source) {
-				return [];
-			}
-			return [
-				{
-					node: {
-						...nodeToRestDto(item, {
-							hasChildren: flags.withChildren.has(sourceId),
-							hasUncompletedChildren: flags.withUncompletedChildren.has(sourceId),
-							name: source.name,
-							note: source.note,
-						}),
-						completedAt: toUnixSeconds(source.completedAt),
-						isMirror: true,
-						originalNodeId: sourceId,
-					},
-					sourceId,
-					crumbs: crumbsOf(sourceId),
-				},
-			];
-		}),
-	});
-	return new Map([...rootOf].map(([nodeId, rootId]) => [nodeId, sectionOf(rootId)]));
-}
-
-/** `ids` and all their ancestors, by id, read one ancestor level per query for the whole batch. */
-function loadAncestors(ctx: ServerContext, ids: readonly string[]): Map<string, Node> {
-	const reader = new NodeReader(ctx.db);
-	const found = new Map<string, Node>();
-	let frontier = [...new Set(ids)];
-	while (frontier.length > 0) {
-		const level = reader.getMany(frontier);
-		for (const [id, node] of level) {
-			found.set(id, node);
-		}
-		frontier = [
-			...new Set(
-				[...level.values()].flatMap((node) =>
-					node.parentId === null || found.has(node.parentId) ? [] : [node.parentId],
-				),
-			),
-		];
-	}
-	return found;
+	return {rootId, items: readBacklinkItems(ctx, sql`(${original})`).get(rootId) ?? []};
 }
 
 // GET /api/v1/nodes/:id/found-dates - A day page's Found Dates section: the nodes
