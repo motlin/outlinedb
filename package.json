@@ -43,8 +43,6 @@
 		"eval:orchestrator": "vp test run --config vitest.config.evals.ts --test-timeout 600000 test/evals/behavioral/scenarios/orchestrator",
 		"eval:e2e": "vp test run --config vitest.config.evals.ts --test-timeout 900000 test/evals/behavioral/scenarios/e2e",
 		"eval:behavioral": "vp test run --config vitest.config.evals.ts --test-timeout 900000 test/evals/behavioral",
-		"version": "oclif readme && git add README.md",
-		"prepublishOnly": "pnpm run build && pnpm test && pnpm run oxlint",
 		"prepare": "VITE_GIT_HOOKS=0 vp config"
 	},
 	"dependencies": {

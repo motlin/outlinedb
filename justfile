@@ -152,6 +152,16 @@ fallow-check: install
 build-shared: install
     vp run --filter @outlinedb/shared build
 
+# Regenerate the oclif usage and command sections of README.md from the built CLI
+[group('build')]
+readme: build
+    scripts/readme.sh
+
+# Fail when README.md's oclif sections differ from what `just readme` would write
+[group('lint')]
+readme-check: build
+    scripts/readme.sh --check
+
 # `vp run --filter @outlinedb/cli prepack`
 [group('build')]
 manifest: install
@@ -206,7 +216,7 @@ verify quick="": build-shared
     # Fixers rewrite files in place, so they share one serial branch. Fallow goes first because its fix rewrites package.json with 2-space indentation, which check's formatter re-tabs.
     branches=(
         "fallow check _pre-commit-unformatted"
-        "typecheck build manifest eval-structural"
+        "typecheck build manifest readme-check eval-structural"
         "test-plugins"
         {{ if quick == "true" { "" } else { '"test"' } }}
     )

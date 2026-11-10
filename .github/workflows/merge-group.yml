@@ -59,6 +59,7 @@ jobs:
           path: ~/.local/share/pnpm/store
           key: pnpm-${{ hashFiles('pnpm-lock.yaml') }}
       - run: just build
+      - run: just --no-deps readme-check
 
   test:
     runs-on: ubuntu-latest
