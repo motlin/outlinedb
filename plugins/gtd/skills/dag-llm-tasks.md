@@ -38,9 +38,9 @@ LLM Tasks:
 The schema is strict:
 
 - Root children are exactly `Import`, `Prep`, and `Presentation`.
-- Every prep task has at most one plugin command and exactly one `<time>` element. A prep task with no command (plain instructions or inline shell) takes its slug from its name.
+- Every prep task has one `<time>` element and at most one plugin command. A task with no plugin command is inline: its child nodes are the whole instructions, scripts included as `code` text. Personal tasks belong inline in Workflowy, not as plugin commands.
 - A paired presentation task has the identical date-stripped name and no date.
-- The prep command supplies the artifact slug after removing a trailing `-prep` or `-auto`; presentation inherits that slug.
+- The prep command supplies the artifact slug after removing a trailing `-prep` or `-auto`; an inline task's slug is the kebab-case of its name. Presentation inherits that slug.
 - `Interval: <amount><unit>` is optional on prep and defaults to `1d`; units are `d`, `m`, and `y`.
 - `Auto` marks prep that completes without presentation. Auto task names must not appear under `Presentation`.
 - `Serial: <name>` groups prep tasks that must run top-to-bottom. Other direct children of `Prep` are independent parallel branches.

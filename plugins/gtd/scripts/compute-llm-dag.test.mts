@@ -244,3 +244,32 @@ test("computeLlmDag rejects obsolete Key markers", () => {
 
 	assert.throws(() => computeLlmDag(tree, "2000-01-01"), /obsolete Key marker/u);
 });
+
+test("computeLlmDag slugs an inline task with no plugin command from its name", () => {
+	const tree = fixture();
+	const prep = childrenOf(tree, "Prep");
+	prep.unshift({
+		name: `Disk cleanup: thin snapshots ${time("2000-01-01", "Sat, Jan 1, 2000")}`,
+		id: "disk",
+		shortId: "disk-short",
+		completedAt: null,
+		children: [instruction("Run `tmutil thinlocalsnapshots / 1 4`"), instruction("Auto")],
+	});
+
+	const plan = computeLlmDag(tree, "2000-01-01");
+	const inline = at(at(plan.prepBranches, 0).tasks, 0);
+	assert.deepStrictEqual(
+		{slug: inline.slug, auto: inline.auto, instructions: inline.instructions.map((item) => item.name)},
+		{slug: "disk-cleanup-thin-snapshots", auto: true, instructions: ["Run `tmutil thinlocalsnapshots / 1 4`"]},
+	);
+});
+
+test("computeLlmDag rejects a task with two plugin commands", () => {
+	const tree = fixture();
+	ownChildren(firstChildOf(tree, "Prep")).push(instruction("/gtd:other-prep"));
+
+	assert.throws(
+		() => computeLlmDag(tree, "2000-01-01"),
+		/prep task "Daily task" must have at most one plugin command/u,
+	);
+});
