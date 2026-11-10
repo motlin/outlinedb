@@ -76,7 +76,7 @@ async function getOrFetchWorkflowyEpoch(tx: TemporalTransaction): Promise<number
 		const session = await new WorkflowyInternalClient({credentials: {username, password}}).bootstrap();
 		runUnitOfWork(tx, (unitOfWork) => {
 			seedAccount(unitOfWork, {
-				userId: session.userId,
+				userId: String(session.userId),
 				dateJoinedSec: session.dateJoinedSec,
 				...(session.fullName === undefined ? {} : {fullName: session.fullName}),
 				...(session.entropyKey === undefined ? {} : {entropyKey: session.entropyKey}),

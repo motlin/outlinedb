@@ -6,7 +6,13 @@
 
 import {applyMetadataPatches, buildMetadataChanges} from "../internal/metadata-patch.js";
 import type {MetadataChange, MetadataPatchSet} from "../internal/metadata-patch.js";
-import {accountRows, readAccountRows, snapshotFromRows, writeAccountRows} from "./account-store.js";
+import {
+	AccountNotProvisionedError,
+	accountRows,
+	readAccountRows,
+	snapshotFromRows,
+	writeAccountRows,
+} from "./account-store.js";
 import type {AccountRows, AccountSnapshot} from "./account-store.js";
 import {runUnitOfWork} from "./node-composite.js";
 import type {TemporalTransaction} from "./temporal-merge.js";
@@ -40,18 +46,39 @@ function getPath(value: unknown, path: readonly string[]): unknown {
 	return current;
 }
 
-/**
- * The snapshot of `rows`, with a stand-in account row (user id from the preference rows, else 0, joined at the Unix
- * epoch) when no account import ever wrote one.
- */
+/** The snapshot of `rows`; throws {@link AccountNotProvisionedError} when no account row exists. */
 function localSnapshot(rows: AccountRows): AccountSnapshot {
-	const userId = rows.account[0]?.userId ?? rows.rootPreferences[0]?.userId ?? rows.accountSettings[0]?.userId ?? 0;
-	const standIn = {userId, dateJoinedSec: 0, fullName: null, entropyKey: null, username: null, email: null};
-	const snapshot = snapshotFromRows({...rows, account: rows.account.length > 0 ? rows.account : [standIn]});
+	const snapshot = snapshotFromRows(rows);
 	if (snapshot === undefined) {
-		throw new TypeError("account snapshot without an account row");
+		throw new AccountNotProvisionedError();
 	}
 	return snapshot;
+}
+
+/** Whom a standalone store was provisioned for: the sign-in user id and email, and when they joined. */
+export interface LocalIdentity {
+	userId: string;
+	email: string;
+	joinedAt: Date;
+}
+
+/** Write the account row of a newly provisioned standalone store, in one unit of work. */
+export function provisionLocalAccount(db: TemporalTransaction, identity: LocalIdentity): void {
+	runUnitOfWork(db, (unitOfWork) => {
+		writeAccountRows(unitOfWork, {
+			...readAccountRows(unitOfWork.tx),
+			account: [
+				{
+					userId: identity.userId,
+					fullName: null,
+					dateJoinedSec: Math.floor(identity.joinedAt.getTime() / 1000),
+					entropyKey: null,
+					username: null,
+					email: identity.email,
+				},
+			],
+		});
+	});
 }
 
 /**
@@ -106,13 +133,17 @@ export class LocalAccount {
 		return Promise.resolve();
 	}
 
-	/** The stored account, or the stand-in (joined at the Unix epoch) before any account import. */
-	async getAccount(): Promise<{userId: number; joinedAt: Date; fullName: string | null}> {
-		const {account} = this.snapshot();
+	/** The provisioned account and its email. */
+	async getAccount(): Promise<{userId: string; joinedAt: Date; fullName: string | null; email: string | null}> {
+		const row = readAccountRows(this.db).account[0];
+		if (row === undefined) {
+			throw new AccountNotProvisionedError();
+		}
 		return Promise.resolve({
-			userId: account.userId,
-			joinedAt: new Date(account.dateJoinedSec * 1000),
-			fullName: account.fullName ?? null,
+			userId: row.userId,
+			joinedAt: new Date(row.dateJoinedSec * 1000),
+			fullName: row.fullName ?? null,
+			email: row.email ?? null,
 		});
 	}
 

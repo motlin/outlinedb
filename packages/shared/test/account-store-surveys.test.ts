@@ -4,7 +4,7 @@ import type {AccountSnapshot} from "../src/cache/account-store.js";
 
 function snapshotWithSurveys(surveys: Record<string, unknown>): AccountSnapshot {
 	return {
-		account: {userId: 7, dateJoinedSec: 1_324_752_241},
+		account: {userId: "7", dateJoinedSec: 1_324_752_241},
 		rootMetadata: {surveys},
 		settings: {},
 		visibleFeatures: [],

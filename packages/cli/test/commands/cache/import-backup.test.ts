@@ -97,7 +97,7 @@ describe("cache:import-backup --backup-system-time", () => {
 	it("reads the epoch from the account row's join date when WORKFLOWY_EPOCH is unset", async () => {
 		Reflect.deleteProperty(process.env, "WORKFLOWY_EPOCH");
 		runUnitOfWork(testDatabase.db, (unitOfWork) => {
-			seedAccount(unitOfWork, {userId: 107, dateJoinedSec: Number(EPOCH)});
+			seedAccount(unitOfWork, {userId: "107", dateJoinedSec: Number(EPOCH)});
 		});
 		const filePath = writeBackup("2024-01-02", [{id: "node-1", nm: "One", ct: 3600, lm: 7200}]);
 

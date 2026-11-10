@@ -28,6 +28,7 @@ function setup(withAdapter: boolean) {
 	};
 	const ctx = {
 		db,
+		mode: withAdapter ? "mirror" : "standalone",
 		internalAdapter: () => (withAdapter ? (adapter as unknown as WorkflowyInternalAdapter) : undefined),
 	} as unknown as ServerContext;
 	const app = httpAppFor(ctx);

@@ -555,7 +555,7 @@ describe("sync from a fake upstream", () => {
 		await expect(accountRows(h)).resolves.toStrictEqual([]);
 		const done = await runToIdle(h);
 		expect(done.lastResult).toMatchObject({status: "ok"});
-		await expect(accountRows(h)).resolves.toStrictEqual([{user_id: 123, date_joined_sec: 1_400_000_000}]);
+		await expect(accountRows(h)).resolves.toStrictEqual([{user_id: "123", date_joined_sec: 1_400_000_000}]);
 		await stop(h);
 	}, 60_000);
 

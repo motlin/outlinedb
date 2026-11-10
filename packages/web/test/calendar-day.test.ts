@@ -157,7 +157,7 @@ describe("findCalendarDay", () => {
 		}
 		deps.db
 			.insert(schema.rootPreferences)
-			.values({userId: 1, calendarRootId: pointer, systemFrom: "2026-01-01", systemTo: FAR_FUTURE_DATE})
+			.values({userId: "1", calendarRootId: pointer, systemFrom: "2026-01-01", systemTo: FAR_FUTURE_DATE})
 			.run();
 		return {...deps, entropyKey: KEY};
 	}

@@ -39,9 +39,20 @@ import type {TemporalTransaction} from "./temporal-merge.js";
 
 type Metadata = Record<string, unknown>;
 
-/** The account row as the adapter stores it; `username`/`email` travel in the settings. */
+/** No account row: a standalone store that was never provisioned, or one provisioned before its row was written. */
+export class AccountNotProvisionedError extends Error {
+	constructor() {
+		super("no account row: this store was never provisioned");
+		this.name = "AccountNotProvisionedError";
+	}
+}
+
+/**
+ * The account row as the adapter stores it; `username`/`email` travel in the settings. `userId` is the Workflowy user
+ * id in decimal for a mirror, and the sign-in user id for a standalone account.
+ */
 export interface StoredAccount {
-	userId: number;
+	userId: string;
 	dateJoinedSec: number;
 	fullName?: string | undefined;
 	entropyKey?: string | undefined;

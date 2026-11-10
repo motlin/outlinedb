@@ -85,7 +85,7 @@ describe("WorkflowyInternalAdapter account state", () => {
 		const {adapter} = tracked();
 
 		await expect(adapter.getAccount()).resolves.toStrictEqual({
-			userId: 123,
+			userId: "123",
 			joinedAt: new Date(1_500_000_000_000),
 			fullName: null,
 		});
@@ -98,7 +98,7 @@ describe("WorkflowyInternalAdapter account state", () => {
 		api.respond("/get_initialization_data", () => json(data, {headers: {wfclientid: FAKE_CLIENT_ID}}));
 
 		await expect(adapter.getAccount()).resolves.toStrictEqual({
-			userId: 123,
+			userId: "123",
 			joinedAt: new Date(1_500_000_000_000),
 			fullName: "Alice Smith",
 		});
@@ -286,7 +286,7 @@ describe("WorkflowyInternalAdapter account state", () => {
 			},
 			account: [
 				{
-					userId: 123,
+					userId: "123",
 					fullName: null,
 					dateJoinedSec: 1_500_000_000,
 					entropyKey: "k".repeat(64),
@@ -294,7 +294,7 @@ describe("WorkflowyInternalAdapter account state", () => {
 					email: null,
 				},
 			],
-			rootPreferences: [[["userId", 123]]],
+			rootPreferences: [[["userId", "123"]]],
 			theme: ["light"],
 			stars: [{locationKey: "abc", treeRoot: "None"}],
 			fetchedAt: START_MS + 1000,

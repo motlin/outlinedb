@@ -169,8 +169,9 @@ describe("worker routes each Access email to its own Durable Object", () => {
 		);
 
 		expect(viaDo).toStrictEqual([404, 404, 404, 404, 404, 404, 404, 404, 404, 404]);
-		// Tags, stars, preferences and expansion read the local tables; files stay 503 until attachments are local.
-		expect(viaWorker.map(({status}) => status)).toStrictEqual([200, 200, 200, 200, 200, 200, 200, 200, 503]);
+		// Alice is in ALLOWED_EMAILS, so her object is a mirror: with no internal API, tags, stars, preferences and
+		// expansion answer 503 instead of writing locally and diverging from workflowy.com.
+		expect(viaWorker.map(({status}) => status)).toStrictEqual([200, 200, 200, 200, 503, 503, 503, 503, 503]);
 		// A fresh database with no workflowy.com account still answers the 20 Settings rows and the default flags.
 		const features = viaWorker[0]?.body as {visible: unknown[]; enabled: Record<string, true>; available: boolean};
 		expect({...features, visible: features.visible.length}).toStrictEqual({
@@ -404,7 +405,7 @@ describe("worker resolves a principal from Access or a Better Auth session", () 
 			.sign(privateKey);
 	}
 
-	it("routes a verified session user to the Durable Object named by its user id, and keeps two users apart", async () => {
+	it("routes a verified session user to the Durable Object named by its user id, keeps two users apart, and serves a standalone store's account state locally", async () => {
 		const carol = await signUp(h, "carol@example.com");
 		const dave = await signUp(h, "dave@example.com");
 		const carolStore = await stubNamed(h, carol.userId);
@@ -421,6 +422,55 @@ describe("worker resolves a principal from Access or a Better Auth session", () 
 		});
 		const status = await carolStore.adminStatus();
 		expect(status.storeName).toBe(carol.userId);
+
+		// Dave is not in ALLOWED_EMAILS, so his object is standalone: account state lives in its local tables, and the
+		// account answers the row provisioning wrote.
+		const call = async (method: string, path: string, body?: unknown) => {
+			const response = await h.mf.dispatchFetch(`${origin}${path}`, {
+				method,
+				headers: {cookie: dave.cookie, "content-type": "application/json"},
+				...(body === undefined ? {} : {body: JSON.stringify(body)}),
+			});
+			const text = await response.text();
+			return {status: response.status, body: text === "" ? null : (JSON.parse(text) as unknown)};
+		};
+
+		const account = await call("GET", "/api/v1/account");
+		const tag = await call("PUT", "/api/v1/tags/%23home", {color: "red"});
+		const tags = await call("GET", "/api/v1/tags");
+		const order = await call("PUT", "/api/v1/stars/order", {keys: []});
+		const stars = await call("GET", "/api/v1/stars");
+		const preferences = await call("PATCH", "/api/v1/preferences", {dateFormat: "MM/DD/YYYY"});
+		const expansion = await call("PATCH", "/api/v1/expansion/left-bar", {changes: {leftbar__starred__abc: true}});
+		const leftBar = await call("GET", "/api/v1/expansion/left-bar");
+
+		const joinedAt = (account.body as {joinedAt?: unknown}).joinedAt;
+		expect(typeof joinedAt === "string" && !Number.isNaN(Date.parse(joinedAt))).toBe(true);
+		expect({
+			account: {...account, body: {...(account.body as object), joinedAt: "<joinedAt>"}},
+			tag,
+			tags,
+			order,
+			stars,
+			preferences: {
+				status: preferences.status,
+				dateFormat: (preferences.body as {dateFormat?: unknown}).dateFormat,
+			},
+			expansion,
+			leftBar,
+		}).toStrictEqual({
+			account: {
+				status: 200,
+				body: {userId: dave.userId, joinedAt: "<joinedAt>", fullName: null, email: "dave@example.com"},
+			},
+			tag: {status: 200, body: {name: "#home", color: "red"}},
+			tags: {status: 200, body: {colors: {"#home": "red"}}},
+			order: {status: 204, body: null},
+			stars: {status: 200, body: {stars: [], nodes: []}},
+			preferences: {status: 200, dateFormat: "MM/DD/YYYY"},
+			expansion: {status: 204, body: null},
+			leftBar: {status: 200, body: {keys: ["leftbar__starred__abc"]}},
+		});
 	});
 
 	it("routes an Access email to its email-named Durable Object, or to its user's once it has a verified D1 user", async () => {

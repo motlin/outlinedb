@@ -6,6 +6,7 @@ import type {NewTree} from "../internal/ops.js";
 import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 import {HOME_TARGET} from "../types/targets.js";
 import {uuidToShortId} from "../workflowy/constants.js";
+import {AccountNotProvisionedError} from "./account-store.js";
 import {currentVersion, normalizeLayoutMode} from "./cache-temporal.js";
 import {readNodeInternalMetadata, writeInternalMetadata} from "./internal-metadata.js";
 import type {InternalMetadata} from "./internal-metadata.js";
@@ -494,8 +495,10 @@ export class LocalTreeWriter {
 		const userId =
 			current?.userId ??
 			tx.select({userId: account.userId}).from(account).where(eq(account.systemTo, FAR_FUTURE_DATE)).get()
-				?.userId ??
-			0;
+				?.userId;
+		if (userId === undefined) {
+			throw new AccountNotProvisionedError();
+		}
 		tx.insert(rootPreferences)
 			.values({...current, userId, homeLayoutMode, systemFrom: systemTime, systemTo: FAR_FUTURE_DATE})
 			.run();

@@ -21,7 +21,7 @@ import * as schema from "../src/db/schema.js";
 const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
 
 function snapshot(rootMetadata: Record<string, unknown>, settings: Record<string, unknown> = {}): AccountSnapshot {
-	return {account: {userId: 1, dateJoinedSec: 1_324_752_241}, rootMetadata, settings, visibleFeatures: []};
+	return {account: {userId: "1", dateJoinedSec: 1_324_752_241}, rootMetadata, settings, visibleFeatures: []};
 }
 
 describe("account store", () => {
@@ -59,14 +59,14 @@ describe("account store", () => {
 	it("seeds only the account row, which a later full account write replaces", () => {
 		const db = database();
 		runUnitOfWork(db, (unitOfWork) => {
-			seedAccount(unitOfWork, {userId: 0, dateJoinedSec: 1_324_752_241});
+			seedAccount(unitOfWork, {userId: "0", dateJoinedSec: 1_324_752_241});
 		});
 		const seeded = readAccountRows(db);
-		write(db, {...snapshot({}), account: {userId: 107, dateJoinedSec: 1_324_752_241, fullName: "Alice Smith"}});
+		write(db, {...snapshot({}), account: {userId: "107", dateJoinedSec: 1_324_752_241, fullName: "Alice Smith"}});
 		expect({seeded: seeded.account, written: readAccountRows(db).account}).toStrictEqual({
 			seeded: [
 				{
-					userId: 0,
+					userId: "0",
 					fullName: null,
 					dateJoinedSec: 1_324_752_241,
 					entropyKey: null,
@@ -76,7 +76,7 @@ describe("account store", () => {
 			],
 			written: [
 				{
-					userId: 107,
+					userId: "107",
 					fullName: "Alice Smith",
 					dateJoinedSec: 1_324_752_241,
 					entropyKey: null,

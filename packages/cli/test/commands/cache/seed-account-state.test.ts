@@ -62,7 +62,7 @@ describe("cache:seed-account-state command", () => {
 	it("PUTs the account state (every account table's live rows and the expanded keys) to the admin route", async () => {
 		runUnitOfWork(testDatabase.db, (unitOfWork) => {
 			writeAccountSnapshot(unitOfWork, {
-				account: {userId: 1, dateJoinedSec: 2},
+				account: {userId: "1", dateJoinedSec: 2},
 				rootMetadata: {color: {tags: {"#a": 1}}},
 				settings: {theme: "dark"},
 				visibleFeatures: [],

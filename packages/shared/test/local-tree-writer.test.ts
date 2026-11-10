@@ -4,6 +4,8 @@ import {and, asc, eq, inArray, isNull} from "drizzle-orm";
 import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
+import {AccountNotProvisionedError} from "../src/cache/account-store.js";
+import {provisionLocalAccount} from "../src/cache/local-account.js";
 import {LocalTreeWriter} from "../src/cache/local-tree-writer.js";
 import * as schema from "../src/db/schema.js";
 import {
@@ -142,6 +144,7 @@ function setup() {
 			.all();
 
 	return {
+		database,
 		writer,
 		siblings,
 		metadataVersions,
@@ -592,17 +595,26 @@ describe("LocalTreeWriter", () => {
 	});
 
 	it("sets Home's layout in the root preferences", () => {
-		const {writer, homeLayoutVersions} = setup();
+		const {database, writer, homeLayoutVersions} = setup();
 		const LATER = "2026-03-02 00:00:00.000";
+		provisionLocalAccount(database, {userId: "user-a", email: "a@example.com", joinedAt: new Date(0)});
 
 		writer.setNodeMetaValues("home", [{path: ["layoutMode"], value: "board"}]);
 		vi.setSystemTime(new Date("2026-03-02T00:00:00.000Z"));
 		writer.setNodeMetaValues("home", [{path: ["layoutMode"], value: undefined}]);
 
 		expect(homeLayoutVersions()).toStrictEqual([
-			{userId: 0, homeLayoutMode: "board", systemFrom: NOW, systemTo: LATER},
-			{userId: 0, homeLayoutMode: null, systemFrom: LATER, systemTo: FAR_FUTURE_DATE},
+			{userId: "user-a", homeLayoutMode: "board", systemFrom: NOW, systemTo: LATER},
+			{userId: "user-a", homeLayoutMode: null, systemFrom: LATER, systemTo: FAR_FUTURE_DATE},
 		]);
+	});
+
+	it("refuses Home's layout when no account row exists, rather than inventing a user id", () => {
+		const {writer} = setup();
+
+		expect(() => {
+			writer.setNodeMetaValues("home", [{path: ["layoutMode"], value: "board"}]);
+		}).toThrow(new AccountNotProvisionedError());
 	});
 
 	it("restores a deleted subtree where it was, from its last closed versions under the original ids", () => {

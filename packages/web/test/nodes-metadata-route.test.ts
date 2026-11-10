@@ -25,7 +25,7 @@ vi.mock("@outlinedb/shared/cache", async (importOriginal) => {
 	};
 });
 
-const {CacheService, collectItemRelationships, emptyItemRelationships, storeInternalMetadata} =
+const {CacheService, collectItemRelationships, emptyItemRelationships, provisionLocalAccount, storeInternalMetadata} =
 	await import("@outlinedb/shared/cache");
 
 const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
@@ -96,6 +96,9 @@ function setup(
 	const sqlite = new DatabaseConstructor(":memory:");
 	const db = drizzle(sqlite, {schema});
 	migrate(db, {migrationsFolder});
+	if (mode === "standalone") {
+		provisionLocalAccount(db, {userId: "user-a", email: "a@example.com", joinedAt: new Date(0)});
+	}
 	const cacheService = new CacheService(db);
 	cacheService.insertNode({...apiNode("n1"), ...n1}, null);
 	const writeMetadata = (id: string, metadata: Record<string, unknown>) => {

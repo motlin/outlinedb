@@ -1,14 +1,14 @@
 import {z} from "zod";
-import {pushingAdapter} from "../account-state.js";
-import {INTERNAL_API_NOT_CONFIGURED} from "../internal-api-error.js";
-import {defineOp, fail, ok} from "./define.js";
+import {AccountNotProvisionedError, LocalAccount} from "@outlinedb/shared/cache";
+import {accountStateUnavailable} from "../account-state.js";
+import {defineOp, ok} from "./define.js";
 
 /**
  * The signed-in account: in a mirror the Workflowy account, whose `email` is `WORKFLOWY_USERNAME` ("" when unset); in
- * a context without the internal API the provisioned profile, whose `userId` is the sign-in user id.
+ * a standalone context the provisioned account row, whose `userId` is the sign-in user id.
  */
 export const AccountResponseSchema = z.strictObject({
-	userId: z.union([z.number(), z.string()]),
+	userId: z.string(),
 	joinedAt: z.string(),
 	fullName: z.string().nullable(),
 	email: z.string(),
@@ -18,14 +18,22 @@ export const accountGet = defineOp({
 	input: z.object({}),
 	output: AccountResponseSchema,
 	async run(ctx) {
-		const adapter = pushingAdapter(ctx);
-		if (adapter) {
-			const {userId, joinedAt, fullName} = await adapter.getAccount();
-			return ok({userId, joinedAt: joinedAt.toISOString(), fullName, email: ctx.config.accountEmail});
+		if (ctx.mode === "standalone") {
+			try {
+				const {userId, joinedAt, fullName, email} = await new LocalAccount(ctx.db).getAccount();
+				return ok({userId, joinedAt: joinedAt.toISOString(), fullName, email: email ?? ""});
+			} catch (error) {
+				if (error instanceof AccountNotProvisionedError) {
+					return accountStateUnavailable();
+				}
+				throw error;
+			}
 		}
-		const identity = ctx.identity?.();
-		return identity
-			? ok({userId: identity.userId, joinedAt: identity.joinedAt, fullName: null, email: identity.email})
-			: fail(503, {error: INTERNAL_API_NOT_CONFIGURED});
+		const adapter = ctx.internalAdapter?.();
+		if (!adapter) {
+			return accountStateUnavailable();
+		}
+		const {userId, joinedAt, fullName} = await adapter.getAccount();
+		return ok({userId, joinedAt: joinedAt.toISOString(), fullName, email: ctx.config.accountEmail});
 	},
 });

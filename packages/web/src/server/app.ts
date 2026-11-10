@@ -1,6 +1,6 @@
 // The host-neutral pieces a Worker or Durable Object needs: ops, store, HTTP layer and context.
 export {buildServerContext} from "./context.js";
-export type {LocalIdentity, ServerContext, ServerContextDeps} from "./context.js";
+export type {ServerContext, ServerContextDeps} from "./context.js";
 export type {ServerConfig} from "./config.js";
 export {LadderEventBus} from "./ladder-events.js";
 export {TreeEventBus, accountChangePublisher} from "./node-events.js";

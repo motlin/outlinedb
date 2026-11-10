@@ -54,7 +54,7 @@ describe("/api/admin/account-state", () => {
 
 	it("merges a seed into the account tables, and a later seed replaces it", async () => {
 		const account = [
-			{userId: 1, fullName: null, dateJoinedSec: 1_324_752_241, entropyKey: null, username: null, email: null},
+			{userId: "1", fullName: null, dateJoinedSec: 1_324_752_241, entropyKey: null, username: null, email: null},
 		];
 		const first = await put(
 			h,

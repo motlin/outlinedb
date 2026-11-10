@@ -52,7 +52,7 @@ function setup(meta: Record<string, unknown> | undefined, settings: Record<strin
 			return Promise.resolve();
 		}),
 		getAccount: vi.fn<WorkflowyInternalAdapter["getAccount"]>(async () =>
-			Promise.resolve({userId: 42, joinedAt: new Date(1_500_000_000 * 1000), fullName: null}),
+			Promise.resolve({userId: "42", joinedAt: new Date(1_500_000_000 * 1000), fullName: null}),
 		),
 	};
 	// A week-start change looks for a calendar root to re-layout, so the context needs a (calendar-less) cache.
@@ -634,22 +634,24 @@ describe("GET /api/v1/account", () => {
 
 		await expect(request("GET", "/account")).resolves.toStrictEqual({
 			status: 200,
-			body: {userId: 42, joinedAt: "2017-07-14T02:40:00.000Z", fullName: null, email: ""},
+			body: {userId: "42", joinedAt: "2017-07-14T02:40:00.000Z", fullName: null, email: ""},
 		});
 	});
 
-	it("answers the provisioned identity without the internal API, and 503 when there is none", async () => {
-		const identity = {userId: "user-a", email: "a@example.com", joinedAt: "2023-11-14T22:13:20.000Z"};
+	it("answers a standalone store's provisioned account row, and 503 when it has none", async () => {
 		const request = async (ctx: ServerContext) => {
 			const res = await httpAppFor(ctx).fetch(new Request("http://x/api/v1/account"));
 			return {status: res.status, body: (await res.json()) as unknown};
 		};
 
 		expect({
-			provisioned: await request(standaloneContext(identity)),
-			unprovisioned: await request(standaloneContext()),
+			provisioned: await request(standaloneContext()),
+			unprovisioned: await request(standaloneContext(null)),
 		}).toStrictEqual({
-			provisioned: {status: 200, body: {...identity, fullName: null}},
+			provisioned: {
+				status: 200,
+				body: {userId: "user-a", joinedAt: "2023-11-14T22:13:20.000Z", fullName: null, email: "a@example.com"},
+			},
 			unprovisioned: {status: 503, body: {error: NOT_CONFIGURED}},
 		});
 	});

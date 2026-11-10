@@ -57,13 +57,13 @@ describe("cache:temporal-rollback command", () => {
 			.insert(rootPreferences)
 			.values([
 				{
-					userId: 1,
+					userId: "1",
 					dateFormat: "YYYY",
 					systemFrom: "2026-01-01 00:00:00.000",
 					systemTo: "2026-02-01 00:00:00.000",
 				},
 				{
-					userId: 1,
+					userId: "1",
 					dateFormat: "MMM D",
 					systemFrom: "2026-02-01 00:00:00.000",
 					systemTo: "9999-12-31 23:59:59",

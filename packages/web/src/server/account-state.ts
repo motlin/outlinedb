@@ -1,25 +1,45 @@
-import {LocalAccount} from "@outlinedb/shared/cache";
+import {AccountNotProvisionedError, LocalAccount} from "@outlinedb/shared/cache";
 import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import type {ServerContext} from "./context.js";
+import {INTERNAL_API_NOT_CONFIGURED} from "./internal-api-error.js";
+import {fail} from "./ops/define.js";
+import type {Json, OpResult} from "./ops/define.js";
 
-/** The account-global reads and writes (root metadata, settings) that stars, tags and preferences use. */
-export type AccountState = Pick<
-	WorkflowyInternalAdapter,
-	"getAccount" | "getRootMeta" | "getSetting" | "setRootMeta" | "setRootMetaValues" | "setSavedViews" | "setSetting"
->;
+/** Account-global state (root metadata, settings): the local tables, or a mirror's internal adapter. */
+export type AccountState = LocalAccount | WorkflowyInternalAdapter;
 
-/**
- * The internal adapter that pushes account state to workflowy.com: a mirror's, when it has the internal API. Undefined
- * in a standalone context or a mirror without the internal API, which keep that state in the local tables only.
- */
-export function pushingAdapter(ctx: ServerContext): WorkflowyInternalAdapter | undefined {
-	return ctx.mode === "standalone" ? undefined : ctx.internalAdapter?.();
+/** The 503 a mirror without the internal API, or an unprovisioned standalone store, answers for account state. */
+export function accountStateUnavailable(): OpResult<never> {
+	return fail(503, {error: INTERNAL_API_NOT_CONFIGURED});
 }
 
 /**
- * Where this context keeps account-global state: the internal adapter (push, then store) when there is one to push
- * through, else the local temporal tables (no push), as feature toggles do.
+ * Where account-global state lives, by the context's mode: a standalone context's local temporal tables (no push),
+ * or a mirror's internal adapter (push, then store). Undefined for a mirror without the internal API, which must
+ * answer 503 rather than write locally and diverge from workflowy.com.
  */
-export function accountState(ctx: ServerContext): AccountState {
-	return pushingAdapter(ctx) ?? new LocalAccount(ctx.db);
+function accountState(ctx: ServerContext): AccountState | undefined {
+	return ctx.mode === "standalone" ? new LocalAccount(ctx.db) : ctx.internalAdapter?.();
+}
+
+/**
+ * Runs `body` with the context's account state, answering 503 when there is none: a mirror without the internal API,
+ * or a standalone store with no provisioned account row.
+ */
+export async function withAccountState<T extends Json>(
+	ctx: ServerContext,
+	body: (state: AccountState) => Promise<OpResult<T>>,
+): Promise<OpResult<T>> {
+	const state = accountState(ctx);
+	if (state === undefined) {
+		return accountStateUnavailable();
+	}
+	try {
+		return await body(state);
+	} catch (error) {
+		if (error instanceof AccountNotProvisionedError) {
+			return accountStateUnavailable();
+		}
+		throw error;
+	}
 }

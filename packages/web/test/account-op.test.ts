@@ -15,7 +15,7 @@ function contextWith(adapter: Partial<WorkflowyInternalAdapter> | undefined): Se
 
 const adapter = {
 	getAccount: vi.fn<WorkflowyInternalAdapter["getAccount"]>(async () =>
-		Promise.resolve({userId: 7, joinedAt: new Date("2020-01-02T00:00:00Z"), fullName: "Alice Smith"}),
+		Promise.resolve({userId: "7", joinedAt: new Date("2020-01-02T00:00:00Z"), fullName: "Alice Smith"}),
 	),
 };
 
@@ -24,7 +24,7 @@ describe("account.get op", () => {
 		await expect(inProcessStore(contextWith(adapter)).call("account.get", {})).resolves.toStrictEqual({
 			ok: true,
 			value: {
-				userId: 7,
+				userId: "7",
 				joinedAt: "2020-01-02T00:00:00.000Z",
 				fullName: "Alice Smith",
 				email: "user@example.com",
@@ -49,7 +49,12 @@ describe("GET /api/v1/account through the HTTP layer", () => {
 
 		expect({status: response.status, body: await response.json()}).toStrictEqual({
 			status: 200,
-			body: {userId: 7, joinedAt: "2020-01-02T00:00:00.000Z", fullName: "Alice Smith", email: "user@example.com"},
+			body: {
+				userId: "7",
+				joinedAt: "2020-01-02T00:00:00.000Z",
+				fullName: "Alice Smith",
+				email: "user@example.com",
+			},
 		});
 	});
 

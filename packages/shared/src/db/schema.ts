@@ -336,7 +336,7 @@ export const calendarLayoutApplies = sqliteTable(
 export const account = sqliteTable(
 	"account",
 	{
-		userId: integer("user_id").notNull(),
+		userId: text("user_id").notNull(),
 		fullName: text("full_name"),
 		dateJoinedSec: integer("date_joined_sec").notNull(),
 		entropyKey: text("entropy_key"),
@@ -361,7 +361,7 @@ export const account = sqliteTable(
 export const rootPreferences = sqliteTable(
 	"root_preferences",
 	{
-		userId: integer("user_id").notNull(),
+		userId: text("user_id").notNull(),
 		dateFormat: text("date_format"),
 		timeFormat: text("time_format"),
 		weekStartDay: integer("week_start_day"),
@@ -402,7 +402,7 @@ export const rootPreferences = sqliteTable(
 export const accountSettings = sqliteTable(
 	"account_settings",
 	{
-		userId: integer("user_id").notNull(),
+		userId: text("user_id").notNull(),
 		theme: text("theme"),
 		font: text("font"),
 		timezone: text("timezone"),

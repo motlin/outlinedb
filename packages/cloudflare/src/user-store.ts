@@ -3,6 +3,7 @@ import {
 	accountRowTotal,
 	accountVersion,
 	ensureNodeTags,
+	provisionLocalAccount,
 	readAccountRows,
 	readAccountState,
 	runUnitOfWork,
@@ -22,7 +23,6 @@ import {
 import type {
 	Awaitable,
 	EmbeddingIndex,
-	LocalIdentity,
 	OpInput,
 	OpName,
 	OpOutput,
@@ -147,7 +147,6 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 			ladderEvents: this.ladderEvents,
 			internalAuth,
 			embeddingIndex: embedding && (() => embedding.index),
-			identity: () => readIdentity(ctx.storage.kv),
 		});
 		this.embeddings =
 			embedding &&
@@ -178,7 +177,7 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 						...internalAuth,
 						fetch: signalled(signal),
 					}).bootstrap();
-					return {userId: session.userId, dateJoinedSec: session.dateJoinedSec};
+					return {userId: String(session.userId), dateJoinedSec: session.dateJoinedSec};
 				}),
 			catchUp: internalAuth && (async () => serverContext.internalAdapter?.()?.catchUp()),
 			alarm: this.alarms.for("sync"),
@@ -202,14 +201,14 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv> {
 		const profile: Profile = {userId: input.userId, email: input.email, mode: input.mode};
 		kv.put(PROFILE_KEYS.email, profile.email);
 		kv.put(PROFILE_KEYS.mode, profile.mode);
-		kv.put(PROFILE_JOINED_AT_KEY, new Date().toISOString());
 		// Written last: a profile is present only once its user id is.
 		kv.put(PROFILE_KEYS.userId, profile.userId);
 		if (profile.mode === "mirror" && !this.isOwner) {
 			this.configure();
 		}
-		// A mirror's nodes come only from workflowy.com, so only a standalone account starts with local content.
+		// A mirror's account and nodes come only from workflowy.com, so only a standalone account starts with local ones.
 		if (profile.mode === "standalone" && !this.isOwner) {
+			provisionLocalAccount(this.db, {userId: profile.userId, email: profile.email, joinedAt: new Date()});
 			seedWelcomeContent(this.db);
 		}
 		return {ok: true, created: true, profile};
@@ -379,16 +378,6 @@ export type ProvisionResult =
 
 /** The profile's fields, one key each in `ctx.storage.kv`. */
 const PROFILE_KEYS = {userId: "profile:userId", email: "profile:email", mode: "profile:mode"} as const;
-
-/** When the object was provisioned (ISO), kept beside the profile; objects provisioned before it was recorded lack it. */
-const PROFILE_JOINED_AT_KEY = "profile:joinedAt";
-
-/** The provisioned user and when they joined, or undefined before provisioning (or without a recorded join date). */
-function readIdentity(kv: KvLike): LocalIdentity | undefined {
-	const profile = readProfile(kv);
-	const joinedAt = kv.get(PROFILE_JOINED_AT_KEY);
-	return profile && joinedAt !== undefined ? {userId: profile.userId, email: profile.email, joinedAt} : undefined;
-}
 
 function readProfile(kv: KvLike): Profile | null {
 	const userId = kv.get(PROFILE_KEYS.userId);

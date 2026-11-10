@@ -105,7 +105,7 @@ const FLAG_SETTINGS = new Set<ServerSetting>([
 ]);
 
 export interface Account {
-	userId: number;
+	userId: string;
 	joinedAt: Date;
 	fullName: string | null;
 }
@@ -2221,7 +2221,7 @@ export class WorkflowyInternalAdapter {
 	private fromSession(session: InternalSession): AccountSnapshot {
 		return {
 			account: {
-				userId: session.userId,
+				userId: String(session.userId),
 				dateJoinedSec: session.dateJoinedSec,
 				...(session.fullName === undefined ? {} : {fullName: session.fullName}),
 				...(session.entropyKey === undefined ? {} : {entropyKey: session.entropyKey}),

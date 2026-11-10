@@ -65,7 +65,7 @@ describe("cache:vacuum command", () => {
 
 		expect(result).toStrictEqual({
 			path: testDbPath,
-			sizeBeforeBytes: 9_191_424,
+			sizeBeforeBytes: 9_195_520,
 			sizeAfterBytes: 626_688,
 			freelistBefore: 2091,
 			freelistAfter: 0,
@@ -75,19 +75,19 @@ describe("cache:vacuum command", () => {
 		expect(freelistAfterRow).toStrictEqual({freelist_count: 0});
 	});
 
-	it("prints a human-readable summary without --json", async () => {
+	it("prints a human-readable summary without --json, reclaiming the pages the account tables' rebuild migration freed", async () => {
 		const {stdout, result} = await captureOutput<VacuumResult>(async () => Vacuum.run([]));
 
 		expect(stdout).toBe(
 			`🧹 Vacuuming cache database...\n  File: ${
 				testDbPath
-			}\n  Size before: 612.00 KB\n  Size after:  612.00 KB\n  Reclaimed:   0 bytes\n  Freelist pages: 0 → 0\n`,
+			}\n  Size before: 624.00 KB\n  Size after:  612.00 KB\n  Reclaimed:   12.00 KB\n  Freelist pages: 2 → 0\n`,
 		);
 		expect(result).toStrictEqual({
 			path: testDbPath,
-			sizeBeforeBytes: 626_688,
+			sizeBeforeBytes: 638_976,
 			sizeAfterBytes: 626_688,
-			freelistBefore: 0,
+			freelistBefore: 2,
 			freelistAfter: 0,
 		});
 	});

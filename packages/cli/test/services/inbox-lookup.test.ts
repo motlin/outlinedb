@@ -21,7 +21,7 @@ describe("findInbox", () => {
 	function pointInboxAt(inboxId: string): void {
 		runUnitOfWork(database.db, (unitOfWork) => {
 			writeAccountSnapshot(unitOfWork, {
-				account: {userId: 1, dateJoinedSec: 2},
+				account: {userId: "1", dateJoinedSec: 2},
 				rootMetadata: {inbox_id: inboxId},
 				settings: {},
 				visibleFeatures: [],

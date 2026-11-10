@@ -17,7 +17,7 @@ import {
 	unstarChanges,
 } from "@outlinedb/shared/internal";
 import type {StarNodes} from "@outlinedb/shared/internal";
-import {accountState} from "../account-state.js";
+import {withAccountState} from "../account-state.js";
 import type {AccountState} from "../account-state.js";
 import type {ServerContext} from "../context.js";
 import type {NodeResponse} from "../../node-types.js";
@@ -74,14 +74,6 @@ async function starredNodes(ctx: ServerContext, stars: readonly Star[], readNode
 	return nodes.filter((node) => node !== undefined);
 }
 
-/** Runs `body` with the account state. */
-async function withAdapter<T extends Json>(
-	ctx: ServerContext,
-	body: (adapter: AccountState) => Promise<OpResult<T>>,
-): Promise<OpResult<T>> {
-	return body(accountState(ctx));
-}
-
 /** The stars and each starred node once. */
 export const StarsResponseSchema = z.strictObject({stars: z.array(StarSchema), nodes: z.array(NodeResponseSchema)});
 
@@ -91,7 +83,7 @@ export function starsListWith(readNode: ReadNode) {
 		input: z.object({}),
 		output: StarsResponseSchema,
 		async run(ctx) {
-			return withAdapter(ctx, async (adapter) => {
+			return withAccountState(ctx, async (adapter) => {
 				const stars = await readStars(ctx, adapter);
 				return ok(toJson({stars, nodes: await starredNodes(ctx, stars, readNode)}));
 			});
@@ -105,7 +97,7 @@ export const starsOrder = defineOp({
 	input: z.object({keys: z.array(z.string())}),
 	output: NoContentSchema,
 	async run(ctx, {keys}) {
-		return withAdapter(ctx, async (adapter) => {
+		return withAccountState(ctx, async (adapter) => {
 			await adapter.setRootMetaValues(orderChanges(keys));
 			return ok(null);
 		});
@@ -117,7 +109,7 @@ export const starsSet = defineOp({
 	input: z.object({key: z.string(), nodeId: z.string().nullable(), query: z.string().nullable()}),
 	output: StarSchema.nullable(),
 	async run(ctx, {key, nodeId, query}) {
-		return withAdapter(ctx, async (adapter) => {
+		return withAccountState(ctx, async (adapter) => {
 			if (locationKey({nodeId, query}) !== key) {
 				return fail(400, {error: "key must equal the location key of {nodeId, query}"});
 			}
@@ -135,7 +127,7 @@ export const starsRemove = defineOp({
 	input: z.object({key: z.string()}),
 	output: NoContentSchema,
 	async run(ctx, {key}) {
-		return withAdapter(ctx, async (adapter) => {
+		return withAccountState(ctx, async (adapter) => {
 			await toggleStar(ctx, adapter, key, false);
 			return ok(null);
 		});
@@ -146,7 +138,7 @@ export const starsRename = defineOp({
 	input: z.object({key: z.string(), name: z.string().nullable()}),
 	output: NoContentSchema,
 	async run(ctx, {key, name}) {
-		return withAdapter(ctx, async (adapter) => {
+		return withAccountState(ctx, async (adapter) => {
 			await adapter.setRootMetaValues(renameChanges(key, name));
 			return ok(null);
 		});

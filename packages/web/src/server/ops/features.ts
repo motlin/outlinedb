@@ -2,6 +2,7 @@ import {z} from "zod";
 import {readEnabledFeatures, writeEnabledFeatures} from "@outlinedb/shared/cache";
 import type {TemporalTransaction} from "@outlinedb/shared/cache";
 import {DEFAULT_FEATURES, VISIBLE_FEATURES} from "../../feature-catalog.js";
+import {accountStateUnavailable} from "../account-state.js";
 import {defineOp, ok, toJson} from "./define.js";
 
 const CODENAME = /^[a-z0-9_-]+$/u;
@@ -55,14 +56,17 @@ export const featuresGet = defineOp({
 	},
 });
 
-/** Turns a feature on or off through the account, or, without the internal API, in the local `enabled_features`. */
+/**
+ * Turns a feature on or off: through the account in a mirror (503 without the internal API, so it never diverges from
+ * workflowy.com), or in the local `enabled_features` in a standalone context.
+ */
 export const featuresSet = defineOp({
 	input: z.object({codename: z.string().regex(CODENAME), on: z.boolean()}).strict(),
 	output: FeatureSetResponseSchema,
 	async run(ctx, {codename, on}) {
-		const adapter = ctx.internalAdapter?.();
-		if (adapter) {
-			return ok({enabled: await adapter.setFeature(codename, on)});
+		if (ctx.mode !== "standalone") {
+			const adapter = ctx.internalAdapter?.();
+			return adapter ? ok({enabled: await adapter.setFeature(codename, on)}) : accountStateUnavailable();
 		}
 		const next = {...localFeatures(ctx.db), [codename]: on};
 		writeEnabledFeatures(ctx.db, next);

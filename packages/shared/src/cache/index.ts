@@ -71,6 +71,7 @@ export {
 export {advanceTreeTxId, readTreeTxId, replaceTreeTxId, storeTreeTxId} from "./tree-transaction.js";
 export {
 	ACCOUNT_IMPORT_NAME,
+	AccountNotProvisionedError,
 	accountRowTotal,
 	type AccountRows,
 	type AccountSnapshot,
@@ -96,7 +97,8 @@ export {
 	replaceExpansion,
 	resolveExpandedIds,
 } from "./expansion-store.js";
-export {LocalAccount, withRootMetaChanges, withSetting} from "./local-account.js";
+export {LocalAccount, provisionLocalAccount, withRootMetaChanges, withSetting} from "./local-account.js";
+export type {LocalIdentity} from "./local-account.js";
 export {markWhatsNewRead, readWhatsNewReads} from "./whats-new-store.js";
 export {accountVersion, readAccountState, writeAccountState} from "./account-seed.js";
 export {effectiveCompletedAt} from "./effective-completion.js";

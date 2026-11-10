@@ -38,7 +38,7 @@ describe("gtd inboxes account command", () => {
 		);
 		runUnitOfWork(testDatabase.db, (unitOfWork) => {
 			writeAccountSnapshot(unitOfWork, {
-				account: {userId: 1, dateJoinedSec: 2},
+				account: {userId: "1", dateJoinedSec: 2},
 				rootMetadata: {inbox_id: "inbox-node"},
 				settings: {},
 				visibleFeatures: [],

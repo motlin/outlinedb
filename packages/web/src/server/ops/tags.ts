@@ -4,7 +4,7 @@
  */
 
 import {z} from "zod";
-import {accountState} from "../account-state.js";
+import {withAccountState} from "../account-state.js";
 import {TAG_COLORS} from "../../tag-colors.js";
 import type {TagColorName} from "../../tag-colors.js";
 import {defineOp, ok} from "./define.js";
@@ -38,18 +38,19 @@ export const tagsList = defineOp({
 	input: z.object({}),
 	output: TagColorsResponseSchema,
 	async run(ctx) {
-		const adapter = accountState(ctx);
-		const stored = await adapter.getRootMeta(TAGS_PATH);
-		const colors: Record<string, string> = {};
-		if (typeof stored === "object" && stored !== null) {
-			for (const [name, index] of Object.entries(stored)) {
-				const color = COLOR_BY_INDEX.get(index);
-				if (color) {
-					colors[name] = color;
+		return withAccountState(ctx, async (state) => {
+			const stored = await state.getRootMeta(TAGS_PATH);
+			const colors: Record<string, string> = {};
+			if (typeof stored === "object" && stored !== null) {
+				for (const [name, index] of Object.entries(stored)) {
+					const color = COLOR_BY_INDEX.get(index);
+					if (color) {
+						colors[name] = color;
+					}
 				}
 			}
-		}
-		return ok({colors});
+			return ok({colors});
+		});
 	},
 });
 
@@ -58,9 +59,10 @@ export const tagsSet = defineOp({
 	input: z.object({name: z.string(), color: z.enum(TAG_COLORS)}),
 	output: z.strictObject({name: z.string(), color: z.enum(TAG_COLORS)}),
 	async run(ctx, {name, color}) {
-		const adapter = accountState(ctx);
-		await adapter.setRootMeta(tagPath(name), COLOR_INDEX[color]);
-		return ok({name, color});
+		return withAccountState(ctx, async (state) => {
+			await state.setRootMeta(tagPath(name), COLOR_INDEX[color]);
+			return ok({name, color});
+		});
 	},
 });
 
@@ -69,8 +71,9 @@ export const tagsClear = defineOp({
 	input: z.object({name: z.string()}),
 	output: z.strictObject({name: z.string()}),
 	async run(ctx, {name}) {
-		const adapter = accountState(ctx);
-		await adapter.setRootMeta(tagPath(name), undefined);
-		return ok({name});
+		return withAccountState(ctx, async (state) => {
+			await state.setRootMeta(tagPath(name), undefined);
+			return ok({name});
+		});
 	},
 });

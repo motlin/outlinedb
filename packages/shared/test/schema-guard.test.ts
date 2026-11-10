@@ -118,7 +118,7 @@ describe("schema guard", () => {
 		bulkImportWithWatermarkGuard(database, loadFixtureBackup("mirror-backup"), new Date("2026-10-02T00:00:00Z"));
 		runUnitOfWork(database, (unitOfWork) => {
 			writeAccountSnapshot(unitOfWork, {
-				account: {userId: 107, dateJoinedSec: 1_324_752_241, fullName: "Alice Smith"},
+				account: {userId: "107", dateJoinedSec: 1_324_752_241, fullName: "Alice Smith"},
 				rootMetadata: {starring: {locations: {n1: "None", n2: "None"}, order: "None/n2/,None/n1/"}},
 				settings: {theme: "dark", font: "default"},
 				visibleFeatures: [],

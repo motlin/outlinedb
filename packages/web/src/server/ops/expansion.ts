@@ -1,7 +1,6 @@
 /**
- * Expansion state, synced with workflowy.com through the internal API. Without one (a standalone context, or a mirror
- * with no internal API) the routes read and write the same expansion store directly: each PATCH applies at once, with
- * no push and no debounce.
+ * Expansion state, synced with workflowy.com through the internal API in a mirror (503 without one). A standalone
+ * context reads and writes the same expansion store directly: each PATCH applies at once, with no push and no debounce.
  *
  * `expansion.get` is a change feed over our own expansion store (seeded by whole-tree imports, updated by every local
  * change; nothing re-reads workflowy.com): `{version?}` -> `{version, expandedIds}`, where `version` is the keys'
@@ -22,7 +21,7 @@ import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import {upstreamExpansionKey} from "@outlinedb/shared/workflowy";
 import {z} from "zod";
 import type {ServerContext} from "../context.js";
-import {pushingAdapter} from "../account-state.js";
+import {accountStateUnavailable} from "../account-state.js";
 import {defineOp, ok} from "./define.js";
 import {ExpansionChangesResponseSchema, NoContentSchema} from "./schemas.js";
 
@@ -84,12 +83,12 @@ function flush(ctx: ServerContext, state: ExpansionState, adapter: WorkflowyInte
 	);
 }
 
-/** The stored keys without the internal API; an unseeded store reads as nothing expanded. */
+/** A standalone context's stored keys; an unseeded store reads as nothing expanded. */
 function localKeys(ctx: ServerContext): Set<string> {
 	return readExpansion(ctx.db) ?? new Set();
 }
 
-/** Apply a delta keyed by upstream keys to the store without the internal API, then announce the new version. */
+/** Apply a delta keyed by upstream keys to a standalone context's store, then announce the new version. */
 function applyLocally(ctx: ServerContext, delta: Record<string, boolean>): void {
 	runUnitOfWork(ctx.db, (unitOfWork) => {
 		applyLocalExpansionDelta(unitOfWork, delta);
@@ -106,11 +105,14 @@ export const expansionGet = defineOp({
 	}),
 	output: ExpansionChangesResponseSchema,
 	run(ctx, {version}) {
-		const adapter = pushingAdapter(ctx);
-		if (!adapter) {
+		if (ctx.mode === "standalone") {
 			const keys = localKeys(ctx);
 			const current = expansionVersion(keys);
 			return ok({version: current, expandedIds: version === current ? null : resolveExpandedIds(ctx.db, keys)});
+		}
+		const adapter = ctx.internalAdapter?.();
+		if (!adapter) {
+			return accountStateUnavailable();
 		}
 		const {version: current, expandedIds} = adapter.getExpansionChanges(version);
 		return ok({version: current, expandedIds});
@@ -121,8 +123,7 @@ export const expansionPatch = defineOp({
 	input: ExpansionPatchSchema,
 	output: NoContentSchema,
 	run(ctx, {changes}) {
-		const adapter = pushingAdapter(ctx);
-		if (!adapter) {
+		if (ctx.mode === "standalone") {
 			applyLocally(
 				ctx,
 				Object.fromEntries(
@@ -130,6 +131,10 @@ export const expansionPatch = defineOp({
 				),
 			);
 			return ok(null);
+		}
+		const adapter = ctx.internalAdapter?.();
+		if (!adapter) {
+			return accountStateUnavailable();
 		}
 		const state = stateOf(ctx);
 		state.pending = {...state.pending, ...changes};
@@ -145,9 +150,12 @@ export const expansionLeftBarGet = defineOp({
 	input: z.object({}),
 	output: z.strictObject({keys: z.array(z.string())}),
 	run(ctx) {
-		const adapter = pushingAdapter(ctx);
-		if (!adapter) {
+		if (ctx.mode === "standalone") {
 			return ok({keys: [...localKeys(ctx)].filter((key) => key.startsWith("leftbar__")).toSorted()});
+		}
+		const adapter = ctx.internalAdapter?.();
+		if (!adapter) {
+			return accountStateUnavailable();
 		}
 		return ok({keys: adapter.getLeftBarExpansionKeys()});
 	},
@@ -157,10 +165,13 @@ export const expansionLeftBarPatch = defineOp({
 	input: LeftBarPatchSchema,
 	output: NoContentSchema,
 	run(ctx, {changes}) {
-		const adapter = pushingAdapter(ctx);
-		if (!adapter) {
+		if (ctx.mode === "standalone") {
 			applyLocally(ctx, changes);
 			return ok(null);
+		}
+		const adapter = ctx.internalAdapter?.();
+		if (!adapter) {
+			return accountStateUnavailable();
 		}
 		const state = stateOf(ctx);
 		state.pendingRaw = {...state.pendingRaw, ...changes};

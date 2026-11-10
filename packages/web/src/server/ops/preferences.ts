@@ -10,7 +10,7 @@
 import {z} from "zod";
 import {LocalAccount} from "@outlinedb/shared/cache";
 import type {ServerSetting} from "@outlinedb/shared/internal";
-import {accountState, pushingAdapter} from "../account-state.js";
+import {withAccountState} from "../account-state.js";
 import type {AccountState} from "../account-state.js";
 import {reapplyWeekLayout} from "../calendar-layout.js";
 import {COLOR_VALUE, isColorName} from "../../color-palette.js";
@@ -273,7 +273,7 @@ export const preferencesGet = defineOp({
 	input: z.object({}),
 	output: PreferencesSchema,
 	async run(ctx) {
-		return ok(await readPreferences(accountState(ctx)));
+		return withAccountState(ctx, async (state) => ok(await readPreferences(state)));
 	},
 });
 
@@ -282,57 +282,57 @@ export const preferencesPatch = defineOp({
 	input: z.object({patch: PreferencesPatchSchema}),
 	output: PreferencesSchema,
 	async run(ctx, {patch}) {
-		const adapter = accountState(ctx);
-		const previousWeekStartDay =
-			patch.weekStartDay === undefined ? undefined : await adapter.getRootMeta(PATHS.weekStartDay);
-		const changes: Parameters<AccountState["setRootMetaValues"]>[0] = KEYS.filter((key) => key in patch).map(
-			(key) => ({
-				path: PATHS[key],
-				value: patch[key] ?? undefined,
-			}),
-		);
-		if (patch.latestColor !== undefined) {
-			changes.push({
-				path: LATEST_COLOR_PATH,
-				value: patch.latestColor === null ? undefined : latestColorTo(patch.latestColor),
-			});
-		}
-		if (patch.searchForChangesAfter !== undefined) {
-			changes.push({
-				path: SEARCH_FOR_CHANGES_AFTER_PATH,
-				value:
-					patch.searchForChangesAfter === null
-						? undefined
-						: await searchForChangesAfterTo(adapter, patch.searchForChangesAfter),
-			});
-		}
-		const settings: [ServerSetting, string | boolean][] = [
-			...FLAG_KEYS.flatMap((key): [ServerSetting, boolean][] => {
-				const value = patch[key];
-				return value === undefined ? [] : [[SETTINGS[key], value]];
-			}),
-			...(patch.theme === undefined ? [] : [[STRING_SETTINGS.theme, patch.theme] as [ServerSetting, string]]),
-			...(patch.font === undefined ? [] : [[STRING_SETTINGS.font, patch.font] as [ServerSetting, string]]),
-		];
-		const internal = pushingAdapter(ctx);
-		if (internal === undefined) {
-			// One unit of work: separate writes would replace the settings row within its own millisecond.
-			new LocalAccount(ctx.db).change(changes, settings);
+		return withAccountState(ctx, async (adapter) => {
+			const previousWeekStartDay =
+				patch.weekStartDay === undefined ? undefined : await adapter.getRootMeta(PATHS.weekStartDay);
+			const changes: Parameters<AccountState["setRootMetaValues"]>[0] = KEYS.filter((key) => key in patch).map(
+				(key) => ({
+					path: PATHS[key],
+					value: patch[key] ?? undefined,
+				}),
+			);
+			if (patch.latestColor !== undefined) {
+				changes.push({
+					path: LATEST_COLOR_PATH,
+					value: patch.latestColor === null ? undefined : latestColorTo(patch.latestColor),
+				});
+			}
+			if (patch.searchForChangesAfter !== undefined) {
+				changes.push({
+					path: SEARCH_FOR_CHANGES_AFTER_PATH,
+					value:
+						patch.searchForChangesAfter === null
+							? undefined
+							: await searchForChangesAfterTo(adapter, patch.searchForChangesAfter),
+				});
+			}
+			const settings: [ServerSetting, string | boolean][] = [
+				...FLAG_KEYS.flatMap((key): [ServerSetting, boolean][] => {
+					const value = patch[key];
+					return value === undefined ? [] : [[SETTINGS[key], value]];
+				}),
+				...(patch.theme === undefined ? [] : [[STRING_SETTINGS.theme, patch.theme] as [ServerSetting, string]]),
+				...(patch.font === undefined ? [] : [[STRING_SETTINGS.font, patch.font] as [ServerSetting, string]]),
+			];
+			if (adapter instanceof LocalAccount) {
+				// One unit of work: separate writes would replace the settings row within its own millisecond.
+				adapter.change(changes, settings);
+				return ok(await readPreferences(adapter));
+			}
+			if (changes.length > 0) {
+				await adapter.setRootMetaValues(changes);
+			}
+			for (const [name, value] of settings) {
+				await adapter.setSetting(name, value);
+			}
+			// Re-laying out the calendar's weeks writes through the internal API; without one the layout stays as it is.
+			if (
+				patch.weekStartDay !== undefined &&
+				(patch.weekStartDay ?? undefined) !== (previousWeekStartDay ?? undefined)
+			) {
+				await reapplyWeekLayout(ctx, adapter);
+			}
 			return ok(await readPreferences(adapter));
-		}
-		if (changes.length > 0) {
-			await internal.setRootMetaValues(changes);
-		}
-		for (const [name, value] of settings) {
-			await internal.setSetting(name, value);
-		}
-		// Re-laying out the calendar's weeks writes through the internal API; without one the layout stays as it is.
-		if (
-			patch.weekStartDay !== undefined &&
-			(patch.weekStartDay ?? undefined) !== (previousWeekStartDay ?? undefined)
-		) {
-			await reapplyWeekLayout(ctx, internal);
-		}
-		return ok(await readPreferences(adapter));
+		});
 	},
 });
