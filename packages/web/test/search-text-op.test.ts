@@ -6,8 +6,11 @@ import {afterEach, describe, expect, it} from "vite-plus/test";
 import * as schema from "@outlinedb/shared/db";
 import {nodeContent, nodeMetadata} from "@outlinedb/shared/db";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
-import {searchText} from "../src/server/ops/search.js";
+import {Ops} from "../src/server/ops/index.js";
 import type {ServerContext} from "../src/server/context.js";
+
+// From the registry, which the web setup wraps to check each op output against its schema.
+const searchText = Ops["search.text"];
 
 const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 const SEEDED_AT = "2026-01-01 00:00:00.000";

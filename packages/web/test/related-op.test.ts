@@ -10,9 +10,12 @@ import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {MemoryEmbeddingIndex, SqliteVecIndex} from "../src/server/embedding-index.js";
 import type {EmbeddingIndex} from "../src/server/embedding-index.js";
 import {nodeTreeHost} from "../src/server/node-host.js";
-import {relatedFind} from "../src/server/ops/related.js";
+import {Ops} from "../src/server/ops/index.js";
 import {bindTreeHost} from "../src/server/tree-snapshot.js";
 import type {ServerContext} from "../src/server/context.js";
+
+// From the registry, which the web setup wraps to check each op output against its schema.
+const relatedFind = Ops["related.find"];
 
 const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 const SEEDED_AT = "2026-01-01 00:00:00.000";

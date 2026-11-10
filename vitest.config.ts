@@ -12,7 +12,8 @@ export default defineConfig({
 		// Trivial sync beforeEach hooks (mkdtemp + template DB copy) hit the 10s default when the machine is oversubscribed
 		hookTimeout: 60_000,
 		restoreMocks: true,
-		reporters: ["verbose"],
+		// The JSON report keeps every run's per-file and per-test durations for the next test-speed pass; the test:run task's cache inputs exclude its directory.
+		reporters: ["verbose", ["json", {outputFile: "node_modules/.vitest-cache/test-timings.json"}]],
 		allowOnly: !process.env.CI,
 		disableConsoleIntercept: true,
 		// strictly-increasing-clock: a fake API answers in microseconds, so back-to-back units of work would share a millisecond and fail as a same-millisecond overwrite.

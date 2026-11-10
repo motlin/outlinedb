@@ -8,6 +8,9 @@ const sleep = async (ms: number): Promise<void> =>
 		setTimeout(resolve, ms);
 	});
 
+// Status polls are cheap in-process fetches, so poll often; each loop keeps its overall wait budget.
+const POLL_MS = 10;
+
 function uuid(n: number): string {
 	return `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 }
@@ -58,7 +61,7 @@ async function status(h: Harness): Promise<SyncStatus> {
 async function runToIdle(h: Harness, previousFinished = 0, path = "/api/admin/sync"): Promise<SyncStatus> {
 	const post = await h.mf.dispatchFetch(`http://localhost${path}`, {method: "POST"});
 	expect(post.status).toBe(202);
-	for (let i = 0; i < 300; i++) {
+	for (let i = 0; i < 30_000 / POLL_MS; i++) {
 		const current = await status(h);
 		if (
 			current.phase === "idle" &&
@@ -68,7 +71,7 @@ async function runToIdle(h: Harness, previousFinished = 0, path = "/api/admin/sy
 		) {
 			return current;
 		}
-		await sleep(100);
+		await sleep(POLL_MS);
 	}
 	throw new Error("sync did not finish");
 }
@@ -267,12 +270,12 @@ describe("sync from a fake upstream", () => {
 		const post = await h.mf.dispatchFetch("http://localhost/api/admin/sync", {method: "POST"});
 		expect(post.status).toBe(202);
 		let result: SyncStatus | undefined;
-		for (let i = 0; i < 100; i++) {
+		for (let i = 0; i < 10_000 / POLL_MS; i++) {
 			result = await status(h);
 			if (result.lastResult?.status === "rate_limited") {
 				break;
 			}
-			await sleep(100);
+			await sleep(POLL_MS);
 		}
 		expect(result?.lastResult?.status).toBe("rate_limited");
 		expect(exportCalls).toBe(before + 1);
@@ -293,12 +296,12 @@ describe("sync from a fake upstream", () => {
 		const persistDir = first.persistDir;
 		await first.mf.dispatchFetch("http://localhost/api/admin/sync", {method: "POST"});
 		let parked: SyncStatus | undefined;
-		for (let i = 0; i < 100; i++) {
+		for (let i = 0; i < 10_000 / POLL_MS; i++) {
 			parked = await status(first);
 			if (parked.applied > 0) {
 				break;
 			}
-			await sleep(100);
+			await sleep(POLL_MS);
 		}
 		expect(parked).toMatchObject({phase: "importing", applied: 2000});
 		const callsBefore = exportCalls;
@@ -307,12 +310,12 @@ describe("sync from a fake upstream", () => {
 		const second = await start(persistDir, {SYNC_BATCHES_PER_TICK: "1", SYNC_TICK_DELAY_MS: "0"});
 		await second.mf.dispatchFetch("http://localhost/api/admin/sync", {method: "POST"});
 		let done: SyncStatus | undefined;
-		for (let i = 0; i < 300; i++) {
+		for (let i = 0; i < 30_000 / POLL_MS; i++) {
 			done = await status(second);
 			if (done.phase === "idle" && done.lastResult?.status === "ok") {
 				break;
 			}
-			await sleep(100);
+			await sleep(POLL_MS);
 		}
 		expect(done?.lastResult).toMatchObject({status: "ok", totalNodes: 5000, nodesAdded: 5000, nodesPhasedOut: 0});
 		expect(exportCalls).toBe(callsBefore);
@@ -339,12 +342,12 @@ describe("sync from a fake upstream", () => {
 		const h = await start(undefined, {SYNC_BATCHES_PER_TICK: "1", SYNC_TICK_DELAY_MS: "600000"});
 		await h.mf.dispatchFetch("http://localhost/api/admin/sync", {method: "POST"});
 		let parked: SyncStatus | undefined;
-		for (let i = 0; i < 100; i++) {
+		for (let i = 0; i < 10_000 / POLL_MS; i++) {
 			parked = await status(h);
 			if (parked.applied > 0) {
 				break;
 			}
-			await sleep(100);
+			await sleep(POLL_MS);
 		}
 		expect(parked).toMatchObject({phase: "importing", applied: 2000});
 
@@ -436,12 +439,12 @@ describe("sync from a fake upstream", () => {
 		exportGate = undefined;
 		exportReached = undefined;
 		let done: SyncStatus | undefined;
-		for (let i = 0; i < 300; i++) {
+		for (let i = 0; i < 30_000 / POLL_MS; i++) {
 			done = await status(h);
 			if (done.phase === "idle" && done.lastResult !== null) {
 				break;
 			}
-			await sleep(100);
+			await sleep(POLL_MS);
 		}
 		expect(done?.lastResult).toMatchObject({status: "ok", totalNodes: 100});
 		// The signed-in user's own view of the sync, which the empty outline shows while the first import runs.

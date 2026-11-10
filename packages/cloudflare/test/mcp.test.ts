@@ -216,37 +216,28 @@ describe("OAuth consent", () => {
 		const wrong = {...page, verifier: "wrong-verifier-wrong-verifier-wrong-verifier"};
 		await expect(exchange(h.mf, wrong, redirect)).rejects.toThrow(/token: 400/u);
 	});
-});
 
-describe("/authorize without a session", () => {
-	let h: AuthHarness;
-
-	beforeAll(async () => {
-		h = await startSessionHarness("alice@example.com");
-	}, 120_000);
-
-	afterAll(async () => {
-		await h.dispose();
-	});
-
-	it("redirects to /login with the whole /authorize path and query as next", async () => {
-		const page = await openConsent(h.mf, "");
-		const location = new URL(page.location ?? "", origin);
-		const next = new URL(location.searchParams.get("next") ?? "", origin);
-		expect({status: page.status, path: location.pathname, nextPath: next.pathname}).toStrictEqual({
-			status: 302,
-			path: "/login",
-			nextPath: "/authorize",
+	// The same harness: a request without a session never sees the signed-up user.
+	describe("/authorize without a session", () => {
+		it("redirects to /login with the whole /authorize path and query as next", async () => {
+			const page = await openConsent(h.mf, "");
+			const location = new URL(page.location ?? "", origin);
+			const next = new URL(location.searchParams.get("next") ?? "", origin);
+			expect({status: page.status, path: location.pathname, nextPath: next.pathname}).toStrictEqual({
+				status: 302,
+				path: "/login",
+				nextPath: "/authorize",
+			});
+			expect([next.searchParams.get("client_id"), next.searchParams.get("state")]).toStrictEqual([
+				page.clientId,
+				"state-1",
+			]);
 		});
-		expect([next.searchParams.get("client_id"), next.searchParams.get("state")]).toStrictEqual([
-			page.clientId,
-			"state-1",
-		]);
-	});
 
-	it("redirects a forged session token to /login too", async () => {
-		const page = await openConsent(h.mf, "better-auth.session_token=forged.token");
-		expect([page.status, new URL(page.location ?? "", origin).pathname]).toStrictEqual([302, "/login"]);
+		it("redirects a forged session token to /login too", async () => {
+			const page = await openConsent(h.mf, "better-auth.session_token=forged.token");
+			expect([page.status, new URL(page.location ?? "", origin).pathname]).toStrictEqual([302, "/login"]);
+		});
 	});
 });
 

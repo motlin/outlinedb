@@ -7,6 +7,18 @@ import type {MiniflareOptions} from "miniflare";
 
 const clientDir = new URL("../../web/dist/client", import.meta.url).pathname;
 
+const bundles = new Map<string, Promise<string>>();
+
+/** Bundle each Worker entry once per test file; every harness started from it reuses the bundle. */
+async function bundleWorkerOnce(entry: string): Promise<string> {
+	let bundle = bundles.get(entry);
+	if (bundle === undefined) {
+		bundle = bundleWorker(entry);
+		bundles.set(entry, bundle);
+	}
+	return bundle;
+}
+
 /** Bundle a Worker entry for workerd, resolving workspace packages through their `source` export. */
 async function bundleWorker(entry: string): Promise<string> {
 	const result = await build({
@@ -36,7 +48,7 @@ export async function startHarness(
 	bindings: Record<string, string> = {ACCESS_DEV_IDENTITY: "dev"},
 	extra: {outboundService?: Extract<MiniflareOptions, {modules: true}>["outboundService"]} = {},
 ): Promise<Harness> {
-	const script = await bundleWorker(entry);
+	const script = await bundleWorkerOnce(entry);
 	const persistDir = existingPersistDir ?? mkdtempSync(join(tmpdir(), "wf-cf-"));
 	const mf = new Miniflare({
 		// Listed explicitly, so Miniflare skips its import scan, which rejects the non-literal `import()` Better Auth's
