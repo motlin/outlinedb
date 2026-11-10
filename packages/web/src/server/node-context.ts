@@ -16,12 +16,14 @@ const ladderEvents = new LadderEventBus();
  */
 export function createServerContext(): ServerContext {
 	const db = getDatabase();
+	const config = readNodeConfig(process.env);
 	return buildServerContext({
 		db,
-		config: readNodeConfig(process.env),
+		config,
 		ladderEvents,
 		decisions: fileDecisionStore(decisionsDirectory(process.env), decisionPhotosDirectory(process.env)),
-		internalAuth: readInternalAuth(),
+		// A standalone host has no workflowy.com behind it: a saved session must not sync or push into its outline.
+		internalAuth: config.mode === "mirror" ? readInternalAuth() : undefined,
 		embeddingIndex: (model) => new SqliteVecIndex(db, model),
 	});
 }

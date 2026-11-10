@@ -91,6 +91,14 @@ describe("node writes in a standalone context", () => {
 		});
 	});
 
+	it("creates at Home's bottom when the parent is omitted, as an empty outline's first bullet sends", async () => {
+		await expect(store.call("nodes.create", {name: "", id: NEW_ID})).resolves.toStrictEqual({
+			ok: true,
+			value: {node: dto(NEW_ID, {name: "", priority: 2, createdAt: NOW, modifiedAt: NOW})},
+			meta: {created: true},
+		});
+	});
+
 	it("answers 404 for a create under an unknown parent", async () => {
 		await expect(
 			store.call("nodes.create", {parent_id: "4d7c2f10-0000-4000-8000-000000000000", name: "x"}),

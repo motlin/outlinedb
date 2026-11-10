@@ -4,13 +4,14 @@ import {
 	NodeTreeReader,
 	ancestorChain,
 	effectiveCompletedAt,
+	readExpansion,
 	readHomeLayoutMode,
 } from "@outlinedb/shared/cache";
 import {mirrors as mirrorsTable, nodeContent, nodeMetadata} from "@outlinedb/shared/db";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import type {Node} from "@outlinedb/shared/types";
 import {HOME_TARGET} from "@outlinedb/shared/types";
-import {isShortId, parseVirtualShortId} from "@outlinedb/shared/workflowy";
+import {isShortId, parseVirtualShortId, upstreamExpansionKey} from "@outlinedb/shared/workflowy";
 import {and, eq, sql} from "drizzle-orm";
 import type {
 	BacklinkItem,
@@ -279,8 +280,8 @@ export const nodesView = defineOp({
 });
 
 /**
- * The view's expansion: the requested ids, or for null the account's stored expansion (nothing without the internal
- * API), as the walk's SQL source and the same test in JS.
+ * The view's expansion: the requested ids, or for null the account's stored expansion (a standalone store's own keys; a
+ * mirror's through the internal API, nothing without it), as the walk's SQL source and the same test in JS.
  */
 function viewExpansion(
 	ctx: ServerContext,
@@ -289,6 +290,10 @@ function viewExpansion(
 	if (expandedIds !== null) {
 		const ids = new Set(expandedIds);
 		return {expansion: {kind: "ids", ids: [...ids]}, isExpanded: (id) => ids.has(id)};
+	}
+	if (ctx.mode === "standalone") {
+		const keys = readExpansion(ctx.db) ?? new Set<string>();
+		return {expansion: {kind: "stored"}, isExpanded: (id) => keys.has(upstreamExpansionKey(id))};
 	}
 	const adapter = ctx.internalAdapter?.();
 	return adapter === undefined

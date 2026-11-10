@@ -63,7 +63,7 @@ describe("Workflowy secrets reach only the owner's Durable Object", () => {
 		});
 	});
 
-	it("writes through to the upstream from the owner's object", async () => {
+	it("writes through to the upstream from the owner's object and never writes the node locally", async () => {
 		calls.length = 0;
 		const response = await harness.mf.dispatchFetch("http://localhost/api/v1/nodes", {
 			method: "POST",
@@ -72,7 +72,13 @@ describe("Workflowy secrets reach only the owner's Durable Object", () => {
 		});
 		await response.arrayBuffer();
 		// The fake fails the first read, which is enough to show the owner's key went upstream.
-		expect(calls).toStrictEqual([{method: "GET", path: "/api/v1/nodes", auth: "Bearer fake-key-value"}]);
+		// A mirror's write goes upstream or nowhere: the failed write leaves no local-only node behind.
+		const listed = plain(await storeClient(await named("dev")).call("nodes.list", {}));
+		expect({status: response.status, calls, listed}).toStrictEqual({
+			status: 500,
+			calls: [{method: "GET", path: "/api/v1/nodes", auth: "Bearer fake-key-value"}],
+			listed: {ok: true, value: {nodes: []}},
+		});
 	});
 
 	it("creates locally in another object without touching the upstream", async () => {

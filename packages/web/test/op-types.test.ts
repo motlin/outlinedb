@@ -25,9 +25,9 @@ describe("OpInput and OpOutput pin the client-facing op types", () => {
 		}>();
 	});
 
-	it("nodes.create takes a parent, a name and optional slot fields", () => {
+	it("nodes.create takes a name and an optional parent (Home when omitted) and slot fields", () => {
 		expectTypeOf<OpInput<"nodes.create">>().toEqualTypeOf<{
-			parent_id: string | null;
+			parent_id?: string | null | undefined;
 			name: string;
 			note?: string | undefined;
 			layoutMode?: string | undefined;

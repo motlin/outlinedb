@@ -1,5 +1,5 @@
 import {afterAll, beforeAll, describe, expect, it} from "vite-plus/test";
-import {cookiesFrom, drainEmails, linkIn, origin, post, startAuthHarness, turnstile} from "./auth-harness";
+import {cookiesFrom, drainEmails, linkIn, origin, post, signUp, startAuthHarness, turnstile} from "./auth-harness";
 import type {AuthHarness} from "./auth-harness";
 import {authDb, countStoreCalls} from "./harness";
 import {storeClient} from "../src/store-client";
@@ -8,7 +8,8 @@ import type {UserStore} from "../src/user-store";
 const bindings = {
 	BETTER_AUTH_SECRET: "test-secret-0123456789abcdef0123456789abcdef",
 	SIGNUP_MODE: "invite",
-	SIGNUP_INVITES: "owner@example.com, sam@example.com, uma@example.com, rita@example.com, lou@example.com",
+	SIGNUP_INVITES:
+		"owner@example.com, sam@example.com, uma@example.com, rita@example.com, lou@example.com, tia@example.com",
 	TURNSTILE_SECRET_KEY: turnstile.passSecret,
 	TURNSTILE_SITE_KEY: turnstile.siteKey,
 	OUTLINEDB_ENV_OWNERS: "Owner@example.com",
@@ -161,6 +162,107 @@ describe("a verified email provisions its user's Durable Object exactly once", (
 			calls: [1, 1],
 			afterFirst: [2, true],
 			afterSecond: 2,
+		});
+	});
+});
+
+describe("a new standalone account types end to end through the Worker", () => {
+	let h: AuthHarness;
+
+	beforeAll(async () => {
+		h = await startAuthHarness(bindings, {className: "ProbeStore"});
+	}, 120_000);
+
+	afterAll(async () => {
+		await h.dispose();
+	});
+
+	interface Row {
+		id: string;
+		name: string;
+		completedAt: number | null;
+	}
+
+	it("creates, renames, indents, expands, completes and deletes, and the outline view reads it all back", async () => {
+		const {cookie} = await signUp(h, "tia@example.com");
+		const call = async (method: string, path: string, body?: unknown): Promise<unknown> => {
+			const response = await h.mf.dispatchFetch(`${origin}/api/v1${path}`, {
+				method,
+				headers: {cookie, "content-type": "application/json"},
+				...(body === undefined ? {} : {body: JSON.stringify(body)}),
+			});
+			const text = await response.text();
+			if (!response.ok) {
+				throw new Error(`${method} ${path}: ${response.status} ${text}`);
+			}
+			return text === "" ? null : JSON.parse(text);
+		};
+		const children = async (parentId?: string): Promise<Row[]> => {
+			// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- GET /nodes answers {nodes: NodeResponse[]}
+			const {nodes} = (await call("GET", parentId === undefined ? "/nodes" : `/nodes?parent_id=${parentId}`)) as {
+				nodes: Row[];
+			};
+			return nodes;
+		};
+		const byName = (rows: Row[], name: string): Row => {
+			const row = rows.find((candidate) => candidate.name === name);
+			if (row === undefined) {
+				throw new Error(`No ${name} in ${JSON.stringify(rows)}`);
+			}
+			return row;
+		};
+
+		const top = await children();
+		const inbox = byName(top, "Inbox");
+		const welcome = byName(top, "Welcome to OutlineDB");
+		const tips = await children(welcome.id);
+		const firstTip = tips[0];
+		if (firstTip === undefined) {
+			throw new Error("No welcome tips");
+		}
+
+		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- POST /nodes answers {node: NodeResponse}
+		const {node: created} = (await call("POST", "/nodes", {parent_id: inbox.id, name: "first thought"})) as {
+			node: Row;
+		};
+		await call("PATCH", `/nodes/${created.id}`, {name: "my first bullet"});
+		await call("POST", `/nodes/${created.id}/move`, {parent_id: welcome.id, index: tips.length});
+		await call("PATCH", "/expansion", {changes: {[welcome.id]: true}});
+		await call("POST", `/nodes/${created.id}/complete`);
+		await call("DELETE", `/nodes/${firstTip.id}`);
+
+		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- POST /nodes/view answers OutlineViewResponse
+		const view = (await call("POST", "/nodes/view", {
+			rootId: null,
+			expandedIds: null,
+			limit: 100,
+			showCompleted: true,
+		})) as {lists: {parentId: string | null; nodes: Row[]}[]; expandedIds: string[]};
+		const names = new Map([...top, ...tips, created].map((row) => [row.id, row.name]));
+		expect({
+			lists: view.lists.map((list) => ({
+				parent: list.parentId === null ? null : names.get(list.parentId),
+				nodes: list.nodes.map((node) => ({name: node.name, completed: node.completedAt !== null})),
+			})),
+			expanded: view.expandedIds.map((id) => names.get(id)),
+		}).toStrictEqual({
+			lists: [
+				{
+					parent: null,
+					nodes: [
+						{name: "Inbox", completed: false},
+						{name: "Welcome to OutlineDB", completed: false},
+					],
+				},
+				{
+					parent: "Welcome to OutlineDB",
+					nodes: [
+						...tips.slice(1).map((tip) => ({name: tip.name, completed: false})),
+						{name: "my first bullet", completed: true},
+					],
+				},
+			],
+			expanded: ["Welcome to OutlineDB"],
 		});
 	});
 });

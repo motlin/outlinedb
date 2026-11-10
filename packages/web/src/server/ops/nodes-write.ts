@@ -113,7 +113,8 @@ async function createdNodeResult(
 // POST /api/v1/nodes - Create node at an exact `index` among all siblings (omitted = bottom)
 export const nodesCreate = defineOp({
 	input: z.object({
-		parent_id: ParentIdSchema,
+		/** Omitted for Home, as an empty outline's first bullet sends it. */
+		parent_id: ParentIdSchema.optional(),
 		/** An empty name is valid: every empty-row create (add button, Enter) sends `name: ""`. */
 		name: z.string(),
 		note: unvalidatedText,
@@ -139,7 +140,7 @@ export const nodesCreate = defineOp({
 			return fail(500, {error: WRITE_CLIENT_REQUIRED});
 		}
 		const {name, note, layoutMode, after_id: afterId} = body;
-		const parent = parseParent(ctx, body.parent_id);
+		const parent = parseParent(ctx, body.parent_id ?? null);
 		if (!parent.ok) {
 			return fail(parent.status, {error: parent.error});
 		}
