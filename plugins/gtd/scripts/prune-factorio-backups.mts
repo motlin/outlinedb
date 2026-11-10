@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 // Archive the Factorio Prints Firebase backup dumps to the NAS, then prune old ones from the bucket.
 //
-// The bucket gains a ~1.4 GB `<ISO timestamp>_facorio-blueprints_data.json.gz` dump every day.
+// The bucket gains a ~1.4 GB `<ISO timestamp>_<project>_data.json.gz` dump every day.
 // This copies every dump the NAS lacks, then deletes the dumps that are older than 45 days and
 // are not the first dump of their calendar month. A dump is deleted only when the NAS holds a
 // copy with the identical byte size. The tiny `*_rules.json.gz` files are never touched.
 //
 // Prints a daily-review briefing as JSON on stdout and exits non-zero when anything failed or
-// stayed unverified. An unmounted NAS is a successful no-op.
+// stayed unverified. An unmounted NAS is a successful no-op, and so is a missing configuration.
 //
-// Usage: prune-factorio-backups.mts [--dry-run] [--today YYYY-MM-DD] [--nas-dir <path>]
+// The bucket, gcloud project, gcloud account, and NAS directory are personal settings, read from
+// `factorioBackups: {bucket, project, account, nasDir}` in .llm/gtd/config.json.
+//
+// Usage: prune-factorio-backups.mts [--dry-run] [--today YYYY-MM-DD] [--config <path>]
 
 import {execFileSync} from "node:child_process";
 import {existsSync, statSync} from "node:fs";
@@ -17,15 +20,17 @@ import {join} from "node:path";
 import {takeValue} from "./cli-args.mts";
 import {localTodayISO} from "./compute-overdue.mts";
 import {parseIsoDate} from "./iso-date.mts";
-import {errorMessage, expectArray, expectObject, parseJson} from "./json.mts";
+import {errorMessage, expectArray, expectObject, isObject, parseJson, readJsonFile, stringField} from "./json.mts";
 
-const BUCKET = "facorio-blueprints-backups";
-const GCLOUD_SCOPE = ["--project", "facorio-blueprints", "--account", "factorio.prints@gmail.com"];
-const DEFAULT_NAS_DIR = "/Volumes/Public/NAS/Factorio/facorio-blueprints-backups";
+const DEFAULT_CONFIG_PATH = ".llm/gtd/config.json";
+const CONFIG_KEY = "factorioBackups";
+const SETTING_KEYS = ["bucket", "project", "account", "nasDir"] as const;
 const KEEP_DAYS = 45;
-const DUMP_PATTERN = /^(\d{4}-\d{2}-\d{2})T[\d:.]+Z_facorio-blueprints_data\.json\.gz$/u;
+const DUMP_PATTERN = /^(\d{4}-\d{2}-\d{2})T[\d:.]+Z_.+_data\.json\.gz$/u;
 const COPY_TIMEOUT_MS = 30 * 60 * 1000;
 const GIB = 1024 ** 3;
+
+type BackupSettings = Record<(typeof SETTING_KEYS)[number], string>;
 
 export interface BucketObject {
 	name: string;
@@ -52,6 +57,8 @@ interface PrunePlan {
 
 interface Outcome {
 	dryRun: boolean;
+	/** Config keys that are absent; non-empty means nothing ran. */
+	missingConfig: string[];
 	nasMounted: boolean;
 	copied: string[];
 	deleted: string[];
@@ -149,15 +156,47 @@ export function parseListing(text: string): BucketObject[] {
 	});
 }
 
+/**
+ * The `factorioBackups` settings from the parsed gtd config. `settings` is null when any key is
+ * absent or not a non-empty string, and `missing` names each such key.
+ */
+export function readBackupConfig(config: unknown): {settings: BackupSettings | null; missing: string[]} {
+	const section = isObject(config) && isObject(config[CONFIG_KEY]) ? config[CONFIG_KEY] : {};
+	const value = (key: string): string => stringField(section, key) ?? "";
+	const missing = SETTING_KEYS.filter((key) => value(key) === "").map((key) => `${CONFIG_KEY}.${key}`);
+	if (missing.length > 0) {
+		return {settings: null, missing};
+	}
+	return {
+		settings: {
+			bucket: value("bucket"),
+			project: value("project"),
+			account: value("account"),
+			nasDir: value("nasDir"),
+		},
+		missing,
+	};
+}
+
 /** `gcloud storage rm` is blocked by a hook on this machine, so deletes go through the JSON API. */
-export function deleteUrl(object: BucketObject): string {
+export function deleteUrl(bucket: string, object: BucketObject): string {
 	const name = encodeURIComponent(object.name);
 	const generation = encodeURIComponent(object.generation);
-	return `https://storage.googleapis.com/storage/v1/b/${BUCKET}/o/${name}?ifGenerationMatch=${generation}`;
+	return `https://storage.googleapis.com/storage/v1/b/${bucket}/o/${name}?ifGenerationMatch=${generation}`;
 }
 
 export function buildBriefing(outcome: Outcome): Briefing {
 	const task = "factorio-backups-prune";
+	if (outcome.missingConfig.length > 0) {
+		return {
+			task,
+			status: "empty",
+			lines: [
+				`🗄️ Factorio backups: not configured, nothing copied or pruned; set ${outcome.missingConfig.join(", ")} in ${DEFAULT_CONFIG_PATH}`,
+			],
+			autoApplied: [],
+		};
+	}
 	if (!outcome.nasMounted) {
 		return {
 			task,
@@ -206,15 +245,17 @@ function gcloud(args: string[], timeout?: number): string {
 	});
 }
 
-function listDumps(): BucketObject[] {
+const gcloudScope = ({project, account}: BackupSettings): string[] => ["--project", project, "--account", account];
+
+function listDumps(settings: BackupSettings): BucketObject[] {
 	return parseListing(
 		gcloud([
 			"storage",
 			"objects",
 			"list",
-			`gs://${BUCKET}/*_data.json.gz`,
+			`gs://${settings.bucket}/*_data.json.gz`,
 			"--format=json(name,size,generation)",
-			...GCLOUD_SCOPE,
+			...gcloudScope(settings),
 		]),
 	);
 }
@@ -230,17 +271,23 @@ function fileSize(path: string): number | null {
 	}
 }
 
-async function deleteObject(object: BucketObject, token: string): Promise<void> {
-	const response = await fetch(deleteUrl(object), {method: "DELETE", headers: {Authorization: `Bearer ${token}`}});
+async function deleteObject(bucket: string, object: BucketObject, token: string): Promise<void> {
+	const response = await fetch(deleteUrl(bucket, object), {
+		method: "DELETE",
+		headers: {Authorization: `Bearer ${token}`},
+	});
 	if (response.status !== 204) {
 		throw new Error(`HTTP ${response.status} ${(await response.text()).slice(0, 200)}`);
 	}
 }
 
-async function run(dryRun: boolean, today: string, nasDir: string): Promise<Outcome> {
+async function run(dryRun: boolean, today: string, configPath: string): Promise<Outcome> {
+	const {settings, missing} = readBackupConfig(existsSync(configPath) ? readJsonFile(configPath) : null);
+	const nasDir = settings?.nasDir ?? "";
 	const outcome: Outcome = {
 		dryRun,
-		nasMounted: existsSync(nasDir),
+		missingConfig: missing,
+		nasMounted: settings !== null && existsSync(nasDir),
 		copied: [],
 		deleted: [],
 		bytesFreed: 0,
@@ -248,11 +295,11 @@ async function run(dryRun: boolean, today: string, nasDir: string): Promise<Outc
 		unverified: [],
 		failures: [],
 	};
-	if (!outcome.nasMounted) {
+	if (settings === null || !outcome.nasMounted) {
 		return outcome;
 	}
 	const nasSize = (name: string): number | null => fileSize(join(nasDir, name));
-	const objects = listDumps();
+	const objects = listDumps(settings);
 	const before = planPrune(objects, today, nasSize);
 	outcome.kept = before.kept;
 
@@ -268,7 +315,13 @@ async function run(dryRun: boolean, today: string, nasDir: string): Promise<Outc
 	for (const object of before.toCopy) {
 		try {
 			gcloud(
-				["storage", "cp", `gs://${BUCKET}/${object.name}`, join(nasDir, object.name), ...GCLOUD_SCOPE],
+				[
+					"storage",
+					"cp",
+					`gs://${settings.bucket}/${object.name}`,
+					join(nasDir, object.name),
+					...gcloudScope(settings),
+				],
 				COPY_TIMEOUT_MS,
 			);
 			outcome.copied.push(object.name);
@@ -283,11 +336,11 @@ async function run(dryRun: boolean, today: string, nasDir: string): Promise<Outc
 	if (after.toDelete.length === 0) {
 		return outcome;
 	}
-	const token = gcloud(["auth", "print-access-token", "--account", "factorio.prints@gmail.com"]).trim();
+	const token = gcloud(["auth", "print-access-token", "--account", settings.account]).trim();
 	for (const object of after.toDelete) {
 		try {
 			// oxlint-disable-next-line no-await-in-loop -- deletes are sequential so a failure stops nothing else mid-flight
-			await deleteObject(object, token);
+			await deleteObject(settings.bucket, object, token);
 			outcome.deleted.push(object.name);
 			outcome.bytesFreed += object.size;
 		} catch (error) {
@@ -300,22 +353,22 @@ async function run(dryRun: boolean, today: string, nasDir: string): Promise<Outc
 async function main(): Promise<void> {
 	let dryRun = false;
 	let today = localTodayISO();
-	let nasDir = DEFAULT_NAS_DIR;
+	let configPath = DEFAULT_CONFIG_PATH;
 	const args = process.argv.slice(2)[Symbol.iterator]();
 	for (const arg of args) {
 		if (arg === "--dry-run") {
 			dryRun = true;
 		} else if (arg === "--today") {
 			today = takeValue(args, arg);
-		} else if (arg === "--nas-dir") {
-			nasDir = takeValue(args, arg);
+		} else if (arg === "--config") {
+			configPath = takeValue(args, arg);
 		} else {
 			throw new Error(`Unknown argument: ${arg}`);
 		}
 	}
 	let briefing: Briefing;
 	try {
-		briefing = buildBriefing(await run(dryRun, today, nasDir));
+		briefing = buildBriefing(await run(dryRun, today, configPath));
 	} catch (error) {
 		briefing = {
 			task: "factorio-backups-prune",

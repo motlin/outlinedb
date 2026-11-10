@@ -2,11 +2,18 @@
 /* eslint-disable @typescript-eslint/no-floating-promises -- node:test test() calls are fire-and-forget by design */
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {buildBriefing, deleteUrl, parseListing, planPrune, selectExpired} from "./prune-factorio-backups.mts";
+import {
+	buildBriefing,
+	deleteUrl,
+	parseListing,
+	planPrune,
+	readBackupConfig,
+	selectExpired,
+} from "./prune-factorio-backups.mts";
 import type {BucketObject} from "./prune-factorio-backups.mts";
 
 const dump = (timestamp: string, size = 100): BucketObject => ({
-	name: `${timestamp}_facorio-blueprints_data.json.gz`,
+	name: `${timestamp}_example-project_data.json.gz`,
 	size,
 	generation: `g-${timestamp}`,
 });
@@ -16,23 +23,23 @@ const TODAY = "2026-11-10";
 test("selectExpired keeps the last 45 days and the first dump of each calendar month", () => {
 	const names = [
 		// August: only the first dump of the month survives.
-		"2026-08-01T04:18:00Z_facorio-blueprints_data.json.gz",
-		"2026-08-01T16:00:00Z_facorio-blueprints_data.json.gz",
-		"2026-08-31T04:18:00Z_facorio-blueprints_data.json.gz",
+		"2026-08-01T04:18:00Z_example-project_data.json.gz",
+		"2026-08-01T16:00:00Z_example-project_data.json.gz",
+		"2026-08-31T04:18:00Z_example-project_data.json.gz",
 		// September's first dump is the 3rd; the day before the cutoff expires.
-		"2026-09-03T04:18:00Z_facorio-blueprints_data.json.gz",
-		"2026-09-25T04:18:00Z_facorio-blueprints_data.json.gz",
+		"2026-09-03T04:18:00Z_example-project_data.json.gz",
+		"2026-09-25T04:18:00Z_example-project_data.json.gz",
 		// 45 days before 2026-11-10 is 2026-09-26: kept, as is everything after it.
-		"2026-09-26T04:18:00Z_facorio-blueprints_data.json.gz",
-		"2026-11-09T15:31:24Z_facorio-blueprints_data.json.gz",
+		"2026-09-26T04:18:00Z_example-project_data.json.gz",
+		"2026-11-09T15:31:24Z_example-project_data.json.gz",
 		// Rules files and strangers are never candidates.
-		"2026-08-15T04:18:00Z_facorio-blueprints_rules.json.gz",
+		"2026-08-15T04:18:00Z_example-project_rules.json.gz",
 		"firebase-auth-export.json",
 	];
 	assert.deepStrictEqual(selectExpired(names.toReversed(), TODAY), [
-		"2026-08-01T16:00:00Z_facorio-blueprints_data.json.gz",
-		"2026-08-31T04:18:00Z_facorio-blueprints_data.json.gz",
-		"2026-09-25T04:18:00Z_facorio-blueprints_data.json.gz",
+		"2026-08-01T16:00:00Z_example-project_data.json.gz",
+		"2026-08-31T04:18:00Z_example-project_data.json.gz",
+		"2026-09-25T04:18:00Z_example-project_data.json.gz",
 	]);
 });
 
@@ -43,7 +50,7 @@ test("planPrune copies what the NAS lacks and deletes only expired dumps whose N
 	const mismatched = dump("2026-08-04T04:18:00Z", 400);
 	const recentMissing = dump("2026-11-09T15:31:24Z", 500);
 	const rules: BucketObject = {
-		name: "2026-08-02T04:18:00Z_facorio-blueprints_rules.json.gz",
+		name: "2026-08-02T04:18:00Z_example-project_rules.json.gz",
 		size: 7,
 		generation: "r",
 	};
@@ -74,26 +81,27 @@ test("planPrune copies what the NAS lacks and deletes only expired dumps whose N
 
 test("parseListing reads gcloud's JSON, whose sizes and generations may be strings or numbers", () => {
 	const listing = JSON.stringify([
-		{name: "a_facorio-blueprints_data.json.gz", size: "1370489367", generation: "1762155931000000"},
-		{name: "b_facorio-blueprints_data.json.gz", size: 12, generation: 34},
+		{name: "a_example-project_data.json.gz", size: "1370489367", generation: "1762155931000000"},
+		{name: "b_example-project_data.json.gz", size: 12, generation: 34},
 	]);
 	assert.deepStrictEqual(parseListing(listing), [
-		{name: "a_facorio-blueprints_data.json.gz", size: 1_370_489_367, generation: "1762155931000000"},
-		{name: "b_facorio-blueprints_data.json.gz", size: 12, generation: "34"},
+		{name: "a_example-project_data.json.gz", size: 1_370_489_367, generation: "1762155931000000"},
+		{name: "b_example-project_data.json.gz", size: 12, generation: "34"},
 	]);
 	assert.throws(() => parseListing('[{"name": "a", "size": "big", "generation": "1"}]'), /size/u);
 });
 
 test("deleteUrl targets one exact generation through the Storage JSON API", () => {
 	assert.equal(
-		deleteUrl(dump("2026-08-02T04:18:00Z")),
-		"https://storage.googleapis.com/storage/v1/b/facorio-blueprints-backups/o/2026-08-02T04%3A18%3A00Z_facorio-blueprints_data.json.gz?ifGenerationMatch=g-2026-08-02T04%3A18%3A00Z",
+		deleteUrl("example-backups", dump("2026-08-02T04:18:00Z")),
+		"https://storage.googleapis.com/storage/v1/b/example-backups/o/2026-08-02T04%3A18%3A00Z_example-project_data.json.gz?ifGenerationMatch=g-2026-08-02T04%3A18%3A00Z",
 	);
 });
 
 test("buildBriefing reports counts, bytes freed, and anything unverified", () => {
 	const outcome = {
 		dryRun: false,
+		missingConfig: [] as string[],
 		nasMounted: true,
 		copied: ["c1", "c2"],
 		deleted: ["d1"],
@@ -139,6 +147,7 @@ test("buildBriefing reports counts, bytes freed, and anything unverified", () =>
 test("buildBriefing treats an unmounted NAS as a successful no-op and a dry run as a preview", () => {
 	const idle = {
 		dryRun: false,
+		missingConfig: [] as string[],
 		nasMounted: false,
 		copied: [],
 		deleted: [],
@@ -147,6 +156,17 @@ test("buildBriefing treats an unmounted NAS as a successful no-op and a dry run 
 		unverified: [],
 		failures: [],
 	};
+	assert.deepStrictEqual(
+		buildBriefing({...idle, missingConfig: ["factorioBackups.account", "factorioBackups.nasDir"]}),
+		{
+			task: "factorio-backups-prune",
+			status: "empty",
+			lines: [
+				"🗄️ Factorio backups: not configured, nothing copied or pruned; set factorioBackups.account, factorioBackups.nasDir in .llm/gtd/config.json",
+			],
+			autoApplied: [],
+		},
+	);
 	assert.deepStrictEqual(buildBriefing(idle), {
 		task: "factorio-backups-prune",
 		status: "empty",
@@ -173,4 +193,29 @@ test("buildBriefing treats an unmounted NAS as a successful no-op and a dry run 
 			autoApplied: [],
 		},
 	);
+});
+
+test("readBackupConfig reads factorioBackups from the gtd config and names every missing key", () => {
+	const factorioBackups = {
+		bucket: "example-backups",
+		project: "example-project",
+		account: "owner@example.com",
+		nasDir: "/Volumes/Archive/backups",
+	};
+	assert.deepStrictEqual(readBackupConfig({projectsDirectory: "/p", factorioBackups}), {
+		settings: factorioBackups,
+		missing: [],
+	});
+	assert.deepStrictEqual(readBackupConfig({factorioBackups: {bucket: "example-backups", project: "", account: 7}}), {
+		settings: null,
+		missing: ["factorioBackups.project", "factorioBackups.account", "factorioBackups.nasDir"],
+	});
+	const everyKey = [
+		"factorioBackups.bucket",
+		"factorioBackups.project",
+		"factorioBackups.account",
+		"factorioBackups.nasDir",
+	];
+	assert.deepStrictEqual(readBackupConfig({projectsDirectory: "/p"}), {settings: null, missing: everyKey});
+	assert.deepStrictEqual(readBackupConfig(null), {settings: null, missing: everyKey});
 });

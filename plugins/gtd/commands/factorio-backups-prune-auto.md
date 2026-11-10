@@ -5,13 +5,30 @@ description: Auto task for the daily review — archive the Factorio Prints Fire
 
 # Factorio Backups Prune — Auto
 
-Keep the `gs://facorio-blueprints-backups` bucket small without losing a backup. The bucket gains a ~1.4 GB `<ISO timestamp>_facorio-blueprints_data.json.gz` dump every day; the NAS at `/Volumes/Public/NAS/Factorio/facorio-blueprints-backups/` is the long-term archive. The live prep task carries `Auto`, so this stages a briefing fragment instead of a confirmable proposal.
+Keep the Factorio Prints backup bucket small without losing a backup. The bucket gains a ~1.4 GB `<ISO timestamp>_<project>_data.json.gz` dump every day; a directory on the NAS is the long-term archive. The live prep task carries `Auto`, so this stages a briefing fragment instead of a confirmable proposal.
 
 ## Auto contract
 
 - **Fully autonomous.** Never call `AskUserQuestion` / `TaskCreate` / `TaskUpdate` / `TodoWrite`.
 - **Run the script once and stage its output.** Never copy, verify, or delete by hand, and never widen what the script deletes.
 - **Idempotent.** A re-run finds every dump archived and nothing past retention, and stages `status: "empty"`.
+
+## Configuration
+
+The bucket, gcloud project, gcloud account, and NAS directory are personal settings in `.llm/gtd/config.json`:
+
+```json
+{
+	"factorioBackups": {
+		"bucket": "example-backups",
+		"project": "example-project",
+		"account": "owner@example.com",
+		"nasDir": "/Volumes/Archive/example-backups"
+	}
+}
+```
+
+`nasDir` is flat and holds each dump under its bucket name. When any key is missing the script does nothing and stages `status: "empty"` with a line naming the missing keys. Auto cannot prompt, so never ask for them or guess them.
 
 ## Run the prune
 
@@ -27,7 +44,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/prune-factorio-backups.mts > .llm/gtd/review/
 
 Allow up to 30 minutes: each missing dump is a 1.4 GB download onto the NAS. The script:
 
-- Lists the bucket's data dumps with `gcloud storage objects list` (project `facorio-blueprints`, account `factorio.prints@gmail.com`). The tiny `*_rules.json.gz` files are never touched.
+- Lists the bucket's data dumps with `gcloud storage objects list`, using the configured project and account. The tiny `*_rules.json.gz` files are never touched.
 - Copies every dump the NAS lacks with `gcloud storage cp`, then checks its size on the NAS.
 - Applies the retention rule: keep every dump from the last 45 days plus the first dump of each calendar month.
 - Deletes the rest only when the NAS copy exists with the identical byte size. A missing or size-mismatched copy leaves the dump in the bucket and is reported.
@@ -46,12 +63,12 @@ The script prints the complete briefing (schema in `${CLAUDE_PLUGIN_ROOT}/skills
 	"task": "factorio-backups-prune",
 	"status": "ready",
 	"lines": ["🗄️ Factorio backups: copied 7 to the NAS, deleted 6 from the bucket (7.66 GiB freed), 156 kept"],
-	"autoApplied": ["Copied 2026-11-05T17:04:34Z_facorio-blueprints_data.json.gz to the NAS"]
+	"autoApplied": ["Copied 2026-11-05T17:04:34Z_example-project_data.json.gz to the NAS"]
 }
 ```
 
 - `ready`: one or more dumps were copied or deleted, and everything is verified.
-- `empty`: nothing to copy or prune, or the NAS is not mounted.
+- `empty`: nothing to copy or prune, the NAS is not mounted, or the configuration is missing.
 - `error`: a listing, copy, or delete failed, or a dump has no identical-size NAS copy. Each one is its own `⚠️` line. Anything already copied or deleted is still listed in `autoApplied`.
 
 Leave the staged file exactly as the script wrote it. If the script printed nothing usable (a crash before the briefing), stage `status: "error"` with the stderr text instead.
