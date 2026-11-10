@@ -345,17 +345,20 @@ describe("cache-import-api service", () => {
 	});
 
 	describe("batch processing", () => {
+		const NODE_COUNT = 200;
+
 		it("handles large number of nodes", () => {
 			const apiNodes: WorkflowyNode[] = [];
-			for (let i = 0; i < 2500; i++) {
+			// Spans several of the importer's 90-id lookup and statement chunks.
+			for (let i = 0; i < NODE_COUNT; i++) {
 				apiNodes.push(createApiNode({id: `node-${i}`, name: `Node ${i}`, priority: i}));
 			}
 
 			const result = importFromApi(testDatabase.db, apiNodes);
 
 			expectImportStats(result, {
-				totalNodes: 2500,
-				nodesAdded: 2500,
+				totalNodes: NODE_COUNT,
+				nodesAdded: NODE_COUNT,
 				nodesUpdated: 0,
 				nodesUnchanged: 0,
 				nodesDeleted: 0,
@@ -370,7 +373,7 @@ describe("cache-import-api service", () => {
 				.from(nodeContent)
 				.where(eq(nodeContent.systemTo, FAR_FUTURE_DATE))
 				.all().length;
-			expect(count).toBe(2500);
+			expect(count).toBe(NODE_COUNT);
 		});
 	});
 

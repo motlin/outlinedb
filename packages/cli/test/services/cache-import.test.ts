@@ -960,9 +960,12 @@ describe("cache-import service", () => {
 	});
 
 	describe("batch processing", () => {
+		const NODE_COUNT = 200;
+
 		it("handles large number of nodes", async () => {
+			// Spans several of the importer's 90-parameter statements; the transaction timeout test below crosses a unit chunk.
 			const backupContent: {id: string; nm: string}[] = [];
-			for (let i = 0; i < 2500; i++) {
+			for (let i = 0; i < NODE_COUNT; i++) {
 				backupContent.push({id: `node-${i}`, nm: `Node ${i}`});
 			}
 			const filePath = writeBackupFile(backupContent);
@@ -970,8 +973,8 @@ describe("cache-import service", () => {
 			const result = await importBackup(testDatabase.db, filePath, "backup.json");
 
 			expectImportStats(result, {
-				totalNodes: 2500,
-				nodesAdded: 2500,
+				totalNodes: NODE_COUNT,
+				nodesAdded: NODE_COUNT,
 				nodesUpdated: 0,
 				nodesUnchanged: 0,
 				nodesDeleted: 0,
@@ -986,7 +989,7 @@ describe("cache-import service", () => {
 				.from(nodeContent)
 				.where(eq(nodeContent.systemTo, FAR_FUTURE_DATE))
 				.all().length;
-			expect(count).toBe(2500);
+			expect(count).toBe(NODE_COUNT);
 		});
 	});
 
