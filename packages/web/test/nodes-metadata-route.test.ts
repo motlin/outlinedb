@@ -82,13 +82,22 @@ interface FakeAdapter {
 	getRootMeta: ReturnType<typeof vi.fn<WorkflowyInternalAdapter["getRootMeta"]>>;
 }
 
-/** Home holds `n1`; the fake adapter writes metadata changes to the cache as the real one does. */
-function setup(configured: boolean, rootLayoutMode?: string, mode: "mirror" | "standalone" = "mirror") {
+/**
+ * Home holds `n1`, seeded with `n1` overrides so a test never rewrites it before the request: a second
+ * write of one row in the seed's millisecond is a SameMillisecondOverwriteError. The fake adapter writes
+ * metadata changes to the cache as the real one does.
+ */
+function setup(
+	configured: boolean,
+	rootLayoutMode?: string,
+	mode: "mirror" | "standalone" = "mirror",
+	n1: Partial<WorkflowyNode> = {},
+) {
 	const sqlite = new DatabaseConstructor(":memory:");
 	const db = drizzle(sqlite, {schema});
 	migrate(db, {migrationsFolder});
 	const cacheService = new CacheService(db);
-	cacheService.insertNode(apiNode("n1"), null);
+	cacheService.insertNode({...apiNode("n1"), ...n1}, null);
 	const writeMetadata = (id: string, metadata: Record<string, unknown>) => {
 		const layoutMode = cacheService.getNode(id)?.layoutMode;
 		storeInternalMetadata(db, new Map([[id, layoutMode == null ? metadata : {...metadata, layoutMode}]]));
@@ -151,8 +160,7 @@ describe("DELETE /api/v1/nodes/:id backlinks", () => {
 	const LINK = '<a href="https://workflowy.com/#/0123456789ab">t</a>';
 
 	it("deletes the backlink items of the linked sources in the subtree after the node is deleted", async () => {
-		const {adapter, request, cacheService} = setup(true);
-		cacheService.insertNode({...apiNode("n1"), name: LINK}, null);
+		const {adapter, request, cacheService} = setup(true, undefined, "mirror", {name: LINK});
 		cacheService.insertNode({...apiNode("c1"), parent_id: "n1", name: "plain"}, "n1");
 		cacheService.insertNode({...apiNode("c2"), parent_id: "n1", note: LINK}, "n1");
 		const order: string[] = [];
@@ -175,8 +183,7 @@ describe("DELETE /api/v1/nodes/:id backlinks", () => {
 	});
 
 	it("deletes the backlink items of a source in the subtree whose text no longer links, so none are stranded", async () => {
-		const {adapter, request, cacheService} = setup(true);
-		cacheService.insertNode({...apiNode("n1"), name: "link removed"}, null);
+		const {adapter, request, cacheService} = setup(true, undefined, "mirror", {name: "link removed"});
 		cacheService.insertNode(apiNode("target"), null);
 		cacheService.insertNode({...apiNode("refs"), parent_id: "target", name: ""}, "target");
 		cacheService.insertNode({...apiNode("item"), parent_id: "refs", name: ""}, "refs");
@@ -335,8 +342,9 @@ describe("PATCH /api/v1/nodes/:id metadata", () => {
 	});
 
 	it("syncs backlinks after a text edit that removes the last internal link", async () => {
-		const {adapter, request, cacheService} = setup(true);
-		cacheService.insertNode({...apiNode("n1"), name: '<a href="https://workflowy.com/#/0123456789ab">t</a>'}, null);
+		const {adapter, request} = setup(true, undefined, "mirror", {
+			name: '<a href="https://workflowy.com/#/0123456789ab">t</a>',
+		});
 		updateNode.mockResolvedValue(apiNode("n1"));
 
 		await request("PATCH", "/nodes/n1", {name: "plain"});
@@ -347,9 +355,8 @@ describe("PATCH /api/v1/nodes/:id metadata", () => {
 	it("reports the target of a backlink recreated by an edit that leaves the link set unchanged", async () => {
 		const TARGET = "aaaaaaaa-aaaa-4aaa-8aaa-0123456789ab";
 		const link = '<a href="https://workflowy.com/#/0123456789ab">t</a>';
-		const {adapter, request, cacheService} = setup(true);
+		const {adapter, request, cacheService} = setup(true, undefined, "mirror", {name: link});
 		cacheService.insertNode({...apiNode(TARGET), name: "target"}, null);
-		cacheService.insertNode({...apiNode("n1"), name: link}, null);
 		updateNode.mockResolvedValue(apiNode("n1"));
 		adapter.syncBacklinks.mockResolvedValue({
 			created: [{id: "b", sourceId: "n1", targetId: TARGET}],
@@ -364,8 +371,7 @@ describe("PATCH /api/v1/nodes/:id metadata", () => {
 
 	it("does not sync backlinks for a keystroke in a row whose link target is unknown to the cache and unchanged", async () => {
 		const link = '<a href="https://workflowy.com/#/0123456789ab">t</a>';
-		const {adapter, request, cacheService} = setup(true);
-		cacheService.insertNode({...apiNode("n1"), name: link}, null);
+		const {adapter, request} = setup(true, undefined, "mirror", {name: link});
 		updateNode.mockResolvedValue(apiNode("n1"));
 
 		await request("PATCH", "/nodes/n1", {name: `${link} more`});
@@ -392,15 +398,14 @@ describe("PATCH /api/v1/nodes/:id metadata", () => {
 	});
 
 	it("reports the targets of the links an edit adds or removes, but not those it keeps", async () => {
-		const {request, cacheService} = setup(true);
 		const kept = "11111111-2222-3333-4444-0123456789ab";
 		const removed = "11111111-2222-3333-4444-aaaaaaaaaaaa";
 		const added = "11111111-2222-3333-4444-bbbbbbbbbbbb";
+		const link = (id: string) => `<a href="https://workflowy.com/#/${id.slice(-12)}">t</a>`;
+		const {request, cacheService} = setup(true, undefined, "mirror", {name: `${link(kept)} ${link(removed)}`});
 		for (const id of [kept, removed, added]) {
 			cacheService.insertNode(apiNode(id), null);
 		}
-		const link = (id: string) => `<a href="https://workflowy.com/#/${id.slice(-12)}">t</a>`;
-		cacheService.insertNode({...apiNode("n1"), name: `${link(kept)} ${link(removed)}`}, null);
 		updateNode.mockResolvedValue(apiNode("n1"));
 
 		const {body} = await request("PATCH", "/nodes/n1", {name: `${link(kept)} ${link(added)}`});
