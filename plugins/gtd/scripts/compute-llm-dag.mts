@@ -68,14 +68,21 @@ function taskDisplayName(name: string): string {
 	return name.replaceAll(/<time[^>]*>.*?<\/time>\s*/gu, "").trim();
 }
 
-function taskSlug(taskInstructions: TreeNode[], context: string): string {
+/** The prep command's slug, or the task name's when the task is plain instructions (inline shell, prose) with no command. */
+function taskSlug(taskInstructions: TreeNode[], context: string, name: string): string {
 	const commandSlugs = taskInstructions.flatMap((instruction) => {
 		const slug = instruction.name.trim().match(TASK_COMMAND_PATTERN)?.[1];
 		return slug ? [slug] : [];
 	});
+	if (commandSlugs.length > 1) {
+		throw new Error(`${context} must have at most one plugin command`);
+	}
 	const [slug] = commandSlugs;
-	if (commandSlugs.length !== 1 || slug === undefined) {
-		throw new Error(`${context} must have exactly one plugin command`);
+	if (slug === undefined) {
+		return name
+			.toLowerCase()
+			.replaceAll(/[^a-z0-9]+/gu, "-")
+			.replaceAll(/^-|-$/gu, "");
 	}
 	return slug.replace(/-(?:prep|auto)$/u, "");
 }
@@ -104,7 +111,7 @@ function parsePrepTask(node: TreeNode, today: string): PrepTask {
 	const name = taskDisplayName(node.name);
 	const context = `prep task "${name}"`;
 	const taskInstructions = instructions(node, context);
-	const slug = taskSlug(taskInstructions, context);
+	const slug = taskSlug(taskInstructions, context, name);
 	const dueDate = parseTimeISO(node.name);
 	if (dueDate === null) {
 		throw new Error(`${context} is missing its date`);

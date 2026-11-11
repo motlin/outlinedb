@@ -126,7 +126,7 @@ LLM Tasks:
       /gtd:refine-journal-apply
 ```
 
-Prep and presentation pair by their identical date-stripped task names. The planner infers the artifact slug from the prep command by removing a trailing `-prep` or `-auto`; `/gtd:email-calendar-prep` therefore stages `email-calendar`. `Interval` is optional and defaults to `1d`; supported units are `d`, `m`, and `y`. `Auto` is only for prep tasks that have no presentation entry. Presentation inherits its due state, slug, and interval from prep, so it carries no date. Placement already identifies prep versus presentation; `Key:`, `#llm-task`, `· prep`, `· apply`, marker emoji, and duplicate dates are invalid clutter.
+Prep and presentation pair by their identical date-stripped task names. The planner infers the artifact slug from the prep command by removing a trailing `-prep` or `-auto`; `/gtd:email-calendar-prep` therefore stages `email-calendar`. A prep task with no command, only instructions or inline shell, takes its slug from its kebab-cased name. `Interval` is optional and defaults to `1d`; supported units are `d`, `m`, and `y`. `Auto` is only for prep tasks that have no presentation entry. Presentation inherits its due state, slug, and interval from prep, so it carries no date. Placement already identifies prep versus presentation; `Key:`, `#llm-task`, `· prep`, `· apply`, marker emoji, and duplicate dates are invalid clutter.
 
 The planner rejects unexpected root children, obsolete `Key:` markers, duplicate or unmatched task names, duplicate inferred slugs, invalid intervals, missing prep dates, dates on presentation tasks, and presentation entries for auto tasks. Any validation error halts the review.
 

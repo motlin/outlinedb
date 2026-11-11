@@ -198,8 +198,20 @@ test("computeLlmDag infers the artifact slug from the prep command", () => {
 		presentation({name: "Refine exercise", id: "exercise-presentation", command: "refine-exercise-apply"}),
 	);
 
+	prep.unshift({
+		name: `Backups prune ${time("2000-01-01", "Sat, Jan 1, 2000")}`,
+		id: "prune",
+		shortId: "prune-short",
+		completedAt: null,
+		children: [instruction("Run the script below."), instruction("<code>echo prune</code>"), instruction("Auto")],
+	});
+
 	const plan = computeLlmDag(tree, "2000-01-01");
-	assert.strictEqual(at(at(plan.prepBranches, 0).tasks, 0).slug, "refine-exercise");
+	assert.deepStrictEqual(
+		at(plan.prepBranches, 0).tasks.map((item) => item.slug),
+		["backups-prune"],
+	);
+	assert.strictEqual(at(at(plan.prepBranches, 1).tasks, 0).slug, "refine-exercise");
 	assert.strictEqual(plan.presentation.at(-1)?.slug, "refine-exercise");
 });
 
