@@ -21,6 +21,7 @@
 
 import {readFileSync} from "node:fs";
 import {arrayField, isObject, parseJson} from "./json.mts";
+import {isMain} from "./is-main.mts";
 
 /** A Workflowy node as `node get --json` emits it; fields the ladder does not read pass through untyped. */
 export interface LadderNode {
@@ -449,6 +450,6 @@ function main(arguments_: readonly string[]): void {
 	process.stdout.write(`${JSON.stringify(run(readLadder(bucket)), null, 2)}\n`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
 	main(process.argv);
 }

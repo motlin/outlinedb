@@ -14,6 +14,7 @@ import {existsSync, mkdirSync, writeFileSync} from "node:fs";
 import {dirname, join} from "node:path";
 import {arrayField, isObject, readJsonFile} from "./json.mts";
 import {takeValue} from "./cli-args.mts";
+import {isMain} from "./is-main.mts";
 
 export const LEDGER_PATH = ".llm/gtd/review/agent-launches.json";
 
@@ -99,6 +100,6 @@ function main(argv: readonly string[]): unknown {
 	throw new Error("usage: agent-launches.mts record <slug> <pane> <cwd> | check <slug> | pending [--date D]");
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
 	console.log(JSON.stringify(main(process.argv.slice(2)), null, 2));
 }

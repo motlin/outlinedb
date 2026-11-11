@@ -13,6 +13,7 @@
 import {readFileSync} from "node:fs";
 import {isObject} from "./json.mts";
 import {takeValue} from "./cli-args.mts";
+import {isMain} from "./is-main.mts";
 
 export interface CompletedNode {
 	id?: string;
@@ -100,6 +101,6 @@ function main(argv: string[]): void {
 	process.stdout.write(`${JSON.stringify(collectCompletedTasks(roots, timeZone), null, 2)}\n`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
 	main(process.argv.slice(2));
 }

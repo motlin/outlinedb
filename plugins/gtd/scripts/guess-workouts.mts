@@ -22,6 +22,7 @@ import {existsSync} from "node:fs";
 import {takeValue} from "./cli-args.mts";
 import {buildTimeElement} from "./compute-overdue.mts";
 import {expectArray, expectObject, readJsonFile} from "./json.mts";
+import {isMain} from "./is-main.mts";
 
 export interface CalendarNode {
 	id?: string;
@@ -672,8 +673,7 @@ const localToday = (): string => {
 	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 };
 
-const isMain = import.meta.url === `file://${process.argv[1]}`;
-if (isMain) {
+if (isMain(import.meta.url)) {
 	let treePath = "";
 	let template = "";
 	let today = localToday();

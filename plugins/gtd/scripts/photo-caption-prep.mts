@@ -30,6 +30,7 @@ import {homedir} from "node:os";
 import {join, resolve} from "node:path";
 import {expectArray, expectObject, parseJson, stringField} from "./json.mts";
 import type {JsonObject} from "./json.mts";
+import {isMain} from "./is-main.mts";
 
 export interface Favorite {
 	uuid: string;
@@ -524,6 +525,6 @@ function run(args: Args, libraryPath: string, outDir: string, dbPath: string): v
 	);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
 	main();
 }

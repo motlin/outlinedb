@@ -6,6 +6,7 @@ import {execFileSync} from "node:child_process";
 import {existsSync, readFileSync, realpathSync} from "node:fs";
 import {homedir} from "node:os";
 import {arrayField, errorMessage, isObject, parseJson, stringField} from "./json.mts";
+import {isMain} from "./is-main.mts";
 
 export interface ProjectNode {
 	name: string;
@@ -137,7 +138,7 @@ function main(): void {
 	process.stdout.write(`${JSON.stringify(plan, null, "\t")}\n`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
 	try {
 		main();
 	} catch (error) {

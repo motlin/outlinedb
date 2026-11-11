@@ -8,6 +8,7 @@
 
 import {spawnSync} from "node:child_process";
 import {takeValue} from "./cli-args.mts";
+import {isMain} from "./is-main.mts";
 
 export function buildSelectAppleScript(filename: string, date: string): string[] {
 	if (!/^\d{4}-\d{2}-\d{2}$/u.test(date)) {
@@ -36,7 +37,7 @@ export function buildSelectAppleScript(filename: string, date: string): string[]
 	];
 }
 
-if (process.argv[1] === import.meta.filename) {
+if (isMain(import.meta.url)) {
 	let filename = "";
 	let date = "";
 	const args = process.argv.slice(2)[Symbol.iterator]();

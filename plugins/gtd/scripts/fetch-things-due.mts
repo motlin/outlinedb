@@ -16,6 +16,7 @@
 // Usage: node fetch-things-due.mts [--today YYYY-MM-DD] > things.json
 
 import {execFileSync} from "node:child_process";
+import {isMain} from "./is-main.mts";
 
 // ASCII unit/record separators: a task title or note can contain any punctuation -- including
 // newlines and pipes -- but never these.
@@ -166,6 +167,6 @@ function main(argv: readonly string[]): void {
 	process.stdout.write(`${JSON.stringify(sets, null, 2)}\n`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
 	main(process.argv);
 }

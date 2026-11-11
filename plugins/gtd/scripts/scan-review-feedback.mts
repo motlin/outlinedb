@@ -19,6 +19,7 @@ import {readdirSync, readFileSync, statSync} from "node:fs";
 import {homedir} from "node:os";
 import {join} from "node:path";
 import {isObject} from "./json.mts";
+import {isMain} from "./is-main.mts";
 
 const MAX_TEXT = 2000;
 /** Claude Code names a project transcript directory after the cwd with every non-alphanumeric character as a dash. */
@@ -286,6 +287,6 @@ function main(argv: string[]): void {
 	process.stdout.write(`${JSON.stringify(sessions, null, 2)}\n`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
 	main(process.argv);
 }

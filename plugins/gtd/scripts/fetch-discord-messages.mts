@@ -8,8 +8,8 @@
 //
 // Exit codes: 0 success, 2 missing token or arguments, 1 Discord API failure (message on stderr).
 
-import {pathToFileURL} from "node:url";
 import {errorMessage, isObject, numberField, stringField} from "./json.mts";
+import {isMain} from "./is-main.mts";
 
 export interface DiscordAuthor {
 	id?: string;
@@ -192,6 +192,6 @@ async function main(): Promise<void> {
 	}
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+if (isMain(import.meta.url)) {
 	await main();
 }

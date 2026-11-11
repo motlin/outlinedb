@@ -27,6 +27,7 @@ import {existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathS
 import {homedir, tmpdir} from "node:os";
 import {join} from "node:path";
 import {isObject} from "./json.mts";
+import {isMain} from "./is-main.mts";
 
 export type Ci = "SUCCESS" | "FAILURE" | "PENDING" | "NONE";
 
@@ -483,6 +484,6 @@ function main(argv: readonly string[]): Report {
 	return buildReport(outcomes, skipped, options.apply);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
 	console.log(JSON.stringify(main(process.argv.slice(2)), null, 2));
 }

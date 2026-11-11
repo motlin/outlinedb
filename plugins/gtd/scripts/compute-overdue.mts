@@ -29,6 +29,7 @@ import {isObject, parseJson, stringField} from "./json.mts";
 import type {JsonObject} from "./json.mts";
 import {takeValue} from "./cli-args.mts";
 import {parseIsoDate} from "./iso-date.mts";
+import {isMain} from "./is-main.mts";
 
 export type IntervalUnit = "d" | "m" | "y";
 
@@ -769,6 +770,6 @@ function main(argv: string[]): void {
 	process.stdout.write(`\nTOTAL OVERDUE: ${rows.length} (${rows.filter((r) => r.isLlmTask).length} #llm-task)\n`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
 	main(process.argv);
 }

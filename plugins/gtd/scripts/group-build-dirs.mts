@@ -20,6 +20,7 @@
 //    "unplugged": [{repo, packageCount, dirCount}], "report": [...]}
 
 import {readFileSync} from "node:fs";
+import {isMain} from "./is-main.mts";
 
 const PR_REPAIR = /^pr-.+-repair$/u;
 
@@ -176,6 +177,6 @@ function main(): void {
 	process.stdout.write(`${JSON.stringify({...grouped, report: formatBuildDirReport(grouped)}, null, "\t")}\n`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
 	main();
 }

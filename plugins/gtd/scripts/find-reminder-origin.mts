@@ -22,6 +22,7 @@ import {homedir} from "node:os";
 import {join} from "node:path";
 import {takeValue} from "./cli-args.mts";
 import {arrayField, isObject, parseJson, stringField} from "./json.mts";
+import {isMain} from "./is-main.mts";
 
 export interface DispatchTo {
 	name: string;
@@ -167,6 +168,6 @@ function main(): void {
 	console.log(JSON.stringify({dispatchTo, origins}, null, 2));
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
 	main();
 }

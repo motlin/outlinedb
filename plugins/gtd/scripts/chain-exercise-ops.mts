@@ -14,6 +14,7 @@
 import {execFileSync} from "node:child_process";
 import {arrayField, expectObject, isObject, readJsonFile, stringField} from "./json.mts";
 import type {JsonObject} from "./json.mts";
+import {isMain} from "./is-main.mts";
 
 export interface ChainedOp {
 	before?: string;
@@ -154,8 +155,7 @@ const readLiveName = (nodeId: string): string => {
 	return stringField(node, "name") ?? "";
 };
 
-const isMain = import.meta.url === `file://${process.argv[1]}`;
-if (isMain) {
+if (isMain(import.meta.url)) {
 	const [command, exercisePath, journalPath] = process.argv.slice(2);
 	if (command === "validate" && exercisePath !== undefined && journalPath !== undefined) {
 		const {valid, errors} = validateExerciseChain(readJson(exercisePath), readJson(journalPath));

@@ -9,6 +9,7 @@ import {
 } from "./compute-overdue.mts";
 import type {Interval, TreeNode, TreeRoot} from "./compute-overdue.mts";
 import {takeValue} from "./cli-args.mts";
+import {isMain} from "./is-main.mts";
 
 const ROOT_NAMES = new Set(["Import", "Prep", "Presentation"]);
 const PLAN_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
@@ -280,6 +281,6 @@ function main(arguments_: string[]): void {
 	process.stdout.write(`${JSON.stringify(computeLlmDag(tree, today), null, 2)}\n`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
 	main(process.argv);
 }

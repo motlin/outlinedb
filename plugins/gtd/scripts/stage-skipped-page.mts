@@ -20,6 +20,7 @@ import {takeValue} from "./cli-args.mts";
 import {DEFAULT_SKIP_LOG_PATH, localTodayISO, parseSkipLog, stripMarkup} from "./compute-overdue.mts";
 import type {SkipEntry} from "./compute-overdue.mts";
 import {isObject, readJsonFile} from "./json.mts";
+import {isMain} from "./is-main.mts";
 
 /** Keys whose last skip-log outcome at or after `runStartedISO` is `skip`, in first-seen order. */
 export function skippedThisRun(entries: readonly SkipEntry[], runStartedISO: string): string[] {
@@ -235,6 +236,6 @@ function main(argv: string[]): void {
 	process.stdout.write(`${JSON.stringify({slug: page.slug, items}, null, 2)}\n`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
 	main(process.argv);
 }

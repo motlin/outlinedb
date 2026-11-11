@@ -41,6 +41,7 @@ import {expectArray, expectObject, parseJson, stringField} from "./json.mts";
 import type {JsonObject} from "./json.mts";
 import {takeValue} from "./cli-args.mts";
 import {parseIsoDate} from "./iso-date.mts";
+import {isMain} from "./is-main.mts";
 
 export type DueSource = "workflowy" | "things" | "reminders";
 
@@ -686,6 +687,6 @@ function main(argv: string[]): void {
 
 export {buildTimeElement};
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
 	main(process.argv);
 }

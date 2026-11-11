@@ -22,6 +22,7 @@
 import {execFileSync} from "node:child_process";
 import {existsSync, lstatSync, readFileSync, statSync} from "node:fs";
 import {dirname, join} from "node:path";
+import {isMain} from "./is-main.mts";
 
 const LINKED_GITDIR = /^gitdir: (.*\/\.git\/worktrees\/[^/]+)\s*$/u;
 // A large checkout lists far more than execFileSync's 1 MiB default buffer.
@@ -183,6 +184,6 @@ function main(): void {
 	process.stdout.write(`${JSON.stringify(result, null, "\t")}\n`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
 	main();
 }

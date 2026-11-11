@@ -21,6 +21,7 @@
 // restart recipe kills only that helper.
 
 import {execSync} from "node:child_process";
+import {isMain} from "./is-main.mts";
 
 // ~1 day, mirrored in overview.md
 export const STALE_THRESHOLD_SECONDS = 86_400;
@@ -122,6 +123,6 @@ function main(): void {
 	process.stdout.write(age === null ? "unknown\n" : `${age}\n`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
 	main();
 }

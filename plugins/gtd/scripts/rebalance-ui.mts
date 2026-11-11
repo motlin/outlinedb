@@ -16,6 +16,7 @@ import {join, resolve} from "node:path";
 import {readLadder, tierLabel} from "./asap-tiers.mts";
 import {isObject, parseJson} from "./json.mts";
 import {webAppUrl} from "./web-app-url.mts";
+import {isMain} from "./is-main.mts";
 
 export interface ModelItem {
 	readonly id: string;
@@ -759,6 +760,6 @@ function main(): void {
 	}
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
 	main();
 }

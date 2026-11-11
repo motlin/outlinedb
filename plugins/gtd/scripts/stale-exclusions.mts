@@ -12,6 +12,7 @@ import {execFileSync} from "node:child_process";
 import {existsSync} from "node:fs";
 import {homedir} from "node:os";
 import {join} from "node:path";
+import {isMain} from "./is-main.mts";
 
 const PREFERENCES = "/Library/Preferences/com.apple.TimeMachine";
 
@@ -63,6 +64,6 @@ function main(): void {
 	);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
 	main();
 }

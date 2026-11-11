@@ -8,6 +8,7 @@
 import {writeFileSync} from "node:fs";
 import {arrayField, errorMessage, expectArray, expectObject, readJsonFile, stringField} from "./json.mts";
 import type {JsonObject} from "./json.mts";
+import {isMain} from "./is-main.mts";
 
 const USAGE = "Usage: render-overview.mts <overview.json> <overview.html>";
 
@@ -172,7 +173,7 @@ export function parseOverview(value: unknown): Overview {
 	};
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
 	const [input, output, ...rest] = process.argv.slice(2);
 	if (input === undefined || output === undefined || rest.length > 0) {
 		process.stderr.write(`${USAGE}\n`);

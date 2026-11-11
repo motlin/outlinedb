@@ -6,6 +6,7 @@
 
 import {expectObject, isObject, readJsonFile} from "./json.mts";
 import type {JsonObject} from "./json.mts";
+import {isMain} from "./is-main.mts";
 
 const REQUIRED_TOP_LEVEL = ["task", "generatedAt", "status"];
 const KNOWN_STATUSES = new Set(["ready", "needs-interactive", "empty", "error"]);
@@ -221,8 +222,7 @@ export const validateProposal = (staged: JsonObject): ValidationResult => {
 	return {valid: errors.length === 0, errors};
 };
 
-const isMain = import.meta.url === `file://${process.argv[1]}`;
-if (isMain) {
+if (isMain(import.meta.url)) {
 	const path = process.argv[2];
 	if (path === undefined || path === "") {
 		console.error("usage: validate-proposal.mts <staged-proposal.json>");

@@ -16,6 +16,7 @@ import type {Dirent} from "node:fs";
 import {existsSync, readdirSync} from "node:fs";
 import {homedir} from "node:os";
 import {join} from "node:path";
+import {isMain} from "./is-main.mts";
 
 const BUILD_DIR_NAMES = new Set(["node_modules", "target", "build", "dist"]);
 const VANISHED_CODES = new Set(["ENOENT", "ENOTDIR"]);
@@ -148,6 +149,6 @@ function main(): void {
 	);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
 	main();
 }

@@ -9,6 +9,7 @@ import {homedir} from "node:os";
 import {setTimeout as delay} from "node:timers/promises";
 import {errorMessage, expectObject, isObject, parseJson, stringField} from "./json.mts";
 import type {JsonObject} from "./json.mts";
+import {isMain} from "./is-main.mts";
 
 export interface LaunchOptions {
 	label: string;
@@ -222,7 +223,7 @@ async function main(): Promise<void> {
 	);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
 	try {
 		await main();
 	} catch (error) {

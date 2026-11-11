@@ -11,6 +11,7 @@
 //     -> {repo, number, title, url, author, state, mergedAt, own, ownMerged, year, landedText}
 
 import {arrayField, expectObject, isObject, readJsonFile, stringField} from "./json.mts";
+import {isMain} from "./is-main.mts";
 
 export interface PullRequest {
 	number: number;
@@ -171,6 +172,6 @@ function main(argv: readonly string[]): PrRef | PrClassification | null {
 	throw new Error("usage: github-pr-landed.mts parse <url> | classify <pr.json> [--config <path>]");
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
 	console.log(JSON.stringify(main(process.argv.slice(2)), null, 2));
 }
