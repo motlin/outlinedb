@@ -40,7 +40,7 @@ describe("wrangler.jsonc", () => {
 			EMAIL_PROVIDER: "cloudflare",
 			EMAIL_FROM: "no-reply@outlinedb.com",
 			APP_ORIGIN: "https://app.outlinedb.com",
-			SIGNUP_MODE: "closed",
+			SIGNUP_MODE: "invite",
 		});
 	});
 
