@@ -9,59 +9,75 @@ import {z} from "zod";
  * This is the raw data structure from Workflowy with no CLI additions.
  */
 export const WorkflowyNodeSchema = z
-	.object({
-		id: z.string(),
-		name: z.string(),
-		note: z.string().nullable().optional(),
-		parent_id: z.string().nullable().optional(),
-		priority: z.number(),
-		completed: z.boolean().optional(),
-		data: z
-			.object({
-				layoutMode: z.string().optional(),
-				ai: z
-					.object({
-						inChat: z.boolean(),
-					})
-					.optional(),
-				isReferencesRoot: z.boolean().optional(),
-			})
-			.optional(),
-		createdAt: z.number(),
-		modifiedAt: z.number().nullable(),
-		completedAt: z.number().nullable().optional(),
-	})
+	.object(
+		{
+			id: z.string(),
+			name: z.string(),
+			note: z.string().nullable().optional(),
+			parent_id: z.string().nullable().optional(),
+			priority: z.number(),
+			completed: z.boolean().optional(),
+			data: z
+				.object(
+					{
+						layoutMode: z.string().optional(),
+						ai: z
+							.object(
+								{
+									inChat: z.boolean(),
+								},
+							)
+							.optional(),
+						isReferencesRoot: z.boolean().optional(),
+					},
+				)
+				.optional(),
+			createdAt: z.number(),
+			modifiedAt: z.number().nullable(),
+			completedAt: z.number().nullable().optional(),
+		},
+	)
 	.strict();
 
 export const ApiResponseSchema = z
-	.object({
-		nodes: z.array(WorkflowyNodeSchema).optional(),
-	})
+	.object(
+		{
+			nodes: z.array(WorkflowyNodeSchema).optional(),
+		},
+	)
 	.strict();
 
 export const CreateNodeResponseSchema = z
-	.object({
-		item_id: z.string(),
-	})
+	.object(
+		{
+			item_id: z.string(),
+		},
+	)
 	.strict();
 
 export const CreateMirrorResponseSchema = z
-	.object({
-		item_id: z.string(),
-		origin_id: z.string(),
-	})
+	.object(
+		{
+			item_id: z.string(),
+			origin_id: z.string(),
+		},
+	)
 	.strict();
 
 export const GetNodeResponseSchema = z
-	.object({
-		node: WorkflowyNodeSchema,
-	})
+	.object(
+		{
+			node: WorkflowyNodeSchema,
+		},
+	)
 	.strict();
 
 export const CompletionStatusResponseSchema = z
-	.object({
-		status: z.string(),
-	})
+	.object(
+		{
+			status: z.string(),
+		},
+	)
 	.strict();
 
 /**
@@ -80,7 +96,8 @@ export type WorkflowyNode = z.infer<typeof WorkflowyNodeSchema>;
  *
  * This is an enhanced type that adds CLI-specific fields to WorkflowyNode.
  */
-type LinkTarget = WorkflowyNode & {
+type LinkTarget = WorkflowyNode &
+{
 	/** The 12-character short ID from the Workflowy URL (last 12 hex chars of UUID) */
 	shortId: string;
 	/** Recursively enhanced children of this link target */
@@ -96,7 +113,8 @@ type LinkTarget = WorkflowyNode & {
  *
  * Use WorkflowyNode for raw API data, EnhancedWorkflowyNode for CLI output.
  */
-export type EnhancedWorkflowyNode = WorkflowyNode & {
+export type EnhancedWorkflowyNode = WorkflowyNode &
+{
 	/** Recursive children for tree output. Present when fetching with `--depth > 0`. */
 	children?: EnhancedWorkflowyNode[];
 	/** Resolved internal link targets when `--follow-links` is used. */

@@ -19,12 +19,15 @@ export async function syncBacklinksIfLinked(
 	texts: (string | null | undefined)[],
 	database: Database,
 	writeThrough: WorkflowyWriteThroughClient,
-): Promise<BacklinkSync | undefined> {
-	if (sourceIds.length === 0 || !hasInternalLink(texts.join(" "))) {
+): Promise<BacklinkSync | undefined>
+{
+	if (sourceIds.length === 0 || !hasInternalLink(texts.join(" ")))
+	{
 		return undefined;
 	}
 	const adapter = internalAdapter(database, writeThrough);
-	if (adapter === undefined) {
+	if (adapter === undefined)
+	{
 		process.stderr.write(
 			"Warning: the text links to other items, but no internal session is configured, so no backlinks were created or removed. Run 'internal login' or set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD.\n",
 		);
@@ -42,12 +45,15 @@ export async function deleteBacklinksOfDeleted(
 	linked: LinkedSources,
 	database: Database,
 	writeThrough: WorkflowyWriteThroughClient,
-): Promise<string[]> {
-	if (linked.ids.length === 0) {
+): Promise<string[]>
+{
+	if (linked.ids.length === 0)
+	{
 		return [];
 	}
 	const adapter = internalAdapter(database, writeThrough);
-	if (adapter === undefined) {
+	if (adapter === undefined)
+	{
 		process.stderr.write(
 			"Warning: the deleted items may have backlinks, but no internal session is configured, so their backlink items were not deleted. Run 'internal login' or set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD.\n",
 		);
@@ -60,9 +66,16 @@ export async function deleteBacklinksOfDeleted(
 export function internalAdapter(
 	database: Database,
 	writeThrough: WorkflowyWriteThroughClient,
-): WorkflowyInternalAdapter | undefined {
+): WorkflowyInternalAdapter | undefined
+{
 	const auth = readInternalAuth();
 	return auth
-		? new WorkflowyInternalAdapter({client: new WorkflowyInternalClient(auth), db: database, writeThrough})
+		? new WorkflowyInternalAdapter(
+				{
+					client: new WorkflowyInternalClient(auth),
+					db: database,
+					writeThrough,
+				},
+			)
 		: undefined;
 }

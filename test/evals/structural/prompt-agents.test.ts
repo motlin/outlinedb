@@ -10,15 +10,33 @@ const GTD_DIR = join(PLUGINS_DIR, "gtd");
 const PROMPTS_DIR = join(GTD_DIR, "prompts");
 const PROMPT_REF = /\bprompts\/([\w/-]+\.md)/gu;
 
-function promptRefs(): {path: string; at: string}[] {
-	const refs: {path: string; at: string}[] = [];
-	for (const filePath of collectMarkdownFiles(GTD_DIR)) {
+function promptRefs():
+{
+	path: string;
+	at: string;
+}[]
+{
+	const refs:
+	{
+		path: string;
+		at: string;
+	}[] = [];
+	for (const filePath of collectMarkdownFiles(GTD_DIR))
+	{
 		const lines = readFileSync(filePath, "utf8").split("\n");
-		for (const [index, line] of lines.entries()) {
-			for (const match of line.matchAll(PROMPT_REF)) {
+		for (const [index, line] of lines.entries())
+		{
+			for (const match of line.matchAll(PROMPT_REF))
+			{
 				const [, refPath] = match;
-				if (refPath !== undefined) {
-					refs.push({path: refPath, at: `${relative(PROJECT_ROOT, filePath)}:${index + 1}`});
+				if (refPath !== undefined)
+				{
+					refs.push(
+						{
+							path: refPath,
+							at: `${relative(PROJECT_ROOT, filePath)}:${index + 1}`,
+						},
+					);
 				}
 			}
 		}
@@ -26,19 +44,23 @@ function promptRefs(): {path: string; at: string}[] {
 	return refs;
 }
 
-describe("Structural Eval: gtd prompt agents", () => {
-	it("the gtd plugin registers no agents", () => {
+describe("Structural Eval: gtd prompt agents", () =>
+{
+	it("the gtd plugin registers no agents", () =>
+	{
 		expect(collectMarkdownFiles(join(GTD_DIR, "agents")).map((f) => relative(PROJECT_ROOT, f))).toStrictEqual([]);
 	});
 
-	it("every prompts/ reference resolves to a prompt file", () => {
+	it("every prompts/ reference resolves to a prompt file", () =>
+	{
 		const missing = promptRefs()
 			.filter((ref) => !existsSync(join(PROMPTS_DIR, ref.path)))
 			.map((ref) => `${ref.path} referenced at ${ref.at}`);
 		expect(missing).toStrictEqual([]);
 	});
 
-	it("every prompt file is referenced somewhere", () => {
+	it("every prompt file is referenced somewhere", () =>
+	{
 		const referenced = new Set(promptRefs().map((ref) => ref.path));
 		const orphans = collectMarkdownFiles(PROMPTS_DIR)
 			.map((f) => relative(PROMPTS_DIR, f))
@@ -46,19 +68,23 @@ describe("Structural Eval: gtd prompt agents", () => {
 		expect(orphans).toStrictEqual([]);
 	});
 
-	it("no command or prompt still spawns a gtd agent by subagent_type", () => {
+	it("no command or prompt still spawns a gtd agent by subagent_type", () =>
+	{
 		const offenders: string[] = [];
 		for (const filePath of [
 			...collectMarkdownFiles(GTD_DIR),
 			...collectMarkdownFiles(join(PLUGINS_DIR, "workflowy")),
-		]) {
+		])
+		{
 			const lines = readFileSync(filePath, "utf8").split("\n");
-			for (const [index, line] of lines.entries()) {
+			for (const [index, line] of lines.entries())
+			{
 				if (
 					/subagent_type:\s*["']gtd:|`gtd:(capture|journal|refinement|shared|legacy:fetchers)(:[\w-]+)+`/u.test(
 						line,
 					)
-				) {
+				)
+				{
 					offenders.push(`${relative(PROJECT_ROOT, filePath)}:${index + 1}`);
 				}
 			}

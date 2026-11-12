@@ -28,22 +28,31 @@ const LINKED_GITDIR = /^gitdir: (.*\/\.git\/worktrees\/[^/]+)\s*$/u;
 // A large checkout lists far more than execFileSync's 1 MiB default buffer.
 const MAX_BUFFER = 256 * 1024 * 1024;
 
-function git(cwd: string, ...args: string[]): string {
-	return execFileSync("git", ["-C", cwd, ...args], {
-		encoding: "utf8",
-		stdio: ["ignore", "pipe", "pipe"],
-		maxBuffer: MAX_BUFFER,
-	}).trim();
+function git(cwd: string, ...args: string[]): string
+{
+	return execFileSync(
+		"git",
+		["-C", cwd, ...args],
+		{
+			encoding: "utf8",
+			stdio: ["ignore", "pipe", "pipe"],
+			maxBuffer: MAX_BUFFER,
+		},
+	).trim();
 }
 
 /** The root of the linked worktree containing `path`, or null when the nearest checkout is not one. */
-function linkedWorktreeRoot(path: string): string | null {
-	for (let directory = dirname(path); directory !== dirname(directory); directory = dirname(directory)) {
+function linkedWorktreeRoot(path: string): string | null
+{
+	for (let directory = dirname(path); directory !== dirname(directory); directory = dirname(directory))
+	{
 		const dotGit = join(directory, ".git");
-		if (!existsSync(dotGit)) {
+		if (!existsSync(dotGit))
+		{
 			continue;
 		}
-		if (lstatSync(dotGit).isDirectory()) {
+		if (lstatSync(dotGit).isDirectory())
+		{
 			return null;
 		}
 		return LINKED_GITDIR.test(readFileSync(dotGit, "utf8")) ? directory : null;
@@ -51,11 +60,13 @@ function linkedWorktreeRoot(path: string): string | null {
 	return null;
 }
 
-function mainRepoOf(worktree: string): string {
+function mainRepoOf(worktree: string): string
+{
 	return dirname(git(worktree, "rev-parse", "--path-format=absolute", "--git-common-dir"));
 }
 
-export interface Worktree {
+export interface Worktree
+{
 	path: string;
 	repo: string;
 	branch: string;
@@ -64,7 +75,8 @@ export interface Worktree {
 	idle: boolean;
 }
 
-export interface ActivityOptions {
+export interface ActivityOptions
+{
 	now: number;
 	/** Working directories of running processes. */
 	cwds: string[];
@@ -72,56 +84,79 @@ export interface ActivityOptions {
 
 const IDLE_MS = 60 * 60 * 1000;
 
-export interface RemovalResult {
+export interface RemovalResult
+{
 	path: string;
 	removed: boolean;
 	error?: string;
 }
 
-function mtimeMs(path: string): number {
-	try {
+function mtimeMs(path: string): number
+{
+	try
+	{
 		return statSync(path).mtimeMs;
-	} catch {
+	}
+	catch
+	{
 		return 0;
 	}
 }
 
 /** Newest mtime among the worktree's non-ignored files and everything in its git admin dir. */
-function newestChange(worktree: string): number {
+function newestChange(worktree: string): number
+{
 	const files = git(worktree, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
 		.split("\0")
 		.filter((file) => file.length > 0)
 		.map((file) => join(worktree, file));
 	const adminDir = git(worktree, "rev-parse", "--absolute-git-dir");
-	const adminFiles = execFileSync("find", [adminDir, "-type", "f"], {encoding: "utf8", maxBuffer: MAX_BUFFER})
+	const adminFiles = execFileSync(
+		"find",
+		[adminDir, "-type", "f"],
+		{
+			encoding: "utf8",
+			maxBuffer: MAX_BUFFER,
+		},
+	)
 		.split("\n")
 		.filter((file) => file.length > 0);
 	return Math.max(mtimeMs(join(worktree, ".git")), ...files.map(mtimeMs), ...adminFiles.map(mtimeMs));
 }
 
-function isIdle(worktree: string, {now, cwds}: ActivityOptions): boolean {
+function isIdle(worktree: string, {now, cwds}: ActivityOptions): boolean
+{
 	const occupied = cwds.some((cwd) => cwd === worktree || cwd.startsWith(`${worktree}/`));
 	return !occupied && now - newestChange(worktree) >= IDLE_MS;
 }
 
 /** Working directories of every running process, from lsof; empty when lsof is unavailable. */
-function processCwds(): string[] {
-	try {
-		const out = execFileSync("lsof", ["-d", "cwd", "-Fn"], {
-			encoding: "utf8",
-			stdio: ["ignore", "pipe", "ignore"],
-			maxBuffer: 64 * 1024 * 1024,
-		});
+function processCwds(): string[]
+{
+	try
+	{
+		const out = execFileSync(
+			"lsof",
+			["-d", "cwd", "-Fn"],
+			{
+				encoding: "utf8",
+				stdio: ["ignore", "pipe", "ignore"],
+				maxBuffer: 64 * 1024 * 1024,
+			},
+		);
 		return out
 			.split("\n")
 			.filter((line) => line.startsWith("n/"))
 			.map((line) => line.slice(1));
-	} catch {
+	}
+	catch
+	{
 		return [];
 	}
 }
 
-function describeWorktree(path: string, dirCount: number, activity: ActivityOptions): Worktree {
+function describeWorktree(path: string, dirCount: number, activity: ActivityOptions): Worktree
+{
 	return {
 		path,
 		repo: mainRepoOf(path),
@@ -134,12 +169,19 @@ function describeWorktree(path: string, dirCount: number, activity: ActivityOpti
 
 export function findWorktrees(
 	paths: string[],
-	activity: ActivityOptions = {now: Date.now(), cwds: processCwds()},
-): Worktree[] {
+	activity: ActivityOptions =
+	{
+		now: Date.now(),
+		cwds: processCwds(),
+	},
+): Worktree[]
+{
 	const dirCounts = new Map<string, number>();
-	for (const path of paths) {
+	for (const path of paths)
+	{
 		const root = linkedWorktreeRoot(path);
-		if (root !== null) {
+		if (root !== null)
+		{
 			dirCounts.set(root, (dirCounts.get(root) ?? 0) + 1);
 		}
 	}
@@ -149,8 +191,10 @@ export function findWorktrees(
 }
 
 /** The git failure text: its stderr when present, else the error message. */
-function failureText(error: unknown): string {
-	if (error instanceof Error) {
+function failureText(error: unknown): string
+{
+	if (error instanceof Error)
+	{
 		const stderr =
 			"stderr" in error && (typeof error.stderr === "string" || Buffer.isBuffer(error.stderr))
 				? String(error.stderr)
@@ -160,30 +204,45 @@ function failureText(error: unknown): string {
 	return String(error).trim();
 }
 
-export function removeWorktrees(worktrees: string[]): RemovalResult[] {
-	return worktrees.map((path): RemovalResult => {
-		try {
+export function removeWorktrees(worktrees: string[]): RemovalResult[]
+{
+	return worktrees.map((path): RemovalResult =>
+	{
+		try
+		{
 			git(mainRepoOf(path), "worktree", "remove", path);
-			return {path, removed: true};
-		} catch (error) {
-			return {path, removed: false, error: failureText(error)};
+			return {
+				path,
+				removed: true,
+			};
+		}
+		catch (error)
+		{
+			return {
+				path,
+				removed: false,
+				error: failureText(error),
+			};
 		}
 	});
 }
 
-function parsePathList(text: string): string[] {
+function parsePathList(text: string): string[]
+{
 	return text
 		.split("\0")
 		.flatMap((chunk) => chunk.split("\n"))
 		.filter((line) => line.length > 0);
 }
 
-function main(): void {
+function main(): void
+{
 	const [flag, ...rest] = process.argv.slice(2);
 	const result = flag === "--remove" ? removeWorktrees(rest) : findWorktrees(parsePathList(readFileSync(0, "utf8")));
 	process.stdout.write(`${JSON.stringify(result, null, "\t")}\n`);
 }
 
-if (isMain(import.meta.url)) {
+if (isMain(import.meta.url))
+{
 	main();
 }

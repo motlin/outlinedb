@@ -19,7 +19,8 @@ import {parseStreamJson, stringInput} from "./stream-json.js";
 export type {CapturedToolCall, LlmEvalResult} from "./eval-types.js";
 
 /** Options for running an LLM eval. */
-export interface LlmEvalOptions {
+export interface LlmEvalOptions
+{
 	/** Maximum top-level agentic turns before Claude Code stops (default: 10) */
 	maxTurns?: number;
 	/** Model alias or id (default: sonnet, matching how the orchestrators launch gtd prompts) */
@@ -31,12 +32,24 @@ export interface LlmEvalOptions {
 let cliAvailable: boolean | undefined;
 
 /** True when the `claude` CLI is on PATH; LLM evals skip otherwise. */
-export function claudeCliAvailable(): boolean {
-	if (cliAvailable === undefined) {
-		try {
-			execFileSync("claude", ["--version"], {stdio: "ignore", timeout: 30_000});
+export function claudeCliAvailable(): boolean
+{
+	if (cliAvailable === undefined)
+	{
+		try
+		{
+			execFileSync(
+				"claude",
+				["--version"],
+				{
+					stdio: "ignore",
+					timeout: 30_000,
+				},
+			);
 			cliAvailable = true;
-		} catch {
+		}
+		catch
+		{
 			cliAvailable = false;
 		}
 	}
@@ -48,16 +61,20 @@ export function claudeCliAvailable(): boolean {
  * - `plugins/<plugin>/prompts/<p>.md` gets the orchestrators' launch prompt
  * - `plugins/<plugin>/commands/<a>/<b>.md` becomes the slash command `/<plugin>:<a>:<b>`
  */
-function launchMessage(projectRoot: string, agentFile: string, task: string): string {
+function launchMessage(projectRoot: string, agentFile: string, task: string): string
+{
 	const [, plugin, kind, ...rest] = agentFile.replace(/\.md$/u, "").split("/");
-	if (plugin === undefined) {
+	if (plugin === undefined)
+	{
 		throw new Error(`Agent file path has no plugin segment: ${agentFile}`);
 	}
 	const pluginRoot = path.join(projectRoot, "plugins", plugin);
-	if (kind === "prompts") {
+	if (kind === "prompts")
+	{
 		return `CLAUDE_PLUGIN_ROOT=${pluginRoot}. Read ${pluginRoot}/prompts/${rest.join("/")}.md and follow it. ${task}`;
 	}
-	if (kind === "commands") {
+	if (kind === "commands")
+	{
 		return `/${[plugin, ...rest].join(":")} ${task}`.trim();
 	}
 	throw new Error(`Unsupported eval target: ${agentFile}`);
@@ -76,7 +93,8 @@ export async function runLlmEval(
 	task: string,
 	ctx: EvalContext,
 	options: LlmEvalOptions = {},
-): Promise<LlmEvalResult> {
+): Promise<LlmEvalResult>
+{
 	const args = [
 		"-p",
 		launchMessage(ctx.projectRoot, agentFile, task),
@@ -100,23 +118,38 @@ export async function runLlmEval(
 		...["gtd", "workflowy"].flatMap((plugin) => ["--plugin-dir", path.join(ctx.projectRoot, "plugins", plugin)]),
 	];
 
-	const env: Record<string, string | undefined> = {...process.env, ...ctx.env};
+	const env: Record<string, string | undefined> =
+	{
+		...process.env,
+		...ctx.env,
+	};
 	// An API key would bill the API instead of the subscription login
 	delete env.ANTHROPIC_API_KEY;
-	if ((ctx.mockServerPort ?? 0) === 0) {
+	if ((ctx.mockServerPort ?? 0) === 0)
+	{
 		delete env.WORKFLOWY_API_KEY;
 	}
 
-	const stdout = await new Promise<string>((resolve, reject) => {
+	const stdout = await new Promise<string>((resolve, reject) =>
+	{
 		execFile(
 			"claude",
 			args,
-			{cwd: ctx.workDir, env, maxBuffer: 64 * 1024 * 1024, timeout: options.timeoutMs ?? 600_000},
-			(error, out, stderr) => {
+			{
+				cwd: ctx.workDir,
+				env,
+				maxBuffer: 64 * 1024 * 1024,
+				timeout: options.timeoutMs ?? 600_000,
+			},
+			(error, out, stderr) =>
+			{
 				// --max-turns exits non-zero but still streams a result event worth asserting on
-				if (error && !out.includes('"type":"result"')) {
+				if (error && !out.includes('"type":"result"'))
+				{
 					reject(new Error(`claude -p failed: ${error.message}\n${stderr}`));
-				} else {
+				}
+				else
+				{
 					resolve(out);
 				}
 			},
@@ -124,8 +157,14 @@ export async function runLlmEval(
 	});
 
 	// Set EVAL_STREAM_LOG to a directory to keep each run's raw stream for debugging
-	if (process.env.EVAL_STREAM_LOG) {
-		fs.mkdirSync(process.env.EVAL_STREAM_LOG, {recursive: true});
+	if (process.env.EVAL_STREAM_LOG)
+	{
+		fs.mkdirSync(
+			process.env.EVAL_STREAM_LOG,
+			{
+				recursive: true,
+			},
+		);
 		const name = `${path.basename(agentFile, ".md")}-${Date.now()}.jsonl`;
 		fs.writeFileSync(path.join(process.env.EVAL_STREAM_LOG, name), stdout);
 	}
@@ -136,7 +175,8 @@ export async function runLlmEval(
 /**
  * Extract bash commands from captured tool calls.
  */
-export function extractBashCommands(toolCalls: CapturedToolCall[]): string[] {
+export function extractBashCommands(toolCalls: CapturedToolCall[]): string[]
+{
 	return toolCalls.filter((tc) => tc.name === "Bash").map((tc) => stringInput(tc, "command"));
 }
 
@@ -144,12 +184,17 @@ export function extractBashCommands(toolCalls: CapturedToolCall[]): string[] {
  * Extract subagent launches from captured tool calls. `promptFile` is the gtd prompt the launch
  * points at (e.g. `refinement/project-tagger`), since every gtd launch is `general-purpose`.
  */
-export function extractSubagentLaunches(
-	toolCalls: CapturedToolCall[],
-): {subagentType: string; prompt: string; promptFile: string | undefined}[] {
+export function extractSubagentLaunches(toolCalls: CapturedToolCall[]):
+{
+	subagentType: string;
+	prompt: string;
+	promptFile: string | undefined;
+}[]
+{
 	return toolCalls
 		.filter((tc) => tc.name === "Agent" || tc.name === "Task")
-		.map((tc) => {
+		.map((tc) =>
+		{
 			const prompt = stringInput(tc, "prompt");
 			return {
 				subagentType: stringInput(tc, "subagent_type") || "general-purpose",

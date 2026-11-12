@@ -4,11 +4,17 @@ import {renderToStaticMarkup} from "react-dom/server";
 import {describe, expect, it, vi} from "vite-plus/test";
 import type {TagPopupState} from "../src/client/components/tag-autocomplete-popup.js";
 
-vi.mock(import("react-dom"), async (importOriginal) => ({
+vi.mock(import("react-dom"), async (importOriginal) => (
+{
 	...(await importOriginal()),
 	createPortal: (node: ReactNode): ReactPortal => node as ReactPortal,
 }));
-vi.stubGlobal("document", {body: {}});
+vi.stubGlobal(
+	"document",
+	{
+		body: {},
+	},
+);
 vi.stubGlobal("devicePixelRatio", 2);
 
 const {TagAutocompletePopup, tagPopupInput, tagPopupKey} =
@@ -24,84 +30,271 @@ const UPSTREAM_TWO_ROWS =
 	"</div></div></div>";
 
 /** Collapses the class templates' newlines and indents the way the browser's class list does. */
-function collapse(html: string): string {
+function collapse(html: string): string
+{
 	return html.replaceAll(/\s+/gu, " ");
 }
 
-describe("TagAutocompletePopup", () => {
-	it("renders upstream's flyout menu at the anchor with the active row highlighted", () => {
+describe("TagAutocompletePopup", () =>
+{
+	it("renders upstream's flyout menu at the anchor with the active row highlighted", () =>
+	{
 		const html = renderToStaticMarkup(
-			createElement(TagAutocompletePopup, {
-				tags: ["#taZebra", "#taApple"],
-				active: 0,
-				left: 190,
-				top: 361.5,
-				onAccept: () => {},
-			}),
+			createElement(
+				TagAutocompletePopup,
+				{
+					tags: ["#taZebra", "#taApple"],
+					active: 0,
+					left: 190,
+					top: 361.5,
+					onAccept: () =>
+					{
+					},
+				},
+			),
 		);
 		expect(collapse(html)).toBe(UPSTREAM_TWO_ROWS);
 	});
 });
 
-const SHOWN: TagPopupState = {attached: true, visible: true, active: 0};
+const SHOWN: TagPopupState =
+{
+	attached: true,
+	visible: true,
+	active: 0,
+};
 
-describe("tagPopupKey", () => {
-	it("hides on Escape but stays attached, and the next input shows it again", () => {
-		const escaped = tagPopupKey(SHOWN, {key: "Escape"}, 2);
+describe("tagPopupKey", () =>
+{
+	it("hides on Escape but stays attached, and the next input shows it again", () =>
+	{
+		const escaped = tagPopupKey(
+			SHOWN,
+			{
+				key: "Escape",
+			},
+			2,
+		);
 		expect([escaped, tagPopupInput(escaped.state)]).toStrictEqual([
-			{state: {attached: true, visible: false, active: 0}, accept: null, preventDefault: true},
-			{attached: true, visible: true, active: 0},
+			{
+				state:
+				{
+					attached: true,
+					visible: false,
+					active: 0,
+				},
+				accept: null,
+				preventDefault: true,
+			},
+			{
+				attached: true,
+				visible: true,
+				active: 0,
+			},
 		]);
 	});
 
-	it("lets a second Escape fall through to the editor", () => {
-		expect(tagPopupKey({attached: true, visible: false, active: 0}, {key: "Escape"}, 2)).toStrictEqual({
-			state: {attached: true, visible: false, active: 0},
-			accept: null,
-			preventDefault: false,
-		});
+	it("lets a second Escape fall through to the editor", () =>
+	{
+		expect(
+			tagPopupKey(
+				{
+					attached: true,
+					visible: false,
+					active: 0,
+				},
+				{
+					key: "Escape",
+				},
+				2,
+			),
+		).toStrictEqual(
+			{
+				state:
+				{
+					attached: true,
+					visible: false,
+					active: 0,
+				},
+				accept: null,
+				preventDefault: false,
+			},
+		);
 	});
 
-	it("accepts the active row on Enter and Tab", () => {
+	it("accepts the active row on Enter and Tab", () =>
+	{
 		expect([
-			tagPopupKey({...SHOWN, active: 1}, {key: "Enter"}, 2),
-			tagPopupKey(SHOWN, {key: "Tab"}, 2),
+			tagPopupKey(
+				{
+					...SHOWN,
+					active: 1,
+				},
+				{
+					key: "Enter",
+				},
+				2,
+			),
+			tagPopupKey(
+				SHOWN,
+				{
+					key: "Tab",
+				},
+				2,
+			),
 		]).toStrictEqual([
-			{state: {attached: true, visible: true, active: 1}, accept: 1, preventDefault: true},
-			{state: SHOWN, accept: 0, preventDefault: true},
+			{
+				state:
+				{
+					attached: true,
+					visible: true,
+					active: 1,
+				},
+				accept: 1,
+				preventDefault: true,
+			},
+			{
+				state: SHOWN,
+				accept: 0,
+				preventDefault: true,
+			},
 		]);
 	});
 
-	it("hides the popup on Enter and Tab with no active row, and the next input re-shows it", () => {
-		const idle = {...SHOWN, active: -1};
-		const hidden = {state: {attached: true, visible: false, active: -1}, accept: null, preventDefault: true};
-		expect([tagPopupKey(idle, {key: "Enter"}, 2), tagPopupKey(idle, {key: "Tab"}, 2)]).toStrictEqual([
-			hidden,
-			hidden,
-		]);
-		expect(tagPopupInput(hidden.state)).toStrictEqual({attached: true, visible: true, active: -1});
+	it("hides the popup on Enter and Tab with no active row, and the next input re-shows it", () =>
+	{
+		const idle =
+		{
+			...SHOWN,
+			active: -1,
+		};
+		const hidden =
+		{
+			state:
+			{
+				attached: true,
+				visible: false,
+				active: -1,
+			},
+			accept: null,
+			preventDefault: true,
+		};
+		expect([
+			tagPopupKey(
+				idle,
+				{
+					key: "Enter",
+				},
+				2,
+			),
+			tagPopupKey(
+				idle,
+				{
+					key: "Tab",
+				},
+				2,
+			),
+		]).toStrictEqual([hidden, hidden]);
+		expect(tagPopupInput(hidden.state)).toStrictEqual(
+			{
+				attached: true,
+				visible: true,
+				active: -1,
+			},
+		);
 	});
 
-	it("moves the active row with the arrows, clamping at the last row", () => {
-		const down = tagPopupKey(SHOWN, {key: "ArrowDown"}, 2);
+	it("moves the active row with the arrows, clamping at the last row", () =>
+	{
+		const down = tagPopupKey(
+			SHOWN,
+			{
+				key: "ArrowDown",
+			},
+			2,
+		);
 		expect([
 			down,
-			tagPopupKey(down.state, {key: "ArrowDown"}, 2),
-			tagPopupKey(down.state, {key: "ArrowUp"}, 2),
+			tagPopupKey(
+				down.state,
+				{
+					key: "ArrowDown",
+				},
+				2,
+			),
+			tagPopupKey(
+				down.state,
+				{
+					key: "ArrowUp",
+				},
+				2,
+			),
 		]).toStrictEqual([
-			{state: {attached: true, visible: true, active: 1}, accept: null, preventDefault: true},
-			{state: {attached: true, visible: true, active: 1}, accept: null, preventDefault: true},
-			{state: SHOWN, accept: null, preventDefault: true},
+			{
+				state:
+				{
+					attached: true,
+					visible: true,
+					active: 1,
+				},
+				accept: null,
+				preventDefault: true,
+			},
+			{
+				state:
+				{
+					attached: true,
+					visible: true,
+					active: 1,
+				},
+				accept: null,
+				preventDefault: true,
+			},
+			{
+				state: SHOWN,
+				accept: null,
+				preventDefault: true,
+			},
 		]);
 	});
 
-	it("leaves other keys, and every key while hidden, to the editor", () => {
+	it("leaves other keys, and every key while hidden, to the editor", () =>
+	{
 		expect([
-			tagPopupKey(SHOWN, {key: "a"}, 2),
-			tagPopupKey({attached: false, visible: false, active: 0}, {key: "Enter"}, 2),
+			tagPopupKey(
+				SHOWN,
+				{
+					key: "a",
+				},
+				2,
+			),
+			tagPopupKey(
+				{
+					attached: false,
+					visible: false,
+					active: 0,
+				},
+				{
+					key: "Enter",
+				},
+				2,
+			),
 		]).toStrictEqual([
-			{state: SHOWN, accept: null, preventDefault: false},
-			{state: {attached: false, visible: false, active: 0}, accept: null, preventDefault: false},
+			{
+				state: SHOWN,
+				accept: null,
+				preventDefault: false,
+			},
+			{
+				state:
+				{
+					attached: false,
+					visible: false,
+					active: 0,
+				},
+				accept: null,
+				preventDefault: false,
+			},
 		]);
 	});
 });

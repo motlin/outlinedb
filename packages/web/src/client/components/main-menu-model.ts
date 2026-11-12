@@ -3,7 +3,8 @@ import type {ReactElement, ReactNode} from "react";
 import type {FaIconKey} from "./fa-icons.js";
 
 /** A compacted header or pane action prepended to the menu, like upstream's `more-menu.menu.header.*`. */
-export interface GearMenuHeaderItem {
+export interface GearMenuHeaderItem
+{
 	label: string;
 	icon: ReactNode;
 	onSelect: () => void;
@@ -53,7 +54,8 @@ export const HELP_SUBMENU_GROUPS = [
 
 const SEPARATOR = "------------";
 
-export interface MenuRowEntry {
+export interface MenuRowEntry
+{
 	label: string;
 	icon?: FaIconKey | ReactElement | undefined;
 	shortcut?: string | undefined;
@@ -67,11 +69,27 @@ export interface MenuRowEntry {
 	onSelect?: (() => unknown) | undefined;
 }
 
-export type MainMenuEntry = MenuRowEntry | {component: "autosave"};
+export type MainMenuEntry =
+	| MenuRowEntry
+	|
+	  {
+			component: "autosave";
+	  };
 
-export type MenuRow = {separator: true; before: string} | {key: string; entry: MainMenuEntry};
+export type MenuRow =
+	|
+	  {
+			separator: true;
+			before: string;
+	  }
+	|
+	  {
+			key: string;
+			entry: MainMenuEntry;
+	  };
 
-function isHidden(entry: MainMenuEntry): boolean {
+function isHidden(entry: MainMenuEntry): boolean
+{
 	return "hidden" in entry && entry.hidden === true;
 }
 
@@ -79,28 +97,44 @@ function isHidden(entry: MainMenuEntry): boolean {
  * Upstream renderer `O92`: a separator key only arms a pending separator once a row has been emitted, and is
  * emitted right before the next visible row, so leading, trailing and doubled separators never appear.
  */
-export function buildMenuRows(groups: readonly string[], entries: Readonly<Record<string, MainMenuEntry>>): MenuRow[] {
+export function buildMenuRows(groups: readonly string[], entries: Readonly<Record<string, MainMenuEntry>>): MenuRow[]
+{
 	const rows: MenuRow[] = [];
 	let pending = false;
-	for (const key of groups) {
-		if (key === SEPARATOR) {
+	for (const key of groups)
+	{
+		if (key === SEPARATOR)
+		{
 			pending = rows.length > 0;
 			continue;
 		}
 		const entry = entries[key];
-		if (!entry || isHidden(entry)) {
+		if (!entry || isHidden(entry))
+		{
 			continue;
 		}
-		if (pending) {
-			rows.push({separator: true, before: key});
+		if (pending)
+		{
+			rows.push(
+				{
+					separator: true,
+					before: key,
+				},
+			);
 			pending = false;
 		}
-		rows.push({key, entry});
+		rows.push(
+			{
+				key,
+				entry,
+			},
+		);
 	}
 	return rows;
 }
 
-export interface MainMenuActions {
+export interface MainMenuActions
+{
 	undo: () => void;
 	redo: () => void;
 	expandAll: () => void;
@@ -113,7 +147,8 @@ export interface MainMenuActions {
 	openHelp: () => void;
 }
 
-export interface MainMenuContext {
+export interface MainMenuContext
+{
 	canUndo: boolean;
 	canRedo: boolean;
 	/** What's New has unread entries, which dots the Help row (upstream `blueDotFrom: "changelog.show"`). */
@@ -123,7 +158,8 @@ export interface MainMenuContext {
 }
 
 /** A header or pane action as a menu entry; only element icons carry over (the rows are not FontAwesome keys). */
-export function entryFromItem(item: GearMenuHeaderItem): MenuRowEntry {
+export function entryFromItem(item: GearMenuHeaderItem): MenuRowEntry
+{
 	return {
 		label: item.label,
 		icon: isValidElement(item.icon) ? item.icon : undefined,
@@ -150,9 +186,12 @@ export function mainMenuEntries({
 	changelogUnread = false,
 	paneRows,
 	actions,
-}: MainMenuContext): Record<string, MainMenuEntry> {
-	const entries: Record<string, MainMenuEntry> = {
-		"edit.undo": {
+}: MainMenuContext): Record<string, MainMenuEntry>
+{
+	const entries: Record<string, MainMenuEntry> =
+	{
+		"edit.undo":
+		{
 			label: "Undo",
 			icon: "fal:arrow-rotate-left",
 			shortcut: "⌘Z",
@@ -160,7 +199,8 @@ export function mainMenuEntries({
 			disabled: !canUndo,
 			onSelect: actions.undo,
 		},
-		"edit.redo": {
+		"edit.redo":
+		{
 			label: "Redo",
 			icon: "fal:arrow-rotate-right",
 			shortcut: "⇧⌘Z",
@@ -168,61 +208,102 @@ export function mainMenuEntries({
 			disabled: !canRedo,
 			onSelect: actions.redo,
 		},
-		"view.expand-all": {
+		"view.expand-all":
+		{
 			label: "Expand all",
 			icon: "fal:up-right-and-down-left-from-center",
 			handbook: "expand.toggle",
 			onSelect: actions.expandAll,
 		},
-		"view.collapse-all": {
+		"view.collapse-all":
+		{
 			label: "Collapse all",
 			icon: "fal:down-left-and-up-right-to-center",
 			handbook: "expand.toggle",
 			onSelect: actions.collapseAll,
 		},
-		"view.export": {label: "Export", icon: "fal:file-export", onSelect: actions.exportZoomed},
-		"view.print": {
+		"view.export":
+		{
+			label: "Export",
+			icon: "fal:file-export",
+			onSelect: actions.exportZoomed,
+		},
+		"view.print":
+		{
 			label: "Print",
 			icon: "fal:print",
 			shortcut: "⌘P",
 			handbook: "print.print",
-			onSelect: () => {
+			onSelect: () =>
+			{
 				setTimeout(actions.print, PRINT_DELAY_MS);
 			},
 		},
-		"desktop.desktop-new-version": {label: "Update desktop app", hidden: true},
-		"desktop.desktop-pin-as-top-window": {label: "Pin as top window", hidden: true},
-		"edu.faculty-dashboard": {label: "Faculty dashboard", hidden: true},
-		"show.show-settings-dialog": {
+		"desktop.desktop-new-version":
+		{
+			label: "Update desktop app",
+			hidden: true,
+		},
+		"desktop.desktop-pin-as-top-window":
+		{
+			label: "Pin as top window",
+			hidden: true,
+		},
+		"edu.faculty-dashboard":
+		{
+			label: "Faculty dashboard",
+			hidden: true,
+		},
+		"show.show-settings-dialog":
+		{
 			label: "Settings",
 			icon: "fal:gear",
 			handbook: "settings.show",
 			onSelect: actions.openSettings,
 		},
-		"changelog.download-apps": {
+		"changelog.download-apps":
+		{
 			label: "Get the Apps",
 			icon: "fal:download",
-			onSelect: () => {
+			onSelect: () =>
+			{
 				actions.openUrl(GET_THE_APPS_URL);
 			},
 		},
-		"promote.zapier": {label: "Integrations", icon: "fal:bolt", handbook: "integrate.integrate", hidden: true},
-		"workflowy.help": {
+		"promote.zapier":
+		{
+			label: "Integrations",
+			icon: "fal:bolt",
+			handbook: "integrate.integrate",
+			hidden: true,
+		},
+		"workflowy.help":
+		{
 			label: "Help",
 			icon: "fal:circle-question",
 			extra: "chevron-down",
 			blueDot: changelogUnread,
 			onSelect: actions.openHelp,
 		},
-		"auth.log-out": {label: "Log out", icon: "fal:arrow-right-from-bracket", hidden: true},
-		"status.autosave": {component: "autosave"},
+		"auth.log-out":
+		{
+			label: "Log out",
+			icon: "fal:arrow-right-from-bracket",
+			hidden: true,
+		},
+		"status.autosave":
+		{
+			component: "autosave",
+		},
 	};
 	const [left, right] = paneRows;
 	for (const [key, item] of [
 		["header.move-pane-left", left],
 		["header.move-pane-right", right],
-	] as const) {
-		if (item) {
+	] as const)
+	{
+		if (item)
+		{
 			entries[key] = entryFromItem(item);
 		}
 	}
@@ -241,16 +322,45 @@ export function helpEntries({
 	changelogUnread: boolean;
 	openChangelog: () => void;
 	openUrl: (url: string) => void;
-}): Record<string, MainMenuEntry> {
-	const link = (url: string) => () => {
+}): Record<string, MainMenuEntry>
+{
+	const link = (url: string) => () =>
+	{
 		openUrl(url);
 	};
 	return {
-		"changelog.show": {label: "What's New", blueDot: changelogUnread, onSelect: openChangelog},
-		"changelog.learn": {label: "Learn workflowy.com", onSelect: link(LEARN_URL)},
-		"show.show-help-dialog": {label: "Help", handbook: "help.show", hidden: !hasHelpDialog},
-		"show.report-problem": {label: "Report a problem", handbook: "bug.report", hidden: true},
-		"workflowy.community": {label: "Community", onSelect: link(COMMUNITY_URL)},
-		"workflowy.blog": {label: "Blog", onSelect: link(BLOG_URL)},
+		"changelog.show":
+		{
+			label: "What's New",
+			blueDot: changelogUnread,
+			onSelect: openChangelog,
+		},
+		"changelog.learn":
+		{
+			label: "Learn workflowy.com",
+			onSelect: link(LEARN_URL),
+		},
+		"show.show-help-dialog":
+		{
+			label: "Help",
+			handbook: "help.show",
+			hidden: !hasHelpDialog,
+		},
+		"show.report-problem":
+		{
+			label: "Report a problem",
+			handbook: "bug.report",
+			hidden: true,
+		},
+		"workflowy.community":
+		{
+			label: "Community",
+			onSelect: link(COMMUNITY_URL),
+		},
+		"workflowy.blog":
+		{
+			label: "Blog",
+			onSelect: link(BLOG_URL),
+		},
 	};
 }

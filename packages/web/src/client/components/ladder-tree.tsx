@@ -4,14 +4,27 @@ import {useEffect, useRef} from "react";
 import type {NodeResponse} from "../../node-types.js";
 import {useChildren, useNode} from "../hooks/use-nodes.js";
 
-export function LadderTree({item, onClose}: {item: {id: string; name: string}; onClose: () => void}) {
+export function LadderTree({
+	item,
+	onClose,
+}: {
+	item:
+	{
+		id: string;
+		name: string;
+	};
+	onClose: () => void;
+})
+{
 	const dialog = useRef<HTMLDialogElement>(null);
 	const {data: node, error, refetch} = useNode(item.id);
-	useEffect(() => {
+	useEffect(() =>
+	{
 		// The ref is attached before effects run, so the dialog is always present here.
 		const element = dialog.current;
 		element?.showModal();
-		return () => {
+		return () =>
+		{
 			element?.close();
 		};
 	}, []);
@@ -20,8 +33,10 @@ export function LadderTree({item, onClose}: {item: {id: string; name: string}; o
 			className="ladder-tree-panel"
 			ref={dialog}
 			aria-labelledby="ladder-tree-title"
-			onClose={() => {
-				if (!dialog.current?.open) {
+			onClose={() =>
+			{
+				if (!dialog.current?.open)
+				{
 					onClose();
 				}
 			}}
@@ -53,16 +68,19 @@ export function LadderTree({item, onClose}: {item: {id: string; name: string}; o
 	);
 }
 
-function LadderTreeChildren({parentId, ancestors}: {parentId: string; ancestors: string[]}) {
+function LadderTreeChildren({parentId, ancestors}: {parentId: string; ancestors: string[]})
+{
 	const {data: children, isLoading, error, refetch} = useChildren(parentId);
-	if (isLoading) {
+	if (isLoading)
+	{
 		return (
 			<p>
 				<output>Loading subtasks…</output>
 			</p>
 		);
 	}
-	if (error) {
+	if (error)
+	{
 		return (
 			<p role="alert">
 				Could not load subtasks.{" "}
@@ -72,7 +90,8 @@ function LadderTreeChildren({parentId, ancestors}: {parentId: string; ancestors:
 			</p>
 		);
 	}
-	if (children === undefined || children.length === 0) {
+	if (children === undefined || children.length === 0)
+	{
 		return <p className="ladder-tree-empty">No subtasks.</p>;
 	}
 	return (
@@ -84,7 +103,8 @@ function LadderTreeChildren({parentId, ancestors}: {parentId: string; ancestors:
 	);
 }
 
-function LadderTreeNode({node, ancestors}: {node: NodeResponse; ancestors: string[]}) {
+function LadderTreeNode({node, ancestors}: {node: NodeResponse; ancestors: string[]})
+{
 	const identity = node.originalNodeId ?? node.id;
 	const cyclic = ancestors.includes(identity);
 	const completed = node.completedAt !== null && node.completedAt !== 0;

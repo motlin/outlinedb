@@ -9,7 +9,8 @@
  */
 
 /** A node row as read from the cache, with its attachment details joined in. */
-export interface CachedNodeRow {
+export interface CachedNodeRow
+{
 	id: string;
 	parentId: string | null;
 	name: string | null;
@@ -26,7 +27,8 @@ export interface CachedNodeRow {
 	fileType: string | null;
 }
 
-export interface PhotoGroupMember {
+export interface PhotoGroupMember
+{
 	id: string;
 	priority: number;
 	createdAt: number | null;
@@ -34,7 +36,8 @@ export interface PhotoGroupMember {
 	fileType: string | null;
 }
 
-export interface PhotoGroup {
+export interface PhotoGroup
+{
 	/** `wrapped` photos sit inside a blank node; `loose` ones hang off the entry. */
 	kind: "wrapped" | "loose";
 	/** The calendar entry the photos should end up under. */
@@ -45,7 +48,8 @@ export interface PhotoGroup {
 	members: PhotoGroupMember[];
 }
 
-export interface PhotoGroupPlan {
+export interface PhotoGroupPlan
+{
 	decision: "reverse" | "already-ordered" | "unverifiable";
 	reason: string;
 	/** Members in the order they should appear once fixed. */
@@ -68,15 +72,18 @@ const IMAGE_SEQUENCE_PATTERN = /^IMG_(\d+)\./iu;
  * These numbers increase with capture time, so they are the only chronological
  * evidence available — the cache stores no EXIF data.
  */
-export function parseImageSequence(fileName: string | null): number | null {
-	if (!fileName) {
+export function parseImageSequence(fileName: string | null): number | null
+{
+	if (!fileName)
+	{
 		return null;
 	}
 	const match = IMAGE_SEQUENCE_PATTERN.exec(fileName);
 	return match ? Number(match[1]) : null;
 }
 
-function isBlank(value: string | null): boolean {
+function isBlank(value: string | null): boolean
+{
 	return (value ?? "").trim() === "";
 }
 
@@ -84,11 +91,13 @@ function isBlank(value: string | null): boolean {
  * A photo node renders blank and holds no children. Mirrors also render blank in
  * the cache — they take their text from the original — so they are excluded here.
  */
-function isBlankLeaf(row: CachedNodeRow): boolean {
+function isBlankLeaf(row: CachedNodeRow): boolean
+{
 	return isBlank(row.name) && isBlank(row.note) && row.childCount === 0 && !row.isMirror;
 }
 
-function toMember(row: CachedNodeRow): PhotoGroupMember {
+function toMember(row: CachedNodeRow): PhotoGroupMember
+{
 	return {
 		id: row.id,
 		priority: row.priority,
@@ -99,11 +108,22 @@ function toMember(row: CachedNodeRow): PhotoGroupMember {
 }
 
 /** Groups need at least one confirmed image; blank leaves alone prove nothing. */
-function hasImageEvidence(members: PhotoGroupMember[]): boolean {
+function hasImageEvidence(members: PhotoGroupMember[]): boolean
+{
 	return members.some((member) => member.fileType?.startsWith("image/") ?? false);
 }
 
-function byPriority(a: {priority: number}, b: {priority: number}): number {
+function byPriority(
+	a:
+	{
+		priority: number;
+	},
+	b:
+	{
+		priority: number;
+	},
+): number
+{
 	return a.priority - b.priority;
 }
 
@@ -112,23 +132,28 @@ function byPriority(a: {priority: number}, b: {priority: number}): number {
  * {@link buildPhotoGroups} drops the unevidenced ones; {@link
  * countGroupsWithoutEvidence} reports how many that was.
  */
-function collectCandidateGroups(rows: CachedNodeRow[]): PhotoGroup[] {
+function collectCandidateGroups(rows: CachedNodeRow[]): PhotoGroup[]
+{
 	const childrenByParent = new Map<string, CachedNodeRow[]>();
-	for (const row of rows) {
-		if (!row.parentId) {
+	for (const row of rows)
+	{
+		if (!row.parentId)
+		{
 			continue;
 		}
 		const siblings = childrenByParent.get(row.parentId) ?? [];
 		siblings.push(row);
 		childrenByParent.set(row.parentId, siblings);
 	}
-	for (const siblings of childrenByParent.values()) {
+	for (const siblings of childrenByParent.values())
+	{
 		siblings.sort(byPriority);
 	}
 
 	const groups: PhotoGroup[] = [];
 
-	for (const row of rows) {
+	for (const row of rows)
+	{
 		const children = childrenByParent.get(row.id) ?? [];
 		const {parentId} = row;
 
@@ -139,33 +164,42 @@ function collectCandidateGroups(rows: CachedNodeRow[]): PhotoGroup[] {
 			children.length >= MINIMUM_GROUP_SIZE &&
 			children.every((child) => isBlankLeaf(child));
 
-		if (isWrapper) {
-			groups.push({
-				kind: "wrapped",
-				entryId: parentId,
-				wrapperId: row.id,
-				members: children.map((child) => toMember(child)),
-			});
+		if (isWrapper)
+		{
+			groups.push(
+				{
+					kind: "wrapped",
+					entryId: parentId,
+					wrapperId: row.id,
+					members: children.map((child) => toMember(child)),
+				},
+			);
 			continue;
 		}
 
-		if (isBlank(row.name)) {
+		if (isBlank(row.name))
+		{
 			continue;
 		}
 
 		let run: CachedNodeRow[] = [];
-		for (const child of [...children, null]) {
-			if (child && isBlankLeaf(child)) {
+		for (const child of [...children, null])
+		{
+			if (child && isBlankLeaf(child))
+			{
 				run.push(child);
 				continue;
 			}
-			if (run.length >= MINIMUM_GROUP_SIZE) {
-				groups.push({
-					kind: "loose",
-					entryId: row.id,
-					wrapperId: null,
-					members: run.map((member) => toMember(member)),
-				});
+			if (run.length >= MINIMUM_GROUP_SIZE)
+			{
+				groups.push(
+					{
+						kind: "loose",
+						entryId: row.id,
+						wrapperId: null,
+						members: run.map((member) => toMember(member)),
+					},
+				);
 			}
 			run = [];
 		}
@@ -181,7 +215,8 @@ function collectCandidateGroups(rows: CachedNodeRow[]): PhotoGroup[] {
  * Clusters with no confirmed image attachment are excluded: blank leaves alone
  * prove nothing, and pasted HTML tables produce the same shape.
  */
-export function buildPhotoGroups(rows: CachedNodeRow[]): PhotoGroup[] {
+export function buildPhotoGroups(rows: CachedNodeRow[]): PhotoGroup[]
+{
 	return collectCandidateGroups(rows).filter((group) => hasImageEvidence(group.members));
 }
 
@@ -191,7 +226,8 @@ export function buildPhotoGroups(rows: CachedNodeRow[]): PhotoGroup[] {
  * cache silently hides real photo groups; surfacing this count is what stops a
  * partial sweep from reading as a complete one.
  */
-export function countGroupsWithoutEvidence(rows: CachedNodeRow[]): number {
+export function countGroupsWithoutEvidence(rows: CachedNodeRow[]): number
+{
 	return collectCandidateGroups(rows).filter((group) => !hasImageEvidence(group.members)).length;
 }
 
@@ -205,13 +241,16 @@ export function countGroupsWithoutEvidence(rows: CachedNodeRow[]): number {
  * @param newestBackup Backup date of the newest backup file on disk.
  * @returns The warning text, or null when the cache is current enough.
  */
-export function describeStaleAttachmentData(newestRow: string | null, newestBackup: Date | null): string | null {
-	if (newestRow === null || newestBackup === null) {
+export function describeStaleAttachmentData(newestRow: string | null, newestBackup: Date | null): string | null
+{
+	if (newestRow === null || newestBackup === null)
+	{
 		return null;
 	}
 
 	const importedThrough = Date.parse(`${newestRow.replace(" ", "T")}Z`);
-	if (Number.isNaN(importedThrough) || newestBackup.getTime() <= importedThrough) {
+	if (Number.isNaN(importedThrough) || newestBackup.getTime() <= importedThrough)
+	{
 		return null;
 	}
 
@@ -223,7 +262,8 @@ export function describeStaleAttachmentData(newestRow: string | null, newestBack
 }
 
 /** Decide what order a group's photos belong in, and whether to touch it at all. */
-export function planPhotoGroup(group: PhotoGroup): PhotoGroupPlan {
+export function planPhotoGroup(group: PhotoGroup): PhotoGroupPlan
+{
 	const members = [...group.members].toSorted(byPriority);
 	const currentIds = members.map((member) => member.id);
 	const reversedIds = [...currentIds].toReversed();
@@ -232,26 +272,47 @@ export function planPhotoGroup(group: PhotoGroup): PhotoGroupPlan {
 	if (
 		timestamps.length === members.length &&
 		Math.max(...timestamps) - Math.min(...timestamps) > PASTE_WINDOW_SECONDS
-	) {
-		return {decision: "unverifiable", reason: "photos were added at different times", orderedIds: currentIds};
+	)
+	{
+		return {
+			decision: "unverifiable",
+			reason: "photos were added at different times",
+			orderedIds: currentIds,
+		};
 	}
 
 	const sequences = members.map((member) => parseImageSequence(member.fileName));
-	if (sequences.every((sequence) => sequence !== null)) {
+	if (sequences.every((sequence) => sequence !== null))
+	{
 		const descending = isStrictlyOrdered(sequences, (previous, next) => previous > next);
-		if (descending) {
-			return {decision: "reverse", reason: "filenames descend", orderedIds: reversedIds};
+		if (descending)
+		{
+			return {
+				decision: "reverse",
+				reason: "filenames descend",
+				orderedIds: reversedIds,
+			};
 		}
 
 		const ascending = isStrictlyOrdered(sequences, (previous, next) => previous < next);
-		if (ascending) {
-			return {decision: "already-ordered", reason: "filenames ascend", orderedIds: currentIds};
+		if (ascending)
+		{
+			return {
+				decision: "already-ordered",
+				reason: "filenames ascend",
+				orderedIds: currentIds,
+			};
 		}
 
-		return {decision: "unverifiable", reason: "filenames are not monotonic", orderedIds: currentIds};
+		return {
+			decision: "unverifiable",
+			reason: "filenames are not monotonic",
+			orderedIds: currentIds,
+		};
 	}
 
-	if (group.kind === "wrapped") {
+	if (group.kind === "wrapped")
+	{
 		return {
 			decision: "reverse",
 			reason: "wrapped group, assuming a single reversed paste",
@@ -259,14 +320,21 @@ export function planPhotoGroup(group: PhotoGroup): PhotoGroupPlan {
 		};
 	}
 
-	return {decision: "unverifiable", reason: "loose group without filename evidence", orderedIds: currentIds};
+	return {
+		decision: "unverifiable",
+		reason: "loose group without filename evidence",
+		orderedIds: currentIds,
+	};
 }
 
 /** Whether every adjacent pair of values satisfies `ordered(previous, next)`. */
-function isStrictlyOrdered(values: number[], ordered: (previous: number, next: number) => boolean): boolean {
+function isStrictlyOrdered(values: number[], ordered: (previous: number, next: number) => boolean): boolean
+{
 	let previous: number | undefined;
-	for (const value of values) {
-		if (previous !== undefined && !ordered(previous, value)) {
+	for (const value of values)
+	{
+		if (previous !== undefined && !ordered(previous, value))
+		{
 			return false;
 		}
 		previous = value;

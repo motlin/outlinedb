@@ -9,28 +9,51 @@ import {CacheService} from "../../../services/cache.js";
 import {logger} from "../../../services/logger.js";
 import {DEFAULT_DB_FILE} from "../../../db/default-db-file.js";
 
-const MeetingSchema = z.object({
-	otid: z.string(),
-	title: z
-		.string()
-		.nullable()
-		.transform((title) => title ?? "Untitled meeting"),
-	start_time: z.number(),
-	summary: z.string().nullable(),
-	outline: z.array(z.object({title: z.string(), segments: z.array(z.string())})),
-	action_items: z
-		.array(z.object({text: z.string(), assignee: z.string().nullable(), completed: z.boolean()}))
-		.optional(),
-});
+const MeetingSchema = z.object(
+	{
+		otid: z.string(),
+		title: z
+			.string()
+			.nullable()
+			.transform((title) => title ?? "Untitled meeting"),
+		start_time: z.number(),
+		summary: z.string().nullable(),
+		outline: z.array(
+			z.object(
+				{
+					title: z.string(),
+					segments: z.array(z.string()),
+				},
+			),
+		),
+		action_items: z
+			.array(
+				z.object(
+					{
+						text: z.string(),
+						assignee: z.string().nullable(),
+						completed: z.boolean(),
+					},
+				),
+			)
+			.optional(),
+	},
+);
 
 type Meeting = z.infer<typeof MeetingSchema>;
 
-const SyncOutputSchema = z.object({speeches: z.array(MeetingSchema)});
+const SyncOutputSchema = z.object(
+	{
+		speeches: z.array(MeetingSchema),
+	},
+);
 
-const ImportStateSchema = z.object({
-	imported_otids: z.array(z.string()),
-	imported_count: z.number(),
-});
+const ImportStateSchema = z.object(
+	{
+		imported_otids: z.array(z.string()),
+		imported_count: z.number(),
+	},
+);
 
 type ImportState = z.infer<typeof ImportStateSchema>;
 
@@ -42,7 +65,8 @@ const STATE_FILE = "/tmp/otter_import_state.json";
  *
  * Uses ~12 POST calls per meeting instead of 88 (JSON mode).
  */
-export default class Import extends Command {
+export default class Import extends Command
+{
 	static override description = "Import Otter meetings to Workflowy Calendar";
 
 	static override examples = [
@@ -56,41 +80,58 @@ export default class Import extends Command {
 		"<%= config.bin %> <%= command.id %> --reset",
 	];
 
-	static override flags = {
-		delay: Flags.integer({
-			char: "d",
-			description: "Seconds between API calls",
-			default: 5,
-		}),
-		max: Flags.integer({
-			char: "m",
-			description: "Maximum meetings to import (0 = unlimited)",
-			default: 0,
-		}),
-		reset: Flags.boolean({
-			description: "Reset import state and start fresh",
-			default: false,
-		}),
-		"calendar-id": Flags.string({
-			description: "Calendar node ID to import into",
-			default: DEFAULT_CALENDAR_ID,
-		}),
-		"dry-run": Flags.boolean({
-			description: "Show what would be imported without creating nodes",
-			default: false,
-		}),
+	static override flags =
+	{
+		delay: Flags.integer(
+			{
+				char: "d",
+				description: "Seconds between API calls",
+				default: 5,
+			},
+		),
+		max: Flags.integer(
+			{
+				char: "m",
+				description: "Maximum meetings to import (0 = unlimited)",
+				default: 0,
+			},
+		),
+		reset: Flags.boolean(
+			{
+				description: "Reset import state and start fresh",
+				default: false,
+			},
+		),
+		"calendar-id": Flags.string(
+			{
+				description: "Calendar node ID to import into",
+				default: DEFAULT_CALENDAR_ID,
+			},
+		),
+		"dry-run": Flags.boolean(
+			{
+				description: "Show what would be imported without creating nodes",
+				default: false,
+			},
+		),
 	};
 
 	private client!: WorkflowyWriteThroughClient;
 	private delay = 5;
 
-	public async run(): Promise<{imported: number; total: number}> {
+	public async run(): Promise<
+	{
+		imported: number;
+		total: number;
+	}>
+	{
 		const {flags} = await this.parse(Import);
 
 		this.delay = flags.delay;
 
 		const apiKey = process.env.WORKFLOWY_API_KEY;
-		if (!apiKey) {
+		if (!apiKey)
+		{
 			this.error("WORKFLOWY_API_KEY environment variable is required");
 		}
 
@@ -101,21 +142,30 @@ export default class Import extends Command {
 
 		this.log("=== Otter Import ===");
 		this.log(`Delay between meetings: ${flags.delay}s`);
-		if (flags.max > 0) {
+		if (flags.max > 0)
+		{
 			this.log(`Max meetings: ${flags.max}`);
 		}
-		if (flags["dry-run"]) {
+		if (flags["dry-run"])
+		{
 			this.log("DRY RUN - no nodes will be created");
 		}
 		this.log("");
 
 		// Load or initialize state
-		let state: ImportState = {imported_otids: [], imported_count: 0};
+		let state: ImportState =
+		{
+			imported_otids: [],
+			imported_count: 0,
+		};
 
-		if (flags.reset && fs.existsSync(STATE_FILE)) {
+		if (flags.reset && fs.existsSync(STATE_FILE))
+		{
 			fs.unlinkSync(STATE_FILE);
 			this.log("State reset");
-		} else if (fs.existsSync(STATE_FILE)) {
+		}
+		else if (fs.existsSync(STATE_FILE))
+		{
 			state = ImportStateSchema.parse(JSON.parse(fs.readFileSync(STATE_FILE, "utf8")));
 			this.log(`Resuming: ${state.imported_count} meetings already imported`);
 		}
@@ -127,9 +177,13 @@ export default class Import extends Command {
 		const projectRoot = this.findProjectRoot();
 		const syncOutput = await this.runOtterSync(projectRoot);
 
-		if (syncOutput.speeches.length === 0) {
+		if (syncOutput.speeches.length === 0)
+		{
 			this.log("No meetings to import");
-			return {imported: 0, total: state.imported_count};
+			return {
+				imported: 0,
+				total: state.imported_count,
+			};
 		}
 
 		this.log(`Got ${syncOutput.speeches.length} meetings`);
@@ -137,24 +191,31 @@ export default class Import extends Command {
 		// Process meetings
 		let totalImported = 0;
 
-		for (const meeting of syncOutput.speeches) {
+		for (const meeting of syncOutput.speeches)
+		{
 			// Skip if already imported
-			if (state.imported_otids.includes(meeting.otid)) {
+			if (state.imported_otids.includes(meeting.otid))
+			{
 				continue;
 			}
 
 			// Skip if no summary (not processed by Otter)
-			if (!meeting.summary) {
+			if (!meeting.summary)
+			{
 				this.log(`  Skipping (not processed): ${meeting.title}`);
 				continue;
 			}
 
 			// Import meeting
-			if (flags["dry-run"]) {
+			if (flags["dry-run"])
+			{
 				this.log(`  Would import: ${meeting.title}`);
-			} else {
+			}
+			else
+			{
 				const success = await this.importMeeting(meeting, flags["calendar-id"]);
-				if (success) {
+				if (success)
+				{
 					state.imported_count++;
 					totalImported++;
 					state.imported_otids.push(meeting.otid);
@@ -165,7 +226,8 @@ export default class Import extends Command {
 			}
 
 			// Check max
-			if (flags.max > 0 && totalImported >= flags.max) {
+			if (flags.max > 0 && totalImported >= flags.max)
+			{
 				this.log("");
 				this.log(`Reached max meetings limit (${flags.max})`);
 				break;
@@ -177,81 +239,109 @@ export default class Import extends Command {
 		this.log(`Total imported this run: ${totalImported}`);
 		this.log(`Total imported overall: ${state.imported_count}`);
 
-		return {imported: totalImported, total: state.imported_count};
+		return {
+			imported: totalImported,
+			total: state.imported_count,
+		};
 	}
 
-	private async runOtterSync(projectRoot: string): Promise<{speeches: Meeting[]}> {
+	private async runOtterSync(projectRoot: string): Promise<
+	{
+		speeches: Meeting[];
+	}>
+	{
 		// Run otter:sync command to get meetings
 		// For now, we'll shell out to the CLI itself
 		const {execSync} = await import("node:child_process");
 		const cliPath = path.join(projectRoot, "bin", "run.js");
 
-		try {
-			const result = execSync(`"${cliPath}" gtd:otter:sync --page-size 100 2>/dev/null`, {
-				encoding: "utf8",
-				env: process.env,
-				cwd: projectRoot,
-			});
-			return SyncOutputSchema.parse(JSON.parse(result));
-		} catch (error) {
-			// Try running the bash script as fallback
-			const scriptPath = path.join(projectRoot, ".claude", "scripts", "gtd", "otter-api.sh");
-			if (fs.existsSync(scriptPath)) {
-				const result = execSync(`"${scriptPath}" sync 100`, {
+		try
+		{
+			const result = execSync(
+				`"${cliPath}" gtd:otter:sync --page-size 100 2>/dev/null`,
+				{
 					encoding: "utf8",
 					env: process.env,
 					cwd: projectRoot,
-				});
+				},
+			);
+			return SyncOutputSchema.parse(JSON.parse(result));
+		}
+		catch (error)
+		{
+			// Try running the bash script as fallback
+			const scriptPath = path.join(projectRoot, ".claude", "scripts", "gtd", "otter-api.sh");
+			if (fs.existsSync(scriptPath))
+			{
+				const result = execSync(
+					`"${scriptPath}" sync 100`,
+					{
+						encoding: "utf8",
+						env: process.env,
+						cwd: projectRoot,
+					},
+				);
 				return SyncOutputSchema.parse(JSON.parse(result));
 			}
 			throw error;
 		}
 	}
 
-	private async importMeeting(meeting: Meeting, calendarId: string): Promise<boolean> {
+	private async importMeeting(meeting: Meeting, calendarId: string): Promise<boolean>
+	{
 		this.log(`  Importing: ${meeting.title}`);
 
-		try {
+		try
+		{
 			// Build time tag
 			const timeTag = this.formatTimeTag(meeting.start_time);
 
 			// 1. Create meeting header
 			const escapedTitle = this.escapeHtml(meeting.title);
 			const header = `<a href="https://otter.ai/u/${meeting.otid}">${escapedTitle}</a> #meeting ${timeTag}`;
-			const meetingNode = await this.client.createNode({
-				parent_id: calendarId,
-				name: header,
-				position: "bottom",
-			});
+			const meetingNode = await this.client.createNode(
+				{
+					parent_id: calendarId,
+					name: header,
+					position: "bottom",
+				},
+			);
 			await this.sleep(this.delay);
 
 			this.log(`    Created meeting: ${meetingNode.id}`);
 
 			// 2. Create URL (leaf)
-			await this.client.createNode({
-				parent_id: meetingNode.id,
-				name: `otter.ai/u/${meeting.otid}`,
-				position: "bottom",
-			});
+			await this.client.createNode(
+				{
+					parent_id: meetingNode.id,
+					name: `otter.ai/u/${meeting.otid}`,
+					position: "bottom",
+				},
+			);
 			await this.sleep(this.delay);
 
 			// 3. Create Overview + summary
-			if (meeting.summary) {
+			if (meeting.summary)
+			{
 				const escapedSummary = this.escapeHtml(meeting.summary);
 				const overviewMd = `- <b>Overview</b>\n  - ${escapedSummary}`;
-				await this.client.createNode({
-					parent_id: meetingNode.id,
-					name: overviewMd,
-					position: "bottom",
-				});
+				await this.client.createNode(
+					{
+						parent_id: meetingNode.id,
+						name: overviewMd,
+						position: "bottom",
+					},
+				);
 				await this.sleep(this.delay);
 			}
 
 			// 4. Create Action Items
-			if (meeting.action_items && meeting.action_items.length > 0) {
+			if (meeting.action_items && meeting.action_items.length > 0)
+			{
 				let actionMd = "- <b>Action Items</b>";
 
-				for (const item of meeting.action_items) {
+				for (const item of meeting.action_items)
+				{
 					const escapedText = this.escapeHtml(item.text);
 					const checkbox = item.completed ? "[x]" : "[ ]";
 
@@ -260,41 +350,50 @@ export default class Import extends Command {
 						: `\n  - ${checkbox} ${escapedText}`;
 				}
 
-				await this.client.createNode({
-					parent_id: meetingNode.id,
-					name: actionMd,
-					position: "bottom",
-				});
+				await this.client.createNode(
+					{
+						parent_id: meetingNode.id,
+						name: actionMd,
+						position: "bottom",
+					},
+				);
 				await this.sleep(this.delay);
 
 				this.log(`    Created ${meeting.action_items.length} action items`);
 			}
 
 			// 5. Create Outline
-			if (meeting.outline.length > 0) {
+			if (meeting.outline.length > 0)
+			{
 				// Create Outline header
-				const outlineNode = await this.client.createNode({
-					parent_id: meetingNode.id,
-					name: "<b>Outline</b>",
-					position: "bottom",
-				});
+				const outlineNode = await this.client.createNode(
+					{
+						parent_id: meetingNode.id,
+						name: "<b>Outline</b>",
+						position: "bottom",
+					},
+				);
 				await this.sleep(this.delay);
 
 				// Create each section with segments
-				for (const section of meeting.outline) {
+				for (const section of meeting.outline)
+				{
 					const escapedSectionTitle = this.escapeHtml(section.title);
 					let sectionMd = `- <b>${escapedSectionTitle}</b>`;
 
-					for (const segment of section.segments) {
+					for (const segment of section.segments)
+					{
 						const escapedSegment = this.escapeHtml(segment);
 						sectionMd += `\n  - ${escapedSegment}`;
 					}
 
-					await this.client.createNode({
-						parent_id: outlineNode.id,
-						name: sectionMd,
-						position: "bottom",
-					});
+					await this.client.createNode(
+						{
+							parent_id: outlineNode.id,
+							name: sectionMd,
+							position: "bottom",
+						},
+					);
 					await this.sleep(this.delay);
 				}
 
@@ -302,13 +401,16 @@ export default class Import extends Command {
 			}
 
 			return true;
-		} catch (error) {
+		}
+		catch (error)
+		{
 			this.log(`    ERROR: ${error instanceof Error ? error.message : "Unknown error"}`);
 			return false;
 		}
 	}
 
-	private formatTimeTag(timestamp: number): string {
+	private formatTimeTag(timestamp: number): string
+	{
 		const date = new Date(timestamp * 1000);
 		const year = date.getFullYear();
 		const month = date.getMonth(); // 0-indexed for Workflowy
@@ -323,7 +425,8 @@ export default class Import extends Command {
 		const monthName = months[month];
 
 		let hours12 = date.getHours() % 12;
-		if (hours12 === 0) {
+		if (hours12 === 0)
+		{
 			hours12 = 12;
 		}
 		const ampm = date.getHours() >= 12 ? "pm" : "am";
@@ -332,21 +435,27 @@ export default class Import extends Command {
 		return `<time startYear="${year}" startMonth="${month}" startDay="${day}" startHour="${hour}" startMinute="${min}">${readable}</time>`;
 	}
 
-	private escapeHtml(text: string): string {
+	private escapeHtml(text: string): string
+	{
 		return text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 	}
 
-	private async sleep(seconds: number): Promise<void> {
-		return new Promise((resolve) => {
+	private async sleep(seconds: number): Promise<void>
+	{
+		return new Promise((resolve) =>
+		{
 			setTimeout(resolve, seconds * 1000);
 		});
 	}
 
-	private findProjectRoot(): string {
+	private findProjectRoot(): string
+	{
 		let dir = process.cwd();
 
-		while (dir !== "/") {
-			if (fs.existsSync(path.join(dir, DEFAULT_DB_FILE)) || fs.existsSync(path.join(dir, "package.json"))) {
+		while (dir !== "/")
+		{
+			if (fs.existsSync(path.join(dir, DEFAULT_DB_FILE)) || fs.existsSync(path.join(dir, "package.json")))
+			{
 				return dir;
 			}
 			dir = path.dirname(dir);

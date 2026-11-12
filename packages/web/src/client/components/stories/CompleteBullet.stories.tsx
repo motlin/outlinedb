@@ -3,29 +3,42 @@ import {fn} from "storybook/test";
 
 import {CompleteBullet} from "./primitives.js";
 
-const meta: Meta<typeof CompleteBullet> = {
+const meta: Meta<typeof CompleteBullet> =
+{
 	title: "Primitives/CompleteBullet",
 	component: CompleteBullet,
-	parameters: {
+	parameters:
+	{
 		layout: "padded",
 	},
 	tags: ["autodocs"],
-	argTypes: {
-		isExpanded: {
+	argTypes:
+	{
+		isExpanded:
+		{
 			control: "boolean",
 			description: "Whether the node is expanded",
 		},
-		isCompleted: {
+		isCompleted:
+		{
 			control: "boolean",
 			description: "Whether the node is completed",
 		},
 	},
-	args: {
+	args:
+	{
 		onToggleExpand: fn<() => void>(),
 	},
 	decorators: [
 		(Story) => (
-			<div style={{position: "relative", minHeight: "50px", width: "400px"}}>
+			<div
+				style={
+				{
+					position: "relative",
+					minHeight: "50px",
+					width: "400px",
+				}}
+			>
 				<Story />
 			</div>
 		),
@@ -35,22 +48,28 @@ const meta: Meta<typeof CompleteBullet> = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {
-	args: {
+export const Default: Story =
+{
+	args:
+	{
 		isExpanded: false,
 		isCompleted: false,
 	},
 };
 
-export const Expanded: Story = {
-	args: {
+export const Expanded: Story =
+{
+	args:
+	{
 		isExpanded: true,
 		isCompleted: false,
 	},
 };
 
-export const Completed: Story = {
-	args: {
+export const Completed: Story =
+{
+	args:
+	{
 		isExpanded: false,
 		isCompleted: true,
 	},

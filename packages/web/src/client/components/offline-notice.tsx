@@ -3,18 +3,21 @@ import {useEffect, useState} from "react";
 import {useOutlineStore} from "../stores/outline.js";
 import {isStalled, oldestInFlightStart} from "../sync-health.js";
 
-interface OfflineNoticeBarProps {
+interface OfflineNoticeBarProps
+{
 	entered: boolean;
 	left: number;
 	onRetry: () => void;
 }
 
 /** Upstream's stalled `.offlineNotice` bar, verbatim classes. */
-export function OfflineNoticeBar({entered, left, onRetry}: OfflineNoticeBarProps) {
+export function OfflineNoticeBar({entered, left, onRetry}: OfflineNoticeBarProps)
+{
 	return (
 		<div
 			className="fixed right-sar border-t border-b border-solid border-primary text-center text-primary transition-transform duration-200 ease-base print:hidden flex flex-wrap items-center justify-center gap-x-m gap-y-xs px-l py-s text-s leading-base bg-warning offlineNotice"
-			style={{
+			style={
+			{
 				bottom: 0,
 				top: "unset",
 				left: `${left}px`,
@@ -37,7 +40,8 @@ export function OfflineNoticeBar({entered, left, onRetry}: OfflineNoticeBarProps
 }
 
 /** Mounted once. Shows while a write has hung for 2 minutes and the caret is not in a row. */
-export function OfflineNotice() {
+export function OfflineNotice()
+{
 	const queryClient = useQueryClient();
 	const editing = useOutlineStore((state) => state.editingId !== null);
 	const left = useOutlineStore((state) => state.leftBarOffset());
@@ -46,54 +50,80 @@ export function OfflineNotice() {
 	const visible = stalled && !editing;
 	const wanted = visible ? "entering" : "exiting";
 	const [lastWanted, setLastWanted] = useState(wanted);
-	if (lastWanted !== wanted) {
+	if (lastWanted !== wanted)
+	{
 		setLastWanted(wanted);
-		if (visible) {
+		if (visible)
+		{
 			setPhase("entering");
-		} else if (phase !== "hidden") {
+		}
+		else if (phase !== "hidden")
+		{
 			setPhase("exiting");
 		}
 	}
 
-	useEffect(() => {
-		const check = (): void => {
+	useEffect(() =>
+	{
+		const check = (): void =>
+		{
 			const mutations = queryClient.getMutationCache().getAll();
-			setStalled(isStalled({oldestInFlightStartedAt: oldestInFlightStart(mutations), now: Date.now()}));
+			setStalled(
+				isStalled(
+					{
+						oldestInFlightStartedAt: oldestInFlightStart(mutations),
+						now: Date.now(),
+					},
+				),
+			);
 		};
 		const timer = setInterval(check, 1000);
-		return () => {
+		return () =>
+		{
 			clearInterval(timer);
 		};
 	}, [queryClient]);
 
-	useEffect(() => {
-		let cancel = (): void => {};
-		if (phase === "entering") {
-			const frame = requestAnimationFrame(() => {
+	useEffect(() =>
+	{
+		let cancel = (): void =>
+		{
+		};
+		if (phase === "entering")
+		{
+			const frame = requestAnimationFrame(() =>
+			{
 				setPhase("entered");
 			});
-			cancel = () => {
+			cancel = () =>
+			{
 				cancelAnimationFrame(frame);
 			};
-		} else if (phase === "exiting") {
-			const timer = setTimeout(() => {
+		}
+		else if (phase === "exiting")
+		{
+			const timer = setTimeout(() =>
+			{
 				setPhase("hidden");
 			}, 200);
-			cancel = () => {
+			cancel = () =>
+			{
 				clearTimeout(timer);
 			};
 		}
 		return cancel;
 	}, [phase]);
 
-	if (phase === "hidden") {
+	if (phase === "hidden")
+	{
 		return null;
 	}
 	return (
 		<OfflineNoticeBar
 			entered={phase === "entered"}
 			left={left}
-			onRetry={() => {
+			onRetry={() =>
+			{
 				void queryClient.resumePausedMutations().then(async () => queryClient.invalidateQueries());
 			}}
 		/>

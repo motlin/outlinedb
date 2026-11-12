@@ -19,15 +19,25 @@ const SECTION_CLASS = `
         [&_ul]:ml-l
       `;
 
-function renderNode(node: ChangelogNode, key: number): ReactElement | string {
-	if (typeof node === "string") {
+function renderNode(node: ChangelogNode, key: number): ReactElement | string
+{
+	if (typeof node === "string")
+	{
 		return node;
 	}
-	return createElement(node.t, {key, ...node.p}, ...(node.c ?? []).map((child, index) => renderNode(child, index)));
+	return createElement(
+		node.t,
+		{
+			key,
+			...node.p,
+		},
+		...(node.c ?? []).map((child, index) => renderNode(child, index)),
+	);
 }
 
 /** Upstream `WF.DomKit.NotificationDot`. */
-function NotificationDot() {
+function NotificationDot()
+{
 	return <FaIcon className="w-m h-m text-tint blue-circle" icon="fas:circle" />;
 }
 
@@ -36,7 +46,8 @@ function NotificationDot() {
  * like/dislike thumbs are left out (upstream's `changelog.liked` is not stored locally), leaving the empty
  * `div.flex.gap-m` upstream renders when it shows no thumbs.
  */
-export function ChangelogEntryView({entry, unread}: {entry: ChangelogEntry; unread: boolean}) {
+export function ChangelogEntryView({entry, unread}: {entry: ChangelogEntry; unread: boolean})
+{
 	return (
 		<div className={`flex flex-col gap-ml p-m ${unread ? "rounded-s" : "border-b border-solid border-primary"}`}>
 			<div className="update-header flex flex-col gap-xs">
@@ -68,7 +79,8 @@ export function ChangelogBody({
 }: {
 	entries?: readonly ChangelogEntry[];
 	read: ChangelogRead;
-}) {
+})
+{
 	return (
 		<div className="flex flex-col flex-1 max-h-[calc(80vh_-_var(--wf-space-2xl)_-_var(--wf-space-2xl))] min-h-0 gap-l [@media(max-height:700px)]:max-h-none [@media(max-width:576px)]:max-h-none">
 			<DialogTitle>What&apos;s new</DialogTitle>
@@ -88,7 +100,8 @@ export function ChangelogBody({
 }
 
 /** The open dialog: snapshots the read entries, then marks every entry read (upstream `Ut0`'s mount effect). */
-function OpenChangelog({onClose}: {onClose: () => void}) {
+function OpenChangelog({onClose}: {onClose: () => void})
+{
 	const queryClient = useQueryClient();
 	const [read] = useState<ChangelogRead>(
 		// Loading or failed: nothing can be marked, so show every entry as read.
@@ -96,7 +109,8 @@ function OpenChangelog({onClose}: {onClose: () => void}) {
 			queryClient.getQueryData<WhatsNewState>(whatsNewKeys.all)?.read ??
 			WHATS_NEW_ENTRIES.map((entry) => entry.id),
 	);
-	useEffect(() => {
+	useEffect(() =>
+	{
 		void markWhatsNewRead(queryClient);
 	}, [queryClient]);
 	return (
@@ -108,7 +122,8 @@ function OpenChangelog({onClose}: {onClose: () => void}) {
 }
 
 /** Upstream's `gui-changelog`: the What's New dialog (Help > What's New, command `show_changelog`). */
-export function ChangelogHost() {
+export function ChangelogHost()
+{
 	const open = useOutlineStore((state) => state.changelogOpen);
 	const close = useOutlineStore((state) => state.closeChangelog);
 	return open ? <OpenChangelog onClose={close} /> : null;

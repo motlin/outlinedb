@@ -9,10 +9,12 @@ import type {MenuItemProps} from "./flyout/menu-item.js";
 import {typeIcon} from "./item-type-icon.js";
 
 /** Upstream picker: selecting runs the type's effect, then the focus leaves the picker (to body), which closes it. */
-function selectType(type: ItemType, onSelect: (type: ItemType) => void): void {
+function selectType(type: ItemType, onSelect: (type: ItemType) => void): void
+{
 	onSelect(type);
 	const active = document.activeElement;
-	if (active instanceof HTMLElement) {
+	if (active instanceof HTMLElement)
+	{
 		active.blur();
 	}
 }
@@ -21,7 +23,8 @@ function selectType(type: ItemType, onSelect: (type: ItemType) => void): void {
 export function nodeTypeMenuItems(
 	types: readonly ItemType[],
 	onSelect: (type: ItemType) => void,
-): ReactElement<MenuItemProps>[] {
+): ReactElement<MenuItemProps>[]
+{
 	return types.map((type) => (
 		<MenuItem
 			key={type.key}
@@ -29,15 +32,21 @@ export function nodeTypeMenuItems(
 			handbook={type.command}
 			icon={typeIcon(type.icon)}
 			label={type.label}
-			onSelect={() => {
+			onSelect={() =>
+			{
 				selectType(type, onSelect);
 			}}
 		/>
 	));
 }
 
-interface ItemTypePickerProps {
-	position: {top: number; left: number};
+interface ItemTypePickerProps
+{
+	position:
+	{
+		top: number;
+		left: number;
+	};
 	types: readonly ItemType[];
 	onSelect: (type: ItemType) => void;
 	onClose: () => void;
@@ -48,15 +57,24 @@ interface ItemTypePickerProps {
  * ButtonMenu with no button, focused on mount so it opens; blur closes it. The
  * rows sit in a Fragment so the menu gives them no arrow-key navigation.
  */
-export function ItemTypePicker({position, types, onSelect, onClose}: ItemTypePickerProps) {
+export function ItemTypePicker({position, types, onSelect, onClose}: ItemTypePickerProps)
+{
 	const menuRef = useRef<ButtonMenuHandle>(null);
 
-	useEffect(() => {
+	useEffect(() =>
+	{
 		menuRef.current?.focus();
 	}, []);
 
 	return createPortal(
-		<div style={{position: "absolute", top: position.top, left: position.left}}>
+		<div
+			style={
+			{
+				position: "absolute",
+				top: position.top,
+				left: position.left,
+			}}
+		>
 			<ButtonMenu ref={menuRef} button={null} minWidth={200} onHide={onClose}>
 				<>{nodeTypeMenuItems(types, onSelect)}</>
 			</ButtonMenu>

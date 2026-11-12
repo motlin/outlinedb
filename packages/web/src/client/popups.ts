@@ -8,12 +8,14 @@ export type PopupId =
 	| "suggest"
 	| "date.autocomplete";
 
-export interface PopupSnapshot {
+export interface PopupSnapshot
+{
 	id: PopupId | undefined;
 	locked: boolean;
 }
 
-interface Current {
+interface Current
+{
 	id: PopupId;
 	target: unknown;
 }
@@ -25,34 +27,53 @@ interface Current {
 let current: Current | undefined;
 let locked = false;
 let closeTimer: ReturnType<typeof setTimeout> | undefined;
-let snap: PopupSnapshot = {id: undefined, locked: false};
+let snap: PopupSnapshot =
+{
+	id: undefined,
+	locked: false,
+};
 
-function clearTimer(): void {
-	if (closeTimer !== undefined) {
+function clearTimer(): void
+{
+	if (closeTimer !== undefined)
+	{
 		clearTimeout(closeTimer);
 		closeTimer = undefined;
 	}
 }
 
-function changed(): void {
-	snap = {id: current?.id, locked};
+function changed(): void
+{
+	snap =
+	{
+		id: current?.id,
+		locked,
+	};
 }
 
-export function snapshot(): PopupSnapshot {
+export function snapshot(): PopupSnapshot
+{
 	return snap;
 }
 
 /** Open `id`, replacing whatever is current. */
-export function pop(id: PopupId, target?: unknown): void {
+export function pop(id: PopupId, target?: unknown): void
+{
 	clearTimer();
-	current = {id, target};
+	current =
+	{
+		id,
+		target,
+	};
 	locked = false;
 	changed();
 }
 
 /** Open `id` unless a different popup is current. */
-export function tryPop(id: PopupId, target?: unknown): boolean {
-	if (current !== undefined && current.id !== id) {
+export function tryPop(id: PopupId, target?: unknown): boolean
+{
+	if (current !== undefined && current.id !== id)
+	{
 		return false;
 	}
 	pop(id, target);
@@ -60,8 +81,10 @@ export function tryPop(id: PopupId, target?: unknown): boolean {
 }
 
 /** Clear the slot when `id` is omitted or current; returns whether it cleared. */
-export function unpop(id?: PopupId): boolean {
-	if (current === undefined || (id !== undefined && current.id !== id)) {
+export function unpop(id?: PopupId): boolean
+{
+	if (current === undefined || (id !== undefined && current.id !== id))
+	{
 		return false;
 	}
 	clearTimer();
@@ -72,38 +95,47 @@ export function unpop(id?: PopupId): boolean {
 }
 
 /** Clear `id` after `ms`, unless it is locked or the slot changed in between. */
-export function requestClose(id: PopupId, ms = 0): void {
+export function requestClose(id: PopupId, ms = 0): void
+{
 	clearTimer();
 	const target = current;
-	closeTimer = setTimeout(() => {
+	closeTimer = setTimeout(() =>
+	{
 		closeTimer = undefined;
-		if (!locked && current !== undefined && current === target && current.id === id) {
+		if (!locked && current !== undefined && current === target && current.id === id)
+		{
 			unpop(id);
 		}
 	}, ms);
 }
 
-export function lock(id: PopupId): void {
-	if (current?.id === id) {
+export function lock(id: PopupId): void
+{
+	if (current?.id === id)
+	{
 		locked = true;
 		changed();
 	}
 }
 
-export function is(id: PopupId): boolean {
+export function is(id: PopupId): boolean
+{
 	return current?.id === id;
 }
 
-export function isVisible(): boolean {
+export function isVisible(): boolean
+{
 	return current !== undefined;
 }
 
 /** Another registered popup, not `id`, is open. */
-export function anotherPopupOpened(id: PopupId): boolean {
+export function anotherPopupOpened(id: PopupId): boolean
+{
 	return isVisible() && !is(id);
 }
 
-export function resetPopupsForTests(): void {
+export function resetPopupsForTests(): void
+{
 	clearTimer();
 	current = undefined;
 	locked = false;

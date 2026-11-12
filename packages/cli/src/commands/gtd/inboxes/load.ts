@@ -7,7 +7,8 @@ import {findSameTitleSiblings, resolveInboxLinks} from "../../../services/inbox-
 import {findUnregisteredInboxes} from "../../../services/unregistered-inboxes.js";
 import {DEFAULT_DB_FILE} from "../../../db/default-db-file.js";
 
-interface InboxItem {
+interface InboxItem
+{
 	id: string;
 	name: string;
 	note?: string;
@@ -16,16 +17,27 @@ interface InboxItem {
 	children?: InboxItem[];
 }
 
-interface Inbox {
+interface Inbox
+{
 	id: string;
 	name: string;
 	linkId: string;
 	items: InboxItem[];
-	probableDuplicates: {title: string; ids: string[]}[];
+	probableDuplicates:
+	{
+		title: string;
+		ids: string[];
+	}[];
 }
 
-interface InboxesOutput {
-	unregisteredInboxes: {id: string; name: string; path: string}[];
+interface InboxesOutput
+{
+	unregisteredInboxes:
+	{
+		id: string;
+		name: string;
+		path: string;
+	}[];
 	loadedAt: string;
 	inboxes: Inbox[];
 	itemCount: number;
@@ -37,7 +49,8 @@ interface InboxesOutput {
  * Reads from Metadata > Inboxes, follows all inbox links, and writes
  * a consolidated JSON file with all inbox items for the refinement agents.
  */
-export default class Load extends Command {
+export default class Load extends Command
+{
 	static override description = "Load inbox items from Workflowy for GTD processing";
 
 	static override examples = [
@@ -47,16 +60,20 @@ export default class Load extends Command {
 		"<%= config.bin %> <%= command.id %> --depth 3",
 	];
 
-	static override flags = {
-		depth: Flags.integer({
-			default: 0,
-			description: "Depth of children to fetch for each inbox item (0 = none, max 10)",
-			max: 10,
-			min: 0,
-		}),
+	static override flags =
+	{
+		depth: Flags.integer(
+			{
+				default: 0,
+				description: "Depth of children to fetch for each inbox item (0 = none, max 10)",
+				max: 10,
+				min: 0,
+			},
+		),
 	};
 
-	public async run(): Promise<InboxesOutput> {
+	public async run(): Promise<InboxesOutput>
+	{
 		const {flags} = await this.parse(Load);
 		const {depth} = flags;
 
@@ -65,8 +82,14 @@ export default class Load extends Command {
 
 		// Ensure .llm directory exists
 		const llmDir = path.dirname(outputFile);
-		if (!fs.existsSync(llmDir)) {
-			fs.mkdirSync(llmDir, {recursive: true});
+		if (!fs.existsSync(llmDir))
+		{
+			fs.mkdirSync(
+				llmDir,
+				{
+					recursive: true,
+				},
+			);
 		}
 
 		// Initialize cache service
@@ -77,7 +100,8 @@ export default class Load extends Command {
 		const inboxesPath = ["Metadata", "\u{1F4E5} Inboxes"];
 		const inboxesNode = cacheService.findNodeByPath(inboxesPath);
 
-		if (!inboxesNode) {
+		if (!inboxesNode)
+		{
 			this.error(`Inboxes node not found at path: ${inboxesPath.join(" > ")}`);
 		}
 
@@ -88,7 +112,8 @@ export default class Load extends Command {
 		const inboxLinks = cacheService.getChildren(inboxesNode.id);
 
 		const {targets: childIdToTargetUuid, broken} = resolveInboxLinks(database, inboxLinks);
-		if (broken.length > 0) {
+		if (broken.length > 0)
+		{
 			const details = broken
 				.map((link) => `${link.name} (link ${link.linkId} -> missing ${link.shortId})`)
 				.join("; ");
@@ -97,7 +122,8 @@ export default class Load extends Command {
 			);
 		}
 
-		for (const child of inboxLinks) {
+		for (const child of inboxLinks)
+		{
 			// Resolve link target via short ID extracted from anchor href
 			const targetUuid = childIdToTargetUuid.get(child.id);
 			const target = targetUuid ? cacheService.getNode(targetUuid) : null;
@@ -113,27 +139,32 @@ export default class Load extends Command {
 			const itemsParentId = target?.id ?? child.id;
 			const inboxItems = cacheService.getChildren(itemsParentId);
 
-			for (const item of inboxItems) {
+			for (const item of inboxItems)
+			{
 				items.push(this.nodeToInboxItem(item));
 			}
 
 			// Fetch children at requested depth using batch queries per level
-			if (depth > 0 && items.length > 0) {
+			if (depth > 0 && items.length > 0)
+			{
 				this.fetchChildrenByDepth(cacheService, items, depth);
 			}
 
-			inboxes.push({
-				id: target?.id ?? child.id,
-				name: inboxName,
-				linkId: child.id,
-				items,
-				probableDuplicates: findSameTitleSiblings(items),
-			});
+			inboxes.push(
+				{
+					id: target?.id ?? child.id,
+					name: inboxName,
+					linkId: child.id,
+					items,
+					probableDuplicates: findSameTitleSiblings(items),
+				},
+			);
 		}
 
 		const registeredIds = new Set(inboxes.flatMap((inbox) => [inbox.id, inbox.linkId]));
 		const unregisteredInboxes = findUnregisteredInboxes(database, registeredIds);
-		for (const inbox of unregisteredInboxes) {
+		for (const inbox of unregisteredInboxes)
+		{
 			this.warn(
 				`Unregistered inbox: ${inbox.path} (${inbox.id}); absent from Metadata > 📥 Inboxes and excluded from triage.`,
 			);
@@ -141,7 +172,8 @@ export default class Load extends Command {
 
 		const itemCount = inboxes.reduce((sum, inbox) => sum + inbox.items.length, 0);
 
-		const output: InboxesOutput = {
+		const output: InboxesOutput =
+		{
 			loadedAt: timestamp,
 			unregisteredInboxes,
 			inboxes,
@@ -152,11 +184,16 @@ export default class Load extends Command {
 		fs.writeFileSync(outputFile, JSON.stringify(output, null, 2));
 
 		// Output summary for the agent
-		const summary = {
+		const summary =
+		{
 			loadedAt: output.loadedAt,
 			unregisteredInboxes,
 			probableDuplicates: inboxes.flatMap((inbox) =>
-				inbox.probableDuplicates.map((group) => ({inbox: inbox.name, ...group})),
+				inbox.probableDuplicates.map((group) => (
+				{
+					inbox: inbox.name,
+					...group,
+				})),
 			),
 			inboxCount: output.inboxes.length,
 			itemCount: output.itemCount,
@@ -171,7 +208,8 @@ export default class Load extends Command {
 		name: string | null;
 		note: string | null;
 		completedAt: Date | null;
-	}): InboxItem {
+	}): InboxItem
+	{
 		return {
 			id: node.id,
 			name: node.name ?? "",
@@ -181,29 +219,36 @@ export default class Load extends Command {
 		};
 	}
 
-	private fetchChildrenByDepth(cacheService: CacheService, items: InboxItem[], maxDepth: number): void {
+	private fetchChildrenByDepth(cacheService: CacheService, items: InboxItem[], maxDepth: number): void
+	{
 		const itemMap = new Map<string, InboxItem>();
-		for (const item of items) {
+		for (const item of items)
+		{
 			itemMap.set(item.id, item);
 		}
 
 		let currentLevelIds = items.map((item) => item.id);
 
-		for (let currentDepth = 1; currentDepth <= maxDepth; currentDepth++) {
-			if (currentLevelIds.length === 0) {
+		for (let currentDepth = 1; currentDepth <= maxDepth; currentDepth++)
+		{
+			if (currentLevelIds.length === 0)
+			{
 				break;
 			}
 
 			const childrenByParent = cacheService.getChildrenForMultipleParents(currentLevelIds);
 			const nextLevelIds: string[] = [];
 
-			for (const [parentId, children] of childrenByParent) {
+			for (const [parentId, children] of childrenByParent)
+			{
 				const parentItem = itemMap.get(parentId);
-				if (parentItem && children.length > 0) {
+				if (parentItem && children.length > 0)
+				{
 					const childItems = children.map((child) => this.nodeToInboxItem(child));
 					parentItem.children = childItems;
 
-					for (const childItem of childItems) {
+					for (const childItem of childItems)
+					{
 						itemMap.set(childItem.id, childItem);
 						nextLevelIds.push(childItem.id);
 					}
@@ -214,16 +259,20 @@ export default class Load extends Command {
 		}
 	}
 
-	private extractAnchorText(html: string): string {
+	private extractAnchorText(html: string): string
+	{
 		const match = html.match(/<a[^>]*>([^<]*)<\/a>/u);
 		return match?.[1] ?? html;
 	}
 
-	private findProjectRoot(): string {
+	private findProjectRoot(): string
+	{
 		let dir = process.cwd();
 
-		while (dir !== "/") {
-			if (fs.existsSync(path.join(dir, DEFAULT_DB_FILE)) || fs.existsSync(path.join(dir, "package.json"))) {
+		while (dir !== "/")
+		{
+			if (fs.existsSync(path.join(dir, DEFAULT_DB_FILE)) || fs.existsSync(path.join(dir, "package.json")))
+			{
 				return dir;
 			}
 			dir = path.dirname(dir);

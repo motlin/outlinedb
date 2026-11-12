@@ -16,8 +16,10 @@ import {nodeSignalSocket, startUpstreamSignal} from "./upstream-signal.js";
 
 process.title = "outlinedb-web-server";
 
-if (httpLoggingEnabled(process.env)) {
-	globalThis.fetch = loggingFetch(globalThis.fetch, (line) => {
+if (httpLoggingEnabled(process.env))
+{
+	globalThis.fetch = loggingFetch(globalThis.fetch, (line) =>
+	{
 		console.log(line);
 	});
 }
@@ -30,29 +32,45 @@ const treeEvents = new TreeEventBus();
  * Announces the expanded keys' new version after a tree write (an import reseeds them) and after each debounced
  * expansion push, so open tabs poll the expansion feed only when it moved.
  */
-const checkExpansion = expansionChangePublisher(treeEvents, () => {
+const checkExpansion = expansionChangePublisher(treeEvents, () =>
+{
 	const keys = readExpansion(serverContext.db);
 	return keys === undefined ? undefined : expansionVersion(keys);
 });
 /** Announces the account tables' new version after a tree write (an import or catch-up rewrites them), so open tabs re-read their flags. */
 const checkAccount = accountChangePublisher(treeEvents, () => accountVersion(readAccountRows(serverContext.db)));
-treeEvents.subscribe((event) => {
-	if (event.type === "tree.changed") {
+treeEvents.subscribe((event) =>
+{
+	if (event.type === "tree.changed")
+	{
 		checkExpansion();
 		checkAccount();
 	}
 });
 serverContext.expansionWritten = checkExpansion;
-const store = inProcessStore(serverContext, undefined, {
-	keepSnapshotWarm: serverContext.config.features.treeSnapshot,
-	treeEvents,
-});
-const httpApp = createHttpApp({resolveStore: () => store, corsOrigin: "http://localhost:5173"});
+const store = inProcessStore(
+	serverContext,
+	undefined,
+	{
+		keepSnapshotWarm: serverContext.config.features.treeSnapshot,
+		treeEvents,
+	},
+);
+const httpApp = createHttpApp(
+	{
+		resolveStore: () => store,
+		corsOrigin: "http://localhost:5173",
+	},
+);
 httpApp.route("/", createDecisionsApp(serverContext));
 
 /** The served app: sockets first, so `/api/v1/nodes/events` is not taken by the HTTP routes' `GET /api/v1/nodes/:id`. */
 const app = new Hono();
-const nodeWebSocket = createNodeWebSocket({app});
+const nodeWebSocket = createNodeWebSocket(
+	{
+		app,
+	},
+);
 
 /**
  * Every ladder write, streamed as one frame per write. Monitor's `ws:` source
@@ -75,13 +93,22 @@ const port = resolvePort(process.env);
 
 // Logged from the listening callback, so a port clash reports EADDRINUSE
 // instead of a "Server running" line that was never true.
-const server = serve({fetch: app.fetch, hostname: "127.0.0.1", port}, (info) => {
-	console.log(`Server running at http://127.0.0.1:${info.port}`);
-	// After listening, so the first search/switcher request finds the whole-tree snapshot already built.
-	setImmediate(() => {
-		warmTreeSnapshot(serverContext.db);
-	});
-});
+const server = serve(
+	{
+		fetch: app.fetch,
+		hostname: "127.0.0.1",
+		port,
+	},
+	(info) =>
+	{
+		console.log(`Server running at http://127.0.0.1:${info.port}`);
+		// After listening, so the first search/switcher request finds the whole-tree snapshot already built.
+		setImmediate(() =>
+		{
+			warmTreeSnapshot(serverContext.db);
+		});
+	},
+);
 nodeWebSocket.injectWebSocket(server);
 
 /**
@@ -90,17 +117,26 @@ nodeWebSocket.injectWebSocket(server);
  */
 const internalAuth = serverContext.internalAuth;
 const internalAdapter = serverContext.internalAdapter?.();
-if (internalAuth && internalAdapter) {
-	startUpstreamSignal({
-		connect: async () => {
-			const clientId = await internalAdapter.clientId();
-			const cookie = internalAuth.sessionStore.read();
-			if (cookie === undefined) {
-				throw new Error("no saved Workflowy session cookie");
-			}
-			return {clientId, cookie};
+if (internalAuth && internalAdapter)
+{
+	startUpstreamSignal(
+		{
+			connect: async () =>
+			{
+				const clientId = await internalAdapter.clientId();
+				const cookie = internalAuth.sessionStore.read();
+				if (cookie === undefined)
+				{
+					throw new Error("no saved Workflowy session cookie");
+				}
+				return {
+					clientId,
+					cookie,
+				};
+			},
+			openSocket: nodeSignalSocket,
+			catchUp: async () =>
+				withTreeChangePublish(serverContext.db, treeEvents, async () => internalAdapter.catchUp()),
 		},
-		openSocket: nodeSignalSocket,
-		catchUp: async () => withTreeChangePublish(serverContext.db, treeEvents, async () => internalAdapter.catchUp()),
-	});
+	);
 }

@@ -20,14 +20,19 @@ const EXERCISE_PROGRAMS =
 	/\b(digin|insanity|shaun t|p90x|t25|21 day fix|beachbody|body ?pump|couch to 5k|stronglifts|crossfit)\b/iu;
 const SCAN_ROOTS = ["plugins", ".claude"];
 
-function scanTracked(pattern: RegExp): string[] {
+function scanTracked(pattern: RegExp): string[]
+{
 	const violations: string[] = [];
-	for (const root of SCAN_ROOTS) {
-		for (const relativePath of trackedFiles(root)) {
+	for (const root of SCAN_ROOTS)
+	{
+		for (const relativePath of trackedFiles(root))
+		{
 			const content = readFileSync(join(PROJECT_ROOT, relativePath), "utf8");
-			content.split("\n").forEach((line, index) => {
+			content.split("\n").forEach((line, index) =>
+			{
 				const match = pattern.exec(line);
-				if (match) {
+				if (match)
+				{
 					violations.push(`${relativePath}:${index + 1}: ${match[0]}`);
 				}
 			});
@@ -36,40 +41,48 @@ function scanTracked(pattern: RegExp): string[] {
 	return violations;
 }
 
-describe("Structural Eval: No Personal Vocabulary", () => {
-	it("no tracked file under plugins/ or .claude/ names a specific holiday", () => {
+describe("Structural Eval: No Personal Vocabulary", () =>
+{
+	it("no tracked file under plugins/ or .claude/ names a specific holiday", () =>
+	{
 		expect(scanTracked(HOLIDAY_NAMES)).toStrictEqual([]);
 	});
 
-	it("no tracked file under plugins/ or .claude/ names a specific exercise program", () => {
+	it("no tracked file under plugins/ or .claude/ names a specific exercise program", () =>
+	{
 		expect(scanTracked(EXERCISE_PROGRAMS)).toStrictEqual([]);
 	});
 
-	it("refine-exercise-prep reads program formats from the private exercise-formats file", () => {
+	it("refine-exercise-prep reads program formats from the private exercise-formats file", () =>
+	{
 		const prep = readFileSync(join(PROJECT_ROOT, "plugins/gtd/commands/refine-exercise-prep.md"), "utf8");
 
 		expect(prep).toContain(".llm/gtd/exercise-formats.md");
 	});
 
-	it("refine-journal-prep reads holiday emoji from the private journal vocabulary", () => {
+	it("refine-journal-prep reads holiday emoji from the private journal vocabulary", () =>
+	{
 		const prep = readFileSync(join(PROJECT_ROOT, "plugins/gtd/commands/refine-journal-prep.md"), "utf8");
 
 		expect(prep).toMatch(/holiday[^\n]*journal-vocabulary\.md|journal-vocabulary\.md[^\n]*holiday/iu);
 	});
 
-	it("refine-journal-prep looks up community events and places in the vocabulary emoji table, not only holidays", () => {
+	it("refine-journal-prep looks up community events and places in the vocabulary emoji table, not only holidays", () =>
+	{
 		const prep = readFileSync(join(PROJECT_ROOT, "plugins/gtd/commands/refine-journal-prep.md"), "utf8");
 
 		expect(prep).toMatch(/religious or community event[^\n]*place[^\n]*journal-vocabulary\.md/iu);
 	});
 
-	it("refine-journal-prep leads emoji options with the occasion rather than the means", () => {
+	it("refine-journal-prep leads emoji options with the occasion rather than the means", () =>
+	{
 		const prep = readFileSync(join(PROJECT_ROOT, "plugins/gtd/commands/refine-journal-prep.md"), "utf8");
 
 		expect(prep).toMatch(/occasion over the means/iu);
 	});
 
-	it("refine-journal-apply offers to record a vocabulary-matched emoji pick in journal-vocabulary.md", () => {
+	it("refine-journal-apply offers to record a vocabulary-matched emoji pick in journal-vocabulary.md", () =>
+	{
 		const apply = readFileSync(join(PROJECT_ROOT, "plugins/gtd/commands/refine-journal-apply.md"), "utf8");
 
 		expect(apply).toMatch(/emoji pick[^\n]*journal-vocabulary\.md/iu);

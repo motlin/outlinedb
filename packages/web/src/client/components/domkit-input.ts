@@ -2,7 +2,8 @@
 const INDENT = " ".repeat(12);
 
 /** The DomKit Input class string; `small` adds upstream's `py-xs px-s` after the base padding. */
-export function domkitInputClass(size: "default" | "small" = "default"): string {
+export function domkitInputClass(size: "default" | "small" = "default"): string
+{
 	return [
 		`block w-full box-border appearance-none p-m rounded-s${size === "small" ? " py-xs px-s" : ""}`,
 		INDENT,

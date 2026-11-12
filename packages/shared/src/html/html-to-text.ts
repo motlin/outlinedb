@@ -1,8 +1,10 @@
 const TAG = /<[^>]*>/gu;
 
 /** The rendered text of name HTML: tags removed, entities decoded. Unlike `stripHtmlTags` it never trims. */
-export function htmlToText(html: string | null | undefined): string {
-	if (!html) {
+export function htmlToText(html: string | null | undefined): string
+{
+	if (!html)
+	{
 		return "";
 	}
 	return html

@@ -2,7 +2,8 @@ import {useEffect, useRef} from "react";
 import {useQueryClient} from "@tanstack/react-query";
 import {useStableNavigate} from "./use-stable-navigate.js";
 import {isMacPlatform} from "../editable-text-keys.js";
-import {
+import
+{
 	deferToFocusedControl,
 	keymapCombo,
 	listenForAppMessageKeys,
@@ -19,7 +20,8 @@ import {useDeleteNode} from "./use-nodes.js";
 import {currentSelectionView, isTextTarget, runSelectionKey} from "./use-selection-keymap.js";
 
 /** Whether keys typed into `target` belong to a form field rather than the outline. */
-function isFormField(target: EventTarget | null): boolean {
+function isFormField(target: EventTarget | null): boolean
+{
 	return (
 		target instanceof HTMLInputElement ||
 		target instanceof HTMLTextAreaElement ||
@@ -27,14 +29,16 @@ function isFormField(target: EventTarget | null): boolean {
 	);
 }
 
-function focusedElement(): HTMLElement | null {
+function focusedElement(): HTMLElement | null
+{
 	return document.activeElement instanceof HTMLElement ? document.activeElement : null;
 }
 
 let activeRegistry: CommandRegistry = {};
 
 /** The registry the global keymap dispatches to, for editors that run a command by id (the slash menu). */
-export function activeCommandRegistry(): CommandRegistry {
+export function activeCommandRegistry(): CommandRegistry
+{
 	return activeRegistry;
 }
 
@@ -45,20 +49,25 @@ export function activeCommandRegistry(): CommandRegistry {
  * message's action shortcuts first (upstream's capture-phase toast listener), then the item selection's own keys
  * while items are selected (upstream's capture-phase Backspace/Delete and selection hotkeys), then the hotkey table.
  */
-export function useGlobalKeymap(registry: CommandRegistry): void {
+export function useGlobalKeymap(registry: CommandRegistry): void
+{
 	const queryClient = useQueryClient();
 	const navigate = useStableNavigate();
 	const {mutate: deleteNode} = useDeleteNode();
 	const registryRef = useRef(registry);
-	useEffect(() => {
+	useEffect(() =>
+	{
 		registryRef.current = registry;
 		activeRegistry = registry;
 	}, [registry]);
 
-	useEffect(() => {
+	useEffect(() =>
+	{
 		const isMac = isMacPlatform();
-		const onKeyDown = (event: KeyboardEvent): void => {
-			if (event.isComposing) {
+		const onKeyDown = (event: KeyboardEvent): void =>
+		{
+			if (event.isComposing)
+			{
 				return;
 			}
 			const selectionResult = processSelectionKey(
@@ -68,21 +77,25 @@ export function useGlobalKeymap(registry: CommandRegistry): void {
 					hasSelection: useOutlineStore.getState().itemSelection.entries.length > 0,
 					inText: isTextTarget(event.target),
 				},
-				(action) => {
+				(action) =>
+				{
 					runSelectionKey(action, queryClient, deleteNode, navigate);
 				},
 			);
-			if (selectionResult === "claimed") {
+			if (selectionResult === "claimed")
+			{
 				event.preventDefault();
 				return;
 			}
 			const combo = keymapCombo(event, isMac, isFormField(event.target));
-			if (combo === null || deferToFocusedControl(combo, focusedElement())) {
+			if (combo === null || deferToFocusedControl(combo, focusedElement()))
+			{
 				return;
 			}
 			const state = useOutlineStore.getState();
 			const {editingId, itemSelection} = state;
-			const ctx: CommandContext = {
+			const ctx: CommandContext =
+			{
 				items: isFormField(event.target)
 					? []
 					: commandTargets(itemSelection, () => currentSelectionView(queryClient).tree, editingId),
@@ -92,14 +105,19 @@ export function useGlobalKeymap(registry: CommandRegistry): void {
 				processCombo(combo, registryRef.current, ctx, isMac, undefined, state.panes.length > 0);
 			// A hotkey on the item selection keeps a caret afterwards, like upstream's `WF.Focus.maintain`.
 			let result = "unclaimed" as ComboResult;
-			if (itemSelection.entries.length > 0) {
-				maintainFocus(() => {
+			if (itemSelection.entries.length > 0)
+			{
+				maintainFocus(() =>
+				{
 					result = run();
 				}, liveFocusEnv(queryClient));
-			} else {
+			}
+			else
+			{
 				result = run();
 			}
-			if (result === "claimed") {
+			if (result === "claimed")
+			{
 				event.preventDefault();
 			}
 		};
@@ -113,7 +131,8 @@ export function useGlobalKeymap(registry: CommandRegistry): void {
 			document,
 			() => useOutlineStore.getState().itemSelection.entries.length > 0,
 		);
-		return () => {
+		return () =>
+		{
 			globalThis.removeEventListener("keydown", onKeyDown);
 			stopAppMessageKeys();
 			stopSelectionPaste();

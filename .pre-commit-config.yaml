@@ -39,7 +39,7 @@ repos:
         language: system
         files: '(?i)(^|/)\.?justfile$|\.just$'
         types: [file]
-      # Runs before oxfmt: fallow fix rewrites package.json with 2-space indentation, which vp fmt must re-tab.
+      # Runs before oxfmt: fallow fix rewrites package.json with 2-space indentation, which oxfmt-next-line must re-tab.
       - id: fallow
         name: fallow
         entry: pnpm run fallow --base HEAD
@@ -47,9 +47,11 @@ repos:
         pass_filenames: false
         types: [file]
       - id: oxfmt
-        name: vp fmt
-        entry: pnpm exec vp fmt --no-error-on-unmatched-pattern
+        name: oxfmt-next-line
+        entry: oxfmt-next-line --no-error-on-unmatched-pattern
         language: system
+        # Show "Finished in Xms on N files" so every run proves formatting happened.
+        verbose: true
       - id: check-staged-pii
         name: check staged PII
         entry: scripts/check-staged-pii.sh

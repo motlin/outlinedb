@@ -6,7 +6,8 @@ import {activeZoomedId, useOutlineStore} from "../stores/outline.js";
 import {FaIcon} from "./fa-icons.js";
 import {useHeaderActions} from "./header-actions.js";
 
-export interface MobileSearchFormViewProps {
+export interface MobileSearchFormViewProps
+{
 	visible: boolean;
 	value: string;
 	/** Upstream shows the star only with a query. */
@@ -35,11 +36,13 @@ export function MobileSearchFormView({
 	onClear,
 	onToggleStar,
 	inputRef,
-}: MobileSearchFormViewProps) {
+}: MobileSearchFormViewProps)
+{
 	return (
 		<form
 			className={`${visible ? "block" : "hidden"} ${FORM_CLASS}`}
-			onSubmit={(event) => {
+			onSubmit={(event) =>
+			{
 				event.preventDefault();
 			}}
 		>
@@ -52,15 +55,19 @@ export function MobileSearchFormView({
 				placeholder="Search"
 				autoComplete="off"
 				value={value}
-				onChange={(event: ChangeEvent<HTMLInputElement>) => {
+				onChange={(event: ChangeEvent<HTMLInputElement>) =>
+				{
 					onChange(event.target.value);
 				}}
 				onFocus={onFocus}
-				onBlur={(event) => {
+				onBlur={(event) =>
+				{
 					onBlur(event.target.value);
 				}}
-				onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
-					if (event.key === "Enter") {
+				onKeyDown={(event: KeyboardEvent<HTMLInputElement>) =>
+				{
+					if (event.key === "Enter")
+					{
 						event.currentTarget.blur();
 					}
 				}}
@@ -70,7 +77,13 @@ export function MobileSearchFormView({
 					// oxlint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- a touch control: tapping stars the search
 					<div onClick={onToggleStar}>
 						{starred ? (
-							<FaIcon icon="fas:star" style={{color: "var(--wf-yellow-200)"}} />
+							<FaIcon
+								icon="fas:star"
+								style={
+								{
+									color: "var(--wf-yellow-200)",
+								}}
+							/>
 						) : (
 							<FaIcon icon="fal:star" />
 						)}
@@ -78,7 +91,8 @@ export function MobileSearchFormView({
 				)}
 				{/* oxlint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- a touch control: tapping clears the search */}
 				<div
-					onMouseDown={(event) => {
+					onMouseDown={(event) =>
+					{
 						event.preventDefault();
 					}}
 					onClick={onClear}
@@ -91,7 +105,8 @@ export function MobileSearchFormView({
 }
 
 /** The mobile search form on the outline store's search state (typed, focused and committed). */
-export function MobileSearchForm() {
+export function MobileSearchForm()
+{
 	const navigate = useStableNavigate();
 	const input = useRef<HTMLInputElement>(null);
 	const searchInput = useOutlineStore((state) => state.searchInput);
@@ -101,26 +116,39 @@ export function MobileSearchForm() {
 	const actions = useHeaderActions(zoomedId, query === "" ? null : query);
 	return (
 		<MobileSearchFormView
-			visible={mobileSearchVisible({focused, input: searchInput, query})}
+			visible={mobileSearchVisible(
+				{
+					focused,
+					input: searchInput,
+					query,
+				},
+			)}
 			value={searchInput}
 			starred={actions.isStarred}
 			inputRef={input}
-			onChange={(value) => {
+			onChange={(value) =>
+			{
 				useOutlineStore.getState().setSearchInput(value);
 			}}
-			onFocus={() => {
+			onFocus={() =>
+			{
 				useOutlineStore.getState().setSearchFocused(true);
 			}}
-			onBlur={(value) => {
+			onBlur={(value) =>
+			{
 				const store = useOutlineStore.getState();
 				store.setSearchFocused(false);
-				if (mobileSearchBlurAction(value) === "cancel") {
+				if (mobileSearchBlurAction(value) === "cancel")
+				{
 					store.cancelSearch(navigate);
-				} else if (value !== store.searchQuery) {
+				}
+				else if (value !== store.searchQuery)
+				{
 					store.commitSearch(value, navigate);
 				}
 			}}
-			onClear={() => {
+			onClear={() =>
+			{
 				const store = useOutlineStore.getState();
 				store.setSearchInput("");
 				input.current?.blur();

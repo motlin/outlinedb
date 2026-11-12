@@ -21,7 +21,8 @@ import {ButtonMenu} from "./flyout/button-menu.js";
 import {IconButton} from "./icon-button.js";
 import {scrollPaneToTop} from "./pane-context.js";
 
-export interface Crumb {
+export interface Crumb
+{
 	id: string;
 	isRoot: boolean;
 	name?: string | null;
@@ -32,9 +33,14 @@ export interface Crumb {
 	fileType?: string | null;
 }
 
-const ROOT_CRUMB: Crumb = {id: "None", isRoot: true};
+const ROOT_CRUMB: Crumb =
+{
+	id: "None",
+	isRoot: true,
+};
 
-interface CrumbClickEvent {
+interface CrumbClickEvent
+{
 	altKey: boolean;
 	ctrlKey: boolean;
 	metaKey: boolean;
@@ -44,13 +50,15 @@ interface CrumbClickEvent {
 	stopPropagation: () => void;
 }
 
-interface CrumbClickState {
+interface CrumbClickState
+{
 	current: boolean;
 	/** A search is committed (`?q=` in the URL). */
 	searchActive: boolean;
 }
 
-interface CrumbClickDeps {
+interface CrumbClickDeps
+{
 	navigateToNode: (nodeId: string | null) => void;
 	cancelSearch: () => void;
 	/** Leave the search without its own URL push, since the crumb navigation drops `?q=`. */
@@ -70,22 +78,29 @@ export function handleCrumbClick(
 	crumb: Crumb,
 	{current, searchActive}: CrumbClickState,
 	{navigateToNode, cancelSearch, leaveSearch, scrollToTop, focusWindow}: CrumbClickDeps,
-): void {
-	if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.button === 1) {
+): void
+{
+	if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.button === 1)
+	{
 		return;
 	}
 	event.preventDefault();
 	const rootDuringSearch = crumb.isRoot && current;
-	if (rootDuringSearch) {
+	if (rootDuringSearch)
+	{
 		event.stopPropagation();
 	}
 	focusWindow();
-	if (!rootDuringSearch) {
-		if (searchActive) {
+	if (!rootDuringSearch)
+	{
+		if (searchActive)
+		{
 			leaveSearch();
 		}
 		navigateToNode(crumb.isRoot ? null : crumb.id);
-	} else if (searchActive) {
+	}
+	else if (searchActive)
+	{
 		cancelSearch();
 	}
 	scrollToTop();
@@ -93,26 +108,32 @@ export function handleCrumbClick(
 
 /** Upstream crumbs never take focus on mousedown, so the editor keeps its caret until navigation. */
 // oxlint-disable-next-line react/only-export-components -- pure handler exported for tests
-export function preventCrumbMouseDown(event: {preventDefault: () => void}): void {
+export function preventCrumbMouseDown(event: {preventDefault: () => void}): void
+{
 	event.preventDefault();
 }
 
-function focusBrowserWindow(): void {
+function focusBrowserWindow(): void
+{
 	window.focus();
 }
 
 /** The main outline scrolls the window, or its own scroller while a pane is open, like upstream. */
-function scrollOutlineToTop(): void {
+function scrollOutlineToTop(): void
+{
 	scrollPaneToTop(MAIN_PANE_ID);
 }
 
-function noop(): void {}
+function noop(): void
+{
+}
 
 /**
  * How crumbs render dates: the account's date format, like the pills, and the 📆 Calendar root's Friendly day names
  * setting, which upstream's crumb decorator honors too.
  */
-interface CrumbDateOptions {
+interface CrumbDateOptions
+{
 	dateFormat?: string;
 	timeFormat?: string | null;
 	dayPrefix?: boolean;
@@ -123,50 +144,68 @@ interface CrumbDateOptions {
 function crumbLabel(
 	{name, dayDateId}: Pick<Crumb, "name" | "dayDateId">,
 	{dateFormat, timeFormat, dayPrefix, account = null}: CrumbDateOptions,
-): string {
-	return formatCrumbLabel(name ?? "", {
-		now: new Date(),
-		dateFormat,
-		timeFormat: timeFormat ?? undefined,
-		dayDateId,
-		dayPrefix,
-		account,
-	});
+): string
+{
+	return formatCrumbLabel(
+		name ?? "",
+		{
+			now: new Date(),
+			dateFormat,
+			timeFormat: timeFormat ?? undefined,
+			dayDateId,
+			dayPrefix,
+			account,
+		},
+	);
 }
 
 const DIVIDER_CLASS = "min-w-l w-full h-px border-0 border-t border-solid border-color text-center m-0 mt-xs";
 
-function fileIconKey(fileType: string): "fal:file-audio" | "fal:file-video" | "fal:file-image" | "fal:file" {
-	if (fileType.startsWith("audio/")) {
+function fileIconKey(fileType: string): "fal:file-audio" | "fal:file-video" | "fal:file-image" | "fal:file"
+{
+	if (fileType.startsWith("audio/"))
+	{
 		return "fal:file-audio";
 	}
-	if (fileType.startsWith("video/")) {
+	if (fileType.startsWith("video/"))
+	{
 		return "fal:file-video";
 	}
-	if (fileType.startsWith("image/")) {
+	if (fileType.startsWith("image/"))
+	{
 		return "fal:file-image";
 	}
 	return "fal:file";
 }
 
 /** Upstream's `item:icon` decorators that reach crumbs: the file-type icon and the divider rule. */
-function CrumbIcon({crumb}: {crumb: Crumb}) {
-	if (crumb.layoutMode === "divider") {
+function CrumbIcon({crumb}: {crumb: Crumb})
+{
+	if (crumb.layoutMode === "divider")
+	{
 		return <hr className={DIVIDER_CLASS} />;
 	}
-	if (crumb.fileType === undefined || crumb.fileType === null) {
+	if (crumb.fileType === undefined || crumb.fileType === null)
+	{
 		return null;
 	}
 	return (
 		<>
-			<FaIcon icon={fileIconKey(crumb.fileType)} style={{color: "var(--wf-text-tertiary)"}} />
+			<FaIcon
+				icon={fileIconKey(crumb.fileType)}
+				style={
+				{
+					color: "var(--wf-text-tertiary)",
+				}}
+			/>
 			{"\u00A0"}
 		</>
 	);
 }
 
 /** Crumb fields filled from an ancestor node. */
-function crumbOfNode(node: NodeResponse): Crumb {
+function crumbOfNode(node: NodeResponse): Crumb
+{
 	return {
 		id: node.id,
 		isRoot: false,
@@ -177,11 +216,14 @@ function crumbOfNode(node: NodeResponse): Crumb {
 	};
 }
 
-function noLog(): void {}
+function noLog(): void
+{
+}
 
 const NO_DATE_OPTIONS: CrumbDateOptions = {};
 
-interface CrumbProps {
+interface CrumbProps
+{
 	crumb: Crumb;
 	current: boolean;
 	truncateWidth?: number | null;
@@ -203,7 +245,8 @@ function BreadcrumbItem({
 	onCancelSearch = noop,
 	dateOptions = NO_DATE_OPTIONS,
 	scrollToTop = scrollOutlineToTop,
-}: CrumbProps) {
+}: CrumbProps)
+{
 	const leaveSearch = useOutlineStore((state) => state.leaveSearch);
 	const disabled = crumb.isRoot && current && !searchActive;
 	const className = `breadcrumb-item flex-shrink-0 whitespace-nowrap overflow-hidden truncate ${current ? "current opacity-100" : "opacity-70"}
@@ -223,9 +266,13 @@ function BreadcrumbItem({
 			{crumbLabel(crumb, dateOptions)}
 		</>
 	);
-	const style = {maxWidth: truncateWidth === null ? undefined : truncateWidth};
+	const style =
+	{
+		maxWidth: truncateWidth === null ? undefined : truncateWidth,
+	};
 
-	if (disabled) {
+	if (disabled)
+	{
 		return (
 			<div className={className} style={style}>
 				{content}
@@ -239,11 +286,15 @@ function BreadcrumbItem({
 			href={crumb.isRoot ? "/" : nodeUrl(crumb.id)}
 			data-item-id={crumb.isRoot ? "None" : crumb.id}
 			onMouseDown={preventCrumbMouseDown}
-			onClick={(event: MouseEvent<HTMLAnchorElement>) => {
+			onClick={(event: MouseEvent<HTMLAnchorElement>) =>
+			{
 				handleCrumbClick(
 					event,
 					crumb,
-					{current, searchActive},
+					{
+						current,
+						searchActive,
+					},
 					{
 						navigateToNode: onNavigate,
 						cancelSearch: onCancelSearch,
@@ -262,7 +313,8 @@ function BreadcrumbItem({
 const HOME_LABEL = "Home";
 const OVERFLOW_MENU_GUTTER = 48;
 
-interface BreadcrumbOverflowMenuProps {
+interface BreadcrumbOverflowMenuProps
+{
 	items: LayoutCrumb[];
 	crumbs: Map<string, Crumb>;
 	currentId: string;
@@ -285,10 +337,12 @@ export function BreadcrumbOverflowMenu({
 	onCancelSearch,
 	dateOptions,
 	scrollToTop,
-}: BreadcrumbOverflowMenuProps) {
+}: BreadcrumbOverflowMenuProps)
+{
 	return (
 		<div className={`max-w-[${maxWidth}px] flex flex-col items-stretch gap-m px-m breadcrumb-overflow-menu`}>
-			{items.map((item) => {
+			{items.map((item) =>
+			{
 				const crumb = crumbs.get(item.id);
 				return crumb === undefined ? null : (
 					<div key={item.id}>
@@ -310,17 +364,20 @@ export function BreadcrumbOverflowMenu({
 }
 
 /** Upstream zoomedIds: ids zoomed into while mounted that are still on the trail, plus the current one. */
-function useZoomedIds(trailIds: string[], currentId: string): string[] {
+function useZoomedIds(trailIds: string[], currentId: string): string[]
+{
 	const [zoomedIds, setZoomedIds] = useState<string[]>([currentId]);
 	const onTrail = new Set(trailIds);
 	const next = [...zoomedIds.filter((id) => id !== currentId && onTrail.has(id)), currentId];
-	if (next.join("/") !== zoomedIds.join("/")) {
+	if (next.join("/") !== zoomedIds.join("/"))
+	{
 		setZoomedIds(next);
 	}
 	return next;
 }
 
-interface BreadcrumbsProps {
+interface BreadcrumbsProps
+{
 	nodeId: string | null;
 	/** The mirror instance the zoomed row was met in: its crumbs run through the mirror. */
 	instance?: MirrorInstance | null;
@@ -347,7 +404,8 @@ export function Breadcrumbs({
 	sizes,
 	maxWidth,
 	threeDotPosition,
-}: BreadcrumbsProps) {
+}: BreadcrumbsProps)
+{
 	const {navigateToNode: navigateMain, cancelSearch} = useNodeNavigation();
 	const crumbZoomOut = useCrumbZoomOut();
 	const mainSearchActive = useOutlineStore((state) => state.searchQuery !== "");
@@ -367,10 +425,14 @@ export function Breadcrumbs({
 	// The main outline's crumbs to an ancestor zoom out with upstream's animation; Home swaps without one, as upstream.
 	const navigateToNode =
 		onNavigate ??
-		((id: string | null) => {
-			if (id === null) {
+		((id: string | null) =>
+		{
+			if (id === null)
+			{
 				navigateMain(null);
-			} else {
+			}
+			else
+			{
 				crumbZoomOut(
 					crumbs.filter((crumb) => !crumb.isRoot).map((crumb) => crumb.id),
 					id,
@@ -378,13 +440,15 @@ export function Breadcrumbs({
 			}
 		});
 	const account = useAccount();
-	const dateOptions = {
+	const dateOptions =
+	{
 		dateFormat,
 		timeFormat,
 		dayPrefix,
 		account,
 	};
-	const inputs = crumbs.map((crumb) => ({
+	const inputs = crumbs.map((crumb) => (
+	{
 		id: crumb.id,
 		label: crumb.isRoot ? HOME_LABEL : crumbLabel(crumb, dateOptions),
 	}));
@@ -400,8 +464,15 @@ export function Breadcrumbs({
 	const {itemGap, rightMargin, minItemWidth, ellipsisWidth} = sizes ?? {};
 	const layout = useMemo(
 		() =>
-			createBreadcrumbLayout({itemGap, rightMargin, minItemWidth, ellipsisWidth, threeDotPosition}, (label) =>
-				measureCrumbLabel(label),
+			createBreadcrumbLayout(
+				{
+					itemGap,
+					rightMargin,
+					minItemWidth,
+					ellipsisWidth,
+					threeDotPosition,
+				},
+				(label) => measureCrumbLabel(label),
 			),
 		[itemGap, rightMargin, minItemWidth, ellipsisWidth, threeDotPosition],
 	);
@@ -418,8 +489,10 @@ export function Breadcrumbs({
 			ref={containerRef}
 			className="breadcrumbs grow shrink min-w-0 flex gap-m items-center text-s leading-base overflow-hidden"
 		>
-			{chunks.flatMap(({items, leftOffset}) => {
-				if (items[0]?.group === 1) {
+			{chunks.flatMap(({items, leftOffset}) =>
+			{
+				if (items[0]?.group === 1)
+				{
 					return [
 						<ButtonMenu
 							key={`more-${leftOffset}-${currentId}`}
@@ -445,9 +518,11 @@ export function Breadcrumbs({
 						<BreadcrumbSeparator key={`breadcrumb-icon-${leftOffset}`} />,
 					];
 				}
-				return items.flatMap((item) => {
+				return items.flatMap((item) =>
+				{
 					const crumb = crumbsById.get(item.id);
-					if (crumb === undefined) {
+					if (crumb === undefined)
+					{
 						return [];
 					}
 					const current = item.id === currentId;
@@ -472,15 +547,22 @@ export function Breadcrumbs({
 }
 
 /** Crumbs outside the header trail: the account's date format and the 📆 Calendar's Friendly day names setting. */
-function useCrumbDateOptions(): CrumbDateOptions {
+function useCrumbDateOptions(): CrumbDateOptions
+{
 	const {dateFormat, timeFormat} = useDateSettings();
 	const {dayPrefix} = useCalendarSettings(noLog).settings;
 	const account = useAccount();
-	return {dateFormat, timeFormat, dayPrefix, account};
+	return {
+		dateFormat,
+		timeFormat,
+		dayPrefix,
+		account,
+	};
 }
 
 /** A backlink's ancestors laid out flat, without the header's truncation engine. */
-export function FlatCrumbs({crumbs}: {crumbs: Crumb[]}) {
+export function FlatCrumbs({crumbs}: {crumbs: Crumb[]})
+{
 	const {navigateToNode} = useNodeNavigation();
 	const dateOptions = useCrumbDateOptions();
 	return (
@@ -502,8 +584,12 @@ export function FlatCrumbs({crumbs}: {crumbs: Crumb[]}) {
 }
 
 // Upstream's Found Dates crumbs pass `sizes: {minItemWidth: 80}` and `threeDotPosition: "left"`.
-const leftCollapseLayout = createBreadcrumbLayout({minItemWidth: 80, threeDotPosition: "left"}, (label) =>
-	measureCrumbLabel(label),
+const leftCollapseLayout = createBreadcrumbLayout(
+	{
+		minItemWidth: 80,
+		threeDotPosition: "left",
+	},
+	(label) => measureCrumbLabel(label),
 );
 
 /**
@@ -520,14 +606,16 @@ export function LeftCollapsingCrumbs({
 	currentId?: string;
 	/** Replaces the default zoom, e.g. to close a dialog first. */
 	onNavigate?: (nodeId: string | null) => void;
-}) {
+})
+{
 	const navigation = useNodeNavigation();
 	const navigateToNode = onNavigate ?? navigation.navigateToNode;
 	const containerRef = useRef<HTMLDivElement>(null);
 	const [containerLeft, containerWidth] = useContainerRect(containerRef);
 	const windowWidth = useWindowWidth();
 	const dateOptions = useCrumbDateOptions();
-	const inputs = crumbs.map((crumb) => ({
+	const inputs = crumbs.map((crumb) => (
+	{
 		id: crumb.id,
 		label: crumb.isRoot ? HOME_LABEL : crumbLabel(crumb, dateOptions),
 	}));
@@ -538,8 +626,10 @@ export function LeftCollapsingCrumbs({
 	);
 	const chunks = leftCollapseLayout.getItemGroupsWithLeftOffset(leftCollapseLayout.getItemGroups(visible));
 	const crumbsById = new Map(crumbs.map((crumb) => [crumb.id, crumb]));
-	const elements = chunks.flatMap(({items, leftOffset}) => {
-		if (items[0]?.group === 1) {
+	const elements = chunks.flatMap(({items, leftOffset}) =>
+	{
+		if (items[0]?.group === 1)
+		{
 			return [
 				<ButtonMenu
 					key={`more-${leftOffset}`}
@@ -561,7 +651,8 @@ export function LeftCollapsingCrumbs({
 				</ButtonMenu>,
 			];
 		}
-		return items.flatMap((item) => {
+		return items.flatMap((item) =>
+		{
 			const crumb = crumbsById.get(item.id);
 			return crumb === undefined
 				? []

@@ -2,7 +2,8 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from "vite-plus/test";
 import type {Root} from "react-dom/client";
 
-declare global {
+declare global
+{
 	// React reads this to know act() wraps every update.
 	var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -16,21 +17,25 @@ const {queryClientDefaults} = await import("../src/client/query-retry.js");
 let root: Root | undefined;
 let reads: number;
 
-beforeEach(() => {
+beforeEach(() =>
+{
 	globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 	vi.useFakeTimers();
 	reads = 0;
 	vi.stubGlobal(
 		"fetch",
-		vi.fn(async () => {
+		vi.fn(async () =>
+		{
 			reads += 1;
 			return Promise.resolve(Response.json({}));
 		}),
 	);
 });
 
-afterEach(() => {
-	act(() => {
+afterEach(() =>
+{
+	act(() =>
+	{
 		root?.unmount();
 	});
 	root = undefined;
@@ -38,33 +43,87 @@ afterEach(() => {
 	vi.unstubAllGlobals();
 });
 
-function Row(): null {
+function Row(): null
+{
 	useRowEmbed('<a href="https://example.com">x</a>');
 	return null;
 }
 
-function Page({rows}: {rows: number}): ReturnType<typeof createElement> {
+function Page({rows}: {rows: number}): ReturnType<typeof createElement>
+{
 	usePreferences();
-	return createElement("div", null, ...Array.from({length: rows}, (_, index) => createElement(Row, {key: index})));
+	return createElement(
+		"div",
+		null,
+		...Array.from(
+			{
+				length: rows,
+			},
+			(_, index) =>
+				createElement(
+					Row,
+					{
+						key: index,
+					},
+				),
+		),
+	);
 }
 
-describe("preferences staleness", () => {
-	it("does not refetch preferences when rows mount long after the first read", async () => {
-		const client = new QueryClient({defaultOptions: queryClientDefaults});
+describe("preferences staleness", () =>
+{
+	it("does not refetch preferences when rows mount long after the first read", async () =>
+	{
+		const client = new QueryClient(
+			{
+				defaultOptions: queryClientDefaults,
+			},
+		);
 		root = createRoot(document.createElement("div"));
-		act(() => {
-			root?.render(createElement(QueryClientProvider, {client}, createElement(Page, {rows: 1})));
+		act(() =>
+		{
+			root?.render(
+				createElement(
+					QueryClientProvider,
+					{
+						client,
+					},
+					createElement(
+						Page,
+						{
+							rows: 1,
+						},
+					),
+				),
+			);
 		});
-		await act(async () => {
+		await act(async () =>
+		{
 			await vi.advanceTimersByTimeAsync(0);
 		});
-		await act(async () => {
+		await act(async () =>
+		{
 			await vi.advanceTimersByTimeAsync(5 * 60_000);
 		});
-		act(() => {
-			root?.render(createElement(QueryClientProvider, {client}, createElement(Page, {rows: 3})));
+		act(() =>
+		{
+			root?.render(
+				createElement(
+					QueryClientProvider,
+					{
+						client,
+					},
+					createElement(
+						Page,
+						{
+							rows: 3,
+						},
+					),
+				),
+			);
 		});
-		await act(async () => {
+		await act(async () =>
+		{
 			await vi.advanceTimersByTimeAsync(0);
 		});
 		expect(reads).toBe(1);

@@ -3,7 +3,8 @@ import type {WorkflowyNode} from "@outlinedb/shared/types";
 import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@outlinedb/shared/temporal";
 import crypto from "node:crypto";
 
-export interface TestNode {
+export interface TestNode
+{
 	id: string;
 	shortId: string | null;
 	name: string | null;
@@ -18,15 +19,18 @@ export interface TestNode {
 	systemTo: string;
 }
 
-function generateTestId(): string {
+function generateTestId(): string
+{
 	return crypto.randomUUID();
 }
 
-export function getShortId(id: string): string {
+export function getShortId(id: string): string
+{
 	return id.replaceAll("-", "").slice(-12);
 }
 
-export function createTestNode(overrides: Partial<TestNode> = {}): TestNode {
+export function createTestNode(overrides: Partial<TestNode> = {}): TestNode
+{
 	// Date.now(), not new Date(): the strictly increasing test clock then keeps a command's first unit of work out of the seed's millisecond.
 	const now = new Date(Date.now());
 	const id = overrides.id ?? generateTestId();
@@ -49,7 +53,8 @@ export function createTestNode(overrides: Partial<TestNode> = {}): TestNode {
 	};
 }
 
-export function createApiNode(overrides: Partial<WorkflowyNode> = {}): WorkflowyNode {
+export function createApiNode(overrides: Partial<WorkflowyNode> = {}): WorkflowyNode
+{
 	const now = Date.now();
 	return {
 		id: generateTestId(),
@@ -61,13 +66,17 @@ export function createApiNode(overrides: Partial<WorkflowyNode> = {}): Workflowy
 		createdAt: now,
 		modifiedAt: now,
 		completedAt: null,
-		data: {layoutMode: "bullets"},
+		data:
+		{
+			layoutMode: "bullets",
+		},
 		...overrides,
 	};
 }
 
 export function createNodeFromContent(
-	content: Partial<{
+	content: Partial<
+	{
 		id: string;
 		name: string | null;
 		note: string | null;
@@ -75,7 +84,8 @@ export function createNodeFromContent(
 		systemFrom: string;
 		systemTo: string;
 	}>,
-): TestNode {
+): TestNode
+{
 	return {
 		id: content.id ?? "",
 		name: content.name ?? null,
@@ -92,12 +102,18 @@ export function createNodeFromContent(
 	};
 }
 
-export function splitNodeIntoContentAndMetadata(node: TestNode): {content: NewNodeContent; metadata: NewNodeMetadata} {
+export function splitNodeIntoContentAndMetadata(node: TestNode):
+{
+	content: NewNodeContent;
+	metadata: NewNodeMetadata;
+}
+{
 	const {id, name, note, parentId, systemFrom, systemTo} = node;
 	const {shortId, priority, createdAt, modifiedAt, completedAt, layoutMode} = node;
 
 	return {
-		content: {
+		content:
+		{
 			id,
 			name,
 			note,
@@ -105,7 +121,8 @@ export function splitNodeIntoContentAndMetadata(node: TestNode): {content: NewNo
 			systemFrom,
 			systemTo,
 		},
-		metadata: {
+		metadata:
+		{
 			nodeId: id,
 			shortId,
 			priority,

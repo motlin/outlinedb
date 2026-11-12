@@ -14,74 +14,96 @@ import type {EvalContext} from "../../helpers/eval-types.js";
 import {runLlmEval, claudeCliAvailable} from "../../helpers/llm-eval-harness.js";
 
 // isAsap and urgencyLevel are optional; urgencyLevel must be a string when present.
-const DueDateResponseSchema = z.looseObject({
-	due: z.unknown(),
-	isAsap: z.unknown(),
-	urgencyLevel: z.string().optional(),
-});
+const DueDateResponseSchema = z.looseObject(
+	{
+		due: z.unknown(),
+		isAsap: z.unknown(),
+		urgencyLevel: z.string().optional(),
+	},
+);
 
-describe("Leaf Eval: due-date-detector", {timeout: 300_000}, () => {
-	let ctx: EvalContext;
-	let skipSuite = false;
-	const agentFile = "plugins/gtd/prompts/refinement/due-date-detector.md";
+describe(
+	"Leaf Eval: due-date-detector",
+	{
+		timeout: 300_000,
+	},
+	() =>
+	{
+		let ctx: EvalContext;
+		let skipSuite = false;
+		const agentFile = "plugins/gtd/prompts/refinement/due-date-detector.md";
 
-	beforeAll(() => {
-		if (!claudeCliAvailable()) {
-			skipSuite = true;
-			return;
-		}
+		beforeAll(() =>
+		{
+			if (!claudeCliAvailable())
+			{
+				skipSuite = true;
+				return;
+			}
 
-		ctx = createEvalContext();
-		const agentPath = path.join(ctx.projectRoot, agentFile);
+			ctx = createEvalContext();
+			const agentPath = path.join(ctx.projectRoot, agentFile);
 
-		if (!fs.existsSync(agentPath)) {
-			skipSuite = true;
-		}
-	});
+			if (!fs.existsSync(agentPath))
+			{
+				skipSuite = true;
+			}
+		});
 
-	afterAll(() => {
-		ctx.cleanup();
-	});
+		afterAll(() =>
+		{
+			ctx.cleanup();
+		});
 
-	it("should detect date from item text with explicit deadline", async (context) => {
-		if (skipSuite) {
-			context.skip();
-		}
+		it("should detect date from item text with explicit deadline", async (context) =>
+		{
+			if (skipSuite)
+			{
+				context.skip();
+			}
 
-		const result = await runLlmEval(
-			agentFile,
-			`Analyze this item for due dates:\nID: test-item-1\nName: Submit tax return by April 15th`,
-			ctx,
-			{maxTurns: 15},
-		);
+			const result = await runLlmEval(
+				agentFile,
+				`Analyze this item for due dates:\nID: test-item-1\nName: Submit tax return by April 15th`,
+				ctx,
+				{
+					maxTurns: 15,
+				},
+			);
 
-		const response = result.finalResponse;
-		const jsonMatch = response.match(/\{[\s\S]*\}/u);
-		assert(jsonMatch, "Response should contain JSON");
+			const response = result.finalResponse;
+			const jsonMatch = response.match(/\{[\s\S]*\}/u);
+			assert(jsonMatch, "Response should contain JSON");
 
-		const parsed = DueDateResponseSchema.parse(JSON.parse(jsonMatch[0]));
-		expect(parsed.due).toMatch(/^\d{4}-04-15$/u);
-	});
+			const parsed = DueDateResponseSchema.parse(JSON.parse(jsonMatch[0]));
+			expect(parsed.due).toMatch(/^\d{4}-04-15$/u);
+		});
 
-	it("should detect urgency keywords", async (context) => {
-		if (skipSuite) {
-			context.skip();
-		}
+		it("should detect urgency keywords", async (context) =>
+		{
+			if (skipSuite)
+			{
+				context.skip();
+			}
 
-		const result = await runLlmEval(
-			agentFile,
-			`Analyze this item for due dates:\nID: test-item-2\nName: URGENT: Fix production server crash ASAP`,
-			ctx,
-			{maxTurns: 15},
-		);
+			const result = await runLlmEval(
+				agentFile,
+				`Analyze this item for due dates:\nID: test-item-2\nName: URGENT: Fix production server crash ASAP`,
+				ctx,
+				{
+					maxTurns: 15,
+				},
+			);
 
-		const response = result.finalResponse;
-		const jsonMatch = response.match(/\{[\s\S]*\}/u);
-		assert(jsonMatch, "Response should contain JSON");
+			const response = result.finalResponse;
+			const jsonMatch = response.match(/\{[\s\S]*\}/u);
+			assert(jsonMatch, "Response should contain JSON");
 
-		const parsed = DueDateResponseSchema.parse(JSON.parse(jsonMatch[0]));
-		if (parsed.isAsap !== undefined) {
-			expect(parsed.isAsap).toBe(true);
-		}
-	});
-});
+			const parsed = DueDateResponseSchema.parse(JSON.parse(jsonMatch[0]));
+			if (parsed.isAsap !== undefined)
+			{
+				expect(parsed.isAsap).toBe(true);
+			}
+		});
+	},
+);

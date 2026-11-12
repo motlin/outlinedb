@@ -7,11 +7,13 @@ import {and, asc, eq, isNotNull} from "drizzle-orm";
 import type {BetterSQLite3Database} from "drizzle-orm/better-sqlite3";
 import {logger} from "./logger.js";
 
-export class QueryHelpers {
+export class QueryHelpers
+{
 	private readonly database: BetterSQLite3Database<typeof schema>;
 	private readonly nodeReader: NodeReader;
 
-	constructor(database: BetterSQLite3Database<typeof schema>) {
+	constructor(database: BetterSQLite3Database<typeof schema>)
+	{
 		this.database = database;
 		this.nodeReader = new NodeReader(database);
 	}
@@ -19,7 +21,8 @@ export class QueryHelpers {
 	/**
 	 * Fetch a single node by ID
 	 */
-	getNodeById(id: string): Node | undefined {
+	getNodeById(id: string): Node | undefined
+	{
 		const result = this.nodeReader.getById(id) ?? undefined;
 		logger.logSqlResult("getNodeById", result);
 		return result;
@@ -28,7 +31,8 @@ export class QueryHelpers {
 	/**
 	 * Fetch children of a node ordered by priority, then createdAt
 	 */
-	getChildren(parentId: string | null): Node[] {
+	getChildren(parentId: string | null): Node[]
+	{
 		const results = this.nodeReader.getChildren(parentId);
 		logger.logSqlResult("getChildren", results);
 		return results;
@@ -37,9 +41,14 @@ export class QueryHelpers {
 	/**
 	 * Find all nodes that have been completed
 	 */
-	getCompletedTasks(): Node[] {
+	getCompletedTasks(): Node[]
+	{
 		const completedRows = this.database
-			.select({id: nodeMetadata.nodeId})
+			.select(
+				{
+					id: nodeMetadata.nodeId,
+				},
+			)
 			.from(nodeContent)
 			.innerJoin(
 				nodeMetadata,
@@ -61,9 +70,12 @@ export class QueryHelpers {
 	 * @param path Array of node names to traverse (e.g., ['Work', 'Journal', 'Archive'])
 	 * @param rootId Optional root node ID to start from (null for absolute root)
 	 */
-	findNodeByPath(path: string[], rootId: string | null = null): Node | undefined {
-		if (path.length === 0) {
-			if (rootId) {
+	findNodeByPath(path: string[], rootId: string | null = null): Node | undefined
+	{
+		if (path.length === 0)
+		{
+			if (rootId)
+			{
 				return this.getNodeById(rootId);
 			}
 			return undefined;
@@ -71,7 +83,8 @@ export class QueryHelpers {
 
 		let currentParentId = rootId;
 
-		for (const segment of path) {
+		for (const segment of path)
+		{
 			const children = this.getChildren(currentParentId);
 			logger.logSqlResult("findNodeByPath.children", children);
 
@@ -80,11 +93,13 @@ export class QueryHelpers {
 				(child) => child.name !== null && child.name !== "" && child.name.includes(segment),
 			);
 
-			if (!matchingChild) {
+			if (!matchingChild)
+			{
 				return undefined;
 			}
 
-			if (segment === path.at(-1)) {
+			if (segment === path.at(-1))
+			{
 				return matchingChild;
 			}
 

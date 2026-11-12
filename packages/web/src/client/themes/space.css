@@ -1,4 +1,5 @@
-._theme-space {
+._theme-space
+{
 	--wf-background-primary: var(--wf-dark-gray-800);
 	--wf-background-secondary: var(--wf-dark-gray-700);
 	--wf-background-tertiary: var(--wf-dark-gray-600);
@@ -65,19 +66,22 @@
 
 	--wf-image-ambient: url("https://workflowy.com/media/i/themes/space_big.5ef562c7a2eb.jpg");
 
-	.wf-header {
+	.wf-header
+	{
 		--wf-background-tertiary: rgba(0, 0, 0, 0.6);
 		--wf-text-primary: var(--wf-dark-gray-300);
 		--wf-border-primary: var(--wf-dark-gray-600);
 	}
 
-	.wf-menu {
+	.wf-menu
+	{
 		--wf-text-primary: var(--wf-dark-gray-200);
 		--wf-border-primary: var(--wf-dark-gray-600);
 		--wf-border-secondary: var(--wf-dark-gray-400);
 	}
 
-	.wf-helper {
+	.wf-helper
+	{
 		--wf-background-primary: var(--wf-gray-700);
 	}
 }

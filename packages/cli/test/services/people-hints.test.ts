@@ -30,8 +30,10 @@ Intro prose mentioning @AliceBrown that is not a table row.
 | Alise | @AliceBrown | Repeated row |
 `;
 
-describe("parsePeopleHints", () => {
-	it("maps each @Name in a table's second column to the first-column phrases, skipping NOT rows and prose", () => {
+describe("parsePeopleHints", () =>
+{
+	it("maps each @Name in a table's second column to the first-column phrases, skipping NOT rows and prose", () =>
+	{
 		expect(parsePeopleHints(MARKDOWN)).toStrictEqual(
 			new Map([
 				["@alicebrown", ["Alise", "both kids", "Alice (book club)"]],
@@ -41,7 +43,8 @@ describe("parsePeopleHints", () => {
 		);
 	});
 
-	it("returns an empty map for text without tables", () => {
+	it("returns an empty map for text without tables", () =>
+	{
 		expect(parsePeopleHints("# Title\n\nJust prose about @Bob.\n")).toStrictEqual(new Map());
 	});
 });

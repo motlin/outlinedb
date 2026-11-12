@@ -3,7 +3,8 @@
 export const DEFAULT_PORT = 5176;
 
 // Overridable so a second instance can run beside a dev server already on the default.
-export const resolvePort = (env: {PORT?: string | undefined}): number => {
+export const resolvePort = (env: {PORT?: string | undefined}): number =>
+{
 	const port = Number(env.PORT);
 	return Number.isFinite(port) && port > 0 ? port : DEFAULT_PORT;
 };

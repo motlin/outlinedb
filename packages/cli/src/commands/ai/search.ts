@@ -7,7 +7,8 @@ import type {SearchMode, SearchResult} from "../../services/search.js";
 import {DEFAULT_MODELS, EMBEDDING_MODELS, getEmbeddingModel} from "../../services/embeddings.js";
 import type {EmbeddingModelKey} from "../../services/embeddings.js";
 
-export default class Search extends Command {
+export default class Search extends Command
+{
 	static override enableJsonFlag = true;
 
 	static override description = "Semantically search through Workflowy nodes using vector embeddings";
@@ -21,42 +22,57 @@ export default class Search extends Command {
 		'<%= config.bin %> <%= command.id %> --query "API" --mode hybrid # BM25 + vector fusion',
 	];
 
-	static override flags = {
-		query: Flags.string({
-			char: "q",
-			description: "Search query",
-			required: true,
-		}),
-		limit: Flags.integer({
-			char: "l",
-			description: "Maximum number of results to return per model",
-			default: 5,
-		}),
-		threshold: Flags.string({
-			char: "t",
-			description:
-				"Maximum distance threshold (lower = more similar, 0-2). Uses model-specific default if not specified.",
-		}),
-		"show-distance": Flags.boolean({
-			char: "d",
-			description: "Show similarity distance scores",
-			default: false,
-		}),
-		model: Flags.string({
-			char: "m",
-			description: "Search using a specific model only (minilm or mpnet)",
-			options: Object.keys(EMBEDDING_MODELS),
-		}),
-		json: Flags.boolean({
-			char: "j",
-			description: "Output results in JSON format",
-			default: false,
-		}),
-		mode: Flags.option({
-			description: "Search mode: vector (default), keyword (FTS5), or hybrid (BM25 + vector RRF fusion)",
-			options: ["vector", "keyword", "hybrid"] as const,
-			default: "vector",
-		})(),
+	static override flags =
+	{
+		query: Flags.string(
+			{
+				char: "q",
+				description: "Search query",
+				required: true,
+			},
+		),
+		limit: Flags.integer(
+			{
+				char: "l",
+				description: "Maximum number of results to return per model",
+				default: 5,
+			},
+		),
+		threshold: Flags.string(
+			{
+				char: "t",
+				description:
+					"Maximum distance threshold (lower = more similar, 0-2). Uses model-specific default if not specified.",
+			},
+		),
+		"show-distance": Flags.boolean(
+			{
+				char: "d",
+				description: "Show similarity distance scores",
+				default: false,
+			},
+		),
+		model: Flags.string(
+			{
+				char: "m",
+				description: "Search using a specific model only (minilm or mpnet)",
+				options: Object.keys(EMBEDDING_MODELS),
+			},
+		),
+		json: Flags.boolean(
+			{
+				char: "j",
+				description: "Output results in JSON format",
+				default: false,
+			},
+		),
+		mode: Flags.option(
+			{
+				description: "Search mode: vector (default), keyword (FTS5), or hybrid (BM25 + vector RRF fusion)",
+				options: ["vector", "keyword", "hybrid"] as const,
+				default: "vector",
+			},
+		)(),
 	};
 
 	public async run(): Promise<
@@ -76,18 +92,21 @@ export default class Search extends Command {
 			distance?: number;
 			model?: EmbeddingModelKey;
 		}[]
-	> {
+	>
+	{
 		const {flags} = await this.parse(Search);
 		const {query} = flags;
 
 		const threshold = flags.threshold === undefined ? undefined : parseStrictNumber(flags.threshold);
-		if (flags.threshold !== undefined && threshold === undefined) {
+		if (flags.threshold !== undefined && threshold === undefined)
+		{
 			this.error(`Invalid --threshold value: "${flags.threshold}". Must be a number.`);
 		}
 		const database = createDatabase();
 		const searchService = new SearchService(database);
 
-		if (!this.jsonEnabled()) {
+		if (!this.jsonEnabled())
+		{
 			this.log(`🔍 Searching for: "${query}"\n`);
 		}
 
@@ -95,21 +114,28 @@ export default class Search extends Command {
 
 		const searchMode: SearchMode = flags.mode;
 
-		const searchPromises = modelsToSearch.map(async (model) => {
-			const results = await searchService.search({
-				query,
-				limit: flags.limit,
-				threshold,
+		const searchPromises = modelsToSearch.map(async (model) =>
+		{
+			const results = await searchService.search(
+				{
+					query,
+					limit: flags.limit,
+					threshold,
+					model,
+					mode: searchMode,
+				},
+			);
+			return {
 				model,
-				mode: searchMode,
-			});
-			return {model, results};
+				results,
+			};
 		});
 
 		const allSearchResults = await Promise.all(searchPromises);
 
 		const transformedResults = allSearchResults.flatMap(({model, results}) =>
-			results.map((result) => ({
+			results.map((result) => (
+			{
 				id: result.id,
 				name: result.name,
 				note: result.note,
@@ -122,20 +148,33 @@ export default class Search extends Command {
 				nodeId: result.nodeId,
 				fullPath: result.fullPath,
 				textContent: result.textContent,
-				...(flags["show-distance"] ? {distance: result.distance} : {}),
-				...(flags.model ? {} : {model}),
+				...(flags["show-distance"]
+					?
+						{
+							distance: result.distance,
+						}
+					: {}),
+				...(flags.model
+					? {}
+					:
+						{
+							model,
+						}),
 			})),
 		);
 
-		if (flags.json) {
+		if (flags.json)
+		{
 			this.log(JSON.stringify(transformedResults, null, 2));
 			return transformedResults;
 		}
 
 		const totalResults = allSearchResults.reduce((sum, {results}) => sum + results.length, 0);
 
-		if (totalResults === 0) {
-			if (!this.jsonEnabled()) {
+		if (totalResults === 0)
+		{
+			if (!this.jsonEnabled())
+			{
 				this.log("No results found. Try:");
 				this.log("  • Using different search terms");
 				this.log("  • Increasing the threshold with --threshold");
@@ -144,19 +183,24 @@ export default class Search extends Command {
 			return transformedResults;
 		}
 
-		if (!this.jsonEnabled()) {
-			for (const {model, results} of allSearchResults) {
-				if (!flags.model) {
+		if (!this.jsonEnabled())
+		{
+			for (const {model, results} of allSearchResults)
+			{
+				if (!flags.model)
+				{
 					const modelConfig = getEmbeddingModel(model);
 					this.log(`═══ ${model} (${modelConfig.name.replace("Xenova/", "")}) ═══\n`);
 				}
 
-				if (results.length === 0) {
+				if (results.length === 0)
+				{
 					this.log("No results found.\n");
 					continue;
 				}
 
-				for (const result of results) {
+				for (const result of results)
+				{
 					this.displayResult(result, flags["show-distance"]);
 				}
 			}
@@ -165,10 +209,12 @@ export default class Search extends Command {
 		return transformedResults;
 	}
 
-	private displayResult(result: SearchResult, showDistance: boolean): void {
+	private displayResult(result: SearchResult, showDistance: boolean): void
+	{
 		const formattedPath = this.formatPathWithGreySeparators(result.fullPath);
 		this.log(`📍 ${formattedPath}`);
-		if (showDistance) {
+		if (showDistance)
+		{
 			this.log(`   Distance: ${result.distance.toFixed(4)}`);
 		}
 
@@ -178,7 +224,8 @@ export default class Search extends Command {
 		this.log(`   🔗 ${greyUrl}\n`);
 	}
 
-	private formatPathWithGreySeparators(path: string): string {
+	private formatPathWithGreySeparators(path: string): string
+	{
 		return path.replaceAll(" > ", "\u001B[90m > \u001B[0m");
 	}
 }

@@ -10,7 +10,8 @@ import type {InlineAttr} from "../rich-text.js";
 import type {SelectionToolbarAction} from "../components/selection-toolbar.js";
 
 /** Whether upstream's selection toolbar (`Lr2`) is shown, and what suppresses it. */
-export interface ToolbarState {
+export interface ToolbarState
+{
 	visible: boolean;
 	/** The primary button is down: selection changes wait for its pointerup. */
 	pointerDown: boolean;
@@ -23,19 +24,49 @@ export interface ToolbarState {
  * closed toolbar closed. `insideCtxMenu`: the pointerdown hit the toolbar itself.
  */
 export type ToolbarEvent =
-	| {type: "pointerdown"; insideCtxMenu: boolean}
-	| {type: "pointerup"; stretched: boolean; popupOpen: boolean}
-	| {type: "selectionchange"; stretched: boolean; popupOpen: boolean}
-	| {type: "compositionstart"}
-	| {type: "compositionend"}
-	| {type: "escape"};
+	|
+	  {
+			type: "pointerdown";
+			insideCtxMenu: boolean;
+	  }
+	|
+	  {
+			type: "pointerup";
+			stretched: boolean;
+			popupOpen: boolean;
+	  }
+	|
+	  {
+			type: "selectionchange";
+			stretched: boolean;
+			popupOpen: boolean;
+	  }
+	|
+	  {
+			type: "compositionstart";
+	  }
+	|
+	  {
+			type: "compositionend";
+	  }
+	|
+	  {
+			type: "escape";
+	  };
 
-export function initialToolbarState(pointerDown: boolean): ToolbarState {
-	return {visible: false, pointerDown, composing: false};
+export function initialToolbarState(pointerDown: boolean): ToolbarState
+{
+	return {
+		visible: false,
+		pointerDown,
+		composing: false,
+	};
 }
 
-function evaluate(state: ToolbarState, stretched: boolean, popupOpen: boolean): boolean {
-	if (!stretched || state.composing) {
+function evaluate(state: ToolbarState, stretched: boolean, popupOpen: boolean): boolean
+{
+	if (!stretched || state.composing)
+	{
 		return false;
 	}
 	return state.visible || !popupOpen;
@@ -46,35 +77,69 @@ function evaluate(state: ToolbarState, stretched: boolean, popupOpen: boolean): 
  * primary button is up, never during a composition, and never over another popup; it closes on collapse, a
  * pointerdown outside `.ctx-menu`, a composition, or Escape.
  */
-export function toolbarState(state: ToolbarState, event: ToolbarEvent): ToolbarState {
-	switch (event.type) {
-		case "pointerdown": {
-			return {...state, pointerDown: true, visible: state.visible && event.insideCtxMenu};
+export function toolbarState(state: ToolbarState, event: ToolbarEvent): ToolbarState
+{
+	switch (event.type)
+	{
+		case "pointerdown":
+		{
+			return {
+				...state,
+				pointerDown: true,
+				visible: state.visible && event.insideCtxMenu,
+			};
 		}
-		case "pointerup": {
-			const released = {...state, pointerDown: false};
-			return {...released, visible: evaluate(released, event.stretched, event.popupOpen)};
+		case "pointerup":
+		{
+			const released =
+			{
+				...state,
+				pointerDown: false,
+			};
+			return {
+				...released,
+				visible: evaluate(released, event.stretched, event.popupOpen),
+			};
 		}
-		case "selectionchange": {
-			if (state.pointerDown) {
+		case "selectionchange":
+		{
+			if (state.pointerDown)
+			{
 				return state;
 			}
-			return {...state, visible: evaluate(state, event.stretched, event.popupOpen)};
+			return {
+				...state,
+				visible: evaluate(state, event.stretched, event.popupOpen),
+			};
 		}
-		case "compositionstart": {
-			return {...state, composing: true, visible: false};
+		case "compositionstart":
+		{
+			return {
+				...state,
+				composing: true,
+				visible: false,
+			};
 		}
-		case "compositionend": {
-			return {...state, composing: false};
+		case "compositionend":
+		{
+			return {
+				...state,
+				composing: false,
+			};
 		}
-		case "escape": {
+		case "escape":
+		{
 			break;
 		}
 	}
-	return {...state, visible: false};
+	return {
+		...state,
+		visible: false,
+	};
 }
 
-const FORMAT_ACTIONS: Partial<Record<SelectionToolbarAction, InlineAttr>> = {
+const FORMAT_ACTIONS: Partial<Record<SelectionToolbarAction, InlineAttr>> =
+{
 	bold: "b",
 	italic: "i",
 	underline: "u",
@@ -82,7 +147,8 @@ const FORMAT_ACTIONS: Partial<Record<SelectionToolbarAction, InlineAttr>> = {
 	"code-format": "code",
 };
 
-const LAYOUT_ACTIONS: Partial<Record<SelectionToolbarAction, LayoutHotkeyCommand>> = {
+const LAYOUT_ACTIONS: Partial<Record<SelectionToolbarAction, LayoutHotkeyCommand>> =
+{
 	h1: "toggle_h1",
 	h2: "toggle_h2",
 	h3: "toggle_h3",
@@ -90,49 +156,64 @@ const LAYOUT_ACTIONS: Partial<Record<SelectionToolbarAction, LayoutHotkeyCommand
 };
 
 /** The inline attribute a toolbar format button toggles, or null. */
-export function toolbarFormatAttr(action: SelectionToolbarAction): InlineAttr | null {
+export function toolbarFormatAttr(action: SelectionToolbarAction): InlineAttr | null
+{
 	return FORMAT_ACTIONS[action] ?? null;
 }
 
 /** The layout toggle a toolbar type button runs, or null. */
-export function toolbarLayoutCommand(action: SelectionToolbarAction): LayoutHotkeyCommand | null {
+export function toolbarLayoutCommand(action: SelectionToolbarAction): LayoutHotkeyCommand | null
+{
 	return LAYOUT_ACTIONS[action] ?? null;
 }
 
 const INLINE_ATTRS: readonly InlineAttr[] = ["b", "i", "u", "s", "code"];
 
-export interface SelectionToolbarView {
+export interface SelectionToolbarView
+{
 	/** The selection's bounding rect in page coordinates. */
-	rect: {x: number; y: number; width: number};
+	rect:
+	{
+		x: number;
+		y: number;
+		width: number;
+	};
 	activeAttrs: ReadonlySet<InlineAttr>;
 	/** A text color or highlight touches the selection. */
 	colorActive: boolean;
 }
 
 /** Changes whenever the row's normalized layout changes, so the toolbar re-measures after the row re-renders. */
-export function toolbarRefreshKey(layoutMode: string | null | undefined): string {
+export function toolbarRefreshKey(layoutMode: string | null | undefined): string
+{
 	return normalizeLayoutMode(layoutMode) ?? "bullets";
 }
 
 let primaryDown = false;
 let trackerInstalled = false;
 
-function releasePrimary(event: PointerEvent): void {
-	if (event.button === 0 || event.type === "pointercancel") {
+function releasePrimary(event: PointerEvent): void
+{
+	if (event.button === 0 || event.type === "pointercancel")
+	{
 		primaryDown = false;
 	}
 }
 
 /** One document-wide primary-button tracker, so an editor focused mid-drag still waits for the pointerup. */
-function installPointerTracker(): void {
-	if (trackerInstalled) {
+function installPointerTracker(): void
+{
+	if (trackerInstalled)
+	{
 		return;
 	}
 	trackerInstalled = true;
 	document.addEventListener(
 		"pointerdown",
-		(event) => {
-			if (event.button === 0) {
+		(event) =>
+		{
+			if (event.button === 0)
+			{
 				primaryDown = true;
 			}
 		},
@@ -143,11 +224,13 @@ function installPointerTracker(): void {
 }
 
 /** A modal is open, or the registry holds a popup other than `self` (upstream's `anotherPopupOpened`). */
-export function otherPopupOpen(self: PopupId, modalOpen: () => boolean): boolean {
+export function otherPopupOpen(self: PopupId, modalOpen: () => boolean): boolean
+{
 	return modalOpen() || anotherPopupOpened(self);
 }
 
-function stretchedIn(editor: HTMLElement): boolean {
+function stretchedIn(editor: HTMLElement): boolean
+{
 	const selection = globalThis.getSelection();
 	return (
 		document.activeElement === editor &&
@@ -159,21 +242,29 @@ function stretchedIn(editor: HTMLElement): boolean {
 	);
 }
 
-function measure(editor: HTMLElement, html: string): SelectionToolbarView | null {
+function measure(editor: HTMLElement, html: string): SelectionToolbarView | null
+{
 	const selection = globalThis.getSelection();
-	if (selection === null || selection.rangeCount === 0) {
+	if (selection === null || selection.rangeCount === 0)
+	{
 		return null;
 	}
 	const box = selection.getRangeAt(0).getBoundingClientRect();
 	const {start, end} = selectionTextOffsets(editor);
 	return {
-		rect: {x: box.left + globalThis.scrollX, y: box.top + globalThis.scrollY, width: box.width},
+		rect:
+		{
+			x: box.left + globalThis.scrollX,
+			y: box.top + globalThis.scrollY,
+			width: box.width,
+		},
 		activeAttrs: new Set(INLINE_ATTRS.filter((attr) => touchesAttr(html, start, end, attr))),
 		colorActive: touchesColor(html, start, end),
 	};
 }
 
-interface SelectionToolbarOptions {
+interface SelectionToolbarOptions
+{
 	editorRef: RefObject<HTMLElement | null>;
 	/** The editor is mounted and may hold the focused selection. */
 	active: boolean;
@@ -189,23 +280,37 @@ interface SelectionToolbarOptions {
  * Returns the toolbar view (null when hidden) and `refresh`, which re-measures after a change that moves no
  * selection (a layout toggle).
  */
-export function useSelectionToolbar({editorRef, active, read, modalOpen}: SelectionToolbarOptions): {
+export function useSelectionToolbar({editorRef, active, read, modalOpen}: SelectionToolbarOptions):
+{
 	view: SelectionToolbarView | null;
 	refresh: () => void;
 	/** Closes the bar now (a popup that replaces it is about to open). */
 	hide: () => void;
-} {
+}
+{
 	const [view, setView] = useState<SelectionToolbarView | null>(null);
-	const io = useRef({read, modalOpen});
-	useLayoutEffect(() => {
-		io.current = {read, modalOpen};
+	const io = useRef(
+		{
+			read,
+			modalOpen,
+		},
+	);
+	useLayoutEffect(() =>
+	{
+		io.current =
+		{
+			read,
+			modalOpen,
+		};
 	});
 	const refreshRef = useRef<() => void>(() => {});
 	const hideRef = useRef<() => void>(() => {});
 
-	useEffect(() => {
+	useEffect(() =>
+	{
 		const editor = editorRef.current;
-		if (!active || editor === null) {
+		if (!active || editor === null)
+		{
 			setView(null);
 			// oxlint-disable-next-line unicorn/no-useless-undefined -- consistent-return needs a value beside the cleanup return
 			return undefined;
@@ -214,61 +319,109 @@ export function useSelectionToolbar({editorRef, active, read, modalOpen}: Select
 		let state = initialToolbarState(primaryDown);
 		let frame = 0;
 		let released = false;
-		const publish = () => {
+		const publish = () =>
+		{
 			const next = state.visible ? measure(editor, io.current.read()) : null;
-			if (next === null) {
+			if (next === null)
+			{
 				unpop("CTX_MENU_POPUP");
-			} else {
+			}
+			else
+			{
 				pop("CTX_MENU_POPUP", editor);
 			}
 			setView(next);
 		};
-		const dispatch = (event: ToolbarEvent) => {
+		const dispatch = (event: ToolbarEvent) =>
+		{
 			state = toolbarState(state, event);
 			publish();
 		};
-		const schedule = () => {
-			if (frame !== 0) {
+		const schedule = () =>
+		{
+			if (frame !== 0)
+			{
 				return;
 			}
-			frame = requestAnimationFrame(() => {
+			frame = requestAnimationFrame(() =>
+			{
 				frame = 0;
 				const stretched = stretchedIn(editor);
 				const popupOpen = otherPopupOpen("CTX_MENU_POPUP", io.current.modalOpen);
 				dispatch(
 					released
-						? {type: "pointerup", stretched, popupOpen}
-						: {type: "selectionchange", stretched, popupOpen},
+						?
+							{
+								type: "pointerup",
+								stretched,
+								popupOpen,
+							}
+						:
+							{
+								type: "selectionchange",
+								stretched,
+								popupOpen,
+							},
 				);
 				released = false;
 			});
 		};
 		refreshRef.current = schedule;
-		hideRef.current = () => {
-			dispatch({type: "escape"});
+		hideRef.current = () =>
+		{
+			dispatch(
+				{
+					type: "escape",
+				},
+			);
 		};
-		const onPointerDown = (event: PointerEvent) => {
-			if (event.button === 0) {
+		const onPointerDown = (event: PointerEvent) =>
+		{
+			if (event.button === 0)
+			{
 				const insideCtxMenu = event.target instanceof Element && event.target.closest(".ctx-menu") !== null;
-				dispatch({type: "pointerdown", insideCtxMenu});
+				dispatch(
+					{
+						type: "pointerdown",
+						insideCtxMenu,
+					},
+				);
 			}
 		};
-		const onPointerUp = (event: PointerEvent) => {
-			if (event.button === 0) {
+		const onPointerUp = (event: PointerEvent) =>
+		{
+			if (event.button === 0)
+			{
 				released = true;
 				schedule();
 			}
 		};
-		const onCompositionStart = () => {
-			dispatch({type: "compositionstart"});
+		const onCompositionStart = () =>
+		{
+			dispatch(
+				{
+					type: "compositionstart",
+				},
+			);
 		};
-		const onCompositionEnd = () => {
-			dispatch({type: "compositionend"});
+		const onCompositionEnd = () =>
+		{
+			dispatch(
+				{
+					type: "compositionend",
+				},
+			);
 			schedule();
 		};
-		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key === "Escape") {
-				dispatch({type: "escape"});
+		const onKeyDown = (event: KeyboardEvent) =>
+		{
+			if (event.key === "Escape")
+			{
+				dispatch(
+					{
+						type: "escape",
+					},
+				);
 			}
 		};
 		document.addEventListener("selectionchange", schedule);
@@ -279,10 +432,15 @@ export function useSelectionToolbar({editorRef, active, read, modalOpen}: Select
 		editor.addEventListener("keydown", onKeyDown);
 		// The editor may already hold a stretched selection (focus handed over with one).
 		schedule();
-		return () => {
+		return () =>
+		{
 			cancelAnimationFrame(frame);
-			refreshRef.current = () => {};
-			hideRef.current = () => {};
+			refreshRef.current = () =>
+			{
+			};
+			hideRef.current = () =>
+			{
+			};
 			document.removeEventListener("selectionchange", schedule);
 			document.removeEventListener("pointerdown", onPointerDown, true);
 			document.removeEventListener("pointerup", onPointerUp, true);
@@ -294,11 +452,17 @@ export function useSelectionToolbar({editorRef, active, read, modalOpen}: Select
 		};
 	}, [active, editorRef]);
 
-	const refresh = useCallback(() => {
+	const refresh = useCallback(() =>
+	{
 		refreshRef.current();
 	}, []);
-	const hide = useCallback(() => {
+	const hide = useCallback(() =>
+	{
 		hideRef.current();
 	}, []);
-	return {view, refresh, hide};
+	return {
+		view,
+		refresh,
+		hide,
+	};
 }

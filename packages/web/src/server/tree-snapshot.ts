@@ -11,7 +11,8 @@ import type {TreeSearchRow} from "./tree-search.js";
 export type Database = AppDatabase;
 
 /** What tells the snapshot another connection committed, and whether the database is still usable. */
-export interface ChangeSource {
+export interface ChangeSource
+{
 	/** Changes whenever a connection other than this server's commits to the database. */
 	dataVersion(): string;
 	/** False once the database is closed, so a pending rebuild is skipped. */
@@ -19,12 +20,14 @@ export interface ChangeSource {
 }
 
 /** Timers for the debounced background rebuild, so a host without `setTimeout().unref()` can supply its own. */
-export interface TreeScheduler {
+export interface TreeScheduler
+{
 	/** Runs `run` once after `delayMs`; the returned function cancels it. */
 	setTimer(run: () => void, delayMs: number): () => void;
 }
 
-export interface TreeHost {
+export interface TreeHost
+{
 	changeSource: ChangeSource;
 	scheduler: TreeScheduler;
 }
@@ -32,19 +35,23 @@ export interface TreeHost {
 const hosts = new WeakMap<Database, TreeHost>();
 
 /** Attach the host's change source and scheduler to `database`; the snapshot cannot be read before this. */
-export function bindTreeHost(database: Database, host: TreeHost): void {
+export function bindTreeHost(database: Database, host: TreeHost): void
+{
 	hosts.set(database, host);
 }
 
-function hostOf(database: Database): TreeHost {
+function hostOf(database: Database): TreeHost
+{
 	const host = hosts.get(database);
-	if (host === undefined) {
+	if (host === undefined)
+	{
 		throw new Error("No tree host is bound to the database; call bindTreeHost first");
 	}
 	return host;
 }
 
-interface TreeSqlRow {
+interface TreeSqlRow
+{
 	id: string;
 	parentId: string | null;
 	priority: number | null;
@@ -66,11 +73,13 @@ interface TreeSqlRow {
 }
 
 /** Epoch seconds as stored by drizzle's timestamp mode, to milliseconds. */
-function toMillis(seconds: number | null): number | null {
+function toMillis(seconds: number | null): number | null
+{
 	return seconds === null ? null : seconds * 1000;
 }
 
-function toSearchRow(row: TreeSqlRow): TreeSearchRow {
+function toSearchRow(row: TreeSqlRow): TreeSearchRow
+{
 	return {
 		id: row.id,
 		parentId: row.parentId,
@@ -91,7 +100,8 @@ function toSearchRow(row: TreeSqlRow): TreeSearchRow {
  * References roots and their backlink items are never search rows, though the tree continues below them.
  * Nor is an `ai.inChat` item, below which the tree stops, like upstream's `inline_search.ignore` rule.
  */
-function isSearchable(row: TreeSqlRow): boolean {
+function isSearchable(row: TreeSqlRow): boolean
+{
 	return row.isReferencesRoot === 0 && row.underReferencesRoot === 0 && row.isInChat === 0;
 }
 
@@ -104,7 +114,8 @@ const LIVE_IN_CHAT = sql`(SELECT node_id FROM ${aiMetadata} WHERE in_chat = 1 AN
  * further down are still reachable through them. An `ai.inChat` row is included, flagged, but nothing below it.
  * A mirror takes its text from its live original.
  */
-function selectTreeRows(database: Database, seeds: SQL, recursive: boolean, withText = true): TreeSqlRow[] {
+function selectTreeRows(database: Database, seeds: SQL, recursive: boolean, withText = true): TreeSqlRow[]
+{
 	const subtree = recursive
 		? sql`WITH RECURSIVE subtree(id, depth) AS (
 			${seeds}
@@ -145,7 +156,8 @@ function selectTreeRows(database: Database, seeds: SQL, recursive: boolean, with
 const TOP_LEVEL_SEEDS = sql`SELECT id, 0 FROM node_content WHERE parent_id IS NULL AND system_to = ${FAR_FUTURE_DATE}`;
 
 /** `(id, depth)` seeds from a list of pairs. */
-function seedsOf(pairs: [id: string, depth: number][]): SQL {
+function seedsOf(pairs: [id: string, depth: number][]): SQL
+{
 	return sql`SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(${JSON.stringify(pairs)})`;
 }
 
@@ -154,7 +166,8 @@ function seedsOf(pairs: [id: string, depth: number][]): SQL {
  * ordered by depth then id. References roots and their backlink items are skipped, as are `ai.inChat` items
  * and everything below them. A mirror takes its text from its live original.
  */
-export function loadTreeSearchRows(database: AppDatabase, rootId: string | null): TreeSearchRow[] {
+export function loadTreeSearchRows(database: AppDatabase, rootId: string | null): TreeSearchRow[]
+{
 	const seeds =
 		rootId === null
 			? TOP_LEVEL_SEEDS
@@ -167,7 +180,8 @@ export function loadTreeSearchRows(database: AppDatabase, rootId: string | null)
  * a tree too large to hold with its text in memory (a 128 MB Durable Object) ranks on, reading text in
  * {@link loadTreeRowText} pages.
  */
-export function loadTreeSkeletonRows(database: AppDatabase): TreeSearchRow[] {
+export function loadTreeSkeletonRows(database: AppDatabase): TreeSearchRow[]
+{
 	return selectTreeRows(database, TOP_LEVEL_SEEDS, true, false).filter(isSearchable).map(toSearchRow);
 }
 
@@ -175,8 +189,20 @@ export function loadTreeSkeletonRows(database: AppDatabase): TreeSearchRow[] {
 export function loadTreeRowText(
 	database: AppDatabase,
 	ids: readonly string[],
-): Map<string, {name: string | null; note: string | null}> {
-	const rows = database.all<{id: string; name: string | null; note: string | null}>(sql`
+): Map<
+	string,
+	{
+		name: string | null;
+		note: string | null;
+	}
+>
+{
+	const rows = database.all<
+	{
+		id: string;
+		name: string | null;
+		note: string | null;
+	}>(sql`
 		SELECT
 			c.id AS id,
 			CASE WHEN o.id IS NULL THEN c.name ELSE o.name END AS name,
@@ -186,10 +212,19 @@ export function loadTreeRowText(
 		LEFT JOIN mirrors mi ON mi.mirror_id = c.id AND mi.system_to = ${FAR_FUTURE_DATE}
 		LEFT JOIN node_content o ON o.id = mi.original_id AND o.system_to = ${FAR_FUTURE_DATE}
 	`);
-	return new Map(rows.map(({id, name, note}) => [id, {name, note}]));
+	return new Map(
+		rows.map(({id, name, note}) => [
+			id,
+			{
+				name,
+				note,
+			},
+		]),
+	);
 }
 
-interface FlatSkeletonSqlRow {
+interface FlatSkeletonSqlRow
+{
 	id: string;
 	parentId: string | null;
 	priority: number | null;
@@ -211,7 +246,8 @@ interface FlatSkeletonSqlRow {
  * rows, order and placement as {@link loadTreeSkeletonRows}' recursive query, which costs several times more on a
  * Durable Object.
  */
-export function buildSwitcherSkeleton(database: Database): SwitcherSkeleton {
+export function buildSwitcherSkeleton(database: Database): SwitcherSkeleton
+{
 	const flat = database.all<FlatSkeletonSqlRow>(sql`
 		SELECT
 			c.id AS id,
@@ -241,27 +277,35 @@ export function buildSwitcherSkeleton(database: Database): SwitcherSkeleton {
 	const children = new Map<string, FlatSkeletonSqlRow[]>();
 	const referencesRootIds = new Set<string>();
 	let level: FlatSkeletonSqlRow[] = [];
-	for (const row of flat) {
-		if (row.isReferencesRoot === 1) {
+	for (const row of flat)
+	{
+		if (row.isReferencesRoot === 1)
+		{
 			referencesRootIds.add(row.id);
 		}
-		if (row.parentId === null) {
+		if (row.parentId === null)
+		{
 			level.push(row);
 			continue;
 		}
 		const siblings = children.get(row.parentId);
-		if (siblings) {
+		if (siblings)
+		{
 			siblings.push(row);
-		} else {
+		}
+		else
+		{
 			children.set(row.parentId, [row]);
 		}
 	}
 	// Breadth first, each depth by id, as the recursive query orders them; nothing below an `ai.inChat` item.
 	const reached: FlatSkeletonSqlRow[] = [];
-	while (level.length > 0) {
+	while (level.length > 0)
+	{
 		level.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 		// A loop, not push(...level), so a wide level cannot overflow the call stack.
-		for (const row of level) {
+		for (const row of level)
+		{
 			reached.push(row);
 		}
 		level = level.flatMap((row) => (row.isInChat === 1 ? [] : (children.get(row.id) ?? [])));
@@ -273,7 +317,8 @@ export function buildSwitcherSkeleton(database: Database): SwitcherSkeleton {
 			(row.parentId === null || !referencesRootIds.has(row.parentId)),
 	);
 	return compactSwitcherSkeleton(
-		searchable.map((row) => ({
+		searchable.map((row) => (
+		{
 			id: row.id,
 			parentId: row.parentId,
 			priority: row.priority,
@@ -287,7 +332,8 @@ export function buildSwitcherSkeleton(database: Database): SwitcherSkeleton {
 			isBacklink: false,
 			fileType: null,
 		})),
-		searchable.map((row) => ({
+		searchable.map((row) => (
+		{
 			nameLength: row.nameLength ?? 0,
 			simpleName: row.simpleName === 1,
 			taggedName: row.taggedName === 1,
@@ -296,14 +342,22 @@ export function buildSwitcherSkeleton(database: Database): SwitcherSkeleton {
 	);
 }
 
-const switcherSkeletons = new WeakMap<Database, {state: ChangeState; skeleton: SwitcherSkeleton}>();
+const switcherSkeletons = new WeakMap<
+	Database,
+	{
+		state: ChangeState;
+		skeleton: SwitcherSkeleton;
+	}
+>();
 
 /**
  * The jump menu's compact whole-tree skeleton, kept per database until it changes, so a burst of keystrokes builds it
  * once instead of rerunning the recursive tree query for each. Built afresh each call when no tree host is bound.
  */
-export function loadSwitcherSkeleton(database: Database): SwitcherSkeleton {
-	if (!hosts.has(database)) {
+export function loadSwitcherSkeleton(database: Database): SwitcherSkeleton
+{
+	if (!hosts.has(database))
+	{
 		// Without a change source nothing tells a cached skeleton is stale.
 		return buildSwitcherSkeleton(database);
 	}
@@ -313,16 +367,24 @@ export function loadSwitcherSkeleton(database: Database): SwitcherSkeleton {
 		cached !== undefined &&
 		cached.state.dataVersion === state.dataVersion &&
 		cached.state.changes === state.changes
-	) {
+	)
+	{
 		return cached.skeleton;
 	}
 	const skeleton = buildSwitcherSkeleton(database);
-	switcherSkeletons.set(database, {state, skeleton});
+	switcherSkeletons.set(
+		database,
+		{
+			state,
+			skeleton,
+		},
+	);
 	return skeleton;
 }
 
 /** The held switcher skeleton without checking for writes or rebuilding, for tests. */
-export function peekSwitcherSkeleton(database: Database): SwitcherSkeleton | undefined {
+export function peekSwitcherSkeleton(database: Database): SwitcherSkeleton | undefined
+{
 	return switcherSkeletons.get(database)?.skeleton;
 }
 
@@ -334,17 +396,24 @@ const skeletonTimers = new WeakMap<Database, () => void>();
  * pay for it. A skeleton not yet held is left for the first jump-menu query, so writes on a freshly woken Durable Object
  * never start a build nobody asked for.
  */
-export async function withSwitcherSkeletonRebuild<T>(database: Database, run: () => Promise<T>): Promise<T> {
+export async function withSwitcherSkeletonRebuild<T>(database: Database, run: () => Promise<T>): Promise<T>
+{
 	const before = changeState(database).changes;
-	try {
+	try
+	{
 		return await run();
-	} finally {
-		if (switcherSkeletons.has(database) && changeState(database).changes !== before) {
+	}
+	finally
+	{
+		if (switcherSkeletons.has(database) && changeState(database).changes !== before)
+		{
 			skeletonTimers.get(database)?.();
 			const {changeSource, scheduler} = hostOf(database);
-			const cancel = scheduler.setTimer(() => {
+			const cancel = scheduler.setTimer(() =>
+			{
 				skeletonTimers.delete(database);
-				if (changeSource.isOpen()) {
+				if (changeSource.isOpen())
+				{
 					loadSwitcherSkeleton(database);
 				}
 			}, REBUILD_DEBOUNCE_MS);
@@ -357,21 +426,32 @@ export async function withSwitcherSkeletonRebuild<T>(database: Database, run: ()
  * The jump menu's {@link SwitcherTextScan} over live `node_content` rows and their own text (mirrors carry their own
  * stale text; the jump menu skips them): an ASCII case-insensitive LIKE for the rows holding a fragment.
  */
-export function switcherTextScan(database: Database, pageSize: number): SwitcherTextScan {
+export function switcherTextScan(database: Database, pageSize: number): SwitcherTextScan
+{
 	return {
 		pageSize,
-		holding(fragment) {
+		holding(fragment)
+		{
 			const pattern = `%${fragment}%`;
 			return database
-				.all<{id: string}>(sql`
+				.all<
+				{
+					id: string;
+				}>(sql`
 					SELECT c.id AS id
 					FROM node_content c
 					WHERE c.system_to = ${FAR_FUTURE_DATE} AND (c.name LIKE ${pattern} OR c.note LIKE ${pattern})
 				`)
 				.map(({id}) => id);
 		},
-		read(ids) {
-			return database.all<{id: string; name: string | null; note: string | null}>(sql`
+		read(ids)
+		{
+			return database.all<
+			{
+				id: string;
+				name: string | null;
+				note: string | null;
+			}>(sql`
 				SELECT c.id AS id, c.name AS name, c.note AS note
 				FROM json_each(${JSON.stringify(ids)}) j
 				INNER JOIN node_content c ON c.id = j.value AND c.system_to = ${FAR_FUTURE_DATE}
@@ -381,14 +461,16 @@ export function switcherTextScan(database: Database, pageSize: number): Switcher
 }
 
 /** Where a live node reachable from a top-level node sits, searchable or not. */
-interface TreeNode {
+interface TreeNode
+{
 	parentId: string | null;
 	depth: number;
 	isReferencesRoot: boolean;
 	isInChat: boolean;
 }
 
-interface TreeSnapshot {
+interface TreeSnapshot
+{
 	dataVersion: string;
 	changes: number;
 	/** The newest system time the snapshot has read, from which the next patch looks for changes. */
@@ -411,17 +493,25 @@ const PATCH_LIMIT = 1000;
 const snapshots = new WeakMap<Database, TreeSnapshot>();
 const rebuildTimers = new WeakMap<Database, () => void>();
 
-interface ChangeState {
+interface ChangeState
+{
 	/** Bumped by commits from any other connection (another process's cache refresh). */
 	dataVersion: string;
 	/** Rows this connection has written, so this server's own edits. */
 	changes: number;
 }
 
-function changeState(database: Database): ChangeState {
+function changeState(database: Database): ChangeState
+{
 	const dataVersion = hostOf(database).changeSource.dataVersion();
-	const {changes} = database.get<{changes: number}>(sql`SELECT total_changes() AS changes`);
-	return {dataVersion, changes};
+	const {changes} = database.get<
+	{
+		changes: number;
+	}>(sql`SELECT total_changes() AS changes`);
+	return {
+		dataVersion,
+		changes,
+	};
 }
 
 const ROW_FIELDS = [
@@ -440,60 +530,77 @@ const ROW_FIELDS = [
 ] as const satisfies readonly (keyof TreeSearchRow)[];
 
 /** `old` when every field of `row` is unchanged, keeping caches keyed on the row object warm. */
-function reuseRow(old: TreeSearchRow | undefined, row: TreeSearchRow): TreeSearchRow {
+function reuseRow(old: TreeSearchRow | undefined, row: TreeSearchRow): TreeSearchRow
+{
 	return old !== undefined && ROW_FIELDS.every((field) => old[field] === row[field]) ? old : row;
 }
 
-function isCurrent(snapshot: TreeSnapshot, state: ChangeState): boolean {
+function isCurrent(snapshot: TreeSnapshot, state: ChangeState): boolean
+{
 	return snapshot.dataVersion === state.dataVersion && snapshot.changes === state.changes;
 }
 
-function addNode(snapshot: TreeSnapshot, row: TreeSqlRow): void {
-	snapshot.nodes.set(row.id, {
-		parentId: row.parentId,
-		depth: row.depth,
-		isReferencesRoot: row.isReferencesRoot === 1,
-		isInChat: row.isInChat === 1,
-	});
+function addNode(snapshot: TreeSnapshot, row: TreeSqlRow): void
+{
+	snapshot.nodes.set(
+		row.id,
+		{
+			parentId: row.parentId,
+			depth: row.depth,
+			isReferencesRoot: row.isReferencesRoot === 1,
+			isInChat: row.isInChat === 1,
+		},
+	);
 	const siblings = snapshot.childIds.get(row.parentId);
-	if (siblings) {
+	if (siblings)
+	{
 		siblings.add(row.id);
-	} else {
+	}
+	else
+	{
 		snapshot.childIds.set(row.parentId, new Set([row.id]));
 	}
 }
 
-function removeNode(snapshot: TreeSnapshot, id: string): void {
+function removeNode(snapshot: TreeSnapshot, id: string): void
+{
 	const node = snapshot.nodes.get(id);
-	if (node === undefined) {
+	if (node === undefined)
+	{
 		return;
 	}
 	snapshot.nodes.delete(id);
 	snapshot.byId.delete(id);
 	const siblings = snapshot.childIds.get(node.parentId);
 	siblings?.delete(id);
-	if (siblings?.size === 0) {
+	if (siblings?.size === 0)
+	{
 		snapshot.childIds.delete(node.parentId);
 	}
 }
 
 /** `id` and every node below it in the snapshot. */
-function subtreeIds(snapshot: TreeSnapshot, id: string): string[] {
+function subtreeIds(snapshot: TreeSnapshot, id: string): string[]
+{
 	const ids = [id];
 	// The array iterator sees ids pushed during the loop, so this walks the subtree breadth-first.
-	for (const member of ids) {
+	for (const member of ids)
+	{
 		ids.push(...(snapshot.childIds.get(member) ?? []));
 	}
 	return ids;
 }
 
-function fullSnapshot(database: Database, state: ChangeState): TreeSnapshot {
+function fullSnapshot(database: Database, state: ChangeState): TreeSnapshot
+{
 	const previous = snapshots.get(database);
-	const {latest, tree} = readConsistently(database, () => ({
+	const {latest, tree} = readConsistently(database, () => (
+	{
 		latest: latestSystemTime(database),
 		tree: selectTreeRows(database, TOP_LEVEL_SEEDS, true),
 	}));
-	const snapshot: TreeSnapshot = {
+	const snapshot: TreeSnapshot =
+	{
 		...state,
 		latest,
 		build: "full",
@@ -502,9 +609,11 @@ function fullSnapshot(database: Database, state: ChangeState): TreeSnapshot {
 		nodes: new Map(),
 		childIds: new Map(),
 	};
-	for (const row of tree) {
+	for (const row of tree)
+	{
 		addNode(snapshot, row);
-		if (isSearchable(row)) {
+		if (isSearchable(row))
+		{
 			const searchRow = reuseRow(previous?.byId.get(row.id), toSearchRow(row));
 			snapshot.rows.push(searchRow);
 			snapshot.byId.set(row.id, searchRow);
@@ -514,27 +623,35 @@ function fullSnapshot(database: Database, state: ChangeState): TreeSnapshot {
 }
 
 /** Orders rows by depth, then id, as {@link selectTreeRows} does. */
-function compareRows(snapshot: TreeSnapshot, a: string, b: string): number {
+function compareRows(snapshot: TreeSnapshot, a: string, b: string): number
+{
 	const depthA = snapshot.nodes.get(a)?.depth ?? 0;
 	const depthB = snapshot.nodes.get(b)?.depth ?? 0;
-	if (depthA !== depthB) {
+	if (depthA !== depthB)
+	{
 		return depthA - depthB;
 	}
-	if (a === b) {
+	if (a === b)
+	{
 		return 0;
 	}
 	return a < b ? -1 : 1;
 }
 
 /** The index of the first row in `rows` ordered at or after `id`. */
-function rowPosition(snapshot: TreeSnapshot, rows: TreeSearchRow[], id: string): number {
+function rowPosition(snapshot: TreeSnapshot, rows: TreeSearchRow[], id: string): number
+{
 	let low = 0;
 	let high = rows.length;
-	while (low < high) {
+	while (low < high)
+	{
 		const middle = (low + high) >>> 1;
-		if (compareRows(snapshot, rows[middle]?.id ?? id, id) < 0) {
+		if (compareRows(snapshot, rows[middle]?.id ?? id, id) < 0)
+		{
 			low = middle + 1;
-		} else {
+		}
+		else
+		{
 			high = middle;
 		}
 	}
@@ -546,11 +663,14 @@ function rowPosition(snapshot: TreeSnapshot, rows: TreeSearchRow[], id: string):
  * A node whose parent, liveness, references-root or `ai.inChat` flag changed is a move: its old subtree leaves the snapshot
  * and its new one is reloaded. Any other changed node keeps its place, so only its row is replaced.
  */
-function patchSnapshot(database: Database, snapshot: TreeSnapshot, state: ChangeState): TreeSnapshot | null {
-	return readConsistently(database, () => {
+function patchSnapshot(database: Database, snapshot: TreeSnapshot, state: ChangeState): TreeSnapshot | null
+{
+	return readConsistently(database, () =>
+	{
 		const latest = latestSystemTime(database);
 		const changed = changedNodeIds(database, changesSince(snapshot.latest), PATCH_LIMIT);
-		if (changed === undefined) {
+		if (changed === undefined)
+		{
 			return null;
 		}
 		const current = new Map(
@@ -558,10 +678,12 @@ function patchSnapshot(database: Database, snapshot: TreeSnapshot, state: Change
 		);
 		const edited: TreeSqlRow[] = [];
 		const moved: string[] = [];
-		for (const id of changed) {
+		for (const id of changed)
+		{
 			const before = snapshot.nodes.get(id);
 			const after = current.get(id);
-			if (before === undefined && after === undefined) {
+			if (before === undefined && after === undefined)
+			{
 				continue;
 			}
 			if (
@@ -570,44 +692,59 @@ function patchSnapshot(database: Database, snapshot: TreeSnapshot, state: Change
 				before.parentId === after.parentId &&
 				before.isReferencesRoot === (after.isReferencesRoot === 1) &&
 				before.isInChat === (after.isInChat === 1)
-			) {
+			)
+			{
 				edited.push(after);
-			} else {
+			}
+			else
+			{
 				moved.push(id);
 			}
 		}
 
 		const removed = new Map<string, TreeSearchRow | undefined>();
-		for (const id of moved) {
-			if (snapshot.nodes.has(id)) {
-				for (const member of subtreeIds(snapshot, id)) {
+		for (const id of moved)
+		{
+			if (snapshot.nodes.has(id))
+			{
+				for (const member of subtreeIds(snapshot, id))
+				{
 					removed.set(member, snapshot.byId.get(member));
 				}
 			}
 		}
-		for (const id of removed.keys()) {
+		for (const id of removed.keys())
+		{
 			removeNode(snapshot, id);
 		}
 
 		const roots: [id: string, depth: number][] = [];
-		for (const id of moved) {
+		for (const id of moved)
+		{
 			const parentId = current.get(id)?.parentId;
-			if (parentId === null) {
+			if (parentId === null)
+			{
 				roots.push([id, 0]);
-			} else if (parentId !== undefined) {
+			}
+			else if (parentId !== undefined)
+			{
 				const parent = snapshot.nodes.get(parentId);
-				if (parent !== undefined && !parent.isInChat) {
+				if (parent !== undefined && !parent.isInChat)
+				{
 					roots.push([id, parent.depth + 1]);
 				}
 			}
 		}
 		const added: TreeSearchRow[] = [];
-		for (const row of roots.length > 0 ? selectTreeRows(database, seedsOf(roots), true) : []) {
-			if (snapshot.nodes.has(row.id)) {
+		for (const row of roots.length > 0 ? selectTreeRows(database, seedsOf(roots), true) : [])
+		{
+			if (snapshot.nodes.has(row.id))
+			{
 				continue;
 			}
 			addNode(snapshot, row);
-			if (isSearchable(row)) {
+			if (isSearchable(row))
+			{
 				const searchRow = reuseRow(removed.get(row.id), toSearchRow(row));
 				added.push(searchRow);
 				snapshot.byId.set(row.id, searchRow);
@@ -615,29 +752,37 @@ function patchSnapshot(database: Database, snapshot: TreeSnapshot, state: Change
 		}
 
 		const replacements: TreeSearchRow[] = [];
-		for (const row of edited) {
+		for (const row of edited)
+		{
 			const old = snapshot.byId.get(row.id);
 			const searchRow = old === undefined || removed.has(row.id) ? old : reuseRow(old, toSearchRow(row));
-			if (searchRow !== old && searchRow !== undefined) {
+			if (searchRow !== old && searchRow !== undefined)
+			{
 				replacements.push(searchRow);
 				snapshot.byId.set(row.id, searchRow);
 			}
 		}
 		let rows = snapshot.rows;
-		if (removed.size > 0) {
+		if (removed.size > 0)
+		{
 			rows = rows.filter((row) => !removed.has(row.id));
-		} else if (replacements.length > 0) {
+		}
+		else if (replacements.length > 0)
+		{
 			rows = [...rows];
 		}
-		for (const row of replacements) {
+		for (const row of replacements)
+		{
 			rows[rowPosition(snapshot, rows, row.id)] = row;
 		}
-		if (added.length > 0) {
+		if (added.length > 0)
+		{
 			// `added` is already in row order, so each lands at or after the previous one's position.
 			// Flatten slices rather than spreading them into push(), which overflows the stack on a large slice.
 			const pieces: (TreeSearchRow | TreeSearchRow[])[] = [];
 			let from = 0;
-			for (const row of added) {
+			for (const row of added)
+			{
 				const to = rowPosition(snapshot, rows, row.id);
 				pieces.push(rows.slice(from, to), row);
 				from = to;
@@ -657,15 +802,18 @@ function patchSnapshot(database: Database, snapshot: TreeSnapshot, state: Change
 }
 
 /** Bring the snapshot up to date: patch it when there is one, else (or when the patch is too big) reload it. */
-function clearPending(database: Database): void {
+function clearPending(database: Database): void
+{
 	const pending = rebuildTimers.get(database);
-	if (pending !== undefined) {
+	if (pending !== undefined)
+	{
 		pending();
 		rebuildTimers.delete(database);
 	}
 }
 
-function refreshSnapshot(database: Database, state: ChangeState): TreeSnapshot {
+function refreshSnapshot(database: Database, state: ChangeState): TreeSnapshot
+{
 	clearPending(database);
 	const previous = snapshots.get(database);
 	const snapshot =
@@ -678,7 +826,8 @@ function refreshSnapshot(database: Database, state: ChangeState): TreeSnapshot {
  * Rebuild the snapshot now unless it is already current, then warm the jump menu's per-row caches for it.
  * Called at server start and by the debounced background rebuild, so the first search is warm.
  */
-export function warmTreeSnapshot(database: Database): void {
+export function warmTreeSnapshot(database: Database): void
+{
 	const state = changeState(database);
 	const cached = snapshots.get(database);
 	const snapshot = cached === undefined || !isCurrent(cached, state) ? refreshSnapshot(database, state) : cached;
@@ -689,18 +838,31 @@ export function warmTreeSnapshot(database: Database): void {
  * Refresh the snapshot {@link REBUILD_DEBOUNCE_MS} after the last call, off the request path.
  * `restart: false` keeps an already pending refresh's deadline, so repeated stale reads cannot postpone it forever.
  */
-export function scheduleTreeSnapshotRebuild(database: Database, {restart = true}: {restart?: boolean} = {}): void {
+export function scheduleTreeSnapshotRebuild(
+	database: Database,
+	{
+		restart = true,
+	}:
+	{
+		restart?: boolean;
+	} = {},
+): void
+{
 	const pending = rebuildTimers.get(database);
-	if (pending !== undefined) {
-		if (!restart) {
+	if (pending !== undefined)
+	{
+		if (!restart)
+		{
 			return;
 		}
 		clearPending(database);
 	}
 	const {changeSource, scheduler} = hostOf(database);
-	const timer = scheduler.setTimer(() => {
+	const timer = scheduler.setTimer(() =>
+	{
 		rebuildTimers.delete(database);
-		if (changeSource.isOpen()) {
+		if (changeSource.isOpen())
+		{
 			warmTreeSnapshot(database);
 		}
 	}, REBUILD_DEBOUNCE_MS);
@@ -708,12 +870,14 @@ export function scheduleTreeSnapshotRebuild(database: Database, {restart = true}
 }
 
 /** The current snapshot's rows without checking for writes or rebuilding, for tests. */
-export function peekTreeSnapshotRows(database: Database): TreeSearchRow[] | undefined {
+export function peekTreeSnapshotRows(database: Database): TreeSearchRow[] | undefined
+{
 	return snapshots.get(database)?.rows;
 }
 
 /** Whether the current snapshot was last reloaded whole or patched, for tests. */
-export function peekTreeSnapshotBuild(database: Database): TreeSnapshot["build"] | undefined {
+export function peekTreeSnapshotBuild(database: Database): TreeSnapshot["build"] | undefined
+{
 	return snapshots.get(database)?.build;
 }
 
@@ -722,12 +886,17 @@ export function peekTreeSnapshotBuild(database: Database): TreeSnapshot["build"]
  * Only a loaded snapshot is kept warm: a write never cold-builds the whole tree in the background, so on a freshly woken
  * Durable Object a burst of edits cannot start a build that outgrows its isolate; the first search builds it instead.
  */
-export async function withTreeSnapshotRebuild<T>(database: Database, run: () => Promise<T>): Promise<T> {
+export async function withTreeSnapshotRebuild<T>(database: Database, run: () => Promise<T>): Promise<T>
+{
 	const before = changeState(database).changes;
-	try {
+	try
+	{
 		return await run();
-	} finally {
-		if (snapshots.has(database) && changeState(database).changes !== before) {
+	}
+	finally
+	{
+		if (snapshots.has(database) && changeState(database).changes !== before)
+		{
 			scheduleTreeSnapshotRebuild(database);
 		}
 	}
@@ -738,14 +907,22 @@ export async function withTreeSnapshotRebuild<T>(database: Database, run: () => 
  * (read-your-writes for the edited node); a write only from another connection, such as the background cache
  * refresh, serves the previous snapshot while a debounced refresh runs off the request path.
  */
-function wholeTreeSnapshot(database: Database): TreeSnapshot {
+function wholeTreeSnapshot(database: Database): TreeSnapshot
+{
 	const state = changeState(database);
 	const cached = snapshots.get(database);
-	if (cached === undefined || cached.changes !== state.changes) {
+	if (cached === undefined || cached.changes !== state.changes)
+	{
 		return refreshSnapshot(database, state);
 	}
-	if (cached.dataVersion !== state.dataVersion) {
-		scheduleTreeSnapshotRebuild(database, {restart: false});
+	if (cached.dataVersion !== state.dataVersion)
+	{
+		scheduleTreeSnapshotRebuild(
+			database,
+			{
+				restart: false,
+			},
+		);
 	}
 	return cached;
 }
@@ -756,13 +933,16 @@ function wholeTreeSnapshot(database: Database): TreeSnapshot {
  * A subtree is the root plus the searchable snapshot rows below it, in snapshot order;
  * a root outside the snapshot (a references root, or a node cut off from Home) falls back to the SQL subtree query.
  */
-export function loadTreeRows(database: Database, rootId: string | null): TreeSearchRow[] {
+export function loadTreeRows(database: Database, rootId: string | null): TreeSearchRow[]
+{
 	const snapshot = wholeTreeSnapshot(database);
-	if (rootId === null) {
+	if (rootId === null)
+	{
 		return snapshot.rows;
 	}
 	const root = snapshot.byId.get(rootId);
-	if (root === undefined) {
+	if (root === undefined)
+	{
 		return loadTreeSearchRows(database, rootId);
 	}
 	const members = new Set(subtreeIds(snapshot, rootId));
@@ -771,7 +951,8 @@ export function loadTreeRows(database: Database, rootId: string | null): TreeSea
 }
 
 /** Whether `query` asks for backlink items, which are searchable only then (upstream `JP.isSearchable`). */
-export function queryNeedsBacklinks(query: string): boolean {
+export function queryNeedsBacklinks(query: string): boolean
+{
 	return /is:backlink|in:backlink/iu.test(query);
 }
 
@@ -785,7 +966,8 @@ export function loadTreeRowsWithBacklinks(
 	database: Database,
 	rootId: string | null,
 	load: (database: Database, rootId: string | null) => TreeSearchRow[] = loadTreeRows,
-): TreeSearchRow[] {
+): TreeSearchRow[]
+{
 	const rows = load(database, rootId);
 	const ids = new Set(rows.map((row) => row.id));
 	const references = selectTreeRows(database, REFERENCES_SEEDS, false);

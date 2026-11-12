@@ -13,19 +13,39 @@ export function renderMainMenuRows(
 	headerItems: GearMenuHeaderItem[] = [],
 	paneItems: GearMenuHeaderItem[] = [],
 	changelogUnread = false,
-): string {
-	function Rows() {
-		const rows = useMainMenuRows({
-			headerItems,
-			paneItems,
-			changelogUnread,
-			onOpenSettings: () => {},
-			onExpandAll: () => {},
-			onCollapseAll: () => {},
-			onUndo: () => {},
-			onRedo: () => {},
-		});
-		return createElement(MenuBody, {unwrapped: true}, ...rows);
+): string
+{
+	function Rows()
+	{
+		const rows = useMainMenuRows(
+			{
+				headerItems,
+				paneItems,
+				changelogUnread,
+				onOpenSettings: () =>
+				{
+				},
+				onExpandAll: () =>
+				{
+				},
+				onCollapseAll: () =>
+				{
+				},
+				onUndo: () =>
+				{
+				},
+				onRedo: () =>
+				{
+				},
+			},
+		);
+		return createElement(
+			MenuBody,
+			{
+				unwrapped: true,
+			},
+			...rows,
+		);
 	}
 	return renderToStaticMarkup(createElement(Rows));
 }

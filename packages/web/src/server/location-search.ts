@@ -3,19 +3,22 @@ import {rankSwitcher} from "./switcher-search.js";
 import type {RankSwitcherOptions, SwitcherAncestor, SwitcherResponse} from "./switcher-search.js";
 import type {TreeSearchRow} from "./tree-search.js";
 
-export interface LocationResult {
+export interface LocationResult
+{
 	id: string;
 	labelHtml: string;
 	/** Root-first, without Home. */
 	ancestors: SwitcherAncestor[];
 }
 
-export interface LocationResponse {
+export interface LocationResponse
+{
 	results: LocationResult[];
 	hasMore: boolean;
 }
 
-export interface FilterLocationsOptions {
+export interface FilterLocationsOptions
+{
 	query: string;
 	excludeId?: string;
 	offset?: number;
@@ -36,7 +39,8 @@ export interface FilterLocationsOptions {
 }
 
 /** The query's word-start hits in `text`, each wrapped in `<b><u>`, with the rest HTML-escaped. */
-export function highlightLabel(query: string, text: string): string {
+export function highlightLabel(query: string, text: string): string
+{
 	return matchField(splitIntoWords(query), text).html;
 }
 
@@ -57,13 +61,28 @@ export function filterLocations(
 		showCompleted,
 		rank = rankSwitcher,
 	}: FilterLocationsOptions,
-): LocationResponse {
-	const {results, hasMore} = rank(rows, query, starredIds, nowSec, {
-		joinedSec,
-		offset,
-		limit,
-		excludeId,
-		showCompleted,
-	});
-	return {results: results.map(({id, labelHtml, ancestors}) => ({id, labelHtml, ancestors})), hasMore};
+): LocationResponse
+{
+	const {results, hasMore} = rank(
+		rows,
+		query,
+		starredIds,
+		nowSec,
+		{
+			joinedSec,
+			offset,
+			limit,
+			excludeId,
+			showCompleted,
+		},
+	);
+	return {
+		results: results.map(({id, labelHtml, ancestors}) => (
+		{
+			id,
+			labelHtml,
+			ancestors,
+		})),
+		hasMore,
+	};
 }

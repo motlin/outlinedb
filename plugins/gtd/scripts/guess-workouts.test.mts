@@ -12,24 +12,45 @@ const CALENDAR_ID = "00000000-0000-4000-8000-000000000000";
 let nextId = 1;
 const uuid = (): string => `00000000-0000-4000-8000-${String(nextId++).padStart(12, "0")}`;
 
-const timeElement = (iso: string, label: string): string => {
+const timeElement = (iso: string, label: string): string =>
+{
 	const [year, month, day] = iso.split("-").map(Number);
 	return `<time startYear="${year}" startMonth="${month}" startDay="${day}">${label}</time> `;
 };
 
-const dayNode = (iso: string, label: string, entries: string[], id = uuid()): CalendarNode => ({
+const dayNode = (iso: string, label: string, entries: string[], id = uuid()): CalendarNode => (
+{
 	id,
 	name: timeElement(iso, label),
-	children: entries.map((name) => ({id: uuid(), name})),
+	children: entries.map((name) => (
+	{
+		id: uuid(),
+		name,
+	})),
 });
 
-const calendar = (archived: CalendarNode[], live: CalendarNode[]): CalendarNode => ({
+const calendar = (archived: CalendarNode[], live: CalendarNode[]): CalendarNode => (
+{
 	id: CALENDAR_ID,
 	name: "📅 Calendar",
-	children: [{id: uuid(), name: "🗃️ Archive", children: [{id: uuid(), name: "2026", children: archived}]}, ...live],
+	children: [
+		{
+			id: uuid(),
+			name: "🗃️ Archive",
+			children: [
+				{
+					id: uuid(),
+					name: "2026",
+					children: archived,
+				},
+			],
+		},
+		...live,
+	],
 });
 
-const session = (overrides: Partial<Session>): Session => ({
+const session = (overrides: Partial<Session>): Session => (
+{
 	date: "2026-03-01",
 	program: "#ProgramX",
 	programKey: "programx",
@@ -59,29 +80,38 @@ const firstPass = (): CalendarNode[] => [
 	]),
 ];
 
-test("parseEntry reads a canonical entry", () => {
-	assert.deepStrictEqual(parseEntry("💪 #ProgramX phase 2, week 1, day 3, Pull 2 #exercise"), {
-		program: "#ProgramX",
-		programKey: "programx",
-		phase: 2,
-		week: 1,
-		day: 3,
-		tail: "Pull 2",
-	});
+test("parseEntry reads a canonical entry", () =>
+{
+	assert.deepStrictEqual(
+		parseEntry("💪 #ProgramX phase 2, week 1, day 3, Pull 2 #exercise"),
+		{
+			program: "#ProgramX",
+			programKey: "programx",
+			phase: 2,
+			week: 1,
+			day: 3,
+			tail: "Pull 2",
+		},
+	);
 });
 
-test("parseEntry tolerates a raw entry with a colon, lowercase tag, and trailing period", () => {
-	assert.deepStrictEqual(parseEntry("#programx phase 2, week 2, day 3: pull 2 #exercise. "), {
-		program: "#programx",
-		programKey: "programx",
-		phase: 2,
-		week: 2,
-		day: 3,
-		tail: "pull 2",
-	});
+test("parseEntry tolerates a raw entry with a colon, lowercase tag, and trailing period", () =>
+{
+	assert.deepStrictEqual(
+		parseEntry("#programx phase 2, week 2, day 3: pull 2 #exercise. "),
+		{
+			program: "#programx",
+			programKey: "programx",
+			phase: 2,
+			week: 2,
+			day: 3,
+			tail: "pull 2",
+		},
+	);
 });
 
-test("parseEntry drops an iteration note and keeps commentary in the tail", () => {
+test("parseEntry drops an iteration note and keeps commentary in the tail", () =>
+{
 	assert.deepStrictEqual(
 		parseEntry("💪 #ProgramX week 3, second iteration, day 1, Push 3, @Alice joined me #exercise"),
 		{
@@ -95,18 +125,23 @@ test("parseEntry drops an iteration note and keeps commentary in the tail", () =
 	);
 });
 
-test("parseEntry reads spelled-out numbers and a Roman-numeral phase", () => {
-	assert.deepStrictEqual(parseEntry("#ProgramX phase II week three day 2 legs #exercise"), {
-		program: "#ProgramX",
-		programKey: "programx",
-		phase: 2,
-		week: 3,
-		day: 2,
-		tail: "legs",
-	});
+test("parseEntry reads spelled-out numbers and a Roman-numeral phase", () =>
+{
+	assert.deepStrictEqual(
+		parseEntry("#ProgramX phase II week three day 2 legs #exercise"),
+		{
+			program: "#ProgramX",
+			programKey: "programx",
+			phase: 2,
+			week: 3,
+			day: 2,
+			tail: "legs",
+		},
+	);
 });
 
-test("parseEntry ignores entries that are not program workouts", () => {
+test("parseEntry ignores entries that are not program workouts", () =>
+{
 	assert.deepStrictEqual(
 		[
 			parseEntry("🏃 Ran 5k with @Alice #exercise"),
@@ -117,25 +152,31 @@ test("parseEntry ignores entries that are not program workouts", () => {
 	);
 });
 
-test("parseEntry accepts a field-less entry for a listed program and uses the listed casing", () => {
-	assert.deepStrictEqual(parseEntry("💪 #programx The Finisher, last day #exercise", ["#ProgramX"]), {
-		program: "#ProgramX",
-		programKey: "programx",
-		phase: null,
-		week: null,
-		day: null,
-		tail: "The Finisher, last day",
-	});
+test("parseEntry accepts a field-less entry for a listed program and uses the listed casing", () =>
+{
+	assert.deepStrictEqual(
+		parseEntry("💪 #programx The Finisher, last day #exercise", ["#ProgramX"]),
+		{
+			program: "#ProgramX",
+			programKey: "programx",
+			phase: null,
+			week: null,
+			day: null,
+			tail: "The Finisher, last day",
+		},
+	);
 });
 
-test("titleCase capitalizes words but keeps minor words and acronyms", () => {
+test("titleCase capitalizes words but keeps minor words and acronyms", () =>
+{
 	assert.deepStrictEqual(
 		[titleCase("arms and calves"), titleCase("the finisher"), titleCase("upper body EMOM"), titleCase("push/pull")],
 		["Arms and Calves", "The Finisher", "Upper Body EMOM", "Push/Pull"],
 	);
 });
 
-test("slotName takes the longest comma prefix every occurrence shares", () => {
+test("slotName takes the longest comma prefix every occurrence shares", () =>
+{
 	assert.deepStrictEqual(
 		[
 			slotName(["Arms, Core, and Calves", "Arms, Core, and Calves, @Alice joined", "arms, core, and calves 🦵"]),
@@ -147,30 +188,102 @@ test("slotName takes the longest comma prefix every occurrence shares", () => {
 	);
 });
 
-test("formatEntry drops an optional segment whose field is missing", () => {
+test("formatEntry drops an optional segment whose field is missing", () =>
+{
 	assert.deepStrictEqual(
 		[
-			formatEntry(TEMPLATE, {program: "#ProgramX", phase: 2, week: 1, day: 3, workout: "Pull 2"}),
-			formatEntry(TEMPLATE, {program: "#ProgramX", phase: null, week: 1, day: 3, workout: "Pull 2"}),
+			formatEntry(
+				TEMPLATE,
+				{
+					program: "#ProgramX",
+					phase: 2,
+					week: 1,
+					day: 3,
+					workout: "Pull 2",
+				},
+			),
+			formatEntry(
+				TEMPLATE,
+				{
+					program: "#ProgramX",
+					phase: null,
+					week: 1,
+					day: 3,
+					workout: "Pull 2",
+				},
+			),
 		],
 		["💪 #ProgramX phase 2, week 1, day 3, Pull 2 #exercise", "💪 #ProgramX week 1, day 3, Pull 2 #exercise"],
 	);
 });
 
-test("predictNext picks the most frequent successor from earlier history", () => {
+test("predictNext picks the most frequent successor from earlier history", () =>
+{
 	const history = [
-		session({week: 1, day: 1, tail: "Push 1"}),
-		session({week: 1, day: 2, tail: "Legs 1"}),
-		session({week: 1, day: 1, tail: "Push 1"}),
-		session({week: 1, day: 3, tail: "Pull 1"}),
-		session({week: 1, day: 1, tail: "Push 1"}),
-		session({week: 1, day: 2, tail: "Legs 1"}),
+		session(
+			{
+				week: 1,
+				day: 1,
+				tail: "Push 1",
+			},
+		),
+		session(
+			{
+				week: 1,
+				day: 2,
+				tail: "Legs 1",
+			},
+		),
+		session(
+			{
+				week: 1,
+				day: 1,
+				tail: "Push 1",
+			},
+		),
+		session(
+			{
+				week: 1,
+				day: 3,
+				tail: "Pull 1",
+			},
+		),
+		session(
+			{
+				week: 1,
+				day: 1,
+				tail: "Push 1",
+			},
+		),
+		session(
+			{
+				week: 1,
+				day: 2,
+				tail: "Legs 1",
+			},
+		),
 	];
 
 	assert.deepStrictEqual(
-		predictNext(history, {programKey: "programx", phase: 1, week: 1, day: 1, workout: "Push 1"}),
+		predictNext(
+			history,
+			{
+				programKey: "programx",
+				phase: 1,
+				week: 1,
+				day: 1,
+				workout: "Push 1",
+			},
+		),
 		{
-			slot: {programKey: "programx", phase: 1, week: 1, day: 2, workout: "Legs 1"},
+			slot:
+			{
+				programKey: "programx",
+				phase: 1,
+				week: 1,
+				day: 2,
+				workout: "Legs 1",
+			},
 			basis: "history",
 			count: 2,
 			total: 3,
@@ -178,19 +291,66 @@ test("predictNext picks the most frequent successor from earlier history", () =>
 	);
 });
 
-test("predictNext falls back to the next day index seen in another week", () => {
+test("predictNext falls back to the next day index seen in another week", () =>
+{
 	const history = [
-		session({week: 1, day: 1, tail: "Push 1"}),
-		session({week: 1, day: 2, tail: "Legs 1"}),
-		session({week: 1, day: 3, tail: "Pull 1"}),
-		session({week: 2, day: 1, tail: "Push 1"}),
-		session({week: 2, day: 2, tail: "legs 1"}),
+		session(
+			{
+				week: 1,
+				day: 1,
+				tail: "Push 1",
+			},
+		),
+		session(
+			{
+				week: 1,
+				day: 2,
+				tail: "Legs 1",
+			},
+		),
+		session(
+			{
+				week: 1,
+				day: 3,
+				tail: "Pull 1",
+			},
+		),
+		session(
+			{
+				week: 2,
+				day: 1,
+				tail: "Push 1",
+			},
+		),
+		session(
+			{
+				week: 2,
+				day: 2,
+				tail: "legs 1",
+			},
+		),
 	];
 
 	assert.deepStrictEqual(
-		predictNext(history, {programKey: "programx", phase: 1, week: 2, day: 2, workout: "Legs 1"}),
+		predictNext(
+			history,
+			{
+				programKey: "programx",
+				phase: 1,
+				week: 2,
+				day: 2,
+				workout: "Legs 1",
+			},
+		),
 		{
-			slot: {programKey: "programx", phase: 1, week: 2, day: 3, workout: "Pull 1"},
+			slot:
+			{
+				programKey: "programx",
+				phase: 1,
+				week: 2,
+				day: 3,
+				workout: "Pull 1",
+			},
 			basis: "structural",
 			count: 0,
 			total: 0,
@@ -198,31 +358,125 @@ test("predictNext falls back to the next day index seen in another week", () => 
 	);
 });
 
-test("predictNext falls back to week+1 day 1, then to the next phase", () => {
+test("predictNext falls back to week+1 day 1, then to the next phase", () =>
+{
 	const history = [
-		session({phase: 1, week: 1, day: 1, tail: "Push 1"}),
-		session({phase: 1, week: 2, day: 1, tail: "Push 1"}),
-		session({phase: 2, week: 1, day: 1, tail: "Push 2"}),
+		session(
+			{
+				phase: 1,
+				week: 1,
+				day: 1,
+				tail: "Push 1",
+			},
+		),
+		session(
+			{
+				phase: 1,
+				week: 2,
+				day: 1,
+				tail: "Push 1",
+			},
+		),
+		session(
+			{
+				phase: 2,
+				week: 1,
+				day: 1,
+				tail: "Push 2",
+			},
+		),
 	];
-	const nextPhaseFirst = [session({phase: 2, week: 1, day: 1, tail: "Push 2"}), session({phase: 1, week: 2, day: 1})];
-	const nextWeek = [session({week: 2, day: 3, tail: "Pull 1"}), session({week: 1, day: 1, tail: "Push 1"})];
+	const nextPhaseFirst = [
+		session(
+			{
+				phase: 2,
+				week: 1,
+				day: 1,
+				tail: "Push 2",
+			},
+		),
+		session(
+			{
+				phase: 1,
+				week: 2,
+				day: 1,
+			},
+		),
+	];
+	const nextWeek = [
+		session(
+			{
+				week: 2,
+				day: 3,
+				tail: "Pull 1",
+			},
+		),
+		session(
+			{
+				week: 1,
+				day: 1,
+				tail: "Push 1",
+			},
+		),
+	];
 
 	assert.deepStrictEqual(
 		[
-			predictNext([session({})], {programKey: "programx", phase: 1, week: 1, day: 1, workout: "Push 1"}),
-			predictNext(nextWeek, {programKey: "programx", phase: 1, week: 1, day: 1, workout: "Push 1"}),
-			predictNext(nextPhaseFirst, {programKey: "programx", phase: 1, week: 2, day: 1, workout: "Push 1"}),
+			predictNext(
+				[session({})],
+				{
+					programKey: "programx",
+					phase: 1,
+					week: 1,
+					day: 1,
+					workout: "Push 1",
+				},
+			),
+			predictNext(
+				nextWeek,
+				{
+					programKey: "programx",
+					phase: 1,
+					week: 1,
+					day: 1,
+					workout: "Push 1",
+				},
+			),
+			predictNext(
+				nextPhaseFirst,
+				{
+					programKey: "programx",
+					phase: 1,
+					week: 2,
+					day: 1,
+					workout: "Push 1",
+				},
+			),
 		],
 		[
 			null,
 			{
-				slot: {programKey: "programx", phase: 1, week: 2, day: 1, workout: "Push 1"},
+				slot:
+				{
+					programKey: "programx",
+					phase: 1,
+					week: 2,
+					day: 1,
+					workout: "Push 1",
+				},
 				basis: "structural",
 				count: 0,
 				total: 0,
 			},
 			{
-				slot: {programKey: "programx", phase: 2, week: 1, day: 1, workout: "Push 2"},
+				slot:
+				{
+					programKey: "programx",
+					phase: 2,
+					week: 1,
+					day: 1,
+					workout: "Push 2",
+				},
 				basis: "structural",
 				count: 0,
 				total: 0,
@@ -230,9 +484,25 @@ test("predictNext falls back to week+1 day 1, then to the next phase", () => {
 		],
 	);
 	assert.deepStrictEqual(
-		predictNext(history, {programKey: "programx", phase: 1, week: 1, day: 1, workout: "Push 1"}),
+		predictNext(
+			history,
+			{
+				programKey: "programx",
+				phase: 1,
+				week: 1,
+				day: 1,
+				workout: "Push 1",
+			},
+		),
 		{
-			slot: {programKey: "programx", phase: 1, week: 2, day: 1, workout: "Push 1"},
+			slot:
+			{
+				programKey: "programx",
+				phase: 1,
+				week: 2,
+				day: 1,
+				workout: "Push 1",
+			},
 			basis: "history",
 			count: 1,
 			total: 1,
@@ -240,7 +510,8 @@ test("predictNext falls back to week+1 day 1, then to the next phase", () => {
 	);
 });
 
-test("guessWorkouts proposes today's entry from the earlier pass and creates the missing day node", () => {
+test("guessWorkouts proposes today's entry from the earlier pass and creates the missing day node", () =>
+{
 	const tree = calendar(firstPass(), [
 		dayNode("2026-10-20", "Tue, Oct 20, 2026", ["💪 #ProgramX phase 1, week 2, day 2, Legs 1 #exercise"]),
 		dayNode("2026-10-21", "Wed, Oct 21, 2026", [
@@ -249,56 +520,82 @@ test("guessWorkouts proposes today's entry from the earlier pass and creates the
 		]),
 	]);
 
-	const staged = guessWorkouts({
-		tree,
-		today: "2026-10-22",
-		template: TEMPLATE,
-		programs: ["#ProgramX"],
-		restDays: [],
-		maxDays: 7,
-		generatedAt: "2026-10-22T07:00:00-04:00",
-	});
+	const staged = guessWorkouts(
+		{
+			tree,
+			today: "2026-10-22",
+			template: TEMPLATE,
+			programs: ["#ProgramX"],
+			restDays: [],
+			maxDays: 7,
+			generatedAt: "2026-10-22T07:00:00-04:00",
+		},
+	);
 
 	const after = "💪 #ProgramX phase 1, week 2, day 4, The Finisher #exercise";
 	const time = '<time startYear="2026" startMonth="10" startDay="22">Thu, Oct 22, 2026</time> ';
-	assert.deepStrictEqual(staged, {
-		task: "workout-guess",
-		generatedAt: "2026-10-22T07:00:00-04:00",
-		status: "ready",
-		presentation: "Guess workout",
-		summary: {
-			lastLogged: {date: "2026-10-21", text: "#programx phase 1, week 2, day 3: pull 1 #exercise. "},
-			daysUnlogged: 1,
-			proposalsStaged: 1,
-			remainingDays: 0,
-		},
-		proposals: [
+	assert.deepStrictEqual(
+		staged,
+		{
+			task: "workout-guess",
+			generatedAt: "2026-10-22T07:00:00-04:00",
+			status: "ready",
+			presentation: "Guess workout",
+			summary:
 			{
-				nodeId: CALENDAR_ID,
-				header: "Oct 22",
-				date: "2026-10-22",
-				dayNode: "create",
-				timeElement: time,
-				basis: "history",
-				before: "",
-				after,
-				changes: [
-					{
-						type: "create",
-						icon: "💪",
-						detail: 'history: after "phase 1, week 2, day 3, Pull 1" came this 1 of 1 times; creates the Thu, Oct 22, 2026 day node',
-					},
-				],
-				applyOps: [
-					`./bin/run.js node create --parent-id ${CALENDAR_ID} --json '${JSON.stringify({name: time, children: [{name: after}]})}' --position bottom`,
-				],
+				lastLogged:
+				{
+					date: "2026-10-21",
+					text: "#programx phase 1, week 2, day 3: pull 1 #exercise. ",
+				},
+				daysUnlogged: 1,
+				proposalsStaged: 1,
+				remainingDays: 0,
 			},
-		],
-	});
-	assert.deepStrictEqual(validateProposal(staged), {valid: true, errors: []});
+			proposals: [
+				{
+					nodeId: CALENDAR_ID,
+					header: "Oct 22",
+					date: "2026-10-22",
+					dayNode: "create",
+					timeElement: time,
+					basis: "history",
+					before: "",
+					after,
+					changes: [
+						{
+							type: "create",
+							icon: "💪",
+							detail: 'history: after "phase 1, week 2, day 3, Pull 1" came this 1 of 1 times; creates the Thu, Oct 22, 2026 day node',
+						},
+					],
+					applyOps: [
+						`./bin/run.js node create --parent-id ${CALENDAR_ID} --json '${JSON.stringify(
+							{
+								name: time,
+								children: [
+									{
+										name: after,
+									},
+								],
+							},
+						)}' --position bottom`,
+					],
+				},
+			],
+		},
+	);
+	assert.deepStrictEqual(
+		validateProposal(staged),
+		{
+			valid: true,
+			errors: [],
+		},
+	);
 });
 
-test("guessWorkouts skips missed days that have any #exercise entry or are recorded rest days", () => {
+test("guessWorkouts skips missed days that have any #exercise entry or are recorded rest days", () =>
+{
 	const oct20 = uuid();
 	const tree = calendar(firstPass(), [
 		dayNode("2026-10-18", "Sun, Oct 18, 2026", ["💪 #ProgramX phase 1, week 2, day 3, Pull 1 #exercise"]),
@@ -307,23 +604,32 @@ test("guessWorkouts skips missed days that have any #exercise entry or are recor
 		dayNode("2026-10-21", "Wed, Oct 21, 2026", ["Rest"]),
 	]);
 
-	const staged = guessWorkouts({
-		tree,
-		today: "2026-10-21",
-		template: TEMPLATE,
-		programs: ["#ProgramX"],
-		restDays: ["2026-10-21"],
-		maxDays: 7,
-		generatedAt: "2026-10-21T07:00:00-04:00",
-	});
+	const staged = guessWorkouts(
+		{
+			tree,
+			today: "2026-10-21",
+			template: TEMPLATE,
+			programs: ["#ProgramX"],
+			restDays: ["2026-10-21"],
+			maxDays: 7,
+			generatedAt: "2026-10-21T07:00:00-04:00",
+		},
+	);
 
 	const finisher = "💪 #ProgramX phase 1, week 2, day 4, The Finisher #exercise";
-	assert.deepStrictEqual(staged.summary, {
-		lastLogged: {date: "2026-10-18", text: "💪 #ProgramX phase 1, week 2, day 3, Pull 1 #exercise"},
-		daysUnlogged: 1,
-		proposalsStaged: 1,
-		remainingDays: 0,
-	});
+	assert.deepStrictEqual(
+		staged.summary,
+		{
+			lastLogged:
+			{
+				date: "2026-10-18",
+				text: "💪 #ProgramX phase 1, week 2, day 3, Pull 1 #exercise",
+			},
+			daysUnlogged: 1,
+			proposalsStaged: 1,
+			remainingDays: 0,
+		},
+	);
 	assert.deepStrictEqual(staged.proposals, [
 		{
 			nodeId: oct20,
@@ -345,7 +651,8 @@ test("guessWorkouts skips missed days that have any #exercise entry or are recor
 	]);
 });
 
-test("guessWorkouts chains each guess off the previous one", () => {
+test("guessWorkouts chains each guess off the previous one", () =>
+{
 	const oct21 = uuid();
 	const oct22 = uuid();
 	const tree = calendar(firstPass(), [
@@ -354,18 +661,25 @@ test("guessWorkouts chains each guess off the previous one", () => {
 		dayNode("2026-10-22", "Thu, Oct 22, 2026", [], oct22),
 	]);
 
-	const staged = guessWorkouts({
-		tree,
-		today: "2026-10-22",
-		template: TEMPLATE,
-		programs: ["#ProgramX"],
-		restDays: [],
-		maxDays: 7,
-		generatedAt: "2026-10-22T07:00:00-04:00",
-	});
+	const staged = guessWorkouts(
+		{
+			tree,
+			today: "2026-10-22",
+			template: TEMPLATE,
+			programs: ["#ProgramX"],
+			restDays: [],
+			maxDays: 7,
+			generatedAt: "2026-10-22T07:00:00-04:00",
+		},
+	);
 
 	assert.deepStrictEqual(
-		staged.proposals.map(({header, after, changes}) => ({header, after, changes})),
+		staged.proposals.map(({header, after, changes}) => (
+		{
+			header,
+			after,
+			changes,
+		})),
 		[
 			{
 				header: "Oct 21",
@@ -393,29 +707,39 @@ test("guessWorkouts chains each guess off the previous one", () => {
 	);
 });
 
-test("guessWorkouts stages an ambiguity when nothing can be predicted, and stops the chain there", () => {
+test("guessWorkouts stages an ambiguity when nothing can be predicted, and stops the chain there", () =>
+{
 	const oct21 = uuid();
 	const tree = calendar(firstPass(), [
 		dayNode("2026-10-20", "Tue, Oct 20, 2026", ["💪 #ProgramX phase 3, week 1, day 1, Core 3 #exercise"]),
 		dayNode("2026-10-21", "Wed, Oct 21, 2026", [], oct21),
 	]);
 
-	const staged = guessWorkouts({
-		tree,
-		today: "2026-10-22",
-		template: TEMPLATE,
-		programs: ["#ProgramX"],
-		restDays: [],
-		maxDays: 7,
-		generatedAt: "2026-10-22T07:00:00-04:00",
-	});
+	const staged = guessWorkouts(
+		{
+			tree,
+			today: "2026-10-22",
+			template: TEMPLATE,
+			programs: ["#ProgramX"],
+			restDays: [],
+			maxDays: 7,
+			generatedAt: "2026-10-22T07:00:00-04:00",
+		},
+	);
 
-	assert.deepStrictEqual(staged.summary, {
-		lastLogged: {date: "2026-10-20", text: "💪 #ProgramX phase 3, week 1, day 1, Core 3 #exercise"},
-		daysUnlogged: 2,
-		proposalsStaged: 1,
-		remainingDays: 1,
-	});
+	assert.deepStrictEqual(
+		staged.summary,
+		{
+			lastLogged:
+			{
+				date: "2026-10-20",
+				text: "💪 #ProgramX phase 3, week 1, day 1, Core 3 #exercise",
+			},
+			daysUnlogged: 2,
+			proposalsStaged: 1,
+			remainingDays: 1,
+		},
+	);
 	assert.deepStrictEqual(staged.proposals, [
 		{
 			nodeId: oct21,
@@ -432,49 +756,82 @@ test("guessWorkouts stages an ambiguity when nothing can be predicted, and stops
 					detail: 'no earlier pass or program structure follows "phase 3, week 1, day 1, Core 3"',
 				},
 			],
-			ambiguity: {
+			ambiguity:
+			{
 				prompt: 'Which workout did you do on Wed, Oct 21, 2026? The last one logged was "💪 #ProgramX phase 3, week 1, day 1, Core 3 #exercise".',
-				options: [{label: "No workout that day", applyOps: []}],
+				options: [
+					{
+						label: "No workout that day",
+						applyOps: [],
+					},
+				],
 			},
 			applyOps: [],
 		},
 	]);
-	assert.deepStrictEqual(validateProposal(staged), {valid: true, errors: []});
+	assert.deepStrictEqual(
+		validateProposal(staged),
+		{
+			valid: true,
+			errors: [],
+		},
+	);
 });
 
-test("guessWorkouts caps the proposals at maxDays and counts the rest", () => {
+test("guessWorkouts caps the proposals at maxDays and counts the rest", () =>
+{
 	const tree = calendar(firstPass(), [
 		dayNode("2026-03-10", "Tue, Mar 10, 2026", ["💪 #ProgramX phase 1, week 1, day 1, Push 1 #exercise"]),
 	]);
 
-	const staged = guessWorkouts({
-		tree,
-		today: "2026-03-14",
-		template: TEMPLATE,
-		programs: ["#ProgramX"],
-		restDays: [],
-		maxDays: 2,
-		generatedAt: "2026-03-14T07:00:00-04:00",
-	});
+	const staged = guessWorkouts(
+		{
+			tree,
+			today: "2026-03-14",
+			template: TEMPLATE,
+			programs: ["#ProgramX"],
+			restDays: [],
+			maxDays: 2,
+			generatedAt: "2026-03-14T07:00:00-04:00",
+		},
+	);
 
 	assert.deepStrictEqual(
-		[staged.summary, staged.proposals.map(({date, after}) => ({date, after}))],
+		[
+			staged.summary,
+			staged.proposals.map(({date, after}) => (
+			{
+				date,
+				after,
+			})),
+		],
 		[
 			{
-				lastLogged: {date: "2026-03-10", text: "💪 #ProgramX phase 1, week 1, day 1, Push 1 #exercise"},
+				lastLogged:
+				{
+					date: "2026-03-10",
+					text: "💪 #ProgramX phase 1, week 1, day 1, Push 1 #exercise",
+				},
 				daysUnlogged: 4,
 				proposalsStaged: 2,
 				remainingDays: 2,
 			},
 			[
-				{date: "2026-03-11", after: "💪 #ProgramX phase 1, week 1, day 2, Legs 1 #exercise"},
-				{date: "2026-03-12", after: "💪 #ProgramX phase 1, week 1, day 3, Pull 1 #exercise"},
+				{
+					date: "2026-03-11",
+					after: "💪 #ProgramX phase 1, week 1, day 2, Legs 1 #exercise",
+				},
+				{
+					date: "2026-03-12",
+					after: "💪 #ProgramX phase 1, week 1, day 3, Pull 1 #exercise",
+				},
 			],
 		],
 	);
 });
 
-test("guessWorkouts escapes apostrophes in the staged create op", () => {
+test("guessWorkouts escapes apostrophes in the staged create op", () =>
+{
 	const oct21 = uuid();
 	const tree = calendar(
 		[
@@ -485,41 +842,73 @@ test("guessWorkouts escapes apostrophes in the staged create op", () => {
 		[dayNode("2026-10-21", "Wed, Oct 21, 2026", [], oct21)],
 	);
 
-	const staged = guessWorkouts({
-		tree,
-		today: "2026-03-04",
-		template: TEMPLATE,
-		programs: ["#ProgramX"],
-		restDays: [],
-		maxDays: 7,
-		generatedAt: "2026-03-04T07:00:00-04:00",
-	});
+	const staged = guessWorkouts(
+		{
+			tree,
+			today: "2026-03-04",
+			template: TEMPLATE,
+			programs: ["#ProgramX"],
+			restDays: [],
+			maxDays: 7,
+			generatedAt: "2026-03-04T07:00:00-04:00",
+		},
+	);
 
 	assert.deepStrictEqual(
-		staged.proposals.map(({after, applyOps}) => ({after, applyOps})),
+		staged.proposals.map(({after, applyOps}) => (
+		{
+			after,
+			applyOps,
+		})),
 		[
 			{
 				after: "💪 #ProgramX week 1, day 2, Farmer's Carry #exercise",
 				applyOps: [
-					`./bin/run.js node create --parent-id ${CALENDAR_ID} --json '${JSON.stringify({
-						name: '<time startYear="2026" startMonth="3" startDay="4">Wed, Mar 4, 2026</time> ',
-						children: [{name: "💪 #ProgramX week 1, day 2, Farmer's Carry #exercise"}],
-					}).replaceAll("'", `'"'"'`)}' --position bottom`,
+					`./bin/run.js node create --parent-id ${CALENDAR_ID} --json '${JSON.stringify(
+						{
+							name: '<time startYear="2026" startMonth="3" startDay="4">Wed, Mar 4, 2026</time> ',
+							children: [
+								{
+									name: "💪 #ProgramX week 1, day 2, Farmer's Carry #exercise",
+								},
+							],
+						},
+					).replaceAll("'", `'"'"'`)}' --position bottom`,
 				],
 			},
 		],
 	);
 });
 
-test("guessWorkouts is empty when today already has a workout or there is no history", () => {
+test("guessWorkouts is empty when today already has a workout or there is no history", () =>
+{
 	const logged = calendar(firstPass(), []);
 	const empty = calendar([], [dayNode("2026-10-21", "Wed, Oct 21, 2026", ["Worked from home"])]);
-	const options = {template: TEMPLATE, programs: ["#ProgramX"], restDays: [], maxDays: 7, generatedAt: "x"};
+	const options =
+	{
+		template: TEMPLATE,
+		programs: ["#ProgramX"],
+		restDays: [],
+		maxDays: 7,
+		generatedAt: "x",
+	};
 
 	assert.deepStrictEqual(
 		[
-			guessWorkouts({...options, tree: logged, today: "2026-03-09"}),
-			guessWorkouts({...options, tree: empty, today: "2026-10-22"}),
+			guessWorkouts(
+				{
+					...options,
+					tree: logged,
+					today: "2026-03-09",
+				},
+			),
+			guessWorkouts(
+				{
+					...options,
+					tree: empty,
+					today: "2026-10-22",
+				},
+			),
 		],
 		[
 			{
@@ -527,8 +916,10 @@ test("guessWorkouts is empty when today already has a workout or there is no his
 				generatedAt: "x",
 				status: "empty",
 				presentation: "Guess workout",
-				summary: {
-					lastLogged: {
+				summary:
+				{
+					lastLogged:
+					{
 						date: "2026-03-09",
 						text: "💪 #ProgramX phase 2, week 1, day 2, Arms, Core, and Calves #exercise",
 					},
@@ -543,96 +934,138 @@ test("guessWorkouts is empty when today already has a workout or there is no his
 				generatedAt: "x",
 				status: "empty",
 				presentation: "Guess workout",
-				summary: {lastLogged: null, daysUnlogged: 0, proposalsStaged: 0, remainingDays: 0},
+				summary:
+				{
+					lastLogged: null,
+					daysUnlogged: 0,
+					proposalsStaged: 0,
+					remainingDays: 0,
+				},
 				proposals: [],
 			},
 		],
 	);
 });
 
-test("guessWorkouts fills bare program-hashtag stubs in place instead of counting them as logged", () => {
-	const stubWithTag = {id: uuid(), name: "💪 #ProgramX #exercise"};
-	const bareStub = {id: uuid(), name: "#programx "};
+test("guessWorkouts fills bare program-hashtag stubs in place instead of counting them as logged", () =>
+{
+	const stubWithTag =
+	{
+		id: uuid(),
+		name: "💪 #ProgramX #exercise",
+	};
+	const bareStub =
+	{
+		id: uuid(),
+		name: "#programx ",
+	};
 	const oct21 = uuid();
 	const oct22 = uuid();
 	const tree = calendar(firstPass(), [
 		dayNode("2026-10-20", "Tue, Oct 20, 2026", ["💪 #ProgramX phase 1, week 2, day 2, Legs 1 #exercise"]),
-		{id: oct21, name: timeElement("2026-10-21", "Wed, Oct 21, 2026"), children: [stubWithTag]},
+		{
+			id: oct21,
+			name: timeElement("2026-10-21", "Wed, Oct 21, 2026"),
+			children: [stubWithTag],
+		},
 		{
 			id: oct22,
 			name: timeElement("2026-10-22", "Thu, Oct 22, 2026"),
-			children: [{id: uuid(), name: "Took the day off"}, bareStub],
+			children: [
+				{
+					id: uuid(),
+					name: "Took the day off",
+				},
+				bareStub,
+			],
 		},
 	]);
 
-	const staged = guessWorkouts({
-		tree,
-		today: "2026-10-22",
-		template: TEMPLATE,
-		programs: ["#ProgramX"],
-		restDays: [],
-		maxDays: 7,
-		generatedAt: "x",
-	});
+	const staged = guessWorkouts(
+		{
+			tree,
+			today: "2026-10-22",
+			template: TEMPLATE,
+			programs: ["#ProgramX"],
+			restDays: [],
+			maxDays: 7,
+			generatedAt: "x",
+		},
+	);
 
 	const pull = "💪 #ProgramX phase 1, week 2, day 3, Pull 1 #exercise";
 	const finisher = "💪 #ProgramX phase 1, week 2, day 4, The Finisher #exercise";
-	assert.deepStrictEqual(staged, {
-		task: "workout-guess",
-		generatedAt: "x",
-		status: "ready",
-		presentation: "Guess workout",
-		summary: {
-			lastLogged: {date: "2026-10-20", text: "💪 #ProgramX phase 1, week 2, day 2, Legs 1 #exercise"},
-			daysUnlogged: 2,
-			proposalsStaged: 2,
-			remainingDays: 0,
+	assert.deepStrictEqual(
+		staged,
+		{
+			task: "workout-guess",
+			generatedAt: "x",
+			status: "ready",
+			presentation: "Guess workout",
+			summary:
+			{
+				lastLogged:
+				{
+					date: "2026-10-20",
+					text: "💪 #ProgramX phase 1, week 2, day 2, Legs 1 #exercise",
+				},
+				daysUnlogged: 2,
+				proposalsStaged: 2,
+				remainingDays: 0,
+			},
+			proposals: [
+				{
+					nodeId: stubWithTag.id,
+					header: "Oct 21",
+					date: "2026-10-21",
+					dayNode: "existing",
+					basis: "history",
+					before: stubWithTag.name,
+					after: pull,
+					changes: [
+						{
+							type: "fill",
+							icon: "💪",
+							detail: 'history: after "phase 1, week 2, day 2, Legs 1" came this 1 of 1 times; fills the bare stub',
+						},
+					],
+					applyOps: [
+						`./bin/run.js node update --id ${stubWithTag.id} --name '${pull}' --expect-name '${stubWithTag.name}'`,
+					],
+				},
+				{
+					nodeId: bareStub.id,
+					header: "Oct 22",
+					date: "2026-10-22",
+					dayNode: "existing",
+					basis: "history",
+					before: bareStub.name,
+					after: finisher,
+					changes: [
+						{
+							type: "fill",
+							icon: "💪",
+							detail: 'history: after "phase 1, week 2, day 3, Pull 1" came this 1 of 1 times; chained on the Oct 21 guess; fills the bare stub',
+						},
+					],
+					applyOps: [
+						`./bin/run.js node update --id ${bareStub.id} --name '${finisher}' --expect-name '${bareStub.name}'`,
+					],
+				},
+			],
 		},
-		proposals: [
-			{
-				nodeId: stubWithTag.id,
-				header: "Oct 21",
-				date: "2026-10-21",
-				dayNode: "existing",
-				basis: "history",
-				before: stubWithTag.name,
-				after: pull,
-				changes: [
-					{
-						type: "fill",
-						icon: "💪",
-						detail: 'history: after "phase 1, week 2, day 2, Legs 1" came this 1 of 1 times; fills the bare stub',
-					},
-				],
-				applyOps: [
-					`./bin/run.js node update --id ${stubWithTag.id} --name '${pull}' --expect-name '${stubWithTag.name}'`,
-				],
-			},
-			{
-				nodeId: bareStub.id,
-				header: "Oct 22",
-				date: "2026-10-22",
-				dayNode: "existing",
-				basis: "history",
-				before: bareStub.name,
-				after: finisher,
-				changes: [
-					{
-						type: "fill",
-						icon: "💪",
-						detail: 'history: after "phase 1, week 2, day 3, Pull 1" came this 1 of 1 times; chained on the Oct 21 guess; fills the bare stub',
-					},
-				],
-				applyOps: [
-					`./bin/run.js node update --id ${bareStub.id} --name '${finisher}' --expect-name '${bareStub.name}'`,
-				],
-			},
-		],
-	});
-	assert.deepStrictEqual(validateProposal(staged), {valid: true, errors: []});
+	);
+	assert.deepStrictEqual(
+		validateProposal(staged),
+		{
+			valid: true,
+			errors: [],
+		},
+	);
 });
 
-test("guessWorkouts counts a day with any known exercise hashtag as logged, even without #exercise", () => {
+test("guessWorkouts counts a day with any known exercise hashtag as logged, even without #exercise", () =>
+{
 	const oct21 = uuid();
 	const tree = calendar(firstPass(), [
 		dayNode("2026-10-18", "Sun, Oct 18, 2026", ["💪 #ProgramX phase 1, week 2, day 3, Pull 1 #exercise"]),
@@ -641,57 +1074,107 @@ test("guessWorkouts counts a day with any known exercise hashtag as logged, even
 		dayNode("2026-10-21", "Wed, Oct 21, 2026", ["Worked from home"], oct21),
 	]);
 
-	const staged = guessWorkouts({
-		tree,
-		today: "2026-10-21",
-		template: TEMPLATE,
-		programs: ["#ProgramX"],
-		exerciseTags: ["#ProgramX", "#ProgramZ", "#30DayZ"],
-		restDays: [],
-		maxDays: 7,
-		generatedAt: "x",
-	});
+	const staged = guessWorkouts(
+		{
+			tree,
+			today: "2026-10-21",
+			template: TEMPLATE,
+			programs: ["#ProgramX"],
+			exerciseTags: ["#ProgramX", "#ProgramZ", "#30DayZ"],
+			restDays: [],
+			maxDays: 7,
+			generatedAt: "x",
+		},
+	);
 
 	const finisher = "💪 #ProgramX phase 1, week 2, day 4, The Finisher #exercise";
-	assert.deepStrictEqual(staged.summary, {
-		lastLogged: {date: "2026-10-18", text: "💪 #ProgramX phase 1, week 2, day 3, Pull 1 #exercise"},
-		daysUnlogged: 1,
-		proposalsStaged: 1,
-		remainingDays: 0,
-	});
 	assert.deepStrictEqual(
-		staged.proposals.map((proposal) => ({date: proposal.date, nodeId: proposal.nodeId, after: proposal.after})),
-		[{date: "2026-10-21", nodeId: oct21, after: finisher}],
+		staged.summary,
+		{
+			lastLogged:
+			{
+				date: "2026-10-18",
+				text: "💪 #ProgramX phase 1, week 2, day 3, Pull 1 #exercise",
+			},
+			daysUnlogged: 1,
+			proposalsStaged: 1,
+			remainingDays: 0,
+		},
+	);
+	assert.deepStrictEqual(
+		staged.proposals.map((proposal) => (
+		{
+			date: proposal.date,
+			nodeId: proposal.nodeId,
+			after: proposal.after,
+		})),
+		[
+			{
+				date: "2026-10-21",
+				nodeId: oct21,
+				after: finisher,
+			},
+		],
 	);
 });
 
-test("guessWorkouts counts a program entry with phase/week/day as a logged session even when voice-to-text wrote 'hashtag exercise'", () => {
-	const dictated = {id: uuid(), name: "#ProgramX phase 1, week 2, day 3: pull 1, 1 hashtag exercise. "};
-	const bareStub = {id: uuid(), name: "#programx "};
+test("guessWorkouts counts a program entry with phase/week/day as a logged session even when voice-to-text wrote 'hashtag exercise'", () =>
+{
+	const dictated =
+	{
+		id: uuid(),
+		name: "#ProgramX phase 1, week 2, day 3: pull 1, 1 hashtag exercise. ",
+	};
+	const bareStub =
+	{
+		id: uuid(),
+		name: "#programx ",
+	};
 	const tree = calendar(firstPass(), [
 		dayNode("2026-10-20", "Tue, Oct 20, 2026", ["💪 #ProgramX phase 1, week 2, day 2, Legs 1 #exercise"]),
-		{id: uuid(), name: timeElement("2026-10-21", "Wed, Oct 21, 2026"), children: [dictated]},
-		{id: uuid(), name: timeElement("2026-10-22", "Thu, Oct 22, 2026"), children: [bareStub]},
+		{
+			id: uuid(),
+			name: timeElement("2026-10-21", "Wed, Oct 21, 2026"),
+			children: [dictated],
+		},
+		{
+			id: uuid(),
+			name: timeElement("2026-10-22", "Thu, Oct 22, 2026"),
+			children: [bareStub],
+		},
 	]);
 
-	const staged = guessWorkouts({
-		tree,
-		today: "2026-10-22",
-		template: TEMPLATE,
-		programs: ["#ProgramX"],
-		restDays: [],
-		maxDays: 7,
-		generatedAt: "x",
-	});
+	const staged = guessWorkouts(
+		{
+			tree,
+			today: "2026-10-22",
+			template: TEMPLATE,
+			programs: ["#ProgramX"],
+			restDays: [],
+			maxDays: 7,
+			generatedAt: "x",
+		},
+	);
 
 	assert.deepStrictEqual(
 		{
 			summary: staged.summary,
-			proposals: staged.proposals.map(({nodeId, date, before, after}) => ({nodeId, date, before, after})),
+			proposals: staged.proposals.map(({nodeId, date, before, after}) => (
+			{
+				nodeId,
+				date,
+				before,
+				after,
+			})),
 		},
 		{
-			summary: {
-				lastLogged: {date: "2026-10-21", text: dictated.name},
+			summary:
+			{
+				lastLogged:
+				{
+					date: "2026-10-21",
+					text: dictated.name,
+				},
 				daysUnlogged: 1,
 				proposalsStaged: 1,
 				remainingDays: 0,

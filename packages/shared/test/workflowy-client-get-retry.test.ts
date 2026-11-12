@@ -10,7 +10,8 @@ import {WorkflowyApiClient} from "../src/api/workflowy-client.js";
 
 const NODE_ID = "10e2d6c2-d165-b390-9484-d4fdbf4c4afa";
 
-const NODE = {
+const NODE =
+{
 	id: NODE_ID,
 	name: "probe",
 	parent_id: null,
@@ -21,29 +22,57 @@ const NODE = {
 	completedAt: null,
 };
 
-function throttledThenOk(): ReturnType<typeof vi.fn<typeof fetch>> {
+function throttledThenOk(): ReturnType<typeof vi.fn<typeof fetch>>
+{
 	const fetchMock = vi
 		.fn<typeof fetch>()
-		.mockResolvedValueOnce(new Response("slow down", {status: 429, statusText: "Too Many Requests"}))
-		.mockResolvedValueOnce(Response.json({node: NODE}, {status: 200, statusText: "OK"}));
+		.mockResolvedValueOnce(
+			new Response(
+				"slow down",
+				{
+					status: 429,
+					statusText: "Too Many Requests",
+				},
+			),
+		)
+		.mockResolvedValueOnce(
+			Response.json(
+				{
+					node: NODE,
+				},
+				{
+					status: 200,
+					statusText: "OK",
+				},
+			),
+		);
 	vi.stubGlobal("fetch", fetchMock);
 	return fetchMock;
 }
 
-function client(): WorkflowyApiClient {
-	return new WorkflowyApiClient("test-key", undefined, "https://workflowy.test", {
-		maxRetries: 1,
-		baseDelayMs: 0,
-		maxDelayMs: 0,
-	});
+function client(): WorkflowyApiClient
+{
+	return new WorkflowyApiClient(
+		"test-key",
+		undefined,
+		"https://workflowy.test",
+		{
+			maxRetries: 1,
+			baseDelayMs: 0,
+			maxDelayMs: 0,
+		},
+	);
 }
 
-describe("WorkflowyApiClient single-node reads", () => {
-	afterEach(() => {
+describe("WorkflowyApiClient single-node reads", () =>
+{
+	afterEach(() =>
+	{
 		vi.unstubAllGlobals();
 	});
 
-	it("getNode retries a 429 and returns the node", async () => {
+	it("getNode retries a 429 and returns the node", async () =>
+	{
 		const fetchMock = throttledThenOk();
 
 		await expect(client().getNode(NODE_ID)).resolves.toStrictEqual(NODE);
@@ -53,7 +82,8 @@ describe("WorkflowyApiClient single-node reads", () => {
 		]);
 	});
 
-	it("findNode retries a 429 and returns the node", async () => {
+	it("findNode retries a 429 and returns the node", async () =>
+	{
 		const fetchMock = throttledThenOk();
 
 		await expect(client().findNode(NODE_ID)).resolves.toStrictEqual(NODE);

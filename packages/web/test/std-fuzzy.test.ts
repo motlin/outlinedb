@@ -49,14 +49,17 @@ const SLASH_LABELS = [
 	"Show Command Palette",
 ];
 
-function rank(term: string): string[] {
+function rank(term: string): string[]
+{
 	const matches = SLASH_LABELS.filter((label) => fuzzyMatch(term, label));
 	matches.sort((a, b) => fuzzyScore(term, b) - fuzzyScore(term, a));
 	return matches;
 }
 
-describe("fuzzyMatch", () => {
-	it("tests a case-insensitive subsequence", () => {
+describe("fuzzyMatch", () =>
+{
+	it("tests a case-insensitive subsequence", () =>
+	{
 		expect([
 			fuzzyMatch("mo", "Mirror"),
 			fuzzyMatch("mo", "Add comment"),
@@ -67,12 +70,15 @@ describe("fuzzyMatch", () => {
 	});
 });
 
-describe("fuzzyScore", () => {
-	it("returns -1 for empty inputs or a partial match", () => {
+describe("fuzzyScore", () =>
+{
+	it("returns -1 for empty inputs or a partial match", () =>
+	{
 		expect([fuzzyScore("x", ""), fuzzyScore("", "x"), fuzzyScore("xyz", "xy")]).toStrictEqual([-1, -1, -1]);
 	});
 
-	it("scores word starts, capitals and streaks", () => {
+	it("scores word starts, capitals and streaks", () =>
+	{
 		expect([fuzzyScore("m", "Mirror"), fuzzyScore("mi", "Mirror"), fuzzyScore("i", "mIx")]).toStrictEqual([
 			15,
 			25 - 0.01,
@@ -81,8 +87,10 @@ describe("fuzzyScore", () => {
 	});
 });
 
-describe("fuzzyValid and fuzzyRegExp", () => {
-	it("strips non-alphanumerics", () => {
+describe("fuzzyValid and fuzzyRegExp", () =>
+{
+	it("strips non-alphanumerics", () =>
+	{
 		expect([
 			fuzzyValid("a-b"),
 			fuzzyValid("-/ "),
@@ -92,84 +100,90 @@ describe("fuzzyValid and fuzzyRegExp", () => {
 	});
 });
 
-describe("slash menu ranking matches upstream FILTER RESULTS", () => {
-	it("ranks the 45 slash labels", () => {
-		expect({
-			m: rank("m"),
-			mo: rank("mo"),
-			dup: rank("dup"),
-			h1: rank("h1"),
-			todo: rank("todo"),
-			mt: rank("mt"),
-			ex: rank("ex"),
-			pri: rank("pri"),
-			date: rank("date"),
-		}).toStrictEqual({
-			m: [
-				"Move To...",
-				"Move Here...",
-				"Move To Child...",
-				"Move to Today",
-				"Move to Tomorrow",
-				"Move to Next Week",
-				"Move to Date...",
-				"Mirror",
-				"Mirror To...",
-				"Mirror To Child...",
-				"Mirror Here...",
-				"Mirror to Today",
-				"Mirror to Date...",
-				"Number",
-				"Complete",
-				"Add comment",
-				"Add from template",
-				"Show Command Palette",
-				"Priority: Default to Bottom",
-			],
-			mo: [
-				"Move To...",
-				"Move Here...",
-				"Move To Child...",
-				"Move to Today",
-				"Move to Tomorrow",
-				"Move to Next Week",
-				"Move to Date...",
-				"Mirror",
-				"Mirror To...",
-				"Mirror To Child...",
-				"Mirror Here...",
-				"Mirror to Today",
-				"Mirror to Date...",
-			],
-			dup: ["Duplicate"],
-			h1: ["Heading 1"],
-			todo: ["To-do"],
-			mt: [
-				"Move To...",
-				"Move To Child...",
-				"Move to Today",
-				"Move to Tomorrow",
-				"Move to Next Week",
-				"Move to Date...",
-				"Mirror To...",
-				"Mirror To Child...",
-				"Mirror to Today",
-				"Mirror to Date...",
-				"Add from template",
-				"Complete",
-				"Add comment",
-				"Show Command Palette",
-			],
-			ex: ["Export", "Expand all", "Move to Next Week"],
-			pri: ["Priority: Default to Bottom", "Copy internal link"],
-			date: [
-				"Move to Date...",
-				"Mirror to Date...",
-				"Duplicate",
-				"Add date",
-				"Add from template",
-				"Show Command Palette",
-			],
-		});
+describe("slash menu ranking matches upstream FILTER RESULTS", () =>
+{
+	it("ranks the 45 slash labels", () =>
+	{
+		expect(
+			{
+				m: rank("m"),
+				mo: rank("mo"),
+				dup: rank("dup"),
+				h1: rank("h1"),
+				todo: rank("todo"),
+				mt: rank("mt"),
+				ex: rank("ex"),
+				pri: rank("pri"),
+				date: rank("date"),
+			},
+		).toStrictEqual(
+			{
+				m: [
+					"Move To...",
+					"Move Here...",
+					"Move To Child...",
+					"Move to Today",
+					"Move to Tomorrow",
+					"Move to Next Week",
+					"Move to Date...",
+					"Mirror",
+					"Mirror To...",
+					"Mirror To Child...",
+					"Mirror Here...",
+					"Mirror to Today",
+					"Mirror to Date...",
+					"Number",
+					"Complete",
+					"Add comment",
+					"Add from template",
+					"Show Command Palette",
+					"Priority: Default to Bottom",
+				],
+				mo: [
+					"Move To...",
+					"Move Here...",
+					"Move To Child...",
+					"Move to Today",
+					"Move to Tomorrow",
+					"Move to Next Week",
+					"Move to Date...",
+					"Mirror",
+					"Mirror To...",
+					"Mirror To Child...",
+					"Mirror Here...",
+					"Mirror to Today",
+					"Mirror to Date...",
+				],
+				dup: ["Duplicate"],
+				h1: ["Heading 1"],
+				todo: ["To-do"],
+				mt: [
+					"Move To...",
+					"Move To Child...",
+					"Move to Today",
+					"Move to Tomorrow",
+					"Move to Next Week",
+					"Move to Date...",
+					"Mirror To...",
+					"Mirror To Child...",
+					"Mirror to Today",
+					"Mirror to Date...",
+					"Add from template",
+					"Complete",
+					"Add comment",
+					"Show Command Palette",
+				],
+				ex: ["Export", "Expand all", "Move to Next Week"],
+				pri: ["Priority: Default to Bottom", "Copy internal link"],
+				date: [
+					"Move to Date...",
+					"Mirror to Date...",
+					"Duplicate",
+					"Add date",
+					"Add from template",
+					"Show Command Palette",
+				],
+			},
+		);
 	});
 });

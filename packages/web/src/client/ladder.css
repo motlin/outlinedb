@@ -6,7 +6,8 @@
  * outliner's own styles.
  */
 
-.ladder-page {
+.ladder-page
+{
 	--paper: #f4f6f7;
 	--surface: #ffffff;
 	--ink: #161c1f;
@@ -39,7 +40,8 @@
 	flex: 1;
 }
 
-:root[data-theme="dark"] .ladder-page {
+:root[data-theme="dark"] .ladder-page
+{
 	--paper: #12171a;
 	--surface: #191f23;
 	--ink: #e8eef0;
@@ -61,18 +63,21 @@
 	--shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
 }
 
-.ladder-wrap {
+.ladder-wrap
+{
 	max-width: 940px;
 	margin: 0 auto;
 }
 
-.ladder-head {
+.ladder-head
+{
 	padding-block: 26px 16px;
 	border-bottom: 2px solid var(--ink);
 	margin-bottom: 20px;
 }
 
-.ladder-head h1 {
+.ladder-head h1
+{
 	font-family: Newsreader, Georgia, serif;
 	font-weight: 600;
 	font-size: clamp(26px, 4vw, 38px);
@@ -81,19 +86,22 @@
 	letter-spacing: -0.015em;
 }
 
-.ladder-dek {
+.ladder-dek
+{
 	color: var(--ink-2);
 	max-width: 66ch;
 	margin: 0;
 }
 
-.ladder-live {
+.ladder-live
+{
 	font-size: 12px;
 	color: var(--muted);
 	margin-top: 8px;
 }
 
-.ladder-live[data-live="on"]::before {
+.ladder-live[data-live="on"]::before
+{
 	content: "";
 	display: inline-block;
 	width: 7px;
@@ -104,7 +112,8 @@
 	vertical-align: middle;
 }
 
-.ladder-live[data-live="off"]::before {
+.ladder-live[data-live="off"]::before
+{
 	content: "";
 	display: inline-block;
 	width: 7px;
@@ -115,13 +124,15 @@
 	vertical-align: middle;
 }
 
-.ladder-rootnav {
+.ladder-rootnav
+{
 	display: flex;
 	gap: 6px;
 	margin-bottom: 16px;
 }
 
-.ladder-rootnav button {
+.ladder-rootnav button
+{
 	font-size: 13.5px;
 	font-weight: 600;
 	padding: 7px 15px;
@@ -132,20 +143,23 @@
 	cursor: pointer;
 }
 
-.ladder-rootnav button[aria-pressed="true"] {
+.ladder-rootnav button[aria-pressed="true"]
+{
 	background: var(--ink);
 	color: var(--paper);
 	border-color: var(--ink);
 }
 
-.ladder-queue {
+.ladder-queue
+{
 	border: 1px solid var(--line-strong);
 	border-radius: 6px;
 	overflow: hidden;
 	box-shadow: var(--shadow);
 }
 
-.ladder-sep {
+.ladder-sep
+{
 	display: flex;
 	align-items: center;
 	gap: 12px;
@@ -159,11 +173,13 @@
 	z-index: 5;
 }
 
-.ladder-sep:first-child {
+.ladder-sep:first-child
+{
 	border-top: none;
 }
 
-.ladder-sep .tname {
+.ladder-sep .tname
+{
 	font-family: Newsreader, Georgia, serif;
 	font-size: 20px;
 	font-weight: 600;
@@ -171,7 +187,8 @@
 	color: var(--sep-ink);
 }
 
-.ladder-sep .gauge {
+.ladder-sep .gauge
+{
 	font-family: "IBM Plex Mono", ui-monospace, monospace;
 	font-size: 12.5px;
 	font-weight: 600;
@@ -179,7 +196,8 @@
 	color: var(--sep-ink);
 }
 
-.ladder-sep .verdict {
+.ladder-sep .verdict
+{
 	font-size: 11px;
 	text-transform: uppercase;
 	letter-spacing: 0.08em;
@@ -191,7 +209,8 @@
 	background: var(--surface);
 }
 
-.ladder-sep .goal {
+.ladder-sep .goal
+{
 	font-size: 10.5px;
 	text-transform: uppercase;
 	letter-spacing: 0.08em;
@@ -200,53 +219,62 @@
 	margin-left: auto;
 }
 
-.ladder-sep.room {
+.ladder-sep.room
+{
 	--sep-bg: var(--room-bg);
 	--sep-edge: var(--room-edge);
 	--sep-ink: var(--room-ink);
 }
 
-.ladder-sep.exact {
+.ladder-sep.exact
+{
 	--sep-bg: var(--exact-bg);
 	--sep-edge: var(--exact-edge);
 	--sep-ink: var(--exact-ink);
 }
 
-.ladder-sep.over {
+.ladder-sep.over
+{
 	--sep-bg: var(--over-bg);
 	--sep-edge: var(--over-edge);
 	--sep-ink: var(--over-ink);
 }
 
-.ladder-zone {
+.ladder-zone
+{
 	padding: 2px 0;
 	min-height: 34px;
 }
 
-.ladder-zone.room {
+.ladder-zone.room
+{
 	background: var(--room-bg);
 	--sep-edge: var(--room-edge);
 	--sep-ink: var(--room-ink);
 }
 
-.ladder-zone.exact {
+.ladder-zone.exact
+{
 	background: var(--exact-bg);
 	--sep-edge: var(--exact-edge);
 	--sep-ink: var(--exact-ink);
 }
 
-.ladder-zone.over {
+.ladder-zone.over
+{
 	background: var(--over-bg);
 	--sep-edge: var(--over-edge);
 	--sep-ink: var(--over-ink);
 }
 
 .ladder-zone.dropping,
-.ladder-sep.dropping {
+.ladder-sep.dropping
+{
 	box-shadow: inset 0 0 0 2px var(--accent);
 }
 
-.ladder-row {
+.ladder-row
+{
 	position: relative;
 	cursor: grab;
 	user-select: none;
@@ -262,21 +290,25 @@
 	border-radius: 4px;
 }
 
-.ladder-row:hover {
+.ladder-row:hover
+{
 	border-color: var(--line-strong);
 	box-shadow: var(--shadow);
 }
 
-.ladder-row:active {
+.ladder-row:active
+{
 	cursor: grabbing;
 }
 
-.ladder-row.dragging {
+.ladder-row.dragging
+{
 	opacity: 0.35;
 	border-style: dashed;
 }
 
-.ladder-ghost {
+.ladder-ghost
+{
 	position: fixed;
 	z-index: 40;
 	transform: translate(-50%, -140%);
@@ -294,15 +326,18 @@
 	text-overflow: ellipsis;
 }
 
-.ladder-row.excess {
+.ladder-row.excess
+{
 	border-left: 3px solid var(--over-edge);
 }
 
-.ladder-row.pending {
+.ladder-row.pending
+{
 	opacity: 0.6;
 }
 
-.ladder-row .grip {
+.ladder-row .grip
+{
 	/*
 	 * The only element that claims the pointer stream. touch-action: none stops
 	 * the browser from treating the press as a scroll or a text selection, which
@@ -321,12 +356,14 @@
 	margin: -6px 0 -6px -4px;
 }
 
-.ladder-row .grip:active {
+.ladder-row .grip:active
+{
 	cursor: grabbing;
 	color: var(--accent);
 }
 
-.ladder-row .rank {
+.ladder-row .rank
+{
 	font-family: "IBM Plex Mono", ui-monospace, monospace;
 	font-size: 11px;
 	color: var(--muted);
@@ -334,25 +371,29 @@
 	min-width: 22px;
 }
 
-.ladder-row .ladder-text {
+.ladder-row .ladder-text
+{
 	user-select: text;
 	-webkit-user-select: text;
 	cursor: text;
 }
 
-.ladder-row .txt {
+.ladder-row .txt
+{
 	min-width: 0;
 	overflow-wrap: anywhere;
 	font-size: 14px;
 }
 
-.ladder-row .step {
+.ladder-row .step
+{
 	display: flex;
 	flex-direction: column;
 	gap: 2px;
 }
 
-.ladder-row .step button {
+.ladder-row .step button
+{
 	width: 30px;
 	height: 20px;
 	padding: 0;
@@ -368,18 +409,21 @@
 	justify-content: center;
 }
 
-.ladder-row .step button:hover:not([disabled]) {
+.ladder-row .step button:hover:not([disabled])
+{
 	border-color: var(--accent);
 	color: var(--accent);
 	background: var(--accent-soft);
 }
 
-.ladder-row .step button[disabled] {
+.ladder-row .step button[disabled]
+{
 	opacity: 0.3;
 	cursor: not-allowed;
 }
 
-.ladder-row .done {
+.ladder-row .done
+{
 	border: 1px solid var(--line-strong);
 	background: var(--surface);
 	color: var(--muted);
@@ -391,13 +435,15 @@
 	white-space: nowrap;
 }
 
-.ladder-row .done:hover {
+.ladder-row .done:hover
+{
 	border-color: var(--exact-edge);
 	color: var(--exact-ink);
 	background: var(--exact-bg);
 }
 
-.ladder-slot {
+.ladder-slot
+{
 	margin: 4px 8px;
 	border: 1.5px dashed var(--sep-edge);
 	border-radius: 4px;
@@ -411,7 +457,8 @@
 	opacity: 0.65;
 }
 
-.ladder-error {
+.ladder-error
+{
 	margin: 12px 0;
 	padding: 10px 14px;
 	border: 1px solid var(--over-edge);
@@ -426,60 +473,72 @@
  * the step buttons are the only way to refile a row -- they get bigger, not
  * smaller, and the row wraps to two lines rather than squeezing them out.
  */
-@media (max-width: 560px) {
-	.ladder-page {
+@media (max-width: 560px)
+{
+	.ladder-page
+	{
 		padding: 0 12px 60px;
 	}
 
-	.ladder-row {
+	.ladder-row
+	{
 		grid-template-columns: auto minmax(0, 1fr) auto auto;
 		gap: 6px;
 		padding: 8px 8px 8px 2px;
 	}
 
-	.ladder-row .rank {
+	.ladder-row .rank
+	{
 		display: none;
 	}
 
-	.ladder-row .grip {
+	.ladder-row .grip
+	{
 		width: 34px;
 		min-height: 42px;
 		font-size: 19px;
 	}
 
-	.ladder-row .step button {
+	.ladder-row .step button
+	{
 		width: 38px;
 		height: 28px;
 		font-size: 12px;
 	}
 
-	.ladder-row .done {
+	.ladder-row .done
+	{
 		padding: 6px 10px;
 	}
 
-	.ladder-sep {
+	.ladder-sep
+	{
 		gap: 8px;
 		padding: 8px 10px;
 	}
 }
 
-.ladder-row.selected {
+.ladder-row.selected
+{
 	background: var(--accent-soft);
 	outline: 2px solid var(--accent, #3b6ea5);
 	outline-offset: -2px;
 }
 
-.ladder-row-error {
+.ladder-row-error
+{
 	display: block;
 	color: #b42318;
 	font-size: 0.85rem;
 }
 
-.ladder-zone {
+.ladder-zone
+{
 	position: relative;
 }
 .ladder-row.drop-before::before,
-.ladder-zone.drop-end::after {
+.ladder-zone.drop-end::after
+{
 	content: "";
 	position: absolute;
 	left: 8px;
@@ -489,14 +548,17 @@
 	pointer-events: none;
 	z-index: 2;
 }
-.ladder-row.drop-before::before {
+.ladder-row.drop-before::before
+{
 	top: -5px;
 }
-.ladder-zone.drop-end::after {
+.ladder-zone.drop-end::after
+{
 	bottom: 0;
 }
 
-.ladder-tree-button {
+.ladder-tree-button
+{
 	margin-left: 10px;
 	padding: 2px 7px;
 	border: 1px solid var(--line);
@@ -508,7 +570,8 @@
 	cursor: pointer;
 }
 
-.ladder-tree-panel {
+.ladder-tree-panel
+{
 	line-height: 1.5;
 	width: min(760px, calc(100vw - 32px));
 	max-height: 85dvh;
@@ -520,10 +583,12 @@
 	box-shadow: 0 16px 64px #0005;
 }
 
-.ladder-tree-panel::backdrop {
+.ladder-tree-panel::backdrop
+{
 	background: #0006;
 }
-.ladder-tree-panel > header {
+.ladder-tree-panel > header
+{
 	display: flex;
 	justify-content: space-between;
 	align-items: start;
@@ -535,55 +600,68 @@
 	background: var(--surface);
 	z-index: 1;
 }
-.ladder-tree-panel h2 {
+.ladder-tree-panel h2
+{
 	margin: 0 0 6px;
 	font-size: 22px;
 }
-.ladder-tree-panel a {
+.ladder-tree-panel a
+{
 	color: var(--accent);
 }
-.ladder-tree-panel button {
+.ladder-tree-panel button
+{
 	cursor: pointer;
 }
-.ladder-tree-body {
+.ladder-tree-body
+{
 	padding: 4px 20px 20px;
 	overflow-wrap: anywhere;
 	user-select: text;
 }
-.ladder-tree-body ul {
+.ladder-tree-body ul
+{
 	margin: 1em 0;
 	padding-left: 22px;
 	list-style: disc;
 }
-.ladder-tree-body li > ul {
+.ladder-tree-body li > ul
+{
 	margin: 0;
 	list-style: circle;
 }
-:where(.ladder-tree-body) p {
+:where(.ladder-tree-body) p
+{
 	margin: 1em 0;
 }
-.ladder-tree-body li {
+.ladder-tree-body li
+{
 	margin: 9px 0;
 }
-.ladder-tree-body summary {
+.ladder-tree-body summary
+{
 	cursor: pointer;
 }
-.ladder-tree-note {
+.ladder-tree-note
+{
 	white-space: pre-wrap;
 	color: var(--ink-2);
 	margin: 4px 0 8px;
 	font-size: 13px;
 }
-.ladder-tree-completed {
+.ladder-tree-completed
+{
 	text-decoration: line-through;
 	color: var(--muted);
 }
-.ladder-tree-empty {
+.ladder-tree-empty
+{
 	margin: 1em 0;
 	color: var(--muted);
 }
 
-.ladder-tree-panel > header button {
+.ladder-tree-panel > header button
+{
 	border: 1px solid var(--line-strong);
 	border-radius: 5px;
 	padding: 5px 10px;
@@ -592,11 +670,13 @@
 	font: inherit;
 }
 
-.ladder-tree-body li:has(> details) {
+.ladder-tree-body li:has(> details)
+{
 	list-style: none;
 }
 
-.ladder-child-count {
+.ladder-child-count
+{
 	margin-left: 8px;
 	padding: 0 6px;
 	border-radius: 9px;
@@ -609,7 +689,8 @@
 }
 
 /* The subtree preview floats above the list, so opening it never moves a row or its buttons. */
-.ladder-preview {
+.ladder-preview
+{
 	position: fixed;
 	z-index: 50;
 	max-width: min(440px, calc(100vw - 32px));
@@ -625,18 +706,22 @@
 	line-height: 1.4;
 	pointer-events: none;
 }
-.ladder-preview ul {
+.ladder-preview ul
+{
 	margin: 0;
 	padding-left: 16px;
 }
-.ladder-preview > ul {
+.ladder-preview > ul
+{
 	padding-left: 14px;
 }
-.ladder-preview li {
+.ladder-preview li
+{
 	margin: 2px 0;
 }
 
-.ladder-child-more {
+.ladder-child-more
+{
 	margin-left: 6px;
 	font-family: "IBM Plex Mono", ui-monospace, monospace;
 	font-size: 10.5px;

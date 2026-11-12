@@ -1,4 +1,5 @@
-.auth-page {
+.auth-page
+{
 	display: flex;
 	min-height: 100vh;
 	align-items: center;
@@ -9,7 +10,8 @@
 	font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
-.auth-card {
+.auth-card
+{
 	width: 100%;
 	max-width: 380px;
 	padding: 32px 28px;
@@ -18,26 +20,30 @@
 	box-shadow: 0 1px 3px rgb(0 0 0 / 12%);
 }
 
-.auth-brand {
+.auth-brand
+{
 	margin-bottom: 20px;
 	font-size: 22px;
 	font-weight: 700;
 	letter-spacing: -0.01em;
 }
 
-.auth-title {
+.auth-title
+{
 	margin: 0 0 20px;
 	font-size: 17px;
 	font-weight: 600;
 }
 
-.auth-form {
+.auth-form
+{
 	display: flex;
 	flex-direction: column;
 	gap: 14px;
 }
 
-.auth-field {
+.auth-field
+{
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
@@ -45,7 +51,8 @@
 	font-weight: 500;
 }
 
-.auth-field input {
+.auth-field input
+{
 	padding: 9px 11px;
 	border: 1px solid #cfd4d9;
 	border-radius: 6px;
@@ -54,12 +61,14 @@
 	font-size: 15px;
 }
 
-.auth-field input:focus {
+.auth-field input:focus
+{
 	border-color: #49baf2;
 	outline: none;
 }
 
-.auth-submit {
+.auth-submit
+{
 	padding: 10px;
 	border: none;
 	border-radius: 6px;
@@ -70,24 +79,28 @@
 	cursor: pointer;
 }
 
-.auth-submit:disabled {
+.auth-submit:disabled
+{
 	opacity: 0.6;
 	cursor: default;
 }
 
 .auth-alert,
 .auth-notice,
-.auth-text {
+.auth-text
+{
 	margin: 0;
 	font-size: 14px;
 	line-height: 1.45;
 }
 
-.auth-alert {
+.auth-alert
+{
 	color: #c0392b;
 }
 
-.auth-link-button {
+.auth-link-button
+{
 	align-self: flex-start;
 	padding: 0;
 	border: none;
@@ -97,7 +110,8 @@
 	cursor: pointer;
 }
 
-.auth-links {
+.auth-links
+{
 	display: flex;
 	flex-wrap: wrap;
 	justify-content: space-between;
@@ -107,31 +121,38 @@
 }
 
 .auth-links a,
-.auth-notice a {
+.auth-notice a
+{
 	color: #3a8cc7;
 }
 
-@media (prefers-color-scheme: dark) {
-	.auth-page {
+@media (prefers-color-scheme: dark)
+{
+	.auth-page
+	{
 		background: #1c1f22;
 		color: #e4e6e8;
 	}
 
-	.auth-card {
+	.auth-card
+	{
 		background: #262a2e;
 		box-shadow: none;
 	}
 
-	.auth-field input {
+	.auth-field input
+	{
 		border-color: #454b51;
 	}
 
-	.auth-submit {
+	.auth-submit
+	{
 		background: #e4e6e8;
 		color: #1c1f22;
 	}
 
-	.auth-alert {
+	.auth-alert
+	{
 		color: #ff8a80;
 	}
 }

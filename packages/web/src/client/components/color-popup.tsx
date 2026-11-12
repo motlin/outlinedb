@@ -4,7 +4,8 @@ import {COLOR_ORDER} from "../../color-palette.js";
 import type {ColorName} from "../../color-palette.js";
 import {useCloseOnLocationChange} from "../hooks/use-close-on-location-change.js";
 import type {ColorKind} from "../rich-text.js";
-import {
+import
+{
 	CANCEL_SWATCH,
 	CancelIcon,
 	SELECTED_BORDER,
@@ -19,12 +20,17 @@ import {POPUP_Z, popoverBox} from "./flyout/popover-box.js";
 /** `(10 + 1) * 32 + 32`: upstream's flyout max width. */
 const MAX_WIDTH = (COLOR_ORDER.length + 1) * 32 + 32;
 
-export interface ColorPopupProps {
+export interface ColorPopupProps
+{
 	/** Viewport left and bottom of the selection (or of the last selected item's content). */
 	left: number;
 	top: number;
 	/** The colors covering the whole selection, by kind; the matching swatches show the selected border. */
-	selected: {text?: ColorName | undefined; highlight?: ColorName | undefined};
+	selected:
+	{
+		text?: ColorName | undefined;
+		highlight?: ColorName | undefined;
+	};
 	/** A swatch was picked, or `null` for "remove color" or a click on the selected swatch. */
 	onSelect: (kind: ColorKind, color: ColorName | null) => void;
 	/** The popup should close (outside click, location change). */
@@ -35,13 +41,30 @@ export interface ColorPopupProps {
 
 /** Whether `left` would push the 384px flyout past the viewport, in which case upstream centers it. */
 // oxlint-disable-next-line react/only-export-components -- pure placement rule, tested beside the component
-export function popupCentered(left: number, viewportWidth: number): boolean {
+export function popupCentered(left: number, viewportWidth: number): boolean
+{
 	return left + MAX_WIDTH > viewportWidth;
 }
 
-const ROWS: readonly {kind: ColorKind; label: string; rowClass: string; colorClass: string}[] = [
-	{kind: "text", label: "Text", rowClass: "picker-text", colorClass: "c"},
-	{kind: "highlight", label: "Highlight", rowClass: "picker-background", colorClass: "bc"},
+const ROWS: readonly
+{
+	kind: ColorKind;
+	label: string;
+	rowClass: string;
+	colorClass: string;
+}[] = [
+	{
+		kind: "text",
+		label: "Text",
+		rowClass: "picker-text",
+		colorClass: "c",
+	},
+	{
+		kind: "highlight",
+		label: "Highlight",
+		rowClass: "picker-background",
+		colorClass: "bc",
+	},
 ];
 
 /**
@@ -49,39 +72,61 @@ const ROWS: readonly {kind: ColorKind; label: string; rowClass: string; colorCla
  * "remove color" swatch plus ten "A" swatches in display order, over a `Style text/apply style` footer.
  * Cloned from `dumps/color-highlight-popup-upstream-dom-2026-10-23.html`.
  */
-export function ColorPopup({left, top, selected, onSelect, onClose, onEscape}: ColorPopupProps) {
+export function ColorPopup({left, top, selected, onSelect, onClose, onEscape}: ColorPopupProps)
+{
 	useCloseOnLocationChange(onClose);
 	const ref = useRef<HTMLDivElement>(null);
-	const handlers = useRef({onClose, onEscape});
-	useEffect(() => {
-		handlers.current = {onClose, onEscape};
+	const handlers = useRef(
+		{
+			onClose,
+			onEscape,
+		},
+	);
+	useEffect(() =>
+	{
+		handlers.current =
+		{
+			onClose,
+			onEscape,
+		};
 	});
-	useEffect(() => {
-		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key === "Escape") {
+	useEffect(() =>
+	{
+		const onKeyDown = (event: KeyboardEvent) =>
+		{
+			if (event.key === "Escape")
+			{
 				event.preventDefault();
 				event.stopPropagation();
 				(handlers.current.onEscape ?? handlers.current.onClose)();
 			}
 		};
-		const onPointerDown = (event: MouseEvent) => {
-			if (!(event.target instanceof Node && ref.current?.contains(event.target))) {
+		const onPointerDown = (event: MouseEvent) =>
+		{
+			if (!(event.target instanceof Node && ref.current?.contains(event.target)))
+			{
 				handlers.current.onClose();
 			}
 		};
 		// Upstream attaches the outside-click listener on the next tick, so the opening click does not close it.
-		const timer = setTimeout(() => {
+		const timer = setTimeout(() =>
+		{
 			document.addEventListener("mousedown", onPointerDown, true);
 		}, 0);
 		document.addEventListener("keydown", onKeyDown, true);
-		return () => {
+		return () =>
+		{
 			clearTimeout(timer);
 			document.removeEventListener("mousedown", onPointerDown, true);
 			document.removeEventListener("keydown", onKeyDown, true);
 		};
 	}, []);
 
-	const box = popoverBox({maxWidth: MAX_WIDTH});
+	const box = popoverBox(
+		{
+			maxWidth: MAX_WIDTH,
+		},
+	);
 	const centered = typeof window !== "undefined" && popupCentered(left, window.innerWidth);
 	return createPortal(
 		// oxlint-disable-next-line jsx-a11y/no-static-element-interactions -- upstream's flyout is a plain div; mousedown only keeps the selection
@@ -89,10 +134,12 @@ export function ColorPopup({left, top, selected, onSelect, onClose, onEscape}: C
 			ref={ref}
 			className={`${box.className} absolute flyout !pt-0 !pb-0 overflow-hidden `}
 			// The swatches are plain divs: keep the editor's focus and selection.
-			onMouseDown={(event) => {
+			onMouseDown={(event) =>
+			{
 				event.preventDefault();
 			}}
-			style={{
+			style={
+			{
 				pointerEvents: "auto",
 				zIndex: POPUP_Z,
 				maxWidth: MAX_WIDTH,
@@ -116,7 +163,8 @@ export function ColorPopup({left, top, selected, onSelect, onClose, onEscape}: C
 									<div
 										title="remove color"
 										className={CANCEL_SWATCH}
-										onClick={() => {
+										onClick={() =>
+										{
 											onSelect(kind, null);
 										}}
 									>
@@ -128,7 +176,8 @@ export function ColorPopup({left, top, selected, onSelect, onClose, onEscape}: C
 											title={capitalize(color)}
 											className={`${SWATCH} ${selected[kind] === color ? SELECTED_BORDER : UNSELECTED_BORDER}${index === COLOR_ORDER.length - 1 ? " mobile:mr-l" : ""} ${colorClass}-${color}`}
 											key={color}
-											onClick={() => {
+											onClick={() =>
+											{
 												onSelect(kind, swatchClick(selected[kind], color));
 											}}
 										>

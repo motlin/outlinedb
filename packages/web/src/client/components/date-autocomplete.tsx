@@ -15,12 +15,14 @@ import {IconButton} from "./icon-button.js";
 /** Upstream places the flyout 20px below the phrase's top edge. */
 const FLYOUT_DROP = 20;
 
-interface Position {
+interface Position
+{
 	left: number;
 	top: number;
 }
 
-export interface DateAutocompleteFlyoutProps {
+export interface DateAutocompleteFlyoutProps
+{
 	label: string;
 	/** Page position of the phrase's top-left corner. */
 	position: Position;
@@ -36,14 +38,26 @@ export function DateAutocompleteFlyout({
 	onApply,
 	onOpenPicker,
 	onOpenSettings,
-}: DateAutocompleteFlyoutProps) {
-	const box = popoverBox({maxWidth: 240, offset: [0, 0]});
+}: DateAutocompleteFlyoutProps)
+{
+	const box = popoverBox(
+		{
+			maxWidth: 240,
+			offset: [0, 0],
+		},
+	);
 	return (
 		// oxlint-disable-next-line jsx-a11y/no-static-element-interactions -- keeps the editor focused while the flyout is clicked
 		<div
 			className={`${box.className} absolute flyout !pt-s !pb-m !px-m text-center gap-m`}
-			style={{...box.style, left: position.left, top: position.top + FLYOUT_DROP}}
-			onMouseDown={(event) => {
+			style={
+			{
+				...box.style,
+				left: position.left,
+				top: position.top + FLYOUT_DROP,
+			}}
+			onMouseDown={(event) =>
+			{
 				event.preventDefault();
 			}}
 		>
@@ -67,16 +81,19 @@ export function DateAutocompleteFlyout({
 }
 
 /** Upstream checks only `key === "Tab"` (so Shift+Tab converts too); any other keydown hides the flyout. */
-export function dateAutocompleteKeyAction(event: {key: string; shiftKey: boolean}): "apply" | "hide" {
+export function dateAutocompleteKeyAction(event: {key: string; shiftKey: boolean}): "apply" | "hide"
+{
 	return event.key === "Tab" ? "apply" : "hide";
 }
 
-interface Shown {
+interface Shown
+{
 	phrase: DatePhrase;
 	position: Position;
 }
 
-interface DateAutocompleteOptions {
+interface DateAutocompleteOptions
+{
 	editorRef: React.RefObject<HTMLElement | null>;
 	dateSettings: DateSettings;
 	/** True while another date popup is open, when the flyout must not appear. */
@@ -89,18 +106,24 @@ interface DateAutocompleteOptions {
 }
 
 /** The page rect of `length` characters ending at the caret, or the caret itself; null without a selection. */
-function phrasePosition(length: number): Position | null {
+function phrasePosition(length: number): Position | null
+{
 	const selection = globalThis.getSelection();
 	const caret = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
-	if (!caret) {
+	if (!caret)
+	{
 		return null;
 	}
 	const range = caret.cloneRange();
-	if (caret.startContainer.nodeType === Node.TEXT_NODE) {
+	if (caret.startContainer.nodeType === Node.TEXT_NODE)
+	{
 		range.setStart(caret.startContainer, Math.max(0, caret.startOffset - length));
 	}
 	const rect = range.getClientRects()[0] ?? range.getBoundingClientRect();
-	return {left: rect.left + globalThis.scrollX, top: rect.top + globalThis.scrollY};
+	return {
+		left: rect.left + globalThis.scrollX,
+		top: rect.top + globalThis.scrollY,
+	};
 }
 
 /**
@@ -115,67 +138,105 @@ export function useDateAutocomplete({
 	onApply,
 	onOpenPicker,
 	onOpenSettings,
-}: DateAutocompleteOptions): {handleInput: () => void; hide: () => void; flyout: ReactNode} {
+}: DateAutocompleteOptions):
+{
+	handleInput: () => void;
+	hide: () => void;
+	flyout: ReactNode;
+}
+{
 	const [shown, setShown] = useState<Shown | null>(null);
 	const shownRef = useRef<Shown | null>(null);
 
-	const show = useCallback((next: Shown | null) => {
+	const show = useCallback((next: Shown | null) =>
+	{
 		shownRef.current = next;
-		if (next === null) {
+		if (next === null)
+		{
 			unpop("date.autocomplete");
-		} else {
+		}
+		else
+		{
 			pop("date.autocomplete");
 		}
 		setShown(next);
 	}, []);
-	const hide = useCallback(() => {
-		if (shownRef.current !== null) {
+	const hide = useCallback(() =>
+	{
+		if (shownRef.current !== null)
+		{
 			show(null);
 		}
 	}, [show]);
 
-	const handleInput = useCallback(() => {
+	const handleInput = useCallback(() =>
+	{
 		const editor = editorRef.current;
 		const selection = globalThis.getSelection();
 		// Upstream: drop our own slot first, then yield to any other registered popup.
 		unpop("date.autocomplete");
-		if (editor === null || !isFeatureOn("dates") || isBlocked() || isVisible() || !selection?.isCollapsed) {
+		if (editor === null || !isFeatureOn("dates") || isBlocked() || isVisible() || !selection?.isCollapsed)
+		{
 			hide();
 			return;
 		}
 		const caret = caretTextOffset(editor);
-		const phrase = findDatePhraseAtCaret(datePhraseText(serializeDatePills(editor.innerHTML)), caret, new Date(), {
-			dateFormat: dateSettings.dateFormat,
-			weekStartDay: dateSettings.weekStartDay,
-		});
+		const phrase = findDatePhraseAtCaret(
+			datePhraseText(serializeDatePills(editor.innerHTML)),
+			caret,
+			new Date(),
+			{
+				dateFormat: dateSettings.dateFormat,
+				weekStartDay: dateSettings.weekStartDay,
+			},
+		);
 		const position = phrase && phrasePosition(caret - phrase.start);
-		show(phrase && position ? {phrase, position} : null);
+		show(
+			phrase && position
+				?
+					{
+						phrase,
+						position,
+					}
+				: null,
+		);
 	}, [editorRef, isBlocked, hide, show, dateSettings.dateFormat, dateSettings.weekStartDay]);
 
-	const apply = useCallback(() => {
+	const apply = useCallback(() =>
+	{
 		const current = shownRef.current;
 		show(null);
-		if (current !== null) {
+		if (current !== null)
+		{
 			onApply(current.phrase);
 		}
 	}, [onApply, show]);
 
 	const isShown = shown !== null;
-	useEffect(() => {
-		if (!isShown) {
-			return () => {};
+	useEffect(() =>
+	{
+		if (!isShown)
+		{
+			return () =>
+			{
+			};
 		}
-		const onKeyDown = (event: KeyboardEvent) => {
-			if (dateAutocompleteKeyAction(event) === "apply") {
+		const onKeyDown = (event: KeyboardEvent) =>
+		{
+			if (dateAutocompleteKeyAction(event) === "apply")
+			{
 				event.stopImmediatePropagation();
 				event.preventDefault();
 				apply();
-			} else {
+			}
+			else
+			{
 				hide();
 			}
 		};
 		window.addEventListener("keydown", onKeyDown, true);
-		return () => {
+		return () =>
+		{
 			window.removeEventListener("keydown", onKeyDown, true);
 		};
 	}, [isShown, apply, hide]);
@@ -185,25 +246,37 @@ export function useDateAutocomplete({
 			? null
 			: createPortal(
 					<DateAutocompleteFlyout
-						label={formatPillLabel(shown.phrase.attrs, {
-							dateFormat: dateSettings.dateFormat,
-							timeFormat: dateSettings.timeFormat,
-						})}
+						label={formatPillLabel(
+							shown.phrase.attrs,
+							{
+								dateFormat: dateSettings.dateFormat,
+								timeFormat: dateSettings.timeFormat,
+							},
+						)}
 						position={shown.position}
 						onApply={apply}
-						onOpenPicker={() => {
+						onOpenPicker={() =>
+						{
 							show(null);
-							onOpenPicker(shown.phrase, {
-								left: shown.position.left,
-								top: shown.position.top + FLYOUT_DROP,
-							});
+							onOpenPicker(
+								shown.phrase,
+								{
+									left: shown.position.left,
+									top: shown.position.top + FLYOUT_DROP,
+								},
+							);
 						}}
-						onOpenSettings={() => {
+						onOpenSettings={() =>
+						{
 							show(null);
 							onOpenSettings();
 						}}
 					/>,
 					document.body,
 				);
-	return {handleInput, hide, flyout};
+	return {
+		handleInput,
+		hide,
+		flyout,
+	};
 }

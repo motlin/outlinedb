@@ -10,7 +10,8 @@ import {nodeKeys} from "../src/client/node-cache.js";
 import {useHashLocationZoom} from "../src/client/hooks/use-hash-location-zoom.js";
 import {useOutlineStore} from "../src/client/stores/outline.js";
 
-declare global {
+declare global
+{
 	var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
@@ -18,14 +19,18 @@ const ALICE = "4823cefa-5fc0-478c-88ac-aaaaaaaaaaaa";
 const BOB = "9a1f6c2e-0b7d-4e5a-8c3f-bbbbbbbbbbbb";
 const CAROL = "1b2c3d4e-0b7d-4e5a-8c3f-cccccccccccc";
 
-function row(id: string, parentId: string | null): NodeResponse {
+function row(id: string, parentId: string | null): NodeResponse
+{
 	return {
 		id,
 		parent_id: parentId,
 		name: id,
 		note: null,
 		priority: 100,
-		data: {layoutMode: null},
+		data:
+		{
+			layoutMode: null,
+		},
 		createdAt: null,
 		modifiedAt: null,
 		completedAt: null,
@@ -33,13 +38,26 @@ function row(id: string, parentId: string | null): NodeResponse {
 	};
 }
 
-const NO_BACKLINKS = {rootId: null, items: []};
+const NO_BACKLINKS =
+{
+	rootId: null,
+	items: [],
+};
 
 // Alice holds Bob, expanded, who holds Carol.
-const aliceView: OutlineViewResponse = {
+const aliceView: OutlineViewResponse =
+{
 	lists: [
-		{parentId: ALICE, nodes: [row(BOB, ALICE)], backlinks: NO_BACKLINKS},
-		{parentId: BOB, nodes: [row(CAROL, BOB)], backlinks: NO_BACKLINKS},
+		{
+			parentId: ALICE,
+			nodes: [row(BOB, ALICE)],
+			backlinks: NO_BACKLINKS,
+		},
+		{
+			parentId: BOB,
+			nodes: [row(CAROL, BOB)],
+			backlinks: NO_BACKLINKS,
+		},
 	],
 };
 
@@ -47,17 +65,25 @@ let root: Root | undefined;
 let requests: string[] = [];
 let releaseView: (() => void) | undefined;
 
-beforeEach(() => {
+beforeEach(() =>
+{
 	globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 	requests = [];
 	useOutlineStore.setState(useOutlineStore.getInitialState(), true);
-	useOutlineStore.setState({expandedIds: new Set([BOB])});
+	useOutlineStore.setState(
+		{
+			expandedIds: new Set([BOB]),
+		},
+	);
 	vi.stubGlobal(
 		"fetch",
-		vi.fn<(url: string) => Promise<Response>>(async (url) => {
+		vi.fn<(url: string) => Promise<Response>>(async (url) =>
+		{
 			requests.push(url);
-			if (url === "/api/v1/nodes/view") {
-				await new Promise<void>((resolve) => {
+			if (url === "/api/v1/nodes/view")
+			{
+				await new Promise<void>((resolve) =>
+				{
 					releaseView = resolve;
 				});
 				return Response.json(aliceView);
@@ -67,8 +93,10 @@ beforeEach(() => {
 	);
 });
 
-afterEach(() => {
-	act(() => {
+afterEach(() =>
+{
+	act(() =>
+	{
 		root?.unmount();
 	});
 	root = undefined;
@@ -77,20 +105,31 @@ afterEach(() => {
 	vi.unstubAllGlobals();
 });
 
-function mountAtHome(): QueryClient {
+function mountAtHome(): QueryClient
+{
 	const queryClient = new QueryClient();
 	queryClient.setQueryData(nodeKeys.children(null), [row(ALICE, null)]);
-	function Probe() {
+	function Probe()
+	{
 		useHashLocationZoom();
 		return null;
 	}
 	root = createRoot(document.createElement("div"));
-	act(() => {
+	act(() =>
+	{
 		root?.render(
 			createElement(
 				QueryClientProvider,
-				{client: queryClient},
-				createElement(MemoryRouter, {initialEntries: ["/"]}, createElement(Probe)),
+				{
+					client: queryClient,
+				},
+				createElement(
+					MemoryRouter,
+					{
+						initialEntries: ["/"],
+					},
+					createElement(Probe),
+				),
 			),
 		);
 	});
@@ -98,59 +137,96 @@ function mountAtHome(): QueryClient {
 }
 
 /** Browser Back/Forward to `hash`: the URL changes, then `popstate` fires. */
-function popTo(hash: string): void {
-	act(() => {
+function popTo(hash: string): void
+{
+	act(() =>
+	{
 		globalThis.history.replaceState(null, "", `/${hash}`);
-		globalThis.dispatchEvent(new PopStateEvent("popstate", {state: null}));
+		globalThis.dispatchEvent(
+			new PopStateEvent(
+				"popstate",
+				{
+					state: null,
+				},
+			),
+		);
 	});
 }
 
-describe("Back/Forward into an uncached view", () => {
-	it("keeps the shown zoom until the view's one request lands, then zooms once", async () => {
+describe("Back/Forward into an uncached view", () =>
+{
+	it("keeps the shown zoom until the view's one request lands, then zooms once", async () =>
+	{
 		const queryClient = mountAtHome();
 		const changes: (string | null)[] = [];
-		const unsubscribe = useOutlineStore.subscribe((state, previous) => {
-			if (state.zoomedNodeId !== previous.zoomedNodeId) {
+		const unsubscribe = useOutlineStore.subscribe((state, previous) =>
+		{
+			if (state.zoomedNodeId !== previous.zoomedNodeId)
+			{
 				changes.push(state.zoomedNodeId);
 			}
 		});
 		popTo("#/aaaaaaaaaaaa");
-		await act(async () => {
-			await vi.waitFor(() => {
+		await act(async () =>
+		{
+			await vi.waitFor(() =>
+			{
 				expect(releaseView).toBeDefined();
 			});
 		});
-		const whileLoading = {zoomed: useOutlineStore.getState().zoomedNodeId, changes: [...changes]};
-		await act(async () => {
+		const whileLoading =
+		{
+			zoomed: useOutlineStore.getState().zoomedNodeId,
+			changes: [...changes],
+		};
+		await act(async () =>
+		{
 			releaseView?.();
-			await vi.waitFor(() => {
+			await vi.waitFor(() =>
+			{
 				expect(useOutlineStore.getState().zoomedNodeId).toBe(ALICE);
 			});
 		});
 		unsubscribe();
-		expect({
-			whileLoading,
-			changes,
-			lists: [ALICE, BOB].map((id) => queryClient.getQueryData(nodeKeys.children(id))),
-			viewRequests: requests.filter((url) => url === "/api/v1/nodes/view"),
-		}).toStrictEqual({
-			whileLoading: {zoomed: null, changes: []},
-			changes: [ALICE],
-			lists: [[row(BOB, ALICE)], [row(CAROL, BOB)]],
-			viewRequests: ["/api/v1/nodes/view"],
-		});
+		expect(
+			{
+				whileLoading,
+				changes,
+				lists: [ALICE, BOB].map((id) => queryClient.getQueryData(nodeKeys.children(id))),
+				viewRequests: requests.filter((url) => url === "/api/v1/nodes/view"),
+			},
+		).toStrictEqual(
+			{
+				whileLoading:
+				{
+					zoomed: null,
+					changes: [],
+				},
+				changes: [ALICE],
+				lists: [[row(BOB, ALICE)], [row(CAROL, BOB)]],
+				viewRequests: ["/api/v1/nodes/view"],
+			},
+		);
 	});
 
-	it("zooms in the popstate itself when the view is cached", () => {
+	it("zooms in the popstate itself when the view is cached", () =>
+	{
 		const queryClient = mountAtHome();
 		queryClient.setQueryData(nodeKeys.children(ALICE), [row(BOB, ALICE)]);
 		queryClient.setQueryData(nodeKeys.children(BOB), [row(CAROL, BOB)]);
 		queryClient.setQueryData(nodeKeys.backlinks(ALICE), NO_BACKLINKS);
 		queryClient.setQueryData(nodeKeys.backlinks(BOB), NO_BACKLINKS);
 		popTo("#/aaaaaaaaaaaa");
-		expect({zoomed: useOutlineStore.getState().zoomedNodeId, requests}).toStrictEqual({
-			zoomed: ALICE,
-			requests: [],
-		});
+		expect(
+			{
+				zoomed: useOutlineStore.getState().zoomedNodeId,
+				requests,
+			},
+		).toStrictEqual(
+			{
+				zoomed: ALICE,
+				requests: [],
+			},
+		);
 	});
 });

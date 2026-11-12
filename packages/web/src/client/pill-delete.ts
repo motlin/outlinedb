@@ -12,13 +12,16 @@ export function deleteAdjacentPill(
 	html: string,
 	direction: "backward" | "forward",
 	render: (html: string) => string,
-): string | null {
-	if (globalThis.getSelection()?.isCollapsed !== true) {
+): string | null
+{
+	if (globalThis.getSelection()?.isCollapsed !== true)
+	{
 		return null;
 	}
 	const offset = caretTextOffset(editor);
 	const next = direction === "backward" ? deletePillBeforeCaret(html, offset) : deletePillAfterCaret(html, offset);
-	if (next === null) {
+	if (next === null)
+	{
 		return null;
 	}
 	editor.innerHTML = render(next);

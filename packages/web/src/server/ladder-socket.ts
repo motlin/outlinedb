@@ -8,27 +8,41 @@
 
 import type {LadderEventBus} from "./ladder-events.js";
 
-interface SocketLike {
+interface SocketLike
+{
 	send: (data: string) => void;
 }
 
-export interface LadderSocketHandlers {
+export interface LadderSocketHandlers
+{
 	onOpen?: (event: unknown, ws: SocketLike) => void;
 	onClose?: (event: unknown, ws: SocketLike) => void;
 }
 
-export function ladderSocketHandlers(bus: LadderEventBus, options: {replay?: boolean} = {}): LadderSocketHandlers {
+export function ladderSocketHandlers(
+	bus: LadderEventBus,
+	options:
+	{
+		replay?: boolean;
+	} = {},
+): LadderSocketHandlers
+{
 	let unsubscribe: (() => void) | undefined;
 	return {
-		onOpen(_event, ws) {
+		onOpen(_event, ws)
+		{
 			unsubscribe = bus.subscribe(
-				(event) => {
+				(event) =>
+				{
 					ws.send(bus.format(event));
 				},
-				{replay: options.replay},
+				{
+					replay: options.replay,
+				},
 			);
 		},
-		onClose() {
+		onClose()
+		{
 			unsubscribe?.();
 			unsubscribe = undefined;
 		},

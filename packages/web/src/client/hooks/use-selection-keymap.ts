@@ -1,5 +1,6 @@
 import type {QueryClient} from "@tanstack/react-query";
-import {
+import
+{
 	caretAfterArrowClear,
 	emptySelection,
 	expand,
@@ -26,7 +27,8 @@ export const HOME_ROOT = "home";
 const DELETE_CONFIRM_THRESHOLD = 20;
 
 /** The outline as the selection model sees it, read from the store and cache at call time. */
-export interface SelectionView {
+export interface SelectionView
+{
 	tree: TreeView;
 	/** The navigable rows in display order: the zoomed title (when zoomed), then every visible row. */
 	rows: FlatRow[];
@@ -34,7 +36,8 @@ export interface SelectionView {
 	allIds: string[];
 }
 
-export function currentSelectionView(queryClient: QueryClient, paneId?: string): SelectionView {
+export function currentSelectionView(queryClient: QueryClient, paneId?: string): SelectionView
+{
 	const {zoomedNodeId, expandedIds, showCompleted, animatingCompletionIds} =
 		paneId === undefined ? activePaneView() : paneView(paneId);
 	const visible = collectVisibleNodeIds(
@@ -46,12 +49,15 @@ export function currentSelectionView(queryClient: QueryClient, paneId?: string):
 	);
 	const zoomRootId = zoomedNodeId ?? HOME_ROOT;
 	const realParent = (id: string): string | null => readNode(queryClient, id)?.parent_id ?? null;
-	const parentOf = (id: string): string | null => {
-		if (id === HOME_ROOT) {
+	const parentOf = (id: string): string | null =>
+	{
+		if (id === HOME_ROOT)
+		{
 			return null;
 		}
 		const node = readNode(queryClient, id);
-		if (node === undefined) {
+		if (node === undefined)
+		{
 			return null;
 		}
 		return node.parent_id ?? (zoomedNodeId === null ? HOME_ROOT : null);
@@ -60,20 +66,26 @@ export function currentSelectionView(queryClient: QueryClient, paneId?: string):
 		nextPotentiallyVisibleSibling(readChildren(queryClient, realParent(id)) ?? [], id, step, showCompleted);
 	const rowIds = zoomedNodeId === null ? visible : [zoomedNodeId, ...visible];
 	return {
-		tree: {
+		tree:
+		{
 			zoomRootId,
 			parentOf,
 			visibleOrder: [zoomRootId, ...visible],
 			nextPotentiallyVisibleSiblingOf: (id) => sibling(id, 1),
 			previousPotentiallyVisibleSiblingOf: (id) => sibling(id, -1),
 		},
-		rows: rowIds.map((id) => ({id, parentId: realParent(id)})),
+		rows: rowIds.map((id) => (
+		{
+			id,
+			parentId: realParent(id),
+		})),
 		allIds: zoomedNodeId === null ? visible.filter((id) => realParent(id) === null) : [zoomedNodeId],
 	};
 }
 
 /** Select `ids` as a fresh selection; Home itself is never selectable. */
-export function freshSelection(view: SelectionView, ids: readonly string[]): SelectionState {
+export function freshSelection(view: SelectionView, ids: readonly string[]): SelectionState
+{
 	return selectIds(
 		emptySelection(),
 		view.tree,
@@ -81,15 +93,22 @@ export function freshSelection(view: SelectionView, ids: readonly string[]): Sel
 	);
 }
 
-export function scrollRowIntoView(id: string | null): void {
-	if (id === null) {
+export function scrollRowIntoView(id: string | null): void
+{
+	if (id === null)
+	{
 		return;
 	}
-	rowContent(id)?.scrollIntoView({block: "nearest"});
+	rowContent(id)?.scrollIntoView(
+		{
+			block: "nearest",
+		},
+	);
 }
 
 /** Whether keys typed into `target` go to text (a form field or an editor) rather than the item selection. */
-export function isTextTarget(target: EventTarget | null): boolean {
+export function isTextTarget(target: EventTarget | null): boolean
+{
 	return (
 		target instanceof HTMLInputElement ||
 		target instanceof HTMLTextAreaElement ||
@@ -99,10 +118,13 @@ export function isTextTarget(target: EventTarget | null): boolean {
 }
 
 /** How many items deleting `ids` removes, descendants included; an unloaded subtree counts as too many to skip the confirm. */
-function deletedItemCount(queryClient: QueryClient, ids: readonly string[]): number {
-	const count = (id: string): number => {
+function deletedItemCount(queryClient: QueryClient, ids: readonly string[]): number
+{
+	const count = (id: string): number =>
+	{
 		const children = readChildren(queryClient, id);
-		if (children === undefined) {
+		if (children === undefined)
+		{
 			return readNode(queryClient, id)?.hasChildren === false ? 1 : Number.POSITIVE_INFINITY;
 		}
 		return children.reduce((sum, child) => sum + count(child.id), 1);
@@ -110,9 +132,11 @@ function deletedItemCount(queryClient: QueryClient, ids: readonly string[]): num
 	return ids.reduce((sum, id) => sum + count(id), 0);
 }
 
-function resumeAt(target: CaretTarget | null): void {
+function resumeAt(target: CaretTarget | null): void
+{
 	const {clearItemSelection, resumeEditing} = useOutlineStore.getState();
-	if (target === null) {
+	if (target === null)
+	{
 		clearItemSelection();
 		return;
 	}
@@ -129,13 +153,20 @@ export function deleteSelectedItems(
 	ordered: readonly string[],
 	deleteNode: (id: string) => void,
 	navigate: NavigateFn,
-	{confirm = true}: {confirm?: boolean} = {},
-): void {
+	{
+		confirm = true,
+	}:
+	{
+		confirm?: boolean;
+	} = {},
+): void
+{
 	if (
 		confirm &&
 		deletedItemCount(queryClient, ordered) > DELETE_CONFIRM_THRESHOLD &&
 		!globalThis.confirm(`Delete ${ordered.length} selected items and everything inside them?`)
-	) {
+	)
+	{
 		return;
 	}
 	const plan = selectionDeletePlan(
@@ -144,14 +175,19 @@ export function deleteSelectedItems(
 		activeZoomedId(useOutlineStore.getState()),
 		(id) => readNode(queryClient, id)?.parent_id ?? null,
 	);
-	void runInUndoBatch(captureOutlineView, () => {
-		if (plan.kind === "zoom-out") {
+	void runInUndoBatch(captureOutlineView, () =>
+	{
+		if (plan.kind === "zoom-out")
+		{
 			useOutlineStore.getState().clearItemSelection();
 			goToNode(navigate, plan.parentId);
-		} else {
+		}
+		else
+		{
 			resumeAt(plan.target);
 		}
-		for (const id of ordered) {
+		for (const id of ordered)
+		{
 			deleteNode(id);
 		}
 	});
@@ -168,36 +204,48 @@ export function runSelectionKey(
 	queryClient: QueryClient,
 	deleteNode: (id: string) => void,
 	navigate: NavigateFn,
-): void {
+): void
+{
 	const state = useOutlineStore.getState();
 	const view = currentSelectionView(queryClient);
 	const selection = state.itemSelection;
 	const ordered = sortedIds(selection, view.tree);
-	switch (action) {
+	switch (action)
+	{
 		case "EXPAND_UP":
-		case "EXPAND_DOWN": {
+		case "EXPAND_DOWN":
+		{
 			const next = expand(selection, view.tree, action === "EXPAND_UP" ? "up" : "down");
-			if (!isEntry(next, HOME_ROOT)) {
+			if (!isEntry(next, HOME_ROOT))
+			{
 				state.setItemSelection(next);
 				scrollRowIntoView(leadId(next));
 			}
 			break;
 		}
-		case "SELECT_ALL": {
+		case "SELECT_ALL":
+		{
 			state.setItemSelection(freshSelection(view, view.allIds));
 			break;
 		}
 		case "CLEAR_LEFT":
 		case "CLEAR_RIGHT":
 		case "CLEAR_UP":
-		case "CLEAR_DOWN": {
-			const dir = ({CLEAR_LEFT: "left", CLEAR_RIGHT: "right", CLEAR_UP: "up", CLEAR_DOWN: "down"} as const)[
-				action
-			];
+		case "CLEAR_DOWN":
+		{
+			const dir = (
+				{
+					CLEAR_LEFT: "left",
+					CLEAR_RIGHT: "right",
+					CLEAR_UP: "up",
+					CLEAR_DOWN: "down",
+				} as const
+			)[action];
 			resumeAt(caretAfterArrowClear(dir, ordered, view.rows));
 			break;
 		}
-		case "DELETE": {
+		case "DELETE":
+		{
 			deleteSelectedItems(queryClient, ordered, deleteNode, navigate);
 			break;
 		}

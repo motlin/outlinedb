@@ -3,20 +3,25 @@ import {fn} from "storybook/test";
 
 import {ExpandTriangle} from "./primitives.js";
 
-const meta: Meta<typeof ExpandTriangle> = {
+const meta: Meta<typeof ExpandTriangle> =
+{
 	title: "Primitives/ExpandTriangle",
 	component: ExpandTriangle,
-	parameters: {
+	parameters:
+	{
 		layout: "centered",
 	},
 	tags: ["autodocs"],
-	argTypes: {
-		isExpanded: {
+	argTypes:
+	{
+		isExpanded:
+		{
 			control: "boolean",
 			description: "Whether the node is expanded (triangle points down)",
 		},
 	},
-	args: {
+	args:
+	{
 		onClick: fn<() => void>(),
 	},
 };
@@ -24,14 +29,18 @@ const meta: Meta<typeof ExpandTriangle> = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Collapsed: Story = {
-	args: {
+export const Collapsed: Story =
+{
+	args:
+	{
 		isExpanded: false,
 	},
 };
 
-export const Expanded: Story = {
-	args: {
+export const Expanded: Story =
+{
+	args:
+	{
 		isExpanded: true,
 	},
 };

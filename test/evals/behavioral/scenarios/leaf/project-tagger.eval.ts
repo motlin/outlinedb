@@ -15,92 +15,124 @@ import {parseNodeJson} from "../../helpers/eval-schemas.js";
 import {runLlmEval, claudeCliAvailable} from "../../helpers/llm-eval-harness.js";
 
 // suggestedProjects is optional, but every entry must carry a string tag when present.
-const ProjectTaggerResponseSchema = z.looseObject({
-	suggestedProjects: z.array(z.looseObject({tag: z.string()})).nullish(),
-});
+const ProjectTaggerResponseSchema = z.looseObject(
+	{
+		suggestedProjects: z
+			.array(
+				z.looseObject(
+					{
+						tag: z.string(),
+					},
+				),
+			)
+			.nullish(),
+	},
+);
 
-describe("Leaf Eval: project-tagger", {timeout: 300_000}, () => {
-	let ctx: EvalContext;
-	let itemId: string;
-	let itemName: string;
-	let skipSuite = false;
-	const agentFile = "plugins/gtd/prompts/refinement/project-tagger.md";
+describe(
+	"Leaf Eval: project-tagger",
+	{
+		timeout: 300_000,
+	},
+	() =>
+	{
+		let ctx: EvalContext;
+		let itemId: string;
+		let itemName: string;
+		let skipSuite = false;
+		const agentFile = "plugins/gtd/prompts/refinement/project-tagger.md";
 
-	beforeAll(async () => {
-		if (!claudeCliAvailable()) {
-			skipSuite = true;
-			return;
-		}
-
-		ctx = createEvalContext();
-		const agentPath = path.join(ctx.projectRoot, agentFile);
-
-		if (!fs.existsSync(agentPath)) {
-			skipSuite = true;
-			return;
-		}
-
-		const result = await runInEvalContext(
-			ctx,
-			`./bin/run.js node get --path "Metadata,📥 Inboxes" --depth 1 --json --fields id --fields children --fields linkTargets 2>/dev/null`,
-		);
-
-		if (result.exitCode !== 0) {
-			skipSuite = true;
-			return;
-		}
-
-		try {
-			const inboxData = parseNodeJson(result.stdout);
-			const firstInboxId = inboxData.children?.[0]?.linkTargets?.[0]?.id;
-			if (!firstInboxId) {
+		beforeAll(async () =>
+		{
+			if (!claudeCliAvailable())
+			{
 				skipSuite = true;
 				return;
 			}
 
-			const itemResult = await runInEvalContext(
+			ctx = createEvalContext();
+			const agentPath = path.join(ctx.projectRoot, agentFile);
+
+			if (!fs.existsSync(agentPath))
+			{
+				skipSuite = true;
+				return;
+			}
+
+			const result = await runInEvalContext(
 				ctx,
-				`./bin/run.js node get --id "${firstInboxId}" --depth 1 --json --fields id --fields name --fields children 2>/dev/null`,
+				`./bin/run.js node get --path "Metadata,📥 Inboxes" --depth 1 --json --fields id --fields children --fields linkTargets 2>/dev/null`,
 			);
 
-			if (itemResult.exitCode !== 0) {
+			if (result.exitCode !== 0)
+			{
 				skipSuite = true;
 				return;
 			}
 
-			const inboxNode = parseNodeJson(itemResult.stdout);
-			const firstItem = inboxNode.children?.[0];
-			itemId = firstItem?.id ?? "";
-			itemName = firstItem?.name ?? "Unknown item";
+			try
+			{
+				const inboxData = parseNodeJson(result.stdout);
+				const firstInboxId = inboxData.children?.[0]?.linkTargets?.[0]?.id;
+				if (!firstInboxId)
+				{
+					skipSuite = true;
+					return;
+				}
 
-			if (!itemId) {
+				const itemResult = await runInEvalContext(
+					ctx,
+					`./bin/run.js node get --id "${firstInboxId}" --depth 1 --json --fields id --fields name --fields children 2>/dev/null`,
+				);
+
+				if (itemResult.exitCode !== 0)
+				{
+					skipSuite = true;
+					return;
+				}
+
+				const inboxNode = parseNodeJson(itemResult.stdout);
+				const firstItem = inboxNode.children?.[0];
+				itemId = firstItem?.id ?? "";
+				itemName = firstItem?.name ?? "Unknown item";
+
+				if (!itemId)
+				{
+					skipSuite = true;
+				}
+			}
+			catch
+			{
 				skipSuite = true;
 			}
-		} catch {
-			skipSuite = true;
-		}
-	});
+		});
 
-	afterAll(() => {
-		ctx.cleanup();
-	});
+		afterAll(() =>
+		{
+			ctx.cleanup();
+		});
 
-	it("should return valid JSON with project tag suggestions", async (context) => {
-		if (skipSuite) {
-			context.skip();
-		}
+		it("should return valid JSON with project tag suggestions", async (context) =>
+		{
+			if (skipSuite)
+			{
+				context.skip();
+			}
 
-		const result = await runLlmEval(
-			agentFile,
-			`Analyze this item for project tags:\nID: ${itemId}\nName: ${itemName}`,
-			ctx,
-			{maxTurns: 15},
-		);
+			const result = await runLlmEval(
+				agentFile,
+				`Analyze this item for project tags:\nID: ${itemId}\nName: ${itemName}`,
+				ctx,
+				{
+					maxTurns: 15,
+				},
+			);
 
-		const response = result.finalResponse;
-		const jsonMatch = response.match(/\{[\s\S]*\}/u);
-		assert(jsonMatch, "Response should contain JSON");
+			const response = result.finalResponse;
+			const jsonMatch = response.match(/\{[\s\S]*\}/u);
+			assert(jsonMatch, "Response should contain JSON");
 
-		expect(() => ProjectTaggerResponseSchema.parse(JSON.parse(jsonMatch[0]))).not.toThrow();
-	});
-});
+			expect(() => ProjectTaggerResponseSchema.parse(JSON.parse(jsonMatch[0]))).not.toThrow();
+		});
+	},
+);

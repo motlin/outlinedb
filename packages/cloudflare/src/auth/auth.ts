@@ -6,7 +6,8 @@ import {signupGate} from "./signup-gate";
 import type {SignupEnv} from "./signup-gate";
 
 /** Bindings Better Auth needs; `BETTER_AUTH_SECRET` is a secret, and without it `/api/auth/*` stays off. */
-export interface AuthEnv extends EmailEnv, SignupEnv {
+export interface AuthEnv extends EmailEnv, SignupEnv
+{
 	AUTH_DB: D1Database;
 	/** Var: the public origin, used for links in emails and as the only trusted origin. */
 	APP_ORIGIN: string;
@@ -21,23 +22,30 @@ export interface AuthEnv extends EmailEnv, SignupEnv {
 const CAPTCHA_ENDPOINTS = ["/sign-up/email", "/sign-in/email", "/request-password-reset"];
 
 /** Whether `pathname` is a captcha endpoint and either Turnstile key is unset, so the request must fail closed. */
-export function captchaMissing(env: AuthEnv, pathname: string): boolean {
+export function captchaMissing(env: AuthEnv, pathname: string): boolean
+{
 	const endpoint = pathname.replace(/^\/api\/auth/u, "").replace(/\/+$/u, "");
 	return CAPTCHA_ENDPOINTS.includes(endpoint) && (!env.TURNSTILE_SECRET_KEY || !env.TURNSTILE_SITE_KEY);
 }
 
 /** The public auth settings the sign-in page needs before anyone is signed in. */
-export function authConfig(env: AuthEnv) {
+export function authConfig(env: AuthEnv)
+{
 	return {
 		hosted: true,
 		turnstileSiteKey: env.TURNSTILE_SITE_KEY ?? null,
-		providers: {google: false, magicLink: false},
+		providers:
+		{
+			google: false,
+			magicLink: false,
+		},
 		signupMode: env.SIGNUP_MODE === "open" || env.SIGNUP_MODE === "invite" ? env.SIGNUP_MODE : "closed",
 	};
 }
 
 /** A link email in plain text and HTML. */
-function linkEmail(to: string, subject: string, intro: string, url: string) {
+function linkEmail(to: string, subject: string, intro: string, url: string)
+{
 	const escaped = url.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
 	return {
 		to,
@@ -55,80 +63,126 @@ export type Provision = (user: {id: string; email: string}) => Promise<void>;
  * provisioned once their email is verified, never before.
  */
 export function createAuth(
-	env: AuthEnv & {BETTER_AUTH_SECRET: string},
+	env: AuthEnv &
+	{
+		BETTER_AUTH_SECRET: string;
+	},
 	provision: Provision,
 	sender: EmailSender = senderFor(env),
-) {
+)
+{
 	const origin = env.APP_ORIGIN;
-	return betterAuth({
-		appName: "OutlineDB",
-		baseURL: origin,
-		basePath: "/api/auth",
-		secret: env.BETTER_AUTH_SECRET,
-		database: env.AUTH_DB,
-		trustedOrigins: [origin],
-		emailAndPassword: {
-			enabled: true,
-			requireEmailVerification: true,
-			async sendResetPassword({user, url}) {
-				await sender.send(
-					linkEmail(
-						user.email,
-						"Reset your OutlineDB password",
-						"Open this link to choose a new OutlineDB password:",
-						url,
-					),
-				);
+	return betterAuth(
+		{
+			appName: "OutlineDB",
+			baseURL: origin,
+			basePath: "/api/auth",
+			secret: env.BETTER_AUTH_SECRET,
+			database: env.AUTH_DB,
+			trustedOrigins: [origin],
+			emailAndPassword:
+			{
+				enabled: true,
+				requireEmailVerification: true,
+				async sendResetPassword({user, url})
+				{
+					await sender.send(
+						linkEmail(
+							user.email,
+							"Reset your OutlineDB password",
+							"Open this link to choose a new OutlineDB password:",
+							url,
+						),
+					);
+				},
 			},
-		},
-		user: {
-			additionalFields: {
-				// Set by `provisionUser`, never by a client; the session carries it, so a provisioned user's request needs no D1 read.
-				provisionedAt: {type: "date", required: false, input: false, fieldName: "provisioned_at"},
-			},
-		},
-		databaseHooks: {
-			user: {
-				create: {
-					// A user created already verified (OAuth) never passes through verify-email.
-					async after(user) {
-						if (user.emailVerified) {
-							await provision(user);
-						}
+			user:
+			{
+				additionalFields:
+				{
+					// Set by `provisionUser`, never by a client; the session carries it, so a provisioned user's request needs no D1 read.
+					provisionedAt:
+					{
+						type: "date",
+						required: false,
+						input: false,
+						fieldName: "provisioned_at",
 					},
 				},
 			},
-		},
-		emailVerification: {
-			sendOnSignUp: true,
-			autoSignInAfterVerification: true,
-			async afterEmailVerification(user) {
-				await provision(user);
+			databaseHooks:
+			{
+				user:
+				{
+					create:
+					{
+						// A user created already verified (OAuth) never passes through verify-email.
+						async after(user)
+						{
+							if (user.emailVerified)
+							{
+								await provision(user);
+							}
+						},
+					},
+				},
 			},
-			async sendVerificationEmail({user, url}) {
-				await sender.send(
-					linkEmail(
-						user.email,
-						"Verify your OutlineDB email",
-						"Open this link to verify your email and sign in to OutlineDB:",
-						url,
-					),
-				);
+			emailVerification:
+			{
+				sendOnSignUp: true,
+				autoSignInAfterVerification: true,
+				async afterEmailVerification(user)
+				{
+					await provision(user);
+				},
+				async sendVerificationEmail({user, url})
+				{
+					await sender.send(
+						linkEmail(
+							user.email,
+							"Verify your OutlineDB email",
+							"Open this link to verify your email and sign in to OutlineDB:",
+							url,
+						),
+					);
+				},
+			},
+			session:
+			{
+				cookieCache:
+				{
+					enabled: true,
+					maxAge: 300,
+				},
+			},
+			rateLimit:
+			{
+				enabled: true,
+				storage: "database",
+			},
+			hooks:
+			{
+				before: signupGate(env),
+			},
+			// The Worker answers 503 on these endpoints before Better Auth when a Turnstile key is unset.
+			plugins: [
+				captcha(
+					{
+						provider: "cloudflare-turnstile",
+						// Empty only if the Worker's 503 guard is bypassed; the plugin then fails closed with 500.
+						secretKey: env.TURNSTILE_SECRET_KEY ?? "",
+						endpoints: CAPTCHA_ENDPOINTS,
+					},
+				),
+			],
+			// Cloudflare sets the client IP here; without it every client shares one rate-limit bucket per path.
+			advanced:
+			{
+				ipAddress:
+				{
+					ipAddressHeaders: ["cf-connecting-ip"],
+				},
 			},
 		},
-		session: {cookieCache: {enabled: true, maxAge: 300}},
-		rateLimit: {enabled: true, storage: "database"},
-		hooks: {before: signupGate(env)},
-		// The Worker answers 503 on these endpoints before Better Auth when a Turnstile key is unset.
-		plugins: [
-			captcha({
-				provider: "cloudflare-turnstile",
-				// Empty only if the Worker's 503 guard is bypassed; the plugin then fails closed with 500.
-				secretKey: env.TURNSTILE_SECRET_KEY ?? "",
-				endpoints: CAPTCHA_ENDPOINTS,
-			}),
-		],
-		// Cloudflare sets the client IP here; without it every client shares one rate-limit bucket per path.
-		advanced: {ipAddress: {ipAddressHeaders: ["cf-connecting-ip"]}},
-	});
+	);
 }

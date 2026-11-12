@@ -13,7 +13,8 @@ import {pixelDensity} from "./file-preview-layout.js";
 import {adjacentAttachment, visibleViewerRows} from "./image-viewer-model.js";
 import {hideImageViewer, showImageViewer, useShownImageId} from "./image-viewer-state.js";
 
-export interface ImageViewerViewProps {
+export interface ImageViewerViewProps
+{
 	nodeId: string;
 	attachment: NodeAttachment | null;
 	prevId: string | null;
@@ -25,7 +26,11 @@ export interface ImageViewerViewProps {
 	openSettings: () => void;
 }
 
-const GALLERY_STYLE = {color: "var(--wf-text-quaternary)", backgroundColor: "var(--wf-background-quaternary)"};
+const GALLERY_STYLE =
+{
+	color: "var(--wf-text-quaternary)",
+	backgroundColor: "var(--wf-background-quaternary)",
+};
 
 function GalleryButton({
 	direction,
@@ -35,7 +40,8 @@ function GalleryButton({
 	direction: "prev" | "next";
 	targetId: string | null;
 	onShow: (nodeId: string) => void;
-}): ReactNode {
+}): ReactNode
+{
 	return (
 		// oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- upstream's IconButton is a focusable div[role=button]
 		<div
@@ -45,14 +51,18 @@ function GalleryButton({
 			title={direction === "prev" ? "Previous image" : "Next image"}
 			className={`gallery-btn ${direction}${targetId === null ? " inactive" : ""} iconButton lg shape-circle`}
 			style={GALLERY_STYLE}
-			onClick={(event) => {
+			onClick={(event) =>
+			{
 				event.stopPropagation();
-				if (targetId !== null) {
+				if (targetId !== null)
+				{
 					onShow(targetId);
 				}
 			}}
-			onKeyDown={(event) => {
-				if ((event.key === "Enter" || event.key === " ") && targetId !== null) {
+			onKeyDown={(event) =>
+			{
+				if ((event.key === "Enter" || event.key === " ") && targetId !== null)
+				{
 					event.preventDefault();
 					event.stopPropagation();
 					onShow(targetId);
@@ -69,50 +79,70 @@ function GalleryButton({
  * file menu, prev/next gallery buttons and the original-size image. Escape hides, the arrows step through attachments,
  * Enter hides and zooms in, and a click outside `.keep-overlay` hides. It owns one `{image:true}` history entry.
  */
-export function ImageViewerView(props: ImageViewerViewProps): ReactNode {
+export function ImageViewerView(props: ImageViewerViewProps): ReactNode
+{
 	const {nodeId, attachment, prevId, nextId, onHide, onShow, onZoom} = props;
 
-	useEffect(() => {
-		const onKeyDown = (event: KeyboardEvent) => {
-			const handlers: Record<string, () => void> = {
+	useEffect(() =>
+	{
+		const onKeyDown = (event: KeyboardEvent) =>
+		{
+			const handlers: Record<string, () => void> =
+			{
 				Escape: onHide,
-				ArrowLeft: () => {
-					if (prevId !== null) {
+				ArrowLeft: () =>
+				{
+					if (prevId !== null)
+					{
 						onShow(prevId);
 					}
 				},
-				ArrowRight: () => {
-					if (nextId !== null) {
+				ArrowRight: () =>
+				{
+					if (nextId !== null)
+					{
 						onShow(nextId);
 					}
 				},
-				Enter: () => {
+				Enter: () =>
+				{
 					onHide();
 					onZoom(nodeId);
 				},
 			};
 			const handler = handlers[event.key];
-			if (handler !== undefined) {
+			if (handler !== undefined)
+			{
 				event.preventDefault();
 				event.stopPropagation();
 				handler();
 			}
 		};
 		document.body.addEventListener("keydown", onKeyDown, true);
-		return () => {
+		return () =>
+		{
 			document.body.removeEventListener("keydown", onKeyDown, true);
 		};
 	}, [nodeId, prevId, nextId, onHide, onShow, onZoom]);
 
-	useEffect(() => {
-		history.pushState({image: true}, "");
-		const onPopState = () => {
+	useEffect(() =>
+	{
+		history.pushState(
+			{
+				image: true,
+			},
+			"",
+		);
+		const onPopState = () =>
+		{
 			onHide();
 		};
 		window.addEventListener("popstate", onPopState);
-		return () => {
+		return () =>
+		{
 			window.removeEventListener("popstate", onPopState);
-			if (isImageState(history.state)) {
+			if (isImageState(history.state))
+			{
 				history.back();
 			}
 		};
@@ -122,21 +152,26 @@ export function ImageViewerView(props: ImageViewerViewProps): ReactNode {
 		attachment?.imageOriginalWidth === null || attachment?.imageOriginalWidth === undefined
 			? null
 			: attachment.imageOriginalWidth / pixelDensity(attachment.imageOriginalPixels);
-	const rows = fileMenuRows({
-		viewOriginal: () => {
-			viewOriginal(nodeId);
+	const rows = fileMenuRows(
+		{
+			viewOriginal: () =>
+			{
+				viewOriginal(nodeId);
+			},
+			download: () =>
+			{
+				downloadFile(nodeId, attachment?.fileName ?? "");
+			},
+			openSettings: props.openSettings,
 		},
-		download: () => {
-			downloadFile(nodeId, attachment?.fileName ?? "");
-		},
-		openSettings: props.openSettings,
-	});
+	);
 
 	return createPortal(
 		// oxlint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- Escape and arrows are handled on body; the overlay click is a mouse shortcut for closing
 		<div
 			className="fixed overlay bg-black/80"
-			style={{
+			style={
+			{
 				zIndex: 400,
 				top: "var(--safe-area-inset-top)",
 				left: "var(--safe-area-inset-left)",
@@ -145,14 +180,22 @@ export function ImageViewerView(props: ImageViewerViewProps): ReactNode {
 				display: "flex",
 				flexDirection: "column",
 			}}
-			onClick={(event) => {
-				if (!(event.target instanceof Element) || event.target.closest(".keep-overlay") === null) {
+			onClick={(event) =>
+			{
+				if (!(event.target instanceof Element) || event.target.closest(".keep-overlay") === null)
+				{
 					onHide();
 				}
 			}}
 		>
 			<div className="h-4xl pr-l flex items-center justify-end">
-				<div style={{display: "flex", alignItems: "center"}}>
+				<div
+					style={
+					{
+						display: "flex",
+						alignItems: "center",
+					}}
+				>
 					<FileMenu nodeId={nodeId} rows={rows} />
 				</div>
 			</div>
@@ -161,7 +204,11 @@ export function ImageViewerView(props: ImageViewerViewProps): ReactNode {
 			<div className="flex-1 flex items-center justify-center overflow-hidden">
 				<div
 					className="max-w-full h-full max-h-full flex items-center justify-center"
-					style={{position: "relative", width: width === null ? undefined : `calc(min(100%, ${width}px))`}}
+					style={
+					{
+						position: "relative",
+						width: width === null ? undefined : `calc(min(100%, ${width}px))`,
+					}}
 				>
 					{attachment?.fileType.startsWith("image/") === true ? (
 						<img
@@ -177,17 +224,20 @@ export function ImageViewerView(props: ImageViewerViewProps): ReactNode {
 	);
 }
 
-function isImageState(state: unknown): boolean {
+function isImageState(state: unknown): boolean
+{
 	return typeof state === "object" && state !== null && "image" in state && state.image === true;
 }
 
 /** Mounts the full-screen viewer while `showImageViewer` has named a node, with prev/next read from the rendered rows. */
-export function ImageViewerHost(): ReactNode {
+export function ImageViewerHost(): ReactNode
+{
 	const shownId = useShownImageId();
 	const {data: node} = useNode(shownId);
 	const {navigateToNode} = useNodeNavigation();
 	const openSettings = useOutlineStore((state) => state.openSettings);
-	if (shownId === null) {
+	if (shownId === null)
+	{
 		return null;
 	}
 	const rows = visibleViewerRows(document);
@@ -199,10 +249,12 @@ export function ImageViewerHost(): ReactNode {
 			nextId={adjacentAttachment(rows, shownId, "next")}
 			onHide={hideImageViewer}
 			onShow={showImageViewer}
-			onZoom={(id) => {
+			onZoom={(id) =>
+			{
 				navigateToNode(id);
 			}}
-			openSettings={() => {
+			openSettings={() =>
+			{
 				hideImageViewer();
 				openSettings("Media & Previews");
 			}}

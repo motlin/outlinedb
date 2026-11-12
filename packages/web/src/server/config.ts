@@ -1,7 +1,8 @@
 export type ServerMode = "mirror" | "standalone";
 
 /** Settings the server reads, parsed once by the host so routers never touch `process.env`. */
-export interface ServerConfig {
+export interface ServerConfig
+{
 	/**
 	 * Where node writes go: "mirror" writes through to workflowy.com and persists the result locally; "standalone"
 	 * has no workflowy.com behind it and writes straight into the local node tables.
@@ -19,11 +20,16 @@ export interface ServerConfig {
 	calendarEnsureEnabled: boolean;
 	/** Whether `PUT /api/v1/calendar/layout` may restructure the calendar. */
 	calendarLayoutEnabled: boolean;
-	features: {embeddings: boolean; treeSnapshot: boolean};
+	features:
+	{
+		embeddings: boolean;
+		treeSnapshot: boolean;
+	};
 }
 
 /** Parse {@link ServerConfig} from a Node-style environment. */
-export function readNodeConfig(env: Record<string, string | undefined>): ServerConfig {
+export function readNodeConfig(env: Record<string, string | undefined>): ServerConfig
+{
 	return {
 		mode: env.WORKFLOWY_API_KEY ? "mirror" : "standalone",
 		apiKey: env.WORKFLOWY_API_KEY,
@@ -32,6 +38,10 @@ export function readNodeConfig(env: Record<string, string | undefined>): ServerC
 		sqlQueryLogging: env.OUTLINEDB_SQL_QUERY_LOGGING === "true",
 		calendarEnsureEnabled: env.CALENDAR_ENSURE_ENABLED !== "false",
 		calendarLayoutEnabled: env.CALENDAR_LAYOUT_ENABLED !== "false",
-		features: {embeddings: true, treeSnapshot: true},
+		features:
+		{
+			embeddings: true,
+			treeSnapshot: true,
+		},
 	};
 }

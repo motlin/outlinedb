@@ -9,7 +9,8 @@ import {RootEmptyOutline} from "./empty-outline.js";
 import {useContext, useEffect, useLayoutEffect, useMemo, useRef, useState} from "react";
 import {useQueryClient} from "@tanstack/react-query";
 import {backlinksLabel, isBacklinksSectionVisible} from "../backlinks.js";
-import {
+import
+{
 	useBacklinks,
 	useChildren,
 	useCreateNode,
@@ -71,7 +72,8 @@ import {rowClickResumesEditing} from "./row-click.js";
 import {isPreviewable, previewKind} from "./file-preview-kind.js";
 import {RowFilePreview} from "./row-file-preview.js";
 
-interface OutlineTreeProps {
+interface OutlineTreeProps
+{
 	parentId: string | null;
 	/** `"page"` renders the rows and `.document-end` as fragments for the main `.page`; `"pane"` keeps its own scroller. */
 	shell?: "page" | "pane";
@@ -96,33 +98,49 @@ const ADD_CHILD_CONTAINER_CLASS = "mt-m mobile:ml-[-6px] [.item--zooming-in-prog
  * shaped like the previous visible row, and puts the caret in it. Uses no React
  * built-in hooks so tests can invoke its click handler directly.
  */
-export function AddChildButton({parentId}: {parentId: string | null}) {
+export function AddChildButton({parentId}: {parentId: string | null})
+{
 	const queryClient = useQueryClient();
 	const createNode = useCreateNode();
 	const {data: nodes} = useChildren(parentId);
 	const showCompleted = useOutlineStore((state) => state.showCompleted);
 	const resumeEditing = useOutlineStore((state) => state.resumeEditing);
 
-	const handleClick = (event?: {currentTarget: {blur: () => void}}) => {
+	const handleClick = (event?: {
+		currentTarget:
+		{
+			blur: () => void;
+		};
+	}) =>
+	{
 		const children = nodes ?? [];
 		const visible = showCompleted ? children : children.filter((node) => node.completedAt === null);
-		const plan = planAddChild({
-			childCount: children.length,
-			zoomedId: parentId,
-			shapeLayout: lastChildShapeLayout(queryClient, parentId, visible.at(-1)),
-		});
+		const plan = planAddChild(
+			{
+				childCount: children.length,
+				zoomedId: parentId,
+				shapeLayout: lastChildShapeLayout(queryClient, parentId, visible.at(-1)),
+			},
+		);
 		// A client-generated id lets the caret enter the new row now, not after the round-trip;
 		// blurring the button keeps Space/Enter typed meanwhile from clicking it again.
 		const id = crypto.randomUUID();
 		event?.currentTarget.blur();
-		createNode.mutate({
-			id,
-			parent_id: plan.parent_id,
-			name: plan.name,
-			index: plan.index,
-			at_end: plan.at_end,
-			...(plan.layoutMode === null ? {} : {layoutMode: plan.layoutMode}),
-		});
+		createNode.mutate(
+			{
+				id,
+				parent_id: plan.parent_id,
+				name: plan.name,
+				index: plan.index,
+				at_end: plan.at_end,
+				...(plan.layoutMode === null
+					? {}
+					:
+						{
+							layoutMode: plan.layoutMode,
+						}),
+			},
+		);
 		resumeEditing(id, 0);
 	};
 
@@ -148,20 +166,41 @@ export function AddChildButton({parentId}: {parentId: string | null}) {
  * until the next mouseenter. Uses no React built-in hooks so tests can invoke its
  * handlers directly.
  */
-export function AddSiblingButton({owner}: {owner?: NodeResponse}) {
+export function AddSiblingButton({owner}: {owner?: NodeResponse})
+{
 	const createNode = useCreateNode();
 	const {data: siblings} = useChildren(owner?.parent_id ?? null, owner !== undefined);
 	const resumeEditing = useOutlineStore((state) => state.resumeEditing);
 
-	const handleClick = (event: {currentTarget: {style: {opacity: string}}}) => {
+	const handleClick = (event: {
+		currentTarget:
+		{
+			style:
+			{
+				opacity: string;
+			};
+		};
+	}) =>
+	{
 		// The Backlinks section's references root is read-only: upstream draws the button, but it adds nothing.
-		if (owner === undefined) {
+		if (owner === undefined)
+		{
 			return;
 		}
-		const plan = planAddSibling({owner, siblings: siblings ?? [owner]});
+		const plan = planAddSibling(
+			{
+				owner,
+				siblings: siblings ?? [owner],
+			},
+		);
 		const id = crypto.randomUUID();
 		event.currentTarget.style.opacity = "0";
-		createNode.mutate({id, ...plan});
+		createNode.mutate(
+			{
+				id,
+				...plan,
+			},
+		);
 		resumeEditing(id, 0);
 	};
 
@@ -171,7 +210,16 @@ export function AddSiblingButton({owner}: {owner?: NodeResponse}) {
 			viewBox="0 0 20 20"
 			className="absolute left-[-11px] bottom-[3px] w-[20px] h-[20px] block opacity-0 hover:opacity-70 active:opacity-100 addSiblingButton"
 			onClick={handleClick}
-			onMouseEnter={(event: {currentTarget: {style: {opacity: string}}}) => {
+			onMouseEnter={(event: {
+				currentTarget:
+				{
+					style:
+					{
+						opacity: string;
+					};
+				};
+			}) =>
+			{
 				event.currentTarget.style.opacity = "";
 			}}
 		>
@@ -187,7 +235,8 @@ export function AddSiblingButton({owner}: {owner?: NodeResponse}) {
  * like any row (`editingId === nodeId`), in a `.name--main` row, its `.notes--main` note, then the root `.children`. At the main-tree root (no zoom) it is
  * `.mainTreeRoot` with a title-less `.name--root` row.
  */
-function ZoomRootRow({nodeId, children}: {nodeId: string | null; children: ReactNode}) {
+function ZoomRootRow({nodeId, children}: {nodeId: string | null; children: ReactNode})
+{
 	const {data: node} = useNode(nodeId);
 	const toggleComplete = useToggleComplete();
 	const [isHovered, setIsHovered] = useState(false);
@@ -213,9 +262,16 @@ function ZoomRootRow({nodeId, children}: {nodeId: string | null; children: React
 	const nameHtml = isMainTreeRoot ? "" : (node?.name ?? "");
 	const layout = resolveLayoutMode(node?.data.layoutMode);
 	const zoomDashboard = isDashboard(node?.data.layoutMode, dashboardsOn());
-	const handleComplete = () => {
-		if (node) {
-			toggleComplete.mutate({nodeId: node.id, isCurrentlyCompleted: node.completedAt !== null});
+	const handleComplete = () =>
+	{
+		if (node)
+		{
+			toggleComplete.mutate(
+				{
+					nodeId: node.id,
+					isCurrentlyCompleted: node.completedAt !== null,
+				},
+			);
 		}
 	};
 
@@ -229,16 +285,19 @@ function ZoomRootRow({nodeId, children}: {nodeId: string | null; children: React
 			: undefined;
 	const checkboxComplete = useCheckboxComplete();
 	const prefixPieces: ReactNode[] = [];
-	if (rootNumber !== undefined && rootNumber > 0) {
+	if (rootNumber !== undefined && rootNumber > 0)
+	{
 		prefixPieces.push(<NumberPiece key="numbered" number={rootNumber} />);
 	}
-	if (node && layout.isTodo) {
+	if (node && layout.isTodo)
+	{
 		prefixPieces.push(
 			<ItemCheckbox
 				key="todo"
 				isCompleted={node.completedAt !== null}
 				isZoomRoot
-				onComplete={() => {
+				onComplete={() =>
+				{
 					checkboxComplete(node, true);
 				}}
 			/>,
@@ -247,8 +306,10 @@ function ZoomRootRow({nodeId, children}: {nodeId: string | null; children: React
 	const dividerLine =
 		node?.data.layoutMode === "divider" ? (
 			<DividerLine
-				onActivate={() => {
-					if (nodeId !== null) {
+				onActivate={() =>
+				{
+					if (nodeId !== null)
+					{
 						resumeEditing(nodeId, 0);
 					}
 				}}
@@ -261,14 +322,17 @@ function ZoomRootRow({nodeId, children}: {nodeId: string | null; children: React
 	// Like a row, the root's `.notes--main` mounts once noted, note-focused, or title-focused, and stays mounted.
 	const [noteMounted, setNoteMounted] = useState(false);
 	const shouldMountNote = !isMainTreeRoot && (Boolean(node?.note) || isEditingNote || isEditing);
-	if (shouldMountNote && !noteMounted) {
+	if (shouldMountNote && !noteMounted)
+	{
 		setNoteMounted(true);
 	}
 
 	// Clicking the title row outside its text edits the title with the caret at the end.
-	const handleTitleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+	const handleTitleClick = (event: React.MouseEvent<HTMLDivElement>) =>
+	{
 		const target = event.target instanceof Element ? event.target : null;
-		if (nodeId !== null && rowClickResumesEditing(target, event.currentTarget)) {
+		if (nodeId !== null && rowClickResumesEditing(target, event.currentTarget))
+		{
 			resumeEditing(nodeId, Number.MAX_SAFE_INTEGER);
 		}
 	};
@@ -278,20 +342,22 @@ function ZoomRootRow({nodeId, children}: {nodeId: string | null; children: React
 			projectid={node?.id}
 			className={
 				[
-					projectClassName({
-						hasChildren: node === undefined || rowHasChildren(node, showCompleted),
-						expanded: true,
-						completed: node !== undefined && node.completedAt !== null,
-						hasNote: Boolean(node?.note),
-						noteFocused: isEditingNote,
-						isZoomRoot: true,
-						hasMirrors: node !== undefined && hasMirrorsClass(node),
-						highlighted: false,
-						addedToSelection: isAddedToSelection,
-						layoutClasses: layout.projectClasses,
-						withImage: isPreviewable(node?.attachment),
-						dragHoveredIn: isDragHoveredIn,
-					}),
+					projectClassName(
+						{
+							hasChildren: node === undefined || rowHasChildren(node, showCompleted),
+							expanded: true,
+							completed: node !== undefined && node.completedAt !== null,
+							hasNote: Boolean(node?.note),
+							noteFocused: isEditingNote,
+							isZoomRoot: true,
+							hasMirrors: node !== undefined && hasMirrorsClass(node),
+							highlighted: false,
+							addedToSelection: isAddedToSelection,
+							layoutClasses: layout.projectClasses,
+							withImage: isPreviewable(node?.attachment),
+							dragHoveredIn: isDragHoveredIn,
+						},
+					),
 					isMainTreeRoot && "mainTreeRoot",
 					isReferencesRoot && "references",
 					...searchRootClasses,
@@ -309,19 +375,30 @@ function ZoomRootRow({nodeId, children}: {nodeId: string | null; children: React
 			<div
 				tabIndex={-1}
 				// Upstream's phone title carries only the padding variable (no font-size variable).
-				style={IS_MOBILE ? {["--name-padding-left" as string]: "30px"} : undefined}
-				className={nameClassName({
-					focused: isEditing,
-					isZoomRoot: !isMainTreeRoot,
-					isMainRoot: isMainTreeRoot,
-					empty: !isMainTreeRoot && nameHtml === "",
-					tail: !isMainTreeRoot && isTable(node?.data.layoutMode) ? TABLE_TITLE_CLASS : undefined,
-				})}
+				style={
+					IS_MOBILE
+						?
+							{
+								["--name-padding-left" as string]: "30px",
+							}
+						: undefined
+				}
+				className={nameClassName(
+					{
+						focused: isEditing,
+						isZoomRoot: !isMainTreeRoot,
+						isMainRoot: isMainTreeRoot,
+						empty: !isMainTreeRoot && nameHtml === "",
+						tail: !isMainTreeRoot && isTable(node?.data.layoutMode) ? TABLE_TITLE_CLASS : undefined,
+					},
+				)}
 				onClick={isMainTreeRoot ? undefined : handleTitleClick}
-				onMouseEnter={() => {
+				onMouseEnter={() =>
+				{
 					setIsHovered(true);
 				}}
-				onMouseLeave={() => {
+				onMouseLeave={() =>
+				{
 					setIsHovered(false);
 				}}
 			>
@@ -338,19 +415,27 @@ function ZoomRootRow({nodeId, children}: {nodeId: string | null; children: React
 					{isReferencesRoot ? (
 						<span className="innerContentContainer">{node.backlinksLabel}</span>
 					) : node && (nameHtml !== "" || isEditing) ? (
-						editableText({
-							clickPosition: isEditing ? (editingClickPosition ?? undefined) : undefined,
-							initialValue: nameHtml,
-							isEditing,
-							layoutMode: node.data.layoutMode,
-							nodeId: node.id,
-							parentId: node.parent_id,
-							priority: node.priority,
-						})
+						editableText(
+							{
+								clickPosition: isEditing ? (editingClickPosition ?? undefined) : undefined,
+								initialValue: nameHtml,
+								isEditing,
+								layoutMode: node.data.layoutMode,
+								nodeId: node.id,
+								parentId: node.parent_id,
+								priority: node.priority,
+							},
+						)
 					) : null}
 				</div>
 				{copyCodeButton}
-				<div className="wf-menu nameButtons" style={{marginLeft: 0}} />
+				<div
+					className="wf-menu nameButtons"
+					style={
+					{
+						marginLeft: 0,
+					}}
+				/>
 				{dividerLine}
 				{node && !isMainTreeRoot && (isHovered || isMenuOpen) ? (
 					<NodeItemMenu
@@ -380,19 +465,25 @@ function ZoomRootRow({nodeId, children}: {nodeId: string | null; children: React
  * raises the budget. Keyed by the budget, so each step re-arms it while it stays in view. Local adaptation with no
  * upstream class equivalent.
  */
-function RenderSentinel({onReached}: {onReached: () => void}) {
+function RenderSentinel({onReached}: {onReached: () => void})
+{
 	const ref = useRef<HTMLDivElement>(null);
 
-	useEffect(() => {
-		const observer = new IntersectionObserver((entries) => {
-			if (entries.some((entry) => entry.isIntersecting)) {
+	useEffect(() =>
+	{
+		const observer = new IntersectionObserver((entries) =>
+		{
+			if (entries.some((entry) => entry.isIntersecting))
+			{
 				onReached();
 			}
 		});
-		if (ref.current) {
+		if (ref.current)
+		{
 			observer.observe(ref.current);
 		}
-		return () => {
+		return () =>
+		{
 			observer.disconnect();
 		};
 	}, [onReached]);
@@ -404,44 +495,58 @@ function RenderSentinel({onReached}: {onReached: () => void}) {
  * The references row's label. The caret can enter it (arrows walk the rows like any other), but upstream's name setter
  * is a no-op: typing, Enter and Backspace change nothing here.
  */
-function ReferencesLabel({rootId, label}: {rootId: string; label: string}) {
+function ReferencesLabel({rootId, label}: {rootId: string; label: string})
+{
 	const queryClient = useQueryClient();
 	const inActivePane = useInActivePane();
 	const editing = useOutlineStore((state) => inActivePane && state.editingId === rootId);
 	const ref = useRef<HTMLSpanElement>(null);
-	useEffect(() => {
+	useEffect(() =>
+	{
 		const content = ref.current;
-		if (!editing || content === null) {
+		if (!editing || content === null)
+		{
 			return;
 		}
-		content.focus({preventScroll: true});
+		content.focus(
+			{
+				preventScroll: true,
+			},
+		);
 		placeCaretAtTextOffset(content, useOutlineStore.getState().editingCaretOffset ?? 0);
 	}, [editing]);
-	if (!editing) {
+	if (!editing)
+	{
 		return <span className="innerContentContainer">{label}</span>;
 	}
-	const cross = (key: string): boolean => {
+	const cross = (key: string): boolean =>
+	{
 		const ids = currentNavigableIds(queryClient);
 		const {resumeEditing} = useOutlineStore.getState();
-		if (key === "ArrowUp" || key === "ArrowDown") {
+		if (key === "ArrowUp" || key === "ArrowDown")
+		{
 			const plan = planVerticalCross(ids, rootId, key === "ArrowUp" ? "up" : "down");
-			if (plan.kind === "move") {
+			if (plan.kind === "move")
+			{
 				resumeEditing(plan.nodeId, plan.caretOffset);
 			}
 			return plan.kind !== "native";
 		}
 		const selection = globalThis.getSelection();
 		const content = ref.current;
-		if (content === null || selection?.isCollapsed !== true) {
+		if (content === null || selection?.isCollapsed !== true)
+		{
 			return false;
 		}
 		const offset = selection.anchorOffset;
 		const left = key === "ArrowLeft";
-		if (offset !== (left ? 0 : label.length)) {
+		if (offset !== (left ? 0 : label.length))
+		{
 			return false;
 		}
 		const target = horizontalTarget(ids, rootId, left ? "left" : "right");
-		if (target === null) {
+		if (target === null)
+		{
 			return false;
 		}
 		resumeEditing(target.nodeId, target.caretOffset);
@@ -455,28 +560,36 @@ function ReferencesLabel({rootId, label}: {rootId: string; label: string}) {
 			data-node-id={rootId}
 			contentEditable
 			suppressContentEditableWarning
-			onBeforeInput={(event) => {
+			onBeforeInput={(event) =>
+			{
 				event.preventDefault();
 			}}
-			onPaste={(event) => {
+			onPaste={(event) =>
+			{
 				event.preventDefault();
 			}}
-			onKeyDown={(event) => {
-				if (event.key === "Enter") {
+			onKeyDown={(event) =>
+			{
+				if (event.key === "Enter")
+				{
 					event.preventDefault();
-				} else if (
+				}
+				else if (
 					["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key) &&
 					!event.shiftKey &&
 					!event.altKey &&
 					!event.metaKey &&
 					!event.ctrlKey &&
 					cross(event.key)
-				) {
+				)
+				{
 					event.preventDefault();
 				}
 			}}
-			onBlur={() => {
-				if (useOutlineStore.getState().editingId === rootId && !useOutlineStore.getState().editingHeld) {
+			onBlur={() =>
+			{
+				if (useOutlineStore.getState().editingId === rootId && !useOutlineStore.getState().editingHeld)
+				{
 					useOutlineStore.getState().stopEditing();
 				}
 			}}
@@ -493,15 +606,20 @@ function ReferencesLabel({rootId, label}: {rootId: string; label: string}) {
  * preceded by its source's crumbs. The label counts every backlink with a
  * current source; completed sources hide like any completed row.
  */
-function BacklinksSection({rootId, items, depth}: {rootId: string; items: BacklinkItem[]; depth: number}) {
+function BacklinksSection({rootId, items, depth}: {rootId: string; items: BacklinkItem[]; depth: number})
+{
 	const isExpanded = usePaneExpandedIds().has(rootId);
 	const mainZoomTo = useZoomTo();
 	const pane = useContext(PaneContext);
 	// Upstream's bullet click is the standard one: it zooms into the references root (the arrow toggles).
-	const zoomIn = () => {
-		if (pane === null) {
+	const zoomIn = () =>
+	{
+		if (pane === null)
+		{
 			void mainZoomTo(rootId, "first_child");
-		} else {
+		}
+		else
+		{
 			pane.zoom(rootId);
 		}
 	};
@@ -510,20 +628,30 @@ function BacklinksSection({rootId, items, depth}: {rootId: string; items: Backli
 	const visibleItems = items.filter((item) => showCompleted || item.node.completedAt === null);
 	return (
 		<div
-			className={projectClassName({
-				references: true,
-				hasChildren: true,
-				expanded: isExpanded,
-				completed: false,
-				hasNote: false,
-				noteFocused: false,
-				isZoomRoot: false,
-				hasMirrors: false,
-				highlighted: false,
-				addedToSelection: false,
-			})}
+			className={projectClassName(
+				{
+					references: true,
+					hasChildren: true,
+					expanded: isExpanded,
+					completed: false,
+					hasNote: false,
+					noteFocused: false,
+					isZoomRoot: false,
+					hasMirrors: false,
+					highlighted: false,
+					addedToSelection: false,
+				},
+			)}
 		>
-			<div tabIndex={-1} className={nameClassName({empty: true})} role="presentation">
+			<div
+				tabIndex={-1}
+				className={nameClassName(
+					{
+						empty: true,
+					},
+				)}
+				role="presentation"
+			>
 				{/* oxlint-disable-next-line jsx-a11y/control-has-associated-label -- upstream's bullet anchor is unlabelled; the "N Backlinks" label beside it names the row */}
 				<a
 					href={nodeUrl(rootId)}
@@ -534,19 +662,23 @@ function BacklinksSection({rootId, items, depth}: {rootId: string; items: Backli
 							? "bullet bullet--backlink-root"
 							: "bullet bullet--show-halo bullet--backlink-root keep-bullet"
 					}
-					style={{
+					style={
+					{
 						left: "calc(var(--name-left-overhang) + 1px)",
 						width: "18px",
 						// Upstream keeps the bullet hidden at rest in both states; hovering the row shows it.
 						opacity: 0,
 						["--bullet-size" as string]: "18px",
 					}}
-					onClick={(event) => {
+					onClick={(event) =>
+					{
 						event.preventDefault();
 						zoomIn();
 					}}
-					onKeyDown={(event) => {
-						if (event.key === "Enter" || event.key === " ") {
+					onKeyDown={(event) =>
+					{
+						if (event.key === "Enter" || event.key === " ")
+						{
 							event.preventDefault();
 							zoomIn();
 						}
@@ -567,8 +699,21 @@ function BacklinksSection({rootId, items, depth}: {rootId: string; items: Backli
 				<div className="notranslate content whitespace-pre-wrap">
 					<ReferencesLabel rootId={rootId} label={backlinksLabel(items.length)} />
 				</div>
-				<div className="wf-menu nameButtons" style={{marginLeft: 0}} />
-				{expandArrow({hasChildren: true, isExpanded, nodeId: rootId, onToggle: toggleExpand})}
+				<div
+					className="wf-menu nameButtons"
+					style={
+					{
+						marginLeft: 0,
+					}}
+				/>
+				{expandArrow(
+					{
+						hasChildren: true,
+						isExpanded,
+						nodeId: rootId,
+						onToggle: toggleExpand,
+					},
+				)}
 			</div>
 			<div className="drop-line">
 				<div className="line" />
@@ -601,28 +746,39 @@ const FOUND_DATES_CLASS = "font-custom project open [&_>.name>.itemMenu]:hidden 
  * under their crumbs. Its name is not editable; Enter on it adds an empty item
  * at the end of the day, as upstream does.
  */
-function FoundDatesSection({dayId, items, depth}: {dayId: string; items: FoundDateItem[]; depth: number}) {
+function FoundDatesSection({dayId, items, depth}: {dayId: string; items: FoundDateItem[]; depth: number})
+{
 	const [isExpanded, setIsExpanded] = useState(true);
 	const queryClient = useQueryClient();
 	const createNode = useCreateNode();
 	const {data: dayChildren} = useChildren(dayId);
 	const resumeEditing = useOutlineStore((state) => state.resumeEditing);
-	const addItemToDay = () => {
+	const addItemToDay = () =>
+	{
 		const children = dayChildren ?? [];
-		const plan = planAddChild({
-			childCount: children.length,
-			zoomedId: dayId,
-			shapeLayout: lastChildShapeLayout(queryClient, dayId, children.at(-1)),
-		});
+		const plan = planAddChild(
+			{
+				childCount: children.length,
+				zoomedId: dayId,
+				shapeLayout: lastChildShapeLayout(queryClient, dayId, children.at(-1)),
+			},
+		);
 		const id = crypto.randomUUID();
-		createNode.mutate({
-			id,
-			parent_id: plan.parent_id,
-			name: plan.name,
-			index: plan.index,
-			at_end: plan.at_end,
-			...(plan.layoutMode === null ? {} : {layoutMode: plan.layoutMode}),
-		});
+		createNode.mutate(
+			{
+				id,
+				parent_id: plan.parent_id,
+				name: plan.name,
+				index: plan.index,
+				at_end: plan.at_end,
+				...(plan.layoutMode === null
+					? {}
+					:
+						{
+							layoutMode: plan.layoutMode,
+						}),
+			},
+		);
 		resumeEditing(id, 0);
 	};
 	return (
@@ -631,7 +787,8 @@ function FoundDatesSection({dayId, items, depth}: {dayId: string; items: FoundDa
 				<span
 					data-handbook="bullet.handle"
 					className="bullet diamond"
-					style={{
+					style={
+					{
 						left: "calc(var(--name-left-overhang) + 1px)",
 						width: "18px",
 						opacity: 1e-8,
@@ -656,8 +813,10 @@ function FoundDatesSection({dayId, items, depth}: {dayId: string; items: FoundDa
 					// oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- upstream's name is a `.content` div that takes the caret but not edits; Enter there adds an item to the day
 					role="button"
 					tabIndex={0}
-					onKeyDown={(event) => {
-						if (event.key === "Enter") {
+					onKeyDown={(event) =>
+					{
+						if (event.key === "Enter")
+						{
 							event.preventDefault();
 							addItemToDay();
 						}
@@ -665,15 +824,24 @@ function FoundDatesSection({dayId, items, depth}: {dayId: string; items: FoundDa
 				>
 					<span className="innerContentContainer">Found Dates</span>
 				</div>
-				<div className="wf-menu nameButtons" style={{marginLeft: 0}} />
-				{expandArrow({
-					hasChildren: true,
-					isExpanded,
-					nodeId: `found-dates-${dayId}`,
-					onToggle: () => {
-						setIsExpanded((open) => !open);
+				<div
+					className="wf-menu nameButtons"
+					style={
+					{
+						marginLeft: 0,
+					}}
+				/>
+				{expandArrow(
+					{
+						hasChildren: true,
+						isExpanded,
+						nodeId: `found-dates-${dayId}`,
+						onToggle: () =>
+						{
+							setIsExpanded((open) => !open);
+						},
 					},
-				})}
+				)}
 			</div>
 			<div className="drop-line">
 				<div className="line" />
@@ -695,8 +863,10 @@ function FoundDatesSection({dayId, items, depth}: {dayId: string; items: FoundDa
 	);
 }
 
-function numberingRows(nodes: readonly NodeResponse[]) {
-	return nodes.map((node) => ({
+function numberingRows(nodes: readonly NodeResponse[])
+{
+	return nodes.map((node) => (
+	{
 		id: node.id,
 		layoutMode: node.data.layoutMode,
 		numberedStart: node.numberedStart,
@@ -713,20 +883,25 @@ function childNumbers(
 	searching: boolean,
 	showCompleted: boolean,
 	animatingCompletionIds: ReadonlySet<string>,
-): Map<string, number> {
-	if (!nodes.some((node) => node.data.layoutMode === "numbered")) {
+): Map<string, number>
+{
+	if (!nodes.some((node) => node.data.layoutMode === "numbered"))
+	{
 		return new Map();
 	}
-	if (!searching) {
+	if (!searching)
+	{
 		return renderedNumbers(numberingRows(visibleNodes));
 	}
 	const siblings = numberingRows(
 		nodes.filter((node) => showCompleted || node.completedAt === null || animatingCompletionIds.has(node.id)),
 	);
 	const numbers = new Map<string, number>();
-	for (const node of visibleNodes) {
+	for (const node of visibleNodes)
+	{
 		const number = siblingNumber(siblings, node.id);
-		if (number > 0) {
+		if (number > 0)
+		{
 			numbers.set(node.id, number);
 		}
 	}
@@ -766,8 +941,13 @@ export function OutlineChildren({
 	isRoot?: boolean;
 	depth?: number;
 	/** The zoomed day page's Found Dates (root only): its day id and the cached list, or null elsewhere. */
-	found?: {dayId: string; response: FoundDatesResponse | undefined} | null;
-}): ReactNode {
+	found?:
+	{
+		dayId: string;
+		response: FoundDatesResponse | undefined;
+	} | null;
+}): ReactNode
+{
 	const search = useOutlineSearchFilter();
 	const instance = useContext(MirrorInstanceContext);
 	// The root's view loads in one request already; an expanded row's first load brings its whole expanded subtree.
@@ -777,7 +957,8 @@ export function OutlineChildren({
 	// which a subtree load seeds the section with.
 	const {data: backlinks} = useBacklinks(search === null && nodes !== undefined ? parentId : null);
 	const {showCompleted, animatingCompletionIds} = useOutlineStore(
-		useShallow((state) => ({
+		useShallow((state) => (
+		{
 			showCompleted: state.showCompleted,
 			animatingCompletionIds: state.animatingCompletionIds,
 		})),
@@ -805,7 +986,8 @@ export function OutlineChildren({
 		!visibleNodes ||
 		(total > 0 && limit === 0) ||
 		(total === 0 && backlinksRootId == null && foundItems.length === 0)
-	) {
+	)
+	{
 		return dashboard && visibleNodes !== undefined && total === 0 ? (
 			<div ref={containerRef} className={isRoot ? ROOT_CHILDREN_CLASS : (className ?? NESTED_CHILDREN_CLASS)}>
 				<DashboardBottomButton parentId={parentId} />
@@ -851,7 +1033,8 @@ export function OutlineChildren({
  * The zoomed references root's `.children`: the target's backlink items, each preceded by its source's crumbs (which
  * collapse from the left like Found Dates'), then the add-child wrapper.
  */
-function ReferencesRootChildren({targetId, addChild}: {targetId: string; addChild?: ReactNode}) {
+function ReferencesRootChildren({targetId, addChild}: {targetId: string; addChild?: ReactNode})
+{
 	const {data: backlinks} = useBacklinks(targetId);
 	const showCompleted = useOutlineStore((state) => state.showCompleted);
 	const items = (backlinks?.items ?? []).filter((item) => showCompleted || item.node.completedAt === null);
@@ -869,25 +1052,37 @@ function ReferencesRootChildren({targetId, addChild}: {targetId: string; addChil
  * The zoom root's `.children`, with the zoomed day page's Found Dates. Only the root reads the zoomed node and its
  * Found Dates, so the nested `.children` of every expanded row hold no query for them.
  */
-export function RootOutlineChildren({parentId, addChild}: {parentId: string | null; addChild?: ReactNode}) {
+export function RootOutlineChildren({parentId, addChild}: {parentId: string | null; addChild?: ReactNode})
+{
 	const {data: zoomed} = useNode(parentId);
 	const dayId = zoomed?.calendar?.level === "day" ? zoomed.id : null;
 	const {data: response} = useFoundDates(dayId);
-	if (zoomed?.isReferencesRoot === true && zoomed.parent_id !== null) {
+	if (zoomed?.isReferencesRoot === true && zoomed.parent_id !== null)
+	{
 		return <ReferencesRootChildren targetId={zoomed.parent_id} addChild={addChild} />;
 	}
 	// A zoomed board is its columns; upstream never draws the add-child button on one.
-	if (parentId !== null && isBoard(zoomed?.data.layoutMode)) {
+	if (parentId !== null && isBoard(zoomed?.data.layoutMode))
+	{
 		return <BoardChildren boardId={parentId} zoomed />;
 	}
 	// A zoomed table is its rows; the add-row button replaces the add-child button.
-	if (zoomed !== undefined && isTable(zoomed.data.layoutMode)) {
+	if (zoomed !== undefined && isTable(zoomed.data.layoutMode))
+	{
 		return <TableChildren table={zoomed} zoomed />;
 	}
 	return (
 		<OutlineChildren
 			addChild={addChild}
-			found={dayId === null ? null : {dayId, response}}
+			found={
+				dayId === null
+					? null
+					:
+						{
+							dayId,
+							response,
+						}
+			}
 			isRoot
 			owner={zoomed}
 			ownerDashboard={isDashboard(zoomed?.data.layoutMode, dashboardsOn())}
@@ -900,7 +1095,8 @@ export function RootOutlineChildren({parentId, addChild}: {parentId: string | nu
  * Renders the outline under `parentId` as nested `.project` / `.children` elements,
  * matching upstream's DOM: each expanded row holds its children inline.
  */
-export function OutlineTree({parentId: requestedId, shell = "pane"}: OutlineTreeProps) {
+export function OutlineTree({parentId: requestedId, shell = "pane"}: OutlineTreeProps)
+{
 	// The whole expanded view loads in one request before the swap; the root's own query then reads the cache.
 	const viewPending = useOutlineViewPending(requestedId);
 	const children = useChildren(requestedId, !viewPending);
@@ -909,7 +1105,8 @@ export function OutlineTree({parentId: requestedId, shell = "pane"}: OutlineTree
 	const [lastShown, setLastShown] = useState<string | null | undefined>(undefined);
 	const parentId = outlineRootToShow(requestedId, isLoading, lastShown);
 	const shownLoading = isLoading && parentId === requestedId;
-	if (!shownLoading && lastShown !== parentId) {
+	if (!shownLoading && lastShown !== parentId)
+	{
 		setLastShown(parentId);
 	}
 	const queryClient = useQueryClient();
@@ -920,8 +1117,10 @@ export function OutlineTree({parentId: requestedId, shell = "pane"}: OutlineTree
 	const paneId = usePaneId();
 	const panesClosed = useOutlineStore((state) => state.panes.length === 0);
 	const scrollsWindow = paneId === MAIN_PANE_ID && panesClosed;
-	useLayoutEffect(() => {
-		if (scrollsWindow && !shownLoading) {
+	useLayoutEffect(() =>
+	{
+		if (scrollsWindow && !shownLoading)
+		{
 			restorePoppedScroll(parentId);
 			restoreShownView(queryClient, parentId);
 		}
@@ -932,28 +1131,42 @@ export function OutlineTree({parentId: requestedId, shell = "pane"}: OutlineTree
 		paneId === MAIN_PANE_ID && state.zoomedNodeId === parentId ? state.zoomedInstance : null,
 	);
 	const rootInstance = useMemo(
-		() => (zoomedInstance === null || parentId === null ? null : childInstance({id: parentId}, zoomedInstance)),
+		() =>
+			zoomedInstance === null || parentId === null
+				? null
+				: childInstance(
+						{
+							id: parentId,
+						},
+						zoomedInstance,
+					),
 		[parentId, zoomedInstance],
 	);
 
 	const createNode = useCreateNode();
 	// A click on blank outline space (below or beside the rows) clears any item selection and edits the end of the
 	// last visible row.
-	const handleBlankClick = (event: React.MouseEvent<HTMLDivElement>) => {
-		if (!(event.target instanceof Element) || !event.target.matches(BLANK_OUTLINE_SELECTOR)) {
+	const handleBlankClick = (event: React.MouseEvent<HTMLDivElement>) =>
+	{
+		if (!(event.target instanceof Element) || !event.target.matches(BLANK_OUTLINE_SELECTOR))
+		{
 			return;
 		}
 		const last = currentSelectionView(queryClient).rows.at(-1);
 		const {clearItemSelection, resumeEditing} = useOutlineStore.getState();
-		if (last === undefined) {
+		if (last === undefined)
+		{
 			clearItemSelection();
-		} else {
+		}
+		else
+		{
 			resumeEditing(last.id, Number.MAX_SAFE_INTEGER);
 		}
 	};
 
 	// Upstream's `xy4`, wired to `.document-end` only.
-	const handleDocumentEndClick = () => {
+	const handleDocumentEndClick = () =>
+	{
 		const {itemSelection, resumeEditing} = useOutlineStore.getState();
 		const view = currentSelectionView(queryClient);
 		const rows = view.rows.filter((row) => row.id !== parentId);
@@ -961,44 +1174,62 @@ export function OutlineTree({parentId: requestedId, shell = "pane"}: OutlineTree
 		const visibleChildCount = (children.data ?? []).filter(
 			(node) => store.showCompleted || node.completedAt === null,
 		).length;
-		const plan = planBlankSpaceClick({
-			selectionActive: itemSelection.entries.length > 0,
-			lastVisibleRowId: rows.at(-1)?.id ?? null,
-			searching: search !== null,
-			visibleChildCount,
-		});
-		if (plan.kind === "edit-end") {
+		const plan = planBlankSpaceClick(
+			{
+				selectionActive: itemSelection.entries.length > 0,
+				lastVisibleRowId: rows.at(-1)?.id ?? null,
+				searching: search !== null,
+				visibleChildCount,
+			},
+		);
+		if (plan.kind === "edit-end")
+		{
 			resumeEditing(plan.id, Number.MAX_SAFE_INTEGER);
-		} else if (plan.kind === "add-child") {
+		}
+		else if (plan.kind === "add-child")
+		{
 			const visible = (children.data ?? []).filter((node) => store.showCompleted || node.completedAt === null);
-			const addPlan = planAddChild({
-				childCount: (children.data ?? []).length,
-				zoomedId: parentId,
-				shapeLayout: lastChildShapeLayout(queryClient, parentId, visible.at(-1)),
-			});
+			const addPlan = planAddChild(
+				{
+					childCount: (children.data ?? []).length,
+					zoomedId: parentId,
+					shapeLayout: lastChildShapeLayout(queryClient, parentId, visible.at(-1)),
+				},
+			);
 			const id = crypto.randomUUID();
-			createNode.mutate({
-				id,
-				parent_id: addPlan.parent_id,
-				name: addPlan.name,
-				index: addPlan.index,
-				...(addPlan.layoutMode === null ? {} : {layoutMode: addPlan.layoutMode}),
-			});
+			createNode.mutate(
+				{
+					id,
+					parent_id: addPlan.parent_id,
+					name: addPlan.name,
+					index: addPlan.index,
+					...(addPlan.layoutMode === null
+						? {}
+						:
+							{
+								layoutMode: addPlan.layoutMode,
+							}),
+				},
+			);
 			resumeEditing(id, 0);
 		}
 	};
 
-	useEffect(() => {
-		if (!shownLoading || error) {
+	useEffect(() =>
+	{
+		if (!shownLoading || error)
+		{
 			hideLoadingScreenOnce();
 		}
 	}, [shownLoading, error]);
 
-	if (shownLoading) {
+	if (shownLoading)
+	{
 		return <div className="outline-tree-loading">Loading...</div>;
 	}
 
-	if (error) {
+	if (error)
+	{
 		return <div className="outline-tree-error">Error loading nodes: {error.message}</div>;
 	}
 
@@ -1018,7 +1249,8 @@ export function OutlineTree({parentId: requestedId, shell = "pane"}: OutlineTree
 	);
 	const sentinel = rowLimits.remaining === 0 ? <RenderSentinel key={budgetRows} onReached={growBudget} /> : null;
 
-	if (shell === "page") {
+	if (shell === "page")
+	{
 		return (
 			<>
 				{rows}
@@ -1026,7 +1258,10 @@ export function OutlineTree({parentId: requestedId, shell = "pane"}: OutlineTree
 				{/* oxlint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- a mouse shortcut to the last row; keyboard users move the caret with the arrow keys */}
 				<div
 					className="document-end flex-grow flex-shrink-0 print:hidden"
-					style={{height: DOCUMENT_END_HEIGHT}}
+					style={
+					{
+						height: DOCUMENT_END_HEIGHT,
+					}}
 					onClick={handleDocumentEndClick}
 				/>
 			</>

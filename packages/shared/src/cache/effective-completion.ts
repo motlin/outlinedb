@@ -10,7 +10,8 @@ import {FAR_FUTURE_DATE} from "../temporal/constants.js";
  * one on a mirror); every other node uses `ownCompletedAt`. Pass the node's id column
  * and its joined `node_metadata.completed_at` column.
  */
-export function effectiveCompletedAt(idColumn: AnySQLiteColumn, ownCompletedAt: AnySQLiteColumn): SQL<Date | null> {
+export function effectiveCompletedAt(idColumn: AnySQLiteColumn, ownCompletedAt: AnySQLiteColumn): SQL<Date | null>
+{
 	return sql<Date | null>`CASE WHEN EXISTS (SELECT 1 FROM ${mirrors} WHERE ${mirrors.mirrorId} = ${idColumn} AND ${mirrors.systemTo} = ${FAR_FUTURE_DATE})
 		THEN (SELECT om.completed_at FROM ${mirrors} mi
 			INNER JOIN ${nodeMetadata} om ON om.node_id = mi.original_id AND om.system_to = ${FAR_FUTURE_DATE}

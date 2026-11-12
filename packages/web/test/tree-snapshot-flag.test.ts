@@ -25,73 +25,192 @@ const TREE: [id: string, parentId: string | null, name: string][] = [
 ];
 
 const open: DatabaseConstructor.Database[] = [];
-afterEach(() => {
-	for (const sqlite of open.splice(0)) {
+afterEach(() =>
+{
+	for (const sqlite of open.splice(0))
+	{
 		sqlite.close();
 	}
 });
 
-function seededDb(withHost: boolean) {
+function seededDb(withHost: boolean)
+{
 	const sqlite = new DatabaseConstructor(":memory:");
 	open.push(sqlite);
-	const db = drizzle(sqlite, {schema});
-	if (withHost) {
+	const db = drizzle(
+		sqlite,
+		{
+			schema,
+		},
+	);
+	if (withHost)
+	{
 		bindTreeHost(db, nodeTreeHost(sqlite));
 	}
-	migrate(db, {migrationsFolder});
-	TREE.forEach(([id, parentId, name], priority) => {
+	migrate(
+		db,
+		{
+			migrationsFolder,
+		},
+	);
+	TREE.forEach(([id, parentId, name], priority) =>
+	{
 		db.insert(nodeContent)
-			.values({id, name, note: null, parentId, systemFrom: SEEDED_AT, systemTo: FAR_FUTURE_DATE})
+			.values(
+				{
+					id,
+					name,
+					note: null,
+					parentId,
+					systemFrom: SEEDED_AT,
+					systemTo: FAR_FUTURE_DATE,
+				},
+			)
 			.run();
-		db.insert(nodeMetadata).values({nodeId: id, priority, systemFrom: SEEDED_AT, systemTo: FAR_FUTURE_DATE}).run();
+		db.insert(nodeMetadata)
+			.values(
+				{
+					nodeId: id,
+					priority,
+					systemFrom: SEEDED_AT,
+					systemTo: FAR_FUTURE_DATE,
+				},
+			)
+			.run();
 	});
 	db.insert(mirrors)
-		.values({mirrorId: "m", originalId: "other", systemFrom: SEEDED_AT, systemTo: FAR_FUTURE_DATE})
+		.values(
+			{
+				mirrorId: "m",
+				originalId: "other",
+				systemFrom: SEEDED_AT,
+				systemTo: FAR_FUTURE_DATE,
+			},
+		)
 		.run();
 	return db;
 }
 
-function appFor(db: ReturnType<typeof seededDb>, treeSnapshot: boolean) {
-	const ctx = {db, config: {features: {embeddings: false, treeSnapshot}}} as unknown as ServerContext;
+function appFor(db: ReturnType<typeof seededDb>, treeSnapshot: boolean)
+{
+	const ctx =
+	{
+		db,
+		config:
+		{
+			features:
+			{
+				embeddings: false,
+				treeSnapshot,
+			},
+		},
+	} as unknown as ServerContext;
 	return httpAppFor(ctx);
 }
 
-async function call(app: Hono, method: string, path: string, body?: unknown): Promise<unknown> {
+async function call(app: Hono, method: string, path: string, body?: unknown): Promise<unknown>
+{
 	const res = await app.fetch(
-		new Request(`http://x${path}`, {
-			method,
-			headers: {"content-type": "application/json"},
-			...(body === undefined ? {} : {body: JSON.stringify(body)}),
-		}),
+		new Request(
+			`http://x${path}`,
+			{
+				method,
+				headers:
+				{
+					"content-type": "application/json",
+				},
+				...(body === undefined
+					? {}
+					:
+						{
+							body: JSON.stringify(body),
+						}),
+			},
+		),
 	);
-	return {status: res.status, body: await res.json()};
+	return {
+		status: res.status,
+		body: await res.json(),
+	};
 }
 
 const REQUESTS: [string, string, unknown?][] = [
-	["POST", "/api/search/tree", {query: "needle", rootId: null}],
-	["POST", "/api/search/tree", {query: "needle", rootId: "root"}],
-	["POST", "/api/search/tree", {query: "is:backlink", rootId: null}],
-	["POST", "/api/search/switcher", {query: "alp", limit: 10}],
-	["POST", "/api/search/locations", {query: "needle", limit: 10}],
+	[
+		"POST",
+		"/api/search/tree",
+		{
+			query: "needle",
+			rootId: null,
+		},
+	],
+	[
+		"POST",
+		"/api/search/tree",
+		{
+			query: "needle",
+			rootId: "root",
+		},
+	],
+	[
+		"POST",
+		"/api/search/tree",
+		{
+			query: "is:backlink",
+			rootId: null,
+		},
+	],
+	[
+		"POST",
+		"/api/search/switcher",
+		{
+			query: "alp",
+			limit: 10,
+		},
+	],
+	[
+		"POST",
+		"/api/search/locations",
+		{
+			query: "needle",
+			limit: 10,
+		},
+	],
 	["GET", "/api/search/helpers?rootId="],
 	["GET", "/api/search/helpers?rootId=root"],
 ];
 
-describe("features.treeSnapshot", () => {
-	it("serves the same search results from SQL as from the snapshot", async () => {
+describe("features.treeSnapshot", () =>
+{
+	it("serves the same search results from SQL as from the snapshot", async () =>
+	{
 		const withSnapshot = appFor(seededDb(true), true);
 		const withoutSnapshot = appFor(seededDb(false), false);
-		for (const [method, path, body] of REQUESTS) {
+		for (const [method, path, body] of REQUESTS)
+		{
 			const expected = await call(withSnapshot, method, path, body);
 			const actual = await call(withoutSnapshot, method, path, body);
-			expect({path, body, result: actual}).toStrictEqual({path, body, result: expected});
+			expect(
+				{
+					path,
+					body,
+					result: actual,
+				},
+			).toStrictEqual(
+				{
+					path,
+					body,
+					result: expected,
+				},
+			);
 		}
 	});
 
-	it("never builds a snapshot while the flag is off", async () => {
+	it("never builds a snapshot while the flag is off", async () =>
+	{
 		const db = seededDb(true);
 		const app = appFor(db, false);
-		for (const [method, path, body] of REQUESTS) {
+		for (const [method, path, body] of REQUESTS)
+		{
 			await call(app, method, path, body);
 		}
 		expect(peekTreeSnapshotRows(db)).toBeUndefined();

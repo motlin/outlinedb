@@ -10,22 +10,26 @@ import type {ParsedQuery} from "./query-parser.js";
  * apply to `node_content`; metadata conditions (completion, last-changed) require
  * joining `node_metadata`, which `needsMetadataJoin` signals.
  */
-export interface SearchConditions {
+export interface SearchConditions
+{
 	contentConditions: SQL[];
 	metadataConditions: SQL[];
 	needsMetadataJoin: boolean;
 }
 
 /** Drizzle's and/or return undefined only for an empty argument list; every call here passes at least one. */
-function defined(condition: SQL | undefined): SQL {
-	if (condition === undefined) {
+function defined(condition: SQL | undefined): SQL
+{
+	if (condition === undefined)
+	{
 		throw new Error("Expected a non-empty SQL condition list");
 	}
 	return condition;
 }
 
 /** Build SQL WHERE conditions for a parsed search query. */
-export function buildSearchConditions(parsed: ParsedQuery): SearchConditions {
+export function buildSearchConditions(parsed: ParsedQuery): SearchConditions
+{
 	const contentConditions: SQL[] = [];
 	const metadataConditions: SQL[] = [];
 
@@ -34,37 +38,45 @@ export function buildSearchConditions(parsed: ParsedQuery): SearchConditions {
 	contentConditions.push(eq(nodeContent.systemTo, FAR_FUTURE_DATE), notAMirror(nodeContent.id));
 
 	// Exact phrases - must appear in name or note
-	for (const phrase of parsed.exactPhrases) {
+	for (const phrase of parsed.exactPhrases)
+	{
 		const pattern = `%${phrase}%`;
 		contentConditions.push(defined(or(like(nodeContent.name, pattern), like(nodeContent.note, pattern))));
 	}
 
 	// Required terms (AND) - all must appear in name or note
-	for (const term of parsed.requiredTerms) {
+	for (const term of parsed.requiredTerms)
+	{
 		const pattern = `%${term}%`;
 		contentConditions.push(defined(or(like(nodeContent.name, pattern), like(nodeContent.note, pattern))));
 	}
 
 	// OR terms - at least one group must match, within each group all terms must match
-	if (parsed.orTerms.length > 0) {
+	if (parsed.orTerms.length > 0)
+	{
 		const orConditions: SQL[] = [];
-		for (const termGroup of parsed.orTerms) {
+		for (const termGroup of parsed.orTerms)
+		{
 			const groupConditions: SQL[] = [];
-			for (const term of termGroup) {
+			for (const term of termGroup)
+			{
 				const pattern = `%${term}%`;
 				groupConditions.push(defined(or(like(nodeContent.name, pattern), like(nodeContent.note, pattern))));
 			}
-			if (groupConditions.length > 0) {
+			if (groupConditions.length > 0)
+			{
 				orConditions.push(defined(and(...groupConditions)));
 			}
 		}
-		if (orConditions.length > 0) {
+		if (orConditions.length > 0)
+		{
 			contentConditions.push(defined(or(...orConditions)));
 		}
 	}
 
 	// Excluded terms - must NOT appear in name or note
-	for (const term of parsed.excludedTerms) {
+	for (const term of parsed.excludedTerms)
+	{
 		const pattern = `%${term}%`;
 		contentConditions.push(
 			defined(
@@ -77,14 +89,18 @@ export function buildSearchConditions(parsed: ParsedQuery): SearchConditions {
 	}
 
 	// Completion filter - requires metadata join
-	if (parsed.isComplete === true) {
+	if (parsed.isComplete === true)
+	{
 		metadataConditions.push(isNotNull(nodeMetadata.completedAt));
-	} else if (parsed.isComplete === false) {
+	}
+	else if (parsed.isComplete === false)
+	{
 		metadataConditions.push(isNull(nodeMetadata.completedAt));
 	}
 
 	// Date filter - last-changed:Nd means modifiedAt within last N days - requires metadata join
-	if (parsed.lastChangedDays !== null) {
+	if (parsed.lastChangedDays !== null)
+	{
 		const cutoffDate = new Date(Date.now() - parsed.lastChangedDays * 24 * 60 * 60 * 1000);
 		metadataConditions.push(gte(nodeMetadata.modifiedAt, cutoffDate));
 	}
@@ -97,9 +113,11 @@ export function buildSearchConditions(parsed: ParsedQuery): SearchConditions {
 }
 
 /** Extract the terms used for relevance scoring from a parsed query. */
-export function getScoringTerms(parsed: ParsedQuery): string[] {
+export function getScoringTerms(parsed: ParsedQuery): string[]
+{
 	const terms: string[] = [...parsed.exactPhrases, ...parsed.requiredTerms];
-	for (const group of parsed.orTerms) {
+	for (const group of parsed.orTerms)
+	{
 		terms.push(...group);
 	}
 	return terms;

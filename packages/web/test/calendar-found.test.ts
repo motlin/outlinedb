@@ -12,7 +12,8 @@ import {httpAppFor} from "./http-app-for.js";
 
 const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 
-function time(year: number, month: number, day: number): string {
+function time(year: number, month: number, day: number): string
+{
 	return `<time startYear="${year}" startMonth="${month}" startDay="${day}">${month}/${day}/${year}</time>`;
 }
 
@@ -47,38 +48,81 @@ const TREE: [string, string | null, string, string | null, number][] = [
 ];
 
 const open: DatabaseConstructor.Database[] = [];
-afterEach(() => {
-	for (const sqlite of open.splice(0)) {
+afterEach(() =>
+{
+	for (const sqlite of open.splice(0))
+	{
 		sqlite.close();
 	}
 });
 
-function setup(rootMetadata?: Record<string, unknown>) {
+function setup(rootMetadata?: Record<string, unknown>)
+{
 	const sqlite = new DatabaseConstructor(":memory:");
 	open.push(sqlite);
-	const db = drizzle(sqlite, {schema});
-	migrate(db, {migrationsFolder});
+	const db = drizzle(
+		sqlite,
+		{
+			schema,
+		},
+	);
+	migrate(
+		db,
+		{
+			migrationsFolder,
+		},
+	);
 	const cacheService = new CacheService(db);
-	for (const [id, parentId, name, note, priority] of TREE) {
-		cacheService.insertNode({id, name, note, parent_id: parentId, priority, createdAt: 1, modifiedAt: 1}, parentId);
+	for (const [id, parentId, name, note, priority] of TREE)
+	{
+		cacheService.insertNode(
+			{
+				id,
+				name,
+				note,
+				parent_id: parentId,
+				priority,
+				createdAt: 1,
+				modifiedAt: 1,
+			},
+			parentId,
+		);
 	}
 	cacheService.insertMirror("due", "mirror");
-	if (rootMetadata !== undefined) {
-		storeInternalMetadata(db, new Map([["cal", {calendar: rootMetadata}]]));
+	if (rootMetadata !== undefined)
+	{
+		storeInternalMetadata(
+			db,
+			new Map([
+				[
+					"cal",
+					{
+						calendar: rootMetadata,
+					},
+				],
+			]),
+		);
 	}
-	const ctx = {db, cacheService} as unknown as ServerContext;
+	const ctx =
+	{
+		db,
+		cacheService,
+	} as unknown as ServerContext;
 	const app = new Hono<AppEnv>();
-	app.use("*", async (c, next) => {
+	app.use("*", async (c, next) =>
+	{
 		c.set("ctx", ctx);
 		await next();
 	});
 	app.route("/", httpAppFor(ctx));
-	const get = async (id: string) => {
+	const get = async (id: string) =>
+	{
 		const res = await app.fetch(new Request(`http://x/api/v1/nodes/${id}/found-dates`));
 		const body = (await res.json()) as Partial<FoundDatesResponse>;
 		return {
 			status: res.status,
-			items: (body.items ?? []).map(({node, crumbs}) => ({
+			items: (body.items ?? []).map(({node, crumbs}) => (
+			{
 				id: node.id,
 				isMirror: node.isMirror,
 				originalNodeId: node.originalNodeId,
@@ -86,46 +130,77 @@ function setup(rootMetadata?: Record<string, unknown>) {
 			})),
 		};
 	};
-	return Object.assign(get, {
-		/** The raw Found Dates GET body and the outline view POST body for `rootId`. */
-		raw: async (rootId: string) => {
-			const foundDates: unknown = await (
-				await app.fetch(new Request(`http://x/api/v1/nodes/${rootId}/found-dates`))
-			).json();
-			const view = (await (
-				await app.fetch(
-					new Request("http://x/api/v1/nodes/view", {
-						method: "POST",
-						headers: {"Content-Type": "application/json"},
-						body: JSON.stringify({rootId, expandedIds: [], limit: 50, showCompleted: false}),
-					}),
-				)
-			).json()) as Record<string, unknown>;
-			return {foundDates, view};
+	return Object.assign(
+		get,
+		{
+			/** The raw Found Dates GET body and the outline view POST body for `rootId`. */
+			raw: async (rootId: string) =>
+			{
+				const foundDates: unknown = await (
+					await app.fetch(new Request(`http://x/api/v1/nodes/${rootId}/found-dates`))
+				).json();
+				const view = (await (
+					await app.fetch(
+						new Request(
+							"http://x/api/v1/nodes/view",
+							{
+								method: "POST",
+								headers:
+								{
+									"Content-Type": "application/json",
+								},
+								body: JSON.stringify(
+									{
+										rootId,
+										expandedIds: [],
+										limit: 50,
+										showCompleted: false,
+									},
+								),
+							},
+						),
+					)
+				).json()) as Record<string, unknown>;
+				return {
+					foundDates,
+					view,
+				};
+			},
 		},
-	});
+	);
 }
 
-const found = (id: string, crumbs: string[]) => ({id, isMirror: true, originalNodeId: id, crumbs});
+const found = (id: string, crumbs: string[]) => (
+{
+	id,
+	isMirror: true,
+	originalNodeId: id,
+	crumbs,
+});
 
-describe("GET /api/v1/nodes/:id/found-dates", () => {
-	it("lists nodes outside the day whose name or note has a <time> covering it, in tree order, as mirrors with crumbs", async () => {
+describe("GET /api/v1/nodes/:id/found-dates", () =>
+{
+	it("lists nodes outside the day whose name or note has a <time> covering it, in tree order, as mirrors with crumbs", async () =>
+	{
 		const get = setup();
 
-		await expect(get("d0930")).resolves.toStrictEqual({
-			status: 200,
-			items: [
-				found("beside", ["cal", "y2026", "m09"]),
-				found("noted", ["projects", "alpha"]),
-				found("due", ["projects", "alpha"]),
-				found("trip", ["projects"]),
-				found("sabbatical", ["projects"]),
-				found("top", []),
-			],
-		});
+		await expect(get("d0930")).resolves.toStrictEqual(
+			{
+				status: 200,
+				items: [
+					found("beside", ["cal", "y2026", "m09"]),
+					found("noted", ["projects", "alpha"]),
+					found("due", ["projects", "alpha"]),
+					found("trip", ["projects"]),
+					found("sabbatical", ["projects"]),
+					found("top", []),
+				],
+			},
+		);
 	});
 
-	it("counts a range for every day it covers", async () => {
+	it("counts a range for every day it covers", async () =>
+	{
 		const get = setup();
 
 		const {items} = await get("d0929");
@@ -133,33 +208,58 @@ describe("GET /api/v1/nodes/:id/found-dates", () => {
 		expect(items.map(({id}) => id)).toStrictEqual(["trip", "sabbatical"]);
 	});
 
-	it("lists nothing for a node that is not a day", async () => {
+	it("lists nothing for a node that is not a day", async () =>
+	{
 		const get = setup();
 
-		await expect(get("alpha")).resolves.toStrictEqual({status: 200, items: []});
+		await expect(get("alpha")).resolves.toStrictEqual(
+			{
+				status: 200,
+				items: [],
+			},
+		);
 	});
 
-	it("lists nothing when the calendar root turns Found Dates off", async () => {
-		const get = setup({root: true, found_dates: false});
+	it("lists nothing when the calendar root turns Found Dates off", async () =>
+	{
+		const get = setup(
+			{
+				root: true,
+				found_dates: false,
+			},
+		);
 
-		await expect(get("d0930")).resolves.toStrictEqual({status: 200, items: []});
+		await expect(get("d0930")).resolves.toStrictEqual(
+			{
+				status: 200,
+				items: [],
+			},
+		);
 	});
 
-	it("answers 404 for an unknown node", async () => {
+	it("answers 404 for an unknown node", async () =>
+	{
 		const get = setup();
 
-		await expect(get("nope")).resolves.toMatchObject({status: 404});
+		await expect(get("nope")).resolves.toMatchObject(
+			{
+				status: 404,
+			},
+		);
 	});
 });
 
-describe("POST /api/v1/nodes/view Found Dates", () => {
-	it("carries a day page's Found Dates, so they swap in with the view", async () => {
+describe("POST /api/v1/nodes/view Found Dates", () =>
+{
+	it("carries a day page's Found Dates, so they swap in with the view", async () =>
+	{
 		const {foundDates, view} = await setup().raw("d0930");
 
 		expect(view.foundDates).toStrictEqual(foundDates);
 	});
 
-	it("carries no Found Dates for a node that is not a day", async () => {
+	it("carries no Found Dates for a node that is not a day", async () =>
+	{
 		const {view} = await setup().raw("alpha");
 
 		expect(Object.keys(view)).toStrictEqual(["lists"]);

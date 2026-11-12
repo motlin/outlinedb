@@ -10,16 +10,19 @@ import type {TestDatabase} from "../../db/migration-helper.js";
 
 const ENV_KEYS = ["OUTLINEDB_DB_PATH", "WORKFLOWY_USERNAME", "WORKFLOWY_PASSWORD", "OUTLINEDB_SESSION_FILE"];
 
-describe("cache:import-account command", () => {
+describe("cache:import-account command", () =>
+{
 	let tempDir: string;
 	let testDatabase: TestDatabase;
 	const savedEnv: Record<string, string | undefined> = {};
 
-	beforeEach(() => {
+	beforeEach(() =>
+	{
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-import-account-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
-		for (const key of ENV_KEYS) {
+		for (const key of ENV_KEYS)
+		{
 			savedEnv[key] = process.env[key];
 			Reflect.deleteProperty(process.env, key);
 		}
@@ -27,28 +30,44 @@ describe("cache:import-account command", () => {
 		process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "no-session");
 	});
 
-	afterEach(() => {
+	afterEach(() =>
+	{
 		cleanupTestDatabase(testDatabase);
-		for (const [key, value] of Object.entries(savedEnv)) {
-			if (value === undefined) {
+		for (const [key, value] of Object.entries(savedEnv))
+		{
+			if (value === undefined)
+			{
 				Reflect.deleteProperty(process.env, key);
-			} else {
+			}
+			else
+			{
 				process.env[key] = value;
 			}
 		}
-		fs.rmSync(tempDir, {recursive: true, force: true});
+		fs.rmSync(
+			tempDir,
+			{
+				recursive: true,
+				force: true,
+			},
+		);
 	});
 
-	it("fails without touching the account tables when no internal-API credentials or session are configured", async () => {
+	it("fails without touching the account tables when no internal-API credentials or session are configured", async () =>
+	{
 		const {error} = await captureOutput(async () => ImportAccount.run([]));
 
-		expect({
-			message: error?.message,
-			rows: ACCOUNT_COMPOSITE_TABLES.flatMap((table) => testDatabase.db.select().from(table).all()),
-		}).toStrictEqual({
-			message:
-				"Importing account state needs the internal API: set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD (e.g. via op run)",
-			rows: [],
-		});
+		expect(
+			{
+				message: error?.message,
+				rows: ACCOUNT_COMPOSITE_TABLES.flatMap((table) => testDatabase.db.select().from(table).all()),
+			},
+		).toStrictEqual(
+			{
+				message:
+					"Importing account state needs the internal API: set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD (e.g. via op run)",
+				rows: [],
+			},
+		);
 	});
 });

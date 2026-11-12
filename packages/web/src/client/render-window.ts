@@ -17,7 +17,8 @@ const MINIMAL_ROW_HEIGHT = 24;
 const ROW_STEP = 24;
 
 /** A viewport of minimal-height rows plus one step of slack below the fold. */
-export function initialRowBudget(viewportHeight: number): number {
+export function initialRowBudget(viewportHeight: number): number
+{
 	return Math.ceil(viewportHeight / MINIMAL_ROW_HEIGHT) + ROW_STEP;
 }
 
@@ -26,21 +27,25 @@ export function initialRowBudget(viewportHeight: number): number {
  * slack below the fold (`initialRowBudget`) mounts after that paint, so the swap's frame does not pay for rows
  * nobody sees yet. An unknown viewport (no window) gets one step.
  */
-export function firstPaintRowBudget(viewportHeight: number): number {
+export function firstPaintRowBudget(viewportHeight: number): number
+{
 	return Math.max(ROW_STEP, Math.ceil(viewportHeight / MINIMAL_ROW_HEIGHT));
 }
 
 /** Upstream's `appState.printing ? Infinity : maxToRender`: a print renders every row. */
-export function printRowBudget(rows: number, printing: boolean): number {
+export function printRowBudget(rows: number, printing: boolean): number
+{
 	return printing ? Number.POSITIVE_INFINITY : rows;
 }
 
-export function nextRowBudget(current: number): number {
+export function nextRowBudget(current: number): number
+{
 	return current + ROW_STEP;
 }
 
 /** What decides which rows the outline shows: expansion and completion, or the search while one is applied. */
-export interface RowView {
+export interface RowView
+{
 	expandedIds: ReadonlySet<string>;
 	showCompleted: boolean;
 	animatingCompletionIds: ReadonlySet<string>;
@@ -53,7 +58,8 @@ function rendersRow(
 	showCompleted: boolean,
 	animatingCompletionIds: ReadonlySet<string>,
 	search: SearchFilter | null,
-): boolean {
+): boolean
+{
 	return (
 		isPotentiallyVisible(node, searchShowsCompleted(showCompleted, search), animatingCompletionIds) &&
 		(search === null || searchShowsNode(node, search))
@@ -66,8 +72,14 @@ function rendersRow(
  */
 export function focusableSiblingIds(
 	nodes: readonly NodeResponse[] | undefined,
-	view: {showCompleted: boolean; animatingCompletionIds: ReadonlySet<string>; search: SearchFilter | null},
-): string[] {
+	view:
+	{
+		showCompleted: boolean;
+		animatingCompletionIds: ReadonlySet<string>;
+		search: SearchFilter | null;
+	},
+): string[]
+{
 	return sortByPriority([...(nodes ?? [])])
 		.filter((node) => rendersRow(node, view.showCompleted, view.animatingCompletionIds, view.search))
 		.map((node) => node.id);
@@ -83,7 +95,8 @@ export function rendersInstanceRow(
 	showCompleted: boolean,
 	animatingCompletionIds: ReadonlySet<string>,
 	search: SearchFilter | null,
-): boolean {
+): boolean
+{
 	return (
 		rendersRow(node, showCompleted, animatingCompletionIds, search) &&
 		(search === null || !isCyclical(node, instance))
@@ -99,11 +112,13 @@ export function rendersInstanceChildren(
 	instance: MirrorInstance | null,
 	expandedIds: ReadonlySet<string>,
 	search: SearchFilter | null,
-): boolean {
+): boolean
+{
 	return search === null ? expandedIds.has(expansionId(node.id, instance)) : isSearchExpanded(node.id, search);
 }
 
-export interface RowLimits {
+export interface RowLimits
+{
 	/** How many of each loaded, rendered parent's visible children render. */
 	limits: ReadonlyMap<string | null, number>;
 	/** The budget left after every loaded row, for a parent whose children have not loaded yet. */
@@ -116,32 +131,42 @@ export function rowLimits(
 	rootId: string | null,
 	budget: number,
 	{expandedIds, showCompleted, animatingCompletionIds, search}: RowView,
-): RowLimits {
+): RowLimits
+{
 	const limits = new Map<string | null, number>();
 	let used = 0;
-	const visit = (parentId: string | null, instance: MirrorInstance | null) => {
+	const visit = (parentId: string | null, instance: MirrorInstance | null) =>
+	{
 		const children = getChildren(parentId);
-		if (children === undefined) {
+		if (children === undefined)
+		{
 			return;
 		}
 		let count = 0;
-		for (const node of children) {
-			if (used >= budget) {
+		for (const node of children)
+		{
+			if (used >= budget)
+			{
 				break;
 			}
-			if (!rendersInstanceRow(node, instance, showCompleted, animatingCompletionIds, search)) {
+			if (!rendersInstanceRow(node, instance, showCompleted, animatingCompletionIds, search))
+			{
 				continue;
 			}
 			used += 1;
 			count += 1;
-			if (rendersInstanceChildren(node, instance, expandedIds, search)) {
+			if (rendersInstanceChildren(node, instance, expandedIds, search))
+			{
 				visit(node.id, childInstance(node, instance));
 			}
 		}
 		limits.set(instanceKey(parentId, instance), count);
 	};
 	visit(rootId, null);
-	return {limits, remaining: budget - used};
+	return {
+		limits,
+		remaining: budget - used,
+	};
 }
 
 /**
@@ -153,27 +178,34 @@ export function viewParentIds(
 	rootId: string | null,
 	budget: number,
 	{expandedIds, showCompleted, animatingCompletionIds, search}: RowView,
-): (string | null)[] | undefined {
+): (string | null)[] | undefined
+{
 	const parentIds: (string | null)[] = [];
 	let used = 0;
-	const visit = (parentId: string | null, instance: MirrorInstance | null): boolean => {
+	const visit = (parentId: string | null, instance: MirrorInstance | null): boolean =>
+	{
 		parentIds.push(parentId);
 		const children = getChildren(parentId);
-		if (children === undefined) {
+		if (children === undefined)
+		{
 			return false;
 		}
-		for (const node of children) {
-			if (used >= budget) {
+		for (const node of children)
+		{
+			if (used >= budget)
+			{
 				return true;
 			}
-			if (!rendersInstanceRow(node, instance, showCompleted, animatingCompletionIds, search)) {
+			if (!rendersInstanceRow(node, instance, showCompleted, animatingCompletionIds, search))
+			{
 				continue;
 			}
 			used += 1;
 			if (
 				rendersInstanceChildren(node, instance, expandedIds, search) &&
 				!visit(node.id, childInstance(node, instance))
-			) {
+			)
+			{
 				return false;
 			}
 		}
@@ -194,11 +226,15 @@ export function rowBudgetToShow(
 	budget: number,
 	{expandedIds, showCompleted, animatingCompletionIds, search}: RowView,
 	targetId: string,
-): number {
+): number
+{
 	let position = 0;
-	const find = (parentId: string | null, instance: MirrorInstance | null): boolean => {
-		for (const node of getChildren(parentId) ?? []) {
-			if (!rendersInstanceRow(node, instance, showCompleted, animatingCompletionIds, search)) {
+	const find = (parentId: string | null, instance: MirrorInstance | null): boolean =>
+	{
+		for (const node of getChildren(parentId) ?? [])
+		{
+			if (!rendersInstanceRow(node, instance, showCompleted, animatingCompletionIds, search))
+			{
 				continue;
 			}
 			position += 1;
@@ -206,13 +242,15 @@ export function rowBudgetToShow(
 				node.id === targetId ||
 				(rendersInstanceChildren(node, instance, expandedIds, search) &&
 					find(node.id, childInstance(node, instance)))
-			) {
+			)
+			{
 				return true;
 			}
 		}
 		return false;
 	};
-	if (!find(rootId, null) || position <= budget) {
+	if (!find(rootId, null) || position <= budget)
+	{
 		return budget;
 	}
 	return budget + Math.ceil((position - budget) / ROW_STEP) * ROW_STEP;
@@ -222,11 +260,13 @@ export function rowBudgetToShow(
  * The rows the parent may render: its share when loaded, else whatever budget is left. `key` is `instanceKey`, so a
  * parent shown at several places inside mirrors has a share for each.
  */
-export function rowLimit(limits: RowLimits, key: string | null): number {
+export function rowLimit(limits: RowLimits, key: string | null): number
+{
 	return limits.limits.get(key) ?? limits.remaining;
 }
 
 /** A value that changes exactly when some parent's limit or the remaining budget does. */
-export function rowLimitsKey({limits, remaining}: RowLimits): string {
+export function rowLimitsKey({limits, remaining}: RowLimits): string
+{
 	return `${remaining}|${[...limits].map(([id, limit]) => `${id}:${limit}`).join(",")}`;
 }

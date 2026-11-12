@@ -4,7 +4,8 @@ import {mirrors, nodeContent, nodeMetadata} from "../db/schema.js";
 import type {AppDatabase} from "../db/types.js";
 import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "../temporal/constants.js";
 
-export interface NodeChange {
+export interface NodeChange
+{
 	id: string;
 	isNew: boolean;
 	isDeleted: boolean;
@@ -23,7 +24,8 @@ export interface NodeChange {
 	parentId: string | null;
 }
 
-export interface ChangeTreeNode {
+export interface ChangeTreeNode
+{
 	id: string;
 	name: string | null;
 	isContext: boolean;
@@ -31,7 +33,8 @@ export interface ChangeTreeNode {
 	children: ChangeTreeNode[];
 }
 
-export interface ChangeSummary {
+export interface ChangeSummary
+{
 	added: number;
 	deleted: number;
 	changed: number;
@@ -40,61 +43,89 @@ export interface ChangeSummary {
 	uncompleted: number;
 }
 
-export interface ChangeDetectionResult {
+export interface ChangeDetectionResult
+{
 	changes: NodeChange[];
 	tree: ChangeTreeNode[];
 	summary: ChangeSummary;
 	cutoffDate: Date;
 }
 
-interface Text {
+interface Text
+{
 	name: string | null;
 	note: string | null;
 }
 
-const NO_TEXT: Text = {name: null, note: null};
+const NO_TEXT: Text =
+{
+	name: null,
+	note: null,
+};
 
 /** `row` with its name and note replaced by `text`, when given. */
-function withText<T extends Text>(row: T | undefined, text: Text | undefined): T | undefined {
-	return row === undefined || text === undefined ? row : {...row, name: text.name, note: text.note};
+function withText<T extends Text>(row: T | undefined, text: Text | undefined): T | undefined
+{
+	return row === undefined || text === undefined
+		? row
+		:
+			{
+				...row,
+				name: text.name,
+				note: text.note,
+			};
 }
 
-export function getChangeLabels(change: NodeChange): string[] {
+export function getChangeLabels(change: NodeChange): string[]
+{
 	const labels: string[] = [];
 
-	if (change.isNew) {
+	if (change.isNew)
+	{
 		labels.push("Added");
 		return labels;
 	}
 
-	if (change.isDeleted) {
+	if (change.isDeleted)
+	{
 		labels.push("Deleted");
 		return labels;
 	}
 
-	if (change.completionChanged) {
+	if (change.completionChanged)
+	{
 		labels.push(change.currentCompletedAt ? "Completed" : "Uncompleted");
 	}
 
-	if (change.contentChanged && change.parentChanged) {
+	if (change.contentChanged && change.parentChanged)
+	{
 		labels.push("Changed and moved");
-	} else if (change.contentChanged) {
+	}
+	else if (change.contentChanged)
+	{
 		labels.push("Changed");
-	} else if (change.parentChanged) {
+	}
+	else if (change.parentChanged)
+	{
 		labels.push("Moved");
 	}
 
-	if (change.noteChanged && !change.contentChanged) {
+	if (change.noteChanged && !change.contentChanged)
+	{
 		labels.push("Note edited");
 	}
 
 	return labels;
 }
 
-export class ChangeDetector {
-	constructor(private readonly db: AppDatabase) {}
+export class ChangeDetector
+{
+	constructor(private readonly db: AppDatabase)
+	{
+	}
 
-	detectChanges(cutoffDate: Date): ChangeDetectionResult {
+	detectChanges(cutoffDate: Date): ChangeDetectionResult
+	{
 		const cutoffStr = formatTemporalTimestamp(cutoffDate);
 
 		const oldContent = this.queryOldContent(cutoffStr);
@@ -106,17 +137,25 @@ export class ChangeDetector {
 		const tree = this.buildChangeTree(changes);
 		const summary = this.summarize(changes);
 
-		return {changes, tree, summary, cutoffDate};
+		return {
+			changes,
+			tree,
+			summary,
+			cutoffDate,
+		};
 	}
 
-	private queryOldContent(cutoffStr: string) {
+	private queryOldContent(cutoffStr: string)
+	{
 		return this.db
-			.select({
-				id: nodeContent.id,
-				name: nodeContent.name,
-				note: nodeContent.note,
-				parentId: nodeContent.parentId,
-			})
+			.select(
+				{
+					id: nodeContent.id,
+					name: nodeContent.name,
+					note: nodeContent.note,
+					parentId: nodeContent.parentId,
+				},
+			)
 			.from(nodeContent)
 			.where(
 				and(
@@ -128,25 +167,31 @@ export class ChangeDetector {
 			.all();
 	}
 
-	private queryNewContent(cutoffStr: string) {
+	private queryNewContent(cutoffStr: string)
+	{
 		return this.db
-			.select({
-				id: nodeContent.id,
-				name: nodeContent.name,
-				note: nodeContent.note,
-				parentId: nodeContent.parentId,
-			})
+			.select(
+				{
+					id: nodeContent.id,
+					name: nodeContent.name,
+					note: nodeContent.note,
+					parentId: nodeContent.parentId,
+				},
+			)
 			.from(nodeContent)
 			.where(and(gte(nodeContent.systemFrom, cutoffStr), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
 			.all();
 	}
 
-	private queryOldMetadata(cutoffStr: string) {
+	private queryOldMetadata(cutoffStr: string)
+	{
 		return this.db
-			.select({
-				nodeId: nodeMetadata.nodeId,
-				completedAt: nodeMetadata.completedAt,
-			})
+			.select(
+				{
+					nodeId: nodeMetadata.nodeId,
+					completedAt: nodeMetadata.completedAt,
+				},
+			)
 			.from(nodeMetadata)
 			.where(
 				and(
@@ -158,24 +203,48 @@ export class ChangeDetector {
 			.all();
 	}
 
-	private queryNewMetadata(cutoffStr: string) {
+	private queryNewMetadata(cutoffStr: string)
+	{
 		return this.db
-			.select({
-				nodeId: nodeMetadata.nodeId,
-				completedAt: nodeMetadata.completedAt,
-			})
+			.select(
+				{
+					nodeId: nodeMetadata.nodeId,
+					completedAt: nodeMetadata.completedAt,
+				},
+			)
 			.from(nodeMetadata)
 			.where(and(gte(nodeMetadata.systemFrom, cutoffStr), eq(nodeMetadata.systemTo, FAR_FUTURE_DATE)))
 			.all();
 	}
 
 	private classifyChanges(
-		oldContent: {id: string; name: string | null; note: string | null; parentId: string | null}[],
-		newContent: {id: string; name: string | null; note: string | null; parentId: string | null}[],
-		oldMeta: {nodeId: string; completedAt: Date | null}[],
-		newMeta: {nodeId: string; completedAt: Date | null}[],
+		oldContent:
+		{
+			id: string;
+			name: string | null;
+			note: string | null;
+			parentId: string | null;
+		}[],
+		newContent:
+		{
+			id: string;
+			name: string | null;
+			note: string | null;
+			parentId: string | null;
+		}[],
+		oldMeta:
+		{
+			nodeId: string;
+			completedAt: Date | null;
+		}[],
+		newMeta:
+		{
+			nodeId: string;
+			completedAt: Date | null;
+		}[],
 		cutoffStr: string,
-	): NodeChange[] {
+	): NodeChange[]
+	{
 		const oldContentMap = new Map(oldContent.map((r) => [r.id, r]));
 		const newContentMap = new Map(newContent.map((r) => [r.id, r]));
 		const oldMetaMap = new Map(oldMeta.map((r) => [r.nodeId, r]));
@@ -191,7 +260,8 @@ export class ChangeDetector {
 
 		const changes: NodeChange[] = [];
 
-		for (const id of allIds) {
+		for (const id of allIds)
+		{
 			// A mirror has no text of its own: stale text stored on it never
 			// counts as a change, and it is labelled with its original's text.
 			const originalId = mirrorOriginals.get(id);
@@ -208,7 +278,8 @@ export class ChangeDetector {
 			const hasContentChange = oldC !== undefined || newC !== undefined;
 			const hasMetaChange = oldM !== undefined || newM !== undefined;
 
-			if (!hasContentChange && !hasMetaChange) {
+			if (!hasContentChange && !hasMetaChange)
+			{
 				continue;
 			}
 
@@ -219,13 +290,17 @@ export class ChangeDetector {
 			let currentNote: string | null = null;
 			let currentParentId: string | null = null;
 
-			if (newC) {
+			if (newC)
+			{
 				currentName = newC.name;
 				currentNote = newC.note;
 				currentParentId = newC.parentId;
-			} else if (!isDeleted) {
+			}
+			else if (!isDeleted)
+			{
 				const current = withText(this.fetchCurrentContent(id), currentOriginal);
-				if (current) {
+				if (current)
+				{
 					currentName = current.name;
 					currentNote = current.note;
 					currentParentId = current.parentId;
@@ -249,28 +324,31 @@ export class ChangeDetector {
 
 			const contentChanged = nameChanged;
 
-			if (!isNew && !isDeleted && !contentChanged && !noteChanged && !parentChanged && !completionChanged) {
+			if (!isNew && !isDeleted && !contentChanged && !noteChanged && !parentChanged && !completionChanged)
+			{
 				continue;
 			}
 
-			changes.push({
-				id,
-				isNew,
-				isDeleted,
-				contentChanged: nameChanged,
-				parentChanged,
-				completionChanged,
-				noteChanged,
-				oldName,
-				oldNote,
-				oldParentId,
-				oldCompletedAt,
-				currentName,
-				currentNote,
-				currentParentId,
-				currentCompletedAt,
-				parentId: isDeleted ? oldParentId : currentParentId,
-			});
+			changes.push(
+				{
+					id,
+					isNew,
+					isDeleted,
+					contentChanged: nameChanged,
+					parentChanged,
+					completionChanged,
+					noteChanged,
+					oldName,
+					oldNote,
+					oldParentId,
+					oldCompletedAt,
+					currentName,
+					currentNote,
+					currentParentId,
+					currentCompletedAt,
+					parentId: isDeleted ? oldParentId : currentParentId,
+				},
+			);
 		}
 
 		return changes;
@@ -280,70 +358,105 @@ export class ChangeDetector {
 	 * Map each of `nodeIds` that was a mirror at any point since the cutoff to
 	 * its original's id, preferring the current relationship.
 	 */
-	private loadMirrorOriginals(nodeIds: string[], cutoffStr: string): Map<string, string> {
+	private loadMirrorOriginals(nodeIds: string[], cutoffStr: string): Map<string, string>
+	{
 		const rows = this.db
-			.select({mirrorId: mirrors.mirrorId, originalId: mirrors.originalId})
+			.select(
+				{
+					mirrorId: mirrors.mirrorId,
+					originalId: mirrors.originalId,
+				},
+			)
 			.from(mirrors)
 			.where(and(inIds(mirrors.mirrorId, nodeIds), gte(mirrors.systemTo, cutoffStr)))
 			.orderBy(mirrors.systemTo)
 			.all();
 		const originals = new Map<string, string>();
-		for (const row of rows) {
+		for (const row of rows)
+		{
 			originals.set(row.mirrorId, row.originalId);
 		}
 		return originals;
 	}
 
-	private fetchCurrentContent(id: string) {
+	private fetchCurrentContent(id: string)
+	{
 		return this.db
-			.select({
-				name: nodeContent.name,
-				note: nodeContent.note,
-				parentId: nodeContent.parentId,
-			})
+			.select(
+				{
+					name: nodeContent.name,
+					note: nodeContent.note,
+					parentId: nodeContent.parentId,
+				},
+			)
 			.from(nodeContent)
 			.where(and(eq(nodeContent.id, id), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
 			.get();
 	}
 
-	buildChangeTree(changes: NodeChange[]): ChangeTreeNode[] {
+	buildChangeTree(changes: NodeChange[]): ChangeTreeNode[]
+	{
 		const changeMap = new Map(changes.map((c) => [c.id, c]));
 
-		const nodeInfoMap = new Map<string, {name: string | null; parentId: string | null}>();
+		const nodeInfoMap = new Map<
+			string,
+			{
+				name: string | null;
+				parentId: string | null;
+			}
+		>();
 
-		for (const change of changes) {
-			nodeInfoMap.set(change.id, {
-				name: change.isDeleted ? change.oldName : change.currentName,
-				parentId: change.parentId,
-			});
+		for (const change of changes)
+		{
+			nodeInfoMap.set(
+				change.id,
+				{
+					name: change.isDeleted ? change.oldName : change.currentName,
+					parentId: change.parentId,
+				},
+			);
 		}
 
 		const parentIds = new Set<string>();
-		for (const change of changes) {
-			if (change.parentId) {
+		for (const change of changes)
+		{
+			if (change.parentId)
+			{
 				parentIds.add(change.parentId);
 			}
 		}
 
 		let currentIds = [...parentIds].filter((id) => !nodeInfoMap.has(id));
 
-		while (currentIds.length > 0) {
+		while (currentIds.length > 0)
+		{
 			const nextIds: string[] = [];
 
 			const results = this.db
-				.select({
-					id: nodeContent.id,
-					name: nodeContent.name,
-					parentId: nodeContent.parentId,
-				})
+				.select(
+					{
+						id: nodeContent.id,
+						name: nodeContent.name,
+						parentId: nodeContent.parentId,
+					},
+				)
 				.from(nodeContent)
 				.where(and(inIds(nodeContent.id, currentIds), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
 				.all();
 
-			for (const row of results) {
-				if (!nodeInfoMap.has(row.id)) {
-					nodeInfoMap.set(row.id, {name: row.name, parentId: row.parentId});
-					if (row.parentId && !nodeInfoMap.has(row.parentId)) {
+			for (const row of results)
+			{
+				if (!nodeInfoMap.has(row.id))
+				{
+					nodeInfoMap.set(
+						row.id,
+						{
+							name: row.name,
+							parentId: row.parentId,
+						},
+					);
+					if (row.parentId && !nodeInfoMap.has(row.parentId))
+					{
 						nextIds.push(row.parentId);
 					}
 				}
@@ -353,19 +466,23 @@ export class ChangeDetector {
 		}
 
 		const childrenMap = new Map<string | null, string[]>();
-		for (const [id, info] of nodeInfoMap) {
+		for (const [id, info] of nodeInfoMap)
+		{
 			const pid = info.parentId;
 			let siblings = childrenMap.get(pid);
-			if (siblings === undefined) {
+			if (siblings === undefined)
+			{
 				siblings = [];
 				childrenMap.set(pid, siblings);
 			}
 			siblings.push(id);
 		}
 
-		const buildNode = (id: string): ChangeTreeNode | null => {
+		const buildNode = (id: string): ChangeTreeNode | null =>
+		{
 			const info = nodeInfoMap.get(id);
-			if (!info) {
+			if (!info)
+			{
 				return null;
 			}
 
@@ -377,7 +494,8 @@ export class ChangeDetector {
 			const change = changeMap.get(id) ?? null;
 			const isContext = change === null;
 
-			if (isContext && children.length === 0) {
+			if (isContext && children.length === 0)
+			{
 				return null;
 			}
 
@@ -394,8 +512,10 @@ export class ChangeDetector {
 		return rootChildIds.map((childId) => buildNode(childId)).filter((n): n is ChangeTreeNode => n !== null);
 	}
 
-	private summarize(changes: NodeChange[]): ChangeSummary {
-		const summary: ChangeSummary = {
+	private summarize(changes: NodeChange[]): ChangeSummary
+	{
+		const summary: ChangeSummary =
+		{
 			added: 0,
 			deleted: 0,
 			changed: 0,
@@ -404,22 +524,34 @@ export class ChangeDetector {
 			uncompleted: 0,
 		};
 
-		for (const c of changes) {
-			if (c.isNew) {
+		for (const c of changes)
+		{
+			if (c.isNew)
+			{
 				summary.added++;
-			} else if (c.isDeleted) {
+			}
+			else if (c.isDeleted)
+			{
 				summary.deleted++;
-			} else {
-				if (c.contentChanged || c.noteChanged) {
+			}
+			else
+			{
+				if (c.contentChanged || c.noteChanged)
+				{
 					summary.changed++;
 				}
-				if (c.parentChanged) {
+				if (c.parentChanged)
+				{
 					summary.moved++;
 				}
-				if (c.completionChanged) {
-					if (c.currentCompletedAt) {
+				if (c.completionChanged)
+				{
+					if (c.currentCompletedAt)
+					{
 						summary.completed++;
-					} else {
+					}
+					else
+					{
 						summary.uncompleted++;
 					}
 				}

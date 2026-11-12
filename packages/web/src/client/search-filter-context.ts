@@ -8,6 +8,7 @@ import type {SearchFilter} from "./search-filter.js";
 export const SearchFilterContext = createContext<SearchFilter | null>(null);
 
 /** The search filter of the outline the caller renders in. */
-export function useOutlineSearchFilter(): SearchFilter | null {
+export function useOutlineSearchFilter(): SearchFilter | null
+{
 	return useContext(SearchFilterContext);
 }

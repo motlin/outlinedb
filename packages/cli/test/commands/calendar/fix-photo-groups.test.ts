@@ -13,13 +13,15 @@ import type {TestDatabase} from "../../db/migration-helper.js";
 import {createTestNode} from "../../helpers/node-fixtures.js";
 import {requestJson} from "../../helpers/request-body.js";
 
-interface RecordedRequest {
+interface RecordedRequest
+{
 	url: string;
 	method: string;
 	body: unknown;
 }
 
-function s3File(nodeId: string, fileName: string, systemFrom = "2026-01-01 00:00:00.000") {
+function s3File(nodeId: string, fileName: string, systemFrom = "2026-01-01 00:00:00.000")
+{
 	return {
 		nodeId,
 		fileName,
@@ -36,33 +38,82 @@ function s3File(nodeId: string, fileName: string, systemFrom = "2026-01-01 00:00
 }
 
 /** Wrapper `wrapper` under entry `entry`, holding photos in reverse order. */
-function seedWrappedGroup(testDatabase: TestDatabase) {
-	seedTestData(testDatabase, {
-		...nodeFixtures([
-			createTestNode({id: "day", name: "Sat, May 23, 2026", parentId: null}),
-			createTestNode({id: "entry", name: "Drove to a friend’s house", parentId: "day"}),
-			createTestNode({id: "wrapper", name: "", note: null, parentId: "entry"}),
-			createTestNode({id: "photo-1", name: "", parentId: "wrapper", priority: 100}),
-			createTestNode({id: "photo-2", name: "", parentId: "wrapper", priority: 200}),
-			createTestNode({id: "photo-3", name: "", parentId: "wrapper", priority: 300}),
-		]),
-		s3Files: [
-			s3File("photo-1", "IMG_0300.jpeg"),
-			s3File("photo-2", "IMG_0200.jpeg"),
-			s3File("photo-3", "IMG_0100.jpeg"),
-		],
-	});
+function seedWrappedGroup(testDatabase: TestDatabase)
+{
+	seedTestData(
+		testDatabase,
+		{
+			...nodeFixtures([
+				createTestNode(
+					{
+						id: "day",
+						name: "Sat, May 23, 2026",
+						parentId: null,
+					},
+				),
+				createTestNode(
+					{
+						id: "entry",
+						name: "Drove to a friend’s house",
+						parentId: "day",
+					},
+				),
+				createTestNode(
+					{
+						id: "wrapper",
+						name: "",
+						note: null,
+						parentId: "entry",
+					},
+				),
+				createTestNode(
+					{
+						id: "photo-1",
+						name: "",
+						parentId: "wrapper",
+						priority: 100,
+					},
+				),
+				createTestNode(
+					{
+						id: "photo-2",
+						name: "",
+						parentId: "wrapper",
+						priority: 200,
+					},
+				),
+				createTestNode(
+					{
+						id: "photo-3",
+						name: "",
+						parentId: "wrapper",
+						priority: 300,
+					},
+				),
+			]),
+			s3Files: [
+				s3File("photo-1", "IMG_0300.jpeg"),
+				s3File("photo-2", "IMG_0200.jpeg"),
+				s3File("photo-3", "IMG_0100.jpeg"),
+			],
+		},
+	);
 }
 
-describe("calendar:fix-photo-groups command", () => {
+describe("calendar:fix-photo-groups command", () =>
+{
 	let originalEnv: typeof process.env;
 	let fetchStub: MockInstance;
 	let tempDir: string;
 	let testDatabase: TestDatabase;
 	let requests: RecordedRequest[];
 
-	beforeEach(() => {
-		originalEnv = {...process.env};
+	beforeEach(() =>
+	{
+		originalEnv =
+		{
+			...process.env,
+		};
 
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-photo-groups-test-"));
 		const testDbPath = path.join(tempDir, "test.sqlite");
@@ -76,23 +127,28 @@ describe("calendar:fix-photo-groups command", () => {
 
 		requests = [];
 		const movedToBottom: string[] = [];
-		fetchStub = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+		fetchStub = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) =>
+		{
 			const urlString = url instanceof Request ? url.url : String(url);
 			const method = init?.method ?? "GET";
-			requests.push({
-				url: urlString,
-				method,
-				body: requestJson(init),
-			});
+			requests.push(
+				{
+					url: urlString,
+					method,
+					body: requestJson(init),
+				},
+			);
 
 			const {pathname, searchParams} = new URL(urlString);
 			const nodeId = pathname.split("/")[4]!;
-			if (method === "POST" && pathname.endsWith("/move")) {
+			if (method === "POST" && pathname.endsWith("/move"))
+			{
 				movedToBottom.push(nodeId);
 			}
 			// Every write here is a move to the bottom of "entry", so a moved node sits
 			// below the rest in move order.
-			const apiNode = (id: string, parentId: string) => ({
+			const apiNode = (id: string, parentId: string) => (
+			{
 				id,
 				name: "",
 				parent_id: parentId,
@@ -104,10 +160,15 @@ describe("calendar:fix-photo-groups command", () => {
 				data: {},
 			});
 			const parentId = searchParams.get("parent_id");
-			if (method === "GET" && parentId !== null) {
+			if (method === "GET" && parentId !== null)
+			{
 				// Workflowy lists the cached children with every move applied: a moved node leaves its old parent for "entry".
 				const cached = testDatabase.db
-					.select({id: nodeContent.id})
+					.select(
+						{
+							id: nodeContent.id,
+						},
+					)
 					.from(nodeContent)
 					.where(and(eq(nodeContent.parentId, parentId), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
 					.all()
@@ -115,28 +176,64 @@ describe("calendar:fix-photo-groups command", () => {
 					.filter((id) => !movedToBottom.includes(id));
 				const ids = parentId === "entry" ? [...cached, ...movedToBottom] : cached;
 				const nodes = ids.map((id) => apiNode(id, parentId));
-				return Promise.resolve(Response.json({nodes}, {status: 200}));
+				return Promise.resolve(
+					Response.json(
+						{
+							nodes,
+						},
+						{
+							status: 200,
+						},
+					),
+				);
 			}
-			if (method === "GET") {
-				return Promise.resolve(Response.json({node: apiNode(nodeId, "entry")}, {status: 200}));
+			if (method === "GET")
+			{
+				return Promise.resolve(
+					Response.json(
+						{
+							node: apiNode(nodeId, "entry"),
+						},
+						{
+							status: 200,
+						},
+					),
+				);
 			}
 
-			return Promise.resolve(Response.json({}, {status: 200}));
+			return Promise.resolve(
+				Response.json(
+					{},
+					{
+						status: 200,
+					},
+				),
+			);
 		});
 	});
 
-	afterEach(() => {
+	afterEach(() =>
+	{
 		process.env = originalEnv;
 		cleanupTestDatabase(testDatabase);
-		if (fs.existsSync(tempDir)) {
-			fs.rmSync(tempDir, {recursive: true, force: true});
+		if (fs.existsSync(tempDir))
+		{
+			fs.rmSync(
+				tempDir,
+				{
+					recursive: true,
+					force: true,
+				},
+			);
 		}
 	});
 
-	it("previews a wrapped group without calling the API", async () => {
+	it("previews a wrapped group without calling the API", async () =>
+	{
 		seedWrappedGroup(testDatabase);
 
-		const {stdout} = await captureOutput(async () => {
+		const {stdout} = await captureOutput(async () =>
+		{
 			await FixPhotoGroups.run(["--dry-run"]);
 		});
 
@@ -146,10 +243,12 @@ describe("calendar:fix-photo-groups command", () => {
 		expect(fetchStub.mock.calls).toStrictEqual([]);
 	});
 
-	it("unwraps and reverses a wrapped group, then deletes the wrapper", async () => {
+	it("unwraps and reverses a wrapped group, then deletes the wrapper", async () =>
+	{
 		seedWrappedGroup(testDatabase);
 
-		await captureOutput(async () => {
+		await captureOutput(async () =>
+		{
 			await FixPhotoGroups.run(["--delay", "0"]);
 		});
 
@@ -158,25 +257,77 @@ describe("calendar:fix-photo-groups command", () => {
 			.map((request) => [request.method, request.url.replace(/^.*\/api\/v1/u, ""), request.body]);
 
 		expect(writes).toStrictEqual([
-			["POST", "/nodes/photo-3/move", {parent_id: "entry", position: "bottom"}],
-			["POST", "/nodes/photo-2/move", {parent_id: "entry", position: "bottom"}],
-			["POST", "/nodes/photo-1/move", {parent_id: "entry", position: "bottom"}],
+			[
+				"POST",
+				"/nodes/photo-3/move",
+				{
+					parent_id: "entry",
+					position: "bottom",
+				},
+			],
+			[
+				"POST",
+				"/nodes/photo-2/move",
+				{
+					parent_id: "entry",
+					position: "bottom",
+				},
+			],
+			[
+				"POST",
+				"/nodes/photo-1/move",
+				{
+					parent_id: "entry",
+					position: "bottom",
+				},
+			],
 			["DELETE", "/nodes/wrapper", undefined],
 		]);
 	});
 
-	it("reverses a loose group in place without deleting anything", async () => {
-		seedTestData(testDatabase, {
-			...nodeFixtures([
-				createTestNode({id: "day", name: "Wed, Jul 1, 2026", parentId: null}),
-				createTestNode({id: "entry", name: "Flat Rock Brook", parentId: "day"}),
-				createTestNode({id: "photo-1", name: "", parentId: "entry", priority: 100}),
-				createTestNode({id: "photo-2", name: "", parentId: "entry", priority: 200}),
-			]),
-			s3Files: [s3File("photo-1", "IMG_3695.jpeg"), s3File("photo-2", "IMG_3667.jpeg")],
-		});
+	it("reverses a loose group in place without deleting anything", async () =>
+	{
+		seedTestData(
+			testDatabase,
+			{
+				...nodeFixtures([
+					createTestNode(
+						{
+							id: "day",
+							name: "Wed, Jul 1, 2026",
+							parentId: null,
+						},
+					),
+					createTestNode(
+						{
+							id: "entry",
+							name: "Flat Rock Brook",
+							parentId: "day",
+						},
+					),
+					createTestNode(
+						{
+							id: "photo-1",
+							name: "",
+							parentId: "entry",
+							priority: 100,
+						},
+					),
+					createTestNode(
+						{
+							id: "photo-2",
+							name: "",
+							parentId: "entry",
+							priority: 200,
+						},
+					),
+				]),
+				s3Files: [s3File("photo-1", "IMG_3695.jpeg"), s3File("photo-2", "IMG_3667.jpeg")],
+			},
+		);
 
-		await captureOutput(async () => {
+		await captureOutput(async () =>
+		{
 			await FixPhotoGroups.run(["--delay", "0"]);
 		});
 
@@ -185,23 +336,68 @@ describe("calendar:fix-photo-groups command", () => {
 			.map((request) => [request.method, request.url.replace(/^.*\/api\/v1/u, ""), request.body]);
 
 		expect(writes).toStrictEqual([
-			["POST", "/nodes/photo-2/move", {parent_id: "entry", position: "bottom"}],
-			["POST", "/nodes/photo-1/move", {parent_id: "entry", position: "bottom"}],
+			[
+				"POST",
+				"/nodes/photo-2/move",
+				{
+					parent_id: "entry",
+					position: "bottom",
+				},
+			],
+			[
+				"POST",
+				"/nodes/photo-1/move",
+				{
+					parent_id: "entry",
+					position: "bottom",
+				},
+			],
 		]);
 	});
 
-	it("leaves a loose group alone when its filenames give no ordering evidence", async () => {
-		seedTestData(testDatabase, {
-			...nodeFixtures([
-				createTestNode({id: "day", name: "Wed, Jul 1, 2026", parentId: null}),
-				createTestNode({id: "entry", name: "Flat Rock Brook", parentId: "day"}),
-				createTestNode({id: "photo-1", name: "", parentId: "entry", priority: 100}),
-				createTestNode({id: "photo-2", name: "", parentId: "entry", priority: 200}),
-			]),
-			s3Files: [s3File("photo-1", "image.jpeg"), s3File("photo-2", "image.jpeg")],
-		});
+	it("leaves a loose group alone when its filenames give no ordering evidence", async () =>
+	{
+		seedTestData(
+			testDatabase,
+			{
+				...nodeFixtures([
+					createTestNode(
+						{
+							id: "day",
+							name: "Wed, Jul 1, 2026",
+							parentId: null,
+						},
+					),
+					createTestNode(
+						{
+							id: "entry",
+							name: "Flat Rock Brook",
+							parentId: "day",
+						},
+					),
+					createTestNode(
+						{
+							id: "photo-1",
+							name: "",
+							parentId: "entry",
+							priority: 100,
+						},
+					),
+					createTestNode(
+						{
+							id: "photo-2",
+							name: "",
+							parentId: "entry",
+							priority: 200,
+						},
+					),
+				]),
+				s3Files: [s3File("photo-1", "image.jpeg"), s3File("photo-2", "image.jpeg")],
+			},
+		);
 
-		const {stdout} = await captureOutput(async () => {
+		const {stdout} = await captureOutput(async () =>
+		{
 			await FixPhotoGroups.run(["--delay", "0"]);
 		});
 
@@ -211,47 +407,142 @@ describe("calendar:fix-photo-groups command", () => {
 		expect(fetchStub.mock.calls).toStrictEqual([]);
 	});
 
-	it("leaves a group alone when its filenames already ascend", async () => {
-		seedTestData(testDatabase, {
-			...nodeFixtures([
-				createTestNode({id: "day", name: "Wed, Jul 1, 2026", parentId: null}),
-				createTestNode({id: "entry", name: "Flat Rock Brook", parentId: "day"}),
-				createTestNode({id: "photo-1", name: "", parentId: "entry", priority: 100}),
-				createTestNode({id: "photo-2", name: "", parentId: "entry", priority: 200}),
-			]),
-			s3Files: [s3File("photo-1", "IMG_3667.jpeg"), s3File("photo-2", "IMG_3695.jpeg")],
-		});
+	it("leaves a group alone when its filenames already ascend", async () =>
+	{
+		seedTestData(
+			testDatabase,
+			{
+				...nodeFixtures([
+					createTestNode(
+						{
+							id: "day",
+							name: "Wed, Jul 1, 2026",
+							parentId: null,
+						},
+					),
+					createTestNode(
+						{
+							id: "entry",
+							name: "Flat Rock Brook",
+							parentId: "day",
+						},
+					),
+					createTestNode(
+						{
+							id: "photo-1",
+							name: "",
+							parentId: "entry",
+							priority: 100,
+						},
+					),
+					createTestNode(
+						{
+							id: "photo-2",
+							name: "",
+							parentId: "entry",
+							priority: 200,
+						},
+					),
+				]),
+				s3Files: [s3File("photo-1", "IMG_3667.jpeg"), s3File("photo-2", "IMG_3695.jpeg")],
+			},
+		);
 
-		await captureOutput(async () => {
+		await captureOutput(async () =>
+		{
 			await FixPhotoGroups.run(["--delay", "0"]);
 		});
 
 		expect(fetchStub.mock.calls).toStrictEqual([]);
 	});
 
-	it("restricts work to one group using its short ID", async () => {
+	it("restricts work to one group using its short ID", async () =>
+	{
 		const wrapperId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
-		seedTestData(testDatabase, {
-			...nodeFixtures([
-				createTestNode({id: "day", name: "Sat, May 23, 2026", parentId: null}),
-				createTestNode({id: "entry", name: "Drove to a friend’s house", parentId: "day"}),
-				createTestNode({id: wrapperId, shortId: "eeeeeeeeeeee", name: "", parentId: "entry"}),
-				createTestNode({id: "photo-1", name: "", parentId: wrapperId, priority: 100}),
-				createTestNode({id: "photo-2", name: "", parentId: wrapperId, priority: 200}),
-				createTestNode({id: "other-entry", name: "Another entry", parentId: "day"}),
-				createTestNode({id: "other-wrapper", name: "", parentId: "other-entry"}),
-				createTestNode({id: "photo-3", name: "", parentId: "other-wrapper", priority: 100}),
-				createTestNode({id: "photo-4", name: "", parentId: "other-wrapper", priority: 200}),
-			]),
-			s3Files: [
-				s3File("photo-1", "image.jpeg"),
-				s3File("photo-2", "image.jpeg"),
-				s3File("photo-3", "image.jpeg"),
-				s3File("photo-4", "image.jpeg"),
-			],
-		});
+		seedTestData(
+			testDatabase,
+			{
+				...nodeFixtures([
+					createTestNode(
+						{
+							id: "day",
+							name: "Sat, May 23, 2026",
+							parentId: null,
+						},
+					),
+					createTestNode(
+						{
+							id: "entry",
+							name: "Drove to a friend’s house",
+							parentId: "day",
+						},
+					),
+					createTestNode(
+						{
+							id: wrapperId,
+							shortId: "eeeeeeeeeeee",
+							name: "",
+							parentId: "entry",
+						},
+					),
+					createTestNode(
+						{
+							id: "photo-1",
+							name: "",
+							parentId: wrapperId,
+							priority: 100,
+						},
+					),
+					createTestNode(
+						{
+							id: "photo-2",
+							name: "",
+							parentId: wrapperId,
+							priority: 200,
+						},
+					),
+					createTestNode(
+						{
+							id: "other-entry",
+							name: "Another entry",
+							parentId: "day",
+						},
+					),
+					createTestNode(
+						{
+							id: "other-wrapper",
+							name: "",
+							parentId: "other-entry",
+						},
+					),
+					createTestNode(
+						{
+							id: "photo-3",
+							name: "",
+							parentId: "other-wrapper",
+							priority: 100,
+						},
+					),
+					createTestNode(
+						{
+							id: "photo-4",
+							name: "",
+							parentId: "other-wrapper",
+							priority: 200,
+						},
+					),
+				]),
+				s3Files: [
+					s3File("photo-1", "image.jpeg"),
+					s3File("photo-2", "image.jpeg"),
+					s3File("photo-3", "image.jpeg"),
+					s3File("photo-4", "image.jpeg"),
+				],
+			},
+		);
 
-		await captureOutput(async () => {
+		await captureOutput(async () =>
+		{
 			await FixPhotoGroups.run(["--node-id", "eeeeeeeeeeee", "--delay", "0"]);
 		});
 
@@ -262,21 +553,59 @@ describe("calendar:fix-photo-groups command", () => {
 		expect(movedIds).toStrictEqual(["photo-2", "photo-1"]);
 	});
 
-	it("resolves a short ID for a dry run without an API key", async () => {
+	it("resolves a short ID for a dry run without an API key", async () =>
+	{
 		delete process.env.WORKFLOWY_API_KEY;
 		const wrapperId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
-		seedTestData(testDatabase, {
-			...nodeFixtures([
-				createTestNode({id: "day", name: "Sat, May 23, 2026", parentId: null}),
-				createTestNode({id: "entry", name: "Drove to a friend’s house", parentId: "day"}),
-				createTestNode({id: wrapperId, shortId: "eeeeeeeeeeee", name: "", parentId: "entry"}),
-				createTestNode({id: "photo-1", name: "", parentId: wrapperId, priority: 100}),
-				createTestNode({id: "photo-2", name: "", parentId: wrapperId, priority: 200}),
-			]),
-			s3Files: [s3File("photo-1", "image.jpeg"), s3File("photo-2", "image.jpeg")],
-		});
+		seedTestData(
+			testDatabase,
+			{
+				...nodeFixtures([
+					createTestNode(
+						{
+							id: "day",
+							name: "Sat, May 23, 2026",
+							parentId: null,
+						},
+					),
+					createTestNode(
+						{
+							id: "entry",
+							name: "Drove to a friend’s house",
+							parentId: "day",
+						},
+					),
+					createTestNode(
+						{
+							id: wrapperId,
+							shortId: "eeeeeeeeeeee",
+							name: "",
+							parentId: "entry",
+						},
+					),
+					createTestNode(
+						{
+							id: "photo-1",
+							name: "",
+							parentId: wrapperId,
+							priority: 100,
+						},
+					),
+					createTestNode(
+						{
+							id: "photo-2",
+							name: "",
+							parentId: wrapperId,
+							priority: 200,
+						},
+					),
+				]),
+				s3Files: [s3File("photo-1", "image.jpeg"), s3File("photo-2", "image.jpeg")],
+			},
+		);
 
-		const {stdout} = await captureOutput(async () => {
+		const {stdout} = await captureOutput(async () =>
+		{
 			await FixPhotoGroups.run(["--node-id", "eeeeeeeeeeee", "--dry-run"]);
 		});
 
@@ -286,7 +615,8 @@ describe("calendar:fix-photo-groups command", () => {
 		expect(fetchStub.mock.calls).toStrictEqual([]);
 	});
 
-	it("requires WORKFLOWY_API_KEY when not doing a dry run", async () => {
+	it("requires WORKFLOWY_API_KEY when not doing a dry run", async () =>
+	{
 		delete process.env.WORKFLOWY_API_KEY;
 		seedWrappedGroup(testDatabase);
 

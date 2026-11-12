@@ -6,19 +6,23 @@ import type {WorkflowyWriteThroughClient} from "./workflowy-write-through-client
  * `children` field uses a Zod v4 getter so the schema is the single source of
  * truth and `z.infer` resolves the recursion. Reusable as an MCP input schema.
  */
-export const NodeTreeSpecSchema = z.object({
-	name: z.string(),
-	note: z.string().optional(),
-	layoutMode: z.string().optional(),
-	get children(): z.ZodOptional<z.ZodArray<typeof NodeTreeSpecSchema>> {
-		return z.array(NodeTreeSpecSchema).optional();
+export const NodeTreeSpecSchema = z.object(
+	{
+		name: z.string(),
+		note: z.string().optional(),
+		layoutMode: z.string().optional(),
+		get children(): z.ZodOptional<z.ZodArray<typeof NodeTreeSpecSchema>>
+		{
+			return z.array(NodeTreeSpecSchema).optional();
+		},
 	},
-});
+);
 
 export type NodeTreeSpec = z.infer<typeof NodeTreeSpecSchema>;
 
 /** The created root node and all its descendants. */
-export interface CreatedNodeTree {
+export interface CreatedNodeTree
+{
 	id: string;
 	name: string;
 	createdAt: number;
@@ -39,19 +43,28 @@ export async function createNodeTree(
 	parentId: string | null,
 	client: TreeWriteClient,
 	position?: "top" | "bottom",
-): Promise<CreatedNodeTree> {
-	const node = await client.createNode({
-		parent_id: parentId,
-		name: spec.name,
-		note: spec.note,
-		layoutMode: spec.layoutMode,
-		position,
-	});
+): Promise<CreatedNodeTree>
+{
+	const node = await client.createNode(
+		{
+			parent_id: parentId,
+			name: spec.name,
+			note: spec.note,
+			layoutMode: spec.layoutMode,
+			position,
+		},
+	);
 
 	const children: CreatedNodeTree[] = [];
-	for (const child of spec.children ?? []) {
+	for (const child of spec.children ?? [])
+	{
 		children.push(await createNodeTree(child, node.id, client, "bottom"));
 	}
 
-	return {id: node.id, name: node.name, createdAt: node.createdAt, children};
+	return {
+		id: node.id,
+		name: node.name,
+		createdAt: node.createdAt,
+		children,
+	};
 }

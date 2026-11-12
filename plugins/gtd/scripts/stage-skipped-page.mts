@@ -23,22 +23,27 @@ import {isObject, readJsonFile} from "./json.mts";
 import {isMain} from "./is-main.mts";
 
 /** Keys whose last skip-log outcome at or after `runStartedISO` is `skip`, in first-seen order. */
-export function skippedThisRun(entries: readonly SkipEntry[], runStartedISO: string): string[] {
+export function skippedThisRun(entries: readonly SkipEntry[], runStartedISO: string): string[]
+{
 	const started = Date.parse(runStartedISO);
-	if (Number.isNaN(started)) {
+	if (Number.isNaN(started))
+	{
 		throw new TypeError(`--run-started must be an ISO timestamp, got ${runStartedISO}`);
 	}
 	const last = new Map<string, string>();
-	for (const entry of entries) {
+	for (const entry of entries)
+	{
 		// An entry without a timestamp only knows its day, so it counts from that day's start.
-		if (Date.parse(entry.at ?? `${entry.date}T00:00:00Z`) >= started) {
+		if (Date.parse(entry.at ?? `${entry.date}T00:00:00Z`) >= started)
+		{
 			last.set(entry.key, entry.outcome);
 		}
 	}
 	return [...last].filter(([, outcome]) => outcome === "skip").map(([key]) => key);
 }
 
-export interface SkippedOverdueRow {
+export interface SkippedOverdueRow
+{
 	id?: string | undefined;
 	name: string;
 	section: string;
@@ -49,30 +54,42 @@ export interface SkippedOverdueRow {
 	missingLlmTag?: boolean | undefined;
 }
 
-export interface SkippedDueRow {
+export interface SkippedDueRow
+{
 	source: string;
 	id?: string | undefined;
 	title: string;
 	overdueByDays: number | null;
 	url: string | null;
-	ops: {complete: string};
+	ops:
+	{
+		complete: string;
+	};
 }
 
-interface Link {
+interface Link
+{
 	label: string;
 	href: string;
 }
 
-interface Card {
+interface Card
+{
 	id: string;
 	title: string;
 	body: string[];
 	links: Link[];
-	options: {value: string; label: string; description: string}[];
+	options:
+	{
+		value: string;
+		label: string;
+		description: string;
+	}[];
 	default: string;
 }
 
-export interface SkippedManifestItem {
+export interface SkippedManifestItem
+{
 	id: string;
 	title: string;
 	segment: "recurring" | "due" | null;
@@ -81,38 +98,68 @@ export interface SkippedManifestItem {
 }
 
 const OPTIONS = [
-	{value: "did", label: "Did it", description: "Mark it done now, the same way Done does in the walk"},
-	{value: "skip", label: "Still skipped", description: "Leave it unchanged; it comes back next run"},
+	{
+		value: "did",
+		label: "Did it",
+		description: "Mark it done now, the same way Done does in the walk",
+	},
+	{
+		value: "skip",
+		label: "Still skipped",
+		description: "Leave it unchanged; it comes back next run",
+	},
 ];
 
-const SOURCE_LABELS: Record<string, string> = {
+const SOURCE_LABELS: Record<string, string> =
+{
 	workflowy: "Workflowy",
 	things: "Things 3",
 	reminders: "Apple Reminders",
 };
 
-function lateness(days: number | null): string[] {
-	if (days === null) {
+function lateness(days: number | null): string[]
+{
+	if (days === null)
+	{
 		return ["no date"];
 	}
-	if (days === 0) {
+	if (days === 0)
+	{
 		return ["due today"];
 	}
 	return days > 0 ? [`overdue ${days}d`] : [`due in ${-days}d`];
 }
 
-function workflowyLink(url: string | null): Link[] {
-	return url ? [{label: "Open in Workflowy", href: url}] : [];
+function workflowyLink(url: string | null): Link[]
+{
+	return url
+		? [
+				{
+					label: "Open in Workflowy",
+					href: url,
+				},
+			]
+		: [];
 }
 
-function card(id: string, title: string, body: string[], links: Link[]): Card {
-	return {id, title, body, links, options: OPTIONS, default: "skip"};
+function card(id: string, title: string, body: string[], links: Link[]): Card
+{
+	return {
+		id,
+		title,
+		body,
+		links,
+		options: OPTIONS,
+		default: "skip",
+	};
 }
 
 /** The skip-log keys a due row can be recorded under; a reminder has no id, so it is keyed by title. */
-function dueKeys(row: SkippedDueRow): string[] {
+function dueKeys(row: SkippedDueRow): string[]
+{
 	const keys = [`${row.source}:${row.id}`];
-	if (row.source === "reminders") {
+	if (row.source === "reminders")
+	{
 		keys.push(`reminders:${row.title}`);
 	}
 	return keys;
@@ -128,7 +175,8 @@ export function buildSkippedPage({
 	today: string;
 	overdueRows: readonly SkippedOverdueRow[];
 	dueRows: readonly SkippedDueRow[];
-}) {
+})
+{
 	// Claude runs #llm-task rows (tagged or not yet tagged) itself; a skip there means it was blocked, not
 	// that the user owes it, so those rows never become a card for the user.
 	const claudeRuns = new Set(overdueRows.filter((row) => row.isLlmTask || row.missingLlmTag).map((row) => row.id));
@@ -140,43 +188,78 @@ export function buildSkippedPage({
 	const unmatched: Card[] = [];
 	const items: SkippedManifestItem[] = [];
 
-	for (const key of keys) {
-		if (claudeRuns.has(key)) {
+	for (const key of keys)
+	{
+		if (claudeRuns.has(key))
+		{
 			continue;
 		}
 		const overdue = overdueByKey.get(key);
 		const dueRow = dueByKey.get(key);
-		if (overdue) {
+		if (overdue)
+		{
 			const title = stripMarkup(overdue.name);
 			recurring.push(
 				card(key, title, [overdue.section, ...lateness(overdue.overdueByDays)], workflowyLink(overdue.url)),
 			);
-			items.push({id: key, title, segment: "recurring", source: "workflowy", done: overdue.applyOp});
-		} else if (dueRow) {
+			items.push(
+				{
+					id: key,
+					title,
+					segment: "recurring",
+					source: "workflowy",
+					done: overdue.applyOp,
+				},
+			);
+		}
+		else if (dueRow)
+		{
 			const body = [SOURCE_LABELS[dueRow.source] ?? dueRow.source, ...lateness(dueRow.overdueByDays)];
 			due.push(card(key, dueRow.title, body, workflowyLink(dueRow.url)));
-			items.push({
-				id: key,
-				title: dueRow.title,
-				segment: "due",
-				source: dueRow.source,
-				done: dueRow.ops.complete,
-			});
-		} else {
+			items.push(
+				{
+					id: key,
+					title: dueRow.title,
+					segment: "due",
+					source: dueRow.source,
+					done: dueRow.ops.complete,
+				},
+			);
+		}
+		else
+		{
 			const body = ["No staged row matches this skip-log key; look it up before marking it done"];
 			unmatched.push(card(key, key, body, []));
-			items.push({id: key, title: key, segment: null, source: null, done: null});
+			items.push(
+				{
+					id: key,
+					title: key,
+					segment: null,
+					source: null,
+					done: null,
+				},
+			);
 		}
 	}
 
 	const groups = [
-		{heading: "Recurring review", items: recurring},
-		{heading: "Due tasks", items: due},
-		{heading: "Not in today's staged rows", items: unmatched},
+		{
+			heading: "Recurring review",
+			items: recurring,
+		},
+		{
+			heading: "Due tasks",
+			items: due,
+		},
+		{
+			heading: "Not in today's staged rows",
+			items: unmatched,
+		},
 	].filter((group) => group.items.length > 0);
 
 	return {
-		page: {
+		page:
+		{
 			slug: `skipped-${today}`,
 			title: "Skipped today",
 			intro: "Everything you skipped during the daily review. Mark the ones you have since done.",
@@ -186,15 +269,18 @@ export function buildSkippedPage({
 	};
 }
 
-function readRows<Row>(path: string): Row[] {
-	if (!existsSync(path)) {
+function readRows<Row>(path: string): Row[]
+{
+	if (!existsSync(path))
+	{
 		return [];
 	}
 	const value = readJsonFile(path);
 	return Array.isArray(value) ? value.filter((row): row is Row => isObject(row)) : [];
 }
 
-function main(argv: string[]): void {
+function main(argv: string[]): void
+{
 	let runStarted: string | null = null;
 	let today = localTodayISO();
 	let skipLogPath = DEFAULT_SKIP_LOG_PATH;
@@ -202,40 +288,71 @@ function main(argv: string[]): void {
 	let dueItemsPath = ".llm/gtd/review/due-items.json";
 	let decisionsDir = ".llm/gtd/review/decisions";
 	const argIterator = argv.slice(2)[Symbol.iterator]();
-	for (const arg of argIterator) {
-		if (arg === "--run-started") {
+	for (const arg of argIterator)
+	{
+		if (arg === "--run-started")
+		{
 			runStarted = takeValue(argIterator, arg);
-		} else if (arg === "--today") {
+		}
+		else if (arg === "--today")
+		{
 			today = takeValue(argIterator, arg);
-		} else if (arg === "--skip-log") {
+		}
+		else if (arg === "--skip-log")
+		{
 			skipLogPath = takeValue(argIterator, arg);
-		} else if (arg === "--overdue") {
+		}
+		else if (arg === "--overdue")
+		{
 			overduePath = takeValue(argIterator, arg);
-		} else if (arg === "--due-items") {
+		}
+		else if (arg === "--due-items")
+		{
 			dueItemsPath = takeValue(argIterator, arg);
-		} else if (arg === "--decisions-dir") {
+		}
+		else if (arg === "--decisions-dir")
+		{
 			decisionsDir = takeValue(argIterator, arg);
 		}
 	}
-	if (runStarted === null) {
+	if (runStarted === null)
+	{
 		process.stderr.write("--run-started <ISO timestamp> is required\n");
 		process.exit(2);
 	}
 
 	const entries = existsSync(skipLogPath) ? parseSkipLog(readFileSync(skipLogPath, "utf8")) : [];
-	const {page, items} = buildSkippedPage({
-		keys: skippedThisRun(entries, runStarted),
-		today,
-		overdueRows: readRows<SkippedOverdueRow>(overduePath),
-		dueRows: readRows<SkippedDueRow>(dueItemsPath),
-	});
-	if (items.length > 0) {
-		mkdirSync(decisionsDir, {recursive: true});
+	const {page, items} = buildSkippedPage(
+		{
+			keys: skippedThisRun(entries, runStarted),
+			today,
+			overdueRows: readRows<SkippedOverdueRow>(overduePath),
+			dueRows: readRows<SkippedDueRow>(dueItemsPath),
+		},
+	);
+	if (items.length > 0)
+	{
+		mkdirSync(
+			decisionsDir,
+			{
+				recursive: true,
+			},
+		);
 		writeFileSync(join(decisionsDir, `${page.slug}.json`), `${JSON.stringify(page, null, 2)}\n`);
 	}
-	process.stdout.write(`${JSON.stringify({slug: page.slug, items}, null, 2)}\n`);
+	process.stdout.write(
+		`${JSON.stringify(
+			{
+				slug: page.slug,
+				items,
+			},
+			null,
+			2,
+		)}\n`,
+	);
 }
 
-if (isMain(import.meta.url)) {
+if (isMain(import.meta.url))
+{
 	main(process.argv);
 }

@@ -1,4 +1,5 @@
-export {
+export
+{
 	suggestKeyAction as slashKeyAction,
 	suggestMode as slashMode,
 	type SuggestKeyAction as SlashKeyAction,

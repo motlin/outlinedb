@@ -6,33 +6,39 @@ import {logger} from "./logger.js";
 
 export type {TextSearchOptions};
 
-export interface TextSearchResult {
+export interface TextSearchResult
+{
 	shortId: string | null;
 	name: string | null;
 	note: string | null;
 	path: string;
 }
 
-export class TextSearchService {
+export class TextSearchService
+{
 	private readonly cacheService: CacheService;
 	private readonly pathBuilder: PathBuilder;
 
-	constructor(database: BetterSQLite3Database<typeof schema>) {
+	constructor(database: BetterSQLite3Database<typeof schema>)
+	{
 		this.cacheService = new CacheService(database);
 		this.pathBuilder = new PathBuilder(database);
 	}
 
-	search(options: TextSearchOptions): TextSearchResult[] {
+	search(options: TextSearchOptions): TextSearchResult[]
+	{
 		const rows = this.cacheService.searchText(options);
 		logger.logSqlResult("textSearch", rows);
 
-		if (rows.length === 0) {
+		if (rows.length === 0)
+		{
 			return [];
 		}
 
 		const pathMap = this.pathBuilder.buildFullPathsBatch(rows.map((r) => r.id));
 
-		return rows.map((row) => ({
+		return rows.map((row) => (
+		{
 			shortId: row.shortId,
 			name: row.name,
 			note: row.note,

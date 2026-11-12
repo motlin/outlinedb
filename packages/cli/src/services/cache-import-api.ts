@@ -8,17 +8,22 @@ import {logger} from "./logger.js";
 
 export type {ImportApiResult};
 
-function cliImportLogger(verbose: boolean): ImportLogger {
+function cliImportLogger(verbose: boolean): ImportLogger
+{
 	return {
-		debug: (message) => {
-			if (verbose) {
+		debug: (message) =>
+		{
+			if (verbose)
+			{
 				logger.debug(message);
 			}
 		},
-		warn: (message) => {
+		warn: (message) =>
+		{
 			console.warn(message);
 		},
-		error: (message) => {
+		error: (message) =>
+		{
 			console.error(message);
 		},
 	};
@@ -35,11 +40,16 @@ export function importFromApi(
 	timestamp?: Date,
 	treeItems?: InternalTreeItem[],
 	snapshotTakenAt?: Date,
-): ImportApiResult {
-	return sharedImportFromApi(database, apiNodes, {
-		logger: cliImportLogger(verbose),
-		timestamp,
-		treeItems,
-		snapshotTakenAt,
-	});
+): ImportApiResult
+{
+	return sharedImportFromApi(
+		database,
+		apiNodes,
+		{
+			logger: cliImportLogger(verbose),
+			timestamp,
+			treeItems,
+			snapshotTakenAt,
+		},
+	);
 }

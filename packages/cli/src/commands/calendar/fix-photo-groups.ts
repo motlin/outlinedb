@@ -7,7 +7,8 @@ import {sql} from "drizzle-orm";
 import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";
 import {logger} from "../../services/logger.js";
-import {
+import
+{
 	buildPhotoGroups,
 	countGroupsWithoutEvidence,
 	describeStaleAttachmentData,
@@ -19,7 +20,8 @@ import {listBackups, resolveBackupsDirectory} from "../../utils/backup-archive.j
 /** Position argument for the move API: negative is top, zero or more is bottom. */
 const MOVE_TO_BOTTOM = 0;
 
-interface CandidateRow {
+interface CandidateRow
+{
 	id: string;
 	parent_id: string | null;
 	name: string | null;
@@ -37,7 +39,8 @@ interface CandidateRow {
  * leaf, and the complete sibling sets around them. Partial sibling sets would let
  * two separate photo runs look adjacent, so the whole child list is needed.
  */
-function loadCandidateRows(database: ReturnType<typeof createDatabase>): CachedNodeRow[] {
+function loadCandidateRows(database: ReturnType<typeof createDatabase>): CachedNodeRow[]
+{
 	const query = sql`
 		WITH cur AS (
 			SELECT
@@ -101,7 +104,8 @@ function loadCandidateRows(database: ReturnType<typeof createDatabase>): CachedN
 		WHERE cur.id IN (SELECT id FROM scope) OR cur.parent_id IN (SELECT id FROM scope)
 	`;
 
-	return database.all<CandidateRow>(query).map((row) => ({
+	return database.all<CandidateRow>(query).map((row) => (
+	{
 		id: row.id,
 		parentId: row.parent_id,
 		name: row.name,
@@ -115,8 +119,10 @@ function loadCandidateRows(database: ReturnType<typeof createDatabase>): CachedN
 	}));
 }
 
-function loadEntryTitles(database: ReturnType<typeof createDatabase>, entryIds: string[]): Map<string, string> {
-	if (entryIds.length === 0) {
+function loadEntryTitles(database: ReturnType<typeof createDatabase>, entryIds: string[]): Map<string, string>
+{
+	if (entryIds.length === 0)
+	{
 		return new Map();
 	}
 
@@ -127,7 +133,11 @@ function loadEntryTitles(database: ReturnType<typeof createDatabase>, entryIds: 
 
 	return new Map(
 		database
-			.all<{id: string; name: string | null}>(query)
+			.all<
+			{
+				id: string;
+				name: string | null;
+			}>(query)
 			.map((row) => [row.id, (row.name ?? "").replaceAll(/<[^>]*>/gu, "").trim()]),
 	);
 }
@@ -137,30 +147,41 @@ function loadEntryTitles(database: ReturnType<typeof createDatabase>, entryIds: 
  * Only backup imports populate `s3_files`, so when the newest backup is younger
  * than the newest row, photos pasted since that import are invisible here.
  */
-function findStaleAttachmentData(database: ReturnType<typeof createDatabase>): string | null {
-	const row = database.all<{newest: string | null}>(sql`SELECT MAX(system_from) AS newest FROM s3_files`)[0];
+function findStaleAttachmentData(database: ReturnType<typeof createDatabase>): string | null
+{
+	const row = database.all<
+	{
+		newest: string | null;
+	}>(sql`SELECT MAX(system_from) AS newest FROM s3_files`)[0];
 
 	let newestBackup: Date | null = null;
-	try {
-		for (const backup of listBackups(resolveBackupsDirectory())) {
-			if (newestBackup === null || backup.backupDate > newestBackup) {
+	try
+	{
+		for (const backup of listBackups(resolveBackupsDirectory()))
+		{
+			if (newestBackup === null || backup.backupDate > newestBackup)
+			{
 				newestBackup = backup.backupDate;
 			}
 		}
-	} catch {
+	}
+	catch
+	{
 		return null;
 	}
 
 	return describeStaleAttachmentData(row?.newest ?? null, newestBackup);
 }
 
-function describeGroup(group: PhotoGroup, titles: Map<string, string>): string {
+function describeGroup(group: PhotoGroup, titles: Map<string, string>): string
+{
 	const title = titles.get(group.entryId);
 	const entry = title ? `entry ${group.entryId} "${title.slice(0, 60)}"` : `entry ${group.entryId}`;
 	return group.kind === "wrapped" ? `wrapper ${group.wrapperId} under ${entry}` : entry;
 }
 
-export default class FixPhotoGroups extends Command {
+export default class FixPhotoGroups extends Command
+{
 	static override description =
 		"Unwrap blank photo-paste wrappers in the calendar and restore chronological photo order";
 
@@ -175,27 +196,37 @@ export default class FixPhotoGroups extends Command {
 		"<%= config.bin %> <%= command.id %> --batch-size 5",
 	];
 
-	static override flags = {
-		"dry-run": Flags.boolean({
-			char: "d",
-			description: "Report the groups and planned order without making API calls",
-			default: false,
-		}),
-		"node-id": Flags.string({
-			description: "Limit processing by wrapper or entry UUID or 12-character short ID",
-		}),
-		"batch-size": Flags.integer({
-			char: "b",
-			description: "Number of groups to fix before stopping (default: all)",
-		}),
-		delay: Flags.integer({
-			char: "D",
-			description: "Milliseconds between API calls",
-			default: 1000,
-		}),
+	static override flags =
+	{
+		"dry-run": Flags.boolean(
+			{
+				char: "d",
+				description: "Report the groups and planned order without making API calls",
+				default: false,
+			},
+		),
+		"node-id": Flags.string(
+			{
+				description: "Limit processing by wrapper or entry UUID or 12-character short ID",
+			},
+		),
+		"batch-size": Flags.integer(
+			{
+				char: "b",
+				description: "Number of groups to fix before stopping (default: all)",
+			},
+		),
+		delay: Flags.integer(
+			{
+				char: "D",
+				description: "Milliseconds between API calls",
+				default: 1000,
+			},
+		),
 	};
 
-	public async run(): Promise<void> {
+	public async run(): Promise<void>
+	{
 		const {flags} = await this.parse(FixPhotoGroups);
 
 		const database = createDatabase();
@@ -203,38 +234,48 @@ export default class FixPhotoGroups extends Command {
 		const rows = loadCandidateRows(database);
 
 		let groups = buildPhotoGroups(rows);
-		if (flags["node-id"]) {
+		if (flags["node-id"])
+		{
 			// Cache-only resolution keeps --dry-run usable without an API key.
 			const wanted = resolveIdOrShortId(flags["node-id"], cacheService);
 			groups = groups.filter((group) => group.wrapperId === wanted || group.entryId === wanted);
-			if (groups.length === 0) {
+			if (groups.length === 0)
+			{
 				this.error(`No photo group found for node ${wanted}`);
 			}
 		}
 
-		const planned = groups.map((group) => ({group, plan: planPhotoGroup(group)}));
+		const planned = groups.map((group) => (
+		{
+			group,
+			plan: planPhotoGroup(group),
+		}));
 		const fixable = planned.filter((entry) => entry.plan.decision === "reverse");
 		const skipped = planned.filter((entry) => entry.plan.decision !== "reverse");
 
 		this.log(`Found ${planned.length} photo groups: ${fixable.length} to fix, ${skipped.length} left alone`);
 
 		const skipCounts = new Map<string, number>();
-		for (const {plan} of skipped) {
+		for (const {plan} of skipped)
+		{
 			skipCounts.set(plan.reason, (skipCounts.get(plan.reason) ?? 0) + 1);
 		}
-		for (const [reason, count] of skipCounts) {
+		for (const [reason, count] of skipCounts)
+		{
 			this.log(`  ${count} left alone: ${reason}`);
 		}
 
 		// Reported separately from the plan tally: these clusters never became
 		// groups at all, so without this line a stale cache reads as a clean sweep.
 		const withoutEvidence = countGroupsWithoutEvidence(rows);
-		if (withoutEvidence > 0) {
+		if (withoutEvidence > 0)
+		{
 			this.log(`  ${withoutEvidence} not examined: no attachment data in the cache`);
 		}
 
 		const staleness = findStaleAttachmentData(database);
-		if (staleness) {
+		if (staleness)
+		{
 			this.warn(staleness);
 		}
 
@@ -245,11 +286,14 @@ export default class FixPhotoGroups extends Command {
 			toProcess.map(({group}) => group.entryId),
 		);
 
-		if (flags["dry-run"]) {
+		if (flags["dry-run"])
+		{
 			this.log("\n--- DRY RUN ---");
-			for (const {group, plan} of toProcess) {
+			for (const {group, plan} of toProcess)
+			{
 				this.log(`  ${describeGroup(group, titles)} — ${plan.decision} (${plan.reason})`);
-				for (const id of plan.orderedIds) {
+				for (const id of plan.orderedIds)
+				{
 					const member = group.members.find((candidate) => candidate.id === id);
 					this.log(`    ${id}  ${member?.fileName ?? "(no filename)"}`);
 				}
@@ -258,12 +302,14 @@ export default class FixPhotoGroups extends Command {
 			return;
 		}
 
-		if (toProcess.length === 0) {
+		if (toProcess.length === 0)
+		{
 			return;
 		}
 
 		const apiKey = process.env.WORKFLOWY_API_KEY;
-		if (!apiKey) {
+		if (!apiKey)
+		{
 			this.error("WORKFLOWY_API_KEY environment variable is required");
 		}
 
@@ -274,31 +320,42 @@ export default class FixPhotoGroups extends Command {
 		let fixed = 0;
 		let errors = 0;
 
-		for (const {group, plan} of toProcess) {
-			try {
+		for (const {group, plan} of toProcess)
+		{
+			try
+			{
 				// Appending to the bottom in target order lays the photos out in that
 				// order, whether they are leaving a wrapper or being reordered in place.
-				for (const id of plan.orderedIds) {
+				for (const id of plan.orderedIds)
+				{
 					await client.moveNode(id, group.entryId, MOVE_TO_BOTTOM);
-					if (delay > 0) {
-						await new Promise((resolve) => {
+					if (delay > 0)
+					{
+						await new Promise((resolve) =>
+						{
 							setTimeout(resolve, delay);
 						});
 					}
 				}
 
-				if (group.wrapperId) {
+				if (group.wrapperId)
+				{
 					const remaining = cacheService.getChildren(group.wrapperId);
-					if (remaining.length > 0) {
+					if (remaining.length > 0)
+					{
 						this.warn(`Wrapper ${group.wrapperId} still has ${remaining.length} children; not deleting it`);
-					} else {
+					}
+					else
+					{
 						await client.deleteNode(group.wrapperId);
 					}
 				}
 
 				fixed++;
 				this.log(`  Fixed ${describeGroup(group, titles)} (${plan.orderedIds.length} photos)`);
-			} catch (error) {
+			}
+			catch (error)
+			{
 				errors++;
 				this.warn(
 					`Failed to fix ${describeGroup(group, titles)}: ${error instanceof Error ? error.message : String(error)}`,

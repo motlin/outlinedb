@@ -1,0 +1,43 @@
+{
+	"braceStyle": "next-line",
+	"useTabs": true,
+	"tabWidth": 4,
+	"printWidth": 120,
+	"proseWrap": "never",
+	"embeddedLanguageFormatting": "off",
+	"semi": true,
+	"singleQuote": false,
+	"bracketSpacing": false,
+	"trailingComma": "all",
+	"arrowParens": "always",
+	"ignorePatterns": [
+		"packages/cloudflare/worker-configuration.d.ts",
+		"packages/web/src/client/wf-tailwind.css",
+		"packages/web/src/client/reset.css",
+		"packages/web/test/fixtures/upstream-color-popup-dom.html"
+	],
+	"overrides": [
+		{
+			"files": [".yamllint.yaml", "**/*.yaml", "**/*.yml"],
+			"options":
+			{
+				"useTabs": false,
+				"tabWidth": 2
+			}
+		},
+		{
+			"files": ["**/*.md"],
+			"options":
+			{
+				"printWidth": 320
+			}
+		},
+		{
+			"files": ["AGENTS.md", "CLAUDE.md"],
+			"options":
+			{
+				"proseWrap": "preserve"
+			}
+		}
+	]
+}

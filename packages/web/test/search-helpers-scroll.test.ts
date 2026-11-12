@@ -4,7 +4,8 @@ import type {Root} from "react-dom/client";
 import {SearchHelpers} from "../src/client/components/search-helpers.js";
 import type {SearchHelpersProps} from "../src/client/components/search-helpers.js";
 
-declare global {
+declare global
+{
 	// React reads this to know act() wraps every update.
 	var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -14,12 +15,15 @@ const {createRoot} = await import("react-dom/client");
 
 let root: Root | undefined;
 
-beforeAll(() => {
+beforeAll(() =>
+{
 	globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 });
 
-afterEach(() => {
-	act(() => {
+afterEach(() =>
+{
+	act(() =>
+	{
 		root?.unmount();
 	});
 	root = undefined;
@@ -27,43 +31,80 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
-function mount(overrides: Partial<SearchHelpersProps>): void {
+function mount(overrides: Partial<SearchHelpersProps>): void
+{
 	const container = document.createElement("div");
 	document.body.append(container);
 	root = createRoot(container);
-	act(() => {
+	act(() =>
+	{
 		root?.render(
-			createElement(SearchHelpers, {
-				query: "",
-				focused: true,
-				autocompletePopulated: false,
-				tags: {hashTags: [], atTags: []},
-				selection: {tab: 2, chip: 5},
-				onHoverTab: () => {},
-				onInsert: () => {},
-				...overrides,
-			}),
+			createElement(
+				SearchHelpers,
+				{
+					query: "",
+					focused: true,
+					autocompletePopulated: false,
+					tags:
+					{
+						hashTags: [],
+						atTags: [],
+					},
+					selection:
+					{
+						tab: 2,
+						chip: 5,
+					},
+					onHoverTab: () =>
+					{
+					},
+					onInsert: () =>
+					{
+					},
+					...overrides,
+				},
+			),
 		);
 	});
 }
 
-describe("SearchHelpers keyboard scrolling", () => {
-	it("scrolls the keyboard-selected chip into view smoothly", () => {
+describe("SearchHelpers keyboard scrolling", () =>
+{
+	it("scrolls the keyboard-selected chip into view smoothly", () =>
+	{
 		const calls: [string | null, unknown][] = [];
 		vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(function (
 			this: HTMLElement,
 			options?: boolean | ScrollIntoViewOptions,
-		) {
+		)
+		{
 			calls.push([this.textContent, options]);
 		});
-		mount({keyboardMode: true});
+		mount(
+			{
+				keyboardMode: true,
+			},
+		);
 
-		expect(calls).toStrictEqual([["tomorrow", {behavior: "smooth", block: "nearest"}]]);
+		expect(calls).toStrictEqual([
+			[
+				"tomorrow",
+				{
+					behavior: "smooth",
+					block: "nearest",
+				},
+			],
+		]);
 	});
 
-	it("does not scroll a hover-selected chip", () => {
+	it("does not scroll a hover-selected chip", () =>
+	{
 		const spy = vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => {});
-		mount({keyboardMode: false});
+		mount(
+			{
+				keyboardMode: false,
+			},
+		);
 
 		expect(spy).not.toHaveBeenCalled();
 	});

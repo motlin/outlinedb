@@ -6,7 +6,8 @@
 
 export type VerticalDirection = "up" | "down";
 
-interface VerticalSpan {
+interface VerticalSpan
+{
 	top: number;
 	bottom: number;
 }
@@ -21,8 +22,10 @@ export function isCaretOnBoundaryLine(
 	direction: VerticalDirection,
 	caret: VerticalSpan | null,
 	content: VerticalSpan,
-): boolean {
-	if (caret === null) {
+): boolean
+{
+	if (caret === null)
+	{
 		return true;
 	}
 	const halfLine = (caret.bottom - caret.top) / 2;
@@ -33,7 +36,8 @@ export function isCaretOnBoundaryLine(
  * The nodes the caret can visit in display order: the zoom root's editable title
  * (when zoomed) followed by the visible rows.
  */
-export function navigableIds(zoomedNodeId: string | null, visibleIds: readonly string[]): string[] {
+export function navigableIds(zoomedNodeId: string | null, visibleIds: readonly string[]): string[]
+{
 	return zoomedNodeId === null ? [...visibleIds] : [zoomedNodeId, ...visibleIds];
 }
 
@@ -44,12 +48,32 @@ export function navigableIds(zoomedNodeId: string | null, visibleIds: readonly s
  */
 export function firstLastNavigable(
 	visibleIds: readonly string[],
-	title: {titleEditable: false} | {titleEditable: true; zoomedId: string},
-): {first: string; last: string} | null {
+	title:
+		|
+		  {
+				titleEditable: false;
+		  }
+		|
+		  {
+				titleEditable: true;
+				zoomedId: string;
+		  },
+):
+{
+	first: string;
+	last: string;
+} | null
+{
 	const ids = title.titleEditable ? [title.zoomedId, ...visibleIds] : visibleIds;
 	const first = ids[0];
 	const last = ids.at(-1);
-	return first === undefined || last === undefined ? null : {first, last};
+	return first === undefined || last === undefined
+		? null
+		:
+			{
+				first,
+				last,
+			};
 }
 
 /**
@@ -60,15 +84,31 @@ export function adjacentVisibleNode(
 	visibleIds: readonly string[],
 	currentId: string,
 	direction: VerticalDirection,
-): string | null {
+): string | null
+{
 	const index = visibleIds.indexOf(currentId);
-	if (index === -1) {
+	if (index === -1)
+	{
 		return null;
 	}
 	return visibleIds[direction === "up" ? index - 1 : index + 1] ?? null;
 }
 
-export type VerticalCross = {kind: "move"; nodeId: string; caretOffset: 0} | {kind: "swallow"} | {kind: "native"};
+export type VerticalCross =
+	|
+	  {
+			kind: "move";
+			nodeId: string;
+			caretOffset: 0;
+	  }
+	|
+	  {
+			kind: "swallow";
+	  }
+	|
+	  {
+			kind: "native";
+	  };
 
 /**
  * What Up/Down does at a row's edge line, matching workflowy.com: continue in the
@@ -79,15 +119,32 @@ export function planVerticalCross(
 	visibleIds: readonly string[],
 	currentId: string,
 	direction: VerticalDirection,
-): VerticalCross {
-	if (!visibleIds.includes(currentId)) {
-		return {kind: "native"};
+): VerticalCross
+{
+	if (!visibleIds.includes(currentId))
+	{
+		return {
+			kind: "native",
+		};
 	}
 	const nodeId = adjacentVisibleNode(visibleIds, currentId, direction);
-	if (nodeId !== null) {
-		return {kind: "move", nodeId, caretOffset: 0};
+	if (nodeId !== null)
+	{
+		return {
+			kind: "move",
+			nodeId,
+			caretOffset: 0,
+		};
 	}
-	return direction === "up" ? {kind: "swallow"} : {kind: "native"};
+	return direction === "up"
+		?
+			{
+				kind: "swallow",
+			}
+		:
+			{
+				kind: "native",
+			};
 }
 
 export type HorizontalDirection = "left" | "right";
@@ -102,10 +159,21 @@ export function horizontalTarget(
 	visibleIds: readonly string[],
 	currentId: string,
 	direction: HorizontalDirection,
-): {nodeId: string; caretOffset: number} | null {
+):
+{
+	nodeId: string;
+	caretOffset: number;
+} | null
+{
 	const left = direction === "left";
 	const nodeId = adjacentVisibleNode(visibleIds, currentId, left ? "up" : "down");
-	return nodeId === null ? null : {nodeId, caretOffset: left ? Number.MAX_SAFE_INTEGER : 0};
+	return nodeId === null
+		? null
+		:
+			{
+				nodeId,
+				caretOffset: left ? Number.MAX_SAFE_INTEGER : 0,
+			};
 }
 
 /**
@@ -116,9 +184,17 @@ export function horizontalTarget(
 export function backspaceDeleteTarget(
 	visibleIds: readonly string[],
 	nodeId: string,
-	node: {text: string; note: string; hasChildren: boolean; hasFile?: boolean},
-): string | null {
-	if (node.text !== "" || node.note !== "" || node.hasChildren || node.hasFile === true) {
+	node:
+	{
+		text: string;
+		note: string;
+		hasChildren: boolean;
+		hasFile?: boolean;
+	},
+): string | null
+{
+	if (node.text !== "" || node.note !== "" || node.hasChildren || node.hasFile === true)
+	{
 		return null;
 	}
 	return adjacentVisibleNode(visibleIds, nodeId, "up");
@@ -132,13 +208,28 @@ export function backspaceDeleteTarget(
 export function editingAfterRemoval(
 	visibleIds: readonly string[],
 	nodeId: string,
-): {nodeId: string; caretOffset: number} | null {
+):
+{
+	nodeId: string;
+	caretOffset: number;
+} | null
+{
 	const previous = adjacentVisibleNode(visibleIds, nodeId, "up");
-	if (previous !== null) {
-		return {nodeId: previous, caretOffset: Number.MAX_SAFE_INTEGER};
+	if (previous !== null)
+	{
+		return {
+			nodeId: previous,
+			caretOffset: Number.MAX_SAFE_INTEGER,
+		};
 	}
 	const next = adjacentVisibleNode(visibleIds, nodeId, "down");
-	return next === null ? null : {nodeId: next, caretOffset: 0};
+	return next === null
+		? null
+		:
+			{
+				nodeId: next,
+				caretOffset: 0,
+			};
 }
 
 /**
@@ -149,20 +240,44 @@ export function editingAfterMoveOut(
 	visibleIds: readonly string[],
 	nodeId: string,
 	zoomRootId: string | null,
-): {nodeId: string; caretOffset: number} | null {
+):
+{
+	nodeId: string;
+	caretOffset: number;
+} | null
+{
 	const previous = adjacentVisibleNode(visibleIds, nodeId, "up");
 	const next = adjacentVisibleNode(visibleIds, nodeId, "down");
-	if (previous !== null && previous === zoomRootId && next !== null) {
-		return {nodeId: next, caretOffset: 0};
+	if (previous !== null && previous === zoomRootId && next !== null)
+	{
+		return {
+			nodeId: next,
+			caretOffset: 0,
+		};
 	}
 	return editingAfterRemoval(visibleIds, nodeId);
 }
 
 export type CompleteFocus =
-	| {kind: "row"; id: string; offset: 0}
-	| {kind: "zoomTitle"}
-	| {kind: "stay"}
-	| {kind: "zoomOut"; delayMs: 500};
+	|
+	  {
+			kind: "row";
+			id: string;
+			offset: 0;
+	  }
+	|
+	  {
+			kind: "zoomTitle";
+	  }
+	|
+	  {
+			kind: "stay";
+	  }
+	|
+	  {
+			kind: "zoomOut";
+			delayMs: 500;
+	  };
 
 /**
  * Where the caret goes after Cmd+Enter toggles completion on `ids`, matching
@@ -181,38 +296,80 @@ export function planCompleteFocus(input: {
 	siblingsOf: (id: string) => readonly string[];
 	visibleRows: readonly string[];
 	completedIds: ReadonlySet<string>;
-}): CompleteFocus {
+}): CompleteFocus
+{
 	const {ids, completing, showCompleted, zoomRootId, siblingsOf, visibleRows, completedIds} = input;
 	const first = ids[0];
 	const last = ids.at(-1);
-	if (!completing || first === undefined || last === undefined) {
-		return {kind: "stay"};
+	if (!completing || first === undefined || last === undefined)
+	{
+		return {
+			kind: "stay",
+		};
 	}
-	if (zoomRootId !== null && ids.includes(zoomRootId)) {
-		return {kind: "zoomOut", delayMs: 500};
+	if (zoomRootId !== null && ids.includes(zoomRootId))
+	{
+		return {
+			kind: "zoomOut",
+			delayMs: 500,
+		};
 	}
 	const isCandidate = (id: string): boolean => !ids.includes(id) && (showCompleted || !completedIds.has(id));
 
 	const siblings = siblingsOf(last);
 	const nextSibling = siblings.slice(siblings.indexOf(last) + 1).find(isCandidate);
-	if (nextSibling !== undefined) {
-		return {kind: "row", id: nextSibling, offset: 0};
+	if (nextSibling !== undefined)
+	{
+		return {
+			kind: "row",
+			id: nextSibling,
+			offset: 0,
+		};
 	}
-	if (showCompleted) {
-		return {kind: "row", id: first, offset: 0};
+	if (showCompleted)
+	{
+		return {
+			kind: "row",
+			id: first,
+			offset: 0,
+		};
 	}
 
 	const firstIndex = visibleRows.indexOf(first);
 	const previous = visibleRows.slice(0, Math.max(firstIndex, 0)).findLast(isCandidate);
-	if (previous === undefined) {
-		return {kind: "stay"};
+	if (previous === undefined)
+	{
+		return {
+			kind: "stay",
+		};
 	}
-	return previous === zoomRootId ? {kind: "zoomTitle"} : {kind: "row", id: previous, offset: 0};
+	return previous === zoomRootId
+		?
+			{
+				kind: "zoomTitle",
+			}
+		:
+			{
+				kind: "row",
+				id: previous,
+				offset: 0,
+			};
 }
 
 export type NoteBoundaryInput =
-	| {from: "rootTitleEnd"; key: "Up" | "Down" | "Left" | "Right"; rootNoted: boolean}
-	| {from: "firstChildName"; key: "Up" | "Down" | "Left" | "Right"; caret: number; rootNoted: boolean};
+	|
+	  {
+			from: "rootTitleEnd";
+			key: "Up" | "Down" | "Left" | "Right";
+			rootNoted: boolean;
+	  }
+	|
+	  {
+			from: "firstChildName";
+			key: "Up" | "Down" | "Left" | "Right";
+			caret: number;
+			rootNoted: boolean;
+	  };
 
 /**
  * Caret moves into the zoom root's note (`notes--main`), matching workflowy.com:
@@ -220,14 +377,33 @@ export type NoteBoundaryInput =
  * at the start of the first child's name enter it at its end. Null when the root has
  * no note or the key moves elsewhere.
  */
-export function planNoteBoundary(input: NoteBoundaryInput): {focus: "rootNote"; caret: 0 | "end"} | null {
-	if (!input.rootNoted) {
+export function planNoteBoundary(input: NoteBoundaryInput):
+{
+	focus: "rootNote";
+	caret: 0 | "end";
+} | null
+{
+	if (!input.rootNoted)
+	{
 		return null;
 	}
-	if (input.from === "rootTitleEnd") {
-		return input.key === "Down" || input.key === "Right" ? {focus: "rootNote", caret: 0} : null;
+	if (input.from === "rootTitleEnd")
+	{
+		return input.key === "Down" || input.key === "Right"
+			?
+				{
+					focus: "rootNote",
+					caret: 0,
+				}
+			: null;
 	}
-	return input.caret === 0 && (input.key === "Up" || input.key === "Left") ? {focus: "rootNote", caret: "end"} : null;
+	return input.caret === 0 && (input.key === "Up" || input.key === "Left")
+		?
+			{
+				focus: "rootNote",
+				caret: "end",
+			}
+		: null;
 }
 
 /**
@@ -240,10 +416,22 @@ export function planHideCompletedFocus(
 	rows: readonly string[],
 	hidden: ReadonlySet<string>,
 	focusedId: string | null,
-): {nodeId: string; caretOffset: 0} | null {
-	if (focusedId === null || !hidden.has(focusedId)) {
+):
+{
+	nodeId: string;
+	caretOffset: 0;
+} | null
+{
+	if (focusedId === null || !hidden.has(focusedId))
+	{
 		return null;
 	}
 	const previous = rows.slice(0, Math.max(rows.indexOf(focusedId), 0)).findLast((id) => !hidden.has(id));
-	return previous === undefined ? null : {nodeId: previous, caretOffset: 0};
+	return previous === undefined
+		? null
+		:
+			{
+				nodeId: previous,
+				caretOffset: 0,
+			};
 }

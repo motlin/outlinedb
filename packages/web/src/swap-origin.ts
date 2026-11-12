@@ -1,9 +1,11 @@
-export interface SwapSide {
+export interface SwapSide
+{
 	id: string;
 	parentId: string | null;
 }
 
-export interface SwapMove {
+export interface SwapMove
+{
 	id: string;
 	parentId: string | null;
 	/** Insertion slot among the target's current children, counted before the moved item is removed. */
@@ -11,7 +13,8 @@ export interface SwapMove {
 }
 
 /** Where `id` sits in `order` after it moves to `slot` (a pre-removal slot). */
-function moved(order: readonly string[], id: string, slot: number): string[] {
+function moved(order: readonly string[], id: string, slot: number): string[]
+{
 	const from = order.indexOf(id);
 	const rest = order.filter((entry) => entry !== id);
 	const at = slot - (from !== -1 && from < slot ? 1 : 0);
@@ -27,19 +30,22 @@ export function planSwapOrigin(
 	orders: ReadonlyMap<string | null, readonly string[]>,
 	mirror: SwapSide,
 	original: SwapSide,
-): [SwapMove, SwapMove] {
+): [SwapMove, SwapMove]
+{
 	const order = (parentId: string | null): readonly string[] => orders.get(parentId) ?? [];
 	const sameParent = mirror.parentId === original.parentId;
 	const slot = (from: number, to: number): number => to + (sameParent && to > from ? 1 : 0);
 	const mirrorIndex = order(mirror.parentId).indexOf(mirror.id);
 	const originalIndex = order(original.parentId).indexOf(original.id);
-	const first: SwapMove = {
+	const first: SwapMove =
+	{
 		id: mirror.id,
 		parentId: original.parentId,
 		index: slot(mirrorIndex, originalIndex),
 	};
 	const afterFirst = moved(order(original.parentId), mirror.id, first.index);
-	const second: SwapMove = {
+	const second: SwapMove =
+	{
 		id: original.id,
 		parentId: mirror.parentId,
 		index: slot(afterFirst.indexOf(original.id), mirrorIndex),
@@ -48,11 +54,20 @@ export function planSwapOrigin(
 }
 
 /** One move of a swap with the slot that puts the mover back, the shape an undo batch records. */
-export interface SwapMoveOp {
+export interface SwapMoveOp
+{
 	kind: "move";
 	nodeId: string;
-	from: {parentId: string | null; index: number};
-	to: {parentId: string | null; index: number};
+	from:
+	{
+		parentId: string | null;
+		index: number;
+	};
+	to:
+	{
+		parentId: string | null;
+		index: number;
+	};
 }
 
 /** The undo-batch ops of {@link planSwapOrigin}: each move with the slot its inverse needs. */
@@ -60,9 +75,11 @@ export function swapMoveOps(
 	orders: ReadonlyMap<string | null, readonly string[]>,
 	mirror: SwapSide,
 	original: SwapSide,
-): SwapMoveOp[] {
+): SwapMoveOp[]
+{
 	const lists = new Map<string | null, string[]>([...orders].map(([parentId, ids]) => [parentId, [...ids]]));
-	return planSwapOrigin(orders, mirror, original).map((move) => {
+	return planSwapOrigin(orders, mirror, original).map((move) =>
+	{
 		const sourceParent = move.id === mirror.id ? mirror.parentId : original.parentId;
 		const source = lists.get(sourceParent) ?? [];
 		const from = source.indexOf(move.id);
@@ -77,8 +94,16 @@ export function swapMoveOps(
 		return {
 			kind: "move",
 			nodeId: move.id,
-			from: {parentId: sourceParent, index: sameParent && from > landed ? from + 1 : from},
-			to: {parentId: move.parentId, index: move.index},
+			from:
+			{
+				parentId: sourceParent,
+				index: sameParent && from > landed ? from + 1 : from,
+			},
+			to:
+			{
+				parentId: move.parentId,
+				index: move.index,
+			},
 		};
 	});
 }

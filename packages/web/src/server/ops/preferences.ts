@@ -18,16 +18,27 @@ import {TAG_COLORS} from "../../tag-colors.js";
 import {defineOp, ok} from "./define.js";
 
 /** The toolbar's latest color as the client sees it: a text or highlight color from the palette. */
-const LatestColorSchema = z.strictObject({kind: z.enum(["text", "highlight"]), color: z.enum(TAG_COLORS)});
+const LatestColorSchema = z.strictObject(
+	{
+		kind: z.enum(["text", "highlight"]),
+		color: z.enum(TAG_COLORS),
+	},
+);
 
 type LatestColor = z.output<typeof LatestColorSchema>;
 
 /** Upstream's `latestColor.attribute`: 11 colors the text, 12 the background. */
-const COLOR_ATTRIBUTE = {text: 11, highlight: 12} as const;
+const COLOR_ATTRIBUTE =
+{
+	text: 11,
+	highlight: 12,
+} as const;
 
 /** Upstream's `{attribute, value}` as a latest color, or null when either is missing or unknown. */
-function latestColorFrom(raw: unknown): LatestColor | null {
-	if (typeof raw !== "object" || raw === null || !("attribute" in raw) || !("value" in raw)) {
+function latestColorFrom(raw: unknown): LatestColor | null
+{
+	if (typeof raw !== "object" || raw === null || !("attribute" in raw) || !("value" in raw))
+	{
 		return null;
 	}
 	const kind =
@@ -37,66 +48,102 @@ function latestColorFrom(raw: unknown): LatestColor | null {
 				? "highlight"
 				: null;
 	const color = Object.entries(COLOR_VALUE).find(([, value]) => value === raw.value)?.[0];
-	return kind !== null && isColorName(color) ? {kind, color} : null;
+	return kind !== null && isColorName(color)
+		?
+			{
+				kind,
+				color,
+			}
+		: null;
 }
 
-function latestColorTo({kind, color}: LatestColor): {attribute: number; value: number} {
-	return {attribute: COLOR_ATTRIBUTE[kind], value: COLOR_VALUE[color]};
+function latestColorTo({kind, color}: LatestColor):
+{
+	attribute: number;
+	value: number;
+}
+{
+	return {
+		attribute: COLOR_ATTRIBUTE[kind],
+		value: COLOR_VALUE[color],
+	};
 }
 
 const PreferencesPatchSchema = z
-	.object({
-		dateFormat: z.string().nullable(),
-		timeFormat: z.string().nullable(),
-		weekStartDay: z.number().int().min(0).max(6).nullable(),
-		slashDiscovered: z.boolean(),
-		/** Upstream's `calendar.tooltip_seen`: the calendar onboarding tooltip was dismissed or tried, which shows Today. */
-		calendarTooltipSeen: z.boolean(),
-		/** Upstream's `emoji.options.selected`: the emoji style (`system`, `noto`), applied as body class `emoji-<name>`. */
-		emojiSelected: z.string().nullable(),
-		/** Upstream's `ai.embeddingStatus`: unset until "Enable AI", then "requested" until the server indexes the notes ("finished"). */
-		aiEmbeddingStatus: z.string().nullable(),
-		/** Upstream's `ai.embedding_tooltip_dismissed`: set the first time the ready AI panel opens. */
-		aiEmbeddingTooltipDismissed: z.boolean(),
-		notesRootId: z.string().nullable(),
-		showCompleted: z.boolean(),
-		showKeyboardShortcuts: z.boolean(),
-		sameColorForLinks: z.boolean(),
-		theme: z.string(),
-		/** Upstream's account `font` (`system`, `helvetica`, `etBook`, ...), applied as body class `font-<name>`. */
-		font: z.string(),
-		displayImagePreviewsAsThumbnails: z.boolean(),
-		ignoreYoutube: z.boolean(),
-		ignoreYtShort: z.boolean(),
-		ignoreTwitter: z.boolean(),
-		ignoreLoom: z.boolean(),
-		unsubscribeFromSummaryEmails: z.boolean(),
-		unsubscribeFromCommentsEmails: z.boolean(),
-		/** Upstream's `backup_to_dropbox`: the daily Dropbox auto-backup is on (connecting Dropbox happens on workflowy.com). */
-		backupToDropbox: z.boolean(),
-		weeklyReportOn: z.boolean(),
-		latestColor: LatestColorSchema.nullable(),
-		/** When the account's change tracking started (upstream's `searchForChangesAfter`), as an ISO date. */
-		searchForChangesAfter: z.iso.datetime().nullable(),
-	})
+	.object(
+		{
+			dateFormat: z.string().nullable(),
+			timeFormat: z.string().nullable(),
+			weekStartDay: z.number().int().min(0).max(6).nullable(),
+			slashDiscovered: z.boolean(),
+			/** Upstream's `calendar.tooltip_seen`: the calendar onboarding tooltip was dismissed or tried, which shows Today. */
+			calendarTooltipSeen: z.boolean(),
+			/** Upstream's `emoji.options.selected`: the emoji style (`system`, `noto`), applied as body class `emoji-<name>`. */
+			emojiSelected: z.string().nullable(),
+			/** Upstream's `ai.embeddingStatus`: unset until "Enable AI", then "requested" until the server indexes the notes ("finished"). */
+			aiEmbeddingStatus: z.string().nullable(),
+			/** Upstream's `ai.embedding_tooltip_dismissed`: set the first time the ready AI panel opens. */
+			aiEmbeddingTooltipDismissed: z.boolean(),
+			notesRootId: z.string().nullable(),
+			showCompleted: z.boolean(),
+			showKeyboardShortcuts: z.boolean(),
+			sameColorForLinks: z.boolean(),
+			theme: z.string(),
+			/** Upstream's account `font` (`system`, `helvetica`, `etBook`, ...), applied as body class `font-<name>`. */
+			font: z.string(),
+			displayImagePreviewsAsThumbnails: z.boolean(),
+			ignoreYoutube: z.boolean(),
+			ignoreYtShort: z.boolean(),
+			ignoreTwitter: z.boolean(),
+			ignoreLoom: z.boolean(),
+			unsubscribeFromSummaryEmails: z.boolean(),
+			unsubscribeFromCommentsEmails: z.boolean(),
+			/** Upstream's `backup_to_dropbox`: the daily Dropbox auto-backup is on (connecting Dropbox happens on workflowy.com). */
+			backupToDropbox: z.boolean(),
+			weeklyReportOn: z.boolean(),
+			latestColor: LatestColorSchema.nullable(),
+			/** When the account's change tracking started (upstream's `searchForChangesAfter`), as an ISO date. */
+			searchForChangesAfter: z.iso.datetime().nullable(),
+		},
+	)
 	.partial()
 	.strict();
 
 /** The full preferences: every patch field present, with `theme` and `font` null when unset. */
-export const PreferencesSchema = z.strictObject({
-	...PreferencesPatchSchema.required().omit({theme: true, font: true}).shape,
-	theme: z.string().nullable(),
-	font: z.string().nullable(),
-	/**
-	 * Upstream's `changelog.read.<id>` (read-only parity data): which of upstream's What's New entries were read, or
-	 * null when none were ever set. Our own entries' read state is `/api/v1/whats-new`, never this key.
-	 */
-	changelogRead: z.record(z.string(), z.boolean()).nullable(),
-	/** The signed-in account's name and email (read-only), null unless both are known. */
-	account: z.strictObject({username: z.string(), email: z.string()}).nullable(),
-	/** Upstream's `settings.mfa` (read-only; turning it on or off happens on workflowy.com), null when the account has none. */
-	mfa: z.strictObject({enabled: z.boolean()}).nullable(),
-});
+export const PreferencesSchema = z.strictObject(
+	{
+		...PreferencesPatchSchema.required().omit(
+			{
+				theme: true,
+				font: true,
+			},
+		).shape,
+		theme: z.string().nullable(),
+		font: z.string().nullable(),
+		/**
+		 * Upstream's `changelog.read.<id>` (read-only parity data): which of upstream's What's New entries were read, or
+		 * null when none were ever set. Our own entries' read state is `/api/v1/whats-new`, never this key.
+		 */
+		changelogRead: z.record(z.string(), z.boolean()).nullable(),
+		/** The signed-in account's name and email (read-only), null unless both are known. */
+		account: z
+			.strictObject(
+				{
+					username: z.string(),
+					email: z.string(),
+				},
+			)
+			.nullable(),
+		/** Upstream's `settings.mfa` (read-only; turning it on or off happens on workflowy.com), null when the account has none. */
+		mfa: z
+			.strictObject(
+				{
+					enabled: z.boolean(),
+				},
+			)
+			.nullable(),
+	},
+);
 
 type Preferences = z.output<typeof PreferencesSchema>;
 
@@ -114,7 +161,8 @@ const KEYS = [
 ] as const;
 
 /** Each root-metadata preference's path. */
-const PATHS: Record<(typeof KEYS)[number], string[]> = {
+const PATHS: Record<(typeof KEYS)[number], string[]> =
+{
 	dateFormat: ["dateFormat"],
 	timeFormat: ["timeFormat"],
 	weekStartDay: ["weekStartDay"],
@@ -134,8 +182,10 @@ const LATEST_COLOR_PATH = ["latestColor"];
 const CHANGELOG_READ_PATH = ["changelog", "read"];
 
 /** The stored read flags, keeping only booleans, or null when `changelog.read` is not an object. */
-function changelogReadFrom(raw: unknown): Record<string, boolean> | null {
-	if (typeof raw !== "object" || raw === null) {
+function changelogReadFrom(raw: unknown): Record<string, boolean> | null
+{
+	if (typeof raw !== "object" || raw === null)
+	{
 		return null;
 	}
 	return Object.fromEntries(
@@ -147,8 +197,10 @@ function changelogReadFrom(raw: unknown): Record<string, boolean> | null {
 const SEARCH_FOR_CHANGES_AFTER_PATH = ["searchForChangesAfter"];
 
 /** A stored client timestamp as an ISO date, or null when it is not a number. */
-async function searchForChangesAfterFrom(adapter: AccountState, raw: unknown): Promise<string | null> {
-	if (typeof raw !== "number") {
+async function searchForChangesAfterFrom(adapter: AccountState, raw: unknown): Promise<string | null>
+{
+	if (typeof raw !== "number")
+	{
 		return null;
 	}
 	const {joinedAt} = await adapter.getAccount();
@@ -156,13 +208,15 @@ async function searchForChangesAfterFrom(adapter: AccountState, raw: unknown): P
 }
 
 /** Upstream's `getClientTimestampForTimestamp`: whole seconds from the join date to `iso`. */
-async function searchForChangesAfterTo(adapter: AccountState, iso: string): Promise<number> {
+async function searchForChangesAfterTo(adapter: AccountState, iso: string): Promise<number>
+{
 	const {joinedAt} = await adapter.getAccount();
 	return Math.floor((Date.parse(iso) - joinedAt.getTime()) / 1000);
 }
 
 /** Flag preferences kept in upstream's account settings rather than root metadata. */
-const SETTINGS = {
+const SETTINGS =
+{
 	showCompleted: "show_completed",
 	showKeyboardShortcuts: "show_keyboard_shortcuts",
 	sameColorForLinks: "same_color_for_links",
@@ -191,24 +245,40 @@ const FLAG_KEYS = [
 ] as const;
 
 /** The server-saved settings that are strings rather than yes/no flags. */
-const STRING_SETTINGS = {theme: "theme", font: "font"} as const satisfies Record<string, ServerSetting>;
+const STRING_SETTINGS =
+{
+	theme: "theme",
+	font: "font",
+} as const satisfies Record<string, ServerSetting>;
 
 /** Upstream sends flags as `"yes"`/`"no"`; the adapter caches a written flag as a boolean. */
-function asFlag(value: unknown): boolean {
+function asFlag(value: unknown): boolean
+{
 	return value === true || value === "yes";
 }
 
-function asString(value: unknown): string | null {
+function asString(value: unknown): string | null
+{
 	return typeof value === "string" ? value : null;
 }
 
 /** Upstream's `settings.mfa` object (a cached row decodes to `{enabled}`), or null when absent. */
-function mfaFrom(raw: unknown): {enabled: boolean} | null {
-	return typeof raw === "object" && raw !== null && "enabled" in raw ? {enabled: asFlag(raw.enabled)} : null;
+function mfaFrom(raw: unknown):
+{
+	enabled: boolean;
+} | null
+{
+	return typeof raw === "object" && raw !== null && "enabled" in raw
+		?
+			{
+				enabled: asFlag(raw.enabled),
+			}
+		: null;
 }
 
 /** Read the preferences, treating missing or mistyped values as null (false for the flag). */
-async function readPreferences(adapter: AccountState): Promise<Preferences> {
+async function readPreferences(adapter: AccountState): Promise<Preferences>
+{
 	const [
 		rootValues,
 		latestColor,
@@ -262,77 +332,111 @@ async function readPreferences(adapter: AccountState): Promise<Preferences> {
 		backupToDropbox: flag("backupToDropbox"),
 		theme: asString(theme),
 		font: asString(font),
-		account: name !== null && address !== null ? {username: name, email: address} : null,
+		account:
+			name !== null && address !== null
+				?
+					{
+						username: name,
+						email: address,
+					}
+				: null,
 		mfa: mfaFrom(mfa),
 		changelogRead: changelogReadFrom(changelogRead),
 	};
 }
 
 /** The account-global preferences. */
-export const preferencesGet = defineOp({
-	input: z.object({}),
-	output: PreferencesSchema,
-	async run(ctx) {
-		return withAccountState(ctx, async (state) => ok(await readPreferences(state)));
+export const preferencesGet = defineOp(
+	{
+		input: z.object({}),
+		output: PreferencesSchema,
+		async run(ctx)
+		{
+			return withAccountState(ctx, async (state) => ok(await readPreferences(state)));
+		},
 	},
-});
+);
 
 /** Applies any subset of preferences (a `null` removes one) and answers the full preferences. */
-export const preferencesPatch = defineOp({
-	input: z.object({patch: PreferencesPatchSchema}),
-	output: PreferencesSchema,
-	async run(ctx, {patch}) {
-		return withAccountState(ctx, async (adapter) => {
-			const previousWeekStartDay =
-				patch.weekStartDay === undefined ? undefined : await adapter.getRootMeta(PATHS.weekStartDay);
-			const changes: Parameters<AccountState["setRootMetaValues"]>[0] = KEYS.filter((key) => key in patch).map(
-				(key) => ({
+export const preferencesPatch = defineOp(
+	{
+		input: z.object(
+			{
+				patch: PreferencesPatchSchema,
+			},
+		),
+		output: PreferencesSchema,
+		async run(ctx, {patch})
+		{
+			return withAccountState(ctx, async (adapter) =>
+			{
+				const previousWeekStartDay =
+					patch.weekStartDay === undefined ? undefined : await adapter.getRootMeta(PATHS.weekStartDay);
+				const changes: Parameters<AccountState["setRootMetaValues"]>[0] = KEYS.filter(
+					(key) => key in patch,
+				).map((key) => (
+				{
 					path: PATHS[key],
 					value: patch[key] ?? undefined,
-				}),
-			);
-			if (patch.latestColor !== undefined) {
-				changes.push({
-					path: LATEST_COLOR_PATH,
-					value: patch.latestColor === null ? undefined : latestColorTo(patch.latestColor),
-				});
-			}
-			if (patch.searchForChangesAfter !== undefined) {
-				changes.push({
-					path: SEARCH_FOR_CHANGES_AFTER_PATH,
-					value:
-						patch.searchForChangesAfter === null
-							? undefined
-							: await searchForChangesAfterTo(adapter, patch.searchForChangesAfter),
-				});
-			}
-			const settings: [ServerSetting, string | boolean][] = [
-				...FLAG_KEYS.flatMap((key): [ServerSetting, boolean][] => {
-					const value = patch[key];
-					return value === undefined ? [] : [[SETTINGS[key], value]];
-				}),
-				...(patch.theme === undefined ? [] : [[STRING_SETTINGS.theme, patch.theme] as [ServerSetting, string]]),
-				...(patch.font === undefined ? [] : [[STRING_SETTINGS.font, patch.font] as [ServerSetting, string]]),
-			];
-			if (adapter instanceof LocalAccount) {
-				// One unit of work: separate writes would replace the settings row within its own millisecond.
-				adapter.change(changes, settings);
+				}));
+				if (patch.latestColor !== undefined)
+				{
+					changes.push(
+						{
+							path: LATEST_COLOR_PATH,
+							value: patch.latestColor === null ? undefined : latestColorTo(patch.latestColor),
+						},
+					);
+				}
+				if (patch.searchForChangesAfter !== undefined)
+				{
+					changes.push(
+						{
+							path: SEARCH_FOR_CHANGES_AFTER_PATH,
+							value:
+								patch.searchForChangesAfter === null
+									? undefined
+									: await searchForChangesAfterTo(adapter, patch.searchForChangesAfter),
+						},
+					);
+				}
+				const settings: [ServerSetting, string | boolean][] = [
+					...FLAG_KEYS.flatMap((key): [ServerSetting, boolean][] =>
+					{
+						const value = patch[key];
+						return value === undefined ? [] : [[SETTINGS[key], value]];
+					}),
+					...(patch.theme === undefined
+						? []
+						: [[STRING_SETTINGS.theme, patch.theme] as [ServerSetting, string]]),
+					...(patch.font === undefined
+						? []
+						: [[STRING_SETTINGS.font, patch.font] as [ServerSetting, string]]),
+				];
+				if (adapter instanceof LocalAccount)
+				{
+					// One unit of work: separate writes would replace the settings row within its own millisecond.
+					adapter.change(changes, settings);
+					return ok(await readPreferences(adapter));
+				}
+				if (changes.length > 0)
+				{
+					await adapter.setRootMetaValues(changes);
+				}
+				for (const [name, value] of settings)
+				{
+					await adapter.setSetting(name, value);
+				}
+				// Re-laying out the calendar's weeks writes through the internal API; without one the layout stays as it is.
+				if (
+					patch.weekStartDay !== undefined &&
+					(patch.weekStartDay ?? undefined) !== (previousWeekStartDay ?? undefined)
+				)
+				{
+					await reapplyWeekLayout(ctx, adapter);
+				}
 				return ok(await readPreferences(adapter));
-			}
-			if (changes.length > 0) {
-				await adapter.setRootMetaValues(changes);
-			}
-			for (const [name, value] of settings) {
-				await adapter.setSetting(name, value);
-			}
-			// Re-laying out the calendar's weeks writes through the internal API; without one the layout stays as it is.
-			if (
-				patch.weekStartDay !== undefined &&
-				(patch.weekStartDay ?? undefined) !== (previousWeekStartDay ?? undefined)
-			) {
-				await reapplyWeekLayout(ctx, adapter);
-			}
-			return ok(await readPreferences(adapter));
-		});
+			});
+		},
 	},
-});
+);

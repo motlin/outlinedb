@@ -1,7 +1,8 @@
 import {originalUrl} from "./file-preview-kind.js";
 
 /** Upstream's `attachment.download()`: a hidden `<a download>` clicked and removed. The signed original redirects from the proxy. */
-export function downloadFile(nodeId: string, fileName: string, doc: Document = document): void {
+export function downloadFile(nodeId: string, fileName: string, doc: Document = document): void
+{
 	const anchor = doc.createElement("a");
 	anchor.href = originalUrl(nodeId);
 	anchor.download = fileName;
@@ -15,6 +16,7 @@ export function downloadFile(nodeId: string, fileName: string, doc: Document = d
 export function viewOriginal(
 	nodeId: string,
 	open: (url: string, target: string) => unknown = window.open.bind(window),
-): void {
+): void
+{
 	open(originalUrl(nodeId), "_blank");
 }

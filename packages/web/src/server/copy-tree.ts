@@ -8,7 +8,8 @@ export const MAX_COPY_ITEMS = 2000;
 /** The deepest subtree a copy reads; deeper levels (or a cycle) are cut off. */
 const COPY_DEPTH = 50;
 
-export interface CopyTreeOptions {
+export interface CopyTreeOptions
+{
 	/** Whether the top copy starts completed (its own completion; a mirror has none). */
 	rootCompleted: boolean;
 	/** Whether a descendant that is an original with mirrors becomes a new mirror of itself (upstream `copyProjectTree`). */
@@ -18,15 +19,29 @@ export interface CopyTreeOptions {
 	newId?: () => string;
 }
 
-export type CopiedTree = {ok: true; tree: NewTree; sourceToNew: Map<string, string>} | {ok: false; count: number};
+export type CopiedTree =
+	|
+	  {
+			ok: true;
+			tree: NewTree;
+			sourceToNew: Map<string, string>;
+	  }
+	|
+	  {
+			ok: false;
+			count: number;
+	  };
 
-function countNodes(node: NodeTree): number {
+function countNodes(node: NodeTree): number
+{
 	return 1 + (node.children ?? []).reduce((sum, child) => sum + countNodes(child), 0);
 }
 
-function collectIds(node: NodeTree, into: string[]): string[] {
+function collectIds(node: NodeTree, into: string[]): string[]
+{
 	into.push(node.id);
-	for (const child of node.children ?? []) {
+	for (const child of node.children ?? [])
+	{
 		collectIds(child, into);
 	}
 	return into;
@@ -42,31 +57,54 @@ export async function copySubtree(
 	cache: CacheService,
 	sourceId: string,
 	options: CopyTreeOptions,
-): Promise<CopiedTree | undefined> {
-	const [root] = await new NodeTreeReader(cache).readNodes([sourceId], {depth: COPY_DEPTH});
-	if (root === undefined) {
+): Promise<CopiedTree | undefined>
+{
+	const [root] = await new NodeTreeReader(cache).readNodes(
+		[sourceId],
+		{
+			depth: COPY_DEPTH,
+		},
+	);
+	if (root === undefined)
+	{
 		return undefined;
 	}
 	const count = countNodes(root);
-	if (count > MAX_COPY_ITEMS) {
-		return {ok: false, count};
+	if (count > MAX_COPY_ITEMS)
+	{
+		return {
+			ok: false,
+			count,
+		};
 	}
 	const newId = options.newId ?? (() => crypto.randomUUID());
 	const mirrored = options.mirrorOriginals
 		? options.originalsWithMirrors(collectIds(root, []).slice(1))
 		: new Set<string>();
 	const sourceToNew = new Map<string, string>();
-	const mirrorOf = (originalId: string): NewTree => ({
+	const mirrorOf = (originalId: string): NewTree => (
+	{
 		id: newId(),
 		name: "",
-		metadata: {mirror: {originalId, isMirrorRoot: true}},
+		metadata:
+		{
+			mirror:
+			{
+				originalId,
+				isMirrorRoot: true,
+			},
+		},
 	});
-	const copy = (node: NodeTree, isRoot: boolean): NewTree => {
-		if (!isRoot) {
-			if (node.mirror.originalNodeId !== null) {
+	const copy = (node: NodeTree, isRoot: boolean): NewTree =>
+	{
+		if (!isRoot)
+		{
+			if (node.mirror.originalNodeId !== null)
+			{
 				return mirrorOf(node.mirror.originalNodeId);
 			}
-			if (mirrored.has(node.id)) {
+			if (mirrored.has(node.id))
+			{
 				return mirrorOf(node.id);
 			}
 		}
@@ -77,11 +115,38 @@ export async function copySubtree(
 		return {
 			id,
 			name: node.name ?? "",
-			...(node.note === null || node.note === "" ? {} : {note: node.note}),
-			...(completed ? {completed: true} : {}),
-			...(node.layoutMode === null ? {} : {metadata: {layoutMode: node.layoutMode}}),
-			...(children.length === 0 ? {} : {children}),
+			...(node.note === null || node.note === ""
+				? {}
+				:
+					{
+						note: node.note,
+					}),
+			...(completed
+				?
+					{
+						completed: true,
+					}
+				: {}),
+			...(node.layoutMode === null
+				? {}
+				:
+					{
+						metadata:
+						{
+							layoutMode: node.layoutMode,
+						},
+					}),
+			...(children.length === 0
+				? {}
+				:
+					{
+						children,
+					}),
 		};
 	};
-	return {ok: true, tree: copy(root, true), sourceToNew};
+	return {
+		ok: true,
+		tree: copy(root, true),
+		sourceToNew,
+	};
 }

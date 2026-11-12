@@ -9,7 +9,8 @@ import type {Node} from "@outlinedb/shared/types";
  * flattened to `isMirror`/`originalNodeId`, `Date`s become ISO strings, and a
  * derived `completed` boolean is added alongside `completedAt`.
  */
-export interface NodeCliRow {
+export interface NodeCliRow
+{
 	/** Full UUID of the node. */
 	id: string;
 	/** 12-character short ID from the Workflowy URL, or null if unknown. */
@@ -48,7 +49,8 @@ export interface NodeCliRow {
  * future divergence between CLI and REST shapes should be a deliberate edit
  * here.
  */
-export function nodeToCliRow(node: Node): NodeCliRow {
+export function nodeToCliRow(node: Node): NodeCliRow
+{
 	return {
 		id: node.id,
 		shortId: node.shortId,

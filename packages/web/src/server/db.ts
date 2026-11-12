@@ -11,8 +11,10 @@ import {bindTreeHost} from "./tree-snapshot.js";
 
 let dbInstance: ReturnType<typeof drizzle<typeof schema>> | null = null;
 
-export function getDatabase() {
-	if (dbInstance) {
+export function getDatabase()
+{
+	if (dbInstance)
+	{
 		return dbInstance;
 	}
 
@@ -21,24 +23,35 @@ export function getDatabase() {
 
 	sqliteVec.load(sqlite);
 
-	if (!process.env.OUTLINEDB_DB_PATH) {
+	if (!process.env.OUTLINEDB_DB_PATH)
+	{
 		sqlite.pragma("journal_mode = WAL");
 	}
 
-	dbInstance = drizzle(sqlite, {
-		schema,
-		logger: createSqlLogger(process.env.OUTLINEDB_SQL_QUERY_LOGGING === "true"),
-	});
+	dbInstance = drizzle(
+		sqlite,
+		{
+			schema,
+			logger: createSqlLogger(process.env.OUTLINEDB_SQL_QUERY_LOGGING === "true"),
+		},
+	);
 
 	bindTreeHost(dbInstance, nodeTreeHost(sqlite));
 
-	if (process.env.OUTLINEDB_SKIP_MIGRATIONS !== "true") {
+	if (process.env.OUTLINEDB_SKIP_MIGRATIONS !== "true")
+	{
 		const migrationsFolder = join(import.meta.dirname, "../../../shared/dist/db/migrations");
-		migrate(dbInstance, {migrationsFolder});
+		migrate(
+			dbInstance,
+			{
+				migrationsFolder,
+			},
+		);
 		ensureNodeTags(dbInstance);
 	}
 
-	if (process.env.OUTLINEDB_TEST_DISABLE_FK !== "true") {
+	if (process.env.OUTLINEDB_TEST_DISABLE_FK !== "true")
+	{
 		sqlite.pragma("foreign_keys = ON");
 	}
 

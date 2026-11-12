@@ -6,25 +6,33 @@ import {CacheService} from "../services/cache.js";
 import {logger} from "../services/logger.js";
 import {resolveNodeId} from "@outlinedb/shared/utils";
 
-export abstract class BaseCompletionCommand extends Command {
+export abstract class BaseCompletionCommand extends Command
+{
 	static override hidden = true;
 
-	static override flags = {
-		id: Flags.string({
-			char: "i",
-			description: "ID of the node",
-			exclusive: ["path"],
-		}),
-		path: Flags.string({
-			char: "p",
-			description: 'Comma-separated path to the node (e.g., "Work,Tasks,My Task")',
-			exclusive: ["id"],
-		}),
-		"dry-run": Flags.boolean({
-			char: "d",
-			description: "Show the API call that would be made without executing",
-			default: false,
-		}),
+	static override flags =
+	{
+		id: Flags.string(
+			{
+				char: "i",
+				description: "ID of the node",
+				exclusive: ["path"],
+			},
+		),
+		path: Flags.string(
+			{
+				char: "p",
+				description: 'Comma-separated path to the node (e.g., "Work,Tasks,My Task")',
+				exclusive: ["id"],
+			},
+		),
+		"dry-run": Flags.boolean(
+			{
+				char: "d",
+				description: "Show the API call that would be made without executing",
+				default: false,
+			},
+		),
 	};
 
 	protected abstract get action(): "complete" | "uncomplete";
@@ -33,15 +41,18 @@ export abstract class BaseCompletionCommand extends Command {
 
 	protected abstract executeAction(client: WorkflowyWriteThroughClient, nodeId: string): Promise<void>;
 
-	public async run(): Promise<void> {
+	public async run(): Promise<void>
+	{
 		const {flags} = await this.parse(BaseCompletionCommand);
 
-		if (!flags.id && !flags.path) {
+		if (!flags.id && !flags.path)
+		{
 			this.error("Either --id or --path is required");
 		}
 
 		const apiKey = process.env.WORKFLOWY_API_KEY;
-		if (!apiKey) {
+		if (!apiKey)
+		{
 			this.error("WORKFLOWY_API_KEY environment variable is required");
 		}
 
@@ -55,7 +66,8 @@ export abstract class BaseCompletionCommand extends Command {
 
 		const fullPath = pathBuilder.buildFullPath(nodeId);
 
-		if (flags["dry-run"]) {
+		if (flags["dry-run"])
+		{
 			this.log("Would execute API call:");
 			this.log(`  Method: POST`);
 			this.log(`  URL: https://workflowy.com/api/v1/nodes/${nodeId}/${this.action}`);
@@ -64,7 +76,9 @@ export abstract class BaseCompletionCommand extends Command {
 			this.log("    Content-Type: application/json");
 			this.log("");
 			this.log(`Node: ${fullPath}`);
-		} else {
+		}
+		else
+		{
 			this.log(`${this.actionPresent}: ${fullPath}`);
 
 			await this.executeAction(client, nodeId);

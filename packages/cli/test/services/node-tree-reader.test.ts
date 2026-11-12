@@ -8,14 +8,20 @@ import {cleanupTestDatabase, createTestDatabase, nodeFixtures, seedTestData} fro
 import type {TestDatabase} from "../db/migration-helper.js";
 import {createTestNode} from "../helpers/node-fixtures.js";
 
-describe("NodeTreeReader", () => {
+describe("NodeTreeReader", () =>
+{
 	let tempDir: string;
 	let testDatabase: TestDatabase;
 	let reader: NodeTreeReader;
 	const from = formatTemporalTimestamp(new Date(Date.now() - 1000));
 
-	beforeEach(() => {
-		vi.useFakeTimers({shouldAdvanceTime: true});
+	beforeEach(() =>
+	{
+		vi.useFakeTimers(
+			{
+				shouldAdvanceTime: true,
+			},
+		);
 		vi.setSystemTime(new Date("2026-01-01T12:00:00.000Z"));
 
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-tree-test-"));
@@ -23,26 +29,66 @@ describe("NodeTreeReader", () => {
 		reader = new NodeTreeReader(new CacheService(testDatabase.db));
 	});
 
-	afterEach(() => {
+	afterEach(() =>
+	{
 		vi.useRealTimers();
 		cleanupTestDatabase(testDatabase);
-		if (fs.existsSync(tempDir)) {
-			fs.rmSync(tempDir, {recursive: true, force: true});
+		if (fs.existsSync(tempDir))
+		{
+			fs.rmSync(
+				tempDir,
+				{
+					recursive: true,
+					force: true,
+				},
+			);
 		}
 	});
 
-	it("reads children as subtrees to the requested depth", async () => {
+	it("reads children as subtrees to the requested depth", async () =>
+	{
 		seedTestData(
 			testDatabase,
 			nodeFixtures([
-				createTestNode({id: "p", name: "Parent", parentId: null}),
-				createTestNode({id: "c1", name: "Child 1", parentId: "p", priority: 0}),
-				createTestNode({id: "c2", name: "Child 2", parentId: "p", priority: 1}),
-				createTestNode({id: "gc1", name: "Grandchild", parentId: "c1"}),
+				createTestNode(
+					{
+						id: "p",
+						name: "Parent",
+						parentId: null,
+					},
+				),
+				createTestNode(
+					{
+						id: "c1",
+						name: "Child 1",
+						parentId: "p",
+						priority: 0,
+					},
+				),
+				createTestNode(
+					{
+						id: "c2",
+						name: "Child 2",
+						parentId: "p",
+						priority: 1,
+					},
+				),
+				createTestNode(
+					{
+						id: "gc1",
+						name: "Grandchild",
+						parentId: "c1",
+					},
+				),
 			]),
 		);
 
-		const trees = await reader.readChildren("p", {depth: 2});
+		const trees = await reader.readChildren(
+			"p",
+			{
+				depth: 2,
+			},
+		);
 
 		expect(trees).toStrictEqual([
 			{
@@ -57,7 +103,11 @@ describe("NodeTreeReader", () => {
 				modifiedAt: new Date("2026-01-01T12:00:00.000Z"),
 				completedAt: null,
 				collapsed: false,
-				mirror: {isMirror: false, originalNodeId: null},
+				mirror:
+				{
+					isMirror: false,
+					originalNodeId: null,
+				},
 				systemFrom: "2026-01-01 12:00:00.000",
 				systemTo: FAR_FUTURE_DATE,
 				inChat: false,
@@ -75,7 +125,11 @@ describe("NodeTreeReader", () => {
 						modifiedAt: new Date("2026-01-01T12:00:00.000Z"),
 						completedAt: null,
 						collapsed: false,
-						mirror: {isMirror: false, originalNodeId: null},
+						mirror:
+						{
+							isMirror: false,
+							originalNodeId: null,
+						},
 						systemFrom: "2026-01-01 12:00:00.000",
 						systemTo: FAR_FUTURE_DATE,
 						inChat: false,
@@ -95,7 +149,11 @@ describe("NodeTreeReader", () => {
 				modifiedAt: new Date("2026-01-01T12:00:00.000Z"),
 				completedAt: null,
 				collapsed: false,
-				mirror: {isMirror: false, originalNodeId: null},
+				mirror:
+				{
+					isMirror: false,
+					originalNodeId: null,
+				},
 				systemFrom: "2026-01-01 12:00:00.000",
 				systemTo: FAR_FUTURE_DATE,
 				inChat: false,
@@ -104,16 +162,34 @@ describe("NodeTreeReader", () => {
 		]);
 	});
 
-	it("does not resolve children at depth 0", async () => {
+	it("does not resolve children at depth 0", async () =>
+	{
 		seedTestData(
 			testDatabase,
 			nodeFixtures([
-				createTestNode({id: "p", name: "Parent", parentId: null}),
-				createTestNode({id: "c1", name: "Child 1", parentId: "p"}),
+				createTestNode(
+					{
+						id: "p",
+						name: "Parent",
+						parentId: null,
+					},
+				),
+				createTestNode(
+					{
+						id: "c1",
+						name: "Child 1",
+						parentId: "p",
+					},
+				),
 			]),
 		);
 
-		const trees = await reader.readChildren("p", {depth: 0});
+		const trees = await reader.readChildren(
+			"p",
+			{
+				depth: 0,
+			},
+		);
 
 		expect(trees).toStrictEqual([
 			{
@@ -128,7 +204,11 @@ describe("NodeTreeReader", () => {
 				modifiedAt: new Date("2026-01-01T12:00:00.000Z"),
 				completedAt: null,
 				collapsed: false,
-				mirror: {isMirror: false, originalNodeId: null},
+				mirror:
+				{
+					isMirror: false,
+					originalNodeId: null,
+				},
 				systemFrom: "2026-01-01 12:00:00.000",
 				systemTo: FAR_FUTURE_DATE,
 				inChat: false,
@@ -137,64 +217,260 @@ describe("NodeTreeReader", () => {
 		]);
 	});
 
-	it("surfaces the inChat and hasReferencesRoot flags", async () => {
-		seedTestData(testDatabase, {
-			...nodeFixtures([
-				createTestNode({id: "p", name: "Parent", parentId: null}),
-				createTestNode({id: "chat", name: "In chat", parentId: "p", priority: 0}),
-				createTestNode({id: "ref", name: "Ref root", parentId: "p", priority: 1}),
-				createTestNode({id: "plain", name: "Plain", parentId: "p", priority: 2}),
-			]),
-			aiMetadata: [{nodeId: "chat", inChat: 1, systemFrom: from, systemTo: FAR_FUTURE_DATE}],
-			referencesRoots: [{nodeId: "ref", systemFrom: from, systemTo: FAR_FUTURE_DATE}],
-		});
+	it("surfaces the inChat and hasReferencesRoot flags", async () =>
+	{
+		seedTestData(
+			testDatabase,
+			{
+				...nodeFixtures([
+					createTestNode(
+						{
+							id: "p",
+							name: "Parent",
+							parentId: null,
+						},
+					),
+					createTestNode(
+						{
+							id: "chat",
+							name: "In chat",
+							parentId: "p",
+							priority: 0,
+						},
+					),
+					createTestNode(
+						{
+							id: "ref",
+							name: "Ref root",
+							parentId: "p",
+							priority: 1,
+						},
+					),
+					createTestNode(
+						{
+							id: "plain",
+							name: "Plain",
+							parentId: "p",
+							priority: 2,
+						},
+					),
+				]),
+				aiMetadata: [
+					{
+						nodeId: "chat",
+						inChat: 1,
+						systemFrom: from,
+						systemTo: FAR_FUTURE_DATE,
+					},
+				],
+				referencesRoots: [
+					{
+						nodeId: "ref",
+						systemFrom: from,
+						systemTo: FAR_FUTURE_DATE,
+					},
+				],
+			},
+		);
 
-		const [chat, ref, plain] = await reader.readChildren("p", {depth: 0});
+		const [chat, ref, plain] = await reader.readChildren(
+			"p",
+			{
+				depth: 0,
+			},
+		);
 		assert(chat && ref && plain);
 
-		expect({inChat: chat.inChat, ref: chat.hasReferencesRoot}).toStrictEqual({inChat: true, ref: false});
-		expect({inChat: ref.inChat, ref: ref.hasReferencesRoot}).toStrictEqual({inChat: false, ref: true});
-		expect({inChat: plain.inChat, ref: plain.hasReferencesRoot}).toStrictEqual({inChat: false, ref: false});
+		expect(
+			{
+				inChat: chat.inChat,
+				ref: chat.hasReferencesRoot,
+			},
+		).toStrictEqual(
+			{
+				inChat: true,
+				ref: false,
+			},
+		);
+		expect(
+			{
+				inChat: ref.inChat,
+				ref: ref.hasReferencesRoot,
+			},
+		).toStrictEqual(
+			{
+				inChat: false,
+				ref: true,
+			},
+		);
+		expect(
+			{
+				inChat: plain.inChat,
+				ref: plain.hasReferencesRoot,
+			},
+		).toStrictEqual(
+			{
+				inChat: false,
+				ref: false,
+			},
+		);
 	});
 
-	it("inherits a mirror original content and children", async () => {
-		seedTestData(testDatabase, {
-			...nodeFixtures([
-				createTestNode({id: "p", name: "Parent", parentId: null}),
-				createTestNode({id: "orig", name: "Original Name", note: "Original Note", parentId: "elsewhere"}),
-				createTestNode({id: "orig-child", name: "Original Child", parentId: "orig"}),
-				// A mirror carries no content of its own.
-				createTestNode({id: "mir", name: null, parentId: "p"}),
-			]),
-			mirrors: [{originalId: "orig", mirrorId: "mir", systemFrom: from, systemTo: FAR_FUTURE_DATE}],
-		});
+	it("inherits a mirror original content and children", async () =>
+	{
+		seedTestData(
+			testDatabase,
+			{
+				...nodeFixtures([
+					createTestNode(
+						{
+							id: "p",
+							name: "Parent",
+							parentId: null,
+						},
+					),
+					createTestNode(
+						{
+							id: "orig",
+							name: "Original Name",
+							note: "Original Note",
+							parentId: "elsewhere",
+						},
+					),
+					createTestNode(
+						{
+							id: "orig-child",
+							name: "Original Child",
+							parentId: "orig",
+						},
+					),
+					// A mirror carries no content of its own.
+					createTestNode(
+						{
+							id: "mir",
+							name: null,
+							parentId: "p",
+						},
+					),
+				]),
+				mirrors: [
+					{
+						originalId: "orig",
+						mirrorId: "mir",
+						systemFrom: from,
+						systemTo: FAR_FUTURE_DATE,
+					},
+				],
+			},
+		);
 
-		const [mirror] = await reader.readChildren("p", {depth: 1});
+		const [mirror] = await reader.readChildren(
+			"p",
+			{
+				depth: 1,
+			},
+		);
 		assert(mirror);
 
 		expect(mirror.mirror.isMirror).toBe(true);
-		expect({name: mirror.name, note: mirror.note}).toStrictEqual({name: "Original Name", note: "Original Note"});
+		expect(
+			{
+				name: mirror.name,
+				note: mirror.note,
+			},
+		).toStrictEqual(
+			{
+				name: "Original Name",
+				note: "Original Note",
+			},
+		);
 		expect(mirror.children?.map((c) => c.name)).toStrictEqual(["Original Child"]);
 	});
 
-	it("reads a mirror's completion from its original and ignores the mirror's own completedAt", async () => {
-		seedTestData(testDatabase, {
-			...nodeFixtures([
-				createTestNode({id: "p", name: "Parent", parentId: null}),
-				createTestNode({id: "open-orig", name: "Open", parentId: "elsewhere"}),
-				createTestNode({id: "done-orig", name: "Done", parentId: "elsewhere", completedAt: new Date(5000)}),
-				createTestNode({id: "stale-mir", name: null, parentId: "p", priority: 1, completedAt: new Date(1234)}),
-				createTestNode({id: "done-mir", name: null, parentId: "p", priority: 2}),
-				createTestNode({id: "orphan-mir", name: null, parentId: "p", priority: 3, completedAt: new Date(99)}),
-			]),
-			mirrors: [
-				{originalId: "open-orig", mirrorId: "stale-mir", systemFrom: from, systemTo: FAR_FUTURE_DATE},
-				{originalId: "done-orig", mirrorId: "done-mir", systemFrom: from, systemTo: FAR_FUTURE_DATE},
-				{originalId: "uncached", mirrorId: "orphan-mir", systemFrom: from, systemTo: FAR_FUTURE_DATE},
-			],
-		});
+	it("reads a mirror's completion from its original and ignores the mirror's own completedAt", async () =>
+	{
+		seedTestData(
+			testDatabase,
+			{
+				...nodeFixtures([
+					createTestNode(
+						{
+							id: "p",
+							name: "Parent",
+							parentId: null,
+						},
+					),
+					createTestNode(
+						{
+							id: "open-orig",
+							name: "Open",
+							parentId: "elsewhere",
+						},
+					),
+					createTestNode(
+						{
+							id: "done-orig",
+							name: "Done",
+							parentId: "elsewhere",
+							completedAt: new Date(5000),
+						},
+					),
+					createTestNode(
+						{
+							id: "stale-mir",
+							name: null,
+							parentId: "p",
+							priority: 1,
+							completedAt: new Date(1234),
+						},
+					),
+					createTestNode(
+						{
+							id: "done-mir",
+							name: null,
+							parentId: "p",
+							priority: 2,
+						},
+					),
+					createTestNode(
+						{
+							id: "orphan-mir",
+							name: null,
+							parentId: "p",
+							priority: 3,
+							completedAt: new Date(99),
+						},
+					),
+				]),
+				mirrors: [
+					{
+						originalId: "open-orig",
+						mirrorId: "stale-mir",
+						systemFrom: from,
+						systemTo: FAR_FUTURE_DATE,
+					},
+					{
+						originalId: "done-orig",
+						mirrorId: "done-mir",
+						systemFrom: from,
+						systemTo: FAR_FUTURE_DATE,
+					},
+					{
+						originalId: "uncached",
+						mirrorId: "orphan-mir",
+						systemFrom: from,
+						systemTo: FAR_FUTURE_DATE,
+					},
+				],
+			},
+		);
 
-		const mirrors = await reader.readChildren("p", {depth: 0});
+		const mirrors = await reader.readChildren(
+			"p",
+			{
+				depth: 0,
+			},
+		);
 
 		expect(mirrors.map((m) => [m.id, m.completedAt])).toStrictEqual([
 			["stale-mir", null],
@@ -203,18 +479,44 @@ describe("NodeTreeReader", () => {
 		]);
 	});
 
-	it("populates linkTargets when following Workflowy links", async () => {
+	it("populates linkTargets when following Workflowy links", async () =>
+	{
 		const linkName = 'See <a href="https://workflowy.com/#/abcdef012345">target</a>';
 		seedTestData(
 			testDatabase,
 			nodeFixtures([
-				createTestNode({id: "p", name: "Parent", parentId: null}),
-				createTestNode({id: "src", name: linkName, parentId: "p"}),
-				createTestNode({id: "tgt", name: "Target Node", shortId: "abcdef012345", parentId: "elsewhere"}),
+				createTestNode(
+					{
+						id: "p",
+						name: "Parent",
+						parentId: null,
+					},
+				),
+				createTestNode(
+					{
+						id: "src",
+						name: linkName,
+						parentId: "p",
+					},
+				),
+				createTestNode(
+					{
+						id: "tgt",
+						name: "Target Node",
+						shortId: "abcdef012345",
+						parentId: "elsewhere",
+					},
+				),
 			]),
 		);
 
-		const [source] = await reader.readChildren("p", {depth: 1, followLinks: true});
+		const [source] = await reader.readChildren(
+			"p",
+			{
+				depth: 1,
+				followLinks: true,
+			},
+		);
 		assert(source);
 
 		expect(source.linkTargets?.map((t) => t.name)).toStrictEqual(["Target Node"]);

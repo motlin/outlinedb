@@ -5,14 +5,18 @@ import {ChangeFeed, applyNodeChanges} from "../src/client/change-feed.js";
 import {nodeKeys} from "../src/client/node-cache.js";
 import type {BacklinksResponse, NodeChangesResponse, NodeResponse} from "../src/node-types.js";
 
-function row(id: string, parentId: string | null, fields: Partial<NodeResponse> = {}): NodeResponse {
+function row(id: string, parentId: string | null, fields: Partial<NodeResponse> = {}): NodeResponse
+{
 	return {
 		id,
 		parent_id: parentId,
 		name: id,
 		note: null,
 		priority: 100,
-		data: {layoutMode: null},
+		data:
+		{
+			layoutMode: null,
+		},
 		createdAt: 0,
 		modifiedAt: 0,
 		completedAt: null,
@@ -23,8 +27,16 @@ function row(id: string, parentId: string | null, fields: Partial<NodeResponse> 
 	};
 }
 
-function changes(fields: Partial<NodeChangesResponse>): NodeChangesResponse {
-	return {latest: "1", reset: false, changedIds: [], deletedIds: [], children: [], ...fields};
+function changes(fields: Partial<NodeChangesResponse>): NodeChangesResponse
+{
+	return {
+		latest: "1",
+		reset: false,
+		changedIds: [],
+		deletedIds: [],
+		children: [],
+		...fields,
+	};
 }
 
 const listIds = (client: QueryClient, parentId: string | null) =>
@@ -33,172 +45,335 @@ const listIds = (client: QueryClient, parentId: string | null) =>
 /** Whether `key` was marked stale (invalidated) since it was set. */
 const stale = (client: QueryClient, key: readonly unknown[]) => client.getQueryState(key)?.isInvalidated ?? false;
 
-describe("applyNodeChanges", () => {
-	it("moves a row between cached lists and resets both parents' flags without invalidating them", () => {
+describe("applyNodeChanges", () =>
+{
+	it("moves a row between cached lists and resets both parents' flags without invalidating them", () =>
+	{
 		const client = new QueryClient();
 		client.setQueryData(nodeKeys.children(null), [
-			row("A", null, {hasChildren: true, hasUncompletedChildren: true}),
+			row(
+				"A",
+				null,
+				{
+					hasChildren: true,
+					hasUncompletedChildren: true,
+				},
+			),
 			row("B", null),
 		]);
 		client.setQueryData(nodeKeys.children("A"), [row("x", "A")]);
-		client.setQueryData(nodeKeys.detail("x"), row("x", "A", {name: "old"}));
+		client.setQueryData(
+			nodeKeys.detail("x"),
+			row(
+				"x",
+				"A",
+				{
+					name: "old",
+				},
+			),
+		);
 
 		applyNodeChanges(
 			client,
-			changes({
-				changedIds: ["x"],
-				children: [
-					{parentId: "A", nodes: []},
-					{parentId: "B", nodes: [row("x", "B")]},
-				],
-			}),
+			changes(
+				{
+					changedIds: ["x"],
+					children: [
+						{
+							parentId: "A",
+							nodes: [],
+						},
+						{
+							parentId: "B",
+							nodes: [row("x", "B")],
+						},
+					],
+				},
+			),
 		);
 
 		const home = client.getQueryData<NodeResponse[]>(nodeKeys.children(null));
-		expect({
-			a: listIds(client, "A"),
-			b: listIds(client, "B"),
-			flags: home?.map(({id, hasChildren, hasUncompletedChildren}) => ({
-				id,
-				hasChildren,
-				hasUncompletedChildren,
-			})),
-			detail: client.getQueryData<NodeResponse>(nodeKeys.detail("x"))?.parent_id,
-			stale: [stale(client, nodeKeys.children(null)), stale(client, nodeKeys.children("A"))],
-		}).toStrictEqual({
-			a: [],
-			// B's list was not cached: a list only replaces one the cache holds.
-			b: undefined,
-			flags: [
-				{id: "A", hasChildren: false, hasUncompletedChildren: false},
-				{id: "B", hasChildren: true, hasUncompletedChildren: true},
-			],
-			detail: "B",
-			stale: [false, false],
-		});
+		expect(
+			{
+				a: listIds(client, "A"),
+				b: listIds(client, "B"),
+				flags: home?.map(({id, hasChildren, hasUncompletedChildren}) => (
+				{
+					id,
+					hasChildren,
+					hasUncompletedChildren,
+				})),
+				detail: client.getQueryData<NodeResponse>(nodeKeys.detail("x"))?.parent_id,
+				stale: [stale(client, nodeKeys.children(null)), stale(client, nodeKeys.children("A"))],
+			},
+		).toStrictEqual(
+			{
+				a: [],
+				// B's list was not cached: a list only replaces one the cache holds.
+				b: undefined,
+				flags: [
+					{
+						id: "A",
+						hasChildren: false,
+						hasUncompletedChildren: false,
+					},
+					{
+						id: "B",
+						hasChildren: true,
+						hasUncompletedChildren: true,
+					},
+				],
+				detail: "B",
+				stale: [false, false],
+			},
+		);
 	});
 
-	it("gives a mirror of a changed parent the same children", () => {
+	it("gives a mirror of a changed parent the same children", () =>
+	{
 		const client = new QueryClient();
 		client.setQueryData(nodeKeys.children(null), [
 			row("O", null),
-			row("M", null, {isMirror: true, originalNodeId: "O"}),
+			row(
+				"M",
+				null,
+				{
+					isMirror: true,
+					originalNodeId: "O",
+				},
+			),
 		]);
 		client.setQueryData(nodeKeys.children("M"), [row("c1", "O")]);
 
 		applyNodeChanges(
 			client,
-			changes({changedIds: ["c2"], children: [{parentId: "O", nodes: [row("c1", "O"), row("c2", "O")]}]}),
+			changes(
+				{
+					changedIds: ["c2"],
+					children: [
+						{
+							parentId: "O",
+							nodes: [row("c1", "O"), row("c2", "O")],
+						},
+					],
+				},
+			),
 		);
 
 		expect(listIds(client, "M")).toStrictEqual(["c1", "c2"]);
 	});
 
-	it("invalidates only the ancestors, Backlinks and details that show a changed or deleted node", () => {
+	it("invalidates only the ancestors, Backlinks and details that show a changed or deleted node", () =>
+	{
 		const client = new QueryClient();
 		client.setQueryData(nodeKeys.ancestors("deep"), [row("x", null), row("deep", "x")]);
 		client.setQueryData(nodeKeys.ancestors("other"), [row("y", null), row("other", "y")]);
-		const backlinks = (sourceId: string, crumbId: string): BacklinksResponse => ({
+		const backlinks = (sourceId: string, crumbId: string): BacklinksResponse => (
+		{
 			rootId: null,
-			items: [{sourceId, node: row(sourceId, null), crumbs: [{id: crumbId, name: crumbId}]}],
+			items: [
+				{
+					sourceId,
+					node: row(sourceId, null),
+					crumbs: [
+						{
+							id: crumbId,
+							name: crumbId,
+						},
+					],
+				},
+			],
 		});
 		client.setQueryData(nodeKeys.backlinks("t1"), backlinks("s1", "x"));
 		client.setQueryData(nodeKeys.backlinks("t2"), backlinks("s2", "y"));
 		client.setQueryData(nodeKeys.backlinks("t3"), backlinks("gone", "y"));
 		client.setQueryData(nodeKeys.detail("gone"), row("gone", null));
 
-		applyNodeChanges(client, changes({changedIds: ["x", "gone"], deletedIds: ["gone"]}));
+		applyNodeChanges(
+			client,
+			changes(
+				{
+					changedIds: ["x", "gone"],
+					deletedIds: ["gone"],
+				},
+			),
+		);
 
-		expect({
-			deep: stale(client, nodeKeys.ancestors("deep")),
-			other: stale(client, nodeKeys.ancestors("other")),
-			t1: stale(client, nodeKeys.backlinks("t1")),
-			t2: stale(client, nodeKeys.backlinks("t2")),
-			t3: stale(client, nodeKeys.backlinks("t3")),
-			gone: stale(client, nodeKeys.detail("gone")),
-		}).toStrictEqual({deep: true, other: false, t1: true, t2: false, t3: true, gone: true});
+		expect(
+			{
+				deep: stale(client, nodeKeys.ancestors("deep")),
+				other: stale(client, nodeKeys.ancestors("other")),
+				t1: stale(client, nodeKeys.backlinks("t1")),
+				t2: stale(client, nodeKeys.backlinks("t2")),
+				t3: stale(client, nodeKeys.backlinks("t3")),
+				gone: stale(client, nodeKeys.detail("gone")),
+			},
+		).toStrictEqual(
+			{
+				deep: true,
+				other: false,
+				t1: true,
+				t2: false,
+				t3: true,
+				gone: true,
+			},
+		);
 	});
-	it("touches only the cache entries a change alters when one row of a big parent changed", () => {
+	it("touches only the cache entries a change alters when one row of a big parent changed", () =>
+	{
 		const client = new QueryClient();
-		const parent = row("P", null, {hasChildren: true, hasUncompletedChildren: true});
-		const children = Array.from({length: 300}, (_, index) => row(`n${index}`, "P"));
+		const parent = row(
+			"P",
+			null,
+			{
+				hasChildren: true,
+				hasUncompletedChildren: true,
+			},
+		);
+		const children = Array.from(
+			{
+				length: 300,
+			},
+			(_, index) => row(`n${index}`, "P"),
+		);
 		client.setQueryData(nodeKeys.children(null), [parent]);
 		client.setQueryData(nodeKeys.detail("P"), parent);
 		client.setQueryData(nodeKeys.children("P"), children);
-		for (const node of children) {
+		for (const node of children)
+		{
 			client.setQueryData(nodeKeys.detail(node.id), node);
 		}
 		const updated: string[] = [];
-		const unsubscribe = client.getQueryCache().subscribe((event) => {
-			if (event.type === "updated") {
+		const unsubscribe = client.getQueryCache().subscribe((event) =>
+		{
+			if (event.type === "updated")
+			{
 				updated.push(JSON.stringify(event.query.queryKey));
 			}
 		});
 
 		applyNodeChanges(
 			client,
-			changes({
-				changedIds: ["n5"],
-				children: [
-					{
-						parentId: "P",
-						nodes: children.map((node) =>
-							node.id === "n5" ? row("n5", "P", {name: "renamed"}) : row(node.id, "P"),
-						),
-					},
-				],
-			}),
+			changes(
+				{
+					changedIds: ["n5"],
+					children: [
+						{
+							parentId: "P",
+							nodes: children.map((node) =>
+								node.id === "n5"
+									? row(
+											"n5",
+											"P",
+											{
+												name: "renamed",
+											},
+										)
+									: row(node.id, "P"),
+							),
+						},
+					],
+				},
+			),
 		);
 		unsubscribe();
 
-		expect({
-			updated,
-			name: client.getQueryData<NodeResponse>(nodeKeys.detail("n5"))?.name,
-			sharedRow: client.getQueryData<NodeResponse[]>(nodeKeys.children("P"))?.[4] === children[4],
-		}).toStrictEqual({
-			updated: [JSON.stringify(nodeKeys.children("P")), JSON.stringify(nodeKeys.detail("n5"))],
-			name: "renamed",
-			sharedRow: true,
-		});
+		expect(
+			{
+				updated,
+				name: client.getQueryData<NodeResponse>(nodeKeys.detail("n5"))?.name,
+				sharedRow: client.getQueryData<NodeResponse[]>(nodeKeys.children("P"))?.[4] === children[4],
+			},
+		).toStrictEqual(
+			{
+				updated: [JSON.stringify(nodeKeys.children("P")), JSON.stringify(nodeKeys.detail("n5"))],
+				name: "renamed",
+				sharedRow: true,
+			},
+		);
 	});
 
-	it("leaves the cache untouched when a refreshed list matches what it holds", () => {
+	it("leaves the cache untouched when a refreshed list matches what it holds", () =>
+	{
 		const client = new QueryClient();
 		const children = [row("a", "P"), row("b", "P")];
 		client.setQueryData(nodeKeys.children("P"), children);
 		const updated: string[] = [];
-		const unsubscribe = client.getQueryCache().subscribe((event) => {
-			if (event.type === "updated") {
+		const unsubscribe = client.getQueryCache().subscribe((event) =>
+		{
+			if (event.type === "updated")
+			{
 				updated.push(JSON.stringify(event.query.queryKey));
 			}
 		});
 
-		applyNodeChanges(client, changes({children: [{parentId: "P", nodes: [row("a", "P"), row("b", "P")]}]}));
+		applyNodeChanges(
+			client,
+			changes(
+				{
+					children: [
+						{
+							parentId: "P",
+							nodes: [row("a", "P"), row("b", "P")],
+						},
+					],
+				},
+			),
+		);
 		unsubscribe();
 
-		expect({updated, same: client.getQueryData(nodeKeys.children("P")) === children}).toStrictEqual({
-			updated: [],
-			same: true,
-		});
+		expect(
+			{
+				updated,
+				same: client.getQueryData(nodeKeys.children("P")) === children,
+			},
+		).toStrictEqual(
+			{
+				updated: [],
+				same: true,
+			},
+		);
 	});
 });
 
-describe("ChangeFeed", () => {
-	it("asks for changes since its high-water mark and only ever advances it", async () => {
+describe("ChangeFeed", () =>
+{
+	it("asks for changes since its high-water mark and only ever advances it", async () =>
+	{
 		const client = new QueryClient();
 		client.setQueryData(nodeKeys.children(null), [row("a", null)]);
 		const asked: (string | undefined)[] = [];
 		const answers = [
-			changes({latest: "5"}),
-			changes({
-				latest: "9",
-				changedIds: ["b"],
-				children: [{parentId: null, nodes: [row("a", null), row("b", null)]}],
-			}),
-			changes({latest: "7"}),
-			changes({latest: "7"}),
+			changes(
+				{
+					latest: "5",
+				},
+			),
+			changes(
+				{
+					latest: "9",
+					changedIds: ["b"],
+					children: [
+						{
+							parentId: null,
+							nodes: [row("a", null), row("b", null)],
+						},
+					],
+				},
+			),
+			changes(
+				{
+					latest: "7",
+				},
+			),
+			changes(
+				{
+					latest: "7",
+				},
+			),
 		];
-		const feed = new ChangeFeed(async (since) => {
+		const feed = new ChangeFeed(async (since) =>
+		{
 			asked.push(since);
 			return Promise.resolve(answers.shift() ?? changes({}));
 		});
@@ -208,22 +383,48 @@ describe("ChangeFeed", () => {
 		await feed.sync(client);
 		await feed.sync(client);
 
-		expect({asked, home: listIds(client, null)}).toStrictEqual({
-			asked: [undefined, "5", "9", "9"],
-			home: ["a", "b"],
-		});
+		expect(
+			{
+				asked,
+				home: listIds(client, null),
+			},
+		).toStrictEqual(
+			{
+				asked: [undefined, "5", "9", "9"],
+				home: ["a", "b"],
+			},
+		);
 	});
 
-	it("compares watermarks as timestamps and takes the server's mark after a reset", async () => {
+	it("compares watermarks as timestamps and takes the server's mark after a reset", async () =>
+	{
 		const client = new QueryClient();
 		const asked: (string | undefined)[] = [];
 		const answers = [
-			changes({latest: "2026-10-29 12:00:09.000"}),
-			changes({latest: "2026-10-29 12:00:10.000"}),
-			changes({latest: "2026-10-29 12:00:03.000", reset: true}),
-			changes({latest: "2026-10-29 12:00:04.000"}),
+			changes(
+				{
+					latest: "2026-10-29 12:00:09.000",
+				},
+			),
+			changes(
+				{
+					latest: "2026-10-29 12:00:10.000",
+				},
+			),
+			changes(
+				{
+					latest: "2026-10-29 12:00:03.000",
+					reset: true,
+				},
+			),
+			changes(
+				{
+					latest: "2026-10-29 12:00:04.000",
+				},
+			),
 		];
-		const feed = new ChangeFeed(async (since) => {
+		const feed = new ChangeFeed(async (since) =>
+		{
 			asked.push(since);
 			return Promise.resolve(answers.shift() ?? changes({}));
 		});
@@ -243,10 +444,22 @@ describe("ChangeFeed", () => {
 		]);
 	});
 
-	it("refetches every node query when it has no mark yet or the server answers reset", async () => {
+	it("refetches every node query when it has no mark yet or the server answers reset", async () =>
+	{
 		const client = new QueryClient();
 		client.setQueryData(nodeKeys.children(null), [row("a", null)]);
-		const answers = [changes({latest: "5"}), changes({reset: true})];
+		const answers = [
+			changes(
+				{
+					latest: "5",
+				},
+			),
+			changes(
+				{
+					reset: true,
+				},
+			),
+		];
 		const feed = new ChangeFeed(async () => Promise.resolve(answers.shift() ?? changes({})));
 
 		await feed.sync(client);
@@ -254,21 +467,44 @@ describe("ChangeFeed", () => {
 		client.setQueryData(nodeKeys.children(null), [row("a", null)]);
 		await feed.sync(client);
 
-		expect({unseeded, reset: stale(client, nodeKeys.children(null))}).toStrictEqual({unseeded: true, reset: true});
+		expect(
+			{
+				unseeded,
+				reset: stale(client, nodeKeys.children(null)),
+			},
+		).toStrictEqual(
+			{
+				unseeded: true,
+				reset: true,
+			},
+		);
 	});
 
-	it("passes each list through prepare, so a pending create survives and a parent mid-move keeps its list", async () => {
+	it("passes each list through prepare, so a pending create survives and a parent mid-move keeps its list", async () =>
+	{
 		const client = new QueryClient();
 		client.setQueryData(nodeKeys.children(null), [row("a", null)]);
 		const answers = [
-			changes({latest: "5"}),
-			changes({
-				changedIds: ["b"],
-				children: [
-					{parentId: null, nodes: [row("a", null), row("b", null)]},
-					{parentId: "moving", nodes: []},
-				],
-			}),
+			changes(
+				{
+					latest: "5",
+				},
+			),
+			changes(
+				{
+					changedIds: ["b"],
+					children: [
+						{
+							parentId: null,
+							nodes: [row("a", null), row("b", null)],
+						},
+						{
+							parentId: "moving",
+							nodes: [],
+						},
+					],
+				},
+			),
 		];
 		const feed = new ChangeFeed(
 			async () => Promise.resolve(answers.shift() ?? changes({})),
@@ -279,17 +515,42 @@ describe("ChangeFeed", () => {
 		await feed.seed();
 		await feed.sync(client);
 
-		expect({home: listIds(client, null), moving: listIds(client, "moving")}).toStrictEqual({
-			home: ["a", "b", "pending"],
-			moving: ["m"],
-		});
+		expect(
+			{
+				home: listIds(client, null),
+				moving: listIds(client, "moving"),
+			},
+		).toStrictEqual(
+			{
+				home: ["a", "b", "pending"],
+				moving: ["m"],
+			},
+		);
 	});
 
-	it("skips an announced change its mark already covers, after any sync queued before it", async () => {
+	it("skips an announced change its mark already covers, after any sync queued before it", async () =>
+	{
 		const client = new QueryClient();
 		const asked: (string | undefined)[] = [];
-		const answers = [changes({latest: "5"}), changes({latest: "8"}), changes({latest: "9"})];
-		const feed = new ChangeFeed(async (since) => {
+		const answers = [
+			changes(
+				{
+					latest: "5",
+				},
+			),
+			changes(
+				{
+					latest: "8",
+				},
+			),
+			changes(
+				{
+					latest: "9",
+				},
+			),
+		];
+		const feed = new ChangeFeed(async (since) =>
+		{
 			asked.push(since);
 			return Promise.resolve(answers.shift() ?? changes({}));
 		});

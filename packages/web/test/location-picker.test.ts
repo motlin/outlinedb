@@ -6,15 +6,22 @@ import {renderToStaticMarkup} from "react-dom/server";
 import {describe, expect, it, vi} from "vite-plus/test";
 import type {PickerRow} from "../src/client/location-picker-model.js";
 
-vi.mock(import("react-dom"), async (importOriginal) => ({
+vi.mock(import("react-dom"), async (importOriginal) => (
+{
 	...(await importOriginal()),
 	createPortal: (node: ReactNode): ReactPortal => node as ReactPortal,
 }));
-vi.mock(import("../src/client/breadcrumb-layout.js"), async (importOriginal) => ({
+vi.mock(import("../src/client/breadcrumb-layout.js"), async (importOriginal) => (
+{
 	...(await importOriginal()),
 	measureCrumbLabel: (label: string) => label.length * 7,
 }));
-vi.stubGlobal("document", {body: {}});
+vi.stubGlobal(
+	"document",
+	{
+		body: {},
+	},
+);
 
 const {LocationPicker} = await import("../src/client/components/location-picker.js");
 const {popperTransform} = await import("../src/client/components/flyout/place-popper.js");
@@ -60,26 +67,56 @@ const PLUS =
 const ARROW_UP =
 	'<svg aria-hidden="true" focusable="false" data-prefix="fal" data-icon="arrow-up" class="svg-inline--fa fa-arrow-up fa-1x " role="img" viewBox="0 0 384 512" style="transform:rotate(45deg)"><path fill="currentColor" d="…"></path></svg>';
 
-const CRUMBS_BY_ID: Record<string, {id: string; name: string}[]> = {
-	hub: [{id: "sandbox", name: "🧪 Sync sandbox"}],
-	deep: ["Alpha", "Bravo", "Charlie", "Delta", "Echo"].map((name) => ({
+const CRUMBS_BY_ID: Record<
+	string,
+	{
+		id: string;
+		name: string;
+	}[]
+> =
+{
+	hub: [
+		{
+			id: "sandbox",
+			name: "🧪 Sync sandbox",
+		},
+	],
+	deep: ["Alpha", "Bravo", "Charlie", "Delta", "Echo"].map((name) => (
+	{
 		id: name.toLowerCase(),
 		name: `${name} ${"x".repeat(14 - name.length)}`,
 	})),
-	t0: [{id: "t1", name: "T1"}],
-	r1: [{id: "sandbox", name: "🧪 Sync sandbox"}],
-	r2: [{id: "hub", name: "Qzpick Hub"}],
+	t0: [
+		{
+			id: "t1",
+			name: "T1",
+		},
+	],
+	r1: [
+		{
+			id: "sandbox",
+			name: "🧪 Sync sandbox",
+		},
+	],
+	r2: [
+		{
+			id: "hub",
+			name: "Qzpick Hub",
+		},
+	],
 };
 
 /** Collapses whitespace inside class attributes, elides svg paths, and drops React's svg xmlns. */
-function normalize(html: string): string {
+function normalize(html: string): string
+{
 	return html
 		.replaceAll(/ class="([^"]*)"/gu, (_match, value: string) => ` class="${value.replaceAll(/\s+/gu, " ")}"`)
 		.replaceAll(/ d="[^"]*"/gu, ' d="…"')
 		.replaceAll(' xmlns="http://www.w3.org/2000/svg"', "");
 }
 
-interface RenderOptions {
+interface RenderOptions
+{
 	step?: 1 | 2;
 	query: string;
 	rows: PickerRow[];
@@ -87,26 +124,35 @@ interface RenderOptions {
 	active?: number;
 }
 
-function render({step = 1, query, rows, name, active}: RenderOptions): string {
+function render({step = 1, query, rows, name, active}: RenderOptions): string
+{
 	return normalize(
 		renderToStaticMarkup(
-			createElement(LocationPicker, {
-				position: [203, 361.5],
-				step,
-				headerText: "Move To...",
-				name,
-				query,
-				active,
-				onQueryChange: () => {},
-				rows,
-				crumbsOf: (id: string) => CRUMBS_BY_ID[id] ?? [],
-				onSelect: () => {},
-			}),
+			createElement(
+				LocationPicker,
+				{
+					position: [203, 361.5],
+					step,
+					headerText: "Move To...",
+					name,
+					query,
+					active,
+					onQueryChange: () =>
+					{
+					},
+					rows,
+					crumbsOf: (id: string) => CRUMBS_BY_ID[id] ?? [],
+					onSelect: () =>
+					{
+					},
+				},
+			),
 		),
 	);
 }
 
-function shell(header: string, inputWrapper: string, query: string, menuClass: string, menu: string): string {
+function shell(header: string, inputWrapper: string, query: string, menuClass: string, menu: string): string
+{
 	return (
 		`<div class="${WRAPPER}" data-popper-reference-hidden="false" data-popper-escaped="false" data-popper-placement="bottom-start" style="position:absolute;inset:0 auto auto 0;z-index:300;transform:translate(203px, 362px)">` +
 		`<div style="pointer-events:auto;z-index:300;max-width:240px;margin-top:4px;left:203px;top:361.5px;transform:scale(1, 1) translateX(0);transform-origin:10% 0;opacity:1" class="${SURFACE}">` +
@@ -117,7 +163,8 @@ function shell(header: string, inputWrapper: string, query: string, menuClass: s
 	);
 }
 
-function crumbs(...names: string[]): string {
+function crumbs(...names: string[]): string
+{
 	return `${CRUMBS}${names.map((name) => `${CRUMB}${name}</div>${SEPARATOR}`).join("")}</div>`;
 }
 
@@ -126,33 +173,63 @@ const footerA = (rowClass: string, query: string, recent: string) =>
 const footerB = (rowClass: string, query: string) =>
 	`<a data-handbook-placement="right" style="${FOOTER_B_STYLE}" class="${rowClass}">${ROW_INNER}${ICON}${ARROW_UP}</div>${LABEL}<div>New "${query}" in…</div></div></span></span></a>`;
 
-function createRows(query: string, disabled: boolean): PickerRow[] {
+function createRows(query: string, disabled: boolean): PickerRow[]
+{
 	return [
-		{kind: "create-default", labelHtml: `New "${query}" in: <b>Qzpick Hub</b>`, disabled, icon: "plus"},
-		{kind: "create-elsewhere", labelHtml: `New "${query}" in…`, disabled, icon: "arrow-up"},
+		{
+			kind: "create-default",
+			labelHtml: `New "${query}" in: <b>Qzpick Hub</b>`,
+			disabled,
+			icon: "plus",
+		},
+		{
+			kind: "create-elsewhere",
+			labelHtml: `New "${query}" in…`,
+			disabled,
+			icon: "arrow-up",
+		},
 	];
 }
 
-describe("popperTransform", () => {
-	it("rounds to device pixels and writes translate at dpr 1", () => {
+describe("popperTransform", () =>
+{
+	it("rounds to device pixels and writes translate at dpr 1", () =>
+	{
 		expect(popperTransform(188.359375, 221.5, 1)).toBe("translate(188px, 222px)");
 	});
 
-	it("writes translate3d above dpr 1", () => {
+	it("writes translate3d above dpr 1", () =>
+	{
 		expect(popperTransform(188.359375, 221.5, 2)).toBe("translate3d(188.5px, 221.5px, 0px)");
 	});
 });
 
-describe("LocationPicker markup", () => {
-	it("renders the empty-query state: a recent and a starred row over two disabled footers", () => {
-		const html = render({
-			query: "",
-			rows: [
-				{kind: "recent", id: "hub", labelHtml: "Qzpick Hub", disabled: false, icon: "clock"},
-				{kind: "starred", id: "t0", labelHtml: "T0", disabled: false, icon: "star"},
-				...createRows("", true),
-			],
-		});
+describe("LocationPicker markup", () =>
+{
+	it("renders the empty-query state: a recent and a starred row over two disabled footers", () =>
+	{
+		const html = render(
+			{
+				query: "",
+				rows: [
+					{
+						kind: "recent",
+						id: "hub",
+						labelHtml: "Qzpick Hub",
+						disabled: false,
+						icon: "clock",
+					},
+					{
+						kind: "starred",
+						id: "t0",
+						labelHtml: "T0",
+						disabled: false,
+						icon: "star",
+					},
+					...createRows("", true),
+				],
+			},
+		);
 		const recent =
 			`<a data-handbook-placement="right" class="${ROW_ACTIVE}">${ROW_INNER}${ICON}` +
 			'<svg aria-hidden="true" focusable="false" data-prefix="fal" data-icon="clock" class="svg-inline--fa fa-clock fa-fw fa-1x " role="img" viewBox="0 0 512 512"><path fill="currentColor" d="…"></path></svg>' +
@@ -176,16 +253,36 @@ describe("LocationPicker markup", () => {
 		);
 	});
 
-	it("renders the query state: highlighted results, More results, and enabled footers", () => {
-		const html = render({
-			query: "qzpick",
-			rows: [
-				{kind: "result", id: "r1", labelHtml: "<b><u>Qzpick</u></b> Hub", disabled: false, icon: null},
-				{kind: "result", id: "r2", labelHtml: "<b><u>Qzpick</u></b> Two", disabled: false, icon: null},
-				{kind: "more", labelHtml: "More results", disabled: false, icon: "ellipsis"},
-				...createRows("qzpick", false),
-			],
-		});
+	it("renders the query state: highlighted results, More results, and enabled footers", () =>
+	{
+		const html = render(
+			{
+				query: "qzpick",
+				rows: [
+					{
+						kind: "result",
+						id: "r1",
+						labelHtml: "<b><u>Qzpick</u></b> Hub",
+						disabled: false,
+						icon: null,
+					},
+					{
+						kind: "result",
+						id: "r2",
+						labelHtml: "<b><u>Qzpick</u></b> Two",
+						disabled: false,
+						icon: null,
+					},
+					{
+						kind: "more",
+						labelHtml: "More results",
+						disabled: false,
+						icon: "ellipsis",
+					},
+					...createRows("qzpick", false),
+				],
+			},
+		);
 		const result = (rowClass: string, label: string, crumb: string) =>
 			`<a data-handbook-placement="right" class="${rowClass}">${ROW_INNER}${LABEL}<div>${label}</div></div></span></span><span class="${SUBTEXT}">${crumbs(crumb)}</span></a>`;
 		const more =
@@ -211,14 +308,22 @@ describe("LocationPicker markup", () => {
 		);
 	});
 
-	it("renders the no-match help text and makes the first footer active", () => {
-		const html = render({
-			query: "zzz",
-			rows: [
-				{kind: "help", labelHtml: "No matching locations found", disabled: true, icon: null},
-				...createRows("zzz", false),
-			],
-		});
+	it("renders the no-match help text and makes the first footer active", () =>
+	{
+		const html = render(
+			{
+				query: "zzz",
+				rows: [
+					{
+						kind: "help",
+						labelHtml: "No matching locations found",
+						disabled: true,
+						icon: null,
+					},
+					...createRows("zzz", false),
+				],
+			},
+		);
 		expect(html).toBe(
 			shell(
 				"Move To...",
@@ -234,13 +339,24 @@ describe("LocationPicker markup", () => {
 		);
 	});
 
-	it("renders step 2 with the bold name header, its own wrapper class and no footers", () => {
-		const html = render({
-			step: 2,
-			name: "qzpick",
-			query: "",
-			rows: [{kind: "recent", id: "hub", labelHtml: "Qzpick Hub", disabled: false, icon: "clock"}],
-		});
+	it("renders step 2 with the bold name header, its own wrapper class and no footers", () =>
+	{
+		const html = render(
+			{
+				step: 2,
+				name: "qzpick",
+				query: "",
+				rows: [
+					{
+						kind: "recent",
+						id: "hub",
+						labelHtml: "Qzpick Hub",
+						disabled: false,
+						icon: "clock",
+					},
+				],
+			},
+		);
 		const recent =
 			`<a data-handbook-placement="right" class="${ROW_ACTIVE}">${ROW_INNER}${ICON}` +
 			'<svg aria-hidden="true" focusable="false" data-prefix="fal" data-icon="clock" class="svg-inline--fa fa-clock fa-fw fa-1x " role="img" viewBox="0 0 512 512"><path fill="currentColor" d="…"></path></svg>' +
@@ -256,70 +372,128 @@ describe("LocationPicker markup", () => {
 		);
 	});
 
-	it("shows Home as the only crumb for a top-level location", () => {
-		const html = render({
-			query: "",
-			rows: [{kind: "recent", id: "top", labelHtml: "Top", disabled: false, icon: "clock"}],
-		});
+	it("shows Home as the only crumb for a top-level location", () =>
+	{
+		const html = render(
+			{
+				query: "",
+				rows: [
+					{
+						kind: "recent",
+						id: "top",
+						labelHtml: "Top",
+						disabled: false,
+						icon: "clock",
+					},
+				],
+			},
+		);
 		expect(html).toContain(`<span class="${SUBTEXT}ml-xl">${crumbs("Home")}</span>`);
 	});
 
-	it("collapses the leftmost crumbs and truncates the rest to fit a narrow window", () => {
-		vi.stubGlobal("window", {innerWidth: 400});
-		const html = render({
-			query: "",
-			rows: [{kind: "recent", id: "deep", labelHtml: "Deep", disabled: false, icon: "clock"}],
-		});
+	it("collapses the leftmost crumbs and truncates the rest to fit a narrow window", () =>
+	{
+		vi.stubGlobal(
+			"window",
+			{
+				innerWidth: 400,
+			},
+		);
+		const html = render(
+			{
+				query: "",
+				rows: [
+					{
+						kind: "recent",
+						id: "deep",
+						labelHtml: "Deep",
+						disabled: false,
+						icon: "clock",
+					},
+				],
+			},
+		);
 		vi.stubGlobal("window", undefined);
 		const trail = html.slice(html.indexOf(CRUMBS) + CRUMBS.length);
-		expect({
-			menus: html.split('<div tabindex="0" class="relative outline-none menu ">').length - 1,
-			ellipsis: trail.startsWith(
-				'<div tabindex="0" class="relative outline-none menu "><div><div role="button" tabindex="0" class="iconButton md shape-circle"><svg aria-hidden="true" focusable="false" data-prefix="fal" data-icon="ellipsis"',
-			),
-			visible: [
-				...trail.matchAll(/<div style="max-width:(\d+)px" class="breadcrumb-item [^"]*">([^<]*)<\/div><svg/gu),
-			].map(([, width, name]) => [name, Number(width)]),
-		}).toStrictEqual({
-			menus: 1,
-			ellipsis: true,
-			visible: [
-				["Charlie xxxxxxx", 94],
-				["Delta xxxxxxxxx", 94],
-				["Echo xxxxxxxxxx", 95],
-			],
-		});
+		expect(
+			{
+				menus: html.split('<div tabindex="0" class="relative outline-none menu ">').length - 1,
+				ellipsis: trail.startsWith(
+					'<div tabindex="0" class="relative outline-none menu "><div><div role="button" tabindex="0" class="iconButton md shape-circle"><svg aria-hidden="true" focusable="false" data-prefix="fal" data-icon="ellipsis"',
+				),
+				visible: [
+					...trail.matchAll(
+						/<div style="max-width:(\d+)px" class="breadcrumb-item [^"]*">([^<]*)<\/div><svg/gu,
+					),
+				].map(([, width, name]) => [name, Number(width)]),
+			},
+		).toStrictEqual(
+			{
+				menus: 1,
+				ellipsis: true,
+				visible: [
+					["Charlie xxxxxxx", 94],
+					["Delta xxxxxxxxx", 94],
+					["Echo xxxxxxxxxx", 95],
+				],
+			},
+		);
 	});
 
-	it("starts the keyboard selection on the reducer's active enabled row", () => {
-		const html = render({
-			query: "qzpick",
-			active: 2,
-			rows: [
-				{kind: "result", id: "r1", labelHtml: "One", disabled: false, icon: null},
-				{kind: "more", labelHtml: "More results", disabled: false, icon: "ellipsis"},
-				...createRows("qzpick", false),
-			],
-		});
+	it("starts the keyboard selection on the reducer's active enabled row", () =>
+	{
+		const html = render(
+			{
+				query: "qzpick",
+				active: 2,
+				rows: [
+					{
+						kind: "result",
+						id: "r1",
+						labelHtml: "One",
+						disabled: false,
+						icon: null,
+					},
+					{
+						kind: "more",
+						labelHtml: "More results",
+						disabled: false,
+						icon: "ellipsis",
+					},
+					...createRows("qzpick", false),
+				],
+			},
+		);
 		expect(
 			[...html.matchAll(/<a [^>]*class="([^"]*)"/gu)].map(([, rowClass]) => rowClass === ROW_ACTIVE),
 		).toStrictEqual([false, false, true, false]);
 	});
 });
 
-describe("MoveAssistant removal", () => {
-	it("renders Move To as the inline picker with no move-assistant markup", () => {
-		const html = render({
-			query: "qzpick",
-			rows: [
-				{kind: "result", id: "r1", labelHtml: "One", disabled: false, icon: null},
-				...createRows("qzpick", false),
-			],
-		});
+describe("MoveAssistant removal", () =>
+{
+	it("renders Move To as the inline picker with no move-assistant markup", () =>
+	{
+		const html = render(
+			{
+				query: "qzpick",
+				rows: [
+					{
+						kind: "result",
+						id: "r1",
+						labelHtml: "One",
+						disabled: false,
+						icon: null,
+					},
+					...createRows("qzpick", false),
+				],
+			},
+		);
 		expect(html.includes("move-assistant")).toBe(false);
 	});
 
-	it("deletes the modal component and its app mount", () => {
+	it("deletes the modal component and its app mount", () =>
+	{
 		const source = (path: string) => fileURLToPath(new URL(`../src/client/${path}`, import.meta.url));
 		expect(existsSync(source("components/move-assistant.tsx"))).toBe(false);
 		expect(/MoveAssistant|move-assistant/u.test(readFileSync(source("app.tsx"), "utf8"))).toBe(false);
@@ -327,34 +501,62 @@ describe("MoveAssistant removal", () => {
 	});
 });
 
-describe("picker styles", () => {
-	it("leaves the footer rows content-box like upstream", () => {
+describe("picker styles", () =>
+{
+	it("leaves the footer rows content-box like upstream", () =>
+	{
 		const css = readFileSync(fileURLToPath(new URL("../src/client/styles.css", import.meta.url)), "utf8");
 		expect(css).not.toMatch(/\[data-popper-placement\] > \.flyout a\.menuItem\[style\*="height: 32px"\]/u);
 	});
 });
 
-describe("LocationPicker driven by an outside filter", () => {
-	it("renders the link-to header with no input wrapper when hideInput is set", () => {
+describe("LocationPicker driven by an outside filter", () =>
+{
+	it("renders the link-to header with no input wrapper when hideInput is set", () =>
+	{
 		const html = renderToStaticMarkup(
-			createElement(LocationPicker, {
-				position: [203, 361.5],
-				step: 1,
-				headerText: "link to",
-				hideInput: true,
-				query: "tar",
-				onQueryChange: () => {},
-				rows: [{kind: "result", id: "r1", labelHtml: "<b><u>Tar</u></b>get", disabled: false, icon: null}],
-				crumbsOf: () => [],
-				onSelect: () => {},
-			}),
+			createElement(
+				LocationPicker,
+				{
+					position: [203, 361.5],
+					step: 1,
+					headerText: "link to",
+					hideInput: true,
+					query: "tar",
+					onQueryChange: () =>
+					{
+					},
+					rows: [
+						{
+							kind: "result",
+							id: "r1",
+							labelHtml: "<b><u>Tar</u></b>get",
+							disabled: false,
+							icon: null,
+						},
+					],
+					crumbsOf: () => [],
+					onSelect: () =>
+					{
+					},
+				},
+			),
 		);
 
-		expect({
-			header: html.includes(">link to</div>"),
-			input: html.includes("<input"),
-			wrapper: html.includes("p-l pt-0 mobile:pl-ml"),
-			menuClass: html.includes("[&amp;_.help-text]:p-l [&amp;_.help-text]:pt-m !static"),
-		}).toStrictEqual({header: true, input: false, wrapper: false, menuClass: true});
+		expect(
+			{
+				header: html.includes(">link to</div>"),
+				input: html.includes("<input"),
+				wrapper: html.includes("p-l pt-0 mobile:pl-ml"),
+				menuClass: html.includes("[&amp;_.help-text]:p-l [&amp;_.help-text]:pt-m !static"),
+			},
+		).toStrictEqual(
+			{
+				header: true,
+				input: false,
+				wrapper: false,
+				menuClass: true,
+			},
+		);
 	});
 });

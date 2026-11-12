@@ -4,11 +4,13 @@ import {MENTION_PATTERN, parseMentionAttrs, resolveMentionName} from "./mention-
 import type {MentionAccount} from "./mention-pills.js";
 
 /** The local-midnight date a `YYYYMMDD` dateId names. */
-function dateOfId(dateId: number): Date {
+function dateOfId(dateId: number): Date
+{
 	return new Date(Math.floor(dateId / 10_000), (Math.floor(dateId / 100) % 100) - 1, dateId % 100);
 }
 
-export interface CrumbLabelOptions {
+export interface CrumbLabelOptions
+{
 	now: Date;
 	dateFormat?: string;
 	timeFormat?: string;
@@ -29,11 +31,19 @@ const TIME_PATTERN = /<time\b([^>]*)>[\s\S]*?<\/time>/giu;
 export function crumbLabel(
 	nameHtml: string,
 	{now, dateFormat = "YYYY-MM-DD ddd", timeFormat, dayDateId = null, dayPrefix, account = null}: CrumbLabelOptions,
-): string {
+): string
+{
 	const label = stripHtmlTags(
 		nameHtml
 			.replaceAll(TIME_PATTERN, (_match, attrText: string) =>
-				formatTimeLabel(parseTimeAttrsLoose(attrText), {dateFormat, timeFormat, now}),
+				formatTimeLabel(
+					parseTimeAttrsLoose(attrText),
+					{
+						dateFormat,
+						timeFormat,
+						now,
+					},
+				),
 			)
 			.replaceAll(MENTION_PATTERN, (_match, attrText: string) =>
 				resolveMentionName(parseMentionAttrs(attrText).id, account),

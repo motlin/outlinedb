@@ -23,7 +23,10 @@ const HIDDEN_ON_PLAIN_ROW: ReadonlySet<string> = new Set([
 	"show_treemap",
 ]);
 
-const plainRow = {available: (key: SlashCommandKey) => !HIDDEN_ON_PLAIN_ROW.has(key)};
+const plainRow =
+{
+	available: (key: SlashCommandKey) => !HIDDEN_ON_PLAIN_ROW.has(key),
+};
 
 const PLAIN_ROW_LABELS = [
 	"Bullets",
@@ -73,13 +76,16 @@ const PLAIN_ROW_LABELS = [
 	"Show Command Palette",
 ];
 
-describe("SLASH_MENU_KEYS", () => {
-	it("has the 61 upstream keys, 45 of which render on a plain row", () => {
+describe("SLASH_MENU_KEYS", () =>
+{
+	it("has the 61 upstream keys, 45 of which render on a plain row", () =>
+	{
 		expect(SLASH_MENU_KEYS).toHaveLength(61);
 		expect(SLASH_MENU_KEYS.filter((key) => plainRow.available(key))).toHaveLength(45);
 	});
 
-	it("maps every rendered command to an icon in the shared FA map", () => {
+	it("maps every rendered command to an icon in the shared FA map", () =>
+	{
 		const missing = Object.values(SLASH_COMMANDS)
 			.map((command) => command.icon)
 			.filter((icon) => !(icon in FA_ICONS));
@@ -87,20 +93,33 @@ describe("SLASH_MENU_KEYS", () => {
 	});
 });
 
-describe("resolveSlash", () => {
-	it("lists the 45 plain-row commands in upstream order for a bare slash", () => {
+describe("resolveSlash", () =>
+{
+	it("lists the 45 plain-row commands in upstream order for a bare slash", () =>
+	{
 		const groups = resolveSlash(" /", plainRow);
 		expect(groups?.map((group) => group.name)).toStrictEqual(["Actions"]);
 		expect(groups?.[0]?.options.map((option) => option.label)).toStrictEqual(PLAIN_ROW_LABELS);
 	});
 
-	it("carries key and icon on each option", () => {
+	it("carries key and icon on each option", () =>
+	{
 		expect(resolveSlash("/h1", plainRow)).toStrictEqual([
-			{name: "Actions", options: [{key: "toggle_h1", label: "Heading 1", icon: "fal:h1"}]},
+			{
+				name: "Actions",
+				options: [
+					{
+						key: "toggle_h1",
+						label: "Heading 1",
+						icon: "fal:h1",
+					},
+				],
+			},
 		]);
 	});
 
-	it("filters fuzzily and ranks by score with a stable sort", () => {
+	it("filters fuzzily and ranks by score with a stable sort", () =>
+	{
 		expect(resolveSlash(" /mo", plainRow)?.[0]?.options.map((option) => option.label)).toStrictEqual([
 			"Move To...",
 			"Move Here...",
@@ -123,34 +142,102 @@ describe("resolveSlash", () => {
 		]);
 	});
 
-	it("drops unavailable commands", () => {
-		expect(resolveSlash("/", {available: (key) => key === "complete" || key === "ask_ai"})).toStrictEqual([
-			{name: "Actions", options: [{key: "complete", label: "Complete", icon: "fal:check"}]},
+	it("drops unavailable commands", () =>
+	{
+		expect(
+			resolveSlash(
+				"/",
+				{
+					available: (key) => key === "complete" || key === "ask_ai",
+				},
+			),
+		).toStrictEqual([
+			{
+				name: "Actions",
+				options: [
+					{
+						key: "complete",
+						label: "Complete",
+						icon: "fal:check",
+					},
+				],
+			},
 		]);
 	});
 
-	it("returns null when the term starts with whitespace", () => {
+	it("returns null when the term starts with whitespace", () =>
+	{
 		expect(resolveSlash("/ x", plainRow)).toBeNull();
 	});
 
-	it("falls back to the math group", () => {
-		expect(resolveSlash(" /2*3", {...plainRow, evalMath: () => "6"})).toStrictEqual([
-			{name: "=", options: [{label: "6"}]},
+	it("falls back to the math group", () =>
+	{
+		expect(
+			resolveSlash(
+				" /2*3",
+				{
+					...plainRow,
+					evalMath: () => "6",
+				},
+			),
+		).toStrictEqual([
+			{
+				name: "=",
+				options: [
+					{
+						label: "6",
+					},
+				],
+			},
 		]);
-		expect(resolveSlash(" /2*", {...plainRow, evalMath: () => "incomplete"})).toStrictEqual([
-			{name: "=", options: [{label: "...", noop: true}]},
+		expect(
+			resolveSlash(
+				" /2*",
+				{
+					...plainRow,
+					evalMath: () => "incomplete",
+				},
+			),
+		).toStrictEqual([
+			{
+				name: "=",
+				options: [
+					{
+						label: "...",
+						noop: true,
+					},
+				],
+			},
 		]);
 	});
 
-	it("returns null when neither commands nor math match", () => {
+	it("returns null when neither commands nor math match", () =>
+	{
 		expect(resolveSlash(" /moq", plainRow)).toBeNull();
-		expect(resolveSlash(" /moq", {...plainRow, evalMath: () => null})).toBeNull();
+		expect(
+			resolveSlash(
+				" /moq",
+				{
+					...plainRow,
+					evalMath: () => null,
+				},
+			),
+		).toBeNull();
 	});
 });
 
-describe("LOCAL_SLASH_AVAILABLE", () => {
-	it("offers only the commands with a local executor, in upstream order", () => {
-		expect(resolveSlash(" /", {available: LOCAL_SLASH_AVAILABLE})?.[0]?.options.map((o) => o.label)).toStrictEqual([
+describe("LOCAL_SLASH_AVAILABLE", () =>
+{
+	it("offers only the commands with a local executor, in upstream order", () =>
+	{
+		expect(
+			resolveSlash(
+				" /",
+				{
+					available: LOCAL_SLASH_AVAILABLE,
+				},
+			)?.[0]?.options.map((o) => o.label),
+		).toStrictEqual([
 			"Bullets",
 			"Board",
 			"Table",
@@ -194,29 +281,57 @@ describe("LOCAL_SLASH_AVAILABLE", () => {
 		]);
 	});
 
-	it("carries key and icon for /palette", () => {
-		expect(resolveSlash("/palette", {available: LOCAL_SLASH_AVAILABLE})).toStrictEqual([
+	it("carries key and icon for /palette", () =>
+	{
+		expect(
+			resolveSlash(
+				"/palette",
+				{
+					available: LOCAL_SLASH_AVAILABLE,
+				},
+			),
+		).toStrictEqual([
 			{
 				name: "Actions",
-				options: [{key: "show_command_palette", label: "Show Command Palette", icon: "fal:palette"}],
+				options: [
+					{
+						key: "show_command_palette",
+						label: "Show Command Palette",
+						icon: "fal:palette",
+					},
+				],
 			},
 		]);
 	});
 
-	it("matches Add date for /add d", () => {
+	it("matches Add date for /add d", () =>
+	{
 		expect(
-			resolveSlash(" /add d", {available: LOCAL_SLASH_AVAILABLE})?.[0]?.options.map((o) => o.label),
+			resolveSlash(
+				" /add d",
+				{
+					available: LOCAL_SLASH_AVAILABLE,
+				},
+			)?.[0]?.options.map((o) => o.label),
 		).toStrictEqual(["Add date"]);
 	});
 
-	it("has a command-registry executor for every locally available key, and the slash hook gates on it", () => {
+	it("has a command-registry executor for every locally available key, and the slash hook gates on it", () =>
+	{
 		const registry = readFileSync(new URL("../src/client/hooks/use-command-registry.ts", import.meta.url), "utf8");
 		const hook = readFileSync(new URL("../src/client/hooks/use-slash-menu.tsx", import.meta.url), "utf8");
-		expect({
-			missing: SLASH_MENU_KEYS.filter(
-				(key) => LOCAL_SLASH_AVAILABLE(key) && !new RegExp(`^\\t\\t${key}: `, "mu").test(registry),
-			),
-			gated: hook.includes("LOCAL_SLASH_AVAILABLE(key)"),
-		}).toStrictEqual({missing: [], gated: true});
+		expect(
+			{
+				missing: SLASH_MENU_KEYS.filter(
+					(key) => LOCAL_SLASH_AVAILABLE(key) && !new RegExp(`^\\t\\t${key}:(?: |$)`, "mu").test(registry),
+				),
+				gated: hook.includes("LOCAL_SLASH_AVAILABLE(key)"),
+			},
+		).toStrictEqual(
+			{
+				missing: [],
+				gated: true,
+			},
+		);
 	});
 });

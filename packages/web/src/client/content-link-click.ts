@@ -8,31 +8,57 @@ import {paneClickModifier} from "./pane-click-routing.js";
 const WORKFLOWY_HOSTS: ReadonlySet<string> = new Set(["workflowy.com", "dev.workflowy.com", "beta.workflowy.com"]);
 
 /** The item id an internal link names (`workflowy.com/#/<id>` or this app's own `/#/<id>`); null for anything else. */
-export function internalLinkId(href: string, origin: string): string | null {
+export function internalLinkId(href: string, origin: string): string | null
+{
 	let url: URL;
-	try {
+	try
+	{
 		url = new URL(href, origin);
-	} catch {
+	}
+	catch
+	{
 		return null;
 	}
 	const internal = url.origin === origin || (/^https?:$/u.test(url.protocol) && WORKFLOWY_HOSTS.has(url.hostname));
 	return internal ? parseLocationHash(url.hash).id : null;
 }
 
-export interface LinkLocation {
+export interface LinkLocation
+{
 	id: string | null;
 	query: string | null;
 }
 
 export type ContentLinkPlan =
-	| {kind: "open_in_pane"; loc: LinkLocation}
-	| {kind: "navigate_pane"; loc: LinkLocation}
-	| {kind: "navigate"; loc: LinkLocation}
-	| {kind: "search"; query: string}
-	| {kind: "open"; href: string}
+	|
+	  {
+			kind: "open_in_pane";
+			loc: LinkLocation;
+	  }
+	|
+	  {
+			kind: "navigate_pane";
+			loc: LinkLocation;
+	  }
+	|
+	  {
+			kind: "navigate";
+			loc: LinkLocation;
+	  }
+	|
+	  {
+			kind: "search";
+			query: string;
+	  }
+	|
+	  {
+			kind: "open";
+			href: string;
+	  }
 	| null;
 
-interface LinkClick {
+interface LinkClick
+{
 	metaKey: boolean;
 	ctrlKey: boolean;
 	altKey: boolean;
@@ -40,19 +66,27 @@ interface LinkClick {
 	button: number;
 }
 
-function internalLocation(href: string, origin: string): LinkLocation | null {
+function internalLocation(href: string, origin: string): LinkLocation | null
+{
 	let url: URL;
-	try {
+	try
+	{
 		url = new URL(href, origin);
-	} catch {
+	}
+	catch
+	{
 		return null;
 	}
 	const internal = url.origin === origin || (/^https?:$/u.test(url.protocol) && WORKFLOWY_HOSTS.has(url.hostname));
-	if (!internal) {
+	if (!internal)
+	{
 		return null;
 	}
 	const {id, query} = parseLocationHash(url.hash);
-	return {id, query};
+	return {
+		id,
+		query,
+	};
 }
 
 /**
@@ -63,42 +97,75 @@ function internalLocation(href: string, origin: string): LinkLocation | null {
 export function planContentLinkClick(
 	href: string,
 	event: LinkClick,
-	ctx: {isMac: boolean; inSidePane: boolean; origin: string},
-): ContentLinkPlan {
-	if (event.button !== 0) {
+	ctx:
+	{
+		isMac: boolean;
+		inSidePane: boolean;
+		origin: string;
+	},
+): ContentLinkPlan
+{
+	if (event.button !== 0)
+	{
 		return null;
 	}
-	if (href.startsWith("search:")) {
-		return {kind: "search", query: safeDecode(href.slice("search:".length))};
+	if (href.startsWith("search:"))
+	{
+		return {
+			kind: "search",
+			query: safeDecode(href.slice("search:".length)),
+		};
 	}
 	const loc = internalLocation(href, ctx.origin);
-	if (loc === null) {
-		return {kind: "open", href};
+	if (loc === null)
+	{
+		return {
+			kind: "open",
+			href,
+		};
 	}
-	if (paneClickModifier(event, ctx.isMac) === "open") {
-		return {kind: "open_in_pane", loc};
+	if (paneClickModifier(event, ctx.isMac) === "open")
+	{
+		return {
+			kind: "open_in_pane",
+			loc,
+		};
 	}
-	if (event.altKey || event.ctrlKey || event.metaKey) {
-		return {kind: "open", href};
+	if (event.altKey || event.ctrlKey || event.metaKey)
+	{
+		return {
+			kind: "open",
+			href,
+		};
 	}
-	return {kind: ctx.inSidePane ? "navigate_pane" : "navigate", loc};
+	return {
+		kind: ctx.inSidePane ? "navigate_pane" : "navigate",
+		loc,
+	};
 }
 
-function safeDecode(value: string): string {
-	try {
+function safeDecode(value: string): string
+{
+	try
+	{
 		return decodeURIComponent(value);
-	} catch {
+	}
+	catch
+	{
 		return value;
 	}
 }
 
-function onContentLinkContextMenu(event: Event): void {
+function onContentLinkContextMenu(event: Event): void
+{
 	const anchor = event.target instanceof Element ? event.target.closest("a.contentLink") : null;
-	if (anchor === null) {
+	if (anchor === null)
+	{
 		return;
 	}
 	anchor.setAttribute("contenteditable", "false");
-	setTimeout(() => {
+	setTimeout(() =>
+	{
 		anchor.removeAttribute("contenteditable");
 	}, 0);
 }
@@ -108,9 +175,11 @@ function onContentLinkContextMenu(event: Event): void {
  * native context menu opens, so the browser offers its link items (Open link in new tab, Copy link address). Returns
  * the uninstall function; the default is never prevented.
  */
-export function installContentLinkContextMenu(doc: Document): () => void {
+export function installContentLinkContextMenu(doc: Document): () => void
+{
 	doc.addEventListener("contextmenu", onContentLinkContextMenu);
-	return () => {
+	return () =>
+	{
 		doc.removeEventListener("contextmenu", onContentLinkContextMenu);
 	};
 }
@@ -120,21 +189,36 @@ export function installContentLinkContextMenu(doc: Document): () => void {
  * An internal or `search:` link goes through the document's click routing, anything else through `window.open`. With a
  * selection, or outside a link, nothing happens and the key falls through.
  */
-export function openLinkAtCaret(editor: HTMLElement): boolean {
+export function openLinkAtCaret(editor: HTMLElement): boolean
+{
 	const selection = globalThis.getSelection();
-	if (selection === null || selection.rangeCount === 0 || !selection.isCollapsed) {
+	if (selection === null || selection.rangeCount === 0 || !selection.isCollapsed)
+	{
 		return false;
 	}
 	const node = selection.anchorNode;
 	const element = node instanceof Element ? node : (node?.parentElement ?? null);
 	const anchor = element?.closest("a[href]") ?? null;
 	const href = anchor?.getAttribute("href");
-	if (anchor === null || href === null || href === undefined || !editor.contains(anchor)) {
+	if (anchor === null || href === null || href === undefined || !editor.contains(anchor))
+	{
 		return false;
 	}
-	if (href.startsWith("search:") || internalLinkId(href, globalThis.location.origin) !== null) {
-		anchor.dispatchEvent(new MouseEvent("click", {bubbles: true, cancelable: true, button: 0}));
-	} else {
+	if (href.startsWith("search:") || internalLinkId(href, globalThis.location.origin) !== null)
+	{
+		anchor.dispatchEvent(
+			new MouseEvent(
+				"click",
+				{
+					bubbles: true,
+					cancelable: true,
+					button: 0,
+				},
+			),
+		);
+	}
+	else
+	{
 		globalThis.open(href);
 	}
 	return true;

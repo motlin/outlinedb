@@ -6,65 +6,88 @@ import {applyTheme, clearPrepaintBackground, storedTheme} from "../src/client/th
 
 const html = readFileSync(join(import.meta.dirname, "../src/client/index.html"), "utf8");
 
-function stubColors(): void {
-	vi.spyOn(globalThis, "getComputedStyle").mockReturnValue({
-		getPropertyValue: (name: string) => (name === "--wf-background-primary" ? " #2a3135 " : " #5c6062 "),
-	} as CSSStyleDeclaration);
+function stubColors(): void
+{
+	vi.spyOn(globalThis, "getComputedStyle").mockReturnValue(
+		{
+			getPropertyValue: (name: string) => (name === "--wf-background-primary" ? " #2a3135 " : " #5c6062 "),
+		} as CSSStyleDeclaration,
+	);
 }
 
-beforeEach(() => {
+beforeEach(() =>
+{
 	document.body.className = "is-desktop font-system _theme-space";
 	document.body.removeAttribute("style");
 	localStorage.clear();
 });
 
-afterEach(() => {
+afterEach(() =>
+{
 	vi.restoreAllMocks();
 });
 
-describe("applyTheme", () => {
-	it("swaps the body theme class, appends it last, and records the loading colors", () => {
+describe("applyTheme", () =>
+{
+	it("swaps the body theme class, appends it last, and records the loading colors", () =>
+	{
 		stubColors();
 		const effective = applyTheme("wood", false);
-		expect({
-			effective,
-			className: document.body.className,
-			cookie: localStorage.getItem("wire_theme_current"),
-			background: localStorage.getItem("loadingBackground"),
-			foreground: localStorage.getItem("loadingForeground"),
-			dataTheme: document.documentElement.dataset.theme,
-		}).toStrictEqual({
-			effective: "wood",
-			className: "is-desktop font-system _theme-wood",
-			cookie: "wood",
-			background: "#2a3135",
-			foreground: "#5c6062",
-			dataTheme: "light",
-		});
+		expect(
+			{
+				effective,
+				className: document.body.className,
+				cookie: localStorage.getItem("wire_theme_current"),
+				background: localStorage.getItem("loadingBackground"),
+				foreground: localStorage.getItem("loadingForeground"),
+				dataTheme: document.documentElement.dataset.theme,
+			},
+		).toStrictEqual(
+			{
+				effective: "wood",
+				className: "is-desktop font-system _theme-wood",
+				cookie: "wood",
+				background: "#2a3135",
+				foreground: "#5c6062",
+				dataTheme: "light",
+			},
+		);
 	});
 
-	it("strips every theme class wherever it sits and keeps single spaces", () => {
+	it("strips every theme class wherever it sits and keeps single spaces", () =>
+	{
 		document.body.className = "is-desktop _theme-foo font-system";
 		applyTheme("dark", false);
 		expect(document.body.className).toBe("is-desktop font-system _theme-dark");
 	});
 
-	it("resolves system from the OS preference and falls back to default for unknown names", () => {
+	it("resolves system from the OS preference and falls back to default for unknown names", () =>
+	{
 		const results = [applyTheme("system", true), applyTheme("system", false), applyTheme("bogus", true)];
-		expect({results, className: document.body.className}).toStrictEqual({
-			results: ["dark", "default", "default"],
-			className: "is-desktop font-system _theme-default",
-		});
+		expect(
+			{
+				results,
+				className: document.body.className,
+			},
+		).toStrictEqual(
+			{
+				results: ["dark", "default", "default"],
+				className: "is-desktop font-system _theme-default",
+			},
+		);
 	});
 
-	it("marks the document dark for dark themes", () => {
+	it("marks the document dark for dark themes", () =>
+	{
 		applyTheme("space", false);
 		expect(document.documentElement.dataset.theme).toBe("dark");
 	});
 });
 
-describe("clearPrepaintBackground", () => {
-	it("removes the inline pre-paint background", () => {
+describe("clearPrepaintBackground", () =>
+{
+	it("removes the inline pre-paint background", () =>
+	{
 		document.body.style.background = "#2a3135";
 		applyTheme("dark", true);
 		clearPrepaintBackground();
@@ -72,8 +95,10 @@ describe("clearPrepaintBackground", () => {
 	});
 });
 
-describe("storedTheme", () => {
-	it("migrates light to default and keeps registered names", () => {
+describe("storedTheme", () =>
+{
+	it("migrates light to default and keeps registered names", () =>
+	{
 		expect(["light", "dark", "system", "hacker", "bogus", null].map((raw) => storedTheme(raw))).toStrictEqual([
 			"default",
 			"dark",
@@ -86,35 +111,50 @@ describe("storedTheme", () => {
 });
 
 /** Run the inline script; happy-dom does not execute script elements. */
-function runScript(script: string): void {
+function runScript(script: string): void
+{
 	// oxlint-disable-next-line no-implied-eval
 	new Function(script)();
 }
 
-describe("index.html pre-paint script", () => {
+describe("index.html pre-paint script", () =>
+{
 	const script = /<body[^>]*>\s*<script>([\s\S]*?)<\/script>/u.exec(html)?.[1] ?? "";
 
-	it("is the first body script and names the stored keys", () => {
+	it("is the first body script and names the stored keys", () =>
+	{
 		expect(
 			["loadingBackground", "loadingForeground", "wire_theme_current"].map((key) => script.includes(key)),
 		).toStrictEqual([true, true, true]);
 	});
 
-	it("adds the stored theme class and the stored background", () => {
+	it("adds the stored theme class and the stored background", () =>
+	{
 		localStorage.setItem("wire_theme_current", "dark");
 		localStorage.setItem("loadingBackground", "#2a3135");
 		localStorage.setItem("loadingForeground", "#5c6062");
 		document.body.className = "is-desktop font-system";
 		runScript(script);
-		expect({className: document.body.className, background: document.body.style.background}).toStrictEqual({
-			className: "is-desktop font-system _theme-dark",
-			background: "#2a3135",
-		});
+		expect(
+			{
+				className: document.body.className,
+				background: document.body.style.background,
+			},
+		).toStrictEqual(
+			{
+				className: "is-desktop font-system _theme-dark",
+				background: "#2a3135",
+			},
+		);
 	});
 
-	it("resolves the OS preference on a first visit", () => {
+	it("resolves the OS preference on a first visit", () =>
+	{
 		document.body.className = "is-desktop font-system";
-		vi.stubGlobal("matchMedia", () => ({matches: true}));
+		vi.stubGlobal("matchMedia", () => (
+		{
+			matches: true,
+		}));
 		runScript(script);
 		expect(document.body.className).toBe("is-desktop font-system _theme-dark");
 		vi.unstubAllGlobals();

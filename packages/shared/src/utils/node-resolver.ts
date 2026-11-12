@@ -13,13 +13,16 @@ import {isShortId} from "../workflowy/index.js";
  * @returns The full UUID
  * @throws Error if a short ID has no match in the cache
  */
-export function resolveIdOrShortId(id: string, cacheService: CacheService): string {
-	if (!isShortId(id)) {
+export function resolveIdOrShortId(id: string, cacheService: CacheService): string
+{
+	if (!isShortId(id))
+	{
 		return id;
 	}
 
 	const nodeId = cacheService.resolveShortIdToUuid(id);
-	if (!nodeId) {
+	if (!nodeId)
+	{
 		throw new Error(`No node found for short ID: ${id}`);
 	}
 	return nodeId;
@@ -38,25 +41,34 @@ export function resolveIdOrShortId(id: string, cacheService: CacheService): stri
  * @throws Error if the node cannot be found
  */
 export async function resolveNodeId(
-	flags: {id?: string; path?: string},
+	flags:
+	{
+		id?: string;
+		path?: string;
+	},
 	cacheService: CacheService,
 	apiClient: WorkflowyApiClient,
-): Promise<string> {
-	if (flags.id) {
+): Promise<string>
+{
+	if (flags.id)
+	{
 		return resolveIdOrShortId(flags.id, cacheService);
 	}
 
-	if (flags.path === undefined) {
+	if (flags.path === undefined)
+	{
 		throw new Error("Either --id or --path is required");
 	}
 	const nodePath = flags.path.split(",").map((s) => s.trim());
 	const cachedNode = cacheService.findNodeByPath(nodePath);
-	if (cachedNode) {
+	if (cachedNode)
+	{
 		return cachedNode.id;
 	}
 
 	const apiNode = await apiClient.findNodeByPath(nodePath);
-	if (!apiNode) {
+	if (!apiNode)
+	{
 		throw new Error(`Node not found at path: ${nodePath.join(" > ")}`);
 	}
 	return apiNode.id;
@@ -75,11 +87,17 @@ export async function resolveNodeId(
  * @throws Error if a path is provided but the node cannot be found
  */
 export async function resolveOptionalNodeId(
-	flags: {id?: string; path?: string},
+	flags:
+	{
+		id?: string;
+		path?: string;
+	},
 	cacheService: CacheService,
 	apiClient: WorkflowyApiClient,
-): Promise<string | undefined> {
-	if (!flags.id && !flags.path) {
+): Promise<string | undefined>
+{
+	if (!flags.id && !flags.path)
+	{
 		return undefined;
 	}
 	return resolveNodeId(flags, cacheService, apiClient);
@@ -99,18 +117,21 @@ export async function resolveOrCreateNodePath(
 	path: string,
 	cacheService: CacheService,
 	apiClient: WorkflowyApiClient,
-): Promise<string> {
+): Promise<string>
+{
 	const pathParts = path.split(",").map((s) => s.trim());
 
 	const createdNodes = new Map<string, string>();
 
 	let currentParentId: string | undefined;
 
-	for (const [i, part] of pathParts.entries()) {
+	for (const [i, part] of pathParts.entries())
+	{
 		const subPath = pathParts.slice(0, i + 1);
 		const subKey = subPath.join("/");
 
-		if (createdNodes.has(subKey)) {
+		if (createdNodes.has(subKey))
+		{
 			currentParentId = createdNodes.get(subKey);
 			continue;
 		}
@@ -118,22 +139,28 @@ export async function resolveOrCreateNodePath(
 		const cachedNode = cacheService.findNodeByPath(subPath);
 		const nodeId = cachedNode?.id ?? (await apiClient.findNodeByPath(subPath))?.id;
 
-		if (nodeId) {
+		if (nodeId)
+		{
 			currentParentId = nodeId;
 			createdNodes.set(subKey, nodeId);
-		} else {
+		}
+		else
+		{
 			// A missing first segment is created at Home (the top level).
-			const newNode = await new WorkflowyWriteThroughClient(apiClient, cacheService).createNode({
-				parent_id: currentParentId ?? null,
-				name: part,
-			});
+			const newNode = await new WorkflowyWriteThroughClient(apiClient, cacheService).createNode(
+				{
+					parent_id: currentParentId ?? null,
+					name: part,
+				},
+			);
 
 			currentParentId = newNode.id;
 			createdNodes.set(subKey, newNode.id);
 		}
 	}
 
-	if (!currentParentId) {
+	if (!currentParentId)
+	{
 		throw new Error(`Failed to resolve or create path: ${path}`);
 	}
 
@@ -145,7 +172,8 @@ export async function resolveOrCreateNodePath(
  * Exactly one of id or path must be provided.
  * The id field accepts UUIDs, system targets (e.g., "inbox"), and "home".
  */
-export interface ResolveParentFlags {
+export interface ResolveParentFlags
+{
 	id?: string;
 	path?: string;
 }
@@ -180,38 +208,47 @@ export async function resolveParent(
 	flags: ResolveParentFlags,
 	cacheService: CacheService,
 	apiClient: WorkflowyApiClient,
-): Promise<string | null> {
+): Promise<string | null>
+{
 	const providedCount = [flags.id, flags.path].filter(Boolean).length;
 
-	if (providedCount === 0) {
+	if (providedCount === 0)
+	{
 		throw new Error("One of --parent-id or --parent-path is required");
 	}
 
-	if (providedCount > 1) {
+	if (providedCount > 1)
+	{
 		throw new Error("Only one of --parent-id or --parent-path can be specified");
 	}
 
-	if (flags.id) {
-		if (flags.id === HOME_TARGET) {
+	if (flags.id)
+	{
+		if (flags.id === HOME_TARGET)
+		{
 			return null;
 		}
-		if (isSystemTarget(flags.id)) {
+		if (isSystemTarget(flags.id))
+		{
 			return flags.id;
 		}
 		return resolveIdOrShortId(flags.id, cacheService);
 	}
 
-	if (flags.path === undefined) {
+	if (flags.path === undefined)
+	{
 		throw new Error("Either --id or --path is required");
 	}
 	const nodePath = flags.path.split(",").map((s) => s.trim());
 	const cachedNode = cacheService.findNodeByPath(nodePath);
-	if (cachedNode) {
+	if (cachedNode)
+	{
 		return cachedNode.id;
 	}
 
 	const apiNode = await apiClient.findNodeByPath(nodePath);
-	if (!apiNode) {
+	if (!apiNode)
+	{
 		throw new Error(`Node not found at path: ${nodePath.join(" > ")}`);
 	}
 	return apiNode.id;
@@ -231,8 +268,10 @@ export async function resolveOptionalParent(
 	flags: ResolveParentFlags,
 	cacheService: CacheService,
 	apiClient: WorkflowyApiClient,
-): Promise<string | null | undefined> {
-	if (!flags.id && !flags.path) {
+): Promise<string | null | undefined>
+{
+	if (!flags.id && !flags.path)
+	{
 		return undefined;
 	}
 	return resolveParent(flags, cacheService, apiClient);

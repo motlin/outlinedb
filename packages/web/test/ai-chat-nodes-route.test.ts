@@ -30,30 +30,75 @@ const TREE: [id: string, parentId: string | null, name: string][] = [
 	["not-chat", null, "Not chat"],
 ];
 
-function setup() {
+function setup()
+{
 	const sqlite = new DatabaseConstructor(":memory:");
-	const db = drizzle(sqlite, {schema});
-	migrate(db, {migrationsFolder});
+	const db = drizzle(
+		sqlite,
+		{
+			schema,
+		},
+	);
+	migrate(
+		db,
+		{
+			migrationsFolder,
+		},
+	);
 	const priorities = new Map<string | null, number>();
-	for (const [id, parentId, name] of TREE) {
+	for (const [id, parentId, name] of TREE)
+	{
 		const priority = priorities.get(parentId) ?? 0;
 		priorities.set(parentId, priority + 1);
 		db.insert(nodeContent)
-			.values({id, name, note: null, parentId, systemFrom: SEEDED_AT, systemTo: FAR_FUTURE_DATE})
+			.values(
+				{
+					id,
+					name,
+					note: null,
+					parentId,
+					systemFrom: SEEDED_AT,
+					systemTo: FAR_FUTURE_DATE,
+				},
+			)
 			.run();
-		db.insert(nodeMetadata).values({nodeId: id, priority, systemFrom: SEEDED_AT, systemTo: FAR_FUTURE_DATE}).run();
+		db.insert(nodeMetadata)
+			.values(
+				{
+					nodeId: id,
+					priority,
+					systemFrom: SEEDED_AT,
+					systemTo: FAR_FUTURE_DATE,
+				},
+			)
+			.run();
 	}
 	for (const [nodeId, inChat] of [
 		["mailbox", 1],
 		["work-mailbox", 1],
 		["not-chat", 0],
-	] as const) {
-		db.insert(aiMetadata).values({nodeId, inChat, systemFrom: SEEDED_AT, systemTo: FAR_FUTURE_DATE}).run();
+	] as const)
+	{
+		db.insert(aiMetadata)
+			.values(
+				{
+					nodeId,
+					inChat,
+					systemFrom: SEEDED_AT,
+					systemTo: FAR_FUTURE_DATE,
+				},
+			)
+			.run();
 	}
 
-	const ctx = {db, cacheService: new CacheService(db)} as unknown as ServerContext;
+	const ctx =
+	{
+		db,
+		cacheService: new CacheService(db),
+	} as unknown as ServerContext;
 	const app = new Hono<AppEnv>();
-	app.use("*", async (c, next) => {
+	app.use("*", async (c, next) =>
+	{
 		c.set("ctx", ctx);
 		await next();
 	});
@@ -61,28 +106,57 @@ function setup() {
 	return app;
 }
 
-async function getJson(app: Hono<AppEnv>, path: string): Promise<unknown> {
+async function getJson(app: Hono<AppEnv>, path: string): Promise<unknown>
+{
 	const response = await app.fetch(new Request(`http://x${path}`));
 	expect(response.status).toBe(200);
 	return response.json();
 }
 
-describe("AI chat nodes in the nodes routes", () => {
-	it("never lists an ai.inChat node as a child, like upstream's ai_chat_message displayable rule", async () => {
+describe("AI chat nodes in the nodes routes", () =>
+{
+	it("never lists an ai.inChat node as a child, like upstream's ai_chat_message displayable rule", async () =>
+	{
 		const app = setup();
 
-		const body = (await getJson(app, "/api/v1/nodes")) as {nodes: {id: string; hasChildren: boolean}[]};
+		const body = (await getJson(app, "/api/v1/nodes")) as
+		{
+			nodes:
+			{
+				id: string;
+				hasChildren: boolean;
+			}[];
+		};
 
-		expect(body.nodes.map(({id, hasChildren}) => ({id, hasChildren}))).toStrictEqual([
-			{id: "work", hasChildren: false},
-			{id: "not-chat", hasChildren: false},
+		expect(
+			body.nodes.map(({id, hasChildren}) => (
+			{
+				id,
+				hasChildren,
+			})),
+		).toStrictEqual([
+			{
+				id: "work",
+				hasChildren: false,
+			},
+			{
+				id: "not-chat",
+				hasChildren: false,
+			},
 		]);
 	});
 
-	it("does not count an ai.inChat child toward hasChildren on a single node", async () => {
+	it("does not count an ai.inChat child toward hasChildren on a single node", async () =>
+	{
 		const app = setup();
 
-		const single = (await getJson(app, "/api/v1/nodes/work")) as {node: {hasChildren: boolean}};
+		const single = (await getJson(app, "/api/v1/nodes/work")) as
+		{
+			node:
+			{
+				hasChildren: boolean;
+			};
+		};
 
 		expect(single.node.hasChildren).toBe(false);
 	});

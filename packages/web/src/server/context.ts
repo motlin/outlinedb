@@ -16,7 +16,8 @@ type ServerDatabase = AppDatabase;
  * `getDatabase()` singleton and `process.env`. A test builds one over an
  * in-memory database and drives `app.fetch(...)` with no disk, network, or env.
  */
-export interface ServerContext {
+export interface ServerContext
+{
 	db: ServerDatabase;
 	cacheService: CacheService;
 	/** Settings parsed by the host; routers read these instead of `process.env`. */
@@ -58,12 +59,17 @@ export interface ServerContext {
 }
 
 /** Hono environment: routers read the {@link ServerContext} via `c.get('ctx')`. */
-export interface AppEnv {
-	Variables: {ctx: ServerContext};
+export interface AppEnv
+{
+	Variables:
+	{
+		ctx: ServerContext;
+	};
 }
 
 /** What a host supplies; {@link buildServerContext} derives the rest. */
-export interface ServerContextDeps {
+export interface ServerContextDeps
+{
 	db: ServerDatabase;
 	config: ServerConfig;
 	ladderEvents: LadderEventBus;
@@ -76,7 +82,8 @@ export interface ServerContextDeps {
 }
 
 /** Assemble a {@link ServerContext} from host-supplied dependencies, with no process or filesystem access. */
-export function buildServerContext(deps: ServerContextDeps): ServerContext {
+export function buildServerContext(deps: ServerContextDeps): ServerContext
+{
 	const {db, config, ladderEvents, decisions, internalAuth, embeddingIndex} = deps;
 	const cacheService = new CacheService(db);
 	const apiKey = config.apiKey;
@@ -93,19 +100,23 @@ export function buildServerContext(deps: ServerContextDeps): ServerContext {
 		embeddingIndex,
 		calendarEnsureEnabled: config.calendarEnsureEnabled,
 		calendarLayoutEnabled: config.calendarLayoutEnabled,
-		internalAdapter: () => {
-			if (!adapter && internalAuth) {
-				adapter = new WorkflowyInternalAdapter({
-					client: new WorkflowyInternalClient(internalAuth),
-					db,
-					// Tree writes refresh the cache through the public API, which needs the key.
-					writeThrough: apiKey
-						? new WorkflowyWriteThroughClient(
-								new WorkflowyApiClient(apiKey, undefined, config.apiUrl),
-								cacheService,
-							)
-						: undefined,
-				});
+		internalAdapter: () =>
+		{
+			if (!adapter && internalAuth)
+			{
+				adapter = new WorkflowyInternalAdapter(
+					{
+						client: new WorkflowyInternalClient(internalAuth),
+						db,
+						// Tree writes refresh the cache through the public API, which needs the key.
+						writeThrough: apiKey
+							? new WorkflowyWriteThroughClient(
+									new WorkflowyApiClient(apiKey, undefined, config.apiUrl),
+									cacheService,
+								)
+							: undefined,
+					},
+				);
 			}
 			return adapter;
 		},

@@ -2,28 +2,33 @@
 import {afterEach, describe, expect, it, vi} from "vite-plus/test";
 import {runZoomAnimation} from "../src/client/zoom-animation.js";
 
-interface Box {
+interface Box
+{
 	left: number;
 	top: number;
 	width?: number;
 }
 
 /** Make `el` report `box` as its bounding rect. */
-function place(el: Element, {left, top, width = 400}: Box): void {
-	vi.spyOn(el, "getBoundingClientRect").mockReturnValue({
-		left,
-		top,
-		x: left,
-		y: top,
-		width,
-		height: 20,
-		right: left + width,
-		bottom: top + 20,
-		toJSON: () => ({}),
-	});
+function place(el: Element, {left, top, width = 400}: Box): void
+{
+	vi.spyOn(el, "getBoundingClientRect").mockReturnValue(
+		{
+			left,
+			top,
+			x: left,
+			y: top,
+			width,
+			height: 20,
+			right: left + width,
+			bottom: top + 20,
+			toJSON: () => ({}),
+		},
+	);
 }
 
-function row(id: string, text: string, rowBox: Box, nameBox: Box, children: HTMLElement[] = []): HTMLElement {
+function row(id: string, text: string, rowBox: Box, nameBox: Box, children: HTMLElement[] = []): HTMLElement
+{
 	const el = document.createElement("div");
 	el.className = "project";
 	const name = document.createElement("div");
@@ -42,36 +47,97 @@ function row(id: string, text: string, rowBox: Box, nameBox: Box, children: HTML
 	el.append(name, kids);
 	place(el, rowBox);
 	place(name, nameBox);
-	place(content, {left: rowBox.left + 24, top: rowBox.top});
+	place(
+		content,
+		{
+			left: rowBox.left + 24,
+			top: rowBox.top,
+		},
+	);
 	return el;
 }
 
 /** Each animated element's label and its two keyframes. */
-function recordAnimations(): string[] {
+function recordAnimations(): string[]
+{
 	const seen: string[] = [];
-	vi.spyOn(Element.prototype, "animate").mockImplementation(function animate(this: Element, keyframes) {
+	vi.spyOn(Element.prototype, "animate").mockImplementation(function animate(this: Element, keyframes)
+	{
 		const frames = keyframes as Keyframe[];
 		const label =
 			this.parentElement === document.body
 				? `clone ${(this as HTMLElement).style.fontSize}`
 				: this.textContent.slice(0, 8);
 		seen.push(`${label}: ${frames.map((k) => `${String(k.opacity)} ${String(k.transform)}`).join(" -> ")}`);
-		return {finished: Promise.resolve(), cancel: () => {}} as unknown as Animation;
+		return {
+			finished: Promise.resolve(),
+			cancel: () =>
+			{
+			},
+		} as unknown as Animation;
 	});
 	return seen;
 }
 
-afterEach(() => {
+afterEach(() =>
+{
 	vi.restoreAllMocks();
 	document.body.innerHTML = "";
 });
 
-describe("runZoomAnimation", () => {
-	it("zooming in slides the title, row, siblings and children by the rows' offset, whatever the .name boxes span", async () => {
-		const child = row("c", "Child", {left: 116, top: 280}, {left: -384, top: 280});
-		const moving = row("m", "Moving", {left: 80, top: 252}, {left: -420, top: 252}, [child]);
-		const sibling = row("s", "Sibling", {left: 80, top: 140}, {left: -420, top: 140});
-		const title = row("t", "Title", {left: 80, top: 96}, {left: -20, top: 96});
+describe("runZoomAnimation", () =>
+{
+	it("zooming in slides the title, row, siblings and children by the rows' offset, whatever the .name boxes span", async () =>
+	{
+		const child = row(
+			"c",
+			"Child",
+			{
+				left: 116,
+				top: 280,
+			},
+			{
+				left: -384,
+				top: 280,
+			},
+		);
+		const moving = row(
+			"m",
+			"Moving",
+			{
+				left: 80,
+				top: 252,
+			},
+			{
+				left: -420,
+				top: 252,
+			},
+			[child],
+		);
+		const sibling = row(
+			"s",
+			"Sibling",
+			{
+				left: 80,
+				top: 140,
+			},
+			{
+				left: -420,
+				top: 140,
+			},
+		);
+		const title = row(
+			"t",
+			"Title",
+			{
+				left: 80,
+				top: 96,
+			},
+			{
+				left: -20,
+				top: 96,
+			},
+		);
 		title.classList.add("root");
 		title.querySelector<HTMLElement>(":scope > .name > .content")!.style.fontSize = "27px";
 		title.querySelector(":scope > .children")!.append(sibling, moving);

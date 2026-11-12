@@ -1,8 +1,10 @@
 import {describe, expect, it} from "vite-plus/test";
 import {THEMES, currentTheme, effectiveTheme, isDarkTheme} from "../src/client/themes.js";
 
-describe("theme registry", () => {
-	it("lists upstream's 16 themes in dropdown order", () => {
+describe("theme registry", () =>
+{
+	it("lists upstream's 16 themes in dropdown order", () =>
+	{
 		expect(THEMES.map((theme) => [theme.name, theme.prettyName, theme.dark ?? false])).toStrictEqual([
 			["default", "Light", false],
 			["dark", "Dark", true],
@@ -23,7 +25,8 @@ describe("theme registry", () => {
 		]);
 	});
 
-	it("falls back to the first theme for an unknown name", () => {
+	it("falls back to the first theme for an unknown name", () =>
+	{
 		expect([currentTheme("bogus"), currentTheme("space"), currentTheme(null)]).toStrictEqual([
 			"default",
 			"space",
@@ -31,7 +34,8 @@ describe("theme registry", () => {
 		]);
 	});
 
-	it("resolves system from the OS preference and leaves other names alone", () => {
+	it("resolves system from the OS preference and leaves other names alone", () =>
+	{
 		expect([
 			effectiveTheme("system", true),
 			effectiveTheme("system", false),
@@ -40,7 +44,8 @@ describe("theme registry", () => {
 		]).toStrictEqual(["dark", "default", "wood", "default"]);
 	});
 
-	it("knows which themes are dark", () => {
+	it("knows which themes are dark", () =>
+	{
 		expect([
 			isDarkTheme("one_dark"),
 			isDarkTheme("vintage"),

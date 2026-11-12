@@ -21,66 +21,166 @@ const TABLES = [
 	"aiPromptButtons",
 ];
 
-function state(rows: Record<string, unknown[]>, expandedKeys: string[] | null = null) {
-	return {rows: {...Object.fromEntries(TABLES.map((name) => [name, []])), ...rows}, expandedKeys};
+function state(rows: Record<string, unknown[]>, expandedKeys: string[] | null = null)
+{
+	return {
+		rows:
+		{
+			...Object.fromEntries(TABLES.map((name) => [name, []])),
+			...rows,
+		},
+		expandedKeys,
+	};
 }
 
-async function put(h: Harness, body: unknown) {
-	return h.mf.dispatchFetch(url, {
-		method: "PUT",
-		headers: {"content-type": "application/json"},
-		body: JSON.stringify(body),
-	});
+async function put(h: Harness, body: unknown)
+{
+	return h.mf.dispatchFetch(
+		url,
+		{
+			method: "PUT",
+			headers:
+			{
+				"content-type": "application/json",
+			},
+			body: JSON.stringify(body),
+		},
+	);
 }
 
-async function read(h: Harness): Promise<unknown> {
+async function read(h: Harness): Promise<unknown>
+{
 	return (await h.mf.dispatchFetch(url)).json();
 }
 
-describe("/api/admin/account-state", () => {
+describe("/api/admin/account-state", () =>
+{
 	let h: Harness;
 
-	beforeAll(async () => {
+	beforeAll(async () =>
+	{
 		h = await startHarness("../src/worker.ts");
 	}, 120_000);
 
-	afterAll(async () => {
+	afterAll(async () =>
+	{
 		await h.dispose();
 	});
 
-	it("starts empty, with expansion unseeded", async () => {
+	it("starts empty, with expansion unseeded", async () =>
+	{
 		await expect(read(h)).resolves.toStrictEqual(state({}));
 	});
 
-	it("merges a seed into the account tables, and a later seed replaces it", async () => {
+	it("merges a seed into the account tables, and a later seed replaces it", async () =>
+	{
 		const account = [
-			{userId: "1", fullName: null, dateJoinedSec: 1_324_752_241, entropyKey: null, username: null, email: null},
+			{
+				userId: "1",
+				fullName: null,
+				dateJoinedSec: 1_324_752_241,
+				entropyKey: null,
+				username: null,
+				email: null,
+			},
 		];
 		const first = await put(
 			h,
-			state({account, tagColors: [{tag: "#a", colorIndex: 1}], stars: [{locationKey: "n1", treeRoot: "None"}]}, [
-				"aaaaaaaa",
-			]),
+			state(
+				{
+					account,
+					tagColors: [
+						{
+							tag: "#a",
+							colorIndex: 1,
+						},
+					],
+					stars: [
+						{
+							locationKey: "n1",
+							treeRoot: "None",
+						},
+					],
+				},
+				["aaaaaaaa"],
+			),
 		);
-		expect({status: first.status, body: await first.json()}).toStrictEqual({
-			status: 200,
-			body: {rows: 3, expandedKeys: 1},
-		});
+		expect(
+			{
+				status: first.status,
+				body: await first.json(),
+			},
+		).toStrictEqual(
+			{
+				status: 200,
+				body:
+				{
+					rows: 3,
+					expandedKeys: 1,
+				},
+			},
+		);
 
-		await put(h, state({account, tagColors: [{tag: "#a", colorIndex: 2}]}, ["bbbbbbbb"]));
+		await put(
+			h,
+			state(
+				{
+					account,
+					tagColors: [
+						{
+							tag: "#a",
+							colorIndex: 2,
+						},
+					],
+				},
+				["bbbbbbbb"],
+			),
+		);
 		await expect(read(h)).resolves.toStrictEqual(
-			state({account, tagColors: [{tag: "#a", colorIndex: 2}]}, ["bbbbbbbb"]),
+			state(
+				{
+					account,
+					tagColors: [
+						{
+							tag: "#a",
+							colorIndex: 2,
+						},
+					],
+				},
+				["bbbbbbbb"],
+			),
 		);
 	});
 
-	it("rejects malformed bodies and unsupported methods", async () => {
-		const bad = await put(h, state({tagColors: [{tag: "#a"}]}));
+	it("rejects malformed bodies and unsupported methods", async () =>
+	{
+		const bad = await put(
+			h,
+			state(
+				{
+					tagColors: [
+						{
+							tag: "#a",
+						},
+					],
+				},
+			),
+		);
 		expect(bad.status).toBe(400);
 		await bad.arrayBuffer();
-		const notState = await put(h, [{key: "x"}]);
+		const notState = await put(h, [
+			{
+				key: "x",
+			},
+		]);
 		expect(notState.status).toBe(400);
 		await notState.arrayBuffer();
-		const del = await h.mf.dispatchFetch(url, {method: "DELETE"});
+		const del = await h.mf.dispatchFetch(
+			url,
+			{
+				method: "DELETE",
+			},
+		);
 		expect(del.status).toBe(405);
 		await del.arrayBuffer();
 	});

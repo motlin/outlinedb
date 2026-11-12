@@ -5,7 +5,8 @@ const SLIDE_UP_FALLBACK_MS = 220;
 /** Upstream animates only the first rows of a multi-item completion. */
 const SLIDE_UP_MAX_ROWS = 10;
 
-export interface CompletionAnimationActions {
+export interface CompletionAnimationActions
+{
 	beginCompletionAnimation: (ids: string[]) => void;
 	startCompletionSlideUp: (ids: string[]) => void;
 	endCompletionAnimation: (ids: string[]) => void;
@@ -21,23 +22,28 @@ export function scheduleCompletionHide(
 	ids: string[],
 	actions: CompletionAnimationActions,
 	isHidden: (id: string) => boolean,
-): void {
+): void
+{
 	actions.beginCompletionAnimation(ids);
-	setTimeout(() => {
+	setTimeout(() =>
+	{
 		const hiding = ids.filter((id) => isHidden(id));
 		const sliding = hiding.slice(0, SLIDE_UP_MAX_ROWS);
 		actions.endCompletionAnimation(ids.filter((id) => !sliding.includes(id)));
-		if (sliding.length === 0) {
+		if (sliding.length === 0)
+		{
 			return;
 		}
 		actions.startCompletionSlideUp(sliding);
-		setTimeout(() => {
+		setTimeout(() =>
+		{
 			actions.endCompletionAnimation(sliding);
 		}, SLIDE_UP_FALLBACK_MS);
 	}, COMPLETION_HIDE_DELAY_MS);
 }
 
 /** Upstream's delay before a completed zoom root zooms out: the hide wait and slide (hidden mode) plus 500ms. */
-export function zoomOutDelayMs(showCompleted: boolean): number {
+export function zoomOutDelayMs(showCompleted: boolean): number
+{
 	return showCompleted ? 500 : COMPLETION_HIDE_DELAY_MS + SLIDE_UP_FALLBACK_MS + 500;
 }

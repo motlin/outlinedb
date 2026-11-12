@@ -22,13 +22,20 @@ import type {SideMenuPosition} from "./flyout/place-popper.js";
 import {popoverBox} from "./flyout/popover-box.js";
 
 /** The `.project` row element of `id` in any pane, or null when it is not rendered. */
-function projectElement(id: string): HTMLElement | null {
+function projectElement(id: string): HTMLElement | null
+{
 	const content = document.querySelector(`.innerContentContainer[data-node-id="${CSS.escape(id)}"]`);
 	return content?.closest<HTMLElement>(".project") ?? null;
 }
 
-const MENU_CLASS_NAME = (() => {
-	const box = popoverBox({minWidth: 144, maxWidth: 240});
+const MENU_CLASS_NAME = (() =>
+{
+	const box = popoverBox(
+		{
+			minWidth: 144,
+			maxWidth: 240,
+		},
+	);
 	return `
             [.moving_&]:hidden
             ${box.className}
@@ -36,9 +43,15 @@ const MENU_CLASS_NAME = (() => {
           `;
 })();
 
-const MENU_BOX_STYLE = popoverBox({minWidth: 144, maxWidth: 240}).style;
+const MENU_BOX_STYLE = popoverBox(
+	{
+		minWidth: 144,
+		maxWidth: 240,
+	},
+).style;
 
-export interface SelectionMenuViewProps {
+export interface SelectionMenuViewProps
+{
 	/** The row beside which the menu floats: upstream's last selected row that has a rendered element. */
 	anchor: HTMLElement;
 	entries: readonly SelectionMenuEntry[];
@@ -52,35 +65,54 @@ export interface SelectionMenuViewProps {
 }
 
 /** Runs `run` once on the next frame however often `schedule` is called before it. */
-function coalescedFrame(run: () => void): {schedule: () => void; cancel: () => void} {
+function coalescedFrame(run: () => void):
+{
+	schedule: () => void;
+	cancel: () => void;
+}
+{
 	let frame: number | null = null;
 	return {
-		schedule: () => {
-			frame ??= requestAnimationFrame(() => {
+		schedule: () =>
+		{
+			frame ??= requestAnimationFrame(() =>
+			{
 				frame = null;
 				run();
 			});
 		},
-		cancel: () => {
-			if (frame !== null) {
+		cancel: () =>
+		{
+			if (frame !== null)
+			{
 				cancelAnimationFrame(frame);
 			}
 		},
 	};
 }
 
-function viewportSize(): {width: number; height: number} {
-	return {width: document.documentElement.clientWidth, height: document.documentElement.clientHeight};
+function viewportSize():
+{
+	width: number;
+	height: number;
+}
+{
+	return {
+		width: document.documentElement.clientWidth,
+		height: document.documentElement.clientHeight,
+	};
 }
 
 type SelectionMenuRowsProps = Omit<SelectionMenuViewProps, "anchor" | "onAnchorLost">;
 
-function sameEntry(a: SelectionMenuEntry | undefined, b: SelectionMenuEntry | undefined): boolean {
+function sameEntry(a: SelectionMenuEntry | undefined, b: SelectionMenuEntry | undefined): boolean
+{
 	return JSON.stringify(a) === JSON.stringify(b);
 }
 
 /** Equal rows: the host rebuilds `entries` on each render, so they are compared by value. */
-function sameRows(previous: SelectionMenuRowsProps, next: SelectionMenuRowsProps): boolean {
+function sameRows(previous: SelectionMenuRowsProps, next: SelectionMenuRowsProps): boolean
+{
 	return (
 		previous.count === next.count &&
 		previous.readOnly === next.readOnly &&
@@ -94,12 +126,8 @@ function sameRows(previous: SelectionMenuRowsProps, next: SelectionMenuRowsProps
  * The menu's rows and footer; memoized by value, so neither repositioning the menu nor a host render that left the
  * rows as they were re-renders a row.
  */
-const SelectionMenuRows = memo(function SelectionMenuRows({
-	entries,
-	count,
-	readOnly,
-	onSelect,
-}: SelectionMenuRowsProps) {
+const SelectionMenuRows = memo(function SelectionMenuRows({entries, count, readOnly, onSelect}: SelectionMenuRowsProps)
+{
 	return (
 		<MenuBody unwrapped disableKeyboard>
 			{entries.map((entry, index) =>
@@ -114,7 +142,8 @@ const SelectionMenuRows = memo(function SelectionMenuRows({
 						icon={entry.icon}
 						label={entry.label}
 						shortcut={entry.shortcutCommand === null ? undefined : hint(entry.shortcutCommand)}
-						onSelect={() => {
+						onSelect={() =>
+						{
 							onSelect(entry.id);
 						}}
 					/>
@@ -139,27 +168,43 @@ export const SelectionMenuView = memo(function SelectionMenuView({
 	readOnly,
 	onSelect,
 	onAnchorLost,
-}: SelectionMenuViewProps) {
+}: SelectionMenuViewProps)
+{
 	const queryClient = useQueryClient();
 	const menu = useRef<HTMLDivElement>(null);
 	const [position, setPosition] = useState<SideMenuPosition | null>(null);
 
-	const place = useCallback(() => {
+	const place = useCallback(() =>
+	{
 		const element = menu.current;
-		if (element === null) {
+		if (element === null)
+		{
 			return;
 		}
-		if (!anchor.isConnected) {
+		if (!anchor.isConnected)
+		{
 			onAnchorLost?.();
 			return;
 		}
 		const rect = anchor.getBoundingClientRect();
 		const size = element.getBoundingClientRect();
-		const next = placeSideMenu({
-			anchor: {left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom},
-			popper: {width: size.width, height: size.height},
-			viewport: viewportSize(),
-		});
+		const next = placeSideMenu(
+			{
+				anchor:
+				{
+					left: rect.left,
+					right: rect.right,
+					top: rect.top,
+					bottom: rect.bottom,
+				},
+				popper:
+				{
+					width: size.width,
+					height: size.height,
+				},
+				viewport: viewportSize(),
+			},
+		);
 		setPosition((current) =>
 			current !== null &&
 			current.placement === next.placement &&
@@ -171,16 +216,19 @@ export const SelectionMenuView = memo(function SelectionMenuView({
 	}, [anchor, onAnchorLost]);
 
 	// A render may change the rows (and so the menu's size); the guard in `place` stops a render loop.
-	useLayoutEffect(() => {
+	useLayoutEffect(() =>
+	{
 		place();
 	});
 
-	useEffect(() => {
+	useEffect(() =>
+	{
 		const nextFrame = coalescedFrame(place);
 		const unsubscribe = queryClient.getQueryCache().subscribe(nextFrame.schedule);
 		globalThis.addEventListener("scroll", place, true);
 		globalThis.addEventListener("resize", place);
-		return () => {
+		return () =>
+		{
 			unsubscribe();
 			nextFrame.cancel();
 			globalThis.removeEventListener("scroll", place, true);
@@ -188,7 +236,8 @@ export const SelectionMenuView = memo(function SelectionMenuView({
 		};
 	}, [place, queryClient]);
 
-	const style: CSSProperties = {
+	const style: CSSProperties =
+	{
 		position: "fixed",
 		inset: position?.style.inset ?? "0px auto auto 0px",
 		...MENU_BOX_STYLE,
@@ -210,12 +259,14 @@ export const SelectionMenuView = memo(function SelectionMenuView({
 });
 
 /** The floating menu of the item selection, mounted once beside the other global hosts; idle without a selection. */
-export function SelectionMenu() {
+export function SelectionMenu()
+{
 	const hasSelection = useOutlineStore((state) => state.itemSelection.entries.length > 0);
 	return hasSelection ? <SelectionMenuHost /> : null;
 }
 
-interface SelectionMenuModel {
+interface SelectionMenuModel
+{
 	ctx: CommandContext;
 	entries: SelectionMenuEntry[];
 	readOnly: boolean;
@@ -228,54 +279,83 @@ function selectionMenuModel(
 	queryClient: QueryClient,
 	selection: SelectionState,
 	zoomedId: string | null,
-): SelectionMenuModel {
+): SelectionMenuModel
+{
 	const view = currentSelectionView(queryClient);
 	const items = commandTargets(selection, () => view.tree, null);
-	const ctx = {items, zoomedId};
+	const ctx =
+	{
+		items,
+		zoomedId,
+	};
 	const registry = activeCommandRegistry();
 	const nodes = items.map((id) => readNode(queryClient, id));
 	const qualifiers = new Set<string>();
 	if (
-		items.some((id) => {
+		items.some((id) =>
+		{
 			const parentId = readNode(queryClient, id)?.parent_id ?? null;
 			const grandparentId = parentId === null ? null : (readNode(queryClient, parentId)?.parent_id ?? null);
 			return grandparentId !== null && readNode(queryClient, grandparentId)?.data.layoutMode === "table";
 		})
-	) {
+	)
+	{
 		qualifiers.add("has_table_cell");
 	}
-	if (items.some((id) => projectElement(id)?.closest("[data-pane-id]") != null)) {
+	if (items.some((id) => projectElement(id)?.closest("[data-pane-id]") != null))
+	{
 		qualifiers.add("has_pane_item");
 	}
-	const entries = buildSelectionMenu({
-		available: (id) => registry[id] !== undefined && registry[id].available?.(ctx) !== false,
-		allCompleted: nodes.length > 0 && nodes.every((node) => node?.completedAt != null),
-		firstEmbedded: false,
-		qualifiers,
-	});
+	const entries = buildSelectionMenu(
+		{
+			available: (id) => registry[id] !== undefined && registry[id].available?.(ctx) !== false,
+			allCompleted: nodes.length > 0 && nodes.every((node) => node?.completedAt != null),
+			firstEmbedded: false,
+			qualifiers,
+		},
+	);
 	const readOnly = nodes.every((node) => node?.readOnly === true);
-	return {ctx, entries, readOnly, key: JSON.stringify([readOnly, entries])};
+	return {
+		ctx,
+		entries,
+		readOnly,
+		key: JSON.stringify([readOnly, entries]),
+	};
 }
 
-type MenuAnchor = {element: HTMLElement; count: number} | null;
+type MenuAnchor =
+{
+	element: HTMLElement;
+	count: number;
+} | null;
 
 /** The row the menu floats beside for `selection`; `previous` itself when that is unchanged. */
-function menuAnchor(selection: SelectionState, previous: MenuAnchor): MenuAnchor {
+function menuAnchor(selection: SelectionState, previous: MenuAnchor): MenuAnchor
+{
 	const {anchorId, count} = selectionMenuAnchor(selection, (id) => projectElement(id) !== null);
 	const element = anchorId === null ? null : projectElement(anchorId);
-	if (element === null) {
+	if (element === null)
+	{
 		return null;
 	}
-	return previous?.element === element && previous.count === count ? previous : {element, count};
+	return previous?.element === element && previous.count === count
+		? previous
+		:
+			{
+				element,
+				count,
+			};
 }
 
 /** The menu model for the store's current selection, read outside render (a cache event, a click). */
-function currentMenuModel(queryClient: QueryClient): SelectionMenuModel {
+function currentMenuModel(queryClient: QueryClient): SelectionMenuModel
+{
 	const state = useOutlineStore.getState();
 	return selectionMenuModel(queryClient, state.itemSelection, activeZoomedId(state));
 }
 
-function SelectionMenuHost() {
+function SelectionMenuHost()
+{
 	const queryClient = useQueryClient();
 	const selection = useOutlineStore((state) => state.itemSelection);
 	const [anchor, setAnchor] = useState<MenuAnchor>(null);
@@ -284,42 +364,52 @@ function SelectionMenuHost() {
 	const [, setModelKey] = useState("");
 
 	// The anchor is captured when the selection changes, like upstream's `selected.changed` listener.
-	useLayoutEffect(() => {
+	useLayoutEffect(() =>
+	{
 		// oxlint-disable-next-line react/set-state-in-effect -- the row element exists in the DOM only after the commit
 		setAnchor((previous) => menuAnchor(selection, previous));
 	}, [selection]);
 	// And again when a move remounts the anchor row.
-	const recaptureAnchor = useCallback(() => {
+	const recaptureAnchor = useCallback(() =>
+	{
 		setAnchor((previous) => menuAnchor(useOutlineStore.getState().itemSelection, previous));
 	}, []);
 
 	// Labels such as Complete/Uncomplete track the items' current state. The cache notifies synchronously, even while
 	// another component renders (a `useQuery` observer subscribing), so a burst is read once, in a microtask.
-	useEffect(() => {
+	useEffect(() =>
+	{
 		let scheduled = false;
 		let live = true;
-		const unsubscribe = queryClient.getQueryCache().subscribe(() => {
-			if (scheduled) {
+		const unsubscribe = queryClient.getQueryCache().subscribe(() =>
+		{
+			if (scheduled)
+			{
 				return;
 			}
 			scheduled = true;
-			queueMicrotask(() => {
+			queueMicrotask(() =>
+			{
 				scheduled = false;
-				if (live) {
+				if (live)
+				{
 					setModelKey(currentMenuModel(queryClient).key);
 				}
 			});
 		});
-		return () => {
+		return () =>
+		{
 			live = false;
 			unsubscribe();
 		};
 	}, [queryClient]);
 
 	const onSelect = useCallback(
-		(id: string) => {
+		(id: string) =>
+		{
 			const {ctx} = currentMenuModel(queryClient);
-			maintainFocus(() => {
+			maintainFocus(() =>
+			{
 				activeCommandRegistry()[id]?.execute(ctx);
 			}, liveFocusEnv(queryClient));
 		},
@@ -327,7 +417,8 @@ function SelectionMenuHost() {
 	);
 
 	const model = selectionMenuModel(queryClient, selection, zoomedId);
-	if (selection.entries.length === 0 || anchor === null || model.entries.length === 0) {
+	if (selection.entries.length === 0 || anchor === null || model.entries.length === 0)
+	{
 		return null;
 	}
 	return (

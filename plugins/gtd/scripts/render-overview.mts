@@ -12,39 +12,52 @@ import {isMain} from "./is-main.mts";
 
 const USAGE = "Usage: render-overview.mts <overview.json> <overview.html>";
 
-export interface OverviewLink {
+export interface OverviewLink
+{
 	label: string;
 	href: string;
 }
 
-export interface OverviewItem {
+export interface OverviewItem
+{
 	text: string;
 	href?: string;
 	note?: string;
 	highlight?: boolean;
 }
 
-export interface OverviewGroup {
+export interface OverviewGroup
+{
 	heading?: string;
 	items: OverviewItem[];
 }
 
-export interface OverviewSection {
+export interface OverviewSection
+{
 	heading: string;
 	link?: OverviewLink;
 	groups: OverviewGroup[];
 	notes?: string[];
 }
 
-export interface Overview {
+export interface Overview
+{
 	title: string;
 	subtitle?: string;
 	sections: OverviewSection[];
 }
 
-const ENTITIES: Record<string, string> = {"&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#39;": "'"};
+const ENTITIES: Record<string, string> =
+{
+	"&amp;": "&",
+	"&lt;": "<",
+	"&gt;": ">",
+	"&quot;": '"',
+	"&#39;": "'",
+};
 
-function escape(text: string): string {
+function escape(text: string): string
+{
 	return text
 		.replaceAll(/&(?:amp|lt|gt|quot|#39);/gu, (entity) => ENTITIES[entity] ?? entity)
 		.replaceAll("&", "&amp;")
@@ -53,21 +66,24 @@ function escape(text: string): string {
 		.replaceAll('"', "&quot;");
 }
 
-function renderItem(item: OverviewItem): string {
+function renderItem(item: OverviewItem): string
+{
 	const text =
 		item.href === undefined ? escape(item.text) : `<a href="${escape(item.href)}">${escape(item.text)}</a>`;
 	const note = item.note === undefined ? "" : ` <span class="note">${escape(item.note)}</span>`;
 	return `<li${item.highlight === true ? ' class="highlight"' : ""}>${text}${note}</li>`;
 }
 
-function renderGroup(group: OverviewGroup): string {
+function renderGroup(group: OverviewGroup): string
+{
 	const heading = group.heading === undefined ? "" : `<h3>${escape(group.heading)}</h3>`;
 	const body =
 		group.items.length === 0 ? '<p class="empty">None</p>' : `<ul>${group.items.map(renderItem).join("")}</ul>`;
 	return `${heading}${body}`;
 }
 
-function renderSection(section: OverviewSection): string {
+function renderSection(section: OverviewSection): string
+{
 	const link =
 		section.link === undefined
 			? ""
@@ -100,7 +116,8 @@ a { color: var(--accent); }
 .section-note { margin: 8px 0 0; }
 `;
 
-export function renderOverview(overview: Overview): string {
+export function renderOverview(overview: Overview): string
+{
 	const subtitle = overview.subtitle === undefined ? "" : `<p class="subtitle">${escape(overview.subtitle)}</p>`;
 	return `<!doctype html>
 <html lang="en">
@@ -119,15 +136,18 @@ ${[`<header><h1>${escape(overview.title)}</h1>${subtitle}</header>`, ...overview
 `;
 }
 
-function requiredString(object: JsonObject, key: string, what: string): string {
+function requiredString(object: JsonObject, key: string, what: string): string
+{
 	const value = stringField(object, key);
-	if (value === undefined) {
+	if (value === undefined)
+	{
 		throw new TypeError(`${what}.${key} must be a string`);
 	}
 	return value;
 }
 
-function parseItem(value: unknown, what: string): OverviewItem {
+function parseItem(value: unknown, what: string): OverviewItem
+{
 	const object = expectObject(value, what);
 	return {
 		text: requiredString(object, "text", what),
@@ -137,7 +157,8 @@ function parseItem(value: unknown, what: string): OverviewItem {
 	};
 }
 
-function parseSection(value: unknown, what: string): OverviewSection {
+function parseSection(value: unknown, what: string): OverviewSection
+{
 	const object = expectObject(value, what);
 	const link = object.link === undefined ? undefined : expectObject(object.link, `${what}.link`);
 	return {
@@ -145,11 +166,13 @@ function parseSection(value: unknown, what: string): OverviewSection {
 		link:
 			link === undefined
 				? undefined
-				: {
+				:
+					{
 						label: requiredString(link, "label", `${what}.link`),
 						href: requiredString(link, "href", `${what}.link`),
 					},
-		groups: expectArray(object.groups, `${what}.groups`).map((group, index) => {
+		groups: expectArray(object.groups, `${what}.groups`).map((group, index) =>
+		{
 			const groupObject = expectObject(group, `${what}.groups[${index}]`);
 			return {
 				heading: stringField(groupObject, "heading"),
@@ -162,7 +185,8 @@ function parseSection(value: unknown, what: string): OverviewSection {
 	};
 }
 
-export function parseOverview(value: unknown): Overview {
+export function parseOverview(value: unknown): Overview
+{
 	const object = expectObject(value, "overview");
 	return {
 		title: requiredString(object, "title", "overview"),
@@ -173,15 +197,20 @@ export function parseOverview(value: unknown): Overview {
 	};
 }
 
-if (isMain(import.meta.url)) {
+if (isMain(import.meta.url))
+{
 	const [input, output, ...rest] = process.argv.slice(2);
-	if (input === undefined || output === undefined || rest.length > 0) {
+	if (input === undefined || output === undefined || rest.length > 0)
+	{
 		process.stderr.write(`${USAGE}\n`);
 		process.exit(2);
 	}
-	try {
+	try
+	{
 		writeFileSync(output, renderOverview(parseOverview(readJsonFile(input))));
-	} catch (error) {
+	}
+	catch (error)
+	{
 		process.stderr.write(`${errorMessage(error)}\n`);
 		process.exit(2);
 	}

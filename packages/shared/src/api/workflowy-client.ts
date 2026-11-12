@@ -1,4 +1,5 @@
-import {
+import
+{
 	ApiResponseSchema,
 	CompletionStatusResponseSchema,
 	CreateMirrorResponseSchema,
@@ -11,7 +12,8 @@ import type {WorkflowyNode} from "../types/workflowy.js";
  * Optional logger interface for API request/response logging.
  * Implement this interface to enable verbose logging.
  */
-export interface ApiLogger {
+export interface ApiLogger
+{
 	logRequest(url: string, method: string, body?: unknown): void;
 	logResponse(url: string, method: string, status: number, statusText: string, data: unknown, duration: number): void;
 	logError(url: string, method: string, error: unknown, duration: number): void;
@@ -20,7 +22,8 @@ export interface ApiLogger {
 /**
  * Retry behavior for requests throttled with HTTP 429.
  */
-export interface RetryOptions {
+export interface RetryOptions
+{
 	/** Maximum number of retries after the initial attempt. */
 	maxRetries?: number;
 	/** Base delay for exponential backoff, in milliseconds. */
@@ -40,14 +43,18 @@ const DEFAULT_MAX_RETRIES = 8;
 const DEFAULT_BASE_DELAY_MS = 1000;
 const DEFAULT_MAX_DELAY_MS = 30_000;
 
-async function sleep(ms: number): Promise<void> {
-	return new Promise((resolve) => {
+async function sleep(ms: number): Promise<void>
+{
+	return new Promise((resolve) =>
+	{
 		setTimeout(resolve, ms);
 	});
 }
 
-function retryAfterSeconds(value: unknown): number | undefined {
-	if (value === null || value === undefined || value === "") {
+function retryAfterSeconds(value: unknown): number | undefined
+{
+	if (value === null || value === undefined || value === "")
+	{
 		return undefined;
 	}
 	const seconds = Number(value);
@@ -55,13 +62,17 @@ function retryAfterSeconds(value: unknown): number | undefined {
 }
 
 /** The `retry_after` seconds in a throttled response's JSON body, if any. */
-async function bodyRetryAfterSeconds(response: Response): Promise<number | undefined> {
-	try {
+async function bodyRetryAfterSeconds(response: Response): Promise<number | undefined>
+{
+	try
+	{
 		const body: unknown = await response.json();
 		return typeof body === "object" && body !== null && "retry_after" in body
 			? retryAfterSeconds(body.retry_after)
 			: undefined;
-	} catch {
+	}
+	catch
+	{
 		return undefined;
 	}
 }
@@ -69,7 +80,8 @@ async function bodyRetryAfterSeconds(response: Response): Promise<number | undef
 /**
  * Request object for creating a new node.
  */
-export interface CreateNodeRequest {
+export interface CreateNodeRequest
+{
 	/**
 	 * The parent node ID. Can be either:
 	 * - A UUID (e.g., "a5408f02-03aa-4735-a886-4ccd128d1ad7")
@@ -88,7 +100,8 @@ export interface CreateNodeRequest {
 /**
  * Request object for updating an existing node.
  */
-export interface UpdateNodeRequest {
+export interface UpdateNodeRequest
+{
 	name?: string;
 	note?: string;
 	layoutMode?: string;
@@ -98,7 +111,8 @@ export interface UpdateNodeRequest {
  * Result of creating a mirror. `originId` is the true origin, which differs
  * from the requested node when that node was itself a mirror.
  */
-export interface CreateMirrorResult {
+export interface CreateMirrorResult
+{
 	mirrorId: string;
 	originId: string;
 }
@@ -108,7 +122,8 @@ export interface CreateMirrorResult {
  *
  * Supports optional logging via dependency injection.
  */
-export class WorkflowyApiClient {
+export class WorkflowyApiClient
+{
 	private readonly logger?: ApiLogger;
 	private readonly baseUrl: string;
 	private readonly maxRetries: number;
@@ -120,7 +135,8 @@ export class WorkflowyApiClient {
 		logger?: ApiLogger,
 		baseUrl?: string,
 		retryOptions?: RetryOptions,
-	) {
+	)
+	{
 		this.logger = logger;
 		this.baseUrl = baseUrl ?? "https://workflowy.com";
 		this.maxRetries = retryOptions?.maxRetries ?? DEFAULT_MAX_RETRIES;
@@ -135,24 +151,30 @@ export class WorkflowyApiClient {
 	 * reference code. Reporting a bare "403" makes an IP block indistinguishable
 	 * from a bad key, an expired token, or an exhausted quota.
 	 */
-	private async describeFailure(prefix: string, response: Response): Promise<Error> {
+	private async describeFailure(prefix: string, response: Response): Promise<Error>
+	{
 		const statusLine = `${prefix}: ${response.status} ${response.statusText}`;
 
 		let body: string;
-		try {
+		try
+		{
 			body = (await response.text()).trim();
-		} catch {
+		}
+		catch
+		{
 			return new Error(statusLine);
 		}
 
-		if (!body) {
+		if (!body)
+		{
 			return new Error(statusLine);
 		}
 
 		return new Error(`${statusLine}\n${body.slice(0, MAX_ERROR_BODY_CHARS)}`);
 	}
 
-	private getHeaders(): Record<string, string> {
+	private getHeaders(): Record<string, string>
+	{
 		return {
 			Authorization: `Bearer ${this.apiKey}`,
 			"Content-Type": "application/json",
@@ -164,10 +186,12 @@ export class WorkflowyApiClient {
 	 * else the body's `retry_after` seconds, e.g. `{"retry_after": 9}`), otherwise
 	 * exponential backoff from baseDelayMs, capped at maxDelayMs.
 	 */
-	private async retryDelayMs(response: Response, attempt: number): Promise<number> {
+	private async retryDelayMs(response: Response, attempt: number): Promise<number>
+	{
 		const seconds =
 			retryAfterSeconds(response.headers.get("retry-after")) ?? (await bodyRetryAfterSeconds(response));
-		if (seconds !== undefined) {
+		if (seconds !== undefined)
+		{
 			return seconds * 1000;
 		}
 		return Math.min(this.baseDelayMs * 2 ** attempt, this.maxDelayMs);
@@ -180,11 +204,14 @@ export class WorkflowyApiClient {
 	 * on the first 429. Non-429 responses are returned as-is for the caller to
 	 * validate.
 	 */
-	private async fetchWithRetry(url: string, init?: RequestInit): Promise<Response> {
+	private async fetchWithRetry(url: string, init?: RequestInit): Promise<Response>
+	{
 		let attempt = 0;
-		for (;;) {
+		for (;;)
+		{
 			const response = await fetch(url, init);
-			if (response.status !== 429 || attempt >= this.maxRetries) {
+			if (response.status !== 429 || attempt >= this.maxRetries)
+			{
 				return response;
 			}
 
@@ -193,16 +220,22 @@ export class WorkflowyApiClient {
 		}
 	}
 
-	private async fetchNodes(url: string): Promise<WorkflowyNode[]> {
+	private async fetchNodes(url: string): Promise<WorkflowyNode[]>
+	{
 		const startTime = performance.now();
 		this.logger?.logRequest(url, "GET");
 
-		try {
-			const response = await this.fetchWithRetry(url, {
-				headers: this.getHeaders(),
-			});
+		try
+		{
+			const response = await this.fetchWithRetry(
+				url,
+				{
+					headers: this.getHeaders(),
+				},
+			);
 
-			if (!response.ok) {
+			if (!response.ok)
+			{
 				throw await this.describeFailure("API request failed", response);
 			}
 
@@ -212,7 +245,9 @@ export class WorkflowyApiClient {
 
 			const validatedResponse = ApiResponseSchema.parse(data);
 			return validatedResponse.nodes ?? [];
-		} catch (error) {
+		}
+		catch (error)
+		{
 			const duration = performance.now() - startTime;
 			this.logger?.logError(url, "GET", error, duration);
 			throw error;
@@ -222,7 +257,8 @@ export class WorkflowyApiClient {
 	/**
 	 * Get all root-level nodes.
 	 */
-	async getRootNodes(): Promise<WorkflowyNode[]> {
+	async getRootNodes(): Promise<WorkflowyNode[]>
+	{
 		return this.fetchNodes(`${this.baseUrl}/api/v1/nodes`);
 	}
 
@@ -231,7 +267,8 @@ export class WorkflowyApiClient {
 	 *
 	 * @param parentId - The parent ID (UUID or system target key like "inbox")
 	 */
-	async getChildNodes(parentId: string): Promise<WorkflowyNode[]> {
+	async getChildNodes(parentId: string): Promise<WorkflowyNode[]>
+	{
 		return this.fetchNodes(`${this.baseUrl}/api/v1/nodes?parent_id=${parentId}`);
 	}
 
@@ -242,7 +279,8 @@ export class WorkflowyApiClient {
 	 * @param parentId The parent ID (null for root nodes)
 	 * @param name The exact name to match
 	 */
-	async getChildByName(parentId: string | null, name: string): Promise<WorkflowyNode | null> {
+	async getChildByName(parentId: string | null, name: string): Promise<WorkflowyNode | null>
+	{
 		const children = parentId ? await this.getChildNodes(parentId) : await this.getRootNodes();
 
 		return children.find((child) => child.name === name) ?? null;
@@ -251,9 +289,11 @@ export class WorkflowyApiClient {
 	/**
 	 * Get a single node by ID.
 	 */
-	async getNode(nodeId: string): Promise<WorkflowyNode> {
+	async getNode(nodeId: string): Promise<WorkflowyNode>
+	{
 		const node = await this.findNode(nodeId);
-		if (node === null) {
+		if (node === null)
+		{
 			throw new Error(`Failed to get node: 404 Not Found (${nodeId})`);
 		}
 		return node;
@@ -264,17 +304,23 @@ export class WorkflowyApiClient {
 	 * is deleted or never existed). Use it to check liveness against a cache
 	 * that may be stale.
 	 */
-	async findNode(nodeId: string): Promise<WorkflowyNode | null> {
+	async findNode(nodeId: string): Promise<WorkflowyNode | null>
+	{
 		const url = `${this.baseUrl}/api/v1/nodes/${nodeId}`;
 		const startTime = performance.now();
 		this.logger?.logRequest(url, "GET");
 
-		try {
-			const response = await this.fetchWithRetry(url, {
-				headers: this.getHeaders(),
-			});
+		try
+		{
+			const response = await this.fetchWithRetry(
+				url,
+				{
+					headers: this.getHeaders(),
+				},
+			);
 
-			if (response.status === 404) {
+			if (response.status === 404)
+			{
 				this.logger?.logResponse(
 					url,
 					"GET",
@@ -285,7 +331,8 @@ export class WorkflowyApiClient {
 				);
 				return null;
 			}
-			if (!response.ok) {
+			if (!response.ok)
+			{
 				throw await this.describeFailure("Failed to get node", response);
 			}
 
@@ -295,7 +342,9 @@ export class WorkflowyApiClient {
 
 			const getResponse = GetNodeResponseSchema.parse(data);
 			return getResponse.node;
-		} catch (error) {
+		}
+		catch (error)
+		{
 			const duration = performance.now() - startTime;
 			this.logger?.logError(url, "GET", error, duration);
 			throw error;
@@ -311,7 +360,8 @@ export class WorkflowyApiClient {
 	 * @returns The created node, constructed from request data without a GET, so its
 	 *   `priority` is a placeholder; read the node back for the one Workflowy assigned
 	 */
-	async createNode(request: CreateNodeRequest): Promise<WorkflowyNode> {
+	async createNode(request: CreateNodeRequest): Promise<WorkflowyNode>
+	{
 		const url = `${this.baseUrl}/api/v1/nodes/`;
 		const {parent_id: parentId, ...rest} = request;
 		// The API has no key for Home: a top-level create omits parent_id.
@@ -319,14 +369,19 @@ export class WorkflowyApiClient {
 		const startTime = performance.now();
 		this.logger?.logRequest(url, "POST", body);
 
-		try {
-			const response = await fetch(url, {
-				method: "POST",
-				headers: this.getHeaders(),
-				body: JSON.stringify(body),
-			});
+		try
+		{
+			const response = await fetch(
+				url,
+				{
+					method: "POST",
+					headers: this.getHeaders(),
+					body: JSON.stringify(body),
+				},
+			);
 
-			if (!response.ok) {
+			if (!response.ok)
+			{
 				throw await this.describeFailure("Failed to create node", response);
 			}
 
@@ -348,12 +403,19 @@ export class WorkflowyApiClient {
 				parent_id: request.parent_id,
 				priority: request.position === "top" ? -1 : 0,
 				completed: false,
-				data: request.layoutMode ? {layoutMode: request.layoutMode} : undefined,
+				data: request.layoutMode
+					?
+						{
+							layoutMode: request.layoutMode,
+						}
+					: undefined,
 				createdAt: now,
 				modifiedAt: now,
 				completedAt: null,
 			};
-		} catch (error) {
+		}
+		catch (error)
+		{
 			const duration = performance.now() - startTime;
 			this.logger?.logError(url, "POST", error, duration);
 			throw error;
@@ -366,19 +428,25 @@ export class WorkflowyApiClient {
 	 * @param id - The node ID to update
 	 * @param request - The fields to update (name, note, layoutMode)
 	 */
-	async updateNode(id: string, request: UpdateNodeRequest): Promise<void> {
+	async updateNode(id: string, request: UpdateNodeRequest): Promise<void>
+	{
 		const url = `${this.baseUrl}/api/v1/nodes/${id}`;
 		const startTime = performance.now();
 		this.logger?.logRequest(url, "POST", request);
 
-		try {
-			const response = await fetch(url, {
-				method: "POST",
-				headers: this.getHeaders(),
-				body: JSON.stringify(request),
-			});
+		try
+		{
+			const response = await fetch(
+				url,
+				{
+					method: "POST",
+					headers: this.getHeaders(),
+					body: JSON.stringify(request),
+				},
+			);
 
-			if (!response.ok) {
+			if (!response.ok)
+			{
 				throw await this.describeFailure("Failed to update node", response);
 			}
 
@@ -387,7 +455,9 @@ export class WorkflowyApiClient {
 			this.logger?.logResponse(url, "POST", response.status, response.statusText, data, duration);
 
 			CompletionStatusResponseSchema.parse(data);
-		} catch (error) {
+		}
+		catch (error)
+		{
 			const duration = performance.now() - startTime;
 			this.logger?.logError(url, "POST", error, duration);
 			throw error;
@@ -399,24 +469,32 @@ export class WorkflowyApiClient {
 	 *
 	 * @param id - The node ID to delete
 	 */
-	async deleteNode(id: string): Promise<void> {
+	async deleteNode(id: string): Promise<void>
+	{
 		const url = `${this.baseUrl}/api/v1/nodes/${id}`;
 		const startTime = performance.now();
 		this.logger?.logRequest(url, "DELETE");
 
-		try {
-			const response = await fetch(url, {
-				method: "DELETE",
-				headers: this.getHeaders(),
-			});
+		try
+		{
+			const response = await fetch(
+				url,
+				{
+					method: "DELETE",
+					headers: this.getHeaders(),
+				},
+			);
 
-			if (!response.ok) {
+			if (!response.ok)
+			{
 				throw await this.describeFailure("Failed to delete node", response);
 			}
 
 			const duration = performance.now() - startTime;
 			this.logger?.logResponse(url, "DELETE", response.status, response.statusText, null, duration);
-		} catch (error) {
+		}
+		catch (error)
+		{
 			const duration = performance.now() - startTime;
 			this.logger?.logError(url, "DELETE", error, duration);
 			throw error;
@@ -428,18 +506,24 @@ export class WorkflowyApiClient {
 	 *
 	 * @param id - The node ID to complete
 	 */
-	async completeNode(id: string): Promise<void> {
+	async completeNode(id: string): Promise<void>
+	{
 		const url = `${this.baseUrl}/api/v1/nodes/${id}/complete`;
 		const startTime = performance.now();
 		this.logger?.logRequest(url, "POST");
 
-		try {
-			const response = await fetch(url, {
-				method: "POST",
-				headers: this.getHeaders(),
-			});
+		try
+		{
+			const response = await fetch(
+				url,
+				{
+					method: "POST",
+					headers: this.getHeaders(),
+				},
+			);
 
-			if (!response.ok) {
+			if (!response.ok)
+			{
 				throw await this.describeFailure("Failed to complete node", response);
 			}
 
@@ -448,7 +532,9 @@ export class WorkflowyApiClient {
 			this.logger?.logResponse(url, "POST", response.status, response.statusText, data, duration);
 
 			CompletionStatusResponseSchema.parse(data);
-		} catch (error) {
+		}
+		catch (error)
+		{
 			const duration = performance.now() - startTime;
 			this.logger?.logError(url, "POST", error, duration);
 			throw error;
@@ -460,18 +546,24 @@ export class WorkflowyApiClient {
 	 *
 	 * @param id - The node ID to uncomplete
 	 */
-	async uncompleteNode(id: string): Promise<void> {
+	async uncompleteNode(id: string): Promise<void>
+	{
 		const url = `${this.baseUrl}/api/v1/nodes/${id}/uncomplete`;
 		const startTime = performance.now();
 		this.logger?.logRequest(url, "POST");
 
-		try {
-			const response = await fetch(url, {
-				method: "POST",
-				headers: this.getHeaders(),
-			});
+		try
+		{
+			const response = await fetch(
+				url,
+				{
+					method: "POST",
+					headers: this.getHeaders(),
+				},
+			);
 
-			if (!response.ok) {
+			if (!response.ok)
+			{
 				throw await this.describeFailure("Failed to uncomplete node", response);
 			}
 
@@ -480,7 +572,9 @@ export class WorkflowyApiClient {
 			this.logger?.logResponse(url, "POST", response.status, response.statusText, data, duration);
 
 			CompletionStatusResponseSchema.parse(data);
-		} catch (error) {
+		}
+		catch (error)
+		{
 			const duration = performance.now() - startTime;
 			this.logger?.logError(url, "POST", error, duration);
 			throw error;
@@ -494,31 +588,50 @@ export class WorkflowyApiClient {
 	 * @param newParentId - The target parent ID (null for Home, sent by omitting parent_id)
 	 * @param position - Optional position ('top' for -1, 'bottom' for >= 0)
 	 */
-	async moveNode(id: string, newParentId: string | null, position?: number): Promise<void> {
+	async moveNode(id: string, newParentId: string | null, position?: number): Promise<void>
+	{
 		const url = `${this.baseUrl}/api/v1/nodes/${id}/move`;
-		const body: {parent_id?: string; position?: string} = newParentId === null ? {} : {parent_id: newParentId};
-		if (position !== undefined) {
+		const body:
+		{
+			parent_id?: string;
+			position?: string;
+		} =
+			newParentId === null
+				? {}
+				:
+					{
+						parent_id: newParentId,
+					};
+		if (position !== undefined)
+		{
 			body.position = position < 0 ? "top" : "bottom";
 		}
 
 		const startTime = performance.now();
 		this.logger?.logRequest(url, "POST", body);
 
-		try {
-			const response = await fetch(url, {
-				method: "POST",
-				headers: this.getHeaders(),
-				body: JSON.stringify(body),
-			});
+		try
+		{
+			const response = await fetch(
+				url,
+				{
+					method: "POST",
+					headers: this.getHeaders(),
+					body: JSON.stringify(body),
+				},
+			);
 
-			if (!response.ok) {
+			if (!response.ok)
+			{
 				throw await this.describeFailure("Failed to move node", response);
 			}
 
 			const data = await response.text();
 			const duration = performance.now() - startTime;
 			this.logger?.logResponse(url, "POST", response.status, response.statusText, data, duration);
-		} catch (error) {
+		}
+		catch (error)
+		{
 			const duration = performance.now() - startTime;
 			this.logger?.logError(url, "POST", error, duration);
 			throw error;
@@ -533,20 +646,30 @@ export class WorkflowyApiClient {
 	 *   so a mirror cannot be placed at Home (the top level)
 	 * @param position - Where among the parent's children to place the mirror
 	 */
-	async createMirror(originId: string, parentId: string, position: "top" | "bottom"): Promise<CreateMirrorResult> {
+	async createMirror(originId: string, parentId: string, position: "top" | "bottom"): Promise<CreateMirrorResult>
+	{
 		const url = `${this.baseUrl}/api/v1/nodes/${originId}/mirror`;
-		const body = {parent_id: parentId, position};
+		const body =
+		{
+			parent_id: parentId,
+			position,
+		};
 		const startTime = performance.now();
 		this.logger?.logRequest(url, "POST", body);
 
-		try {
-			const response = await this.fetchWithRetry(url, {
-				method: "POST",
-				headers: this.getHeaders(),
-				body: JSON.stringify(body),
-			});
+		try
+		{
+			const response = await this.fetchWithRetry(
+				url,
+				{
+					method: "POST",
+					headers: this.getHeaders(),
+					body: JSON.stringify(body),
+				},
+			);
 
-			if (!response.ok) {
+			if (!response.ok)
+			{
 				throw await this.describeFailure("Failed to create mirror", response);
 			}
 
@@ -555,8 +678,13 @@ export class WorkflowyApiClient {
 			this.logger?.logResponse(url, "POST", response.status, response.statusText, data, duration);
 
 			const parsed = CreateMirrorResponseSchema.parse(data);
-			return {mirrorId: parsed.item_id, originId: parsed.origin_id};
-		} catch (error) {
+			return {
+				mirrorId: parsed.item_id,
+				originId: parsed.origin_id,
+			};
+		}
+		catch (error)
+		{
 			const duration = performance.now() - startTime;
 			this.logger?.logError(url, "POST", error, duration);
 			throw error;
@@ -568,25 +696,33 @@ export class WorkflowyApiClient {
 	 *
 	 * @param mirrorId - The mirror node to remove
 	 */
-	async deleteMirror(mirrorId: string): Promise<void> {
+	async deleteMirror(mirrorId: string): Promise<void>
+	{
 		const url = `${this.baseUrl}/api/v1/nodes/${mirrorId}/mirror`;
 		const startTime = performance.now();
 		this.logger?.logRequest(url, "DELETE");
 
-		try {
-			const response = await this.fetchWithRetry(url, {
-				method: "DELETE",
-				headers: this.getHeaders(),
-			});
+		try
+		{
+			const response = await this.fetchWithRetry(
+				url,
+				{
+					method: "DELETE",
+					headers: this.getHeaders(),
+				},
+			);
 
-			if (!response.ok) {
+			if (!response.ok)
+			{
 				throw await this.describeFailure("Failed to delete mirror", response);
 			}
 
 			const data = await response.text();
 			const duration = performance.now() - startTime;
 			this.logger?.logResponse(url, "DELETE", response.status, response.statusText, data, duration);
-		} catch (error) {
+		}
+		catch (error)
+		{
 			const duration = performance.now() - startTime;
 			this.logger?.logError(url, "DELETE", error, duration);
 			throw error;
@@ -601,17 +737,23 @@ export class WorkflowyApiClient {
 	 *
 	 * @returns Array of all nodes in the user's Workflowy account
 	 */
-	async exportAllNodes(): Promise<WorkflowyNode[]> {
+	async exportAllNodes(): Promise<WorkflowyNode[]>
+	{
 		const url = `${this.baseUrl}/api/v1/nodes-export`;
 		const startTime = performance.now();
 		this.logger?.logRequest(url, "GET");
 
-		try {
-			const response = await this.fetchWithRetry(url, {
-				headers: this.getHeaders(),
-			});
+		try
+		{
+			const response = await this.fetchWithRetry(
+				url,
+				{
+					headers: this.getHeaders(),
+				},
+			);
 
-			if (!response.ok) {
+			if (!response.ok)
+			{
 				throw await this.describeFailure("API request failed", response);
 			}
 
@@ -621,7 +763,9 @@ export class WorkflowyApiClient {
 
 			const validatedResponse = ApiResponseSchema.parse(data);
 			return validatedResponse.nodes ?? [];
-		} catch (error) {
+		}
+		catch (error)
+		{
 			const duration = performance.now() - startTime;
 			this.logger?.logError(url, "GET", error, duration);
 			throw error;
@@ -636,14 +780,17 @@ export class WorkflowyApiClient {
 	 * @param parentId - Optional starting parent ID (null for root)
 	 * @returns The found node or null if not found
 	 */
-	async findNodeByPath(path: string[], parentId: string | null = null): Promise<WorkflowyNode | null> {
+	async findNodeByPath(path: string[], parentId: string | null = null): Promise<WorkflowyNode | null>
+	{
 		let currentParent = parentId;
 		let lastFoundNode: WorkflowyNode | null = null;
 
-		for (const nodeName of path) {
+		for (const nodeName of path)
+		{
 			const node = await this.getChildByName(currentParent, nodeName);
 
-			if (!node) {
+			if (!node)
+			{
 				return null;
 			}
 

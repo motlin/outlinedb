@@ -8,33 +8,47 @@
 
 import type {CapturedToolCall, LlmEvalResult, SubagentExecution} from "./eval-types.js";
 
-interface Usage {
+interface Usage
+{
 	input_tokens?: number;
 	cache_creation_input_tokens?: number;
 	cache_read_input_tokens?: number;
 	output_tokens?: number;
 }
 
-interface ContentBlock {
+interface ContentBlock
+{
 	type: string;
 	id?: string;
 	name?: string;
 	input?: Record<string, unknown>;
 	text?: string;
 	tool_use_id?: string;
-	content?: string | {type: string; text?: string}[];
+	content?:
+		| string
+		|
+		  {
+				type: string;
+				text?: string;
+		  }[];
 }
 
-interface StreamEvent {
+interface StreamEvent
+{
 	type: string;
 	subtype?: string;
 	parent_tool_use_id?: string | null;
 	result?: string;
 	usage?: Usage;
-	message?: {usage?: Usage; content?: string | ContentBlock[]};
+	message?:
+	{
+		usage?: Usage;
+		content?: string | ContentBlock[];
+	};
 }
 
-interface Scope {
+interface Scope
+{
 	toolCalls: CapturedToolCall[];
 	pending: Map<string, CapturedToolCall>;
 	texts: string[];
@@ -46,38 +60,57 @@ interface Scope {
 const inputTokensOf = (usage: Usage = {}) =>
 	(usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0);
 
-function resultText(content: ContentBlock["content"]): string {
-	if (typeof content === "string") {
+function resultText(content: ContentBlock["content"]): string
+{
+	if (typeof content === "string")
+	{
 		return content;
 	}
 	return (content ?? []).map((part) => part.text ?? "").join("");
 }
 
-function isStreamEvent(value: unknown): value is StreamEvent {
+function isStreamEvent(value: unknown): value is StreamEvent
+{
 	return typeof value === "object" && value !== null && "type" in value && typeof value.type === "string";
 }
 
-function parseLine(line: string): StreamEvent | undefined {
-	try {
+function parseLine(line: string): StreamEvent | undefined
+{
+	try
+	{
 		const event: unknown = JSON.parse(line);
 		return isStreamEvent(event) ? event : undefined;
-	} catch {
+	}
+	catch
+	{
 		return undefined;
 	}
 }
 
 /** A string-valued tool input, or '' when absent. */
-export function stringInput(call: CapturedToolCall, key: string): string {
+export function stringInput(call: CapturedToolCall, key: string): string
+{
 	const value = call.input[key];
 	return typeof value === "string" ? value : "";
 }
 
-export function parseStreamJson(output: string): LlmEvalResult {
+export function parseStreamJson(output: string): LlmEvalResult
+{
 	const scopes = new Map<string | null, Scope>();
-	const scopeFor = (id: string | null): Scope => {
+	const scopeFor = (id: string | null): Scope =>
+	{
 		let scope = scopes.get(id);
-		if (!scope) {
-			scope = {toolCalls: [], pending: new Map(), texts: [], inputTokens: 0, outputTokens: 0, children: []};
+		if (!scope)
+		{
+			scope =
+			{
+				toolCalls: [],
+				pending: new Map(),
+				texts: [],
+				inputTokens: 0,
+				outputTokens: 0,
+				children: [],
+			};
 			scopes.set(id, scope);
 		}
 		return scope;
@@ -85,43 +118,62 @@ export function parseStreamJson(output: string): LlmEvalResult {
 	const agentCalls = new Map<string, CapturedToolCall>();
 	let final: StreamEvent | undefined;
 
-	for (const event of output.split("\n").map(parseLine)) {
-		if (!event) {
+	for (const event of output.split("\n").map(parseLine))
+	{
+		if (!event)
+		{
 			continue;
 		}
-		if (event.type === "result") {
+		if (event.type === "result")
+		{
 			final = event;
 			continue;
 		}
-		if (event.type !== "assistant" && event.type !== "user") {
+		if (event.type !== "assistant" && event.type !== "user")
+		{
 			continue;
 		}
 
 		const scope = scopeFor(event.parent_tool_use_id ?? null);
 		const content = event.message?.content;
-		if (!Array.isArray(content)) {
+		if (!Array.isArray(content))
+		{
 			continue;
 		}
 
-		if (event.type === "assistant") {
+		if (event.type === "assistant")
+		{
 			scope.inputTokens += inputTokensOf(event.message?.usage);
 			scope.outputTokens += event.message?.usage?.output_tokens ?? 0;
 		}
 
-		for (const block of content) {
-			if (event.type === "assistant" && block.type === "text" && block.text) {
+		for (const block of content)
+		{
+			if (event.type === "assistant" && block.type === "text" && block.text)
+			{
 				scope.texts.push(block.text);
-			} else if (block.type === "tool_use" && block.id && block.name) {
-				const call: CapturedToolCall = {name: block.name, input: block.input ?? {}, result: ""};
+			}
+			else if (block.type === "tool_use" && block.id && block.name)
+			{
+				const call: CapturedToolCall =
+				{
+					name: block.name,
+					input: block.input ?? {},
+					result: "",
+				};
 				scope.toolCalls.push(call);
 				scope.pending.set(block.id, call);
-				if (block.name === "Agent" || block.name === "Task") {
+				if (block.name === "Agent" || block.name === "Task")
+				{
 					agentCalls.set(block.id, call);
 					scope.children.push(block.id);
 				}
-			} else if (block.type === "tool_result" && block.tool_use_id) {
+			}
+			else if (block.type === "tool_result" && block.tool_use_id)
+			{
 				const call = scope.pending.get(block.tool_use_id);
-				if (call) {
+				if (call)
+				{
 					call.result = resultText(block.content);
 				}
 			}
@@ -129,16 +181,19 @@ export function parseStreamJson(output: string): LlmEvalResult {
 	}
 
 	const executionsOf = (scope: Scope): SubagentExecution[] =>
-		scope.children.flatMap((id) => {
+		scope.children.flatMap((id) =>
+		{
 			const call = agentCalls.get(id);
-			if (call === undefined) {
+			if (call === undefined)
+			{
 				return [];
 			}
 			const child = scopeFor(id);
 			return {
 				agentName: stringInput(call, "subagent_type") || "general-purpose",
 				prompt: stringInput(call, "prompt"),
-				result: {
+				result:
+				{
 					toolCalls: child.toolCalls,
 					// The Agent tool result wraps the report in hand-back framing; prefer the subagent's own words
 					finalResponse: child.texts.at(-1) ?? call.result,
@@ -165,6 +220,7 @@ export function parseStreamJson(output: string): LlmEvalResult {
  * Flatten the subagent execution tree into a flat list.
  * Useful for assertions that want to check all subagents at any depth.
  */
-export function flattenSubagentExecutions(executions: SubagentExecution[]): SubagentExecution[] {
+export function flattenSubagentExecutions(executions: SubagentExecution[]): SubagentExecution[]
+{
 	return executions.flatMap((exec) => [exec, ...flattenSubagentExecutions(exec.result.subagentExecutions)]);
 }

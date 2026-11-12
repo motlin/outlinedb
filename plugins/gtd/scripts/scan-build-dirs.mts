@@ -24,14 +24,22 @@ const TMUTIL_BATCH_SIZE = 200;
 
 const byPath = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
-type ReadDir = (directory: string, options: {withFileTypes: true}) => Dirent[];
+type ReadDir = (
+	directory: string,
+	options:
+	{
+		withFileTypes: true;
+	},
+) => Dirent[];
 
-export interface WalkResult {
+export interface WalkResult
+{
 	dirs: string[];
 	vanished: string[];
 }
 
-function isVanishedError(error: unknown): boolean {
+function isVanishedError(error: unknown): boolean
+{
 	return (
 		error instanceof Error && "code" in error && typeof error.code === "string" && VANISHED_CODES.has(error.code)
 	);
@@ -39,41 +47,77 @@ function isVanishedError(error: unknown): boolean {
 
 const readDirents: ReadDir = (directory, options) => readdirSync(directory, options);
 
-export function walkBuildDirs(root: string, {readdir = readDirents}: {readdir?: ReadDir} = {}): WalkResult {
+export function walkBuildDirs(
+	root: string,
+	{
+		readdir = readDirents,
+	}:
+	{
+		readdir?: ReadDir;
+	} = {},
+): WalkResult
+{
 	const dirs: string[] = [];
 	const vanished: string[] = [];
 	const pending = [root];
-	for (let directory = pending.pop(); directory !== undefined; directory = pending.pop()) {
+	for (let directory = pending.pop(); directory !== undefined; directory = pending.pop())
+	{
 		let entries: Dirent[];
-		try {
-			entries = readdir(directory, {withFileTypes: true});
-		} catch (error) {
-			if (directory !== root && isVanishedError(error)) {
+		try
+		{
+			entries = readdir(
+				directory,
+				{
+					withFileTypes: true,
+				},
+			);
+		}
+		catch (error)
+		{
+			if (directory !== root && isVanishedError(error))
+			{
 				vanished.push(directory);
 				continue;
 			}
 			throw error;
 		}
-		for (const entry of entries) {
-			if (!entry.isDirectory()) {
+		for (const entry of entries)
+		{
+			if (!entry.isDirectory())
+			{
 				continue;
 			}
 			const path = join(directory, entry.name);
-			if (BUILD_DIR_NAMES.has(entry.name)) {
+			if (BUILD_DIR_NAMES.has(entry.name))
+			{
 				dirs.push(path);
-			} else {
+			}
+			else
+			{
 				pending.push(path);
 			}
 		}
 	}
-	return {dirs: dirs.toSorted(byPath), vanished: vanished.toSorted(byPath)};
+	return {
+		dirs: dirs.toSorted(byPath),
+		vanished: vanished.toSorted(byPath),
+	};
 }
 
-function runTmutilIsExcluded(paths: string[]): string {
-	return execFileSync("tmutil", ["isexcluded", ...paths], {encoding: "utf8", maxBuffer: 64 * 1024 * 1024});
+function runTmutilIsExcluded(paths: string[]): string
+{
+	return execFileSync(
+		"tmutil",
+		["isexcluded", ...paths],
+		{
+			encoding: "utf8",
+			maxBuffer: 64 * 1024 * 1024,
+		},
+	);
 }
 
-interface ClassifyOptions {
+interface ClassifyOptions
+{
 	runTmutil?: (paths: string[]) => string;
 	exists?: (path: string) => boolean;
 	batchSize?: number;
@@ -82,45 +126,71 @@ interface ClassifyOptions {
 export function classifyExclusions(
 	paths: string[],
 	{runTmutil = runTmutilIsExcluded, exists = existsSync, batchSize = TMUTIL_BATCH_SIZE}: ClassifyOptions = {},
-): {unexcluded: string[]; vanished: string[]} {
+):
+{
+	unexcluded: string[];
+	vanished: string[];
+}
+{
 	const unexcluded: string[] = [];
 	const vanished: string[] = [];
-	for (let start = 0; start < paths.length; start += batchSize) {
+	for (let start = 0; start < paths.length; start += batchSize)
+	{
 		const batch = paths.slice(start, start + batchSize);
 		const lines = runTmutil(batch)
 			.split("\n")
 			.filter((line) => line !== "");
-		if (lines.length !== batch.length) {
+		if (lines.length !== batch.length)
+		{
 			throw new Error(`tmutil returned ${lines.length} lines for ${batch.length} paths`);
 		}
 		// tmutil prints one status line per argument, in argument order.
-		for (const [index, path] of batch.entries()) {
+		for (const [index, path] of batch.entries())
+		{
 			const line = lines[index];
-			if (line === undefined) {
+			if (line === undefined)
+			{
 				throw new Error(`tmutil returned no line for ${path}`);
 			}
-			if (line.startsWith("[Excluded]")) {
+			if (line.startsWith("[Excluded]"))
+			{
 				continue;
 			}
-			if (line.startsWith("[Included]")) {
+			if (line.startsWith("[Included]"))
+			{
 				unexcluded.push(path);
-			} else if (exists(path)) {
+			}
+			else if (exists(path))
+			{
 				throw new Error(`tmutil could not classify ${path}: ${line}`);
-			} else {
+			}
+			else
+			{
 				vanished.push(path);
 			}
 		}
 	}
-	return {unexcluded, vanished};
+	return {
+		unexcluded,
+		vanished,
+	};
 }
 
-function gitTrackedFiles(path: string): string {
-	try {
-		return execFileSync("git", ["-C", path, "ls-files", "--", "."], {
-			encoding: "utf8",
-			stdio: ["ignore", "pipe", "ignore"],
-		});
-	} catch {
+function gitTrackedFiles(path: string): string
+{
+	try
+	{
+		return execFileSync(
+			"git",
+			["-C", path, "ls-files", "--", "."],
+			{
+				encoding: "utf8",
+				stdio: ["ignore", "pipe", "ignore"],
+			},
+		);
+	}
+	catch
+	{
 		// Not inside a git work tree, so nothing here is tracked.
 		return "";
 	}
@@ -130,16 +200,24 @@ function gitTrackedFiles(path: string): string {
 // Excluding it would drop real source from backups, so any directory with tracked files stays.
 export function dropTrackedSource(
 	paths: string[],
-	{trackedFiles = gitTrackedFiles}: {trackedFiles?: (path: string) => string} = {},
-): string[] {
+	{
+		trackedFiles = gitTrackedFiles,
+	}:
+	{
+		trackedFiles?: (path: string) => string;
+	} = {},
+): string[]
+{
 	return paths.filter((path) => trackedFiles(path) === "");
 }
 
-function main(): void {
+function main(): void
+{
 	const root = process.argv[2] ?? join(homedir(), "projects");
 	const walked = walkBuildDirs(root);
 	const classified = classifyExclusions(walked.dirs);
-	for (const path of [...walked.vanished, ...classified.vanished]) {
+	for (const path of [...walked.vanished, ...classified.vanished])
+	{
 		process.stderr.write(`vanished mid-scan, skipped: ${path}\n`);
 	}
 	process.stdout.write(
@@ -149,6 +227,7 @@ function main(): void {
 	);
 }
 
-if (isMain(import.meta.url)) {
+if (isMain(import.meta.url))
+{
 	main();
 }

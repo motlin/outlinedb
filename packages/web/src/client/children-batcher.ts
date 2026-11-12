@@ -3,7 +3,8 @@ import type {NodeResponse} from "../node-types.js";
 /** The most parents one batch request asks for. */
 export const CHILDREN_BATCH_SIZE = 200;
 
-interface Waiter {
+interface Waiter
+{
 	resolve: (nodes: NodeResponse[]) => void;
 	reject: (error: unknown) => void;
 }
@@ -15,49 +16,78 @@ interface Waiter {
  */
 export function createChildrenBatcher(
 	post: (parentIds: string[]) => Promise<Record<string, NodeResponse[]>>,
-): (parentId: string) => Promise<NodeResponse[]> {
+): (parentId: string) => Promise<NodeResponse[]>
+{
 	let queue = new Map<string, Waiter[]>();
 
-	const send = async (batch: [string, Waiter[]][]): Promise<void> => {
-		try {
+	const send = async (batch: [string, Waiter[]][]): Promise<void> =>
+	{
+		try
+		{
 			const children = await post(batch.map(([id]) => id));
-			for (const [id, waiters] of batch) {
+			for (const [id, waiters] of batch)
+			{
 				const nodes = children[id];
-				for (const waiter of waiters) {
-					if (nodes === undefined) {
+				for (const waiter of waiters)
+				{
+					if (nodes === undefined)
+					{
 						waiter.reject(new Error(`Failed to fetch children: unknown parent ${id}`));
-					} else {
+					}
+					else
+					{
 						waiter.resolve(nodes);
 					}
 				}
 			}
-		} catch (error) {
-			for (const [, waiters] of batch) {
-				for (const waiter of waiters) {
+		}
+		catch (error)
+		{
+			for (const [, waiters] of batch)
+			{
+				for (const waiter of waiters)
+				{
 					waiter.reject(error);
 				}
 			}
 		}
 	};
 
-	const flush = (): void => {
+	const flush = (): void =>
+	{
 		const entries = [...queue];
 		queue = new Map();
-		for (let start = 0; start < entries.length; start += CHILDREN_BATCH_SIZE) {
+		for (let start = 0; start < entries.length; start += CHILDREN_BATCH_SIZE)
+		{
 			void send(entries.slice(start, start + CHILDREN_BATCH_SIZE));
 		}
 	};
 
 	return async (parentId) =>
-		new Promise<NodeResponse[]>((resolve, reject) => {
-			if (queue.size === 0) {
+		new Promise<NodeResponse[]>((resolve, reject) =>
+		{
+			if (queue.size === 0)
+			{
 				setTimeout(flush, 0);
 			}
 			const waiters = queue.get(parentId);
-			if (waiters === undefined) {
-				queue.set(parentId, [{resolve, reject}]);
-			} else {
-				waiters.push({resolve, reject});
+			if (waiters === undefined)
+			{
+				queue.set(parentId, [
+					{
+						resolve,
+						reject,
+					},
+				]);
+			}
+			else
+			{
+				waiters.push(
+					{
+						resolve,
+						reject,
+					},
+				);
 			}
 		});
 }

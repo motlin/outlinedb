@@ -12,7 +12,8 @@
  * CLI does not need them, so forcing every reader to compute them would be a
  * needless cost.
  */
-export interface Node {
+export interface Node
+{
 	/** Full UUID of the node. */
 	id: string;
 	/** 12-character short ID from the Workflowy URL, or null if unknown. */
@@ -36,7 +37,8 @@ export interface Node {
 	/** Whether the node is collapsed in the UI. */
 	collapsed: boolean;
 	/** Mirror relationship info. */
-	mirror: {
+	mirror:
+	{
 		/** Whether this node is a mirror of another node. */
 		isMirror: boolean;
 		/** Full UUID of the original node this mirrors, or null. */

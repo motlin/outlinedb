@@ -10,11 +10,14 @@ import {tooltipPosition} from "./tooltip.js";
 /** Upstream's tippy `offset: [-40, 10]`: 40px left of centered, 10px below the trigger. */
 const SKIDDING = -40;
 
-const subscribeNever = () => () => {};
+const subscribeNever = () => () =>
+{
+};
 const onClient = () => true;
 const onServer = () => false;
 
-interface CalendarTodayControlProps {
+interface CalendarTodayControlProps
+{
 	/** Navigate to today's 📆 Calendar day, as the plain Today button does. */
 	onToday: () => void;
 	/** The plain Today button (upstream `header.controls.today`), shown once the tooltip is seen. */
@@ -27,24 +30,33 @@ interface CalendarTodayControlProps {
  * Today's place; trying it (the button or Try it out) or closing the tooltip sets the flag, and the plain Today shows.
  * Nothing renders while preferences load.
  */
-export function CalendarTodayControl({onToday, children}: CalendarTodayControlProps) {
+export function CalendarTodayControl({onToday, children}: CalendarTodayControlProps)
+{
 	const seen = useCalendarTooltipSeen();
-	if (seen === null) {
+	if (seen === null)
+	{
 		return null;
 	}
 	return seen ? children : <CalendarOnboarding onToday={onToday} />;
 }
 
-function CalendarOnboarding({onToday}: {onToday: () => void}) {
+function CalendarOnboarding({onToday}: {onToday: () => void})
+{
 	const queryClient = useQueryClient();
 	const triggerRef = useRef<HTMLDivElement>(null);
 	const boxRef = useRef<HTMLDivElement>(null);
-	const [position, setPosition] = useState<{top: number; left: number} | null>(null);
+	const [position, setPosition] = useState<
+	{
+		top: number;
+		left: number;
+	} | null>(null);
 	// Tippy's `showOnCreate`: the tooltip opens on the client (portals have no server rendering).
 	const mounted = useSyncExternalStore(subscribeNever, onClient, onServer);
 
-	useLayoutEffect(() => {
-		if (!mounted || triggerRef.current === null || boxRef.current === null) {
+	useLayoutEffect(() =>
+	{
+		if (!mounted || triggerRef.current === null || boxRef.current === null)
+		{
 			return;
 		}
 		const {top, left} = tooltipPosition(
@@ -52,13 +64,20 @@ function CalendarOnboarding({onToday}: {onToday: () => void}) {
 			boxRef.current.offsetWidth,
 			window.innerWidth,
 		);
-		setPosition({top, left: left + SKIDDING});
+		setPosition(
+			{
+				top,
+				left: left + SKIDDING,
+			},
+		);
 	}, [mounted]);
 
-	const markSeen = () => {
+	const markSeen = () =>
+	{
 		void markCalendarTooltipSeen(queryClient);
 	};
-	const tryIt = () => {
+	const tryIt = () =>
+	{
 		markSeen();
 		onToday();
 	};
@@ -74,7 +93,8 @@ function CalendarOnboarding({onToday}: {onToday: () => void}) {
 					<div
 						data-tippy-root=""
 						ref={boxRef}
-						style={{
+						style={
+						{
 							position: "fixed",
 							top: position?.top ?? 0,
 							left: position?.left ?? 0,
@@ -88,7 +108,10 @@ function CalendarOnboarding({onToday}: {onToday: () => void}) {
 							data-state="visible"
 							data-calendar-tooltip=""
 							role="tooltip"
-							style={{whiteSpace: "normal"}}
+							style={
+							{
+								whiteSpace: "normal",
+							}}
 							data-placement="bottom"
 						>
 							<div className="tippy-content" data-state="visible">
@@ -103,7 +126,8 @@ function CalendarOnboarding({onToday}: {onToday: () => void}) {
 										{/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- upstream's close-tooltip is a bare clickable div */}
 										<div
 											className="close-tooltip"
-											onClick={(event: MouseEvent) => {
+											onClick={(event: MouseEvent) =>
+											{
 												event.stopPropagation();
 												markSeen();
 											}}

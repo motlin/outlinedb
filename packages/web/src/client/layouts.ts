@@ -1,16 +1,19 @@
 // Upstream's `WF.Layouts` registry (`canRender`) as pure functions. A complex layout (table, board, dashboard) draws
 // itself only when no other complex layout sits between it and the render root (the zoomed item or a pane root).
 
-interface LayoutHolder {
+interface LayoutHolder
+{
 	layoutMode: string | null | undefined;
 }
 
 /** Layouts upstream registers with `{complex: true}`; `dashboard` only exists while the Labs flag is on. */
-export function complexLayouts(dashboardsFlag: boolean): ReadonlySet<string> {
+export function complexLayouts(dashboardsFlag: boolean): ReadonlySet<string>
+{
 	return new Set(dashboardsFlag ? ["table", "board", "dashboard"] : ["table", "board"]);
 }
 
-export interface CanRenderOptions {
+export interface CanRenderOptions
+{
 	/** The ancestor walk met the render root; false means the item sits outside the rendered subtree. */
 	reachedRoot: boolean;
 	dashboardsFlag: boolean;
@@ -25,12 +28,15 @@ export function canRenderLayout(
 	node: LayoutHolder,
 	ancestors: readonly LayoutHolder[],
 	{reachedRoot, dashboardsFlag}: CanRenderOptions,
-): boolean {
+): boolean
+{
 	const complex = complexLayouts(dashboardsFlag);
-	if (!complex.has(layout)) {
+	if (!complex.has(layout))
+	{
 		return true;
 	}
-	if (node.layoutMode !== layout || !reachedRoot) {
+	if (node.layoutMode !== layout || !reachedRoot)
+	{
 		return false;
 	}
 	return !ancestors.some((ancestor) => complex.has(ancestor.layoutMode ?? ""));

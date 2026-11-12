@@ -6,15 +6,33 @@ import type {TimeAttrs} from "@outlinedb/shared";
  * pick hands the dates over and inserts nothing, and an empty one just cancels; otherwise the dates become a pill.
  */
 export function applyDatePick(
-	opened: {offset: number; replaceEnd?: number; onSelect?: (dates: Date[]) => void},
+	opened:
+	{
+		offset: number;
+		replaceEnd?: number;
+		onSelect?: (dates: Date[]) => void;
+	},
 	dates: Date[],
-	{insert, cancel}: {insert: (attrs: TimeAttrs) => void; cancel: (offset: number) => void},
-): void {
-	if (opened.onSelect === undefined) {
+	{
+		insert,
+		cancel,
+	}:
+	{
+		insert: (attrs: TimeAttrs) => void;
+		cancel: (offset: number) => void;
+	},
+): void
+{
+	if (opened.onSelect === undefined)
+	{
 		insert(timeAttrsFromDates(dates));
-	} else if (dates.length > 0) {
+	}
+	else if (dates.length > 0)
+	{
 		opened.onSelect(dates);
-	} else {
+	}
+	else
+	{
 		cancel(opened.replaceEnd ?? opened.offset);
 	}
 }

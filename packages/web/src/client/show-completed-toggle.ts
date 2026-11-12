@@ -6,13 +6,15 @@ const SLIDE_MAX_ROWS = 10;
 /** The 120ms slide plus slack, after which the sliding rows settle. */
 const SLIDE_SETTLE_MS = 220;
 
-export interface ShowCompletedToggleInput {
+export interface ShowCompletedToggleInput
+{
 	showCompleted: boolean;
 	editingId: string | null;
 	/** Navigable rows (zoom title first) with completed rows shown or hidden, ignoring rows held for animation. */
 	rowsFor: (showCompleted: boolean) => string[];
 	isCompleted: (id: string) => boolean;
-	actions: {
+	actions:
+	{
 		setShowCompleted: (showCompleted: boolean) => void;
 		beginCompletionAnimation: (ids: string[]) => void;
 		startCompletionSlideUp: (ids: string[]) => void;
@@ -28,24 +30,30 @@ export interface ShowCompletedToggleInput {
  * hides them when the slide ends, moving the caret off an edited row that hides; showing
  * reveals the rows and slides down the first 10 newly visible done rows.
  */
-export function runShowCompletedToggle(input: ShowCompletedToggleInput): void {
+export function runShowCompletedToggle(input: ShowCompletedToggleInput): void
+{
 	const {showCompleted, editingId, rowsFor, isCompleted, actions} = input;
-	if (showCompleted) {
+	if (showCompleted)
+	{
 		const before = rowsFor(true);
 		const after = new Set(rowsFor(false));
 		const hidden = new Set(before.filter((id) => !after.has(id)));
 		const sliding = before.filter((id) => hidden.has(id) && isCompleted(id)).slice(0, SLIDE_MAX_ROWS);
 		const focus = planHideCompletedFocus(before, hidden, editingId);
-		if (sliding.length > 0) {
+		if (sliding.length > 0)
+		{
 			actions.beginCompletionAnimation(sliding);
 		}
 		actions.setShowCompleted(false);
-		if (focus !== null) {
+		if (focus !== null)
+		{
 			actions.resumeEditing(focus.nodeId, focus.caretOffset);
 		}
-		if (sliding.length > 0) {
+		if (sliding.length > 0)
+		{
 			actions.startCompletionSlideUp(sliding);
-			setTimeout(() => {
+			setTimeout(() =>
+			{
 				actions.endCompletionAnimation(sliding);
 			}, SLIDE_SETTLE_MS);
 		}
@@ -56,11 +64,13 @@ export function runShowCompletedToggle(input: ShowCompletedToggleInput): void {
 	const revealed = rowsFor(true)
 		.filter((id) => !before.has(id) && isCompleted(id))
 		.slice(0, SLIDE_MAX_ROWS);
-	if (revealed.length === 0) {
+	if (revealed.length === 0)
+	{
 		return;
 	}
 	actions.startCompletedSlideDown(revealed);
-	setTimeout(() => {
+	setTimeout(() =>
+	{
 		actions.endCompletedSlideDown(revealed);
 	}, SLIDE_SETTLE_MS);
 }
@@ -69,6 +79,10 @@ export function runShowCompletedToggle(input: ShowCompletedToggleInput): void {
  * Upstream's `show_or_hide_completed` command: unavailable while a search is in progress
  * (`WF.Search.isInProgress()`), so its combo is still claimed but does nothing.
  */
-export function showCompletedCommand(toggle: () => void, isSearching: () => boolean): Command {
-	return {available: () => !isSearching(), execute: toggle};
+export function showCompletedCommand(toggle: () => void, isSearching: () => boolean): Command
+{
+	return {
+		available: () => !isSearching(),
+		execute: toggle,
+	};
 }

@@ -1,4 +1,5 @@
-interface RowClickTarget {
+interface RowClickTarget
+{
 	closest(selector: string): object | null;
 }
 
@@ -9,9 +10,14 @@ interface RowClickTarget {
  */
 export function rowClickResumesEditing<T extends RowClickTarget>(
 	target: T | null,
-	row: {contains(other: NoInfer<T>): boolean},
-): boolean {
-	if (target === null || !row.contains(target)) {
+	row:
+	{
+		contains(other: NoInfer<T>): boolean;
+	},
+): boolean
+{
+	if (target === null || !row.contains(target))
+	{
 		return false;
 	}
 	return target.closest("[contenteditable]") === null && target.closest(".itemMenu") === null;

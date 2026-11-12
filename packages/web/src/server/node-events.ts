@@ -16,19 +16,22 @@ import {sql} from "drizzle-orm";
 import type {AppDatabase} from "@outlinedb/shared/db";
 import {changeWatermark} from "./system-changes.js";
 
-export interface TreeChangedEvent {
+export interface TreeChangedEvent
+{
 	type: "tree.changed";
 	/** The changes-feed watermark at publish time (see `changeWatermark`). */
 	latest: string;
 }
 
-export interface ExpansionChangedEvent {
+export interface ExpansionChangedEvent
+{
 	type: "expansion.changed";
 	/** The expanded keys' content version, as `GET /api/v1/expansion` answers it. */
 	version: string;
 }
 
-export interface AccountChangedEvent {
+export interface AccountChangedEvent
+{
 	type: "account.changed";
 	/** The account tables' content version (see `accountVersion`). */
 	version: string;
@@ -38,35 +41,61 @@ export type NodeEvent = TreeChangedEvent | ExpansionChangedEvent | AccountChange
 
 export type TreeChangeListener = (event: NodeEvent) => void;
 
-export class TreeEventBus {
+export class TreeEventBus
+{
 	readonly #listeners = new Set<TreeChangeListener>();
 
-	subscribe(listener: TreeChangeListener): () => void {
+	subscribe(listener: TreeChangeListener): () => void
+	{
 		this.#listeners.add(listener);
-		return () => {
+		return () =>
+		{
 			this.#listeners.delete(listener);
 		};
 	}
 
-	publish(latest: string): void {
-		this.#emit({type: "tree.changed", latest});
+	publish(latest: string): void
+	{
+		this.#emit(
+			{
+				type: "tree.changed",
+				latest,
+			},
+		);
 	}
 
-	publishExpansion(version: string): void {
-		this.#emit({type: "expansion.changed", version});
+	publishExpansion(version: string): void
+	{
+		this.#emit(
+			{
+				type: "expansion.changed",
+				version,
+			},
+		);
 	}
 
-	publishAccount(version: string): void {
-		this.#emit({type: "account.changed", version});
+	publishAccount(version: string): void
+	{
+		this.#emit(
+			{
+				type: "account.changed",
+				version,
+			},
+		);
 	}
 
-	#emit(event: NodeEvent): void {
+	#emit(event: NodeEvent): void
+	{
 		// Copied: a throwing listener is dropped, and a listener may unsubscribe itself mid-notification.
 		// oxlint-disable-next-line no-useless-spread
-		for (const listener of [...this.#listeners]) {
-			try {
+		for (const listener of [...this.#listeners])
+		{
+			try
+			{
 				listener(event);
-			} catch {
+			}
+			catch
+			{
 				// A listener writing to a socket that just closed must not take the rest down.
 				this.#listeners.delete(listener);
 			}
@@ -74,8 +103,12 @@ export class TreeEventBus {
 	}
 }
 
-function totalChanges(database: AppDatabase): number {
-	return database.get<{changes: number}>(sql`SELECT total_changes() AS changes`).changes;
+function totalChanges(database: AppDatabase): number
+{
+	return database.get<
+	{
+		changes: number;
+	}>(sql`SELECT total_changes() AS changes`).changes;
 }
 
 /**
@@ -87,12 +120,17 @@ export async function withTreeChangePublish<T>(
 	bus: TreeEventBus,
 	run: () => Promise<T>,
 	now: () => string = changeWatermark,
-): Promise<T> {
+): Promise<T>
+{
 	const before = totalChanges(database);
-	try {
+	try
+	{
 		return await run();
-	} finally {
-		if (totalChanges(database) !== before) {
+	}
+	finally
+	{
+		if (totalChanges(database) !== before)
+		{
 			bus.publish(now());
 		}
 	}
@@ -102,11 +140,14 @@ export async function withTreeChangePublish<T>(
  * Returns a check that calls `publish` when `readVersion` answers a version other than the last one seen (the first
  * read is the baseline). An undefined version publishes nothing and keeps the baseline.
  */
-function versionChangePublisher(publish: (version: string) => void, readVersion: () => string | undefined): () => void {
+function versionChangePublisher(publish: (version: string) => void, readVersion: () => string | undefined): () => void
+{
 	let last = readVersion();
-	return () => {
+	return () =>
+	{
 		const current = readVersion();
-		if (current !== undefined && current !== last) {
+		if (current !== undefined && current !== last)
+		{
 			last = current;
 			publish(current);
 		}
@@ -117,15 +158,19 @@ function versionChangePublisher(publish: (version: string) => void, readVersion:
  * Returns a check that publishes `expansion.changed` when `readVersion` answers a version other than the last one
  * seen (the first read is the baseline). An unseeded store (undefined) publishes nothing and keeps the baseline.
  */
-export function expansionChangePublisher(bus: TreeEventBus, readVersion: () => string | undefined): () => void {
-	return versionChangePublisher((version) => {
+export function expansionChangePublisher(bus: TreeEventBus, readVersion: () => string | undefined): () => void
+{
+	return versionChangePublisher((version) =>
+	{
 		bus.publishExpansion(version);
 	}, readVersion);
 }
 
 /** Returns a check that publishes `account.changed` when the account tables' version moved since the last check. */
-export function accountChangePublisher(bus: TreeEventBus, readVersion: () => string): () => void {
-	return versionChangePublisher((version) => {
+export function accountChangePublisher(bus: TreeEventBus, readVersion: () => string): () => void
+{
+	return versionChangePublisher((version) =>
+	{
 		bus.publishAccount(version);
 	}, readVersion);
 }

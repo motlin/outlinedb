@@ -3,12 +3,14 @@
  * undefined `--wf-animation-duration`, which makes the whole declaration invalid, so upstream's header hides and
  * shows instantly; the transition is left out here for the same result.
  */
-body.zen-mode .wf-header.header {
+body.zen-mode .wf-header.header
+{
 	opacity: 0;
 	transform: translateY(calc(-100% + 6px));
 }
 
-body.zen-mode .wf-header.header::before {
+body.zen-mode .wf-header.header::before
+{
 	content: "";
 	position: absolute;
 	left: 0;
@@ -18,13 +20,15 @@ body.zen-mode .wf-header.header::before {
 }
 
 body.zen-mode .wf-header.header:hover,
-body.zen-mode .wf-header.header:focus-within {
+body.zen-mode .wf-header.header:focus-within
+{
 	opacity: 1;
 	transform: translateY(0);
 }
 
 body.zen-mode .project > .name,
-body.zen-mode .project > .notes {
+body.zen-mode .project > .notes
+{
 	transition:
 		opacity 120ms ease,
 		filter 120ms ease,
@@ -32,7 +36,8 @@ body.zen-mode .project > .notes {
 }
 
 body.zen-mode.zen-mode--focused .project:not(.zen-mode-current) > .name,
-body.zen-mode.zen-mode--focused .project:not(.zen-mode-current) > .notes {
+body.zen-mode.zen-mode--focused .project:not(.zen-mode-current) > .notes
+{
 	color: var(--wf-text-secondary);
 	opacity: 0.62;
 	filter: saturate(0.25);

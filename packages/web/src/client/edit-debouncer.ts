@@ -2,12 +2,14 @@
 export const TEXT_SAVE_DEBOUNCE_MS = 500;
 
 /** One text save: the value as last saved, and the value it becomes. */
-export interface TextEdit {
+export interface TextEdit
+{
 	before: string;
 	after: string;
 }
 
-export interface EditDebouncer {
+export interface EditDebouncer
+{
 	/** The editor now holds `value` as saved (editing started, or a command saved it); drops a pending save. */
 	reset(value: string): void;
 	/** The text changed to `value`; it saves once the editor has been idle for `delay`. */
@@ -26,41 +28,55 @@ export interface EditDebouncer {
  * Upstream's `saveLater`: every pause of `delay` in typing saves one edit, so each pause is its
  * own undo step, and `flush` (before undo, ⌘S, or leaving the row) saves the rest at once.
  */
-export function createEditDebouncer({delay, save}: {delay: number; save: (edit: TextEdit) => void}): EditDebouncer {
+export function createEditDebouncer({delay, save}: {delay: number; save: (edit: TextEdit) => void}): EditDebouncer
+{
 	let saved = "";
 	let latest: string | null = null;
 	let timer: ReturnType<typeof setTimeout> | undefined;
 
-	function cancel(): void {
-		if (timer !== undefined) {
+	function cancel(): void
+	{
+		if (timer !== undefined)
+		{
 			globalThis.clearTimeout(timer);
 			timer = undefined;
 		}
 		latest = null;
 	}
 
-	function saveNow(value: string): void {
+	function saveNow(value: string): void
+	{
 		cancel();
-		if (value !== saved) {
-			const edit = {before: saved, after: value};
+		if (value !== saved)
+		{
+			const edit =
+			{
+				before: saved,
+				after: value,
+			};
 			saved = value;
 			save(edit);
 		}
 	}
 
-	function flush(): void {
-		if (latest !== null) {
+	function flush(): void
+	{
+		if (latest !== null)
+		{
 			saveNow(latest);
 		}
 	}
 
 	return {
-		reset(value) {
+		reset(value)
+		{
 			cancel();
 			saved = value;
 		},
-		change(value) {
-			if (timer !== undefined) {
+		change(value)
+		{
+			if (timer !== undefined)
+			{
 				globalThis.clearTimeout(timer);
 			}
 			latest = value;
@@ -68,10 +84,12 @@ export function createEditDebouncer({delay, save}: {delay: number; save: (edit: 
 		},
 		saveNow,
 		flush,
-		get pending() {
+		get pending()
+		{
 			return latest !== null;
 		},
-		get saved() {
+		get saved()
+		{
 			return saved;
 		},
 	};

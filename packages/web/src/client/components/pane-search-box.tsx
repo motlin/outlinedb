@@ -3,7 +3,8 @@ import type {CSSProperties, KeyboardEvent} from "react";
 import {borderStyle, createSearchBoxController} from "../search-box-model.js";
 import {CLEAR_PATH, COMPACT_INPUT_CLASS, MAGNIFIER_PATH, labelClass} from "./search-box.js";
 
-interface PaneSearchBoxProps {
+interface PaneSearchBoxProps
+{
 	/** The pane's committed query ("" for none). */
 	query: string;
 	/** Upstream's `compact`: a borderless 36px circle while empty and unfocused. */
@@ -16,32 +17,44 @@ interface PaneSearchBoxProps {
  * magnifier circle until focused or holding a query, then the header's pill. Typing commits after the header search's
  * debounce, Enter commits at once, and Escape or the clear control ends the pane's search.
  */
-export function PaneSearchBox({query, compact = false, onCommit}: PaneSearchBoxProps) {
+export function PaneSearchBox({query, compact = false, onCommit}: PaneSearchBoxProps)
+{
 	const [value, setValue] = useState(query);
 	const [shownQuery, setShownQuery] = useState(query);
 	const [focused, setFocused] = useState(false);
 	const inputRef = useRef<HTMLInputElement>(null);
 	// A pane zoom or Back/Forward replaces the committed query; the box follows it.
-	if (shownQuery !== query) {
+	if (shownQuery !== query)
+	{
 		setShownQuery(query);
 		setValue(query);
 	}
 	const controller = useMemo(
-		() => createSearchBoxController({commit: onCommit, getCommitted: () => query}),
+		() =>
+			createSearchBoxController(
+				{
+					commit: onCommit,
+					getCommitted: () => query,
+				},
+			),
 		[onCommit, query],
 	);
 	useEffect(() => controller.dispose, [controller]);
 
-	const clear = () => {
+	const clear = () =>
+	{
 		controller.dispose();
 		setValue("");
-		if (query !== "") {
+		if (query !== "")
+		{
 			onCommit("");
 		}
 	};
 
-	const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-		if (event.key === "Escape") {
+	const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) =>
+	{
+		if (event.key === "Escape")
+		{
 			event.preventDefault();
 			event.stopPropagation();
 			clear();
@@ -49,10 +62,12 @@ export function PaneSearchBox({query, compact = false, onCommit}: PaneSearchBoxP
 			return;
 		}
 		const result = controller.key(event.key, value);
-		if (result.preventDefault) {
+		if (result.preventDefault)
+		{
 			event.preventDefault();
 		}
-		if (result.action === "focusOutline") {
+		if (result.action === "focusOutline")
+		{
 			inputRef.current?.blur();
 		}
 	};
@@ -60,10 +75,22 @@ export function PaneSearchBox({query, compact = false, onCommit}: PaneSearchBoxP
 	const hasText = value !== "";
 	const collapsed = compact && !focused && !hasText;
 	const labelStyle: CSSProperties = collapsed
-		? {width: 36, height: 36, borderRadius: 18}
-		: {marginRight: 6, width: 210};
+		?
+			{
+				width: 36,
+				height: 36,
+				borderRadius: 18,
+			}
+		:
+			{
+				marginRight: 6,
+				width: 210,
+			};
 	const innerStyle: CSSProperties = collapsed
-		? {borderRadius: 20}
+		?
+			{
+				borderRadius: 20,
+			}
 		: borderStyle(hasText ? "var(--wf-border-tint)" : "var(--wf-border-primary)");
 
 	const label = (
@@ -77,14 +104,17 @@ export function PaneSearchBox({query, compact = false, onCommit}: PaneSearchBoxP
 					className={collapsed ? `${COMPACT_INPUT_CLASS} opacity-0 cursor-pointer` : COMPACT_INPUT_CLASS}
 					data-handbook="search.search"
 					data-pane-search-input="true"
-					onBlur={() => {
+					onBlur={() =>
+					{
 						setFocused(false);
 					}}
-					onChange={(event) => {
+					onChange={(event) =>
+					{
 						setValue(event.target.value);
 						controller.change(event.target.value);
 					}}
-					onFocus={() => {
+					onFocus={() =>
+					{
 						setFocused(true);
 					}}
 					onKeyDown={handleKeyDown}
@@ -109,7 +139,8 @@ export function PaneSearchBox({query, compact = false, onCommit}: PaneSearchBoxP
 							height="14"
 							viewBox="0 0 14 14"
 							className="cursor-pointer text-secondary"
-							onMouseDown={(event) => {
+							onMouseDown={(event) =>
+							{
 								event.preventDefault();
 							}}
 							onClick={clear}

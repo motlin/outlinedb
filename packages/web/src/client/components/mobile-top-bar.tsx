@@ -16,24 +16,36 @@ import {MobileSearchForm} from "./mobile-search-form.js";
 
 function crumbText(
 	node: Pick<NodeResponse, "name" | "calendar">,
-	options: {dateFormat: string; timeFormat: string; dayPrefix: boolean; account: MentionAccount},
-): string {
-	return formatCrumbLabel(node.name ?? "", {
-		now: new Date(),
-		dateFormat: options.dateFormat,
-		timeFormat: options.timeFormat,
-		dayDateId: node.calendar?.level === "day" ? node.calendar.dateId : null,
-		dayPrefix: options.dayPrefix,
-		account: options.account,
-	});
+	options:
+	{
+		dateFormat: string;
+		timeFormat: string;
+		dayPrefix: boolean;
+		account: MentionAccount;
+	},
+): string
+{
+	return formatCrumbLabel(
+		node.name ?? "",
+		{
+			now: new Date(),
+			dateFormat: options.dateFormat,
+			timeFormat: options.timeFormat,
+			dayDateId: node.calendar?.level === "day" ? node.calendar.dateId : null,
+			dayPrefix: options.dayPrefix,
+			account: options.account,
+		},
+	);
 }
 
-export interface MobileCrumb {
+export interface MobileCrumb
+{
 	id: string;
 	label: string;
 }
 
-export interface MobileBreadcrumbsViewProps {
+export interface MobileBreadcrumbsViewProps
+{
 	/** Ancestors below the root, ending with the current node. */
 	crumbs: readonly MobileCrumb[];
 	searching: boolean;
@@ -54,20 +66,29 @@ const SCROLLER_CLASS =
 const KEBAB_CLASS = "h-full grow-0 shrink-0 basis-[44px] flex items-center justify-center text-tertiary";
 
 /** Upstream's `Xw4` MobileBreadcrumbs: home button, a scrolling italic crumb trail and the kebab. */
-export function MobileBreadcrumbsView({crumbs, searching, onHome, onCrumb, onKebab}: MobileBreadcrumbsViewProps) {
+export function MobileBreadcrumbsView({crumbs, searching, onHome, onCrumb, onKebab}: MobileBreadcrumbsViewProps)
+{
 	const scroller = useRef<HTMLDivElement>(null);
 	const lastId = crumbs.at(-1)?.id;
 	const previousId = useRef(lastId);
 	// On a zoom change the trail scrolls to show the new crumb after 200ms, like upstream.
-	useEffect(() => {
+	useEffect(() =>
+	{
 		const changed = previousId.current !== lastId;
 		previousId.current = lastId;
 		const timer = changed
-			? setTimeout(() => {
-					scroller.current?.scrollBy({left: 500, behavior: "smooth"});
+			? setTimeout(() =>
+				{
+					scroller.current?.scrollBy(
+						{
+							left: 500,
+							behavior: "smooth",
+						},
+					);
 				}, 200)
 			: undefined;
-		return () => {
+		return () =>
+		{
 			clearTimeout(timer);
 		};
 	}, [lastId]);
@@ -76,18 +97,34 @@ export function MobileBreadcrumbsView({crumbs, searching, onHome, onCrumb, onKeb
 			{/* oxlint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- a touch control: tapping goes home */}
 			<div
 				className={HOME_CLASS}
-				style={{width: 48, opacity: homeButtonOpacity({atRoot: crumbs.length === 0, searching})}}
+				style={
+				{
+					width: 48,
+					opacity: homeButtonOpacity(
+						{
+							atRoot: crumbs.length === 0,
+							searching,
+						},
+					),
+				}}
 				onClick={onHome}
 			>
 				<FaIcon icon="fal:house" size="lg" />
 			</div>
 			{crumbs.length > 0 && (
-				<div className="relative w-s pl-s flex items-center pointer-events-none" style={{left: -8}}>
+				<div
+					className="relative w-s pl-s flex items-center pointer-events-none"
+					style={
+					{
+						left: -8,
+					}}
+				>
 					<FaIcon icon="fal:chevron-right" size="xs" />
 				</div>
 			)}
 			<div ref={scroller} className={SCROLLER_CLASS}>
-				{crumbs.map((crumb, index) => {
+				{crumbs.map((crumb, index) =>
+				{
 					const current = index === crumbs.length - 1;
 					return (
 						<Fragment key={crumb.id}>
@@ -95,11 +132,15 @@ export function MobileBreadcrumbsView({crumbs, searching, onHome, onCrumb, onKeb
 								{/* oxlint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- a touch crumb: tapping navigates */}
 								<span
 									className={current ? "flex-none" : "flex-none underline"}
-									style={{color: "var(--wf-text-tertiary)"}}
+									style={
+									{
+										color: "var(--wf-text-tertiary)",
+									}}
 									onClick={
 										current
 											? undefined
-											: () => {
+											: () =>
+												{
 													onCrumb(crumb.id);
 												}
 									}
@@ -117,7 +158,14 @@ export function MobileBreadcrumbsView({crumbs, searching, onHome, onCrumb, onKeb
 				})}
 			</div>
 			{/* oxlint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- a touch control: tapping opens the more menu */}
-			<div className={KEBAB_CLASS} style={{marginRight: 4}} onClick={onKebab}>
+			<div
+				className={KEBAB_CLASS}
+				style={
+				{
+					marginRight: 4,
+				}}
+				onClick={onKebab}
+			>
 				<FaIcon icon="fal:ellipsis-vertical" size="lg" className="text-icon" />
 			</div>
 		</div>
@@ -125,7 +173,8 @@ export function MobileBreadcrumbsView({crumbs, searching, onHome, onCrumb, onKeb
 }
 
 /** Upstream's phone shell top (`.topBar`): the crumbs, and the search form that renders above them. */
-export function MobileTopBar() {
+export function MobileTopBar()
+{
 	const zoomedId = useOutlineStore(activeZoomedId);
 	const searching = useOutlineStore((state) => state.searchQuery !== "");
 	const {data: ancestors} = useAncestors(zoomedId);
@@ -137,12 +186,23 @@ export function MobileTopBar() {
 	const crumbs: MobileCrumb[] =
 		zoomedId === null || ancestors === undefined
 			? []
-			: ancestors.map((node) => ({
+			: ancestors.map((node) => (
+				{
 					id: node.id,
-					label: crumbText(node, {dateFormat, timeFormat, dayPrefix, account}),
+					label: crumbText(
+						node,
+						{
+							dateFormat,
+							timeFormat,
+							dayPrefix,
+							account,
+						},
+					),
 				}));
-	const leaveSearch = () => {
-		if (searching) {
+	const leaveSearch = () =>
+	{
+		if (searching)
+		{
 			cancelSearch();
 		}
 	};
@@ -151,25 +211,37 @@ export function MobileTopBar() {
 			<MobileBreadcrumbsView
 				crumbs={crumbs}
 				searching={searching}
-				onHome={() => {
+				onHome={() =>
+				{
 					leaveSearch();
 					navigateToNode(null);
 				}}
-				onCrumb={(id) => {
+				onCrumb={(id) =>
+				{
 					leaveSearch();
-					const go = () => {
+					const go = () =>
+					{
 						crumbZoomOut(
 							crumbs.map((crumb) => crumb.id),
 							id,
 						);
 					};
-					if ("startViewTransition" in document) {
-						document.startViewTransition({update: go, types: ["backwards"]});
-					} else {
+					if ("startViewTransition" in document)
+					{
+						document.startViewTransition(
+							{
+								update: go,
+								types: ["backwards"],
+							},
+						);
+					}
+					else
+					{
 						go();
 					}
 				}}
-				onKebab={() => {
+				onKebab={() =>
+				{
 					Sheet.set("more-menu");
 				}}
 			/>

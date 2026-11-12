@@ -23,13 +23,15 @@ import type {UnitOfWorkStart} from "./system-time.js";
 const LOOKUP_CHUNK_SIZE = 90;
 
 /** The logging the import needs; the host decides where it goes. */
-export interface ImportLogger {
+export interface ImportLogger
+{
 	debug(message: string): void;
 	warn(message: string): void;
 	error(message: string): void;
 }
 
-export interface ImportApiResult {
+export interface ImportApiResult
+{
 	totalNodes: number;
 	nodesAdded: number;
 	nodesUpdated: number;
@@ -42,7 +44,8 @@ export interface ImportApiResult {
 	importTimestamp: Date;
 }
 
-export interface ImportFromApiOptions {
+export interface ImportFromApiOptions
+{
 	logger?: ImportLogger;
 	timestamp?: Date;
 	/**
@@ -59,7 +62,8 @@ export interface ImportFromApiOptions {
 	treeItems?: InternalTreeItem[];
 }
 
-interface ProcessedNode {
+interface ProcessedNode
+{
 	id: string;
 	shortId: string;
 	name: string;
@@ -73,7 +77,8 @@ interface ProcessedNode {
 }
 
 /** Progress of one batched import. Opaque to callers; pass it between the three calls. */
-export interface ApiImportState {
+export interface ApiImportState
+{
 	readonly database: AppDatabase;
 	readonly logger: ImportLogger | undefined;
 	readonly importTimestamp: Date;
@@ -95,41 +100,49 @@ export interface ApiImportState {
 	relationshipNodeIds?: Set<string>;
 }
 
-function timestampToDate(timestamp: number | null | undefined): Date | null {
+function timestampToDate(timestamp: number | null | undefined): Date | null
+{
 	return timestamp === null || timestamp === undefined ? null : new Date(timestamp * 1000);
 }
 
-function nonEmpty(value: string | null | undefined): string | undefined {
+function nonEmpty(value: string | null | undefined): string | undefined
+{
 	return value === "" || value === null ? undefined : value;
 }
 
-function processNodes(state: ApiImportState, apiNodes: WorkflowyNode[]): ProcessedNode[] {
+function processNodes(state: ApiImportState, apiNodes: WorkflowyNode[]): ProcessedNode[]
+{
 	const processed: ProcessedNode[] = [];
-	for (const node of apiNodes) {
+	for (const node of apiNodes)
+	{
 		const parsed = WorkflowyNodeSchema.safeParse(node);
-		if (!parsed.success) {
+		if (!parsed.success)
+		{
 			state.validationErrors++;
 			state.logger?.error(
 				`Validation error for node ${node.id}: ${parsed.error.message}\nNode JSON: ${JSON.stringify(node, null, 2)}`,
 			);
-			if (typeof node.id === "string") {
+			if (typeof node.id === "string")
+			{
 				state.invalidIds.add(node.id);
 			}
 			continue;
 		}
 		const validated = parsed.data;
-		processed.push({
-			id: validated.id,
-			shortId: uuidToShortId(validated.id),
-			name: validated.name,
-			note: nonEmpty(validated.note) ?? null,
-			parentId: validated.parent_id ?? null,
-			priority: validated.priority,
-			createdAt: validated.createdAt,
-			modifiedAt: validated.modifiedAt ?? null,
-			completedAt: validated.completedAt ?? null,
-			layoutMode: normalizeLayoutMode(validated.data?.layoutMode),
-		});
+		processed.push(
+			{
+				id: validated.id,
+				shortId: uuidToShortId(validated.id),
+				name: validated.name,
+				note: nonEmpty(validated.note) ?? null,
+				parentId: validated.parent_id ?? null,
+				priority: validated.priority,
+				createdAt: validated.createdAt,
+				modifiedAt: validated.modifiedAt ?? null,
+				completedAt: validated.completedAt ?? null,
+				layoutMode: normalizeLayoutMode(validated.data?.layoutMode),
+			},
+		);
 	}
 	return processed;
 }
@@ -141,8 +154,14 @@ function processNodes(state: ApiImportState, apiNodes: WorkflowyNode[]): Process
  */
 export function beginApiImport(
 	database: AppDatabase,
-	options: {logger?: ImportLogger; timestamp?: Date; snapshotTakenAt?: Date} = {},
-): ApiImportState {
+	options:
+	{
+		logger?: ImportLogger;
+		timestamp?: Date;
+		snapshotTakenAt?: Date;
+	} = {},
+): ApiImportState
+{
 	const start = startUnitOfWork(options.timestamp);
 	const startTime = start.startedAt;
 	options.logger?.debug("[IMPORT-API] Starting import");
@@ -168,7 +187,14 @@ export function beginApiImport(
 }
 
 /** The ids ordered by priority, ties by id, as one comparable string. */
-function siblingOrder(items: {id: string; priority: number}[]): string {
+function siblingOrder(
+	items:
+	{
+		id: string;
+		priority: number;
+	}[],
+): string
+{
 	return items
 		.toSorted((a, b) => a.priority - b.priority || a.id.localeCompare(b.id))
 		.map((item) => item.id)
@@ -190,27 +216,43 @@ function keepEquivalentPriorities(
 	tx: UnitOfWork["tx"],
 	nodes: ProcessedNode[],
 	existingMetadata: Map<string, NodeMetadataType>,
-): void {
+): void
+{
 	const incomingByParent = new Map<string | null, ProcessedNode[]>();
-	for (const node of nodes) {
+	for (const node of nodes)
+	{
 		const siblings = incomingByParent.get(node.parentId) ?? [];
 		siblings.push(node);
 		incomingByParent.set(node.parentId, siblings);
 	}
 
 	const currentChildren = new Map<string | null, Set<string>>();
-	const addChildren = (rows: {id: string; parentId: string | null}[]) => {
-		for (const row of rows) {
+	const addChildren = (
+		rows:
+		{
+			id: string;
+			parentId: string | null;
+		}[],
+	) =>
+	{
+		for (const row of rows)
+		{
 			const children = currentChildren.get(row.parentId) ?? new Set<string>();
 			children.add(row.id);
 			currentChildren.set(row.parentId, children);
 		}
 	};
 	const parentIds = [...incomingByParent.keys()].filter((parentId) => parentId !== null);
-	for (let start = 0; start < parentIds.length; start += LOOKUP_CHUNK_SIZE) {
+	for (let start = 0; start < parentIds.length; start += LOOKUP_CHUNK_SIZE)
+	{
 		addChildren(
 			tx
-				.select({id: nodeContent.id, parentId: nodeContent.parentId})
+				.select(
+					{
+						id: nodeContent.id,
+						parentId: nodeContent.parentId,
+					},
+				)
 				.from(nodeContent)
 				.where(
 					and(
@@ -221,34 +263,63 @@ function keepEquivalentPriorities(
 				.all(),
 		);
 	}
-	if (incomingByParent.has(null)) {
+	if (incomingByParent.has(null))
+	{
 		addChildren(
 			tx
-				.select({id: nodeContent.id, parentId: nodeContent.parentId})
+				.select(
+					{
+						id: nodeContent.id,
+						parentId: nodeContent.parentId,
+					},
+				)
 				.from(nodeContent)
 				.where(and(eq(nodeContent.systemTo, FAR_FUTURE_DATE), isNull(nodeContent.parentId)))
 				.all(),
 		);
 	}
 
-	for (const [parentId, siblings] of incomingByParent) {
+	for (const [parentId, siblings] of incomingByParent)
+	{
 		const current = currentChildren.get(parentId) ?? new Set<string>();
-		if (siblings.length !== current.size || siblings.some((node) => !current.has(node.id))) {
+		if (siblings.length !== current.size || siblings.some((node) => !current.has(node.id)))
+		{
 			continue;
 		}
-		const stored = siblings.map((node) => ({id: node.id, priority: existingMetadata.get(node.id)?.priority}));
+		const stored = siblings.map((node) => (
+		{
+			id: node.id,
+			priority: existingMetadata.get(node.id)?.priority,
+		}));
 		const known = stored.flatMap((item) =>
-			item.priority === null || item.priority === undefined ? [] : [{...item, priority: item.priority}],
+			item.priority === null || item.priority === undefined
+				? []
+				: [
+						{
+							...item,
+							priority: item.priority,
+						},
+					],
 		);
 		if (
 			known.length !== siblings.length ||
-			siblingOrder(known) !== siblingOrder(siblings.map((node) => ({id: node.id, priority: node.priority})))
-		) {
+			siblingOrder(known) !==
+				siblingOrder(
+					siblings.map((node) => (
+					{
+						id: node.id,
+						priority: node.priority,
+					})),
+				)
+		)
+		{
 			continue;
 		}
-		for (const item of known) {
+		for (const item of known)
+		{
 			const node = siblings.find((sibling) => sibling.id === item.id);
-			if (node) {
+			if (node)
+			{
 				node.priority = item.priority;
 			}
 		}
@@ -260,12 +331,18 @@ function keepEquivalentPriorities(
  * a live content or metadata version opened after it, or a content version
  * closed after it.
  */
-function writtenAfterSnapshot(tx: UnitOfWork["tx"], ids: string[], snapshotAt: string): Set<string> {
+function writtenAfterSnapshot(tx: UnitOfWork["tx"], ids: string[], snapshotAt: string): Set<string>
+{
 	const written = new Set<string>();
-	for (let start = 0; start < ids.length; start += LOOKUP_CHUNK_SIZE) {
+	for (let start = 0; start < ids.length; start += LOOKUP_CHUNK_SIZE)
+	{
 		const chunk = ids.slice(start, start + LOOKUP_CHUNK_SIZE);
 		for (const row of tx
-			.select({id: nodeContent.id})
+			.select(
+				{
+					id: nodeContent.id,
+				},
+			)
 			.from(nodeContent)
 			.where(
 				and(
@@ -276,11 +353,16 @@ function writtenAfterSnapshot(tx: UnitOfWork["tx"], ids: string[], snapshotAt: s
 					),
 				),
 			)
-			.all()) {
+			.all())
+		{
 			written.add(row.id);
 		}
 		for (const row of tx
-			.select({id: nodeMetadata.nodeId})
+			.select(
+				{
+					id: nodeMetadata.nodeId,
+				},
+			)
 			.from(nodeMetadata)
 			.where(
 				and(
@@ -289,24 +371,28 @@ function writtenAfterSnapshot(tx: UnitOfWork["tx"], ids: string[], snapshotAt: s
 					gt(nodeMetadata.systemFrom, snapshotAt),
 				),
 			)
-			.all()) {
+			.all())
+		{
 			written.add(row.id);
 		}
 	}
 	return written;
 }
 
-function applyBatchIn(unitOfWork: UnitOfWork, state: ApiImportState, apiNodes: WorkflowyNode[]): void {
+function applyBatchIn(unitOfWork: UnitOfWork, state: ApiImportState, apiNodes: WorkflowyNode[]): void
+{
 	const {tx} = unitOfWork;
 	let nodes = processNodes(state, apiNodes);
-	if (state.snapshotAt !== undefined) {
+	if (state.snapshotAt !== undefined)
+	{
 		// The cache's later write wins: the node is left as it is and counts as seen.
 		const later = writtenAfterSnapshot(
 			tx,
 			nodes.map((node) => node.id),
 			state.snapshotAt,
 		);
-		for (const id of later) {
+		for (const id of later)
+		{
 			state.seenIds.add(id);
 		}
 		state.totalNodes += later.size;
@@ -318,53 +404,66 @@ function applyBatchIn(unitOfWork: UnitOfWork, state: ApiImportState, apiNodes: W
 	// Classify against only this batch's current rows.
 	const existingContent = new Map<string, NodeContentType>();
 	const existingMetadata = new Map<string, NodeMetadataType>();
-	for (let start = 0; start < ids.length; start += LOOKUP_CHUNK_SIZE) {
+	for (let start = 0; start < ids.length; start += LOOKUP_CHUNK_SIZE)
+	{
 		const chunk = ids.slice(start, start + LOOKUP_CHUNK_SIZE);
 		for (const row of tx
 			.select()
 			.from(nodeContent)
 			.where(and(eq(nodeContent.systemTo, FAR_FUTURE_DATE), inArray(nodeContent.id, chunk)))
-			.all()) {
+			.all())
+		{
 			existingContent.set(row.id, row);
 		}
 		for (const row of tx
 			.select()
 			.from(nodeMetadata)
 			.where(and(eq(nodeMetadata.systemTo, FAR_FUTURE_DATE), inArray(nodeMetadata.nodeId, chunk)))
-			.all()) {
+			.all())
+		{
 			existingMetadata.set(row.nodeId, row);
 		}
 	}
 	keepEquivalentPriorities(tx, nodes, existingMetadata);
-	for (const node of nodes) {
+	for (const node of nodes)
+	{
 		const content = existingContent.get(node.id);
 		const metadata = existingMetadata.get(node.id);
 		const contentChanged = content && !contentMatches(content, node);
 		const metadataChanged = metadata && !metadataMatches(metadata, node);
-		if (!content) {
+		if (!content)
+		{
 			state.nodesAdded++;
-		} else if (contentChanged || metadataChanged) {
+		}
+		else if (contentChanged || metadataChanged)
+		{
 			state.nodesUpdated++;
-			if (contentChanged) {
+			if (contentChanged)
+			{
 				state.contentUpdated++;
 			}
-			if (metadataChanged) {
+			if (metadataChanged)
+			{
 				state.metadataUpdated++;
 			}
-		} else {
+		}
+		else
+		{
 			state.nodesUnchanged++;
 		}
 		state.seenIds.add(node.id);
 	}
 	state.totalNodes += nodes.length;
 
-	const contentRows: NormalizedNodeContentRow[] = nodes.map((node) => ({
+	const contentRows: NormalizedNodeContentRow[] = nodes.map((node) => (
+	{
 		id: node.id,
 		name: node.name,
 		note: node.note,
 		parentId: node.parentId,
 	}));
-	const metadataRows: NormalizedNodeMetadataRow[] = nodes.map((node) => ({
+	const metadataRows: NormalizedNodeMetadataRow[] = nodes.map((node) => (
+	{
 		nodeId: node.id,
 		shortId: node.shortId,
 		priority: node.priority,
@@ -373,48 +472,67 @@ function applyBatchIn(unitOfWork: UnitOfWork, state: ApiImportState, apiNodes: W
 		completedAt: timestampToDate(node.completedAt),
 		layoutMode: node.layoutMode,
 	}));
-	applyNodeRowsBatch(unitOfWork, {nodeContent: contentRows, nodeMetadata: metadataRows});
+	applyNodeRowsBatch(
+		unitOfWork,
+		{
+			nodeContent: contentRows,
+			nodeMetadata: metadataRows,
+		},
+	);
 }
 
 /**
  * Merge one batch of API nodes. Looks up existing rows by `id IN (...)` for
  * this batch only; nothing absent from the batch is touched.
  */
-export function applyApiBatch(state: ApiImportState, apiNodes: WorkflowyNode[]): void {
+export function applyApiBatch(state: ApiImportState, apiNodes: WorkflowyNode[]): void
+{
 	runUnitOfWork(
 		state.database,
-		(unitOfWork) => {
+		(unitOfWork) =>
+		{
 			applyBatchIn(unitOfWork, state, apiNodes);
 		},
 		state.start,
 	);
 }
 
-function finishIn(unitOfWork: UnitOfWork, state: ApiImportState, treeItems?: InternalTreeItem[]): ImportApiResult {
+function finishIn(unitOfWork: UnitOfWork, state: ApiImportState, treeItems?: InternalTreeItem[]): ImportApiResult
+{
 	const {tx} = unitOfWork;
 	let unseen: string[] = [];
 	for (const row of tx
-		.select({id: nodeContent.id})
+		.select(
+			{
+				id: nodeContent.id,
+			},
+		)
 		.from(nodeContent)
 		.where(eq(nodeContent.systemTo, FAR_FUTURE_DATE))
-		.all()) {
-		if (!state.seenIds.has(row.id) && !state.invalidIds.has(row.id)) {
+		.all())
+	{
+		if (!state.seenIds.has(row.id) && !state.invalidIds.has(row.id))
+		{
 			unseen.push(row.id);
 		}
 	}
-	if (state.snapshotAt !== undefined) {
+	if (state.snapshotAt !== undefined)
+	{
 		// A node the cache wrote after the snapshot is absent from it, not deleted.
 		const later = writtenAfterSnapshot(tx, unseen, state.snapshotAt);
 		unseen = unseen.filter((id) => !later.has(id));
 	}
 	endNodeComposites(unitOfWork, unseen);
 
-	if (treeItems !== undefined) {
+	if (treeItems !== undefined)
+	{
 		const relationships: ItemRelationships = emptyItemRelationships();
-		for (const item of treeItems) {
+		for (const item of treeItems)
+		{
 			collectItemRelationships(relationships, item.id, item.metadata);
 		}
-		const rowsByTable: NormalizedRowsByTable = {
+		const rowsByTable: NormalizedRowsByTable =
+		{
 			referencesRoots: relationships.referencesRoots.filter((row) => state.seenIds.has(row.nodeId)),
 			aiMetadata: relationships.aiMetadata.filter((row) => state.seenIds.has(row.nodeId)),
 		};
@@ -422,7 +540,8 @@ function finishIn(unitOfWork: UnitOfWork, state: ApiImportState, treeItems?: Int
 		mergeItemRelationships(unitOfWork, relationships, state.seenIds);
 	}
 	endOrphanedParts(unitOfWork);
-	if (treeItems !== undefined) {
+	if (treeItems !== undefined)
+	{
 		// Only the tree data carries backlinks, so only then can an item be judged stranded.
 		endStrandedBacklinkItems(unitOfWork);
 	}
@@ -446,8 +565,10 @@ function finishIn(unitOfWork: UnitOfWork, state: ApiImportState, treeItems?: Int
  * Finish a batched import: end every node no batch mentioned (with its whole
  * composite), then merge the tree-derived relationships when given.
  */
-export function finishApiImport(state: ApiImportState, treeItems?: InternalTreeItem[]): ImportApiResult {
-	if (state.validationErrors > 0) {
+export function finishApiImport(state: ApiImportState, treeItems?: InternalTreeItem[]): ImportApiResult
+{
+	if (state.validationErrors > 0)
+	{
 		state.logger?.warn(`Encountered ${state.validationErrors} validation errors during import`);
 	}
 	return runUnitOfWork(state.database, (unitOfWork) => finishIn(unitOfWork, state, treeItems), state.start);
@@ -463,18 +584,21 @@ export function importFromApi(
 	database: AppDatabase,
 	apiNodes: WorkflowyNode[],
 	options: ImportFromApiOptions = {},
-): ImportApiResult {
+): ImportApiResult
+{
 	const state = beginApiImport(database, options);
 	const result = runUnitOfWork(
 		database,
-		(unitOfWork) => {
+		(unitOfWork) =>
+		{
 			applyBatchIn(unitOfWork, state, apiNodes);
 			return finishIn(unitOfWork, state, options.treeItems);
 		},
 		state.start,
 	);
 	metadataComparisonStats.log();
-	if (state.validationErrors > 0) {
+	if (state.validationErrors > 0)
+	{
 		state.logger?.warn(`Encountered ${state.validationErrors} validation errors during import`);
 	}
 	return result;

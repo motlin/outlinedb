@@ -13,7 +13,8 @@ import type {SelectionKeyAction} from "../item-selection.js";
 import type {AppMessageAction} from "../stores/outline.js";
 
 /** What a command acts on: the row holding the caret (upstream's focused item) and the zoomed node. */
-export interface CommandContext {
+export interface CommandContext
+{
 	items: readonly string[];
 	zoomedId: string | null;
 	/** Where a picker the command opens anchors, e.g. the removed slash chip's rect. */
@@ -22,7 +23,8 @@ export interface CommandContext {
 	undoMatch?: (batch: UndoBatch) => boolean;
 }
 
-export interface Command {
+export interface Command
+{
 	/** Upstream's `available()`; a command without one is always available. */
 	available?: (ctx: CommandContext) => boolean;
 	execute: (ctx: CommandContext) => void;
@@ -33,23 +35,29 @@ export type CommandRegistry = Readonly<Record<string, Command>>;
 
 /** Upstream `print` (⌘P): open the browser's print dialog. */
 export function printCommand(
-	print: () => void = () => {
+	print: () => void = () =>
+	{
 		globalThis.print();
 	},
-): Command {
+): Command
+{
 	return {
-		execute: () => {
+		execute: () =>
+		{
 			print();
 		},
 	};
 }
 
 /** Upstream `present_it` (⇧⌘P): expand the focused item, then open the presentation on the zoomed node (or the root). */
-export function presentCommand(deps: {open: (nodeId: string) => void; expand: (nodeId: string) => void}): Command {
+export function presentCommand(deps: {open: (nodeId: string) => void; expand: (nodeId: string) => void}): Command
+{
 	return {
-		execute: (ctx) => {
+		execute: (ctx) =>
+		{
 			const [item] = ctx.items;
-			if (item !== undefined) {
+			if (item !== undefined)
+			{
 				deps.expand(item);
 			}
 			deps.open(ctx.zoomedId ?? "root");
@@ -63,10 +71,12 @@ export type ComboResult = "claimed" | "unclaimed";
  * Upstream's panes listener: while panes are open it claims Back/Forward (⌘[ / ⌘] on mac, ⌥← / ⌥→ elsewhere) to step the
  * active pane's history. With no pane open the browser's own Back/Forward runs (the table binds them only in Electron).
  */
-function paneHistoryCommand(combo: string, isMac: boolean): string | undefined {
+function paneHistoryCommand(combo: string, isMac: boolean): string | undefined
+{
 	const back = isMac ? "meta+[" : "alt+left";
 	const forward = isMac ? "meta+]" : "alt+right";
-	if (combo === back) {
+	if (combo === back)
+	{
 		return "navigate_backward";
 	}
 	return combo === forward ? "navigate_forward" : undefined;
@@ -75,29 +85,48 @@ function paneHistoryCommand(combo: string, isMac: boolean): string | undefined {
 const tables = new Map<boolean, ReadonlyMap<string, string>>();
 
 /** The combo-to-command table for the current browser, with its mac flag overridden. */
-export function hotkeyTable(isMac: boolean): ReadonlyMap<string, string> {
+export function hotkeyTable(isMac: boolean): ReadonlyMap<string, string>
+{
 	const {overrides} = useCustomKeymapStore.getState();
-	if (overrides.length > 0) {
-		const base = buildHotkeys({...currentPlatform(), mac: isMac});
+	if (overrides.length > 0)
+	{
+		const base = buildHotkeys(
+			{
+				...currentPlatform(),
+				mac: isMac,
+			},
+		);
 		const custom = new Map<string, string>();
-		for (const [combo, command] of overlayHotkeys(base, overrides)) {
-			if (command !== null) {
+		for (const [combo, command] of overlayHotkeys(base, overrides))
+		{
+			if (command !== null)
+			{
 				custom.set(combo, command);
 			}
 		}
 		return custom;
 	}
 	let table = tables.get(isMac);
-	if (table === undefined) {
-		table = new Map(buildHotkeys({...currentPlatform(), mac: isMac}));
+	if (table === undefined)
+	{
+		table = new Map(
+			buildHotkeys(
+				{
+					...currentPlatform(),
+					mac: isMac,
+				},
+			),
+		);
 		tables.set(isMac, table);
 	}
 	return table;
 }
 
 /** Upstream's `lg4`: combos left to the browser when their command is unavailable (Emacs ctrl+p/n/t on mac). */
-function passesThrough(combo: string, isMac: boolean): boolean {
-	const passthrough: Readonly<Record<string, boolean>> = {
+function passesThrough(combo: string, isMac: boolean): boolean
+{
+	const passthrough: Readonly<Record<string, boolean>> =
+	{
 		"ctrl+p": isMac,
 		"ctrl+n": isMac,
 		"ctrl+t": isMac,
@@ -115,13 +144,16 @@ export function processCombo(
 	isMac: boolean,
 	table: ReadonlyMap<string, string> = hotkeyTable(isMac),
 	panesOpen = false,
-): ComboResult {
+): ComboResult
+{
 	const commandId = table.get(combo) ?? (panesOpen ? paneHistoryCommand(combo, isMac) : undefined);
-	if (commandId === undefined) {
+	if (commandId === undefined)
+	{
 		return "unclaimed";
 	}
 	const command = registry[commandId];
-	if (command !== undefined && command.available?.(ctx) !== false) {
+	if (command !== undefined && command.available?.(ctx) !== false)
+	{
 		command.execute(ctx);
 		return "claimed";
 	}
@@ -132,16 +164,19 @@ export function processCombo(
  * Upstream `Fe4`'s keydown handler: while an app message is shown, a combo matching one of its actions' shortcuts runs
  * that action (without hiding the message) and is claimed before the hotkey table sees it.
  */
-export function processAppMessageCombo(combo: string, actions: readonly AppMessageAction[]): ComboResult {
+export function processAppMessageCombo(combo: string, actions: readonly AppMessageAction[]): ComboResult
+{
 	const action = actions.find(({shortcut}) => shortcut === combo);
-	if (action === undefined) {
+	if (action === undefined)
+	{
 		return "unclaimed";
 	}
 	action.run();
 	return "claimed";
 }
 
-interface KeydownTarget {
+interface KeydownTarget
+{
 	addEventListener: (type: "keydown", handler: (event: KeyboardEvent) => void, capture: boolean) => void;
 	removeEventListener: (type: "keydown", handler: (event: KeyboardEvent) => void, capture: boolean) => void;
 }
@@ -154,23 +189,29 @@ export function listenForAppMessageKeys(
 	target: KeydownTarget,
 	getActions: () => readonly AppMessageAction[] | undefined,
 	comboOf: (event: KeyboardEvent) => string,
-): () => void {
-	const handler = (event: KeyboardEvent): void => {
+): () => void
+{
+	const handler = (event: KeyboardEvent): void =>
+	{
 		const actions = getActions();
-		if (event.isComposing || actions === undefined) {
+		if (event.isComposing || actions === undefined)
+		{
 			return;
 		}
-		if (processAppMessageCombo(comboOf(event), actions) === "claimed") {
+		if (processAppMessageCombo(comboOf(event), actions) === "claimed")
+		{
 			event.preventDefault();
 		}
 	};
 	target.addEventListener("keydown", handler, true);
-	return () => {
+	return () =>
+	{
 		target.removeEventListener("keydown", handler, true);
 	};
 }
 
-export interface SelectionKeyEvent {
+export interface SelectionKeyEvent
+{
 	key: string;
 	metaKey: boolean;
 	ctrlKey: boolean;
@@ -188,14 +229,24 @@ export interface SelectionKeyEvent {
 export function processSelectionKey(
 	event: SelectionKeyEvent,
 	isMac: boolean,
-	{hasSelection, inText}: {hasSelection: boolean; inText: boolean},
+	{
+		hasSelection,
+		inText,
+	}:
+	{
+		hasSelection: boolean;
+		inText: boolean;
+	},
 	run: (action: SelectionKeyAction) => void,
-): ComboResult {
-	if (event.defaultPrevented || event.isComposing || !hasSelection || inText) {
+): ComboResult
+{
+	if (event.defaultPrevented || event.isComposing || !hasSelection || inText)
+	{
 		return "unclaimed";
 	}
 	const action = selectionKeyAction(event, isMac);
-	if (action === null) {
+	if (action === null)
+	{
 		return "unclaimed";
 	}
 	run(action);
@@ -205,13 +256,15 @@ export function processSelectionKey(
 /** Combos a focused button, input or menu keeps for itself. */
 const CONTROL_COMBOS = new Set(["tab", "shift+tab", "meta+a", "ctrl+a", "return"]);
 
-export interface FocusedElement {
+export interface FocusedElement
+{
 	tabIndex: number;
 	closest: (selector: string) => unknown;
 }
 
 /** Upstream returns early for these combos when a focusable control outside the outline's text holds focus. */
-export function deferToFocusedControl(combo: string, active: FocusedElement | null): boolean {
+export function deferToFocusedControl(combo: string, active: FocusedElement | null): boolean
+{
 	return CONTROL_COMBOS.has(combo) && active !== null && active.tabIndex >= 0 && active.closest(".name") === null;
 }
 
@@ -231,10 +284,12 @@ export const BROWSER_NATIVE_COMMANDS: ReadonlySet<string> = new Set([
 const FORM_FIELD_NATIVE_COMMANDS: ReadonlySet<string> = new Set(["undo", "redo"]);
 
 /** The combo to dispatch for a keydown, or null when its command is left to the browser. */
-export function keymapCombo(event: KeyComboEvent, isMac: boolean, inFormField = false): string | null {
+export function keymapCombo(event: KeyComboEvent, isMac: boolean, inFormField = false): string | null
+{
 	const combo = comboFromEvent(event);
 	const commandId = hotkeyTable(isMac).get(combo);
-	if (commandId === undefined) {
+	if (commandId === undefined)
+	{
 		return combo;
 	}
 	const native = BROWSER_NATIVE_COMMANDS.has(commandId) || (inFormField && FORM_FIELD_NATIVE_COMMANDS.has(commandId));

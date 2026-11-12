@@ -3,139 +3,264 @@ import {afterEach, beforeEach, describe, expect, it, vi} from "vite-plus/test";
 const stored = new Map<string, string>();
 const fetchMock = vi.fn<typeof fetch>();
 
-function stubGlobals(): void {
-	vi.stubGlobal("localStorage", {
-		getItem: (key: string) => stored.get(key) ?? null,
-		setItem: (key: string, value: string) => {
-			stored.set(key, value);
+function stubGlobals(): void
+{
+	vi.stubGlobal(
+		"localStorage",
+		{
+			getItem: (key: string) => stored.get(key) ?? null,
+			setItem: (key: string, value: string) =>
+			{
+				stored.set(key, value);
+			},
+			removeItem: (key: string) =>
+			{
+				stored.delete(key);
+			},
 		},
-		removeItem: (key: string) => {
-			stored.delete(key);
-		},
-	});
+	);
 	vi.stubGlobal("innerWidth", 1272);
-	vi.stubGlobal("matchMedia", () => ({matches: false, addEventListener: () => {}}));
-	vi.stubGlobal("document", {
-		documentElement: {dataset: {}},
-		body: {classList: {toggle: () => true, contains: () => false}},
-	});
+	vi.stubGlobal("matchMedia", () => (
+	{
+		matches: false,
+		addEventListener: () =>
+		{
+		},
+	}));
+	vi.stubGlobal(
+		"document",
+		{
+			documentElement:
+			{
+				dataset: {},
+			},
+			body:
+			{
+				classList:
+				{
+					toggle: () => true,
+					contains: () => false,
+				},
+			},
+		},
+	);
 	vi.stubGlobal("addEventListener", () => {});
 	vi.stubGlobal("fetch", fetchMock);
 }
 
-async function loadStore() {
+async function loadStore()
+{
 	vi.resetModules();
 	const {useOutlineStore} = await import("../src/client/stores/outline.js");
 	return useOutlineStore;
 }
 
-function patchCalls(): {url: unknown; method: unknown; body: unknown}[] {
-	return fetchMock.mock.calls.map(([url, init]) => ({url, method: init?.method, body: init?.body}));
+function patchCalls():
+{
+	url: unknown;
+	method: unknown;
+	body: unknown;
+}[]
+{
+	return fetchMock.mock.calls.map(([url, init]) => (
+	{
+		url,
+		method: init?.method,
+		body: init?.body,
+	}));
 }
 
-beforeEach(() => {
+beforeEach(() =>
+{
 	stored.clear();
 	fetchMock.mockReset();
-	fetchMock.mockResolvedValue(Response.json({}, {status: 200}));
+	fetchMock.mockResolvedValue(
+		Response.json(
+			{},
+			{
+				status: 200,
+			},
+		),
+	);
 	stubGlobals();
 });
 
-afterEach(() => {
+afterEach(() =>
+{
 	vi.unstubAllGlobals();
 });
 
-describe("showCompleted initial value", () => {
-	it("defaults to shown with nothing stored", async () => {
+describe("showCompleted initial value", () =>
+{
+	it("defaults to shown with nothing stored", async () =>
+	{
 		const store = await loadStore();
 		expect(store.getState().showCompleted).toBe(true);
 	});
 
-	it("reads completedMode", async () => {
+	it("reads completedMode", async () =>
+	{
 		stored.set("completedMode", "hide");
 		const store = await loadStore();
 		expect(store.getState().showCompleted).toBe(false);
 	});
 
-	it("ignores the old workflowy-show-completed key", async () => {
+	it("ignores the old workflowy-show-completed key", async () =>
+	{
 		stored.set("workflowy-show-completed", "false");
 		const store = await loadStore();
-		expect({showCompleted: store.getState().showCompleted, stored: Object.fromEntries(stored)}).toStrictEqual({
-			showCompleted: true,
-			stored: {"workflowy-show-completed": "false"},
-		});
+		expect(
+			{
+				showCompleted: store.getState().showCompleted,
+				stored: Object.fromEntries(stored),
+			},
+		).toStrictEqual(
+			{
+				showCompleted: true,
+				stored:
+				{
+					"workflowy-show-completed": "false",
+				},
+			},
+		);
 	});
 });
 
-describe("setShowCompleted", () => {
-	it("writes completedMode and PATCHes the account preference once", async () => {
+describe("setShowCompleted", () =>
+{
+	it("writes completedMode and PATCHes the account preference once", async () =>
+	{
 		const store = await loadStore();
 		store.getState().setShowCompleted(false);
-		expect({
-			showCompleted: store.getState().showCompleted,
-			completedMode: stored.get("completedMode"),
-			calls: patchCalls(),
-		}).toStrictEqual({
-			showCompleted: false,
-			completedMode: "hide",
-			calls: [{url: "/api/v1/preferences", method: "PATCH", body: '{"showCompleted":false}'}],
-		});
+		expect(
+			{
+				showCompleted: store.getState().showCompleted,
+				completedMode: stored.get("completedMode"),
+				calls: patchCalls(),
+			},
+		).toStrictEqual(
+			{
+				showCompleted: false,
+				completedMode: "hide",
+				calls: [
+					{
+						url: "/api/v1/preferences",
+						method: "PATCH",
+						body: '{"showCompleted":false}',
+					},
+				],
+			},
+		);
 	});
 
-	it("toggleShowCompleted flips the value through the same path", async () => {
+	it("toggleShowCompleted flips the value through the same path", async () =>
+	{
 		stored.set("completedMode", "hide");
 		const store = await loadStore();
 		store.getState().toggleShowCompleted();
-		expect({
-			showCompleted: store.getState().showCompleted,
-			completedMode: stored.get("completedMode"),
-			calls: patchCalls(),
-		}).toStrictEqual({
-			showCompleted: true,
-			completedMode: "show",
-			calls: [{url: "/api/v1/preferences", method: "PATCH", body: '{"showCompleted":true}'}],
-		});
+		expect(
+			{
+				showCompleted: store.getState().showCompleted,
+				completedMode: stored.get("completedMode"),
+				calls: patchCalls(),
+			},
+		).toStrictEqual(
+			{
+				showCompleted: true,
+				completedMode: "show",
+				calls: [
+					{
+						url: "/api/v1/preferences",
+						method: "PATCH",
+						body: '{"showCompleted":true}',
+					},
+				],
+			},
+		);
 	});
 
-	it("leaves completedMode untouched while a search is active, but still updates state", async () => {
+	it("leaves completedMode untouched while a search is active, but still updates state", async () =>
+	{
 		const store = await loadStore();
-		store.setState({searchQuery: "x"});
+		store.setState(
+			{
+				searchQuery: "x",
+			},
+		);
 		store.getState().setShowCompleted(false);
-		const duringSearch = {
+		const duringSearch =
+		{
 			showCompleted: store.getState().showCompleted,
 			completedMode: stored.get("completedMode"),
 		};
-		store.setState({searchQuery: ""});
+		store.setState(
+			{
+				searchQuery: "",
+			},
+		);
 		store.getState().setShowCompleted(false);
 		expect([duringSearch, stored.get("completedMode")]).toStrictEqual([
-			{showCompleted: false, completedMode: undefined},
+			{
+				showCompleted: false,
+				completedMode: undefined,
+			},
 			"hide",
 		]);
 	});
 
-	it("ignores the toggle while the search forces completed rows", async () => {
+	it("ignores the toggle while the search forces completed rows", async () =>
+	{
 		const store = await loadStore();
-		store.setState({searchQuery: "is:complete"});
+		store.setState(
+			{
+				searchQuery: "is:complete",
+			},
+		);
 		store.getState().toggleShowCompleted();
-		expect({showCompleted: store.getState().showCompleted, calls: patchCalls()}).toStrictEqual({
-			showCompleted: true,
-			calls: [],
-		});
+		expect(
+			{
+				showCompleted: store.getState().showCompleted,
+				calls: patchCalls(),
+			},
+		).toStrictEqual(
+			{
+				showCompleted: true,
+				calls: [],
+			},
+		);
 	});
 
-	it("keeps the local value when the PATCH fails", async () => {
-		fetchMock.mockResolvedValue(new Response("nope", {status: 500}));
+	it("keeps the local value when the PATCH fails", async () =>
+	{
+		fetchMock.mockResolvedValue(
+			new Response(
+				"nope",
+				{
+					status: 500,
+				},
+			),
+		);
 		const error = vi.spyOn(console, "error").mockImplementation(() => {});
 		const store = await loadStore();
 		store.getState().setShowCompleted(false);
-		await vi.waitFor(() => {
+		await vi.waitFor(() =>
+		{
 			expect(error).toHaveBeenCalledOnce();
 		});
 		error.mockRestore();
 		expect([store.getState().showCompleted, stored.get("completedMode")]).toStrictEqual([false, "hide"]);
 	});
 
-	it("stays local-only without logging on 503", async () => {
-		fetchMock.mockResolvedValue(new Response("{}", {status: 503}));
+	it("stays local-only without logging on 503", async () =>
+	{
+		fetchMock.mockResolvedValue(
+			new Response(
+				"{}",
+				{
+					status: 503,
+				},
+			),
+		);
 		const error = vi.spyOn(console, "error").mockImplementation(() => {});
 		const store = await loadStore();
 		store.getState().setShowCompleted(false);
@@ -147,27 +272,55 @@ describe("setShowCompleted", () => {
 	});
 });
 
-describe("adoptShowCompleted", () => {
-	it("adopts the server value and rewrites completedMode without a PATCH", async () => {
+describe("adoptShowCompleted", () =>
+{
+	it("adopts the server value and rewrites completedMode without a PATCH", async () =>
+	{
 		stored.set("completedMode", "hide");
 		const store = await loadStore();
 		store.getState().adoptShowCompleted(true);
-		expect({
-			showCompleted: store.getState().showCompleted,
-			completedMode: stored.get("completedMode"),
-			calls: patchCalls(),
-		}).toStrictEqual({showCompleted: true, completedMode: "show", calls: []});
+		expect(
+			{
+				showCompleted: store.getState().showCompleted,
+				completedMode: stored.get("completedMode"),
+				calls: patchCalls(),
+			},
+		).toStrictEqual(
+			{
+				showCompleted: true,
+				completedMode: "show",
+				calls: [],
+			},
+		);
 	});
 });
 
-describe("serverShowCompleted", () => {
-	it("is the account value once loaded and null while loading or unavailable", async () => {
+describe("serverShowCompleted", () =>
+{
+	it("is the account value once loaded and null while loading or unavailable", async () =>
+	{
 		const {EMPTY_PREFERENCES, serverShowCompleted} = await import("../src/client/hooks/use-preferences.js");
-		const preferences = {...EMPTY_PREFERENCES, showCompleted: true};
+		const preferences =
+		{
+			...EMPTY_PREFERENCES,
+			showCompleted: true,
+		};
 		expect([
 			serverShowCompleted(undefined),
-			serverShowCompleted({preferences, available: true, error: null}),
-			serverShowCompleted({preferences, available: false, error: "no login"}),
+			serverShowCompleted(
+				{
+					preferences,
+					available: true,
+					error: null,
+				},
+			),
+			serverShowCompleted(
+				{
+					preferences,
+					available: false,
+					error: "no login",
+				},
+			),
 		]).toStrictEqual([null, true, null]);
 	});
 });

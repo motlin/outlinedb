@@ -10,11 +10,14 @@ const PANEL_CLASS = "empty-outline flex flex-col gap-y-xs py-m text-s leading-ba
  * outline the user emptied. Renders nothing until the sync state is known, so an account still importing never
  * flashes it.
  */
-function EmptyOutline({sync}: {sync: AccountSync | undefined}) {
-	if (sync === undefined) {
+function EmptyOutline({sync}: {sync: AccountSync | undefined})
+{
+	if (sync === undefined)
+	{
 		return null;
 	}
-	if (sync.phase !== "idle") {
+	if (sync.phase !== "idle")
+	{
 		return (
 			<section className={`${PANEL_CLASS} empty-outline--syncing`} aria-live="polite">
 				<LoadingSpinner size="small" />
@@ -36,6 +39,7 @@ function EmptyOutline({sync}: {sync: AccountSync | undefined}) {
 }
 
 /** {@link EmptyOutline} reading the account's sync state; mounted only while the unzoomed outline is empty. */
-export function RootEmptyOutline() {
+export function RootEmptyOutline()
+{
 	return <EmptyOutline sync={useAccountSync()} />;
 }

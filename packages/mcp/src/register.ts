@@ -6,7 +6,8 @@ import {registerNodeTools, registerNodeWriteTools} from "./tools/node-tools.js";
 import {registerSearchTools} from "./tools/search-tools.js";
 
 /** Which tools a connection gets: a read-only one lists and runs only the tools that read the outline. */
-export interface ToolAccess {
+export interface ToolAccess
+{
 	readOnly?: boolean;
 }
 
@@ -20,19 +21,31 @@ const READ_OPS: ReadonlySet<OpName> = new Set<OpName>([
 	"calendar.day",
 ]);
 
-function isReadCall(op: OpName, input: unknown): boolean {
-	if (!READ_OPS.has(op)) {
+function isReadCall(op: OpName, input: unknown): boolean
+{
+	if (!READ_OPS.has(op))
+	{
 		return false;
 	}
 	return !(typeof input === "object" && input !== null && "createPath" in input && input.createPath === true);
 }
 
 /** A store that refuses every op that could write, so a read tool with a write option (calendar ensure) cannot write. */
-function readOnlyStore(store: StoreClient): StoreClient {
+function readOnlyStore(store: StoreClient): StoreClient
+{
 	return {
-		async call<K extends OpName>(op: K, input: OpInput<K>): Promise<OpResult<OpOutput<K>>> {
-			if (!isReadCall(op, input)) {
-				return {ok: false, status: 403, body: {error: `Read-only access: ${op} needs the mcp:write scope`}};
+		async call<K extends OpName>(op: K, input: OpInput<K>): Promise<OpResult<OpOutput<K>>>
+		{
+			if (!isReadCall(op, input))
+			{
+				return {
+					ok: false,
+					status: 403,
+					body:
+					{
+						error: `Read-only access: ${op} needs the mcp:write scope`,
+					},
+				};
 			}
 			return store.call(op, input);
 		},
@@ -44,10 +57,12 @@ function readOnlyStore(store: StoreClient): StoreClient {
  * local cache; a Worker can pass a Durable Object's store client. With `readOnly`, the write tools are not registered
  * and the store refuses write ops.
  */
-export function registerOutlineTools(server: McpServer, store: StoreClient, access: ToolAccess = {}): void {
+export function registerOutlineTools(server: McpServer, store: StoreClient, access: ToolAccess = {}): void
+{
 	const scoped = access.readOnly === true ? readOnlyStore(store) : store;
 	registerNodeTools(server, scoped);
-	if (access.readOnly !== true) {
+	if (access.readOnly !== true)
+	{
 		registerNodeWriteTools(server, scoped);
 	}
 	registerCalendarTools(server, scoped);

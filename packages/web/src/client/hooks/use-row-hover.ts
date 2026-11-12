@@ -6,7 +6,8 @@ import {useOutlineStore} from "../stores/outline.js";
 const THROTTLE_MS = 50;
 
 /** Whether `rowId` is the hovered row, by a direct hover or the gutter probe. */
-export function useIsRowHovered(rowId: string): boolean {
+export function useIsRowHovered(rowId: string): boolean
+{
 	return useSyncExternalStore(
 		subscribeHoveredRow,
 		() => getHoveredRowId() === rowId,
@@ -15,12 +16,16 @@ export function useIsRowHovered(rowId: string): boolean {
 }
 
 /** Installs upstream's throttled document `mousemove` hover controller, once. */
-export function useRowHoverController(): void {
-	useEffect(() => {
+export function useRowHoverController(): void
+{
+	useEffect(() =>
+	{
 		let last = 0;
-		const onMove = (event: MouseEvent) => {
+		const onMove = (event: MouseEvent) =>
+		{
 			const now = Date.now();
-			if (now - last < THROTTLE_MS) {
+			if (now - last < THROTTLE_MS)
+			{
 				return;
 			}
 			last = now;
@@ -34,7 +39,8 @@ export function useRowHoverController(): void {
 			);
 		};
 		document.addEventListener("mousemove", onMove);
-		return () => {
+		return () =>
+		{
 			document.removeEventListener("mousemove", onMove);
 			setHoveredRowId(null);
 		};

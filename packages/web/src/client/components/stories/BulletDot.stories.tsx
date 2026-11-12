@@ -2,19 +2,24 @@ import type {Meta, StoryObj} from "@storybook/react-vite";
 
 import {BulletDot} from "./primitives.js";
 
-const meta: Meta<typeof BulletDot> = {
+const meta: Meta<typeof BulletDot> =
+{
 	title: "Primitives/BulletDot",
 	component: BulletDot,
-	parameters: {
+	parameters:
+	{
 		layout: "centered",
 	},
 	tags: ["autodocs"],
-	argTypes: {
-		isCollapsed: {
+	argTypes:
+	{
+		isCollapsed:
+		{
 			control: "boolean",
 			description: "Whether the node is a collapsed parent (shows the halo)",
 		},
-		isMirror: {
+		isMirror:
+		{
 			control: "boolean",
 			description: "Whether the node is a mirror (diamond bullet)",
 		},
@@ -24,18 +29,23 @@ const meta: Meta<typeof BulletDot> = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {
+export const Default: Story =
+{
 	args: {},
 };
 
-export const Collapsed: Story = {
-	args: {
+export const Collapsed: Story =
+{
+	args:
+	{
 		isCollapsed: true,
 	},
 };
 
-export const Mirror: Story = {
-	args: {
+export const Mirror: Story =
+{
+	args:
+	{
 		isMirror: true,
 	},
 };

@@ -7,13 +7,15 @@ import {QueryClient, QueryClientProvider} from "@tanstack/react-query";
 import {editableText} from "../src/client/components/editable-text.js";
 import {useOutlineStore} from "../src/client/stores/outline.js";
 
-declare global {
+declare global
+{
 	var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
 let root: Root | undefined;
 
-beforeEach(() => {
+beforeEach(() =>
+{
 	globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 	useOutlineStore.setState(useOutlineStore.getInitialState(), true);
 	vi.stubGlobal(
@@ -22,8 +24,10 @@ beforeEach(() => {
 	);
 });
 
-afterEach(() => {
-	act(() => {
+afterEach(() =>
+{
+	act(() =>
+	{
 		root?.unmount();
 	});
 	root = undefined;
@@ -31,21 +35,28 @@ afterEach(() => {
 });
 
 /** The query keys mounting one row name puts in the cache. */
-function mountedQueryKeys(isEditing: boolean): string[] {
+function mountedQueryKeys(isEditing: boolean): string[]
+{
 	const queryClient = new QueryClient();
 	root = createRoot(document.createElement("div"));
-	act(() => {
+	act(() =>
+	{
 		root?.render(
 			createElement(
 				QueryClientProvider,
-				{client: queryClient},
-				createElement(editableText, {
-					nodeId: "alice",
-					initialValue: "Alice",
-					parentId: null,
-					priority: 0,
-					isEditing,
-				}),
+				{
+					client: queryClient,
+				},
+				createElement(
+					editableText,
+					{
+						nodeId: "alice",
+						initialValue: "Alice",
+						parentId: null,
+						priority: 0,
+						isEditing,
+					},
+				),
 			),
 		);
 	});
@@ -55,16 +66,33 @@ function mountedQueryKeys(isEditing: boolean): string[] {
 		.map((query) => String(query.queryKey[0]));
 }
 
-describe("EditableText at rest", () => {
-	it("mounts a resting row with only the date settings and account it renders pills with, leaving the editor's queries to the edited row", () => {
+describe("EditableText at rest", () =>
+{
+	it("mounts a resting row with only the date settings and account it renders pills with, leaving the editor's queries to the edited row", () =>
+	{
 		const resting = mountedQueryKeys(false);
-		act(() => {
+		act(() =>
+		{
 			root?.unmount();
 		});
-		expect({resting, editing: mountedQueryKeys(true)}).toStrictEqual({
-			resting: ["preferences", "account"],
-			editing: ["preferences", "account", "tag-autocomplete", "calendar-days", "calendar-days", "calendar-days"],
-		});
+		expect(
+			{
+				resting,
+				editing: mountedQueryKeys(true),
+			},
+		).toStrictEqual(
+			{
+				resting: ["preferences", "account"],
+				editing: [
+					"preferences",
+					"account",
+					"tag-autocomplete",
+					"calendar-days",
+					"calendar-days",
+					"calendar-days",
+				],
+			},
+		);
 	});
 });
 
@@ -75,73 +103,121 @@ const TIMED_PILL =
 async function pickOnRestingPill(
 	initialValue: string,
 	choose: () => void,
-): Promise<{names: string[]; editingId: string | null; caret: number | null}> {
+): Promise<
+{
+	names: string[];
+	editingId: string | null;
+	caret: number | null;
+}>
+{
 	const names: string[] = [];
 	vi.stubGlobal(
 		"fetch",
-		vi.fn(async (_input: unknown, init?: RequestInit) => {
-			if (typeof init?.body === "string") {
+		vi.fn(async (_input: unknown, init?: RequestInit) =>
+		{
+			if (typeof init?.body === "string")
+			{
 				const body: unknown = JSON.parse(init.body);
-				if (typeof body === "object" && body !== null && "name" in body && typeof body.name === "string") {
+				if (typeof body === "object" && body !== null && "name" in body && typeof body.name === "string")
+				{
 					names.push(body.name);
 				}
 			}
-			return Promise.resolve(Response.json({days: []}));
+			return Promise.resolve(
+				Response.json(
+					{
+						days: [],
+					},
+				),
+			);
 		}),
 	);
 	const host = document.createElement("div");
 	document.body.append(host);
 	root = createRoot(host);
-	await act(async () => {
+	await act(async () =>
+	{
 		root?.render(
 			createElement(
 				QueryClientProvider,
-				{client: new QueryClient()},
-				createElement(editableText, {
-					nodeId: "alice",
-					initialValue,
-					parentId: null,
-					priority: 0,
-					isEditing: false,
-				}),
+				{
+					client: new QueryClient(),
+				},
+				createElement(
+					editableText,
+					{
+						nodeId: "alice",
+						initialValue,
+						parentId: null,
+						priority: 0,
+						isEditing: false,
+					},
+				),
 			),
 		);
 		await Promise.resolve();
 	});
-	await act(async () => {
-		host.querySelector("time")?.dispatchEvent(new MouseEvent("click", {bubbles: true, cancelable: true}));
+	await act(async () =>
+	{
+		host.querySelector("time")?.dispatchEvent(
+			new MouseEvent(
+				"click",
+				{
+					bubbles: true,
+					cancelable: true,
+				},
+			),
+		);
 		await Promise.resolve();
 	});
-	await act(async () => {
+	await act(async () =>
+	{
 		choose();
 		await Promise.resolve();
 	});
 	const {editingId, editingCaretOffset} = useOutlineStore.getState();
-	return {names, editingId, caret: editingCaretOffset};
+	return {
+		names,
+		editingId,
+		caret: editingCaretOffset,
+	};
 }
 
-describe("EditableText resting pill picker", () => {
-	it("applying a day replaces the pill, drops the hours and edits the row with the caret after the pill", async () => {
-		const result = await pickOnRestingPill(`dpHours ${TIMED_PILL}`, () => {
+describe("EditableText resting pill picker", () =>
+{
+	it("applying a day replaces the pill, drops the hours and edits the row with the caret after the pill", async () =>
+	{
+		const result = await pickOnRestingPill(`dpHours ${TIMED_PILL}`, () =>
+		{
 			const five = [...document.querySelectorAll<HTMLElement>('[data-date-picker-day-button="true"]')].find(
 				(button) => button.textContent === "5",
 			);
 			five?.click();
 		});
-		expect(result).toStrictEqual({
-			names: ['dpHours <time startYear="2026" startMonth="10" startDay="5">Mon, Oct 5, 2026</time>'],
-			editingId: "alice",
-			caret: 9,
-		});
+		expect(result).toStrictEqual(
+			{
+				names: ['dpHours <time startYear="2026" startMonth="10" startDay="5">Mon, Oct 5, 2026</time>'],
+				editingId: "alice",
+				caret: 9,
+			},
+		);
 	});
 
-	it("Remove date edits the row with the caret where the pill was", async () => {
-		const result = await pickOnRestingPill(`dpOtherYear ${TIMED_PILL}`, () => {
+	it("Remove date edits the row with the caret where the pill was", async () =>
+	{
+		const result = await pickOnRestingPill(`dpOtherYear ${TIMED_PILL}`, () =>
+		{
 			const remove = [...document.querySelectorAll<HTMLElement>(".menuItem")].find(
 				(row) => row.textContent === "Remove date",
 			);
 			remove?.click();
 		});
-		expect(result).toStrictEqual({names: ["dpOtherYear "], editingId: "alice", caret: 12});
+		expect(result).toStrictEqual(
+			{
+				names: ["dpOtherYear "],
+				editingId: "alice",
+				caret: 12,
+			},
+		);
 	});
 });

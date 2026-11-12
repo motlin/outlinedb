@@ -6,7 +6,8 @@ import {dateId, dayTimestamp, formatPillLabel, guessDates, presetDate, stripMode
 import type {CalendarLevel, DatePreset} from "@outlinedb/shared";
 import type {CalendarDotsResponse, NodeResponse} from "../../node-types.js";
 import {prefetchCalendarDays, useCalendarEventDays} from "../hooks/use-calendar-event-days.js";
-import {
+import
+{
 	applyCalendarLayout,
 	previewCalendarLayout,
 	undoCalendarLayout,
@@ -23,7 +24,8 @@ import {useOutlineStore} from "../stores/outline.js";
 import {findOrEnsureCalendarNode} from "../today.js";
 import type {CalendarTarget} from "../today.js";
 import {captureOutlineView, runInUndoBatch} from "../undo-batch.js";
-import {
+import
+{
 	STRIP_DROP_EVENT,
 	attachDragScroll,
 	attachOutsideDismiss,
@@ -43,21 +45,26 @@ import {FaIcon} from "./fa-icons.js";
 import {IconButton} from "./icon-button.js";
 import {LoadingSpinner} from "./loading-spinner.js";
 
-async function fetchDots(from: number, to: number): Promise<number[]> {
+async function fetchDots(from: number, to: number): Promise<number[]>
+{
 	const response = await fetch(`/api/v1/calendar/dots?from=${from}&to=${to}`);
-	if (!response.ok) {
+	if (!response.ok)
+	{
 		throw new Error(`Failed to fetch calendar dots: ${response.statusText}`);
 	}
 	return (await readJson<CalendarDotsResponse>(response)).dateIds;
 }
 
 /** The day dateIds in `[from, to]` with journal content; empty until loaded or when `from` is null. */
-function useCalendarDots(from: number | null, to: number | null): ReadonlySet<number> {
-	const {data} = useQuery({
-		queryKey: ["calendar-dots", from, to],
-		queryFn: async () => (from === null || to === null ? [] : fetchDots(from, to)),
-		enabled: from !== null && to !== null,
-	});
+function useCalendarDots(from: number | null, to: number | null): ReadonlySet<number>
+{
+	const {data} = useQuery(
+		{
+			queryKey: ["calendar-dots", from, to],
+			queryFn: async () => (from === null || to === null ? [] : fetchDots(from, to)),
+			enabled: from !== null && to !== null,
+		},
+	);
 	return new Set(data);
 }
 
@@ -69,56 +76,106 @@ function useCalendarDots(from: number | null, to: number | null): ReadonlySet<nu
  * applies the restructure (with an Undo action) when the server enables it,
  * and otherwise only previews it.
  */
-function CalendarButton({date, onSelect}: {date: Date; onSelect: (day: Date) => void}) {
+function CalendarButton({date, onSelect}: {date: Date; onSelect: (day: Date) => void})
+{
 	const anchor = useRef<HTMLDivElement | null>(null);
 	const popup = useRef<HTMLDivElement | null>(null);
-	const [open, setOpen] = useState<{left: number; top: number} | null>(null);
+	const [open, setOpen] = useState<
+	{
+		left: number;
+		top: number;
+	} | null>(null);
 	const [term, setTerm] = useState("");
 	const {dateFormat, weekStartDay} = useDateSettings();
-	const eventDays = useCalendarEventDays({found: true});
+	const eventDays = useCalendarEventDays(
+		{
+			found: true,
+		},
+	);
 	const [layoutView, setLayoutView] = useState(false);
 	const layout = useCalendarLayout(layoutView);
 	const showAppMessage = useOutlineStore((state) => state.showAppMessage);
 	const openSettings = useOutlineStore((state) => state.openSettings);
 	const queryClient = useQueryClient();
-	const reportError = (error: unknown) => {
-		showAppMessage(error instanceof Error ? error.message : String(error), {type: "failure"});
+	const reportError = (error: unknown) =>
+	{
+		showAppMessage(
+			error instanceof Error ? error.message : String(error),
+			{
+				type: "failure",
+			},
+		);
 	};
 	const calendarSettings = useCalendarSettings(reportError);
 	const shownYear = date.getFullYear();
 	const shownMonth = date.getMonth() + 1;
-	const prefetchDots = () => {
-		void prefetchCalendarDays(queryClient, {year: shownYear, month: shownMonth}, {found: true});
+	const prefetchDots = () =>
+	{
+		void prefetchCalendarDays(
+			queryClient,
+			{
+				year: shownYear,
+				month: shownMonth,
+			},
+			{
+				found: true,
+			},
+		);
 	};
 	// The picker opens on the strip's month: load its dots while the button shows, so they paint with the grid.
-	useEffect(() => {
-		void prefetchCalendarDays(queryClient, {year: shownYear, month: shownMonth}, {found: true});
+	useEffect(() =>
+	{
+		void prefetchCalendarDays(
+			queryClient,
+			{
+				year: shownYear,
+				month: shownMonth,
+			},
+			{
+				found: true,
+			},
+		);
 	}, [queryClient, shownYear, shownMonth]);
 	/**
 	 * Apply the layout and offer Undo when anything changed; everything it may have moved refetches in the background,
 	 * so the button's spinner ends as soon as the server has pushed.
 	 */
-	const applyLayout = async (levels: Parameters<typeof applyCalendarLayout>[0]) => {
+	const applyLayout = async (levels: Parameters<typeof applyCalendarLayout>[0]) =>
+	{
 		const {writes} = await applyCalendarLayout(levels);
 		void queryClient.invalidateQueries();
-		const undo = async () => {
-			try {
+		const undo = async () =>
+		{
+			try
+			{
 				await undoCalendarLayout();
 				void queryClient.invalidateQueries();
-				showAppMessage("Calendar layout restored.", {timeout: 5000});
-			} catch (error) {
+				showAppMessage(
+					"Calendar layout restored.",
+					{
+						timeout: 5000,
+					},
+				);
+			}
+			catch (error)
+			{
 				reportError(error);
 			}
 		};
 		showAppMessage(
 			layoutAppliedMessage(writes),
 			writes === 0
-				? {timeout: 5000}
-				: {
+				?
+					{
+						timeout: 5000,
+					}
+				:
+					{
 						actions: [
 							{
 								label: "Undo",
-								run: () => {
+								run: () =>
+								{
 									void undo();
 								},
 							},
@@ -126,15 +183,18 @@ function CalendarButton({date, onSelect}: {date: Date; onSelect: (day: Date) => 
 					},
 		);
 	};
-	const close = () => {
+	const close = () =>
+	{
 		setOpen(null);
 		setTerm("");
 		setLayoutView(false);
 	};
 	const isOpen = open !== null;
 	// Upstream closes the picker on a pointerdown outside it; the button itself toggles it in its click handler.
-	useEffect(() => {
-		if (!isOpen) {
+	useEffect(() =>
+	{
+		if (!isOpen)
+		{
 			return noCleanup;
 		}
 		return attachOutsideDismiss(
@@ -142,16 +202,19 @@ function CalendarButton({date, onSelect}: {date: Date; onSelect: (day: Date) => 
 			(target) =>
 				target instanceof Node &&
 				((anchor.current?.contains(target) ?? false) || (popup.current?.contains(target) ?? false)),
-			() => {
+			() =>
+			{
 				setOpen(null);
 				setTerm("");
 				setLayoutView(false);
 			},
 		);
 	}, [isOpen]);
-	const select = (day: Date | undefined) => {
+	const select = (day: Date | undefined) =>
+	{
 		close();
-		if (day !== undefined) {
+		if (day !== undefined)
+		{
 			onSelect(day);
 		}
 	};
@@ -161,19 +224,28 @@ function CalendarButton({date, onSelect}: {date: Date; onSelect: (day: Date) => 
 			ref={anchor}
 			className="inline-flex relative"
 			onPointerEnter={prefetchDots}
-			onClick={(event) => {
+			onClick={(event) =>
+			{
 				event.stopPropagation();
 				// Clicks inside the portaled popup bubble here through the React tree; only the button's own toggle.
-				if (!(event.target instanceof Node && (anchor.current?.contains(event.target) ?? false))) {
+				if (!(event.target instanceof Node && (anchor.current?.contains(event.target) ?? false)))
+				{
 					return;
 				}
-				if (open !== null) {
+				if (open !== null)
+				{
 					close();
 					return;
 				}
 				const rect = anchor.current?.getBoundingClientRect();
-				if (rect) {
-					setOpen({left: rect.left + globalThis.scrollX, top: rect.bottom + globalThis.scrollY});
+				if (rect)
+				{
+					setOpen(
+						{
+							left: rect.left + globalThis.scrollX,
+							top: rect.bottom + globalThis.scrollY,
+						},
+					);
 				}
 			}}
 		>
@@ -188,7 +260,13 @@ function CalendarButton({date, onSelect}: {date: Date; onSelect: (day: Date) => 
 								selected={stripPickerSelection(
 									term,
 									date,
-									guessDates(term, {dateFormat, weekStartDay}),
+									guessDates(
+										term,
+										{
+											dateFormat,
+											weekStartDay,
+										},
+									),
 								)}
 								weekStartDay={weekStartDay}
 								showControls={false}
@@ -196,7 +274,8 @@ function CalendarButton({date, onSelect}: {date: Date; onSelect: (day: Date) => 
 								afterCalendar={calendarPickerSettingsRows(
 									calendarSettings.settings,
 									calendarSettings.toggle,
-									() => {
+									() =>
+									{
 										setLayoutView(true);
 									},
 								)}
@@ -209,18 +288,25 @@ function CalendarButton({date, onSelect}: {date: Date; onSelect: (day: Date) => 
 										) : (
 											<CalendarLayoutView
 												layout={layout}
-												onCancel={() => {
+												onCancel={() =>
+												{
 													setLayoutView(false);
 												}}
-												onDateFormat={() => {
+												onDateFormat={() =>
+												{
 													close();
 													openSettings("Dates");
 												}}
-												onUpdate={async (levels) => {
-													try {
-														if (layout.applyEnabled) {
+												onUpdate={async (levels) =>
+												{
+													try
+													{
+														if (layout.applyEnabled)
+														{
 															await applyLayout(levels);
-														} else {
+														}
+														else
+														{
 															showAppMessage(
 																layoutPreviewMessage(
 																	await previewCalendarLayout(levels),
@@ -228,7 +314,9 @@ function CalendarButton({date, onSelect}: {date: Date; onSelect: (day: Date) => 
 															);
 														}
 														close();
-													} catch (error) {
+													}
+													catch (error)
+													{
 														reportError(error);
 													}
 												}}
@@ -240,14 +328,32 @@ function CalendarButton({date, onSelect}: {date: Date; onSelect: (day: Date) => 
 								term={term}
 								position={open}
 								onTermChange={setTerm}
-								onEnter={() => {
-									select(guessDates(term, {dateFormat, weekStartDay})[0]);
+								onEnter={() =>
+								{
+									select(
+										guessDates(
+											term,
+											{
+												dateFormat,
+												weekStartDay,
+											},
+										)[0],
+									);
 								}}
-								onApply={(dates) => {
+								onApply={(dates) =>
+								{
 									select(dates[0]);
 								}}
-								onPreset={(preset: DatePreset) => {
-									select(presetDate(preset, {weekStartDay}));
+								onPreset={(preset: DatePreset) =>
+								{
+									select(
+										presetDate(
+											preset,
+											{
+												weekStartDay,
+											},
+										),
+									);
 								}}
 								onEscape={close}
 								onClose={close}
@@ -259,9 +365,12 @@ function CalendarButton({date, onSelect}: {date: Date; onSelect: (day: Date) => 
 	);
 }
 
-function noCleanup(): void {}
+function noCleanup(): void
+{
+}
 
-function isStripDrop(event: Event): event is CustomEvent<StripDropDetail> {
+function isStripDrop(event: Event): event is CustomEvent<StripDropDetail>
+{
 	return event instanceof CustomEvent;
 }
 
@@ -269,59 +378,99 @@ function isStripDrop(event: Event): event is CustomEvent<StripDropDetail> {
  * Upstream's strip drop target (`WF.Moving.target`): a bullet drag released over a card moves its items to the end
  * of that page, creating it when missing, and toasts View and Undo; near an edge the strip autoscrolls.
  */
-function useStripDrop(scroller: HTMLDivElement | null, level: StripLevel): void {
+function useStripDrop(scroller: HTMLDivElement | null, level: StripLevel): void
+{
 	const queryClient = useQueryClient();
 	const navigate = useStableNavigate();
 	const {mutate: moveNodes} = useMoveNodes();
 	const {dateFormat} = useDateSettings();
-	useEffect(() => {
-		if (scroller === null) {
+	useEffect(() =>
+	{
+		if (scroller === null)
+		{
 			return noCleanup;
 		}
-		const onDrop = (event: Event) => {
-			if (!isStripDrop(event)) {
+		const onDrop = (event: Event) =>
+		{
+			if (!isStripDrop(event))
+			{
 				return;
 			}
 			const {itemIds, cell} = event.detail;
 			const store = useOutlineStore.getState();
-			void runStripDrop({
-				items: itemIds,
-				level,
-				cell,
-				dayName: (date) =>
-					formatPillLabel(
-						{startYear: date.getFullYear(), startMonth: date.getMonth() + 1, startDay: date.getDate()},
-						{dateFormat},
-					),
-				ensure: async (target) => {
-					const node = await findOrEnsureCalendarNode(target, globalThis.fetch);
-					return node === null
-						? null
-						: {id: node.dayId, childCount: (await fetchChildren(node.dayId)).length};
+			void runStripDrop(
+				{
+					items: itemIds,
+					level,
+					cell,
+					dayName: (date) =>
+						formatPillLabel(
+							{
+								startYear: date.getFullYear(),
+								startMonth: date.getMonth() + 1,
+								startDay: date.getDate(),
+							},
+							{
+								dateFormat,
+							},
+						),
+					ensure: async (target) =>
+					{
+						const node = await findOrEnsureCalendarNode(target, globalThis.fetch);
+						return node === null
+							? null
+							:
+								{
+									id: node.dayId,
+									childCount: (await fetchChildren(node.dayId)).length,
+								};
+					},
+					clearSelection: store.clearItemSelection,
+					moveNodes: (moves) =>
+					{
+						void runInUndoBatch(captureOutlineView, async () => sendBlockMoves(moves, moveNodes)).then(
+							async () =>
+								queryClient.invalidateQueries(
+									{
+										queryKey: ["calendar-dots"],
+									},
+								),
+						);
+					},
+					showToast: ({text, timeout, actions, type}) =>
+					{
+						useOutlineStore.getState().showAppMessage(
+							text,
+							{
+								timeout,
+								actions,
+								type,
+							},
+						);
+					},
+					view: (id) =>
+					{
+						goToNode(navigate, id);
+					},
+					undo: () =>
+					{
+						activeCommandRegistry().undo?.execute(
+							{
+								items: [],
+								zoomedId: null,
+							},
+						);
+					},
 				},
-				clearSelection: store.clearItemSelection,
-				moveNodes: (moves) => {
-					void runInUndoBatch(captureOutlineView, async () => sendBlockMoves(moves, moveNodes)).then(
-						async () => queryClient.invalidateQueries({queryKey: ["calendar-dots"]}),
-					);
-				},
-				showToast: ({text, timeout, actions, type}) => {
-					useOutlineStore.getState().showAppMessage(text, {timeout, actions, type});
-				},
-				view: (id) => {
-					goToNode(navigate, id);
-				},
-				undo: () => {
-					activeCommandRegistry().undo?.execute({items: [], zoomedId: null});
-				},
-			});
+			);
 		};
 		scroller.addEventListener(STRIP_DROP_EVENT, onDrop);
 		const detachAutoscroll = attachDropAutoscroll(
 			scroller,
 			() => useOutlineStore.getState().draggingIds.length > 0,
 		);
-		return () => {
+		return () =>
+		{
 			scroller.removeEventListener(STRIP_DROP_EVENT, onDrop);
 			detachAutoscroll();
 		};
@@ -329,12 +478,14 @@ function useStripDrop(scroller: HTMLDivElement | null, level: StripLevel): void 
 }
 
 /** A strip page's level and first day. */
-interface StripPage {
+interface StripPage
+{
 	level: CalendarLevel;
 	date: Date;
 }
 
-function StripForPage({level, date}: StripPage) {
+function StripForPage({level, date}: StripPage)
+{
 	const [now] = useState(() => new Date());
 	const {weekStartDay} = useDateSettings();
 	const navigateTo = useNavigateToCalendarDate();
@@ -352,9 +503,18 @@ function StripForPage({level, date}: StripPage) {
 	const todayTs = dayTimestamp(now);
 
 	// Like upstream, this re-runs only when the zoomed page changes.
-	useLayoutEffect(() => {
-		if (scroller !== null) {
-			scrollStripOnMount(scroller, {level, pageTs, todayTs});
+	useLayoutEffect(() =>
+	{
+		if (scroller !== null)
+		{
+			scrollStripOnMount(
+				scroller,
+				{
+					level,
+					pageTs,
+					todayTs,
+				},
+			);
 		}
 	}, [scroller, level, pageTs, todayTs]);
 
@@ -365,7 +525,8 @@ function StripForPage({level, date}: StripPage) {
 	const dragging = useOutlineStore((state) => state.draggingIds.length > 0);
 	const dropHoverKey = useOutlineStore((state) => state.stripDropKey);
 
-	const onNavigate = (target: CalendarTarget) => {
+	const onNavigate = (target: CalendarTarget) =>
+	{
 		void navigateTo(target);
 	};
 	return (
@@ -384,8 +545,13 @@ function StripForPage({level, date}: StripPage) {
 			calendarButton={
 				<CalendarButton
 					date={date}
-					onSelect={(day) => {
-						onNavigate({date: day});
+					onSelect={(day) =>
+					{
+						onNavigate(
+							{
+								date: day,
+							},
+						);
 					}}
 				/>
 			}
@@ -399,7 +565,8 @@ function StripForPage({level, date}: StripPage) {
  * button, and the scrollable day and month cells, each zooming to its page.
  * Other nodes render nothing.
  */
-export function CalendarStrip({node}: {node: Pick<NodeResponse, "id" | "calendar">}) {
+export function CalendarStrip({node}: {node: Pick<NodeResponse, "id" | "calendar">})
+{
 	const page = stripPage(node.calendar);
 	return page === null ? null : <StripForPage key={node.id} level={page.level} date={page.date} />;
 }

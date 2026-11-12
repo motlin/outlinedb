@@ -8,23 +8,45 @@ import {markWhatsNewRead, readWhatsNewReads} from "@outlinedb/shared/cache";
 import {defineOp, ok} from "./define.js";
 
 /** Every entry id of ours that was read, sorted. */
-export const WhatsNewReadSchema = z.strictObject({read: z.array(z.string())});
+export const WhatsNewReadSchema = z.strictObject(
+	{
+		read: z.array(z.string()),
+	},
+);
 
 /** Which of our What's New entries were read. */
-export const whatsNewGet = defineOp({
-	input: z.object({}),
-	output: WhatsNewReadSchema,
-	run(ctx) {
-		return ok({read: readWhatsNewReads(ctx.db)});
+export const whatsNewGet = defineOp(
+	{
+		input: z.object({}),
+		output: WhatsNewReadSchema,
+		run(ctx)
+		{
+			return ok(
+				{
+					read: readWhatsNewReads(ctx.db),
+				},
+			);
+		},
 	},
-});
+);
 
 /** Marks entries read (already-read ones are kept as they are) and answers every read entry. */
-export const whatsNewMarkRead = defineOp({
-	input: z.strictObject({entries: z.array(z.string().regex(/^[a-z0-9_]+$/u))}),
-	output: WhatsNewReadSchema,
-	run(ctx, {entries}) {
-		markWhatsNewRead(ctx.db, entries);
-		return ok({read: readWhatsNewReads(ctx.db)});
+export const whatsNewMarkRead = defineOp(
+	{
+		input: z.strictObject(
+			{
+				entries: z.array(z.string().regex(/^[a-z0-9_]+$/u)),
+			},
+		),
+		output: WhatsNewReadSchema,
+		run(ctx, {entries})
+		{
+			markWhatsNewRead(ctx.db, entries);
+			return ok(
+				{
+					read: readWhatsNewReads(ctx.db),
+				},
+			);
+		},
 	},
-});
+);

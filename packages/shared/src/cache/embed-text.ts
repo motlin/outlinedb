@@ -11,7 +11,8 @@ import {PathBuilder} from "./path-builder.js";
  * The current nodes worth indexing: those with children, excluding mirrors,
  * which have no text of their own (their original is indexed instead).
  */
-export function loadEmbeddableNodes(database: AppDatabase, pathBuilder = new PathBuilder(database)): NodeContentType[] {
+export function loadEmbeddableNodes(database: AppDatabase, pathBuilder = new PathBuilder(database)): NodeContentType[]
+{
 	const currentNodes = database
 		.select()
 		.from(nodeContent)
@@ -26,10 +27,15 @@ export function filterEmbeddable(
 	database: AppDatabase,
 	nodeIds: readonly string[],
 	pathBuilder = new PathBuilder(database),
-): string[] {
+): string[]
+{
 	const current = new Set(
 		database
-			.select({id: nodeContent.id})
+			.select(
+				{
+					id: nodeContent.id,
+				},
+			)
 			.from(nodeContent)
 			.where(
 				and(
@@ -53,12 +59,14 @@ export function buildEmbedTexts(
 	database: AppDatabase,
 	nodeIds: string[],
 	pathBuilder = new PathBuilder(database),
-): Map<string, string> {
+): Map<string, string>
+{
 	const pathMap = pathBuilder.buildFullPathsBatch(nodeIds);
 	const contentMap = pathBuilder.buildTextContentBatch(nodeIds);
 	const childrenMap = pathBuilder.buildChildrenTextBatch(nodeIds);
 	return new Map(
-		nodeIds.map((id) => {
+		nodeIds.map((id) =>
+		{
 			const fullPath = pathMap.get(id) ?? "";
 			const textContent = contentMap.get(id) ?? "";
 			const childrenText = childrenMap.get(id) ?? "";

@@ -38,7 +38,8 @@ import {RelatedNodesPanel} from "./components/related-nodes-panel.js";
 import {RightBar} from "./components/right-bar.js";
 import {SearchCountIndicator} from "./components/search-count-indicator.js";
 import {Settings} from "./components/settings.js";
-import {
+import
+{
 	DocumentEnd,
 	MainPane,
 	PANE_SCROLLER_CLASS,
@@ -112,13 +113,24 @@ import "./themes/one_dark.css";
 // Before any query exists: a navigation mounts hundreds of observers, each arming a stale timer.
 installCoalescingTimeoutProvider();
 
-const queryClient = new QueryClient({
-	defaultOptions: queryClientDefaults,
-	queryCache: new QueryCache({onError: redirectOnAuthError}),
-	mutationCache: new MutationCache({onError: redirectOnAuthError}),
-});
+const queryClient = new QueryClient(
+	{
+		defaultOptions: queryClientDefaults,
+		queryCache: new QueryCache(
+			{
+				onError: redirectOnAuthError,
+			},
+		),
+		mutationCache: new MutationCache(
+			{
+				onError: redirectOnAuthError,
+			},
+		),
+	},
+);
 setFeatureWriter(async (codename, on) => setFeature(queryClient, codename, on));
-watchMutations(queryClient, (event) => {
+watchMutations(queryClient, (event) =>
+{
 	useOutlineStore.getState().recordSyncEvent(event);
 });
 setTableCellProbe((nodeId) => cachedTableRole(queryClient, nodeId) === "cell");
@@ -128,7 +140,8 @@ installSaveTracking(queryClient, window);
  * Registers the keyboard shortcuts. The command registry follows the edited and zoomed nodes, so it lives in this
  * empty leaf: its re-renders on every edit and save stay here instead of re-rendering the whole page.
  */
-function GlobalCommands() {
+function GlobalCommands()
+{
 	useGlobalKeymap(useCommandRegistry());
 	useCopyCut();
 	useSearchEscape();
@@ -138,46 +151,57 @@ function GlobalCommands() {
 
 /** The page shell. Memoized, so a URL change re-renders it only through the store fields it selects. */
 /** `window.innerWidth`, tracked on resize: upstream feeds it to the page padding. */
-function useInnerWidth(): number {
+function useInnerWidth(): number
+{
 	const [width, setWidth] = useState(() => window.innerWidth);
-	useEffect(() => {
-		const onResize = () => {
+	useEffect(() =>
+	{
+		const onResize = () =>
+		{
 			setWidth(window.innerWidth);
 		};
 		window.addEventListener("resize", onResize);
-		return () => {
+		return () =>
+		{
 			window.removeEventListener("resize", onResize);
 		};
 	}, []);
 	return width;
 }
 
-function clearSelectionOnPageMouseDown(event: React.MouseEvent<HTMLDivElement>): void {
+function clearSelectionOnPageMouseDown(event: React.MouseEvent<HTMLDivElement>): void
+{
 	const target = event.target instanceof Element ? event.target : null;
 	const {itemSelection, clearItemSelection} = useOutlineStore.getState();
 	const bullet = target?.closest(".bullet");
 	const bulletRow = bullet?.closest(".project");
 	if (
-		shouldClearSelectionOnPageMouseDown({
-			selectionActive: itemSelection.entries.length > 0,
-			button: event.button,
-			meta: event.metaKey,
-			alt: event.altKey,
-			ctrl: event.ctrlKey,
-			shift: event.shiftKey,
-			onSelectedBullet: bulletRow?.classList.contains("addedToSelection") === true,
-		})
-	) {
+		shouldClearSelectionOnPageMouseDown(
+			{
+				selectionActive: itemSelection.entries.length > 0,
+				button: event.button,
+				meta: event.metaKey,
+				alt: event.altKey,
+				ctrl: event.ctrlKey,
+				shift: event.shiftKey,
+				onSelectedBullet: bulletRow?.classList.contains("addedToSelection") === true,
+			},
+		)
+	)
+	{
 		clearItemSelection();
 	}
 }
 
 /** A dashboard page takes its padding, margin and radius from the `.dashboard-page` rule, not the inline page style. */
-function dashboardPageStyle(dashboardPage: boolean, style: ReturnType<typeof pageStyle>) {
-	if (!dashboardPage) {
+function dashboardPageStyle(dashboardPage: boolean, style: ReturnType<typeof pageStyle>)
+{
+	if (!dashboardPage)
+	{
 		return style;
 	}
-	const {
+	const
+	{
 		paddingLeft: _paddingLeft,
 		paddingRight: _paddingRight,
 		marginTop: _marginTop,
@@ -189,7 +213,8 @@ function dashboardPageStyle(dashboardPage: boolean, style: ReturnType<typeof pag
 	return rest;
 }
 
-export interface PageShellProps {
+export interface PageShellProps
+{
 	zoomedNodeId: string | null;
 	fullWidth: boolean;
 	/** `window.innerWidth`. */
@@ -211,22 +236,32 @@ export function pageShell({
 	showCompleted,
 	searchFormVisible = false,
 	dashboardPage = false,
-}: PageShellProps) {
+}: PageShellProps)
+{
 	return (
 		// oxlint-disable-next-line jsx-a11y/no-static-element-interactions -- upstream clears the item selection on any plain press in the container
 		<div className={pageContainerClassName(IS_MOBILE)} onMouseDown={clearSelectionOnPageMouseDown}>
 			<div
-				className={pageClassName({searching, showCompleted, mobile: IS_MOBILE, dashboardPage})}
+				className={pageClassName(
+					{
+						searching,
+						showCompleted,
+						mobile: IS_MOBILE,
+						dashboardPage,
+					},
+				)}
 				style={dashboardPageStyle(
 					dashboardPage,
-					pageStyle({
-						fullWidth,
-						width,
-						searching,
-						mobile: IS_MOBILE,
-						safeInsets: IS_MOBILE ? readSafeInsets() : undefined,
-						searchFormVisible,
-					}),
+					pageStyle(
+						{
+							fullWidth,
+							width,
+							searching,
+							mobile: IS_MOBILE,
+							safeInsets: IS_MOBILE ? readSafeInsets() : undefined,
+							searchFormVisible,
+						},
+					),
 				)}
 			>
 				<OutlineTree parentId={zoomedNodeId} shell="page" />
@@ -236,41 +271,54 @@ export function pageShell({
 	);
 }
 
-function FeatureFlagsSync() {
+function FeatureFlagsSync()
+{
 	useFeatureStoreSync();
 	return null;
 }
 
 /** The main pane's outline under its zoom, styled by its search: the part of the page a zoom or search re-renders. */
-function MainOutline() {
+function MainOutline()
+{
 	const zoomedNodeId = useOutlineStore((state) => state.zoomedNodeId);
 	const searchQuery = useOutlineStore((state) => state.searchQuery);
 	const showCompleted = useOutlineStore((state) => state.showCompleted);
 	const searchFormVisible = useOutlineStore((state) =>
-		mobileSearchVisible({focused: state.searchFocused, input: state.searchInput, query: state.searchQuery}),
+		mobileSearchVisible(
+			{
+				focused: state.searchFocused,
+				input: state.searchInput,
+				query: state.searchQuery,
+			},
+		),
 	);
 	const width = useInnerWidth();
 	const fullWidth = useOutlineStore((state) => state.fullWidthPage);
 	// With a pane open the main outline scrolls itself, like each pane, instead of the document.
 	const panesOpen = useOutlineStore((state) => state.panes.length > 0);
 	const {data: zoomedNode} = useNode(zoomedNodeId);
-	if (!panesOpen) {
-		return pageShell({
-			dashboardPage:
-				dashboardClasses({
-					layoutMode: zoomedNode?.data.layoutMode,
-					renders: true,
-					parentRenders: false,
-					isZoomRoot: true,
-					flagOn: dashboardsOn(),
-				}).page.length > 0,
-			zoomedNodeId,
-			fullWidth,
-			width,
-			searching: searchQuery !== "",
-			showCompleted,
-			searchFormVisible: IS_MOBILE && searchFormVisible,
-		});
+	if (!panesOpen)
+	{
+		return pageShell(
+			{
+				dashboardPage:
+					dashboardClasses(
+						{
+							layoutMode: zoomedNode?.data.layoutMode,
+							renders: true,
+							parentRenders: false,
+							isZoomRoot: true,
+							flagOn: dashboardsOn(),
+						},
+					).page.length > 0,
+				zoomedNodeId,
+				fullWidth,
+				width,
+				searching: searchQuery !== "",
+				showCompleted,
+				searchFormVisible: IS_MOBILE && searchFormVisible,
+			},
+		);
 	}
 	return (
 		<div className="relative flex flex-1 min-h-0 flex-col">
@@ -288,15 +336,28 @@ function MainOutline() {
 }
 
 /** Undo and redo from the header, for the main outline's zoom when pressed. */
-function undoFromHeader(): void {
-	activeCommandRegistry().undo?.execute({items: [], zoomedId: useOutlineStore.getState().zoomedNodeId});
+function undoFromHeader(): void
+{
+	activeCommandRegistry().undo?.execute(
+		{
+			items: [],
+			zoomedId: useOutlineStore.getState().zoomedNodeId,
+		},
+	);
 }
 
-function redoFromHeader(): void {
-	activeCommandRegistry().redo?.execute({items: [], zoomedId: useOutlineStore.getState().zoomedNodeId});
+function redoFromHeader(): void
+{
+	activeCommandRegistry().redo?.execute(
+		{
+			items: [],
+			zoomedId: useOutlineStore.getState().zoomedNodeId,
+		},
+	);
 }
 
-export const OutlineView = memo(function OutlineView() {
+export const OutlineView = memo(function OutlineView()
+{
 	useZenModeListeners();
 	const {relatedNodesPanelOpen, paneCount} = useOutlineViewState();
 
@@ -348,7 +409,8 @@ export const OutlineView = memo(function OutlineView() {
 });
 
 /** The `/` route: the outline zoomed to the node the `#/<id>?q=` hash names (see `useHashLocationZoom`). */
-function HashLocationRoute() {
+function HashLocationRoute()
+{
 	useHashLocationZoom();
 	useEmptyDayCleanup();
 	usePaneUrlSync(fetchResolvedId);
@@ -359,42 +421,52 @@ function HashLocationRoute() {
 }
 
 /** `/node/:id` is a legacy alias: replace it with the hash URL, which resolves the id. */
-function NodeRedirect() {
-	const {id} = useParams<{id: string}>();
+function NodeRedirect()
+{
+	const {id} = useParams<
+	{
+		id: string;
+	}>();
 	return <Navigate replace to={id === undefined ? "/" : nodeUrl(id)} />;
 }
 
 /** Upstream's generated tag color sheet: colors `.contentTag` spans by their lowercased `data-val`. */
-function TagColorStyles() {
+function TagColorStyles()
+{
 	return createPortal(<style id="tags-None">{buildTagColorCss(useTagColors())}</style>, document.head);
 }
 
 /** Upstream's injected `.contentLink` color sheet, rebuilt from the account's External link style setting. */
-function LinkColorStyles() {
+function LinkColorStyles()
+{
 	const {preferences} = usePreferences();
 	return createPortal(<style id="link-colors">{linkColorCss(preferences.sameColorForLinks)}</style>, document.head);
 }
 
 /** Keeps the toolbar's latest color in step with the account's `latestColor`. */
-function LatestColorSync() {
+function LatestColorSync()
+{
 	useLatestColorSync();
 	return null;
 }
 
 /** Starts the account's change tracking (`searchForChangesAfter`) on load, as upstream does. */
-function SearchForChangesAfterSync() {
+function SearchForChangesAfterSync()
+{
 	useSearchForChangesAfterSync();
 	return null;
 }
 
 /** Keeps show/hide completed in step with the account's `show_completed` setting. */
-function ShowCompletedSync() {
+function ShowCompletedSync()
+{
 	useShowCompletedSync();
 	return null;
 }
 
 /** Keeps the right bar's shortcuts help in step with the account's `show_keyboard_shortcuts` setting. */
-function ShowKeyboardShortcutsSync() {
+function ShowKeyboardShortcutsSync()
+{
 	useShowKeyboardShortcutsSync();
 	useThemeSync();
 	useEmojiSync();
@@ -404,28 +476,33 @@ function ShowKeyboardShortcutsSync() {
 }
 
 /** Hydrates expansion from the account (`/api/v1/expansion`) once on load. */
-function ExpansionSync() {
+function ExpansionSync()
+{
 	useExpansionSync();
 	return null;
 }
 
 /** Pulls tree changes made elsewhere (another tab, the CLI, an upstream catch-up) into the open outline. */
-function OutlineLiveSync() {
+function OutlineLiveSync()
+{
 	useOutlineLiveSync();
 	return null;
 }
 
 /** Dims item-selection tints while the window is blurred (`body.wf-dom-window-blurred`). */
-function WindowBlurredClass() {
+function WindowBlurredClass()
+{
 	useEffect(() => installWindowBlurredClass(window, document.body), []);
 	useEffect(() => installContentLinkContextMenu(document), []);
 	useEffect(() => installLinkStatusBar(document), []);
 	return null;
 }
 
-export function App() {
+export function App()
+{
 	// The sign-in screens stand alone: none of the outline's account syncs run before anyone is signed in.
-	if (isAuthPath(globalThis.location.pathname)) {
+	if (isAuthPath(globalThis.location.pathname))
+	{
 		return (
 			<ErrorBoundary>
 				<AuthApp />

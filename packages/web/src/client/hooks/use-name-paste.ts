@@ -9,7 +9,8 @@ import type {DateSettings} from "../date-settings.js";
 import {renderEditorHtml, serializeEditorHtml} from "../editor-html.js";
 import type {MentionAccount} from "../mention-pills.js";
 import {readChildren, readNode} from "../node-cache.js";
-import {
+import
+{
 	buildItemCopyLines,
 	buildPasteLines,
 	planItemCopy,
@@ -25,7 +26,8 @@ import {captureOutlineView, holdUndoSlot, runInUndoBatch} from "../undo-batch.js
 import {usePlainPasteKey} from "./use-plain-paste-key.js";
 import {mirrorNodeAt, restoreNode, syncNodeChanges, toggleComplete, useDeleteNode, useUpdateNode} from "./use-nodes.js";
 import {cutEntryFor, forgetCut} from "../cut-registry.js";
-import {
+import
+{
 	CUT_PASTE_WARNING,
 	copyTreeFromCache,
 	mirrorOriginalFromCache,
@@ -39,7 +41,8 @@ import {applyLinkPaste, cachedLinkTargetName, planLinkPaste} from "../link-paste
 import {RequestStatusError} from "../request-error.js";
 import {hideBanner, showBanner} from "../stores/banner.js";
 
-interface NamePasteOptions {
+interface NamePasteOptions
+{
 	nodeId: string;
 	parentId: string | null;
 	contentRef: RefObject<HTMLSpanElement | null>;
@@ -51,7 +54,8 @@ interface NamePasteOptions {
 	changed: () => void;
 }
 
-interface ItemPasteTarget {
+interface ItemPasteTarget
+{
 	queryClient: QueryClient;
 	parentId: string | null;
 	baseIndex: number;
@@ -65,31 +69,65 @@ async function pasteItemSteps(
 	steps: readonly ItemPasteStep[],
 	{queryClient, parentId, baseIndex}: ItemPasteTarget,
 	copyTrees: readonly PasteTree[],
-): Promise<Awaited<ReturnType<typeof pasteSteps>>> {
+): Promise<Awaited<ReturnType<typeof pasteSteps>>>
+{
 	const createOne = async (tree: PasteTree | undefined, at: number): Promise<string | undefined> =>
-		tree === undefined ? undefined : (await createTrees(queryClient, {parentId, index: at, trees: [tree]}))[0];
-	const result = await pasteSteps(steps, baseIndex, {
-		async restore(step, at) {
-			const slot = holdUndoSlot();
-			try {
-				await restoreNode(step.id, {parent_id: parentId, index: at});
-			} catch (error) {
-				slot.settle([]);
-				throw error;
-			}
-			slot.settle([{kind: "undelete", nodeId: step.id, parentId, index: at}]);
-			forgetCut(step.shortId);
-			hideBanner();
+		tree === undefined
+			? undefined
+			: (
+					await createTrees(
+						queryClient,
+						{
+							parentId,
+							index: at,
+							trees: [tree],
+						},
+					)
+				)[0];
+	const result = await pasteSteps(
+		steps,
+		baseIndex,
+		{
+			async restore(step, at)
+			{
+				const slot = holdUndoSlot();
+				try
+				{
+					await restoreNode(
+						step.id,
+						{
+							parent_id: parentId,
+							index: at,
+						},
+					);
+				}
+				catch (error)
+				{
+					slot.settle([]);
+					throw error;
+				}
+				slot.settle([
+					{
+						kind: "undelete",
+						nodeId: step.id,
+						parentId,
+						index: at,
+					},
+				]);
+				forgetCut(step.shortId);
+				hideBanner();
+			},
+			mirror: async (originalId, at) => mirrorNodeAt(queryClient, originalId, parentId, at),
+			copyFromCache: async (id, at) => createOne(copyTreeFromCache(queryClient, id), at),
+			fallbackCopy: async (stepIndex, at) => createOne(copyTrees[stepIndex], at),
 		},
-		mirror: async (originalId, at) => mirrorNodeAt(queryClient, originalId, parentId, at),
-		copyFromCache: async (id, at) => createOne(copyTreeFromCache(queryClient, id), at),
-		fallbackCopy: async (stepIndex, at) => createOne(copyTrees[stepIndex], at),
-	});
+	);
 	await syncNodeChanges(queryClient);
 	return result;
 }
 
-function lastTree(trees: readonly PasteTree[]): PasteTree | undefined {
+function lastTree(trees: readonly PasteTree[]): PasteTree | undefined
+{
 	return trees.at(-1);
 }
 
@@ -102,29 +140,34 @@ export function useNamePaste({
 	account,
 	resetSaved,
 	changed,
-}: NamePasteOptions) {
+}: NamePasteOptions)
+{
 	const queryClient = useQueryClient();
 	const updateNode = useUpdateNode();
 	const deleteNode = useDeleteNode();
 	const plainKey = usePlainPasteKey();
 
 	return useCallback(
-		(event: ReactClipboardEvent<HTMLElement>) => {
+		(event: ReactClipboardEvent<HTMLElement>) =>
+		{
 			const content = contentRef.current;
 			const data = event.clipboardData;
-			if (content === null) {
+			if (content === null)
+			{
 				return;
 			}
 			const text = data.getData("text/plain");
 			const html = data.getData("text/html");
 			// Image files belong to uploads: leave the native paste.
-			if (data.files.length > 0 && text === "") {
+			if (data.files.length > 0 && text === "")
+			{
 				return;
 			}
 			const selection = globalThis.getSelection();
 			const anchorElement =
 				selection?.anchorNode instanceof Element ? selection.anchorNode : selection?.anchorNode?.parentElement;
-			const showName = (name: string, caret: number): void => {
+			const showName = (name: string, caret: number): void =>
+			{
 				content.innerHTML = renderEditorHtml(name, dateSettings, account);
 				placeCaretAtTextOffset(content, caret);
 			};
@@ -135,9 +178,16 @@ export function useNamePaste({
 			const layoutMode = node?.data.layoutMode;
 
 			// Inside a code span the trimmed text goes in as code.
-			if (anchorElement?.closest("code") && content.contains(anchorElement)) {
+			if (anchorElement?.closest("code") && content.contains(anchorElement))
+			{
 				event.preventDefault();
-				const splice = planMultilineSplice({before, after, text: text.trim()});
+				const splice = planMultilineSplice(
+					{
+						before,
+						after,
+						text: text.trim(),
+					},
+				);
 				showName(splice.html, splice.caret);
 				changed();
 				return;
@@ -147,27 +197,33 @@ export function useNamePaste({
 			if (
 				layoutMode === "code-block" ||
 				(layoutMode !== undefined && resolveLayoutMode(layoutMode).projectClasses.includes("multiline"))
-			) {
+			)
+			{
 				event.preventDefault();
-				const splice = planMultilineSplice({
-					before,
-					after,
-					text: layoutMode === "code-block" ? text.trim() : text,
-				});
+				const splice = planMultilineSplice(
+					{
+						before,
+						after,
+						text: layoutMode === "code-block" ? text.trim() : text,
+					},
+				);
 				showName(splice.html, splice.caret);
 				changed();
 				return;
 			}
 			const linkPlan = plainKey.current
 				? null
-				: planLinkPaste({
-						clipboardText: text,
-						selectionText: selection?.toString() ?? "",
-						collapsed: offsets.start === offsets.end,
-						inCode: false,
-						resolveTargetName: (href) => cachedLinkTargetName(queryClient, href),
-					});
-			if (linkPlan !== null) {
+				: planLinkPaste(
+						{
+							clipboardText: text,
+							selectionText: selection?.toString() ?? "",
+							collapsed: offsets.start === offsets.end,
+							inCode: false,
+							resolveTargetName: (href) => cachedLinkTargetName(queryClient, href),
+						},
+					);
+			if (linkPlan !== null)
+			{
 				event.preventDefault();
 				const linked = applyLinkPaste(stored, offsets, linkPlan);
 				showName(linked.html, linked.caret);
@@ -193,12 +249,16 @@ export function useNamePaste({
 
 			const itemSteps = plainKey.current
 				? null
-				: planItemPaste(html, {
-						cutId: (shortId) => cutEntryFor(shortId)?.id,
-						resolve: (shortId) => resolveShortId(queryClient, shortId),
-						mirrorOriginal: (id) => mirrorOriginalFromCache(queryClient, id),
-					});
-			if (itemSteps !== null && "alert" in itemSteps) {
+				: planItemPaste(
+						html,
+						{
+							cutId: (shortId) => cutEntryFor(shortId)?.id,
+							resolve: (shortId) => resolveShortId(queryClient, shortId),
+							mirrorOriginal: (id) => mirrorOriginalFromCache(queryClient, id),
+						},
+					);
+			if (itemSteps !== null && "alert" in itemSteps)
+			{
 				showAlert(itemSteps.alert, "Error");
 				return;
 			}
@@ -206,45 +266,83 @@ export function useNamePaste({
 			const copiedTrees =
 				copied === null
 					? []
-					: planItemCopy({lines: copied, rowEmpty: false, rowIndex: 0, rowOpen: false}).trees;
-			const pasteCopiedLines = (): void => {
-				if (copied === null) {
+					: planItemCopy(
+							{
+								lines: copied,
+								rowEmpty: false,
+								rowIndex: 0,
+								rowOpen: false,
+							},
+						).trees;
+			const pasteCopiedLines = (): void =>
+			{
+				if (copied === null)
+				{
 					return;
 				}
-				const plan = planItemCopy({
-					lines: copied,
-					rowEmpty: stored.trim() === "" && offsets.start === 0 && offsets.end === 0,
-					rowIndex,
-					rowOpen: view.expandedIds.has(nodeId) && children.length > 0,
-				});
-				void runInUndoBatch(captureOutlineView, async () => {
+				const plan = planItemCopy(
+					{
+						lines: copied,
+						rowEmpty: stored.trim() === "" && offsets.start === 0 && offsets.end === 0,
+						rowIndex,
+						rowOpen: view.expandedIds.has(nodeId) && children.length > 0,
+					},
+				);
+				void runInUndoBatch(captureOutlineView, async () =>
+				{
 					const request =
 						plan.placement.kind === "index"
-							? {parentId, index: plan.placement.index}
+							?
+								{
+									parentId,
+									index: plan.placement.index,
+								}
 							: plan.placement.kind === "firstChild"
-								? {parentId: nodeId, index: 0}
-								: {parentId, afterId: nodeId};
-					const ids = await createTrees(queryClient, {...request, trees: plan.trees});
-					if (plan.deleteCurrent) {
+								?
+									{
+										parentId: nodeId,
+										index: 0,
+									}
+								:
+									{
+										parentId,
+										afterId: nodeId,
+									};
+					const ids = await createTrees(
+						queryClient,
+						{
+							...request,
+							trees: plan.trees,
+						},
+					);
+					if (plan.deleteCurrent)
+					{
 						deleteNode.mutate(nodeId);
-					} else if (plan.placement.kind === "firstChild") {
+					}
+					else if (plan.placement.kind === "firstChild")
+					{
 						expand(nodeId);
 					}
 					const last = ids.at(-1);
 					const tree = lastTree(plan.trees);
-					if (last !== undefined && tree !== undefined) {
+					if (last !== undefined && tree !== undefined)
+					{
 						resumeEditing(last, plainLength(tree.name));
 					}
 				}).catch(() => {});
 			};
-			if (itemSteps !== null && stepsRunnable(itemSteps)) {
-				const placementPlan = planItemCopy({
-					lines: [],
-					rowEmpty: stored.trim() === "" && offsets.start === 0 && offsets.end === 0,
-					rowIndex,
-					rowOpen: view.expandedIds.has(nodeId) && children.length > 0,
-				});
-				void runInUndoBatch(captureOutlineView, async () => {
+			if (itemSteps !== null && stepsRunnable(itemSteps))
+			{
+				const placementPlan = planItemCopy(
+					{
+						lines: [],
+						rowEmpty: stored.trim() === "" && offsets.start === 0 && offsets.end === 0,
+						rowIndex,
+						rowOpen: view.expandedIds.has(nodeId) && children.length > 0,
+					},
+				);
+				void runInUndoBatch(captureOutlineView, async () =>
+				{
 					const placed = await pasteItemSteps(
 						itemSteps,
 						{
@@ -259,38 +357,71 @@ export function useNamePaste({
 						},
 						copiedTrees,
 					);
-					if (placed.unmovable) {
-						showBanner(CUT_PASTE_WARNING, {kind: "warn"});
+					if (placed.unmovable)
+					{
+						showBanner(
+							CUT_PASTE_WARNING,
+							{
+								kind: "warn",
+							},
+						);
 						pasteCopiedLines();
 						return;
 					}
-					if (placed.fellBack) {
-						showBanner(CUT_PASTE_WARNING, {kind: "warn"});
+					if (placed.fellBack)
+					{
+						showBanner(
+							CUT_PASTE_WARNING,
+							{
+								kind: "warn",
+							},
+						);
 					}
-					if (placementPlan.deleteCurrent) {
+					if (placementPlan.deleteCurrent)
+					{
 						deleteNode.mutate(nodeId);
-					} else if (placementPlan.placement.kind === "firstChild") {
+					}
+					else if (placementPlan.placement.kind === "firstChild")
+					{
 						expand(nodeId);
 					}
-					if (placed.lastId !== null) {
+					if (placed.lastId !== null)
+					{
 						resumeEditing(placed.lastId, Number.MAX_SAFE_INTEGER);
 					}
 				}).catch(() => {});
 				return;
 			}
-			if (copied !== null) {
+			if (copied !== null)
+			{
 				pasteCopiedLines();
 				return;
 			}
 
-			const lines = buildPasteLines({text, html, plain: plainKey.current});
-			const plan = planPasteApply({before, after, lines, rowKind});
-			if ("alert" in plan) {
+			const lines = buildPasteLines(
+				{
+					text,
+					html,
+					plain: plainKey.current,
+				},
+			);
+			const plan = planPasteApply(
+				{
+					before,
+					after,
+					lines,
+					rowKind,
+				},
+			);
+			if ("alert" in plan)
+			{
 				showAlert(plan.alert, "Error");
 				return;
 			}
-			void runInUndoBatch(captureOutlineView, async () => {
-				if (plan.currentName !== null) {
+			void runInUndoBatch(captureOutlineView, async () =>
+			{
+				if (plan.currentName !== null)
+				{
 					const name = plan.currentName;
 					showName(
 						name,
@@ -299,34 +430,93 @@ export function useNamePaste({
 							: plainLength(name),
 					);
 					resetSaved(name);
-					updateNode.mutate({
-						nodeId,
-						name,
-						...(plan.current?.note === undefined ? {} : {note: plan.current.note}),
-						...(plan.current?.layoutMode === undefined ? {} : {layoutMode: plan.current.layoutMode}),
-						...(plan.current?.numberedStart === undefined
-							? {}
-							: {numberedStart: plan.current.numberedStart}),
-					});
-					if (plan.current?.complete === true) {
-						toggleComplete(queryClient, {nodeId, isCurrentlyCompleted: false});
+					updateNode.mutate(
+						{
+							nodeId,
+							name,
+							...(plan.current?.note === undefined
+								? {}
+								:
+									{
+										note: plan.current.note,
+									}),
+							...(plan.current?.layoutMode === undefined
+								? {}
+								:
+									{
+										layoutMode: plan.current.layoutMode,
+									}),
+							...(plan.current?.numberedStart === undefined
+								? {}
+								:
+									{
+										numberedStart: plan.current.numberedStart,
+									}),
+						},
+					);
+					if (plan.current?.complete === true)
+					{
+						toggleComplete(
+							queryClient,
+							{
+								nodeId,
+								isCurrentlyCompleted: false,
+							},
+						);
 					}
 				}
-				let created: {id: string; tree: PasteTree} | undefined;
-				if (plan.childTrees.length > 0) {
-					const ids = await createTrees(queryClient, {parentId: nodeId, index: 0, trees: plan.childTrees});
+				let created:
+					|
+					  {
+							id: string;
+							tree: PasteTree;
+					  }
+					| undefined;
+				if (plan.childTrees.length > 0)
+				{
+					const ids = await createTrees(
+						queryClient,
+						{
+							parentId: nodeId,
+							index: 0,
+							trees: plan.childTrees,
+						},
+					);
 					expand(nodeId);
 					const last = ids.at(-1);
 					const tree = lastTree(plan.childTrees);
-					created = last !== undefined && tree !== undefined ? {id: last, tree} : created;
+					created =
+						last !== undefined && tree !== undefined
+							?
+								{
+									id: last,
+									tree,
+								}
+							: created;
 				}
-				if (plan.siblingTrees.length > 0) {
-					const ids = await createTrees(queryClient, {parentId, afterId: nodeId, trees: plan.siblingTrees});
+				if (plan.siblingTrees.length > 0)
+				{
+					const ids = await createTrees(
+						queryClient,
+						{
+							parentId,
+							afterId: nodeId,
+							trees: plan.siblingTrees,
+						},
+					);
 					const last = ids.at(-1);
 					const tree = lastTree(plan.siblingTrees);
-					created = last !== undefined && tree !== undefined ? {id: last, tree} : created;
+					created =
+						last !== undefined && tree !== undefined
+							?
+								{
+									id: last,
+									tree,
+								}
+							: created;
 				}
-				if (plan.caret.row === "lastCreated" && created !== undefined) {
+				if (plan.caret.row === "lastCreated" && created !== undefined)
+				{
 					resumeEditing(
 						created.id,
 						plan.caret.offset === "end" ? plainLength(created.tree.name) : plan.caret.offset,

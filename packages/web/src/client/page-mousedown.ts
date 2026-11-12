@@ -1,4 +1,5 @@
-export interface PageMouseDown {
+export interface PageMouseDown
+{
 	selectionActive: boolean;
 	button: number;
 	meta: boolean;
@@ -10,7 +11,8 @@ export interface PageMouseDown {
 }
 
 /** Upstream's `wy4`: a plain left mousedown inside the page container clears the item selection. */
-export function shouldClearSelectionOnPageMouseDown(event: PageMouseDown): boolean {
+export function shouldClearSelectionOnPageMouseDown(event: PageMouseDown): boolean
+{
 	return (
 		event.selectionActive &&
 		event.button === 0 &&

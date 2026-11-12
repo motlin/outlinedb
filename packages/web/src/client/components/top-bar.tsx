@@ -24,7 +24,8 @@ import {cachedResolvedId} from "../node-cache.js";
 import {PANE_HEADER_ACTIVE_BORDER} from "./pane-context.js";
 
 /** The first pane's header while panes are open: upstream's pane header reset, not the fixed single-document bar. */
-const FIRST_PANE_HEADER_STYLE: CSSProperties = {
+const FIRST_PANE_HEADER_STYLE: CSSProperties =
+{
 	position: "relative",
 	top: "auto",
 	right: "auto",
@@ -42,7 +43,8 @@ const LEFT_CONTROL_CLASS =
 /** Upstream's hamburger hover peek: the drawer closes this long after the pointer leaves the hamburger. */
 const PEEK_CLOSE_DELAY_MS = 200;
 
-export interface PeekControllerOptions {
+export interface PeekControllerOptions
+{
 	open: () => void;
 	close: () => void;
 	/** True while the pointer is over the left bar itself, which keeps the drawer open. */
@@ -53,22 +55,28 @@ export interface PeekControllerOptions {
  * Hamburger hover peek: enter cancels any pending close and opens the drawer; leave closes it
  * 200ms later unless the pointer has moved onto the left bar by then.
  */
-export function createPeekController({open, close, isHovered}: PeekControllerOptions) {
+export function createPeekController({open, close, isHovered}: PeekControllerOptions)
+{
 	let closeTimer: ReturnType<typeof setTimeout> | undefined;
-	const cancel = () => {
+	const cancel = () =>
+	{
 		clearTimeout(closeTimer);
 		closeTimer = undefined;
 	};
 	return {
-		enter: () => {
+		enter: () =>
+		{
 			cancel();
 			open();
 		},
-		leave: () => {
+		leave: () =>
+		{
 			cancel();
-			closeTimer = setTimeout(() => {
+			closeTimer = setTimeout(() =>
+			{
 				closeTimer = undefined;
-				if (!isHovered()) {
+				if (!isHovered())
+				{
 					close();
 				}
 			}, PEEK_CLOSE_DELAY_MS);
@@ -77,7 +85,8 @@ export function createPeekController({open, close, isHovered}: PeekControllerOpt
 	};
 }
 
-function canHover(): boolean {
+function canHover(): boolean
+{
 	return globalThis.matchMedia("(any-hover: hover) and (pointer: fine)").matches;
 }
 
@@ -85,13 +94,16 @@ function canHover(): boolean {
  * Top toolbar matching upstream's div.wf-header.header: flat children (hamburger,
  * pagination, breadcrumbs, right cluster), 48px tall, fixed at the top.
  */
-interface TopBarProps {
+interface TopBarProps
+{
 	onUndo: () => void;
 	onRedo: () => void;
 }
 
-export function TopBar({onUndo, onRedo}: TopBarProps) {
-	const {
+export function TopBar({onUndo, onRedo}: TopBarProps)
+{
+	const
+	{
 		zoomedNodeId,
 		zoomedInstance,
 		toggleLeftBar,
@@ -103,7 +115,8 @@ export function TopBar({onUndo, onRedo}: TopBarProps) {
 		openPane,
 		searchQuery,
 	} = useOutlineStore(
-		useShallow((state) => ({
+		useShallow((state) => (
+		{
 			zoomedNodeId: state.zoomedNodeId,
 			zoomedInstance: state.zoomedInstance,
 			toggleLeftBar: state.toggleLeftBar,
@@ -117,11 +130,13 @@ export function TopBar({onUndo, onRedo}: TopBarProps) {
 		})),
 	);
 	const [peek] = useState(() =>
-		createPeekController({
-			open: openLeftBarDrawer,
-			close: closeLeftBarDrawer,
-			isHovered: () => useOutlineStore.getState().leftBarHovered,
-		}),
+		createPeekController(
+			{
+				open: openLeftBarDrawer,
+				close: closeLeftBarDrawer,
+				isHovered: () => useOutlineStore.getState().leftBarHovered,
+			},
+		),
 	);
 	useEffect(() => peek.dispose, [peek]);
 	const navigate = useStableNavigate();
@@ -142,25 +157,33 @@ export function TopBar({onUndo, onRedo}: TopBarProps) {
 	const compact = narrow || paneOpen;
 
 	const commitMainSearch = useCallback(
-		(query: string) => {
+		(query: string) =>
+		{
 			useOutlineStore.getState().commitSearch(query, navigate);
 		},
 		[navigate],
 	);
 	const resolveCached = (locationId: string) => cachedResolvedId(queryClient, locationId);
-	const handleNavigateBack = () => {
+	const handleNavigateBack = () =>
+	{
 		stepNav(navigate, "back", resolveCached);
 	};
-	const handleNavigateForward = () => {
+	const handleNavigateForward = () =>
+	{
 		stepNav(navigate, "forward", resolveCached);
 	};
 
 	const toggle = (
 		<div
-			style={{position: "relative"}}
-			onMouseEnter={() => {
+			style={
+			{
+				position: "relative",
+			}}
+			onMouseEnter={() =>
+			{
 				// Upstream peeks on pointer devices only; touch taps go through the toggle.
-				if (canHover()) {
+				if (canHover())
+				{
 					peek.enter();
 				}
 			}}
@@ -175,7 +198,15 @@ export function TopBar({onUndo, onRedo}: TopBarProps) {
 	return (
 		<div
 			className={`wf-header header bg-primary${paneOpen ? " wf-pane-header" : ""} border-b border-solid border-primary${paneOpen ? ` ${PANE_HEADER_ACTIVE_BORDER} flex-shrink-0` : ""}`}
-			style={paneOpen ? FIRST_PANE_HEADER_STYLE : {left: leftBarOffset, zIndex: 200}}
+			style={
+				paneOpen
+					? FIRST_PANE_HEADER_STYLE
+					:
+						{
+							left: leftBarOffset,
+							zIndex: 200,
+						}
+			}
 		>
 			{/* Upstream swaps the hamburger for a 16px spacer while the left bar is pinned. */}
 			{leftBarMode === "alwaysOpen" ? <div className="w-l" /> : !paneOpen && toggle}
@@ -212,7 +243,8 @@ export function TopBar({onUndo, onRedo}: TopBarProps) {
 					<CalendarTodayControl onToday={() => void navigateToToday()}>
 						{paneOpen ? (
 							<IconButton
-								onClick={() => {
+								onClick={() =>
+								{
 									void navigateToToday();
 								}}
 								shortcut="⌃T"
@@ -262,7 +294,14 @@ export function TopBar({onUndo, onRedo}: TopBarProps) {
 							>
 								<FaIcon
 									icon="fal:check"
-									style={actions.showCompleted ? {color: "var(--wf-text-tint)"} : undefined}
+									style={
+										actions.showCompleted
+											?
+												{
+													color: "var(--wf-text-tint)",
+												}
+											: undefined
+									}
 								/>
 							</IconButton>
 						)}
@@ -285,7 +324,8 @@ export function TopBar({onUndo, onRedo}: TopBarProps) {
 				{paneOpen && (
 					<IconButton
 						className="text-tertiary hover:text-on-surface flex-shrink-0"
-						onClick={() => {
+						onClick={() =>
+						{
 							closeMainPane(navigate);
 						}}
 						tooltip="Close pane"
@@ -297,8 +337,14 @@ export function TopBar({onUndo, onRedo}: TopBarProps) {
 					<>
 						<div className="self-stretch border-l border-solid border-primary mx-s" />
 						<IconButton
-							onClick={() => {
-								openPane(zoomedNodeId, {sourcePaneId: MAIN_PANE_ID});
+							onClick={() =>
+							{
+								openPane(
+									zoomedNodeId,
+									{
+										sourcePaneId: MAIN_PANE_ID,
+									},
+								);
 							}}
 							shortcut="⌃R"
 							tooltip="New pane"
@@ -311,7 +357,13 @@ export function TopBar({onUndo, onRedo}: TopBarProps) {
 
 			{/* Upstream's fixed left-control portal: with the left bar closed the first pane's header hosts the bars toggle. */}
 			{paneOpen && leftBarMode !== "alwaysOpen" && (
-				<div className={LEFT_CONTROL_CLASS} style={{zIndex: 200}}>
+				<div
+					className={LEFT_CONTROL_CLASS}
+					style={
+					{
+						zIndex: 200,
+					}}
+				>
 					{toggle}
 				</div>
 			)}

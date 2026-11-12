@@ -25,18 +25,22 @@ export const RECORD_SEP = "\x1E";
 
 const pad = (n: number): string => String(n).padStart(2, "0");
 
-function normalizeDate(due: string | undefined): string | null {
-	if (!due) {
+function normalizeDate(due: string | undefined): string | null
+{
+	if (!due)
+	{
 		return null;
 	}
 	const [y, m, d] = due.split("-").map(Number);
-	if (y === undefined || m === undefined || d === undefined) {
+	if (y === undefined || m === undefined || d === undefined)
+	{
 		throw new Error(`Expected a Y-M-D Things due date, got: ${due}`);
 	}
 	return `${y}-${pad(m)}-${pad(d)}`;
 }
 
-export interface ThingsTask {
+export interface ThingsTask
+{
 	id: string;
 	title: string;
 	due: string | null;
@@ -45,13 +49,15 @@ export interface ThingsTask {
 	activationDate?: string | null;
 }
 
-export function parseThingsRows(raw: string): ThingsTask[] {
+export function parseThingsRows(raw: string): ThingsTask[]
+{
 	return raw
 		.split(RECORD_SEP)
 		.filter((record) => record.length > 0)
 		.map((record) => record.split(FIELD_SEP))
 		.filter((fields) => fields.length === 6)
-		.map(([id = "", title = "", due, list = "", notes, activation]) => ({
+		.map(([id = "", title = "", due, list = "", notes, activation]) => (
+		{
 			id,
 			title,
 			due: normalizeDate(due),
@@ -63,7 +69,8 @@ export function parseThingsRows(raw: string): ThingsTask[] {
 		}));
 }
 
-export function script(listName: string): string {
+export function script(listName: string): string
+{
 	// The separators are built with `ASCII character` so no control byte has to survive the trip
 	// through the shell into an AppleScript string literal.
 	//
@@ -118,13 +125,22 @@ end tell`;
 // small and started timing out once it wasn't.
 export const OSASCRIPT_TIMEOUT_MS = 180_000;
 
-function run(listName: string): ThingsTask[] {
+function run(listName: string): ThingsTask[]
+{
 	return parseThingsRows(
-		execFileSync("osascript", ["-e", script(listName)], {encoding: "utf8", timeout: OSASCRIPT_TIMEOUT_MS}),
+		execFileSync(
+			"osascript",
+			["-e", script(listName)],
+			{
+				encoding: "utf8",
+				timeout: OSASCRIPT_TIMEOUT_MS,
+			},
+		),
 	);
 }
 
-function localTodayISO(): string {
+function localTodayISO(): string
+{
 	const now = new Date();
 	return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
@@ -134,10 +150,32 @@ function localTodayISO(): string {
  * superset that already contains Today, so the Today ids come off the Anytime list once, up front,
  * and both splits work from that remainder rather than trusting the list membership.
  */
-export function partitionThings<T extends {id: string; due: string | null}>(
-	{todayList, anytime, someday = []}: {todayList: T[]; anytime: T[]; someday?: T[]},
+export function partitionThings<
+	T extends
+	{
+		id: string;
+		due: string | null;
+	},
+>(
+	{
+		todayList,
+		anytime,
+		someday = [],
+	}:
+	{
+		todayList: T[];
+		anytime: T[];
+		someday?: T[];
+	},
 	todayISO: string,
-): {due: T[]; today: T[]; anytime: T[]; someday: T[]} {
+):
+{
+	due: T[];
+	today: T[];
+	anytime: T[];
+	someday: T[];
+}
+{
 	const inToday = new Set(todayList.map((t) => t.id));
 	const anytimeOnly = anytime.filter((t) => !inToday.has(t.id));
 
@@ -151,22 +189,38 @@ export function partitionThings<T extends {id: string; due: string | null}>(
 	const seen = new Set([...inToday, ...anytimeOnly.map((t) => t.id)]);
 	const somedayOnly = someday.filter((t) => !seen.has(t.id));
 
-	return {due, today: todayList, anytime: undatedAnytime, someday: somedayOnly};
+	return {
+		due,
+		today: todayList,
+		anytime: undatedAnytime,
+		someday: somedayOnly,
+	};
 }
 
-function main(argv: readonly string[]): void {
+function main(argv: readonly string[]): void
+{
 	const args = argv.slice(2);
 	let today = localTodayISO();
-	for (let i = 0; i < args.length; i++) {
-		if (args[i] === "--today") {
+	for (let i = 0; i < args.length; i++)
+	{
+		if (args[i] === "--today")
+		{
 			today = args[++i] ?? today;
 		}
 	}
 
-	const sets = partitionThings({todayList: run("Today"), anytime: run("Anytime"), someday: run("Someday")}, today);
+	const sets = partitionThings(
+		{
+			todayList: run("Today"),
+			anytime: run("Anytime"),
+			someday: run("Someday"),
+		},
+		today,
+	);
 	process.stdout.write(`${JSON.stringify(sets, null, 2)}\n`);
 }
 
-if (isMain(import.meta.url)) {
+if (isMain(import.meta.url))
+{
 	main(process.argv);
 }

@@ -1,5 +1,6 @@
 /** Whether a row shows its children, and whether a search decides that. */
-export interface RowExpansion {
+export interface RowExpansion
+{
 	expanded: boolean;
 	searching: boolean;
 }
@@ -9,8 +10,10 @@ export interface RowExpansion {
  * search swaps the whole outline's expansion at once and does not slide, since a slide-up keeps every collapsed
  * row's children mounted and re-rendered, which froze the tab on Back out of a broad search.
  */
-export function expansionSlide(previous: RowExpansion, next: RowExpansion): "down" | "up" | null {
-	if (previous.searching !== next.searching || previous.expanded === next.expanded) {
+export function expansionSlide(previous: RowExpansion, next: RowExpansion): "down" | "up" | null
+{
+	if (previous.searching !== next.searching || previous.expanded === next.expanded)
+	{
 		return null;
 	}
 	return next.expanded ? "down" : "up";
@@ -28,11 +31,14 @@ export function pendingSlideAction(
 	slide: "down" | "up" | null,
 	hasChildrenElement: boolean,
 	waitedMs: number,
-): "run" | "wait" | "drop" {
-	if (slide === null) {
+): "run" | "wait" | "drop"
+{
+	if (slide === null)
+	{
 		return "drop";
 	}
-	if (hasChildrenElement) {
+	if (hasChildrenElement)
+	{
 		return "run";
 	}
 	return slide === "down" && waitedMs < SLIDE_WAIT_MS ? "wait" : "drop";

@@ -30,7 +30,8 @@ export const FONT_OPTIONS = [
 const FONT_CLASSES = new Set(FONT_OPTIONS.map(([name]) => `font-${name}`));
 
 /** Swap the body's `font-<name>` class for `font-<name>` of the chosen font, leaving unrelated `font-*` classes. */
-export function applyFont(name: string): void {
+export function applyFont(name: string): void
+{
 	const {classList} = document.body;
 	classList.remove(...[...classList].filter((className) => FONT_CLASSES.has(className)));
 	classList.add(`font-${name}`);

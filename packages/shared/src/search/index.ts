@@ -1,6 +1,7 @@
 export {buildSearchConditions, getScoringTerms, type SearchConditions} from "./conditions.js";
 export {foldPerCharacter, normalizeForSearch, normalizeWithOffsets} from "./normalize.js";
-export {
+export
+{
 	matchNested,
 	type MatchResult,
 	type NestedQuery,
@@ -14,7 +15,8 @@ export {
 	type SearchOperator,
 } from "./query-ast.js";
 export {type ParsedQuery, parseSearchQuery} from "./query-parser.js";
-export {
+export
+{
 	type FieldMatch,
 	highlight,
 	matchField,
@@ -23,7 +25,8 @@ export {
 	type SwitcherRowInput,
 	type SwitcherRowMatch,
 } from "./switcher-match.js";
-export {
+export
+{
 	baseScore,
 	decodeHtmlEntities,
 	indexText,

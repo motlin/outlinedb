@@ -9,7 +9,8 @@ import {CacheService} from "./cache-service.js";
 export const INBOX_NAME = "Inbox";
 
 /** The account's Inbox, and whether root metadata `inbox_id` or the Home child's name located it. */
-export interface InboxLookup {
+export interface InboxLookup
+{
 	id: string;
 	name: string;
 	source: "inbox_id" | "name";
@@ -21,16 +22,34 @@ export interface InboxLookup {
  * Home child named `Inbox`. Upstream's `AppInbox.ensured` creates and records a
  * missing Inbox; this read-only lookup leaves that to a write-through caller.
  */
-export function findInbox(db: AppDatabase): InboxLookup | undefined {
+export function findInbox(db: AppDatabase): InboxLookup | undefined
+{
 	const pointed = db
-		.select({id: nodeContent.id, name: nodeContent.name})
+		.select(
+			{
+				id: nodeContent.id,
+				name: nodeContent.name,
+			},
+		)
 		.from(rootPreferences)
 		.innerJoin(nodeContent, eq(nodeContent.id, rootPreferences.inboxId))
 		.where(and(eq(rootPreferences.systemTo, FAR_FUTURE_DATE), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
 		.get();
-	if (pointed) {
-		return {id: pointed.id, name: stripHtmlTags(pointed.name ?? "").trim(), source: "inbox_id"};
+	if (pointed)
+	{
+		return {
+			id: pointed.id,
+			name: stripHtmlTags(pointed.name ?? "").trim(),
+			source: "inbox_id",
+		};
 	}
 	const named = new CacheService(db).getChildByName(null, INBOX_NAME);
-	return named ? {id: named.id, name: stripHtmlTags(named.name ?? "").trim(), source: "name"} : undefined;
+	return named
+		?
+			{
+				id: named.id,
+				name: stripHtmlTags(named.name ?? "").trim(),
+				source: "name",
+			}
+		: undefined;
 }

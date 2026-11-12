@@ -17,8 +17,10 @@ import {buildTestDb, bulkImportWithWatermarkGuard, loadFixtureBackup} from "./he
  * Everything runs in a single Vitest process against an in-memory SQLite
  * database, building on the Phase 4a infrastructure (`buildTestDb`).
  */
-describe("canonical Node DTO snapshot", () => {
-	it("matches the snapshotted shape for a known fixture node", () => {
+describe("canonical Node DTO snapshot", () =>
+{
+	it("matches the snapshotted shape for a known fixture node", () =>
+	{
 		const {database, sqlite} = buildTestDb();
 		const importedAt = new Date("2026-05-22T10:00:00Z");
 
@@ -30,7 +32,8 @@ describe("canonical Node DTO snapshot", () => {
 		// created/modified/completed timestamps, a non-zero priority, and a
 		// parent id — making it the most informative shape to snapshot.
 		const node = reader.getById("33333333-3333-3333-3333-333333333333");
-		if (node === null) {
+		if (node === null)
+		{
 			throw new Error("NodeReader returned null for the fixture node");
 		}
 

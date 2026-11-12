@@ -12,7 +12,8 @@ import {notAMirror, PathBuilder} from "@outlinedb/shared/cache";
 
 export type SearchMode = "vector" | "keyword" | "hybrid";
 
-export interface SearchOptions {
+export interface SearchOptions
+{
 	query: string;
 	limit?: number;
 	threshold?: number;
@@ -20,7 +21,8 @@ export interface SearchOptions {
 	mode?: SearchMode;
 }
 
-export type SearchResult = WorkflowyNode & {
+export type SearchResult = WorkflowyNode &
+{
 	completed: boolean;
 	completedAt: number | null;
 	nodeId: string;
@@ -29,51 +31,68 @@ export type SearchResult = WorkflowyNode & {
 	distance: number;
 };
 
-export class SearchService {
+export class SearchService
+{
 	private readonly database: BetterSQLite3Database<typeof schema>;
 	private readonly pathBuilder: PathBuilder;
 
-	constructor(database: BetterSQLite3Database<typeof schema>) {
+	constructor(database: BetterSQLite3Database<typeof schema>)
+	{
 		this.database = database;
 		this.pathBuilder = new PathBuilder(database);
 	}
 
-	async search(options: SearchOptions): Promise<SearchResult[]> {
+	async search(options: SearchOptions): Promise<SearchResult[]>
+	{
 		const {query, limit = 5, mode = "vector"} = options;
 
-		switch (mode) {
-			case "vector": {
+		switch (mode)
+		{
+			case "vector":
+			{
 				return this.searchVector(options);
 			}
-			case "keyword": {
+			case "keyword":
+			{
 				return this.searchKeyword(query, limit);
 			}
-			case "hybrid": {
+			case "hybrid":
+			{
 				return this.searchHybrid(options);
 			}
-			default: {
+			default:
+			{
 				const unknownMode: never = mode;
 				throw new Error(`Unknown search mode: ${String(unknownMode)}`);
 			}
 		}
 	}
 
-	private async searchVector(options: SearchOptions): Promise<SearchResult[]> {
+	private async searchVector(options: SearchOptions): Promise<SearchResult[]>
+	{
 		const {query, limit = 5, model = "minilm"} = options;
 		const modelConfig = getEmbeddingModel(model);
 		const threshold = options.threshold ?? modelConfig.defaultThreshold;
 
-		const queryEmbedding = await embeddingService.generateEmbedding(query, model, {isQuery: true});
+		const queryEmbedding = await embeddingService.generateEmbedding(
+			query,
+			model,
+			{
+				isQuery: true,
+			},
+		);
 		const queryBuffer = Buffer.from(queryEmbedding.buffer);
 
 		const searchResults = this.database
-			.select({
-				nodeId: nodeEmbeddings.nodeId,
-				distance: sql<number>`vec_distance_cosine(${nodeEmbeddings.embedding}, vec_f32(${queryBuffer}))`,
-				id: schema.nodeContent.id,
-				name: schema.nodeContent.name,
-				note: schema.nodeContent.note,
-			})
+			.select(
+				{
+					nodeId: nodeEmbeddings.nodeId,
+					distance: sql<number>`vec_distance_cosine(${nodeEmbeddings.embedding}, vec_f32(${queryBuffer}))`,
+					id: schema.nodeContent.id,
+					name: schema.nodeContent.name,
+					note: schema.nodeContent.note,
+				},
+			)
 			.from(nodeEmbeddings)
 			.innerJoin(
 				schema.nodeContent,
@@ -92,81 +111,135 @@ export class SearchService {
 			.all();
 		logger.logSqlResult("vectorSearch", searchResults);
 
-		return this.enrichResults(searchResults.map((r) => ({nodeId: r.nodeId, distance: r.distance})));
+		return this.enrichResults(
+			searchResults.map((r) => (
+			{
+				nodeId: r.nodeId,
+				distance: r.distance,
+			})),
+		);
 	}
 
-	private searchKeyword(query: string, limit: number): SearchResult[] {
-		const ftsResults = this.database.all<{node_id: string; score: number}>(
-			sql`SELECT node_id, rank as score FROM node_fts WHERE node_fts MATCH ${query} ORDER BY rank LIMIT ${limit}`,
-		);
+	private searchKeyword(query: string, limit: number): SearchResult[]
+	{
+		const ftsResults = this.database.all<
+		{
+			node_id: string;
+			score: number;
+		}>(sql`SELECT node_id, rank as score FROM node_fts WHERE node_fts MATCH ${query} ORDER BY rank LIMIT ${limit}`);
 		logger.logSqlResult("ftsSearch", ftsResults);
 
 		// FTS5 rank is negative (lower = better), convert to distance-like metric
 		return this.enrichResults(
-			ftsResults.map((r) => ({
+			ftsResults.map((r) => (
+			{
 				nodeId: r.node_id,
 				distance: Math.abs(r.score) / (1 + Math.abs(r.score)),
 			})),
 		);
 	}
 
-	private async searchHybrid(options: SearchOptions): Promise<SearchResult[]> {
+	private async searchHybrid(options: SearchOptions): Promise<SearchResult[]>
+	{
 		const {query, limit = 5} = options;
 		const k = 60; // RRF constant
 
 		// Run vector and FTS5 in parallel
-		const vectorResults = await this.searchVector({...options, limit: limit * 3});
+		const vectorResults = await this.searchVector(
+			{
+				...options,
+				limit: limit * 3,
+			},
+		);
 		const ftsResults = this.searchKeyword(query, limit * 3);
 
 		// Build RRF scores
-		const rrfScores = new Map<string, {score: number; result: SearchResult}>();
+		const rrfScores = new Map<
+			string,
+			{
+				score: number;
+				result: SearchResult;
+			}
+		>();
 
-		for (const [rank, result] of vectorResults.entries()) {
+		for (const [rank, result] of vectorResults.entries())
+		{
 			const existing = rrfScores.get(result.nodeId);
 			const contribution = 1 / (k + rank + 1);
-			if (existing) {
+			if (existing)
+			{
 				existing.score += contribution;
-			} else {
-				rrfScores.set(result.nodeId, {score: contribution, result});
+			}
+			else
+			{
+				rrfScores.set(
+					result.nodeId,
+					{
+						score: contribution,
+						result,
+					},
+				);
 			}
 		}
 
-		for (const [rank, result] of ftsResults.entries()) {
+		for (const [rank, result] of ftsResults.entries())
+		{
 			const existing = rrfScores.get(result.nodeId);
 			const contribution = 1 / (k + rank + 1);
-			if (existing) {
+			if (existing)
+			{
 				existing.score += contribution;
-			} else {
-				rrfScores.set(result.nodeId, {score: contribution, result});
+			}
+			else
+			{
+				rrfScores.set(
+					result.nodeId,
+					{
+						score: contribution,
+						result,
+					},
+				);
 			}
 		}
 
 		// Sort by RRF score descending, convert to distance (lower = better)
 		const sorted = [...rrfScores.values()].toSorted((a, b) => b.score - a.score).slice(0, limit);
 
-		return sorted.map(({result, score}) => ({
+		return sorted.map(({result, score}) => (
+		{
 			...result,
 			distance: 1 - score, // Convert RRF score to distance-like metric
 		}));
 	}
 
-	private enrichResults(rawResults: {nodeId: string; distance: number}[]): SearchResult[] {
-		return rawResults.map((result) => {
+	private enrichResults(
+		rawResults:
+		{
+			nodeId: string;
+			distance: number;
+		}[],
+	): SearchResult[]
+	{
+		return rawResults.map((result) =>
+		{
 			const fullPath = this.pathBuilder.buildFullPath(result.nodeId);
 			const textContent = this.pathBuilder.buildTextContent(result.nodeId);
 
 			const nodeWithRelations = this.database.query.nodeContent
-				.findFirst({
-					where: and(
-						eq(schema.nodeContent.id, result.nodeId),
-						eq(schema.nodeContent.systemTo, FAR_FUTURE_DATE),
-					),
-					with: {
-						metadata: true,
-						aiMetadata: true,
-						referencesRoot: true,
+				.findFirst(
+					{
+						where: and(
+							eq(schema.nodeContent.id, result.nodeId),
+							eq(schema.nodeContent.systemTo, FAR_FUTURE_DATE),
+						),
+						with:
+						{
+							metadata: true,
+							aiMetadata: true,
+							referencesRoot: true,
+						},
 					},
-				})
+				)
 				.sync();
 			logger.logSqlResult("nodeWithRelations", nodeWithRelations);
 
@@ -175,16 +248,20 @@ export class SearchService {
 			const priority = metadata?.priority ?? 0;
 			const data: Record<string, unknown> = {};
 
-			if (metadata?.layoutMode) {
+			if (metadata?.layoutMode)
+			{
 				data.layoutMode = metadata.layoutMode;
 			}
 
-			if (nodeWithRelations?.referencesRoot) {
+			if (nodeWithRelations?.referencesRoot)
+			{
 				data.isReferencesRoot = true;
 			}
 
-			if (nodeWithRelations?.aiMetadata) {
-				data.ai = {
+			if (nodeWithRelations?.aiMetadata)
+			{
+				data.ai =
+				{
 					inChat: Boolean(nodeWithRelations.aiMetadata.inChat),
 				};
 			}

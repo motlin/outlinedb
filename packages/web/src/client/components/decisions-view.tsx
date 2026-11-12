@@ -20,9 +20,27 @@ import {useOutlineStore} from "../stores/outline.js";
 
 const NOTE_DEBOUNCE_MS = 600;
 
-type SaveStatus = {kind: "idle"} | {kind: "saving"} | {kind: "saved"} | {kind: "error"; message: string};
+type SaveStatus =
+	|
+	  {
+			kind: "idle";
+	  }
+	|
+	  {
+			kind: "saving";
+	  }
+	|
+	  {
+			kind: "saved";
+	  }
+	|
+	  {
+			kind: "error";
+			message: string;
+	  };
 
-interface ItemState {
+interface ItemState
+{
 	choice: string | null;
 	note: string;
 	/** Whether the server holds an answer for this item. */
@@ -31,62 +49,141 @@ interface ItemState {
 }
 
 type SubmitState =
-	| {kind: "idle"}
-	| {kind: "submitting"}
-	| {kind: "submitted"; at: string}
-	| {kind: "error"; message: string};
+	|
+	  {
+			kind: "idle";
+	  }
+	|
+	  {
+			kind: "submitting";
+	  }
+	|
+	  {
+			kind: "submitted";
+			at: string;
+	  }
+	|
+	  {
+			kind: "error";
+			message: string;
+	  };
 
 /** The outcome of the most recent save, shown in the footer because the card that made it may be gone. */
-type LastSave = {card: number; error: string | null} | null;
+type LastSave =
+{
+	card: number;
+	error: string | null;
+} | null;
 
 type Group = DecisionPage["groups"][number];
 
 /** One card in walk order: an item with the group it belongs to. */
-interface Card {
+interface Card
+{
 	group: Group;
 	item: Group["items"][number];
 }
 
-async function errorOf(response: FetchedText): Promise<string> {
-	try {
-		return (await readJson<{error: string}>(new Response(response.text))).error;
-	} catch {
+async function errorOf(response: FetchedText): Promise<string>
+{
+	try
+	{
+		return (
+			await readJson<
+			{
+				error: string;
+			}>(new Response(response.text))
+		).error;
+	}
+	catch
+	{
 		return `HTTP ${response.status}`;
 	}
 }
 
-const STATUS_TEXT: Record<Exclude<SaveStatus["kind"], "error">, string> = {idle: "", saving: "Saving…", saved: "Saved"};
+const STATUS_TEXT: Record<Exclude<SaveStatus["kind"], "error">, string> =
+{
+	idle: "",
+	saving: "Saving…",
+	saved: "Saved",
+};
 
-function statusText(status: SaveStatus): string {
+function statusText(status: SaveStatus): string
+{
 	return status.kind === "error" ? `Not saved: ${status.message}` : STATUS_TEXT[status.kind];
 }
 
 /** A submission time as the viewer's local clock time. */
-function clockTime(iso: string): string {
-	return new Date(iso).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"});
+function clockTime(iso: string): string
+{
+	return new Date(iso).toLocaleTimeString(
+		[],
+		{
+			hour: "numeric",
+			minute: "2-digit",
+		},
+	);
 }
 
-function messageOf(error: unknown): string {
+function messageOf(error: unknown): string
+{
 	return error instanceof Error ? error.message : String(error);
 }
 
 /** The staged page, or the reason it could not be loaded. */
-async function loadPage(url: string, signal: AbortSignal): Promise<{page: DecisionPage} | {error: string}> {
-	try {
-		const response = await fetchThroughRestarts(url, {signal});
+async function loadPage(
+	url: string,
+	signal: AbortSignal,
+): Promise<
+	|
+	  {
+			page: DecisionPage;
+	  }
+	|
+	  {
+			error: string;
+	  }
+>
+{
+	try
+	{
+		const response = await fetchThroughRestarts(
+			url,
+			{
+				signal,
+			},
+		);
 		return response.ok
-			? {page: await readJson<DecisionPage>(new Response(response.text))}
-			: {error: await errorOf(response)};
-	} catch (error) {
-		return {error: messageOf(error)};
+			?
+				{
+					page: await readJson<DecisionPage>(new Response(response.text)),
+				}
+			:
+				{
+					error: await errorOf(response),
+				};
+	}
+	catch (error)
+	{
+		return {
+			error: messageOf(error),
+		};
 	}
 }
 
-function cardsOf(page: DecisionPage): Card[] {
-	return page.groups.flatMap((group) => group.items.map((item) => ({group, item})));
+function cardsOf(page: DecisionPage): Card[]
+{
+	return page.groups.flatMap((group) =>
+		group.items.map((item) => (
+		{
+			group,
+			item,
+		})),
+	);
 }
 
-function initialItems(page: DecisionPage): Record<string, ItemState> {
+function initialItems(page: DecisionPage): Record<string, ItemState>
+{
 	return Object.fromEntries(
 		cardsOf(page).map(({item}) => [
 			item.id,
@@ -94,7 +191,10 @@ function initialItems(page: DecisionPage): Record<string, ItemState> {
 				choice: item.answer?.choice ?? null,
 				note: item.answer?.note ?? "",
 				answered: item.answer !== null,
-				status: {kind: "idle"},
+				status:
+				{
+					kind: "idle",
+				},
 			},
 		]),
 	);
@@ -104,11 +204,14 @@ function initialItems(page: DecisionPage): Record<string, ItemState> {
  * The first unanswered card after `from`, wrapping around to the start, or
  * `from` itself when every other card is answered.
  */
-function nextUnanswered(cards: Card[], items: Record<string, ItemState>, from: number): number {
-	for (let step = 1; step < cards.length; step++) {
+function nextUnanswered(cards: Card[], items: Record<string, ItemState>, from: number): number
+{
+	for (let step = 1; step < cards.length; step++)
+	{
 		const index = (from + step) % cards.length;
 		const card = cards[index];
-		if (card !== undefined && items[card.item.id]?.answered !== true) {
+		if (card !== undefined && items[card.item.id]?.answered !== true)
+		{
 			return index;
 		}
 	}
@@ -116,29 +219,35 @@ function nextUnanswered(cards: Card[], items: Record<string, ItemState>, from: n
 }
 
 /** Where a fresh load starts: the first unanswered card, or the first card when all are answered. */
-function resumeIndex(cards: Card[], items: Record<string, ItemState>): number {
+function resumeIndex(cards: Card[], items: Record<string, ItemState>): number
+{
 	const index = cards.findIndex((card) => items[card.item.id]?.answered !== true);
 	return Math.max(index, 0);
 }
 
 /** Whether a key press belongs to a text field rather than to the page's shortcuts. */
-function isTyping(target: EventTarget | null): boolean {
-	if (!(target instanceof HTMLElement)) {
+function isTyping(target: EventTarget | null): boolean
+{
+	if (!(target instanceof HTMLElement))
+	{
 		return false;
 	}
-	if (target.isContentEditable || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) {
+	if (target.isContentEditable || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement)
+	{
 		return true;
 	}
 	return target instanceof HTMLInputElement && target.type !== "radio" && target.type !== "checkbox";
 }
 
 /** The `/decisions/:slug` route. */
-export function DecisionsView() {
+export function DecisionsView()
+{
 	const {slug = ""} = useParams();
 	return <DecisionPageView key={slug} slug={slug} />;
 }
 
-export function DecisionPageView({slug}: {slug: string}) {
+export function DecisionPageView({slug}: {slug: string})
+{
 	const base = `/api/v1/decisions/${encodeURIComponent(slug)}`;
 	const [page, setPage] = useState<DecisionPage | null>(null);
 	const [loadError, setLoadError] = useState<string | null>(null);
@@ -147,7 +256,11 @@ export function DecisionPageView({slug}: {slug: string}) {
 	// Mirrors `index` so a save that resolves later sees the card on screen now.
 	const indexRef = useRef(0);
 	const [lastSave, setLastSave] = useState<LastSave>(null);
-	const [submit, setSubmit] = useState<SubmitState>({kind: "idle"});
+	const [submit, setSubmit] = useState<SubmitState>(
+		{
+			kind: "idle",
+		},
+	);
 	// The All done page, shown in place of the cards once every card is answered.
 	const [done, setDone] = useState(false);
 	const cards = useMemo(() => (page === null ? [] : cardsOf(page)), [page]);
@@ -157,24 +270,30 @@ export function DecisionPageView({slug}: {slug: string}) {
 	// The latest render's key handler, so the window listener never sees stale state.
 	const onKeyRef = useRef<(event: KeyboardEvent) => void>(() => {});
 
-	useEffect(() => {
+	useEffect(() =>
+	{
 		indexRef.current = index;
 	}, [index]);
 
 	// Only the outline view dismisses the boot screen; this route never mounts it.
-	useEffect(() => {
+	useEffect(() =>
+	{
 		hideLoadingScreenOnce();
 	}, []);
 
-	useEffect(() => {
+	useEffect(() =>
+	{
 		const controller = new AbortController();
 		const timers = noteTimers.current;
-		void (async () => {
+		void (async () =>
+		{
 			const result = await loadPage(base, controller.signal);
-			if (controller.signal.aborted) {
+			if (controller.signal.aborted)
+			{
 				return;
 			}
-			if ("error" in result) {
+			if ("error" in result)
+			{
 				setLoadError(result.error);
 				return;
 			}
@@ -183,80 +302,182 @@ export function DecisionPageView({slug}: {slug: string}) {
 			setIndex(resumeIndex(cardsOf(result.page), itemsRef.current));
 			setPage(result.page);
 			const {submittedAt} = result.page;
-			setSubmit(submittedAt === null ? {kind: "idle"} : {kind: "submitted", at: submittedAt});
+			setSubmit(
+				submittedAt === null
+					?
+						{
+							kind: "idle",
+						}
+					:
+						{
+							kind: "submitted",
+							at: submittedAt,
+						},
+			);
 			setDone(submittedAt !== null && Object.values(itemsRef.current).every((state) => state.answered));
 		})();
-		return () => {
+		return () =>
+		{
 			controller.abort();
-			for (const timer of timers.values()) {
+			for (const timer of timers.values())
+			{
 				clearTimeout(timer);
 			}
 		};
 	}, [base]);
 
-	useEffect(() => {
-		function onKey(event: KeyboardEvent): void {
+	useEffect(() =>
+	{
+		function onKey(event: KeyboardEvent): void
+		{
 			onKeyRef.current(event);
 		}
 		window.addEventListener("keydown", onKey);
-		return () => {
+		return () =>
+		{
 			window.removeEventListener("keydown", onKey);
 		};
 	}, []);
 
-	function update(id: string, patch: Partial<ItemState>): ItemState {
+	function update(id: string, patch: Partial<ItemState>): ItemState
+	{
 		const current = itemsRef.current[id];
-		if (current === undefined) {
+		if (current === undefined)
+		{
 			throw new Error(`No decision item ${id}`);
 		}
-		const next = {...current, ...patch};
-		itemsRef.current = {...itemsRef.current, [id]: next};
+		const next =
+		{
+			...current,
+			...patch,
+		};
+		itemsRef.current =
+		{
+			...itemsRef.current,
+			[id]: next,
+		};
 		setItems(itemsRef.current);
 		return next;
 	}
 
-	function cardNumber(id: string): number {
+	function cardNumber(id: string): number
+	{
 		return cards.findIndex((card) => card.item.id === id) + 1;
 	}
 
 	/** Saves the item's current choice and note; resolves whether the server kept them. */
-	async function save(id: string): Promise<boolean> {
-		const {choice, note} = update(id, {status: {kind: "saving"}});
+	async function save(id: string): Promise<boolean>
+	{
+		const {choice, note} = update(
+			id,
+			{
+				status:
+				{
+					kind: "saving",
+				},
+			},
+		);
 		let error: string;
-		try {
-			const response = await fetchThroughRestarts(`${base}/${encodeURIComponent(id)}`, {
-				method: "PUT",
-				headers: {"content-type": "application/json"},
-				body: JSON.stringify({choice, note}),
-			});
-			if (response.ok) {
-				update(id, {answered: true, status: {kind: "saved"}});
-				setLastSave({card: cardNumber(id), error: null});
+		try
+		{
+			const response = await fetchThroughRestarts(
+				`${base}/${encodeURIComponent(id)}`,
+				{
+					method: "PUT",
+					headers:
+					{
+						"content-type": "application/json",
+					},
+					body: JSON.stringify(
+						{
+							choice,
+							note,
+						},
+					),
+				},
+			);
+			if (response.ok)
+			{
+				update(
+					id,
+					{
+						answered: true,
+						status:
+						{
+							kind: "saved",
+						},
+					},
+				);
+				setLastSave(
+					{
+						card: cardNumber(id),
+						error: null,
+					},
+				);
 				return true;
 			}
 			error = await errorOf(response);
-		} catch (caught) {
+		}
+		catch (caught)
+		{
 			error = messageOf(caught);
 		}
-		update(id, {status: {kind: "error", message: error}});
-		setLastSave({card: cardNumber(id), error});
+		update(
+			id,
+			{
+				status:
+				{
+					kind: "error",
+					message: error,
+				},
+			},
+		);
+		setLastSave(
+			{
+				card: cardNumber(id),
+				error,
+			},
+		);
 		return false;
 	}
 
-	async function submitPage(): Promise<void> {
-		setSubmit({kind: "submitting"});
-		try {
-			const response = await fetchThroughRestarts(`${base}/submit`, {method: "POST"});
+	async function submitPage(): Promise<void>
+	{
+		setSubmit(
+			{
+				kind: "submitting",
+			},
+		);
+		try
+		{
+			const response = await fetchThroughRestarts(
+				`${base}/submit`,
+				{
+					method: "POST",
+				},
+			);
 			setSubmit(
 				response.ok
-					? {
+					?
+						{
 							kind: "submitted",
 							at: (await readJson<DecisionSubmitResult>(new Response(response.text))).submittedAt,
 						}
-					: {kind: "error", message: await errorOf(response)},
+					:
+						{
+							kind: "error",
+							message: await errorOf(response),
+						},
 			);
-		} catch (error) {
-			setSubmit({kind: "error", message: messageOf(error)});
+		}
+		catch (error)
+		{
+			setSubmit(
+				{
+					kind: "error",
+					message: messageOf(error),
+				},
+			);
 		}
 	}
 
@@ -264,12 +485,15 @@ export function DecisionPageView({slug}: {slug: string}) {
 	 * Moves on to the next unanswered card, unless the user already left the card that was saved.
 	 * Saving the last unanswered card submits the page and shows the All done page instead.
 	 */
-	function advanceFrom(id: string): void {
+	function advanceFrom(id: string): void
+	{
 		const from = cardNumber(id) - 1;
-		if (indexRef.current !== from) {
+		if (indexRef.current !== from)
+		{
 			return;
 		}
-		if (Object.values(itemsRef.current).every((state) => state.answered)) {
+		if (Object.values(itemsRef.current).every((state) => state.answered))
+		{
 			setDone(true);
 			void submitPage();
 			return;
@@ -277,49 +501,69 @@ export function DecisionPageView({slug}: {slug: string}) {
 		setIndex(nextUnanswered(cards, itemsRef.current, from));
 	}
 
-	async function saveAndAdvance(id: string): Promise<void> {
-		if (await save(id)) {
+	async function saveAndAdvance(id: string): Promise<void>
+	{
+		if (await save(id))
+		{
 			advanceFrom(id);
 		}
 	}
 
-	function cancelNoteSave(id: string): void {
+	function cancelNoteSave(id: string): void
+	{
 		clearTimeout(noteTimers.current.get(id));
 		noteTimers.current.delete(id);
 	}
 
-	function choose(id: string, choice: string): void {
+	function choose(id: string, choice: string): void
+	{
 		cancelNoteSave(id);
-		update(id, {choice});
+		update(
+			id,
+			{
+				choice,
+			},
+		);
 		void saveAndAdvance(id);
 	}
 
-	function saveNoteAndNext(id: string): void {
+	function saveNoteAndNext(id: string): void
+	{
 		cancelNoteSave(id);
 		void saveAndAdvance(id);
 	}
 
-	function editNote(id: string, note: string): void {
+	function editNote(id: string, note: string): void
+	{
 		cancelNoteSave(id);
-		update(id, {note});
+		update(
+			id,
+			{
+				note,
+			},
+		);
 		noteTimers.current.set(
 			id,
-			setTimeout(() => {
+			setTimeout(() =>
+			{
 				noteTimers.current.delete(id);
 				void save(id);
 			}, NOTE_DEBOUNCE_MS),
 		);
 	}
 
-	function goTo(target: number): void {
+	function goTo(target: number): void
+	{
 		setIndex(Math.min(Math.max(target, 0), cards.length - 1));
 	}
 
 	const current = cards[index];
 
 	// Runs after every render so the window listener always acts on the card on screen.
-	useEffect(() => {
-		onKeyRef.current = (event) => {
+	useEffect(() =>
+	{
+		onKeyRef.current = (event) =>
+		{
 			if (
 				done ||
 				current === undefined ||
@@ -327,12 +571,15 @@ export function DecisionPageView({slug}: {slug: string}) {
 				event.ctrlKey ||
 				event.metaKey ||
 				isTyping(event.target)
-			) {
+			)
+			{
 				return;
 			}
-			if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+			if (event.key === "ArrowLeft" || event.key === "ArrowRight")
+			{
 				// A focused video seeks with the arrows.
-				if (event.target instanceof HTMLMediaElement) {
+				if (event.target instanceof HTMLMediaElement)
+				{
 					return;
 				}
 				// A focused radio would otherwise move its own selection, which saves an answer.
@@ -341,14 +588,16 @@ export function DecisionPageView({slug}: {slug: string}) {
 				return;
 			}
 			const option = /^[1-9]$/u.test(event.key) ? current.item.options[Number(event.key) - 1] : undefined;
-			if (option !== undefined) {
+			if (option !== undefined)
+			{
 				event.preventDefault();
 				choose(current.item.id, option.value);
 			}
 		};
 	});
 
-	if (loadError !== null) {
+	if (loadError !== null)
+	{
 		return (
 			<main className="decisions-page">
 				<p className="decisions-error" role="alert">
@@ -357,7 +606,8 @@ export function DecisionPageView({slug}: {slug: string}) {
 			</main>
 		);
 	}
-	if (page === null) {
+	if (page === null)
+	{
 		return <main className="decisions-page" aria-busy="true" />;
 	}
 
@@ -392,7 +642,8 @@ export function DecisionPageView({slug}: {slug: string}) {
 						</p>
 						<button
 							className="decisions-nav-button"
-							onClick={() => {
+							onClick={() =>
+							{
 								setDone(false);
 								setIndex(0);
 							}}
@@ -406,10 +657,12 @@ export function DecisionPageView({slug}: {slug: string}) {
 						<DecisionCard
 							group={current.group}
 							item={current.item}
-							onChoose={(choice) => {
+							onChoose={(choice) =>
+							{
 								choose(current.item.id, choice);
 							}}
-							onNote={(note) => {
+							onNote={(note) =>
+							{
 								editNote(current.item.id, note);
 							}}
 							state={currentState}
@@ -418,7 +671,8 @@ export function DecisionPageView({slug}: {slug: string}) {
 								<button
 									className="decisions-nav-button"
 									disabled={index === 0}
-									onClick={() => {
+									onClick={() =>
+									{
 										goTo(index - 1);
 									}}
 									type="button"
@@ -427,7 +681,8 @@ export function DecisionPageView({slug}: {slug: string}) {
 								</button>
 								<button
 									className="decisions-nav-button decisions-note-next"
-									onClick={() => {
+									onClick={() =>
+									{
 										saveNoteAndNext(current.item.id);
 									}}
 									type="button"
@@ -437,7 +692,8 @@ export function DecisionPageView({slug}: {slug: string}) {
 								<button
 									className="decisions-nav-button"
 									disabled={index === cards.length - 1}
-									onClick={() => {
+									onClick={() =>
+									{
 										goTo(index + 1);
 									}}
 									type="button"
@@ -473,7 +729,8 @@ export function DecisionPageView({slug}: {slug: string}) {
 					className="decisions-submit"
 					data-ready={allAnswered}
 					disabled={submit.kind === "submitting"}
-					onClick={() => {
+					onClick={() =>
+					{
 						void submitPage();
 					}}
 					type="button"
@@ -486,21 +743,25 @@ export function DecisionPageView({slug}: {slug: string}) {
 }
 
 /** The All done page's submission line: in flight, when it landed, or why it failed. */
-function SubmitLine({submit}: {submit: SubmitState}) {
-	if (submit.kind === "submitted") {
+function SubmitLine({submit}: {submit: SubmitState})
+{
+	if (submit.kind === "submitted")
+	{
 		return (
 			<>
 				Submitted at <time dateTime={submit.at}>{clockTime(submit.at)}</time>. Tell Claude you&apos;re done.
 			</>
 		);
 	}
-	if (submit.kind === "error") {
+	if (submit.kind === "error")
+	{
 		return <>Not submitted: {submit.message}. Use Submit below to retry.</>;
 	}
 	return <>Submitting…</>;
 }
 
-interface DecisionCardProps {
+interface DecisionCardProps
+{
 	group: Group;
 	item: DecisionItem;
 	state: ItemState;
@@ -510,7 +771,8 @@ interface DecisionCardProps {
 	children: ReactNode;
 }
 
-function DecisionCard({group, item, state, onChoose, onNote, children}: DecisionCardProps) {
+function DecisionCard({group, item, state, onChoose, onNote, children}: DecisionCardProps)
+{
 	const noteId = `decision-note-${item.id}`;
 	const titleId = `decision-title-${item.id}`;
 	return (
@@ -532,7 +794,8 @@ function DecisionCard({group, item, state, onChoose, onNote, children}: Decision
 				{item.diff === undefined ? null : <DiffBlock after={item.diff.after} before={item.diff.before} />}
 				{(item.images ?? []).length === 0 && (item.videos ?? []).length === 0 ? null : (
 					<div className="decisions-images">
-						{(item.images ?? []).map((image) => {
+						{(item.images ?? []).map((image) =>
+						{
 							const url = imageUrl(image.src);
 							return (
 								<a
@@ -598,7 +861,8 @@ function DecisionCard({group, item, state, onChoose, onNote, children}: Decision
 							<input
 								checked={state.choice === option.value}
 								name={`decision-${item.id}`}
-								onChange={() => {
+								onChange={() =>
+								{
 									onChoose(option.value);
 								}}
 								type="radio"
@@ -627,7 +891,8 @@ function DecisionCard({group, item, state, onChoose, onNote, children}: Decision
 				<textarea
 					className="decisions-note"
 					id={noteId}
-					onChange={(event) => {
+					onChange={(event) =>
+					{
 						onNote(event.target.value);
 					}}
 					rows={2}
@@ -643,22 +908,26 @@ function DecisionCard({group, item, state, onChoose, onNote, children}: Decision
 }
 
 /** A `src` path encoded one segment at a time. */
-function encodePath(src: string): string {
+function encodePath(src: string): string
+{
 	return src.split("/").map(encodeURIComponent).join("/");
 }
 
 /** Where the server serves an item image. */
-function imageUrl(src: string): string {
+function imageUrl(src: string): string
+{
 	return `/api/v1/decisions/images/${encodePath(src)}`;
 }
 
 /** Where the server serves an item video, with the byte ranges players need to seek. */
-function mediaUrl(src: string): string {
+function mediaUrl(src: string): string
+{
 	return `/api/v1/decisions/media/${encodePath(src)}`;
 }
 
 /** A body line as plain text, with its dates, durations and counts wrapped for color. */
-function BodyLine({line}: {line: string}) {
+function BodyLine({line}: {line: string})
+{
 	return bodyTokens(line).map((token, index) =>
 		token.kind === null ? (
 			token.text
@@ -672,16 +941,21 @@ function BodyLine({line}: {line: string}) {
 	);
 }
 
-function isWorkflowyLink(href: string): boolean {
-	try {
+function isWorkflowyLink(href: string): boolean
+{
+	try
+	{
 		const {hostname} = new URL(href);
 		return hostname === "workflowy.com" || hostname.endsWith(".workflowy.com");
-	} catch {
+	}
+	catch
+	{
 		return false;
 	}
 }
 
-const SVG_PROPS = {
+const SVG_PROPS =
+{
 	"aria-hidden": true,
 	fill: "none",
 	height: 16,
@@ -694,8 +968,10 @@ const SVG_PROPS = {
 } as const;
 
 /** The app's own favicon for Workflowy links, a generic external-link glyph for every other host. */
-function LinkIcon({href}: {href: string}) {
-	if (isWorkflowyLink(href)) {
+function LinkIcon({href}: {href: string})
+{
+	if (isWorkflowyLink(href))
+	{
 		return (
 			<img
 				alt=""
@@ -752,7 +1028,8 @@ const THEME_CHOICES = [
  * Light / Dark / System, through the app's own theme setting: the same storage key, the same
  * `data-theme` on the root, and the store's live listener for OS changes while on System.
  */
-function ThemeToggle() {
+function ThemeToggle()
+{
 	const theme = useOutlineStore((state) => state.theme);
 	const setTheme = useOutlineStore((state) => state.setTheme);
 	return (
@@ -763,7 +1040,8 @@ function ThemeToggle() {
 					aria-label={`${choice.label} theme`}
 					aria-pressed={theme === choice.theme}
 					key={choice.theme}
-					onClick={() => {
+					onClick={() =>
+					{
 						setTheme(choice.theme);
 					}}
 					title={choice.label}
@@ -776,31 +1054,44 @@ function ThemeToggle() {
 	);
 }
 
-interface DiffPart {
+interface DiffPart
+{
 	text: string;
 	changed: boolean;
 }
 
 /** One side of a word diff: the text shared with the other side, plus the words only this side has, marked. */
-function diffSide(before: string, after: string, side: "removed" | "added"): DiffPart[] {
+function diffSide(before: string, after: string, side: "removed" | "added"): DiffPart[]
+{
 	const parts: DiffPart[] = [];
-	for (const change of diffWordsWithSpace(before, after)) {
-		if (side === "removed" ? change.added : change.removed) {
+	for (const change of diffWordsWithSpace(before, after))
+	{
+		if (side === "removed" ? change.added : change.removed)
+		{
 			continue;
 		}
 		const changed = side === "removed" ? change.removed : change.added;
 		const last = parts.at(-1);
-		if (last?.changed === changed) {
+		if (last?.changed === changed)
+		{
 			last.text += change.value;
-		} else {
-			parts.push({text: change.value, changed});
+		}
+		else
+		{
+			parts.push(
+				{
+					text: change.value,
+					changed,
+				},
+			);
 		}
 	}
 	return parts;
 }
 
 /** A proposed rewrite rendered the way code review shows a changed line: `-` before, `+` after, changed words marked. */
-function DiffBlock({before, after}: {before: string; after: string}): ReactNode {
+function DiffBlock({before, after}: {before: string; after: string}): ReactNode
+{
 	return (
 		<div className="decisions-diff">
 			{(["removed", "added"] as const).map((side) => (

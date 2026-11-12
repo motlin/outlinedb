@@ -13,14 +13,34 @@ import {httpAppFor} from "./http-app-for.js";
 
 const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 
-function apiNode(id: string): WorkflowyNode {
-	return {id, name: "", note: null, parent_id: null, priority: 0, createdAt: 100, modifiedAt: 200};
+function apiNode(id: string): WorkflowyNode
+{
+	return {
+		id,
+		name: "",
+		note: null,
+		parent_id: null,
+		priority: 0,
+		createdAt: 100,
+		modifiedAt: 200,
+	};
 }
 
-function setup() {
+function setup()
+{
 	const sqlite = new DatabaseConstructor(":memory:");
-	const db = drizzle(sqlite, {schema});
-	migrate(db, {migrationsFolder});
+	const db = drizzle(
+		sqlite,
+		{
+			schema,
+		},
+	);
+	migrate(
+		db,
+		{
+			migrationsFolder,
+		},
+	);
 	const cacheService = new CacheService(db);
 	cacheService.insertNode(apiNode("n1"), null);
 	sqlite
@@ -40,9 +60,14 @@ function setup() {
 			"2026-01-01T00:00:00.000Z",
 			FAR_FUTURE_DATE,
 		);
-	const ctx = {db, cacheService} as unknown as ServerContext;
+	const ctx =
+	{
+		db,
+		cacheService,
+	} as unknown as ServerContext;
 	const app = new Hono<AppEnv>();
-	app.use("*", async (c, next) => {
+	app.use("*", async (c, next) =>
+	{
 		c.set("ctx", ctx);
 		await next();
 	});
@@ -50,20 +75,30 @@ function setup() {
 	return app;
 }
 
-describe("GET /api/v1/nodes/:id attachment", () => {
-	it("exposes the fractional pixel density and the animated GIF flag", async () => {
+describe("GET /api/v1/nodes/:id attachment", () =>
+{
+	it("exposes the fractional pixel density and the animated GIF flag", async () =>
+	{
 		const res = await setup().fetch(new Request("http://x/api/v1/nodes/n1"));
-		const body = (await res.json()) as {node: {attachment: unknown}};
+		const body = (await res.json()) as
+		{
+			node:
+			{
+				attachment: unknown;
+			};
+		};
 
-		expect(body.node.attachment).toStrictEqual({
-			fileName: "IMG.png",
-			fileType: "image/png",
-			objectFolder: "folder-1",
-			imageOriginalWidth: 1440,
-			imageOriginalHeight: 1020,
-			imageOriginalPixels: 2.5,
-			isAnimatedGif: true,
-			isDeleted: false,
-		});
+		expect(body.node.attachment).toStrictEqual(
+			{
+				fileName: "IMG.png",
+				fileType: "image/png",
+				objectFolder: "folder-1",
+				imageOriginalWidth: 1440,
+				imageOriginalHeight: 1020,
+				imageOriginalPixels: 2.5,
+				isAnimatedGif: true,
+				isDeleted: false,
+			},
+		);
 	});
 });

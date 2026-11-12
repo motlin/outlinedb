@@ -8,13 +8,15 @@
 	"routes": [{"pattern": "app.outlinedb.com", "custom_domain": true}],
 	"workers_dev": false,
 	"preview_urls": false,
-	"assets": {
+	"assets":
+	{
 		"directory": "../web/dist/client",
 		"binding": "ASSETS",
 		"not_found_handling": "single-page-application",
 		"run_worker_first": ["/health", "/api/*", "/mcp", "/authorize", "/oauth/*", "/.well-known/*"],
 	},
-	"durable_objects": {
+	"durable_objects":
+	{
 		"bindings": [{"name": "USER_STORE", "class_name": "UserStore"}],
 	},
 	// OAuth clients, grants and hashed tokens for the MCP connector; deploy provisions the namespace when it has no id.
@@ -38,7 +40,8 @@
 	"send_email": [{"name": "EMAIL"}],
 	"migrations": [{"tag": "v1", "new_sqlite_classes": ["UserStore"]}],
 	// Access config (ACCESS_TEAM_DOMAIN, ACCESS_AUD, ALLOWED_EMAILS, ALLOWED_SERVICE_TOKENS) and OUTLINEDB_ENV_OWNERS must not be vars: deploy would reset them. Set them as secrets; use .dev.vars locally (also ACCESS_DEV_IDENTITY).
-	"vars": {
+	"vars":
+	{
 		"SYNC_INTERVAL_MINUTES": "30",
 		"EMAIL_PROVIDER": "cloudflare",
 		"EMAIL_FROM": "no-reply@outlinedb.com",

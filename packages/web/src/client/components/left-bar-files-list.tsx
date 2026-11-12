@@ -27,15 +27,25 @@ type ArrowStyle = CSSProperties & Record<"--opacity" | "--hover-opacity", number
  * Upstream's FilesList arrow opacities (`kx4` k1/y1): a row with no potentially visible
  * children is dimmer, and the current row is brighter than its siblings.
  */
-function filesListArrowStyle(noChildren: boolean, current: boolean): ArrowStyle {
-	if (noChildren) {
-		return {"--opacity": current ? 0.2 : 0.15, "--hover-opacity": current ? 0.65 : 0.45};
+function filesListArrowStyle(noChildren: boolean, current: boolean): ArrowStyle
+{
+	if (noChildren)
+	{
+		return {
+			"--opacity": current ? 0.2 : 0.15,
+			"--hover-opacity": current ? 0.65 : 0.45,
+		};
 	}
-	return {"--opacity": current ? 0.65 : 0.45, "--hover-opacity": 1};
+	return {
+		"--opacity": current ? 0.65 : 0.45,
+		"--hover-opacity": 1,
+	};
 }
 
-function isListed(node: NodeResponse, showCompleted: boolean): boolean {
-	if (node.completedAt !== null && !showCompleted) {
+function isListed(node: NodeResponse, showCompleted: boolean): boolean
+{
+	if (node.completedAt !== null && !showCompleted)
+	{
 		return false;
 	}
 	return Boolean(node.name) || Boolean(node.note) || node.hasChildren !== false;
@@ -57,19 +67,29 @@ export function rowName({
 	dates?: DateSettings;
 	/** The friendly day prefix (`Today, `), a sibling before the label as upstream's `item:icon` decorator renders it. */
 	prefix?: string | null;
-}) {
+})
+{
 	const shown = html !== undefined && dates !== undefined ? addMonolithGuards(renderDatePills(html, dates)) : html;
 	return (
 		<>
 			{prefix}
-			<span style={{pointerEvents: "none", whiteSpace: "nowrap"}}>
+			<span
+				style={
+				{
+					pointerEvents: "none",
+					whiteSpace: "nowrap",
+				}}
+			>
 				{shown === undefined ? (
 					<span className="innerContentContainer">{text}</span>
 				) : (
 					<span
 						className="innerContentContainer"
 						// oxlint-disable-next-line react/no-danger -- node names are stored HTML; colors and formatting must survive
-						dangerouslySetInnerHTML={{__html: shown}}
+						dangerouslySetInnerHTML={
+						{
+							__html: shown,
+						}}
 					/>
 				)}
 			</span>
@@ -78,22 +98,31 @@ export function rowName({
 }
 
 /** The local-midnight date a `YYYYMMDD` dateId names. */
-function dateOfId(dateId: number): Date {
+function dateOfId(dateId: number): Date
+{
 	return new Date(Math.floor(dateId / 10_000), (Math.floor(dateId / 100) % 100) - 1, dateId % 100);
 }
 
 /** A node's left-bar label: its rich name with date pills, plus `Today, ` on a calendar day node. */
-export function useNodeRowName(node: Pick<NodeResponse, "name" | "calendar"> | undefined) {
+export function useNodeRowName(node: Pick<NodeResponse, "name" | "calendar"> | undefined)
+{
 	const dates = useDateSettings();
 	const dayPrefix = useDayPrefix(undefined);
 	const [now] = useState(() => new Date());
 	const dateId = node?.calendar?.level === "day" ? node.calendar.dateId : null;
 	const prefix = dateId !== null && dayPrefix ? friendlyPrefix(dateOfId(dateId), now) : null;
-	return rowName({html: nodeNameHtml(node?.name), dates, prefix: prefix === null ? null : `${prefix}, `});
+	return rowName(
+		{
+			html: nodeNameHtml(node?.name),
+			dates,
+			prefix: prefix === null ? null : `${prefix}, `,
+		},
+	);
 }
 
 /** A node's rich name, or "Untitled" when it has none. */
-function nodeNameHtml(name: string | null | undefined): string {
+function nodeNameHtml(name: string | null | undefined): string
+{
 	return name === null || name === undefined || name === "" ? "Untitled" : name;
 }
 
@@ -108,13 +137,15 @@ export function filesListArrow({
 	noChildren: boolean;
 	current: boolean;
 	onToggle: () => void;
-}) {
+})
+{
 	return (
 		// oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- verbatim upstream markup: a plain clickable div arrow
 		<div
 			className={`flex shrink-0 items-center justify-center opacity-[var(--opacity)] hover:opacity-[var(--hover-opacity)] arrow ${expanded ? "expanded" : ""}`}
 			data-left-bar-controls
-			onClick={(event) => {
+			onClick={(event) =>
+			{
 				event.stopPropagation();
 				event.preventDefault();
 				onToggle();
@@ -127,7 +158,8 @@ export function filesListArrow({
 }
 
 /** What a left-bar row knows about itself as a drop target and drag source. */
-interface LeftBarDropItem {
+interface LeftBarDropItem
+{
 	id: string;
 	/** The list's parent (`"home"` for the root list). */
 	parentId: string;
@@ -141,20 +173,24 @@ interface LeftBarDropItem {
 }
 
 /** The ids above `id` in the cached tree, nearest first. */
-function ancestorsInCache(queryClient: QueryClient | undefined, id: string): string[] {
+function ancestorsInCache(queryClient: QueryClient | undefined, id: string): string[]
+{
 	const chain: string[] = [];
-	if (queryClient === undefined) {
+	if (queryClient === undefined)
+	{
 		return chain;
 	}
 	let parentId = readNode(queryClient, id)?.parent_id ?? null;
-	while (parentId !== null && !chain.includes(parentId)) {
+	while (parentId !== null && !chain.includes(parentId))
+	{
 		chain.push(parentId);
 		parentId = readNode(queryClient, parentId)?.parent_id ?? null;
 	}
 	return chain;
 }
 
-interface LeftBarRowProps {
+interface LeftBarRowProps
+{
 	dropItem?: LeftBarDropItem;
 	href: string;
 	depth: number;
@@ -167,65 +203,98 @@ interface LeftBarRowProps {
 }
 
 /** A row's hover state and link navigation, which `leftBarRowLink` renders with. */
-function useLeftBarRowState() {
+function useLeftBarRowState()
+{
 	const navigate = useStableNavigate();
 	const [hovered, setHovered] = useState(false);
 	/** Upstream's `WF.Moving.happening`: a bullet drag or a Starred reorder freezes row hover. */
 	const moving = useOutlineStore((state) => state.draggingIds.length > 0 || state.starDragActive);
 	const grabbedId = useOutlineStore((state) => state.draggingIds[0] ?? null);
 	const queryClient = useContext(QueryClientContext);
-	return {navigate, hovered, setHovered, moving, grabbedId, queryClient};
+	return {
+		navigate,
+		hovered,
+		setHovered,
+		moving,
+		grabbedId,
+		queryClient,
+	};
 }
 
 /** One upstream FilesList row: a link with an arrow slot, a label, and hover-only controls. */
 function leftBarRowLink(
 	{href, depth, current: zoomed, completed, expanded, arrow, label, controls, dropItem}: LeftBarRowProps,
 	{navigate, hovered, setHovered, moving, grabbedId, queryClient}: ReturnType<typeof useLeftBarRowState>,
-) {
+)
+{
 	// While a drag carries rows, upstream shows the grabbed item (and anything inside it) as secondary/600 and dimmed.
 	const {inside, dim} =
 		grabbedId === null || dropItem === undefined
-			? {inside: false, dim: false}
+			?
+				{
+					inside: false,
+					dim: false,
+				}
 			: rowMovingStyle(dropItem.id, grabbedId, (id) => ancestorsInCache(queryClient, id));
 	const current = grabbedId === null ? zoomed : inside;
 	/** Upstream `G`: while rows are carried, hovering a row plans where a drop here would land. */
-	const planDrop = (event: ReactMouseEvent<HTMLAnchorElement>) => {
+	const planDrop = (event: ReactMouseEvent<HTMLAnchorElement>) =>
+	{
 		const {draggingIds, setLeftBarDrop} = useOutlineStore.getState();
-		if (draggingIds.length === 0 || dropItem === undefined) {
+		if (draggingIds.length === 0 || dropItem === undefined)
+		{
 			return;
 		}
 		const labelRect = (
 			event.currentTarget.querySelector("[data-expanded]") ?? event.currentTarget
 		).getBoundingClientRect();
 		const rowRect = event.currentTarget.getBoundingClientRect();
-		const pos = planLeftBarDrop({
-			rowRect: {top: rowRect.top, height: rowRect.height},
-			labelRect: {left: labelRect.left, width: labelRect.width},
-			point: {x: event.clientX, y: event.clientY},
-			item: dropItem,
-			disableRootMoves: dropItem.disableRootMoves,
-			previousSibling:
-				dropItem.previousId === null
-					? null
-					: {
-							id: dropItem.previousId,
-							expanded: dropItem.previousExpanded,
-							childCount:
-								queryClient === undefined
-									? 0
-									: (readChildren(queryClient, dropItem.previousId)?.length ?? 0),
-						},
-			isValidParent: (id) =>
-				isValidLeftBarParent(id, draggingIds, (ancestor) => ancestorsInCache(queryClient, ancestor)),
-		});
+		const pos = planLeftBarDrop(
+			{
+				rowRect:
+				{
+					top: rowRect.top,
+					height: rowRect.height,
+				},
+				labelRect:
+				{
+					left: labelRect.left,
+					width: labelRect.width,
+				},
+				point:
+				{
+					x: event.clientX,
+					y: event.clientY,
+				},
+				item: dropItem,
+				disableRootMoves: dropItem.disableRootMoves,
+				previousSibling:
+					dropItem.previousId === null
+						? null
+						:
+							{
+								id: dropItem.previousId,
+								expanded: dropItem.previousExpanded,
+								childCount:
+									queryClient === undefined
+										? 0
+										: (readChildren(queryClient, dropItem.previousId)?.length ?? 0),
+							},
+				isValidParent: (id) =>
+					isValidLeftBarParent(id, draggingIds, (ancestor) => ancestorsInCache(queryClient, ancestor)),
+			},
+		);
 		// Upstream keeps the last valid position when this row has none.
-		if (pos !== null) {
+		if (pos !== null)
+		{
 			setLeftBarDrop(pos);
 		}
 	};
 
-	const handleClick = (event: ReactMouseEvent<HTMLAnchorElement>) => {
-		if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+	const handleClick = (event: ReactMouseEvent<HTMLAnchorElement>) =>
+	{
+		if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+		{
 			return;
 		}
 		event.preventDefault();
@@ -239,7 +308,8 @@ function leftBarRowLink(
 			draggable="false"
 			className={`flex justify-between items-center pr-m hover:cursor-pointer ${completed ? "hover:line-through" : "hover:no-underline"} left-bar-section-item font-custom `}
 			onClick={handleClick}
-			onMouseDown={(event) => {
+			onMouseDown={(event) =>
+			{
 				if (
 					queryClient === undefined ||
 					dropItem === undefined ||
@@ -248,24 +318,30 @@ function leftBarRowLink(
 					event.button !== 0 ||
 					event.ctrlKey ||
 					event.metaKey
-				) {
+				)
+				{
 					return;
 				}
 				startLeftBarRowDrag(queryClient, dropItem.id, event);
 			}}
-			onMouseEnter={(event) => {
-				if (!moving) {
+			onMouseEnter={(event) =>
+			{
+				if (!moving)
+				{
 					setHovered(true);
 				}
 				planDrop(event);
 			}}
-			onMouseLeave={() => {
-				if (!moving) {
+			onMouseLeave={() =>
+			{
+				if (!moving)
+				{
 					setHovered(false);
 				}
 			}}
 			onMouseMove={planDrop}
-			style={{
+			style={
+			{
 				paddingLeft: 12 * (depth + 1),
 				background: hovered ? "var(--wf-background-tertiary)" : undefined,
 				color: current ? "var(--wf-text-secondary)" : "var(--wf-text-tertiary)",
@@ -275,7 +351,10 @@ function leftBarRowLink(
 		>
 			<div
 				className="flex grow items-center min-w-0 h-[30px] pl-xs text-tertiary"
-				style={{fontWeight: current ? 600 : 400}}
+				style={
+				{
+					fontWeight: current ? 600 : 400,
+				}}
 			>
 				{arrow}
 				<div className="grow py-xs truncate" data-expanded={expanded}>
@@ -292,7 +371,8 @@ function leftBarRowLink(
 }
 
 /** A left-bar row with hover controls, for the Starred section's rows. */
-export function LeftBarRow(props: LeftBarRowProps) {
+export function LeftBarRow(props: LeftBarRowProps)
+{
 	return leftBarRowLink(props, useLeftBarRowState());
 }
 
@@ -309,36 +389,53 @@ export function renderLimit({
 	scrollTop: number;
 	offsetHeight: number;
 	rulerOffsetTop: number;
-}): number {
+}): number
+{
 	return Math.ceil(Math.max(0, scrollTop + offsetHeight - rulerOffsetTop) / ROW_HEIGHT) + LIMIT_PADDING;
 }
 
 /** The limit is only replaced when it moves by more than 40, as upstream. */
-export function nextLimit(current: number, computed: number): number {
+export function nextLimit(current: number, computed: number): number
+{
 	return Math.abs(computed - current) > LIMIT_HYSTERESIS ? computed : current;
 }
 
 /** Tracks the render limit of the list whose ruler element `ruler` is, from its `.scroller` ancestor. */
-function useRenderLimit(ruler: {current: HTMLElement | null}): number {
-	const [limit, setLimit] = useState(() => renderLimit({scrollTop: 0, offsetHeight: 0, rulerOffsetTop: 0}));
-	useEffect(() => {
+function useRenderLimit(ruler: {current: HTMLElement | null}): number
+{
+	const [limit, setLimit] = useState(() =>
+		renderLimit(
+			{
+				scrollTop: 0,
+				offsetHeight: 0,
+				rulerOffsetTop: 0,
+			},
+		),
+	);
+	useEffect(() =>
+	{
 		const element = ruler.current;
 		const scroller = element?.closest<HTMLElement>(".scroller");
-		const update = () => {
-			if (!element || !scroller) {
+		const update = () =>
+		{
+			if (!element || !scroller)
+			{
 				return;
 			}
-			const computed = renderLimit({
-				scrollTop: scroller.scrollTop,
-				offsetHeight: scroller.offsetHeight,
-				rulerOffsetTop: element.offsetTop,
-			});
+			const computed = renderLimit(
+				{
+					scrollTop: scroller.scrollTop,
+					offsetHeight: scroller.offsetHeight,
+					rulerOffsetTop: element.offsetTop,
+				},
+			);
 			setLimit((current) => nextLimit(current, computed));
 		};
 		update();
 		scroller?.addEventListener("scroll", update);
 		window.addEventListener("resize", update);
-		return () => {
+		return () =>
+		{
 			scroller?.removeEventListener("scroll", update);
 			window.removeEventListener("resize", update);
 		};
@@ -370,7 +467,8 @@ export function FilesListRows({
 	budget?: number;
 	/** Overrides the measured limit (tests). */
 	limit?: number;
-}) {
+})
+{
 	const {data: nodes} = useChildren(parentId);
 	const showCompleted = useOutlineStore((state) => state.showCompleted);
 	const keys = useLeftBarExpansionStore((state) => state.keys);
@@ -383,7 +481,8 @@ export function FilesListRows({
 	return (
 		<>
 			{windowed ? <div ref={ruler} /> : null}
-			{listed?.map((node, index) => {
+			{listed?.map((node, index) =>
+			{
 				const top = topUniqueId ?? pageUniqueId(node.id);
 				const previous = listed[index - 1];
 				return (
@@ -434,7 +533,8 @@ const FilesListBranch = memo(function FilesListBranch({
 	topUniqueId: string;
 	expanded: boolean;
 	budget: number;
-}) {
+})
+{
 	const toggle = useLeftBarExpansionStore((state) => state.toggle);
 	const current = useOutlineStore((state) => state.zoomedNodeId === node.id);
 	const showCompleted = useOutlineStore((state) => state.showCompleted);
@@ -444,21 +544,26 @@ const FilesListBranch = memo(function FilesListBranch({
 		<>
 			{leftBarRowLink(
 				{
-					arrow: filesListArrow({
-						current,
-						expanded,
-						noChildren: !rowHasChildren(node, showCompleted),
-						onToggle: () => {
-							// Upstream skips items with no children at all (completed ones count).
-							if (node.hasChildren !== false) {
-								toggle(leftBarExpansionKey(section, topUniqueId, node.id));
-							}
+					arrow: filesListArrow(
+						{
+							current,
+							expanded,
+							noChildren: !rowHasChildren(node, showCompleted),
+							onToggle: () =>
+							{
+								// Upstream skips items with no children at all (completed ones count).
+								if (node.hasChildren !== false)
+								{
+									toggle(leftBarExpansionKey(section, topUniqueId, node.id));
+								}
+							},
 						},
-					}),
+					),
 					completed: node.completedAt !== null,
 					current,
 					depth,
-					dropItem: {
+					dropItem:
+					{
 						id: node.id,
 						parentId: listParentId,
 						index: siblingIndex,

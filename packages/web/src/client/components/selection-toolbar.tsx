@@ -21,7 +21,8 @@ export type SelectionToolbarAction =
 	| "latest-color"
 	| "show-palette";
 
-export interface SelectionToolbarButton {
+export interface SelectionToolbarButton
+{
 	key: SelectionToolbarAction;
 	icon: FaIconKey;
 	iconClassName: string;
@@ -38,18 +39,87 @@ const GAP = "      ";
 /** Upstream's toolbar buttons in order; the first four (types) are hidden in a note. */
 // oxlint-disable-next-line react/only-export-components -- static button table exported for unit tests
 export const selectionToolbarButtons: readonly SelectionToolbarButton[] = [
-	{key: "h1", icon: "far:h1", iconClassName: "h1", tooltip: `Heading 1${GAP}⌥⌘1`, layoutMode: "h1"},
-	{key: "h2", icon: "far:h2", iconClassName: "h2", tooltip: `Heading 2${GAP}⌥⌘2`, layoutMode: "h2"},
-	{key: "h3", icon: "far:h3", iconClassName: "h3", tooltip: `Heading 3${GAP}⌥⌘3`, layoutMode: "h3"},
-	{key: "p", icon: "far:paragraph", iconClassName: "paragraph", tooltip: `Paragraph${GAP}⌥⌘4`, layoutMode: "p"},
-	{key: "bold", icon: "far:bold", iconClassName: "", tooltip: `Bold${GAP}⌘B`, attr: "b"},
-	{key: "underline", icon: "far:underline", iconClassName: "", tooltip: `Underline${GAP}⌘U`, attr: "u"},
-	{key: "italic", icon: "far:italic", iconClassName: "", tooltip: `Italic${GAP}⌘I`, attr: "i"},
-	{key: "strikethrough", icon: "far:strikethrough", iconClassName: "", tooltip: `Strikethrough${GAP}⇧⌘X`, attr: "s"},
-	{key: "code-format", icon: "far:code", iconClassName: "code", tooltip: "Inline Code    ⇧⌘C", attr: "code"},
-	{key: "link", icon: "far:link", iconClassName: "", tooltip: `Link${GAP}⌘K`},
-	{key: "latest-color", icon: "far:font", iconClassName: "", tooltip: `Text color${GAP}⇧⌘H`},
-	{key: "show-palette", icon: "far:chevron-down", iconClassName: "show-palette", tooltip: undefined},
+	{
+		key: "h1",
+		icon: "far:h1",
+		iconClassName: "h1",
+		tooltip: `Heading 1${GAP}⌥⌘1`,
+		layoutMode: "h1",
+	},
+	{
+		key: "h2",
+		icon: "far:h2",
+		iconClassName: "h2",
+		tooltip: `Heading 2${GAP}⌥⌘2`,
+		layoutMode: "h2",
+	},
+	{
+		key: "h3",
+		icon: "far:h3",
+		iconClassName: "h3",
+		tooltip: `Heading 3${GAP}⌥⌘3`,
+		layoutMode: "h3",
+	},
+	{
+		key: "p",
+		icon: "far:paragraph",
+		iconClassName: "paragraph",
+		tooltip: `Paragraph${GAP}⌥⌘4`,
+		layoutMode: "p",
+	},
+	{
+		key: "bold",
+		icon: "far:bold",
+		iconClassName: "",
+		tooltip: `Bold${GAP}⌘B`,
+		attr: "b",
+	},
+	{
+		key: "underline",
+		icon: "far:underline",
+		iconClassName: "",
+		tooltip: `Underline${GAP}⌘U`,
+		attr: "u",
+	},
+	{
+		key: "italic",
+		icon: "far:italic",
+		iconClassName: "",
+		tooltip: `Italic${GAP}⌘I`,
+		attr: "i",
+	},
+	{
+		key: "strikethrough",
+		icon: "far:strikethrough",
+		iconClassName: "",
+		tooltip: `Strikethrough${GAP}⇧⌘X`,
+		attr: "s",
+	},
+	{
+		key: "code-format",
+		icon: "far:code",
+		iconClassName: "code",
+		tooltip: "Inline Code    ⇧⌘C",
+		attr: "code",
+	},
+	{
+		key: "link",
+		icon: "far:link",
+		iconClassName: "",
+		tooltip: `Link${GAP}⌘K`,
+	},
+	{
+		key: "latest-color",
+		icon: "far:font",
+		iconClassName: "",
+		tooltip: `Text color${GAP}⇧⌘H`,
+	},
+	{
+		key: "show-palette",
+		icon: "far:chevron-down",
+		iconClassName: "show-palette",
+		tooltip: undefined,
+	},
 ];
 
 const TYPE_BUTTON_COUNT = 4;
@@ -64,9 +134,11 @@ export function selectionToolbarButtonsFor({
 }: {
 	inNote: boolean;
 	layoutMode: string | null | undefined;
-}): readonly SelectionToolbarButton[] {
+}): readonly SelectionToolbarButton[]
+{
 	const normalized = normalizeLayoutMode(layoutMode);
-	if (normalized !== null && SUPPRESSING_LAYOUTS.has(normalized)) {
+	if (normalized !== null && SUPPRESSING_LAYOUTS.has(normalized))
+	{
 		return [];
 	}
 	return inNote ? selectionToolbarButtons.slice(TYPE_BUTTON_COUNT) : selectionToolbarButtons;
@@ -77,15 +149,22 @@ const X_SHIFT = 55;
 const Y_SHIFT = -52;
 
 /** Upstream's safe-area portal host around popup flyouts. */
-const HOST_STYLE = {
+const HOST_STYLE =
+{
 	overflow: "hidden",
 	marginTop: "var(--safe-area-inset-top)",
 	marginBottom: "var(--safe-area-inset-bottom)",
 } as const;
 
-export interface SelectionToolbarProps {
+export interface SelectionToolbarProps
+{
 	/** The selection's bounding rect in page coordinates. */
-	rect: {x: number; y: number; width: number};
+	rect:
+	{
+		x: number;
+		y: number;
+		width: number;
+	};
 	/** The selection is in a note: the type buttons are hidden. */
 	inNote: boolean;
 	/** Inline attributes touching the selection. */
@@ -99,34 +178,54 @@ export interface SelectionToolbarProps {
 	onAction: (action: SelectionToolbarAction) => void;
 }
 
-function isActive(button: SelectionToolbarButton, props: SelectionToolbarProps): boolean {
-	if (button.layoutMode !== undefined) {
+function isActive(button: SelectionToolbarButton, props: SelectionToolbarProps): boolean
+{
+	if (button.layoutMode !== undefined)
+	{
 		return normalizeLayoutMode(props.layoutMode) === button.layoutMode;
 	}
-	if (button.key === "latest-color") {
+	if (button.key === "latest-color")
+	{
 		return props.colorActive === true;
 	}
 	return button.attr !== undefined && props.activeAttrs.has(button.attr);
 }
 
-function iconClassName(button: SelectionToolbarButton, lastColorClass: string | undefined): string {
-	if (button.key === "latest-color" && lastColorClass !== undefined && lastColorClass !== "") {
+function iconClassName(button: SelectionToolbarButton, lastColorClass: string | undefined): string
+{
+	if (button.key === "latest-color" && lastColorClass !== undefined && lastColorClass !== "")
+	{
 		return `${lastColorClass} !p-[3px] rounded-[3px]`;
 	}
 	return button.iconClassName;
 }
 
 /** Upstream's floating text-formatting toolbar shown above a non-collapsed selection. */
-export function SelectionToolbar(props: SelectionToolbarProps) {
+export function SelectionToolbar(props: SelectionToolbarProps)
+{
 	const {rect, inNote, lastColorClass, onAction} = props;
-	const buttons = selectionToolbarButtonsFor({inNote, layoutMode: props.layoutMode});
-	if (buttons.length === 0) {
+	const buttons = selectionToolbarButtonsFor(
+		{
+			inNote,
+			layoutMode: props.layoutMode,
+		},
+	);
+	if (buttons.length === 0)
+	{
 		return null;
 	}
 	const position = [rect.x + rect.width / 2 + X_SHIFT, rect.y + Y_SHIFT] as const;
 	return createPortal(
 		<div style={HOST_STYLE}>
-			<Flyout position={position} className="ctx-menu" style={{maxWidth: "none", padding: "var(--wf-space-s)"}}>
+			<Flyout
+				position={position}
+				className="ctx-menu"
+				style={
+				{
+					maxWidth: "none",
+					padding: "var(--wf-space-s)",
+				}}
+			>
 				<div className="flex">
 					{buttons.map((button) => (
 						<IconButton
@@ -135,12 +234,14 @@ export function SelectionToolbar(props: SelectionToolbarProps) {
 							shape="square"
 							className={`ctx-menu-item ${isActive(button, props) ? "active" : ""}`}
 							tooltip={button.tooltip}
-							onMouseDown={(event: MouseEvent<HTMLDivElement>) => {
+							onMouseDown={(event: MouseEvent<HTMLDivElement>) =>
+							{
 								// Keep the selection, and keep the press from reaching the row's drag-select through the portal.
 								event.preventDefault();
 								event.stopPropagation();
 							}}
-							onClick={(event) => {
+							onClick={(event) =>
+							{
 								event.stopPropagation();
 								onAction(button.key);
 							}}

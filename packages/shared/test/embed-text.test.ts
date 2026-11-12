@@ -10,21 +10,36 @@ import {FAR_FUTURE_DATE} from "../src/temporal/index.js";
 const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
 const SYSTEM_FROM = "2026-01-01 00:00:00.000";
 
-describe("embed text", () => {
+describe("embed text", () =>
+{
 	let open: DatabaseConstructor.Database[] = [];
-	afterEach(() => {
-		for (const sqlite of open) {
+	afterEach(() =>
+	{
+		for (const sqlite of open)
+		{
 			sqlite.close();
 		}
 		open = [];
 	});
 
-	function database() {
+	function database()
+	{
 		const sqlite = new DatabaseConstructor(":memory:");
 		open.push(sqlite);
-		const db = drizzle(sqlite, {schema});
-		migrate(db, {migrationsFolder});
-		const node = (id: string, name: string, parentId: string | null, note: string | null = null) => ({
+		const db = drizzle(
+			sqlite,
+			{
+				schema,
+			},
+		);
+		migrate(
+			db,
+			{
+				migrationsFolder,
+			},
+		);
+		const node = (id: string, name: string, parentId: string | null, note: string | null = null) => (
+		{
 			id,
 			name,
 			note,
@@ -43,12 +58,20 @@ describe("embed text", () => {
 			])
 			.run();
 		db.insert(schema.mirrors)
-			.values({originalId: "garden", mirrorId: "mir", systemFrom: SYSTEM_FROM, systemTo: FAR_FUTURE_DATE})
+			.values(
+				{
+					originalId: "garden",
+					mirrorId: "mir",
+					systemFrom: SYSTEM_FROM,
+					systemTo: FAR_FUTURE_DATE,
+				},
+			)
 			.run();
 		return db;
 	}
 
-	it("loads only current non-leaf nodes that are not mirrors", () => {
+	it("loads only current non-leaf nodes that are not mirrors", () =>
+	{
 		expect(
 			loadEmbeddableNodes(database())
 				.map((node) => node.id)
@@ -56,14 +79,16 @@ describe("embed text", () => {
 		).toStrictEqual(["garden", "root"]);
 	});
 
-	it("keeps the ids that are current containers and not mirrors, in the order given", () => {
+	it("keeps the ids that are current containers and not mirrors, in the order given", () =>
+	{
 		expect(filterEmbeddable(database(), ["root", "basil", "mir", "gone", "garden"])).toStrictEqual([
 			"root",
 			"garden",
 		]);
 	});
 
-	it("builds PATH, CONTENT and CHILDREN text, leaving CHILDREN out when a node has none", () => {
+	it("builds PATH, CONTENT and CHILDREN text, leaving CHILDREN out when a node has none", () =>
+	{
 		expect(buildEmbedTexts(database(), ["garden", "root", "basil"])).toStrictEqual(
 			new Map([
 				[

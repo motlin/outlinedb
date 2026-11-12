@@ -17,18 +17,23 @@ const REPO_ROOT = join(import.meta.dirname, "../../../..");
 const DEFAULT_DIRECTORY = join(REPO_ROOT, ".llm/gtd/review/decisions");
 const DEFAULT_PHOTOS_DIRECTORY = join(REPO_ROOT, ".llm/photos");
 
-export function decisionsDirectory(env: {OUTLINEDB_DECISIONS_DIR?: string | undefined}): string {
+export function decisionsDirectory(env: {OUTLINEDB_DECISIONS_DIR?: string | undefined}): string
+{
 	return env.OUTLINEDB_DECISIONS_DIR ?? DEFAULT_DIRECTORY;
 }
 
-export function decisionPhotosDirectory(env: {OUTLINEDB_DECISION_PHOTOS_DIR?: string | undefined}): string {
+export function decisionPhotosDirectory(env: {OUTLINEDB_DECISION_PHOTOS_DIR?: string | undefined}): string
+{
 	return env.OUTLINEDB_DECISION_PHOTOS_DIR ?? DEFAULT_PHOTOS_DIRECTORY;
 }
 
 /** `photosDirectory` undefined means the host serves no images or videos. */
-export function fileDecisionStore(directory: string, photosDirectory?: string): DecisionStore {
-	const path = (slug: string, suffix: string): string => {
-		if (!DECISION_SLUG.test(slug)) {
+export function fileDecisionStore(directory: string, photosDirectory?: string): DecisionStore
+{
+	const path = (slug: string, suffix: string): string =>
+	{
+		if (!DECISION_SLUG.test(slug))
+		{
 			throw new Error(`Decision slug must match [a-z0-9-]+, got "${slug}"`);
 		}
 		return join(directory, `${slug}${suffix}`);
@@ -36,25 +41,35 @@ export function fileDecisionStore(directory: string, photosDirectory?: string): 
 	return {
 		readDocument: async (slug) => readIfPresent(path(slug, ".json")),
 		readAnswers: async (slug) => readIfPresent(path(slug, ".answers.json")),
-		writeAnswers: async (slug, text) => {
+		writeAnswers: async (slug, text) =>
+		{
 			const destination = path(slug, ".answers.json");
-			await mkdir(directory, {recursive: true});
+			await mkdir(
+				directory,
+				{
+					recursive: true,
+				},
+			);
 			const temporary = `${destination}.${randomUUID()}.tmp`;
 			await writeFile(temporary, text);
 			await rename(temporary, destination);
 		},
-		openMedia: async (src) => {
-			if (photosDirectory === undefined || decisionMediaType(src) === null) {
+		openMedia: async (src) =>
+		{
+			if (photosDirectory === undefined || decisionMediaType(src) === null)
+			{
 				return null;
 			}
 			const file = await realIfPresent(join(photosDirectory, src));
 			const root = await realIfPresent(photosDirectory);
 			// Resolving symlinks first means a link inside the directory cannot reach a file outside it.
-			if (file === null || root === null || !isInside(root, file)) {
+			if (file === null || root === null || !isInside(root, file))
+			{
 				return null;
 			}
 			const stats = await stat(file);
-			if (!stats.isFile()) {
+			if (!stats.isFile())
+			{
 				return null;
 			}
 			return {
@@ -66,32 +81,47 @@ export function fileDecisionStore(directory: string, photosDirectory?: string): 
 }
 
 /** The bytes of `file` from `start` through `end` inclusive, read only as the consumer pulls them. */
-function readSlice(file: string, start: number, end: number): ReadableStream<Uint8Array<ArrayBuffer>> {
-	const chunks = createReadStream(file, {start, end})[Symbol.asyncIterator]();
-	return new ReadableStream({
-		async pull(controller) {
-			const next: IteratorResult<unknown> = await chunks.next();
-			if (next.done === true) {
-				controller.close();
-				return;
-			}
-			if (!(next.value instanceof Uint8Array)) {
-				throw new TypeError("A file stream yielded a non-byte chunk");
-			}
-			controller.enqueue(new Uint8Array(next.value));
+function readSlice(file: string, start: number, end: number): ReadableStream<Uint8Array<ArrayBuffer>>
+{
+	const chunks = createReadStream(
+		file,
+		{
+			start,
+			end,
 		},
-		async cancel() {
-			await chunks.return?.();
+	)[Symbol.asyncIterator]();
+	return new ReadableStream(
+		{
+			async pull(controller)
+			{
+				const next: IteratorResult<unknown> = await chunks.next();
+				if (next.done === true)
+				{
+					controller.close();
+					return;
+				}
+				if (!(next.value instanceof Uint8Array))
+				{
+					throw new TypeError("A file stream yielded a non-byte chunk");
+				}
+				controller.enqueue(new Uint8Array(next.value));
+			},
+			async cancel()
+			{
+				await chunks.return?.();
+			},
 		},
-	});
+	);
 }
 
-function isInside(root: string, file: string): boolean {
+function isInside(root: string, file: string): boolean
+{
 	const path = relative(root, file);
 	return path !== "" && !isAbsolute(path) && path !== ".." && !path.startsWith(`..${sep}`);
 }
 
-function isMissing(error: unknown): boolean {
+function isMissing(error: unknown): boolean
+{
 	return (
 		error instanceof Error &&
 		"code" in error &&
@@ -99,22 +129,32 @@ function isMissing(error: unknown): boolean {
 	);
 }
 
-async function realIfPresent(file: string): Promise<string | null> {
-	try {
+async function realIfPresent(file: string): Promise<string | null>
+{
+	try
+	{
 		return await realpath(file);
-	} catch (error) {
-		if (isMissing(error)) {
+	}
+	catch (error)
+	{
+		if (isMissing(error))
+		{
 			return null;
 		}
 		throw error;
 	}
 }
 
-async function readIfPresent(file: string): Promise<string | null> {
-	try {
+async function readIfPresent(file: string): Promise<string | null>
+{
+	try
+	{
 		return await readFile(file, "utf8");
-	} catch (error) {
-		if (isMissing(error)) {
+	}
+	catch (error)
+	{
+		if (isMissing(error))
+		{
 			return null;
 		}
 		throw error;

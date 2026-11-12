@@ -10,7 +10,8 @@
 	],
 	"license": "Apache 2.0",
 	"author": "Craig P. Motlin",
-	"bin": {
+	"bin":
+	{
 		"outlinedb": "./bin/run.js"
 	},
 	"files": [
@@ -21,14 +22,15 @@
 	"type": "module",
 	"main": "dist/index.js",
 	"types": "dist/index.d.ts",
-	"scripts": {
+	"scripts":
+	{
 		"preinstall": "npx only-allow pnpm",
 		"build": "shx rm -rf dist && tsc -b",
-		"gen:migrations": "node scripts/gen-migrations-bundle.mjs && vp fmt packages/shared/src/db/migrations-bundle.generated.ts",
+		"gen:migrations": "node scripts/gen-migrations-bundle.mjs && oxfmt-next-line packages/shared/src/db/migrations-bundle.generated.ts",
 		"oxlint": "vp lint . --fix",
 		"oxlint:ci": "vp lint . --format github",
-		"fmt": "vp fmt",
-		"fmt:ci": "vp fmt --check",
+		"fmt": "oxfmt-next-line",
+		"fmt:ci": "oxfmt-next-line --check",
 		"fallow": "fallow fix --yes --no-create-config",
 		"fallow:ci": "fallow dead-code",
 		"typecheck": "tsc --noEmit",
@@ -45,14 +47,16 @@
 		"eval:behavioral": "vp test run --config vitest.config.evals.ts --test-timeout 900000 test/evals/behavioral",
 		"prepare": "VITE_GIT_HOOKS=0 vp config"
 	},
-	"dependencies": {
+	"dependencies":
+	{
 		"@oclif/core": "^5.1.11",
 		"@oclif/plugin-help": "^7",
 		"@outlinedb/shared": "workspace:*",
 		"better-sqlite3": "13.0.3",
 		"drizzle-orm": "^0.45.3"
 	},
-	"devDependencies": {
+	"devDependencies":
+	{
 		"@types/better-sqlite3": "^9.6.0",
 		"@types/node": "^26.6.6",
 		"drizzle-kit": "^0.31.11",
@@ -68,7 +72,8 @@
 		"vitest": "catalog:",
 		"zod": "^4.6.7"
 	},
-	"oclif": {
+	"oclif":
+	{
 		"bin": "outlinedb",
 		"commands": "./packages/cli/dist/commands",
 		"dirname": "outlinedb",
@@ -77,7 +82,8 @@
 		],
 		"topicSeparator": " "
 	},
-	"engines": {
+	"engines":
+	{
 		"node": ">=20.11.0"
 	},
 	"packageManager": "pnpm@12.18.0"

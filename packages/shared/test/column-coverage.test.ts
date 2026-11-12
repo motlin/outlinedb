@@ -42,7 +42,8 @@ const allowlistedColumns = new Set(["systemFrom", "systemTo"]);
  */
 const pendingReadSites = new Set(["nodeLabelSuggestions.labelKind", "nodeLabelSuggestions.contentFrom"]);
 
-interface SchemaColumn {
+interface SchemaColumn
+{
 	table: string;
 	column: string;
 }
@@ -52,12 +53,14 @@ interface SchemaColumn {
  * sqliteTable("name", { ... })` block contributes the property names declared
  * in its column-definition object, ignoring the trailing index/PK callback.
  */
-function extractSchemaColumns(source: string): SchemaColumn[] {
+function extractSchemaColumns(source: string): SchemaColumn[]
+{
 	const columns: SchemaColumn[] = [];
 	const tablePattern = /export const (\w+) = sqliteTable\(\s*(["'])[^"']+\2,/gu;
 
 	let match: RegExpExecArray | null;
-	while ((match = tablePattern.exec(source)) !== null) {
+	while ((match = tablePattern.exec(source)) !== null)
+	{
 		const tableConstant = match[1];
 		assert(tableConstant !== undefined);
 		const blockStart = source.indexOf("{", match.index + match[0].length);
@@ -65,13 +68,18 @@ function extractSchemaColumns(source: string): SchemaColumn[] {
 
 		let depth = 0;
 		let blockEnd = blockStart;
-		for (let index = blockStart; index < source.length; index++) {
+		for (let index = blockStart; index < source.length; index++)
+		{
 			const character = source[index];
-			if (character === "{") {
+			if (character === "{")
+			{
 				depth++;
-			} else if (character === "}") {
+			}
+			else if (character === "}")
+			{
 				depth--;
-				if (depth === 0) {
+				if (depth === 0)
+				{
 					blockEnd = index;
 					break;
 				}
@@ -81,10 +89,17 @@ function extractSchemaColumns(source: string): SchemaColumn[] {
 		const block = source.slice(blockStart + 1, blockEnd);
 		const columnPattern = /(?:^|\n)\s*(\w+):\s*(?:text|integer|blob)\(/gu;
 		let columnMatch: RegExpExecArray | null;
-		while ((columnMatch = columnPattern.exec(block)) !== null) {
+		while ((columnMatch = columnPattern.exec(block)) !== null)
+		{
 			const [, column] = columnMatch;
-			if (column !== undefined) {
-				columns.push({table: tableConstant, column});
+			if (column !== undefined)
+			{
+				columns.push(
+					{
+						table: tableConstant,
+						column,
+					},
+				);
 			}
 		}
 	}
@@ -98,18 +113,25 @@ function extractSchemaColumns(source: string): SchemaColumn[] {
  * schema file itself, and test files. A column referenced only by a migration
  * or by a test does not count as a real downstream read site.
  */
-function collectSourceFiles(): string[] {
+function collectSourceFiles(): string[]
+{
 	const skipDirectories = new Set(["node_modules", "dist", "migrations", "test"]);
 	const files: string[] = [];
 
-	const walk = (directory: string): void => {
-		for (const entry of readdirSync(directory)) {
+	const walk = (directory: string): void =>
+	{
+		for (const entry of readdirSync(directory))
+		{
 			const entryPath = join(directory, entry);
-			if (statSync(entryPath).isDirectory()) {
-				if (!skipDirectories.has(entry)) {
+			if (statSync(entryPath).isDirectory())
+			{
+				if (!skipDirectories.has(entry))
+				{
 					walk(entryPath);
 				}
-			} else if (extname(entry) === ".ts" && entryPath !== schemaPath) {
+			}
+			else if (extname(entry) === ".ts" && entryPath !== schemaPath)
+			{
 				files.push(entryPath);
 			}
 		}
@@ -119,8 +141,10 @@ function collectSourceFiles(): string[] {
 	return files;
 }
 
-describe("column coverage", () => {
-	it("every schema column is referenced by a read site outside migrations", () => {
+describe("column coverage", () =>
+{
+	it("every schema column is referenced by a read site outside migrations", () =>
+	{
 		const schemaSource = readFileSync(schemaPath, "utf8");
 		const schemaColumns = extractSchemaColumns(schemaSource);
 
@@ -131,8 +155,10 @@ describe("column coverage", () => {
 
 		const sourceText = sourceFiles.map((file) => readFileSync(file, "utf8")).join("\n");
 
-		const deadColumns = schemaColumns.filter(({table, column}) => {
-			if (allowlistedColumns.has(column) || pendingReadSites.has(`${table}.${column}`)) {
+		const deadColumns = schemaColumns.filter(({table, column}) =>
+		{
+			if (allowlistedColumns.has(column) || pendingReadSites.has(`${table}.${column}`))
+			{
 				return false;
 			}
 			const referencePattern = new RegExp(`[.'"]${column}\\b|\\b${column}:`, "u");

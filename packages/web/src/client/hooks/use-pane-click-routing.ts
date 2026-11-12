@@ -12,7 +12,8 @@ import {blurEditor, claim} from "./use-content-link-clicks.js";
 
 const BULLET_SELECTOR = '[data-handbook="bullet.handle"][data-item-id]';
 
-function paneIdOf(element: Element): string {
+function paneIdOf(element: Element): string
+{
 	return element.closest("[data-pane-id]")?.getAttribute("data-pane-id") ?? MAIN_PANE_ID;
 }
 
@@ -22,35 +23,44 @@ function paneIdOf(element: Element): string {
  * a bullet or crumb, at the end for a left-bar row, keeping the row's search query); a plain left-bar click while side
  * panes are open navigates the focused or active pane instead of the main outline. Mount once (the app owns it).
  */
-export function usePaneClickRouting(resolveId: (locationId: string) => Promise<string | null>): void {
+export function usePaneClickRouting(resolveId: (locationId: string) => Promise<string | null>): void
+{
 	const queryClient = useQueryClient();
-	useEffect(() => {
+	useEffect(() =>
+	{
 		const resolve = async (locationId: string | null): Promise<string | null> =>
 			locationId === null
 				? null
-				: queryClient.query({
-						queryKey: nodeKeys.resolvedId(locationId),
-						queryFn: async () => resolveId(locationId),
-						staleTime: RESOLVED_ID_STALE_TIME,
-					});
+				: queryClient.query(
+						{
+							queryKey: nodeKeys.resolvedId(locationId),
+							queryFn: async () => resolveId(locationId),
+							staleTime: RESOLVED_ID_STALE_TIME,
+						},
+					);
 
-		const handleClick = (event: MouseEvent) => {
+		const handleClick = (event: MouseEvent) =>
+		{
 			const target = event.target instanceof Element ? event.target : null;
-			if (target === null) {
+			if (target === null)
+			{
 				return;
 			}
 			const mode = paneClickModifier(event, isMacPlatform());
 
 			const bullet = target.closest<HTMLElement>(BULLET_SELECTOR);
-			if (bullet !== null && mode === "open" && bullet.dataset.preDragClick === "true") {
+			if (bullet !== null && mode === "open" && bullet.dataset.preDragClick === "true")
+			{
 				claim(event);
 				openInPane(useOutlineStore.getState(), bullet.dataset.itemId ?? "", paneIdOf(bullet));
 				return;
 			}
 
 			const crumb = target.closest<HTMLElement>("a.breadcrumb-item[data-item-id]");
-			if (crumb !== null) {
-				if (mode === "open") {
+			if (crumb !== null)
+			{
+				if (mode === "open")
+				{
 					claim(event);
 					const itemId = crumb.dataset.itemId;
 					openInPane(
@@ -63,53 +73,68 @@ export function usePaneClickRouting(resolveId: (locationId: string) => Promise<s
 			}
 
 			const row = target.closest<HTMLElement>("a.left-bar-section-item");
-			if (row === null || target.closest("[data-left-bar-controls]") !== null || mode === "other") {
+			if (row === null || target.closest("[data-left-bar-controls]") !== null || mode === "other")
+			{
 				return;
 			}
 			const locationUrl = row.dataset.locationUrl;
-			if (locationUrl === undefined || locationUrl === "") {
+			if (locationUrl === undefined || locationUrl === "")
+			{
 				return;
 			}
 			const {id: locationId, query} = parseLocationHash(new URL(locationUrl, globalThis.location.origin).hash);
-			if (mode === "plain") {
+			if (mode === "plain")
+			{
 				const {panes} = useOutlineStore.getState();
 				const paneId = focusedPaneId();
-				if (panes.length === 0 || findPane(panes, paneId) === undefined) {
+				if (panes.length === 0 || findPane(panes, paneId) === undefined)
+				{
 					return;
 				}
 				claim(event);
 				blurEditor();
-				void (async () => {
+				void (async () =>
+				{
 					const resolved = await resolve(locationId);
-					if (locationId !== null && resolved === null) {
+					if (locationId !== null && resolved === null)
+					{
 						return;
 					}
 					const state = useOutlineStore.getState();
 					state.zoomPane(paneId, resolved);
 					state.setPaneQuery(paneId, query ?? "");
 					state.setActivePane(paneId);
-					document
-						.querySelector(`[data-pane-id="${CSS.escape(paneId)}"]`)
-						?.scrollIntoView({block: "nearest", inline: "nearest"});
+					document.querySelector(`[data-pane-id="${CSS.escape(paneId)}"]`)?.scrollIntoView(
+						{
+							block: "nearest",
+							inline: "nearest",
+						},
+					);
 				})();
 				return;
 			}
 			claim(event);
-			void (async () => {
+			void (async () =>
+			{
 				const resolved = await resolve(locationId);
-				if (locationId !== null && resolved === null) {
+				if (locationId !== null && resolved === null)
+				{
 					return;
 				}
 				const state = useOutlineStore.getState();
-				state.openPane(resolved, {
-					index: state.panes.length + 1,
-					sourcePaneId: state.activePaneId,
-					query: query ?? "",
-				});
+				state.openPane(
+					resolved,
+					{
+						index: state.panes.length + 1,
+						sourcePaneId: state.activePaneId,
+						query: query ?? "",
+					},
+				);
 			})();
 		};
 		document.addEventListener("click", handleClick, true);
-		return () => {
+		return () =>
+		{
 			document.removeEventListener("click", handleClick, true);
 		};
 	}, [queryClient, resolveId]);

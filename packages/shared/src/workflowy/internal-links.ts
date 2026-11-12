@@ -3,7 +3,8 @@ import {uuidToShortId} from "./constants.js";
 const HREF_PATTERN = /href="([^"]*)"/giu;
 const LINK_ID_PATTERN = /^(?:[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}|[\da-f]{12})$/iu;
 
-function decodeAttribute(value: string): string {
+function decodeAttribute(value: string): string
+{
 	return value.replaceAll("&amp;", "&").replaceAll("&quot;", '"').replaceAll("&#39;", "'");
 }
 
@@ -12,14 +13,19 @@ function decodeAttribute(value: string): string {
  * parses, its hash is `#/<id>` with nothing after the id, and the host does
  * not matter. A relative href or a hash carrying `?q=` is no link.
  */
-function linkedId(href: string): string | undefined {
+function linkedId(href: string): string | undefined
+{
 	let hash: string;
-	try {
+	try
+	{
 		hash = new URL(decodeAttribute(href)).hash;
-	} catch {
+	}
+	catch
+	{
 		return undefined;
 	}
-	if (!hash.startsWith("#/")) {
+	if (!hash.startsWith("#/"))
+	{
 		return undefined;
 	}
 	const id = hash.slice(2);
@@ -27,11 +33,14 @@ function linkedId(href: string): string | undefined {
 }
 
 /** The short ids of the nodes `text` links to (its `<a href>`s ending in `#/<id>`), in order and deduplicated. */
-export function internalLinkShortIds(text: string): string[] {
+export function internalLinkShortIds(text: string): string[]
+{
 	const shortIds = new Set<string>();
-	for (const [, href] of text.matchAll(HREF_PATTERN)) {
+	for (const [, href] of text.matchAll(HREF_PATTERN))
+	{
 		const id = href === undefined ? undefined : linkedId(href);
-		if (id !== undefined) {
+		if (id !== undefined)
+		{
 			shortIds.add(uuidToShortId(id.toLowerCase()));
 		}
 	}
@@ -39,6 +48,7 @@ export function internalLinkShortIds(text: string): string[] {
 }
 
 /** Whether `text` holds any internal link. */
-export function hasInternalLink(text: string): boolean {
+export function hasInternalLink(text: string): boolean
+{
 	return internalLinkShortIds(text).length > 0;
 }

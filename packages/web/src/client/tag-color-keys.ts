@@ -1,3 +1,4 @@
-export const tagColorKeys = {
+export const tagColorKeys =
+{
 	all: ["tag-colors"] as const,
 };

@@ -11,117 +11,249 @@ import {cssBlock, cssBlockText, hasSelector} from "./helpers/css-block.js";
 const pickerCalls: unknown[] = [];
 const openPaneCalls: unknown[][] = [];
 const closePaneCalls: unknown[][] = [];
-const storeState: {zoomedNodeId: string | null; panes: {id: string; zoomedId: string | null}[]} & Record<
-	string,
-	unknown
-> = {
+const storeState:
+{
+	zoomedNodeId: string | null;
+	panes:
+	{
+		id: string;
+		zoomedId: string | null;
+	}[];
+} & Record<string, unknown> =
+{
 	zoomedNodeId: "alice",
 	panes: [],
-	openPane: (zoomedId: string | null, options?: unknown) => {
+	openPane: (zoomedId: string | null, options?: unknown) =>
+	{
 		openPaneCalls.push([zoomedId, options]);
 		return "NEW";
 	},
-	toggleLeftBar: () => {},
+	toggleLeftBar: () =>
+	{
+	},
 	searchInput: "",
-	setSearchInput: () => {},
+	setSearchInput: () =>
+	{
+	},
 	searchFocused: false,
-	setSearchFocused: () => {},
+	setSearchFocused: () =>
+	{
+	},
 	showCompleted: false,
 	searchQuery: "",
-	openSettings: () => {},
-	openPresentation: () => {},
+	openSettings: () =>
+	{
+	},
+	openPresentation: () =>
+	{
+	},
 	leftBarOffset: () => 0,
 	leftBarMode: "drawerClosed",
-	nav: {current: null, back: [], forward: []},
-	mainPaneHistory: {back: [], forward: []},
-	showItemTypePicker: (picker: unknown) => {
+	nav:
+	{
+		current: null,
+		back: [],
+		forward: [],
+	},
+	mainPaneHistory:
+	{
+		back: [],
+		forward: [],
+	},
+	showItemTypePicker: (picker: unknown) =>
+	{
 		pickerCalls.push(picker);
 	},
 };
 
-vi.mock("../src/client/stores/outline.js", () => ({
+vi.mock("../src/client/stores/outline.js", () => (
+{
 	useOutlineStore: (selector?: (state: typeof storeState) => unknown) =>
 		selector === undefined ? storeState : selector(storeState),
 }));
-vi.mock("../src/client/hooks/use-starred.js", () => ({
+vi.mock("../src/client/hooks/use-starred.js", () => (
+{
 	STARS_UNAVAILABLE_TOOLTIP: "Stars need a workflowy.com login",
-	useRecordStarViews: () => {},
-	useStarActions: () => ({toggleStar: async () => Promise.resolve(true)}),
+	useRecordStarViews: () =>
+	{
+	},
+	useStarActions: () => (
+	{
+		toggleStar: async () => Promise.resolve(true),
+	}),
 	useStarredLocations: () => [],
-	useStars: () => ({stars: [], unavailable: false}),
+	useStars: () => (
+	{
+		stars: [],
+		unavailable: false,
+	}),
 }));
 /** The account's calendar.tooltip_seen as the Today controls read it. */
-const tooltipSeen: {value: boolean | null} = {value: true};
+const tooltipSeen:
+{
+	value: boolean | null;
+} =
+{
+	value: true,
+};
 /** Whether What's New has unread entries, which dots the kebab. */
-const changelogUnread = {value: false};
-vi.mock("../src/client/hooks/use-preferences.js", async (importOriginal) => ({
+const changelogUnread =
+{
+	value: false,
+};
+vi.mock("../src/client/hooks/use-preferences.js", async (importOriginal) => (
+{
 	...(await importOriginal<typeof UsePreferencesModule>()),
 	useCalendarTooltipSeen: () => tooltipSeen.value,
 }));
-vi.mock("../src/client/hooks/use-whats-new.js", () => ({useChangelogUnread: () => changelogUnread.value}));
+vi.mock("../src/client/hooks/use-whats-new.js", () => (
+{
+	useChangelogUnread: () => changelogUnread.value,
+}));
 
-vi.mock("react-router-dom", () => ({useNavigate: () => () => {}}));
-vi.mock("@tanstack/react-query", () => ({useQueryClient: () => ({}), useQuery: () => ({data: undefined})}));
-const toggleState = {toggleCompleted: (): void => {}};
-vi.mock("../src/client/hooks/use-show-completed-toggle.js", () => ({
+vi.mock("react-router-dom", () => (
+{
+	useNavigate: () => () =>
+	{
+	},
+}));
+vi.mock("@tanstack/react-query", () => (
+{
+	useQueryClient: () => ({}),
+	useQuery: () => (
+	{
+		data: undefined,
+	}),
+}));
+const toggleState =
+{
+	toggleCompleted: (): void =>
+	{
+	},
+};
+vi.mock("../src/client/hooks/use-show-completed-toggle.js", () => (
+{
 	useShowCompletedToggle: () => toggleState.toggleCompleted,
 }));
-vi.mock("../src/client/navigation.js", () => ({
-	stepNav: () => {},
-	useNavStackSync: () => {},
-	closeMainPane: () => {
+vi.mock("../src/client/navigation.js", () => (
+{
+	stepNav: () =>
+	{
+	},
+	useNavStackSync: () =>
+	{
+	},
+	closeMainPane: () =>
+	{
 		closePaneCalls.push(["closeMainPane"]);
 	},
 }));
-const nodeState: {hasChildren: boolean; rootChildren: {id: string}[]; layoutMode: string | null} = {
+const nodeState:
+{
+	hasChildren: boolean;
+	rootChildren:
+	{
+		id: string;
+	}[];
+	layoutMode: string | null;
+} =
+{
 	hasChildren: true,
-	rootChildren: [{id: "r1"}],
+	rootChildren: [
+		{
+			id: "r1",
+		},
+	],
 	layoutMode: null,
 };
-const homeState: {layoutMode: string | undefined} = {layoutMode: undefined};
+const homeState:
+{
+	layoutMode: string | undefined;
+} =
+{
+	layoutMode: undefined,
+};
 
 const expandAllCalls: [string | null, boolean][] = [];
 
-vi.mock("../src/client/hooks/use-nodes.js", async () => {
+vi.mock("../src/client/hooks/use-nodes.js", async () =>
+{
 	const {noopMutation} = await import("./helpers/stable-mutation.js");
 	return {
-		useExpandAll: () => (rootId: string | null, open: boolean) => {
+		useExpandAll: () => (rootId: string | null, open: boolean) =>
+		{
 			expandAllCalls.push([rootId, open]);
 		},
 		useUpdateNode: () => noopMutation,
 		useCreateNode: () => noopMutation,
 		useDeleteNode: () => noopMutation,
 		useMoveNode: () => noopMutation,
-		useNode: (nodeId: string | null) => ({
+		useNode: (nodeId: string | null) => (
+		{
 			data:
 				nodeId === null
 					? undefined
-					: {id: nodeId, hasChildren: nodeState.hasChildren, data: {layoutMode: nodeState.layoutMode}},
+					:
+						{
+							id: nodeId,
+							hasChildren: nodeState.hasChildren,
+							data:
+							{
+								layoutMode: nodeState.layoutMode,
+							},
+						},
 		}),
-		useHome: () => ({data: homeState.layoutMode === undefined ? undefined : {layoutMode: homeState.layoutMode}}),
-		useChildren: () => ({data: nodeState.rootChildren}),
+		useHome: () => (
+		{
+			data:
+				homeState.layoutMode === undefined
+					? undefined
+					:
+						{
+							layoutMode: homeState.layoutMode,
+						},
+		}),
+		useChildren: () => (
+		{
+			data: nodeState.rootChildren,
+		}),
 	};
 });
-vi.mock("../src/client/components/breadcrumbs.js", () => ({
-	Breadcrumbs: () => createElement("div", {className: "breadcrumbs-mock"}),
+vi.mock("../src/client/components/breadcrumbs.js", () => (
+{
+	Breadcrumbs: () =>
+		createElement(
+			"div",
+			{
+				className: "breadcrumbs-mock",
+			},
+		),
 }));
-const media = {wide: true};
+const media =
+{
+	wide: true,
+};
 const breakpointCalls: number[] = [];
-vi.mock("../src/client/hooks/use-breakpoint.js", () => ({
-	useBreakpoint: (min: number) => {
+vi.mock("../src/client/hooks/use-breakpoint.js", () => (
+{
+	useBreakpoint: (min: number) =>
+	{
 		breakpointCalls.push(min);
 		return media.wide;
 	},
 }));
 
-interface CapturedGearMenuProps {
+interface CapturedGearMenuProps
+{
 	headerItems?: GearMenuHeaderItem[];
 	onExpandAll?: () => void;
 	onCollapseAll?: () => void;
 }
 const gearMenuProps: CapturedGearMenuProps = {};
-vi.mock("../src/client/components/main-menu-rows.js", () => ({
-	useMainMenuRows: (props: CapturedGearMenuProps) => {
+vi.mock("../src/client/components/main-menu-rows.js", () => (
+{
+	useMainMenuRows: (props: CapturedGearMenuProps) =>
+	{
 		gearMenuProps.headerItems = props.headerItems;
 		gearMenuProps.onExpandAll = props.onExpandAll;
 		gearMenuProps.onCollapseAll = props.onCollapseAll;
@@ -134,22 +266,28 @@ type IconButtonProps = Parameters<typeof IconButtonModule.IconButton>[0];
 
 const iconButtonProps = new Map<string, IconButtonProps>();
 
-vi.mock("../src/client/components/icon-button.js", async (importOriginal) => {
+vi.mock("../src/client/components/icon-button.js", async (importOriginal) =>
+{
 	const actual = await importOriginal<typeof IconButtonModule>();
 	return {
 		...actual,
-		IconButton: (props: IconButtonProps) => {
+		IconButton: (props: IconButtonProps) =>
+		{
 			const handbook = props["data-handbook"];
-			if (handbook !== undefined) {
+			if (handbook !== undefined)
+			{
 				iconButtonProps.set(handbook, props);
 			}
-			if (props.tooltip === "Share") {
+			if (props.tooltip === "Share")
+			{
 				iconButtonProps.set("share", props);
 			}
-			if (props.tooltip === "New pane") {
+			if (props.tooltip === "New pane")
+			{
 				iconButtonProps.set("new_pane", props);
 			}
-			if (props.tooltip === "Close pane") {
+			if (props.tooltip === "Close pane")
+			{
 				iconButtonProps.set("close_pane", props);
 			}
 			return actual.IconButton(props);
@@ -164,36 +302,49 @@ const styles = readFileSync(fileURLToPath(new URL("../src/client/styles.css", im
 const VOID_TAGS = new Set(["input", "img", "br", "hr"]);
 
 /** Class attributes of the root element's direct children. */
-function rootChildClasses(html: string): string[] {
+function rootChildClasses(html: string): string[]
+{
 	const classes: string[] = [];
 	let depth = 0;
-	for (const match of html.matchAll(/<(\/?)([a-z]+)([^>]*?)(\/?)>/gu)) {
+	for (const match of html.matchAll(/<(\/?)([a-z]+)([^>]*?)(\/?)>/gu))
+	{
 		const [, closing, tag, attributes, selfClosing] = match;
-		if (closing === "/") {
+		if (closing === "/")
+		{
 			depth--;
 			continue;
 		}
-		if (depth === 1) {
+		if (depth === 1)
+		{
 			classes.push(/class="([^"]*)"/u.exec(attributes)?.[1] ?? "");
 		}
-		if (selfClosing !== "/" && !VOID_TAGS.has(tag)) {
+		if (selfClosing !== "/" && !VOID_TAGS.has(tag))
+		{
 			depth++;
 		}
 	}
 	return classes;
 }
 
-describe("TopBar markup", () => {
+describe("TopBar markup", () =>
+{
 	const html = renderToStaticMarkup(createElement(TopBar));
 
-	it("renders upstream's wf-header root", () => {
+	it("renders upstream's wf-header root", () =>
+	{
 		expect(html.slice(0, html.indexOf(">") + 1)).toBe(
 			'<div class="wf-header header bg-primary border-b border-solid border-primary" style="left:0;z-index:200">',
 		);
 	});
 
-	it("adds the pane-active border class only while a pane is open", () => {
-		storeState.panes = [{id: "BBBBBBBBBBB", zoomedId: "bob"}];
+	it("adds the pane-active border class only while a pane is open", () =>
+	{
+		storeState.panes = [
+			{
+				id: "BBBBBBBBBBB",
+				zoomedId: "bob",
+			},
+		];
 		const withPane = renderToStaticMarkup(createElement(TopBar));
 		storeState.panes = [];
 		expect(withPane.slice(0, withPane.indexOf(">") + 1)).toContain(
@@ -201,7 +352,8 @@ describe("TopBar markup", () => {
 		);
 	});
 
-	it("offsets the header by the pinned left bar width", () => {
+	it("offsets the header by the pinned left bar width", () =>
+	{
 		storeState.leftBarOffset = () => 296;
 		const pinned = renderToStaticMarkup(createElement(TopBar));
 		storeState.leftBarOffset = () => 0;
@@ -210,7 +362,8 @@ describe("TopBar markup", () => {
 		);
 	});
 
-	it("renders upstream's flat child order", () => {
+	it("renders upstream's flat child order", () =>
+	{
 		expect(rootChildClasses(html)).toStrictEqual([
 			"",
 			"pagination",
@@ -220,14 +373,25 @@ describe("TopBar markup", () => {
 	});
 });
 
-function renderWithNav(canGoBack: boolean, canGoForward: boolean): string {
-	const home = {id: null, query: null};
-	storeState.nav = {current: home, back: canGoBack ? [home] : [], forward: canGoForward ? [home] : []};
+function renderWithNav(canGoBack: boolean, canGoForward: boolean): string
+{
+	const home =
+	{
+		id: null,
+		query: null,
+	};
+	storeState.nav =
+	{
+		current: home,
+		back: canGoBack ? [home] : [],
+		forward: canGoForward ? [home] : [],
+	};
 	return renderToStaticMarkup(createElement(TopBar));
 }
 
 /** Inner HTML of the `.pagination` element with svg path data stripped. */
-function paginationInner(html: string): string {
+function paginationInner(html: string): string
+{
 	const start = html.indexOf('<div class="pagination">') + '<div class="pagination">'.length;
 	const end = html.indexOf('<div class="breadcrumbs-mock">');
 	return html
@@ -236,37 +400,60 @@ function paginationInner(html: string): string {
 		.replaceAll(/ d="[^"]*"/gu, "");
 }
 
-function svg(name: string, width: number): string {
+function svg(name: string, width: number): string
+{
 	return `<svg aria-hidden="true" focusable="false" data-prefix="fal" data-icon="${name}" class="svg-inline--fa fa-${name} fa-1x " role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} 512"><path fill="currentColor"></path></svg>`;
 }
 
-describe("TopBar left controls", () => {
-	it("renders a disabled Back and no Forward on an empty stack", () => {
+describe("TopBar left controls", () =>
+{
+	it("renders a disabled Back and no Forward on an empty stack", () =>
+	{
 		expect(paginationInner(renderWithNav(false, false))).toBe(
 			`<div role="button" tabindex="-1" aria-disabled="true" data-handbook="nav.back" icon="chevron-left" class="iconButton lg shape-circle disabled">${svg("chevron-left", 320)}</div>`,
 		);
 	});
 
-	it("steps the main pane history instead of the app stacks while a pane is open", () => {
-		const home = {id: null, query: null};
-		storeState.panes = [{id: "BBBBBBBBBBB", zoomedId: "bob"}];
-		storeState.mainPaneHistory = {back: [home], forward: []};
+	it("steps the main pane history instead of the app stacks while a pane is open", () =>
+	{
+		const home =
+		{
+			id: null,
+			query: null,
+		};
+		storeState.panes = [
+			{
+				id: "BBBBBBBBBBB",
+				zoomedId: "bob",
+			},
+		];
+		storeState.mainPaneHistory =
+		{
+			back: [home],
+			forward: [],
+		};
 		const html = renderWithNav(false, true);
 		storeState.panes = [];
-		storeState.mainPaneHistory = {back: [], forward: []};
+		storeState.mainPaneHistory =
+		{
+			back: [],
+			forward: [],
+		};
 		expect(paginationInner(html)).toBe(
 			`<div role="button" tabindex="0" data-handbook="nav.back" icon="chevron-left" class="iconButton lg shape-circle">${svg("chevron-left", 320)}</div>`,
 		);
 	});
 
-	it("renders enabled Back and a sm:flex Forward when both stacks are non-empty", () => {
+	it("renders enabled Back and a sm:flex Forward when both stacks are non-empty", () =>
+	{
 		expect(paginationInner(renderWithNav(true, true))).toBe(
 			`<div role="button" tabindex="0" data-handbook="nav.back" icon="chevron-left" class="iconButton lg shape-circle">${svg("chevron-left", 320)}</div>` +
 				`<div role="button" tabindex="0" data-handbook="nav.forward" icon="chevron-right" class="sm:flex hidden iconButton lg shape-circle">${svg("chevron-right", 320)}</div>`,
 		);
 	});
 
-	it("renders the hamburger as a toggle_leftbar IconButton without a tooltip", () => {
+	it("renders the hamburger as a toggle_leftbar IconButton without a tooltip", () =>
+	{
 		const html = renderWithNav(false, false);
 		const wrapper = html.slice(html.indexOf(">") + 1, html.indexOf('<div class="pagination">'));
 		expect(wrapper.replaceAll(/ d="[^"]*"/gu, "")).toBe(
@@ -274,7 +461,8 @@ describe("TopBar left controls", () => {
 		);
 	});
 
-	it("replaces the hamburger with upstream's w-l spacer while the left bar is pinned", () => {
+	it("replaces the hamburger with upstream's w-l spacer while the left bar is pinned", () =>
+	{
 		storeState.leftBarMode = "alwaysOpen";
 		const html = renderWithNav(false, false);
 		storeState.leftBarMode = "drawerClosed";
@@ -285,46 +473,67 @@ describe("TopBar left controls", () => {
 });
 
 /** Inner HTML of the right cluster. */
-function clusterHtml(html: string): string {
+function clusterHtml(html: string): string
+{
 	const marker = '<div class="ml-auto flex self-stretch items-center gap-xs flex-shrink-0">';
 	return html.slice(html.indexOf(marker) + marker.length);
 }
 
 /** Ordered identifiers of the right-cluster controls. */
-function clusterSequence(html: string): string[] {
+function clusterSequence(html: string): string[]
+{
 	const tokens = clusterHtml(html).matchAll(
 		/fa-calendar-day\b|fa-user-plus|fa-xmark\b|viewBox="0 0 33 30"|data-handbook="([^"]+)"|class="[^"]*\bgearMenu\b/gu,
 	);
-	return [...tokens].map((match) => {
-		if (match[0] === 'viewBox="0 0 33 30"') {
+	return [...tokens].map((match) =>
+	{
+		if (match[0] === 'viewBox="0 0 33 30"')
+		{
 			return "new_pane";
 		}
-		if (match[0].startsWith("data-handbook")) {
+		if (match[0].startsWith("data-handbook"))
+		{
 			return match[1] === "search.search" ? "search" : match[1];
 		}
-		if (match[0] === "fa-user-plus") {
+		if (match[0] === "fa-user-plus")
+		{
 			return "share";
 		}
-		if (match[0] === "fa-xmark") {
+		if (match[0] === "fa-xmark")
+		{
 			return "close_pane";
 		}
 		return match[0] === "fa-calendar-day" ? "today" : "gearMenu";
 	});
 }
 
-function renderCluster(zoomedNodeId: string | null, hasChildren: boolean, rootChildren: {id: string}[]): string {
+function renderCluster(
+	zoomedNodeId: string | null,
+	hasChildren: boolean,
+	rootChildren:
+	{
+		id: string;
+	}[],
+): string
+{
 	storeState.zoomedNodeId = zoomedNodeId;
 	nodeState.hasChildren = hasChildren;
 	nodeState.rootChildren = rootChildren;
 	const html = renderToStaticMarkup(createElement(TopBar));
 	storeState.zoomedNodeId = "alice";
 	nodeState.hasChildren = true;
-	nodeState.rootChildren = [{id: "r1"}];
+	nodeState.rootChildren = [
+		{
+			id: "r1",
+		},
+	];
 	return html;
 }
 
-describe("TopBar right cluster", () => {
-	it("orders the zoomed controls like upstream", () => {
+describe("TopBar right cluster", () =>
+{
+	it("orders the zoomed controls like upstream", () =>
+	{
 		expect(clusterSequence(renderCluster("alice", true, []))).toStrictEqual([
 			"search",
 			"today",
@@ -338,63 +547,97 @@ describe("TopBar right cluster", () => {
 		]);
 	});
 
-	it("drops the star at root and keeps Present when root has children", () => {
-		expect(clusterSequence(renderCluster(null, false, [{id: "r1"}]))).toStrictEqual([
-			"search",
-			"today",
-			"present_it",
-			"complete.toggle",
-			"bullet.layout",
-			"gearMenu",
-			"new_pane",
-		]);
+	it("drops the star at root and keeps Present when root has children", () =>
+	{
+		expect(
+			clusterSequence(
+				renderCluster(null, false, [
+					{
+						id: "r1",
+					},
+				]),
+			),
+		).toStrictEqual(["search", "today", "present_it", "complete.toggle", "bullet.layout", "gearMenu", "new_pane"]);
 	});
 
-	it("renders the kebab as a ButtonMenu trigger, not a hand-built gear menu", () => {
+	it("renders the kebab as a ButtonMenu trigger, not a hand-built gear menu", () =>
+	{
 		const html = renderCluster("alice", true, []);
-		expect({
-			trigger: html.includes('<div tabindex="0" class="relative outline-none menu gearMenu">'),
-			handBuilt: html.includes("gear-menu"),
-		}).toStrictEqual({trigger: true, handBuilt: false});
+		expect(
+			{
+				trigger: html.includes('<div tabindex="0" class="relative outline-none menu gearMenu">'),
+				handBuilt: html.includes("gear-menu"),
+			},
+		).toStrictEqual(
+			{
+				trigger: true,
+				handBuilt: false,
+			},
+		);
 	});
 
-	it("hides Present when the zoomed node has no children", () => {
-		expect(clusterSequence(renderCluster("alice", false, [{id: "r1"}]))).not.toContain("present_it");
+	it("hides Present when the zoomed node has no children", () =>
+	{
+		expect(
+			clusterSequence(
+				renderCluster("alice", false, [
+					{
+						id: "r1",
+					},
+				]),
+			),
+		).not.toContain("present_it");
 	});
 
-	it("hides Present at an empty root", () => {
+	it("hides Present at an empty root", () =>
+	{
 		expect(clusterSequence(renderCluster(null, true, []))).not.toContain("present_it");
 	});
 
-	it("adds upstream's blue dot inside the kebab button while What's New has unread entries, unless a pane is open", () => {
-		const kebabWith = (unread: boolean, panes: typeof storeState.panes) => {
+	it("adds upstream's blue dot inside the kebab button while What's New has unread entries, unless a pane is open", () =>
+	{
+		const kebabWith = (unread: boolean, panes: typeof storeState.panes) =>
+		{
 			changelogUnread.value = unread;
 			storeState.panes = panes;
-			try {
+			try
+			{
 				const cluster = clusterHtml(renderCluster("alice", true, [])).replaceAll(/ d="[^"]*"/gu, "");
 				return cluster.slice(
 					cluster.indexOf('<div tabindex="0" class="relative outline-none menu gearMenu">'),
 					cluster.indexOf('<div class="self-stretch border-l'),
 				);
-			} finally {
+			}
+			finally
+			{
 				changelogUnread.value = false;
 				storeState.panes = [];
 			}
 		};
-		expect({
-			unread: kebabWith(true, []),
-			withPane: kebabWith(true, [{id: "p1", zoomedId: null}]).includes("w-[7px]"),
-		}).toStrictEqual({
-			unread:
-				'<div tabindex="0" class="relative outline-none menu gearMenu"><div><div role="button" tabindex="0" class="iconButton lg shape-circle">' +
-				'<svg aria-hidden="true" focusable="false" data-prefix="fal" data-icon="ellipsis-vertical" class="svg-inline--fa fa-ellipsis-vertical fa-lg " role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 512"><path fill="currentColor"></path></svg>' +
-				'<div class="w-[7px] h-[7px] bg-tint rounded-circle absolute top-xs right-xs"></div>' +
-				"</div></div></div>",
-			withPane: false,
-		});
+		expect(
+			{
+				unread: kebabWith(true, []),
+				withPane: kebabWith(true, [
+					{
+						id: "p1",
+						zoomedId: null,
+					},
+				]).includes("w-[7px]"),
+			},
+		).toStrictEqual(
+			{
+				unread:
+					'<div tabindex="0" class="relative outline-none menu gearMenu"><div><div role="button" tabindex="0" class="iconButton lg shape-circle">' +
+					'<svg aria-hidden="true" focusable="false" data-prefix="fal" data-icon="ellipsis-vertical" class="svg-inline--fa fa-ellipsis-vertical fa-lg " role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 512"><path fill="currentColor"></path></svg>' +
+					'<div class="w-[7px] h-[7px] bg-tint rounded-circle absolute top-xs right-xs"></div>' +
+					"</div></div></div>",
+				withPane: false,
+			},
+		);
 	});
 
-	it("renders the kebab wrapper without a tooltip or blue dot when every What's New entry is read", () => {
+	it("renders the kebab wrapper without a tooltip or blue dot when every What's New entry is read", () =>
+	{
 		const cluster = clusterHtml(renderCluster("alice", true, []));
 		const kebab = cluster.slice(
 			cluster.indexOf('<div tabindex="0" class="relative outline-none menu gearMenu">'),
@@ -409,120 +652,191 @@ describe("TopBar right cluster", () => {
 		expect(cluster).not.toContain('role="tooltip"');
 	});
 
-	it("renders Today as a bare div around a calendar-day IconButton", () => {
+	it("renders Today as a bare div around a calendar-day IconButton", () =>
+	{
 		const cluster = clusterHtml(renderCluster("alice", true, [])).replaceAll(/ d="[^"]*"/gu, "");
 		expect(cluster).toContain(
 			`<div><div role="button" tabindex="0" class="iconButton lg shape-circle">${svg("calendar-day", 448)}</div></div>`,
 		);
 	});
 
-	it("shows the calendar onboarding button in place of Today until calendar.tooltip_seen, and nothing while loading", () => {
-		const seenAs = (value: boolean | null) => {
+	it("shows the calendar onboarding button in place of Today until calendar.tooltip_seen, and nothing while loading", () =>
+	{
+		const seenAs = (value: boolean | null) =>
+		{
 			tooltipSeen.value = value;
-			try {
+			try
+			{
 				const cluster = clusterHtml(renderCluster("alice", true, []));
 				return {
 					onboarding: cluster.includes('class="shape-circle iconButton lg"'),
 					calendarDay: cluster.includes("fa-calendar-day "),
 				};
-			} finally {
+			}
+			finally
+			{
 				tooltipSeen.value = true;
 			}
 		};
-		expect({seen: seenAs(true), unseen: seenAs(false), loading: seenAs(null)}).toStrictEqual({
-			seen: {onboarding: false, calendarDay: true},
-			unseen: {onboarding: true, calendarDay: true},
-			loading: {onboarding: false, calendarDay: false},
-		});
+		expect(
+			{
+				seen: seenAs(true),
+				unseen: seenAs(false),
+				loading: seenAs(null),
+			},
+		).toStrictEqual(
+			{
+				seen:
+				{
+					onboarding: false,
+					calendarDay: true,
+				},
+				unseen:
+				{
+					onboarding: true,
+					calendarDay: true,
+				},
+				loading:
+				{
+					onboarding: false,
+					calendarDay: false,
+				},
+			},
+		);
 	});
 
-	it("renders no Calendar popover", () => {
+	it("renders no Calendar popover", () =>
+	{
 		const html = renderCluster("alice", true, []);
 		expect(html).not.toContain("top-bar-calendar-container");
 		expect(html).not.toContain("calendar-panel");
 	});
 });
 
-function renderWithPane(): string {
-	storeState.panes = [{id: "BBBBBBBBBBB", zoomedId: "bob"}];
-	const html = renderCluster("alice", true, [{id: "r1"}]);
+function renderWithPane(): string
+{
+	storeState.panes = [
+		{
+			id: "BBBBBBBBBBB",
+			zoomedId: "bob",
+		},
+	];
+	const html = renderCluster("alice", true, [
+		{
+			id: "r1",
+		},
+	]);
 	storeState.panes = [];
 	return html;
 }
 
 /** Outer HTML of the New pane separator and IconButton, svg path data stripped. */
-function newPaneHtml(html: string): string {
+function newPaneHtml(html: string): string
+{
 	const start = html.indexOf('<div class="self-stretch border-l border-solid border-primary mx-s">');
 	const end = html.indexOf("</svg></div>", start) + "</svg></div>".length;
 	return html.slice(start, end).replaceAll(/ d="[^"]*"/gu, "");
 }
 
-describe("TopBar as the first pane's header", () => {
+describe("TopBar as the first pane's header", () =>
+{
 	const header = (html: string) => html.slice(0, html.indexOf(">") + 1);
 
-	it("uses the pane header's inline reset instead of the fixed offset", () => {
+	it("uses the pane header's inline reset instead of the fixed offset", () =>
+	{
 		expect(header(renderWithPane())).toBe(
 			'<div class="wf-header header bg-primary wf-pane-header border-b border-solid border-primary group-data-[pane-active=true]/pane:border-b-tint flex-shrink-0" style="position:relative;top:auto;right:auto;left:auto;height:auto;min-height:var(--wf-header-height);z-index:auto;transition:none">',
 		);
 	});
 
-	it("renders the compact 36px search circle, not the header search box", () => {
+	it("renders the compact 36px search circle, not the header search box", () =>
+	{
 		const html = renderWithPane();
-		expect({
-			input: html.includes('data-pane-search-input="true"'),
-			legacy: html.includes('id="srch-input"'),
-			circle: html.includes(
-				'class="relative shrink-0 max-w-[60vw] transition-[width] duration-300 ease-base hover:!bg-tertiary searchBox" style="width:36px;height:36px;border-radius:18px"',
-			),
-		}).toStrictEqual({input: true, legacy: false, circle: true});
+		expect(
+			{
+				input: html.includes('data-pane-search-input="true"'),
+				legacy: html.includes('id="srch-input"'),
+				circle: html.includes(
+					'class="relative shrink-0 max-w-[60vw] transition-[width] duration-300 ease-base hover:!bg-tertiary searchBox" style="width:36px;height:36px;border-radius:18px"',
+				),
+			},
+		).toStrictEqual(
+			{
+				input: true,
+				legacy: false,
+				circle: true,
+			},
+		);
 	});
 
-	it("renders Today as a direct IconButton with no wrapper div", () => {
+	it("renders Today as a direct IconButton with no wrapper div", () =>
+	{
 		const cluster = clusterHtml(renderWithPane());
 		expect(cluster).not.toMatch(/<div><div role="button"[^>]*><svg[^>]*fa-calendar-day/u);
 		expect(cluster.indexOf("fa-calendar-day")).toBeGreaterThan(-1);
 	});
 
-	it("moves the bars toggle into a fixed left control, the header's last child, while the left bar is closed", () => {
+	it("moves the bars toggle into a fixed left control, the header's last child, while the left bar is closed", () =>
+	{
 		const html = renderWithPane();
 		const control = html.indexOf('<div class="pane-workspace-control');
-		expect({
-			control: html.slice(control, html.indexOf(">", control) + 1),
-			last: html.endsWith("</div></div></div>") && html.indexOf('data-handbook="toggle_leftbar"') > control,
-			leading: html.indexOf('data-handbook="toggle_leftbar"') > html.indexOf('class="pagination"'),
-		}).toStrictEqual({
-			control:
-				'<div class="pane-workspace-control empty:hidden box-border fixed top-0 left-0 flex h-[var(--wf-header-height)] w-[var(--pane-workspace-left-control-width)] items-center justify-start pl-[var(--wf-space-s)] bg-primary" style="z-index:200">',
-			last: true,
-			leading: true,
-		});
+		expect(
+			{
+				control: html.slice(control, html.indexOf(">", control) + 1),
+				last: html.endsWith("</div></div></div>") && html.indexOf('data-handbook="toggle_leftbar"') > control,
+				leading: html.indexOf('data-handbook="toggle_leftbar"') > html.indexOf('class="pagination"'),
+			},
+		).toStrictEqual(
+			{
+				control:
+					'<div class="pane-workspace-control empty:hidden box-border fixed top-0 left-0 flex h-[var(--wf-header-height)] w-[var(--pane-workspace-left-control-width)] items-center justify-start pl-[var(--wf-space-s)] bg-primary" style="z-index:200">',
+				last: true,
+				leading: true,
+			},
+		);
 	});
 
-	it("keeps the 16px spacer and no left control while the left bar is pinned", () => {
+	it("keeps the 16px spacer and no left control while the left bar is pinned", () =>
+	{
 		storeState.leftBarMode = "alwaysOpen";
 		const html = renderWithPane();
 		storeState.leftBarMode = "drawerClosed";
-		expect({
-			control: html.includes("pane-workspace-control"),
-			spacer: html.includes('<div class="w-l">'),
-		}).toStrictEqual({
-			control: false,
-			spacer: true,
-		});
+		expect(
+			{
+				control: html.includes("pane-workspace-control"),
+				spacer: html.includes('<div class="w-l">'),
+			},
+		).toStrictEqual(
+			{
+				control: false,
+				spacer: true,
+			},
+		);
 	});
 
-	it("keeps the single-document header unchanged: leading toggle, wrapped Today, no control", () => {
+	it("keeps the single-document header unchanged: leading toggle, wrapped Today, no control", () =>
+	{
 		const html = renderCluster("alice", true, []);
-		expect({
-			control: html.includes("pane-workspace-control"),
-			legacy: html.includes('id="srch-input"'),
-			wrapped: /<div><div role="button"[^>]*>(?:(?!<\/div>).)*fa-calendar-day/u.test(clusterHtml(html)),
-		}).toStrictEqual({control: false, legacy: true, wrapped: true});
+		expect(
+			{
+				control: html.includes("pane-workspace-control"),
+				legacy: html.includes('id="srch-input"'),
+				wrapped: /<div><div role="button"[^>]*>(?:(?!<\/div>).)*fa-calendar-day/u.test(clusterHtml(html)),
+			},
+		).toStrictEqual(
+			{
+				control: false,
+				legacy: true,
+				wrapped: true,
+			},
+		);
 	});
 });
 
-describe("TopBar New pane", () => {
-	it("renders upstream's separator and 30x27 columns-plus IconButton after the kebab", () => {
+describe("TopBar New pane", () =>
+{
+	it("renders upstream's separator and 30x27 columns-plus IconButton after the kebab", () =>
+	{
 		expect(newPaneHtml(renderCluster("alice", true, []))).toBe(
 			'<div class="self-stretch border-l border-solid border-primary mx-s"></div>' +
 				'<div role="button" tabindex="0" class="iconButton lg shape-circle">' +
@@ -531,30 +845,59 @@ describe("TopBar New pane", () => {
 		);
 	});
 
-	it("shows the ⌃R shortcut in its New pane tooltip", () => {
+	it("shows the ⌃R shortcut in its New pane tooltip", () =>
+	{
 		renderCluster("alice", true, []);
 		const props = iconButtonProps.get("new_pane");
-		expect({tooltip: props?.tooltip, shortcut: props?.shortcut}).toStrictEqual({
-			tooltip: "New pane",
-			shortcut: "⌃R",
-		});
+		expect(
+			{
+				tooltip: props?.tooltip,
+				shortcut: props?.shortcut,
+			},
+		).toStrictEqual(
+			{
+				tooltip: "New pane",
+				shortcut: "⌃R",
+			},
+		);
 	});
 
-	it("opens a pane on the zoomed node from the main pane", () => {
+	it("opens a pane on the zoomed node from the main pane", () =>
+	{
 		openPaneCalls.length = 0;
 		renderCluster("alice", true, []);
 		iconButtonProps.get("new_pane")?.onClick?.({} as never);
-		expect(openPaneCalls).toStrictEqual([["alice", {sourcePaneId: "main"}]]);
+		expect(openPaneCalls).toStrictEqual([
+			[
+				"alice",
+				{
+					sourcePaneId: "main",
+				},
+			],
+		]);
 	});
 
-	it("opens a pane on Home at root", () => {
+	it("opens a pane on Home at root", () =>
+	{
 		openPaneCalls.length = 0;
-		renderCluster(null, true, [{id: "r1"}]);
+		renderCluster(null, true, [
+			{
+				id: "r1",
+			},
+		]);
 		iconButtonProps.get("new_pane")?.onClick?.({} as never);
-		expect(openPaneCalls).toStrictEqual([[null, {sourcePaneId: "main"}]]);
+		expect(openPaneCalls).toStrictEqual([
+			[
+				null,
+				{
+					sourcePaneId: "main",
+				},
+			],
+		]);
 	});
 
-	it("swaps New pane for Close pane and compacts the cluster while a pane is open", () => {
+	it("swaps New pane for Close pane and compacts the cluster while a pane is open", () =>
+	{
 		expect(clusterSequence(renderWithPane())).toStrictEqual([
 			"search",
 			"today",
@@ -564,28 +907,39 @@ describe("TopBar New pane", () => {
 		]);
 	});
 
-	it("renders Close pane as upstream's tertiary xmark", () => {
+	it("renders Close pane as upstream's tertiary xmark", () =>
+	{
 		const cluster = clusterHtml(renderWithPane()).replaceAll(/ d="[^"]*"/gu, "");
 		expect(cluster).toContain(
 			`<div role="button" tabindex="0" class="text-tertiary hover:text-on-surface flex-shrink-0 iconButton lg shape-circle">${svg("xmark", 384)}</div>`,
 		);
 	});
 
-	it("marks the main header a draggable pane header only while a pane is open", () => {
-		expect({
-			single: renderCluster("alice", true, []).includes("wf-pane-header"),
-			panes: renderWithPane().includes('class="wf-header header bg-primary wf-pane-header border-b'),
-		}).toStrictEqual({single: false, panes: true});
+	it("marks the main header a draggable pane header only while a pane is open", () =>
+	{
+		expect(
+			{
+				single: renderCluster("alice", true, []).includes("wf-pane-header"),
+				panes: renderWithPane().includes('class="wf-header header bg-primary wf-pane-header border-b'),
+			},
+		).toStrictEqual(
+			{
+				single: false,
+				panes: true,
+			},
+		);
 	});
 
-	it("closes the main pane, so the first pane becomes the main outline", () => {
+	it("closes the main pane, so the first pane becomes the main outline", () =>
+	{
 		closePaneCalls.length = 0;
 		renderWithPane();
 		iconButtonProps.get("close_pane")?.onClick?.({} as never);
 		expect(closePaneCalls).toStrictEqual([["closeMainPane"]]);
 	});
 
-	it("moves the compactable actions into the more menu while a pane is open", () => {
+	it("moves the compactable actions into the more menu while a pane is open", () =>
+	{
 		renderWithPane();
 		expect(gearMenuProps.headerItems?.map((item) => item.label)).toStrictEqual([
 			"Share",
@@ -597,25 +951,34 @@ describe("TopBar New pane", () => {
 	});
 });
 
-function renderCompact(zoomedNodeId: string | null): string {
+function renderCompact(zoomedNodeId: string | null): string
+{
 	media.wide = false;
-	const html = renderCluster(zoomedNodeId, true, [{id: "r1"}]);
+	const html = renderCluster(zoomedNodeId, true, [
+		{
+			id: "r1",
+		},
+	]);
 	media.wide = true;
 	return html;
 }
 
-describe("TopBar compact mode under 701px", () => {
-	it("compacts at upstream's 701px breakpoint", () => {
+describe("TopBar compact mode under 701px", () =>
+{
+	it("compacts at upstream's 701px breakpoint", () =>
+	{
 		breakpointCalls.length = 0;
 		renderCompact("alice");
 		expect(breakpointCalls.includes(701)).toBe(true);
 	});
 
-	it("keeps only search, Today, the kebab and New pane in the cluster", () => {
+	it("keeps only search, Today, the kebab and New pane in the cluster", () =>
+	{
 		expect(clusterSequence(renderCompact("alice"))).toStrictEqual(["search", "today", "gearMenu", "new_pane"]);
 	});
 
-	it("prepends the compactable actions to the more menu", () => {
+	it("prepends the compactable actions to the more menu", () =>
+	{
 		renderCompact("alice");
 		expect(gearMenuProps.headerItems?.map((item) => item.label)).toStrictEqual([
 			"Share",
@@ -626,7 +989,8 @@ describe("TopBar compact mode under 701px", () => {
 		]);
 	});
 
-	it("drops Share and Star from the more menu at root", () => {
+	it("drops Share and Star from the more menu at root", () =>
+	{
 		renderCompact(null);
 		expect(gearMenuProps.headerItems?.map((item) => item.label)).toStrictEqual([
 			"Present",
@@ -635,36 +999,49 @@ describe("TopBar compact mode under 701px", () => {
 		]);
 	});
 
-	it("runs the same actions from the more menu", () => {
+	it("runs the same actions from the more menu", () =>
+	{
 		const toggleCompleted = vi.fn<() => void>();
 		toggleState.toggleCompleted = toggleCompleted;
 		renderCompact("alice");
-		toggleState.toggleCompleted = () => {};
+		toggleState.toggleCompleted = () =>
+		{
+		};
 		gearMenuProps.headerItems?.find((item) => item.label === "Show completed")?.onSelect();
 		expect(toggleCompleted).toHaveBeenCalledOnce();
 	});
 
-	it("passes no header items when wide", () => {
+	it("passes no header items when wide", () =>
+	{
 		renderCluster("alice", true, []);
 		expect(gearMenuProps.headerItems).toStrictEqual([]);
 	});
 });
 
 /** Outer HTML of the complete.toggle IconButton, svg path data stripped. */
-function completedToggleHtml(html: string): string {
+function completedToggleHtml(html: string): string
+{
 	const start = html.lastIndexOf("<div", html.indexOf('data-handbook="complete.toggle"'));
 	const end = html.indexOf("</svg></div>", start) + "</svg></div>".length;
 	return html.slice(start, end).replaceAll(/ d="[^"]*"/gu, "");
 }
 
-function svgStyled(name: string, width: number, style: string): string {
+function svgStyled(name: string, width: number, style: string): string
+{
 	return svg(name, width).replace(' 512"><path', ` 512" style="${style}"><path`);
 }
 
-describe("TopBar share button", () => {
-	it("opens the zoomed node on workflowy.com in a new tab", () => {
+describe("TopBar share button", () =>
+{
+	it("opens the zoomed node on workflowy.com in a new tab", () =>
+	{
 		const open = vi.fn<typeof window.open>();
-		vi.stubGlobal("window", {open});
+		vi.stubGlobal(
+			"window",
+			{
+				open,
+			},
+		);
 		renderCluster("21757ea6-e49b-4392-aa5b-aeda6fe0c1bb", true, []);
 		const onClick = iconButtonProps.get("share")?.onClick as () => void;
 		onClick();
@@ -672,7 +1049,8 @@ describe("TopBar share button", () => {
 		expect(open.mock.calls).toStrictEqual([["https://workflowy.com/#/aeda6fe0c1bb", "_blank", "noopener"]]);
 	});
 
-	it("renders a user-plus IconButton without a handbook", () => {
+	it("renders a user-plus IconButton without a handbook", () =>
+	{
 		const cluster = clusterHtml(renderCluster("alice", true, [])).replaceAll(/ d="[^"]*"/gu, "");
 		expect(cluster).toContain(
 			`<div role="button" tabindex="0" class="iconButton lg shape-circle">${svg("user-plus", 640)}</div>`,
@@ -680,12 +1058,16 @@ describe("TopBar share button", () => {
 	});
 });
 
-describe("TopBar show completed toggle", () => {
-	it("toggles completed directly on click, with no popup", () => {
+describe("TopBar show completed toggle", () =>
+{
+	it("toggles completed directly on click, with no popup", () =>
+	{
 		const toggleCompleted = vi.fn<() => void>();
 		toggleState.toggleCompleted = toggleCompleted;
 		const html = renderToStaticMarkup(createElement(TopBar));
-		toggleState.toggleCompleted = () => {};
+		toggleState.toggleCompleted = () =>
+		{
+		};
 		const onClick = iconButtonProps.get("complete.toggle")?.onClick as () => void;
 		onClick();
 		expect(toggleCompleted).toHaveBeenCalledOnce();
@@ -694,7 +1076,8 @@ describe("TopBar show completed toggle", () => {
 		expect(html).not.toContain('aria-haspopup="true" data-handbook="complete.toggle"');
 	});
 
-	it("renders an untinted check with a Show completed tooltip when hidden", () => {
+	it("renders an untinted check with a Show completed tooltip when hidden", () =>
+	{
 		const html = renderToStaticMarkup(createElement(TopBar));
 		expect(completedToggleHtml(html)).toBe(
 			`<div role="button" tabindex="0" data-handbook="complete.toggle" class="iconButton lg shape-circle">${svg("check", 448)}</div>`,
@@ -703,7 +1086,8 @@ describe("TopBar show completed toggle", () => {
 		expect(iconButtonProps.get("complete.toggle")?.shortcut).toBeUndefined();
 	});
 
-	it("renders no toggle, and no more-menu entry, while the search forces completed rows", () => {
+	it("renders no toggle, and no more-menu entry, while the search forces completed rows", () =>
+	{
 		storeState.searchQuery = "is:complete";
 		const forced = renderToStaticMarkup(createElement(TopBar));
 		renderCompact("alice");
@@ -711,14 +1095,23 @@ describe("TopBar show completed toggle", () => {
 		storeState.searchQuery = "rc";
 		const plain = renderToStaticMarkup(createElement(TopBar));
 		storeState.searchQuery = "";
-		expect({
-			forced: forced.includes('data-handbook="complete.toggle"'),
-			forcedLabels,
-			plain: plain.includes('data-handbook="complete.toggle"'),
-		}).toStrictEqual({forced: false, forcedLabels: ["Share", "Present", "Star", "Change layout"], plain: true});
+		expect(
+			{
+				forced: forced.includes('data-handbook="complete.toggle"'),
+				forcedLabels,
+				plain: plain.includes('data-handbook="complete.toggle"'),
+			},
+		).toStrictEqual(
+			{
+				forced: false,
+				forcedLabels: ["Share", "Present", "Star", "Change layout"],
+				plain: true,
+			},
+		);
 	});
 
-	it("tints the check svg and offers Hide completed when shown", () => {
+	it("tints the check svg and offers Hide completed when shown", () =>
+	{
 		storeState.showCompleted = true;
 		const html = renderToStaticMarkup(createElement(TopBar));
 		storeState.showCompleted = false;
@@ -730,45 +1123,64 @@ describe("TopBar show completed toggle", () => {
 	});
 });
 
-describe("header CSS", () => {
-	it("ports upstream's .header rule (content-box by default)", () => {
-		expect(cssBlock(styles, ".header")).toStrictEqual({
-			position: "fixed",
-			top: "0",
-			right: "0",
-			height: "var(--wf-header-height)",
-			display: "flex",
-			"min-width": "320px",
-			padding: "0 var(--wf-space-m) 0 var(--wf-space-s)",
-			"align-items": "center",
-			"user-select": "none",
-			color: "var(--wf-text-primary) !important",
-		});
+describe("header CSS", () =>
+{
+	it("ports upstream's .header rule (content-box by default)", () =>
+	{
+		expect(cssBlock(styles, ".header")).toStrictEqual(
+			{
+				position: "fixed",
+				top: "0",
+				right: "0",
+				height: "var(--wf-header-height)",
+				display: "flex",
+				"min-width": "320px",
+				padding: "0 var(--wf-space-m) 0 var(--wf-space-s)",
+				"align-items": "center",
+				"user-select": "none",
+				color: "var(--wf-text-primary) !important",
+			},
+		);
 	});
 
-	it("ports upstream's pagination and text color rules", () => {
-		expect(cssBlock(styles, ".header .pagination")).toStrictEqual({display: "flex", "flex-direction": "row"});
+	it("ports upstream's pagination and text color rules", () =>
+	{
+		expect(cssBlock(styles, ".header .pagination")).toStrictEqual(
+			{
+				display: "flex",
+				"flex-direction": "row",
+			},
+		);
 		expect(
 			cssBlock(styles, ".header :is(.iconButton), .header :is(.breadcrumbs), .header :is(.breadcrumb-item)"),
-		).toStrictEqual({color: "var(--wf-text-primary) !important"});
+		).toStrictEqual(
+			{
+				color: "var(--wf-text-primary) !important",
+			},
+		);
 	});
 
-	it("hides the header when printing", () => {
+	it("hides the header when printing", () =>
+	{
 		expect(cssBlockText(styles, "@media print").replaceAll(/\s+/gu, "")).toBe(".header{display:none!important;}");
 	});
 
-	it("drops the old top-bar layout rules and the offline-banner override", () => {
+	it("drops the old top-bar layout rules and the offline-banner override", () =>
+	{
 		expect(hasSelector(styles, /\.top-bar(-left|-right|-nav-buttons)?\s*[{,]/u)).toBe(false);
 		expect(hasSelector(styles, /offline-banner/u)).toBe(false);
 	});
 
-	it("drops the local-only Calendar popover rules", () => {
+	it("drops the local-only Calendar popover rules", () =>
+	{
 		expect(hasSelector(styles, /\.(calendar-panel|calendar-day|top-bar-calendar-container)\b/u)).toBe(false);
 	});
 });
 
-describe("TopBar Expand all / Collapse all", () => {
-	it("acts on the zoomed item's whole subtree, and on Home when not zoomed", () => {
+describe("TopBar Expand all / Collapse all", () =>
+{
+	it("acts on the zoomed item's whole subtree, and on Home when not zoomed", () =>
+	{
 		expandAllCalls.length = 0;
 		renderToStaticMarkup(createElement(TopBar));
 		gearMenuProps.onExpandAll?.();
@@ -787,21 +1199,25 @@ describe("TopBar Expand all / Collapse all", () => {
 });
 
 /** The data-icon of the Change layout button's svg. */
-function layoutIcon(html: string): string | undefined {
+function layoutIcon(html: string): string | undefined
+{
 	const button = html.slice(html.indexOf('data-handbook="bullet.layout"'));
 	return /data-icon="([^"]*)"/u.exec(button)?.[1];
 }
 
 /** The wrapper markup around the Change layout button, from the ButtonMenu trigger to the end of the IconButton. */
-function layoutControl(html: string): string {
+function layoutControl(html: string): string
+{
 	const marker = 'data-handbook="bullet.layout"';
 	const start = html.lastIndexOf('<div tabindex="0"', html.indexOf(marker));
 	const end = html.indexOf("</svg></div></div></div>", html.indexOf(marker)) + "</svg></div></div></div>".length;
 	return html.slice(start, end).replaceAll(/ d="[^"]*"/gu, "");
 }
 
-describe("TopBar Change layout button", () => {
-	it("renders a ButtonMenu trigger around the zoomed item's type icon", () => {
+describe("TopBar Change layout button", () =>
+{
+	it("renders a ButtonMenu trigger around the zoomed item's type icon", () =>
+	{
 		nodeState.layoutMode = "h2";
 		const html = renderToStaticMarkup(createElement(TopBar));
 		nodeState.layoutMode = null;
@@ -811,13 +1227,15 @@ describe("TopBar Change layout button", () => {
 		);
 	});
 
-	it("opens no picker from the button itself", () => {
+	it("opens no picker from the button itself", () =>
+	{
 		pickerCalls.length = 0;
 		renderToStaticMarkup(createElement(TopBar));
 		expect(pickerCalls).toStrictEqual([]);
 	});
 
-	it("shows Home's layout icon at Home", () => {
+	it("shows Home's layout icon at Home", () =>
+	{
 		storeState.zoomedNodeId = null;
 		homeState.layoutMode = "board";
 		const html = renderToStaticMarkup(createElement(TopBar));
@@ -826,38 +1244,68 @@ describe("TopBar Change layout button", () => {
 		expect(layoutIcon(html)).toBe("columns-3");
 	});
 
-	it("opens the picker over the last visible flyout from the compact more menu", () => {
+	it("opens the picker over the last visible flyout from the compact more menu", () =>
+	{
 		pickerCalls.length = 0;
 		renderCompact("alice");
-		const rect = (left: number, top: number, width: number, height: number) => ({
-			getBoundingClientRect: () => ({left, top, width, height}),
+		const rect = (left: number, top: number, width: number, height: number) => (
+		{
+			getBoundingClientRect: () => (
+			{
+				left,
+				top,
+				width,
+				height,
+			}),
 		});
-		vi.stubGlobal("document", {
-			querySelectorAll: (selector: string) =>
-				selector === ".flyout.menu" ? [rect(10, 10, 0, 0), rect(600, 50, 228, 500), rect(0, 0, 0, 0)] : [],
-		});
+		vi.stubGlobal(
+			"document",
+			{
+				querySelectorAll: (selector: string) =>
+					selector === ".flyout.menu" ? [rect(10, 10, 0, 0), rect(600, 50, 228, 500), rect(0, 0, 0, 0)] : [],
+			},
+		);
 		gearMenuProps.headerItems?.find((item) => item.label === "Change layout")?.onSelect();
 		vi.unstubAllGlobals();
-		expect(pickerCalls).toStrictEqual([{nodeIds: ["alice"], position: {top: 46, left: 714}}]);
+		expect(pickerCalls).toStrictEqual([
+			{
+				nodeIds: ["alice"],
+				position:
+				{
+					top: 46,
+					left: 714,
+				},
+			},
+		]);
 	});
 });
 
-describe("createPeekController", () => {
-	function setup(hovered = false) {
+describe("createPeekController", () =>
+{
+	function setup(hovered = false)
+	{
 		const calls: string[] = [];
-		const controller = createPeekController({
-			open: () => {
-				calls.push("open");
+		const controller = createPeekController(
+			{
+				open: () =>
+				{
+					calls.push("open");
+				},
+				close: () =>
+				{
+					calls.push("close");
+				},
+				isHovered: () => hovered,
 			},
-			close: () => {
-				calls.push("close");
-			},
-			isHovered: () => hovered,
-		});
-		return {calls, controller};
+		);
+		return {
+			calls,
+			controller,
+		};
 	}
 
-	it("opens the drawer on enter and closes it 200ms after leave", () => {
+	it("opens the drawer on enter and closes it 200ms after leave", () =>
+	{
 		vi.useFakeTimers();
 		const {calls, controller} = setup();
 		controller.enter();
@@ -872,7 +1320,8 @@ describe("createPeekController", () => {
 		expect(calls).toStrictEqual(["open", "close"]);
 	});
 
-	it("keeps the drawer open when the pointer reached the left bar", () => {
+	it("keeps the drawer open when the pointer reached the left bar", () =>
+	{
 		vi.useFakeTimers();
 		const {calls, controller} = setup(true);
 		controller.enter();
@@ -882,7 +1331,8 @@ describe("createPeekController", () => {
 		expect(calls).toStrictEqual(["open"]);
 	});
 
-	it("cancels a pending close when the pointer re-enters", () => {
+	it("cancels a pending close when the pointer re-enters", () =>
+	{
 		vi.useFakeTimers();
 		const {calls, controller} = setup();
 		controller.enter();

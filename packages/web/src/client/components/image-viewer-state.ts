@@ -4,37 +4,47 @@ import {useSyncExternalStore} from "react";
 let shownId: string | null = null;
 const listeners = new Set<() => void>();
 
-function emit(): void {
-	for (const listener of listeners) {
+function emit(): void
+{
+	for (const listener of listeners)
+	{
 		listener();
 	}
 }
 
-function getShownImageId(): string | null {
+function getShownImageId(): string | null
+{
 	return shownId;
 }
 
-export function showImageViewer(nodeId: string): void {
-	if (shownId !== nodeId) {
+export function showImageViewer(nodeId: string): void
+{
+	if (shownId !== nodeId)
+	{
 		shownId = nodeId;
 		emit();
 	}
 }
 
-export function hideImageViewer(): void {
-	if (shownId !== null) {
+export function hideImageViewer(): void
+{
+	if (shownId !== null)
+	{
 		shownId = null;
 		emit();
 	}
 }
 
-function subscribe(listener: () => void): () => void {
+function subscribe(listener: () => void): () => void
+{
 	listeners.add(listener);
-	return () => {
+	return () =>
+	{
 		listeners.delete(listener);
 	};
 }
 
-export function useShownImageId(): string | null {
+export function useShownImageId(): string | null
+{
 	return useSyncExternalStore(subscribe, getShownImageId, () => null);
 }

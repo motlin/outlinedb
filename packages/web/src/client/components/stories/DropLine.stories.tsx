@@ -2,22 +2,32 @@ import type {Meta, StoryObj} from "@storybook/react-vite";
 
 import {DropLine} from "./primitives.js";
 
-const meta: Meta<typeof DropLine> = {
+const meta: Meta<typeof DropLine> =
+{
 	title: "Primitives/DropLine",
 	component: DropLine,
-	parameters: {
+	parameters:
+	{
 		layout: "padded",
 	},
 	tags: ["autodocs"],
-	argTypes: {
-		isVisible: {
+	argTypes:
+	{
+		isVisible:
+		{
 			control: "boolean",
 			description: "Whether the drop line is visible",
 		},
 	},
 	decorators: [
 		(Story) => (
-			<div style={{width: "400px", padding: "20px 0"}}>
+			<div
+				style={
+				{
+					width: "400px",
+					padding: "20px 0",
+				}}
+			>
 				<Story />
 			</div>
 		),
@@ -27,14 +37,18 @@ const meta: Meta<typeof DropLine> = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Visible: Story = {
-	args: {
+export const Visible: Story =
+{
+	args:
+	{
 		isVisible: true,
 	},
 };
 
-export const Hidden: Story = {
-	args: {
+export const Hidden: Story =
+{
+	args:
+	{
 		isVisible: false,
 	},
 };

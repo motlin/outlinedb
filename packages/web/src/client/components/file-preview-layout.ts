@@ -1,17 +1,21 @@
 /** Upstream's aspect for the image box: `floor(h/w*100)/100`, null when the original size is unknown. */
-export function aspect(width: number | null, height: number | null): number | null {
-	if (width === null || height === null || width === 0) {
+export function aspect(width: number | null, height: number | null): number | null
+{
+	if (width === null || height === null || width === 0)
+	{
 		return null;
 	}
 	return Math.floor((height / width) * 100) / 100;
 }
 
 /** The upload's pixel density, where a missing or zero value counts as 1. */
-export function pixelDensity(pixels: number | null): number {
+export function pixelDensity(pixels: number | null): number
+{
 	return pixels === null || pixels === 0 ? 1 : pixels;
 }
 
-export interface PreviewWidthInput {
+export interface PreviewWidthInput
+{
 	/** The window is zoomed into the image item itself. */
 	zoomedIn: boolean;
 	innerWidth: number;
@@ -24,8 +28,10 @@ export interface PreviewWidthInput {
 }
 
 /** Upstream `cA4`'s image width in px: the window when zoomed in, else the size cap plus the 2px border, never wider than the window. */
-export function previewWidth({zoomedIn, innerWidth, thumbs, w, pixels}: PreviewWidthInput): number {
-	if (zoomedIn) {
+export function previewWidth({zoomedIn, innerWidth, thumbs, w, pixels}: PreviewWidthInput): number
+{
+	if (zoomedIn)
+	{
 		return innerWidth;
 	}
 	const cap = thumbs ? 200 : 700;

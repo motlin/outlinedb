@@ -1,4 +1,5 @@
-._theme-glass {
+._theme-glass
+{
 	--wf-background-primary: #ffffffee;
 	--wf-background-secondary: var(--wf-gray-100);
 	--wf-background-tertiary: var(--wf-gray-300);
@@ -66,20 +67,23 @@
 		radial-gradient(119.62% 192.08% at 50% -12.01%, #fff 38.75%, rgba(255, 255, 255, 0) 100%),
 		linear-gradient(96deg, #8ec6ff 17.86%, #c9caf1 72.43%, #b5afed 88.47%);
 
-	.wf-header {
+	.wf-header
+	{
 		--wf-background-primary: #ffffff;
 		--wf-text-primary: var(--wf-gray-500);
 		--wf-border-primary: var(--wf-gray-200);
 	}
 
-	.wf-menu {
+	.wf-menu
+	{
 		--wf-background-primary: #ffffffee;
 		--wf-text-primary: var(--wf-gray-700);
 		--wf-border-primary: var(--wf-gray-200);
 		--wf-border-secondary: var(--wf-gray-400);
 	}
 
-	.wf-helper {
+	.wf-helper
+	{
 		--wf-background-primary: var(--wf-gray-100);
 	}
 }

@@ -16,12 +16,14 @@ import {NoContentSchema} from "./schemas.js";
 const NOTHING_SHARED = "Share a title, text or url";
 
 /** `&` first, then `>` and `<`, like upstream's `HL`: item names are HTML. */
-function escapeHtml(text: string): string {
+function escapeHtml(text: string): string
+{
 	return text.replaceAll("&", "&amp;").replaceAll(">", "&gt;").replaceAll("<", "&lt;");
 }
 
 /** The shared fields as one item name, or undefined when all are blank. */
-function sharedItemName(shared: {title?: string; text?: string; url?: string}): string | undefined {
+function sharedItemName(shared: {title?: string; text?: string; url?: string}): string | undefined
+{
 	const title = shared.title?.trim() ?? "";
 	const text = shared.text?.trim() ?? "";
 	const url = shared.url?.trim() ?? "";
@@ -29,28 +31,67 @@ function sharedItemName(shared: {title?: string; text?: string; url?: string}): 
 	return parts.length === 0 ? undefined : escapeHtml(parts.join(" "));
 }
 
-export const inboxShare = defineOp({
-	input: z.object({title: z.string().optional(), text: z.string().optional(), url: z.string().optional()}),
-	/** The value is always null: the Inbox URL travels in `meta.redirect`. */
-	output: NoContentSchema,
-	async run(ctx: ServerContext, input) {
-		const name = sharedItemName(input);
-		if (name === undefined) {
-			return fail(400, {error: NOTHING_SHARED});
-		}
-		// Tree writes refresh the cache through the public API, so they need its key too.
-		const adapter = ctx.apiKey ? ctx.internalAdapter?.() : undefined;
-		if (!adapter) {
-			return fail(503, {error: INTERNAL_API_NOT_CONFIGURED});
-		}
-		try {
-			const {inboxId} = await adapter.addToInbox({name});
-			return ok(null, {redirect: `/#/${inboxId.slice(-12)}`});
-		} catch (error) {
-			if (error instanceof InboxMissing) {
-				return fail(409, {error: error.message});
+export const inboxShare = defineOp(
+	{
+		input: z.object(
+			{
+				title: z.string().optional(),
+				text: z.string().optional(),
+				url: z.string().optional(),
+			},
+		),
+		/** The value is always null: the Inbox URL travels in `meta.redirect`. */
+		output: NoContentSchema,
+		async run(ctx: ServerContext, input)
+		{
+			const name = sharedItemName(input);
+			if (name === undefined)
+			{
+				return fail(
+					400,
+					{
+						error: NOTHING_SHARED,
+					},
+				);
 			}
-			throw error;
-		}
+			// Tree writes refresh the cache through the public API, so they need its key too.
+			const adapter = ctx.apiKey ? ctx.internalAdapter?.() : undefined;
+			if (!adapter)
+			{
+				return fail(
+					503,
+					{
+						error: INTERNAL_API_NOT_CONFIGURED,
+					},
+				);
+			}
+			try
+			{
+				const {inboxId} = await adapter.addToInbox(
+					{
+						name,
+					},
+				);
+				return ok(
+					null,
+					{
+						redirect: `/#/${inboxId.slice(-12)}`,
+					},
+				);
+			}
+			catch (error)
+			{
+				if (error instanceof InboxMissing)
+				{
+					return fail(
+						409,
+						{
+							error: error.message,
+						},
+					);
+				}
+				throw error;
+			}
+		},
 	},
-});
+);

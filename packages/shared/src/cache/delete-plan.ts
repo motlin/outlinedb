@@ -10,7 +10,8 @@ export type ChildOrder = (parentId: string | null) => Promise<string[]>;
  * its children, is moved into that mirror's place. Its other mirrors keep
  * mirroring it where it now lives.
  */
-export interface MirrorPromotion {
+export interface MirrorPromotion
+{
 	/** The original that is kept. */
 	originalId: string;
 	/** The mirror removed through DELETE /nodes/:id/mirror to make room for it. */
@@ -36,7 +37,8 @@ export interface MirrorPromotion {
 }
 
 /** The API calls {@link WorkflowyWriteThroughClient.deleteNode} makes for one delete, in order. */
-export interface DeletePlan {
+export interface DeletePlan
+{
 	/** Mirrors inside the deleted part of the subtree, removed first through DELETE /nodes/:id/mirror. */
 	mirrorIds: string[];
 	/** Originals kept by moving them into a mirror's place, carried out next. */
@@ -46,23 +48,56 @@ export interface DeletePlan {
 }
 
 /** One API call of a {@link DeletePlan}; `path` is relative to /api/v1. */
-export interface DeletePlanCall {
+export interface DeletePlanCall
+{
 	method: "DELETE" | "POST";
 	path: string;
-	body?: {parent_id: string | null; position: "top" | "bottom"};
+	body?:
+	{
+		parent_id: string | null;
+		position: "top" | "bottom";
+	};
 }
 
 /** Every mutating API call a plan makes, in order (the GETs that refresh the cache after a move are left out). */
-export function deletePlanCalls(plan: DeletePlan): DeletePlanCall[] {
-	const calls: DeletePlanCall[] = plan.mirrorIds.map((id) => ({method: "DELETE", path: `/nodes/${id}/mirror`}));
-	for (const {mirrorId, originalId, parentId, position, siblingIds} of plan.promotions) {
-		calls.push({method: "DELETE", path: `/nodes/${mirrorId}/mirror`});
-		for (const id of [originalId, ...siblingIds]) {
-			calls.push({method: "POST", path: `/nodes/${id}/move`, body: {parent_id: parentId, position}});
+export function deletePlanCalls(plan: DeletePlan): DeletePlanCall[]
+{
+	const calls: DeletePlanCall[] = plan.mirrorIds.map((id) => (
+	{
+		method: "DELETE",
+		path: `/nodes/${id}/mirror`,
+	}));
+	for (const {mirrorId, originalId, parentId, position, siblingIds} of plan.promotions)
+	{
+		calls.push(
+			{
+				method: "DELETE",
+				path: `/nodes/${mirrorId}/mirror`,
+			},
+		);
+		for (const id of [originalId, ...siblingIds])
+		{
+			calls.push(
+				{
+					method: "POST",
+					path: `/nodes/${id}/move`,
+					body:
+					{
+						parent_id: parentId,
+						position,
+					},
+				},
+			);
 		}
 	}
-	if (plan.nodeId !== null) {
-		calls.push({method: "DELETE", path: `/nodes/${plan.nodeId}`});
+	if (plan.nodeId !== null)
+	{
+		calls.push(
+			{
+				method: "DELETE",
+				path: `/nodes/${plan.nodeId}`,
+			},
+		);
 	}
 	return calls;
 }
@@ -89,13 +124,15 @@ export async function planSubtreeDelete(
 	cacheService: CacheService,
 	nodeId: string,
 	childOrder: ChildOrder,
-): Promise<DeletePlan> {
+): Promise<DeletePlan>
+{
 	const subtree = cacheService.getSubtreeMirrors(nodeId);
 	const kept = findKeptOriginals(nodeId, subtree);
 	const deleted = (id: string) => isDeleted(id, nodeId, subtree.parents, kept);
 
 	const chosen = new Map<string, string>();
-	for (const [originalId, candidates] of kept) {
+	for (const [originalId, candidates] of kept)
+	{
 		chosen.set(
 			originalId,
 			candidates.reduce((lowest, id) => (id < lowest ? id : lowest)),
@@ -107,7 +144,8 @@ export async function planSubtreeDelete(
 	const outline = new OutlineSimulation(childOrder);
 	const pendingMirrors = new Set(chosen.values());
 	const promotions: MirrorPromotion[] = [];
-	for (const [originalId, mirrorId] of chosen) {
+	for (const [originalId, mirrorId] of chosen)
+	{
 		const parentId = cacheService.getNode(mirrorId)?.parentId ?? null;
 		const siblings = (await outline.children(parentId)).filter(
 			(id) => id === mirrorId || (id !== originalId && !deleted(id) && !pendingMirrors.has(id)),
@@ -120,10 +158,20 @@ export async function planSubtreeDelete(
 
 		pendingMirrors.delete(mirrorId);
 		outline.remove(mirrorId);
-		for (const id of [originalId, ...siblingIds]) {
+		for (const id of [originalId, ...siblingIds])
+		{
 			await outline.move(id, parentId, position);
 		}
-		promotions.push({originalId, mirrorId, parentId, position, siblingIds, index});
+		promotions.push(
+			{
+				originalId,
+				mirrorId,
+				parentId,
+				position,
+				siblingIds,
+				index,
+			},
+		);
 	}
 
 	return {
@@ -137,23 +185,30 @@ export async function planSubtreeDelete(
  * The originals kept, in the order found, each with its candidate mirrors:
  * those outside the part still deleted once every kept original is known.
  */
-function findKeptOriginals(nodeId: string, subtree: SubtreeMirrors): Map<string, string[]> {
+function findKeptOriginals(nodeId: string, subtree: SubtreeMirrors): Map<string, string[]>
+{
 	const kept = new Map<string, string[]>();
 	let changed = true;
-	while (changed) {
+	while (changed)
+	{
 		changed = false;
-		for (const [originalId, mirrorIds] of subtree.mirrorsOf) {
-			if (!isDeleted(originalId, nodeId, subtree.parents, kept)) {
+		for (const [originalId, mirrorIds] of subtree.mirrorsOf)
+		{
+			if (!isDeleted(originalId, nodeId, subtree.parents, kept))
+			{
 				continue;
 			}
-			if (mirrorIds.some((id) => !isDeleted(id, nodeId, subtree.parents, kept))) {
+			if (mirrorIds.some((id) => !isDeleted(id, nodeId, subtree.parents, kept)))
+			{
 				kept.set(originalId, []);
 				changed = true;
 			}
 		}
 	}
-	for (const [originalId, mirrorIds] of subtree.mirrorsOf) {
-		if (!kept.has(originalId)) {
+	for (const [originalId, mirrorIds] of subtree.mirrorsOf)
+	{
+		if (!kept.has(originalId))
+		{
 			continue;
 		}
 		kept.set(
@@ -165,12 +220,16 @@ function findKeptOriginals(nodeId: string, subtree: SubtreeMirrors): Map<string,
 }
 
 /** Whether `id` is in the subtree of `nodeId` and not under (or itself) a kept original. */
-function isDeleted(id: string, nodeId: string, parents: Map<string, string>, kept: Map<string, unknown>): boolean {
-	if (id !== nodeId && !parents.has(id)) {
+function isDeleted(id: string, nodeId: string, parents: Map<string, string>, kept: Map<string, unknown>): boolean
+{
+	if (id !== nodeId && !parents.has(id))
+	{
 		return false;
 	}
-	for (let current: string | undefined = id; current !== undefined; current = parents.get(current)) {
-		if (kept.has(current)) {
+	for (let current: string | undefined = id; current !== undefined; current = parents.get(current))
+	{
+		if (kept.has(current))
+		{
 			return false;
 		}
 	}
@@ -182,37 +241,49 @@ function isDeleted(id: string, nodeId: string, parents: Map<string, string>, kep
  * removal and move is applied, so a later promotion into the same parent sees
  * the siblings as they will be by then.
  */
-class OutlineSimulation {
+class OutlineSimulation
+{
 	private readonly lists = new Map<string | null, string[]>();
 	private readonly touched = new Set<string>();
 
-	constructor(private readonly childOrder: ChildOrder) {}
+	constructor(private readonly childOrder: ChildOrder)
+	{
+	}
 
-	async children(parentId: string | null): Promise<string[]> {
+	async children(parentId: string | null): Promise<string[]>
+	{
 		let list = this.lists.get(parentId);
-		if (list === undefined) {
+		if (list === undefined)
+		{
 			list = (await this.childOrder(parentId)).filter((id) => !this.touched.has(id));
 			this.lists.set(parentId, list);
 		}
 		return list;
 	}
 
-	remove(id: string): void {
+	remove(id: string): void
+	{
 		this.touched.add(id);
-		for (const list of this.lists.values()) {
+		for (const list of this.lists.values())
+		{
 			const index = list.indexOf(id);
-			if (index !== -1) {
+			if (index !== -1)
+			{
 				list.splice(index, 1);
 			}
 		}
 	}
 
-	async move(id: string, parentId: string | null, position: "top" | "bottom"): Promise<void> {
+	async move(id: string, parentId: string | null, position: "top" | "bottom"): Promise<void>
+	{
 		const list = await this.children(parentId);
 		this.remove(id);
-		if (position === "top") {
+		if (position === "top")
+		{
 			list.unshift(id);
-		} else {
+		}
+		else
+		{
 			list.push(id);
 		}
 	}

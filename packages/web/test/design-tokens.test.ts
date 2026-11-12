@@ -7,7 +7,8 @@ const styles = readFileSync(fileURLToPath(new URL("../src/client/styles.css", im
 
 // Values copied verbatim from upstream themes_design / themes_default / themes_dark (2026-10-01 dumps);
 // hex case and rgba() spacing follow the formatter, which normalises both in styles.css.
-const PALETTE: Record<string, string> = {
+const PALETTE: Record<string, string> =
+{
 	"--wf-red-300": "#fdcacf",
 	"--wf-red-500": "#f74e5d",
 	"--wf-red-700": "#de4854",
@@ -49,7 +50,8 @@ const PALETTE: Record<string, string> = {
 	"--safe-area-inset-left": "env(safe-area-inset-left, 0px)",
 };
 
-const LIGHT_SEMANTIC: Record<string, string> = {
+const LIGHT_SEMANTIC: Record<string, string> =
+{
 	"--wf-background-primary": "var(--wf-gray-0)",
 	"--wf-background-secondary": "var(--wf-gray-100)",
 	"--wf-background-tertiary": "var(--wf-gray-300)",
@@ -112,7 +114,8 @@ const LIGHT_SEMANTIC: Record<string, string> = {
 	"--wf-border-success": "var(--wf-green-700)",
 };
 
-const DARK_SEMANTIC: Record<string, string> = {
+const DARK_SEMANTIC: Record<string, string> =
+{
 	"--wf-background-primary": "var(--wf-dark-gray-800)",
 	"--wf-background-secondary": "var(--wf-dark-gray-700)",
 	"--wf-background-tertiary": "var(--wf-dark-gray-500)",
@@ -359,7 +362,8 @@ const UPSTREAM_UNDEFINED = [
 // Local-only --wf-* declarations, each with a written justification. Empty: local invents none.
 const LOCAL_EXTRA: string[] = [];
 
-const LEGACY_ALIASES: Record<string, string> = {
+const LEGACY_ALIASES: Record<string, string> =
+{
 	"--color-bg": "var(--wf-background-primary)",
 	"--color-bg-secondary": "var(--wf-background-secondary)",
 	"--color-bg-hover": "var(--wf-background-secondary)",
@@ -382,39 +386,54 @@ const LEGACY_ALIASES: Record<string, string> = {
 	"--color-icon": "var(--wf-text-tertiary)",
 };
 
-function sourceFiles(directory: string): string[] {
-	return readdirSync(directory, {withFileTypes: true}).flatMap((entry) => {
+function sourceFiles(directory: string): string[]
+{
+	return readdirSync(
+		directory,
+		{
+			withFileTypes: true,
+		},
+	).flatMap((entry) =>
+	{
 		const full = `${directory}/${entry.name}`;
-		if (entry.isDirectory()) {
+		if (entry.isDirectory())
+		{
 			return sourceFiles(full);
 		}
 		return /\.(tsx?|css)$/u.test(entry.name) && !entry.name.startsWith("wf-tailwind") ? [full] : [];
 	});
 }
 
-function declaredNames(css: string, prefix: string): string[] {
+function declaredNames(css: string, prefix: string): string[]
+{
 	const stripped = css.replaceAll(/\/\*[\s\S]*?\*\//gu, "");
 	return [...new Set([...stripped.matchAll(new RegExp(`(${prefix}[\\w-]+)\\s*:`, "gu"))].map((match) => match[1]))];
 }
 
-function pick(block: Record<string, string>, keys: string[]): Record<string, string> {
+function pick(block: Record<string, string>, keys: string[]): Record<string, string>
+{
 	return Object.fromEntries(keys.filter((key) => key in block).map((key) => [key, block[key]]));
 }
 
-describe("design tokens", () => {
-	it("defines the upstream palette on :root", () => {
+describe("design tokens", () =>
+{
+	it("defines the upstream palette on :root", () =>
+	{
 		expect(pick(cssBlock(styles, ":root"), Object.keys(PALETTE))).toStrictEqual(PALETTE);
 	});
 
-	it("defines the light semantic tokens under the body class ._theme-default", () => {
+	it("defines the light semantic tokens under the body class ._theme-default", () =>
+	{
 		expect(pick(cssBlock(styles, "._theme-default"), Object.keys(LIGHT_SEMANTIC))).toStrictEqual(LIGHT_SEMANTIC);
 	});
 
-	it("defines the dark semantic tokens under the body class ._theme-dark", () => {
+	it("defines the dark semantic tokens under the body class ._theme-dark", () =>
+	{
 		expect(pick(cssBlock(styles, "._theme-dark"), Object.keys(DARK_SEMANTIC))).toStrictEqual(DARK_SEMANTIC);
 	});
 
-	it("keeps semantic tokens and aliases off :root, like upstream's html", () => {
+	it("keeps semantic tokens and aliases off :root, like upstream's html", () =>
+	{
 		const root = cssBlock(styles, ":root");
 		const offenders = Object.entries(root)
 			.filter(
@@ -428,22 +447,26 @@ describe("design tokens", () => {
 		expect(offenders).toStrictEqual([]);
 	});
 
-	it("declares the elevated shadow on body", () => {
+	it("declares the elevated shadow on body", () =>
+	{
 		expect(cssBlock(styles, "body")["--wf-shadow-elevated"]).toBe(
 			"0px 3px 3px -2px rgba(0, 0, 0, 0.2), 0px 3px 4px 0px rgba(0, 0, 0, 0.2), 0px 1px 8px 0px rgba(0, 0, 0, 0.2)",
 		);
 	});
 
-	it("has no data-theme selector left", () => {
+	it("has no data-theme selector left", () =>
+	{
 		expect(styles).not.toContain("[data-theme");
 		expect(styles).not.toContain(".dark ");
 	});
 
-	it("declares each semantic name once per theme block", () => {
+	it("declares each semantic name once per theme block", () =>
+	{
 		expect(cssBlockText(styles, "._theme-default").match(/--wf-background-tertiary\s*:/gu)?.length).toBe(1);
 	});
 
-	it("adds the missing upstream tokens", () => {
+	it("adds the missing upstream tokens", () =>
+	{
 		expect(
 			pick(cssBlock(styles, ":root"), [
 				"--wf-lime-green-100",
@@ -457,38 +480,44 @@ describe("design tokens", () => {
 				"--wf-ai-beta-tag-color",
 				"--wf-content-padding-bottom",
 			]),
-		).toStrictEqual({
-			"--wf-lime-green-100": "#00ff00",
-			"--wf-lime-green-200": "#00ee00",
-			"--wf-lime-green-300": "#009900",
-			"--wf-lime-green-400": "#006600",
-			"--wf-lime-green-500": "#005500",
-			"--wf-lime-green-600": "#003300",
-			"--wf-lime-green-700": "#002200",
-			"--wf-lime-green-800": "#000000",
-			"--wf-ai-beta-tag-color": "#073751",
-			"--wf-content-padding-bottom": "unset",
-		});
+		).toStrictEqual(
+			{
+				"--wf-lime-green-100": "#00ff00",
+				"--wf-lime-green-200": "#00ee00",
+				"--wf-lime-green-300": "#009900",
+				"--wf-lime-green-400": "#006600",
+				"--wf-lime-green-500": "#005500",
+				"--wf-lime-green-600": "#003300",
+				"--wf-lime-green-700": "#002200",
+				"--wf-lime-green-800": "#000000",
+				"--wf-ai-beta-tag-color": "#073751",
+				"--wf-content-padding-bottom": "unset",
+			},
+		);
 		expect(cssBlock(styles, "._theme-default")["--wf-ai-background"]).toBe(
 			"linear-gradient(90deg, #edf9ff 7.9%, #fff2fd 99.15%)",
 		);
 		expect(cssBlock(styles, "._theme-dark")["--wf-ai-background"]).toBe("linear-gradient(90deg, #1f3540, #362a3c)");
-		expect(cssBlock(styles, ".children, .draggableNameClone")).toStrictEqual({
-			"--wf-content-padding-top": "var(--font-descendant-padding-top)",
-			"--wf-content-padding-bottom": "unset",
-		});
+		expect(cssBlock(styles, ".children, .draggableNameClone")).toStrictEqual(
+			{
+				"--wf-content-padding-top": "var(--font-descendant-padding-top)",
+				"--wf-content-padding-bottom": "unset",
+			},
+		);
 		expect(cssBlock(styles, ".name > .content")["--wf-item-line-height"]).toBe("var(--font-default-line-height)");
 		expect(cssBlock(styles, ".name--main > .content")["--wf-item-line-height"]).toBe(
 			"var(--font-selected-name-line-height)",
 		);
 	});
 
-	it("declares only upstream --wf-* names", () => {
+	it("declares only upstream --wf-* names", () =>
+	{
 		const allowed = new Set([...UPSTREAM_WF_NAMES, ...LOCAL_EXTRA]);
 		expect(declaredNames(styles, "--wf-").filter((name) => !allowed.has(name))).toStrictEqual([]);
 	});
 
-	it("references only declared --wf-* tokens, or ones upstream leaves undefined", () => {
+	it("references only declared --wf-* tokens, or ones upstream leaves undefined", () =>
+	{
 		const declared = new Set(declaredNames(styles, "--wf-"));
 		const allowed = new Set([...declared, ...UPSTREAM_UNDEFINED]);
 		const sources = sourceFiles(fileURLToPath(new URL("../src/client", import.meta.url)));
@@ -501,19 +530,22 @@ describe("design tokens", () => {
 		expect(unknown).toStrictEqual([]);
 	});
 
-	it("leaves the names upstream deliberately never defines undeclared", () => {
+	it("leaves the names upstream deliberately never defines undeclared", () =>
+	{
 		const declared = new Set(declaredNames(styles, "--wf-"));
 		expect(UPSTREAM_UNDEFINED.filter((name) => declared.has(name))).toStrictEqual([]);
 	});
 
-	it("aliases the legacy --color-* layer to semantic tokens on body only", () => {
+	it("aliases the legacy --color-* layer to semantic tokens on body only", () =>
+	{
 		const body = cssBlock(styles, "body");
 		expect(pick(body, Object.keys(LEGACY_ALIASES))).toStrictEqual(LEGACY_ALIASES);
 		expect(new Set(declaredNames(styles, "--color-"))).toStrictEqual(new Set(Object.keys(LEGACY_ALIASES)));
 		expect(declaredNames(styles, "--shadow-")).toStrictEqual(["--shadow-modal"]);
 	});
 
-	it("keeps the modal shadow per theme", () => {
+	it("keeps the modal shadow per theme", () =>
+	{
 		expect([
 			cssBlock(styles, "._theme-default")["--shadow-modal"],
 			cssBlock(styles, "._theme-dark")["--shadow-modal"],
@@ -523,20 +555,25 @@ describe("design tokens", () => {
 		]);
 	});
 
-	it("matches upstream's --wf-font-family text", () => {
+	it("matches upstream's --wf-font-family text", () =>
+	{
 		expect(cssBlock(styles, ":root")["--wf-font-family"]).toBe(
 			'-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"',
 		);
 	});
 
-	it("reads --wf-text-secondary for bullets", () => {
+	it("reads --wf-text-secondary for bullets", () =>
+	{
 		expect(cssBlock(styles, ".bullet").color).toBe("var(--wf-text-secondary)");
 	});
 
-	it("ports the row-text selection color and the main name border color", () => {
-		expect(cssBlock(styles, ".content::selection, .content ::selection")).toStrictEqual({
-			"background-color": "#c1e1f2b3",
-		});
+	it("ports the row-text selection color and the main name border color", () =>
+	{
+		expect(cssBlock(styles, ".content::selection, .content ::selection")).toStrictEqual(
+			{
+				"background-color": "#c1e1f2b3",
+			},
+		);
 		expect(cssBlock(styles, ".name.name--main")["border-color"]).toBe("#aaa");
 		expect(styles.indexOf(".content::selection,")).toBeLessThan(
 			styles.indexOf(".notes > .content > .innerContentContainer::selection"),
@@ -554,12 +591,23 @@ describe("design tokens", () => {
 		],
 		[
 			"._theme-default .wf-menu",
-			{"--wf-text-primary": "var(--wf-gray-700)", "--wf-border-secondary": "var(--wf-gray-400)"},
+			{
+				"--wf-text-primary": "var(--wf-gray-700)",
+				"--wf-border-secondary": "var(--wf-gray-400)",
+			},
 		],
-		["._theme-default .wf-helper", {"--wf-background-primary": "var(--wf-gray-100)"}],
+		[
+			"._theme-default .wf-helper",
+			{
+				"--wf-background-primary": "var(--wf-gray-100)",
+			},
+		],
 		[
 			"._theme-dark .wf-header",
-			{"--wf-text-primary": "var(--wf-dark-gray-300)", "--wf-border-primary": "var(--wf-dark-gray-600)"},
+			{
+				"--wf-text-primary": "var(--wf-dark-gray-300)",
+				"--wf-border-primary": "var(--wf-dark-gray-600)",
+			},
 		],
 		[
 			"._theme-dark .wf-menu",
@@ -569,9 +617,20 @@ describe("design tokens", () => {
 				"--wf-border-secondary": "var(--wf-dark-gray-500)",
 			},
 		],
-		["._theme-dark .wf-helper", {"--wf-background-primary": "var(--wf-gray-700)"}],
-		[".wf-menu, .wf-header, .wf-helper", {color: "var(--wf-text-primary)"}],
-	])("scopes %s overrides like upstream", (selector, expected) => {
+		[
+			"._theme-dark .wf-helper",
+			{
+				"--wf-background-primary": "var(--wf-gray-700)",
+			},
+		],
+		[
+			".wf-menu, .wf-header, .wf-helper",
+			{
+				color: "var(--wf-text-primary)",
+			},
+		],
+	])("scopes %s overrides like upstream", (selector, expected) =>
+	{
 		expect(cssBlock(styles, selector)).toStrictEqual(expected);
 	});
 });

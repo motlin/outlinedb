@@ -20,47 +20,64 @@ import {preferenceKeys} from "./use-preferences.js";
 import {syncNodeChanges} from "./use-nodes.js";
 
 /** Upstream's reconnect delay: `(1000 + rand * 4000) * 2^failures`, capped at 3 minutes. */
-function reconnectDelayMs(failures: number, random: number): number {
+function reconnectDelayMs(failures: number, random: number): number
+{
 	return Math.min((1000 + random * 4000) * 2 ** failures, 180_000);
 }
 
 const OPEN = 1;
 
-interface VersionFrame {
+interface VersionFrame
+{
 	type: "expansion.changed" | "account.changed";
 	version: string;
 }
 
 /** A `tree.changed` frame's watermark, or undefined when the frame carries none (read unconditionally). */
-function announcedLatest(data: unknown): string | undefined {
-	if (typeof data !== "string") {
+function announcedLatest(data: unknown): string | undefined
+{
+	if (typeof data !== "string")
+	{
 		return undefined;
 	}
-	try {
+	try
+	{
 		const frame: unknown = JSON.parse(data);
 		return typeof frame === "object" && frame !== null && "latest" in frame && typeof frame.latest === "string"
 			? frame.latest
 			: undefined;
-	} catch {
+	}
+	catch
+	{
 		return undefined;
 	}
 }
 
 /** An `expansion.changed` or `account.changed` frame, or undefined for any other frame (read as a tree change). */
-function versionFrame(data: unknown): VersionFrame | undefined {
-	if (typeof data !== "string") {
+function versionFrame(data: unknown): VersionFrame | undefined
+{
+	if (typeof data !== "string")
+	{
 		return undefined;
 	}
-	try {
+	try
+	{
 		const frame: unknown = JSON.parse(data);
-		if (typeof frame !== "object" || frame === null || !("type" in frame) || !("version" in frame)) {
+		if (typeof frame !== "object" || frame === null || !("type" in frame) || !("version" in frame))
+		{
 			return undefined;
 		}
 		const {type, version} = frame;
 		return (type === "expansion.changed" || type === "account.changed") && typeof version === "string"
-			? {type, version}
+			?
+				{
+					type,
+					version,
+				}
 			: undefined;
-	} catch {
+	}
+	catch
+	{
 		return undefined;
 	}
 }
@@ -70,8 +87,10 @@ function startOutlineLiveSync(
 	sync: (announced: string | undefined) => Promise<void>,
 	onExpansion: (version: string) => void,
 	onAccount: () => void,
-): () => void {
-	const state = {
+): () => void
+{
+	const state =
+	{
 		disposed: false,
 		socket: undefined as WebSocket | undefined,
 		opened: false,
@@ -83,63 +102,82 @@ function startOutlineLiveSync(
 		draining: false,
 	};
 
-	const drain = async () => {
+	const drain = async () =>
+	{
 		state.draining = true;
 		// Let the rest of this tick's frames join this read.
 		await Promise.resolve();
-		while (state.dirty && !state.disposed) {
+		while (state.dirty && !state.disposed)
+		{
 			state.dirty = false;
 			const {announced} = state;
 			state.announced = undefined;
-			try {
+			try
+			{
 				// oxlint-disable-next-line no-await-in-loop -- reads run one at a time by design.
 				await sync(announced);
-			} catch (error) {
+			}
+			catch (error)
+			{
 				console.error("Failed to sync tree changes", error);
 			}
 		}
 		state.draining = false;
 	};
 	/** Ask for a read; `announced` (a frame's watermark) lets it be skipped when already covered, none forces it. */
-	const requestSync = (announced?: string) => {
+	const requestSync = (announced?: string) =>
+	{
 		const pending = state.dirty ? state.announced : "";
 		state.announced =
 			pending === undefined || announced === undefined ? undefined : pending > announced ? pending : announced;
 		state.dirty = true;
-		if (!state.draining) {
+		if (!state.draining)
+		{
 			void drain();
 		}
 	};
 
-	const connect = () => {
+	const connect = () =>
+	{
 		const protocol = globalThis.location.protocol === "https:" ? "wss" : "ws";
 		const socket = new WebSocket(`${protocol}://${globalThis.location.host}/api/v1/nodes/events`);
 		state.socket = socket;
 		let socketOpened = false;
-		socket.addEventListener("open", () => {
+		socket.addEventListener("open", () =>
+		{
 			socketOpened = true;
 			state.failures = 0;
-			if (state.opened) {
+			if (state.opened)
+			{
 				// Anything written while the socket was down sent no frame.
 				requestSync();
 			}
 			state.opened = true;
 		});
-		socket.addEventListener("message", (event: MessageEvent) => {
+		socket.addEventListener("message", (event: MessageEvent) =>
+		{
 			const frame = versionFrame(event.data);
-			if (frame === undefined) {
+			if (frame === undefined)
+			{
 				requestSync(announcedLatest(event.data));
-			} else if (frame.type === "expansion.changed") {
+			}
+			else if (frame.type === "expansion.changed")
+			{
 				onExpansion(frame.version);
-			} else {
+			}
+			else
+			{
 				onAccount();
 			}
 		});
-		socket.addEventListener("close", () => {
-			if (state.disposed || state.socket !== socket) {
+		socket.addEventListener("close", () =>
+		{
+			if (state.disposed || state.socket !== socket)
+			{
 				return;
 			}
-			if (!socketOpened) {
+			if (!socketOpened)
+			{
 				void redirectIfSignedOut();
 			}
 			state.reconnectTimer = setTimeout(connect, reconnectDelayMs(state.failures, Math.random()));
@@ -147,15 +185,18 @@ function startOutlineLiveSync(
 		});
 	};
 
-	const onVisibilityChange = () => {
-		if (document.visibilityState === "visible" && state.socket?.readyState !== OPEN) {
+	const onVisibilityChange = () =>
+	{
+		if (document.visibilityState === "visible" && state.socket?.readyState !== OPEN)
+		{
 			requestSync();
 		}
 	};
 
 	connect();
 	document.addEventListener("visibilitychange", onVisibilityChange);
-	return () => {
+	return () =>
+	{
 		state.disposed = true;
 		clearTimeout(state.reconnectTimer);
 		document.removeEventListener("visibilitychange", onVisibilityChange);
@@ -163,18 +204,29 @@ function startOutlineLiveSync(
 	};
 }
 
-export function useOutlineLiveSync(): void {
+export function useOutlineLiveSync(): void
+{
 	const queryClient = useQueryClient();
 	useEffect(
 		() =>
 			startOutlineLiveSync(
 				async (announced) => syncNodeChanges(queryClient, announced),
-				(version) => {
+				(version) =>
+				{
 					expansionVersionAnnounced(queryClient, version);
 				},
-				() => {
-					void queryClient.invalidateQueries({queryKey: featureKeys.all});
-					void queryClient.invalidateQueries({queryKey: preferenceKeys.all});
+				() =>
+				{
+					void queryClient.invalidateQueries(
+						{
+							queryKey: featureKeys.all,
+						},
+					);
+					void queryClient.invalidateQueries(
+						{
+							queryKey: preferenceKeys.all,
+						},
+					);
 				},
 			),
 		[queryClient],

@@ -2,7 +2,8 @@ import type {InternalAuth, SessionCookieStore} from "@outlinedb/shared/api";
 import type {ServerConfig} from "@outlinedb/web/server-app";
 
 /** Optional secret bindings and vars; set as Wrangler secrets (locally in `.dev.vars`). */
-export interface WorkerSecrets {
+export interface WorkerSecrets
+{
 	WORKFLOWY_API_KEY?: string;
 	WORKFLOWY_USERNAME?: string;
 	WORKFLOWY_PASSWORD?: string;
@@ -24,8 +25,10 @@ export interface WorkerSecrets {
 }
 
 /** Whether the Durable Object named `storeName` is an owner: the one that mirrors workflowy.com with the env secrets. */
-export function isStoreOwner(storeName: string | undefined, env: WorkerSecrets): boolean {
-	if (storeName === undefined) {
+export function isStoreOwner(storeName: string | undefined, env: WorkerSecrets): boolean
+{
+	if (storeName === undefined)
+	{
 		return false;
 	}
 	const owners = (nonEmpty(env.OUTLINEDB_ENV_OWNERS) ?? env.ALLOWED_EMAILS ?? "")
@@ -39,7 +42,8 @@ export function isStoreOwner(storeName: string | undefined, env: WorkerSecrets):
  * Parse {@link ServerConfig} from Worker bindings; an empty binding counts as unset. A non-owner gets no API key and
  * no account email, so it can never write to the owner's workflowy.com account; it is standalone and writes locally.
  */
-export function readWorkerConfig(env: WorkerSecrets, isOwner: boolean): ServerConfig {
+export function readWorkerConfig(env: WorkerSecrets, isOwner: boolean): ServerConfig
+{
 	return {
 		mode: isOwner ? "mirror" : "standalone",
 		apiKey: isOwner ? nonEmpty(env.WORKFLOWY_API_KEY) : undefined,
@@ -48,7 +52,8 @@ export function readWorkerConfig(env: WorkerSecrets, isOwner: boolean): ServerCo
 		sqlQueryLogging: false,
 		calendarEnsureEnabled: true,
 		calendarLayoutEnabled: true,
-		features: {
+		features:
+		{
 			embeddings: env.AI !== undefined && env.RELATED_INDEX !== undefined,
 			treeSnapshot: env.TREE_SNAPSHOT !== "false",
 		},
@@ -63,18 +68,34 @@ export function readWorkerInternalAuth(
 	env: WorkerSecrets,
 	sessionStore: SessionCookieStore,
 	isOwner: boolean,
-): InternalAuth | undefined {
-	if (!isOwner) {
+): InternalAuth | undefined
+{
+	if (!isOwner)
+	{
 		return undefined;
 	}
 	const username = env.WORKFLOWY_USERNAME;
 	const password = env.WORKFLOWY_PASSWORD;
-	if (username && password) {
-		return {credentials: {username, password}, sessionStore};
+	if (username && password)
+	{
+		return {
+			credentials:
+			{
+				username,
+				password,
+			},
+			sessionStore,
+		};
 	}
-	return sessionStore.read() === undefined ? undefined : {sessionStore};
+	return sessionStore.read() === undefined
+		? undefined
+		:
+			{
+				sessionStore,
+			};
 }
 
-function nonEmpty(value: string | undefined): string | undefined {
+function nonEmpty(value: string | undefined): string | undefined
+{
 	return value === "" ? undefined : value;
 }

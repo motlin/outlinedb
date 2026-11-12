@@ -1,5 +1,6 @@
 {
-	"alpha_charlie": {
+	"alpha_charlie":
+	{
 		"selectedDomOrder": ["Alpha", "Charlie"],
 		"prevented": false,
 		"html": "\n<ul>\n  <li>\n    <div class=\"name\" style=\"color:#333; \" data-wfid=\"1ccce67ee6ff\" data-parent=\"fa85028843d2\"><span class=\"innerContentContainer\">Alpha</span></div>\n    <ul>\n      <li>\n        <div class=\"name\" style=\"color:#333; \" data-chid=\"e00f955fa992\" data-parent=\"1ccce67ee6ff\"><span class=\"innerContentContainer\">A1</span></div>\n      </li>\n      <li>\n        <div class=\"name\" style=\"color:#333; \" data-chid=\"0d8bb6069b31\" data-parent=\"1ccce67ee6ff\"><span class=\"innerContentContainer\">A2</span></div>\n      </li>\n    </ul>\n  </li>\n  <li>\n    <div class=\"name\" style=\"color:#333; \" data-wfid=\"9da451f0256e\" data-parent=\"fa85028843d2\"><span class=\"innerContentContainer\">Charlie</span></div>\n  </li>\n</ul>",
@@ -7,7 +8,8 @@
 		"afterSel": 2,
 		"active": "BODY"
 	},
-	"a2_bravo": {
+	"a2_bravo":
+	{
 		"selectedDomOrder": ["A2", "Bravo bold"],
 		"prevented": false,
 		"html": "\n<ul>\n  <li>\n    <div class=\"name\" style=\"color:#333; \" data-wfid=\"0d8bb6069b31\" data-parent=\"1ccce67ee6ff\"><span class=\"innerContentContainer\">A2</span></div>\n  </li>\n  <li>\n    <div class=\"name\" style=\"color:#333; \" data-wfid=\"70fab4089100\" data-parent=\"fa85028843d2\"><span class=\"innerContentContainer\">Bravo <b>bold</b></span></div>\n    <span class=\"note\" style=\"font-size:12px; color:#666; \"><span class=\"innerContentContainer\">bravo note</span></span>\n  </li>\n</ul>",
@@ -15,7 +17,8 @@
 		"afterSel": 2,
 		"active": "BODY"
 	},
-	"a1_only": {
+	"a1_only":
+	{
 		"selectedDomOrder": ["A1"],
 		"prevented": false,
 		"html": "<ul><li>\n<div>\n<span class=\"name\" style=\"color:#333; \" data-wfid=\"e00f955fa992\" data-parent=\"1ccce67ee6ff\"><span class=\"innerContentContainer\">A1</span></span></div></li></ul>",
@@ -23,7 +26,8 @@
 		"afterSel": 1,
 		"active": "BODY"
 	},
-	"zoomroot": {
+	"zoomroot":
+	{
 		"selectedDomOrder": ["CC fixture"],
 		"prevented": false,
 		"html": "\n<div>\n<span class=\"name\" style=\"color:#333; \" data-wfid=\"fa85028843d2\" data-parent=\"ab03ee6d2ae0\"><span class=\"innerContentContainer\">CC fixture</span></span>\n<ul>\n  <li>\n    <div class=\"name\" style=\"color:#333; \" data-chid=\"1ccce67ee6ff\" data-parent=\"fa85028843d2\"><span class=\"innerContentContainer\">Alpha</span></div>\n    <ul>\n      <li>\n        <div class=\"name\" style=\"color:#333; \" data-chid=\"e00f955fa992\" data-parent=\"1ccce67ee6ff\"><span class=\"innerContentContainer\">A1</span></div>\n      </li>\n      <li>\n        <div class=\"name\" style=\"color:#333; \" data-chid=\"0d8bb6069b31\" data-parent=\"1ccce67ee6ff\"><span class=\"innerContentContainer\">A2</span></div>\n      </li>\n    </ul>\n  </li>\n  <li>\n    <div class=\"name\" style=\"color:#333; \" data-chid=\"70fab4089100\" data-parent=\"fa85028843d2\"><span class=\"innerContentContainer\">Bravo <b>bold</b></span></div>\n    <span class=\"note\" style=\"font-size:12px; color:#666; \"><span class=\"innerContentContainer\">bravo note</span></span>\n  </li>\n  <li>\n    <div class=\"name\" style=\"color:#333; \" data-chid=\"9da451f0256e\" data-parent=\"fa85028843d2\"><span class=\"innerContentContainer\">Charlie</span></div>\n  </li>\n  <li>\n    <div class=\"name\" style=\"color:#333; \" data-chid=\"53b4d5571cce\" data-parent=\"fa85028843d2\"><span class=\"innerContentContainer\">Delta</span></div>\n  </li>\n  <li>\n    <div class=\"name\" style=\"color:#333; \" data-chid=\"4b159905d286\" data-parent=\"fa85028843d2\"><span class=\"innerContentContainer\">Dest</span></div>\n  </li>\n</ul></div>",
@@ -31,7 +35,8 @@
 		"afterSel": 1,
 		"active": "BODY"
 	},
-	"reversed_insert": {
+	"reversed_insert":
+	{
 		"selectedDomOrder": ["Bravo bold", "Delta"],
 		"prevented": false,
 		"html": "\n<ul>\n  <li>\n    <div class=\"name\" style=\"color:#333; \" data-wfid=\"70fab4089100\" data-parent=\"fa85028843d2\"><span class=\"innerContentContainer\">Bravo <b>bold</b></span></div>\n    <span class=\"note\" style=\"font-size:12px; color:#666; \"><span class=\"innerContentContainer\">bravo note</span></span>\n  </li>\n  <li>\n    <div class=\"name\" style=\"color:#333; \" data-wfid=\"53b4d5571cce\" data-parent=\"fa85028843d2\"><span class=\"innerContentContainer\">Delta</span></div>\n  </li>\n</ul>",

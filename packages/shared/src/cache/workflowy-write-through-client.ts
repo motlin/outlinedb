@@ -1,5 +1,6 @@
 import type {ItemRelationships, UpstreamRelationshipMetadata} from "./item-relationships.js";
-import type {
+import type
+{
 	CreateMirrorResult,
 	CreateNodeRequest,
 	UpdateNodeRequest,
@@ -12,7 +13,8 @@ import {planSubtreeDelete} from "./delete-plan.js";
 import type {DeletePlan} from "./delete-plan.js";
 
 /** Moves nodes to an exact slot among a parent's children (Home's for `null`), as the internal API can. */
-export interface ExactMover {
+export interface ExactMover
+{
 	moveTo(input: {ids: string[]; parentId: string | null; index: number}): Promise<void>;
 }
 
@@ -23,13 +25,16 @@ export interface ExactMover {
  * Error handling: If the API call succeeds but the cache update fails, the error is thrown.
  * This ensures data consistency and makes failures visible.
  */
-export class WorkflowyWriteThroughClient {
+export class WorkflowyWriteThroughClient
+{
 	constructor(
 		private readonly apiClient: WorkflowyApiClient,
 		private readonly cacheService: CacheService,
 		/** Places a promoted original in one move; without it, promotions rotate siblings through the REST API. */
 		private readonly exactMover?: ExactMover,
-	) {}
+	)
+	{
+	}
 
 	/**
 	 * Ensure the parent node exists in the cache before inserting a child.
@@ -38,13 +43,16 @@ export class WorkflowyWriteThroughClient {
 	 *
 	 * @param parentId The parent node ID to ensure exists in cache
 	 */
-	private async ensureParentInCache(parentId: string | null): Promise<void> {
-		if (parentId === null) {
+	private async ensureParentInCache(parentId: string | null): Promise<void>
+	{
+		if (parentId === null)
+		{
 			return;
 		}
 
 		const existingParent = this.cacheService.getNode(parentId);
-		if (existingParent) {
+		if (existingParent)
+		{
 			return;
 		}
 
@@ -53,9 +61,11 @@ export class WorkflowyWriteThroughClient {
 
 		// Check if grandparent exists (if parent has a parent)
 		const grandparentId = parent.parent_id ?? null;
-		if (grandparentId !== null) {
+		if (grandparentId !== null)
+		{
 			const existingGrandparent = this.cacheService.getNode(grandparentId);
-			if (!existingGrandparent) {
+			if (!existingGrandparent)
+			{
 				throw new Error(`Cache too stale: grandparent node ${grandparentId} not found`);
 			}
 		}
@@ -69,13 +79,15 @@ export class WorkflowyWriteThroughClient {
 	 * @param options Node creation options
 	 * @returns The created node
 	 */
-	async createNode(options: CreateNodeRequest): Promise<WorkflowyNode> {
+	async createNode(options: CreateNodeRequest): Promise<WorkflowyNode>
+	{
 		const created = await this.apiClient.createNode(options);
 		// The create response holds only the new id, so read back the priority Workflowy
 		// assigned; the placeholder would put the node out of order among its cached siblings.
 		// A system target like "inbox" is accepted on create but 404s on GET, so the real parent comes from here too.
 		const fetched = await this.apiClient.getNode(created.id);
-		const node = {
+		const node =
+		{
 			...created,
 			priority: fetched.priority,
 			parent_id: options.parent_id && isSystemTarget(options.parent_id) ? fetched.parent_id : created.parent_id,
@@ -92,7 +104,8 @@ export class WorkflowyWriteThroughClient {
 	 * mirror, which Workflowy ignores. So every update on a mirror, clears
 	 * included, goes to the original.
 	 */
-	resolveUpdateTarget(nodeId: string): string {
+	resolveUpdateTarget(nodeId: string): string
+	{
 		return this.cacheService.getMirrorOriginal(nodeId) ?? nodeId;
 	}
 
@@ -101,7 +114,8 @@ export class WorkflowyWriteThroughClient {
 	 * node is cached, otherwise the parent the API just reported, so an uncached
 	 * node is not filed at Home.
 	 */
-	private cachedParentOr(nodeId: string, fetched: WorkflowyNode): string | null {
+	private cachedParentOr(nodeId: string, fetched: WorkflowyNode): string | null
+	{
 		const cachedNode = this.cacheService.getNode(nodeId);
 		return cachedNode ? cachedNode.parentId : (fetched.parent_id ?? null);
 	}
@@ -113,7 +127,8 @@ export class WorkflowyWriteThroughClient {
 	 * @param options Update options (name, note, layoutMode)
 	 * @returns The node that was updated (the original, for a mirror)
 	 */
-	async updateNode(requestedId: string, options: UpdateNodeRequest): Promise<WorkflowyNode> {
+	async updateNode(requestedId: string, options: UpdateNodeRequest): Promise<WorkflowyNode>
+	{
 		const nodeId = this.resolveUpdateTarget(requestedId);
 		await this.apiClient.updateNode(nodeId, options);
 		// Fetch fresh node data from API to update cache correctly
@@ -141,27 +156,36 @@ export class WorkflowyWriteThroughClient {
 	 * mirror's place, so an original in the subtree with a mirror outside the
 	 * deleted part is kept that way (see {@link planSubtreeDelete}).
 	 */
-	async planDelete(nodeId: string): Promise<DeletePlan> {
-		if (this.cacheService.getMirrorOriginal(nodeId) !== null) {
-			return {mirrorIds: [nodeId], promotions: [], nodeId: null};
+	async planDelete(nodeId: string): Promise<DeletePlan>
+	{
+		if (this.cacheService.getMirrorOriginal(nodeId) !== null)
+		{
+			return {
+				mirrorIds: [nodeId],
+				promotions: [],
+				nodeId: null,
+			};
 		}
 		return planSubtreeDelete(this.cacheService, nodeId, async (parentId) => this.liveChildOrder(parentId));
 	}
 
 	/** A parent's children ids in Workflowy's current order, read from the API. */
-	private async liveChildOrder(parentId: string | null): Promise<string[]> {
+	private async liveChildOrder(parentId: string | null): Promise<string[]>
+	{
 		return (await this.liveChildren(parentId)).map((node) => node.id);
 	}
 
 	/** A parent's children (Home's for `null`) in Workflowy's current order, read from the API. */
-	async liveChildren(parentId: string | null): Promise<WorkflowyNode[]> {
+	async liveChildren(parentId: string | null): Promise<WorkflowyNode[]>
+	{
 		const children =
 			parentId === null ? await this.apiClient.getRootNodes() : await this.apiClient.getChildNodes(parentId);
 		return children.toSorted((a, b) => a.priority - b.priority);
 	}
 
 	/** A parent's children ids (Home's for `null`) in the cache's order, with no API call. */
-	cachedChildIds(parentId: string | null): string[] {
+	cachedChildIds(parentId: string | null): string[]
+	{
 		return this.cacheService.getChildren(parentId).map((node) => node.id);
 	}
 
@@ -170,9 +194,14 @@ export class WorkflowyWriteThroughClient {
 	 * nested nodes just created under it, and store their children in the
 	 * given order so each new node is cached before its own children.
 	 */
-	async refreshChain(parentIds: string[]): Promise<void> {
+	async refreshChain(parentIds: string[]): Promise<void>
+	{
 		const batches = await Promise.all(
-			parentIds.map(async (parentId) => ({parentId, nodes: await this.liveChildren(parentId)})),
+			parentIds.map(async (parentId) => (
+			{
+				parentId,
+				nodes: await this.liveChildren(parentId),
+			})),
 		);
 		this.cacheService.storeApiResponses(batches);
 	}
@@ -184,50 +213,59 @@ export class WorkflowyWriteThroughClient {
 	 * the parent's child list, so {@link refreshChain} never adds a blank
 	 * placeholder parent at Home.
 	 */
-	async cacheLiveNode(nodeId: string): Promise<void> {
+	async cacheLiveNode(nodeId: string): Promise<void>
+	{
 		const node = await this.apiClient.getNode(nodeId);
 		const parentId = node.parent_id ?? null;
-		if (parentId === null) {
+		if (parentId === null)
+		{
 			this.cacheService.insertNode(node, null);
 			return;
 		}
 		const ancestors: WorkflowyNode[] = [];
 		const seen = new Set([nodeId]);
 		let ancestorId: string | null = parentId;
-		while (ancestorId !== null && !seen.has(ancestorId) && this.cacheService.getNode(ancestorId) === undefined) {
+		while (ancestorId !== null && !seen.has(ancestorId) && this.cacheService.getNode(ancestorId) === undefined)
+		{
 			seen.add(ancestorId);
 			const ancestor = await this.apiClient.getNode(ancestorId);
 			ancestors.push(ancestor);
 			ancestorId = ancestor.parent_id ?? null;
 		}
-		for (const ancestor of ancestors.toReversed()) {
+		for (const ancestor of ancestors.toReversed())
+		{
 			this.cacheService.insertNode(ancestor, ancestor.parent_id ?? null);
 		}
 		await this.refreshChain([parentId]);
 	}
 
 	/** One node as Workflowy has it now, read from the API. */
-	async liveNode(nodeId: string): Promise<WorkflowyNode> {
+	async liveNode(nodeId: string): Promise<WorkflowyNode>
+	{
 		return this.apiClient.getNode(nodeId);
 	}
 
 	/** One node as Workflowy has it now, or `null` when the public API answers 404. */
-	async findLiveNode(nodeId: string): Promise<WorkflowyNode | null> {
+	async findLiveNode(nodeId: string): Promise<WorkflowyNode | null>
+	{
 		return this.apiClient.findNode(nodeId);
 	}
 
 	/** The cached node a link's 12-hex short id names, or `null` when no cached node has it. */
-	resolveShortId(shortId: string): string | null {
+	resolveShortId(shortId: string): string | null
+	{
 		return this.cacheService.resolveShortIdToUuid(shortId);
 	}
 
 	/** Whether `nodeId` is cached, or else live on Workflowy (one public read, a 404 meaning no). */
-	async exists(nodeId: string): Promise<boolean> {
+	async exists(nodeId: string): Promise<boolean>
+	{
 		return this.cacheService.getNode(nodeId) !== undefined || (await this.apiClient.findNode(nodeId)) !== null;
 	}
 
 	/** Each node's upstream `mirror`/`backlink`/`isReferencesRoot` view, rebuilt from the cached edge tables. */
-	relationshipMetadata(nodeIds: readonly string[]): Map<string, UpstreamRelationshipMetadata> {
+	relationshipMetadata(nodeIds: readonly string[]): Map<string, UpstreamRelationshipMetadata>
+	{
 		return this.cacheService.relationshipMetadata(nodeIds);
 	}
 
@@ -242,18 +280,29 @@ export class WorkflowyWriteThroughClient {
 	 * and stored in the same transaction, for writes such as a restore that
 	 * bring back descendants the parent's children alone do not show.
 	 */
-	async refreshChildren(parentIds: (string | null)[], subtreeRoots: string[] = []): Promise<void> {
+	async refreshChildren(parentIds: (string | null)[], subtreeRoots: string[] = []): Promise<void>
+	{
 		const unique = [...new Set(parentIds)];
-		for (const parentId of unique) {
+		for (const parentId of unique)
+		{
 			await this.ensureParentInCache(parentId);
 		}
 		const batches = await Promise.all(
-			unique.map(async (parentId) => ({parentId, nodes: await this.liveChildren(parentId)})),
+			unique.map(async (parentId) => (
+			{
+				parentId,
+				nodes: await this.liveChildren(parentId),
+			})),
 		);
 		let level = subtreeRoots;
-		while (level.length > 0) {
+		while (level.length > 0)
+		{
 			const levelBatches = await Promise.all(
-				level.map(async (parentId) => ({parentId, nodes: await this.liveChildren(parentId)})),
+				level.map(async (parentId) => (
+				{
+					parentId,
+					nodes: await this.liveChildren(parentId),
+				})),
 			);
 			batches.push(...levelBatches);
 			level = levelBatches.flatMap((batch) => batch.nodes.map((node) => node.id));
@@ -267,11 +316,21 @@ export class WorkflowyWriteThroughClient {
 	 * roots created under them) and record the sync in the cache as one unit
 	 * of work.
 	 */
-	async refreshBacklinks(parentIds: string[], record: Omit<BacklinkSyncRecord, "children">): Promise<void> {
+	async refreshBacklinks(parentIds: string[], record: Omit<BacklinkSyncRecord, "children">): Promise<void>
+	{
 		const children = await Promise.all(
-			parentIds.map(async (parentId) => ({parentId, nodes: await this.liveChildren(parentId)})),
+			parentIds.map(async (parentId) => (
+			{
+				parentId,
+				nodes: await this.liveChildren(parentId),
+			})),
 		);
-		this.cacheService.recordBacklinkSync({...record, children});
+		this.cacheService.recordBacklinkSync(
+			{
+				...record,
+				children,
+			},
+		);
 	}
 
 	/**
@@ -287,25 +346,37 @@ export class WorkflowyWriteThroughClient {
 	 *   already made (and showed) one; otherwise one is made now
 	 * @returns The plan that was carried out
 	 */
-	async deleteNode(nodeId: string, plan?: DeletePlan): Promise<DeletePlan> {
+	async deleteNode(nodeId: string, plan?: DeletePlan): Promise<DeletePlan>
+	{
 		plan ??= await this.planDelete(nodeId);
-		for (const mirrorId of plan.mirrorIds) {
+		for (const mirrorId of plan.mirrorIds)
+		{
 			await this.deleteMirror(mirrorId);
 		}
-		for (const {mirrorId, originalId, parentId, position, siblingIds, index} of plan.promotions) {
-			if (this.exactMover !== undefined) {
+		for (const {mirrorId, originalId, parentId, position, siblingIds, index} of plan.promotions)
+		{
+			if (this.exactMover !== undefined)
+			{
 				await this.deleteMirror(mirrorId);
-				await this.exactMover.moveTo({ids: [originalId], parentId, index});
+				await this.exactMover.moveTo(
+					{
+						ids: [originalId],
+						parentId,
+						index,
+					},
+				);
 				await this.refreshChildren([parentId]);
 				continue;
 			}
 			const end = position === "top" ? -1 : 0;
 			await this.promote(mirrorId, originalId, parentId, end);
-			for (const siblingId of siblingIds) {
+			for (const siblingId of siblingIds)
+			{
 				await this.moveNode(siblingId, parentId, end);
 			}
 		}
-		if (plan.nodeId !== null) {
+		if (plan.nodeId !== null)
+		{
 			await this.apiClient.deleteNode(plan.nodeId);
 			this.cacheService.deleteNode(plan.nodeId);
 		}
@@ -322,13 +393,17 @@ export class WorkflowyWriteThroughClient {
 		originalId: string,
 		parentId: string | null,
 		position: number,
-	): Promise<void> {
+	): Promise<void>
+	{
 		await this.apiClient.deleteMirror(mirrorId);
 		let moved: WorkflowyNode;
-		try {
+		try
+		{
 			await this.apiClient.moveNode(originalId, parentId, position);
 			moved = await this.apiClient.getNode(originalId);
-		} catch (error) {
+		}
+		catch (error)
+		{
 			this.cacheService.deleteNode(mirrorId);
 			throw error;
 		}
@@ -344,7 +419,8 @@ export class WorkflowyWriteThroughClient {
 	 * @param position Optional position ('top' for -1, 'bottom' for >= 0)
 	 * @returns The moved node
 	 */
-	async moveNode(nodeId: string, newParentId: string | null, position?: number): Promise<WorkflowyNode> {
+	async moveNode(nodeId: string, newParentId: string | null, position?: number): Promise<WorkflowyNode>
+	{
 		await this.apiClient.moveNode(nodeId, newParentId, position);
 		// Fetch fresh node data from API to update cache correctly
 		const movedNode = await this.apiClient.getNode(nodeId);
@@ -363,18 +439,27 @@ export class WorkflowyWriteThroughClient {
 	 * @param parentId The parent to place the mirror under
 	 * @param position Where among the parent's children to place the mirror
 	 */
-	async createMirror(originId: string, parentId: string, position: "top" | "bottom"): Promise<CreateMirrorResult> {
+	async createMirror(originId: string, parentId: string, position: "top" | "bottom"): Promise<CreateMirrorResult>
+	{
 		const result = await this.apiClient.createMirror(originId, parentId, position);
 		const mirrorNode = await this.apiClient.getNode(result.mirrorId);
 		const mirrorParentId = mirrorNode.parent_id ?? parentId;
 		await this.ensureParentInCache(mirrorParentId);
-		this.cacheService.insertNode({...mirrorNode, name: "", note: null}, mirrorParentId);
+		this.cacheService.insertNode(
+			{
+				...mirrorNode,
+				name: "",
+				note: null,
+			},
+			mirrorParentId,
+		);
 		this.cacheService.insertMirror(result.originId, result.mirrorId);
 		return result;
 	}
 
 	/** Cache the mirror, backlink and references-root rows an accepted push created outside {@link createMirror}. */
-	recordRelationships(relationships: ItemRelationships): void {
+	recordRelationships(relationships: ItemRelationships): void
+	{
 		this.cacheService.recordRelationships(relationships);
 	}
 
@@ -382,7 +467,8 @@ export class WorkflowyWriteThroughClient {
 	 * Remove a mirror and drop it, with its mirror relationship, from the cache.
 	 * @param mirrorId The mirror node to remove
 	 */
-	async deleteMirror(mirrorId: string): Promise<void> {
+	async deleteMirror(mirrorId: string): Promise<void>
+	{
 		await this.apiClient.deleteMirror(mirrorId);
 		this.cacheService.deleteNode(mirrorId);
 	}
@@ -393,7 +479,8 @@ export class WorkflowyWriteThroughClient {
 	 * @param requestedId The node ID to complete
 	 * @returns The completed node (the original, for a mirror)
 	 */
-	async completeNode(requestedId: string): Promise<WorkflowyNode> {
+	async completeNode(requestedId: string): Promise<WorkflowyNode>
+	{
 		const nodeId = this.resolveUpdateTarget(requestedId);
 		await this.apiClient.completeNode(nodeId);
 		// Fetch fresh node data from API to update cache correctly
@@ -410,7 +497,8 @@ export class WorkflowyWriteThroughClient {
 	 * @param requestedId The node ID to uncomplete
 	 * @returns The uncompleted node (the original, for a mirror)
 	 */
-	async uncompleteNode(requestedId: string): Promise<WorkflowyNode> {
+	async uncompleteNode(requestedId: string): Promise<WorkflowyNode>
+	{
 		const nodeId = this.resolveUpdateTarget(requestedId);
 		await this.apiClient.uncompleteNode(nodeId);
 		// Fetch fresh node data from API to update cache correctly

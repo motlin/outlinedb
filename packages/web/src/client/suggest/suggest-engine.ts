@@ -1,7 +1,8 @@
 import type {MenuKeyboardState} from "../components/flyout/menu-keyboard.js";
 
 /** Options of upstream's `WF.Suggest.for(range, opts)` that shape the chip's input handling. */
-export interface SuggestOptions {
+export interface SuggestOptions
+{
 	prefix: string;
 	/** A typed space abandons the chip (`@`). */
 	solid?: boolean;
@@ -12,7 +13,8 @@ export interface SuggestOptions {
 	chipClassName: string;
 }
 
-export interface SuggestInputInput {
+export interface SuggestInputInput
+{
 	chipText: string;
 	inserted: string | null;
 	deleting: boolean;
@@ -31,31 +33,39 @@ export function suggestInputAction({
 	composing,
 	resultsEmpty,
 	opts,
-}: SuggestInputInput): SuggestInputAction {
-	if (composing) {
+}: SuggestInputInput): SuggestInputAction
+{
+	if (composing)
+	{
 		return "update";
 	}
-	if (opts.unique === true) {
+	if (opts.unique === true)
+	{
 		return "abandon";
 	}
-	if (opts.solid === true && inserted === " ") {
+	if (opts.solid === true && inserted === " ")
+	{
 		return "abandon";
 	}
-	if (deleting && !chipText.trimStart().startsWith(opts.prefix)) {
+	if (deleting && !chipText.trimStart().startsWith(opts.prefix))
+	{
 		return "abandon";
 	}
-	if (opts.strict === true && resultsEmpty) {
+	if (opts.strict === true && resultsEmpty)
+	{
 		return "abandon";
 	}
 	return "update";
 }
 
 /** Upstream `propping`: any character other than space, `\n`, `\r` or `\t`; a missing neighbor is not propping. */
-export function isPropping(ch: string | undefined): boolean {
+export function isPropping(ch: string | undefined): boolean
+{
 	return ch !== undefined && !/[ \n\r\t]/u.test(ch);
 }
 
-export interface SuggestKeyInput {
+export interface SuggestKeyInput
+{
 	key: string;
 	ctrlKey: boolean;
 	metaKey: boolean;
@@ -70,22 +80,29 @@ export interface SuggestKeyInput {
 export type SuggestKeyAction = "down" | "up" | "select" | "abandon" | "disarmNoAbandon";
 
 /** Upstream chip-popup keydown mapping; `null` leaves the key to the editor. */
-export function suggestKeyAction({key, ctrlKey, metaKey, caretAtChipEnd}: SuggestKeyInput): SuggestKeyAction | null {
-	if (ctrlKey || metaKey) {
-		if (key === "z" || key === "Z") {
+export function suggestKeyAction({key, ctrlKey, metaKey, caretAtChipEnd}: SuggestKeyInput): SuggestKeyAction | null
+{
+	if (ctrlKey || metaKey)
+	{
+		if (key === "z" || key === "Z")
+		{
 			return "disarmNoAbandon";
 		}
-		if (ctrlKey && !metaKey) {
-			if (key === "n") {
+		if (ctrlKey && !metaKey)
+		{
+			if (key === "n")
+			{
 				return "down";
 			}
-			if (key === "p") {
+			if (key === "p")
+			{
 				return "up";
 			}
 		}
 		return null;
 	}
-	switch (key) {
+	switch (key)
+	{
 		case "ArrowDown":
 			return "down";
 		case "ArrowUp":
@@ -102,15 +119,33 @@ export function suggestKeyAction({key, ctrlKey, metaKey, caretAtChipEnd}: Sugges
 	}
 }
 
-export type SuggestModeEvent = {type: "mouseMove"} | {type: "hover"; index: number};
+export type SuggestModeEvent =
+	|
+	  {
+			type: "mouseMove";
+	  }
+	|
+	  {
+			type: "hover";
+			index: number;
+	  };
 
 /**
  * Any `mousemove` over the scroller drops keyboard mode (no `active` row, every row `canHover`);
  * hovering a row then sets the index so the next arrow key continues from it.
  */
-export function suggestMode(state: MenuKeyboardState, event: SuggestModeEvent): MenuKeyboardState {
-	if (event.type === "mouseMove") {
-		return {...state, keyboardMode: false};
+export function suggestMode(state: MenuKeyboardState, event: SuggestModeEvent): MenuKeyboardState
+{
+	if (event.type === "mouseMove")
+	{
+		return {
+			...state,
+			keyboardMode: false,
+		};
 	}
-	return {...state, index: event.index, keyboardMode: false};
+	return {
+		...state,
+		index: event.index,
+		keyboardMode: false,
+	};
 }

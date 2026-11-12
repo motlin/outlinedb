@@ -8,16 +8,19 @@ import {WHATS_NEW_ENTRIES} from "./whats-new-entries.js";
 export type ChangelogRead = readonly string[];
 
 /** The ids of our entries not read yet. */
-export function unreadChangelogEntries(read: ChangelogRead): string[] {
+export function unreadChangelogEntries(read: ChangelogRead): string[]
+{
 	return WHATS_NEW_ENTRIES.filter((entry) => !read.includes(entry.id)).map((entry) => entry.id);
 }
 
 /** Upstream What's New `blueDot`: one of our entries is not read yet. */
-export function changelogUnread(read: ChangelogRead): boolean {
+export function changelogUnread(read: ChangelogRead): boolean
+{
 	return unreadChangelogEntries(read).length > 0;
 }
 
 /** An entry shows its unread dot until it is read. */
-export function changelogEntryUnread(read: ChangelogRead, id: string): boolean {
+export function changelogEntryUnread(read: ChangelogRead, id: string): boolean
+{
 	return !read.includes(id);
 }

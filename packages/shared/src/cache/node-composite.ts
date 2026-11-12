@@ -1,7 +1,8 @@
 import {getTableName, sql} from "drizzle-orm";
 import type {SQL} from "drizzle-orm";
 import type {SQLiteColumn, SQLiteTable} from "drizzle-orm/sqlite-core";
-import {
+import
+{
 	account,
 	accountSettings,
 	aiAssistants,
@@ -52,13 +53,15 @@ import type {TemporalTransaction} from "./temporal-merge.js";
  * and the node-id columns that merely reference another composite and are never
  * cascaded.
  */
-export interface CompositeEntry {
+export interface CompositeEntry
+{
 	table: SQLiteTable;
 	owner: SQLiteColumn;
 	references: SQLiteColumn[];
 }
 
-export interface CompositePart extends CompositeEntry {
+export interface CompositePart extends CompositeEntry
+{
 	/**
 	 * References whose death also ends the row. Only mirrors: a mirror row closes
 	 * when either side dies (design Q2), and import-api rebuilds it from upstream.
@@ -68,7 +71,8 @@ export interface CompositePart extends CompositeEntry {
 	hardDelete?: boolean;
 }
 
-export const NODE_COMPOSITE_ROOT: CompositeEntry = {
+export const NODE_COMPOSITE_ROOT: CompositeEntry =
+{
 	table: nodeContent,
 	owner: nodeContent.id,
 	references: [nodeContent.parentId],
@@ -76,17 +80,61 @@ export const NODE_COMPOSITE_ROOT: CompositeEntry = {
 
 /** Every table owned by a node composite. Ending a node ends all of these rows with it. */
 export const NODE_COMPOSITE_PARTS: readonly CompositePart[] = [
-	{table: nodeMetadata, owner: nodeMetadata.nodeId, references: []},
-	{table: calendarMetadata, owner: calendarMetadata.nodeId, references: []},
-	{table: calendarLevels, owner: calendarLevels.nodeId, references: []},
-	{table: nodeDisplayMetadata, owner: nodeDisplayMetadata.nodeId, references: []},
-	{table: nodeTableCellSizes, owner: nodeTableCellSizes.nodeId, references: [nodeTableCellSizes.cellId]},
-	{table: nodeEmbeddings, owner: nodeEmbeddings.nodeId, references: []},
-	{table: aiMetadata, owner: aiMetadata.nodeId, references: []},
-	{table: nodeLabelSuggestions, owner: nodeLabelSuggestions.nodeId, references: []},
-	{table: s3Files, owner: s3Files.nodeId, references: []},
-	{table: changesMetadata, owner: changesMetadata.nodeId, references: []},
-	{table: referencesRoots, owner: referencesRoots.nodeId, references: []},
+	{
+		table: nodeMetadata,
+		owner: nodeMetadata.nodeId,
+		references: [],
+	},
+	{
+		table: calendarMetadata,
+		owner: calendarMetadata.nodeId,
+		references: [],
+	},
+	{
+		table: calendarLevels,
+		owner: calendarLevels.nodeId,
+		references: [],
+	},
+	{
+		table: nodeDisplayMetadata,
+		owner: nodeDisplayMetadata.nodeId,
+		references: [],
+	},
+	{
+		table: nodeTableCellSizes,
+		owner: nodeTableCellSizes.nodeId,
+		references: [nodeTableCellSizes.cellId],
+	},
+	{
+		table: nodeEmbeddings,
+		owner: nodeEmbeddings.nodeId,
+		references: [],
+	},
+	{
+		table: aiMetadata,
+		owner: aiMetadata.nodeId,
+		references: [],
+	},
+	{
+		table: nodeLabelSuggestions,
+		owner: nodeLabelSuggestions.nodeId,
+		references: [],
+	},
+	{
+		table: s3Files,
+		owner: s3Files.nodeId,
+		references: [],
+	},
+	{
+		table: changesMetadata,
+		owner: changesMetadata.nodeId,
+		references: [],
+	},
+	{
+		table: referencesRoots,
+		owner: referencesRoots.nodeId,
+		references: [],
+	},
 	{
 		table: mirrors,
 		owner: mirrors.mirrorId,
@@ -94,7 +142,12 @@ export const NODE_COMPOSITE_PARTS: readonly CompositePart[] = [
 		endsWithReferences: [mirrors.originalId],
 	},
 	// Derived from the live content and rewritten by every unit of work; ending the node drops its tags too.
-	{table: nodeTags, owner: nodeTags.nodeId, references: [], hardDelete: true},
+	{
+		table: nodeTags,
+		owner: nodeTags.nodeId,
+		references: [],
+		hardDelete: true,
+	},
 ];
 
 /**
@@ -121,7 +174,8 @@ export const ACCOUNT_COMPOSITE_TABLES: readonly SQLiteTable[] = [
 ];
 
 /** Tables outside every node composite, with the reason. */
-export const NON_NODE_TABLES: Readonly<Record<string, string>> = {
+export const NON_NODE_TABLES: Readonly<Record<string, string>> =
+{
 	[getTableName(backupImports)]: "import bookkeeping keyed by backup filename",
 	[getTableName(apiImportTimestamp)]: "import bookkeeping keyed by pipeline name",
 	[getTableName(treeTransactions)]: "the transaction id each tree's edge rows are current to",
@@ -133,7 +187,8 @@ export const NON_NODE_TABLES: Readonly<Record<string, string>> = {
 };
 
 /** Columns named like node ids that hold something else, with the reason. */
-export const NON_NODE_ID_COLUMNS: Readonly<Record<string, string>> = {
+export const NON_NODE_ID_COLUMNS: Readonly<Record<string, string>> =
+{
 	"node_metadata.short_id": "the owner's own id suffix, not a link to another node",
 	"calendar_metadata.date_id": "a calendar date number, not a node id",
 };
@@ -143,7 +198,8 @@ export const NON_NODE_ID_COLUMNS: Readonly<Record<string, string>> = {
  * gets `systemTime` as `system_to` and every row it inserts gets it as
  * `system_from`, across every table and composite it touches.
  */
-export interface UnitOfWork {
+export interface UnitOfWork
+{
 	tx: TemporalTransaction;
 	systemTime: string;
 }
@@ -160,9 +216,16 @@ export function runUnitOfWork<T>(
 	database: TemporalTransaction,
 	work: (unitOfWork: UnitOfWork) => T,
 	start: UnitOfWorkStart = startUnitOfWork(),
-): T {
-	return database.transaction((tx) => {
-		const result = work({tx, systemTime: start.systemTime});
+): T
+{
+	return database.transaction((tx) =>
+	{
+		const result = work(
+			{
+				tx,
+				systemTime: start.systemTime,
+			},
+		);
 		syncNodeTags(tx, start.systemTime);
 		assertWithinTransactionTimeout(start);
 		return result;
@@ -171,9 +234,11 @@ export function runUnitOfWork<T>(
 
 const ROOT_AND_PARTS: readonly CompositePart[] = [NODE_COMPOSITE_ROOT, ...NODE_COMPOSITE_PARTS];
 
-function endRows(unitOfWork: UnitOfWork, part: CompositePart, where: SQL): void {
+function endRows(unitOfWork: UnitOfWork, part: CompositePart, where: SQL): void
+{
 	const {tx, systemTime} = unitOfWork;
-	if (part.hardDelete) {
+	if (part.hardDelete)
+	{
 		tx.run(sql`DELETE FROM ${part.table} WHERE ${where}`);
 		return;
 	}
@@ -186,11 +251,14 @@ function endRows(unitOfWork: UnitOfWork, part: CompositePart, where: SQL): void 
  * that merely reference these ids are left alone, except mirror rows, which
  * close when either side dies.
  */
-export function endNodeComposites(unitOfWork: UnitOfWork, nodeIds: readonly string[]): void {
-	if (nodeIds.length === 0) {
+export function endNodeComposites(unitOfWork: UnitOfWork, nodeIds: readonly string[]): void
+{
+	if (nodeIds.length === 0)
+	{
 		return;
 	}
-	for (const part of ROOT_AND_PARTS) {
+	for (const part of ROOT_AND_PARTS)
+	{
 		const columns = [part.owner, ...(part.endsWithReferences ?? [])];
 		endRows(
 			unitOfWork,
@@ -209,13 +277,17 @@ export function endNodeComposites(unitOfWork: UnitOfWork, nodeIds: readonly stri
  * (deleted), since a version that starts and ends at one system time never
  * existed, and any version it replaced stays ended at that time.
  */
-export function withdrawNodeComposites(unitOfWork: UnitOfWork, nodeIds: readonly string[]): void {
+export function withdrawNodeComposites(unitOfWork: UnitOfWork, nodeIds: readonly string[]): void
+{
 	const {tx, systemTime} = unitOfWork;
-	if (nodeIds.length === 0) {
+	if (nodeIds.length === 0)
+	{
 		return;
 	}
-	for (const part of ROOT_AND_PARTS) {
-		if (part.hardDelete) {
+	for (const part of ROOT_AND_PARTS)
+	{
+		if (part.hardDelete)
+		{
 			continue;
 		}
 		const owned = sql.join(
@@ -233,8 +305,10 @@ export function withdrawNodeComposites(unitOfWork: UnitOfWork, nodeIds: readonly
  * End every owned row whose owner (or, for mirrors, original) has no current
  * node. The sweep after a global merge, in the caller's unit of work.
  */
-export function endOrphanedParts(unitOfWork: UnitOfWork): void {
-	for (const part of NODE_COMPOSITE_PARTS) {
+export function endOrphanedParts(unitOfWork: UnitOfWork): void
+{
+	for (const part of NODE_COMPOSITE_PARTS)
+	{
 		const columns = [part.owner, ...(part.endsWithReferences ?? [])];
 		const orphaned = columns.map(
 			(column) =>

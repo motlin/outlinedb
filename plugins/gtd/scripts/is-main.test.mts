@@ -9,7 +9,13 @@ import {pathToFileURL} from "node:url";
 
 import {isMain} from "./is-main.mts";
 
-function fixture(): {real: string; linked: string; other: string} {
+function fixture():
+{
+	real: string;
+	linked: string;
+	other: string;
+}
+{
 	const root = realpathSync(mkdtempSync(join(tmpdir(), "is-main-")));
 	const realDirectory = join(root, "real");
 	mkdirSync(realDirectory);
@@ -18,10 +24,15 @@ function fixture(): {real: string; linked: string; other: string} {
 	const other = join(realDirectory, "other.mts");
 	writeFileSync(other, "");
 	symlinkSync(realDirectory, join(root, "link"));
-	return {real, linked: join(root, "link", "script.mts"), other};
+	return {
+		real,
+		linked: join(root, "link", "script.mts"),
+		other,
+	};
 }
 
-test("isMain matches the module whether argv[1] is the real path or reached through a symlink", () => {
+test("isMain matches the module whether argv[1] is the real path or reached through a symlink", () =>
+{
 	const {real, linked, other} = fixture();
 	const moduleUrl = pathToFileURL(real).href;
 	assert.deepStrictEqual(
@@ -31,6 +42,11 @@ test("isMain matches the module whether argv[1] is the real path or reached thro
 			other: isMain(moduleUrl, other),
 			missing: isMain(moduleUrl, undefined),
 		},
-		{real: true, linked: true, other: false, missing: false},
+		{
+			real: true,
+			linked: true,
+			other: false,
+			missing: false,
+		},
 	);
 });

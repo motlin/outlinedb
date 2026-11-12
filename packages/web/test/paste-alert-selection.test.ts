@@ -5,14 +5,21 @@ import {describe, expect, it, vi} from "vite-plus/test";
 import {AlertDialogView} from "../src/client/components/alert-dialog.js";
 import {listenForSelectionPaste} from "../src/client/item-selection.js";
 
-describe("AlertDialogView", () => {
-	it("renders upstream's alert markup", () => {
+describe("AlertDialogView", () =>
+{
+	it("renders upstream's alert markup", () =>
+	{
 		const html = renderToStaticMarkup(
-			createElement(AlertDialogView, {
-				title: "Error",
-				message: "Pasting more than 10000 items at a time is not supported.",
-				onClose: () => {},
-			}),
+			createElement(
+				AlertDialogView,
+				{
+					title: "Error",
+					message: "Pasting more than 10000 items at a time is not supported.",
+					onClose: () =>
+					{
+					},
+				},
+			),
 		);
 		expect(html).toContain('style="z-index:600"');
 		expect(html).toContain("dialog-backdrop");
@@ -27,14 +34,23 @@ describe("AlertDialogView", () => {
 	});
 });
 
-describe("listenForSelectionPaste", () => {
-	function paste(target: HTMLElement): Event {
-		const event = new Event("paste", {bubbles: true, cancelable: true});
+describe("listenForSelectionPaste", () =>
+{
+	function paste(target: HTMLElement): Event
+	{
+		const event = new Event(
+			"paste",
+			{
+				bubbles: true,
+				cancelable: true,
+			},
+		);
 		target.dispatchEvent(event);
 		return event;
 	}
 
-	it("swallows a paste while items are selected", () => {
+	it("swallows a paste while items are selected", () =>
+	{
 		const stop = listenForSelectionPaste(document, () => true);
 		const reached = vi.fn<() => void>();
 		document.body.addEventListener("paste", reached);
@@ -45,13 +61,15 @@ describe("listenForSelectionPaste", () => {
 		stop();
 	});
 
-	it("leaves a paste alone without a selection", () => {
+	it("leaves a paste alone without a selection", () =>
+	{
 		const stop = listenForSelectionPaste(document, () => false);
 		expect(paste(document.body).defaultPrevented).toBe(false);
 		stop();
 	});
 
-	it("leaves a paste into an input alone", () => {
+	it("leaves a paste into an input alone", () =>
+	{
 		const stop = listenForSelectionPaste(document, () => true);
 		const input = document.createElement("input");
 		document.body.append(input);

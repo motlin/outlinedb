@@ -6,7 +6,8 @@ import {paneExpandedIds} from "../pane-ids.js";
 import {useOutlineStore} from "../stores/outline.js";
 import type {ClickPosition} from "../stores/outline.js";
 
-export interface RowState {
+export interface RowState
+{
 	isPersistentlyExpanded: boolean;
 	isEditingNote: boolean;
 	isEditingName: boolean;
@@ -29,9 +30,11 @@ export interface RowState {
  * editor re-renders the two rows it leaves and enters, not every row. Editing and the item selection show only in
  * the active pane, so a row visible in both panes edits in one.
  */
-export function useRowState(nodeId: string, paneId: string, expansionKey: string = nodeId): RowState {
+export function useRowState(nodeId: string, paneId: string, expansionKey: string = nodeId): RowState
+{
 	return useOutlineStore(
-		useShallow((state) => {
+		useShallow((state) =>
+		{
 			const inActivePane = state.activePaneId === paneId;
 			const isEditingName = inActivePane && state.editingId === nodeId;
 			return {

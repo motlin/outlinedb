@@ -1,7 +1,8 @@
 /**
  * JSON output of `node mirror --json`.
  */
-export interface NodeMirrorResult {
+export interface NodeMirrorResult
+{
 	/** Whether a mirror was created or removed. */
 	action: "created" | "deleted";
 	/** Full UUID of the mirror node. */

@@ -1,5 +1,6 @@
 /** The environment facts upstream's boot-time phone detection reads. */
-export interface DeviceInfo {
+export interface DeviceInfo
+{
 	userAgent: string;
 	platform: string;
 	maxTouchPoints: number;
@@ -15,37 +16,48 @@ const MOBILE_UA_PREFIX =
 /* oxlint-enable require-unicode-regexp */
 
 /** Upstream's `W3`: iOS by user agent. */
-export function isIos(userAgent: string): boolean {
+export function isIos(userAgent: string): boolean
+{
 	return /(iphone|ipad|ipod)/iu.test(userAgent) || /(ios:application)/iu.test(userAgent);
 }
 
 /** Upstream's `Z8`: Android by user agent. */
-export function isAndroid(userAgent: string): boolean {
+export function isAndroid(userAgent: string): boolean
+{
 	return /(android|silk-accelerated)/iu.test(userAgent);
 }
 
 /** Upstream's `q`: the regex pair, or an iPadOS Safari posing as a Mac with a touch screen (`R0 && QU` for the iOS app). */
-export function detectMobile({userAgent, platform, maxTouchPoints}: DeviceInfo): boolean {
+export function detectMobile({userAgent, platform, maxTouchPoints}: DeviceInfo): boolean
+{
 	const iosApp = userAgent.match("ios:application") !== null;
 	const touchMac = platform === "MacIntel" && maxTouchPoints > 1;
 	return MOBILE_UA.test(userAgent) || MOBILE_UA_PREFIX.test(userAgent.slice(0, 4)) || (iosApp && touchMac);
 }
 
 /** Upstream's `--wf-header-height` on a phone: 49px on iOS, 56px on Android. */
-export function headerHeight(userAgent: string): number {
+export function headerHeight(userAgent: string): number
+{
 	return isAndroid(userAgent) ? 56 : 49;
 }
 
 /** The body class upstream sets once at boot (`is-mobile` replaces `is-desktop`). */
-export function bodyDeviceClass(mobile: boolean): "is-mobile" | "is-desktop" {
+export function bodyDeviceClass(mobile: boolean): "is-mobile" | "is-desktop"
+{
 	return mobile ? "is-mobile" : "is-desktop";
 }
 
-function currentDevice(): DeviceInfo | null {
-	if (typeof navigator === "undefined") {
+function currentDevice(): DeviceInfo | null
+{
+	if (typeof navigator === "undefined")
+	{
 		return null;
 	}
-	return {userAgent: navigator.userAgent, platform: navigator.platform, maxTouchPoints: navigator.maxTouchPoints};
+	return {
+		userAgent: navigator.userAgent,
+		platform: navigator.platform,
+		maxTouchPoints: navigator.maxTouchPoints,
+	};
 }
 
 const DEVICE = currentDevice();
@@ -54,9 +66,11 @@ const DEVICE = currentDevice();
 export const IS_MOBILE: boolean = DEVICE !== null && detectMobile(DEVICE);
 
 /** Swaps the body's device class and, on a phone, sets the platform's header height. Runs once, before the first render. */
-export function applyDeviceClass(body: HTMLElement, mobile: boolean, userAgent: string): void {
+export function applyDeviceClass(body: HTMLElement, mobile: boolean, userAgent: string): void
+{
 	body.classList.replace("is-desktop", bodyDeviceClass(mobile));
-	if (mobile) {
+	if (mobile)
+	{
 		body.style.setProperty("--wf-header-height", `${headerHeight(userAgent)}px`);
 	}
 }

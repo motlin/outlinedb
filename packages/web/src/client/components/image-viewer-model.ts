@@ -1,4 +1,5 @@
-export interface ViewerRow {
+export interface ViewerRow
+{
 	id: string;
 	hasAttachment: boolean;
 }
@@ -11,14 +12,18 @@ export function adjacentAttachment(
 	rows: readonly ViewerRow[],
 	currentId: string,
 	direction: "prev" | "next",
-): string | null {
+): string | null
+{
 	const start = rows.findIndex((row) => row.id === currentId);
-	if (start === -1) {
+	if (start === -1)
+	{
 		return null;
 	}
 	const step = direction === "next" ? 1 : -1;
-	for (let index = start + step; index >= 0 && index < rows.length; index += step) {
-		if (rows[index]?.hasAttachment === true) {
+	for (let index = start + step; index >= 0 && index < rows.length; index += step)
+	{
+		if (rows[index]?.hasAttachment === true)
+		{
 			return rows[index]?.id ?? null;
 		}
 	}
@@ -26,12 +31,20 @@ export function adjacentAttachment(
 }
 
 /** The rendered rows of the current view, in document order, each flagged when it shows a `.file-preview`. */
-export function visibleViewerRows(doc: Document): ViewerRow[] {
+export function visibleViewerRows(doc: Document): ViewerRow[]
+{
 	const rows: ViewerRow[] = [];
-	for (const element of doc.querySelectorAll("[projectid]")) {
+	for (const element of doc.querySelectorAll("[projectid]"))
+	{
 		const id = element.getAttribute("projectid");
-		if (id !== null) {
-			rows.push({id, hasAttachment: element.querySelector(":scope > .file-preview") !== null});
+		if (id !== null)
+		{
+			rows.push(
+				{
+					id,
+					hasAttachment: element.querySelector(":scope > .file-preview") !== null,
+				},
+			);
 		}
 	}
 	return rows;

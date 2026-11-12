@@ -3,7 +3,8 @@
  * Combos are `alt+ctrl+meta+shift+<key>` strings; the table maps each combo to a command name.
  */
 
-export interface Platform {
+export interface Platform
+{
 	mac: boolean;
 	safari: boolean;
 	windows: boolean;
@@ -19,12 +20,15 @@ export type Hotkey = [combo: string, command: string];
  * replaces its command but keeps the combo's first position, and a deleted combo re-added moves to the end.
  * Upstream's dev-only `localhost:8000` bindings are left out.
  */
-export function buildHotkeys({mac, safari, windows, linux, chromeos, electron}: Platform): Hotkey[] {
+export function buildHotkeys({mac, safari, windows, linux, chromeos, electron}: Platform): Hotkey[]
+{
 	const keys = new Map<string, string>();
-	const bind = (combo: string, command: string): void => {
+	const bind = (combo: string, command: string): void =>
+	{
 		keys.set(combo, command);
 	};
-	const byPlatform = (macCombo: string, otherCombo: string, command: string): void => {
+	const byPlatform = (macCombo: string, otherCombo: string, command: string): void =>
+	{
 		bind(mac ? macCombo : otherCombo, command);
 	};
 
@@ -34,7 +38,8 @@ export function buildHotkeys({mac, safari, windows, linux, chromeos, electron}: 
 	byPlatform("meta+shift+d", "alt+shift+d", "duplicate");
 	byPlatform("meta+shift+m", "alt+shift+m", "mirror");
 	byPlatform("meta+shift+l", "alt+shift+l", "copy_link");
-	if (mac) {
+	if (mac)
+	{
 		bind("meta+s", "save_and_sync");
 		bind("meta+z", "undo");
 		bind("meta+y", "redo");
@@ -45,7 +50,8 @@ export function buildHotkeys({mac, safari, windows, linux, chromeos, electron}: 
 	bind("ctrl+y", "redo");
 	bind("ctrl+shift+z", "redo");
 
-	if (mac) {
+	if (mac)
+	{
 		bind(safari ? "meta+shift+." : "meta+.", "zoom_in");
 		bind("ctrl+right", "zoom_in");
 		bind("ctrl+.", "zoom_in");
@@ -57,7 +63,9 @@ export function buildHotkeys({mac, safari, windows, linux, chromeos, electron}: 
 		bind("ctrl+,", "zoom_out");
 		bind(safari ? "meta+," : "meta+shift+,", "zoom_out");
 		bind("ctrl+meta+shift+,", "zoom_out");
-	} else {
+	}
+	else
+	{
 		bind("alt+down", "zoom_in");
 		bind("alt+.", "zoom_in");
 		bind("alt+meta+shift+.", "zoom_in");
@@ -69,14 +77,16 @@ export function buildHotkeys({mac, safari, windows, linux, chromeos, electron}: 
 
 	byPlatform("ctrl+t", "alt+t", "navigate_to_today");
 	byPlatform("meta+'", "ctrl+'", "navigate_home");
-	if (mac) {
+	if (mac)
+	{
 		bind("meta+shift+0", "navigate_to_next_item");
 		bind("meta+shift+9", "navigate_to_prev_item");
 	}
 	const siblingItemModifier = windows ? "alt" : "ctrl";
 	bind(`${siblingItemModifier}+shift+0`, "navigate_to_next_item");
 	bind(`${siblingItemModifier}+shift+9`, "navigate_to_prev_item");
-	if (electron) {
+	if (electron)
+	{
 		byPlatform("meta+[", "alt+left", "navigate_backward");
 		byPlatform("meta+]", "alt+right", "navigate_forward");
 		bind("ctrl+[", "navigate_backward");
@@ -87,7 +97,8 @@ export function buildHotkeys({mac, safari, windows, linux, chromeos, electron}: 
 	bind("shift+tab", "outdent");
 	byPlatform("ctrl+shift+right", "alt+shift+right", "indent");
 	byPlatform("ctrl+shift+left", "alt+shift+left", "outdent");
-	if (mac) {
+	if (mac)
+	{
 		bind("meta+shift+up", "move_up");
 		bind("meta+shift+down", "move_down");
 	}
@@ -105,16 +116,19 @@ export function buildHotkeys({mac, safari, windows, linux, chromeos, electron}: 
 	byPlatform("meta+a", "ctrl+a", "select_all");
 	bind("esc", "focus_or_unfocus_search");
 	byPlatform("meta+o", "ctrl+o", "show_or_hide_completed");
-	if (safari) {
+	if (safari)
+	{
 		keys.delete("meta+o");
 		bind("meta+shift+o", "show_or_hide_completed");
 	}
 
 	const paneModifier = mac ? "ctrl" : windows ? "alt" : linux ? "alt+shift" : "";
-	for (let pane = 1; pane <= 8; pane++) {
+	for (let pane = 1; pane <= 8; pane++)
+	{
 		bind(`${paneModifier}+${pane}`, `focus_or_open_pane_${pane}`);
 	}
-	for (let pane = 1; pane <= 8; pane++) {
+	for (let pane = 1; pane <= 8; pane++)
+	{
 		bind(`${mac || linux ? "ctrl" : "alt"}+shift+${pane}`, `open_in_pane_${pane}`);
 	}
 	byPlatform("ctrl+r", "alt+r", "new_pane");
@@ -149,7 +163,8 @@ export function buildHotkeys({mac, safari, windows, linux, chromeos, electron}: 
 		["8", "toggle_bullet"],
 		["9", "toggle_todo"],
 		["0", "toggle_numbered"],
-	] as const) {
+	] as const)
+	{
 		bind(`${blockModifier}+${digit}`, command);
 	}
 	bind("alt+shift+space", "toggle_ai_item");
@@ -162,7 +177,8 @@ export function buildHotkeys({mac, safari, windows, linux, chromeos, electron}: 
 }
 
 /** Upstream's platform flags, read from the browser; all false outside one. */
-export function currentPlatform(): Platform {
+export function currentPlatform(): Platform
+{
 	const userAgent = typeof navigator === "undefined" ? "" : navigator.userAgent;
 	const platform = typeof navigator === "undefined" ? "" : navigator.platform;
 	const chromeos = /CrOS/u.test(userAgent);
@@ -179,7 +195,8 @@ export function currentPlatform(): Platform {
 export const HOTKEYS: readonly Hotkey[] = buildHotkeys(currentPlatform());
 
 /** Upstream's `r92`: base key names by `KeyboardEvent.which`. */
-const KEY_NAMES: Readonly<Record<number, string>> = {
+const KEY_NAMES: Readonly<Record<number, string>> =
+{
 	8: "backspace",
 	9: "tab",
 	13: "return",
@@ -241,7 +258,8 @@ const KEY_NAMES: Readonly<Record<number, string>> = {
 	224: "meta",
 };
 
-export interface KeyComboEvent {
+export interface KeyComboEvent
+{
 	which: number;
 	altKey: boolean;
 	ctrlKey: boolean;
@@ -253,7 +271,8 @@ export interface KeyComboEvent {
  * Upstream's `qY`: the canonical combo for a keydown. Shift never changes the base key, modifiers are prefixed in
  * alt, ctrl, meta, shift order, and a modifier pressed alone is not repeated as its own prefix.
  */
-export function comboFromEvent({which, altKey, ctrlKey, metaKey, shiftKey}: KeyComboEvent): string {
+export function comboFromEvent({which, altKey, ctrlKey, metaKey, shiftKey}: KeyComboEvent): string
+{
 	const named = KEY_NAMES[which];
 	const key = named ?? String.fromCodePoint(which).toLowerCase();
 	const modifiers = (

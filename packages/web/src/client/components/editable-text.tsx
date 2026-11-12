@@ -1,6 +1,7 @@
 import {memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from "react";
 import {useQueryClient} from "@tanstack/react-query";
-import {
+import
+{
 	activePaneView,
 	isModalOpen,
 	outlineActions,
@@ -14,7 +15,8 @@ import {cellBackspace, cellEnter} from "../table-actions.js";
 import {locateCell} from "../table-cache.js";
 import {planCellKey} from "../table.js";
 import {makeTableDeps} from "../hooks/use-table-actions.js";
-import {
+import
+{
 	applySplitPlan,
 	indentChildrenToLoad,
 	isEmptyForReturn,
@@ -28,7 +30,8 @@ import type {MergeRow} from "../tree-ops.js";
 import {planBlockPrefix, prefixedName} from "../block-prefix.js";
 import {sortByPriority} from "../tree-position.js";
 import type {NodeResponse} from "../../node-types.js";
-import {
+import
+{
 	backspaceDeleteTarget,
 	horizontalTarget,
 	isCaretOnBoundaryLine,
@@ -37,7 +40,8 @@ import {
 	planVerticalCross,
 } from "../caret-navigation.js";
 import type {HorizontalDirection, VerticalDirection} from "../caret-navigation.js";
-import {
+import
+{
 	caretTextOffset,
 	placeCaretAtTextOffset,
 	placeSelectionAtTextOffsets,
@@ -52,7 +56,8 @@ import {nodeKeys, patchCachedNode, readChildren, readDetail, readNode} from "../
 import {collectVisibleNodeIds} from "../hooks/use-visible-nodes.js";
 import {currentSelectionView, freshSelection, scrollRowIntoView} from "../hooks/use-selection-keymap.js";
 import {editorSelectAllTakesOver, editorShiftArrowTakesOver} from "../item-selection.js";
-import {
+import
+{
 	fetchChildren,
 	toggleComplete,
 	useCreateNode,
@@ -69,7 +74,8 @@ import {FaIcon} from "./fa-icons.js";
 import {prefetchPickerMonths} from "../hooks/use-calendar-event-days.js";
 import {applyDatePhrase, planDateInsertion, planPillReplacement, replacePill} from "../date-pills.js";
 import {deleteAdjacentPill as deleteAdjacentPillInEditor} from "../pill-delete.js";
-import {
+import
+{
 	isComposingInput,
 	renderCodeBlockHtml,
 	renderEditorHtml,
@@ -89,7 +95,8 @@ import {useColorPopup} from "../hooks/use-color-popup.js";
 import {useInlineFormat} from "../hooks/use-inline-format.js";
 import {useLatestColorClass} from "../latest-color.js";
 import {useNamePaste} from "../hooks/use-name-paste.js";
-import {
+import
+{
 	toolbarFormatAttr,
 	toolbarLayoutCommand,
 	toolbarRefreshKey,
@@ -125,9 +132,11 @@ import {scrollToCenter} from "../scroll-reveal.js";
  * The caret's client rect at the edge of the current selection that the arrow key
  * moves from, or null when it cannot be measured (e.g. a caret in an empty node).
  */
-function caretRect(direction: VerticalDirection): DOMRect | null {
+function caretRect(direction: VerticalDirection): DOMRect | null
+{
 	const selection = globalThis.getSelection();
-	if (!selection || selection.rangeCount === 0) {
+	if (!selection || selection.rangeCount === 0)
+	{
 		return null;
 	}
 	const range = selection.getRangeAt(0).cloneRange();
@@ -139,19 +148,25 @@ function caretRect(direction: VerticalDirection): DOMRect | null {
 /** Stands in for a date pill, one caret unit, in the plain text the tag autocomplete reads. */
 const PILL_UNIT = "\uFFFC";
 
-interface EditableTextProps {
+interface EditableTextProps
+{
 	nodeId: string;
 	initialValue: string;
 	parentId: string | null;
 	priority: number;
 	isEditing: boolean;
-	clickPosition?: {x: number; y: number};
+	clickPosition?:
+	{
+		x: number;
+		y: number;
+	};
 	/** The row's layout mode: a code block shows its name as plain text. */
 	layoutMode?: string | null | undefined;
 }
 
 /** Caret actions named the way `planNoteBoundary` takes them. */
-const CARET_ARROWS: Readonly<Partial<Record<EditorKeyAction, "Up" | "Down" | "Left" | "Right">>> = {
+const CARET_ARROWS: Readonly<Partial<Record<EditorKeyAction, "Up" | "Down" | "Left" | "Right">>> =
+{
 	CARET_UP: "Up",
 	CARET_DOWN: "Down",
 	CARET_LEFT: "Left",
@@ -180,10 +195,12 @@ function EditingText({
 	isEditing,
 	clickPosition,
 	layoutMode,
-}: EditableTextProps) {
+}: EditableTextProps)
+{
 	const contentRef = useRef<HTMLSpanElement>(null);
 	const queryClient = useQueryClient();
-	const {
+	const
+	{
 		stopEditing,
 		resumeEditing,
 		focusNote,
@@ -208,17 +225,26 @@ function EditingText({
 
 	// The HTML as of editing start, held while editing so saves and refetches never rewrite the DOM under the caret.
 	const [editingHtml, setEditingHtml] = useState<string | null>(null);
-	if (isEditing && editingHtml === null) {
+	if (isEditing && editingHtml === null)
+	{
 		const override = outlineActions().editingHtmlOverride;
 		setEditingHtml(override?.id === nodeId ? override.html : initialValue);
-	} else if (!isEditing && editingHtml !== null) {
+	}
+	else if (!isEditing && editingHtml !== null)
+	{
 		setEditingHtml(null);
 	}
 	const storedEditorHtml = editingHtml ?? initialValue;
 	// The override has served this editor; a later editing session must start from the stored name again.
-	useEffect(() => {
-		if (editingHtml !== null && outlineActions().editingHtmlOverride?.id === nodeId) {
-			useOutlineStore.setState({editingHtmlOverride: null});
+	useEffect(() =>
+	{
+		if (editingHtml !== null && outlineActions().editingHtmlOverride?.id === nodeId)
+		{
+			useOutlineStore.setState(
+				{
+					editingHtmlOverride: null,
+				},
+			);
 		}
 	}, [editingHtml, nodeId]);
 	// Pills are atomic in edit mode too; every save path serializes them back to stored `<time>` markup.
@@ -233,33 +259,47 @@ function EditingText({
 	const updateNode = useLatest(updateNodeMutation.mutate);
 	const nameSaver = useMemo(
 		() =>
-			createEditDebouncer({
-				delay: TEXT_SAVE_DEBOUNCE_MS,
-				save: ({after}) => {
-					updateNode.current({nodeId, name: after});
+			createEditDebouncer(
+				{
+					delay: TEXT_SAVE_DEBOUNCE_MS,
+					save: ({after}) =>
+					{
+						updateNode.current(
+							{
+								nodeId,
+								name: after,
+							},
+						);
+					},
 				},
-			}),
+			),
 		[nodeId, updateNode],
 	);
 
 	// Focus and position cursor when entering edit mode
-	useEffect(() => {
-		if (isEditing && contentRef.current) {
+	useEffect(() =>
+	{
+		if (isEditing && contentRef.current)
+		{
 			prefetchPickerMonths(queryClient);
 			const centers = focusCenters(nodeId);
-			contentRef.current.focus({
-				preventScroll:
-					!focusScrolls(nodeId) ||
-					centers ||
-					focusKeepsScroll(contentRef.current.getBoundingClientRect(), window.innerHeight),
-			});
-			if (centers) {
+			contentRef.current.focus(
+				{
+					preventScroll:
+						!focusScrolls(nodeId) ||
+						centers ||
+						focusKeepsScroll(contentRef.current.getBoundingClientRect(), window.innerHeight),
+				},
+			);
+			if (centers)
+			{
 				scrollToCenter(contentRef.current);
 			}
 			nameSaver.reset(serializeEditorHtml(latestRenderName.current(storedEditorHtml)));
 
 			const {editingId, editingCaretOffset, editingCaretEnd, editingCaretReversed} = useOutlineStore.getState();
-			if (editingId === nodeId && editingCaretOffset !== null) {
+			if (editingId === nodeId && editingCaretOffset !== null)
+			{
 				placeSelectionAtTextOffsets(
 					contentRef.current,
 					editingCaretOffset,
@@ -270,9 +310,11 @@ function EditingText({
 			}
 
 			// If we have a click position, use caretPositionFromPoint to place the cursor there
-			if (clickPosition && "caretPositionFromPoint" in document) {
+			if (clickPosition && "caretPositionFromPoint" in document)
+			{
 				const position = document.caretPositionFromPoint(clickPosition.x, clickPosition.y);
-				if (position && contentRef.current.contains(position.offsetNode)) {
+				if (position && contentRef.current.contains(position.offsetNode))
+				{
 					const range = document.createRange();
 					range.setStart(position.offsetNode, position.offset);
 					range.collapse(true);
@@ -293,8 +335,10 @@ function EditingText({
 	}, [isEditing, storedEditorHtml, clickPosition, nodeId, nameSaver, queryClient, latestRenderName]);
 
 	/** Save the edited text if it changed, keeping the caret (⌘S); returns false with no editor. */
-	const saveInPlace = useCallback((): boolean => {
-		if (!contentRef.current) {
+	const saveInPlace = useCallback((): boolean =>
+	{
+		if (!contentRef.current)
+		{
 			return false;
 		}
 
@@ -304,13 +348,16 @@ function EditingText({
 		return true;
 	}, [nameSaver]);
 
-	useEffect(() => {
+	useEffect(() =>
+	{
 		const unregister = isEditing
-			? registerEditFlush(() => {
+			? registerEditFlush(() =>
+				{
 					saveInPlace();
 				})
 			: undefined;
-		return () => {
+		return () =>
+		{
 			unregister?.();
 			// Leaving the row without a blur commit (a remount or a structural move) still saves the last pause.
 			nameSaver.flush();
@@ -319,30 +366,56 @@ function EditingText({
 
 	// Tab into a collapsed, never-opened previous sibling must first load its children; load them while the row is
 	// edited, so Tab moves at once instead of after a round trip.
-	useEffect(() => {
+	useEffect(() =>
+	{
 		const target = isEditing
-			? indentChildrenToLoad(queryClient, {id: nodeId, parent_id: parentId, priority})
+			? indentChildrenToLoad(
+					queryClient,
+					{
+						id: nodeId,
+						parent_id: parentId,
+						priority,
+					},
+				)
 			: null;
-		if (target !== null) {
+		if (target !== null)
+		{
 			// A failed load is retried by the Tab that needs it.
 			queryClient
-				.query({
-					queryKey: nodeKeys.children(target),
-					queryFn: async () => fetchChildren(target),
-					staleTime: "static",
-				})
+				.query(
+					{
+						queryKey: nodeKeys.children(target),
+						queryFn: async () => fetchChildren(target),
+						staleTime: "static",
+					},
+				)
 				.catch(() => {});
 		}
 	}, [isEditing, nodeId, parentId, priority, queryClient]);
 
 	const insertDate = useCallback(
-		(attrs: TimeAttrs, offset: number, replaceEnd?: number, addSpaceBefore?: boolean) => {
+		(attrs: TimeAttrs, offset: number, replaceEnd?: number, addSpaceBefore?: boolean) =>
+		{
 			const content = contentRef.current;
-			if (content) {
+			if (content)
+			{
 				const html = serializeEditorHtml(content.innerHTML);
 				const {before, after} =
-					replaceEnd === undefined ? {before: html, after: ""} : splitHtml(html, offset, replaceEnd);
-				const plan = planDateInsertion(before + after, offset, attrs, {addSpaceBefore});
+					replaceEnd === undefined
+						?
+							{
+								before: html,
+								after: "",
+							}
+						: splitHtml(html, offset, replaceEnd);
+				const plan = planDateInsertion(
+					before + after,
+					offset,
+					attrs,
+					{
+						addSpaceBefore,
+					},
+				);
 				content.focus();
 				content.innerHTML = renderName(plan.html);
 				placeCaretAtTextOffset(content, plan.caretOffset);
@@ -354,9 +427,11 @@ function EditingText({
 	);
 
 	const cancelDate = useCallback(
-		(offset: number) => {
+		(offset: number) =>
+		{
 			const content = contentRef.current;
-			if (content) {
+			if (content)
+			{
 				content.focus();
 				placeCaretAtTextOffset(content, offset);
 			}
@@ -366,102 +441,138 @@ function EditingText({
 	);
 
 	// `!!` opens the date picker; holding editing keeps the input's focus from committing this edit.
-	const datePicker = useBangDatePicker({
-		editorRef: contentRef,
-		dateSettings,
-		onOpen: holdEditing,
-		onInsert: insertDate,
-		onCancel: cancelDate,
-	});
+	const datePicker = useBangDatePicker(
+		{
+			editorRef: contentRef,
+			dateSettings,
+			onOpen: holdEditing,
+			onInsert: insertDate,
+			onCancel: cancelDate,
+		},
+	);
 	const {handleInput: handleDateTrigger, openForPhrase, openAtCaret, isOpen: isDatePickerOpen} = datePicker;
 
 	// "Add date" from the item menu focuses this name at its end, then opens the picker there.
 	const datePickerRequestId = useOutlineStore((state) => state.datePickerRequest?.id);
-	useEffect(() => {
-		if (isEditing && datePickerRequestId === nodeId && document.activeElement === contentRef.current) {
+	useEffect(() =>
+	{
+		if (isEditing && datePickerRequestId === nodeId && document.activeElement === contentRef.current)
+		{
 			const anchor = useOutlineStore.getState().datePickerAnchor;
 			const request = useOutlineStore.getState().takeDatePickerRequest(nodeId);
-			if (request !== null) {
+			if (request !== null)
+			{
 				openAtCaret(anchor, request);
 			}
 		}
 	}, [isEditing, datePickerRequestId, nodeId, openAtCaret]);
 
 	// Typing a natural-language date ("tomorrow") offers a flyout; Tab or a click converts it to a pill.
-	const dateAutocomplete = useDateAutocomplete({
-		editorRef: contentRef,
-		dateSettings,
-		isBlocked: isDatePickerOpen,
-		onApply: (phrase) => {
-			const content = contentRef.current;
-			if (content) {
-				const plan = applyDatePhrase(serializeEditorHtml(content.innerHTML), phrase);
-				content.innerHTML = renderName(plan.html);
-				placeCaretAtTextOffset(content, plan.caretOffset);
-				nameSaver.saveNow(plan.html);
-			}
+	const dateAutocomplete = useDateAutocomplete(
+		{
+			editorRef: contentRef,
+			dateSettings,
+			isBlocked: isDatePickerOpen,
+			onApply: (phrase) =>
+			{
+				const content = contentRef.current;
+				if (content)
+				{
+					const plan = applyDatePhrase(serializeEditorHtml(content.innerHTML), phrase);
+					content.innerHTML = renderName(plan.html);
+					placeCaretAtTextOffset(content, plan.caretOffset);
+					nameSaver.saveNow(plan.html);
+				}
+			},
+			onOpenPicker: (phrase, position) =>
+			{
+				openForPhrase(
+					{
+						offset: phrase.start,
+						replaceEnd: phrase.end,
+						position,
+						term: formatPillLabel(
+							phrase.attrs,
+							{
+								dateFormat: dateSettings.dateFormat,
+							},
+						),
+						isRange: phrase.attrs.endYear !== undefined,
+					},
+				);
+			},
+			onOpenSettings: () =>
+			{
+				openSettings("Dates");
+			},
 		},
-		onOpenPicker: (phrase, position) => {
-			openForPhrase({
-				offset: phrase.start,
-				replaceEnd: phrase.end,
-				position,
-				term: formatPillLabel(phrase.attrs, {dateFormat: dateSettings.dateFormat}),
-				isRange: phrase.attrs.endYear !== undefined,
-			});
-		},
-		onOpenSettings: () => {
-			openSettings("Dates");
-		},
-	});
+	);
 	const {handleInput: handleDateAutocomplete, hide: hideDateAutocomplete} = dateAutocomplete;
 
 	// A plain click on a pill edits or removes just that pill. At rest it saves the stored name; while editing,
 	// holding editing keeps the picker's focus from committing, and the change lands in the live editor.
 	const pillCaret = useRef(0);
-	const pillPicker = usePillDatePicker({
-		dateSettings,
-		onChange: (pillIndex, attrs) => {
-			const content = contentRef.current;
-			if (content === null) {
-				updateNodeMutation.mutate({nodeId, name: replacePill(initialValue, pillIndex, attrs)});
-				return;
-			}
-			const plan = planPillReplacement(serializeEditorHtml(content.innerHTML), pillIndex, attrs);
-			content.focus();
-			content.innerHTML = renderName(plan.html);
-			placeCaretAtTextOffset(content, plan.caretOffset);
-			nameSaver.saveNow(plan.html);
-			releaseEditing();
-		},
-		onDismiss: () => {
-			const content = contentRef.current;
-			if (content !== null) {
+	const pillPicker = usePillDatePicker(
+		{
+			dateSettings,
+			onChange: (pillIndex, attrs) =>
+			{
+				const content = contentRef.current;
+				if (content === null)
+				{
+					updateNodeMutation.mutate(
+						{
+							nodeId,
+							name: replacePill(initialValue, pillIndex, attrs),
+						},
+					);
+					return;
+				}
+				const plan = planPillReplacement(serializeEditorHtml(content.innerHTML), pillIndex, attrs);
 				content.focus();
-				placeCaretAtTextOffset(content, pillCaret.current);
+				content.innerHTML = renderName(plan.html);
+				placeCaretAtTextOffset(content, plan.caretOffset);
+				nameSaver.saveNow(plan.html);
 				releaseEditing();
-			}
+			},
+			onDismiss: () =>
+			{
+				const content = contentRef.current;
+				if (content !== null)
+				{
+					content.focus();
+					placeCaretAtTextOffset(content, pillCaret.current);
+					releaseEditing();
+				}
+			},
 		},
-	});
+	);
 	const {open: openPillPicker} = pillPicker;
-	const tagPointer = useTagPointer({
-		getHtml: () => (contentRef.current ? serializeEditorHtml(contentRef.current.innerHTML) : ""),
-		save: (html, caret) => {
-			const content = contentRef.current;
-			if (content) {
-				content.innerHTML = renderName(html);
-				placeCaretAtTextOffset(content, caret);
-				nameSaver.saveNow(html);
-			}
+	const tagPointer = useTagPointer(
+		{
+			getHtml: () => (contentRef.current ? serializeEditorHtml(contentRef.current.innerHTML) : ""),
+			save: (html, caret) =>
+			{
+				const content = contentRef.current;
+				if (content)
+				{
+					content.innerHTML = renderName(html);
+					placeCaretAtTextOffset(content, caret);
+					nameSaver.saveNow(html);
+				}
+			},
 		},
-	});
+	);
 	const handleEditingClick = useCallback(
-		(event: React.MouseEvent<HTMLSpanElement>) => {
-			if (tagPointer.onClick(event)) {
+		(event: React.MouseEvent<HTMLSpanElement>) =>
+		{
+			if (tagPointer.onClick(event))
+			{
 				return;
 			}
 			const clicked = clickedPill(event, event.currentTarget);
-			if (clicked === null) {
+			if (clicked === null)
+			{
 				return;
 			}
 			event.preventDefault();
@@ -479,9 +590,11 @@ function EditingText({
 		[],
 	);
 	const acceptTag = useCallback<TagAcceptHandler>(
-		(edit) => {
+		(edit) =>
+		{
 			const content = contentRef.current;
-			if (content) {
+			if (content)
+			{
 				const html = spliceAcceptedTag(serializeEditorHtml(content.innerHTML), edit);
 				content.innerHTML = renderName(html);
 				placeCaretAtTextOffset(content, edit.caret);
@@ -490,14 +603,17 @@ function EditingText({
 		},
 		[renderName, nameSaver],
 	);
-	const tagAutocomplete = useTagAutocomplete({
-		editorRef: contentRef,
-		nodeId,
-		field: "name",
-		readPlain: readNamePlain,
-		onAccept: acceptTag,
-	});
-	const {
+	const tagAutocomplete = useTagAutocomplete(
+		{
+			editorRef: contentRef,
+			nodeId,
+			field: "name",
+			readPlain: readNamePlain,
+			onAccept: acceptTag,
+		},
+	);
+	const
+	{
 		handleInput: handleTagAutocomplete,
 		handleKeyDown: handleTagAutocompleteKey,
 		detach: detachTagAutocomplete,
@@ -505,47 +621,58 @@ function EditingText({
 
 	// ⌘B/⌘I/⌘U/⇧⌘X/⇧⌘C toggle the selection's format, or make it pending for the next typed character.
 	const readNameHtml = useCallback(() => serializeEditorHtml(contentRef.current?.innerHTML ?? ""), []);
-	const {applyInlineToggle, applyLatestColor, applyColorToggle} = useInlineFormat({
-		editorRef: contentRef,
-		active: isEditing,
-		read: readNameHtml,
-		render: (html) => renderName(html),
-		onChange: (html) => {
-			nameSaver.change(html);
+	const {applyInlineToggle, applyLatestColor, applyColorToggle} = useInlineFormat(
+		{
+			editorRef: contentRef,
+			active: isEditing,
+			read: readNameHtml,
+			render: (html) => renderName(html),
+			onChange: (html) =>
+			{
+				nameSaver.change(html);
+			},
 		},
-	});
+	);
 
 	// Upstream's floating format toolbar over a stretched selection in the edited name.
-	const {
+	const
+	{
 		view: toolbarView,
 		refresh: refreshToolbar,
 		hide: hideToolbar,
-	} = useSelectionToolbar({
-		editorRef: contentRef,
-		active: isEditing,
-		read: readNameHtml,
-		modalOpen: isModalOpen,
-	});
+	} = useSelectionToolbar(
+		{
+			editorRef: contentRef,
+			active: isEditing,
+			read: readNameHtml,
+			modalOpen: isModalOpen,
+		},
+	);
 	const lastColorClass = useLatestColorClass();
-	const {
+	const
+	{
 		popup: colorPopup,
 		openPalette,
 		applyLatestOrOpen,
-	} = useColorPopup({
-		editorRef: contentRef,
-		read: readNameHtml,
-		applyColorToggle,
-		applyLatestColor,
-		hideToolbar,
-		refreshToolbar,
-	});
+	} = useColorPopup(
+		{
+			editorRef: contentRef,
+			read: readNameHtml,
+			applyColorToggle,
+			applyLatestColor,
+			hideToolbar,
+			refreshToolbar,
+		},
+	);
 
 	// An h1-p toggle re-renders the row at a new text size: re-measure the bar once that has landed.
 	const rowLayoutMode = readNode(queryClient, nodeId)?.data.layoutMode;
 	const refreshKey = toolbarRefreshKey(rowLayoutMode);
 	const seenRefreshKey = useRef(refreshKey);
-	useLayoutEffect(() => {
-		if (seenRefreshKey.current !== refreshKey) {
+	useLayoutEffect(() =>
+	{
+		if (seenRefreshKey.current !== refreshKey)
+		{
 			seenRefreshKey.current = refreshKey;
 			refreshToolbar();
 		}
@@ -553,31 +680,45 @@ function EditingText({
 
 	/** A toolbar type button: commit the text, then toggle this row's layout in one undo step, keeping the selection. */
 	const toggleLayoutFromToolbar = useCallback(
-		(command: LayoutHotkeyCommand) => {
+		(command: LayoutHotkeyCommand) =>
+		{
 			const content = contentRef.current;
 			const node = readNode(queryClient, nodeId);
-			if (!content || node === undefined) {
+			if (!content || node === undefined)
+			{
 				return;
 			}
 			const name = serializeEditorHtml(content.innerHTML);
 			const sel = selectionTextOffsets(content);
 			nameSaver.saveNow(name);
-			const plan = planLayoutHotkey(command, [node], {nodeId, name});
+			const plan = planLayoutHotkey(
+				command,
+				[node],
+				{
+					nodeId,
+					name,
+				},
+			);
 			const renamed = plan.updates.find((update) => update.nodeId === nodeId)?.name;
-			if (renamed !== undefined && renamed !== name) {
+			if (renamed !== undefined && renamed !== name)
+			{
 				nameSaver.reset(renamed);
 				content.innerHTML = renderName(renamed);
 				const length = textUnitLength(content);
 				placeSelectionAtTextOffsets(content, Math.min(sel.start, length), Math.min(sel.end, length));
 			}
-			void runInUndoBatch(captureOutlineView, () => {
-				for (const update of plan.updates) {
+			void runInUndoBatch(captureOutlineView, () =>
+			{
+				for (const update of plan.updates)
+				{
 					updateNodeMutation.mutate(update);
 				}
-				for (const deleteId of plan.deletes) {
+				for (const deleteId of plan.deletes)
+				{
 					deleteNodeMutation.mutate(deleteId);
 				}
-				for (const request of lineSplitRequests(queryClient, plan.creates)) {
+				for (const request of lineSplitRequests(queryClient, plan.creates))
+				{
 					createNodeMutation.mutate(request);
 				}
 			});
@@ -586,21 +727,32 @@ function EditingText({
 	);
 
 	const handleToolbarAction = useCallback(
-		(action: SelectionToolbarAction) => {
+		(action: SelectionToolbarAction) =>
+		{
 			const attr = toolbarFormatAttr(action);
 			const layout = toolbarLayoutCommand(action);
-			if (attr !== null) {
+			if (attr !== null)
+			{
 				applyInlineToggle(attr);
-			} else if (layout !== null) {
+			}
+			else if (layout !== null)
+			{
 				toggleLayoutFromToolbar(layout);
-			} else if (action === "link") {
+			}
+			else if (action === "link")
+			{
 				const target = toolbarLinkTarget(nodeId);
-				if (target !== null) {
+				if (target !== null)
+				{
 					openLinkPopup(target);
 				}
-			} else if (action === "latest-color") {
+			}
+			else if (action === "latest-color")
+			{
 				applyLatestOrOpen();
-			} else if (action === "show-palette") {
+			}
+			else if (action === "show-palette")
+			{
 				openPalette();
 			}
 		},
@@ -608,28 +760,47 @@ function EditingText({
 	);
 
 	// Typing a first or standalone "/" opens the slash command menu under a chip; it never schedules a save while open.
-	const changeName = useCallback(() => {
-		if (contentRef.current) {
+	const changeName = useCallback(() =>
+	{
+		if (contentRef.current)
+		{
 			nameSaver.change(
 				stripMirrorChip(stripMentionChip(stripSlashChip(serializeEditorHtml(contentRef.current.innerHTML)))),
 			);
 		}
 	}, [nameSaver]);
-	const saveName = useCallback(() => {
+	const saveName = useCallback(() =>
+	{
 		saveInPlace();
 	}, [saveInPlace]);
-	const slashMenu = useSlashMenu({editorRef: contentRef, nodeId, onChange: changeName, onSave: saveName});
+	const slashMenu = useSlashMenu(
+		{
+			editorRef: contentRef,
+			nodeId,
+			onChange: changeName,
+			onSave: saveName,
+		},
+	);
 	const slashDiscovered = useSlashDiscovered();
 	// Typing a spaced "@" opens the mention popup (people and @tags) under a chip, like the slash menu.
-	const acceptMention = useCallback(() => {
+	const acceptMention = useCallback(() =>
+	{
 		const content = contentRef.current;
-		if (content !== null) {
+		if (content !== null)
+		{
 			retagEditor(content, renderName(serializeEditorHtml(content.innerHTML)));
 		}
 		saveInPlace();
 	}, [renderName, saveInPlace]);
-	const mentionMenu = useMentionMenu({editorRef: contentRef, onChange: changeName, onAccept: acceptMention});
-	const {
+	const mentionMenu = useMentionMenu(
+		{
+			editorRef: contentRef,
+			onChange: changeName,
+			onAccept: acceptMention,
+		},
+	);
+	const
+	{
 		handleInput: handleMentionInput,
 		handleKeyDown: handleMentionKey,
 		detach: detachMentionMenu,
@@ -637,14 +808,29 @@ function EditingText({
 	} = mentionMenu;
 	// Typing "((" opens the mirror popup; choosing a location puts a mirror where the "((...))" was.
 	const resetSavedName = useCallback(
-		(name: string) => {
+		(name: string) =>
+		{
 			nameSaver.reset(name);
 		},
 		[nameSaver],
 	);
-	const acceptMirrorPick = useInlineMirrorPick({nodeId, parentId, contentRef, resetSaved: resetSavedName});
-	const mirrorMenu = useMirrorMenu({editorRef: contentRef, onChange: changeName, onPick: acceptMirrorPick});
-	const {
+	const acceptMirrorPick = useInlineMirrorPick(
+		{
+			nodeId,
+			parentId,
+			contentRef,
+			resetSaved: resetSavedName,
+		},
+	);
+	const mirrorMenu = useMirrorMenu(
+		{
+			editorRef: contentRef,
+			onChange: changeName,
+			onPick: acceptMirrorPick,
+		},
+	);
+	const
+	{
 		handleInput: handleMirrorInput,
 		handleKeyDown: handleMirrorKey,
 		detach: detachMirrorMenu,
@@ -652,39 +838,54 @@ function EditingText({
 	} = mirrorMenu;
 	// Typing "[[" closes it with "]]" and, while the caret is inside, offers items to link to.
 	const applyLink = useCallback(
-		(html: string, caret: number) => {
+		(html: string, caret: number) =>
+		{
 			const content = contentRef.current;
-			if (content === null) {
+			if (content === null)
+			{
 				return;
 			}
 			content.innerHTML = renderName(html);
 			placeCaretAtTextOffset(content, caret);
-			void runInUndoBatch(captureOutlineView, () => {
+			void runInUndoBatch(captureOutlineView, () =>
+			{
 				saveInPlace();
 			});
 		},
 		[renderName, saveInPlace],
 	);
-	const linkPopup = useInlineLinkPopup({nodeId, contentRef, dateSettings, account, applyLink});
+	const linkPopup = useInlineLinkPopup(
+		{
+			nodeId,
+			contentRef,
+			dateSettings,
+			account,
+			applyLink,
+		},
+	);
 	const {handleInput: handleLinkInput, handleKeyDown: handleLinkKey, handleBlur: handleLinkBlur} = linkPopup;
-	const {
+	const
+	{
 		handleInput: handleSlashInput,
 		handleKeyDown: handleSlashKey,
 		detach: detachSlashMenu,
 		isOpen: isSlashMenuOpen,
 	} = slashMenu;
 
-	const handlePaste = useNamePaste({
-		nodeId,
-		parentId,
-		contentRef,
-		dateSettings,
-		account,
-		resetSaved: (name) => {
-			nameSaver.reset(name);
+	const handlePaste = useNamePaste(
+		{
+			nodeId,
+			parentId,
+			contentRef,
+			dateSettings,
+			account,
+			resetSaved: (name) =>
+			{
+				nameSaver.reset(name);
+			},
+			changed: changeName,
 		},
-		changed: changeName,
-	});
+	);
 
 	/**
 	 * Upstream's markdown-style block prefixes: a prefix typed at the very start of the name (`[] `, `# `, `> `, ...)
@@ -692,18 +893,22 @@ function EditingText({
 	 * undo step. Returns true when the input was handled.
 	 */
 	const applyBlockPrefix = useCallback(
-		(content: HTMLElement): boolean => {
+		(content: HTMLElement): boolean =>
+		{
 			const node = readNode(queryClient, nodeId);
 			const html = serializeEditorHtml(content.innerHTML);
 			const text = plainText(html, PILL_UNIT);
 			const offset = caretTextOffset(content);
 			const currentLayoutMode = node?.data.layoutMode ?? null;
-			const plan = planBlockPrefix({
-				before: text.slice(0, offset),
-				after: text.slice(offset),
-				layoutMode: currentLayoutMode,
-			});
-			if (plan === null) {
+			const plan = planBlockPrefix(
+				{
+					before: text.slice(0, offset),
+					after: text.slice(offset),
+					layoutMode: currentLayoutMode,
+				},
+			);
+			if (plan === null)
+			{
 				return false;
 			}
 			const name = prefixedName(html, plan, PILL_UNIT);
@@ -714,29 +919,55 @@ function EditingText({
 			const slot = sortByPriority(readChildren(queryClient, parentId) ?? []).findIndex(
 				(sibling) => sibling.id === nodeId,
 			);
-			void runInUndoBatch(captureOutlineView, () => {
+			void runInUndoBatch(captureOutlineView, () =>
+			{
 				updateNodeMutation.mutate(
 					{
 						nodeId,
 						name,
-						...(plan.kind === "divider-above" ? {} : {layoutMode: plan.layoutMode}),
+						...(plan.kind === "divider-above"
+							? {}
+							:
+								{
+									layoutMode: plan.layoutMode,
+								}),
 						...(plan.kind === "clear" && plan.layoutMode === "divider" && (node?.note ?? "") !== ""
-							? {note: ""}
+							?
+								{
+									note: "",
+								}
 							: {}),
-						...(plan.numberedStart === undefined ? {} : {numberedStart: plan.numberedStart}),
+						...(plan.numberedStart === undefined
+							? {}
+							:
+								{
+									numberedStart: plan.numberedStart,
+								}),
 					},
-					{onSettled: releaseEditing},
+					{
+						onSettled: releaseEditing,
+					},
 				);
-				if (plan.complete && node?.completedAt === null) {
-					toggleComplete(queryClient, {nodeId, isCurrentlyCompleted: false});
+				if (plan.complete && node?.completedAt === null)
+				{
+					toggleComplete(
+						queryClient,
+						{
+							nodeId,
+							isCurrentlyCompleted: false,
+						},
+					);
 				}
-				if (plan.kind === "divider-above") {
-					createNodeMutation.mutate({
-						parent_id: parentId ?? undefined,
-						index: Math.max(slot, 0),
-						name: "",
-						layoutMode: "divider",
-					});
+				if (plan.kind === "divider-above")
+				{
+					createNodeMutation.mutate(
+						{
+							parent_id: parentId ?? undefined,
+							index: Math.max(slot, 0),
+							name: "",
+							layoutMode: "divider",
+						},
+					);
 				}
 			});
 			return true;
@@ -755,7 +986,8 @@ function EditingText({
 	);
 
 	const handleInput = useCallback(
-		(event: React.SyntheticEvent<HTMLSpanElement>) => {
+		(event: React.SyntheticEvent<HTMLSpanElement>) =>
+		{
 			const content = contentRef.current;
 			if (
 				content !== null &&
@@ -764,67 +996,100 @@ function EditingText({
 				!isMentionMenuOpen() &&
 				!isMirrorMenuOpen() &&
 				applyBlockPrefix(content)
-			) {
+			)
+			{
 				return;
 			}
 			// Upstream's `code-block.disable-inline-popups`: a code block is plain text, so no tag, mention, date, slash or
 			// inline-code rule runs in it.
-			if (codeBlock) {
+			if (codeBlock)
+			{
 				changeName();
 				return;
 			}
 			// Upstream's inline-code input rule: a closing backtick or a double space typed at the end of code.
 			if (
 				content !== null &&
-				applyInlineCodeInput(content, event.nativeEvent, {
-					read: readNameHtml,
-					render: (html) => renderName(html),
-				}) !== null
-			) {
+				applyInlineCodeInput(
+					content,
+					event.nativeEvent,
+					{
+						read: readNameHtml,
+						render: (html) => renderName(html),
+					},
+				) !== null
+			)
+			{
 				changeName();
 				return;
 			}
 			// The mention chip is handled first: a chip that is still armed keeps its text out of the tag re-render.
 			const mention = isSlashMenuOpen()
-				? {armedBefore: false, armedAfter: false}
+				?
+					{
+						armedBefore: false,
+						armedAfter: false,
+					}
 				: handleMentionInput(event.nativeEvent);
-			if (content !== null && !mention.armedAfter && !isComposingInput(event.nativeEvent)) {
+			if (content !== null && !mention.armedAfter && !isComposingInput(event.nativeEvent))
+			{
 				retagEditor(content, renderName(serializeEditorHtml(content.innerHTML)));
 			}
 			// Upstream's typed-input pipe: an armed chip swallows the input, including the one that disarms it.
 			const slash =
 				mention.armedBefore || mention.armedAfter
-					? {armedBefore: false, armedAfter: false}
+					?
+						{
+							armedBefore: false,
+							armedAfter: false,
+						}
 					: handleSlashInput(event.nativeEvent);
 			const mirror =
 				mention.armedBefore || mention.armedAfter || slash.armedBefore || slash.armedAfter
-					? {armedBefore: false, armedAfter: false}
+					?
+						{
+							armedBefore: false,
+							armedAfter: false,
+						}
 					: handleMirrorInput(event.nativeEvent);
 			handleLinkInput(event.nativeEvent);
 			const armedBefore = mention.armedBefore || slash.armedBefore || mirror.armedBefore;
 			const armedAfter = mention.armedAfter || slash.armedAfter || mirror.armedAfter;
-			const chipRoute = routeTypedInput({
-				chipArmedBefore: armedBefore,
-				chipArmedAfter: armedAfter,
-				datePopupOpened: false,
-			});
+			const chipRoute = routeTypedInput(
+				{
+					chipArmedBefore: armedBefore,
+					chipArmedAfter: armedAfter,
+					datePopupOpened: false,
+				},
+			);
 			let datePopupOpened = false;
-			if (chipRoute.dateTrigger) {
+			if (chipRoute.dateTrigger)
+			{
 				const wasOpen = isDatePickerOpen();
 				handleDateTrigger(event.nativeEvent);
 				datePopupOpened = !wasOpen && isDatePickerOpen();
 			}
-			const route = routeTypedInput({chipArmedBefore: armedBefore, chipArmedAfter: armedAfter, datePopupOpened});
-			if (route.dateAutocomplete) {
+			const route = routeTypedInput(
+				{
+					chipArmedBefore: armedBefore,
+					chipArmedAfter: armedAfter,
+					datePopupOpened,
+				},
+			);
+			if (route.dateAutocomplete)
+			{
 				handleDateAutocomplete();
 			}
-			if (route.detachTags) {
+			if (route.detachTags)
+			{
 				detachTagAutocomplete();
 			}
-			if (route.tagAutocomplete) {
+			if (route.tagAutocomplete)
+			{
 				handleTagAutocomplete();
 			}
-			if (route.save) {
+			if (route.save)
+			{
 				changeName();
 			}
 		},
@@ -849,13 +1114,16 @@ function EditingText({
 		],
 	);
 
-	const saveChanges = useCallback(() => {
-		if (!saveInPlace()) {
+	const saveChanges = useCallback(() =>
+	{
+		if (!saveInPlace())
+		{
 			return;
 		}
 
 		// A vertical move may already have handed editing to another node.
-		if (useOutlineStore.getState().editingId === nodeId) {
+		if (useOutlineStore.getState().editingId === nodeId)
+		{
 			stopEditing();
 		}
 	}, [nodeId, saveInPlace, stopEditing]);
@@ -866,13 +1134,16 @@ function EditingText({
 	 * Returns false when the caret should move within this node's text instead.
 	 */
 	const moveToAdjacentNode = useCallback(
-		(direction: VerticalDirection): boolean => {
+		(direction: VerticalDirection): boolean =>
+		{
 			const content = contentRef.current;
-			if (!content) {
+			if (!content)
+			{
 				return false;
 			}
 			const caret = caretRect(direction);
-			if (!isCaretOnBoundaryLine(direction, caret, content.getBoundingClientRect())) {
+			if (!isCaretOnBoundaryLine(direction, caret, content.getBoundingClientRect()))
+			{
 				return false;
 			}
 			const {zoomedNodeId, expandedIds, showCompleted, animatingCompletionIds} = activePaneView();
@@ -881,7 +1152,8 @@ function EditingText({
 				collectVisibleNodeIds(queryClient, zoomedNodeId, expandedIds, showCompleted, animatingCompletionIds),
 			);
 			const plan = planVerticalCross(visibleIds, nodeId, direction);
-			if (plan.kind === "move") {
+			if (plan.kind === "move")
+			{
 				saveChanges();
 				resumeEditing(plan.nodeId, plan.caretOffset);
 			}
@@ -897,13 +1169,16 @@ function EditingText({
 	 * neighbor in that direction).
 	 */
 	const crossRowHorizontally = useCallback(
-		(direction: HorizontalDirection): boolean => {
+		(direction: HorizontalDirection): boolean =>
+		{
 			const content = contentRef.current;
-			if (!content || globalThis.getSelection()?.isCollapsed !== true) {
+			if (!content || globalThis.getSelection()?.isCollapsed !== true)
+			{
 				return false;
 			}
 			const edgeOffset = direction === "left" ? 0 : textUnitLength(content);
-			if (caretTextOffset(content) !== edgeOffset) {
+			if (caretTextOffset(content) !== edgeOffset)
+			{
 				return false;
 			}
 			const {zoomedNodeId, expandedIds, showCompleted, animatingCompletionIds} = activePaneView();
@@ -912,7 +1187,8 @@ function EditingText({
 				collectVisibleNodeIds(queryClient, zoomedNodeId, expandedIds, showCompleted, animatingCompletionIds),
 			);
 			const target = horizontalTarget(visibleIds, nodeId, direction);
-			if (target === null) {
+			if (target === null)
+			{
 				return false;
 			}
 			saveChanges();
@@ -928,10 +1204,12 @@ function EditingText({
 	 * Left/Right. Returns false when the key should move the caret elsewhere.
 	 */
 	const enterRootNote = useCallback(
-		(key: "Up" | "Down" | "Left" | "Right"): boolean => {
+		(key: "Up" | "Down" | "Left" | "Right"): boolean =>
+		{
 			const content = contentRef.current;
 			const {zoomedNodeId, expandedIds, showCompleted, animatingCompletionIds} = activePaneView();
-			if (!content || zoomedNodeId === null || globalThis.getSelection()?.isCollapsed !== true) {
+			if (!content || zoomedNodeId === null || globalThis.getSelection()?.isCollapsed !== true)
+			{
 				return false;
 			}
 			const rootNoted = Boolean(readDetail(queryClient, zoomedNodeId)?.note);
@@ -943,9 +1221,20 @@ function EditingText({
 				? isCaretOnBoundaryLine(direction, caretRect(direction), content.getBoundingClientRect())
 				: offset === (forward ? textUnitLength(content) : 0);
 			let plan: ReturnType<typeof planNoteBoundary> = null;
-			if (nodeId === zoomedNodeId) {
-				plan = atEdge ? planNoteBoundary({from: "rootTitleEnd", key, rootNoted}) : null;
-			} else {
+			if (nodeId === zoomedNodeId)
+			{
+				plan = atEdge
+					? planNoteBoundary(
+							{
+								from: "rootTitleEnd",
+								key,
+								rootNoted,
+							},
+						)
+					: null;
+			}
+			else
+			{
 				const [firstChild] = collectVisibleNodeIds(
 					queryClient,
 					zoomedNodeId,
@@ -953,11 +1242,20 @@ function EditingText({
 					showCompleted,
 					animatingCompletionIds,
 				);
-				if (firstChild === nodeId) {
-					plan = planNoteBoundary({from: "firstChildName", key, caret: atEdge ? 0 : offset || 1, rootNoted});
+				if (firstChild === nodeId)
+				{
+					plan = planNoteBoundary(
+						{
+							from: "firstChildName",
+							key,
+							caret: atEdge ? 0 : offset || 1,
+							rootNoted,
+						},
+					);
 				}
 			}
-			if (plan === null) {
+			if (plan === null)
+			{
 				return false;
 			}
 			saveChanges();
@@ -972,9 +1270,11 @@ function EditingText({
 	 * selection into a new row created at its exact slot (one create per Enter), rename
 	 * the current row when its text changed, and edit the focused row at its start.
 	 */
-	const splitAtSelection = useCallback(() => {
+	const splitAtSelection = useCallback(() =>
+	{
 		const content = contentRef.current;
-		if (!content) {
+		if (!content)
+		{
 			return;
 		}
 		const {zoomedNodeId, expandedIds, showCompleted, animatingCompletionIds} = activePaneView();
@@ -987,50 +1287,74 @@ function EditingText({
 		const children = readChildren(queryClient, nodeId);
 		const grandparent = parentId === null ? undefined : readNode(queryClient, parentId)?.parent_id;
 		const html = serializeEditorHtml(content.innerHTML);
-		const outdent = planOutdent(queryClient, {id: nodeId, parent_id: parentId, priority}, zoomedNodeId);
-		const plan = planSplit({
-			node: {
+		const outdent = planOutdent(
+			queryClient,
+			{
 				id: nodeId,
 				parent_id: parentId,
-				index: Math.max(
-					allSiblings.findIndex((sibling) => sibling.id === nodeId),
-					0,
-				),
-				hasVisibleChildren: (children ?? []).some((child) => visible.has(child.id)),
-				isExpanded: expandedIds.has(nodeId),
-				isZoomRoot: nodeId === zoomedNodeId,
-				isEmpty: isEmptyForReturn({
-					text: content.textContent,
-					layoutMode: listed?.data.layoutMode,
-					hasFile: Boolean(listed?.attachment),
-					isCalendarContainer: Boolean(listed?.calendar),
-					isTableCell:
-						grandparent !== null &&
-						grandparent !== undefined &&
-						readNode(queryClient, grandparent)?.data.layoutMode === "table",
-				}),
-				hasNextSibling: visibleSiblings.at(-1)?.id !== nodeId,
-				canOutdent: outdent !== null,
-				layoutMode: listed?.data.layoutMode,
-				role: rowEnterRole({
-					parentRendersBoard: parentId !== null && cachedCanRender(queryClient, parentId, "board"),
-					parentRendersDashboard: parentId !== null && cachedCanRender(queryClient, parentId, "dashboard"),
-				}),
+				priority,
 			},
-			html,
-			selection: selectionTextOffsets(content),
-			shapeLayout: listed === undefined ? null : rowShapeLayout(queryClient, listed),
-		});
+			zoomedNodeId,
+		);
+		const plan = planSplit(
+			{
+				node:
+				{
+					id: nodeId,
+					parent_id: parentId,
+					index: Math.max(
+						allSiblings.findIndex((sibling) => sibling.id === nodeId),
+						0,
+					),
+					hasVisibleChildren: (children ?? []).some((child) => visible.has(child.id)),
+					isExpanded: expandedIds.has(nodeId),
+					isZoomRoot: nodeId === zoomedNodeId,
+					isEmpty: isEmptyForReturn(
+						{
+							text: content.textContent,
+							layoutMode: listed?.data.layoutMode,
+							hasFile: Boolean(listed?.attachment),
+							isCalendarContainer: Boolean(listed?.calendar),
+							isTableCell:
+								grandparent !== null &&
+								grandparent !== undefined &&
+								readNode(queryClient, grandparent)?.data.layoutMode === "table",
+						},
+					),
+					hasNextSibling: visibleSiblings.at(-1)?.id !== nodeId,
+					canOutdent: outdent !== null,
+					layoutMode: listed?.data.layoutMode,
+					role: rowEnterRole(
+						{
+							parentRendersBoard: parentId !== null && cachedCanRender(queryClient, parentId, "board"),
+							parentRendersDashboard:
+								parentId !== null && cachedCanRender(queryClient, parentId, "dashboard"),
+						},
+					),
+				},
+				html,
+				selection: selectionTextOffsets(content),
+				shapeLayout: listed === undefined ? null : rowShapeLayout(queryClient, listed),
+			},
+		);
 
-		if (plan.kind === "outdent") {
-			if (outdent !== null) {
+		if (plan.kind === "outdent")
+		{
+			if (outdent !== null)
+			{
 				holdEditing(0);
-				moveNodeMutation.mutate(outdent, {onSettled: releaseEditing});
+				moveNodeMutation.mutate(
+					outdent,
+					{
+						onSettled: releaseEditing,
+					},
+				);
 			}
 			return;
 		}
 
-		if (plan.kind === "newline") {
+		if (plan.kind === "newline")
+		{
 			// A code or quote block keeps its lines in one row: Enter inserts a newline at the caret.
 			const {start, end} = selectionTextOffsets(content);
 			const {before, after} = splitHtml(html, start, end);
@@ -1041,33 +1365,56 @@ function EditingText({
 		}
 
 		// Show the kept text now, so the blur commit and the re-render agree with the plan.
-		if (html !== plan.currentName) {
+		if (html !== plan.currentName)
+		{
 			content.innerHTML = renderName(plan.currentName);
 		}
 		// The new row carries a client-generated id, so the caret moves into it now,
 		// before the create round-trip; writes to it wait for the create (pendingCreates).
 		const newId = crypto.randomUUID();
-		if (plan.expand !== undefined) {
+		if (plan.expand !== undefined)
+		{
 			activePaneView().replaceExpanded(new Set([...expandedIds, plan.expand]));
 		}
 		// The rename and the create are one user command: one undo step.
-		void runInUndoBatch(captureOutlineView, () => {
-			for (const step of applySplitPlan(plan, nodeId, nameSaver.saved)) {
-				if (step.type === "update") {
+		void runInUndoBatch(captureOutlineView, () =>
+		{
+			for (const step of applySplitPlan(plan, nodeId, nameSaver.saved))
+			{
+				if (step.type === "update")
+				{
 					nameSaver.reset(step.name);
-					updateNodeMutation.mutate({nodeId: step.nodeId, name: step.name});
-				} else if (step.type === "create") {
-					createNodeMutation.mutate({
-						id: newId,
-						parent_id: step.parent_id ?? undefined,
-						index: step.index,
-						name: step.name,
-						...(step.layoutMode === null ? {} : {layoutMode: step.layoutMode}),
-					});
-				} else if (step.target === "current") {
+					updateNodeMutation.mutate(
+						{
+							nodeId: step.nodeId,
+							name: step.name,
+						},
+					);
+				}
+				else if (step.type === "create")
+				{
+					createNodeMutation.mutate(
+						{
+							id: newId,
+							parent_id: step.parent_id ?? undefined,
+							index: step.index,
+							name: step.name,
+							...(step.layoutMode === null
+								? {}
+								:
+									{
+										layoutMode: step.layoutMode,
+									}),
+						},
+					);
+				}
+				else if (step.target === "current")
+				{
 					placeCaretAtTextOffset(content, step.caret);
 					resumeEditing(nodeId, step.caret);
-				} else {
+				}
+				else
+				{
 					resumeEditing(newId, step.caret);
 				}
 			}
@@ -1092,9 +1439,11 @@ function EditingText({
 	 * Backspace in an empty, childless node deletes it and continues editing at the
 	 * end of the previous visible node. Returns false when Backspace should edit text.
 	 */
-	const deleteIfEmpty = useCallback((): boolean => {
+	const deleteIfEmpty = useCallback((): boolean =>
+	{
 		const content = contentRef.current;
-		if (!content) {
+		if (!content)
+		{
 			return false;
 		}
 		// Unknown children count as children: never delete a subtree that has not loaded.
@@ -1107,13 +1456,18 @@ function EditingText({
 			collectVisibleNodeIds(queryClient, zoomedNodeId, expandedIds, showCompleted, animatingCompletionIds),
 		);
 		const note = readDetail(queryClient, nodeId)?.note ?? listed?.note ?? "";
-		const targetId = backspaceDeleteTarget(visibleIds, nodeId, {
-			text: content.textContent,
-			note,
-			hasChildren,
-			hasFile: listed?.attachment?.isDeleted === false,
-		});
-		if (targetId === null) {
+		const targetId = backspaceDeleteTarget(
+			visibleIds,
+			nodeId,
+			{
+				text: content.textContent,
+				note,
+				hasChildren,
+				hasFile: listed?.attachment?.isDeleted === false,
+			},
+		);
+		if (targetId === null)
+		{
 			return false;
 		}
 		// The row is going away: never save its pending text.
@@ -1129,14 +1483,17 @@ function EditingText({
 	 * children, and note; the other is deleted. Returns false when the merge is refused.
 	 */
 	const mergeWithSibling = useCallback(
-		(direction: "backward" | "forward"): boolean => {
+		(direction: "backward" | "forward"): boolean =>
+		{
 			const content = contentRef.current;
 			const {zoomedNodeId, expandedIds, showCompleted, animatingCompletionIds} = activePaneView();
-			if (!content || nodeId === zoomedNodeId || globalThis.getSelection()?.isCollapsed !== true) {
+			if (!content || nodeId === zoomedNodeId || globalThis.getSelection()?.isCollapsed !== true)
+			{
 				return false;
 			}
 			const offset = caretTextOffset(content);
-			if (offset !== (direction === "backward" ? 0 : textUnitLength(content))) {
+			if (offset !== (direction === "backward" ? 0 : textUnitLength(content)))
+			{
 				return false;
 			}
 			const visible = new Set(
@@ -1147,10 +1504,12 @@ function EditingText({
 			);
 			const index = siblings.findIndex((sibling) => sibling.id === nodeId);
 			const current = siblings[index];
-			if (current === undefined) {
+			if (current === undefined)
+			{
 				return false;
 			}
-			const toRow = (node: NodeResponse, html: string): MergeRow => {
+			const toRow = (node: NodeResponse, html: string): MergeRow =>
+			{
 				// Unknown children count as children: never delete a subtree that has not loaded.
 				const children = readChildren(queryClient, node.id);
 				return {
@@ -1170,19 +1529,37 @@ function EditingText({
 			const neighborRow = neighbor === undefined ? null : toRow(neighbor, neighbor.name ?? "");
 			const plan =
 				direction === "backward"
-					? planBackspaceAtStart({current: currentRow, previousSibling: neighborRow})
-					: planDeleteAtEnd({current: currentRow, nextSibling: neighborRow});
-			if (plan.kind === "none") {
+					? planBackspaceAtStart(
+							{
+								current: currentRow,
+								previousSibling: neighborRow,
+							},
+						)
+					: planDeleteAtEnd(
+							{
+								current: currentRow,
+								nextSibling: neighborRow,
+							},
+						);
+			if (plan.kind === "none")
+			{
 				return false;
 			}
 			// The rename and the delete are one undo step; both read their before-values
 			// from the cache, so they are issued before the optimistic merge below.
-			void runInUndoBatch(captureOutlineView, () => {
+			void runInUndoBatch(captureOutlineView, () =>
+			{
 				resumeEditing(plan.keepId, plan.caret);
 				nameSaver.reset(plan.name);
-				updateNodeMutation.mutate({nodeId: plan.keepId, name: plan.name});
+				updateNodeMutation.mutate(
+					{
+						nodeId: plan.keepId,
+						name: plan.name,
+					},
+				);
 				// The held editor never re-renders its text: show the merged row and its caret here.
-				if (plan.keepId === nodeId) {
+				if (plan.keepId === nodeId)
+				{
 					content.innerHTML = renderName(plan.name);
 					placeCaretAtTextOffset(content, plan.caret);
 				}
@@ -1191,7 +1568,15 @@ function EditingText({
 				queryClient.setQueryData<NodeResponse[]>(nodeKeys.children(parentId), (old) =>
 					old
 						?.filter((sibling) => sibling.id !== plan.deleteId)
-						.map((sibling) => (sibling.id === plan.keepId ? {...sibling, name: plan.name} : sibling)),
+						.map((sibling) =>
+							sibling.id === plan.keepId
+								?
+									{
+										...sibling,
+										name: plan.name,
+									}
+								: sibling,
+						),
 				);
 			});
 			return true;
@@ -1204,9 +1589,11 @@ function EditingText({
 	 * removes the whole pill (upstream monolith). Returns false when no pill is adjacent.
 	 */
 	const deleteAdjacentPill = useCallback(
-		(direction: "backward" | "forward"): boolean => {
+		(direction: "backward" | "forward"): boolean =>
+		{
 			const content = contentRef.current;
-			if (!content) {
+			if (!content)
+			{
 				return false;
 			}
 			const next = deleteAdjacentPillInEditor(
@@ -1215,7 +1602,8 @@ function EditingText({
 				direction,
 				(html) => renderName(html),
 			);
-			if (next === null) {
+			if (next === null)
+			{
 				return false;
 			}
 			nameSaver.change(next);
@@ -1229,14 +1617,17 @@ function EditingText({
 	 * the edited row. If React moved the row and focus fell to the page, take it back
 	 * at the caret captured before the move, keeping the unsaved text in the DOM.
 	 */
-	useLayoutEffect(() => {
+	useLayoutEffect(() =>
+	{
 		const content = contentRef.current;
-		if (!isEditing || !content || document.activeElement === content) {
+		if (!isEditing || !content || document.activeElement === content)
+		{
 			return;
 		}
 		const {editingHeld, editingCaretOffset, editingCaretEnd, editingCaretReversed} = useOutlineStore.getState();
 		const focusIsLost = document.activeElement === null || document.activeElement === document.body;
-		if (!editingHeld || !focusIsLost) {
+		if (!editingHeld || !focusIsLost)
+		{
 			return;
 		}
 		content.focus();
@@ -1246,14 +1637,16 @@ function EditingText({
 	});
 
 	const handleBlur = useCallback(
-		(event: React.FocusEvent<HTMLSpanElement>) => {
+		(event: React.FocusEvent<HTMLSpanElement>) =>
+		{
 			handleLinkBlur(event);
 			detachSlashMenu();
 			detachMentionMenu();
 			detachMirrorMenu();
 			hideDateAutocomplete();
 			detachTagAutocomplete();
-			if (shouldCommitOnBlur(useOutlineStore.getState(), nodeId)) {
+			if (shouldCommitOnBlur(useOutlineStore.getState(), nodeId))
+			{
 				saveChanges();
 			}
 		},
@@ -1275,24 +1668,35 @@ function EditingText({
 	 * stays native.
 	 */
 	const selectItemsFromEditor = useCallback(
-		(action: "SELECT_UP" | "SELECT_DOWN" | "SELECT_ALL"): boolean => {
+		(action: "SELECT_UP" | "SELECT_DOWN" | "SELECT_ALL"): boolean =>
+		{
 			const content = contentRef.current;
-			if (!content) {
+			if (!content)
+			{
 				return false;
 			}
 			const {start, end} = selectionTextOffsets(content);
 			const length = textUnitLength(content);
 			const takesOver =
 				action === "SELECT_ALL"
-					? editorSelectAllTakesOver({start, end, length})
-					: editorShiftArrowTakesOver({
-							dir: action === "SELECT_UP" ? "up" : "down",
-							start,
-							end,
-							length,
-							inNote: false,
-						});
-			if (!takesOver) {
+					? editorSelectAllTakesOver(
+							{
+								start,
+								end,
+								length,
+							},
+						)
+					: editorShiftArrowTakesOver(
+							{
+								dir: action === "SELECT_UP" ? "up" : "down",
+								start,
+								end,
+								length,
+								inNote: false,
+							},
+						);
+			if (!takesOver)
+			{
 				return false;
 			}
 			const view = currentSelectionView(queryClient);
@@ -1301,7 +1705,8 @@ function EditingText({
 			globalThis.getSelection()?.removeAllRanges();
 			content.blur();
 			setItemSelection(freshSelection(view, action === "SELECT_ALL" ? view.allIds : [nodeId]));
-			if (action !== "SELECT_ALL") {
+			if (action !== "SELECT_ALL")
+			{
 				scrollRowIntoView(nodeId);
 			}
 			return true;
@@ -1314,38 +1719,50 @@ function EditingText({
 	 * Backspace at the start of an empty cell deletes it. Returns true when the key was handled or swallowed.
 	 */
 	const handleTableCellKey = useCallback(
-		(event: React.KeyboardEvent<HTMLSpanElement>, action: ReturnType<typeof classifyEditorKey>): boolean => {
+		(event: React.KeyboardEvent<HTMLSpanElement>, action: ReturnType<typeof classifyEditorKey>): boolean =>
+		{
 			const content = contentRef.current;
 			const location = content === null ? null : locateCell(queryClient, nodeId);
-			if (content === null || location === null || event.nativeEvent.isComposing) {
+			if (content === null || location === null || event.nativeEvent.isComposing)
+			{
 				return false;
 			}
-			const deps = makeTableDeps(queryClient, {
-				create: createNodeMutation.mutate,
-				remove: deleteNodeMutation.mutate,
-				move: moveNodeMutation.mutate,
-				update: updateNodeMutation.mutate,
-			});
+			const deps = makeTableDeps(
+				queryClient,
+				{
+					create: createNodeMutation.mutate,
+					remove: deleteNodeMutation.mutate,
+					move: moveNodeMutation.mutate,
+					update: updateNodeMutation.mutate,
+				},
+			);
 			const collapsed = globalThis.getSelection()?.isCollapsed === true;
 			const offset = caretTextOffset(content);
-			if (action === "RETURN") {
+			if (action === "RETURN")
+			{
 				event.preventDefault();
 				saveChanges();
 				void cellEnter(deps, location);
 				return true;
 			}
-			if (action === "DELETE_BACKWARD") {
-				if (!collapsed || offset !== 0) {
+			if (action === "DELETE_BACKWARD")
+			{
+				if (!collapsed || offset !== 0)
+				{
 					return false;
 				}
 				event.preventDefault();
 				saveChanges();
 				const node = readNode(queryClient, nodeId);
-				void cellBackspace(deps, location, {
-					name: content.textContent,
-					note: node?.note ?? "",
-					hasChildren: node?.hasChildren === true,
-				});
+				void cellBackspace(
+					deps,
+					location,
+					{
+						name: content.textContent,
+						note: node?.note ?? "",
+						hasChildren: node?.hasChildren === true,
+					},
+				);
 				return true;
 			}
 			const plain = !event.metaKey && !event.ctrlKey && !event.altKey;
@@ -1358,24 +1775,31 @@ function EditingText({
 					: event.key.startsWith("Arrow") && (!event.shiftKey || vertical)
 						? `${event.shiftKey ? "shift+" : ""}${event.key}`
 						: null;
-			if (!plain || name === null) {
+			if (!plain || name === null)
+			{
 				return false;
 			}
-			const plan = planCellKey(name, {
-				row: location.rowIndex,
-				col: location.colIndex,
-				rowCount: location.grid.rows.length,
-				rowLens: location.grid.rows.map((entry) => entry.cells.length),
-				caretAtStart: collapsed && offset === 0,
-				caretAtEnd: collapsed && offset === textUnitLength(content),
-			});
-			if (plan === null) {
+			const plan = planCellKey(
+				name,
+				{
+					row: location.rowIndex,
+					col: location.colIndex,
+					rowCount: location.grid.rows.length,
+					rowLens: location.grid.rows.map((entry) => entry.cells.length),
+					caretAtStart: collapsed && offset === 0,
+					caretAtEnd: collapsed && offset === textUnitLength(content),
+				},
+			);
+			if (plan === null)
+			{
 				return false;
 			}
 			event.preventDefault();
-			if ("focus" in plan) {
+			if ("focus" in plan)
+			{
 				const target = location.grid.rows[plan.focus.row]?.cells[plan.focus.col];
-				if (target !== undefined) {
+				if (target !== undefined)
+				{
 					saveChanges();
 					resumeEditing(target.id, plan.focus.caret === "end" ? Number.MAX_SAFE_INTEGER : 0);
 				}
@@ -1395,28 +1819,36 @@ function EditingText({
 	);
 
 	const handleKeyDown = useCallback(
-		(event: React.KeyboardEvent<HTMLSpanElement>) => {
+		(event: React.KeyboardEvent<HTMLSpanElement>) =>
+		{
 			// A capture-phase listener (the app message's action shortcut) already claimed this key.
-			if (event.nativeEvent.defaultPrevented) {
+			if (event.nativeEvent.defaultPrevented)
+			{
 				return;
 			}
-			if (handleLinkKey(event)) {
+			if (handleLinkKey(event))
+			{
 				return;
 			}
-			if (handleSlashKey(event)) {
+			if (handleSlashKey(event))
+			{
 				return;
 			}
-			if (handleMentionKey(event)) {
+			if (handleMentionKey(event))
+			{
 				return;
 			}
-			if (handleMirrorKey(event)) {
+			if (handleMirrorKey(event))
+			{
 				return;
 			}
-			if (handleTagAutocompleteKey(event)) {
+			if (handleTagAutocompleteKey(event))
+			{
 				return;
 			}
 			const action = classifyEditorKey(event, isMacPlatform());
-			if (handleTableCellKey(event, action)) {
+			if (handleTableCellKey(event, action))
+			{
 				return;
 			}
 			const composing = event.nativeEvent.isComposing;
@@ -1427,45 +1859,72 @@ function EditingText({
 				(action === "SELECT_UP" || action === "SELECT_DOWN" || action === "SELECT_ALL") &&
 				!composing &&
 				selectItemsFromEditor(action)
-			) {
+			)
+			{
 				event.preventDefault();
-			} else if (arrow !== undefined && !composing && enterRootNote(arrow)) {
+			}
+			else if (arrow !== undefined && !composing && enterRootNote(arrow))
+			{
 				event.preventDefault();
-			} else if ((action === "CARET_UP" || action === "CARET_DOWN") && !composing) {
-				if (moveToAdjacentNode(action === "CARET_UP" ? "up" : "down")) {
+			}
+			else if ((action === "CARET_UP" || action === "CARET_DOWN") && !composing)
+			{
+				if (moveToAdjacentNode(action === "CARET_UP" ? "up" : "down"))
+				{
 					event.preventDefault();
 				}
-			} else if ((action === "CARET_LEFT" || action === "CARET_RIGHT") && !composing) {
-				if (crossRowHorizontally(action === "CARET_LEFT" ? "left" : "right")) {
+			}
+			else if ((action === "CARET_LEFT" || action === "CARET_RIGHT") && !composing)
+			{
+				if (crossRowHorizontally(action === "CARET_LEFT" ? "left" : "right"))
+				{
 					event.preventDefault();
 				}
-			} else if (action === "CARRIAGE_RETURN") {
+			}
+			else if (action === "CARRIAGE_RETURN")
+			{
 				event.preventDefault();
 				// Alt+Enter in a link opens it, as upstream.
-				if (event.altKey && contentRef.current !== null) {
+				if (event.altKey && contentRef.current !== null)
+				{
 					openLinkAtCaret(contentRef.current);
 				}
-			} else if (action === "RETURN") {
+			}
+			else if (action === "RETURN")
+			{
 				event.preventDefault();
 				splitAtSelection();
-			} else if (action === "SHIFT_RETURN") {
+			}
+			else if (action === "SHIFT_RETURN")
+			{
 				event.preventDefault();
 				saveChanges();
-				if (canHaveNote(readNode(queryClient, nodeId)?.data.layoutMode)) {
+				if (canHaveNote(readNode(queryClient, nodeId)?.data.layoutMode))
+				{
 					focusNote(nodeId);
 				}
-			} else if (action === "DELETE_BACKWARD") {
-				if (deleteAdjacentPill("backward") || deleteIfEmpty() || mergeWithSibling("backward")) {
+			}
+			else if (action === "DELETE_BACKWARD")
+			{
+				if (deleteAdjacentPill("backward") || deleteIfEmpty() || mergeWithSibling("backward"))
+				{
 					event.preventDefault();
 				}
-			} else if (action === "DELETE_FORWARD") {
-				if (deleteAdjacentPill("forward") || mergeWithSibling("forward")) {
+			}
+			else if (action === "DELETE_FORWARD")
+			{
+				if (deleteAdjacentPill("forward") || mergeWithSibling("forward"))
+				{
 					event.preventDefault();
 				}
-			} else if (formatAttr !== null && !composing) {
+			}
+			else if (formatAttr !== null && !composing)
+			{
 				event.preventDefault();
 				applyInlineToggle(formatAttr);
-			} else if (highlight && !composing) {
+			}
+			else if (highlight && !composing)
+			{
 				event.preventDefault();
 				applyLatestOrOpen();
 			}
@@ -1501,23 +1960,29 @@ function EditingText({
 				className="innerContentContainer editing"
 				data-node-id={nodeId}
 				// The CSS `:empty` rule shows it only while the editor is empty.
-				data-placeholder={placeholderFor({
-					focused: true,
-					empty: true,
-					layoutMode: readNode(queryClient, nodeId)?.data.layoutMode,
-					slashDiscovered,
-					dashboardCard:
-						parentId !== null &&
-						isDashboard(readNode(queryClient, parentId)?.data.layoutMode, dashboardsOn()),
-				})}
+				data-placeholder={placeholderFor(
+					{
+						focused: true,
+						empty: true,
+						layoutMode: readNode(queryClient, nodeId)?.data.layoutMode,
+						slashDiscovered,
+						dashboardCard:
+							parentId !== null &&
+							isDashboard(readNode(queryClient, parentId)?.data.layoutMode, dashboardsOn()),
+					},
+				)}
 				contentEditable
-				dangerouslySetInnerHTML={{__html: editorHtml}}
+				dangerouslySetInnerHTML={
+				{
+					__html: editorHtml,
+				}}
 				onBlur={handleBlur}
 				onClick={handleEditingClick}
 				onInput={handleInput}
 				onKeyDown={handleKeyDown}
 				onPaste={handlePaste}
-				onMouseDown={(event) => {
+				onMouseDown={(event) =>
+				{
 					tagPointer.onMouseDown(event);
 					detachTagAutocomplete();
 				}}
@@ -1560,7 +2025,8 @@ const RestingText = memo(function RestingText({
 	nodeId,
 	initialValue,
 	layoutMode,
-}: Pick<EditableTextProps, "nodeId" | "initialValue" | "layoutMode">) {
+}: Pick<EditableTextProps, "nodeId" | "initialValue" | "layoutMode">)
+{
 	const queryClient = useQueryClient();
 	const {startEditing, resumeEditing} = outlineActions();
 	const searchQuery = usePaneSearchQuery();
@@ -1568,29 +2034,67 @@ const RestingText = memo(function RestingText({
 	const dateSettings = useDateSettings();
 	const account = useAccount();
 	// A plain click on a pill edits or removes just that pill, saving the stored name.
-	const pillPicker = usePillDatePicker({
-		dateSettings,
-		onChange: (pillIndex, attrs) => {
-			// Upstream edits the row afterwards: the caret lands after the new pill, or where the removed one was.
-			const plan = planPillReplacement(initialValue, pillIndex, attrs);
-			updateNodeMutation.mutate({nodeId, name: plan.html});
-			// The editor captures its HTML when editing starts: show the new name before that.
-			patchCachedNode(queryClient, nodeId, (node) => ({...node, name: plan.html}));
-			resumeEditing(nodeId, plan.caretOffset, {html: plan.html});
+	const pillPicker = usePillDatePicker(
+		{
+			dateSettings,
+			onChange: (pillIndex, attrs) =>
+			{
+				// Upstream edits the row afterwards: the caret lands after the new pill, or where the removed one was.
+				const plan = planPillReplacement(initialValue, pillIndex, attrs);
+				updateNodeMutation.mutate(
+					{
+						nodeId,
+						name: plan.html,
+					},
+				);
+				// The editor captures its HTML when editing starts: show the new name before that.
+				patchCachedNode(queryClient, nodeId, (node) => (
+				{
+					...node,
+					name: plan.html,
+				}));
+				resumeEditing(
+					nodeId,
+					plan.caretOffset,
+					{
+						html: plan.html,
+					},
+				);
+			},
+			onDismiss: () =>
+			{
+			},
 		},
-		onDismiss: () => {},
-	});
+	);
 	const {open: openPillPicker} = pillPicker;
 
-	const tagPointer = useTagPointer({
-		getHtml: () => initialValue,
-		save: (name, caret) => {
-			updateNodeMutation.mutate({nodeId, name});
-			// The editor captures its HTML when editing starts: show the new name before that.
-			patchCachedNode(queryClient, nodeId, (node) => ({...node, name}));
-			resumeEditing(nodeId, caret, {html: name});
+	const tagPointer = useTagPointer(
+		{
+			getHtml: () => initialValue,
+			save: (name, caret) =>
+			{
+				updateNodeMutation.mutate(
+					{
+						nodeId,
+						name,
+					},
+				);
+				// The editor captures its HTML when editing starts: show the new name before that.
+				patchCachedNode(queryClient, nodeId, (node) => (
+				{
+					...node,
+					name,
+				}));
+				resumeEditing(
+					nodeId,
+					caret,
+					{
+						html: name,
+					},
+				);
+			},
 		},
-	});
+	);
 
 	/**
 	 * Handle text clicks:
@@ -1601,14 +2105,17 @@ const RestingText = memo(function RestingText({
 	 * - Otherwise: start editing at click position
 	 */
 	const handleTextClick = useCallback(
-		(event: React.MouseEvent<HTMLSpanElement>) => {
-			if (tagPointer.onClick(event)) {
+		(event: React.MouseEvent<HTMLSpanElement>) =>
+		{
+			if (tagPointer.onClick(event))
+			{
 				return;
 			}
 
 			// Plain click on a date pill opens the picker on it; ⌥click is reserved for date search.
 			const clicked = clickedPill(event, event.currentTarget);
-			if (clicked !== null) {
+			if (clicked !== null)
+			{
 				event.preventDefault();
 				event.stopPropagation();
 				openPillPicker(clicked.pill, clicked.index);
@@ -1617,7 +2124,13 @@ const RestingText = memo(function RestingText({
 
 			// Regular click: start editing at click position
 			event.stopPropagation();
-			startEditing(nodeId, {x: event.clientX, y: event.clientY});
+			startEditing(
+				nodeId,
+				{
+					x: event.clientX,
+					y: event.clientY,
+				},
+			);
 		},
 		[nodeId, startEditing, openPillPicker, tagPointer],
 	);
@@ -1628,7 +2141,8 @@ const RestingText = memo(function RestingText({
 			<span
 				className="innerContentContainer"
 				data-node-id={nodeId}
-				dangerouslySetInnerHTML={{
+				dangerouslySetInnerHTML={
+				{
 					__html: highlightSearchMatches(
 						normalizeLayoutMode(layoutMode) === "code-block"
 							? renderCodeBlockHtml(initialValue)
@@ -1653,7 +2167,8 @@ const RestingText = memo(function RestingText({
  * A row's name: the full contenteditable `EditingText` while editing, else the light `RestingText`. Called as a
  * plain function, so a row mounts no fiber of its own for the choice.
  */
-export function editableText(props: EditableTextProps) {
+export function editableText(props: EditableTextProps)
+{
 	return props.isEditing ? (
 		<EditingText {...props} />
 	) : (
