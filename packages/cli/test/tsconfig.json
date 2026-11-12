@@ -1,6 +1,7 @@
 {
 	"extends": "../../../tsconfig.base.json",
-	"compilerOptions": {
+	"compilerOptions":
+	{
 		"outDir": "../../../dist-test/cli",
 		"rootDir": ".",
 		"types": ["vitest/globals", "node"]

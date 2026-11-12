@@ -2,7 +2,8 @@
 	"name": "workflowy",
 	"version": "0.1.0",
 	"description": "Workflowy foundation: CLI usage conventions, HTML/date formats, calendar journaling, and node tooling",
-	"author": {
+	"author":
+	{
 		"name": "Craig Motlin"
 	},
 	"license": "Apache-2.0",

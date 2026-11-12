@@ -1,7 +1,8 @@
 import {memo} from "react";
 
 /** Upstream's custom 30x27 "columns +" New pane icon (ZC4). */
-export const NewPaneIcon = memo(function NewPaneIcon() {
+export const NewPaneIcon = memo(function NewPaneIcon()
+{
 	return (
 		<svg
 			aria-hidden

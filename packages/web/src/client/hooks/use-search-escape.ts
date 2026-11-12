@@ -16,12 +16,14 @@ const SEARCH_INPUT_ID = "srch-input";
 /** The main outline's scroll (its pane scroller while panes are open, else the window's) when Escape focused search, restored when focus returns. */
 let savedScrollTop: number | null = null;
 
-function searchInputElement(): HTMLInputElement | null {
+function searchInputElement(): HTMLInputElement | null
+{
 	const input = document.getElementById(SEARCH_INPUT_ID);
 	return input instanceof HTMLInputElement ? input : null;
 }
 
-function editFirstVisibleRow(queryClient: QueryClient): void {
+function editFirstVisibleRow(queryClient: QueryClient): void
+{
 	const {zoomedNodeId, expandedIds, showCompleted, animatingCompletionIds, resumeEditing} =
 		useOutlineStore.getState();
 	const [firstId] = collectVisibleNodeIds(
@@ -32,8 +34,14 @@ function editFirstVisibleRow(queryClient: QueryClient): void {
 		animatingCompletionIds,
 		currentSearchFilter(queryClient, MAIN_PANE_ID),
 	);
-	const target = outlineFocusTarget({zoomedNodeId, firstVisibleId: firstId});
-	if (target !== null) {
+	const target = outlineFocusTarget(
+		{
+			zoomedNodeId,
+			firstVisibleId: firstId,
+		},
+	);
+	if (target !== null)
+	{
 		resumeEditing(target.nodeId, target.offset);
 	}
 }
@@ -44,33 +52,41 @@ function editFirstVisibleRow(queryClient: QueryClient): void {
  */
 export function focusOutline(
 	queryClient: QueryClient,
-	leave = (): void => {
+	leave = (): void =>
+	{
 		useOutlineStore.getState().blurSearch();
 	},
-): void {
+): void
+{
 	searchInputElement()?.blur();
 	const resumes = useOutlineStore.getState().searchReturn !== null;
 	leave();
-	if (!resumes) {
+	if (!resumes)
+	{
 		editFirstVisibleRow(queryClient);
 	}
 	restoreSavedScroll();
 }
 
-function restoreSavedScroll(): void {
+function restoreSavedScroll(): void
+{
 	const scrollTop = savedScrollTop;
 	savedScrollTop = null;
-	if (scrollTop !== null) {
+	if (scrollTop !== null)
+	{
 		scrollPaneTo(MAIN_PANE_ID, scrollTop);
 	}
 }
 
 /** Where the caret sits in the edited name or note, blurring that editor so its text commits. */
-function leaveEditor(): SearchReturn | null {
+function leaveEditor(): SearchReturn | null
+{
 	const {editingId, editingNoteId} = useOutlineStore.getState();
-	if (editingId !== null) {
+	if (editingId !== null)
+	{
 		const editor = editorElement(editingId);
-		const from: SearchReturn = {
+		const from: SearchReturn =
+		{
 			nodeId: editingId,
 			caretOffset: editor === null ? 0 : caretTextOffset(editor),
 			field: "name",
@@ -78,22 +94,29 @@ function leaveEditor(): SearchReturn | null {
 		editor?.blur();
 		return from;
 	}
-	if (editingNoteId !== null) {
+	if (editingNoteId !== null)
+	{
 		const active = document.activeElement;
 		const noteEl = active instanceof HTMLElement && active.matches(".notes > .content") ? active : null;
 		const caretOffset =
 			noteEl === null
 				? Number.MAX_SAFE_INTEGER
 				: caretTextOffset(noteEl.querySelector<HTMLElement>(".innerContentContainer") ?? noteEl);
-		if (active instanceof HTMLElement) {
+		if (active instanceof HTMLElement)
+		{
 			active.blur();
 		}
-		return {nodeId: editingNoteId, caretOffset, field: "note"};
+		return {
+			nodeId: editingNoteId,
+			caretOffset,
+			field: "note",
+		};
 	}
 	return null;
 }
 
-function popupOwnsEscape(): boolean {
+function popupOwnsEscape(): boolean
+{
 	const {presentationOpen, requestedMenus} = useOutlineStore.getState();
 	return isModalOpen() || presentationOpen || requestedMenus.size > 0;
 }
@@ -103,12 +126,15 @@ function popupOwnsEscape(): boolean {
  * outline, else leave a focused empty search box for the remembered caret, else commit the edited text and focus
  * the search box. Runs on `window` after every popup, menu and editor has had its chance to claim Escape.
  */
-export function useSearchEscape(): void {
+export function useSearchEscape(): void
+{
 	const queryClient = useQueryClient();
 	const navigate = useStableNavigate();
 
-	useEffect(() => {
-		const onKeyDown = (event: KeyboardEvent): void => {
+	useEffect(() =>
+	{
+		const onKeyDown = (event: KeyboardEvent): void =>
+		{
 			if (
 				event.key !== "Escape" ||
 				event.defaultPrevented ||
@@ -118,32 +144,43 @@ export function useSearchEscape(): void {
 				event.altKey ||
 				event.shiftKey ||
 				popupOwnsEscape()
-			) {
+			)
+			{
 				return;
 			}
 			event.preventDefault();
 			const state = useOutlineStore.getState();
-			const action = escapeAction({
-				searchQuery: state.searchQuery,
-				searchInput: state.searchInput,
-				inputFocused: document.activeElement?.id === SEARCH_INPUT_ID,
-			});
-			switch (action) {
-				case "cancel": {
+			const action = escapeAction(
+				{
+					searchQuery: state.searchQuery,
+					searchInput: state.searchInput,
+					inputFocused: document.activeElement?.id === SEARCH_INPUT_ID,
+				},
+			);
+			switch (action)
+			{
+				case "cancel":
+				{
 					// Upstream lands the caret on the zoom-root title (or the first row), not on the row Escape left.
 					leaveEditor();
 					searchInputElement()?.blur();
-					useOutlineStore.setState({searchReturn: null});
+					useOutlineStore.setState(
+						{
+							searchReturn: null,
+						},
+					);
 					useOutlineStore.getState().cancelSearch(navigate);
 					editFirstVisibleRow(queryClient);
 					restoreSavedScroll();
 					break;
 				}
-				case "blur": {
+				case "blur":
+				{
 					focusOutline(queryClient);
 					break;
 				}
-				case "focus": {
+				case "focus":
+				{
 					const from = leaveEditor();
 					savedScrollTop = paneScrollTop(MAIN_PANE_ID);
 					state.focusSearch(from);
@@ -153,7 +190,8 @@ export function useSearchEscape(): void {
 			}
 		};
 		globalThis.addEventListener("keydown", onKeyDown);
-		return () => {
+		return () =>
+		{
 			globalThis.removeEventListener("keydown", onKeyDown);
 		};
 	}, [queryClient, navigate]);

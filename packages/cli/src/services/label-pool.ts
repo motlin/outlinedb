@@ -1,12 +1,14 @@
 /** A node from a Workflowy registry export (`.llm/gtd/metadata/people.json`, `hobbies-registry.json`). */
-export interface RegistryNode {
+export interface RegistryNode
+{
 	readonly name: string;
 	readonly children?: readonly RegistryNode[];
 }
 
 export type LabelKind = "person" | "tag";
 
-export interface PoolLabel {
+export interface PoolLabel
+{
 	/** Clef question/option id: `p.` or `t.` plus the label, restricted to `[A-Za-z0-9_.-]`. */
 	readonly optionId: string;
 	/** Canonical `@Name` or `#tag`. */
@@ -16,7 +18,8 @@ export interface PoolLabel {
 	readonly description: string;
 }
 
-export interface LabelPoolInput {
+export interface LabelPoolInput
+{
 	readonly people: RegistryNode;
 	readonly hobbies: RegistryNode;
 	/** `tags` map from `tag-frequency.json`: `#tag` to usage count. */
@@ -65,25 +68,47 @@ const HOBBY_NAME = /(?:^|\s)(#[\p{L}\p{N}_-]+)$/u;
 const FIELD = /^[^:]{1,40}:/u;
 
 /** Builds the per-entry label pool that the Clef shortlist pass chooses from. Pure. */
-export function buildLabelPool(input: LabelPoolInput): PoolLabel[] {
+export function buildLabelPool(input: LabelPoolInput): PoolLabel[]
+{
 	const excluded = new Set([...WORKFLOW_TAGS, ...input.entryLabels.map((label) => label.toLowerCase())]);
 	const pool = new Map<string, PoolLabel>();
 
-	const add = (label: string, kind: LabelKind, description: string, words = MAX_DESCRIPTION_WORDS): void => {
+	const add = (label: string, kind: LabelKind, description: string, words = MAX_DESCRIPTION_WORDS): void =>
+	{
 		const key = label.toLowerCase();
-		if (excluded.has(key)) {
+		if (excluded.has(key))
+		{
 			return;
 		}
 		const existing = pool.get(key);
-		if (existing === undefined) {
-			pool.set(key, {optionId: optionIdFor(label, kind), label, kind, description: truncate(description, words)});
-		} else if (existing.description === "" && description !== "") {
-			pool.set(key, {...existing, description: truncate(description, words)});
+		if (existing === undefined)
+		{
+			pool.set(
+				key,
+				{
+					optionId: optionIdFor(label, kind),
+					label,
+					kind,
+					description: truncate(description, words),
+				},
+			);
+		}
+		else if (existing.description === "" && description !== "")
+		{
+			pool.set(
+				key,
+				{
+					...existing,
+					description: truncate(description, words),
+				},
+			);
 		}
 	};
 
-	for (const node of walk(input.people)) {
-		if (PERSON_NAME.test(node.name)) {
+	for (const node of walk(input.people))
+	{
+		if (PERSON_NAME.test(node.name))
+		{
 			const hints = input.personHints?.get(node.name.toLowerCase()) ?? [];
 			const base = personDescription(node);
 			const description = hints.length === 0 ? base : `${base}; text may say ${hints.join(", ")}`;
@@ -91,9 +116,11 @@ export function buildLabelPool(input: LabelPoolInput): PoolLabel[] {
 		}
 	}
 
-	for (const node of walk(input.hobbies)) {
+	for (const node of walk(input.hobbies))
+	{
 		const tag = HOBBY_NAME.exec(node.name)?.[1];
-		if (tag !== undefined) {
+		if (tag !== undefined)
+		{
 			add(tag, "tag", hobbyDescription(node, tag));
 		}
 	}
@@ -102,34 +129,41 @@ export function buildLabelPool(input: LabelPoolInput): PoolLabel[] {
 	const frequent = Object.entries(input.tagFrequency)
 		.filter(([, count]) => count >= minTagCount)
 		.toSorted(([a, countA], [b, countB]) => countB - countA || a.localeCompare(b));
-	for (const [tag] of frequent) {
+	for (const [tag] of frequent)
+	{
 		add(tag, "tag", humanizeTag(tag));
 	}
 
 	return [...pool.values()];
 }
 
-function* walk(node: RegistryNode): Generator<RegistryNode> {
+function* walk(node: RegistryNode): Generator<RegistryNode>
+{
 	yield node;
-	for (const child of node.children ?? []) {
+	for (const child of node.children ?? [])
+	{
 		yield* walk(child);
 	}
 }
 
-function optionIdFor(label: string, kind: LabelKind): string {
+function optionIdFor(label: string, kind: LabelKind): string
+{
 	const prefix = kind === "person" ? "p." : "t.";
 	return (prefix + label.slice(1).replaceAll(/[^A-Za-z0-9_.-]/gu, "_")).slice(0, 100);
 }
 
-function personDescription(node: RegistryNode): string {
+function personDescription(node: RegistryNode): string
+{
 	const fullName = node.name.slice(1).replaceAll(/(\p{Ll})(\p{Lu})/gu, "$1 $2");
 	const relationship = fieldValue(node, "👥 Relationship");
 	return relationship === undefined ? fullName : `${fullName}, ${relationship}`;
 }
 
-function hobbyDescription(node: RegistryNode, tag: string): string {
+function hobbyDescription(node: RegistryNode, tag: string): string
+{
 	const fullName = fieldValue(node, "Full name");
-	if (fullName !== undefined) {
+	if (fullName !== undefined)
+	{
 		return fullName;
 	}
 	const summary = node.children
@@ -138,13 +172,15 @@ function hobbyDescription(node: RegistryNode, tag: string): string {
 	return summary ?? humanizeTag(tag);
 }
 
-function fieldValue(node: RegistryNode, field: string): string | undefined {
+function fieldValue(node: RegistryNode, field: string): string | undefined
+{
 	const prefix = `${field}:`;
 	const child = node.children?.find((candidate) => candidate.name.startsWith(prefix));
 	return child === undefined ? undefined : plainText(child.name.slice(prefix.length));
 }
 
-function plainText(html: string): string {
+function plainText(html: string): string
+{
 	return html
 		.replaceAll(/<[^>]*>/gu, "")
 		.replaceAll("↗", "")
@@ -152,10 +188,12 @@ function plainText(html: string): string {
 		.trim();
 }
 
-function humanizeTag(tag: string): string {
+function humanizeTag(tag: string): string
+{
 	return tag.slice(1).replaceAll(/[-_]+/gu, " ");
 }
 
-function truncate(description: string, words: number): string {
+function truncate(description: string, words: number): string
+{
 	return description.split(" ").slice(0, words).join(" ");
 }

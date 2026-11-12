@@ -6,11 +6,14 @@ import {useLocation} from "react-router-dom";
  * the way upstream's flyouts close on location change. Call it from the
  * flyout itself, so each mount remembers the location it opened at.
  */
-export function useCloseOnLocationChange(close: () => void): void {
+export function useCloseOnLocationChange(close: () => void): void
+{
 	const {key} = useLocation();
 	const openedAt = useRef(key);
-	useEffect(() => {
-		if (key !== openedAt.current) {
+	useEffect(() =>
+	{
+		if (key !== openedAt.current)
+		{
 			close();
 		}
 	}, [key, close]);

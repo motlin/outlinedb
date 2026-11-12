@@ -3,14 +3,16 @@ import {planInlineCodeInput} from "../src/client/inline-code-input.js";
 import {readFileSync} from "node:fs";
 import {canBePending, insertWithPendingFormat, togglePendingAttr} from "../src/client/hooks/use-inline-format.js";
 import {routeTypedInput} from "../src/client/inline-input-router.js";
-import {
+import
+{
 	bracketMatch,
 	innerText,
 	planAutoClose,
 	planInsertInlineLink,
 	planLinkInsert,
 } from "../src/client/inline-link.js";
-import {
+import
+{
 	inlineMirrorInsertion,
 	inlineMirrorRefusal,
 	planInlineMirror,
@@ -18,8 +20,10 @@ import {
 	planMirrorRearm,
 } from "../src/client/inline-mirror.js";
 
-describe("inline code input", () => {
-	describe("planInlineCodeInput", () => {
+describe("inline code input", () =>
+{
+	describe("planInlineCodeInput", () =>
+	{
 		it.each([
 			["a closing backtick codes the text and adds a plain space", "a `bc`", 6, "`", "a <code>bc</code> ", 5],
 			["no space is added before an existing space", "`k` z", 3, "`", "<code>k</code> z", 2],
@@ -35,8 +39,14 @@ describe("inline code input", () => {
 			["typing between two backticks wraps them", "e `x`", 4, "x", "e <code>x</code>", 3],
 			["two spaces at the end of code leave it", "a <code>bcz  </code> d", 7, " ", "a <code>bcz</code>  d", 6],
 			["other formats stay untouched", "a <b>x</b> `y`", 7, "`", "a <b>x</b> <code>y</code> ", 6],
-		])("%s", (_name, html, caret, typed, expectedHtml, expectedCaret) => {
-			expect(planInlineCodeInput(html, caret, typed)).toStrictEqual({html: expectedHtml, caret: expectedCaret});
+		])("%s", (_name, html, caret, typed, expectedHtml, expectedCaret) =>
+		{
+			expect(planInlineCodeInput(html, caret, typed)).toStrictEqual(
+				{
+					html: expectedHtml,
+					caret: expectedCaret,
+				},
+			);
 		});
 
 		it.each([
@@ -44,22 +54,28 @@ describe("inline code input", () => {
 			["a backtick inside code stays literal", "<code>a`b</code>", 2, "`"],
 			["a lone backtick is left alone", "e `", 3, "`"],
 			["plain typing changes nothing", "plain", 5, "n"],
-		])("%s", (_name, html, caret, typed) => {
+		])("%s", (_name, html, caret, typed) =>
+		{
 			expect(planInlineCodeInput(html, caret, typed)).toBeNull();
 		});
 	});
 });
 
-describe("inline format wiring", () => {
-	function source(path: string): string {
+describe("inline format wiring", () =>
+{
+	function source(path: string): string
+	{
 		return readFileSync(new URL(`../src/client/components/${path}`, import.meta.url), "utf8");
 	}
 
-	describe("inline format wiring", () => {
-		it("routes both editors' format commands through applyInlineToggle, never execCommand", () => {
+	describe("inline format wiring", () =>
+	{
+		it("routes both editors' format commands through applyInlineToggle, never execCommand", () =>
+		{
 			const files = ["editable-text.tsx", "editable-note.tsx"];
 			expect(
-				files.map((file) => {
+				files.map((file) =>
+				{
 					const text = source(file);
 					return [file, text.includes("execCommand("), text.includes("applyInlineToggle")];
 				}),
@@ -70,10 +86,13 @@ describe("inline format wiring", () => {
 		});
 	});
 
-	describe("editor wiring for code and color", () => {
-		it("runs the inline-code input rule and the color popup in both editors", () => {
+	describe("editor wiring for code and color", () =>
+	{
+		it("runs the inline-code input rule and the color popup in both editors", () =>
+		{
 			expect(
-				["editable-text.tsx", "editable-note.tsx"].map((file) => {
+				["editable-text.tsx", "editable-note.tsx"].map((file) =>
+				{
 					const text = source(file);
 					return [file, text.includes("applyInlineCodeInput("), text.includes("useColorPopup(")];
 				}),
@@ -84,16 +103,20 @@ describe("inline format wiring", () => {
 		});
 	});
 
-	describe("togglePendingAttr", () => {
-		it("adds an attribute once and removes it on the second toggle", () => {
+	describe("togglePendingAttr", () =>
+	{
+		it("adds an attribute once and removes it on the second toggle", () =>
+		{
 			const once = togglePendingAttr(new Set(), "b");
 			const twice = togglePendingAttr(once, "b");
 			expect([[...once], [...twice], [...togglePendingAttr(once, "i")]]).toStrictEqual([["b"], [], ["b", "i"]]);
 		});
 	});
 
-	describe("canBePending", () => {
-		it("keeps Code out of pending formats, since upstream's Code is atomic", () => {
+	describe("canBePending", () =>
+	{
+		it("keeps Code out of pending formats, since upstream's Code is atomic", () =>
+		{
 			expect((["b", "i", "u", "s", "code"] as const).map(canBePending)).toStrictEqual([
 				true,
 				true,
@@ -104,11 +127,31 @@ describe("inline format wiring", () => {
 		});
 	});
 
-	describe("insertWithPendingFormat with a color", () => {
-		it("wraps the typed text in the pending color", () => {
+	describe("insertWithPendingFormat with a color", () =>
+	{
+		it("wraps the typed text in the pending color", () =>
+		{
 			expect([
-				insertWithPendingFormat("here", 4, new Set(), "z", {kind: "highlight", color: "yellow"}),
-				insertWithPendingFormat("here", 4, new Set(["b"]), "zy", {kind: "text", color: "red"}),
+				insertWithPendingFormat(
+					"here",
+					4,
+					new Set(),
+					"z",
+					{
+						kind: "highlight",
+						color: "yellow",
+					},
+				),
+				insertWithPendingFormat(
+					"here",
+					4,
+					new Set(["b"]),
+					"zy",
+					{
+						kind: "text",
+						color: "red",
+					},
+				),
 			]).toStrictEqual([
 				'here<span class="colored bc-yellow">z</span>',
 				'here<span class="colored c-red"><b>zy</b></span>',
@@ -116,8 +159,10 @@ describe("inline format wiring", () => {
 		});
 	});
 
-	describe("insertWithPendingFormat", () => {
-		it("applies pending attributes to the first typed character; the rest inherit from it", () => {
+	describe("insertWithPendingFormat", () =>
+	{
+		it("applies pending attributes to the first typed character; the rest inherit from it", () =>
+		{
 			expect([
 				insertWithPendingFormat("ab", 1, new Set(["b"]), "z"),
 				insertWithPendingFormat("ab", 1, new Set(["b"]), "zy"),
@@ -128,99 +173,171 @@ describe("inline format wiring", () => {
 	});
 });
 
-describe("inline input router", () => {
-	describe("routeTypedInput", () => {
-		it("swallows the input that disarmed a chip, and saves", () => {
+describe("inline input router", () =>
+{
+	describe("routeTypedInput", () =>
+	{
+		it("swallows the input that disarmed a chip, and saves", () =>
+		{
 			expect(
-				routeTypedInput({chipArmedBefore: true, chipArmedAfter: false, datePopupOpened: false}),
-			).toStrictEqual({
-				dateTrigger: false,
-				dateAutocomplete: false,
-				tagAutocomplete: false,
-				detachTags: true,
-				save: true,
-			});
+				routeTypedInput(
+					{
+						chipArmedBefore: true,
+						chipArmedAfter: false,
+						datePopupOpened: false,
+					},
+				),
+			).toStrictEqual(
+				{
+					dateTrigger: false,
+					dateAutocomplete: false,
+					tagAutocomplete: false,
+					detachTags: true,
+					save: true,
+				},
+			);
 		});
 
-		it("swallows the input that armed a chip, and does not save", () => {
+		it("swallows the input that armed a chip, and does not save", () =>
+		{
 			expect(
-				routeTypedInput({chipArmedBefore: false, chipArmedAfter: true, datePopupOpened: false}),
-			).toStrictEqual({
-				dateTrigger: false,
-				dateAutocomplete: false,
-				tagAutocomplete: false,
-				detachTags: true,
-				save: false,
-			});
+				routeTypedInput(
+					{
+						chipArmedBefore: false,
+						chipArmedAfter: true,
+						datePopupOpened: false,
+					},
+				),
+			).toStrictEqual(
+				{
+					dateTrigger: false,
+					dateAutocomplete: false,
+					tagAutocomplete: false,
+					detachTags: true,
+					save: false,
+				},
+			);
 		});
 
-		it("skips the date autocomplete when the bang trigger opened the picker", () => {
+		it("skips the date autocomplete when the bang trigger opened the picker", () =>
+		{
 			expect(
-				routeTypedInput({chipArmedBefore: false, chipArmedAfter: false, datePopupOpened: true}),
-			).toStrictEqual({
-				dateTrigger: true,
-				dateAutocomplete: false,
-				tagAutocomplete: true,
-				detachTags: false,
-				save: true,
-			});
+				routeTypedInput(
+					{
+						chipArmedBefore: false,
+						chipArmedAfter: false,
+						datePopupOpened: true,
+					},
+				),
+			).toStrictEqual(
+				{
+					dateTrigger: true,
+					dateAutocomplete: false,
+					tagAutocomplete: true,
+					detachTags: false,
+					save: true,
+				},
+			);
 		});
 
-		it("runs every hook on an ordinary input", () => {
+		it("runs every hook on an ordinary input", () =>
+		{
 			expect(
-				routeTypedInput({chipArmedBefore: false, chipArmedAfter: false, datePopupOpened: false}),
-			).toStrictEqual({
-				dateTrigger: true,
-				dateAutocomplete: true,
-				tagAutocomplete: true,
-				detachTags: false,
-				save: true,
-			});
+				routeTypedInput(
+					{
+						chipArmedBefore: false,
+						chipArmedAfter: false,
+						datePopupOpened: false,
+					},
+				),
+			).toStrictEqual(
+				{
+					dateTrigger: true,
+					dateAutocomplete: true,
+					tagAutocomplete: true,
+					detachTags: false,
+					save: true,
+				},
+			);
 		});
 	});
 });
 
-describe("inline link", () => {
-	describe("bracketMatch", () => {
-		it("finds an empty pair around the caret", () => {
-			expect(bracketMatch("Plain P [[]]", 10)).toStrictEqual({index: 8, text: "[[]]"});
+describe("inline link", () =>
+{
+	describe("bracketMatch", () =>
+	{
+		it("finds an empty pair around the caret", () =>
+		{
+			expect(bracketMatch("Plain P [[]]", 10)).toStrictEqual(
+				{
+					index: 8,
+					text: "[[]]",
+				},
+			);
 		});
 
-		it("finds a pair holding a filter", () => {
-			expect(bracketMatch("Plain P [[zq]]", 11)).toStrictEqual({index: 8, text: "[[zq]]"});
+		it("finds a pair holding a filter", () =>
+		{
+			expect(bracketMatch("Plain P [[zq]]", 11)).toStrictEqual(
+				{
+					index: 8,
+					text: "[[zq]]",
+				},
+			);
 		});
 
-		it("misses once the caret is past the pair", () => {
-			expect(bracketMatch("Plain P [[zq]]", 14)).toStrictEqual({index: -1, text: ""});
+		it("misses once the caret is past the pair", () =>
+		{
+			expect(bracketMatch("Plain P [[zq]]", 14)).toStrictEqual(
+				{
+					index: -1,
+					text: "",
+				},
+			);
 		});
 
-		it("reads the filter between the brackets", () => {
+		it("reads the filter between the brackets", () =>
+		{
 			expect(innerText(bracketMatch("Plain P [[zq]]", 11))).toBe("zq");
 		});
 	});
 
-	describe("planAutoClose", () => {
-		it("closes a freshly typed [[", () => {
-			expect(planAutoClose("a [[", 4)).toStrictEqual({insertAt: 4, text: "]]"});
+	describe("planAutoClose", () =>
+	{
+		it("closes a freshly typed [[", () =>
+		{
+			expect(planAutoClose("a [[", 4)).toStrictEqual(
+				{
+					insertAt: 4,
+					text: "]]",
+				},
+			);
 		});
 
-		it("does nothing when a ]] already follows", () => {
+		it("does nothing when a ]] already follows", () =>
+		{
 			expect(planAutoClose("a [[x]]", 4)).toBeNull();
 		});
 	});
 
-	describe("planLinkInsert", () => {
-		it("replaces the pair with a link and one space, and puts the caret after the space", () => {
+	describe("planLinkInsert", () =>
+	{
+		it("replaces the pair with a link and one space, and puts the caret after the space", () =>
+		{
 			const text = "Plain P [[Target T]]";
 			const match = bracketMatch(text, 12);
 
-			expect(planLinkInsert(text, match, "Target T", "https://workflowy.com/#/81df3e9581ea")).toStrictEqual({
-				html: 'Plain P <a href="https://workflowy.com/#/81df3e9581ea">Target T</a> ',
-				caret: 17,
-			});
+			expect(planLinkInsert(text, match, "Target T", "https://workflowy.com/#/81df3e9581ea")).toStrictEqual(
+				{
+					html: 'Plain P <a href="https://workflowy.com/#/81df3e9581ea">Target T</a> ',
+					caret: 17,
+				},
+			);
 		});
 
-		it("escapes markup in the label", () => {
+		it("escapes markup in the label", () =>
+		{
 			const text = "[[x]]";
 
 			expect(
@@ -229,64 +346,143 @@ describe("inline link", () => {
 		});
 	});
 
-	describe("planInsertInlineLink", () => {
-		it("adds a space before [[ after a word", () => {
-			expect(planInsertInlineLink("a", 1)).toStrictEqual({text: "a [[", caret: 4});
+	describe("planInsertInlineLink", () =>
+	{
+		it("adds a space before [[ after a word", () =>
+		{
+			expect(planInsertInlineLink("a", 1)).toStrictEqual(
+				{
+					text: "a [[",
+					caret: 4,
+				},
+			);
 		});
 
-		it("inserts [[ alone in an empty row", () => {
-			expect(planInsertInlineLink("", 0)).toStrictEqual({text: "[[", caret: 2});
+		it("inserts [[ alone in an empty row", () =>
+		{
+			expect(planInsertInlineLink("", 0)).toStrictEqual(
+				{
+					text: "[[",
+					caret: 2,
+				},
+			);
 		});
 
-		it("inserts [[ alone after a space", () => {
-			expect(planInsertInlineLink("a ", 2)).toStrictEqual({text: "a [[", caret: 4});
+		it("inserts [[ alone after a space", () =>
+		{
+			expect(planInsertInlineLink("a ", 2)).toStrictEqual(
+				{
+					text: "a [[",
+					caret: 4,
+				},
+			);
 		});
 	});
 });
 
-describe("inline mirror", () => {
-	describe("planMirrorOpen", () => {
-		it("opens on the second parenthesis of ((", () => {
+describe("inline mirror", () =>
+{
+	describe("planMirrorOpen", () =>
+	{
+		it("opens on the second parenthesis of ((", () =>
+		{
 			expect([planMirrorOpen("see ((", 5), planMirrorOpen("see (", 4), planMirrorOpen("a(b", 1)]).toStrictEqual([
-				{start: 4, end: 6},
+				{
+					start: 4,
+					end: 6,
+				},
 				null,
 				null,
 			]);
 		});
 	});
 
-	describe("planMirrorRearm", () => {
-		it("re-arms a resting ((query ending at the caret", () => {
+	describe("planMirrorRearm", () =>
+	{
+		it("re-arms a resting ((query ending at the caret", () =>
+		{
 			expect([
 				planMirrorRearm("see ((Orig", 10),
 				planMirrorRearm("see ((Orig))", 12),
 				planMirrorRearm("no", 2),
-			]).toStrictEqual([{start: 4, end: 10}, null, null]);
+			]).toStrictEqual([
+				{
+					start: 4,
+					end: 10,
+				},
+				null,
+				null,
+			]);
 		});
 	});
 
-	describe("planInlineMirror", () => {
-		it("replaces the row when nothing else is in the name", () => {
-			expect(planInlineMirror({beforeHtml: "", afterHtml: ""})).toStrictEqual({kind: "replace-row"});
-			expect(planInlineMirror({beforeHtml: "<b></b>", afterHtml: "&nbsp;"})).toStrictEqual({kind: "replace-row"});
+	describe("planInlineMirror", () =>
+	{
+		it("replaces the row when nothing else is in the name", () =>
+		{
+			expect(
+				planInlineMirror(
+					{
+						beforeHtml: "",
+						afterHtml: "",
+					},
+				),
+			).toStrictEqual(
+				{
+					kind: "replace-row",
+				},
+			);
+			expect(
+				planInlineMirror(
+					{
+						beforeHtml: "<b></b>",
+						afterHtml: "&nbsp;",
+					},
+				),
+			).toStrictEqual(
+				{
+					kind: "replace-row",
+				},
+			);
 		});
 
-		it("splits the row, dropping one whitespace before the ((", () => {
-			expect(planInlineMirror({beforeHtml: "see ", afterHtml: " then"})).toStrictEqual({
-				kind: "split",
-				before: "see",
-				after: " then",
-			});
-			expect(planInlineMirror({beforeHtml: "see  ", afterHtml: ""})).toStrictEqual({
-				kind: "split",
-				before: "see ",
-				after: "",
-			});
+		it("splits the row, dropping one whitespace before the ((", () =>
+		{
+			expect(
+				planInlineMirror(
+					{
+						beforeHtml: "see ",
+						afterHtml: " then",
+					},
+				),
+			).toStrictEqual(
+				{
+					kind: "split",
+					before: "see",
+					after: " then",
+				},
+			);
+			expect(
+				planInlineMirror(
+					{
+						beforeHtml: "see  ",
+						afterHtml: "",
+					},
+				),
+			).toStrictEqual(
+				{
+					kind: "split",
+					before: "see ",
+					after: "",
+				},
+			);
 		});
 	});
 
-	describe("inlineMirrorInsertion", () => {
-		it("inserts (( at the start or after a space, else ' (('", () => {
+	describe("inlineMirrorInsertion", () =>
+	{
+		it("inserts (( at the start or after a space, else ' (('", () =>
+		{
 			expect([
 				inlineMirrorInsertion(""),
 				inlineMirrorInsertion("see "),
@@ -295,14 +491,40 @@ describe("inline mirror", () => {
 		});
 	});
 
-	describe("inlineMirrorRefusal", () => {
-		it("refuses Home, the row itself and the row's ancestors", () => {
+	describe("inlineMirrorRefusal", () =>
+	{
+		it("refuses Home, the row itself and the row's ancestors", () =>
+		{
 			const lineage = ["parent", "grand"];
 			expect([
-				inlineMirrorRefusal({pickId: "None", rowId: "row", parentLineage: lineage}),
-				inlineMirrorRefusal({pickId: "row", rowId: "row", parentLineage: lineage}),
-				inlineMirrorRefusal({pickId: "grand", rowId: "row", parentLineage: lineage}),
-				inlineMirrorRefusal({pickId: "other", rowId: "row", parentLineage: lineage}),
+				inlineMirrorRefusal(
+					{
+						pickId: "None",
+						rowId: "row",
+						parentLineage: lineage,
+					},
+				),
+				inlineMirrorRefusal(
+					{
+						pickId: "row",
+						rowId: "row",
+						parentLineage: lineage,
+					},
+				),
+				inlineMirrorRefusal(
+					{
+						pickId: "grand",
+						rowId: "row",
+						parentLineage: lineage,
+					},
+				),
+				inlineMirrorRefusal(
+					{
+						pickId: "other",
+						rowId: "row",
+						parentLineage: lineage,
+					},
+				),
 			]).toStrictEqual([
 				"Cannot mirror Home",
 				"Cannot mirror an item into itself",

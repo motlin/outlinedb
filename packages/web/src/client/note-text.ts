@@ -20,58 +20,85 @@ const CLASS_PATTERN = /\sclass\s*=\s*(?:"([^"]*)"|'([^']*)')/iu;
 const COLOR_CLASS_PATTERN = /^b?c-[\w-]+$/u;
 const LEGACY_BREAK_PATTERN = /<br\s*\/?>/giu;
 
-function isColorSpan(attributes: string): boolean {
+function isColorSpan(attributes: string): boolean
+{
 	const match = CLASS_PATTERN.exec(attributes);
 	const classes = (match?.[1] ?? match?.[2] ?? "").split(/\s+/u);
 	return classes.includes("colored") && classes.some((name) => COLOR_CLASS_PATTERN.test(name));
 }
 
-function decodeText(text: string): string {
+function decodeText(text: string): string
+{
 	return text.replaceAll("&nbsp;", " ").replaceAll(" ", " ");
 }
 
-function isKept(name: string, attributes: string): boolean {
+function isKept(name: string, attributes: string): boolean
+{
 	return KEPT_ELEMENTS.has(name) || (name === "span" && isColorSpan(attributes));
 }
 
 /** Converts the note editor's innerHTML into stored note text (date pills back to canonical `<time>` markup). */
-export function editorHtmlToNote(editorHtml: string): string {
+export function editorHtmlToNote(editorHtml: string): string
+{
 	const html = serializeDatePills(serializeMentionPills(editorHtml));
 	let note = "";
 	let cursor = 0;
 	// For each open element, whether its open tag was emitted and so needs a close tag.
-	const openElements: {name: string; kept: boolean}[] = [];
-	for (const match of html.matchAll(TAG_PATTERN)) {
+	const openElements:
+	{
+		name: string;
+		kept: boolean;
+	}[] = [];
+	for (const match of html.matchAll(TAG_PATTERN))
+	{
 		note += decodeText(html.slice(cursor, match.index));
 		cursor = match.index + match[0].length;
 		const [tag, slash, rawName, attributes] = match;
 		const name = (rawName ?? "").toLowerCase();
 		const closing = slash === "/";
-		if (name === "br") {
+		if (name === "br")
+		{
 			// A block's trailing <br> is the browser's empty-line placeholder, not a line break.
 			const placeholder = /^<\/(?:div|p)>/iu.test(html.slice(cursor)) || cursor === html.length;
-			if (!placeholder) {
+			if (!placeholder)
+			{
 				note += "\n";
 			}
-		} else if (BLOCK_ELEMENTS.has(name)) {
-			if (!closing && note !== "") {
+		}
+		else if (BLOCK_ELEMENTS.has(name))
+		{
+			if (!closing && note !== "")
+			{
 				note += "\n";
 			}
-		} else if (closing) {
+		}
+		else if (closing)
+		{
 			const index = openElements.findLastIndex((element) => element.name === name);
-			if (index !== -1) {
+			if (index !== -1)
+			{
 				const [element] = openElements.splice(index, 1);
-				if (element?.kept === true) {
+				if (element?.kept === true)
+				{
 					note += `</${name}>`;
 				}
 			}
-		} else {
+		}
+		else
+		{
 			const kept = isKept(name, attributes ?? "");
-			if (kept) {
+			if (kept)
+			{
 				note += name === "a" ? storedAnchorTag(anchorHref(tag)) : tag;
 			}
-			if (!tag.endsWith("/>")) {
-				openElements.push({name, kept});
+			if (!tag.endsWith("/>"))
+			{
+				openElements.push(
+					{
+						name,
+						kept,
+					},
+				);
 			}
 		}
 	}
@@ -79,7 +106,8 @@ export function editorHtmlToNote(editorHtml: string): string {
 }
 
 /** Converts stored note text into the editor's initial HTML, repairing legacy `<br>` breaks. */
-export function noteToEditorHtml(note: string): string {
+export function noteToEditorHtml(note: string): string
+{
 	return note.replaceAll(LEGACY_BREAK_PATTERN, "\n");
 }
 
@@ -95,8 +123,10 @@ export function noteContentHtml(
 	dateSettings?: DateSettings,
 	now?: Date,
 	account: MentionAccount = null,
-): string {
-	if (note === "") {
+): string
+{
+	if (note === "")
+	{
 		return "";
 	}
 	const linked = renderLinks(noteToEditorHtml(note));
@@ -109,13 +139,25 @@ export function noteContentHtml(
  * Decides whether the note editor's HTML needs saving against the last saved note. A blank
  * (whitespace-only) note saves as `""`; an unchanged note is skipped.
  */
-export function planNoteSave(initial: string, html: string): {save: boolean; note: string} {
+export function planNoteSave(
+	initial: string,
+	html: string,
+):
+{
+	save: boolean;
+	note: string;
+}
+{
 	const converted = editorHtmlToNote(html);
 	const note = converted.trim() === "" ? "" : converted;
-	return {save: note !== initial, note};
+	return {
+		save: note !== initial,
+		note,
+	};
 }
 
-export interface NoteKeyInput {
+export interface NoteKeyInput
+{
 	key: string;
 	shift: boolean;
 	/** The note's plain text. */
@@ -129,54 +171,153 @@ export interface NoteKeyInput {
 }
 
 export type NoteKeyPlan =
-	| {kind: "native"}
-	| {kind: "noop"}
-	| {kind: "insert"; text: string; caret: number}
-	| {kind: "focusName"; caret: 0 | "end"}
-	| {kind: "focusNextRowName"}
-	| {kind: "clearAndFocusName"}
-	| {kind: "appendSentinelThenNative"};
+	|
+	  {
+			kind: "native";
+	  }
+	|
+	  {
+			kind: "noop";
+	  }
+	|
+	  {
+			kind: "insert";
+			text: string;
+			caret: number;
+	  }
+	|
+	  {
+			kind: "focusName";
+			caret: 0 | "end";
+	  }
+	|
+	  {
+			kind: "focusNextRowName";
+	  }
+	|
+	  {
+			kind: "clearAndFocusName";
+	  }
+	|
+	  {
+			kind: "appendSentinelThenNative";
+	  };
 
 /**
  * Upstream's in-note key handling: Enter and Tab insert text (never split or indent rows),
  * Backspace in a blank note returns to the name, and arrows leave the note at its edges.
  */
-export function planNoteKey({key, shift, text, start, end, onFirstLine, onLastLine}: NoteKeyInput): NoteKeyPlan {
+export function planNoteKey({key, shift, text, start, end, onFirstLine, onLastLine}: NoteKeyInput): NoteKeyPlan
+{
 	const collapsed = start === end;
 	const atStart = collapsed && start === 0;
 	const atEnd = collapsed && end === text.length;
-	switch (key) {
-		case "Enter": {
-			if (shift) {
-				return {kind: "focusName", caret: "end"};
+	switch (key)
+	{
+		case "Enter":
+		{
+			if (shift)
+			{
+				return {
+					kind: "focusName",
+					caret: "end",
+				};
 			}
 			// A trailing newline renders no line, so a second one holds the new empty line open.
-			return {kind: "insert", text: end === text.length ? "\n\n" : "\n", caret: start + 1};
+			return {
+				kind: "insert",
+				text: end === text.length ? "\n\n" : "\n",
+				caret: start + 1,
+			};
 		}
-		case "Tab": {
-			return shift ? {kind: "noop"} : {kind: "insert", text: "\t", caret: start + 1};
+		case "Tab":
+		{
+			return shift
+				?
+					{
+						kind: "noop",
+					}
+				:
+					{
+						kind: "insert",
+						text: "\t",
+						caret: start + 1,
+					};
 		}
-		case "Backspace": {
-			if (text.trim() === "") {
-				return {kind: "clearAndFocusName"};
+		case "Backspace":
+		{
+			if (text.trim() === "")
+			{
+				return {
+					kind: "clearAndFocusName",
+				};
 			}
 			// Upstream appends a trailing "\n" first, so the native delete keeps the last line rendered.
-			return collapsed && !text.endsWith("\n") ? {kind: "appendSentinelThenNative"} : {kind: "native"};
+			return collapsed && !text.endsWith("\n")
+				?
+					{
+						kind: "appendSentinelThenNative",
+					}
+				:
+					{
+						kind: "native",
+					};
 		}
-		case "ArrowUp": {
-			return !shift && atStart && onFirstLine ? {kind: "focusName", caret: 0} : {kind: "native"};
+		case "ArrowUp":
+		{
+			return !shift && atStart && onFirstLine
+				?
+					{
+						kind: "focusName",
+						caret: 0,
+					}
+				:
+					{
+						kind: "native",
+					};
 		}
-		case "ArrowDown": {
-			return !shift && atEnd && onLastLine ? {kind: "focusNextRowName"} : {kind: "native"};
+		case "ArrowDown":
+		{
+			return !shift && atEnd && onLastLine
+				?
+					{
+						kind: "focusNextRowName",
+					}
+				:
+					{
+						kind: "native",
+					};
 		}
-		case "ArrowLeft": {
-			return !shift && atStart ? {kind: "focusName", caret: "end"} : {kind: "native"};
+		case "ArrowLeft":
+		{
+			return !shift && atStart
+				?
+					{
+						kind: "focusName",
+						caret: "end",
+					}
+				:
+					{
+						kind: "native",
+					};
 		}
-		case "ArrowRight": {
-			return !shift && atEnd ? {kind: "focusNextRowName"} : {kind: "native"};
+		case "ArrowRight":
+		{
+			return !shift && atEnd
+				?
+					{
+						kind: "focusNextRowName",
+					}
+				:
+					{
+						kind: "native",
+					};
 		}
-		default: {
-			return {kind: "native"};
+		default:
+		{
+			return {
+				kind: "native",
+			};
 		}
 	}
 }
@@ -185,15 +326,19 @@ export function planNoteKey({key, shift, text, start, end, onFirstLine, onLastLi
  * Wraps text nodes typed directly into the note `.content` in `.innerContentContainer`, like upstream, and
  * restores the caret to the same text offset.
  */
-export function wrapBareNoteText(element: HTMLElement): void {
-	if (element.querySelector(".innerContentContainer") !== null || element.firstChild === null) {
+export function wrapBareNoteText(element: HTMLElement): void
+{
+	if (element.querySelector(".innerContentContainer") !== null || element.firstChild === null)
+	{
 		return;
 	}
 	const selection = globalThis.getSelection();
 	let offset: number | null = null;
-	if (selection !== null && selection.rangeCount > 0) {
+	if (selection !== null && selection.rangeCount > 0)
+	{
 		const range = selection.getRangeAt(0);
-		if (element.contains(range.startContainer)) {
+		if (element.contains(range.startContainer))
+		{
 			const before = document.createRange();
 			before.selectNodeContents(element);
 			before.setEnd(range.startContainer, range.startOffset);
@@ -204,7 +349,8 @@ export function wrapBareNoteText(element: HTMLElement): void {
 	wrapper.className = "innerContentContainer";
 	wrapper.append(...element.childNodes);
 	element.append(wrapper);
-	if (offset !== null) {
+	if (offset !== null)
+	{
 		placeCaretAtTextOffset(wrapper, offset);
 	}
 }

@@ -5,14 +5,30 @@
 
 export type PopperPlacement = "bottom" | "bottom-start";
 
-export interface PlacePopperInput {
-	reference: {left: number; top: number; width: number; height: number};
-	popper: {width: number; height: number};
+export interface PlacePopperInput
+{
+	reference:
+	{
+		left: number;
+		top: number;
+		width: number;
+		height: number;
+	};
+	popper:
+	{
+		width: number;
+		height: number;
+	};
 	placement: PopperPlacement;
-	viewport: {width: number; height: number};
+	viewport:
+	{
+		width: number;
+		height: number;
+	};
 }
 
-export interface PopperPosition {
+export interface PopperPosition
+{
 	x: number;
 	y: number;
 	placement: PopperPlacement;
@@ -21,11 +37,13 @@ export interface PopperPosition {
 const PADDING = 10;
 
 // Popper's `within(min, value, max)`: min wins when the popper is larger than the padded boundary.
-function within(min: number, value: number, max: number): number {
+function within(min: number, value: number, max: number): number
+{
 	return Math.max(min, Math.min(value, max));
 }
 
-export function placePopper({reference, popper, placement, viewport}: PlacePopperInput): PopperPosition {
+export function placePopper({reference, popper, placement, viewport}: PlacePopperInput): PopperPosition
+{
 	const baseX = placement === "bottom" ? reference.left + reference.width / 2 - popper.width / 2 : reference.left;
 	const baseY = reference.top + reference.height;
 	return {
@@ -36,33 +54,65 @@ export function placePopper({reference, popper, placement, viewport}: PlacePoppe
 }
 
 /** Popper's `roundOffsets` + `mapToStyles` transform: device-pixel rounding, 2d form at dpr <= 1. */
-export function popperTransform(x: number, y: number, dpr: number): string {
+export function popperTransform(x: number, y: number, dpr: number): string
+{
 	const round = (value: number): number => Math.round(value * dpr) / dpr || 0;
 	return dpr <= 1 ? `translate(${round(x)}px, ${round(y)}px)` : `translate3d(${round(x)}px, ${round(y)}px, 0px)`;
 }
 
 /** Popper's boundary: the root client box, which excludes a scrollbar (not `innerWidth/innerHeight`). */
-export function popperViewport(doc: {documentElement: {clientWidth: number; clientHeight: number}}): {
+export function popperViewport(doc: {
+	documentElement:
+	{
+		clientWidth: number;
+		clientHeight: number;
+	};
+}):
+{
 	width: number;
 	height: number;
-} {
-	return {width: doc.documentElement.clientWidth, height: doc.documentElement.clientHeight};
+}
+{
+	return {
+		width: doc.documentElement.clientWidth,
+		height: doc.documentElement.clientHeight,
+	};
 }
 
-export interface SideMenuInput {
+export interface SideMenuInput
+{
 	/** The anchor row's client rect: popper's virtual reference sits at `(right, top)`. */
-	anchor: {left: number; right: number; top: number; bottom: number};
-	popper: {width: number; height: number};
-	viewport: {width: number; height: number};
+	anchor:
+	{
+		left: number;
+		right: number;
+		top: number;
+		bottom: number;
+	};
+	popper:
+	{
+		width: number;
+		height: number;
+	};
+	viewport:
+	{
+		width: number;
+		height: number;
+	};
 }
 
-export interface SideMenuPosition {
+export interface SideMenuPosition
+{
 	placement: "right-start" | "left-start";
 	x: number;
 	y: number;
 	/** Popper's `hide` modifier: the anchor row lies fully outside the viewport. */
 	referenceHidden: boolean;
-	style: {inset: string; transform: string};
+	style:
+	{
+		inset: string;
+		transform: string;
+	};
 }
 
 const SIDE_OFFSET = 8;
@@ -72,7 +122,8 @@ const SIDE_OFFSET = 8;
  * preventOverflow clamping both axes to 10px inside the viewport. The inline style is popper's dpr-1 form, anchored
  * to the right edge for `left-start`.
  */
-export function placeSideMenu({anchor, popper, viewport}: SideMenuInput): SideMenuPosition {
+export function placeSideMenu({anchor, popper, viewport}: SideMenuInput): SideMenuPosition
+{
 	const rightX = anchor.right + SIDE_OFFSET;
 	const leftX = anchor.right - SIDE_OFFSET - popper.width;
 	const fitsRight = rightX + popper.width <= viewport.width - PADDING;
@@ -82,9 +133,23 @@ export function placeSideMenu({anchor, popper, viewport}: SideMenuInput): SideMe
 	const y = within(PADDING, anchor.top, viewport.height - PADDING - popper.height);
 	const style =
 		placement === "left-start"
-			? {inset: "0px 0px auto auto", transform: popperTransform(-(viewport.width - (x + popper.width)), y, 1)}
-			: {inset: "0px auto auto 0px", transform: popperTransform(x, y, 1)};
+			?
+				{
+					inset: "0px 0px auto auto",
+					transform: popperTransform(-(viewport.width - (x + popper.width)), y, 1),
+				}
+			:
+				{
+					inset: "0px auto auto 0px",
+					transform: popperTransform(x, y, 1),
+				};
 	const referenceHidden =
 		anchor.bottom <= 0 || anchor.top >= viewport.height || anchor.right <= 0 || anchor.left >= viewport.width;
-	return {placement, x, y, referenceHidden, style};
+	return {
+		placement,
+		x,
+		y,
+		referenceHidden,
+		style,
+	};
 }

@@ -8,12 +8,14 @@ import {homedir} from "node:os";
 import {arrayField, errorMessage, isObject, parseJson, stringField} from "./json.mts";
 import {isMain} from "./is-main.mts";
 
-export interface ProjectNode {
+export interface ProjectNode
+{
 	name: string;
 	children?: ProjectNode[];
 }
 
-export interface ProjectEntry {
+export interface ProjectEntry
+{
 	name: string;
 	path: string;
 	tasksShortId: string | null;
@@ -21,22 +23,31 @@ export interface ProjectEntry {
 	tags: string[];
 }
 
-export interface HerdrPane {
+export interface HerdrPane
+{
 	pane_id: string;
 	tab_id: string;
 	workspace_id: string;
 	cwd?: string;
 }
 
-export interface PlannedProject extends ProjectEntry {
+export interface PlannedProject extends ProjectEntry
+{
 	todoPath: string;
 	todoExists: boolean;
 	notGitToplevel: boolean;
-	openPanes: {paneId: string; tabId: string; workspaceId: string}[];
+	openPanes:
+	{
+		paneId: string;
+		tabId: string;
+		workspaceId: string;
+	}[];
 }
 
-export function expandHome(path: string, home: string): string {
-	if (path === "~") {
+export function expandHome(path: string, home: string): string
+{
+	if (path === "~")
+	{
 		return home;
 	}
 	return path.startsWith("~/") ? `${home}${path.slice(1)}` : path;
@@ -44,12 +55,21 @@ export function expandHome(path: string, home: string): string {
 
 const LINK = /<a href="https:\/\/workflowy\.com\/#\/([0-9a-f]+)">(.*?)<\/a>/u;
 
-export function parseProjectDirectories(exported: {children?: ProjectNode[]}, home: string): ProjectEntry[] {
-	return (exported.children ?? []).flatMap((project): ProjectEntry[] => {
+export function parseProjectDirectories(
+	exported:
+	{
+		children?: ProjectNode[];
+	},
+	home: string,
+): ProjectEntry[]
+{
+	return (exported.children ?? []).flatMap((project): ProjectEntry[] =>
+	{
 		const children = project.children ?? [];
 		const pathChild = children.at(0);
 		const linkChild = children.at(1);
-		if (pathChild === undefined) {
+		if (pathChild === undefined)
+		{
 			return [];
 		}
 		const link = linkChild === undefined ? null : LINK.exec(linkChild.name);
@@ -71,12 +91,19 @@ export function planProjects(
 	panes: readonly HerdrPane[],
 	todoExists: (path: string) => boolean,
 	checkGitToplevel: (path: string) => boolean,
-): PlannedProject[] {
-	return projects.map((project) => {
+): PlannedProject[]
+{
+	return projects.map((project) =>
+	{
 		const todoPath = `${project.path}/.llm/todo.md`;
 		const openPanes = panes
 			.filter((pane) => pane.cwd === project.path || pane.cwd?.startsWith(`${project.path}/`))
-			.map((pane) => ({paneId: pane.pane_id, tabId: pane.tab_id, workspaceId: pane.workspace_id}));
+			.map((pane) => (
+			{
+				paneId: pane.pane_id,
+				tabId: pane.tab_id,
+				workspaceId: pane.workspace_id,
+			}));
 		return {
 			...project,
 			todoPath,
@@ -87,34 +114,53 @@ export function planProjects(
 	});
 }
 
-export function isGitToplevel(path: string): boolean {
-	try {
-		const top = execFileSync("git", ["-C", path, "rev-parse", "--show-toplevel"], {
-			encoding: "utf8",
-			stdio: ["ignore", "pipe", "ignore"],
-		}).trim();
+export function isGitToplevel(path: string): boolean
+{
+	try
+	{
+		const top = execFileSync(
+			"git",
+			["-C", path, "rev-parse", "--show-toplevel"],
+			{
+				encoding: "utf8",
+				stdio: ["ignore", "pipe", "ignore"],
+			},
+		).trim();
 		return realpathSync(top) === realpathSync(path);
-	} catch {
+	}
+	catch
+	{
 		return false;
 	}
 }
 
-function toProjectNode(value: unknown): ProjectNode {
-	if (!isObject(value)) {
-		return {name: ""};
+function toProjectNode(value: unknown): ProjectNode
+{
+	if (!isObject(value))
+	{
+		return {
+			name: "",
+		};
 	}
-	return {name: stringField(value, "name") ?? "", children: arrayField(value, "children").map(toProjectNode)};
+	return {
+		name: stringField(value, "name") ?? "",
+		children: arrayField(value, "children").map(toProjectNode),
+	};
 }
 
-function toPanes(paneList: unknown): HerdrPane[] {
-	if (!isObject(paneList)) {
+function toPanes(paneList: unknown): HerdrPane[]
+{
+	if (!isObject(paneList))
+	{
 		return [];
 	}
 	const raw = isObject(paneList.result) ? paneList.result.panes : paneList.panes;
-	if (!Array.isArray(raw)) {
+	if (!Array.isArray(raw))
+	{
 		return [];
 	}
-	return raw.filter(isObject).map((pane) => ({
+	return raw.filter(isObject).map((pane) => (
+	{
 		pane_id: stringField(pane, "pane_id") ?? "",
 		tab_id: stringField(pane, "tab_id") ?? "",
 		workspace_id: stringField(pane, "workspace_id") ?? "",
@@ -122,12 +168,15 @@ function toPanes(paneList: unknown): HerdrPane[] {
 	}));
 }
 
-function main(): void {
+function main(): void
+{
 	const args = process.argv.slice(2);
-	const value = (flag: string): string => {
+	const value = (flag: string): string =>
+	{
 		const index = args.indexOf(flag);
 		const file = index === -1 ? undefined : args[index + 1];
-		if (!file) {
+		if (!file)
+		{
 			throw new Error(`${flag} <file> is required`);
 		}
 		return file;
@@ -138,10 +187,14 @@ function main(): void {
 	process.stdout.write(`${JSON.stringify(plan, null, "\t")}\n`);
 }
 
-if (isMain(import.meta.url)) {
-	try {
+if (isMain(import.meta.url))
+{
+	try
+	{
 		main();
-	} catch (error) {
+	}
+	catch (error)
+	{
 		process.stderr.write(`${errorMessage(error)}\n`);
 		process.exit(1);
 	}

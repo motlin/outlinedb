@@ -19,12 +19,14 @@ import {POPUP_Z} from "./flyout/popover-box.js";
 import {domkitInputClass} from "./domkit-input.js";
 
 /** One ancestor shown in a location row's subtext, top-down, Home excluded. */
-export interface LocationCrumb {
+export interface LocationCrumb
+{
 	id: string;
 	name: string;
 }
 
-export interface LocationPickerProps {
+export interface LocationPickerProps
+{
 	/** Caret box bottom-left, in page coordinates. */
 	position: readonly [number, number];
 	/** Step 1 searches for the target; step 2 picks where `New "name" in…` goes. */
@@ -60,26 +62,52 @@ const INPUT_CLASS = domkitInputClass();
 
 const MENU_MAX_HEIGHT = 240;
 
-const FOOTER_STYLE: CSSProperties = {height: 32, display: "flex", alignItems: "center"};
-const FOOTER_A_STYLE: CSSProperties = {
+const FOOTER_STYLE: CSSProperties =
+{
+	height: 32,
+	display: "flex",
+	alignItems: "center",
+};
+const FOOTER_A_STYLE: CSSProperties =
+{
 	overflow: "hidden",
 	...FOOTER_STYLE,
 	borderTop: "1px solid var(--wf-border-primary)",
 };
 
-const STRING_ICONS: Partial<Record<NonNullable<PickerIcon>, FaIconKey>> = {
+const STRING_ICONS: Partial<Record<NonNullable<PickerIcon>, FaIconKey>> =
+{
 	clock: "fal:clock",
 	ellipsis: "fal:ellipsis",
 	plus: "fal:plus",
 };
 
 /** Upstream passes clock/ellipsis/plus as icon names (fa-fw, subtext ml-xl) and star/arrow-up as elements. */
-function rowIcon(icon: PickerIcon): FaIconKey | ReactElement | undefined {
-	if (icon === "star") {
-		return <FaIcon icon="fas:star" style={{color: "var(--wf-yellow-200)"}} />;
+function rowIcon(icon: PickerIcon): FaIconKey | ReactElement | undefined
+{
+	if (icon === "star")
+	{
+		return (
+			<FaIcon
+				icon="fas:star"
+				style={
+				{
+					color: "var(--wf-yellow-200)",
+				}}
+			/>
+		);
 	}
-	if (icon === "arrow-up") {
-		return <FaIcon icon="fal:arrow-up" style={{transform: "rotate(45deg)"}} />;
+	if (icon === "arrow-up")
+	{
+		return (
+			<FaIcon
+				icon="fal:arrow-up"
+				style={
+				{
+					transform: "rotate(45deg)",
+				}}
+			/>
+		);
 	}
 	return icon === null ? undefined : STRING_ICONS[icon];
 }
@@ -89,14 +117,25 @@ const CRUMB_CLASS = `breadcrumb-item flex-shrink-0 whitespace-nowrap overflow-hi
 const OVERFLOW_MENU_GUTTER = 48;
 
 // Upstream's location rows pass `sizes: {minItemWidth: 80}` and `threeDotPosition: "left"`.
-const layout = createBreadcrumbLayout({minItemWidth: 80, threeDotPosition: "left"}, (label) =>
-	measureCrumbLabel(label),
+const layout = createBreadcrumbLayout(
+	{
+		minItemWidth: 80,
+		threeDotPosition: "left",
+	},
+	(label) => measureCrumbLabel(label),
 );
 
 /** A disabled upstream `.breadcrumb-item`: a plain div, narrowed to its truncation width. */
-function LocationCrumbItem({item}: {item: LayoutCrumb}) {
+function LocationCrumbItem({item}: {item: LayoutCrumb})
+{
 	return (
-		<div style={{maxWidth: item.truncateWidth ?? undefined}} className={CRUMB_CLASS}>
+		<div
+			style={
+			{
+				maxWidth: item.truncateWidth ?? undefined,
+			}}
+			className={CRUMB_CLASS}
+		>
 			{item.label}
 		</div>
 	);
@@ -106,12 +145,25 @@ function LocationCrumbItem({item}: {item: LayoutCrumb}) {
  * Upstream GuiCrumbs.Widget with hideCurrent, showLastSeparator and itemsDisabled: plain divs, Home for top level,
  * the widest crumbs truncated and the leftmost collapsed into an ellipsis menu to fit the row.
  */
-export function LocationCrumbs({crumbs}: {crumbs: readonly LocationCrumb[]}) {
+export function LocationCrumbs({crumbs}: {crumbs: readonly LocationCrumb[]})
+{
 	const containerRef = useRef<HTMLDivElement>(null);
 	const [containerLeft, containerWidth] = useContainerRect(containerRef);
 	const windowWidth = useWindowWidth();
-	const shown = crumbs.length === 0 ? [{id: "None", name: "Home"}] : crumbs;
-	const inputs = shown.map(({id, name}) => ({id, label: name}));
+	const shown =
+		crumbs.length === 0
+			? [
+					{
+						id: "None",
+						name: "Home",
+					},
+				]
+			: crumbs;
+	const inputs = shown.map(({id, name}) => (
+	{
+		id,
+		label: name,
+	}));
 	const inputsKey = crumbInputsKey(inputs);
 	const visible = useMemo(
 		() => layout.calculateVisibleItems(crumbInputsFromKey(inputsKey), containerWidth, []),
@@ -122,10 +174,16 @@ export function LocationCrumbs({crumbs}: {crumbs: readonly LocationCrumb[]}) {
 		<div
 			ref={containerRef}
 			className="breadcrumbs grow shrink min-w-0 flex gap-m items-center text-s leading-base overflow-hidden"
-			style={{height: 24, color: "var(--wf-text-primary)"}}
+			style={
+			{
+				height: 24,
+				color: "var(--wf-text-primary)",
+			}}
 		>
-			{chunks.flatMap(({items, leftOffset}) => {
-				if (items[0]?.group === 1) {
+			{chunks.flatMap(({items, leftOffset}) =>
+			{
+				if (items[0]?.group === 1)
+				{
 					return [
 						<ButtonMenu
 							key={`more-${leftOffset}`}
@@ -138,7 +196,10 @@ export function LocationCrumbs({crumbs}: {crumbs: readonly LocationCrumb[]}) {
 						>
 							<div
 								className="flex flex-col items-stretch gap-m px-m breadcrumb-overflow-menu"
-								style={{maxWidth: windowWidth - leftOffset - containerLeft - OVERFLOW_MENU_GUTTER}}
+								style={
+								{
+									maxWidth: windowWidth - leftOffset - containerLeft - OVERFLOW_MENU_GUTTER,
+								}}
 							>
 								{items.map((item) => (
 									<div key={item.id}>
@@ -159,7 +220,8 @@ export function LocationCrumbs({crumbs}: {crumbs: readonly LocationCrumb[]}) {
 	);
 }
 
-interface LocationRowProps {
+interface LocationRowProps
+{
 	row: PickerRow;
 	crumbs?: readonly LocationCrumb[];
 	style?: CSSProperties;
@@ -180,18 +242,27 @@ function LocationRow({
 	isInKeyboardMode,
 	onSelect,
 	onMouseEnter,
-}: LocationRowProps) {
+}: LocationRowProps)
+{
 	// The default-location footer's label is a fragment upstream, so it is not wrapped in an inner div.
 	const label =
 		row.kind === "create-default" ? (
 			<div
 				data-menu-item-label=""
 				className="flex flex-row gap-m"
-				dangerouslySetInnerHTML={{__html: row.labelHtml}}
+				dangerouslySetInnerHTML={
+				{
+					__html: row.labelHtml,
+				}}
 			/>
 		) : (
 			<div data-menu-item-label="" className="flex flex-row gap-m">
-				<div dangerouslySetInnerHTML={{__html: row.labelHtml}} />
+				<div
+					dangerouslySetInnerHTML={
+					{
+						__html: row.labelHtml,
+					}}
+				/>
 			</div>
 		);
 	return (
@@ -217,8 +288,10 @@ function LocationRow({
 
 LocationRow.componentType = "menuItem" as const;
 
-function renderRow(row: PickerRow, index: number, props: LocationPickerProps): ReactElement {
-	if (row.kind === "help") {
+function renderRow(row: PickerRow, index: number, props: LocationPickerProps): ReactElement
+{
+	if (row.kind === "help")
+	{
 		return (
 			<div key="help" className="help-text">
 				{row.labelHtml}
@@ -227,9 +300,12 @@ function renderRow(row: PickerRow, index: number, props: LocationPickerProps): R
 	}
 	const footer = row.kind === "create-default" || row.kind === "create-elsewhere";
 	let style: CSSProperties | undefined;
-	if (row.kind === "create-default") {
+	if (row.kind === "create-default")
+	{
 		style = FOOTER_A_STYLE;
-	} else if (footer) {
+	}
+	else if (footer)
+	{
 		style = FOOTER_STYLE;
 	}
 	return (
@@ -245,51 +321,81 @@ function renderRow(row: PickerRow, index: number, props: LocationPickerProps): R
 }
 
 /** Upstream `bb4`: the popper div at `position`, bottom-start, clamped 10px inside the viewport, never flipped. */
-function usePopperPosition(position: readonly [number, number]) {
+function usePopperPosition(position: readonly [number, number])
+{
 	const ref = useRef<HTMLDivElement>(null);
 	const [placed, setPlaced] = useState<readonly [number, number]>(position);
-	useLayoutEffect(() => {
+	useLayoutEffect(() =>
+	{
 		const element = ref.current;
-		if (!element) {
+		if (!element)
+		{
 			return;
 		}
-		const {x, y} = placePopper({
-			reference: {left: position[0], top: position[1], width: 0, height: 0},
-			popper: {width: element.offsetWidth, height: element.offsetHeight},
-			placement: "bottom-start",
-			viewport: {width: window.innerWidth, height: Number.POSITIVE_INFINITY},
-		});
+		const {x, y} = placePopper(
+			{
+				reference:
+				{
+					left: position[0],
+					top: position[1],
+					width: 0,
+					height: 0,
+				},
+				popper:
+				{
+					width: element.offsetWidth,
+					height: element.offsetHeight,
+				},
+				placement: "bottom-start",
+				viewport:
+				{
+					width: window.innerWidth,
+					height: Number.POSITIVE_INFINITY,
+				},
+			},
+		);
 		setPlaced([x, y]);
 	}, [position]);
-	return {ref, placed};
+	return {
+		ref,
+		placed,
+	};
 }
 
 /** Upstream's step-1 document keydown listener: Escape is the picker's, before the menu or editor see it. */
-function useEscape(onEscape: (() => void) | undefined) {
-	useEffect(() => {
-		const onKeyDown = (event: KeyboardEvent) => {
-			if (onEscape && event.key === "Escape") {
+function useEscape(onEscape: (() => void) | undefined)
+{
+	useEffect(() =>
+	{
+		const onKeyDown = (event: KeyboardEvent) =>
+		{
+			if (onEscape && event.key === "Escape")
+			{
 				event.preventDefault();
 				event.stopPropagation();
 				onEscape();
 			}
 		};
 		document.addEventListener("keydown", onKeyDown);
-		return () => {
+		return () =>
+		{
 			document.removeEventListener("keydown", onKeyDown);
 		};
 	}, [onEscape]);
 }
 
 /** Enabled-row index of each row (disabled rows get -1), as the menu and `reducePicker` count them. */
-function enabledIndexes(rows: readonly PickerRow[]): number[] {
+function enabledIndexes(rows: readonly PickerRow[]): number[]
+{
 	let next = 0;
 	return rows.map((row) => (row.disabled ? -1 : next++));
 }
 
 /** Upstream WF.InlineSearch picker (`Bp` desktop `Cb4` + steps `Lm1`/`Mm1` + results list `KM`). */
-export function LocationPicker(props: LocationPickerProps) {
-	const {
+export function LocationPicker(props: LocationPickerProps)
+{
+	const
+	{
 		position,
 		step,
 		headerText,
@@ -308,13 +414,21 @@ export function LocationPicker(props: LocationPickerProps) {
 	// Upstream's WF.Scroll.reveal(b, {boundary: row, inline: "center"}) on each highlighted match as its row mounts.
 	const rowKey = rows.map((row) => row.labelHtml).join("\n");
 	const revealedKey = useRef<string | null>(null);
-	useLayoutEffect(() => {
-		if (revealedKey.current === rowKey) {
+	useLayoutEffect(() =>
+	{
+		if (revealedKey.current === rowKey)
+		{
 			return;
 		}
 		revealedKey.current = rowKey;
-		for (const match of ref.current?.querySelectorAll("a.menuItem [data-menu-item-label] b") ?? []) {
-			match.scrollIntoView({inline: "center", block: "nearest"});
+		for (const match of ref.current?.querySelectorAll("a.menuItem [data-menu-item-label] b") ?? [])
+		{
+			match.scrollIntoView(
+				{
+					inline: "center",
+					block: "nearest",
+				},
+			);
 		}
 	});
 	const indexes = enabledIndexes(rows);
@@ -328,7 +442,8 @@ export function LocationPicker(props: LocationPickerProps) {
 			</>
 		);
 	let menuClass = "[&_.help-text]:pt-0 [&_.help-text]:px-l [&_.help-text]:pb-l";
-	if (step === 1) {
+	if (step === 1)
+	{
 		menuClass = `[&_.help-text]:p-l ${query ? "[&_.help-text]:pt-m" : ""}`;
 	}
 	return createPortal(
@@ -339,7 +454,8 @@ export function LocationPicker(props: LocationPickerProps) {
 			data-popper-reference-hidden="false"
 			data-popper-escaped="false"
 			data-popper-placement="bottom-start"
-			style={{
+			style={
+			{
 				position: "absolute",
 				inset: "0 auto auto 0",
 				zIndex: POPUP_Z,
@@ -348,13 +464,16 @@ export function LocationPicker(props: LocationPickerProps) {
 			// A filter-driven picker (`[[`) sits beside an editor that keeps the caret: pressing a row must not blur it.
 			onMouseDown={
 				hideInput
-					? (event) => {
+					? (event) =>
+						{
 							event.preventDefault();
 						}
 					: undefined
 			}
-			onBlur={(event) => {
-				if (onFocusLeave && !event.currentTarget.contains(event.relatedTarget)) {
+			onBlur={(event) =>
+			{
+				if (onFocusLeave && !event.currentTarget.contains(event.relatedTarget))
+				{
 					onFocusLeave();
 				}
 			}}
@@ -371,7 +490,8 @@ export function LocationPicker(props: LocationPickerProps) {
 								type="text"
 								placeholder="Find location..."
 								value={query}
-								onChange={(event) => {
+								onChange={(event) =>
+								{
 									onQueryChange(event.currentTarget.value);
 								}}
 								// oxlint-disable-next-line jsx-a11y/no-autofocus -- upstream's picker input autofocuses

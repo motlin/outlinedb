@@ -24,10 +24,21 @@ const DELETED = "2026-03-01 00:00:00.000";
  * gone              (deleted)
  * refs-gone         (deleted, its references_roots row still current)
  */
-function setup() {
+function setup()
+{
 	const sqlite = new DatabaseConstructor(":memory:");
-	const db = drizzle(sqlite, {schema});
-	migrate(db, {migrationsFolder});
+	const db = drizzle(
+		sqlite,
+		{
+			schema,
+		},
+	);
+	migrate(
+		db,
+		{
+			migrationsFolder,
+		},
+	);
 	const nodes: [id: string, parentId: string | null, systemTo: string][] = [
 		["target", null, FAR_FUTURE_DATE],
 		["refs", "target", FAR_FUTURE_DATE],
@@ -38,95 +49,225 @@ function setup() {
 		["gone", null, DELETED],
 		["refs-gone", "target", DELETED],
 	];
-	for (const [id, parentId, systemTo] of nodes) {
-		db.insert(nodeContent).values({id, name: id, note: null, parentId, systemFrom: SEEDED, systemTo}).run();
-		db.insert(nodeMetadata).values({nodeId: id, priority: 0, systemFrom: SEEDED, systemTo}).run();
+	for (const [id, parentId, systemTo] of nodes)
+	{
+		db.insert(nodeContent)
+			.values(
+				{
+					id,
+					name: id,
+					note: null,
+					parentId,
+					systemFrom: SEEDED,
+					systemTo,
+				},
+			)
+			.run();
+		db.insert(nodeMetadata)
+			.values(
+				{
+					nodeId: id,
+					priority: 0,
+					systemFrom: SEEDED,
+					systemTo,
+				},
+			)
+			.run();
 	}
 	db.insert(referencesRoots)
 		.values([
-			{nodeId: "refs", systemFrom: SEEDED, systemTo: FAR_FUTURE_DATE},
-			{nodeId: "refs-gone", systemFrom: SEEDED, systemTo: FAR_FUTURE_DATE},
+			{
+				nodeId: "refs",
+				systemFrom: SEEDED,
+				systemTo: FAR_FUTURE_DATE,
+			},
+			{
+				nodeId: "refs-gone",
+				systemFrom: SEEDED,
+				systemTo: FAR_FUTURE_DATE,
+			},
 		])
 		.run();
 	db.insert(mirrors)
 		.values([
-			{mirrorId: "item-live", originalId: "source", systemFrom: SEEDED, systemTo: FAR_FUTURE_DATE},
-			{mirrorId: "item-stranded", originalId: "gone", systemFrom: SEEDED, systemTo: DELETED},
-			{mirrorId: "item-dangling", originalId: "gone", systemFrom: SEEDED, systemTo: FAR_FUTURE_DATE},
+			{
+				mirrorId: "item-live",
+				originalId: "source",
+				systemFrom: SEEDED,
+				systemTo: FAR_FUTURE_DATE,
+			},
+			{
+				mirrorId: "item-stranded",
+				originalId: "gone",
+				systemFrom: SEEDED,
+				systemTo: DELETED,
+			},
+			{
+				mirrorId: "item-dangling",
+				originalId: "gone",
+				systemFrom: SEEDED,
+				systemTo: FAR_FUTURE_DATE,
+			},
 		])
 		.run();
 	return db;
 }
 
-describe("stranded relationship rows", () => {
-	it("counts backlink items without a current original, and mirror and references root rows without a current node", () => {
+describe("stranded relationship rows", () =>
+{
+	it("counts backlink items without a current original, and mirror and references root rows without a current node", () =>
+	{
 		const db = setup();
 
-		expect(countStrandedRows(db)).toStrictEqual({backlinkItems: 2, mirrors: 1, referencesRoots: 1});
+		expect(countStrandedRows(db)).toStrictEqual(
+			{
+				backlinkItems: 2,
+				mirrors: 1,
+				referencesRoots: 1,
+			},
+		);
 	});
 
-	it("ends each stranded backlink item's composite, leaving none", () => {
-		const db = setup();
-		const UOW_TIME = "2026-06-01 12:00:00.000";
-
-		const ended = runUnitOfWork(db, endStrandedBacklinkItems, {systemTime: UOW_TIME, startedAt: Date.now()});
-
-		expect({
-			ended,
-			counts: countStrandedRows(db),
-			currentUnderRefs: db
-				.select({id: nodeContent.id})
-				.from(nodeContent)
-				.where(and(eq(nodeContent.parentId, "refs"), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
-				.all(),
-			endedItems: db
-				.select({id: nodeContent.id, systemTo: nodeContent.systemTo})
-				.from(nodeContent)
-				.where(eq(nodeContent.systemTo, UOW_TIME))
-				.orderBy(nodeContent.id)
-				.all(),
-		}).toStrictEqual({
-			ended: ["item-dangling", "item-stranded"],
-			counts: {backlinkItems: 0, mirrors: 0, referencesRoots: 1},
-			currentUnderRefs: [{id: "item-live"}],
-			endedItems: [
-				{id: "item-dangling", systemTo: UOW_TIME},
-				{id: "item-stranded", systemTo: UOW_TIME},
-			],
-		});
-	});
-
-	it("withdraws a stranded backlink item the same unit of work inserted, since it never existed", () => {
+	it("ends each stranded backlink item's composite, leaving none", () =>
+	{
 		const db = setup();
 		const UOW_TIME = "2026-06-01 12:00:00.000";
 
 		const ended = runUnitOfWork(
 			db,
-			(unitOfWork) => {
-				const temporal = {systemFrom: UOW_TIME, systemTo: FAR_FUTURE_DATE};
+			endStrandedBacklinkItems,
+			{
+				systemTime: UOW_TIME,
+				startedAt: Date.now(),
+			},
+		);
+
+		expect(
+			{
+				ended,
+				counts: countStrandedRows(db),
+				currentUnderRefs: db
+					.select(
+						{
+							id: nodeContent.id,
+						},
+					)
+					.from(nodeContent)
+					.where(and(eq(nodeContent.parentId, "refs"), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
+					.all(),
+				endedItems: db
+					.select(
+						{
+							id: nodeContent.id,
+							systemTo: nodeContent.systemTo,
+						},
+					)
+					.from(nodeContent)
+					.where(eq(nodeContent.systemTo, UOW_TIME))
+					.orderBy(nodeContent.id)
+					.all(),
+			},
+		).toStrictEqual(
+			{
+				ended: ["item-dangling", "item-stranded"],
+				counts:
+				{
+					backlinkItems: 0,
+					mirrors: 0,
+					referencesRoots: 1,
+				},
+				currentUnderRefs: [
+					{
+						id: "item-live",
+					},
+				],
+				endedItems: [
+					{
+						id: "item-dangling",
+						systemTo: UOW_TIME,
+					},
+					{
+						id: "item-stranded",
+						systemTo: UOW_TIME,
+					},
+				],
+			},
+		);
+	});
+
+	it("withdraws a stranded backlink item the same unit of work inserted, since it never existed", () =>
+	{
+		const db = setup();
+		const UOW_TIME = "2026-06-01 12:00:00.000";
+
+		const ended = runUnitOfWork(
+			db,
+			(unitOfWork) =>
+			{
+				const temporal =
+				{
+					systemFrom: UOW_TIME,
+					systemTo: FAR_FUTURE_DATE,
+				};
 				unitOfWork.tx
 					.insert(nodeContent)
-					.values({id: "item-new", name: "", note: null, parentId: "refs", ...temporal})
+					.values(
+						{
+							id: "item-new",
+							name: "",
+							note: null,
+							parentId: "refs",
+							...temporal,
+						},
+					)
 					.run();
 				unitOfWork.tx
 					.insert(nodeMetadata)
-					.values({nodeId: "item-new", priority: 3, ...temporal})
+					.values(
+						{
+							nodeId: "item-new",
+							priority: 3,
+							...temporal,
+						},
+					)
 					.run();
 				return endStrandedBacklinkItems(unitOfWork);
 			},
-			{systemTime: UOW_TIME, startedAt: Date.now()},
+			{
+				systemTime: UOW_TIME,
+				startedAt: Date.now(),
+			},
 		);
 
-		expect({
-			ended,
-			itemNew: [
-				...db.select({id: nodeContent.id}).from(nodeContent).where(eq(nodeContent.id, "item-new")).all(),
-				...db
-					.select({id: nodeMetadata.nodeId})
-					.from(nodeMetadata)
-					.where(eq(nodeMetadata.nodeId, "item-new"))
-					.all(),
-			],
-		}).toStrictEqual({ended: ["item-dangling", "item-new", "item-stranded"], itemNew: []});
+		expect(
+			{
+				ended,
+				itemNew: [
+					...db
+						.select(
+							{
+								id: nodeContent.id,
+							},
+						)
+						.from(nodeContent)
+						.where(eq(nodeContent.id, "item-new"))
+						.all(),
+					...db
+						.select(
+							{
+								id: nodeMetadata.nodeId,
+							},
+						)
+						.from(nodeMetadata)
+						.where(eq(nodeMetadata.nodeId, "item-new"))
+						.all(),
+				],
+			},
+		).toStrictEqual(
+			{
+				ended: ["item-dangling", "item-new", "item-stranded"],
+				itemNew: [],
+			},
+		);
 	});
 });

@@ -10,18 +10,23 @@ import {useRowLimits} from "../src/client/hooks/use-row-limits.js";
 import {firstPaintRowBudget, initialRowBudget} from "../src/client/render-window.js";
 import {useOutlineStore} from "../src/client/stores/outline.js";
 
-declare global {
+declare global
+{
 	var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
-function treeRow(index: number): NodeResponse {
+function treeRow(index: number): NodeResponse
+{
 	return {
 		id: `row-${index}`,
 		parent_id: null,
 		name: `row ${index}`,
 		note: null,
 		priority: index,
-		data: {layoutMode: null},
+		data:
+		{
+			layoutMode: null,
+		},
 		createdAt: null,
 		modifiedAt: null,
 		completedAt: null,
@@ -30,72 +35,138 @@ function treeRow(index: number): NodeResponse {
 
 let root: Root | undefined;
 
-beforeEach(() => {
+beforeEach(() =>
+{
 	globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 	useOutlineStore.setState(useOutlineStore.getInitialState(), true);
 });
 
-afterEach(() => {
-	act(() => {
+afterEach(() =>
+{
+	act(() =>
+	{
 		root?.unmount();
 	});
 	root = undefined;
 });
 
-describe("useRowLimits", () => {
-	it("mounts a viewport of rows with the swap and adds the step below the fold after the paint", async () => {
+describe("useRowLimits", () =>
+{
+	it("mounts a viewport of rows with the swap and adds the step below the fold after the paint", async () =>
+	{
 		const queryClient = new QueryClient();
 		queryClient.setQueryData(
 			nodeKeys.children(null),
-			Array.from({length: 300}, (_, index) => treeRow(index)),
+			Array.from(
+				{
+					length: 300,
+				},
+				(_, index) => treeRow(index),
+			),
 		);
 		const budgets: number[] = [];
-		function Probe() {
+		function Probe()
+		{
 			budgets.push(useRowLimits(null, null).budgetRows);
 			return null;
 		}
 		root = createRoot(document.createElement("div"));
-		act(() => {
-			root?.render(createElement(QueryClientProvider, {client: queryClient}, createElement(Probe)));
+		act(() =>
+		{
+			root?.render(
+				createElement(
+					QueryClientProvider,
+					{
+						client: queryClient,
+					},
+					createElement(Probe),
+				),
+			);
 		});
 		const atSwap = budgets.at(-1);
-		await act(async () => {
-			await new Promise((resolve) => {
-				requestAnimationFrame(() => {
+		await act(async () =>
+		{
+			await new Promise((resolve) =>
+			{
+				requestAnimationFrame(() =>
+				{
 					setTimeout(resolve, 10);
 				});
 			});
 		});
-		expect({atSwap, afterPaint: budgets.at(-1)}).toStrictEqual({
-			atSwap: firstPaintRowBudget(globalThis.innerHeight),
-			afterPaint: initialRowBudget(globalThis.innerHeight),
-		});
+		expect(
+			{
+				atSwap,
+				afterPaint: budgets.at(-1),
+			},
+		).toStrictEqual(
+			{
+				atSwap: firstPaintRowBudget(globalThis.innerHeight),
+				afterPaint: initialRowBudget(globalThis.innerHeight),
+			},
+		);
 	});
 
-	it("grows the row budget when the caret moves onto a row past the last one rendered", () => {
+	it("grows the row budget when the caret moves onto a row past the last one rendered", () =>
+	{
 		const queryClient = new QueryClient();
 		queryClient.setQueryData(
 			nodeKeys.children(null),
-			Array.from({length: 300}, (_, index) => treeRow(index)),
+			Array.from(
+				{
+					length: 300,
+				},
+				(_, index) => treeRow(index),
+			),
 		);
 		let budgets: number[] = [];
-		function Probe() {
+		function Probe()
+		{
 			budgets.push(useRowLimits(null, null).budgetRows);
 			return null;
 		}
 		root = createRoot(document.createElement("div"));
-		act(() => {
-			root?.render(createElement(QueryClientProvider, {client: queryClient}, createElement(Probe)));
+		act(() =>
+		{
+			root?.render(
+				createElement(
+					QueryClientProvider,
+					{
+						client: queryClient,
+					},
+					createElement(Probe),
+				),
+			);
 		});
 		const initial = budgets.at(-1) ?? 0;
 		budgets = [];
-		act(() => {
-			useOutlineStore.setState({editingId: `row-${initial - 1}`});
+		act(() =>
+		{
+			useOutlineStore.setState(
+				{
+					editingId: `row-${initial - 1}`,
+				},
+			);
 		});
 		const inside = budgets.at(-1) ?? initial;
-		act(() => {
-			useOutlineStore.setState({editingId: `row-${initial}`});
+		act(() =>
+		{
+			useOutlineStore.setState(
+				{
+					editingId: `row-${initial}`,
+				},
+			);
 		});
-		expect({inside: inside - initial, past: (budgets.at(-1) ?? 0) - initial}).toStrictEqual({inside: 0, past: 24});
+		expect(
+			{
+				inside: inside - initial,
+				past: (budgets.at(-1) ?? 0) - initial,
+			},
+		).toStrictEqual(
+			{
+				inside: 0,
+				past: 24,
+			},
+		);
 	});
 });

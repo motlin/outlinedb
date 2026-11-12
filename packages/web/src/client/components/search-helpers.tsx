@@ -5,17 +5,20 @@ import {FaIcon} from "./fa-icons.js";
 import {Flyout} from "./flyout/flyout.js";
 import type {FaIconKey} from "./fa-icons.js";
 
-export interface HelperTagLists {
+export interface HelperTagLists
+{
 	hashTags: readonly string[];
 	atTags: readonly string[];
 }
 
-interface HelperValue {
+interface HelperValue
+{
 	label: string;
 	value: string;
 }
 
-export interface HelperSection {
+export interface HelperSection
+{
 	name: string;
 	icon: FaIconKey;
 	values: readonly HelperValue[];
@@ -23,8 +26,13 @@ export interface HelperSection {
 	hint: boolean;
 }
 
-function plain(values: readonly string[]): HelperValue[] {
-	return values.map((value) => ({label: value, value}));
+function plain(values: readonly string[]): HelperValue[]
+{
+	return values.map((value) => (
+	{
+		label: value,
+		value,
+	}));
 }
 
 const DATE_VALUES = plain([
@@ -48,19 +56,51 @@ const DATE_VALUES = plain([
  * section always leads with upstream's constant `mentioned:` chip, so it shows even when the zoom has no at-tags.
  */
 // oxlint-disable-next-line react/only-export-components -- SearchBox reads the same section list for its keyboard model
-export function helperSections(tags: HelperTagLists): HelperSection[] {
+export function helperSections(tags: HelperTagLists): HelperSection[]
+{
 	const sections: HelperSection[] = [
-		{name: "jumpTo", icon: "fal:globe", values: [], hint: true},
-		{name: "tags", icon: "fal:hashtag", values: plain(tags.hashTags), hint: false},
-		{name: "mentions", icon: "fal:at", values: plain(["mentioned:", ...tags.atTags]), hint: false},
-		{name: "dates", icon: "fal:calendar-days", values: DATE_VALUES, hint: false},
-		{name: "changes", icon: "fal:clock-rotate-left", values: plain(["changed:", "created:"]), hint: false},
+		{
+			name: "jumpTo",
+			icon: "fal:globe",
+			values: [],
+			hint: true,
+		},
+		{
+			name: "tags",
+			icon: "fal:hashtag",
+			values: plain(tags.hashTags),
+			hint: false,
+		},
+		{
+			name: "mentions",
+			icon: "fal:at",
+			values: plain(["mentioned:", ...tags.atTags]),
+			hint: false,
+		},
+		{
+			name: "dates",
+			icon: "fal:calendar-days",
+			values: DATE_VALUES,
+			hint: false,
+		},
+		{
+			name: "changes",
+			icon: "fal:clock-rotate-left",
+			values: plain(["changed:", "created:"]),
+			hint: false,
+		},
 		{
 			name: "changedBy",
 			icon: "fal:users",
 			values: [
-				{label: "me", value: "changed-by:me"},
-				{label: "others", value: "changed-by:others"},
+				{
+					label: "me",
+					value: "changed-by:me",
+				},
+				{
+					label: "others",
+					value: "changed-by:others",
+				},
 			],
 			hint: false,
 		},
@@ -79,14 +119,17 @@ const FLYOUT_CLASS = "menu !-mt-px !px-[5%] !pt-0 !pb-[2px] !bg-primary\n       
 const TAB_ROW_CLASS = "relative py-s shrink-0 flex justify-around overflow-hidden";
 const TAB_ROW_SELECTED_CLASS = `${TAB_ROW_CLASS} after:content-[''] after:absolute after:z-1 after:top-full after:left-0 after:right-0 after:bottom-0 after:h-px after:-mt-px after:bg-header-border`;
 const TAB_CLASS = "py-2xs px-ml rounded-[16px]";
-const NOOP_HOVER_CHIP = (): void => {};
+const NOOP_HOVER_CHIP = (): void =>
+{
+};
 const CHIP_BASE =
 	"pl-l py-xs pr-l block !no-underline cursor-pointer whitespace-nowrap leading-base border-solid border-primary text-primary";
 const CHIP_TAIL =
 	"mobile:border-t mobile:last:border-b mobile:py-ml mobile:landscape:pl-safe-left mobile:landscape:pr-safe-right menuItem !py-0 !px-s !flex text-xs rounded-[16px] [&_span]:whitespace-nowrap [&_span]:text-ellipsis [&_span]:overflow-hidden !text-on-surface";
 
 /** Upstream's chip classes: `hover:bg-secondary` and `canHover` appear only once the mouse has been used over the menu. */
-function chipClass(active: boolean, canHover: boolean): string {
+function chipClass(active: boolean, canHover: boolean): string
+{
 	return [
 		CHIP_BASE,
 		active && "bg-secondary",
@@ -102,7 +145,8 @@ function chipClass(active: boolean, canHover: boolean): string {
 /** Upstream's `useDelayedMouseEnter`: the first hover waits 100ms, later ones are instant until the flyout is left. */
 const FIRST_HOVER_DELAY_MS = 100;
 
-export interface SearchHelpersProps {
+export interface SearchHelpersProps
+{
 	query: string;
 	focused: boolean;
 	autocompletePopulated: boolean;
@@ -123,7 +167,8 @@ export interface SearchHelpersProps {
 	flyoutRef?: Ref<HTMLDivElement>;
 }
 
-function JumpHint({jumpKey}: {jumpKey: string}) {
+function JumpHint({jumpKey}: {jumpKey: string})
+{
 	return (
 		<div className="pt-[5px] pb-[3px] text-[12px] leading-[16px] text-center">
 			For the jump to-menu, hit <span className="px-2xs rounded-xs">enter</span> now, <br /> or{" "}
@@ -146,11 +191,19 @@ function Chips({
 	keyboardMode: boolean;
 	onHoverChip: (chip: number) => void;
 	onInsert: (value: string) => void;
-}) {
+})
+{
 	const activeChip = useRef<HTMLAnchorElement>(null);
-	useEffect(() => {
-		if (keyboardMode && chip >= 0) {
-			activeChip.current?.scrollIntoView({behavior: "smooth", block: "nearest"});
+	useEffect(() =>
+	{
+		if (keyboardMode && chip >= 0)
+		{
+			activeChip.current?.scrollIntoView(
+				{
+					behavior: "smooth",
+					block: "nearest",
+				},
+			);
 		}
 	}, [keyboardMode, chip]);
 	return (
@@ -162,11 +215,16 @@ function Chips({
 						<a
 							ref={index === chip ? activeChip : undefined}
 							className={chipClass(index === chip, canHover)}
-							style={{height: 20}}
-							onMouseEnter={() => {
+							style={
+							{
+								height: 20,
+							}}
+							onMouseEnter={() =>
+							{
 								onHoverChip(index);
 							}}
-							onClick={() => {
+							onClick={() =>
+							{
 								onInsert(value);
 							}}
 						>
@@ -202,28 +260,35 @@ export function SearchHelpers({
 	onInsert,
 	jumpKey = "meta+k",
 	flyoutRef,
-}: SearchHelpersProps) {
+}: SearchHelpersProps)
+{
 	const sections = helperSections(tags);
 	const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const hoverDelay = useRef(FIRST_HOVER_DELAY_MS);
 	useEffect(
-		() => () => {
-			if (hoverTimer.current !== null) {
+		() => () =>
+		{
+			if (hoverTimer.current !== null)
+			{
 				clearTimeout(hoverTimer.current);
 			}
 		},
 		[],
 	);
 
-	const cancelHover = () => {
-		if (hoverTimer.current !== null) {
+	const cancelHover = () =>
+	{
+		if (hoverTimer.current !== null)
+		{
 			clearTimeout(hoverTimer.current);
 			hoverTimer.current = null;
 		}
 	};
-	const hoverTab = (tab: number) => {
+	const hoverTab = (tab: number) =>
+	{
 		cancelHover();
-		hoverTimer.current = setTimeout(() => {
+		hoverTimer.current = setTimeout(() =>
+		{
 			hoverTimer.current = null;
 			hoverDelay.current = 0;
 			onHoverTab(tab);
@@ -232,9 +297,12 @@ export function SearchHelpers({
 
 	const selected = sections[selection.tab];
 	let panel: ReactNode = null;
-	if (selected?.hint === true) {
+	if (selected?.hint === true)
+	{
 		panel = <JumpHint jumpKey={jumpKey} />;
-	} else if (selected !== undefined) {
+	}
+	else if (selected !== undefined)
+	{
 		panel = (
 			<Chips
 				values={selected.values}
@@ -259,10 +327,12 @@ export function SearchHelpers({
 				maxWidth="100%"
 				className={`${FLYOUT_CLASS}${border}`}
 				ref={flyoutRef}
-				onMouseDown={(event) => {
+				onMouseDown={(event) =>
+				{
 					event.preventDefault();
 				}}
-				onMouseLeave={() => {
+				onMouseLeave={() =>
+				{
 					cancelHover();
 					hoverDelay.current = FIRST_HOVER_DELAY_MS;
 				}}
@@ -277,11 +347,13 @@ export function SearchHelpers({
 									? `${TAB_CLASS} !bg-secondary`
 									: `${TAB_CLASS} !text-on-surface !bg-transparent`
 							}
-							onMouseEnter={() => {
+							onMouseEnter={() =>
+							{
 								hoverTab(index);
 							}}
 							onMouseLeave={cancelHover}
-							onClick={() => {
+							onClick={() =>
+							{
 								onClickTab?.(index);
 							}}
 						>

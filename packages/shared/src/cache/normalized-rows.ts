@@ -22,7 +22,8 @@
  * state of one row, minus its temporal envelope."
  */
 
-import type {
+import type
+{
 	NewAiMetadata,
 	NewCalendarLevels,
 	NewCalendarMetadata,

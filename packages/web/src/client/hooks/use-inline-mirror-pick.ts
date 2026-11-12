@@ -31,7 +31,8 @@ export function useInlineMirrorPick({
 	parentId: string | null;
 	contentRef: RefObject<HTMLElement | null>;
 	resetSaved: (name: string) => void;
-}): (pick: MirrorPick) => void {
+}): (pick: MirrorPick) => void
+{
 	const queryClient = useQueryClient();
 	const navigate = useStableNavigate();
 	const updateNode = useUpdateNode();
@@ -41,25 +42,46 @@ export function useInlineMirrorPick({
 	const account = useAccount();
 
 	return useCallback(
-		({hit, beforeHtml, afterHtml}) => {
+		({hit, beforeHtml, afterHtml}) =>
+		{
 			const store = useOutlineStore.getState();
 			const lineage: string[] = [];
 			for (
 				let id: string | null = parentId;
 				id !== null && !lineage.includes(id);
 				id = readNode(queryClient, id)?.parent_id ?? null
-			) {
+			)
+			{
 				lineage.push(id);
 			}
-			const refusal = inlineMirrorRefusal({pickId: hit.id, rowId: nodeId, parentLineage: lineage});
-			const plan = planInlineMirror({beforeHtml, afterHtml});
+			const refusal = inlineMirrorRefusal(
+				{
+					pickId: hit.id,
+					rowId: nodeId,
+					parentLineage: lineage,
+				},
+			);
+			const plan = planInlineMirror(
+				{
+					beforeHtml,
+					afterHtml,
+				},
+			);
 			const content = contentRef.current;
-			if (plan.kind === "split" && content !== null) {
+			if (plan.kind === "split" && content !== null)
+			{
 				content.innerHTML = renderEditorHtml(plan.before, dateSettings, account);
 				resetSaved(plan.before);
 			}
-			if (refusal !== null) {
-				store.showAppMessage(refusal, {timeout: TOAST_TIMEOUT, type: "failure"});
+			if (refusal !== null)
+			{
+				store.showAppMessage(
+					refusal,
+					{
+						timeout: TOAST_TIMEOUT,
+						type: "failure",
+					},
+				);
 				return;
 			}
 			const isZoomRoot = activePaneView().zoomedNodeId === nodeId;
@@ -67,21 +89,37 @@ export function useInlineMirrorPick({
 				sortByPriority(readChildren(queryClient, parentId) ?? []).findIndex((sibling) => sibling.id === nodeId),
 				0,
 			);
-			void runInUndoBatch(captureOutlineView, async () => {
-				if (plan.kind === "replace-row") {
+			void runInUndoBatch(captureOutlineView, async () =>
+			{
+				if (plan.kind === "replace-row")
+				{
 					const mirrorId = await mirrorNodeAt(queryClient, hit.id, parentId, rowIndex);
 					deleteNode.mutate(nodeId);
-					if (isZoomRoot && mirrorId !== undefined) {
+					if (isZoomRoot && mirrorId !== undefined)
+					{
 						goToNode(navigate, mirrorId);
 					}
 					return;
 				}
-				updateNode.mutate({nodeId, name: plan.before});
+				updateNode.mutate(
+					{
+						nodeId,
+						name: plan.before,
+					},
+				);
 				await mirrorNodeAt(queryClient, hit.id, parentId, rowIndex + 1);
-				if (plan.after.trim() !== "") {
-					createNode.mutate({parent_id: parentId ?? undefined, index: rowIndex + 2, name: plan.after});
+				if (plan.after.trim() !== "")
+				{
+					createNode.mutate(
+						{
+							parent_id: parentId ?? undefined,
+							index: rowIndex + 2,
+							name: plan.after,
+						},
+					);
 				}
-			}).catch((error: unknown) => {
+			}).catch((error: unknown) =>
+			{
 				store.addErrorNotification(
 					`Failed to mirror: ${error instanceof Error ? error.message : "request failed"}`,
 				);

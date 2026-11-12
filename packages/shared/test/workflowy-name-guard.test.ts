@@ -68,18 +68,29 @@ const ALLOWED_FILES: readonly (readonly [RegExp, string])[] = [
 /** Old names for our own CLI, binary, topic and package, banned everywhere including the allowlisted files. */
 const OLD_PRODUCT_NAMES = /workflowy[ -]cli\b|workflowy[ :]utils\b|@workflowy\/|mcp__workflowy|\bworkflowy\.sqlite\b/iu;
 
-function allTrackedFiles(): string[] {
-	return execFileSync("git", ["ls-files", "-z"], {cwd: REPO_ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024})
+function allTrackedFiles(): string[]
+{
+	return execFileSync(
+		"git",
+		["ls-files", "-z"],
+		{
+			cwd: REPO_ROOT,
+			encoding: "utf8",
+			maxBuffer: 64 * 1024 * 1024,
+		},
+	)
 		.split("\0")
 		.filter((file) => file !== "" && !file.startsWith(".llm/"))
 		.filter((file) => fs.existsSync(path.join(REPO_ROOT, file)));
 }
 
-function trackedFiles(): string[] {
+function trackedFiles(): string[]
+{
 	return allTrackedFiles().filter((file) => !ALLOWED_FILES.some(([pattern]) => pattern.test(file)));
 }
 
-function oldProductNames(file: string): string[] {
+function oldProductNames(file: string): string[]
+{
 	return fs
 		.readFileSync(path.join(REPO_ROOT, file), "utf8")
 		.split("\n")
@@ -87,9 +98,11 @@ function oldProductNames(file: string): string[] {
 		.map((line) => `${file}: ${line.trim()}`);
 }
 
-function ownMentions(file: string): string[] {
+function ownMentions(file: string): string[]
+{
 	const content = fs.readFileSync(path.join(REPO_ROOT, file), "utf8");
-	if (!/workflowy/iu.test(content)) {
+	if (!/workflowy/iu.test(content))
+	{
 		return [];
 	}
 	return content
@@ -100,12 +113,15 @@ function ownMentions(file: string): string[] {
 		.map((line) => `${file}: ${line.trim()}`);
 }
 
-describe("workflowy name guard", () => {
-	it("names our own code OutlineDB, keeping workflowy only for upstream references", () => {
+describe("workflowy name guard", () =>
+{
+	it("names our own code OutlineDB, keeping workflowy only for upstream references", () =>
+	{
 		expect(trackedFiles().flatMap((file) => ownMentions(file))).toStrictEqual([]);
 	});
 
-	it("never uses the old CLI, topic, package scope, MCP tool or cache file names, even in upstream-facing files", () => {
+	it("never uses the old CLI, topic, package scope, MCP tool or cache file names, even in upstream-facing files", () =>
+	{
 		const guards = new Set([
 			"packages/shared/test/workflowy-name-guard.test.ts",
 			"packages/shared/test/package-scope-guard.test.ts",

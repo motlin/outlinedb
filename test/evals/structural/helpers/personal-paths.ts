@@ -21,7 +21,8 @@ const PLACEHOLDER_USERS = new Set([
 const HOME_PATH = /\/(?:Users|home)\/([A-Za-z0-9._-]+)/gu;
 
 /** Returns each home directory on the line that is not a placeholder user. */
-export function findPersonalHomePaths(line: string): string[] {
+export function findPersonalHomePaths(line: string): string[]
+{
 	return [...line.matchAll(HOME_PATH)]
 		.filter((match) => !PLACEHOLDER_USERS.has((match[1] ?? "").toLowerCase()))
 		.map((match) => match[0]);

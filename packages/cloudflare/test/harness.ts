@@ -10,9 +10,11 @@ const clientDir = new URL("../../web/dist/client", import.meta.url).pathname;
 const bundles = new Map<string, Promise<string>>();
 
 /** Bundle each Worker entry once per test file; every harness started from it reuses the bundle. */
-async function bundleWorkerOnce(entry: string): Promise<string> {
+async function bundleWorkerOnce(entry: string): Promise<string>
+{
 	let bundle = bundles.get(entry);
-	if (bundle === undefined) {
+	if (bundle === undefined)
+	{
 		bundle = bundleWorker(entry);
 		bundles.set(entry, bundle);
 	}
@@ -20,21 +22,25 @@ async function bundleWorkerOnce(entry: string): Promise<string> {
 }
 
 /** Bundle a Worker entry for workerd, resolving workspace packages through their `source` export. */
-async function bundleWorker(entry: string): Promise<string> {
-	const result = await build({
-		entryPoints: [new URL(entry, import.meta.url).pathname],
-		bundle: true,
-		format: "esm",
-		write: false,
-		platform: "neutral",
-		conditions: ["source", "workerd", "worker", "browser"],
-		mainFields: ["module", "main"],
-		external: ["cloudflare:workers", "node:*"],
-	});
+async function bundleWorker(entry: string): Promise<string>
+{
+	const result = await build(
+		{
+			entryPoints: [new URL(entry, import.meta.url).pathname],
+			bundle: true,
+			format: "esm",
+			write: false,
+			platform: "neutral",
+			conditions: ["source", "workerd", "worker", "browser"],
+			mainFields: ["module", "main"],
+			external: ["cloudflare:workers", "node:*"],
+		},
+	);
 	return result.outputFiles[0]?.text ?? "";
 }
 
-export interface Harness {
+export interface Harness
+{
 	mf: Miniflare;
 	persistDir: string;
 	dispose(keepData?: boolean): Promise<void>;
@@ -45,49 +51,93 @@ export async function startHarness(
 	entry: string,
 	className = "UserStore",
 	existingPersistDir?: string,
-	bindings: Record<string, string> = {ACCESS_DEV_IDENTITY: "dev"},
-	extra: {outboundService?: Extract<MiniflareOptions, {modules: true}>["outboundService"]} = {},
-): Promise<Harness> {
+	bindings: Record<string, string> =
+	{
+		ACCESS_DEV_IDENTITY: "dev",
+	},
+	extra:
+	{
+		outboundService?: Extract<
+			MiniflareOptions,
+			{
+				modules: true;
+			}
+		>["outboundService"];
+	} = {},
+): Promise<Harness>
+{
 	const script = await bundleWorkerOnce(entry);
 	const persistDir = existingPersistDir ?? mkdtempSync(join(tmpdir(), "wf-cf-"));
-	const mf = new Miniflare({
-		// Listed explicitly, so Miniflare skips its import scan, which rejects the non-literal `import()` Better Auth's
-		// Kysely adapter keeps for node:sqlite (never reached with D1).
-		modules: [{type: "ESModule", path: "worker.mjs", contents: script}],
-		compatibilityDate: "2026-08-01",
-		compatibilityFlags: ["nodejs_compat", "global_fetch_strictly_public"],
-		bindings,
-		...extra,
-		durableObjects: {USER_STORE: {className, useSQLite: true}},
-		durableObjectsPersist: join(persistDir, "do"),
-		r2Buckets: ["SNAPSHOTS"],
-		r2Persist: join(persistDir, "r2"),
-		kvNamespaces: ["OAUTH_KV"],
-		kvPersist: join(persistDir, "kv"),
-		d1Databases: ["AUTH_DB"],
-		d1Persist: join(persistDir, "d1"),
-		assets: {
-			directory: clientDir,
-			binding: "ASSETS",
-			routerConfig: {has_user_worker: true, invoke_user_worker_ahead_of_assets: false},
-			assetConfig: {not_found_handling: "single-page-application"},
+	const mf = new Miniflare(
+		{
+			// Listed explicitly, so Miniflare skips its import scan, which rejects the non-literal `import()` Better Auth's
+			// Kysely adapter keeps for node:sqlite (never reached with D1).
+			modules: [
+				{
+					type: "ESModule",
+					path: "worker.mjs",
+					contents: script,
+				},
+			],
+			compatibilityDate: "2026-08-01",
+			compatibilityFlags: ["nodejs_compat", "global_fetch_strictly_public"],
+			bindings,
+			...extra,
+			durableObjects:
+			{
+				USER_STORE:
+				{
+					className,
+					useSQLite: true,
+				},
+			},
+			durableObjectsPersist: join(persistDir, "do"),
+			r2Buckets: ["SNAPSHOTS"],
+			r2Persist: join(persistDir, "r2"),
+			kvNamespaces: ["OAUTH_KV"],
+			kvPersist: join(persistDir, "kv"),
+			d1Databases: ["AUTH_DB"],
+			d1Persist: join(persistDir, "d1"),
+			assets:
+			{
+				directory: clientDir,
+				binding: "ASSETS",
+				routerConfig:
+				{
+					has_user_worker: true,
+					invoke_user_worker_ahead_of_assets: false,
+				},
+				assetConfig:
+				{
+					not_found_handling: "single-page-application",
+				},
+			},
 		},
-	});
+	);
 	await mf.ready;
 	return {
 		mf,
 		persistDir,
-		async dispose(keepData = false) {
+		async dispose(keepData = false)
+		{
 			await mf.dispose();
-			if (!keepData) {
-				rmSync(persistDir, {recursive: true, force: true});
+			if (!keepData)
+			{
+				rmSync(
+					persistDir,
+					{
+						recursive: true,
+						force: true,
+					},
+				);
 			}
 		},
 	};
 }
 
 /** The AUTH_DB D1 binding, typed with the Workers types. */
-export async function authDb(mf: Miniflare): Promise<D1Database> {
+export async function authDb(mf: Miniflare): Promise<D1Database>
+{
 	// Miniflare's D1 return type does not resolve here, so the linter sees an error type; cast to the Workers type.
 	// oxlint-disable-next-line typescript/no-unsafe-type-assertion, typescript/no-unnecessary-type-assertion
 	return (await mf.getD1Database("AUTH_DB")) as unknown as D1Database;
@@ -99,7 +149,8 @@ const migrationsDir = new URL("../migrations/", import.meta.url);
  * Apply the AUTH_DB migrations not yet recorded in `d1_migrations` (the table wrangler uses), in file-name order.
  * Returns the names it applied, so a re-run returns `[]`.
  */
-export async function applyD1Migrations(mf: Miniflare): Promise<string[]> {
+export async function applyD1Migrations(mf: Miniflare): Promise<string[]>
+{
 	const db = await authDb(mf);
 	await db
 		.prepare(
@@ -107,12 +158,18 @@ export async function applyD1Migrations(mf: Miniflare): Promise<string[]> {
 		)
 		.run();
 	const applied = new Set(
-		(await db.prepare("SELECT name FROM d1_migrations").all<{name: string}>()).results.map((row) => row.name),
+		(
+			await db.prepare("SELECT name FROM d1_migrations").all<
+			{
+				name: string;
+			}>()
+		).results.map((row) => row.name),
 	);
 	const pending = readdirSync(migrationsDir)
 		.filter((name) => name.endsWith(".sql") && !applied.has(name))
 		.toSorted();
-	for (const name of pending) {
+	for (const name of pending)
+	{
 		const statements = readFileSync(new URL(name, migrationsDir), "utf8")
 			.split("\n")
 			.filter((line) => !line.trim().startsWith("--"))
@@ -129,20 +186,23 @@ export async function applyD1Migrations(mf: Miniflare): Promise<string[]> {
 }
 
 /** Read a response body as JSON, inflating it first when the app compressed it (Miniflare drops the header). */
-export async function readJson(response: {arrayBuffer(): Promise<ArrayBuffer>}): Promise<unknown> {
+export async function readJson(response: {arrayBuffer(): Promise<ArrayBuffer>}): Promise<unknown>
+{
 	const bytes = new Uint8Array(await response.arrayBuffer());
 	const gzipped = bytes[0] === 0x1f && bytes[1] === 0x8b;
 	const body = gzipped ? new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip")) : new Blob([bytes]);
 	return new Response(body).json();
 }
 
-export interface SchemaRow {
+export interface SchemaRow
+{
 	type: string;
 	name: string;
 	sql: string;
 }
 
-export interface ProbeResult {
+export interface ProbeResult
+{
 	names: string[];
 	schema: SchemaRow[];
 	migrations: number;
@@ -150,7 +210,8 @@ export interface ProbeResult {
 }
 
 /** GET the probe path straight from the "dev" Durable Object, which the Worker does not route. */
-export async function probeStore<T = ProbeResult>(mf: Miniflare, path = "/__probe"): Promise<T> {
+export async function probeStore<T = ProbeResult>(mf: Miniflare, path = "/__probe"): Promise<T>
+{
 	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
 	const ns = (await mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace;
 	const response = await ns.get(ns.idFromName("dev")).fetch(`http://localhost${path}`);
@@ -158,12 +219,16 @@ export async function probeStore<T = ProbeResult>(mf: Miniflare, path = "/__prob
 }
 
 /** Run one HTTP request and return how many `UserStore.call`s it made on the named Durable Object (needs the ProbeStore entry). */
-export async function countStoreCalls(mf: Miniflare, name: string, request: () => Promise<unknown>): Promise<number> {
+export async function countStoreCalls(mf: Miniflare, name: string, request: () => Promise<unknown>): Promise<number>
+{
 	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
 	const ns = (await mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace;
 	const stub = ns.get(ns.idFromName(name));
 	await stub.fetch("http://localhost/__calls?reset");
 	await request();
-	const result: {calls: number} = await (await stub.fetch("http://localhost/__calls")).json();
+	const result:
+	{
+		calls: number;
+	} = await (await stub.fetch("http://localhost/__calls")).json();
 	return result.calls;
 }

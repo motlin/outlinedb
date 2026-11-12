@@ -7,11 +7,13 @@ import {placePopper, popperTransform, popperViewport} from "./place-popper.js";
 import type {PopperPlacement} from "./place-popper.js";
 import {BUTTON_MENU_Z, popoverBox} from "./popover-box.js";
 
-export interface ButtonMenuHandle {
+export interface ButtonMenuHandle
+{
 	focus(): void;
 }
 
-export interface ButtonMenuProps {
+export interface ButtonMenuProps
+{
 	button: ReactNode;
 	/** Upstream `for`: adds `button-menu-for-<for>` to body while open. */
 	for?: string;
@@ -53,100 +55,165 @@ export function ButtonMenu({
 	blockCloseOnInternalClick = false,
 	ref,
 	children,
-}: ButtonMenuProps) {
+}: ButtonMenuProps)
+{
 	const triggerRef = useRef<HTMLDivElement>(null);
 	const referenceRef = useRef<HTMLDivElement>(null);
 	const flyoutRef = useRef<HTMLDivElement>(null);
 	const [internalExpanded, setInternalExpanded] = useState(false);
-	const [position, setPosition] = useState({x: 0, y: 0});
+	const [position, setPosition] = useState(
+		{
+			x: 0,
+			y: 0,
+		},
+	);
 	// Upstream: a controlled setExpanded replaces the internal setter, and either source can open the menu.
 	const open = expanded === true || internalExpanded;
 
 	// The controller is created once; its callbacks read the latest props through this ref.
-	const latest = useRef({onShow, onHide, setExpanded});
-	useLayoutEffect(() => {
-		latest.current = {onShow, onHide, setExpanded};
+	const latest = useRef(
+		{
+			onShow,
+			onHide,
+			setExpanded,
+		},
+	);
+	useLayoutEffect(() =>
+	{
+		latest.current =
+		{
+			onShow,
+			onHide,
+			setExpanded,
+		};
 	});
 
 	const [controller] = useState(() =>
-		createButtonMenuController({
-			actOnHover,
-			blockCloseOnInternalClick,
-			forId,
-			setTimeout: (fn, ms) => window.setTimeout(fn, ms),
-			clearTimeout: (id) => {
-				window.clearTimeout(id);
-			},
-			bodyClassList: {
-				add: (name) => {
-					document.body.classList.add(name);
+		createButtonMenuController(
+			{
+				actOnHover,
+				blockCloseOnInternalClick,
+				forId,
+				setTimeout: (fn, ms) => window.setTimeout(fn, ms),
+				clearTimeout: (id) =>
+				{
+					window.clearTimeout(id);
 				},
-				remove: (name) => {
-					document.body.classList.remove(name);
+				bodyClassList:
+				{
+					add: (name) =>
+					{
+						document.body.classList.add(name);
+					},
+					remove: (name) =>
+					{
+						document.body.classList.remove(name);
+					},
 				},
+				onShow: () =>
+				{
+					(latest.current.setExpanded ?? setInternalExpanded)(true);
+					latest.current.onShow?.();
+				},
+				onHide: () =>
+				{
+					(latest.current.setExpanded ?? setInternalExpanded)(false);
+					latest.current.onHide?.();
+				},
+				focusTrigger: () => triggerRef.current?.focus(),
 			},
-			onShow: () => {
-				(latest.current.setExpanded ?? setInternalExpanded)(true);
-				latest.current.onShow?.();
-			},
-			onHide: () => {
-				(latest.current.setExpanded ?? setInternalExpanded)(false);
-				latest.current.onHide?.();
-			},
-			focusTrigger: () => triggerRef.current?.focus(),
-		}),
+		),
 	);
 
-	useImperativeHandle(ref, () => ({focus: () => triggerRef.current?.focus()}), []);
+	useImperativeHandle(
+		ref,
+		() => (
+		{
+			focus: () => triggerRef.current?.focus(),
+		}),
+		[],
+	);
 
-	useLayoutEffect(() => {
-		const reposition = () => {
+	useLayoutEffect(() =>
+	{
+		const reposition = () =>
+		{
 			const reference = referenceRef.current;
 			const flyout = flyoutRef.current;
-			if (!reference || !flyout) {
+			if (!reference || !flyout)
+			{
 				return;
 			}
 			const rect = reference.getBoundingClientRect();
-			const placed = placePopper({
-				reference: {left: rect.left, top: rect.top, width: rect.width, height: rect.height},
-				popper: {width: flyout.offsetWidth, height: flyout.offsetHeight},
-				placement,
-				viewport: popperViewport(document),
-			});
+			const placed = placePopper(
+				{
+					reference:
+					{
+						left: rect.left,
+						top: rect.top,
+						width: rect.width,
+						height: rect.height,
+					},
+					popper:
+					{
+						width: flyout.offsetWidth,
+						height: flyout.offsetHeight,
+					},
+					placement,
+					viewport: popperViewport(document),
+				},
+			);
 			// The flyout is absolutely positioned in document.body, so viewport coordinates need the scroll offset.
-			setPosition({x: placed.x + window.scrollX, y: placed.y + window.scrollY});
+			setPosition(
+				{
+					x: placed.x + window.scrollX,
+					y: placed.y + window.scrollY,
+				},
+			);
 		};
-		if (open) {
+		if (open)
+		{
 			reposition();
 			window.addEventListener("resize", reposition);
 			window.addEventListener("scroll", reposition, true);
 		}
-		return () => {
+		return () =>
+		{
 			window.removeEventListener("resize", reposition);
 			window.removeEventListener("scroll", reposition, true);
 		};
 	}, [open, placement]);
 
-	const hide = () => {
+	const hide = () =>
+	{
 		controller.blur();
 	};
-	const box = popoverBox({minWidth, maxWidth, offset});
+	const box = popoverBox(
+		{
+			minWidth,
+			maxWidth,
+			offset,
+		},
+	);
 
 	const flyout = (
 		// oxlint-disable-next-line jsx-a11y/no-static-element-interactions -- verbatim upstream markup: the pointer handlers only flag internal clicks
 		<div
 			ref={flyoutRef}
-			onMouseDown={() => {
+			onMouseDown={() =>
+			{
 				controller.flyoutPointerDown();
 			}}
-			onTouchStart={() => {
+			onTouchStart={() =>
+			{
 				controller.flyoutPointerDown();
 			}}
 			className={`${box.className} flyout menu`}
 			data-popper-reference-hidden="false"
 			data-popper-escaped="false"
 			data-popper-placement={placement}
-			style={{
+			style={
+			{
 				position: "absolute",
 				inset: "0px auto auto 0px",
 				...box.style,
@@ -169,19 +236,24 @@ export function ButtonMenu({
 			tabIndex={0}
 			style={style}
 			className={`relative outline-none menu ${className}`}
-			onFocus={() => {
+			onFocus={() =>
+			{
 				controller.focus();
 			}}
-			onBlur={() => {
+			onBlur={() =>
+			{
 				controller.blur();
 			}}
-			onMouseEnter={() => {
+			onMouseEnter={() =>
+			{
 				controller.mouseEnter();
 			}}
-			onMouseLeave={() => {
+			onMouseLeave={() =>
+			{
 				controller.mouseLeave();
 			}}
-			onClick={(event) => {
+			onClick={(event) =>
+			{
 				const active = document.activeElement;
 				const activeElement = active instanceof HTMLElement ? active : null;
 				// A menu item's click bubbles here through the portal; it must not reopen the menu it just closed.
@@ -190,7 +262,8 @@ export function ButtonMenu({
 					activeElement ? (triggerRef.current?.contains(activeElement) ?? false) : null,
 					fromFlyout,
 				);
-				if (action === "blur") {
+				if (action === "blur")
+				{
 					activeElement?.blur();
 				}
 			}}

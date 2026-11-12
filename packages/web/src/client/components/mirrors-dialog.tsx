@@ -13,12 +13,14 @@ import type {MirrorLocation, MirrorsResponse} from "../../node-types.js";
 export type {MirrorLocation, MirrorsResponse} from "../../node-types.js";
 
 /** Lodash `truncate(text, {length})`: longer text keeps `length - 3` characters and an ellipsis. */
-export function lodashTruncate(text: string, length: number): string {
+export function lodashTruncate(text: string, length: number): string
+{
 	return text.length <= length ? text : `${text.slice(0, length - 3)}...`;
 }
 
 /** Upstream's "Delete Original and Linked copies" deletes the mirrors first so the original is never promoted. */
-export function deletionOrder(data: MirrorsResponse): string[] {
+export function deletionOrder(data: MirrorsResponse): string[]
+{
 	return [
 		...data.mirrors.filter((location) => !location.isOriginal),
 		...data.mirrors.filter((l) => l.isOriginal),
@@ -34,7 +36,8 @@ export function MirrorsDialogView({
 	data: MirrorsResponse;
 	renderCrumbs: (location: MirrorLocation) => ReactNode;
 	onDeleteAll: () => void;
-}) {
+})
+{
 	return (
 		<div className="flex flex-col gap-xl">
 			<div className="text-xl font-bold">
@@ -69,49 +72,78 @@ export function MirrorsDialogView({
 }
 
 /** Upstream `WF.Mirrors.see`: the "Mirrors for" dialog of the node in the store, fetched when it opens. */
-export function MirrorsDialogHost() {
+export function MirrorsDialogHost()
+{
 	const nodeId = useOutlineStore((state) => state.mirrorsDialogNodeId);
 	const close = useOutlineStore((state) => state.closeMirrorsDialog);
-	const [loaded, setLoaded] = useState<{nodeId: string; data: MirrorsResponse} | null>(null);
+	const [loaded, setLoaded] = useState<
+	{
+		nodeId: string;
+		data: MirrorsResponse;
+	} | null>(null);
 	const {navigateToNode} = useNodeNavigation();
 	const deleteNode = useDeleteNode();
 
-	useEffect(() => {
-		if (nodeId === null) {
+	useEffect(() =>
+	{
+		if (nodeId === null)
+		{
 			// oxlint-disable-next-line unicorn/no-useless-undefined -- consistent-return needs a value beside the cleanup return
 			return undefined;
 		}
 		const controller = new AbortController();
-		void (async () => {
-			try {
-				const response = await fetch(`/api/v1/nodes/${encodeURIComponent(nodeId)}/mirrors`, {
-					signal: controller.signal,
-				});
-				if (response.ok) {
-					setLoaded({nodeId, data: await readJson<MirrorsResponse>(response)});
+		void (async () =>
+		{
+			try
+			{
+				const response = await fetch(
+					`/api/v1/nodes/${encodeURIComponent(nodeId)}/mirrors`,
+					{
+						signal: controller.signal,
+					},
+				);
+				if (response.ok)
+				{
+					setLoaded(
+						{
+							nodeId,
+							data: await readJson<MirrorsResponse>(response),
+						},
+					);
 				}
-			} catch {
+			}
+			catch
+			{
 				// A failed or superseded lookup leaves the dialog closed.
 			}
 		})();
-		return () => {
+		return () =>
+		{
 			controller.abort();
 		};
 	}, [nodeId]);
 
-	if (nodeId === null || loaded === null || loaded.nodeId !== nodeId) {
+	if (nodeId === null || loaded === null || loaded.nodeId !== nodeId)
+	{
 		return null;
 	}
 	const {data} = loaded;
-	const deleteAll = async () => {
-		for (const id of deletionOrder(data)) {
+	const deleteAll = async () =>
+	{
+		for (const id of deletionOrder(data))
+		{
 			// oxlint-disable-next-line no-await-in-loop -- the mirrors go before the original
-			await new Promise<void>((resolve) => {
-				deleteNode.mutate(id, {
-					onSettled: () => {
-						resolve();
+			await new Promise<void>((resolve) =>
+			{
+				deleteNode.mutate(
+					id,
+					{
+						onSettled: () =>
+						{
+							resolve();
+						},
 					},
-				});
+				);
 			});
 		}
 		close();
@@ -122,15 +154,22 @@ export function MirrorsDialogHost() {
 				data={data}
 				renderCrumbs={(location) => (
 					<LeftCollapsingCrumbs
-						crumbs={location.path.map((crumb) => ({id: crumb.id, isRoot: false, name: crumb.name}))}
+						crumbs={location.path.map((crumb) => (
+						{
+							id: crumb.id,
+							isRoot: false,
+							name: crumb.name,
+						}))}
 						currentId={location.id}
-						onNavigate={(id) => {
+						onNavigate={(id) =>
+						{
 							close();
 							navigateToNode(id);
 						}}
 					/>
 				)}
-				onDeleteAll={() => {
+				onDeleteAll={() =>
+				{
 					void deleteAll();
 				}}
 			/>

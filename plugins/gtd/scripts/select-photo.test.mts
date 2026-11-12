@@ -4,7 +4,8 @@ import {test} from "node:test";
 import assert from "node:assert/strict";
 import {buildSelectAppleScript} from "./select-photo.mts";
 
-test("buildSelectAppleScript selects by exact filename and date, read-only", () => {
+test("buildSelectAppleScript selects by exact filename and date, read-only", () =>
+{
 	assert.deepStrictEqual(buildSelectAppleScript("IMG_3513.HEIC", "2026-10-25"), [
 		"on run argv",
 		'tell application "Photos"',
@@ -27,16 +28,19 @@ test("buildSelectAppleScript selects by exact filename and date, read-only", () 
 	]);
 });
 
-test("buildSelectAppleScript escapes quotes and backslashes in the filename", () => {
+test("buildSelectAppleScript escapes quotes and backslashes in the filename", () =>
+{
 	const lines = buildSelectAppleScript(String.raw`a"b\c.jpg`, "2026-01-02");
 	assert.ok(lines.includes(String.raw`set matches to (get every media item whose filename is "a\"b\\c.jpg")`));
 });
 
-test("buildSelectAppleScript rejects a malformed date", () => {
+test("buildSelectAppleScript rejects a malformed date", () =>
+{
 	assert.throws(() => buildSelectAppleScript("IMG_1.JPG", "10/25/2026"), /YYYY-MM-DD/u);
 });
 
-test("buildSelectAppleScript never contains a mutating Photos verb", () => {
+test("buildSelectAppleScript never contains a mutating Photos verb", () =>
+{
 	const script = buildSelectAppleScript("IMG_1.JPG", "2026-01-02").join("\n");
 	assert.doesNotMatch(script, /\b(delete|remove|move|import|set (name|title|favorite))\b/u);
 });

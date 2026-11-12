@@ -1,6 +1,7 @@
 import {describe, expect, it} from "vite-plus/test";
 import {PALETTE_ORDER} from "../src/client/keys/palette-order.js";
-import {
+import
+{
 	initialPaletteState,
 	paletteEntries,
 	paletteFooterCount,
@@ -11,20 +12,40 @@ import {
 import type {PaletteEntry} from "../src/client/command-palette-model.js";
 import type {CommandRegistry} from "../src/client/keys/dispatch.js";
 
-const ctx = {items: [], zoomedId: null};
-const execute = () => {};
+const ctx =
+{
+	items: [],
+	zoomedId: null,
+};
+const execute = () =>
+{
+};
 const NA = "Not available in the current context";
 
-function full(): PaletteEntry[] {
-	return PALETTE_ORDER.map((key) => ({key, disabled: null}));
+function full(): PaletteEntry[]
+{
+	return PALETTE_ORDER.map((key) => (
+	{
+		key,
+		disabled: null,
+	}));
 }
 
-function search(term: string, list = full()): string[] {
-	return paletteReducer(initialPaletteState(list), {type: "SEARCH", term}).list.map((e) => e.key);
+function search(term: string, list = full()): string[]
+{
+	return paletteReducer(
+		initialPaletteState(list),
+		{
+			type: "SEARCH",
+			term,
+		},
+	).list.map((e) => e.key);
 }
 
-describe("palette order", () => {
-	it("holds the 192 upstream ids", () => {
+describe("palette order", () =>
+{
+	it("holds the 192 upstream ids", () =>
+	{
 		expect(PALETTE_ORDER).toHaveLength(192);
 		expect(PALETTE_ORDER.slice(0, 3)).toStrictEqual(["select_all", "expand_selection_up", "expand_selection_down"]);
 		expect(PALETTE_ORDER.slice(-3)).toStrictEqual([
@@ -35,31 +56,63 @@ describe("palette order", () => {
 	});
 });
 
-describe("paletteEntries", () => {
-	it("lists upstream order first, local extras last, hides underscore keys, marks unavailable", () => {
-		const registry: CommandRegistry = {
-			zen_mode: {execute},
-			b_local: {execute},
-			_hidden: {execute},
-			swap_mirror_origin: {available: () => false, execute},
-			toggle_table: {
-				available: () => {
+describe("paletteEntries", () =>
+{
+	it("lists upstream order first, local extras last, hides underscore keys, marks unavailable", () =>
+	{
+		const registry: CommandRegistry =
+		{
+			zen_mode:
+			{
+				execute,
+			},
+			b_local:
+			{
+				execute,
+			},
+			_hidden:
+			{
+				execute,
+			},
+			swap_mirror_origin:
+			{
+				available: () => false,
+				execute,
+			},
+			toggle_table:
+			{
+				available: () =>
+				{
 					throw new Error("boom");
 				},
 				execute,
 			},
 		};
 		expect(paletteEntries(registry, ctx)).toStrictEqual([
-			{key: "swap_mirror_origin", disabled: NA},
-			{key: "toggle_table", disabled: NA},
-			{key: "zen_mode", disabled: null},
-			{key: "b_local", disabled: null},
+			{
+				key: "swap_mirror_origin",
+				disabled: NA,
+			},
+			{
+				key: "toggle_table",
+				disabled: NA,
+			},
+			{
+				key: "zen_mode",
+				disabled: null,
+			},
+			{
+				key: "b_local",
+				disabled: null,
+			},
 		]);
 	});
 });
 
-describe("paletteHotkeys", () => {
-	it("keeps the first raw combo per command", () => {
+describe("paletteHotkeys", () =>
+{
+	it("keeps the first raw combo per command", () =>
+	{
 		expect(
 			paletteHotkeys([
 				["alt+q", "show_command_palette"],
@@ -67,12 +120,19 @@ describe("paletteHotkeys", () => {
 				["meta+a", null],
 				["meta+a", "select_all"],
 			]),
-		).toStrictEqual({show_command_palette: "alt+q", select_all: "meta+a"});
+		).toStrictEqual(
+			{
+				show_command_palette: "alt+q",
+				select_all: "meta+a",
+			},
+		);
 	});
 });
 
-describe("paletteReducer", () => {
-	it("filters by fuzzy command id and ranks by score", () => {
+describe("paletteReducer", () =>
+{
+	it("filters by fuzzy command id and ranks by score", () =>
+	{
 		expect(search("zen")).toStrictEqual(["zen_mode"]);
 		expect(search("tfw")).toStrictEqual(["toggle_full_width_page", "navigate_forward"]);
 		expect(search("mv7")).toStrictEqual(["move_7_days_out"]);
@@ -97,8 +157,13 @@ describe("paletteReducer", () => {
 		expect(search("sel m")).toStrictEqual([]);
 	});
 
-	it("keeps disabled rows in results", () => {
-		const list = PALETTE_ORDER.map((key) => ({key, disabled: key === "detach_mirror" ? NA : null}));
+	it("keeps disabled rows in results", () =>
+	{
+		const list = PALETTE_ORDER.map((key) => (
+		{
+			key,
+			disabled: key === "detach_mirror" ? NA : null,
+		}));
 		expect(search("mirror", list)).toStrictEqual([
 			"mirror",
 			"mirror_to",
@@ -113,24 +178,58 @@ describe("paletteReducer", () => {
 		]);
 	});
 
-	it("clamps movement and resets the index on search", () => {
+	it("clamps movement and resets the index on search", () =>
+	{
 		let state = initialPaletteState(full().slice(0, 10));
-		for (let i = 0; i < 12; i++) {
-			state = paletteReducer(state, {type: "MOVE_DOWN"});
+		for (let i = 0; i < 12; i++)
+		{
+			state = paletteReducer(
+				state,
+				{
+					type: "MOVE_DOWN",
+				},
+			);
 		}
 		expect(state.idx).toBe(9);
-		for (let i = 0; i < 12; i++) {
-			state = paletteReducer(state, {type: "MOVE_UP"});
+		for (let i = 0; i < 12; i++)
+		{
+			state = paletteReducer(
+				state,
+				{
+					type: "MOVE_UP",
+				},
+			);
 		}
 		expect(state.idx).toBe(0);
-		state = paletteReducer(paletteReducer(state, {type: "MOVE_DOWN"}), {type: "SEARCH", term: "s"});
+		state = paletteReducer(
+			paletteReducer(
+				state,
+				{
+					type: "MOVE_DOWN",
+				},
+			),
+			{
+				type: "SEARCH",
+				term: "s",
+			},
+		);
 		expect(state.idx).toBe(0);
-		expect(paletteReducer(state, {type: "SEARCH", term: ""}).list).toHaveLength(10);
+		expect(
+			paletteReducer(
+				state,
+				{
+					type: "SEARCH",
+					term: "",
+				},
+			).list,
+		).toHaveLength(10);
 	});
 });
 
-describe("row class and footer", () => {
-	it("clones the upstream template quirk", () => {
+describe("row class and footer", () =>
+{
+	it("clones the upstream template quirk", () =>
+	{
 		expect(paletteRowClass(true)).toBe(
 			"\n                py-s pl-s bg-secondary\n                flex flex-row items-center\n                aria-disabled:opacity-50\n                aria-disabled:cursor-help\n              ",
 		);

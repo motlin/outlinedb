@@ -13,7 +13,8 @@ const parsed = JSON.parse(readFileSync(join(migrationsDir, "meta/_journal.json")
 const journal = /** @type {{entries: {idx: number, tag: string}[]}} */ (parsed);
 /** @type {Record<string, string>} */
 const migrations = {};
-for (const entry of journal.entries) {
+for (const entry of journal.entries)
+{
 	migrations[`m${String(entry.idx).padStart(4, "0")}`] = readFileSync(
 		join(migrationsDir, `${entry.tag}.sql`),
 		"utf8",

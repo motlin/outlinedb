@@ -12,21 +12,41 @@ export type StripLevel = CalendarLevel;
 const DRAG_THRESHOLD = 4;
 
 /** The local date a `YYYYMMDD` (day or week) / `YYYYMM00` / `YYYY0000` calendar dateId starts on. */
-export function calendarPageDate(pageDateId: number): Date {
+export function calendarPageDate(pageDateId: number): Date
+{
 	const month = Math.floor(pageDateId / 100) % 100;
 	return new Date(Math.floor(pageDateId / 10_000), Math.max(month, 1) - 1, Math.max(pageDateId % 100, 1));
 }
 
 /** A zoomed node's strip page: its level and first day, or null when it is no day, week, month or year page. */
 export function stripPage(
-	calendar: {level: string | null; dateId: number | null} | null | undefined,
-): {level: StripLevel; date: Date} | null {
+	calendar:
+		|
+		  {
+				level: string | null;
+				dateId: number | null;
+		  }
+		| null
+		| undefined,
+):
+{
+	level: StripLevel;
+	date: Date;
+} | null
+{
 	const level = CALENDAR_LEVELS.find((candidate) => candidate === calendar?.level);
 	const pageDateId = calendar?.dateId ?? null;
-	return level === undefined || pageDateId === null ? null : {level, date: calendarPageDate(pageDateId)};
+	return level === undefined || pageDateId === null
+		? null
+		:
+			{
+				level,
+				date: calendarPageDate(pageDateId),
+			};
 }
 
-export interface StripArrow {
+export interface StripArrow
+{
 	tooltip: string;
 	target: CalendarTarget;
 }
@@ -37,17 +57,49 @@ export function stripNav(
 	date: Date,
 	now: Date,
 	weekStartDay: number,
-): {prev: StripArrow; next: StripArrow} {
+):
+{
+	prev: StripArrow;
+	next: StripArrow;
+}
+{
 	const [prevTooltip, nextTooltip] = navTooltips(level, date, now, weekStartDay);
 	return {
-		prev: {tooltip: prevTooltip, target: {date: prevOf(level, date), level}},
-		next: {tooltip: nextTooltip, target: {date: nextOf(level, date), level}},
+		prev:
+		{
+			tooltip: prevTooltip,
+			target:
+			{
+				date: prevOf(level, date),
+				level,
+			},
+		},
+		next:
+		{
+			tooltip: nextTooltip,
+			target:
+			{
+				date: nextOf(level, date),
+				level,
+			},
+		},
 	};
 }
 
 /** A month cell: that month node on month and year pages (`stopAt:"month"`, no child), else its first day's page. */
-export function monthCellTarget(level: StripLevel, month: Date): CalendarTarget {
-	return level === "day" ? {date: month} : {date: month, level: "month", createChild: false};
+export function monthCellTarget(level: StripLevel, month: Date): CalendarTarget
+{
+	return level === "day"
+		?
+			{
+				date: month,
+			}
+		:
+			{
+				date: month,
+				level: "month",
+				createChild: false,
+			};
 }
 
 /**
@@ -57,49 +109,82 @@ export function monthCellTarget(level: StripLevel, month: Date): CalendarTarget 
  * click lands on Sep 1, not on the day under the clicked card.
  */
 export function scrollStripOnMount(
-	scroller: ScrollGeometry & {scrollLeft: number},
-	{level, pageTs, todayTs}: {level: StripLevel; pageTs: number; todayTs: number},
-): void {
+	scroller: ScrollGeometry &
+	{
+		scrollLeft: number;
+	},
+	{
+		level,
+		pageTs,
+		todayTs,
+	}:
+	{
+		level: StripLevel;
+		pageTs: number;
+		todayTs: number;
+	},
+): void
+{
 	const pageDelta = level === "year" ? null : scrollDelta(scroller, pageTs);
-	if (pageDelta !== null) {
+	if (pageDelta !== null)
+	{
 		scroller.scrollLeft += pageDelta;
 		return;
 	}
 	scroller.scrollLeft = 0;
 	const todayDelta = level === "year" ? scrollDelta(scroller, todayTs) : null;
-	if (todayDelta !== null) {
+	if (todayDelta !== null)
+	{
 		scroller.scrollLeft += todayDelta;
 	}
 }
 
-interface ScrollGeometry {
-	getBoundingClientRect: () => {left: number};
-	querySelector: (selector: string) => {getBoundingClientRect: () => {left: number}} | null;
+interface ScrollGeometry
+{
+	getBoundingClientRect: () =>
+	{
+		left: number;
+	};
+	querySelector: (selector: string) =>
+	{
+		getBoundingClientRect: () =>
+		{
+			left: number;
+		};
+	} | null;
 }
 
 /** How far to scroll so the `[data-ts]` cell sits at the scroller's left edge, or null without one. */
-export function scrollDelta(scroller: ScrollGeometry, ts: number): number | null {
+export function scrollDelta(scroller: ScrollGeometry, ts: number): number | null
+{
 	const cell = scroller.querySelector(`[data-ts="${ts}"]`);
 	return cell === null ? null : cell.getBoundingClientRect().left - scroller.getBoundingClientRect().left;
 }
 
 /** Swallow the click that ends a drag, so no cell navigates. */
-function swallowClick(event: Event): void {
+function swallowClick(event: Event): void
+{
 	event.stopPropagation();
 	event.preventDefault();
 }
 
-function mouseX(event: Event): number {
+function mouseX(event: Event): number
+{
 	return "clientX" in event && typeof event.clientX === "number" ? event.clientX : 0;
 }
 
-function mouseButton(event: Event): number {
+function mouseButton(event: Event): number
+{
 	return "button" in event && typeof event.button === "number" ? event.button : -1;
 }
 
-interface DragScroller extends EventTarget {
+interface DragScroller extends EventTarget
+{
 	scrollLeft: number;
-	style: {cursor: string};
+	style:
+	{
+		cursor: string;
+	};
 }
 
 /**
@@ -110,15 +195,31 @@ export function attachOutsideDismiss(
 	doc: EventTarget,
 	inside: (target: EventTarget | null) => boolean,
 	dismiss: () => void,
-): () => void {
-	const onDown = (event: Event) => {
-		if (!inside(event.target)) {
+): () => void
+{
+	const onDown = (event: Event) =>
+	{
+		if (!inside(event.target))
+		{
 			dismiss();
 		}
 	};
-	doc.addEventListener("pointerdown", onDown, {capture: true});
-	return () => {
-		doc.removeEventListener("pointerdown", onDown, {capture: true});
+	doc.addEventListener(
+		"pointerdown",
+		onDown,
+		{
+			capture: true,
+		},
+	);
+	return () =>
+	{
+		doc.removeEventListener(
+			"pointerdown",
+			onDown,
+			{
+				capture: true,
+			},
+		);
 	};
 }
 
@@ -127,35 +228,51 @@ export function attachOutsideDismiss(
  * strip with `cursor: grabbing`, and the click that ends it is swallowed so no
  * cell navigates. Returns the cleanup.
  */
-export function attachDragScroll(scroller: DragScroller, doc: EventTarget): () => void {
+export function attachDragScroll(scroller: DragScroller, doc: EventTarget): () => void
+{
 	let down = false;
 	let dragging = false;
 	let startX = 0;
 	let startScroll = 0;
-	const onDown = (event: Event) => {
-		if (mouseButton(event) === 0) {
+	const onDown = (event: Event) =>
+	{
+		if (mouseButton(event) === 0)
+		{
 			down = true;
 			dragging = false;
 			startX = mouseX(event);
 			startScroll = scroller.scrollLeft;
 		}
 	};
-	const onMove = (event: Event) => {
-		if (!down) {
+	const onMove = (event: Event) =>
+	{
+		if (!down)
+		{
 			return;
 		}
 		const dx = mouseX(event) - startX;
-		if (!dragging && Math.abs(dx) > DRAG_THRESHOLD) {
+		if (!dragging && Math.abs(dx) > DRAG_THRESHOLD)
+		{
 			dragging = true;
 		}
-		if (dragging) {
+		if (dragging)
+		{
 			scroller.scrollLeft = startScroll - dx;
 			scroller.style.cursor = "grabbing";
 		}
 	};
-	const onUp = () => {
-		if (dragging) {
-			scroller.addEventListener("click", swallowClick, {capture: true, once: true});
+	const onUp = () =>
+	{
+		if (dragging)
+		{
+			scroller.addEventListener(
+				"click",
+				swallowClick,
+				{
+					capture: true,
+					once: true,
+				},
+			);
 		}
 		down = false;
 		dragging = false;
@@ -164,7 +281,8 @@ export function attachDragScroll(scroller: DragScroller, doc: EventTarget): () =
 	scroller.addEventListener("mousedown", onDown);
 	doc.addEventListener("mousemove", onMove);
 	doc.addEventListener("mouseup", onUp);
-	return () => {
+	return () =>
+	{
 		scroller.removeEventListener("mousedown", onDown);
 		doc.removeEventListener("mousemove", onMove);
 		doc.removeEventListener("mouseup", onUp);
@@ -182,20 +300,30 @@ const MOVE_TOAST_TIMEOUT = 5000;
  * Upstream's strip autoscroll during an item drag, in px per frame: `2 + min(1, depth/80) * 8` toward the edge
  * the pointer is within 80px of (negative is left), else 0.
  */
-export function stripAutoscrollSpeed(clientX: number, rect: {left: number; right: number}): number {
+export function stripAutoscrollSpeed(
+	clientX: number,
+	rect:
+	{
+		left: number;
+		right: number;
+	},
+): number
+{
 	const speed = (inset: number) =>
 		DROP_AUTOSCROLL_MIN +
 		Math.min(1, (DROP_AUTOSCROLL_ZONE - inset) / DROP_AUTOSCROLL_ZONE) * DROP_AUTOSCROLL_RANGE;
 	const fromLeft = clientX - rect.left;
 	const fromRight = rect.right - clientX;
-	if (fromLeft < DROP_AUTOSCROLL_ZONE) {
+	if (fromLeft < DROP_AUTOSCROLL_ZONE)
+	{
 		return -speed(fromLeft);
 	}
 	return fromRight < DROP_AUTOSCROLL_ZONE ? speed(fromRight) : 0;
 }
 
 /** A strip card items can be dropped on: a day card (the Today card too) or a month card, by its `data-ts`. */
-export interface StripDropCell {
+export interface StripDropCell
+{
 	kind: "day" | "month";
 	ts: number;
 }
@@ -205,31 +333,51 @@ const STRIP_DROP_ATTRIBUTE = "data-strip-drop";
 /** The event a bullet drag dispatches on the strip card it was released over. */
 export const STRIP_DROP_EVENT = "calendar-strip-drop";
 
-export interface StripDropDetail {
+export interface StripDropDetail
+{
 	itemIds: readonly string[];
 	cell: StripDropCell;
 }
 
 /** The store key of a hovered strip card, unique across day and month cells that share a timestamp. */
-export function stripDropKey(cell: StripDropCell): string {
+export function stripDropKey(cell: StripDropCell): string
+{
 	return `${cell.kind}:${cell.ts}`;
 }
 
 /** The strip card at or around `element`, or null when it is not one. */
-export function stripDropCellOf(element: Element): {card: Element; cell: StripDropCell} | null {
+export function stripDropCellOf(element: Element):
+{
+	card: Element;
+	cell: StripDropCell;
+} | null
+{
 	const card = element.closest(`[${STRIP_DROP_ATTRIBUTE}]`);
 	const ts = Number(card?.closest("[data-ts]")?.getAttribute("data-ts") ?? Number.NaN);
 	const kind = card?.getAttribute(STRIP_DROP_ATTRIBUTE);
-	if (card === null || Number.isNaN(ts) || (kind !== "day" && kind !== "month")) {
+	if (card === null || Number.isNaN(ts) || (kind !== "day" && kind !== "month"))
+	{
 		return null;
 	}
-	return {card, cell: {kind, ts}};
+	return {
+		card,
+		cell:
+		{
+			kind,
+			ts,
+		},
+	};
 }
 
 /** Upstream's drop page: a day card's day; a month card's month node on month and year pages, else its 1st day. */
-export function stripDropTarget(level: StripLevel, cell: StripDropCell): CalendarTarget {
+export function stripDropTarget(level: StripLevel, cell: StripDropCell): CalendarTarget
+{
 	const date = new Date(cell.ts);
-	return {date, level: cell.kind === "month" && level !== "day" ? "month" : "day", createChild: false};
+	return {
+		date,
+		level: cell.kind === "month" && level !== "day" ? "month" : "day",
+		createChild: false,
+	};
 }
 
 /**
@@ -256,48 +404,69 @@ export async function runStripDrop({
 	/** A day's name as its page title shows it (the account date format). */
 	dayName: (date: Date) => string;
 	/** Find or create the page; null when it cannot. */
-	ensure: (target: CalendarTarget) => Promise<{id: string; childCount: number} | null>;
+	ensure: (target: CalendarTarget) => Promise<
+	{
+		id: string;
+		childCount: number;
+	} | null>;
 	clearSelection: () => void;
 	moveNodes: (moves: BlockMove[]) => void;
 	showToast: (toast: MoveToToast) => void;
 	view: (id: string) => void;
 	undo: () => void;
-}): Promise<boolean> {
+}): Promise<boolean>
+{
 	const target = stripDropTarget(level, cell);
 	const {date} = target;
 	const page = await ensure(target);
-	if (page === null) {
+	if (page === null)
+	{
 		return false;
 	}
 	const text =
 		target.level === "month"
 			? `Moved to ${STRIP_MONTHS[date.getMonth()]} ${date.getFullYear()}`
 			: moveToastText("ok", MOVE_VERB, dayName(date));
-	if (items.includes(page.id)) {
-		showToast({
-			text: moveToastText("cant", MOVE_VERB, dayName(date)),
-			timeout: MOVE_TOAST_TIMEOUT,
-			actions: [],
-			type: "failure",
-		});
+	if (items.includes(page.id))
+	{
+		showToast(
+			{
+				text: moveToastText("cant", MOVE_VERB, dayName(date)),
+				timeout: MOVE_TOAST_TIMEOUT,
+				actions: [],
+				type: "failure",
+			},
+		);
 		return false;
 	}
 	clearSelection();
-	moveNodes([{ids: [...items], parentId: page.id, index: page.childCount}]);
-	showToast({
-		text,
-		timeout: MOVE_TOAST_TIMEOUT,
-		actions: [
-			{
-				label: "View",
-				shortcut: "shift+return",
-				run: () => {
-					view(page.id);
+	moveNodes([
+		{
+			ids: [...items],
+			parentId: page.id,
+			index: page.childCount,
+		},
+	]);
+	showToast(
+		{
+			text,
+			timeout: MOVE_TOAST_TIMEOUT,
+			actions: [
+				{
+					label: "View",
+					shortcut: "shift+return",
+					run: () =>
+					{
+						view(page.id);
+					},
 				},
-			},
-			{label: "Undo", run: undo},
-		],
-	});
+				{
+					label: "Undo",
+					run: undo,
+				},
+			],
+		},
+	);
 	return true;
 }
 
@@ -305,35 +474,52 @@ export async function runStripDrop({
  * Upstream's strip autoscroll during an item drag: while `isDragging()` and the pointer is over the strip's rows
  * near an edge, a rAF loop scrolls it at `stripAutoscrollSpeed`. Returns the cleanup.
  */
-export function attachDropAutoscroll(scroller: HTMLElement, isDragging: () => boolean): () => void {
-	let pointer: {x: number; y: number} | null = null;
+export function attachDropAutoscroll(scroller: HTMLElement, isDragging: () => boolean): () => void
+{
+	let pointer:
+	{
+		x: number;
+		y: number;
+	} | null = null;
 	let frame: number | null = null;
-	const speed = () => {
-		if (pointer === null || !isDragging()) {
+	const speed = () =>
+	{
+		if (pointer === null || !isDragging())
+		{
 			return 0;
 		}
 		const rect = scroller.getBoundingClientRect();
 		return pointer.y < rect.top || pointer.y > rect.bottom ? 0 : stripAutoscrollSpeed(pointer.x, rect);
 	};
-	const tick = () => {
+	const tick = () =>
+	{
 		const current = speed();
-		if (current === 0) {
+		if (current === 0)
+		{
 			frame = null;
 			return;
 		}
 		scroller.scrollLeft += current;
 		frame = requestAnimationFrame(tick);
 	};
-	const onMove = (event: MouseEvent) => {
-		pointer = {x: event.clientX, y: event.clientY};
-		if (frame === null && speed() !== 0) {
+	const onMove = (event: MouseEvent) =>
+	{
+		pointer =
+		{
+			x: event.clientX,
+			y: event.clientY,
+		};
+		if (frame === null && speed() !== 0)
+		{
 			frame = requestAnimationFrame(tick);
 		}
 	};
 	globalThis.addEventListener("mousemove", onMove, true);
-	return () => {
+	return () =>
+	{
 		globalThis.removeEventListener("mousemove", onMove, true);
-		if (frame !== null) {
+		if (frame !== null)
+		{
 			cancelAnimationFrame(frame);
 		}
 	};

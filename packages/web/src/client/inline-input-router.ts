@@ -1,4 +1,5 @@
-export interface InputRouteState {
+export interface InputRouteState
+{
 	/** A Suggest chip (slash today, `@` later) was armed when the input arrived. */
 	chipArmedBefore: boolean;
 	/** The chip handler left a chip armed (or armed a new one). */
@@ -7,7 +8,8 @@ export interface InputRouteState {
 	datePopupOpened: boolean;
 }
 
-export interface InputRoute {
+export interface InputRoute
+{
 	dateTrigger: boolean;
 	dateAutocomplete: boolean;
 	tagAutocomplete: boolean;
@@ -19,8 +21,10 @@ export interface InputRoute {
  * Upstream's `editor.input.*` pipe order: an armed chip never calls `next`, so every later hook is skipped for
  * that input, including the input that disarms the chip. The date trigger runs before the date autocomplete.
  */
-export function routeTypedInput({chipArmedBefore, chipArmedAfter, datePopupOpened}: InputRouteState): InputRoute {
-	if (chipArmedBefore || chipArmedAfter) {
+export function routeTypedInput({chipArmedBefore, chipArmedAfter, datePopupOpened}: InputRouteState): InputRoute
+{
+	if (chipArmedBefore || chipArmedAfter)
+	{
 		return {
 			dateTrigger: false,
 			dateAutocomplete: false,

@@ -15,7 +15,8 @@ const JUST_OPENED_MS = 300;
 const FLYOUT_OFFSET = 4;
 
 /** Upstream `q34`: a MenuItem that takes `isSelected` only to label the trigger and never renders it. */
-export function DropdownOption({isSelected: _isSelected, ...props}: MenuItemProps) {
+export function DropdownOption({isSelected: _isSelected, ...props}: MenuItemProps)
+{
 	return <MenuItem {...props} />;
 }
 
@@ -23,12 +24,14 @@ DropdownOption.componentType = "menuItem" as const;
 
 type OptionElement = ReactElement<MenuItemProps>;
 
-function isOption(node: ReactNode): node is OptionElement {
+function isOption(node: ReactNode): node is OptionElement
+{
 	return isValidElement(node);
 }
 
 /** The label of the first child marked `isSelected`, else the empty string. */
-function selectedLabel(children: ReactNode): ReactNode {
+function selectedLabel(children: ReactNode): ReactNode
+{
 	const selected = Children.toArray(children)
 		.filter(isOption)
 		.find((child) => child.props.isSelected === true);
@@ -36,7 +39,8 @@ function selectedLabel(children: ReactNode): ReactNode {
 }
 
 /** Upstream `K34`'s trigger class template, literal newlines and 8-space indents included. */
-function dropdownTriggerClassName(className: string): string {
+function dropdownTriggerClassName(className: string): string
+{
 	return `flex flex-row items-center justify-center gap-m box-border
         leading-[16px] text-s text-primary border border-solid border-primary
         whitespace-nowrap select-none cursor-pointer hover:bg-quaternary active:bg-quaternary
@@ -45,7 +49,8 @@ function dropdownTriggerClassName(className: string): string {
         ${className}`;
 }
 
-export interface DropdownProps {
+export interface DropdownProps
+{
 	large?: boolean;
 	className?: string;
 	maxHeight?: number | string;
@@ -55,80 +60,123 @@ export interface DropdownProps {
 }
 
 /** Upstream DomKit Dropdown (`K34`), desktop: a focus-opened trigger whose flyout is portaled to the body. */
-export function Dropdown({
-	large = false,
-	className = "dropdown",
-	maxHeight,
-	style,
-	menuStyle,
-	children,
-}: DropdownProps) {
+export function Dropdown({large = false, className = "dropdown", maxHeight, style, menuStyle, children}: DropdownProps)
+{
 	const wrapperRef = useRef<HTMLDivElement>(null);
 	const triggerRef = useRef<HTMLDivElement>(null);
 	const flyoutRef = useRef<HTMLDivElement>(null);
 	const justOpened = useRef(false);
 	const timer = useRef<number>(0);
 	const [open, setOpen] = useState(false);
-	const [placed, setPlaced] = useState<{x: number; y: number; placement: string}>({x: 0, y: 0, placement: "bottom"});
+	const [placed, setPlaced] = useState<
+	{
+		x: number;
+		y: number;
+		placement: string;
+	}>(
+		{
+			x: 0,
+			y: 0,
+			placement: "bottom",
+		},
+	);
 
-	useLayoutEffect(() => {
-		if (!open) {
-			return () => {};
+	useLayoutEffect(() =>
+	{
+		if (!open)
+		{
+			return () =>
+			{
+			};
 		}
-		const reposition = () => {
+		const reposition = () =>
+		{
 			const trigger = triggerRef.current;
 			const flyout = flyoutRef.current;
-			if (!trigger || !flyout) {
+			if (!trigger || !flyout)
+			{
 				return;
 			}
 			const rect = trigger.getBoundingClientRect();
-			const popper = {width: flyout.offsetWidth, height: flyout.offsetHeight};
+			const popper =
+			{
+				width: flyout.offsetWidth,
+				height: flyout.offsetHeight,
+			};
 			const viewport = popperViewport(document);
-			const below = placePopper({
-				reference: {left: rect.left, top: rect.top, width: rect.width, height: rect.height},
-				popper,
-				placement: "bottom",
-				viewport,
-			});
+			const below = placePopper(
+				{
+					reference:
+					{
+						left: rect.left,
+						top: rect.top,
+						width: rect.width,
+						height: rect.height,
+					},
+					popper,
+					placement: "bottom",
+					viewport,
+				},
+			);
 			const fitsBelow = rect.bottom + FLYOUT_OFFSET + popper.height <= viewport.height - 10;
 			const fitsAbove = rect.top - FLYOUT_OFFSET - popper.height >= 10;
-			if (!fitsBelow && fitsAbove) {
-				setPlaced({
-					x: below.x + window.scrollX,
-					y: rect.top - FLYOUT_OFFSET - popper.height + window.scrollY,
-					placement: "top",
-				});
+			if (!fitsBelow && fitsAbove)
+			{
+				setPlaced(
+					{
+						x: below.x + window.scrollX,
+						y: rect.top - FLYOUT_OFFSET - popper.height + window.scrollY,
+						placement: "top",
+					},
+				);
 				return;
 			}
-			setPlaced({x: below.x + window.scrollX, y: below.y + FLYOUT_OFFSET + window.scrollY, placement: "bottom"});
+			setPlaced(
+				{
+					x: below.x + window.scrollX,
+					y: below.y + FLYOUT_OFFSET + window.scrollY,
+					placement: "bottom",
+				},
+			);
 		};
 		reposition();
 		window.addEventListener("resize", reposition);
 		window.addEventListener("scroll", reposition, true);
-		return () => {
+		return () =>
+		{
 			window.removeEventListener("resize", reposition);
 			window.removeEventListener("scroll", reposition, true);
 		};
 	}, [open]);
 
-	const show = () => {
+	const show = () =>
+	{
 		setOpen(true);
 		justOpened.current = true;
 		window.clearTimeout(timer.current);
-		timer.current = window.setTimeout(() => {
+		timer.current = window.setTimeout(() =>
+		{
 			justOpened.current = false;
 		}, JUST_OPENED_MS);
 	};
-	const hide = () => {
+	const hide = () =>
+	{
 		setOpen(false);
 	};
-	const hideAndBlur = () => {
+	const hideAndBlur = () =>
+	{
 		setOpen(false);
 		wrapperRef.current?.blur();
 	};
 
-	const box = popoverBox({minWidth: 0, maxWidth: 240});
-	const triggerStyle: CSSProperties = {
+	const box = popoverBox(
+		{
+			minWidth: 0,
+			maxWidth: 240,
+		},
+	);
+	const triggerStyle: CSSProperties =
+	{
 		paddingTop: large ? 9 : 3,
 		paddingBottom: large ? 9 : 3,
 		paddingLeft: large ? 17 : 11,
@@ -147,8 +195,10 @@ export function Dropdown({
 			className="relative outline-none menu"
 			onFocus={show}
 			onBlur={hide}
-			onClick={(event) => {
-				if (!justOpened.current) {
+			onClick={(event) =>
+			{
+				if (!justOpened.current)
+				{
 					event.currentTarget.blur();
 				}
 			}}
@@ -166,7 +216,8 @@ export function Dropdown({
 						data-popper-reference-hidden="false"
 						data-popper-escaped="false"
 						data-popper-placement={placed.placement}
-						style={{
+						style={
+						{
 							position: "absolute",
 							inset: "0px auto auto 0px",
 							...box.style,

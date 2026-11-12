@@ -1,26 +1,33 @@
 {
-	"request": {
+	"request":
+	{
 		"model": "clef-flash",
-		"state": {
+		"state":
+		{
 			"date": "2026-11-03",
 			"parent": "📆 Calendar > 2026 > November > Mon, Nov 3",
 			"entry": "Played pickleball with Alice after work"
 		},
-		"questions": {
-			"people.1": {
+		"questions":
+		{
+			"people.1":
+			{
 				"type": "choice",
 				"instructions": "Which one of these people does this journal entry most likely involve?",
-				"criteria": {
+				"criteria":
+				{
 					"p.AliceBrown": "Alice Brown, book club friend",
 					"p.AliceChen": "Alice Chen, coworker",
 					"p.Bob": "Bob Smith, neighbor",
 					"none": "None of these people"
 				}
 			},
-			"tags.1": {
+			"tags.1":
+			{
 				"type": "choice",
 				"instructions": "Which one of these tags best describes this journal entry?",
-				"criteria": {
+				"criteria":
+				{
 					"t.pickleball": "Pickleball",
 					"t.cooking": "Cooking",
 					"t.reading": "Reading",
@@ -30,14 +37,19 @@
 		}
 	},
 	"status": 200,
-	"body": {
-		"result": {
+	"body":
+	{
+		"result":
+		{
 			"model": "clef-flash",
-			"answers": {
-				"people.1": {
+			"answers":
+			{
+				"people.1":
+				{
 					"type": "choice",
 					"choice": "p.AliceChen",
-					"probabilities": {
+					"probabilities":
+					{
 						"p.AliceBrown": 0.2739,
 						"p.AliceChen": 0.6316,
 						"p.Bob": 0.0074,
@@ -45,10 +57,12 @@
 					},
 					"confidence": 0.3087
 				},
-				"tags.1": {
+				"tags.1":
+				{
 					"type": "choice",
 					"choice": "t.pickleball",
-					"probabilities": {
+					"probabilities":
+					{
 						"t.pickleball": 0.9592,
 						"t.cooking": 0.0032,
 						"t.reading": 0.0028,
@@ -57,7 +71,8 @@
 					"confidence": 0.895
 				}
 			},
-			"usage": {
+			"usage":
+			{
 				"input_tokens": 351,
 				"output_tokens": 0
 			}

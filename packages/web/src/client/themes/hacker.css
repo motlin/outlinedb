@@ -1,4 +1,5 @@
-._theme-hacker {
+._theme-hacker
+{
 	--wf-background-primary: var(--wf-lime-green-800);
 	--wf-background-secondary: var(--wf-lime-green-700);
 	--wf-background-tertiary: var(--wf-lime-green-600);
@@ -62,19 +63,22 @@
 	--wf-border-warning: var(--wf-yellow-200);
 	--wf-border-success: var(--wf-green-700);
 
-	.wf-header {
+	.wf-header
+	{
 		--wf-text-primary: var(--wf-lime-green-300);
 		--wf-border-primary: var(--wf-lime-green-600);
 	}
 
-	.wf-menu {
+	.wf-menu
+	{
 		--wf-text-primary: var(--wf-lime-green-200);
 		--wf-background-secondary: var(--wf-lime-green-500);
 		--wf-border-primary: var(--wf-lime-green-600);
 		--wf-border-secondary: var(--wf-lime-green-300);
 	}
 
-	.wf-helper {
+	.wf-helper
+	{
 		--wf-background-primary: var(--wf-lime-green-600);
 	}
 }

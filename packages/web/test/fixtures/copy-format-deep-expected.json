@@ -1,57 +1,68 @@
 {
 	"_note": "Live upstream (wf-base.9d26a182115f.js), 2026-10-23, sandbox fixture 'CCD fixture' (deleted afterwards). Bucket innerHTML captured in a window copy/cut listener registered after the app's (so the app had already filled and selected the bucket). '=' was escaped as U+2248 in transit and is restored here. data-parent stripped where noted.",
-	"single_with_note_collapsed": {
+	"single_with_note_collapsed":
+	{
 		"selection": ["Plain #ccdtag (note 'plain note', 2 children, collapsed)"],
 		"html": "<ul><li>\n<div>\n<span class=\"name\" style=\"color:#333; \" data-wfid=\"f858f5ef34bf\" data-parent=\"b0adce4a2894\"><span class=\"innerContentContainer\">Plain <span class=\"contentTag explosive\" title=\"Filter #ccdtag\" data-val=\"#ccdtag\">#<span class=\"contentTagText\">ccdtag</span><span class=\"contentTagNub\"></span></span></span></span>\n<br>\n<span class=\"note\" style=\"font-size:12px; color:#666; \"><span class=\"innerContentContainer\">plain note</span></span></div></li></ul>",
 		"text": "Plain #ccdtag\n\nplain note"
 	},
-	"two_items_first_with_note": {
+	"two_items_first_with_note":
+	{
 		"selection": ["Plain #ccdtag", "Dest"],
 		"html": "\n<ul>\n  <li>\n    <div class=\"name\" style=\"color:#333; \" data-wfid=\"f858f5ef34bf\" data-parent=\"b0adce4a2894\"><span class=\"innerContentContainer\">Plain <span class=\"contentTag explosive\" title=\"Filter #ccdtag\" data-val=\"#ccdtag\">#<span class=\"contentTagText\">ccdtag</span><span class=\"contentTagNub\"></span></span></span></div>\n    <span class=\"note\" style=\"font-size:12px; color:#666; \"><span class=\"innerContentContainer\">plain note</span></span>\n  </li>\n  <li>\n    <div class=\"name\" style=\"color:#333; \" data-wfid=\"ecbac275491a\" data-parent=\"b0adce4a2894\"><span class=\"innerContentContainer\">Dest</span></div>\n  </li>\n</ul>",
 		"text": "Plain #ccdtag\nplain note\nDest"
 	},
-	"single_expanded_with_note_and_children (data-parent stripped)": {
+	"single_expanded_with_note_and_children (data-parent stripped)":
+	{
 		"selection": ["Plain #ccdtag (expanded)"],
 		"html": "\n<div>\n<span class=\"name\" style=\"color:#333; \" data-wfid=\"f858f5ef34bf\" ><span class=\"innerContentContainer\">Plain <span class=\"contentTag explosive\" title=\"Filter #ccdtag\" data-val=\"#ccdtag\">#<span class=\"contentTagText\">ccdtag</span><span class=\"contentTagNub\"></span></span></span></span>\n<br>\n<span class=\"note\" style=\"font-size:12px; color:#666; \"><span class=\"innerContentContainer\">plain note</span></span>\n<ul>\n  <li>\n    <div class=\"name\" style=\"color:#333; \" data-chid=\"1dffea89a928\" ><span class=\"innerContentContainer\">P1</span></div>\n  </li>\n  <li>\n    <div class=\"name\" style=\"color:#333; \" data-chid=\"cd8cd021c376\" ><span class=\"innerContentContainer\">P2</span></div>\n  </li>\n</ul></div>",
 		"text": "Plain #ccdtag\n\nplain note\nP1\nP2",
 		"also": "Selecting [Plain, P1] or [P2, Plain] gave a 1-id selection (WF.AppItemSelect.ids.length === 1) and exactly this output: selecting a parent absorbs selected descendants."
 	},
-	"mixed_depth (data-parent stripped)": {
+	"mixed_depth (data-parent stripped)":
+	{
 		"selection": ["P2 (child of Plain)", "Dest (top level)"],
 		"html": "\n<ul>\n  <li>\n    <div class=\"name\" style=\"color:#333; \" data-wfid=\"cd8cd021c376\" ><span class=\"innerContentContainer\">P2</span></div>\n  </li>\n  <li>\n    <div class=\"name\" style=\"color:#333; \" data-wfid=\"ecbac275491a\" ><span class=\"innerContentContainer\">Dest</span></div>\n  </li>\n</ul>",
 		"text": "P2\nDest"
 	},
-	"search_mode_q_P1": {
+	"search_mode_q_P1":
+	{
 		"selection": ["Plain #ccdtag while '?q=P1' (search expanded it; P2 hidden)"],
 		"html": "\n<div>\n<span class=\"name\" style=\"color:#333; \" data-wfid=\"f858f5ef34bf\" data-parent=\"b0adce4a2894\"><span class=\"innerContentContainer\">Plain <span class=\"contentTag explosive\" title=\"Filter #ccdtag\" data-val=\"#ccdtag\">#<span class=\"contentTagText\">ccdtag</span><span class=\"contentTagNub\"></span></span></span></span>\n<br>\n<span class=\"note\" style=\"font-size:12px; color:#666; \"><span class=\"innerContentContainer\">plain note</span></span>\n<ul>\n  <li>\n    <div class=\"name\" style=\"color:#333; \" data-chid=\"1dffea89a928\" data-parent=\"f858f5ef34bf\"><span class=\"innerContentContainer\"><span class=\"contentMatch\">P1</span></span></div>\n  </li>\n</ul></div>",
 		"text": "Plain #ccdtag\n\nplain note\nP1",
 		"after_search_cleared": "Plain.isExpanded back to false"
 	},
-	"rich_markup": {
+	"rich_markup":
+	{
 		"model_name": "Rich <b>bold</b> <span class=\"colored c-red\">red</span> <a href=\"https://example.com/\">link</a> <time startYear=\"2026\" startMonth=\"10\" startDay=\"1\">Thu, Oct 1, 2026</time> & <code>cd</code>",
 		"html": "<ul><li>\n<div>\n<span class=\"name\" style=\"color:#333; \" data-wfid=\"f00eb4839228\" data-parent=\"b0adce4a2894\"><span class=\"innerContentContainer\">Rich <b>bold</b> <span class=\"colored c-red\">red</span> <a class=\"contentLink\" target=\"_blank\" rel=\"noreferrer\" href=\"https://example.com/\">link</a> <time data-monolith=\"true\" contenteditable=\"false\" class=\"explosive monolith-pill\" title=\"⌥click to search\" startyear=\"2026\" startmonth=\"10\" startday=\"1\">﻿<span class=\"content-wrapper\">2026-10-01 Thu</span>﻿</time> &amp; <code>cd</code></span></span></div></li></ul>",
 		"text": "Rich bold red link ﻿2026-10-01 Thu﻿ & cd"
 	},
-	"original_with_mirror_copy": {
+	"original_with_mirror_copy":
+	{
 		"selection": ["Orig (original; mirrored once under Holder; collapsed, child O1)"],
 		"html": "<ul><li>\n<div>\n<span class=\"name\" style=\"color:#333; \" data-wfid=\"6586f219048d\" data-parent=\"b0adce4a2894\"><span class=\"innerContentContainer\">Orig</span></span></div></li></ul>",
 		"text": "Orig",
-		"copyProjectTree": {
+		"copyProjectTree":
+		{
 			"nm": "",
 			"metadata.mirror": {"originalId": "21347633-...-6586f219048d", "isMirrorRoot": true},
 			"children": 0
 		},
 		"paste_after_Dest": "new row 905b3855474b is a MIRROR of Orig (WF.Mirrors.is true, child O1 is the virtual mirror child '855474b_a56f'); Orig now has 2 mirrorRootIds"
 	},
-	"mirror_copy_model": {
+	"mirror_copy_model":
+	{
 		"item": "Holder > Orig (mirror 57c2d3ebc1a1)",
-		"copyProjectTree": {
+		"copyProjectTree":
+		{
 			"nm": "",
 			"metadata.mirror": {"originalId": "21347633-...-6586f219048d", "isMirrorRoot": true}
 		},
 		"note": "a mirror's copy is always another mirror of the same original"
 	},
-	"cut_original_with_mirrors": {
+	"cut_original_with_mirrors":
+	{
 		"before": "Orig(6586, original) at top; Holder > Orig(57c2, mirror); Orig(905b, mirror) after Dest",
 		"after_cut": "Holder > Orig is now 6586 (the ORIGINAL, with O1) in the mirror's slot; mirror 57c2 deleted; the top-level Orig row gone; mirror 905b kept",
 		"after_paste_on_Dest": "mirror 57c2d3ebc1a1 UNDELETED after Dest (same id, still a mirror); the original stays in Holder"

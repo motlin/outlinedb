@@ -17,11 +17,13 @@ export function LayoutButtonMenu({
 }: {
 	nodeId: string | null;
 	layoutIcon: HeaderActions["layoutIcon"];
-}) {
+})
+{
 	const deps = useItemTypeSelectDeps();
 	const target = nodeId ?? HOME_TARGET;
 	const types = pickerItemTypes([target]);
-	if (types.length === 0) {
+	if (types.length === 0)
+	{
 		return null;
 	}
 	return (
@@ -33,9 +35,11 @@ export function LayoutButtonMenu({
 			}
 		>
 			<>
-				{nodeTypeMenuItems(types, (type) => {
+				{nodeTypeMenuItems(types, (type) =>
+				{
 					// One undo step for the whole choice.
-					void runInUndoBatch(captureOutlineView, () => {
+					void runInUndoBatch(captureOutlineView, () =>
+					{
 						selectItemType(type, [target], deps);
 					});
 				})}

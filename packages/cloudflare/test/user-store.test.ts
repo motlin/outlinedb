@@ -8,21 +8,29 @@ import type {Harness, SchemaRow} from "./harness";
 
 const migrationsFolder = new URL("../../shared/src/db/migrations", import.meta.url).pathname;
 
-describe("user store Durable Object behind the Worker", () => {
+describe("user store Durable Object behind the Worker", () =>
+{
 	let harness: Harness;
 
-	beforeAll(async () => {
+	beforeAll(async () =>
+	{
 		harness = await startHarness("./probe-entry.ts", "ProbeStore");
 	}, 60_000);
 
-	afterAll(async () => {
+	afterAll(async () =>
+	{
 		await harness.dispose();
 	});
 
-	it("applies every migration in a fresh Durable Object", async () => {
+	it("applies every migration in a fresh Durable Object", async () =>
+	{
 		const response = await harness.mf.dispatchFetch("http://localhost/health");
 		expect(response.status).toBe(200);
-		await expect(response.json()).resolves.toStrictEqual({status: "ok"});
+		await expect(response.json()).resolves.toStrictEqual(
+			{
+				status: "ok",
+			},
+		);
 
 		// The probe path is not routed by the Worker, so reach the DO directly.
 		const {names, migrations} = await probeStore(harness.mf);
@@ -39,7 +47,8 @@ describe("user store Durable Object behind the Worker", () => {
 		expect(names.filter((name) => wanted.includes(name))).toStrictEqual(wanted);
 	});
 
-	it("matches the sqlite_master of the Node migration chain", async () => {
+	it("matches the sqlite_master of the Node migration chain", async () =>
+	{
 		const {schema} = await probeStore(harness.mf);
 		const normalize = (rows: SchemaRow[]) =>
 			rows
@@ -47,10 +56,20 @@ describe("user store Durable Object behind the Worker", () => {
 				.filter((row) => row.name !== "__drizzle_migrations")
 				// DO-only bookkeeping for the sync job, created outside the shared schema.
 				.filter((row) => !row.name.startsWith("sync_"))
-				.map((row) => ({type: row.type, name: row.name, sql: row.sql.replaceAll(/\s+/gu, " ")}));
+				.map((row) => (
+				{
+					type: row.type,
+					name: row.name,
+					sql: row.sql.replaceAll(/\s+/gu, " "),
+				}));
 
 		const node = new Database(":memory:");
-		migrate(drizzle(node), {migrationsFolder});
+		migrate(
+			drizzle(node),
+			{
+				migrationsFolder,
+			},
+		);
 		const nodeSchema = node
 			.prepare("SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY type, name")
 			.all() as SchemaRow[];
@@ -59,7 +78,8 @@ describe("user store Durable Object behind the Worker", () => {
 		expect(normalize(schema)).toStrictEqual(normalize(nodeSchema));
 	});
 
-	it("creates the sync job's own tables temporal, each with a live unique index and a closed-at index", async () => {
+	it("creates the sync job's own tables temporal, each with a live unique index and a closed-at index", async () =>
+	{
 		const {schema} = await probeStore(harness.mf);
 		const syncRows = schema.filter((row) => row.name.startsWith("sync_"));
 		const tables = syncRows.filter((row) => row.type === "table");
@@ -74,24 +94,42 @@ describe("user store Durable Object behind the Worker", () => {
 				},
 			]),
 		);
-		expect(shape).toStrictEqual({
-			sync_runs: {temporal: true, indexes: ["sync_runs_closed_at_idx", "sync_runs_system_to_idx"]},
-			sync_seed_requests: {
-				temporal: true,
-				indexes: ["sync_seed_requests_closed_at_idx", "sync_seed_requests_system_to_idx"],
+		expect(shape).toStrictEqual(
+			{
+				sync_runs:
+				{
+					temporal: true,
+					indexes: ["sync_runs_closed_at_idx", "sync_runs_system_to_idx"],
+				},
+				sync_seed_requests:
+				{
+					temporal: true,
+					indexes: ["sync_seed_requests_closed_at_idx", "sync_seed_requests_system_to_idx"],
+				},
+				sync_seen:
+				{
+					temporal: true,
+					indexes: ["sync_seen_closed_at_idx", "sync_seen_system_to_idx"],
+				},
 			},
-			sync_seen: {temporal: true, indexes: ["sync_seen_closed_at_idx", "sync_seen_system_to_idx"]},
-		});
+		);
 	});
 
-	it("serves an empty outline root on a fresh database", async () => {
+	it("serves an empty outline root on a fresh database", async () =>
+	{
 		const response = await harness.mf.dispatchFetch("http://localhost/api/v1/nodes");
 		expect(response.status).toBe(200);
-		await expect(readJson(response)).resolves.toStrictEqual({nodes: []});
+		await expect(readJson(response)).resolves.toStrictEqual(
+			{
+				nodes: [],
+			},
+		);
 	});
 
-	it("keeps node_tags in step with a write, so tag autocomplete drops a removed tag", async () => {
-		const tags = async () => {
+	it("keeps node_tags in step with a write, so tag autocomplete drops a removed tag", async () =>
+	{
+		const tags = async () =>
+		{
 			const response = await harness.mf.dispatchFetch(
 				"http://localhost/api/v1/tags/autocomplete?prefix=%23doTag",
 			);
@@ -101,13 +139,32 @@ describe("user store Durable Object behind the Worker", () => {
 		const tagged = await tags();
 		await probeStore(harness.mf, "/__seed?name=seeded");
 
-		expect({tagged, untagged: await tags()}).toStrictEqual({
-			tagged: {tags: [{tag: "#doTag", count: 1}]},
-			untagged: {tags: []},
-		});
+		expect(
+			{
+				tagged,
+				untagged: await tags(),
+			},
+		).toStrictEqual(
+			{
+				tagged:
+				{
+					tags: [
+						{
+							tag: "#doTag",
+							count: 1,
+						},
+					],
+				},
+				untagged:
+				{
+					tags: [],
+				},
+			},
+		);
 	});
 
-	it("serves an expanded row's whole expanded subtree in one view request", async () => {
+	it("serves an expanded row's whole expanded subtree in one view request", async () =>
+	{
 		// subtree-a > {subtree-b > subtree-c > subtree-d, subtree-e > subtree-f}, with b and c expanded but not e.
 		const tree = [
 			["subtree-a", null, 200],
@@ -117,67 +174,154 @@ describe("user store Durable Object behind the Worker", () => {
 			["subtree-d", "subtree-c", 0],
 			["subtree-f", "subtree-e", 0],
 		] as const;
-		for (const [id, parent, priority] of tree) {
-			const params = new URLSearchParams({id, name: id, priority: String(priority), ...(parent ? {parent} : {})});
+		for (const [id, parent, priority] of tree)
+		{
+			const params = new URLSearchParams(
+				{
+					id,
+					name: id,
+					priority: String(priority),
+					...(parent
+						?
+							{
+								parent,
+							}
+						: {}),
+				},
+			);
 			await probeStore(harness.mf, `/__seed?${params}`);
 		}
 
-		const response = await harness.mf.dispatchFetch("http://localhost/api/v1/nodes/view", {
-			method: "POST",
-			headers: {"content-type": "application/json"},
-			body: JSON.stringify({
-				rootId: "subtree-a",
-				expandedIds: ["subtree-a", "subtree-b", "subtree-c"],
-				limit: 100,
-				showCompleted: false,
-			}),
-		});
-		const body = (await readJson(response)) as {
-			lists: {parentId: string; nodes: {id: string}[]; backlinks: unknown}[];
+		const response = await harness.mf.dispatchFetch(
+			"http://localhost/api/v1/nodes/view",
+			{
+				method: "POST",
+				headers:
+				{
+					"content-type": "application/json",
+				},
+				body: JSON.stringify(
+					{
+						rootId: "subtree-a",
+						expandedIds: ["subtree-a", "subtree-b", "subtree-c"],
+						limit: 100,
+						showCompleted: false,
+					},
+				),
+			},
+		);
+		const body = (await readJson(response)) as
+		{
+			lists:
+			{
+				parentId: string;
+				nodes:
+				{
+					id: string;
+				}[];
+				backlinks: unknown;
+			}[];
 		};
 
-		expect({
-			status: response.status,
-			lists: body.lists.map(({parentId, nodes, backlinks}) => [
-				parentId,
-				nodes.map((node) => node.id),
-				backlinks,
-			]),
-		}).toStrictEqual({
-			status: 200,
-			lists: [
-				["subtree-a", ["subtree-b", "subtree-e"], {rootId: null, items: []}],
-				["subtree-b", ["subtree-c"], {rootId: null, items: []}],
-				["subtree-c", ["subtree-d"], {rootId: null, items: []}],
-			],
-		});
+		expect(
+			{
+				status: response.status,
+				lists: body.lists.map(({parentId, nodes, backlinks}) => [
+					parentId,
+					nodes.map((node) => node.id),
+					backlinks,
+				]),
+			},
+		).toStrictEqual(
+			{
+				status: 200,
+				lists: [
+					[
+						"subtree-a",
+						["subtree-b", "subtree-e"],
+						{
+							rootId: null,
+							items: [],
+						},
+					],
+					[
+						"subtree-b",
+						["subtree-c"],
+						{
+							rootId: null,
+							items: [],
+						},
+					],
+					[
+						"subtree-c",
+						["subtree-d"],
+						{
+							rootId: null,
+							items: [],
+						},
+					],
+				],
+			},
+		);
 	});
 
-	it("serves the SPA index.html for a client route", async () => {
-		const response = await harness.mf.dispatchFetch("http://localhost/some/client/route", {
-			headers: {"sec-fetch-mode": "navigate", accept: "text/html"},
-		});
+	it("serves the SPA index.html for a client route", async () =>
+	{
+		const response = await harness.mf.dispatchFetch(
+			"http://localhost/some/client/route",
+			{
+				headers:
+				{
+					"sec-fetch-mode": "navigate",
+					accept: "text/html",
+				},
+			},
+		);
 		expect(response.status).toBe(200);
 		await expect(response.text()).resolves.toContain('<div id="root"');
 	});
 });
 
-describe("user store restart", () => {
-	it("does not re-run migrations when the Durable Object restarts", async () => {
+describe("user store restart", () =>
+{
+	it("does not re-run migrations when the Durable Object restarts", async () =>
+	{
 		const probe = async (h: Harness) => probeStore(h.mf);
 		const first = await startHarness("./probe-entry.ts", "ProbeStore");
 		const persistDir = first.persistDir;
-		try {
-			await expect(probe(first)).resolves.toMatchObject({migrations: 5, appliedOnBoot: 5});
+		try
+		{
+			await expect(probe(first)).resolves.toMatchObject(
+				{
+					migrations: 5,
+					appliedOnBoot: 5,
+				},
+			);
 			await first.dispose(true);
 			const second = await startHarness("./probe-entry.ts", "ProbeStore", persistDir);
-			try {
-				await expect(probe(second)).resolves.toMatchObject({migrations: 5, appliedOnBoot: 0});
-			} finally {
+			try
+			{
+				await expect(probe(second)).resolves.toMatchObject(
+					{
+						migrations: 5,
+						appliedOnBoot: 0,
+					},
+				);
+			}
+			finally
+			{
 				await second.dispose();
 			}
-		} finally {
-			rmSync(persistDir, {recursive: true, force: true});
+		}
+		finally
+		{
+			rmSync(
+				persistDir,
+				{
+					recursive: true,
+					force: true,
+				},
+			);
 		}
 	}, 60_000);
 });

@@ -8,21 +8,34 @@ import {addMonolithGuards} from "./monolith-guards.js";
 import {renderTags, stripTagMarkup} from "./tag-render.js";
 
 /** Stored name HTML as the name editor shows it: atomic date and mention pills and colored `.contentTag` spans. */
-export function renderEditorHtml(html: string, dateSettings: DateSettings, account: MentionAccount = null): string {
+export function renderEditorHtml(html: string, dateSettings: DateSettings, account: MentionAccount = null): string
+{
 	return addMonolithGuards(
 		renderTags(renderMentionPills(renderDatePills(autoLink(decorateStoredLinks(html)), dateSettings), account)),
 	);
 }
 
-const ENTITIES: Readonly<Record<string, string>> = {amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: "\u00A0"};
+const ENTITIES: Readonly<Record<string, string>> =
+{
+	amp: "&",
+	lt: "<",
+	gt: ">",
+	quot: '"',
+	apos: "'",
+	nbsp: "\u00A0",
+};
 
-function decodeEntities(text: string): string {
-	return text.replaceAll(/&(?:#(\d+)|#x([0-9a-f]+)|([a-z]+));/giu, (match, ...groups: (string | undefined)[]) => {
+function decodeEntities(text: string): string
+{
+	return text.replaceAll(/&(?:#(\d+)|#x([0-9a-f]+)|([a-z]+));/giu, (match, ...groups: (string | undefined)[]) =>
+	{
 		const [decimal, hex, name] = groups;
-		if (decimal !== undefined) {
+		if (decimal !== undefined)
+		{
 			return String.fromCodePoint(Number(decimal));
 		}
-		if (hex !== undefined) {
+		if (hex !== undefined)
+		{
 			return String.fromCodePoint(Number.parseInt(hex, 16));
 		}
 		return ENTITIES[(name ?? "").toLowerCase()] ?? match;
@@ -33,7 +46,8 @@ function decodeEntities(text: string): string {
  * Upstream shows a code block's name as plain text: every tag (formatting, links, colors, date pills) is dropped
  * but its text kept, and `\n` and spaces stay exactly as written. Tags, mentions and links are never rendered.
  */
-export function renderCodeBlockHtml(html: string): string {
+export function renderCodeBlockHtml(html: string): string
+{
 	const text = decodeEntities(html.replaceAll(/<[^>]*>/gu, ""));
 	const escaped = text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 	// A final newline needs a <br> after it to show as an empty last line.
@@ -41,17 +55,20 @@ export function renderCodeBlockHtml(html: string): string {
 }
 
 /** The name editor's innerHTML back to stored HTML: tag spans unwrapped, date pills to canonical `<time>`. */
-export function serializeEditorHtml(html: string): string {
+export function serializeEditorHtml(html: string): string
+{
 	// A trailing <br> is the editor's placeholder that keeps a final newline visible, never part of the name.
 	return serializeMentionPills(serializeDatePills(stripTagMarkup(storeAnchors(html)))).replace(/<br\s*\/?>$/iu, "");
 }
 
 /** An IME composition is in progress, so the DOM under it must not be rewritten. */
-export function isComposingInput(event: Event | undefined): boolean {
+export function isComposingInput(event: Event | undefined): boolean
+{
 	return event instanceof InputEvent && event.isComposing;
 }
 
-function tagSignature(root: ParentNode): string {
+function tagSignature(root: ParentNode): string
+{
 	return [...root.querySelectorAll<HTMLElement>(".contentTag")]
 		.map((tag) => `${tag.dataset.val ?? ""}\u0000${tag.textContent}`)
 		.join("\u0001");
@@ -62,10 +79,12 @@ function tagSignature(root: ParentNode): string {
  * editor's, keeping the selection. Like upstream, which re-renders tags on every edit, a
  * tag colors on each keystroke while it is typed (`#w`, `#wo`, ...) and uncolors when broken.
  */
-export function retagEditor(editor: HTMLElement, html: string): void {
+export function retagEditor(editor: HTMLElement, html: string): void
+{
 	const rendered = document.createElement("template");
 	rendered.innerHTML = html;
-	if (tagSignature(rendered.content) === tagSignature(editor)) {
+	if (tagSignature(rendered.content) === tagSignature(editor))
+	{
 		return;
 	}
 	const {start, end} = selectionTextOffsets(editor);

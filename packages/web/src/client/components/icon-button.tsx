@@ -5,7 +5,8 @@ import {useTooltip} from "./tooltip.js";
 type IconButtonSize = "sm" | "ms" | "md" | "ml" | "lg" | "xl";
 type IconButtonShape = "circle" | "square" | "none";
 
-interface IconButtonProps extends Omit<HTMLAttributes<HTMLDivElement>, "onClick" | "onKeyDown"> {
+interface IconButtonProps extends Omit<HTMLAttributes<HTMLDivElement>, "onClick" | "onKeyDown">
+{
 	size?: IconButtonSize;
 	shape?: IconButtonShape;
 	className?: string;
@@ -19,16 +20,22 @@ interface IconButtonProps extends Omit<HTMLAttributes<HTMLDivElement>, "onClick"
 	[dataAttribute: `data-${string}`]: string | undefined;
 }
 
-interface KeyLikeEvent {
+interface KeyLikeEvent
+{
 	key: string;
 	preventDefault: () => void;
 	stopPropagation: () => void;
-	currentTarget: {click: () => void};
+	currentTarget:
+	{
+		click: () => void;
+	};
 }
 
 /** Upstream's IconButton key handling: Enter or Space activates the div like a native button. */
-export function iconButtonKeyDown(event: KeyLikeEvent, disabled: boolean): void {
-	if (disabled || (event.key !== "Enter" && event.key !== " ")) {
+export function iconButtonKeyDown(event: KeyLikeEvent, disabled: boolean): void
+{
+	if (disabled || (event.key !== "Enter" && event.key !== " "))
+	{
 		return;
 	}
 	event.preventDefault();
@@ -48,17 +55,22 @@ export function IconButton({
 	onMouseDown,
 	children,
 	...rest
-}: IconButtonProps) {
+}: IconButtonProps)
+{
 	const elementRef = useRef<HTMLDivElement | null>(null);
-	const {triggerProps, tooltip: tooltipNode} = useTooltip({
-		content: tooltip,
-		shortcut,
-		disabled: disabled || tooltip === undefined,
-	});
+	const {triggerProps, tooltip: tooltipNode} = useTooltip(
+		{
+			content: tooltip,
+			shortcut,
+			disabled: disabled || tooltip === undefined,
+		},
+	);
 	const triggerRef = triggerProps.ref;
 
-	useEffect(() => {
-		if (disabled && elementRef.current !== null && elementRef.current === document.activeElement) {
+	useEffect(() =>
+	{
+		if (disabled && elementRef.current !== null && elementRef.current === document.activeElement)
+		{
 			elementRef.current.blur();
 		}
 	}, [disabled]);
@@ -76,18 +88,22 @@ export function IconButton({
 				{...rest}
 				className={classes}
 				onClick={onClick}
-				onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
+				onKeyDown={(event: KeyboardEvent<HTMLDivElement>) =>
+				{
 					iconButtonKeyDown(event, disabled);
 				}}
 				{...(hasTooltip ? triggerProps : {})}
 				// The tooltip hides on mousedown; the caller's handler (e.g. keeping the editor's selection) still runs.
-				onMouseDown={(event: MouseEvent<HTMLDivElement>) => {
-					if (hasTooltip) {
+				onMouseDown={(event: MouseEvent<HTMLDivElement>) =>
+				{
+					if (hasTooltip)
+					{
 						triggerProps.onMouseDown();
 					}
 					onMouseDown?.(event);
 				}}
-				ref={(element) => {
+				ref={(element) =>
+				{
 					elementRef.current = element;
 					triggerRef(element);
 				}}

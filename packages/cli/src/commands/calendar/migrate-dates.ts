@@ -7,7 +7,8 @@ import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";
 import {logger} from "../../services/logger.js";
 
-const MONTH_ABBREVS: Record<string, number> = {
+const MONTH_ABBREVS: Record<string, number> =
+{
 	Jan: 1,
 	Feb: 2,
 	Mar: 3,
@@ -22,7 +23,8 @@ const MONTH_ABBREVS: Record<string, number> = {
 	Dec: 12,
 };
 
-const MONTH_NAMES: Record<string, number> = {
+const MONTH_NAMES: Record<string, number> =
+{
 	January: 1,
 	February: 2,
 	March: 3,
@@ -37,26 +39,30 @@ const MONTH_NAMES: Record<string, number> = {
 	December: 12,
 };
 
-interface CandidateNode {
+interface CandidateNode
+{
 	id: string;
 	name: string;
 	monthName: string;
 	yearName: string;
 }
 
-interface ParsedDate {
+interface ParsedDate
+{
 	year: number;
 	month: number;
 	day: number;
 }
 
-function parseTextDate(name: string): ParsedDate | null {
+function parseTextDate(name: string): ParsedDate | null
+{
 	const trimmed = name.trim();
 
 	// "[YYYY-MM-DD]" bracket format (from previous failed migration)
 	const bracketFormat = /^\[(\d{4})-(\d{2})-(\d{2})\]$/u;
 	let match = bracketFormat.exec(trimmed);
-	if (match) {
+	if (match)
+	{
 		return {
 			year: Number(match[1]),
 			month: Number(match[2]),
@@ -67,40 +73,58 @@ function parseTextDate(name: string): ParsedDate | null {
 	// "Weekday M/D/YY" or "Weekday M/D/YYYY"
 	const weekdaySlash = /^\w+ (\d{1,2})\/(\d{1,2})\/(\d{2,4})$/u;
 	match = weekdaySlash.exec(trimmed);
-	if (match) {
+	if (match)
+	{
 		const month = Number(match[1]);
 		const day = Number(match[2]);
 		let year = Number(match[3]);
-		if (year < 100) {
+		if (year < 100)
+		{
 			year += 2000;
 		}
-		return {year, month, day};
+		return {
+			year,
+			month,
+			day,
+		};
 	}
 
 	// "Ddd, Mmm D, YYYY" (e.g., "Tue, Nov 17, 2020")
 	const abbrevFormat = /^\w{3}, (\w{3}) (\d{1,2}), (\d{4})$/u;
 	match = abbrevFormat.exec(trimmed);
-	if (match) {
+	if (match)
+	{
 		const monthNum = MONTH_ABBREVS[match[1] ?? ""];
-		if (monthNum === undefined) {
+		if (monthNum === undefined)
+		{
 			return null;
 		}
 		const day = Number(match[2]);
 		const year = Number(match[3]);
-		return {year, month: monthNum, day};
+		return {
+			year,
+			month: monthNum,
+			day,
+		};
 	}
 
 	// "M/D/YY" bare format
 	const bareSlash = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/u;
 	match = bareSlash.exec(trimmed);
-	if (match) {
+	if (match)
+	{
 		const month = Number(match[1]);
 		const day = Number(match[2]);
 		let year = Number(match[3]);
-		if (year < 100) {
+		if (year < 100)
+		{
 			year += 2000;
 		}
-		return {year, month, day};
+		return {
+			year,
+			month,
+			day,
+		};
 	}
 
 	return null;
@@ -109,7 +133,8 @@ function parseTextDate(name: string): ParsedDate | null {
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTH_ABBREV_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-function formatTimeElement(parsed: ParsedDate): string {
+function formatTimeElement(parsed: ParsedDate): string
+{
 	const date = new Date(parsed.year, parsed.month - 1, parsed.day);
 	const dayName = DAY_NAMES[date.getDay()];
 	const monthName = MONTH_ABBREV_NAMES[date.getMonth()];
@@ -117,7 +142,8 @@ function formatTimeElement(parsed: ParsedDate): string {
 	return `<time startYear="${parsed.year}" startMonth="${parsed.month}" startDay="${parsed.day}">${displayText}</time>`;
 }
 
-export default class MigrateDates extends Command {
+export default class MigrateDates extends Command
+{
 	static override description = "Convert text dates to native Workflowy dates in calendar archive day nodes";
 
 	static override examples = [
@@ -134,32 +160,44 @@ export default class MigrateDates extends Command {
 		"<%= config.bin %> <%= command.id %> --delay 300",
 	];
 
-	static override flags = {
-		"dry-run": Flags.boolean({
-			char: "d",
-			description: "Parse and log all changes without making API calls",
-			default: false,
-		}),
-		"archive-id": Flags.string({
-			char: "a",
-			description: "ID of the archive root node",
-			default: "f6b557fbf770",
-		}),
-		"batch-size": Flags.integer({
-			char: "b",
-			description: "Number of nodes to process before stopping (default: all)",
-		}),
-		delay: Flags.integer({
-			char: "D",
-			description: "Milliseconds between API calls",
-			default: 1000,
-		}),
-		year: Flags.integer({
-			description: "Limit processing to a specific year",
-		}),
+	static override flags =
+	{
+		"dry-run": Flags.boolean(
+			{
+				char: "d",
+				description: "Parse and log all changes without making API calls",
+				default: false,
+			},
+		),
+		"archive-id": Flags.string(
+			{
+				char: "a",
+				description: "ID of the archive root node",
+				default: "f6b557fbf770",
+			},
+		),
+		"batch-size": Flags.integer(
+			{
+				char: "b",
+				description: "Number of nodes to process before stopping (default: all)",
+			},
+		),
+		delay: Flags.integer(
+			{
+				char: "D",
+				description: "Milliseconds between API calls",
+				default: 1000,
+			},
+		),
+		year: Flags.integer(
+			{
+				description: "Limit processing to a specific year",
+			},
+		),
 	};
 
-	public async run(): Promise<void> {
+	public async run(): Promise<void>
+	{
 		const {flags} = await this.parse(MigrateDates);
 
 		const database = createDatabase();
@@ -177,9 +215,13 @@ export default class MigrateDates extends Command {
 				AND nc.system_to = ${FAR_FUTURE_DATE}
 			LIMIT 1
 		`;
-		const archiveResult = database.all<{id: string}>(archiveQuery);
+		const archiveResult = database.all<
+		{
+			id: string;
+		}>(archiveQuery);
 		const [archiveRow] = archiveResult;
-		if (!archiveRow) {
+		if (!archiveRow)
+		{
 			this.error(`Archive node with short ID "${archiveShortId}" not found`);
 		}
 		const archiveId = archiveRow.id;
@@ -206,7 +248,8 @@ export default class MigrateDates extends Command {
 				${yearFilter ? sql`AND year.name = ${yearFilter}` : sql``}
 			ORDER BY year.name, month.name, day.name
 		`;
-		const candidates = database.all<{
+		const candidates = database.all<
+		{
 			id: string;
 			name: string;
 			month_name: string;
@@ -215,11 +258,23 @@ export default class MigrateDates extends Command {
 
 		this.log(`Found ${candidates.length} candidate nodes`);
 
-		const parsed: {node: CandidateNode; date: ParsedDate; formatted: string}[] = [];
-		const skipped: {id: string; name: string; reason: string}[] = [];
+		const parsed:
+		{
+			node: CandidateNode;
+			date: ParsedDate;
+			formatted: string;
+		}[] = [];
+		const skipped:
+		{
+			id: string;
+			name: string;
+			reason: string;
+		}[] = [];
 
-		for (const row of candidates) {
-			const node: CandidateNode = {
+		for (const row of candidates)
+		{
+			const node: CandidateNode =
+			{
 				id: row.id,
 				name: row.name,
 				monthName: row.month_name,
@@ -227,8 +282,15 @@ export default class MigrateDates extends Command {
 			};
 
 			const date = parseTextDate(node.name);
-			if (!date) {
-				skipped.push({id: node.id, name: node.name, reason: "unparseable"});
+			if (!date)
+			{
+				skipped.push(
+					{
+						id: node.id,
+						name: node.name,
+						reason: "unparseable",
+					},
+				);
 				continue;
 			}
 
@@ -236,31 +298,43 @@ export default class MigrateDates extends Command {
 			const expectedYear = Number(node.yearName);
 			const expectedMonth = MONTH_NAMES[node.monthName];
 
-			if (expectedYear && date.year !== expectedYear) {
+			if (expectedYear && date.year !== expectedYear)
+			{
 				this.warn(`Year mismatch: "${node.name}" parsed as ${date.year} but parent year is ${node.yearName}`);
 			}
-			if (expectedMonth !== undefined && date.month !== expectedMonth) {
+			if (expectedMonth !== undefined && date.month !== expectedMonth)
+			{
 				this.warn(
 					`Month mismatch: "${node.name}" parsed as month ${date.month} but parent is ${node.monthName}`,
 				);
 			}
 
 			const formatted = formatTimeElement(date);
-			parsed.push({node, date, formatted});
+			parsed.push(
+				{
+					node,
+					date,
+					formatted,
+				},
+			);
 		}
 
 		this.log(`Parsed: ${parsed.length}, Skipped: ${skipped.length}`);
 
-		if (skipped.length > 0) {
+		if (skipped.length > 0)
+		{
 			this.log("\nSkipped nodes:");
-			for (const s of skipped) {
+			for (const s of skipped)
+			{
 				this.log(`  [${s.id}] "${s.name}" (${s.reason})`);
 			}
 		}
 
-		if (flags["dry-run"]) {
+		if (flags["dry-run"])
+		{
 			this.log("\n--- DRY RUN ---");
-			for (const {node, formatted} of parsed) {
+			for (const {node, formatted} of parsed)
+			{
 				this.log(`  "${node.name}" → ${formatted}  (${node.yearName}/${node.monthName})`);
 			}
 			this.log(`\nTotal: ${parsed.length} nodes would be updated`);
@@ -269,7 +343,8 @@ export default class MigrateDates extends Command {
 
 		// Execute updates
 		const apiKey = process.env.WORKFLOWY_API_KEY;
-		if (!apiKey) {
+		if (!apiKey)
+		{
 			this.error("WORKFLOWY_API_KEY environment variable is required");
 		}
 
@@ -286,29 +361,42 @@ export default class MigrateDates extends Command {
 		let updated = 0;
 		let errors = 0;
 
-		for (const {node, formatted} of toProcess) {
-			try {
-				await client.updateNode(node.id, {name: formatted});
+		for (const {node, formatted} of toProcess)
+		{
+			try
+			{
+				await client.updateNode(
+					node.id,
+					{
+						name: formatted,
+					},
+				);
 				updated++;
-				if (updated % 50 === 0) {
+				if (updated % 50 === 0)
+				{
 					this.log(`  Progress: ${updated}/${toProcess.length}`);
 				}
-			} catch (error) {
+			}
+			catch (error)
+			{
 				errors++;
 				this.warn(
 					`Failed to update "${node.name}" (${node.id}): ${error instanceof Error ? error.message : String(error)}`,
 				);
 			}
 
-			if (delay > 0) {
-				await new Promise((resolve) => {
+			if (delay > 0)
+			{
+				await new Promise((resolve) =>
+				{
 					setTimeout(resolve, delay);
 				});
 			}
 		}
 
 		this.log(`\nDone: ${updated} updated, ${errors} errors`);
-		if (batchSize !== undefined && batchSize !== 0 && parsed.length > batchSize) {
+		if (batchSize !== undefined && batchSize !== 0 && parsed.length > batchSize)
+		{
 			this.log(`Remaining: ${parsed.length - batchSize} nodes`);
 		}
 	}

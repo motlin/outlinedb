@@ -9,17 +9,25 @@ import {planInlineCodeInput} from "./inline-code-input.js";
 export function applyInlineCodeInput(
 	editor: HTMLElement,
 	event: Event | undefined,
-	io: {read: () => string; render: (html: string) => string},
-): string | null {
-	if (!(event instanceof InputEvent) || event.isComposing || event.inputType !== "insertText" || !event.data) {
+	io:
+	{
+		read: () => string;
+		render: (html: string) => string;
+	},
+): string | null
+{
+	if (!(event instanceof InputEvent) || event.isComposing || event.inputType !== "insertText" || !event.data)
+	{
 		return null;
 	}
 	const {start, end} = selectionTextOffsets(editor);
-	if (start !== end) {
+	if (start !== end)
+	{
 		return null;
 	}
 	const plan = planInlineCodeInput(io.read(), end, event.data);
-	if (plan === null) {
+	if (plan === null)
+	{
 		return null;
 	}
 	editor.innerHTML = io.render(plan.html);

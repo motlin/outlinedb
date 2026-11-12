@@ -7,24 +7,30 @@
 
 import type {TreeEventBus} from "./node-events.js";
 
-interface SocketLike {
+interface SocketLike
+{
 	send: (data: string) => void;
 }
 
-export interface NodeEventsSocketHandlers {
+export interface NodeEventsSocketHandlers
+{
 	onOpen?: (event: unknown, ws: SocketLike) => void;
 	onClose?: (event: unknown, ws: SocketLike) => void;
 }
 
-export function nodeEventsSocketHandlers(bus: TreeEventBus): NodeEventsSocketHandlers {
+export function nodeEventsSocketHandlers(bus: TreeEventBus): NodeEventsSocketHandlers
+{
 	let unsubscribe: (() => void) | undefined;
 	return {
-		onOpen(_event, ws) {
-			unsubscribe = bus.subscribe((event) => {
+		onOpen(_event, ws)
+		{
+			unsubscribe = bus.subscribe((event) =>
+			{
 				ws.send(JSON.stringify(event));
 			});
 		},
-		onClose() {
+		onClose()
+		{
 			unsubscribe?.();
 			unsubscribe = undefined;
 		},

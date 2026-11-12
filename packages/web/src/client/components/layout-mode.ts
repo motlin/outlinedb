@@ -35,21 +35,27 @@ export const DIVIDER_CLASSES: readonly string[] = [
 	"project--bullet-on-hover",
 ];
 
-export interface LayoutModeRendering {
+export interface LayoutModeRendering
+{
 	/** Classes appended to the node's `.project` element, in upstream order; empty for default bullets. */
 	projectClasses: readonly string[];
 	/** True when the layout puts a checkbox in the prefix slot (to-do). */
 	isTodo: boolean;
 }
 
-const HEADING_CLASS: Record<string, string> = {
+const HEADING_CLASS: Record<string, string> =
+{
 	h1: "header1",
 	h2: "header2",
 	h3: "header3",
 };
 
-function rendering(projectClasses: readonly string[], isTodo = false): LayoutModeRendering {
-	return {projectClasses, isTodo};
+function rendering(projectClasses: readonly string[], isTodo = false): LayoutModeRendering
+{
+	return {
+		projectClasses,
+		isTodo,
+	};
 }
 
 /**
@@ -59,45 +65,56 @@ function rendering(projectClasses: readonly string[], isTodo = false): LayoutMod
 export function resolveLayoutMode(
 	layoutMode: string | null | undefined,
 	flagOn: boolean = dashboardsOn(),
-): LayoutModeRendering {
-	if (!layoutMode || layoutMode === "bullets" || layoutMode === "bullet") {
+): LayoutModeRendering
+{
+	if (!layoutMode || layoutMode === "bullets" || layoutMode === "bullet")
+	{
 		return rendering([]);
 	}
 
 	const heading = HEADING_CLASS[layoutMode];
-	if (heading) {
+	if (heading)
+	{
 		return rendering([heading]);
 	}
 
-	if (layoutMode === "todo" || layoutMode === "check") {
+	if (layoutMode === "todo" || layoutMode === "check")
+	{
 		return rendering(["checkmark"], true);
 	}
 
-	if (layoutMode === "code-block") {
+	if (layoutMode === "code-block")
+	{
 		return rendering(["code-block", "multiline"]);
 	}
 
-	if (layoutMode === "quote" || layoutMode === "quote-block") {
+	if (layoutMode === "quote" || layoutMode === "quote-block")
+	{
 		return rendering(["quote-block", "multiline"]);
 	}
 
-	if (layoutMode === "divider") {
+	if (layoutMode === "divider")
+	{
 		return rendering(DIVIDER_CLASSES);
 	}
 
-	if (layoutMode === "dashboard") {
+	if (layoutMode === "dashboard")
+	{
 		return rendering(flagOn ? ["dashboard"] : []);
 	}
 
-	if (layoutMode === "board") {
+	if (layoutMode === "board")
+	{
 		return rendering(["board"]);
 	}
 
-	if (layoutMode === "table") {
+	if (layoutMode === "table")
+	{
 		return rendering(["tableItem"]);
 	}
 
-	if (layoutMode === "paragraph" || layoutMode === "p") {
+	if (layoutMode === "paragraph" || layoutMode === "p")
+	{
 		return rendering(["paragraph"]);
 	}
 

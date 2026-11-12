@@ -10,7 +10,8 @@
 	],
 	"license": "Apache 2.0",
 	"author": "Craig P. Motlin",
-	"bin": {
+	"bin":
+	{
 		"outlinedb": "./bin/run.js"
 	},
 	"files": [
@@ -21,13 +22,15 @@
 	"type": "module",
 	"main": "dist/index.js",
 	"types": "dist/index.d.ts",
-	"scripts": {
+	"scripts":
+	{
 		"build": "shx rm -rf dist tsconfig.tsbuildinfo && tsc -b",
 		"typecheck": "tsc --noEmit",
 		"postpack": "shx rm -f oclif.manifest.json",
 		"prepack": "oclif manifest"
 	},
-	"dependencies": {
+	"dependencies":
+	{
 		"@oclif/core": "^5.1.11",
 		"@oclif/plugin-help": "^7",
 		"@outlinedb/shared": "workspace:*",
@@ -44,7 +47,8 @@
 		"sqlite-vec": "^0.1.9",
 		"zod": "^4.6.7"
 	},
-	"devDependencies": {
+	"devDependencies":
+	{
 		"@oclif/test": "^5",
 		"oclif": "^6",
 		"pino-pretty": "^13.2.0",
@@ -54,7 +58,8 @@
 		"typescript": "^7.0.2",
 		"vite-plus": "catalog:"
 	},
-	"oclif": {
+	"oclif":
+	{
 		"bin": "outlinedb",
 		"commands": "./dist/commands",
 		"dirname": "outlinedb",
@@ -63,7 +68,8 @@
 		],
 		"topicSeparator": " "
 	},
-	"engines": {
+	"engines":
+	{
 		"node": ">=20.11.0"
 	}
 }

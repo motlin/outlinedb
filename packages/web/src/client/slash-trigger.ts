@@ -8,7 +8,8 @@ import {isPropping} from "./suggest/suggest-engine.js";
 
 export const SLASH_CHIP_CLASS = "slash-input bg-tertiary py-2xs pr-xs pl-xs rounded-s leading-none";
 
-export interface SlashRange {
+export interface SlashRange
+{
 	readonly start: number;
 	readonly end: number;
 }
@@ -20,31 +21,43 @@ const REARM_SCAN_LENGTH = 10;
  * Triggers when the slash is `first` (offset 0) or `standalone`; a trailing slash after other text
  * also wraps the preceding character (the space).
  */
-export function planSlashOpen(text: string, slashIndex: number): SlashRange | null {
+export function planSlashOpen(text: string, slashIndex: number): SlashRange | null
+{
 	const first = slashIndex === 0;
 	const standalone = !isPropping(text[slashIndex - 1]) && !isPropping(text[slashIndex + 1]);
-	if (!first && !standalone) {
+	if (!first && !standalone)
+	{
 		return null;
 	}
 	const last = slashIndex === text.length - 1;
 	const start = last && !first ? slashIndex - 1 : slashIndex;
-	return {start, end: slashIndex + 1};
+	return {
+		start,
+		end: slashIndex + 1,
+	};
 }
 
 /**
  * Range to re-wrap as a chip after a deleting input, scanning back up to 10 characters from the caret
  * for a `/`. The caller must still require a non-empty `resolveSlash` for the text after the slash.
  */
-export function planSlashRearm(text: string, caret: number): SlashRange | null {
+export function planSlashRearm(text: string, caret: number): SlashRange | null
+{
 	const before = text.slice(0, caret);
-	for (let o = caret; o > caret - REARM_SCAN_LENGTH && o >= 0; o--) {
-		if (before[o] !== "/") {
+	for (let o = caret; o > caret - REARM_SCAN_LENGTH && o >= 0; o--)
+	{
+		if (before[o] !== "/")
+		{
 			continue;
 		}
-		if ((before[o - 1] !== " " && o !== 0) || before[o + 1] === " ") {
+		if ((before[o - 1] !== " " && o !== 0) || before[o + 1] === " ")
+		{
 			return null;
 		}
-		return {start: before[o - 1] === " " ? o - 1 : o, end: caret};
+		return {
+			start: before[o - 1] === " " ? o - 1 : o,
+			end: caret,
+		};
 	}
 	return null;
 }
@@ -52,13 +65,15 @@ export function planSlashRearm(text: string, caret: number): SlashRange | null {
 const SLASH_CHIP_PATTERN = new RegExp(`<span class="${SLASH_CHIP_CLASS}">([^<]*)</span>`, "gu");
 
 /** Unwraps any slash chip span to its plain text so a live chip is never persisted. */
-export function stripSlashChip(html: string): string {
+export function stripSlashChip(html: string): string
+{
 	return html.replaceAll(SLASH_CHIP_PATTERN, "$1");
 }
 
 const SLASH_HINT = 'Type "/" for commands';
 
-export interface PlaceholderInput {
+export interface PlaceholderInput
+{
 	readonly focused: boolean;
 	readonly empty: boolean;
 	readonly layoutMode?: string | null | undefined;
@@ -84,14 +99,18 @@ export function placeholderFor({
 	slashDiscovered = true,
 	isZoomRoot = false,
 	dashboardCard = false,
-}: PlaceholderInput): string | undefined {
-	if (!empty || NO_PLACEHOLDER_LAYOUTS.has(layoutMode ?? "")) {
+}: PlaceholderInput): string | undefined
+{
+	if (!empty || NO_PLACEHOLDER_LAYOUTS.has(layoutMode ?? ""))
+	{
 		return undefined;
 	}
-	if (dashboardCard) {
+	if (dashboardCard)
+	{
 		return CARD_PLACEHOLDER;
 	}
-	if (focused && !slashDiscovered && layoutMode !== "divider" && layoutMode !== "numbered") {
+	if (focused && !slashDiscovered && layoutMode !== "divider" && layoutMode !== "numbered")
+	{
 		return SLASH_HINT;
 	}
 	return isZoomRoot ? "Untitled" : undefined;

@@ -2,7 +2,8 @@ import {matchNested, parseNestedQuery, parseQuery} from "@outlinedb/shared/searc
 import type {MatchResult, SearchItem} from "@outlinedb/shared/search";
 
 /** A live node as loaded for tree search. Timestamps are epoch milliseconds. */
-export interface TreeSearchRow {
+export interface TreeSearchRow
+{
 	id: string;
 	parentId: string | null;
 	priority: number | null;
@@ -19,7 +20,8 @@ export interface TreeSearchRow {
 	fileType: string | null;
 }
 
-export interface TreeSearchResult {
+export interface TreeSearchResult
+{
 	matchIds: string[];
 	nameMatchIds: string[];
 	noteMatchIds: string[];
@@ -36,7 +38,8 @@ export interface TreeSearchResult {
 	revealsCompleted: boolean;
 }
 
-interface Visit {
+interface Visit
+{
 	id: string;
 	childIds: string[];
 	matches: boolean;
@@ -46,7 +49,8 @@ interface Visit {
 	completed: boolean;
 }
 
-function emptyResult(revealsCompleted: boolean): TreeSearchResult {
+function emptyResult(revealsCompleted: boolean): TreeSearchResult
+{
 	return {
 		matchIds: [],
 		nameMatchIds: [],
@@ -66,39 +70,50 @@ function emptyResult(revealsCompleted: boolean): TreeSearchResult {
 const childrenCache = new WeakMap<readonly TreeSearchRow[], Map<string | null, TreeSearchRow[]>>();
 const itemCache = new WeakMap<TreeSearchRow, [open?: SearchItem, underCompleted?: SearchItem]>();
 
-function childrenByParent(rows: TreeSearchRow[]): Map<string | null, TreeSearchRow[]> {
+function childrenByParent(rows: TreeSearchRow[]): Map<string | null, TreeSearchRow[]>
+{
 	const cached = childrenCache.get(rows);
-	if (cached) {
+	if (cached)
+	{
 		return cached;
 	}
 	const children = new Map<string | null, TreeSearchRow[]>();
-	for (const row of rows) {
+	for (const row of rows)
+	{
 		const siblings = children.get(row.parentId);
-		if (siblings) {
+		if (siblings)
+		{
 			siblings.push(row);
-		} else {
+		}
+		else
+		{
 			children.set(row.parentId, [row]);
 		}
 	}
-	for (const siblings of children.values()) {
+	for (const siblings of children.values())
+	{
 		siblings.sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0));
 	}
 	childrenCache.set(rows, children);
 	return children;
 }
 
-export function searchItem(row: TreeSearchRow, childCount: number, ancestorCompleted: boolean): SearchItem {
+export function searchItem(row: TreeSearchRow, childCount: number, ancestorCompleted: boolean): SearchItem
+{
 	let slots = itemCache.get(row);
-	if (slots === undefined) {
+	if (slots === undefined)
+	{
 		slots = [];
 		itemCache.set(row, slots);
 	}
 	const slot = ancestorCompleted ? 1 : 0;
 	const cached = slots[slot];
-	if (cached?.childCount === childCount) {
+	if (cached?.childCount === childCount)
+	{
 		return cached;
 	}
-	const item: SearchItem = {
+	const item: SearchItem =
+	{
 		id: row.id,
 		nameHtml: row.name ?? "",
 		noteHtml: row.note ?? "",
@@ -117,54 +132,94 @@ export function searchItem(row: TreeSearchRow, childCount: number, ancestorCompl
 }
 
 /** Where a paged search reads row text: `read` answers one page of at most `pageSize` ids. */
-export interface RowTextSource {
+export interface RowTextSource
+{
 	pageSize: number;
-	read(ids: readonly string[]): ReadonlyMap<string, {name: string | null; note: string | null}>;
+	read(ids: readonly string[]): ReadonlyMap<
+		string,
+		{
+			name: string | null;
+			note: string | null;
+		}
+	>;
 }
 
 /**
  * `entries` in their order, read in pages of `source.pageSize`, each row carrying its text from `source`
  * (rows without live text are dropped).
  */
-export function* withRowText<T extends {row: TreeSearchRow}>(
-	entries: Iterable<T>,
-	source: RowTextSource,
-): Generator<T> {
+export function* withRowText<
+	T extends
+	{
+		row: TreeSearchRow;
+	},
+>(entries: Iterable<T>, source: RowTextSource): Generator<T>
+{
 	let page: T[] = [];
-	const flush = function* (): Generator<T> {
+	const flush = function* (): Generator<T>
+	{
 		const text = source.read(page.map(({row}) => row.id));
-		for (const entry of page) {
+		for (const entry of page)
+		{
 			const found = text.get(entry.row.id);
-			if (found !== undefined) {
-				yield {...entry, row: {...entry.row, name: found.name, note: found.note}};
+			if (found !== undefined)
+			{
+				yield {
+					...entry,
+					row:
+					{
+						...entry.row,
+						name: found.name,
+						note: found.note,
+					},
+				};
 			}
 		}
 		page = [];
 	};
-	for (const entry of entries) {
+	for (const entry of entries)
+	{
 		page.push(entry);
-		if (page.length === source.pageSize) {
+		if (page.length === source.pageSize)
+		{
 			yield* flush();
 		}
 	}
-	if (page.length > 0) {
+	if (page.length > 0)
+	{
 		yield* flush();
 	}
 }
 
-interface ParseOpts {
+interface ParseOpts
+{
 	dateFormat?: string;
 	weekStartDay?: 0 | 1;
 }
 
-function parseTreeQuery(query: string, now: number, opts: ParseOpts) {
-	const parseOpts = {
+function parseTreeQuery(query: string, now: number, opts: ParseOpts)
+{
+	const parseOpts =
+	{
 		now,
-		...(opts.dateFormat === undefined ? {} : {dateFormat: opts.dateFormat}),
-		...(opts.weekStartDay === undefined ? {} : {weekStartDay: opts.weekStartDay}),
+		...(opts.dateFormat === undefined
+			? {}
+			:
+				{
+					dateFormat: opts.dateFormat,
+				}),
+		...(opts.weekStartDay === undefined
+			? {}
+			:
+				{
+					weekStartDay: opts.weekStartDay,
+				}),
 	};
 	const nested = parseNestedQuery(query, parseOpts);
-	return {nested, parsed: nested?.highlight ?? parseQuery(query, parseOpts)};
+	return {
+		nested,
+		parsed: nested?.highlight ?? parseQuery(query, parseOpts),
+	};
 }
 
 /** The result from `visits` (in document order) and the ids of the search root's children. */
@@ -172,15 +227,19 @@ function summarize(
 	visits: readonly Visit[],
 	rootChildIds: readonly string[],
 	revealsCompleted: boolean,
-): TreeSearchResult {
+): TreeSearchResult
+{
 	// Children follow their parent in `visits`, so a reverse pass sees every child before its parent.
 	const hasDescendantMatch = new Set<string>();
 	const visible = new Set<string>();
-	for (const visit of visits.toReversed()) {
-		if (visit.childIds.some((id) => visible.has(id))) {
+	for (const visit of visits.toReversed())
+	{
+		if (visit.childIds.some((id) => visible.has(id)))
+		{
 			hasDescendantMatch.add(visit.id);
 		}
-		if (visit.matches || hasDescendantMatch.has(visit.id)) {
+		if (visit.matches || hasDescendantMatch.has(visit.id))
+		{
 			visible.add(visit.id);
 		}
 	}
@@ -188,26 +247,34 @@ function summarize(
 		childIds.some((id) => visible.has(id)) && childIds.some((id) => !visible.has(id));
 
 	const result = emptyResult(revealsCompleted);
-	for (const visit of visits) {
-		if (visit.matches) {
+	for (const visit of visits)
+	{
+		if (visit.matches)
+		{
 			result.matchIds.push(visit.id);
 			result.matchCount += 1;
-			if (visit.completed) {
+			if (visit.completed)
+			{
 				result.completedMatchCount += 1;
 			}
-			if (visit.nameMatches) {
+			if (visit.nameMatches)
+			{
 				result.nameMatchIds.push(visit.id);
 			}
-			if (visit.noteMatches) {
+			if (visit.noteMatches)
+			{
 				result.noteMatchIds.push(visit.id);
 			}
-			if (visit.metaMatches && !visit.nameMatches && !visit.noteMatches) {
+			if (visit.metaMatches && !visit.nameMatches && !visit.noteMatches)
+			{
 				result.metaMatchIds.push(visit.id);
 			}
 		}
-		if (hasDescendantMatch.has(visit.id)) {
+		if (hasDescendantMatch.has(visit.id))
+		{
 			result.ancestorIds.push(visit.id);
-			if (isHalfExpanded(visit.childIds)) {
+			if (isHalfExpanded(visit.childIds))
+			{
 				result.halfExpandedIds.push(visit.id);
 			}
 		}
@@ -226,9 +293,11 @@ export function computeTreeSearch(
 	query: string,
 	now: number,
 	opts: ParseOpts = {},
-): TreeSearchResult {
+): TreeSearchResult
+{
 	const {nested, parsed} = parseTreeQuery(query, now, opts);
-	if (parsed.isEmpty()) {
+	if (parsed.isEmpty())
+	{
 		return emptyResult(false);
 	}
 
@@ -236,35 +305,49 @@ export function computeTreeSearch(
 	const rootCompleted = rootId !== null && rows.some((row) => row.id === rootId && row.completedAt !== null);
 	const visits: Visit[] = [];
 	const byId = nested ? new Map(rows.map((row) => [row.id, row])) : null;
-	const matchRow = (row: TreeSearchRow, ancestorCompleted: boolean): MatchResult => {
+	const matchRow = (row: TreeSearchRow, ancestorCompleted: boolean): MatchResult =>
+	{
 		const item = searchItem(row, children.get(row.id)?.length ?? 0, ancestorCompleted);
-		if (!nested || !byId) {
+		if (!nested || !byId)
+		{
 			return parsed.matches(item);
 		}
 		const ancestors: SearchItem[] = [];
 		const seen = new Set<string>([row.id]);
-		for (let id = row.parentId; id !== null && !seen.has(id);) {
+		for (let id = row.parentId; id !== null && !seen.has(id);)
+		{
 			const ancestor = byId.get(id);
-			if (!ancestor) {
+			if (!ancestor)
+			{
 				break;
 			}
 			seen.add(id);
 			ancestors.push(searchItem(ancestor, children.get(id)?.length ?? 0, false));
 			id = ancestor.parentId;
 		}
-		return matchNested(nested, {...item, ancestors});
+		return matchNested(
+			nested,
+			{
+				...item,
+				ancestors,
+			},
+		);
 	};
 
-	const walk = (parentId: string | null, ancestorCompleted: boolean): void => {
-		for (const row of children.get(parentId) ?? []) {
+	const walk = (parentId: string | null, ancestorCompleted: boolean): void =>
+	{
+		for (const row of children.get(parentId) ?? [])
+		{
 			const match = matchRow(row, ancestorCompleted);
 			const completed = ancestorCompleted || row.completedAt !== null;
-			visits.push({
-				id: row.id,
-				childIds: (children.get(row.id) ?? []).map((child) => child.id),
-				...match,
-				completed,
-			});
+			visits.push(
+				{
+					id: row.id,
+					childIds: (children.get(row.id) ?? []).map((child) => child.id),
+					...match,
+					completed,
+				},
+			);
 			walk(row.id, completed);
 		}
 	};
@@ -276,23 +359,36 @@ export function computeTreeSearch(
 	);
 }
 
-interface Placed {
+interface Placed
+{
 	row: TreeSearchRow;
 	depth: number;
 	ancestorCompleted: boolean;
 }
 
 /** Every row reachable from the top level in document order, with its depth and whether an ancestor is completed. */
-function* preorder(children: ReadonlyMap<string | null, TreeSearchRow[]>): Generator<Placed> {
-	const stack: Placed[] = (children.get(null) ?? [])
-		.toReversed()
-		.map((row) => ({row, depth: 0, ancestorCompleted: false}));
-	for (let placed = stack.pop(); placed !== undefined; placed = stack.pop()) {
+function* preorder(children: ReadonlyMap<string | null, TreeSearchRow[]>): Generator<Placed>
+{
+	const stack: Placed[] = (children.get(null) ?? []).toReversed().map((row) => (
+	{
+		row,
+		depth: 0,
+		ancestorCompleted: false,
+	}));
+	for (let placed = stack.pop(); placed !== undefined; placed = stack.pop())
+	{
 		yield placed;
 		const {row, depth, ancestorCompleted} = placed;
 		const below = ancestorCompleted || row.completedAt !== null;
-		for (const child of (children.get(row.id) ?? []).toReversed()) {
-			stack.push({row: child, depth: depth + 1, ancestorCompleted: below});
+		for (const child of (children.get(row.id) ?? []).toReversed())
+		{
+			stack.push(
+				{
+					row: child,
+					depth: depth + 1,
+					ancestorCompleted: below,
+				},
+			);
 		}
 	}
 }
@@ -309,35 +405,59 @@ export function computeTreeSearchPaged(
 	now: number,
 	opts: ParseOpts,
 	source: RowTextSource,
-): TreeSearchResult {
+): TreeSearchResult
+{
 	const {nested, parsed} = parseTreeQuery(query, now, opts);
-	if (parsed.isEmpty()) {
+	if (parsed.isEmpty())
+	{
 		return emptyResult(false);
 	}
 	const children = childrenByParent(skeleton);
 	const childIds = (id: string): string[] => (children.get(id) ?? []).map((child) => child.id);
 	const visits: Visit[] = [];
 	// The current row's ancestors with their text, root first (only for a nested query).
-	const path: {depth: number; item: SearchItem}[] = [];
-	for (const {row, depth, ancestorCompleted} of withRowText(preorder(children), source)) {
+	const path:
+	{
+		depth: number;
+		item: SearchItem;
+	}[] = [];
+	for (const {row, depth, ancestorCompleted} of withRowText(preorder(children), source))
+	{
 		const count = children.get(row.id)?.length ?? 0;
 		const item = searchItem(row, count, ancestorCompleted);
 		let match: MatchResult;
-		if (nested) {
-			while ((path.at(-1)?.depth ?? -1) >= depth) {
+		if (nested)
+		{
+			while ((path.at(-1)?.depth ?? -1) >= depth)
+			{
 				path.pop();
 			}
-			match = matchNested(nested, {...item, ancestors: path.map((entry) => entry.item).toReversed()});
-			path.push({depth, item: searchItem(row, count, false)});
-		} else {
+			match = matchNested(
+				nested,
+				{
+					...item,
+					ancestors: path.map((entry) => entry.item).toReversed(),
+				},
+			);
+			path.push(
+				{
+					depth,
+					item: searchItem(row, count, false),
+				},
+			);
+		}
+		else
+		{
 			match = parsed.matches(item);
 		}
-		visits.push({
-			id: row.id,
-			childIds: childIds(row.id),
-			...match,
-			completed: ancestorCompleted || row.completedAt !== null,
-		});
+		visits.push(
+			{
+				id: row.id,
+				childIds: childIds(row.id),
+				...match,
+				completed: ancestorCompleted || row.completedAt !== null,
+			},
+		);
 	}
 	return summarize(
 		visits,

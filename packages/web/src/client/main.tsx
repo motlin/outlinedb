@@ -8,7 +8,8 @@ import "./print.css";
 import {installPrintListeners} from "./hooks/use-printing.js";
 
 const rootElement = document.querySelector("#root");
-if (!rootElement) {
+if (!rootElement)
+{
 	throw new Error("Root element not found");
 }
 
@@ -28,6 +29,7 @@ root.render(
 );
 
 // Upstream clears the inline pre-paint background once the app is ready.
-requestAnimationFrame(() => {
+requestAnimationFrame(() =>
+{
 	requestAnimationFrame(clearPrepaintBackground);
 });

@@ -4,7 +4,8 @@ import {cardBulletClass} from "../dashboard.js";
 import {TABLE_CELL_BULLET_CLASS} from "./table-classes.js";
 import {bulletClickAction, nodeUrl} from "../navigation.js";
 
-interface NodeBulletProps {
+interface NodeBulletProps
+{
 	nodeId: string;
 	/** Where the row sits inside a mirror: its link is the virtual `v_…` location. */
 	instance?: MirrorInstance | null;
@@ -25,7 +26,11 @@ interface NodeBulletProps {
 	/** The cell is shared (a mirror root's original), so the bullet gains `text-shared`. */
 	shared?: boolean;
 	/** A phone row's bullet: upstream's `VD4` draws a sized `div` (no href) at half opacity. */
-	mobile?: {size: number; left: number};
+	mobile?:
+	{
+		size: number;
+		left: number;
+	};
 }
 
 /**
@@ -48,11 +53,18 @@ export function nodeBullet({
 	tableCell = false,
 	shared = false,
 	mobile,
-}: NodeBulletProps) {
+}: NodeBulletProps)
+{
 	const style =
 		mobile === undefined
-			? {left: "calc(var(--name-left-overhang) + 1px)", width: "18px", ["--bullet-size" as string]: "18px"}
-			: {
+			?
+				{
+					left: "calc(var(--name-left-overhang) + 1px)",
+					width: "18px",
+					["--bullet-size" as string]: "18px",
+				}
+			:
+				{
 					left: `${mobile.left}px`,
 					width: `${mobile.size}px`,
 					opacity: 0.5,
@@ -89,25 +101,32 @@ export function nodeBullet({
 					]
 						.filter(Boolean)
 						.join(" ");
-	const handleClick = (event: React.MouseEvent<HTMLElement>) => {
+	const handleClick = (event: React.MouseEvent<HTMLElement>) =>
+	{
 		event.stopPropagation();
 		// Only a press the drag armed and released before moving 3px acts; a finished drag does not.
 		const armed = event.currentTarget.dataset.preDragClick === "true";
 		delete event.currentTarget.dataset.preDragClick;
-		const action = bulletClickAction({
-			metaKey: event.metaKey,
-			ctrlKey: event.ctrlKey,
-			button: event.button,
-			armed,
-			inSelection: isInSelection(),
-		});
-		if (action === "browser") {
+		const action = bulletClickAction(
+			{
+				metaKey: event.metaKey,
+				ctrlKey: event.ctrlKey,
+				button: event.button,
+				armed,
+				inSelection: isInSelection(),
+			},
+		);
+		if (action === "browser")
+		{
 			return;
 		}
 		event.preventDefault();
-		if (action === "clear-selection") {
+		if (action === "clear-selection")
+		{
 			onClearSelection();
-		} else if (action === "zoom") {
+		}
+		else if (action === "zoom")
+		{
 			onZoom();
 		}
 	};
@@ -176,7 +195,8 @@ export function nodeBullet({
 			</svg>
 		</>
 	);
-	const common = {
+	const common =
+	{
 		"data-handbook": "bullet.handle",
 		"data-item-id": nodeId,
 		className,

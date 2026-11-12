@@ -9,17 +9,24 @@ import {PLUGINS_DIR} from "./helpers/scan-roots.js";
 const REFINEMENT_DIR = join(PLUGINS_DIR, "gtd", "prompts", "refinement");
 const refiner = readFileSync(join(REFINEMENT_DIR, "item-refiner.md"), "utf8");
 
-describe("Structural Eval: item-refiner runs taggers inline", () => {
-	it("never launches nested subagents", () => {
+describe("Structural Eval: item-refiner runs taggers inline", () =>
+{
+	it("never launches nested subagents", () =>
+	{
 		const offenders = refiner
 			.split("\n")
-			.map((line, index) => ({line, at: index + 1}))
+			.map((line, index) => (
+			{
+				line,
+				at: index + 1,
+			}))
 			.filter(({line}) => /Agent tool|subagent_type|run_in_background|in parallel/iu.test(line))
 			.map(({line, at}) => `${at}: ${line.trim()}`);
 		expect(offenders).toStrictEqual([]);
 	});
 
-	it("applies every tagger and composer prompt", () => {
+	it("applies every tagger and composer prompt", () =>
+	{
 		const expected = [
 			"agenda-detector",
 			"context-tagger",
@@ -35,7 +42,8 @@ describe("Structural Eval: item-refiner runs taggers inline", () => {
 		expect(missing).toStrictEqual([]);
 	});
 
-	it("serializes lock-holding CLI calls", () => {
+	it("serializes lock-holding CLI calls", () =>
+	{
 		expect(refiner).toMatch(/run one CLI call at a time/u);
 	});
 });

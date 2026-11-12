@@ -7,7 +7,8 @@ import {syncBacklinksIfLinked} from "@outlinedb/shared/node";
 import {logger} from "../../services/logger.js";
 import {resolveNodeId} from "@outlinedb/shared/utils";
 
-export default class Update extends Command {
+export default class Update extends Command
+{
 	static override description = "Update a Workflowy node";
 
 	static override examples = [
@@ -33,63 +34,86 @@ export default class Update extends Command {
 		'<%= config.bin %> <%= command.id %> --id abc123 --name "Updated" --dry-run',
 	];
 
-	static override flags = {
-		id: Flags.string({
-			char: "i",
-			description: "ID of the node to update",
-			exclusive: ["path"],
-		}),
-		path: Flags.string({
-			char: "p",
-			description: 'Comma-separated path to the node (e.g., "Work,Tasks,My Task")',
-			exclusive: ["id"],
-		}),
-		name: Flags.string({
-			char: "n",
-			description: "New name for the node",
-			exclusive: ["clear-name"],
-		}),
-		"clear-name": Flags.boolean({
-			description: "Clear the node's name (on a mirror, its original's name).",
-			default: false,
-			exclusive: ["name"],
-		}),
-		note: Flags.string({
-			description: "New note/description for the node",
-			exclusive: ["clear-note"],
-		}),
-		"clear-note": Flags.boolean({
-			description: "Clear the note from the node",
-			default: false,
-			exclusive: ["note"],
-		}),
-		"layout-mode": Flags.string({
-			description: 'Layout mode for the node (e.g., "todo", "document", "board")',
-		}),
-		"expect-name": Flags.string({
-			description:
-				"Refuse the update unless the node's current name exactly equals this value (guards against overwriting text that changed since it was read)",
-		}),
-		"dry-run": Flags.boolean({
-			char: "d",
-			description: "Show the API call that would be made without executing",
-			default: false,
-		}),
+	static override flags =
+	{
+		id: Flags.string(
+			{
+				char: "i",
+				description: "ID of the node to update",
+				exclusive: ["path"],
+			},
+		),
+		path: Flags.string(
+			{
+				char: "p",
+				description: 'Comma-separated path to the node (e.g., "Work,Tasks,My Task")',
+				exclusive: ["id"],
+			},
+		),
+		name: Flags.string(
+			{
+				char: "n",
+				description: "New name for the node",
+				exclusive: ["clear-name"],
+			},
+		),
+		"clear-name": Flags.boolean(
+			{
+				description: "Clear the node's name (on a mirror, its original's name).",
+				default: false,
+				exclusive: ["name"],
+			},
+		),
+		note: Flags.string(
+			{
+				description: "New note/description for the node",
+				exclusive: ["clear-note"],
+			},
+		),
+		"clear-note": Flags.boolean(
+			{
+				description: "Clear the note from the node",
+				default: false,
+				exclusive: ["note"],
+			},
+		),
+		"layout-mode": Flags.string(
+			{
+				description: 'Layout mode for the node (e.g., "todo", "document", "board")',
+			},
+		),
+		"expect-name": Flags.string(
+			{
+				description:
+					"Refuse the update unless the node's current name exactly equals this value (guards against overwriting text that changed since it was read)",
+			},
+		),
+		"dry-run": Flags.boolean(
+			{
+				char: "d",
+				description: "Show the API call that would be made without executing",
+				default: false,
+			},
+		),
 	};
 
-	public async run(): Promise<void> {
+	public async run(): Promise<void>
+	{
 		const {flags} = await this.parse(Update);
 
-		if (!flags.id && !flags.path) {
+		if (!flags.id && !flags.path)
+		{
 			this.error("Either --id or --path is required");
 		}
 
-		if (!flags.name && !flags["clear-name"] && !flags.note && !flags["clear-note"] && !flags["layout-mode"]) {
+		if (!flags.name && !flags["clear-name"] && !flags.note && !flags["clear-note"] && !flags["layout-mode"])
+		{
 			this.error("At least one of --name, --clear-name, --note, --clear-note, or --layout-mode must be provided");
 		}
 
 		const apiKey = process.env.WORKFLOWY_API_KEY;
-		if (!apiKey) {
+		if (!apiKey)
+		{
 			this.error("WORKFLOWY_API_KEY environment variable is required");
 		}
 
@@ -100,7 +124,8 @@ export default class Update extends Command {
 		const pathBuilder = new PathBuilder(database);
 
 		const requestedId = await resolveNodeId(flags, cacheService, apiClient);
-		const update = {
+		const update =
+		{
 			name: flags["clear-name"] ? "" : flags.name,
 			note: flags["clear-note"] ? "" : flags.note,
 			layoutMode: flags["layout-mode"],
@@ -108,9 +133,11 @@ export default class Update extends Command {
 		// Text on a mirror lives on its original, so guard and report against that node.
 		const nodeId = client.resolveUpdateTarget(requestedId);
 
-		if (flags["expect-name"] !== undefined && !flags["dry-run"]) {
+		if (flags["expect-name"] !== undefined && !flags["dry-run"])
+		{
 			const current = cacheService.getNode(nodeId);
-			if (!current || current.name !== flags["expect-name"]) {
+			if (!current || current.name !== flags["expect-name"])
+			{
 				this.error(
 					`Refusing to update ${nodeId}: current name does not match --expect-name ` +
 						`(the node likely changed since it was read).\n` +
@@ -122,7 +149,8 @@ export default class Update extends Command {
 
 		const fullPath = pathBuilder.buildFullPath(nodeId);
 
-		if (flags["dry-run"]) {
+		if (flags["dry-run"])
+		{
 			this.log("Would execute API call:");
 			this.log(`  Method: POST`);
 			this.log(`  URL: https://workflowy.com/api/v1/nodes/${nodeId}`);
@@ -133,8 +161,11 @@ export default class Update extends Command {
 			this.log(`    ${JSON.stringify(update, null, 2).split("\n").join("\n    ")}`);
 			this.log("");
 			this.log(`Node: ${fullPath}`);
-		} else {
-			if (nodeId !== requestedId) {
+		}
+		else
+		{
+			if (nodeId !== requestedId)
+			{
 				this.log(`${requestedId} is a mirror; updating its original ${nodeId}`);
 			}
 			this.log(`Updating node: ${fullPath}`);
@@ -150,17 +181,24 @@ export default class Update extends Command {
 
 			this.log("");
 			this.log(`Successfully updated node`);
-			if (flags.name) {
+			if (flags.name)
+			{
 				this.log(`  New name: ${flags.name}`);
-			} else if (flags["clear-name"]) {
+			}
+			else if (flags["clear-name"])
+			{
 				this.log(`  Name cleared`);
 			}
-			if (flags.note) {
+			if (flags.note)
+			{
 				this.log(`  New note: ${flags.note}`);
-			} else if (flags["clear-note"]) {
+			}
+			else if (flags["clear-note"])
+			{
 				this.log(`  Note cleared`);
 			}
-			if (flags["layout-mode"]) {
+			if (flags["layout-mode"])
+			{
 				this.log(`  Layout mode: ${flags["layout-mode"]}`);
 			}
 		}

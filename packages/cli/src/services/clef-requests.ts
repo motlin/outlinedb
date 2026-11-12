@@ -4,7 +4,8 @@ import type {LabelKind, PoolLabel} from "./label-pool.js";
 export type ClefModel = "clef" | "clef-flash";
 
 /** The entry Clef reads; the same state goes to both passes. */
-export interface ClefState {
+export interface ClefState
+{
 	readonly date: string;
 	readonly parent: string;
 	readonly entry: string;
@@ -12,31 +13,36 @@ export interface ClefState {
 	readonly siblings?: readonly string[];
 }
 
-export interface ChoiceQuestion {
+export interface ChoiceQuestion
+{
 	readonly type: "choice";
 	readonly instructions: string;
 	readonly criteria: Readonly<Record<string, string | null>>;
 }
 
-export interface NoulQuestion {
+export interface NoulQuestion
+{
 	readonly type: "noul";
 	readonly instructions: string;
 }
 
-export interface ClefRequest<Q> {
+export interface ClefRequest<Q>
+{
 	readonly model: ClefModel;
 	readonly state: ClefState;
 	readonly questions: Readonly<Record<string, Q>>;
 }
 
-export interface ChoiceAnswer {
+export interface ChoiceAnswer
+{
 	readonly type: "choice";
 	readonly choice: string;
 	readonly probabilities: Readonly<Record<string, number>>;
 	readonly confidence: number;
 }
 
-export interface NoulAnswer {
+export interface NoulAnswer
+{
 	readonly type: "noul";
 	/** Probability of yes, 0 to 1. */
 	readonly noul: number;
@@ -45,18 +51,25 @@ export interface NoulAnswer {
 export type ClefAnswer = ChoiceAnswer | NoulAnswer;
 
 /** The unwrapped Workers AI `result` of a Clef run. */
-export interface ClefResult {
+export interface ClefResult
+{
 	readonly model: string;
 	readonly answers: Record<string, ClefAnswer>;
-	readonly usage: {readonly input_tokens: number; readonly output_tokens: number};
+	readonly usage:
+	{
+		readonly input_tokens: number;
+		readonly output_tokens: number;
+	};
 }
 
 /** Sends one Clef request and returns its unwrapped result. */
-export interface ClefClient {
+export interface ClefClient
+{
 	run(request: ClefRequest<ChoiceQuestion | NoulQuestion>): Promise<ClefResult>;
 }
 
-export interface ShortlistEntry {
+export interface ShortlistEntry
+{
 	readonly label: PoolLabel;
 	/** Pass 1 choice probability, stored as `clef-flash-shortlist`. */
 	readonly score: number;
@@ -69,19 +82,35 @@ const MAX_QUESTIONS = 64;
 /** Stays well under Clef-flash's 24,576-token window. */
 const MAX_REQUEST_TOKENS = 20_000;
 /** Pass 1 options kept per shard, by label kind; people get more because homonyms spread their probability. */
-const SHORTLIST_TOP_PER_SHARD: Readonly<Record<LabelKind, number>> = {person: 16, tag: 8};
+const SHORTLIST_TOP_PER_SHARD: Readonly<Record<LabelKind, number>> =
+{
+	person: 16,
+	tag: 8,
+};
 const SHORTLIST_MIN_PROBABILITY = 0.05;
 
 const CLEF_ID = /^[A-Za-z0-9_.-]{1,100}$/u;
 const CHARS_PER_TOKEN = 3.5;
 
-const SHARD_TEXT: Readonly<Record<LabelKind, {prefix: string; instructions: string; none: string}>> = {
-	person: {
+const SHARD_TEXT: Readonly<
+	Record<
+		LabelKind,
+		{
+			prefix: string;
+			instructions: string;
+			none: string;
+		}
+	>
+> =
+{
+	person:
+	{
 		prefix: "people",
 		instructions: "Which one of these people does this journal entry most likely involve?",
 		none: "None of these people",
 	},
-	tag: {
+	tag:
+	{
 		prefix: "tags",
 		instructions: "Which one of these tags best describes this journal entry?",
 		none: "None of these tags",
@@ -89,7 +118,8 @@ const SHARD_TEXT: Readonly<Record<LabelKind, {prefix: string; instructions: stri
 };
 
 /** Rough token count for a request body: serialized characters / 3.5. */
-export function estimateTokens(body: unknown): number {
+export function estimateTokens(body: unknown): number
+{
 	return Math.ceil(JSON.stringify(body).length / CHARS_PER_TOKEN);
 }
 
@@ -101,41 +131,80 @@ export function buildShortlistRequests(
 	state: ClefState,
 	pool: readonly PoolLabel[],
 	model: ClefModel = "clef-flash",
-): ClefRequest<ChoiceQuestion>[] {
+): ClefRequest<ChoiceQuestion>[]
+{
 	const shards: [string, ChoiceQuestion][] = [];
-	for (const kind of ["person", "tag"] as const) {
+	for (const kind of ["person", "tag"] as const)
+	{
 		const labels = pool.filter((label) => label.kind === kind);
 		const text = SHARD_TEXT[kind];
-		for (let start = 0; start < labels.length; start += SHARD_SIZE) {
+		for (let start = 0; start < labels.length; start += SHARD_SIZE)
+		{
 			const criteria: Record<string, string | null> = {};
-			for (const label of labels.slice(start, start + SHARD_SIZE)) {
+			for (const label of labels.slice(start, start + SHARD_SIZE))
+			{
 				criteria[validId(label.optionId)] = label.description === "" ? null : label.description;
 			}
 			criteria[NONE_OPTION] = text.none;
 			shards.push([
 				`${text.prefix}.${start / SHARD_SIZE + 1}`,
-				{type: "choice", instructions: text.instructions, criteria},
+				{
+					type: "choice",
+					instructions: text.instructions,
+					criteria,
+				},
 			]);
 		}
 	}
 
 	const requests: ClefRequest<ChoiceQuestion>[] = [];
 	let questions: Record<string, ChoiceQuestion> = {};
-	for (const [id, question] of shards) {
-		const candidate = {...questions, [id]: question};
+	for (const [id, question] of shards)
+	{
+		const candidate =
+		{
+			...questions,
+			[id]: question,
+		};
 		const full = Object.keys(questions).length >= MAX_QUESTIONS;
 		if (
 			Object.keys(questions).length > 0 &&
-			(full || estimateTokens({model, state, questions: candidate}) > MAX_REQUEST_TOKENS)
-		) {
-			requests.push({model, state, questions});
-			questions = {[id]: question};
-		} else {
+			(full ||
+				estimateTokens(
+					{
+						model,
+						state,
+						questions: candidate,
+					},
+				) > MAX_REQUEST_TOKENS)
+		)
+		{
+			requests.push(
+				{
+					model,
+					state,
+					questions,
+				},
+			);
+			questions =
+			{
+				[id]: question,
+			};
+		}
+		else
+		{
 			questions = candidate;
 		}
 	}
-	if (Object.keys(questions).length > 0) {
-		requests.push({model, state, questions});
+	if (Object.keys(questions).length > 0)
+	{
+		requests.push(
+			{
+				model,
+				state,
+				questions,
+			},
+		);
 	}
 	return requests;
 }
@@ -149,22 +218,34 @@ export function selectShortlist(
 	pool: readonly PoolLabel[],
 	answers: Readonly<Record<string, ChoiceAnswer>>,
 	topPerShard: Readonly<Record<LabelKind, number>> = SHORTLIST_TOP_PER_SHARD,
-): ShortlistEntry[] {
+): ShortlistEntry[]
+{
 	const byId = new Map(pool.map((label) => [label.optionId, label]));
 	const selected = new Map<string, ShortlistEntry>();
-	for (const answer of Object.values(answers)) {
+	for (const answer of Object.values(answers))
+	{
 		const ranked = Object.entries(answer.probabilities)
-			.flatMap(([id, score]) => {
+			.flatMap(([id, score]) =>
+			{
 				const label = byId.get(id);
-				return label === undefined ? [] : [{label, score}];
+				return label === undefined
+					? []
+					: [
+							{
+								label,
+								score,
+							},
+						];
 			})
 			.toSorted((a, b) => b.score - a.score);
-		for (const [index, entry] of ranked.entries()) {
+		for (const [index, entry] of ranked.entries())
+		{
 			const previous = selected.get(entry.label.optionId);
 			if (
 				(index < topPerShard[entry.label.kind] || entry.score >= SHORTLIST_MIN_PROBABILITY) &&
 				(previous === undefined || previous.score < entry.score)
-			) {
+			)
+			{
 				selected.set(entry.label.optionId, entry);
 			}
 		}
@@ -177,24 +258,37 @@ export function buildVerifyRequest(
 	state: ClefState,
 	shortlist: readonly ShortlistEntry[],
 	model: ClefModel = "clef-flash",
-): ClefRequest<NoulQuestion> {
+): ClefRequest<NoulQuestion>
+{
 	const questions: Record<string, NoulQuestion> = {};
 	const best = shortlist.toSorted((a, b) => b.score - a.score).slice(0, MAX_QUESTIONS);
-	for (const {label} of best) {
-		questions[validId(label.optionId)] = {type: "noul", instructions: verifyInstructions(label)};
+	for (const {label} of best)
+	{
+		questions[validId(label.optionId)] =
+		{
+			type: "noul",
+			instructions: verifyInstructions(label),
+		};
 	}
-	return {model, state, questions};
+	return {
+		model,
+		state,
+		questions,
+	};
 }
 
-function verifyInstructions(label: PoolLabel): string {
+function verifyInstructions(label: PoolLabel): string
+{
 	const described = label.description === "" ? label.label : `${label.label} (${label.description})`;
 	return label.kind === "person"
 		? `Does this journal entry involve ${described}?`
 		: `Does this journal entry describe doing ${described}?`;
 }
 
-function validId(id: string): string {
-	if (!CLEF_ID.test(id)) {
+function validId(id: string): string
+{
+	if (!CLEF_ID.test(id))
+	{
 		throw new Error(`Invalid Clef id: ${id}`);
 	}
 	return id;

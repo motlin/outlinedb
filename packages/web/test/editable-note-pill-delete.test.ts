@@ -2,16 +2,24 @@
 import {afterEach, beforeAll, describe, expect, it, vi} from "vite-plus/test";
 import type {Root} from "react-dom/client";
 
-declare global {
+declare global
+{
 	// React reads this to know act() wraps every update.
 	var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
-const saves: {nodeId: string; note: string}[] = [];
+const saves:
+{
+	nodeId: string;
+	note: string;
+}[] = [];
 
-vi.mock("../src/client/hooks/use-nodes.js", () => ({
-	useUpdateNode: () => ({
-		mutate: (update: {nodeId: string; note: string}) => {
+vi.mock("../src/client/hooks/use-nodes.js", () => (
+{
+	useUpdateNode: () => (
+	{
+		mutate: (update: {nodeId: string; note: string}) =>
+		{
 			saves.push(update);
 		},
 	}),
@@ -27,50 +35,81 @@ const PILL = '<time startYear="2026" startMonth="10" startDay="1">Thu, Oct 1, 20
 
 let root: Root | undefined;
 
-beforeAll(() => {
+beforeAll(() =>
+{
 	globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 });
 
-afterEach(() => {
-	act(() => {
+afterEach(() =>
+{
+	act(() =>
+	{
 		root?.unmount();
 	});
 	document.body.innerHTML = "";
 	saves.length = 0;
 });
 
-function mountNote(initialValue: string): HTMLElement {
+function mountNote(initialValue: string): HTMLElement
+{
 	const container = document.createElement("div");
 	document.body.append(container);
 	root = createRoot(container);
-	act(() => {
+	act(() =>
+	{
 		root?.render(
 			createElement(
 				QueryClientProvider,
-				{client: new QueryClient()},
-				createElement(EditableNote, {nodeId: "alice", initialValue, isFocused: true}),
+				{
+					client: new QueryClient(),
+				},
+				createElement(
+					EditableNote,
+					{
+						nodeId: "alice",
+						initialValue,
+						isFocused: true,
+					},
+				),
 			),
 		);
 	});
 	const editor = container.querySelector<HTMLElement>(".notes .content");
-	if (editor === null) {
+	if (editor === null)
+	{
 		throw new Error("note editor did not render");
 	}
-	act(() => {
+	act(() =>
+	{
 		editor.focus();
 	});
 	return editor;
 }
 
-function pressKey(editor: HTMLElement, key: string): boolean {
-	const event = new KeyboardEvent("keydown", {key, bubbles: true, cancelable: true});
-	act(() => {
+function pressKey(editor: HTMLElement, key: string): boolean
+{
+	const event = new KeyboardEvent(
+		"keydown",
+		{
+			key,
+			bubbles: true,
+			cancelable: true,
+		},
+	);
+	act(() =>
+	{
 		editor.dispatchEvent(event);
 	});
 	return event.defaultPrevented;
 }
 
-function noteState(editor: HTMLElement): {pills: number; text: string; caret: number} {
+function noteState(editor: HTMLElement):
+{
+	pills: number;
+	text: string;
+	caret: number;
+}
+{
 	return {
 		pills: editor.querySelectorAll("time").length,
 		text: editor.textContent.replaceAll("﻿", ""),
@@ -78,41 +117,79 @@ function noteState(editor: HTMLElement): {pills: number; text: string; caret: nu
 	};
 }
 
-describe("EditableNote atomic date-pill deletion", () => {
-	it("removes the whole pill on Backspace right after it and saves", () => {
+describe("EditableNote atomic date-pill deletion", () =>
+{
+	it("removes the whole pill on Backspace right after it and saves", () =>
+	{
 		const editor = mountNote(`due ${PILL} tail`);
 		placeCaretAtTextOffset(editor, 5);
 		const prevented = pressKey(editor, "Backspace");
-		expect({prevented, ...noteState(editor), saves}).toStrictEqual({
-			prevented: true,
-			pills: 0,
-			text: "due  tail",
-			caret: 4,
-			saves: [{nodeId: "alice", note: "due  tail"}],
-		});
+		expect(
+			{
+				prevented,
+				...noteState(editor),
+				saves,
+			},
+		).toStrictEqual(
+			{
+				prevented: true,
+				pills: 0,
+				text: "due  tail",
+				caret: 4,
+				saves: [
+					{
+						nodeId: "alice",
+						note: "due  tail",
+					},
+				],
+			},
+		);
 	});
 
-	it("removes the whole pill on Delete right before it and saves", () => {
+	it("removes the whole pill on Delete right before it and saves", () =>
+	{
 		const editor = mountNote(`due ${PILL} tail`);
 		placeCaretAtTextOffset(editor, 4);
 		const prevented = pressKey(editor, "Delete");
-		expect({prevented, ...noteState(editor), saves}).toStrictEqual({
-			prevented: true,
-			pills: 0,
-			text: "due  tail",
-			caret: 4,
-			saves: [{nodeId: "alice", note: "due  tail"}],
-		});
+		expect(
+			{
+				prevented,
+				...noteState(editor),
+				saves,
+			},
+		).toStrictEqual(
+			{
+				prevented: true,
+				pills: 0,
+				text: "due  tail",
+				caret: 4,
+				saves: [
+					{
+						nodeId: "alice",
+						note: "due  tail",
+					},
+				],
+			},
+		);
 	});
 
-	it("leaves Backspace to the browser when no pill is adjacent", () => {
+	it("leaves Backspace to the browser when no pill is adjacent", () =>
+	{
 		const editor = mountNote(`due ${PILL} tail`);
 		placeCaretAtTextOffset(editor, 3);
 		const prevented = pressKey(editor, "Backspace");
-		expect({prevented, pills: editor.querySelectorAll("time").length, saves}).toStrictEqual({
-			prevented: false,
-			pills: 1,
-			saves: [],
-		});
+		expect(
+			{
+				prevented,
+				pills: editor.querySelectorAll("time").length,
+				saves,
+			},
+		).toStrictEqual(
+			{
+				prevented: false,
+				pills: 1,
+				saves: [],
+			},
+		);
 	});
 });

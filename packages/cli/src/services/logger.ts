@@ -8,7 +8,8 @@ import {z} from "zod";
 /**
  * Category filter definition.
  */
-interface CategoryFilter {
+interface CategoryFilter
+{
 	category: string;
 	subcategory?: string;
 }
@@ -17,24 +18,75 @@ interface CategoryFilter {
  * Category filters mapped to environment variables.
  * Each env var can enable multiple category/subcategory combinations.
  */
-const CATEGORY_FILTERS: Record<string, CategoryFilter[]> = {
-	OUTLINEDB_SQL_READ_LOGGING: [{category: "sql", subcategory: "read"}],
-	OUTLINEDB_SQL_WRITE_LOGGING: [{category: "sql", subcategory: "write"}],
-	OUTLINEDB_SQL_SCHEMA_LOGGING: [{category: "sql", subcategory: "schema"}],
-	OUTLINEDB_SQL_BULK_LOGGING: [{category: "sql", subcategory: "bulk"}],
+const CATEGORY_FILTERS: Record<string, CategoryFilter[]> =
+{
+	OUTLINEDB_SQL_READ_LOGGING: [
+		{
+			category: "sql",
+			subcategory: "read",
+		},
+	],
+	OUTLINEDB_SQL_WRITE_LOGGING: [
+		{
+			category: "sql",
+			subcategory: "write",
+		},
+	],
+	OUTLINEDB_SQL_SCHEMA_LOGGING: [
+		{
+			category: "sql",
+			subcategory: "schema",
+		},
+	],
+	OUTLINEDB_SQL_BULK_LOGGING: [
+		{
+			category: "sql",
+			subcategory: "bulk",
+		},
+	],
 	OUTLINEDB_SQL_QUERY_LOGGING: [
-		{category: "sql", subcategory: "read"},
-		{category: "sql", subcategory: "write"},
-		{category: "sql", subcategory: "schema"},
-		{category: "sql", subcategory: "bulk"},
+		{
+			category: "sql",
+			subcategory: "read",
+		},
+		{
+			category: "sql",
+			subcategory: "write",
+		},
+		{
+			category: "sql",
+			subcategory: "schema",
+		},
+		{
+			category: "sql",
+			subcategory: "bulk",
+		},
 	],
-	OUTLINEDB_SQL_RESULTS_LOGGING: [{category: "sql", subcategory: "result"}],
+	OUTLINEDB_SQL_RESULTS_LOGGING: [
+		{
+			category: "sql",
+			subcategory: "result",
+		},
+	],
 	OUTLINEDB_REST_LOGGING: [
-		{category: "rest", subcategory: "request"},
-		{category: "rest", subcategory: "response"},
-		{category: "rest", subcategory: "error"},
+		{
+			category: "rest",
+			subcategory: "request",
+		},
+		{
+			category: "rest",
+			subcategory: "response",
+		},
+		{
+			category: "rest",
+			subcategory: "error",
+		},
 	],
-	OUTLINEDB_GENERAL_LOGGING: [{category: "general"}],
+	OUTLINEDB_GENERAL_LOGGING: [
+		{
+			category: "general",
+		},
+	],
 };
 
 /**
@@ -54,14 +106,19 @@ const anyLoggingEnabled =
  * Check if a log object should be shown based on its category/subcategory
  * and the enabled environment variables.
  */
-function isEnabled(category?: string, subcategory?: string): boolean {
-	for (const [envVar, filters] of Object.entries(CATEGORY_FILTERS)) {
-		if (process.env[envVar] !== "true") {
+function isEnabled(category?: string, subcategory?: string): boolean
+{
+	for (const [envVar, filters] of Object.entries(CATEGORY_FILTERS))
+	{
+		if (process.env[envVar] !== "true")
+		{
 			continue;
 		}
 
-		for (const filter of filters) {
-			if (category === filter.category && (!filter.subcategory || subcategory === filter.subcategory)) {
+		for (const filter of filters)
+		{
+			if (category === filter.category && (!filter.subcategory || subcategory === filter.subcategory))
+			{
 				return true;
 			}
 		}
@@ -72,7 +129,8 @@ function isEnabled(category?: string, subcategory?: string): boolean {
 /**
  * ANSI color codes for JSON-like param coloring.
  */
-const COLORS = {
+const COLORS =
+{
 	cyan: "\u001B[36m",
 	green: "\u001B[32m",
 	yellow: "\u001B[33m",
@@ -82,21 +140,27 @@ const COLORS = {
 /**
  * Format params array for display.
  */
-function formatParams(params: unknown[], colorize: boolean): string {
-	if (params.length === 0) {
+function formatParams(params: unknown[], colorize: boolean): string
+{
+	if (params.length === 0)
+	{
 		return colorize ? `${COLORS.cyan}params=[]${COLORS.reset}` : "params=[]";
 	}
 
 	const formatted = params
-		.map((p) => {
+		.map((p) =>
+		{
 			const json = JSON.stringify(p);
-			if (!colorize) {
+			if (!colorize)
+			{
 				return json;
 			}
-			if (typeof p === "string") {
+			if (typeof p === "string")
+			{
 				return `${COLORS.green}${json}${COLORS.reset}`;
 			}
-			if (typeof p === "number") {
+			if (typeof p === "number")
+			{
 				return `${COLORS.yellow}${json}${COLORS.reset}`;
 			}
 			return json;
@@ -116,7 +180,8 @@ function formatParams(params: unknown[], colorize: boolean): string {
  */
 const level = process.env.OUTLINEDB_LOG_LEVEL ?? (anyLoggingEnabled ? "debug" : "silent");
 
-function optionalString(value: unknown): string | undefined {
+function optionalString(value: unknown): string | undefined
+{
 	return typeof value === "string" ? value : undefined;
 }
 
@@ -125,57 +190,74 @@ function optionalString(value: unknown): string | undefined {
  * Using sync mode ensures logs are written immediately, not buffered.
  * Filtering is done via the write hook.
  */
-const prettyStream = pinoPretty({
-	colorize: true,
-	translateTime: "SYS:standard",
-	ignore: "pid,hostname,category,subcategory,params",
-	destination: 2, // stderr
-	sync: true, // Synchronous writes - critical for correct output ordering
-	messageFormat(log, messageKey) {
-		const msg = String(log[messageKey]);
-		const category = optionalString(log.category);
-		const subcategory = optionalString(log.subcategory);
-		const params: unknown[] | undefined = Array.isArray(log.params) ? log.params : undefined;
+const prettyStream = pinoPretty(
+	{
+		colorize: true,
+		translateTime: "SYS:standard",
+		ignore: "pid,hostname,category,subcategory,params",
+		destination: 2, // stderr
+		sync: true, // Synchronous writes - critical for correct output ordering
+		messageFormat(log, messageKey)
+		{
+			const msg = String(log[messageKey]);
+			const category = optionalString(log.category);
+			const subcategory = optionalString(log.subcategory);
+			const params: unknown[] | undefined = Array.isArray(log.params) ? log.params : undefined;
 
-		// Skip if category filtering doesn't pass
-		if (!isEnabled(category, subcategory)) {
-			return "";
-		}
+			// Skip if category filtering doesn't pass
+			if (!isEnabled(category, subcategory))
+			{
+				return "";
+			}
 
-		const categoryTag = subcategory ? `${category}:${subcategory}` : category;
-		const paramsStr = params === undefined ? "" : ` ${formatParams(params, true)}`;
-		const metadataSuffix = categoryTag ? ` [${categoryTag}]${paramsStr}` : "";
+			const categoryTag = subcategory ? `${category}:${subcategory}` : category;
+			const paramsStr = params === undefined ? "" : ` ${formatParams(params, true)}`;
+			const metadataSuffix = categoryTag ? ` [${categoryTag}]${paramsStr}` : "";
 
-		if (msg.startsWith("SQL\n")) {
-			const query = msg.slice(4);
-			return `SQL${metadataSuffix}\n${query}`;
-		}
+			if (msg.startsWith("SQL\n"))
+			{
+				const query = msg.slice(4);
+				return `SQL${metadataSuffix}\n${query}`;
+			}
 
-		const newlineIndex = msg.indexOf("\n");
-		if (newlineIndex !== -1 && metadataSuffix) {
-			const firstLine = msg.slice(0, newlineIndex);
-			const rest = msg.slice(newlineIndex);
-			return `${firstLine}${metadataSuffix}${rest}`;
-		}
+			const newlineIndex = msg.indexOf("\n");
+			if (newlineIndex !== -1 && metadataSuffix)
+			{
+				const firstLine = msg.slice(0, newlineIndex);
+				const rest = msg.slice(newlineIndex);
+				return `${firstLine}${metadataSuffix}${rest}`;
+			}
 
-		return `${msg}${metadataSuffix}`;
+			return `${msg}${metadataSuffix}`;
+		},
 	},
-});
+);
 
 /**
  * Filtering wrapper stream that only passes through enabled log categories.
  * This prevents pino-pretty from outputting anything for filtered logs.
  */
-const LogLineCategorySchema = z.object({category: z.string().optional(), subcategory: z.string().optional()});
+const LogLineCategorySchema = z.object(
+	{
+		category: z.string().optional(),
+		subcategory: z.string().optional(),
+	},
+);
 
-const filteringStream = {
-	write(chunk: string): void {
-		try {
+const filteringStream =
+{
+	write(chunk: string): void
+	{
+		try
+		{
 			const log = LogLineCategorySchema.parse(JSON.parse(chunk));
-			if (isEnabled(log.category, log.subcategory)) {
+			if (isEnabled(log.category, log.subcategory))
+			{
 				prettyStream.write(chunk);
 			}
-		} catch {
+		}
+		catch
+		{
 			// If parsing fails, pass through as-is
 			prettyStream.write(chunk);
 		}
@@ -190,32 +272,84 @@ const filteringStream = {
  * - Pretty printing with colorized output
  * - Synchronous writes to ensure correct ordering with stdout
  */
-const baseLogger = pino({level}, filteringStream);
+const baseLogger = pino(
+	{
+		level,
+	},
+	filteringStream,
+);
 
 // Child loggers with category/subcategory context
-const sqlReadLogger = baseLogger.child({category: "sql", subcategory: "read"});
-const sqlWriteLogger = baseLogger.child({category: "sql", subcategory: "write"});
-const sqlSchemaLogger = baseLogger.child({category: "sql", subcategory: "schema"});
-const sqlBulkLogger = baseLogger.child({category: "sql", subcategory: "bulk"});
-const sqlResultLogger = baseLogger.child({category: "sql", subcategory: "result"});
-const restRequestLogger = baseLogger.child({category: "rest", subcategory: "request"});
-const restResponseLogger = baseLogger.child({category: "rest", subcategory: "response"});
-const restErrorLogger = baseLogger.child({category: "rest", subcategory: "error"});
-const generalLogger = baseLogger.child({category: "general"});
+const sqlReadLogger = baseLogger.child(
+	{
+		category: "sql",
+		subcategory: "read",
+	},
+);
+const sqlWriteLogger = baseLogger.child(
+	{
+		category: "sql",
+		subcategory: "write",
+	},
+);
+const sqlSchemaLogger = baseLogger.child(
+	{
+		category: "sql",
+		subcategory: "schema",
+	},
+);
+const sqlBulkLogger = baseLogger.child(
+	{
+		category: "sql",
+		subcategory: "bulk",
+	},
+);
+const sqlResultLogger = baseLogger.child(
+	{
+		category: "sql",
+		subcategory: "result",
+	},
+);
+const restRequestLogger = baseLogger.child(
+	{
+		category: "rest",
+		subcategory: "request",
+	},
+);
+const restResponseLogger = baseLogger.child(
+	{
+		category: "rest",
+		subcategory: "response",
+	},
+);
+const restErrorLogger = baseLogger.child(
+	{
+		category: "rest",
+		subcategory: "error",
+	},
+);
+const generalLogger = baseLogger.child(
+	{
+		category: "general",
+	},
+);
 
 /**
  * Export child loggers directly.
  * Callers choose the appropriate severity level (debug, info, warn, error).
  */
-export const log = {
-	sql: {
+export const log =
+{
+	sql:
+	{
 		read: sqlReadLogger,
 		write: sqlWriteLogger,
 		schema: sqlSchemaLogger,
 		bulk: sqlBulkLogger,
 		result: sqlResultLogger,
 	},
-	rest: {
+	rest:
+	{
 		request: restRequestLogger,
 		response: restResponseLogger,
 		error: restErrorLogger,
@@ -232,25 +366,30 @@ type SqlCategory = "read" | "write" | "schema" | "bulk";
  * Classify a SQL query as read, write, schema (DDL), or bulk operation.
  * Used for granular logging control via environment variables.
  */
-function classifyQuery(query: string): SqlCategory {
+function classifyQuery(query: string): SqlCategory
+{
 	// Normalize: strip leading whitespace and comments
 	const normalized = query.replaceAll(/^\s*(--[^\n]*\n|\/\*[\s\S]*?\*\/\s*)*/gu, "").trim();
 
 	// Read: SELECT or WITH...SELECT (CTEs)
-	if (/^(SELECT|WITH\b)/iu.test(normalized)) {
+	if (/^(SELECT|WITH\b)/iu.test(normalized))
+	{
 		return "read";
 	}
 
 	// Schema (DDL): CREATE, ALTER, DROP statements for tables, indexes, triggers, views
-	if (/^(CREATE|ALTER|DROP)\s+(TABLE|INDEX|TRIGGER|VIEW|VIRTUAL TABLE)/iu.test(normalized)) {
+	if (/^(CREATE|ALTER|DROP)\s+(TABLE|INDEX|TRIGGER|VIEW|VIRTUAL TABLE)/iu.test(normalized))
+	{
 		return "schema";
 	}
 
 	// Bulk: multiple VALUES tuples or INSERT...SELECT
-	if (/INSERT\s+(OR\s+\w+\s+)?INTO\s+.*VALUES\s*\([^)]*\)\s*,/iu.test(normalized)) {
+	if (/INSERT\s+(OR\s+\w+\s+)?INTO\s+.*VALUES\s*\([^)]*\)\s*,/iu.test(normalized))
+	{
 		return "bulk";
 	}
-	if (/INSERT\s+(OR\s+\w+\s+)?INTO\s+.*\bSELECT\b/iu.test(normalized)) {
+	if (/INSERT\s+(OR\s+\w+\s+)?INTO\s+.*\bSELECT\b/iu.test(normalized))
+	{
 		return "bulk";
 	}
 
@@ -268,16 +407,20 @@ const MAX_BULK_PARAMS = 10;
  * This prevents large binary data (like embeddings) from cluttering logs.
  * For bulk queries, truncates after MAX_BULK_PARAMS items.
  */
-function sanitizeParams(params: unknown[], isBulk: boolean): unknown[] {
-	let sanitized = params.map((param) => {
-		if (Buffer.isBuffer(param)) {
+function sanitizeParams(params: unknown[], isBulk: boolean): unknown[]
+{
+	let sanitized = params.map((param) =>
+	{
+		if (Buffer.isBuffer(param))
+		{
 			return `[Buffer: ${param.length} bytes]`;
 		}
 		return param;
 	});
 
 	// Truncate bulk INSERT params after 10 items
-	if (isBulk && sanitized.length > MAX_BULK_PARAMS) {
+	if (isBulk && sanitized.length > MAX_BULK_PARAMS)
+	{
 		const remaining = sanitized.length - MAX_BULK_PARAMS;
 		sanitized = [...sanitized.slice(0, MAX_BULK_PARAMS), `...and ${remaining} more`];
 	}
@@ -294,29 +437,35 @@ const MAX_LOG_DATA_SIZE = 10_000;
  * Truncate large data objects for logging.
  * Returns a placeholder for objects that would produce large JSON output.
  */
-function truncateData(data: unknown): unknown {
-	if (data === null || data === undefined) {
+function truncateData(data: unknown): unknown
+{
+	if (data === null || data === undefined)
+	{
 		return data;
 	}
 
 	const json = JSON.stringify(data);
-	if (json.length <= MAX_LOG_DATA_SIZE) {
+	if (json.length <= MAX_LOG_DATA_SIZE)
+	{
 		return data;
 	}
 
 	// For arrays, show count
-	if (Array.isArray(data)) {
+	if (Array.isArray(data))
+	{
 		return `[Array: ${data.length} items, ${json.length} bytes]`;
 	}
 
 	// For objects, show keys and size
-	if (typeof data === "object") {
+	if (typeof data === "object")
+	{
 		const keys = Object.keys(data);
 		return `[Object: ${keys.length} keys, ${json.length} bytes]`;
 	}
 
 	// For strings, truncate with ellipsis
-	if (typeof data === "string") {
+	if (typeof data === "string")
+	{
 		return `${data.slice(0, MAX_LOG_DATA_SIZE)}...`;
 	}
 
@@ -335,16 +484,20 @@ const SHORT_QUERY_THRESHOLD = 120;
  * Long queries are pretty-printed with sql-formatter.
  * All queries get syntax highlighting with ANSI colors.
  */
-function formatSql(query: string): string {
+function formatSql(query: string): string
+{
 	// Short queries stay on a single line, long queries get pretty-printed
 	const formatted =
 		query.length <= SHORT_QUERY_THRESHOLD
 			? query.trim().replaceAll(/\s+/gu, " ")
-			: format(query, {
-					language: "sqlite",
-					tabWidth: 2,
-					keywordCase: "upper",
-				});
+			: format(
+					query,
+					{
+						language: "sqlite",
+						tabWidth: 2,
+						keywordCase: "upper",
+					},
+				);
 
 	// Apply syntax highlighting
 	return highlight(formatted);
@@ -357,14 +510,19 @@ function formatSql(query: string): string {
  * For backward compatibility, this class provides the same interface
  * as the previous Logger class while using the new pino architecture.
  */
-class Logger implements ApiLogger {
+class Logger implements ApiLogger
+{
 	/**
 	 * Log a debug message (general category)
 	 */
-	debug(message: string, data?: Record<string, unknown>): void {
-		if (data) {
+	debug(message: string, data?: Record<string, unknown>): void
+	{
+		if (data)
+		{
 			generalLogger.debug(data, message);
-		} else {
+		}
+		else
+		{
 			generalLogger.debug(message);
 		}
 	}
@@ -372,10 +530,14 @@ class Logger implements ApiLogger {
 	/**
 	 * Log a warning message (general category)
 	 */
-	warn(message: string, data?: Record<string, unknown>): void {
-		if (data) {
+	warn(message: string, data?: Record<string, unknown>): void
+	{
+		if (data)
+		{
 			generalLogger.warn(data, message);
-		} else {
+		}
+		else
+		{
 			generalLogger.warn(message);
 		}
 	}
@@ -383,10 +545,14 @@ class Logger implements ApiLogger {
 	/**
 	 * Log an info message (general category)
 	 */
-	info(message: string, data?: Record<string, unknown>): void {
-		if (data) {
+	info(message: string, data?: Record<string, unknown>): void
+	{
+		if (data)
+		{
 			generalLogger.info(data, message);
-		} else {
+		}
+		else
+		{
 			generalLogger.info(message);
 		}
 	}
@@ -398,12 +564,14 @@ class Logger implements ApiLogger {
 	 * SCHEMA operations (CREATE, ALTER, DROP): info severity, sql:schema category
 	 * BULK operations (multi-row INSERT): info severity, sql:bulk category
 	 */
-	logSql(query: string, params: unknown[]): void {
+	logSql(query: string, params: unknown[]): void
+	{
 		const category = classifyQuery(query);
 		const formattedQuery = formatSql(query);
 		const sanitizedParams = sanitizeParams(params, category === "bulk");
 
-		const loggers = {
+		const loggers =
+		{
 			read: sqlReadLogger,
 			write: sqlWriteLogger,
 			schema: sqlSchemaLogger,
@@ -412,42 +580,70 @@ class Logger implements ApiLogger {
 		const logger = loggers[category];
 
 		// Read operations use debug level, write/schema/bulk use info
-		if (category === "read") {
-			logger.debug({params: sanitizedParams}, `SQL\n${formattedQuery}`);
-		} else {
-			logger.info({params: sanitizedParams}, `SQL\n${formattedQuery}`);
+		if (category === "read")
+		{
+			logger.debug(
+				{
+					params: sanitizedParams,
+				},
+				`SQL\n${formattedQuery}`,
+			);
+		}
+		else
+		{
+			logger.info(
+				{
+					params: sanitizedParams,
+				},
+				`SQL\n${formattedQuery}`,
+			);
 		}
 	}
 
 	/**
 	 * Log SQL query results.
 	 */
-	logSqlResult(label: string, result: unknown): void {
-		sqlResultLogger.debug({result}, `SQL Result: ${label}`);
+	logSqlResult(label: string, result: unknown): void
+	{
+		sqlResultLogger.debug(
+			{
+				result,
+			},
+			`SQL Result: ${label}`,
+		);
 	}
 
 	/**
 	 * Log an API request (ApiLogger interface)
 	 * Large request bodies are truncated to prevent log flooding.
 	 */
-	logRequest(url: string, method: string, body?: unknown): void {
-		restRequestLogger.debug({method, url, body: truncateData(body)}, `-> ${method} ${url}`);
+	logRequest(url: string, method: string, body?: unknown): void
+	{
+		restRequestLogger.debug(
+			{
+				method,
+				url,
+				body: truncateData(body),
+			},
+			`-> ${method} ${url}`,
+		);
 	}
 
 	/**
 	 * Log an API response (ApiLogger interface)
 	 * Large response bodies are truncated to prevent log flooding.
 	 */
-	logResponse(
-		url: string,
-		method: string,
-		status: number,
-		statusText: string,
-		data: unknown,
-		duration: number,
-	): void {
+	logResponse(url: string, method: string, status: number, statusText: string, data: unknown, duration: number): void
+	{
 		restResponseLogger.debug(
-			{method, url, status, statusText, data: truncateData(data), duration},
+			{
+				method,
+				url,
+				status,
+				statusText,
+				data: truncateData(data),
+				duration,
+			},
 			`<- ${status} ${statusText} (${duration.toFixed(0)}ms)`,
 		);
 	}
@@ -455,9 +651,15 @@ class Logger implements ApiLogger {
 	/**
 	 * Log an API error (ApiLogger interface)
 	 */
-	logError(url: string, method: string, error: unknown, duration: number): void {
+	logError(url: string, method: string, error: unknown, duration: number): void
+	{
 		restErrorLogger.error(
-			{method, url, error: error instanceof Error ? error.message : String(error), duration},
+			{
+				method,
+				url,
+				error: error instanceof Error ? error.message : String(error),
+				duration,
+			},
 			`X ${method} ${url} failed after ${duration.toFixed(0)}ms`,
 		);
 	}

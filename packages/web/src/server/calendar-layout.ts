@@ -9,7 +9,8 @@
 import {and, eq} from "drizzle-orm";
 import {calendarLevels} from "@outlinedb/shared/db";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
-import type {
+import type
+{
 	CalendarLayoutLevels,
 	CalendarLayoutSnapshot,
 	LayoutNode,
@@ -20,18 +21,22 @@ import {findTaggedCalendarRoot, loadCalendarInfo} from "./calendar-day.js";
 import type {CalendarDayDeps} from "./calendar-day.js";
 import type {ServerContext} from "./context.js";
 
-function rootLevels(deps: Pick<CalendarDayDeps, "db">, rootId: string): CalendarLayoutLevels | undefined {
+function rootLevels(deps: Pick<CalendarDayDeps, "db">, rootId: string): CalendarLayoutLevels | undefined
+{
 	const row = deps.db
 		.select()
 		.from(calendarLevels)
 		.where(and(eq(calendarLevels.nodeId, rootId), eq(calendarLevels.systemTo, FAR_FUTURE_DATE)))
 		.get();
-	if (row === undefined) {
+	if (row === undefined)
+	{
 		return undefined;
 	}
 	const levels: CalendarLayoutLevels = {};
-	for (const level of ["day", "week", "month", "year"] as const) {
-		if (row[level] !== null) {
+	for (const level of ["day", "week", "month", "year"] as const)
+	{
+		if (row[level] !== null)
+		{
 			levels[level] = row[level] === 1;
 		}
 	}
@@ -45,16 +50,26 @@ function rootLevels(deps: Pick<CalendarDayDeps, "db">, rootId: string): Calendar
 export function loadCalendarLayout(
 	deps: Pick<CalendarDayDeps, "db" | "cache">,
 	explicitRootId?: string,
-): CalendarLayoutSnapshot | undefined {
+): CalendarLayoutSnapshot | undefined
+{
 	const rootId = explicitRootId ?? findTaggedCalendarRoot(deps);
 	const rootNode = rootId === undefined ? undefined : deps.cache.getNode(rootId);
-	if (rootId === undefined || rootNode === undefined) {
+	if (rootId === undefined || rootNode === undefined)
+	{
 		return undefined;
 	}
-	const toLayout = (nodes: Node[]): LayoutNode[] => {
+	const toLayout = (nodes: Node[]): LayoutNode[] =>
+	{
 		// Only stored metadata: applying reads it from the internal API, where a day-named node is no day unless tagged.
-		const info = loadCalendarInfo(deps, nodes, {fromNames: false});
-		return nodes.map((node) => {
+		const info = loadCalendarInfo(
+			deps,
+			nodes,
+			{
+				fromNames: false,
+			},
+		);
+		return nodes.map((node) =>
+		{
 			const calendar = info.get(node.id);
 			const level = calendar?.level ?? undefined;
 			const dateId = calendar?.dateId ?? undefined;
@@ -64,17 +79,38 @@ export function loadCalendarLayout(
 				id: node.id,
 				name: node.name ?? "",
 				note: node.note ?? "",
-				...(isLevel ? {calendar: {level, dateId}} : {}),
-				...(node.mirror.isMirror ? {isMirror: true} : {}),
+				...(isLevel
+					?
+						{
+							calendar:
+							{
+								level,
+								dateId,
+							},
+						}
+					: {}),
+				...(node.mirror.isMirror
+					?
+						{
+							isMirror: true,
+						}
+					: {}),
 				children:
 					isLevel && level === "day"
-						? children.map((child) => ({id: child.id, name: "", note: "", children: []}))
+						? children.map((child) => (
+							{
+								id: child.id,
+								name: "",
+								note: "",
+								children: [],
+							}))
 						: toLayout(children),
 			};
 		});
 	};
 	return {
-		root: {
+		root:
+		{
 			id: rootId,
 			name: rootNode.name ?? "",
 			note: rootNode.note ?? "",
@@ -89,15 +125,28 @@ export function loadCalendarLayout(
  * when Start of week changes under a week-level calendar. Does nothing when layouts are disabled, no cached root is
  * tagged, or the root has no week level.
  */
-export async function reapplyWeekLayout(ctx: ServerContext, adapter: WorkflowyInternalAdapter): Promise<void> {
-	if (ctx.calendarLayoutEnabled === false) {
+export async function reapplyWeekLayout(ctx: ServerContext, adapter: WorkflowyInternalAdapter): Promise<void>
+{
+	if (ctx.calendarLayoutEnabled === false)
+	{
 		return;
 	}
-	const deps = {db: ctx.db, cache: ctx.cacheService};
+	const deps =
+	{
+		db: ctx.db,
+		cache: ctx.cacheService,
+	};
 	const rootId = findTaggedCalendarRoot(deps);
 	const levels = rootId === undefined ? undefined : loadCalendarLayout(deps, rootId)?.levels;
-	if (rootId === undefined || levels?.week !== true) {
+	if (rootId === undefined || levels?.week !== true)
+	{
 		return;
 	}
-	await adapter.applyCalendarLayout(levels, {rootId, loadSnapshot: () => loadCalendarLayout(deps, rootId)});
+	await adapter.applyCalendarLayout(
+		levels,
+		{
+			rootId,
+			loadSnapshot: () => loadCalendarLayout(deps, rootId),
+		},
+	);
 }

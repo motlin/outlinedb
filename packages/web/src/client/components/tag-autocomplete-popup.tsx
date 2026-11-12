@@ -7,13 +7,15 @@ import {menuKeyboard} from "./flyout/menu-keyboard.js";
 import {popperTransform} from "./flyout/place-popper.js";
 
 /** `attached`: a tag query is being tracked; `visible`: not dismissed by Escape; `active`: the highlighted row, -1 for none. */
-export interface TagPopupState {
+export interface TagPopupState
+{
 	attached: boolean;
 	visible: boolean;
 	active: number;
 }
 
-export interface TagPopupKeyResult {
+export interface TagPopupKeyResult
+{
 	state: TagPopupState;
 	/** The row to accept, if any. */
 	accept: number | null;
@@ -21,7 +23,8 @@ export interface TagPopupKeyResult {
 	preventDefault: boolean;
 }
 
-interface TagPopupKeyEvent {
+interface TagPopupKeyEvent
+{
 	key: string;
 	ctrlKey?: boolean;
 	shiftKey?: boolean;
@@ -34,37 +37,95 @@ interface TagPopupKeyEvent {
  * and Escape only hides; a hidden or detached popup leaves every key to the editor.
  */
 // oxlint-disable-next-line react/only-export-components -- pure key rules, tested beside the popup
-export function tagPopupKey(state: TagPopupState, event: TagPopupKeyEvent, count: number): TagPopupKeyResult {
-	const pass: TagPopupKeyResult = {state, accept: null, preventDefault: false};
-	if (!state.attached || !state.visible || event.isComposing === true) {
+export function tagPopupKey(state: TagPopupState, event: TagPopupKeyEvent, count: number): TagPopupKeyResult
+{
+	const pass: TagPopupKeyResult =
+	{
+		state,
+		accept: null,
+		preventDefault: false,
+	};
+	if (!state.attached || !state.visible || event.isComposing === true)
+	{
 		return pass;
 	}
-	if (event.key === "Escape") {
-		return {state: {...state, visible: false}, accept: null, preventDefault: true};
+	if (event.key === "Escape")
+	{
+		return {
+			state:
+			{
+				...state,
+				visible: false,
+			},
+			accept: null,
+			preventDefault: true,
+		};
 	}
-	if (event.key === "Enter" || event.key === "Tab") {
-		if (state.active >= 0 && state.active < count) {
-			return {state, accept: state.active, preventDefault: true};
+	if (event.key === "Enter" || event.key === "Tab")
+	{
+		if (state.active >= 0 && state.active < count)
+		{
+			return {
+				state,
+				accept: state.active,
+				preventDefault: true,
+			};
 		}
-		return {state: {...state, visible: false}, accept: null, preventDefault: true};
+		return {
+			state:
+			{
+				...state,
+				visible: false,
+			},
+			accept: null,
+			preventDefault: true,
+		};
 	}
 	const step = menuKeyboard(
-		{index: state.active, hidden: false, keyboardMode: true},
-		{key: event.key, ctrlKey: event.ctrlKey ?? false, shiftKey: event.shiftKey ?? false, composing: false},
-		{count, cyclic: false, selectOnTab: true, stopPropagation: true},
+		{
+			index: state.active,
+			hidden: false,
+			keyboardMode: true,
+		},
+		{
+			key: event.key,
+			ctrlKey: event.ctrlKey ?? false,
+			shiftKey: event.shiftKey ?? false,
+			composing: false,
+		},
+		{
+			count,
+			cyclic: false,
+			selectOnTab: true,
+			stopPropagation: true,
+		},
 	);
 	return step.action === "move"
-		? {state: {...state, active: step.state.index}, accept: null, preventDefault: true}
+		?
+			{
+				state:
+				{
+					...state,
+					active: step.state.index,
+				},
+				accept: null,
+				preventDefault: true,
+			}
 		: pass;
 }
 
 /** Any input re-shows a popup Escape hid while it stays attached. */
 // oxlint-disable-next-line react/only-export-components -- pure input rule, tested beside the popup
-export function tagPopupInput(state: TagPopupState): TagPopupState {
-	return {...state, visible: true};
+export function tagPopupInput(state: TagPopupState): TagPopupState
+{
+	return {
+		...state,
+		visible: true,
+	};
 }
 
-interface TagAutocompletePopupProps {
+interface TagAutocompletePopupProps
+{
 	tags: readonly string[];
 	active: number;
 	/** Viewport point just after the `#`: its left and bottom. */
@@ -78,11 +139,13 @@ interface TagAutocompletePopupProps {
  * wrapper at the anchor holding a DomKit flyout menu. Hover never moves the active row; mousedown on
  * a row accepts it while keeping the editor focused.
  */
-export function TagAutocompletePopup({tags, active, left, top, onAccept}: TagAutocompletePopupProps) {
+export function TagAutocompletePopup({tags, active, left, top, onAccept}: TagAutocompletePopupProps)
+{
 	return createPortal(
 		<div
 			className="z-[100]"
-			style={{
+			style={
+			{
 				position: "fixed",
 				inset: "0px auto auto 0px",
 				transform: popperTransform(left, top, globalThis.devicePixelRatio || 1),
@@ -99,7 +162,8 @@ export function TagAutocompletePopup({tags, active, left, top, onAccept}: TagAut
 							label={tag}
 							isSelected={index === active}
 							isInKeyboardMode
-							onMouseDown={() => {
+							onMouseDown={() =>
+							{
 								onAccept(index);
 							}}
 						/>

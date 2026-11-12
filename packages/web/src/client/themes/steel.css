@@ -1,4 +1,5 @@
-._theme-steel {
+._theme-steel
+{
 	--wf-background-primary: var(--wf-gray-0);
 	--wf-background-secondary: var(--wf-gray-100);
 	--wf-background-tertiary: var(--wf-gray-200);
@@ -66,7 +67,8 @@
 
 	--wf-image-ambient: url("https://workflowy.com/media/i/themes/steel_big.5d7bd7450f28.jpg");
 
-	.wf-header {
+	.wf-header
+	{
 		--wf-background-primary: var(--wf-black-opaque-70);
 		--wf-background-secondary: var(--wf-dark-gray-800);
 		--wf-background-tertiary: rgba(0, 0, 0, 0.6);
@@ -75,7 +77,8 @@
 		--wf-border-primary: var(--wf-dark-gray-500);
 	}
 
-	.wf-menu {
+	.wf-menu
+	{
 		--wf-background-primary: var(--wf-gray-800);
 		--wf-background-secondary: var(--wf-dark-gray-600);
 		--wf-background-tertiary: var(--wf-dark-gray-500);
@@ -87,7 +90,8 @@
 		--wf-border-secondary: var(--wf-dark-gray-400);
 	}
 
-	.wf-helper {
+	.wf-helper
+	{
 		--wf-background-primary: var(--wf-gray-100);
 	}
 }

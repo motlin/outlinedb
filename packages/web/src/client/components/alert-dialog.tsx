@@ -3,7 +3,8 @@ import {Button} from "./button.js";
 import {DialogCloseButton, DialogShell, DialogTitle} from "./dialog-shell.js";
 
 /** Upstream's alert: a titled dialog with a message, closed by its X or Escape. */
-export function AlertDialogView({title, message, onClose}: {title: string; message: string; onClose: () => void}) {
+export function AlertDialogView({title, message, onClose}: {title: string; message: string; onClose: () => void})
+{
 	return (
 		<DialogShell onClose={onClose}>
 			<DialogTitle>{title}</DialogTitle>
@@ -24,10 +25,12 @@ function ConfirmDialogView({
 	message: string;
 	confirmLabel: string;
 	onAnswer: (confirmed: boolean) => void;
-}) {
+})
+{
 	return (
 		<DialogShell
-			onClose={() => {
+			onClose={() =>
+			{
 				onAnswer(false);
 			}}
 		>
@@ -36,7 +39,8 @@ function ConfirmDialogView({
 			<div className="flex justify-end">
 				<Button
 					variant="primary"
-					onClick={() => {
+					onClick={() =>
+					{
 						onAnswer(true);
 					}}
 				>
@@ -44,7 +48,8 @@ function ConfirmDialogView({
 				</Button>
 			</div>
 			<DialogCloseButton
-				onClose={() => {
+				onClose={() =>
+				{
 					onAnswer(false);
 				}}
 			/>
@@ -53,10 +58,12 @@ function ConfirmDialogView({
 }
 
 /** Shows whatever `showAlert` or `confirmAction` last asked for. */
-export function AlertDialog() {
+export function AlertDialog()
+{
 	const alert = useAlertStore((state) => state.alert);
 	const confirm = useConfirmStore((state) => state.confirm);
-	if (confirm !== null) {
+	if (confirm !== null)
+	{
 		return (
 			<ConfirmDialogView
 				title={confirm.title}

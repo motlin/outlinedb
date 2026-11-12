@@ -1,8 +1,14 @@
+[settings]
+# Skip releases younger than 24 hours when mise chooses a version (`mise upgrade`, `latest`, ranges),
+# enforcing .claude/includes/sync-version-policy.md. An exact version pinned here still installs.
+minimum_release_age = "1d"
+
 [tools]
 just = "1.59.0"
 node = "24.22.0"
 pnpm = "12.18.0"
 pre-commit = "4.7.0"
+"npm:oxfmt-next-line" = { version = "0.75.0", allow_low_downloads = true }
 python = "3.15.0"
 
 [env]

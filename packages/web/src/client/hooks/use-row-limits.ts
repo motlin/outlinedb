@@ -4,7 +4,8 @@ import type {NodeResponse} from "../../node-types.js";
 import {nodeKeys} from "../node-cache.js";
 import type {SearchFilter} from "../search-filter.js";
 import type {RowLimits} from "../render-window.js";
-import {
+import
+{
 	firstPaintRowBudget,
 	initialRowBudget,
 	nextRowBudget,
@@ -25,7 +26,8 @@ export const RowLimitsContext = createContext<RowLimits | null>(null);
 /** Every children query's hash starts so (TanStack hashes a key as its JSON). */
 const CHILDREN_HASH_PREFIX = JSON.stringify(nodeKeys.children(null)).replace(/null\]$/u, "");
 
-function viewportHeight(): number {
+function viewportHeight(): number
+{
 	return typeof window === "undefined" ? 0 : window.innerHeight;
 }
 
@@ -39,7 +41,13 @@ function viewportHeight(): number {
 export function useRowLimits(
 	rootId: string | null,
 	search: SearchFilter | null,
-): {rowLimits: RowLimits; budgetRows: number; growBudget: () => void} {
+):
+{
+	rowLimits: RowLimits;
+	budgetRows: number;
+	growBudget: () => void;
+}
+{
 	const queryClient = useQueryClient();
 	const expandedIds = usePaneExpandedIds();
 	const showCompleted = useOutlineStore((state) => state.showCompleted);
@@ -49,64 +57,109 @@ export function useRowLimits(
 
 	// A view Back/Forward restores scrolled down mounts rows down to that scroll, so it lands on rows.
 	const firstRows = () => firstPaintRowBudget(viewportHeight() + poppedScrollY(rootId));
-	const [budget, setBudget] = useState(() => ({rootId, result, rows: firstRows()}));
-	if (budget.rootId !== rootId || budget.result !== result) {
-		setBudget({rootId, result, rows: firstRows()});
+	const [budget, setBudget] = useState(() => (
+	{
+		rootId,
+		result,
+		rows: firstRows(),
+	}));
+	if (budget.rootId !== rootId || budget.result !== result)
+	{
+		setBudget(
+			{
+				rootId,
+				result,
+				rows: firstRows(),
+			},
+		);
 	}
-	useEffect(() => {
-		const run = {cancelled: false};
-		void (async () => {
+	useEffect(() =>
+	{
+		const run =
+		{
+			cancelled: false,
+		};
+		void (async () =>
+		{
 			await afterNextPaint();
-			if (run.cancelled) {
+			if (run.cancelled)
+			{
 				return;
 			}
-			startTransition(() => {
-				setBudget((current) => {
+			startTransition(() =>
+			{
+				setBudget((current) =>
+				{
 					const rows = initialRowBudget(viewportHeight());
 					return current.rootId === rootId && current.result === result && current.rows < rows
-						? {...current, rows}
+						?
+							{
+								...current,
+								rows,
+							}
 						: current;
 				});
 			});
 		})();
-		return () => {
+		return () =>
+		{
 			run.cancelled = true;
 		};
 	}, [rootId, result]);
 
 	const getChildren = (parentId: string | null) =>
 		queryClient.getQueryData<NodeResponse[]>(nodeKeys.children(parentId));
-	const view = {expandedIds, showCompleted, animatingCompletionIds, search};
+	const view =
+	{
+		expandedIds,
+		showCompleted,
+		animatingCompletionIds,
+		search,
+	};
 	const compute = (): RowLimits => rowLimits(getChildren, rootId, printRowBudget(budget.rows, printing), view);
 	const budgetToShow = (targetId: string): number =>
 		rowBudgetToShow(getChildren, rootId, budget.rows, view, targetId);
 	const computed = compute();
 	const [stable, setStable] = useState(computed);
-	if (rowLimitsKey(stable) !== rowLimitsKey(computed)) {
+	if (rowLimitsKey(stable) !== rowLimitsKey(computed))
+	{
 		setStable(computed);
 	}
 
 	const latestCompute = useRef(compute);
 	const latestBudgetToShow = useRef(budgetToShow);
-	useEffect(() => {
+	useEffect(() =>
+	{
 		latestCompute.current = compute;
 		latestBudgetToShow.current = budgetToShow;
 	});
 	useEffect(
 		() =>
-			useOutlineStore.subscribe(({editingId}, previous) => {
-				if (editingId === null || editingId === previous.editingId) {
+			useOutlineStore.subscribe(({editingId}, previous) =>
+			{
+				if (editingId === null || editingId === previous.editingId)
+				{
 					return;
 				}
 				const rows = latestBudgetToShow.current(editingId);
-				setBudget((current) => (rows > current.rows ? {...current, rows} : current));
+				setBudget((current) =>
+					rows > current.rows
+						?
+							{
+								...current,
+								rows,
+							}
+						: current,
+				);
 			}),
 		[],
 	);
 	useEffect(
 		() =>
-			queryClient.getQueryCache().subscribe((event) => {
-				if (event.type !== "updated" || !event.query.queryHash.startsWith(CHILDREN_HASH_PREFIX)) {
+			queryClient.getQueryCache().subscribe((event) =>
+			{
+				if (event.type !== "updated" || !event.query.queryHash.startsWith(CHILDREN_HASH_PREFIX))
+				{
 					return;
 				}
 				const next = latestCompute.current();
@@ -115,8 +168,17 @@ export function useRowLimits(
 		[queryClient],
 	);
 
-	const growBudget = useCallback(() => {
-		setBudget((current) => ({...current, rows: nextRowBudget(current.rows)}));
+	const growBudget = useCallback(() =>
+	{
+		setBudget((current) => (
+		{
+			...current,
+			rows: nextRowBudget(current.rows),
+		}));
 	}, []);
-	return {rowLimits: stable, budgetRows: budget.rows, growBudget};
+	return {
+		rowLimits: stable,
+		budgetRows: budget.rows,
+		growBudget,
+	};
 }

@@ -4,7 +4,8 @@ import {useEffect, useMemo, useState} from "react";
 import {useAiEmbeddingStage, usePreferences} from "../hooks/use-preferences.js";
 import {fetchAncestors, useCreateNode} from "../hooks/use-nodes.js";
 import {readLastViewed, useStarredLocations} from "../hooks/use-starred.js";
-import {
+import
+{
 	INITIAL_PICKER_STATE,
 	ancestorCrumbs,
 	buildPickerRows,
@@ -34,17 +35,20 @@ const EMPTY_HITS: readonly SearchHit[] = [];
 let recents: RecentLocations | null = null;
 
 /** Upstream's per-tab recent locations (sessionStorage `recentlySavedLocations`). */
-function recentLocations(): RecentLocations {
+function recentLocations(): RecentLocations
+{
 	recents ??= createRecentLocations(sessionStorage, () => Date.now());
 	return recents;
 }
 
-function escapeHtml(text: string): string {
+function escapeHtml(text: string): string
+{
 	return text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 }
 
 /** A node name as upstream's `nameInPlainText`: markup stripped, then escaped as a text child. */
-function plainLabel(name: string): string {
+function plainLabel(name: string): string
+{
 	return escapeHtml(stripHtmlTags(name));
 }
 
@@ -53,40 +57,83 @@ function useSearchHits(
 	query: string,
 	starredIds: readonly string[],
 	showCompleted: boolean,
-): {hits: readonly SearchHit[]; pending: boolean} {
-	const [found, setFound] = useState<{query: string; hits: readonly SearchHit[]}>({query: "", hits: []});
-	useEffect(() => {
-		if (query.trim() === "") {
+):
+{
+	hits: readonly SearchHit[];
+	pending: boolean;
+}
+{
+	const [found, setFound] = useState<
+	{
+		query: string;
+		hits: readonly SearchHit[];
+	}>(
+		{
+			query: "",
+			hits: [],
+		},
+	);
+	useEffect(() =>
+	{
+		if (query.trim() === "")
+		{
 			// oxlint-disable-next-line unicorn/no-useless-undefined -- consistent-return needs a value beside the cleanup return
 			return undefined;
 		}
 		// Upstream requests on every keystroke; a superseded query's request is aborted so a late reply cannot win.
 		const controller = new AbortController();
-		void (async () => {
-			const response = await fetch("/api/search/locations", {
-				method: "POST",
-				headers: {"Content-Type": "application/json"},
-				body: JSON.stringify({query, limit: SEARCH_LIMIT, starredIds, showCompleted}),
-				signal: controller.signal,
-			});
-			if (!response.ok) {
+		void (async () =>
+		{
+			const response = await fetch(
+				"/api/search/locations",
+				{
+					method: "POST",
+					headers:
+					{
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify(
+						{
+							query,
+							limit: SEARCH_LIMIT,
+							starredIds,
+							showCompleted,
+						},
+					),
+					signal: controller.signal,
+				},
+			);
+			if (!response.ok)
+			{
 				return;
 			}
 			const {results} = await readJson<LocationResponse>(response);
-			if (!controller.signal.aborted) {
-				setFound({query, hits: results});
+			if (!controller.signal.aborted)
+			{
+				setFound(
+					{
+						query,
+						hits: results,
+					},
+				);
 			}
-		})().catch((error: unknown) => {
-			if (!controller.signal.aborted) {
+		})().catch((error: unknown) =>
+		{
+			if (!controller.signal.aborted)
+			{
 				throw error;
 			}
 		});
-		return () => {
+		return () =>
+		{
 			controller.abort();
 		};
 	}, [query, starredIds, showCompleted]);
 	const landed = found.query === query;
-	return {hits: landed ? found.hits : EMPTY_HITS, pending: !landed && query.trim() !== ""};
+	return {
+		hits: landed ? found.hits : EMPTY_HITS,
+		pending: !landed && query.trim() !== "",
+	};
 }
 
 type RelatedHit = RelatedResponse["results"][number];
@@ -96,36 +143,66 @@ const RELATED_THRESHOLD = 0.6;
 const EMPTY_RELATED: readonly RelatedHit[] = [];
 
 /** Local extra: nodes semantically related to `nodeId` (`/api/related` link-targets), empty when unset or failed. */
-function useRelatedHits(nodeId: string | undefined): readonly RelatedHit[] {
-	const [found, setFound] = useState<{nodeId: string; hits: readonly RelatedHit[]}>({nodeId: "", hits: []});
-	useEffect(() => {
-		if (nodeId === undefined) {
+function useRelatedHits(nodeId: string | undefined): readonly RelatedHit[]
+{
+	const [found, setFound] = useState<
+	{
+		nodeId: string;
+		hits: readonly RelatedHit[];
+	}>(
+		{
+			nodeId: "",
+			hits: [],
+		},
+	);
+	useEffect(() =>
+	{
+		if (nodeId === undefined)
+		{
 			// oxlint-disable-next-line unicorn/no-useless-undefined -- consistent-return needs a value beside the cleanup return
 			return undefined;
 		}
 		const controller = new AbortController();
-		void (async () => {
-			const response = await fetch("/api/related", {
-				method: "POST",
-				headers: {"Content-Type": "application/json"},
-				body: JSON.stringify({
-					nodeId,
-					type: "link-targets",
-					limit: RELATED_LIMIT,
-					threshold: RELATED_THRESHOLD,
-				}),
-			});
-			if (!response.ok) {
+		void (async () =>
+		{
+			const response = await fetch(
+				"/api/related",
+				{
+					method: "POST",
+					headers:
+					{
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify(
+						{
+							nodeId,
+							type: "link-targets",
+							limit: RELATED_LIMIT,
+							threshold: RELATED_THRESHOLD,
+						},
+					),
+				},
+			);
+			if (!response.ok)
+			{
 				return;
 			}
 			const {results} = await readJson<RelatedResponse>(response);
-			setFound({nodeId, hits: results});
-		})().catch((error: unknown) => {
-			if (!controller.signal.aborted) {
+			setFound(
+				{
+					nodeId,
+					hits: results,
+				},
+			);
+		})().catch((error: unknown) =>
+		{
+			if (!controller.signal.aborted)
+			{
 				throw error;
 			}
 		});
-		return () => {
+		return () =>
+		{
 			controller.abort();
 		};
 	}, [nodeId]);
@@ -133,16 +210,21 @@ function useRelatedHits(nodeId: string | undefined): readonly RelatedHit[] {
 }
 
 /** The stored view stamps, or none when storage is unavailable. */
-function safeLastViewed(): Record<string, number> {
-	try {
+function safeLastViewed(): Record<string, number>
+{
+	try
+	{
 		return readLastViewed(globalThis.localStorage);
-	} catch {
+	}
+	catch
+	{
 		return {};
 	}
 }
 
 /** One open picker: its step machine, rows and the create-and-move sub-action. */
-function LocationPickerSession({picker}: {picker: LocationPickerState}) {
+function LocationPickerSession({picker}: {picker: LocationPickerState})
+{
 	const queryClient = useQueryClient();
 	const createNode = useCreateNode();
 	const {preferences} = usePreferences();
@@ -160,7 +242,8 @@ function LocationPickerSession({picker}: {picker: LocationPickerState}) {
 	const hits: readonly SearchHit[] =
 		searcher === undefined
 			? fetchedHits
-			: (query === "" && !searcher.eager ? [] : searcher.search(query)).map(({id, labelHtml}) => ({
+			: (query === "" && !searcher.eager ? [] : searcher.search(query)).map(({id, labelHtml}) => (
+				{
 					id,
 					labelHtml,
 					ancestors: [],
@@ -175,19 +258,28 @@ function LocationPickerSession({picker}: {picker: LocationPickerState}) {
 	const recentIds = recentLocations().ids();
 	const exists = (id: string): boolean => readNode(queryClient, id) !== undefined;
 	const recentExists = (id: string): boolean => exists(id) || stars.some((star) => star.nodeId === id);
-	const defaultLocation = resolveDefaultLocation({
-		recentIds,
-		notesRootId: notesRootIdFor(preferences),
-		exists: (id) => (recentIds.includes(id) ? recentExists(id) : exists(id)),
-	});
-	const results: PickerResult[] = hits.map(({id, labelHtml}) => ({id, labelHtml}));
+	const defaultLocation = resolveDefaultLocation(
+		{
+			recentIds,
+			notesRootId: notesRootIdFor(preferences),
+			exists: (id) => (recentIds.includes(id) ? recentExists(id) : exists(id)),
+		},
+	);
+	const results: PickerResult[] = hits.map(({id, labelHtml}) => (
+	{
+		id,
+		labelHtml,
+	}));
 	const listedIds = [...new Set([...recentIds, ...starredIds])];
-	const chains = useQueries({
-		queries: listedIds.map((id) => ({
-			queryKey: nodeKeys.ancestors(id),
-			queryFn: async () => fetchAncestors(id),
-		})),
-	});
+	const chains = useQueries(
+		{
+			queries: listedIds.map((id) => (
+			{
+				queryKey: nodeKeys.ancestors(id),
+				queryFn: async () => fetchAncestors(id),
+			})),
+		},
+	);
 	const crumbsById = new Map<string, readonly LocationCrumb[]>([
 		...listedIds.map((id, index): [string, readonly LocationCrumb[]] => [
 			id,
@@ -195,52 +287,86 @@ function LocationPickerSession({picker}: {picker: LocationPickerState}) {
 		]),
 		...relatedHits.map((hit): [string, readonly LocationCrumb[]] => [
 			hit.id,
-			hit.path.map((name, index) => ({id: `${hit.id}-${index}`, name})),
+			hit.path.map((name, index) => (
+			{
+				id: `${hit.id}-${index}`,
+				name,
+			})),
 		]),
 		...hits.map((hit): [string, readonly LocationCrumb[]] => [hit.id, hit.ancestors]),
 	]);
-	const rows = buildPickerRows({
-		query,
-		results,
-		related: relatedHits.map((hit) => ({id: hit.id, labelHtml: plainLabel(hit.name ?? "") || "Untitled"})),
-		eager: searcher?.eager,
-		action: searcher?.action,
-		subActionName: picker.subActionName,
-		recentIds,
-		starredIds,
-		forItemId: picker.forItemId,
-		expanded: state.expanded,
-		step: state.step,
-		pending,
-		exists: recentExists,
-		recentLabel: "create" in defaultLocation ? "Notes" : plainLabel(nameOf(defaultLocation.id)),
-		labelOf: (id) => plainLabel(nameOf(id)),
-	});
+	const rows = buildPickerRows(
+		{
+			query,
+			results,
+			related: relatedHits.map((hit) => (
+			{
+				id: hit.id,
+				labelHtml: plainLabel(hit.name ?? "") || "Untitled",
+			})),
+			eager: searcher?.eager,
+			action: searcher?.action,
+			subActionName: picker.subActionName,
+			recentIds,
+			starredIds,
+			forItemId: picker.forItemId,
+			expanded: state.expanded,
+			step: state.step,
+			pending,
+			exists: recentExists,
+			recentLabel: "create" in defaultLocation ? "Notes" : plainLabel(nameOf(defaultLocation.id)),
+			labelOf: (id) => plainLabel(nameOf(id)),
+		},
+	);
 
 	const defaultTarget = async () =>
 		"create" in defaultLocation ? ensureNotesLocation(queryClient) : defaultLocation.id;
 
-	const subAction = async (parentId: string | undefined, name: string) => {
+	const subAction = async (parentId: string | undefined, name: string) =>
+	{
 		const parent = parentId ?? (await defaultTarget());
 		const createdId = crypto.randomUUID();
-		await runInUndoBatch(captureOutlineView, () => {
+		await runInUndoBatch(captureOutlineView, () =>
+		{
 			recentLocations().add(parent);
-			createNode.mutate({id: createdId, parent_id: parent, name, index: 0});
+			createNode.mutate(
+				{
+					id: createdId,
+					parent_id: parent,
+					name,
+					index: 0,
+				},
+			);
 		});
-		closeLocationPicker({createdId});
+		closeLocationPicker(
+			{
+				createdId,
+			},
+		);
 	};
 
-	const run = (effect: PickerEffect) => {
-		if (effect.type === "close") {
+	const run = (effect: PickerEffect) =>
+	{
+		if (effect.type === "close")
+		{
 			closeLocationPicker(undefined);
-		} else if (effect.type === "action") {
-			closeLocationPicker({id: effect.id});
-		} else if (effect.type === "sub-action") {
+		}
+		else if (effect.type === "action")
+		{
+			closeLocationPicker(
+				{
+					id: effect.id,
+				},
+			);
+		}
+		else if (effect.type === "sub-action")
+		{
 			void subAction(effect.id, effect.name);
 		}
 	};
 
-	const dispatch = (event: PickerEvent) => {
+	const dispatch = (event: PickerEvent) =>
+	{
 		const transition = reducePicker(state, event, rows);
 		setState(transition.state);
 		run(transition.effect);
@@ -256,29 +382,54 @@ function LocationPickerSession({picker}: {picker: LocationPickerState}) {
 			query={query}
 			subActionName={picker.subActionName}
 			hideInput={filter !== null}
-			onQueryChange={(typed) => {
-				dispatch({type: "query", query: typed});
+			onQueryChange={(typed) =>
+			{
+				dispatch(
+					{
+						type: "query",
+						query: typed,
+					},
+				);
 			}}
 			rows={rows}
 			crumbsOf={crumbsOf}
 			active={state.active}
-			onSelect={(_row, index) => {
-				dispatch({type: "select", index});
+			onSelect={(_row, index) =>
+			{
+				dispatch(
+					{
+						type: "select",
+						index,
+					},
+				);
 			}}
-			onEscape={() => {
-				dispatch({type: "key", key: "Escape"});
+			onEscape={() =>
+			{
+				dispatch(
+					{
+						type: "key",
+						key: "Escape",
+					},
+				);
 			}}
-			onFocusLeave={() => {
-				dispatch({type: "focus-leave"});
+			onFocusLeave={() =>
+			{
+				dispatch(
+					{
+						type: "focus-leave",
+					},
+				);
 			}}
 		/>
 	);
 }
 
 /** The one inline location picker root, shown wherever `openLocationPicker` opened it. */
-export function LocationPickerHost() {
+export function LocationPickerHost()
+{
 	const picker = useOutlineStore((state) => state.locationPicker);
-	if (picker === null) {
+	if (picker === null)
+	{
 		return null;
 	}
 	return <LocationPickerSession key={`${picker.forItemId}:${picker.anchor.x}:${picker.anchor.y}`} picker={picker} />;

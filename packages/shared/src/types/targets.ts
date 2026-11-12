@@ -30,7 +30,8 @@ export const SYSTEM_TARGETS = ["inbox"] as const satisfies readonly SystemTarget
  * }
  * ```
  */
-export function isSystemTarget(value: string): value is SystemTargetKey {
+export function isSystemTarget(value: string): value is SystemTargetKey
+{
 	return (SYSTEM_TARGETS as readonly string[]).includes(value);
 }
 
@@ -45,19 +46,23 @@ export const HOME_TARGET = "home";
  * Zod schema for a single target in the /api/v1/targets response.
  */
 export const WorkflowyTargetSchema = z
-	.object({
-		name: z.string(),
-		id: z.string(),
-	})
+	.object(
+		{
+			name: z.string(),
+			id: z.string(),
+		},
+	)
 	.strict();
 
 /**
  * Zod schema for the /api/v1/targets response.
  */
 export const TargetsResponseSchema = z
-	.object({
-		targets: z.array(WorkflowyTargetSchema),
-	})
+	.object(
+		{
+			targets: z.array(WorkflowyTargetSchema),
+		},
+	)
 	.strict();
 
 /**

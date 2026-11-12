@@ -3,35 +3,46 @@ import {fn} from "storybook/test";
 
 import {MenuItem, MenuSeparator} from "../flyout/menu-item.js";
 
-const meta: Meta<typeof MenuItem> = {
+const meta: Meta<typeof MenuItem> =
+{
 	title: "Components/MenuItem",
 	component: MenuItem,
-	parameters: {
+	parameters:
+	{
 		layout: "centered",
 	},
 	tags: ["autodocs"],
-	argTypes: {
-		label: {
+	argTypes:
+	{
+		label:
+		{
 			control: "text",
 			description: "The text label for the menu item",
 		},
-		disabled: {
+		disabled:
+		{
 			control: "boolean",
 			description: "Whether the menu item is disabled",
 		},
-		shortcut: {
+		shortcut:
+		{
 			control: "text",
 			description: "Keyboard shortcut shown at the end of the row",
 		},
 	},
-	args: {
+	args:
+	{
 		onSelect: fn<() => void>(),
 	},
 	decorators: [
 		(Story) => (
 			<div
 				className="wf-menu flex flex-col border border-solid border-primary text-xs rounded-md bg-primary shadow-md"
-				style={{padding: 5, minWidth: 160}}
+				style={
+				{
+					padding: 5,
+					minWidth: 160,
+				}}
 			>
 				<Story />
 			</div>
@@ -42,23 +53,28 @@ const meta: Meta<typeof MenuItem> = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {
-	args: {
+export const Default: Story =
+{
+	args:
+	{
 		label: "Complete",
 		icon: "fal:check",
 		shortcut: "⌘↵",
 	},
 };
 
-export const Disabled: Story = {
-	args: {
+export const Disabled: Story =
+{
+	args:
+	{
 		label: "Add note",
 		icon: "fal:pencil",
 		disabled: true,
 	},
 };
 
-export const AllVariants: Story = {
+export const AllVariants: Story =
+{
 	render: () => (
 		<>
 			<MenuItem icon="fal:check" label="Complete" shortcut="⌘↵" />

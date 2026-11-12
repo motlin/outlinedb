@@ -10,16 +10,20 @@ const HIGHLIGHT_STYLE = `
       `;
 
 /** Upstream `MX1`: how a section tells the dialog its title, for the Jump to list. */
-export const SettingsSectionRegistry = createContext<(title: string) => () => void>(() => () => {});
+export const SettingsSectionRegistry = createContext<(title: string) => () => void>(() => () =>
+{
+});
 
-export interface SettingsSectionProps {
+export interface SettingsSectionProps
+{
 	title: string;
 	dangerous?: boolean;
 	children?: ReactNode;
 }
 
 /** Upstream `el4`: a titled, divided block that registers itself for Jump to and can be highlighted. */
-export function SettingsSection({title, dangerous = false, children}: SettingsSectionProps) {
+export function SettingsSection({title, dangerous = false, children}: SettingsSectionProps)
+{
 	const register = useContext(SettingsSectionRegistry);
 	useEffect(() => register(title), [register, title]);
 	return (

@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import {afterEach, describe, expect, it, vi} from "vite-plus/test";
-import {
+import
+{
 	EXPORT_DEFAULT,
 	EXPORT_OPTIONS,
 	ExportBlobWriter,
@@ -9,15 +10,19 @@ import {
 	windowsPostFormat,
 } from "../src/client/export-format.js";
 
-afterEach(() => {
+afterEach(() =>
+{
 	vi.useRealTimers();
 });
 
-describe("ExportBlobWriter", () => {
-	it("flushes whenever 512 Ki chars are buffered, then flushes the remainder", async () => {
+describe("ExportBlobWriter", () =>
+{
+	it("flushes whenever 512 Ki chars are buffered, then flushes the remainder", async () =>
+	{
 		vi.useFakeTimers();
 		const sizes: number[] = [];
-		const writer = new ExportBlobWriter("text/plain", new AbortController().signal, (bytes) => {
+		const writer = new ExportBlobWriter("text/plain", new AbortController().signal, (bytes) =>
+		{
 			sizes.push(bytes);
 		});
 		const chunk = "a".repeat(300_000);
@@ -31,11 +36,13 @@ describe("ExportBlobWriter", () => {
 		expect(writer.blob.type).toBe("text/plain");
 	});
 
-	it("rejects with the abort reason and stops writing", async () => {
+	it("rejects with the abort reason and stops writing", async () =>
+	{
 		vi.useFakeTimers();
 		const controller = new AbortController();
 		const sizes: number[] = [];
-		const writer = new ExportBlobWriter("text/plain", controller.signal, (bytes) => {
+		const writer = new ExportBlobWriter("text/plain", controller.signal, (bytes) =>
+		{
 			sizes.push(bytes);
 			controller.abort(new Error("switched tab"));
 		});
@@ -54,8 +61,10 @@ describe("ExportBlobWriter", () => {
 	});
 });
 
-describe("windowsPostFormat", () => {
-	it("turns each bare newline into CRLF", () => {
+describe("windowsPostFormat", () =>
+{
+	it("turns each bare newline into CRLF", () =>
+	{
 		expect([windowsPostFormat("a\n"), windowsPostFormat("\n"), windowsPostFormat("a\r\n")]).toStrictEqual([
 			"a\r\n",
 			"\r\n",
@@ -64,8 +73,10 @@ describe("windowsPostFormat", () => {
 	});
 });
 
-describe("preparingLabel", () => {
-	it("shows megabytes only while generating at 1 MiB or more", () => {
+describe("preparingLabel", () =>
+{
+	it("shows megabytes only while generating at 1 MiB or more", () =>
+	{
 		expect([
 			preparingLabel(true, 1_048_575),
 			preparingLabel(true, 1_572_864),
@@ -74,19 +85,69 @@ describe("preparingLabel", () => {
 	});
 });
 
-describe("exportFileName", () => {
+describe("exportFileName", () =>
+{
 	const now = new Date(2026, 9, 23, 12, 34, 56);
 
-	it("names one item by its plain text without the first two punctuation or emoji characters", () => {
-		expect(exportFileName([{name: "🧪 Sync sandbox"}], "html", now)).toBe("WF - Sync sandbox - 261023-123456.html");
-		expect(exportFileName([{name: "<b>a-b-c</b> d"}], "md", now)).toBe("WF - abc d - 261023-123456.md");
+	it("names one item by its plain text without the first two punctuation or emoji characters", () =>
+	{
+		expect(
+			exportFileName(
+				[
+					{
+						name: "🧪 Sync sandbox",
+					},
+				],
+				"html",
+				now,
+			),
+		).toBe("WF - Sync sandbox - 261023-123456.html");
+		expect(
+			exportFileName(
+				[
+					{
+						name: "<b>a-b-c</b> d",
+					},
+				],
+				"md",
+				now,
+			),
+		).toBe("WF - abc d - 261023-123456.md");
 	});
 
-	it("uses Export for several items, an empty name, and slices long names to fit 50 characters", () => {
+	it("uses Export for several items, an empty name, and slices long names to fit 50 characters", () =>
+	{
 		expect([
-			exportFileName([{name: "a"}, {name: "b"}], "html", now),
-			exportFileName([{name: "!!"}], "txt", now),
-			exportFileName([{name: "x".repeat(60)}], "opml", now),
+			exportFileName(
+				[
+					{
+						name: "a",
+					},
+					{
+						name: "b",
+					},
+				],
+				"html",
+				now,
+			),
+			exportFileName(
+				[
+					{
+						name: "!!",
+					},
+				],
+				"txt",
+				now,
+			),
+			exportFileName(
+				[
+					{
+						name: "x".repeat(60),
+					},
+				],
+				"opml",
+				now,
+			),
 		]).toStrictEqual([
 			"WF - Export - 261023-123456.html",
 			"WF - Export - 261023-123456.txt",
@@ -95,8 +156,10 @@ describe("exportFileName", () => {
 	});
 });
 
-describe("EXPORT_OPTIONS", () => {
-	it("lists Formatted, Markdown, Plain Text and OPML with html as the default", () => {
+describe("EXPORT_OPTIONS", () =>
+{
+	it("lists Formatted, Markdown, Plain Text and OPML with html as the default", () =>
+	{
 		expect([Object.entries(EXPORT_OPTIONS).map(([key, {label}]) => [key, label]), EXPORT_DEFAULT]).toStrictEqual([
 			[
 				["html", "Formatted"],

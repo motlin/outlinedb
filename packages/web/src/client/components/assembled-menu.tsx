@@ -9,31 +9,42 @@ import {MenuItem, MenuSeparator} from "./flyout/menu-item.js";
 import type {MenuItemProps} from "./flyout/menu-item.js";
 
 /** What a command row needs: upstream's `cmd.key` (handbook), `label`, `icon` and `shortcut`. */
-export interface MenuCommandRow {
+export interface MenuCommandRow
+{
 	key: string;
 	label: string;
 	icon: string;
 	shortcut?: string;
 }
 
-function isFaIconKey(key: string): key is FaIconKey {
+function isFaIconKey(key: string): key is FaIconKey
+{
 	return Object.hasOwn(FA_ICONS, key);
 }
 
 /** A light FontAwesome icon, falling back to upstream's missing-icon triangle. */
-function lightIcon(name: string | undefined): FaIconKey {
+function lightIcon(name: string | undefined): FaIconKey
+{
 	const key = `fal:${name ?? ""}`;
 	return isFaIconKey(key) ? key : "fal:triangle-exclamation";
 }
 
-export interface RenderAssembledOptions<C extends MenuCommandRow> {
+export interface RenderAssembledOptions<C extends MenuCommandRow>
+{
 	onSelect: (cmd: C) => unknown;
 	cmdContext: MenuCmdContext;
 	qualifiers: readonly string[];
 	/** Upstream drops separators on mobile (`q === true`). */
 	isMobile?: boolean;
 	/** Opens a submenu at the click's page point; defaults to `showMenuById` in the outline store. */
-	openSubmenu?: (menuId: string, target: {top: number; left: number}) => void;
+	openSubmenu?: (
+		menuId: string,
+		target:
+		{
+			top: number;
+			left: number;
+		},
+	) => void;
 }
 
 /**
@@ -43,18 +54,23 @@ export interface RenderAssembledOptions<C extends MenuCommandRow> {
 export function renderAssembledMenu<C extends MenuCommandRow>(
 	entries: readonly AssembledEntry<C>[],
 	{onSelect, cmdContext, qualifiers, isMobile = false, openSubmenu}: RenderAssembledOptions<C>,
-): ReactElement<MenuItemProps>[] {
+): ReactElement<MenuItemProps>[]
+{
 	const rows: ReactElement<MenuItemProps>[] = [];
-	entries.forEach((entry, index) => {
-		if (entry.kind === "separator") {
-			if (!isMobile) {
+	entries.forEach((entry, index) =>
+	{
+		if (entry.kind === "separator")
+		{
+			if (!isMobile)
+			{
 				// Separators have no identity beyond their position in the assembled list.
 				// oxlint-disable-next-line react/no-array-index-key
 				rows.push(<MenuSeparator key={`separator${index}`} />);
 			}
 			return;
 		}
-		if (entry.kind === "command") {
+		if (entry.kind === "command")
+		{
 			const {cmd} = entry;
 			rows.push(
 				<MenuItem
@@ -75,11 +91,19 @@ export function renderAssembledMenu<C extends MenuCommandRow>(
 				icon={lightIcon(APP_MENU_CONFIG.icons[id])}
 				key={id}
 				label={APP_MENU_CONFIG.labels[id] ?? `<${id}>`}
-				onSelect={(event) => {
-					const target = {top: event?.pageY ?? 0, left: event?.pageX ?? 0};
-					if (openSubmenu === undefined) {
+				onSelect={(event) =>
+				{
+					const target =
+					{
+						top: event?.pageY ?? 0,
+						left: event?.pageX ?? 0,
+					};
+					if (openSubmenu === undefined)
+					{
 						useOutlineStore.getState().showMenuById(id, target, cmdContext, qualifiers);
-					} else {
+					}
+					else
+					{
 						openSubmenu(id, target);
 					}
 				}}

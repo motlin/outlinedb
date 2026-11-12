@@ -2,7 +2,8 @@
 	"name": "@outlinedb/mcp",
 	"version": "0.1.0",
 	"description": "MCP server for OutlineDB",
-	"bin": {
+	"bin":
+	{
 		"outlinedb-mcp": "./bin/mcp.js"
 	},
 	"files": [
@@ -12,30 +13,36 @@
 	"type": "module",
 	"main": "dist/index.js",
 	"types": "dist/index.d.ts",
-	"exports": {
-		"./tools": {
+	"exports":
+	{
+		"./tools":
+		{
 			"source": "./src/register.ts",
 			"types": "./dist/register.d.ts",
 			"import": "./dist/register.js"
 		}
 	},
-	"scripts": {
+	"scripts":
+	{
 		"build": "tsc -b",
 		"dev": "tsx src/index.ts",
 		"start": "node dist/index.js"
 	},
-	"dependencies": {
+	"dependencies":
+	{
 		"@modelcontextprotocol/sdk": "^1.32.2",
 		"@outlinedb/shared": "workspace:*",
 		"@outlinedb/web": "workspace:*",
 		"zod": "^4.6.7"
 	},
-	"devDependencies": {
+	"devDependencies":
+	{
 		"@types/node": "^26.6.6",
 		"tsx": "^4.23.15",
 		"typescript": "^7.0.2"
 	},
-	"engines": {
+	"engines":
+	{
 		"node": ">=20.11.0"
 	}
 }

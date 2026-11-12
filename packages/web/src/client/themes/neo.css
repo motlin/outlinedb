@@ -1,4 +1,5 @@
-._theme-neo {
+._theme-neo
+{
 	--wf-background-primary: #141414;
 	--wf-background-secondary: #2d2d2d;
 	--wf-background-tertiary: #373737;
@@ -62,19 +63,22 @@
 	--wf-border-warning: var(--wf-yellow-200);
 	--wf-border-success: var(--wf-green-700);
 
-	.wf-header {
+	.wf-header
+	{
 		--wf-text-primary: #999999;
 		--wf-background-secondary: var(--wf-dark-gray-700);
 		--wf-border-primary: #2d2d2d;
 	}
 
-	.wf-menu {
+	.wf-menu
+	{
 		--wf-text-primary: var(--wf-dark-gray-200);
 		--wf-border-primary: #2f2f2f;
 		--wf-border-secondary: #565656;
 	}
 
-	.wf-helper {
+	.wf-helper
+	{
 		--wf-background-primary: #373737;
 	}
 }

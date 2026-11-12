@@ -17,25 +17,37 @@ export async function prefetchSearchAncestors(
 	ancestorIds: readonly string[],
 	fetchChildren: (parentId: string) => Promise<NodeResponse[]>,
 	signal: AbortSignal,
-): Promise<void> {
+): Promise<void>
+{
 	const pending = ancestorIds
 		.filter((id) => queryClient.getQueryData(nodeKeys.children(id)) === undefined)
 		.slice(0, SEARCH_PREFETCH_LIMIT);
 	let next = 0;
-	const worker = async (): Promise<void> => {
-		for (let id = pending[next]; !signal.aborted && id !== undefined; id = pending[next]) {
+	const worker = async (): Promise<void> =>
+	{
+		for (let id = pending[next]; !signal.aborted && id !== undefined; id = pending[next])
+		{
 			next += 1;
 			const parentId = id;
 			// A failed prefetch is dropped: the row fetches its own children when it renders.
 			// oxlint-disable-next-line no-await-in-loop -- each worker runs its fetches one after another by design
 			await queryClient
-				.query({
-					queryKey: nodeKeys.children(parentId),
-					queryFn: async () => fetchChildren(parentId),
-					retry: false,
-				})
+				.query(
+					{
+						queryKey: nodeKeys.children(parentId),
+						queryFn: async () => fetchChildren(parentId),
+						retry: false,
+					},
+				)
 				.catch(() => {});
 		}
 	};
-	await Promise.all(Array.from({length: SEARCH_PREFETCH_CONCURRENCY}, worker));
+	await Promise.all(
+		Array.from(
+			{
+				length: SEARCH_PREFETCH_CONCURRENCY,
+			},
+			worker,
+		),
+	);
 }

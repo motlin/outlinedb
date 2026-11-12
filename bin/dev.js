@@ -13,7 +13,9 @@ setDefaultAutoSelectFamily(false);
 
 const cliPackageDir = join(import.meta.dirname, "..", "packages", "cli");
 
-await execute({
-	development: true,
-	dir: cliPackageDir,
-});
+await execute(
+	{
+		development: true,
+		dir: cliPackageDir,
+	},
+);

@@ -9,7 +9,8 @@ export function Toggle({
 	className?: string;
 	disabled?: boolean;
 	onClick?: () => void;
-}) {
+})
+{
 	return (
 		// oxlint-disable-next-line jsx-a11y/label-has-associated-control, jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- verbatim upstream Toggle markup; the menu row carries the text
 		<label

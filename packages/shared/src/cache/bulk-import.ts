@@ -28,14 +28,20 @@ export function runBulkUnitOfWork<T>(
 	database: TemporalTransaction,
 	work: (unitOfWork: UnitOfWork, at: Date) => T,
 	systemTime?: Date,
-): T {
+): T
+{
 	const lease = startUnitOfWork();
 	runUnitOfWork(
 		database,
-		(unitOfWork) => {
+		(unitOfWork) =>
+		{
 			// A lease that began, and so ended, in this millisecond: a second bulk import in it would overwrite that history.
 			const earlier = unitOfWork.tx
-				.select({name: apiImportTimestamp.name})
+				.select(
+					{
+						name: apiImportTimestamp.name,
+					},
+				)
 				.from(apiImportTimestamp)
 				.where(
 					and(
@@ -44,7 +50,8 @@ export function runBulkUnitOfWork<T>(
 					),
 				)
 				.get();
-			if (earlier !== undefined) {
+			if (earlier !== undefined)
+			{
 				throw new SameMillisecondOverwriteError(
 					getTableName(apiImportTimestamp),
 					`name=${BULK_IMPORT_LEASE_NAME}`,
@@ -55,24 +62,41 @@ export function runBulkUnitOfWork<T>(
 		},
 		lease,
 	);
-	try {
+	try
+	{
 		return database.transaction(
-			(tx) => {
+			(tx) =>
+			{
 				const at = systemTime ?? new Date(Date.now());
-				const start = {systemTime: formatTemporalTimestamp(at), startedAt: lease.startedAt};
-				const result = work({tx, systemTime: start.systemTime}, at);
+				const start =
+				{
+					systemTime: formatTemporalTimestamp(at),
+					startedAt: lease.startedAt,
+				};
+				const result = work(
+					{
+						tx,
+						systemTime: start.systemTime,
+					},
+					at,
+				);
 				syncNodeTags(tx, start.systemTime);
 				assertWithinTransactionTimeout(start, BULK_IMPORT_TIMEOUT_MS);
 				return result;
 			},
-			{behavior: "immediate"},
+			{
+				behavior: "immediate",
+			},
 		);
-	} finally {
+	}
+	finally
+	{
 		// A lease ending in the millisecond it began would leave an empty interval, so it ends a millisecond later.
 		const end = startUnitOfWork(new Date(Math.max(Date.now(), lease.startedAt + 1)));
 		runUnitOfWork(
 			database,
-			({tx, systemTime: at}) => {
+			({tx, systemTime: at}) =>
+			{
 				closeCurrentVersions(tx, apiImportTimestamp, at, eq(apiImportTimestamp.name, BULK_IMPORT_LEASE_NAME));
 			},
 			end,
@@ -84,9 +108,14 @@ export function runBulkUnitOfWork<T>(
  * The system time of the open, unexpired bulk-import lease, or undefined when no bulk import is in flight. Every row
  * the import writes is stamped at or after it.
  */
-export function bulkImportLeaseStart(database: TemporalTransaction): string | undefined {
+export function bulkImportLeaseStart(database: TemporalTransaction): string | undefined
+{
 	const row = database
-		.select({systemFrom: max(apiImportTimestamp.systemFrom)})
+		.select(
+			{
+				systemFrom: max(apiImportTimestamp.systemFrom),
+			},
+		)
 		.from(apiImportTimestamp)
 		.where(
 			and(

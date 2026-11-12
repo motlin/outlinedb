@@ -9,7 +9,8 @@ import {isSearchExpanded, searchShowsCompleted, searchShowsNode} from "../search
  * A flattened node includes the original node data plus its depth in the tree.
  * This allows us to render a flat list with proper indentation.
  */
-interface FlattenedNode {
+interface FlattenedNode
+{
 	node: NodeResponse;
 	depth: number;
 	isExpanded: boolean;
@@ -30,8 +31,10 @@ export function flattenTree(
 	animating: ReadonlySet<string>,
 	search: SearchFilter | null = null,
 	instance: MirrorInstance | null = null,
-): FlattenedNode[] {
-	if (!nodes || nodes.length === 0) {
+): FlattenedNode[]
+{
+	if (!nodes || nodes.length === 0)
+	{
 		return [];
 	}
 
@@ -43,7 +46,8 @@ export function flattenTree(
 
 	const result: FlattenedNode[] = [];
 
-	for (const node of visibleNodes) {
+	for (const node of visibleNodes)
+	{
 		const isExpanded =
 			search === null ? expandedIds.has(expansionId(node.id, instance)) : isSearchExpanded(node.id, search);
 		const children = childrenMap.get(node.id);
@@ -53,15 +57,18 @@ export function flattenTree(
 				? children === undefined || children.length > 0
 				: rowHasChildren(node, showCompleted);
 
-		result.push({
-			node,
-			depth,
-			isExpanded,
-			hasChildren,
-		});
+		result.push(
+			{
+				node,
+				depth,
+				isExpanded,
+				hasChildren,
+			},
+		);
 
 		// Only recurse into expanded nodes that have fetched children
-		if (isExpanded && children && children.length > 0 && (search === null || !isCyclical(node, instance))) {
+		if (isExpanded && children && children.length > 0 && (search === null || !isCyclical(node, instance)))
+		{
 			const childFlattened = flattenTree(
 				children,
 				expandedIds,

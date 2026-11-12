@@ -3,7 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import {WorkflowyApiClient, WorkflowyInternalClient} from "@outlinedb/shared/api";
 import type {InternalSession} from "@outlinedb/shared/api";
-import {
+import
+{
 	CALENDAR_ID_NAMESPACE,
 	WorkflowyInternalAdapter,
 	calendarNodeId,
@@ -13,7 +14,8 @@ import {
 import type {CalendarIdLevel, EnsuredCalendarDay} from "@outlinedb/shared/internal";
 import {readInternalAuth} from "@outlinedb/shared/node";
 import {isDeepStrictEqual} from "node:util";
-import {
+import
+{
 	WorkflowyWriteThroughClient,
 	keptInternalMetadata,
 	readNodeInternalMetadata,
@@ -55,7 +57,10 @@ const ROOT_META_PATHS = [
 ];
 /** The throwaway root metadata key the write steps set and remove; nothing else is ever written. */
 const PROBE_KEY = "probe";
-const PROBE_VALUE = {x: "1"};
+const PROBE_VALUE =
+{
+	x: "1",
+};
 const RENAMED = "probe error-shape: renamed";
 /** How far the `index` step backdates the create's client clock, so the node's `createdAt` shows whether `ct` was kept. */
 const CT_SHIFT_SEC = 86_400;
@@ -70,7 +75,8 @@ const ADOPT_DATE_ID = 20_991_231;
 const ADOPT_MIN_DATE_ID = 20_990_101;
 
 /** `order` after moving `ids` (in that order) to insertion slot `index` among the same parent's children. */
-export function expectedMove(order: readonly string[], ids: readonly string[], index: number): string[] {
+export function expectedMove(order: readonly string[], ids: readonly string[], index: number): string[]
+{
 	const kept = (part: readonly string[]) => part.filter((id) => !ids.includes(id));
 	return [...kept(order.slice(0, index)), ...ids, ...kept(order.slice(index))];
 }
@@ -79,8 +85,10 @@ export function expectedMove(order: readonly string[], ids: readonly string[], i
 export const SANDBOX_ID = "7aed376b-80c8-42c5-8065-ab03ee6d2ae0";
 
 /** Throws unless the sandbox is among `ancestorIds`; every probe write is gated on it. */
-export function assertUnderSandbox(ancestorIds: readonly string[]): void {
-	if (!ancestorIds.includes(SANDBOX_ID)) {
+export function assertUnderSandbox(ancestorIds: readonly string[]): void
+{
+	if (!ancestorIds.includes(SANDBOX_ID))
+	{
 		throw new Error(`Refusing to write outside the sandbox: ${SANDBOX_ID} is not an ancestor`);
 	}
 }
@@ -91,27 +99,41 @@ export function assertUnderSandbox(ancestorIds: readonly string[]): void {
  * Returns the node whose delete cleans the probe up (the topmost created one).
  */
 export function planCalendarAdoptProbe(
-	ensured: EnsuredCalendarDay & {dateId: number},
+	ensured: EnsuredCalendarDay &
+	{
+		dateId: number;
+	},
 	calendarRootId: string,
 	ancestorsOf: (id: string) => readonly string[],
-): {deleteId: string} {
+):
+{
+	deleteId: string;
+}
+{
 	assertAdoptDateId(ensured.dateId);
-	for (const id of ensured.created) {
-		if (!ancestorsOf(id).includes(calendarRootId)) {
+	for (const id of ensured.created)
+	{
+		if (!ancestorsOf(id).includes(calendarRootId))
+		{
 			throw new Error(
 				`Refusing to continue: created node ${id} is not under the calendar root ${calendarRootId}`,
 			);
 		}
 	}
 	const [deleteId] = ensured.created;
-	if (deleteId === undefined) {
+	if (deleteId === undefined)
+	{
 		throw new Error(`Refusing to continue: ensure created nothing, so ${ensured.dateId} already existed`);
 	}
-	return {deleteId};
+	return {
+		deleteId,
+	};
 }
 
-function assertAdoptDateId(dateId: number): void {
-	if (dateId < ADOPT_MIN_DATE_ID) {
+function assertAdoptDateId(dateId: number): void
+{
+	if (dateId < ADOPT_MIN_DATE_ID)
+	{
 		throw new Error(
 			`Refusing to probe ${dateId}: the calendar-adopt probe only touches days from ${ADOPT_MIN_DATE_ID} on`,
 		);
@@ -119,12 +141,15 @@ function assertAdoptDateId(dateId: number): void {
 }
 
 /** Ancestor ids from `parentId` upward (nearest first, stopping at the sandbox), read from the public API. */
-async function readAncestors(api: WorkflowyApiClient, firstParentId: string | null | undefined): Promise<string[]> {
+async function readAncestors(api: WorkflowyApiClient, firstParentId: string | null | undefined): Promise<string[]>
+{
 	const ancestors: string[] = [];
 	let parentId = firstParentId ?? null;
-	while (parentId !== null) {
+	while (parentId !== null)
+	{
 		ancestors.push(parentId);
-		if (parentId === SANDBOX_ID) {
+		if (parentId === SANDBOX_ID)
+		{
 			break;
 		}
 		parentId = (await api.getNode(parentId)).parent_id ?? null;
@@ -132,10 +157,12 @@ async function readAncestors(api: WorkflowyApiClient, firstParentId: string | nu
 	return ancestors;
 }
 /** Every ancestor id from `firstParentId` up to the top level (nearest first), read from the public API. */
-async function readAllAncestors(api: WorkflowyApiClient, firstParentId: string | null | undefined): Promise<string[]> {
+async function readAllAncestors(api: WorkflowyApiClient, firstParentId: string | null | undefined): Promise<string[]>
+{
 	const ancestors: string[] = [];
 	let parentId = firstParentId ?? null;
-	while (parentId !== null) {
+	while (parentId !== null)
+	{
 		ancestors.push(parentId);
 		parentId = (await api.getNode(parentId)).parent_id ?? null;
 	}
@@ -144,11 +171,13 @@ async function readAllAncestors(api: WorkflowyApiClient, firstParentId: string |
 
 const BODY_PREVIEW_CHARS = 200;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isRecord(value: unknown): value is Record<string, unknown>
+{
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function union(values: unknown[]): string {
+function union(values: unknown[]): string
+{
 	return [...new Set(values.map((value) => typeShape(value, false)))].toSorted().join(" | ");
 }
 
@@ -156,22 +185,29 @@ function union(values: unknown[]): string {
  * A value redacted to its type. The top-level object becomes a `Record` (its keys are
  * user data such as tag names or ids); nested objects keep their structural keys.
  */
-export function typeShape(value: unknown, topLevel = true): string {
-	if (value === undefined) {
+export function typeShape(value: unknown, topLevel = true): string
+{
+	if (value === undefined)
+	{
 		return "absent";
 	}
-	if (value === null) {
+	if (value === null)
+	{
 		return "null";
 	}
-	if (Array.isArray(value)) {
+	if (Array.isArray(value))
+	{
 		return `Array<${value.length === 0 ? "never" : union(value)}>`;
 	}
-	if (isRecord(value)) {
+	if (isRecord(value))
+	{
 		const entries = Object.entries(value);
-		if (entries.length === 0) {
+		if (entries.length === 0)
+		{
 			return "{}";
 		}
-		if (topLevel) {
+		if (topLevel)
+		{
 			return `Record<string, ${union(entries.map(([, inner]) => inner))}>`;
 		}
 		return `{${entries
@@ -182,11 +218,13 @@ export function typeShape(value: unknown, topLevel = true): string {
 	return typeof value;
 }
 
-function getPath(value: unknown, keys: string[]): unknown {
+function getPath(value: unknown, keys: string[]): unknown
+{
 	return keys.reduce<unknown>((current, key) => (isRecord(current) ? current[key] : undefined), value);
 }
 
-interface RecordedRequest {
+interface RecordedRequest
+{
 	method: string;
 	path: string;
 	status: number;
@@ -195,12 +233,14 @@ interface RecordedRequest {
 	clientIdHeader: string | null;
 }
 
-function urlOf(input: string | URL | Request): string {
+function urlOf(input: string | URL | Request): string
+{
 	return typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
 }
 
 /** A string or number as text; anything else (absent, object) as undefined. */
-function scalarText(value: unknown): string | undefined {
+function scalarText(value: unknown): string | undefined
+{
 	return typeof value === "string" || typeof value === "number" ? String(value) : undefined;
 }
 
@@ -209,50 +249,67 @@ function scalarText(value: unknown): string | undefined {
  * `wfclientid` header) and, when `stripCrosscheck` is set, removes
  * `crosscheck_user_id` from form bodies before they leave.
  */
-function recordingFetch(recorded: RecordedRequest[], stripCrosscheck: boolean): typeof fetch {
-	return async (input, init) => {
+function recordingFetch(recorded: RecordedRequest[], stripCrosscheck: boolean): typeof fetch
+{
+	return async (input, init) =>
+	{
 		let requestInit = init;
-		if (stripCrosscheck && typeof init?.body === "string") {
+		if (stripCrosscheck && typeof init?.body === "string")
+		{
 			const form = new URLSearchParams(init.body);
 			form.delete("crosscheck_user_id");
-			requestInit = {...init, body: form.toString()};
+			requestInit =
+			{
+				...init,
+				body: form.toString(),
+			};
 		}
 		const response = await globalThis.fetch(input, requestInit);
 		const text = await response.clone().text();
-		recorded.push({
-			method: requestInit?.method ?? "GET",
-			path: new URL(urlOf(input)).pathname,
-			status: response.status,
-			bytes: Buffer.byteLength(text),
-			text,
-			clientIdHeader: response.headers.get("wfclientid"),
-		});
+		recorded.push(
+			{
+				method: requestInit?.method ?? "GET",
+				path: new URL(urlOf(input)).pathname,
+				status: response.status,
+				bytes: Buffer.byteLength(text),
+				text,
+				clientIdHeader: response.headers.get("wfclientid"),
+			},
+		);
 		return response;
 	};
 }
 
 /** The character classes of a value (digits to 9, letters to a/A), so formats are recorded without values. */
-export function shapeOf(value: string): string {
+export function shapeOf(value: string): string
+{
 	return value.replaceAll(/\d/gu, "9").replaceAll(/[a-z]/gu, "a").replaceAll(/[A-Z]/gu, "A");
 }
 
-function objectKeys(value: unknown): string[] {
+function objectKeys(value: unknown): string[]
+{
 	return typeof value === "object" && value !== null && !Array.isArray(value) ? Object.keys(value).toSorted() : [];
 }
 
-function codeList(keys: string[]): string {
+function codeList(keys: string[]): string
+{
 	return keys.length === 0 ? "(none)" : keys.map((key) => `\`${key}\``).join(", ");
 }
 
-function parseJson(text: string): unknown {
-	try {
+function parseJson(text: string): unknown
+{
+	try
+	{
 		return JSON.parse(text) as unknown;
-	} catch {
+	}
+	catch
+	{
 		return undefined;
 	}
 }
 
-function findInitTxId(text: string): string | undefined {
+function findInitTxId(text: string): string | undefined
+{
 	const treeData: unknown = Reflect.get(Object(parseJson(text)), "projectTreeData");
 	const info: unknown = Reflect.get(Object(treeData), "mainProjectTreeInfo");
 	return scalarText(Reflect.get(Object(info), "initialMostRecentOperationTransactionId"));
@@ -264,7 +321,8 @@ async function sendRawPush(
 	session: InternalSession,
 	recorded: RecordedRequest[],
 	tree: Record<string, unknown>,
-): Promise<RecordedRequest> {
+): Promise<RecordedRequest>
+{
 	const pushPollId = crypto.randomUUID().replaceAll("-", "").slice(0, 8);
 	const form = new URLSearchParams();
 	form.append("client_id", session.clientId);
@@ -274,13 +332,15 @@ async function sendRawPush(
 	form.append("timezone", Intl.DateTimeFormat().resolvedOptions().timeZone);
 	await client.postForm(`/push_and_poll?uti=${session.userId}-${Date.now()}-${pushPollId}`, form);
 	const push = recorded.findLast((request) => request.path === "/push_and_poll");
-	if (push === undefined) {
+	if (push === undefined)
+	{
 		throw new Error("No /push_and_poll response was recorded");
 	}
 	return push;
 }
 
-export default class Probe extends Command {
+export default class Probe extends Command
+{
 	static override description =
 		"Run one live probe of Workflowy's internal API (read-only, or writes confined to the sandbox) and append the findings to a markdown log";
 
@@ -304,65 +364,102 @@ export default class Probe extends Command {
 		"<%= config.bin %> internal probe calendar-adopt --yes-live",
 	];
 
-	static override args = {
-		step: Args.string({description: "Probe step", options: [...STEPS], required: true}),
+	static override args =
+	{
+		step: Args.string(
+			{
+				description: "Probe step",
+				options: [...STEPS],
+				required: true,
+			},
+		),
 	};
 
-	static override flags = {
-		"yes-live": Flags.boolean({description: "Confirm the probe may call workflowy.com", default: false}),
-		crosscheck: Flags.boolean({
-			description: "Send crosscheck_user_id on /push_and_poll (poll only)",
-			default: true,
-			allowNo: true,
-		}),
-		"yes-account-global": Flags.boolean({
-			description:
-				"Confirm the user approved the account-global writes: the throwaway root metadata key `probe`, or the `show_completed` flip-and-restore",
-			default: false,
-		}),
-		keep: Flags.boolean({
-			description:
-				"Leave the `index`, `restore`, `meta` or `expansion` fixture in the sandbox for a visual check (delete it afterwards); `meta` then stops while the fixture is still numbered, `expansion` while it is still expanded",
-			default: false,
-		}),
-		out: Flags.string({description: "Markdown file the findings are appended to", default: DEFAULT_OUT}),
+	static override flags =
+	{
+		"yes-live": Flags.boolean(
+			{
+				description: "Confirm the probe may call workflowy.com",
+				default: false,
+			},
+		),
+		crosscheck: Flags.boolean(
+			{
+				description: "Send crosscheck_user_id on /push_and_poll (poll only)",
+				default: true,
+				allowNo: true,
+			},
+		),
+		"yes-account-global": Flags.boolean(
+			{
+				description:
+					"Confirm the user approved the account-global writes: the throwaway root metadata key `probe`, or the `show_completed` flip-and-restore",
+				default: false,
+			},
+		),
+		keep: Flags.boolean(
+			{
+				description:
+					"Leave the `index`, `restore`, `meta` or `expansion` fixture in the sandbox for a visual check (delete it afterwards); `meta` then stops while the fixture is still numbered, `expansion` while it is still expanded",
+				default: false,
+			},
+		),
+		out: Flags.string(
+			{
+				description: "Markdown file the findings are appended to",
+				default: DEFAULT_OUT,
+			},
+		),
 	};
 
-	public async run(): Promise<void> {
+	public async run(): Promise<void>
+	{
 		const {args, flags} = await this.parse(Probe);
-		if (!flags["yes-live"]) {
+		if (!flags["yes-live"])
+		{
 			this.error("Live probe against workflowy.com: pass --yes-live to run it");
 		}
-		if (ROOT_META_WRITES.has(args.step) && !flags["yes-account-global"]) {
+		if (ROOT_META_WRITES.has(args.step) && !flags["yes-account-global"])
+		{
 			this.error(
 				"Root metadata is account-global and cannot be sandboxed: pass --yes-account-global (with the user's approval) to write it",
 			);
 		}
-		if (args.step === "settings" && !flags["yes-account-global"]) {
+		if (args.step === "settings" && !flags["yes-account-global"])
+		{
 			this.error(
 				"Account settings are account-global and cannot be sandboxed: pass --yes-account-global (with the user's approval) to write them",
 			);
 		}
 		const apiKey = NEEDS_API_KEY.has(args.step) ? process.env.WORKFLOWY_API_KEY : undefined;
-		if (NEEDS_API_KEY.has(args.step) && !apiKey) {
+		if (NEEDS_API_KEY.has(args.step) && !apiKey)
+		{
 			this.error("WORKFLOWY_API_KEY environment variable is required");
 		}
 		const auth = readInternalAuth();
-		if (!auth) {
+		if (!auth)
+		{
 			this.error(
 				"Set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD in the environment (e.g. from .envrc), or run './bin/run.js internal login' with them set",
 			);
 		}
 		const recorded: RecordedRequest[] = [];
-		const client = new WorkflowyInternalClient({
-			...auth,
-			fetch: recordingFetch(recorded, !flags.crosscheck),
-		});
+		const client = new WorkflowyInternalClient(
+			{
+				...auth,
+				fetch: recordingFetch(recorded, !flags.crosscheck),
+			},
+		);
 		const startedAt = new Date().toISOString();
 		const lines = await this.runStep(args.step, client, recorded, flags.crosscheck, apiKey, flags.keep);
 		const title = args.step === "poll" && !flags.crosscheck ? "poll --no-crosscheck" : args.step;
 		const section = ["", `## ${title} (${startedAt})`, "", ...lines, ""].join("\n");
-		fs.mkdirSync(path.dirname(flags.out), {recursive: true});
+		fs.mkdirSync(
+			path.dirname(flags.out),
+			{
+				recursive: true,
+			},
+		);
 		fs.appendFileSync(flags.out, section);
 		this.log(section);
 	}
@@ -374,42 +471,50 @@ export default class Probe extends Command {
 		crosscheck: boolean,
 		apiKey: string | undefined,
 		keep: boolean,
-	): Promise<string[]> {
-		if (step === "bootstrap") {
+	): Promise<string[]>
+	{
+		if (step === "bootstrap")
+		{
 			return this.bootstrap(client, recorded);
 		}
-		if (step === "poll") {
+		if (step === "poll")
+		{
 			return this.poll(client, recorded, crosscheck);
 		}
-		if (step === "error-shape") {
+		if (step === "error-shape")
+		{
 			return this.errorShape(
 				client,
 				recorded,
 				new WorkflowyApiClient(apiKey ?? "", undefined, process.env.WORKFLOWY_API_URL),
 			);
 		}
-		if (step === "index") {
+		if (step === "index")
+		{
 			return this.index(
 				client,
 				new WorkflowyApiClient(apiKey ?? "", undefined, process.env.WORKFLOWY_API_URL),
 				keep,
 			);
 		}
-		if (step === "restore") {
+		if (step === "restore")
+		{
 			return this.restore(
 				client,
 				new WorkflowyApiClient(apiKey ?? "", undefined, process.env.WORKFLOWY_API_URL),
 				keep,
 			);
 		}
-		if (step === "meta") {
+		if (step === "meta")
+		{
 			return this.meta(
 				client,
 				new WorkflowyApiClient(apiKey ?? "", undefined, process.env.WORKFLOWY_API_URL),
 				keep,
 			);
 		}
-		if (step === "expansion") {
+		if (step === "expansion")
+		{
 			return this.expansion(
 				client,
 				recorded,
@@ -417,16 +522,20 @@ export default class Probe extends Command {
 				keep,
 			);
 		}
-		if (step === "root-meta") {
+		if (step === "root-meta")
+		{
 			return this.rootMeta(client);
 		}
-		if (step === "settings") {
+		if (step === "settings")
+		{
 			return this.settings(client, recorded);
 		}
-		if (step === "calendar-ids") {
+		if (step === "calendar-ids")
+		{
 			return this.calendarIds(client, recorded);
 		}
-		if (step === "calendar-adopt") {
+		if (step === "calendar-adopt")
+		{
 			return this.calendarAdopt(
 				client,
 				new WorkflowyApiClient(apiKey ?? "", undefined, process.env.WORKFLOWY_API_URL),
@@ -442,28 +551,40 @@ export default class Probe extends Command {
 	 * step the order is read from the public API and from the cache the adapter
 	 * wrote through. The fixture is deleted unless `keep`.
 	 */
-	private async index(client: WorkflowyInternalClient, api: WorkflowyApiClient, keep: boolean): Promise<string[]> {
-		const {id: parentId} = await api.createNode({
-			parent_id: SANDBOX_ID,
-			name: `probe index ${new Date().toISOString()}`,
-			position: "bottom",
-		});
+	private async index(client: WorkflowyInternalClient, api: WorkflowyApiClient, keep: boolean): Promise<string[]>
+	{
+		const {id: parentId} = await api.createNode(
+			{
+				parent_id: SANDBOX_ID,
+				name: `probe index ${new Date().toISOString()}`,
+				position: "bottom",
+			},
+		);
 		assertUnderSandbox(await readAncestors(api, (await api.getNode(parentId)).parent_id));
 		const labels = new Map<string, string>();
-		for (const name of ["a", "b", "c"]) {
-			const {id} = await api.createNode({parent_id: parentId, name, position: "bottom"});
+		for (const name of ["a", "b", "c"])
+		{
+			const {id} = await api.createNode(
+				{
+					parent_id: parentId,
+					name,
+					position: "bottom",
+				},
+			);
 			labels.set(id, name);
 		}
 		const db = createDatabase();
 		const cache = new CacheService(db);
 		const writeThrough = new WorkflowyWriteThroughClient(api, cache);
 		const lines = ["- Fixture: fresh child of the sandbox with children `a,b,c` (public API); ancestors verified"];
-		try {
+		try
+		{
 			await writeThrough.refreshChildren([parentId]);
 			const byLabel = (label: string) => [...labels].find(([, name]) => name === label)?.[0] ?? label;
 			const named = (ids: string[]) => ids.map((id) => labels.get(id) ?? id).join(",");
 			let order = (await writeThrough.liveChildren(parentId)).map((node) => node.id);
-			const check = async (step: string, expected: string[]) => {
+			const check = async (step: string, expected: string[]) =>
+			{
 				const live = (await writeThrough.liveChildren(parentId)).map((node) => node.id);
 				const cached = cache.getChildren(parentId).map((node) => node.id);
 				const ok = isDeepStrictEqual(live, expected) && isDeepStrictEqual(cached, expected);
@@ -474,13 +595,21 @@ export default class Probe extends Command {
 			};
 
 			const startSec = Math.floor(Date.now() / 1000);
-			const backdated = new WorkflowyInternalAdapter({
-				client,
-				db,
-				writeThrough,
-				now: () => Date.now() - CT_SHIFT_SEC * 1000,
-			});
-			const {id: newId} = await backdated.createAt({parentId, index: 1, name: "new"});
+			const backdated = new WorkflowyInternalAdapter(
+				{
+					client,
+					db,
+					writeThrough,
+					now: () => Date.now() - CT_SHIFT_SEC * 1000,
+				},
+			);
+			const {id: newId} = await backdated.createAt(
+				{
+					parentId,
+					index: 1,
+					name: "new",
+				},
+			);
 			labels.set(newId, "new");
 			await check("`createAt(index 1)` (`bulk_create`)", expectedMove([...order, newId], [newId], 1));
 			const created = await api.getNode(newId).catch(() => {});
@@ -498,20 +627,49 @@ export default class Probe extends Command {
 				}`,
 			);
 
-			const adapter = new WorkflowyInternalAdapter({client, db, writeThrough});
+			const adapter = new WorkflowyInternalAdapter(
+				{
+					client,
+					db,
+					writeThrough,
+				},
+			);
 			const c = byLabel("c");
-			await adapter.moveTo({ids: [c], parentId, index: 0});
+			await adapter.moveTo(
+				{
+					ids: [c],
+					parentId,
+					index: 0,
+				},
+			);
 			await check("`moveTo(c, index 0)` (`move`)", expectedMove(order, [c], 0));
 			const a = byLabel("a");
-			await adapter.moveTo({ids: [a], parentId, index: 3});
+			await adapter.moveTo(
+				{
+					ids: [a],
+					parentId,
+					index: 3,
+				},
+			);
 			await check("same-parent `moveTo(a, index 3)` (`move`, down)", expectedMove(order, [a], 3));
 			const pair = [byLabel("b"), newId];
-			await adapter.moveTo({ids: pair, parentId, index: 0});
+			await adapter.moveTo(
+				{
+					ids: pair,
+					parentId,
+					index: 0,
+				},
+			);
 			await check("`moveTo([b,new], index 0)` (`bulk_move`)", expectedMove(order, pair, 0));
-		} finally {
-			if (keep) {
+		}
+		finally
+		{
+			if (keep)
+			{
 				lines.push(`- Fixture kept for a visual check: \`${parentId}\` (delete it afterwards)`);
-			} else {
+			}
+			else
+			{
 				assertUnderSandbox(await readAncestors(api, (await api.getNode(parentId)).parent_id));
 				await writeThrough.deleteNode(parentId);
 				lines.push("- Cleanup: fixture deleted through the write-through client");
@@ -530,13 +688,16 @@ export default class Probe extends Command {
 	 * through the public API and the write-through cache. The fixture is deleted
 	 * unless `keep`.
 	 */
-	private async restore(client: WorkflowyInternalClient, api: WorkflowyApiClient, keep: boolean): Promise<string[]> {
+	private async restore(client: WorkflowyInternalClient, api: WorkflowyApiClient, keep: boolean): Promise<string[]>
+	{
 		const stamp = new Date().toISOString();
-		const {id: rootId} = await api.createNode({
-			parent_id: SANDBOX_ID,
-			name: `probe restore ${stamp}`,
-			position: "bottom",
-		});
+		const {id: rootId} = await api.createNode(
+			{
+				parent_id: SANDBOX_ID,
+				name: `probe restore ${stamp}`,
+				position: "bottom",
+			},
+		);
 		assertUnderSandbox(await readAncestors(api, (await api.getNode(rootId)).parent_id));
 		const db = createDatabase();
 		const cache = new CacheService(db);
@@ -544,25 +705,44 @@ export default class Probe extends Command {
 		const lines = [
 			"- Fixture: fresh sandbox child with parents `from` and `to` (`to` holds `existing`); under `from` a completed `target` with a note and a grandchild (public API); ancestors verified",
 		];
-		try {
-			const {id: fromId} = await writeThrough.createNode({parent_id: rootId, name: "from", position: "bottom"});
-			const {id: toId} = await writeThrough.createNode({parent_id: rootId, name: "to", position: "bottom"});
-			const {id: existingId} = await writeThrough.createNode({
-				parent_id: toId,
-				name: "existing",
-				position: "bottom",
-			});
-			const {id: targetId} = await writeThrough.createNode({
-				parent_id: fromId,
-				name: "target",
-				note: "target note",
-				position: "bottom",
-			});
-			const {id: grandchildId} = await writeThrough.createNode({
-				parent_id: targetId,
-				name: "grandchild",
-				position: "bottom",
-			});
+		try
+		{
+			const {id: fromId} = await writeThrough.createNode(
+				{
+					parent_id: rootId,
+					name: "from",
+					position: "bottom",
+				},
+			);
+			const {id: toId} = await writeThrough.createNode(
+				{
+					parent_id: rootId,
+					name: "to",
+					position: "bottom",
+				},
+			);
+			const {id: existingId} = await writeThrough.createNode(
+				{
+					parent_id: toId,
+					name: "existing",
+					position: "bottom",
+				},
+			);
+			const {id: targetId} = await writeThrough.createNode(
+				{
+					parent_id: fromId,
+					name: "target",
+					note: "target note",
+					position: "bottom",
+				},
+			);
+			const {id: grandchildId} = await writeThrough.createNode(
+				{
+					parent_id: targetId,
+					name: "grandchild",
+					position: "bottom",
+				},
+			);
 			await writeThrough.completeNode(targetId);
 			const labels = new Map([
 				[rootId, "fixture"],
@@ -574,19 +754,23 @@ export default class Probe extends Command {
 			]);
 			const named = (ids: string[]) => ids.map((id) => labels.get(id) ?? id).join(",");
 			const original = await api.getNode(targetId);
-			const snapshot = (node: typeof original) => ({
+			const snapshot = (node: typeof original) => (
+			{
 				name: node.name,
 				note: node.note ?? null,
 				completed: node.completed,
 				createdAt: node.createdAt,
 			});
-			const deleteTarget = async () => {
+			const deleteTarget = async () =>
+			{
 				assertUnderSandbox(await readAncestors(api, (await api.getNode(targetId)).parent_id));
 				await writeThrough.deleteNode(targetId);
 			};
-			const report = async (label: string, expectedParent: string, expectedSiblings: string[]) => {
+			const report = async (label: string, expectedParent: string, expectedSiblings: string[]) =>
+			{
 				const restored = await api.getNode(targetId).catch(() => {});
-				if (restored === undefined) {
+				if (restored === undefined)
+				{
 					lines.push(`- ${label}: public API has no node under the original id (id NOT kept)`);
 					return;
 				}
@@ -596,7 +780,8 @@ export default class Probe extends Command {
 				const children = (await writeThrough.liveChildren(targetId)).map((node) => node.id);
 				const before = snapshot(original);
 				const after = snapshot(restored);
-				const kept = Object.entries(before).map(([key, was]) => {
+				const kept = Object.entries(before).map(([key, was]) =>
+				{
 					const now: unknown = Reflect.get(after, key);
 					return `${key} ${isDeepStrictEqual(was, now) ? "kept" : `CHANGED (\`${JSON.stringify(was)}\` -> \`${JSON.stringify(now)}\`)`}`;
 				});
@@ -611,17 +796,38 @@ export default class Probe extends Command {
 			};
 
 			await deleteTarget();
-			const adapter = new WorkflowyInternalAdapter({client, db, writeThrough});
-			await adapter.restore({id: targetId, parentId: toId, index: 0});
+			const adapter = new WorkflowyInternalAdapter(
+				{
+					client,
+					db,
+					writeThrough,
+				},
+			);
+			await adapter.restore(
+				{
+					id: targetId,
+					parentId: toId,
+					index: 0,
+				},
+			);
 			await report("`restore(target, to, index 0)` (`undelete`)", toId, [targetId, existingId]);
 
 			await deleteTarget();
-			await adapter.restore({id: targetId});
+			await adapter.restore(
+				{
+					id: targetId,
+				},
+			);
 			await report("`restore(target)` (`POST /trash/restore/<id>/`)", toId, [targetId, existingId]);
-		} finally {
-			if (keep) {
+		}
+		finally
+		{
+			if (keep)
+			{
 				lines.push(`- Fixture kept for a visual check: \`${rootId}\` (delete it afterwards)`);
-			} else {
+			}
+			else
+			{
 				assertUnderSandbox(await readAncestors(api, (await api.getNode(rootId)).parent_id));
 				await writeThrough.deleteNode(rootId);
 				lines.push("- Cleanup: fixture deleted through the write-through client");
@@ -639,15 +845,25 @@ export default class Probe extends Command {
 	 * `layoutMode` is read from root metadata only, never written. With `keep` the
 	 * fixture stays numbered for a visual check and the bullets half is skipped.
 	 */
-	private async meta(client: WorkflowyInternalClient, api: WorkflowyApiClient, keep: boolean): Promise<string[]> {
-		const {id: fixtureId} = await api.createNode({
-			parent_id: SANDBOX_ID,
-			name: `probe meta ${new Date().toISOString()}`,
-			position: "bottom",
-		});
+	private async meta(client: WorkflowyInternalClient, api: WorkflowyApiClient, keep: boolean): Promise<string[]>
+	{
+		const {id: fixtureId} = await api.createNode(
+			{
+				parent_id: SANDBOX_ID,
+				name: `probe meta ${new Date().toISOString()}`,
+				position: "bottom",
+			},
+		);
 		assertUnderSandbox(await readAncestors(api, (await api.getNode(fixtureId)).parent_id));
-		for (const name of ["one", "two", "three"]) {
-			await api.createNode({parent_id: fixtureId, name, position: "bottom"});
+		for (const name of ["one", "two", "three"])
+		{
+			await api.createNode(
+				{
+					parent_id: fixtureId,
+					name,
+					position: "bottom",
+				},
+			);
 		}
 		const {rootMetadata} = await client.bootstrap();
 		const homeLayout: unknown = rootMetadata.layoutMode;
@@ -658,7 +874,8 @@ export default class Probe extends Command {
 			"- Fixture: fresh sandbox child with children `one,two,three` (public API); ancestors verified",
 			`- Home \`layoutMode\` (root metadata, read only): ${homeLayout === undefined ? "absent (bullets)" : `\`${JSON.stringify(homeLayout)}\``}`,
 		];
-		const report = async (label: string, expected: Record<string, unknown>) => {
+		const report = async (label: string, expected: Record<string, unknown>) =>
+		{
 			const live = await api.getNode(fixtureId);
 			const item = (await client.getTreeSnapshot()).items.find((candidate) => candidate.id === fixtureId);
 			const imported = keptInternalMetadata(item?.metadata) ?? {};
@@ -676,28 +893,47 @@ export default class Probe extends Command {
 				`  - Cache: typed metadata tables \`${JSON.stringify(pick(cachedMeta))}\` (${verdict(pick(cachedMeta))}); node \`layoutMode\` \`${JSON.stringify(cachedLayout)}\``,
 			);
 		};
-		try {
+		try
+		{
 			await writeThrough.refreshChildren([SANDBOX_ID]);
-			const adapter = new WorkflowyInternalAdapter({client, db, writeThrough});
+			const adapter = new WorkflowyInternalAdapter(
+				{
+					client,
+					db,
+					writeThrough,
+				},
+			);
 			await adapter.setNodeMeta(fixtureId, ["layoutMode"], "numbered");
 			await adapter.setNodeMeta(fixtureId, ["numbered_start"], NUMBERED_START);
-			await report(`\`setNodeMeta(layoutMode "numbered")\` + \`setNodeMeta(numbered_start ${NUMBERED_START})\``, {
-				layoutMode: "numbered",
-				numbered_start: NUMBERED_START,
-			});
-			if (!keep) {
-				await adapter.setNodeMeta(fixtureId, ["layoutMode"], undefined);
-				await report("bullets: `setNodeMeta(layoutMode undefined)` (`remove` patch)", {
-					layoutMode: undefined,
+			await report(
+				`\`setNodeMeta(layoutMode "numbered")\` + \`setNodeMeta(numbered_start ${NUMBERED_START})\``,
+				{
+					layoutMode: "numbered",
 					numbered_start: NUMBERED_START,
-				});
+				},
+			);
+			if (!keep)
+			{
+				await adapter.setNodeMeta(fixtureId, ["layoutMode"], undefined);
+				await report(
+					"bullets: `setNodeMeta(layoutMode undefined)` (`remove` patch)",
+					{
+						layoutMode: undefined,
+						numbered_start: NUMBERED_START,
+					},
+				);
 			}
-		} finally {
-			if (keep) {
+		}
+		finally
+		{
+			if (keep)
+			{
 				lines.push(
 					`- Fixture kept numbered for a visual check (list should start at ${NUMBERED_START}): \`${fixtureId}\` (delete it afterwards)`,
 				);
-			} else {
+			}
+			else
+			{
 				assertUnderSandbox(await readAncestors(api, (await api.getNode(fixtureId)).parent_id));
 				await writeThrough.deleteNode(fixtureId);
 				lines.push("- Cleanup: fixture deleted through the write-through client");
@@ -719,16 +955,29 @@ export default class Probe extends Command {
 		recorded: RecordedRequest[],
 		api: WorkflowyApiClient,
 		keep: boolean,
-	): Promise<string[]> {
-		const {id: fixtureId} = await api.createNode({
-			parent_id: SANDBOX_ID,
-			name: `probe expansion ${new Date().toISOString()}`,
-			position: "bottom",
-		});
+	): Promise<string[]>
+	{
+		const {id: fixtureId} = await api.createNode(
+			{
+				parent_id: SANDBOX_ID,
+				name: `probe expansion ${new Date().toISOString()}`,
+				position: "bottom",
+			},
+		);
 		assertUnderSandbox(await readAncestors(api, (await api.getNode(fixtureId)).parent_id));
-		await api.createNode({parent_id: fixtureId, name: "inner", position: "bottom"});
+		await api.createNode(
+			{
+				parent_id: fixtureId,
+				name: "inner",
+				position: "bottom",
+			},
+		);
 		const key = fixtureId.slice(0, 8);
-		const groups = createDatabase().all<{key: string; ids: number}>(
+		const groups = createDatabase().all<
+		{
+			key: string;
+			ids: number;
+		}>(
 			sql`SELECT substr(id, 1, 8) AS key, COUNT(DISTINCT id) AS ids FROM node_content WHERE system_to = ${FAR_FUTURE_DATE} GROUP BY key HAVING ids > 1`,
 		);
 		const collidingIds = groups.reduce((total, group) => total + group.ids, 0);
@@ -737,7 +986,8 @@ export default class Probe extends Command {
 			`- Key: first 8 chars of the fixture id (shape \`${shapeOf(key)}\`)`,
 			`- 8-char key collisions among the cache's live ids (read only): ${groups.length} keys shared by ${collidingIds} ids${groups.some((group) => group.key === key) ? "; the fixture key is one of them" : ""}`,
 		];
-		const report = async (label: string, expected: boolean) => {
+		const report = async (label: string, expected: boolean) =>
+		{
 			await client.getTreeSnapshot();
 			const treeData = recorded.findLast((request) => request.path === "/get_tree_data/");
 			const list: unknown = Reflect.get(Object(parseJson(treeData?.text ?? "")), "server_expanded_projects_list");
@@ -757,33 +1007,49 @@ export default class Probe extends Command {
 				`  - Fresh bootstrap \`mainProjectTreeInfo.serverExpandedProjectsList\`: ${Array.isArray(initList) ? `${initList.length} keys, key ${inInit ? "present" : "absent"} (${verdict(inInit)})` : "ABSENT"}`,
 			);
 		};
-		const push = async (expanded: boolean) => {
+		const push = async (expanded: boolean) =>
+		{
 			assertUnderSandbox(await readAncestors(api, (await api.getNode(fixtureId)).parent_id));
 			const session = await client.bootstrap();
-			const response = await sendRawPush(client, session, recorded, {
-				most_recent_operation_transaction_id: session.txId,
-				project_expansions_delta: {[key]: expanded},
-			});
+			const response = await sendRawPush(
+				client,
+				session,
+				recorded,
+				{
+					most_recent_operation_transaction_id: session.txId,
+					project_expansions_delta:
+					{
+						[key]: expanded,
+					},
+				},
+			);
 			const first: unknown = Reflect.get(Object(Reflect.get(Object(parseJson(response.text)), "results")), 0);
 			const error: unknown = Reflect.get(Object(first), "error");
 			lines.push(
 				`- Pushed \`project_expansions_delta: {<key>: ${expanded}}\` with no ops: HTTP ${response.status}${typeof error === "string" ? `, \`results[0].error\` \`${error}\`` : ""}`,
 			);
 		};
-		try {
+		try
+		{
 			await report("Before any push", false);
 			await push(true);
 			await report("After `true`", true);
-			if (!keep) {
+			if (!keep)
+			{
 				await push(false);
 				await report("After `false`", false);
 			}
-		} finally {
-			if (keep) {
+		}
+		finally
+		{
+			if (keep)
+			{
 				lines.push(
 					`- Fixture kept expanded for a visual check (reload workflowy.com; \`inner\` should show): \`${fixtureId}\` (collapse and delete it afterwards)`,
 				);
-			} else {
+			}
+			else
+			{
 				assertUnderSandbox(await readAncestors(api, (await api.getNode(fixtureId)).parent_id));
 				await api.deleteNode(fixtureId);
 				lines.push("- Cleanup: fixture deleted via the public API");
@@ -793,7 +1059,8 @@ export default class Probe extends Command {
 	}
 
 	/** Read-only: the shapes of the account-global root metadata keys, values redacted to types. */
-	private async rootMeta(client: WorkflowyInternalClient): Promise<string[]> {
+	private async rootMeta(client: WorkflowyInternalClient): Promise<string[]>
+	{
 		const {rootMetadata} = await client.bootstrap();
 		return [
 			`- Top-level root metadata keys: ${codeList(objectKeys(rootMetadata))}`,
@@ -806,28 +1073,43 @@ export default class Probe extends Command {
 	 * (`uuidv5(\`${entropyKey}-calendar-${level}-${dateId}\`)`) reproduce the
 	 * ids of the calendar nodes already in the cache.
 	 */
-	private async calendarIds(client: WorkflowyInternalClient, recorded: RecordedRequest[]): Promise<string[]> {
+	private async calendarIds(client: WorkflowyInternalClient, recorded: RecordedRequest[]): Promise<string[]>
+	{
 		await client.bootstrap();
 		const source = recorded.findLast(
 			(request) => request.path === "/get_user_data/" || request.path === "/get_initialization_data",
 		);
 		const sourceName = `\`${source?.path ?? "/get_user_data/"}\` \`user\``;
 		const entropyKey: unknown = getPath(parseJson(source?.text ?? ""), ["user", "entropyKey"]);
-		if (typeof entropyKey !== "string" || entropyKey === "") {
+		if (typeof entropyKey !== "string" || entropyKey === "")
+		{
 			return [
 				`- \`entropyKey\`: ABSENT from ${sourceName}; upstream then falls back to random ids (TD9 must name-match)`,
 			];
 		}
-		const cached = createDatabase().all<{nodeId: string; level: string; dateId: number}>(
+		const cached = createDatabase().all<
+		{
+			nodeId: string;
+			level: string;
+			dateId: number;
+		}>(
 			sql`SELECT node_id AS nodeId, level, date_id AS dateId FROM calendar_metadata WHERE system_to = ${FAR_FUTURE_DATE} AND date_id IS NOT NULL ORDER BY date_id DESC`,
 		);
-		const rows = cached.filter((row): row is {nodeId: string; level: CalendarIdLevel; dateId: number} =>
-			CALENDAR_LEVELS.some((level) => level === row.level),
+		const rows = cached.filter(
+			(
+				row,
+			): row is
+			{
+				nodeId: string;
+				level: CalendarIdLevel;
+				dateId: number;
+			} => CALENDAR_LEVELS.some((level) => level === row.level),
 		);
 		const matches = (row: {nodeId: string; level: CalendarIdLevel; dateId: number}) =>
 			calendarNodeId(entropyKey, row.level, row.dateId) === row.nodeId;
 		const sample = rows.filter((row) => row.level === "day").slice(0, CALENDAR_SAMPLE);
-		const totals = CALENDAR_LEVELS.map((level) => {
+		const totals = CALENDAR_LEVELS.map((level) =>
+		{
 			const atLevel = rows.filter((row) => row.level === level);
 			return `${level} ${atLevel.filter(matches).length} of ${atLevel.length}`;
 		});
@@ -848,24 +1130,37 @@ export default class Probe extends Command {
 	 * under the calendar root, and print what to check on workflowy.com and
 	 * which node to delete afterwards. It deletes nothing itself.
 	 */
-	private async calendarAdopt(client: WorkflowyInternalClient, api: WorkflowyApiClient): Promise<string[]> {
+	private async calendarAdopt(client: WorkflowyInternalClient, api: WorkflowyApiClient): Promise<string[]>
+	{
 		assertAdoptDateId(ADOPT_DATE_ID);
 		const db = createDatabase();
 		const writeThrough = new WorkflowyWriteThroughClient(api, new CacheService(db));
-		const adapter = new WorkflowyInternalAdapter({client, db, writeThrough});
-		const ensured = await adapter.ensureCalendarDay(ADOPT_DATE_ID);
-		const [root] = db.all<{nodeId: string}>(
-			sql`SELECT node_id AS nodeId FROM calendar_metadata WHERE root = 1 AND system_to = ${FAR_FUTURE_DATE}`,
+		const adapter = new WorkflowyInternalAdapter(
+			{
+				client,
+				db,
+				writeThrough,
+			},
 		);
-		if (root === undefined) {
+		const ensured = await adapter.ensureCalendarDay(ADOPT_DATE_ID);
+		const [root] = db.all<
+		{
+			nodeId: string;
+		}>(sql`SELECT node_id AS nodeId FROM calendar_metadata WHERE root = 1 AND system_to = ${FAR_FUTURE_DATE}`);
+		if (root === undefined)
+		{
 			this.error("No cached calendar root after ensure");
 		}
 		const ancestors = new Map<string, string[]>();
-		for (const id of ensured.created) {
+		for (const id of ensured.created)
+		{
 			ancestors.set(id, await readAllAncestors(api, (await api.getNode(id)).parent_id));
 		}
 		const {deleteId} = planCalendarAdoptProbe(
-			{...ensured, dateId: ADOPT_DATE_ID},
+			{
+				...ensured,
+				dateId: ADOPT_DATE_ID,
+			},
 			root.nodeId,
 			(id) => ancestors.get(id) ?? [],
 		);
@@ -883,19 +1178,28 @@ export default class Probe extends Command {
 	 * An adapter over an in-memory cache, so the probe exercises `setRootMeta` without touching the real cache.
 	 * The throwaway cache follows the log from the bootstrap's transaction id, an id the server returned.
 	 */
-	private adapter(client: WorkflowyInternalClient): WorkflowyInternalAdapter {
+	private adapter(client: WorkflowyInternalClient): WorkflowyInternalAdapter
+	{
 		const db = createDatabase(":memory:");
 		const txId = client.session?.txId;
-		if (txId !== undefined) {
+		if (txId !== undefined)
+		{
 			storeTreeTxId(db, txId);
 		}
-		return new WorkflowyInternalAdapter({client, db});
+		return new WorkflowyInternalAdapter(
+			{
+				client,
+				db,
+			},
+		);
 	}
 
 	/** ACCOUNT-GLOBAL write: set the throwaway `probe.x`, then confirm it from a fresh bootstrap. */
-	private async rootMetaSet(client: WorkflowyInternalClient): Promise<string[]> {
+	private async rootMetaSet(client: WorkflowyInternalClient): Promise<string[]>
+	{
 		const before = (await client.bootstrap()).rootMetadata[PROBE_KEY];
-		if (before !== undefined) {
+		if (before !== undefined)
+		{
 			this.error(`Refusing to write: root metadata already has a \`${PROBE_KEY}\` key`);
 		}
 		await this.adapter(client).setRootMeta([PROBE_KEY, "x"], PROBE_VALUE.x);
@@ -911,9 +1215,11 @@ export default class Probe extends Command {
 	}
 
 	/** ACCOUNT-GLOBAL write: remove `probe` (only when it is exactly the throwaway value), then confirm it is gone. */
-	private async rootMetaUnset(client: WorkflowyInternalClient): Promise<string[]> {
+	private async rootMetaUnset(client: WorkflowyInternalClient): Promise<string[]>
+	{
 		const before = (await client.bootstrap()).rootMetadata[PROBE_KEY];
-		if (!isDeepStrictEqual(before, PROBE_VALUE)) {
+		if (!isDeepStrictEqual(before, PROBE_VALUE))
+		{
 			this.error(
 				`Refusing to remove: root metadata \`${PROBE_KEY}\` is not exactly ${JSON.stringify(PROBE_VALUE)}`,
 			);
@@ -933,16 +1239,19 @@ export default class Probe extends Command {
 	 * ACCOUNT-GLOBAL write: post `show_completed` at its current value through `setSetting`, then flip it and
 	 * restore it at once, reading each back from a fresh bootstrap. The restore runs even if the flip fails.
 	 */
-	private async settings(client: WorkflowyInternalClient, recorded: RecordedRequest[]): Promise<string[]> {
+	private async settings(client: WorkflowyInternalClient, recorded: RecordedRequest[]): Promise<string[]>
+	{
 		const readShowCompleted = async (): Promise<unknown> => (await client.bootstrap()).settings.show_completed;
 		const before = await readShowCompleted();
-		if (typeof before !== "boolean") {
+		if (typeof before !== "boolean")
+		{
 			this.error(
 				`Refusing to write: init settings.show_completed is ${before === undefined ? "absent" : `\`${JSON.stringify(before)}\``}, not a boolean`,
 			);
 		}
 		const adapter = this.adapter(client);
-		const post = async (label: string, value: boolean): Promise<string> => {
+		const post = async (label: string, value: boolean): Promise<string> =>
+		{
 			await adapter.setSetting("show_completed", value);
 			const response = recorded.findLast((request) => request.path === "/change_settings");
 			const preview = (response?.text ?? "").slice(0, BODY_PREVIEW_CHARS).replaceAll(/\s+/gu, " ").trim();
@@ -950,22 +1259,27 @@ export default class Probe extends Command {
 			return `- ${label}: posted \`show_completed=${value ? "yes" : "no"}\`: HTTP ${response?.status ?? "?"}, body \`${preview}\`; read back \`${JSON.stringify(after)}\` (${after === value ? "MATCH" : "MISMATCH"})`;
 		};
 		const lines = [`- \`show_completed\` before: \`${before}\` (\`boolean\`)`, await post("Same value", before)];
-		try {
+		try
+		{
 			lines.push(await post("Flip", !before));
-		} finally {
+		}
+		finally
+		{
 			lines.push(await post("Restore", before));
 		}
 		return [...lines, "- Next: reload workflowy.com and confirm completed items show as before"];
 	}
 
-	private async bootstrap(client: WorkflowyInternalClient, recorded: RecordedRequest[]): Promise<string[]> {
+	private async bootstrap(client: WorkflowyInternalClient, recorded: RecordedRequest[]): Promise<string[]>
+	{
 		const session = await client.bootstrap();
 		const init = recorded.find((request) => request.path === "/get_initialization_data");
 		const clientId = init?.clientIdHeader ?? null;
 		const initTxId = init === undefined ? undefined : findInitTxId(init.text);
 		const usedTreeData = recorded.some((request) => request.path === "/get_tree_data/");
 		const usedUserData = recorded.some((request) => request.path === "/get_user_data/");
-		const versionFromGlobals = recorded.some((request) => {
+		const versionFromGlobals = recorded.some((request) =>
+		{
 			const globals: unknown = Reflect.get(Object(parseJson(request.text)), "globals");
 			return (
 				Array.isArray(globals) && globals.some((pair) => Array.isArray(pair) && pair[0] === "CLIENT_VERSION")
@@ -998,11 +1312,17 @@ export default class Probe extends Command {
 		client: WorkflowyInternalClient,
 		recorded: RecordedRequest[],
 		crosscheck: boolean,
-	): Promise<string[]> {
+	): Promise<string[]>
+	{
 		const session = await client.bootstrap();
-		const poll = await sendRawPush(client, session, recorded, {
-			most_recent_operation_transaction_id: session.txId,
-		});
+		const poll = await sendRawPush(
+			client,
+			session,
+			recorded,
+			{
+				most_recent_operation_transaction_id: session.txId,
+			},
+		);
 		const lines = [
 			`- \`crosscheck_user_id\` sent: ${crosscheck ? "yes" : "no"}`,
 			`- HTTP status: ${poll.status} (${poll.bytes} bytes)`,
@@ -1013,21 +1333,24 @@ export default class Probe extends Command {
 					: `- CSRF: inconclusive (status ${poll.status})`,
 		];
 		const body = parseJson(poll.text);
-		if (body === undefined) {
+		if (body === undefined)
+		{
 			const preview = poll.text.slice(0, BODY_PREVIEW_CHARS).replaceAll(/\s+/gu, " ").trim();
 			return [...lines, `- Body (not JSON): \`${preview}\``];
 		}
 		lines.push(`- Response keys: ${codeList(objectKeys(body))}`);
 		const results: unknown = Reflect.get(Object(body), "results");
 		const first: unknown = Array.isArray(results) ? results[0] : undefined;
-		if (first === undefined) {
+		if (first === undefined)
+		{
 			return lines;
 		}
 		const newTxId = scalarText(Reflect.get(Object(first), "new_most_recent_operation_transaction_id"));
 		const remote: unknown = Reflect.get(Object(first), "concurrent_remote_operation_transactions");
 		const error: unknown = Reflect.get(Object(first), "error");
 		lines.push(`- \`results[0]\` keys: ${codeList(objectKeys(first))}`);
-		if (typeof error === "string") {
+		if (typeof error === "string")
+		{
 			lines.push(`- \`results[0].error\`: \`${error}\``);
 		}
 		lines.push(
@@ -1052,27 +1375,59 @@ export default class Probe extends Command {
 		client: WorkflowyInternalClient,
 		recorded: RecordedRequest[],
 		api: WorkflowyApiClient,
-	): Promise<string[]> {
+	): Promise<string[]>
+	{
 		const originalName = `probe error-shape ${new Date().toISOString()}`;
-		const {id} = await api.createNode({parent_id: SANDBOX_ID, name: originalName, position: "bottom"});
+		const {id} = await api.createNode(
+			{
+				parent_id: SANDBOX_ID,
+				name: originalName,
+				position: "bottom",
+			},
+		);
 		assertUnderSandbox(await readAncestors(api, (await api.getNode(id)).parent_id));
 		const index = (await api.getChildNodes(SANDBOX_ID)).findIndex((child) => child.id === id);
 		const session = await client.bootstrap();
-		const clock = {now: Date.now(), dateJoinedSec: session.dateJoinedSec};
+		const clock =
+		{
+			now: Date.now(),
+			dateJoinedSec: session.dateJoinedSec,
+		};
 		const operations = [
-			editOp({...clock, id, name: RENAMED, previous: {name: originalName}}),
-			moveOp({
-				...clock,
-				id,
-				parentId: crypto.randomUUID(),
-				index: 0,
-				from: {parentId: SANDBOX_ID, index: Math.max(index, 0)},
-			}),
+			editOp(
+				{
+					...clock,
+					id,
+					name: RENAMED,
+					previous:
+					{
+						name: originalName,
+					},
+				},
+			),
+			moveOp(
+				{
+					...clock,
+					id,
+					parentId: crypto.randomUUID(),
+					index: 0,
+					from:
+					{
+						parentId: SANDBOX_ID,
+						index: Math.max(index, 0),
+					},
+				},
+			),
 		];
-		const push = await sendRawPush(client, session, recorded, {
-			most_recent_operation_transaction_id: session.txId,
-			operations,
-		});
+		const push = await sendRawPush(
+			client,
+			session,
+			recorded,
+			{
+				most_recent_operation_transaction_id: session.txId,
+				operations,
+			},
+		);
 		const lines = [
 			"- Fixture: fresh child created under the sandbox via the public API; ancestors verified",
 			"- Batch: `edit` (rename the child) then `move` (into a nonexistent parent), one `/push_and_poll`",
@@ -1081,10 +1436,13 @@ export default class Probe extends Command {
 		const body = parseJson(push.text);
 		const results: unknown = Reflect.get(Object(body), "results");
 		const first: unknown = Array.isArray(results) ? results[0] : undefined;
-		if (first === undefined) {
+		if (first === undefined)
+		{
 			const preview = push.text.slice(0, BODY_PREVIEW_CHARS).replaceAll(/\s+/gu, " ").trim();
 			lines.push(`- Body (no \`results[0]\`): \`${preview}\``);
-		} else {
+		}
+		else
+		{
 			const error: unknown = Reflect.get(Object(first), "error");
 			const serverRun: unknown = Reflect.get(Object(first), "server_run_operation_transaction_json");
 			const newTxId = scalarText(Reflect.get(Object(first), "new_most_recent_operation_transaction_id"));

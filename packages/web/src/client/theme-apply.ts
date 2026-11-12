@@ -10,17 +10,23 @@ const LOADING_BACKGROUND_KEY = "loadingBackground";
 const LOADING_FOREGROUND_KEY = "loadingForeground";
 
 /** The theme saved in this browser: `light` (the old name) becomes `default`, anything unknown is `system`. */
-export function storedTheme(raw: string | null): ThemeName {
-	if (raw === "light") {
+export function storedTheme(raw: string | null): ThemeName
+{
+	if (raw === "light")
+	{
 		return "default";
 	}
 	return isRegisteredTheme(raw) ? raw : "system";
 }
 
-function remember(key: string, value: string): void {
-	try {
+function remember(key: string, value: string): void
+{
+	try
+	{
 		localStorage.setItem(key, value);
-	} catch {
+	}
+	catch
+	{
 		// Storage can be blocked; the theme still applies for this page load.
 	}
 }
@@ -29,10 +35,12 @@ function remember(key: string, value: string): void {
  * Swap the body's `_theme-*` class (new one last), then store the effective name and the theme's
  * background and foreground so the next load paints them before any CSS or JS. Returns the effective theme.
  */
-export function applyTheme(selected: string, prefersDark: boolean): ThemeName {
+export function applyTheme(selected: string, prefersDark: boolean): ThemeName
+{
 	const effective = effectiveTheme(selected, prefersDark);
 	const {body, documentElement} = document;
-	if (typeof body.className !== "string") {
+	if (typeof body.className !== "string")
+	{
 		// A stubbed or non-browser document has no class list to rewrite.
 		return effective;
 	}
@@ -51,6 +59,7 @@ export function applyTheme(selected: string, prefersDark: boolean): ThemeName {
 }
 
 /** Upstream's `kr1()`: once the app is ready the inline pre-paint background gives way to the theme's. */
-export function clearPrepaintBackground(): void {
+export function clearPrepaintBackground(): void
+{
 	document.body.style.background = "";
 }

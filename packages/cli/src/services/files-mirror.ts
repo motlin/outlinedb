@@ -33,9 +33,11 @@ const STORE_DIR_NAME = "files-mirror";
  * `OUTLINEDB_FILES_DIR`, else a `files-mirror` directory beside the cache database
  * (`OUTLINEDB_DB_PATH`, default `outlinedb.sqlite` in the working directory).
  */
-export function defaultStoreDir(env: NodeJS.ProcessEnv, cwd: string): string {
+export function defaultStoreDir(env: NodeJS.ProcessEnv, cwd: string): string
+{
 	const configured = env.OUTLINEDB_FILES_DIR ?? "";
-	if (configured !== "") {
+	if (configured !== "")
+	{
 		return path.resolve(cwd, configured);
 	}
 	const dbPath = (env.OUTLINEDB_DB_PATH ?? "") || DEFAULT_DB_FILE;
@@ -43,11 +45,13 @@ export function defaultStoreDir(env: NodeJS.ProcessEnv, cwd: string): string {
 }
 
 /** Mints a fresh signed URL for one attachment's original bytes. */
-export interface FileUrlSigner {
+export interface FileUrlSigner
+{
 	signedOriginalUrl(nodeId: string): Promise<string>;
 }
 
-export interface MirrorFilesOptions {
+export interface MirrorFilesOptions
+{
 	database: BetterSQLite3Database<typeof schema>;
 	/** Required unless `dryRun`. */
 	signer?: FileUrlSigner;
@@ -70,13 +74,15 @@ export interface MirrorFilesOptions {
 	onProgress?: (line: string) => void;
 }
 
-export interface MirrorFailure {
+export interface MirrorFailure
+{
 	nodeId: string;
 	fileName: string;
 	error: string;
 }
 
-export interface MirrorFilesReport {
+export interface MirrorFilesReport
+{
 	/** Live (not deleted, current) attachments. */
 	live: number;
 	/** Live attachments already mirrored and present on disk. */
@@ -90,30 +96,41 @@ export interface MirrorFilesReport {
 	failures: MirrorFailure[];
 }
 
-interface LiveFile {
+interface LiveFile
+{
 	nodeId: string;
 	fileName: string;
 	fileType: string;
 }
 
-interface Download {
+interface Download
+{
 	sha256: string;
 	size: number;
 	localPath: string;
 }
 
 /** The store-relative path of a blob: two-character fan-out directory, then the full hash. */
-function blobRelativePath(sha256: string): string {
+function blobRelativePath(sha256: string): string
+{
 	return `blobs/${sha256.slice(0, 2)}/${sha256}`;
 }
 
-function errorMessage(error: unknown): string {
+function errorMessage(error: unknown): string
+{
 	return error instanceof Error ? error.message : String(error);
 }
 
-function liveFiles(database: MirrorFilesOptions["database"]): LiveFile[] {
+function liveFiles(database: MirrorFilesOptions["database"]): LiveFile[]
+{
 	return database
-		.select({nodeId: s3Files.nodeId, fileName: s3Files.fileName, fileType: s3Files.fileType})
+		.select(
+			{
+				nodeId: s3Files.nodeId,
+				fileName: s3Files.fileName,
+				fileType: s3Files.fileType,
+			},
+		)
 		.from(s3Files)
 		.where(and(eq(s3Files.systemTo, FAR_FUTURE_DATE), or(isNull(s3Files.isDeleted), eq(s3Files.isDeleted, 0))))
 		.orderBy(s3Files.nodeId)
@@ -121,15 +138,24 @@ function liveFiles(database: MirrorFilesOptions["database"]): LiveFile[] {
 }
 
 /** Node ids whose recorded blob is still on disk at the recorded size. */
-function mirroredNodeIds(database: MirrorFilesOptions["database"], storeDir: string): Set<string> {
+function mirroredNodeIds(database: MirrorFilesOptions["database"], storeDir: string): Set<string>
+{
 	const mirrored = new Set<string>();
 	const live = and(eq(fileBlobs.status, "ok"), eq(fileBlobs.systemTo, FAR_FUTURE_DATE));
-	for (const row of database.select().from(fileBlobs).where(live).all()) {
-		if (row.localPath === null || row.size === null) {
+	for (const row of database.select().from(fileBlobs).where(live).all())
+	{
+		if (row.localPath === null || row.size === null)
+		{
 			continue;
 		}
-		const stat = fs.statSync(path.join(storeDir, row.localPath), {throwIfNoEntry: false});
-		if (stat?.size === row.size) {
+		const stat = fs.statSync(
+			path.join(storeDir, row.localPath),
+			{
+				throwIfNoEntry: false,
+			},
+		);
+		if (stat?.size === row.size)
+		{
 			mirrored.add(row.nodeId);
 		}
 	}
@@ -141,23 +167,34 @@ async function downloadOnce(
 	options: MirrorFilesOptions,
 	file: LiveFile,
 	tmpDir: string,
-): Promise<Download & {contentType: string}> {
-	if (options.signer === undefined) {
+): Promise<
+	Download &
+	{
+		contentType: string;
+	}
+>
+{
+	if (options.signer === undefined)
+	{
 		throw new Error("no signer configured");
 	}
 	const url = await options.signer.signedOriginalUrl(file.nodeId);
 	const response = await options.fetch(url);
-	if (!response.ok || response.body === null) {
+	if (!response.ok || response.body === null)
+	{
 		throw new Error(`HTTP ${response.status} ${response.statusText}`);
 	}
 	const tmpPath = path.join(tmpDir, `${file.nodeId}.part`);
 	const hash = createHash("sha256");
 	let size = 0;
-	try {
+	try
+	{
 		await pipeline(
 			response.body,
-			async function* count(source: AsyncIterable<Buffer>) {
-				for await (const chunk of source) {
+			async function* count(source: AsyncIterable<Buffer>)
+			{
+				for await (const chunk of source)
+				{
 					hash.update(chunk);
 					size += chunk.length;
 					yield chunk;
@@ -166,21 +203,49 @@ async function downloadOnce(
 			fs.createWriteStream(tmpPath),
 		);
 		const declared = response.headers.get("content-length");
-		if (declared !== null && Number(declared) !== size) {
+		if (declared !== null && Number(declared) !== size)
+		{
 			throw new Error(`size ${size} does not match Content-Length ${declared}`);
 		}
 		const sha256 = hash.digest("hex");
 		const localPath = blobRelativePath(sha256);
 		const target = path.join(options.storeDir, localPath);
-		fs.mkdirSync(path.dirname(target), {recursive: true});
-		if (fs.statSync(target, {throwIfNoEntry: false})?.size === size) {
+		fs.mkdirSync(
+			path.dirname(target),
+			{
+				recursive: true,
+			},
+		);
+		if (
+			fs.statSync(
+				target,
+				{
+					throwIfNoEntry: false,
+				},
+			)?.size === size
+		)
+		{
 			fs.rmSync(tmpPath);
-		} else {
+		}
+		else
+		{
 			fs.renameSync(tmpPath, target);
 		}
-		return {sha256, size, localPath, contentType: file.fileType};
-	} finally {
-		fs.rmSync(tmpPath, {force: true});
+		return {
+			sha256,
+			size,
+			localPath,
+			contentType: file.fileType,
+		};
+	}
+	finally
+	{
+		fs.rmSync(
+			tmpPath,
+			{
+				force: true,
+			},
+		);
 	}
 }
 
@@ -188,16 +253,27 @@ async function downloadWithRetry(
 	options: MirrorFilesOptions,
 	file: LiveFile,
 	tmpDir: string,
-): Promise<Download & {contentType: string}> {
+): Promise<
+	Download &
+	{
+		contentType: string;
+	}
+>
+{
 	const maxAttempts = Math.max(1, options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS);
 	const retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
 	let lastError: unknown;
-	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-		try {
+	for (let attempt = 1; attempt <= maxAttempts; attempt++)
+	{
+		try
+		{
 			return await downloadOnce(options, file, tmpDir);
-		} catch (error) {
+		}
+		catch (error)
+		{
 			lastError = error;
-			if (attempt < maxAttempts && retryDelayMs > 0) {
+			if (attempt < maxAttempts && retryDelayMs > 0)
+			{
 				await sleep(retryDelayMs * attempt);
 			}
 		}
@@ -208,27 +284,37 @@ async function downloadWithRetry(
 type BlobVersion = Omit<typeof fileBlobs.$inferInsert, "systemFrom" | "systemTo">;
 
 /** Phase out the attachment's live version, if any, and insert `row` as the new one, in one unit of work. */
-function record(database: MirrorFilesOptions["database"], row: BlobVersion, at: Date): void {
+function record(database: MirrorFilesOptions["database"], row: BlobVersion, at: Date): void
+{
 	runUnitOfWork(
 		database,
-		({tx, systemTime}) => {
+		({tx, systemTime}) =>
+		{
 			closeCurrentVersions(tx, fileBlobs, systemTime, eq(fileBlobs.nodeId, row.nodeId));
 			tx.insert(fileBlobs)
-				.values({...row, systemFrom: systemTime, systemTo: FAR_FUTURE_DATE})
+				.values(
+					{
+						...row,
+						systemFrom: systemTime,
+						systemTo: FAR_FUTURE_DATE,
+					},
+				)
 				.run();
 		},
 		startUnitOfWork(at),
 	);
 }
 
-export async function mirrorFiles(options: MirrorFilesOptions): Promise<MirrorFilesReport> {
+export async function mirrorFiles(options: MirrorFilesOptions): Promise<MirrorFilesReport>
+{
 	const {database, storeDir} = options;
 	const now = options.now ?? (() => new Date());
 	const live = liveFiles(database);
 	const mirrored = mirroredNodeIds(database, storeDir);
 	const pending = live.filter((file) => !mirrored.has(file.nodeId));
 	const selected = options.limit === undefined ? pending : pending.slice(0, options.limit);
-	const report: MirrorFilesReport = {
+	const report: MirrorFilesReport =
+	{
 		live: live.length,
 		alreadyMirrored: live.length - pending.length,
 		selected: selected.length,
@@ -237,32 +323,54 @@ export async function mirrorFiles(options: MirrorFilesOptions): Promise<MirrorFi
 		bytes: 0,
 		failures: [],
 	};
-	if (options.dryRun) {
-		for (const file of selected) {
+	if (options.dryRun)
+	{
+		for (const file of selected)
+		{
 			options.onProgress?.(`would fetch ${file.nodeId} ${file.fileName} (${file.fileType})`);
 		}
 		return report;
 	}
 
 	const tmpDir = path.join(storeDir, "tmp");
-	fs.mkdirSync(tmpDir, {recursive: true});
+	fs.mkdirSync(
+		tmpDir,
+		{
+			recursive: true,
+		},
+	);
 	const failures = new Map<string, MirrorFailure>();
 	let next = 0;
-	const worker = async (): Promise<void> => {
-		while (next < selected.length) {
+	const worker = async (): Promise<void> =>
+	{
+		while (next < selected.length)
+		{
 			const file = selected[next++];
-			if (file === undefined) {
+			if (file === undefined)
+			{
 				return;
 			}
-			try {
+			try
+			{
 				const download = await downloadWithRetry(options, file, tmpDir);
-				record(database, {nodeId: file.nodeId, status: "ok", ...download, error: null}, now());
+				record(
+					database,
+					{
+						nodeId: file.nodeId,
+						status: "ok",
+						...download,
+						error: null,
+					},
+					now(),
+				);
 				report.downloaded++;
 				report.bytes += download.size;
 				options.onProgress?.(
 					`ok    ${file.nodeId} ${file.fileName} ${download.size} bytes ${download.localPath}`,
 				);
-			} catch (error) {
+			}
+			catch (error)
+			{
 				const message = errorMessage(error);
 				record(
 					database,
@@ -278,13 +386,27 @@ export async function mirrorFiles(options: MirrorFilesOptions): Promise<MirrorFi
 					now(),
 				);
 				report.failed++;
-				failures.set(file.nodeId, {nodeId: file.nodeId, fileName: file.fileName, error: message});
+				failures.set(
+					file.nodeId,
+					{
+						nodeId: file.nodeId,
+						fileName: file.fileName,
+						error: message,
+					},
+				);
 				options.onProgress?.(`error ${file.nodeId} ${file.fileName}: ${message}`);
 			}
 		}
 	};
 	const concurrency = Math.max(1, options.concurrency ?? DEFAULT_CONCURRENCY);
-	await Promise.all(Array.from({length: Math.min(concurrency, selected.length)}, worker));
+	await Promise.all(
+		Array.from(
+			{
+				length: Math.min(concurrency, selected.length),
+			},
+			worker,
+		),
+	);
 	report.failures = selected.flatMap((file) => failures.get(file.nodeId) ?? []);
 	return report;
 }

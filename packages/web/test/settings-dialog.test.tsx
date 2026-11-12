@@ -8,16 +8,19 @@ import {EMPTY_PREFERENCES, preferenceKeys} from "../src/client/hooks/use-prefere
 import type {Preferences} from "../src/client/hooks/use-preferences.js";
 import upstreamFeatures from "./fixtures/upstream-settings-features.json" with {type: "json"};
 
-declare global {
+declare global
+{
 	// React reads this to know act() wraps every update.
 	var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
-const store = vi.hoisted(() => ({
+const store = vi.hoisted(() => (
+{
 	state: {} as Record<string, unknown>,
 }));
 
-vi.mock("../src/client/stores/outline.js", () => ({
+vi.mock("../src/client/stores/outline.js", () => (
+{
 	useOutlineStore: (selector: (state: Record<string, unknown>) => unknown) => selector(store.state),
 }));
 
@@ -26,8 +29,10 @@ const {createRoot} = await import("react-dom/client");
 const {Settings} = await import("../src/client/components/settings.js");
 
 /** Runs `change` inside act and lets React flush it. */
-async function run(change: () => void): Promise<void> {
-	await act(async () => {
+async function run(change: () => void): Promise<void>
+{
+	await act(async () =>
+	{
 		change();
 		await Promise.resolve();
 	});
@@ -35,7 +40,8 @@ async function run(change: () => void): Promise<void> {
 
 let root: Root | undefined;
 let host: HTMLElement | undefined;
-const calls = {
+const calls =
+{
 	closeSettings: vi.fn<() => void>(),
 	setTheme: vi.fn<(theme: string) => void>(),
 	setShowKeyboardShortcuts: vi.fn<(on: boolean) => void>(),
@@ -43,20 +49,45 @@ const calls = {
 	toggleRightBarCollapsed: vi.fn<() => void>(),
 };
 const fetchStub = vi.fn<typeof fetch>();
-let featuresBody: unknown = {visible: [], enabled: {...DEFAULT_FEATURES}, available: true};
-let authConfigBody: unknown = {hosted: false};
+let featuresBody: unknown =
+{
+	visible: [],
+	enabled:
+	{
+		...DEFAULT_FEATURES,
+	},
+	available: true,
+};
+let authConfigBody: unknown =
+{
+	hosted: false,
+};
 
-beforeAll(() => {
+beforeAll(() =>
+{
 	globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 });
 
-beforeEach(() => {
+beforeEach(() =>
+{
 	vi.spyOn(window, "requestAnimationFrame").mockImplementation(() => 0);
 	vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
 	vi.stubGlobal("fetch", fetchStub);
-	featuresBody = {visible: [], enabled: {...DEFAULT_FEATURES}, available: true};
-	authConfigBody = {hosted: false};
-	store.state = {
+	featuresBody =
+	{
+		visible: [],
+		enabled:
+		{
+			...DEFAULT_FEATURES,
+		},
+		available: true,
+	};
+	authConfigBody =
+	{
+		hosted: false,
+	};
+	store.state =
+	{
 		settingsOpen: true,
 		settingsSection: null,
 		theme: "system",
@@ -65,228 +96,377 @@ beforeEach(() => {
 	};
 });
 
-afterEach(async () => {
+afterEach(async () =>
+{
 	vi.restoreAllMocks();
 	vi.unstubAllGlobals();
-	for (const call of Object.values(calls)) {
+	for (const call of Object.values(calls))
+	{
 		call.mockReset();
 	}
 	fetchStub.mockReset();
-	await run(() => {
+	await run(() =>
+	{
 		root?.unmount();
 	});
 	host?.remove();
 	vi.useRealTimers();
 });
 
-async function open(preferences: Partial<Preferences> = {}, opened: string | null = null): Promise<void> {
-	fetchStub.mockImplementation(async (input, init) => {
-		if (urlOf(input).startsWith("/api/v1/features")) {
+async function open(preferences: Partial<Preferences> = {}, opened: string | null = null): Promise<void>
+{
+	fetchStub.mockImplementation(async (input, init) =>
+	{
+		if (urlOf(input).startsWith("/api/v1/features"))
+		{
 			return Promise.resolve(Response.json(featuresBody));
 		}
 		const path = new URL(urlOf(input), globalThis.location.origin).pathname;
-		if (path === "/api/auth-config") {
+		if (path === "/api/auth-config")
+		{
 			return Promise.resolve(Response.json(authConfigBody));
 		}
-		if (path === "/api/auth/sign-out") {
-			return Promise.resolve(Response.json({success: true}));
+		if (path === "/api/auth/sign-out")
+		{
+			return Promise.resolve(
+				Response.json(
+					{
+						success: true,
+					},
+				),
+			);
 		}
 		const patch: unknown = JSON.parse(typeof init?.body === "string" ? init.body : "{}");
 		Object.assign(preferences, patch);
-		return Promise.resolve(Response.json({...EMPTY_PREFERENCES, ...preferences}));
+		return Promise.resolve(
+			Response.json(
+				{
+					...EMPTY_PREFERENCES,
+					...preferences,
+				},
+			),
+		);
 	});
 	store.state.settingsSection = opened;
 	const client = new QueryClient();
-	client.setQueryData(preferenceKeys.all, {
-		preferences: {...EMPTY_PREFERENCES, ...preferences},
-		available: true,
-		error: null,
-	});
+	client.setQueryData(
+		preferenceKeys.all,
+		{
+			preferences:
+			{
+				...EMPTY_PREFERENCES,
+				...preferences,
+			},
+			available: true,
+			error: null,
+		},
+	);
 	client.setQueryData(featureKeys.all, featuresBody);
 	host = document.createElement("div");
 	document.body.append(host);
 	root = createRoot(host);
-	await run(() => {
-		root?.render(createElement(QueryClientProvider, {client}, createElement(Settings)));
+	await run(() =>
+	{
+		root?.render(
+			createElement(
+				QueryClientProvider,
+				{
+					client,
+				},
+				createElement(Settings),
+			),
+		);
 	});
 }
 
 /** The writes: a mounted dialog also re-reads preferences, which is not one. */
-function patches() {
+function patches()
+{
 	return fetchStub.mock.calls.filter(([, init]) => init?.method === "PATCH");
 }
 
 /** Lets queued fetches and the renders they cause settle. */
-async function settleFetches(): Promise<void> {
-	for (let turn = 0; turn < 5; turn++) {
-		await act(async () => {
-			await new Promise<void>((resolve) => {
+async function settleFetches(): Promise<void>
+{
+	for (let turn = 0; turn < 5; turn++)
+	{
+		await act(async () =>
+		{
+			await new Promise<void>((resolve) =>
+			{
 				setTimeout(resolve, 5);
 			});
 		});
 	}
 }
 
-function urlOf(input: Parameters<typeof fetch>[0]): string {
+function urlOf(input: Parameters<typeof fetch>[0]): string
+{
 	return typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
 }
 
-function collapse(value: string): string {
+function collapse(value: string): string
+{
 	return value.replaceAll(/\s+/gu, " ").trim();
 }
 
-function sectionTitles(): (string | undefined)[] {
+function sectionTitles(): (string | undefined)[]
+{
 	return [...document.querySelectorAll<HTMLElement>("[data-section-title]")].map((el) => el.dataset.sectionTitle);
 }
 
-function section(title: string): HTMLElement {
+function section(title: string): HTMLElement
+{
 	const found = [...document.querySelectorAll<HTMLElement>("[data-section-title]")].find(
 		(candidate) => candidate.dataset.sectionTitle === title,
 	);
-	if (!found) {
+	if (!found)
+	{
 		throw new Error(`no section ${title}`);
 	}
 	return found;
 }
 
-function rowLabels(title: string): string[] {
+function rowLabels(title: string): string[]
+{
 	return [...section(title).querySelectorAll(".text-base.leading-s")].map((label) => label.textContent);
 }
 
-function toggleClasses(title: string): string[] {
+function toggleClasses(title: string): string[]
+{
 	return [...section(title).querySelectorAll("label.toggle")].map((toggle) => collapse(toggle.className));
 }
 
-function jumpTrigger(): HTMLElement {
+function jumpTrigger(): HTMLElement
+{
 	const trigger = document.querySelector<HTMLElement>(".dialog-box .menu > div");
-	if (!trigger) {
+	if (!trigger)
+	{
 		throw new Error("no jump trigger");
 	}
 	return trigger;
 }
 
-async function pickOption(menu: HTMLElement, label: string): Promise<void> {
-	await run(() => {
+async function pickOption(menu: HTMLElement, label: string): Promise<void>
+{
+	await run(() =>
+	{
 		menu.focus();
 	});
 	const row = [...document.querySelectorAll<HTMLElement>(".flyout a")].find(
 		(candidate) => candidate.textContent === label,
 	);
-	await run(() => {
-		row?.dispatchEvent(new MouseEvent("mousedown", {bubbles: true, cancelable: true}));
+	await run(() =>
+	{
+		row?.dispatchEvent(
+			new MouseEvent(
+				"mousedown",
+				{
+					bubbles: true,
+					cancelable: true,
+				},
+			),
+		);
 		row?.click();
 	});
 }
 
-describe("Settings dialog", () => {
-	it("renders the upstream dialog box, title, version and close button", async () => {
+describe("Settings dialog", () =>
+{
+	it("renders the upstream dialog box, title, version and close button", async () =>
+	{
 		await open();
 		const box = document.querySelector<HTMLElement>(".dialog-box");
-		expect({
-			backdrop: document.querySelector(".dialog-backdrop")?.className,
-			padded: box?.className.includes(" p-xl "),
-			title: document.querySelector("h1")?.outerHTML,
-			version: document.querySelector(".text-xs.space-x-2xs span")?.className,
-			close: document.querySelector(".dialog-box svg.relative")?.outerHTML,
-		}).toStrictEqual({
-			backdrop:
-				"fixed top-sat left-sal right-sar bottom-sab flex items-start justify-center print:hidden dialog-backdrop",
-			padded: true,
-			title: '<h1 class="title text-l leading-xs font-bold whitespace-nowrap overflow-hidden text-ellipsis mr-3xl" style="margin-right: 0px;">Settings</h1>',
-			version: "text-tertiary p-2xs cursor-pointer",
-			close: '<svg class="relative" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke-linecap="round" stroke="var(--wf-text-tertiary)"><line x1="1" y1="1" x2="19" y2="19"></line><line x1="19" y1="1" x2="1" y2="19"></line></svg>',
-		});
+		expect(
+			{
+				backdrop: document.querySelector(".dialog-backdrop")?.className,
+				padded: box?.className.includes(" p-xl "),
+				title: document.querySelector("h1")?.outerHTML,
+				version: document.querySelector(".text-xs.space-x-2xs span")?.className,
+				close: document.querySelector(".dialog-box svg.relative")?.outerHTML,
+			},
+		).toStrictEqual(
+			{
+				backdrop:
+					"fixed top-sat left-sal right-sar bottom-sab flex items-start justify-center print:hidden dialog-backdrop",
+				padded: true,
+				title: '<h1 class="title text-l leading-xs font-bold whitespace-nowrap overflow-hidden text-ellipsis mr-3xl" style="margin-right: 0px;">Settings</h1>',
+				version: "text-tertiary p-2xs cursor-pointer",
+				close: '<svg class="relative" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke-linecap="round" stroke="var(--wf-text-tertiary)"><line x1="1" y1="1" x2="19" y2="19"></line><line x1="19" y1="1" x2="1" y2="19"></line></svg>',
+			},
+		);
 	});
 
-	it("lists the sections in upstream order, skipping Account without a name and email", async () => {
+	it("lists the sections in upstream order, skipping Account without a name and email", async () =>
+	{
 		await open();
 		const without = sectionTitles();
-		await run(() => {
+		await run(() =>
+		{
 			root?.unmount();
 		});
 		host?.remove();
-		await open({account: {username: "Alice", email: "alice@example.com"}});
-		expect({without, withAccount: sectionTitles(), accountLabels: rowLabels("Account")}).toStrictEqual({
-			without: ["Personalization", "Dates", "Media & Previews", "Backup", "Notifications", "Features"],
-			withAccount: [
-				"Account",
-				"Personalization",
-				"Dates",
-				"Media & Previews",
-				"Backup",
-				"Notifications",
-				"Features",
-			],
-			accountLabels: ["Name", "Email"],
-		});
+		await open(
+			{
+				account:
+				{
+					username: "Alice",
+					email: "alice@example.com",
+				},
+			},
+		);
+		expect(
+			{
+				without,
+				withAccount: sectionTitles(),
+				accountLabels: rowLabels("Account"),
+			},
+		).toStrictEqual(
+			{
+				without: ["Personalization", "Dates", "Media & Previews", "Backup", "Notifications", "Features"],
+				withAccount: [
+					"Account",
+					"Personalization",
+					"Dates",
+					"Media & Previews",
+					"Backup",
+					"Notifications",
+					"Features",
+				],
+				accountLabels: ["Name", "Email"],
+			},
+		);
 	});
 
-	it("shows upstream's Multi-factor authentication block under Account, labelled by the enabled state", async () => {
-		const account = {username: "Alice", email: "alice@example.com"};
+	it("shows upstream's Multi-factor authentication block under Account, labelled by the enabled state", async () =>
+	{
+		const account =
+		{
+			username: "Alice",
+			email: "alice@example.com",
+		};
 		const mfaBlock = (): string =>
 			collapse(section("Account").querySelector(".flex-1")?.lastElementChild?.outerHTML ?? "");
-		await open({account, mfa: {enabled: true}});
+		await open(
+			{
+				account,
+				mfa:
+				{
+					enabled: true,
+				},
+			},
+		);
 		const enabled = mfaBlock();
-		await run(() => {
+		await run(() =>
+		{
 			root?.unmount();
 		});
 		host?.remove();
-		await open({account, mfa: {enabled: false}});
+		await open(
+			{
+				account,
+				mfa:
+				{
+					enabled: false,
+				},
+			},
+		);
 		const disabled = section("Account").querySelector("a.button")?.textContent;
-		await run(() => {
+		await run(() =>
+		{
 			root?.unmount();
 		});
 		host?.remove();
-		await open({account});
-		expect({enabled, disabled, absent: rowLabels("Account"), patch: patches()}).toStrictEqual({
-			enabled:
-				'<div class="flex flex-col items-start justify-center gap-xs"><div class="text-base leading-s text-primary">Multi-factor authentication</div><div class="text-s leading-xs text-tertiary">Require a code from an authenticator app when you sign in.</div><div class="pt-xs"><a href="https://workflowy.com/" tabindex="0" class=" hover:no-underline button" target="_blank" rel="noreferrer"><span class="">Manage MFA</span></a></div></div>',
-			disabled: "Setup MFA",
-			absent: ["Name", "Email"],
-			patch: [],
-		});
+		await open(
+			{
+				account,
+			},
+		);
+		expect(
+			{
+				enabled,
+				disabled,
+				absent: rowLabels("Account"),
+				patch: patches(),
+			},
+		).toStrictEqual(
+			{
+				enabled:
+					'<div class="flex flex-col items-start justify-center gap-xs"><div class="text-base leading-s text-primary">Multi-factor authentication</div><div class="text-s leading-xs text-tertiary">Require a code from an authenticator app when you sign in.</div><div class="pt-xs"><a href="https://workflowy.com/" tabindex="0" class=" hover:no-underline button" target="_blank" rel="noreferrer"><span class="">Manage MFA</span></a></div></div>',
+				disabled: "Setup MFA",
+				absent: ["Name", "Email"],
+				patch: [],
+			},
+		);
 	});
 
-	it("offers Log out under Account on the hosted app, which signs out and goes to login", async () => {
-		authConfigBody = {
+	it("offers Log out under Account on the hosted app, which signs out and goes to login", async () =>
+	{
+		authConfigBody =
+		{
 			hosted: true,
 			turnstileSiteKey: null,
-			providers: {google: false, magicLink: false},
+			providers:
+			{
+				google: false,
+				magicLink: false,
+			},
 			signupMode: "closed",
 		};
 		const assigned: string[] = [];
-		vi.spyOn(globalThis.location, "assign").mockImplementation((url: string | URL) => {
+		vi.spyOn(globalThis.location, "assign").mockImplementation((url: string | URL) =>
+		{
 			assigned.push(String(url));
 		});
 		await open();
 		await settleFetches();
 		const titles = sectionTitles();
 		const button = [...section("Account").querySelectorAll("button")].find((b) => b.textContent === "Log out");
-		await run(() => {
+		await run(() =>
+		{
 			button?.click();
 		});
 		await settleFetches();
 
-		expect({
-			first: titles[0],
-			signOuts: fetchStub.mock.calls
-				.map(([input, init]) => [new URL(urlOf(input), globalThis.location.origin).pathname, init?.method])
-				.filter(([path]) => path === "/api/auth/sign-out"),
-			assigned,
-		}).toStrictEqual({first: "Account", signOuts: [["/api/auth/sign-out", "POST"]], assigned: ["/login"]});
+		expect(
+			{
+				first: titles[0],
+				signOuts: fetchStub.mock.calls
+					.map(([input, init]) => [new URL(urlOf(input), globalThis.location.origin).pathname, init?.method])
+					.filter(([path]) => path === "/api/auth/sign-out"),
+				assigned,
+			},
+		).toStrictEqual(
+			{
+				first: "Account",
+				signOuts: [["/api/auth/sign-out", "POST"]],
+				assigned: ["/login"],
+			},
+		);
 	});
 
-	it("has no Log out on the Node host", async () => {
-		await open({account: {username: "Alice", email: "alice@example.com"}});
+	it("has no Log out on the Node host", async () =>
+	{
+		await open(
+			{
+				account:
+				{
+					username: "Alice",
+					email: "alice@example.com",
+				},
+			},
+		);
 		await settleFetches();
 
 		expect(section("Account").textContent.includes("Log out")).toBe(false);
 	});
 
-	it("offers Jump to for every registered section and labels it with the opened section", async () => {
+	it("offers Jump to for every registered section and labels it with the opened section", async () =>
+	{
 		await open({}, "Dates");
 		expect(jumpTrigger().textContent).toBe("Dates");
-		await run(() => {
+		await run(() =>
+		{
 			document.querySelector<HTMLElement>(".dialog-box .menu")?.focus();
 		});
 		expect([...document.querySelectorAll(".flyout a")].map((row) => row.textContent)).toStrictEqual([
@@ -300,378 +480,584 @@ describe("Settings dialog", () => {
 		]);
 	});
 
-	it("leaves the Jump to label empty for a title no section has", async () => {
+	it("leaves the Jump to label empty for a title no section has", async () =>
+	{
 		await open({}, "Images");
 		expect(jumpTrigger().textContent).toBe("");
 	});
 
-	it("centres and highlights the opened section 300ms after mount, but not for an unknown title", async () => {
+	it("centres and highlights the opened section 300ms after mount, but not for an unknown title", async () =>
+	{
 		vi.useFakeTimers();
 		const scroll = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});
 		await open({}, "Features");
-		await run(() => {
+		await run(() =>
+		{
 			vi.advanceTimersByTime(299);
 		});
 		const early = section("Features").dataset.sectionHighlight;
-		await run(() => {
+		await run(() =>
+		{
 			vi.advanceTimersByTime(1);
 		});
-		expect({early, late: section("Features").dataset.sectionHighlight, scroll: scroll.mock.calls}).toStrictEqual({
-			early: undefined,
-			late: "true",
-			scroll: [[{block: "center", inline: "nearest"}]],
-		});
+		expect(
+			{
+				early,
+				late: section("Features").dataset.sectionHighlight,
+				scroll: scroll.mock.calls,
+			},
+		).toStrictEqual(
+			{
+				early: undefined,
+				late: "true",
+				scroll: [
+					[
+						{
+							block: "center",
+							inline: "nearest",
+						},
+					],
+				],
+			},
+		);
 		scroll.mockClear();
-		await run(() => {
+		await run(() =>
+		{
 			root?.unmount();
 		});
 		host?.remove();
 		await open({}, "Images");
-		await run(() => {
+		await run(() =>
+		{
 			vi.advanceTimersByTime(400);
 		});
-		expect({
-			highlighted: document.querySelectorAll("[data-section-highlight]").length,
-			scroll: scroll.mock.calls,
-		}).toStrictEqual({highlighted: 0, scroll: []});
+		expect(
+			{
+				highlighted: document.querySelectorAll("[data-section-highlight]").length,
+				scroll: scroll.mock.calls,
+			},
+		).toStrictEqual(
+			{
+				highlighted: 0,
+				scroll: [],
+			},
+		);
 	});
 
-	it("scrolls a chosen section to the box top without highlighting it", async () => {
+	it("scrolls a chosen section to the box top without highlighting it", async () =>
+	{
 		await open();
 		const box = document.querySelector<HTMLElement>(".dialog-box");
-		if (!box) {
+		if (!box)
+		{
 			throw new Error("no box");
 		}
-		Object.defineProperty(box, "clientTop", {value: 1});
-		vi.spyOn(box, "getBoundingClientRect").mockReturnValue({top: 80} as DOMRect);
-		vi.spyOn(section("Dates"), "getBoundingClientRect").mockReturnValue({top: 2000} as DOMRect);
+		Object.defineProperty(
+			box,
+			"clientTop",
+			{
+				value: 1,
+			},
+		);
+		vi.spyOn(box, "getBoundingClientRect").mockReturnValue(
+			{
+				top: 80,
+			} as DOMRect,
+		);
+		vi.spyOn(section("Dates"), "getBoundingClientRect").mockReturnValue(
+			{
+				top: 2000,
+			} as DOMRect,
+		);
 		await pickOption(document.querySelector<HTMLElement>(".dialog-box .menu")!, "Dates");
-		expect({
-			scrollTop: box.scrollTop,
-			highlighted: document.querySelectorAll("[data-section-highlight]").length,
-			label: jumpTrigger().textContent,
-		}).toStrictEqual({scrollTop: 1919, highlighted: 0, label: "Dates"});
+		expect(
+			{
+				scrollTop: box.scrollTop,
+				highlighted: document.querySelectorAll("[data-section-highlight]").length,
+				label: jumpTrigger().textContent,
+			},
+		).toStrictEqual(
+			{
+				scrollTop: 1919,
+				highlighted: 0,
+				label: "Dates",
+			},
+		);
 	});
 
-	it("closes on Escape without letting the key reach the window", async () => {
+	it("closes on Escape without letting the key reach the window", async () =>
+	{
 		await open();
 		const reached = vi.fn<() => void>();
 		window.addEventListener("keydown", reached);
-		await run(() => {
-			document.body.dispatchEvent(new KeyboardEvent("keydown", {key: "Escape", bubbles: true}));
+		await run(() =>
+		{
+			document.body.dispatchEvent(
+				new KeyboardEvent(
+					"keydown",
+					{
+						key: "Escape",
+						bubbles: true,
+					},
+				),
+			);
 		});
 		window.removeEventListener("keydown", reached);
-		expect({closed: calls.closeSettings.mock.calls, reached: reached.mock.calls}).toStrictEqual({
-			closed: [[]],
-			reached: [],
-		});
+		expect(
+			{
+				closed: calls.closeSettings.mock.calls,
+				reached: reached.mock.calls,
+			},
+		).toStrictEqual(
+			{
+				closed: [[]],
+				reached: [],
+			},
+		);
 	});
 
-	it("shows the account theme in the Personalization dropdown and saves a new choice to the account and the app", async () => {
-		await open({theme: "dark"});
+	it("shows the account theme in the Personalization dropdown and saves a new choice to the account and the app", async () =>
+	{
+		await open(
+			{
+				theme: "dark",
+			},
+		);
 		const menu = section("Personalization").querySelector<HTMLElement>(".menu");
 		const label = menu?.firstElementChild?.textContent;
-		await run(() => {
+		await run(() =>
+		{
 			menu?.focus();
 		});
 		const options = [...document.querySelectorAll(".flyout a")].map((row) => row.textContent);
 		await pickOption(menu!, "System");
-		expect({
-			label,
-			options,
-			patch: patches().map(([, init]) => [init?.method, init?.body]),
-			setTheme: calls.setTheme.mock.calls,
-		}).toStrictEqual({
-			label: "Dark",
-			options: [
-				"Light",
-				"Dark",
-				"System",
-				"Vintage",
-				"Catppuccin",
-				"Chocolate",
-				"Glass",
-				"Hacker",
-				"Matcha",
-				"Moon",
-				"Neo",
-				"Robot",
-				"Space",
-				"Steel",
-				"Wood",
-				"One Dark",
-			],
-			patch: [["PATCH", '{"theme":"system"}']],
-			setTheme: [["system"]],
-		});
+		expect(
+			{
+				label,
+				options,
+				patch: patches().map(([, init]) => [init?.method, init?.body]),
+				setTheme: calls.setTheme.mock.calls,
+			},
+		).toStrictEqual(
+			{
+				label: "Dark",
+				options: [
+					"Light",
+					"Dark",
+					"System",
+					"Vintage",
+					"Catppuccin",
+					"Chocolate",
+					"Glass",
+					"Hacker",
+					"Matcha",
+					"Moon",
+					"Neo",
+					"Robot",
+					"Space",
+					"Steel",
+					"Wood",
+					"One Dark",
+				],
+				patch: [["PATCH", '{"theme":"system"}']],
+				setTheme: [["system"]],
+			},
+		);
 	});
 
-	it("saves a non-standard theme such as Space to the account and the app", async () => {
-		await open({theme: "dark"});
+	it("saves a non-standard theme such as Space to the account and the app", async () =>
+	{
+		await open(
+			{
+				theme: "dark",
+			},
+		);
 		await pickOption(section("Personalization").querySelector<HTMLElement>(".menu")!, "Space");
-		expect({
-			patch: patches().map(([, init]) => init?.body),
-			setTheme: calls.setTheme.mock.calls,
-		}).toStrictEqual({patch: ['{"theme":"space"}'], setTheme: [["space"]]});
+		expect(
+			{
+				patch: patches().map(([, init]) => init?.body),
+				setTheme: calls.setTheme.mock.calls,
+			},
+		).toStrictEqual(
+			{
+				patch: ['{"theme":"space"}'],
+				setTheme: [["space"]],
+			},
+		);
 	});
 
-	it("labels the dropdown with the account's theme name", async () => {
-		await open({theme: "one_dark"});
+	it("labels the dropdown with the account's theme name", async () =>
+	{
+		await open(
+			{
+				theme: "one_dark",
+			},
+		);
 		const menu = section("Personalization").querySelector<HTMLElement>(".menu");
 		expect(menu?.firstElementChild?.textContent).toBe("One Dark");
 	});
 
-	it("maps Light to the account's default theme", async () => {
-		await open({theme: "dark"});
+	it("maps Light to the account's default theme", async () =>
+	{
+		await open(
+			{
+				theme: "dark",
+			},
+		);
 		await pickOption(section("Personalization").querySelector<HTMLElement>(".menu")!, "Light");
-		expect({
-			patch: patches().map(([, init]) => init?.body),
-			setTheme: calls.setTheme.mock.calls,
-		}).toStrictEqual({patch: ['{"theme":"default"}'], setTheme: [["default"]]});
+		expect(
+			{
+				patch: patches().map(([, init]) => init?.body),
+				setTheme: calls.setTheme.mock.calls,
+			},
+		).toStrictEqual(
+			{
+				patch: ['{"theme":"default"}'],
+				setTheme: [["default"]],
+			},
+		);
 	});
 
-	it("shows the account font in the Font dropdown and saves a choice to the account and the body", async () => {
+	it("shows the account font in the Font dropdown and saves a choice to the account and the body", async () =>
+	{
 		document.body.className = "is-desktop font-system";
-		await open({font: "times"});
+		await open(
+			{
+				font: "times",
+			},
+		);
 		const menu = [...section("Personalization").querySelectorAll<HTMLElement>(".menu")].at(1);
 		const trigger = menu?.firstElementChild;
 		const label = trigger?.textContent;
-		await run(() => {
+		await run(() =>
+		{
 			menu?.focus();
 		});
 		const rows = [...document.querySelectorAll(".flyout a")];
 		const options = rows.map((row) => row.textContent);
 		const classes = rows.slice(0, 3).map((row) => [...row.classList].slice(-4).join(" "));
 		await pickOption(menu!, "ET Book");
-		expect({
-			label,
-			triggerClasses: {
-				dropdownFont: trigger?.classList.contains("dropdownFont"),
-				dropdown: trigger?.classList.contains("dropdown"),
+		expect(
+			{
+				label,
+				triggerClasses:
+				{
+					dropdownFont: trigger?.classList.contains("dropdownFont"),
+					dropdown: trigger?.classList.contains("dropdown"),
+				},
+				options,
+				classes,
+				patch: patches().map(([, init]) => init?.body),
+				bodyClass: document.body.className,
 			},
-			options,
-			classes,
-			patch: patches().map(([, init]) => init?.body),
-			bodyClass: document.body.className,
-		}).toStrictEqual({
-			label: "Serif",
-			triggerClasses: {dropdownFont: true, dropdown: false},
-			options: [
-				"System",
-				"Sans-serif",
-				"Serif",
-				"Interface",
-				"Atkinson Hyperlegible",
-				"Bold",
-				"Courier New",
-				"ET Book",
-				"Fira Code",
-				"Geist Mono",
-				"IBM Plex Mono",
-				"Inter",
-				"JetBrains Mono",
-				"Junicode",
-				"Lexend",
-				"Light",
-				"Open Dyslexic",
-				"Open Sans",
-				"Terminal",
-				"Typewriter",
-			],
-			classes: [
-				"menuItem fontOption system canHover",
-				"menuItem fontOption helvetica canHover",
-				"menuItem fontOption times canHover",
-			],
-			patch: ['{"font":"etBook"}'],
-			bodyClass: "is-desktop font-etBook",
-		});
+		).toStrictEqual(
+			{
+				label: "Serif",
+				triggerClasses:
+				{
+					dropdownFont: true,
+					dropdown: false,
+				},
+				options: [
+					"System",
+					"Sans-serif",
+					"Serif",
+					"Interface",
+					"Atkinson Hyperlegible",
+					"Bold",
+					"Courier New",
+					"ET Book",
+					"Fira Code",
+					"Geist Mono",
+					"IBM Plex Mono",
+					"Inter",
+					"JetBrains Mono",
+					"Junicode",
+					"Lexend",
+					"Light",
+					"Open Dyslexic",
+					"Open Sans",
+					"Terminal",
+					"Typewriter",
+				],
+				classes: [
+					"menuItem fontOption system canHover",
+					"menuItem fontOption helvetica canHover",
+					"menuItem fontOption times canHover",
+				],
+				patch: ['{"font":"etBook"}'],
+				bodyClass: "is-desktop font-etBook",
+			},
+		);
 	});
 
-	it("labels the Font dropdown System when the account has no font", async () => {
+	it("labels the Font dropdown System when the account has no font", async () =>
+	{
 		await open();
 		const menu = [...section("Personalization").querySelectorAll<HTMLElement>(".menu")].at(1);
 		expect(menu?.firstElementChild?.textContent).toBe("System");
 	});
 
-	it("shows the account emoji style in the Emojis dropdown and saves a choice to the account, the body and this browser", async () => {
+	it("shows the account emoji style in the Emojis dropdown and saves a choice to the account, the body and this browser", async () =>
+	{
 		localStorage.clear();
-		await open({emojiSelected: "system"});
+		await open(
+			{
+				emojiSelected: "system",
+			},
+		);
 		const menu = [...section("Personalization").querySelectorAll<HTMLElement>(".menu")].at(2);
 		const label = menu?.firstElementChild?.textContent;
-		await run(() => {
+		await run(() =>
+		{
 			menu?.focus();
 		});
 		const options = [...document.querySelectorAll(".flyout a")].map((row) => row.textContent);
 		await pickOption(menu!, "Noto Emoji");
-		expect({
-			rows: rowLabels("Personalization"),
-			label,
-			options,
-			patch: patches().map(([, init]) => init?.body),
-			bodyClass: document.body.classList.contains("emoji-noto"),
-			stored: localStorage.getItem("emoji_options__selected"),
-		}).toStrictEqual({
-			rows: ["Theme", "Font", "Emojis"],
-			label: "System",
-			options: ["System", "Noto Emoji"],
-			patch: ['{"emojiSelected":"noto"}'],
-			bodyClass: true,
-			stored: "noto",
-		});
+		expect(
+			{
+				rows: rowLabels("Personalization"),
+				label,
+				options,
+				patch: patches().map(([, init]) => init?.body),
+				bodyClass: document.body.classList.contains("emoji-noto"),
+				stored: localStorage.getItem("emoji_options__selected"),
+			},
+		).toStrictEqual(
+			{
+				rows: ["Theme", "Font", "Emojis"],
+				label: "System",
+				options: ["System", "Noto Emoji"],
+				patch: ['{"emojiSelected":"noto"}'],
+				bodyClass: true,
+				stored: "noto",
+			},
+		);
 	});
 
-	it("labels the Emojis dropdown System when the account has no emoji style", async () => {
+	it("labels the Emojis dropdown System when the account has no emoji style", async () =>
+	{
 		localStorage.clear();
 		await open();
 		const menu = [...section("Personalization").querySelectorAll<HTMLElement>(".menu")].at(2);
 		expect(menu?.firstElementChild?.textContent).toBe("System");
 	});
 
-	it("shows the media rows from the account flags and writes an embed toggle inverted", async () => {
+	it("shows the media rows from the account flags and writes an embed toggle inverted", async () =>
+	{
 		await open();
 		const thumbnails =
 			section("Media & Previews").querySelector<HTMLElement>(".menu")?.firstElementChild?.textContent;
 		const defaults = toggleClasses("Media & Previews").map((value) => value.split(" ")[1]);
-		await run(() => {
+		await run(() =>
+		{
 			section("Media & Previews").querySelectorAll<HTMLElement>("label.toggle")[3]?.click();
 		});
-		expect({
-			labels: rowLabels("Media & Previews"),
-			thumbnails,
-			defaults,
-			patch: patches().map(([, init]) => init?.body),
-		}).toStrictEqual({
-			labels: [
-				"Image thumbnails size",
-				"Embed YouTube videos",
-				"Embed YouTube Shorts",
-				"Embed Tweets",
-				"Embed Loom",
-			],
-			thumbnails: "Big",
-			defaults: ["on", "on", "on", "on"],
-			patch: ['{"ignoreLoom":true}'],
-		});
+		expect(
+			{
+				labels: rowLabels("Media & Previews"),
+				thumbnails,
+				defaults,
+				patch: patches().map(([, init]) => init?.body),
+			},
+		).toStrictEqual(
+			{
+				labels: [
+					"Image thumbnails size",
+					"Embed YouTube videos",
+					"Embed YouTube Shorts",
+					"Embed Tweets",
+					"Embed Loom",
+				],
+				thumbnails: "Big",
+				defaults: ["on", "on", "on", "on"],
+				patch: ['{"ignoreLoom":true}'],
+			},
+		);
 	});
 
-	it("shows an ignored embed as off and small thumbnails as Small", async () => {
-		await open({ignoreLoom: true, displayImagePreviewsAsThumbnails: true});
-		expect({
-			last: toggleClasses("Media & Previews").at(-1)?.split(" ")[1],
-			thumbnails: section("Media & Previews").querySelector<HTMLElement>(".menu")?.firstElementChild?.textContent,
-		}).toStrictEqual({last: "off", thumbnails: "Small"});
+	it("shows an ignored embed as off and small thumbnails as Small", async () =>
+	{
+		await open(
+			{
+				ignoreLoom: true,
+				displayImagePreviewsAsThumbnails: true,
+			},
+		);
+		expect(
+			{
+				last: toggleClasses("Media & Previews").at(-1)?.split(" ")[1],
+				thumbnails:
+					section("Media & Previews").querySelector<HTMLElement>(".menu")?.firstElementChild?.textContent,
+			},
+		).toStrictEqual(
+			{
+				last: "off",
+				thumbnails: "Small",
+			},
+		);
 	});
 
-	it("lists the weekly report and daily summary toggles, the latter inverted, and writes them", async () => {
-		await open({unsubscribeFromSummaryEmails: true});
+	it("lists the weekly report and daily summary toggles, the latter inverted, and writes them", async () =>
+	{
+		await open(
+			{
+				unsubscribeFromSummaryEmails: true,
+			},
+		);
 		const states = toggleClasses("Notifications").map((value) => value.split(" ")[1]);
 		const toggles = section("Notifications").querySelectorAll<HTMLElement>("label.toggle");
-		await run(() => {
+		await run(() =>
+		{
 			toggles[0]?.click();
 		});
-		await run(() => {
+		await run(() =>
+		{
 			toggles[1]?.click();
 		});
-		expect({
-			labels: rowLabels("Notifications"),
-			states,
-			patch: patches().map(([, init]) => init?.body),
-		}).toStrictEqual({
-			labels: ["Show weekly report", "Daily change email summary"],
-			states: ["off", "off"],
-			patch: ['{"weeklyReportOn":true}', '{"unsubscribeFromSummaryEmails":false}'],
-		});
+		expect(
+			{
+				labels: rowLabels("Notifications"),
+				states,
+				patch: patches().map(([, init]) => init?.body),
+			},
+		).toStrictEqual(
+			{
+				labels: ["Show weekly report", "Daily change email summary"],
+				states: ["off", "off"],
+				patch: ['{"weeklyReportOn":true}', '{"unsubscribeFromSummaryEmails":false}'],
+			},
+		);
 	});
 
-	it("offers Dropbox setup while backup is off, saving the flag and opening upstream's authorize page", async () => {
+	it("offers Dropbox setup while backup is off, saving the flag and opening upstream's authorize page", async () =>
+	{
 		const openWindow = vi.spyOn(window, "open").mockImplementation(() => null);
 		await open();
 		const backup = section("Backup");
 		const markup = collapse(backup.querySelector(".flex-1")?.innerHTML ?? "");
-		await run(() => {
+		await run(() =>
+		{
 			backup.querySelector<HTMLElement>("button.button")?.click();
 		});
-		expect({
-			markup,
-			patch: patches().map(([, init]) => init?.body),
-			opened: openWindow.mock.calls,
-		}).toStrictEqual({
-			markup: '<div class="flex flex-col items-start justify-center gap-xs"><div class="text-base leading-s text-primary">Dropbox Auto-backup</div><div class="text-s leading-xs text-tertiary">Automatically back up your workflowy.com account to Dropbox every day.</div><div class="pt-xs"><button tabindex="0" class=" hover:no-underline button" type="button"><span class="">Set up Dropbox backup</span></button></div></div><div class="flex flex-col items-start justify-center gap-xs"><div class="text-base leading-s text-primary">Restore Backup</div><div class="text-s leading-xs text-tertiary">Recover your account from a Dropbox backup.</div><div class="pt-xs"><a href="https://workflowy.com/accounts/restore_from_backup" tabindex="0" class=" hover:no-underline button" target="_blank" rel="noreferrer"><span class="">Restore from a Dropbox backup</span></a></div></div>',
-			patch: ['{"backupToDropbox":true}'],
-			opened: [["https://workflowy.com/authorize_dropbox", "_blank"]],
-		});
+		expect(
+			{
+				markup,
+				patch: patches().map(([, init]) => init?.body),
+				opened: openWindow.mock.calls,
+			},
+		).toStrictEqual(
+			{
+				markup: '<div class="flex flex-col items-start justify-center gap-xs"><div class="text-base leading-s text-primary">Dropbox Auto-backup</div><div class="text-s leading-xs text-tertiary">Automatically back up your workflowy.com account to Dropbox every day.</div><div class="pt-xs"><button tabindex="0" class=" hover:no-underline button" type="button"><span class="">Set up Dropbox backup</span></button></div></div><div class="flex flex-col items-start justify-center gap-xs"><div class="text-base leading-s text-primary">Restore Backup</div><div class="text-s leading-xs text-tertiary">Recover your account from a Dropbox backup.</div><div class="pt-xs"><a href="https://workflowy.com/accounts/restore_from_backup" tabindex="0" class=" hover:no-underline button" target="_blank" rel="noreferrer"><span class="">Restore from a Dropbox backup</span></a></div></div>',
+				patch: ['{"backupToDropbox":true}'],
+				opened: [["https://workflowy.com/authorize_dropbox", "_blank"]],
+			},
+		);
 	});
 
-	it("turns Dropbox backup off without opening anything while it is on", async () => {
+	it("turns Dropbox backup off without opening anything while it is on", async () =>
+	{
 		const openWindow = vi.spyOn(window, "open").mockImplementation(() => null);
-		await open({backupToDropbox: true});
+		await open(
+			{
+				backupToDropbox: true,
+			},
+		);
 		const button = section("Backup").querySelector<HTMLElement>("button.button");
 		const label = button?.textContent;
-		await act(async () => {
+		await act(async () =>
+		{
 			button?.click();
 			// The optimistic update lands after the preferences query is cancelled, which can take more than one tick.
-			await vi.waitFor(() => {
-				if (section("Backup").querySelector<HTMLElement>("button.button")?.textContent === label) {
+			await vi.waitFor(() =>
+			{
+				if (section("Backup").querySelector<HTMLElement>("button.button")?.textContent === label)
+				{
 					throw new Error("still showing the old label");
 				}
 			});
 		});
-		expect({
-			label,
-			after: section("Backup").querySelector<HTMLElement>("button.button")?.textContent,
-			patch: patches().map(([, init]) => init?.body),
-			opened: openWindow.mock.calls,
-		}).toStrictEqual({
-			label: "Turn off",
-			after: "Set up Dropbox backup",
-			patch: ['{"backupToDropbox":false}'],
-			opened: [],
-		});
+		expect(
+			{
+				label,
+				after: section("Backup").querySelector<HTMLElement>("button.button")?.textContent,
+				patch: patches().map(([, init]) => init?.body),
+				opened: openWindow.mock.calls,
+			},
+		).toStrictEqual(
+			{
+				label: "Turn off",
+				after: "Set up Dropbox backup",
+				patch: ['{"backupToDropbox":false}'],
+				opened: [],
+			},
+		);
 	});
 
-	it("keeps the Dates section by default and drops it when the dates flag is off", async () => {
+	it("keeps the Dates section by default and drops it when the dates flag is off", async () =>
+	{
 		await open();
 		const defaults = sectionTitles();
-		await run(() => {
+		await run(() =>
+		{
 			root?.unmount();
 		});
 		host?.remove();
-		featuresBody = {
+		featuresBody =
+		{
 			visible: [],
 			enabled: Object.fromEntries(Object.entries(DEFAULT_FEATURES).filter(([name]) => name !== "dates")),
 			available: true,
 		};
 		await open();
-		expect({defaults, off: sectionTitles()}).toStrictEqual({
-			defaults: ["Personalization", "Dates", "Media & Previews", "Backup", "Notifications", "Features"],
-			off: ["Personalization", "Media & Previews", "Backup", "Notifications", "Features"],
-		});
+		expect(
+			{
+				defaults,
+				off: sectionTitles(),
+			},
+		).toStrictEqual(
+			{
+				defaults: ["Personalization", "Dates", "Media & Previews", "Backup", "Notifications", "Features"],
+				off: ["Personalization", "Media & Previews", "Backup", "Notifications", "Features"],
+			},
+		);
 	});
 
-	it("has a Keyboard shortcuts helper toggle that sets the preference and leaves the right bar alone", async () => {
+	it("has a Keyboard shortcuts helper toggle that sets the preference and leaves the right bar alone", async () =>
+	{
 		await open();
 		const toggle = section("Features").querySelector<HTMLElement>("label.toggle");
 		const classes = collapse(toggle?.className ?? "");
-		await run(() => {
+		await run(() =>
+		{
 			toggle?.click();
 		});
-		expect({
-			labels: rowLabels("Features"),
-			classes,
-			set: calls.setShowKeyboardShortcuts.mock.calls,
-			bar: [calls.toggleRightBar.mock.calls, calls.toggleRightBarCollapsed.mock.calls],
-		}).toStrictEqual({
-			labels: ["Keyboard shortcuts helper"],
-			classes: "toggle off inline-flex gap-m mobile:gap-l showKeyboardShortcuts cursor-pointer",
-			set: [[true]],
-			bar: [[], []],
-		});
+		expect(
+			{
+				labels: rowLabels("Features"),
+				classes,
+				set: calls.setShowKeyboardShortcuts.mock.calls,
+				bar: [calls.toggleRightBar.mock.calls, calls.toggleRightBarCollapsed.mock.calls],
+			},
+		).toStrictEqual(
+			{
+				labels: ["Keyboard shortcuts helper"],
+				classes: "toggle off inline-flex gap-m mobile:gap-l showKeyboardShortcuts cursor-pointer",
+				set: [[true]],
+				bar: [[], []],
+			},
+		);
 	});
 
-	it("lists one toggle per server feature in server order, with LABS badges, hints and upstream's toggle classes", async () => {
+	it("lists one toggle per server feature in server order, with LABS badges, hints and upstream's toggle classes", async () =>
+	{
 		const {visible, enabled} = upstreamFeatures;
-		featuresBody = {visible, enabled, available: true};
+		featuresBody =
+		{
+			visible,
+			enabled,
+			available: true,
+		};
 		await open();
 		const features = section("Features");
 		const badges = [...features.querySelectorAll<HTMLElement>(".text-base.leading-s > div")].map((badge) => [
@@ -681,67 +1067,91 @@ describe("Settings dialog", () => {
 		]);
 		const LABS = "color: var(--wf-gray-0); background: var(--wf-blue-300);";
 
-		expect({
-			labels: [...features.querySelectorAll(".text-base.leading-s")].map(
-				(label) => label.firstChild?.textContent,
-			),
-			states: [...features.querySelectorAll("label.toggle")].map((toggle) =>
-				toggle.classList.contains("on") ? "on" : "off",
-			),
-			badges,
-			datesClass: features.querySelector("label.toggle.dates")?.className,
-			hints: features.querySelectorAll(".text-s.leading-xs").length,
-			firstHint: features.querySelector(".text-s.leading-xs")?.textContent,
-		}).toStrictEqual({
-			labels: [
-				"Keyboard shortcuts helper",
-				"Workflowy Labs",
-				"Open links in desktop app",
-				"Dates",
-				"Full width page",
-				"Templates",
-				"Backlinks",
-				"Keep Mobile Keyboard on Scroll",
-				"Rich tags",
-				"Always show expand/collapse arrows",
-				"All updates",
-				"Fractal Comments",
-				"Dashboard layout",
-				"Workflowy AI",
-				"Instant Presentations",
-				"Nested search",
-				"Recognize markdown pasting",
-				"Calendar",
-				"Numbered List",
-				"Tables",
-				"Panes",
-			],
-			states: [
-				"off",
-				...Array.from({length: 10}, () => "on"),
-				"off",
-				"off",
-				"off",
-				...Array.from({length: 7}, () => "on"),
-			],
-			badges: [
-				["All updates", "LABS", LABS],
-				["Dashboard layout", "LABS", LABS],
-				["Workflowy AI", "LABS", LABS],
-				["Instant Presentations", "LABS", LABS],
-			],
-			datesClass: "toggle on inline-flex gap-m mobile:gap-l\n        dates\n        cursor-pointer",
-			hints: 20,
-			firstHint: visible[0]?.description,
-		});
+		expect(
+			{
+				labels: [...features.querySelectorAll(".text-base.leading-s")].map(
+					(label) => label.firstChild?.textContent,
+				),
+				states: [...features.querySelectorAll("label.toggle")].map((toggle) =>
+					toggle.classList.contains("on") ? "on" : "off",
+				),
+				badges,
+				datesClass: features.querySelector("label.toggle.dates")?.className,
+				hints: features.querySelectorAll(".text-s.leading-xs").length,
+				firstHint: features.querySelector(".text-s.leading-xs")?.textContent,
+			},
+		).toStrictEqual(
+			{
+				labels: [
+					"Keyboard shortcuts helper",
+					"Workflowy Labs",
+					"Open links in desktop app",
+					"Dates",
+					"Full width page",
+					"Templates",
+					"Backlinks",
+					"Keep Mobile Keyboard on Scroll",
+					"Rich tags",
+					"Always show expand/collapse arrows",
+					"All updates",
+					"Fractal Comments",
+					"Dashboard layout",
+					"Workflowy AI",
+					"Instant Presentations",
+					"Nested search",
+					"Recognize markdown pasting",
+					"Calendar",
+					"Numbered List",
+					"Tables",
+					"Panes",
+				],
+				states: [
+					"off",
+					...Array.from(
+						{
+							length: 10,
+						},
+						() => "on",
+					),
+					"off",
+					"off",
+					"off",
+					...Array.from(
+						{
+							length: 7,
+						},
+						() => "on",
+					),
+				],
+				badges: [
+					["All updates", "LABS", LABS],
+					["Dashboard layout", "LABS", LABS],
+					["Workflowy AI", "LABS", LABS],
+					["Instant Presentations", "LABS", LABS],
+				],
+				datesClass: "toggle on inline-flex gap-m mobile:gap-l\n        dates\n        cursor-pointer",
+				hints: 20,
+				firstHint: visible[0]?.description,
+			},
+		);
 	});
 
-	it("posts the feature POST for a clicked server toggle and flips it at once", async () => {
-		featuresBody = {visible: upstreamFeatures.visible, enabled: {dates: true}, available: true};
+	it("posts the feature POST for a clicked server toggle and flips it at once", async () =>
+	{
+		featuresBody =
+		{
+			visible: upstreamFeatures.visible,
+			enabled:
+			{
+				dates: true,
+			},
+			available: true,
+		};
 		await open();
 		const dashboards = section("Features").querySelector<HTMLElement>("label.toggle.dashboards");
 
-		await run(() => {
+		await run(() =>
+		{
 			dashboards?.click();
 		});
 
@@ -751,22 +1161,43 @@ describe("Settings dialog", () => {
 		]);
 	});
 
-	it("copies the version and flashes copied! for 2000ms", async () => {
+	it("copies the version and flashes copied! for 2000ms", async () =>
+	{
 		vi.useFakeTimers();
 		const writeText = vi.fn<(text: string) => Promise<void>>(async () => Promise.resolve());
-		Object.defineProperty(navigator, "clipboard", {value: {writeText}, configurable: true});
+		Object.defineProperty(
+			navigator,
+			"clipboard",
+			{
+				value:
+				{
+					writeText,
+				},
+				configurable: true,
+			},
+		);
 		await open();
-		await run(() => {
+		await run(() =>
+		{
 			document.querySelector<HTMLElement>(".text-xs.space-x-2xs")?.click();
 		});
 		const flashing = document.querySelector(".text-success")?.textContent;
-		await run(() => {
+		await run(() =>
+		{
 			vi.advanceTimersByTime(2000);
 		});
-		expect({
-			flashing,
-			after: document.querySelector(".text-success"),
-			copied: writeText.mock.calls.length,
-		}).toStrictEqual({flashing: "copied!", after: null, copied: 1});
+		expect(
+			{
+				flashing,
+				after: document.querySelector(".text-success"),
+				copied: writeText.mock.calls.length,
+			},
+		).toStrictEqual(
+			{
+				flashing: "copied!",
+				after: null,
+				copied: 1,
+			},
+		);
 	});
 });

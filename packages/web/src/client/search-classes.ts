@@ -2,16 +2,23 @@ import type {SearchFilter} from "./search-filter.js";
 import {isSearchExpanded} from "./search-filter.js";
 
 /** Classes a search appends to a row's `.project`, `.name` and `.notes` class lists. */
-export interface SearchClasses {
+export interface SearchClasses
+{
 	project: string[];
 	name: string[];
 	note: string[];
 }
 
-const NO_CLASSES: SearchClasses = {project: [], name: [], note: []};
+const NO_CLASSES: SearchClasses =
+{
+	project: [],
+	name: [],
+	note: [],
+};
 
 /** Whether a search shows `id` expanded but not every child: upstream gives such a bullet its halo. */
-export function isSearchHalfExpanded(id: string, search: SearchFilter): boolean {
+export function isSearchHalfExpanded(id: string, search: SearchFilter): boolean
+{
 	return search.halfExpandedIds.has(id) && isSearchExpanded(id, search) && search.expansion.get(id) !== true;
 }
 
@@ -20,8 +27,17 @@ export function isSearchHalfExpanded(id: string, search: SearchFilter): boolean 
  * non-matching row shown because its parent was fully expanded, counts as created-for-search: `matches
  * terminalMatch` without `fullMatch`.
  */
-export function searchClasses(row: {id: string; parentId: string | null}, search: SearchFilter | null): SearchClasses {
-	if (search === null) {
+export function searchClasses(
+	row:
+	{
+		id: string;
+		parentId: string | null;
+	},
+	search: SearchFilter | null,
+): SearchClasses
+{
+	if (search === null)
+	{
 		return NO_CLASSES;
 	}
 	const {id, parentId} = row;
@@ -46,21 +62,25 @@ export function searchClasses(row: {id: string; parentId: string | null}, search
 }
 
 /** The zoom-root title's search classes: half-expanded when some child neither matches nor leads to a match. */
-export function rootSearchClasses(search: SearchFilter | null): string[] {
+export function rootSearchClasses(search: SearchFilter | null): string[]
+{
 	return search?.result.rootHalfExpanded === true ? ["half-open", "halfExpanded"] : [];
 }
 
 /** Upstream's `.page.searching`: the local page wrapper gets `searching` while a query is active. */
-export function outlineViewClassName(searchQuery: string): string {
+export function outlineViewClassName(searchQuery: string): string
+{
 	return searchQuery === "" ? "outline-view" : "outline-view searching";
 }
 
 /** Upstream shows no add-child button during a search. */
-export function shouldRenderAddChildButton(searchQuery: string): boolean {
+export function shouldRenderAddChildButton(searchQuery: string): boolean
+{
 	return searchQuery === "";
 }
 
 /** `base` plus extra classes, space-joined. */
-export function withClasses(base: string, extra: readonly string[]): string {
+export function withClasses(base: string, extra: readonly string[]): string
+{
 	return extra.length === 0 ? base : `${base} ${extra.join(" ")}`;
 }

@@ -9,7 +9,8 @@ import {logger} from "./logger.js";
  * backup import functionality. This functionality requires Node.js fs
  * module, so it cannot be included in the shared package.
  */
-export class CacheService extends BaseCacheService {
+export class CacheService extends BaseCacheService
+{
 	/**
 	 * Import nodes from a Workflowy backup file
 	 * @param filePath Path to the backup JSON file
@@ -24,17 +25,20 @@ export class CacheService extends BaseCacheService {
 		verbose = false,
 		force = false,
 		systemTime?: BackupSystemTime,
-	): Promise<ImportBackupResult> {
+	): Promise<ImportBackupResult>
+	{
 		return importBackup(this.database, filePath, backupImportFilename, verbose, systemTime, force);
 	}
 
-	getNode(nodeId: string): Node | undefined {
+	getNode(nodeId: string): Node | undefined
+	{
 		const result = super.getNode(nodeId);
 		logger.logSqlResult("getNode", result);
 		return result;
 	}
 
-	getChildren(parentId: string | null): Node[] {
+	getChildren(parentId: string | null): Node[]
+	{
 		const results = super.getChildren(parentId);
 		logger.logSqlResult("getChildren", results);
 		return results;
@@ -42,7 +46,8 @@ export class CacheService extends BaseCacheService {
 
 	getChildrenWithMergedData(
 		parentId: string | null,
-	): Awaited<ReturnType<BaseCacheService["getChildrenWithMergedData"]>> {
+	): Awaited<ReturnType<BaseCacheService["getChildrenWithMergedData"]>>
+	{
 		const result = super.getChildrenWithMergedData(parentId);
 		logger.logSqlResult("getChildrenWithMergedData", result);
 		return result;
@@ -50,13 +55,15 @@ export class CacheService extends BaseCacheService {
 
 	getChildrenForMultipleParents(
 		parentIds: string[],
-	): Awaited<ReturnType<BaseCacheService["getChildrenForMultipleParents"]>> {
+	): Awaited<ReturnType<BaseCacheService["getChildrenForMultipleParents"]>>
+	{
 		const result = super.getChildrenForMultipleParents(parentIds);
 		logger.logSqlResult("getChildrenForMultipleParents", result);
 		return result;
 	}
 
-	getMirrorOriginal(nodeId: string) {
+	getMirrorOriginal(nodeId: string)
+	{
 		const result = super.getMirrorOriginal(nodeId);
 		logger.logSqlResult("getMirrorOriginal", result);
 		return result;

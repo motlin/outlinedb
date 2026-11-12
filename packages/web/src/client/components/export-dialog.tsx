@@ -4,7 +4,8 @@ import {useCallback, useEffect, useRef, useState} from "react";
 import {filterBySearch} from "../export-entry.js";
 import {cachedAncestorLayouts} from "../layouts-cache.js";
 import type {ExportRequest} from "../export-entry.js";
-import {
+import
+{
 	EXPORT_DEFAULT,
 	EXPORT_FORMATS,
 	EXPORT_OPTIONS,
@@ -32,38 +33,60 @@ const PREVIEW_CLASS =
 const PLACEHOLDER_CLASS =
 	"_theme-default bg-primary border border-solid border-primary h-[50vh] max-h-[468px] p-m w-full box-border rounded flex items-center justify-center text-secondary text-s";
 
-function isFormat(value: string | null): value is ExportFormatType {
+function isFormat(value: string | null): value is ExportFormatType
+{
 	return EXPORT_FORMATS.some((format) => format === value);
 }
 
 /** The remembered tab, else upstream's default, else the first tab when storage throws. */
-function initialFormat(): ExportFormatType {
-	try {
+function initialFormat(): ExportFormatType
+{
+	try
+	{
 		const stored = localStorage.getItem(STORAGE_KEY);
 		return isFormat(stored) ? stored : EXPORT_DEFAULT;
-	} catch {
+	}
+	catch
+	{
 		return EXPORT_FORMATS[0] ?? EXPORT_DEFAULT;
 	}
 }
 
-function rememberFormat(format: ExportFormatType): void {
-	try {
+function rememberFormat(format: ExportFormatType): void
+{
+	try
+	{
 		localStorage.setItem(STORAGE_KEY, format);
-	} catch {
+	}
+	catch
+	{
 		// Storage is only a convenience.
 	}
 }
 
 /** The roots and everything below them, as the formatters take them, with completed and search visibility applied. */
-async function fetchExportItems(queryClient: QueryClient, request: ExportRequest): Promise<ExportItem[]> {
+async function fetchExportItems(queryClient: QueryClient, request: ExportRequest): Promise<ExportItem[]>
+{
 	const search = request.ignoreSearch ? null : currentSearchFilter(queryClient);
 	const showCompleted = useOutlineStore.getState().showCompleted || search?.result.revealsCompleted === true;
-	const response = await fetch("/api/v1/nodes/export-tree", {
-		method: "POST",
-		headers: {"Content-Type": "application/json"},
-		body: JSON.stringify({ids: request.nodeIds, includeCompleted: showCompleted}),
-	});
-	if (!response.ok) {
+	const response = await fetch(
+		"/api/v1/nodes/export-tree",
+		{
+			method: "POST",
+			headers:
+			{
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(
+				{
+					ids: request.nodeIds,
+					includeCompleted: showCompleted,
+				},
+			),
+		},
+	);
+	if (!response.ok)
+	{
 		throw new Error("Failed to load export.");
 	}
 	const {items} = await readJson<ExportTreeResponse>(response);
@@ -79,28 +102,33 @@ async function fetchExportItems(queryClient: QueryClient, request: ExportRequest
 						(parentId !== null && search.expansion.get(parentId) === true),
 				);
 	const roots = toExportItems(visible);
-	for (const root of roots) {
+	for (const root of roots)
+	{
 		root.aboveLayouts = cachedAncestorLayouts(queryClient, root.id).layouts.map((layout) => layout.layoutMode);
 	}
 	return roots;
 }
 
-async function fetchOwnerEmail(): Promise<string> {
+async function fetchOwnerEmail(): Promise<string>
+{
 	const response = await fetch("/api/v1/account");
-	if (!response.ok) {
+	if (!response.ok)
+	{
 		return "";
 	}
 	const {email} = await readJson<AccountResponse>(response);
 	return email;
 }
 
-interface Generated {
+interface Generated
+{
 	blob: Blob;
 	url: string;
 }
 
 /** One generation: what it formats, how far along it is, and the finished blob once there is one. */
-interface Run {
+interface Run
+{
 	format: ExportFormatType;
 	items: ExportItem[];
 	bytes: number;
@@ -108,26 +136,37 @@ interface Run {
 }
 
 /** Copies Formatted by selecting the preview iframe's body, as upstream does on Android. */
-function copyIframeSelection(iframe: HTMLIFrameElement | null): void {
+function copyIframeSelection(iframe: HTMLIFrameElement | null): void
+{
 	const body = iframe?.contentDocument?.body;
 	const selection = iframe?.contentWindow?.getSelection();
-	if (body === undefined || selection === undefined || selection === null) {
+	if (body === undefined || selection === undefined || selection === null)
+	{
 		throw new Error("Export preview is unavailable.");
 	}
 	selection.selectAllChildren(body);
 	// oxlint-disable-next-line typescript/no-deprecated -- upstream copies the iframe's selection this way; no async clipboard path covers it
 	const copiedOk = iframe?.contentDocument?.execCommand("copy") === true;
 	selection.removeAllRanges();
-	if (!copiedOk) {
+	if (!copiedOk)
+	{
 		throw new Error("Copy command failed.");
 	}
 }
 
-async function copyBlob(blob: Blob): Promise<void> {
-	await navigator.clipboard.write([new ClipboardItem({[blob.type]: blob})]);
+async function copyBlob(blob: Blob): Promise<void>
+{
+	await navigator.clipboard.write([
+		new ClipboardItem(
+			{
+				[blob.type]: blob,
+			},
+		),
+	]);
 }
 
-function ExportDialogBody({request, onClose}: {request: ExportRequest; onClose: () => void}) {
+function ExportDialogBody({request, onClose}: {request: ExportRequest; onClose: () => void})
+{
 	const queryClient = useQueryClient();
 	const showAppMessage = useOutlineStore((state) => state.showAppMessage);
 	const [format, setFormat] = useState<ExportFormatType>(initialFormat);
@@ -139,33 +178,44 @@ function ExportDialogBody({request, onClose}: {request: ExportRequest; onClose: 
 	// Upstream's closeOnNav: zooming elsewhere closes the dialog.
 	const zoomedId = useOutlineStore(activeZoomedId);
 	const [openedAt] = useState(zoomedId);
-	useEffect(() => {
-		if (zoomedId !== openedAt) {
+	useEffect(() =>
+	{
+		if (zoomedId !== openedAt)
+		{
 			onClose();
 		}
 	}, [zoomedId, openedAt, onClose]);
 
-	useEffect(() => {
+	useEffect(() =>
+	{
 		rememberFormat(format);
 	}, [format]);
 
-	const {data: items} = useQuery({
-		queryKey: ["export-tree", request.nodeIds, request.ignoreSearch],
-		queryFn: async () => fetchExportItems(queryClient, request),
-		staleTime: 0,
-		gcTime: 0,
-	});
-	const {data: ownerEmail} = useQuery({
-		queryKey: ["export-owner-email"],
-		queryFn: fetchOwnerEmail,
-		staleTime: Infinity,
-		retry: false,
-	});
+	const {data: items} = useQuery(
+		{
+			queryKey: ["export-tree", request.nodeIds, request.ignoreSearch],
+			queryFn: async () => fetchExportItems(queryClient, request),
+			staleTime: 0,
+			gcTime: 0,
+		},
+	);
+	const {data: ownerEmail} = useQuery(
+		{
+			queryKey: ["export-owner-email"],
+			queryFn: fetchOwnerEmail,
+			staleTime: Infinity,
+			retry: false,
+		},
+	);
 
 	// Each tab switch aborts the previous run; a run that is not for the current tab and items counts as no run.
-	useEffect(() => {
-		if (items === undefined || ownerEmail === undefined) {
-			return () => {};
+	useEffect(() =>
+	{
+		if (items === undefined || ownerEmail === undefined)
+		{
+			return () =>
+			{
+			};
 		}
 		const controller = new AbortController();
 		let url: string | null = null;
@@ -174,21 +224,48 @@ function ExportDialogBody({request, onClose}: {request: ExportRequest; onClose: 
 			items,
 			ownerEmail,
 			controller.signal,
-			(bytes) => {
-				setRun({format, items, bytes, generated: null});
+			(bytes) =>
+			{
+				setRun(
+					{
+						format,
+						items,
+						bytes,
+						generated: null,
+					},
+				);
 			},
 			navigator.userAgent,
 		)
-			.then((blob) => {
-				const preview = new Blob([blob], {type: `${blob.type};charset=utf-8`});
+			.then((blob) =>
+			{
+				const preview = new Blob(
+					[blob],
+					{
+						type: `${blob.type};charset=utf-8`,
+					},
+				);
 				url = URL.createObjectURL(preview);
-				setRun({format, items, bytes: blob.size, generated: {blob, url}});
+				setRun(
+					{
+						format,
+						items,
+						bytes: blob.size,
+						generated:
+						{
+							blob,
+							url,
+						},
+					},
+				);
 				return url;
 			})
 			.catch(() => null);
-		return () => {
+		return () =>
+		{
 			controller.abort();
-			if (url !== null) {
+			if (url !== null)
+			{
 				URL.revokeObjectURL(url);
 			}
 		};
@@ -198,12 +275,15 @@ function ExportDialogBody({request, onClose}: {request: ExportRequest; onClose: 
 	const generating = generated === null;
 	const bytes = current?.bytes ?? 0;
 
-	const download = useCallback(() => {
-		if (generated === null || items === undefined) {
+	const download = useCallback(() =>
+	{
+		if (generated === null || items === undefined)
+		{
 			return;
 		}
 		setDownloading(true);
-		try {
+		try
+		{
 			const url = URL.createObjectURL(generated.blob);
 			const anchor = document.createElement("a");
 			anchor.href = url;
@@ -212,31 +292,53 @@ function ExportDialogBody({request, onClose}: {request: ExportRequest; onClose: 
 			document.body.append(anchor);
 			anchor.click();
 			anchor.remove();
-			setTimeout(() => {
+			setTimeout(() =>
+			{
 				URL.revokeObjectURL(url);
 			}, 0);
-		} catch {
-			showAppMessage("Failed to export file.", {type: "failure"});
+		}
+		catch
+		{
+			showAppMessage(
+				"Failed to export file.",
+				{
+					type: "failure",
+				},
+			);
 		}
 		setDownloading(false);
 	}, [format, generated, items, showAppMessage]);
 
-	const copy = useCallback(async () => {
-		if (generated === null) {
+	const copy = useCallback(async () =>
+	{
+		if (generated === null)
+		{
 			return;
 		}
-		try {
-			if (usesIframeCopy(format, navigator.userAgent)) {
+		try
+		{
+			if (usesIframeCopy(format, navigator.userAgent))
+			{
 				copyIframeSelection(iframeRef.current);
-			} else {
+			}
+			else
+			{
 				await copyBlob(generated.blob);
 			}
 			setCopied(true);
-			setTimeout(() => {
+			setTimeout(() =>
+			{
 				setCopied(false);
 			}, 2000);
-		} catch {
-			showAppMessage("Failed to copy export.", {type: "failure"});
+		}
+		catch
+		{
+			showAppMessage(
+				"Failed to copy export.",
+				{
+					type: "failure",
+				},
+			);
 		}
 	}, [format, generated, showAppMessage]);
 
@@ -253,7 +355,8 @@ function ExportDialogBody({request, onClose}: {request: ExportRequest; onClose: 
 					<button
 						className={format === key ? TAB_CLASS : `${TAB_CLASS} !bg-primary`}
 						key={key}
-						onClick={() => {
+						onClick={() =>
+						{
 							setFormat(key);
 						}}
 						type="button"
@@ -270,7 +373,10 @@ function ExportDialogBody({request, onClose}: {request: ExportRequest; onClose: 
 					ref={iframeRef}
 					sandbox={usesIframeCopy(format, navigator.userAgent) ? "allow-same-origin" : ""}
 					src={generated.url}
-					style={{colorScheme: "light"}}
+					style={
+					{
+						colorScheme: "light",
+					}}
 					title="Export preview"
 				/>
 			)}
@@ -279,7 +385,8 @@ function ExportDialogBody({request, onClose}: {request: ExportRequest; onClose: 
 					className="tertiary min-w-[128px] large cursor-pointer disabled:cursor-default"
 					disabled={busy}
 					onClick={download}
-					onMouseDown={(event) => {
+					onMouseDown={(event) =>
+					{
 						event.preventDefault();
 					}}
 					type="button"
@@ -290,7 +397,8 @@ function ExportDialogBody({request, onClose}: {request: ExportRequest; onClose: 
 					<button
 						className="primary large min-w-[128px] disabled:cursor-default"
 						disabled={busy || copied}
-						onClick={() => {
+						onClick={() =>
+						{
 							void copy();
 						}}
 						type="button"
@@ -304,18 +412,21 @@ function ExportDialogBody({request, onClose}: {request: ExportRequest; onClose: 
 	);
 }
 
-export function ExportDialog() {
+export function ExportDialog()
+{
 	const open = useOutlineStore((state) => state.exportDialogOpen);
 	const request = useOutlineStore((state) => state.exportContext);
 	const closeExportDialog = useOutlineStore((state) => state.closeExportDialog);
 
 	// The body outlives `open` for the shell's exit animation.
 	const [shown, setShown] = useState(request);
-	if (request !== null && request !== shown) {
+	if (request !== null && request !== shown)
+	{
 		setShown(request);
 	}
 
-	if (shown === null) {
+	if (shown === null)
+	{
 		return null;
 	}
 	return (

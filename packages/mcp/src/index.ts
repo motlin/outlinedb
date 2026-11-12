@@ -5,10 +5,12 @@ import {registerOutlineTools} from "./register.js";
 
 process.title = "outlinedb-mcp";
 
-const server = new McpServer({
-	name: "outlinedb",
-	version: "0.1.0",
-});
+const server = new McpServer(
+	{
+		name: "outlinedb",
+		version: "0.1.0",
+	},
+);
 
 registerOutlineTools(server, inProcessStore(createServerContext()));
 

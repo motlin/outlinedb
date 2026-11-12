@@ -22,14 +22,17 @@ const BOUND_PARAMS_PER_STATEMENT = 90;
 const KEY_SEP = "\u001F";
 
 /** Join key parts with the composite-key separator. */
-export function joinKey(...parts: string[]): string {
+export function joinKey(...parts: string[]): string
+{
 	return parts.join(KEY_SEP);
 }
 
 /** SQL expression concatenating the key columns with {@link KEY_SEP}. */
-function keyExpression(columns: SQLiteColumn[]): SQL {
+function keyExpression(columns: SQLiteColumn[]): SQL
+{
 	let expr: SQL = sql`${columns[0]}`;
-	for (let i = 1; i < columns.length; i++) {
+	for (let i = 1; i < columns.length; i++)
+	{
 		expr = sql`${expr} || ${KEY_SEP} || ${columns[i]}`;
 	}
 	return expr;
@@ -38,7 +41,8 @@ function keyExpression(columns: SQLiteColumn[]): SQL {
 /**
  * Result of a {@link temporalMerge} call.
  */
-export interface TemporalMergeResult {
+export interface TemporalMergeResult
+{
 	/** Rows inserted as new current versions (new keys + changed keys). */
 	inserted: number;
 	/** Current rows whose `systemTo` was closed (changed keys + removed keys). */
@@ -50,7 +54,8 @@ export interface TemporalMergeResult {
 /**
  * Configuration describing how a single temporal table is merged.
  */
-export interface TemporalMergeConfig<TIncoming, TCurrent> {
+export interface TemporalMergeConfig<TIncoming, TCurrent>
+{
 	/**
 	 * The Drizzle table to merge into. Must have `system_from` / `system_to`
 	 * text columns following the project's temporal convention.
@@ -115,8 +120,10 @@ export type TemporalTransaction = BaseSQLiteDatabase<"sync", any, any, any>;
  * writes to one row in one unit should be merged before writing; two units in
  * one millisecond should retry.
  */
-export class SameMillisecondOverwriteError extends Error {
-	constructor(tableName: string, key: string, systemTime: string) {
+export class SameMillisecondOverwriteError extends Error
+{
+	constructor(tableName: string, key: string, systemTime: string)
+	{
 		super(
 			`Unit of work at system time ${systemTime} would overwrite the ${tableName} version (${key}) it started in the same millisecond; rolled back instead of deleting history`,
 		);
@@ -125,7 +132,8 @@ export class SameMillisecondOverwriteError extends Error {
 }
 
 /** The names of the non-temporal primary-key columns of `table`, which name one row's history. */
-function historyKeyColumnNames(table: SQLiteTable): string[] {
+function historyKeyColumnNames(table: SQLiteTable): string[]
+{
 	const tableConfig = getTableConfig(table);
 	const columns = tableConfig.primaryKeys[0]?.columns ?? tableConfig.columns.filter((column) => column.primary);
 	return columns.map((column): string => column.name).filter((name) => name !== "system_from");
@@ -146,7 +154,8 @@ export function closeCurrentVersions(
 	table: SQLiteTable,
 	systemTime: string,
 	where: SQL | undefined,
-): void {
+): void
+{
 	const systemFrom = sql.identifier("system_from");
 	const systemTo = sql.identifier("system_to");
 	const matching = where ?? sql`1`;
@@ -157,7 +166,8 @@ export function closeCurrentVersions(
 			sql`, `,
 		)} FROM ${table} WHERE ${systemTo} = ${FAR_FUTURE_DATE} AND ${systemFrom} = ${systemTime} AND (${matching}) LIMIT 1`,
 	);
-	if (collision !== undefined) {
+	if (collision !== undefined)
+	{
 		const key = keyColumnNames.map((name) => `${name}=${String(collision[name])}`).join(", ");
 		throw new SameMillisecondOverwriteError(getTableName(table), key, systemTime);
 	}
@@ -195,14 +205,16 @@ export function temporalMerge<TIncoming, TCurrent>(
 	incoming: TIncoming[],
 	currentRows: TCurrent[],
 	importedAt: string,
-): TemporalMergeResult {
+): TemporalMergeResult
+{
 	const {table, keyColumn, keyColumns, incomingKey, currentKey, contentMatches, buildInsertRow, preserveKeys} =
 		config;
 	const columns = keyColumns ?? (keyColumn ? [keyColumn] : []);
 	const keyMatchExpr = keyExpression(columns);
 
 	const currentByKey = new Map<string, TCurrent>();
-	for (const row of currentRows) {
+	for (const row of currentRows)
+	{
 		currentByKey.set(currentKey(row), row);
 	}
 
@@ -212,38 +224,46 @@ export function temporalMerge<TIncoming, TCurrent>(
 	const rowsToInsert: Record<string, any>[] = [];
 	let unchanged = 0;
 
-	for (const row of incoming) {
+	for (const row of incoming)
+	{
 		const key = incomingKey(row);
 		incomingKeys.add(key);
 
 		const current = currentByKey.get(key);
-		if (current !== undefined && contentMatches(current, row)) {
+		if (current !== undefined && contentMatches(current, row))
+		{
 			unchanged++;
 			continue;
 		}
 
 		// New key, or changed key: insert a new current version. A changed key
 		// also needs its old current row phased out.
-		if (current !== undefined) {
+		if (current !== undefined)
+		{
 			keysToPhaseOut.push(key);
 		}
-		rowsToInsert.push({
-			...buildInsertRow(row, current),
-			systemFrom: importedAt,
-			systemTo: FAR_FUTURE_DATE,
-		});
+		rowsToInsert.push(
+			{
+				...buildInsertRow(row, current),
+				systemFrom: importedAt,
+				systemTo: FAR_FUTURE_DATE,
+			},
+		);
 	}
 
 	let phasedOut = keysToPhaseOut.length;
-	for (const key of currentByKey.keys()) {
-		if (!incomingKeys.has(key) && !preserveKeys?.has(key)) {
+	for (const key of currentByKey.keys())
+	{
+		if (!incomingKeys.has(key) && !preserveKeys?.has(key))
+		{
 			keysToPhaseOut.push(key);
 			phasedOut++;
 		}
 	}
 
 	// Chunked IN lists rather than a scratch table: Durable Object SQLite has no temp tables.
-	for (let i = 0; i < keysToPhaseOut.length; i += BOUND_PARAMS_PER_STATEMENT) {
+	for (let i = 0; i < keysToPhaseOut.length; i += BOUND_PARAMS_PER_STATEMENT)
+	{
 		const chunk = keysToPhaseOut.slice(i, i + BOUND_PARAMS_PER_STATEMENT);
 		closeCurrentVersions(
 			tx,
@@ -257,14 +277,20 @@ export function temporalMerge<TIncoming, TCurrent>(
 	}
 
 	const firstRow = rowsToInsert[0];
-	if (firstRow !== undefined) {
+	if (firstRow !== undefined)
+	{
 		const rowsPerStatement = Math.max(1, Math.floor(BOUND_PARAMS_PER_STATEMENT / Object.keys(firstRow).length));
-		for (let i = 0; i < rowsToInsert.length; i += rowsPerStatement) {
+		for (let i = 0; i < rowsToInsert.length; i += rowsPerStatement)
+		{
 			tx.insert(table)
 				.values(rowsToInsert.slice(i, i + rowsPerStatement))
 				.run();
 		}
 	}
 
-	return {inserted: rowsToInsert.length, phasedOut, unchanged};
+	return {
+		inserted: rowsToInsert.length,
+		phasedOut,
+		unchanged,
+	};
 }

@@ -18,7 +18,8 @@ import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 import type {CacheService} from "./cache-service.js";
 import {inIds} from "./in-ids.js";
 
-export interface CalendarDayDeps {
+export interface CalendarDayDeps
+{
 	db: AppDatabase;
 	cache: CacheService;
 	/** The account's entropy key; without it the deterministic-id lookup is skipped. */
@@ -44,20 +45,25 @@ const DAY_NAME = /^<time\b([^>]*)>[^<]*<\/time>$/iu;
  * dateId, then (except for weeks) the name walk root > `YYYY` > `MM` (or `M`)
  * > a child whose `<time>` is this date. Only nodes under the root count.
  */
-export function findCalendarDay(deps: CalendarDayDeps, dateId: number, level: CalendarLevel = "day"): string | null {
+export function findCalendarDay(deps: CalendarDayDeps, dateId: number, level: CalendarLevel = "day"): string | null
+{
 	const date = parseDateId(dateId);
 	const taggedRoot = findTaggedCalendarRoot(deps);
 	const root = taggedRoot ?? deps.cache.getChildByName(null, CALENDAR_ROOT_NAME)?.id;
-	if (date === undefined || root === undefined) {
+	if (date === undefined || root === undefined)
+	{
 		return null;
 	}
-	if (taggedRoot !== undefined) {
+	if (taggedRoot !== undefined)
+	{
 		return walkMetadata(deps, root, date, level);
 	}
 	const levelDateId = calendarDateId(level, date, deps.weekStartDay);
-	if (deps.entropyKey !== undefined) {
+	if (deps.entropyKey !== undefined)
+	{
 		const id = calendarNodeId(deps.entropyKey, level, levelDateId, date.year);
-		if (isUnder(deps.cache, id, root)) {
+		if (isUnder(deps.cache, id, root))
+		{
 			return id;
 		}
 	}
@@ -72,13 +78,15 @@ export function findCalendarDay(deps: CalendarDayDeps, dateId: number, level: Ca
 }
 
 /** `level`'s ancestors' levels from the root down, then `level`: the enabled levels above it, plus it. */
-function levelPath(levels: Readonly<Record<CalendarLevel, boolean>>, level: CalendarLevel): CalendarLevel[] {
+function levelPath(levels: Readonly<Record<CalendarLevel, boolean>>, level: CalendarLevel): CalendarLevel[]
+{
 	const target = CALENDAR_LEVELS.indexOf(level);
 	return CALENDAR_LEVELS.filter((candidate, index) => candidate === level || (index < target && levels[candidate]));
 }
 
 /** The levels the tagged root enables, upstream's defaults when it sets none. */
-function rootLevels(deps: Pick<CalendarDayDeps, "db">, root: string): Readonly<Record<CalendarLevel, boolean>> {
+function rootLevels(deps: Pick<CalendarDayDeps, "db">, root: string): Readonly<Record<CalendarLevel, boolean>>
+{
 	const row = deps.db
 		.select()
 		.from(calendarLevels)
@@ -86,25 +94,35 @@ function rootLevels(deps: Pick<CalendarDayDeps, "db">, root: string): Readonly<R
 		.get();
 	return row === undefined
 		? DEFAULT_CALENDAR_LEVELS
-		: {year: row.year === 1, month: row.month === 1, week: row.week === 1, day: row.day === 1};
+		:
+			{
+				year: row.year === 1,
+				month: row.month === 1,
+				week: row.week === 1,
+				day: row.day === 1,
+			};
 }
 
 /** The `level` and `dateId` of each id's cached `metadata.calendar`; ids without one are absent. */
-function calendarTags(deps: Pick<CalendarDayDeps, "db">, ids: readonly string[]): Map<string, CalendarTag> {
+function calendarTags(deps: Pick<CalendarDayDeps, "db">, ids: readonly string[]): Map<string, CalendarTag>
+{
 	const tags = new Map<string, CalendarTag>();
-	for (const {id, calendar} of calendarRows(deps, inIds(calendarMetadata.nodeId, ids), {liveOnly: false})) {
+	for (const {id, calendar} of calendarRows(
+		deps,
+		inIds(calendarMetadata.nodeId, ids),
+		{
+			liveOnly: false,
+		},
+	))
+	{
 		tags.set(id, calendar);
 	}
 	return tags;
 }
 
 /** The first direct child of `parentId` tagged `level` with `dateId`, or null. */
-function firstTaggedChild(
-	deps: CalendarDayDeps,
-	parentId: string,
-	level: CalendarLevel,
-	dateId: number,
-): string | null {
+function firstTaggedChild(deps: CalendarDayDeps, parentId: string, level: CalendarLevel, dateId: number): string | null
+{
 	const children = deps.cache.getChildren(parentId);
 	const tags = calendarTags(
 		deps,
@@ -114,11 +132,14 @@ function firstTaggedChild(
 }
 
 /** Upstream's `findDateItem`: the strict direct-child walk by `metadata.calendar`, down to `level`. */
-function walkMetadata(deps: CalendarDayDeps, root: string, date: CalendarDate, level: CalendarLevel): string | null {
+function walkMetadata(deps: CalendarDayDeps, root: string, date: CalendarDate, level: CalendarLevel): string | null
+{
 	let current: string | null = root;
-	for (const step of levelPath(rootLevels(deps, root), level)) {
+	for (const step of levelPath(rootLevels(deps, root), level))
+	{
 		current = firstTaggedChild(deps, current, step, calendarDateId(step, date, deps.weekStartDay));
-		if (current === null) {
+		if (current === null)
+		{
 			return null;
 		}
 	}
@@ -132,18 +153,29 @@ function walkMetadata(deps: CalendarDayDeps, root: string, date: CalendarDate, l
  * and one scan of a month's children (or, in the lenient mode, one metadata
  * scan and one name walk per month) instead of per day.
  */
-export function findCalendarDays(deps: CalendarDayDeps, dateIds: readonly number[]): Map<number, string> {
+export function findCalendarDays(deps: CalendarDayDeps, dateIds: readonly number[]): Map<number, string>
+{
 	const found = new Map<number, string>();
 	const taggedRoot = findTaggedCalendarRoot(deps);
 	const root = taggedRoot ?? deps.cache.getChildByName(null, CALENDAR_ROOT_NAME)?.id;
-	if (root === undefined) {
+	if (root === undefined)
+	{
 		return found;
 	}
-	const days = dateIds.flatMap((dateId) => {
+	const days = dateIds.flatMap((dateId) =>
+	{
 		const date = parseDateId(dateId);
-		return date === undefined ? [] : [{dateId, date}];
+		return date === undefined
+			? []
+			: [
+					{
+						dateId,
+						date,
+					},
+				];
 	});
-	if (taggedRoot !== undefined) {
+	if (taggedRoot !== undefined)
+	{
 		return findStrictDays(deps, taggedRoot, days);
 	}
 	const under = underRoot(deps.cache, root);
@@ -154,22 +186,36 @@ export function findCalendarDays(deps: CalendarDayDeps, dateIds: readonly number
 			: days.map(({dateId, date}) => [dateId, calendarNodeId(entropyKey, "day", dateId, date.year)] as const),
 	);
 	const nodes = deps.cache.getMultipleNodes([...deterministic.values()]);
-	const months = new Map<number, {tagged: Map<number, string>; named: Map<number, string>}>();
-	for (const {dateId, date} of days) {
+	const months = new Map<
+		number,
+		{
+			tagged: Map<number, string>;
+			named: Map<number, string>;
+		}
+	>();
+	for (const {dateId, date} of days)
+	{
 		const id = deterministic.get(dateId);
 		const node = id === undefined ? undefined : nodes.get(id);
-		if (id !== undefined && node !== undefined && under(node.parentId)) {
+		if (id !== undefined && node !== undefined && under(node.parentId))
+		{
 			found.set(dateId, id);
 			continue;
 		}
 		const monthKey = Math.floor(dateId / 100);
 		let month = months.get(monthKey);
-		if (month === undefined) {
-			month = {tagged: taggedDaysInMonth(deps, under, monthKey), named: namedDaysInMonth(deps.cache, root, date)};
+		if (month === undefined)
+		{
+			month =
+			{
+				tagged: taggedDaysInMonth(deps, under, monthKey),
+				named: namedDaysInMonth(deps.cache, root, date),
+			};
 			months.set(monthKey, month);
 		}
 		const dayId = month.tagged.get(dateId) ?? month.named.get(date.day);
-		if (dayId !== undefined) {
+		if (dayId !== undefined)
+		{
 			found.set(dateId, dayId);
 		}
 	}
@@ -180,16 +226,23 @@ export function findCalendarDays(deps: CalendarDayDeps, dateIds: readonly number
 function findStrictDays(
 	deps: CalendarDayDeps,
 	root: string,
-	days: readonly {dateId: number; date: CalendarDate}[],
-): Map<number, string> {
+	days: readonly
+	{
+		dateId: number;
+		date: CalendarDate;
+	}[],
+): Map<number, string>
+{
 	const found = new Map<number, string>();
 	const path = levelPath(rootLevels(deps, root), "day").slice(0, -1);
 	const containers = new Map<string, string | null>();
 	const dayNodes = new Map<string, Map<number, string>>();
-	for (const {dateId, date} of days) {
+	for (const {dateId, date} of days)
+	{
 		const key = path.map((step) => calendarDateId(step, date, deps.weekStartDay)).join("/");
 		let container = containers.get(key);
-		if (container === undefined) {
+		if (container === undefined)
+		{
 			container = path.reduce<string | null>(
 				(current, step) =>
 					current === null
@@ -199,27 +252,32 @@ function findStrictDays(
 			);
 			containers.set(key, container);
 		}
-		if (container === null) {
+		if (container === null)
+		{
 			continue;
 		}
 		let byDate = dayNodes.get(container);
-		if (byDate === undefined) {
+		if (byDate === undefined)
+		{
 			const children = deps.cache.getChildren(container);
 			const tags = calendarTags(
 				deps,
 				children.map(({id}) => id),
 			);
 			byDate = new Map();
-			for (const {id} of children) {
+			for (const {id} of children)
+			{
 				const tag = tags.get(id);
-				if (tag?.level === "day" && tag.dateId !== undefined && !byDate.has(tag.dateId)) {
+				if (tag?.level === "day" && tag.dateId !== undefined && !byDate.has(tag.dateId))
+				{
 					byDate.set(tag.dateId, id);
 				}
 			}
 			dayNodes.set(container, byDate);
 		}
 		const id = byDate.get(dateId);
-		if (id !== undefined) {
+		if (id !== undefined)
+		{
 			found.set(dateId, id);
 		}
 	}
@@ -231,25 +289,31 @@ function findStrictDays(
  * {@link isUnder} answers, remembering the ancestors it climbs so sibling days
  * share one walk.
  */
-function underRoot(cache: CacheService, root: string): (parentId: string | null) => boolean {
+function underRoot(cache: CacheService, root: string): (parentId: string | null) => boolean
+{
 	const answers = new Map<string, boolean>([[root, true]]);
-	return (start) => {
+	return (start) =>
+	{
 		const climbed: string[] = [];
 		let parentId = start;
 		let answer = false;
-		while (parentId !== null) {
+		while (parentId !== null)
+		{
 			const known = answers.get(parentId);
-			if (known !== undefined) {
+			if (known !== undefined)
+			{
 				answer = known;
 				break;
 			}
-			if (climbed.includes(parentId)) {
+			if (climbed.includes(parentId))
+			{
 				break;
 			}
 			climbed.push(parentId);
 			parentId = cache.getNode(parentId)?.parentId ?? null;
 		}
-		for (const ancestor of climbed) {
+		for (const ancestor of climbed)
+		{
 			answers.set(ancestor, answer);
 		}
 		return answer;
@@ -261,7 +325,8 @@ function taggedDaysInMonth(
 	deps: Pick<CalendarDayDeps, "db" | "cache">,
 	under: (parentId: string | null) => boolean,
 	monthKey: number,
-): Map<number, string> {
+): Map<number, string>
+{
 	const rows = calendarRows(
 		deps,
 		and(eq(calendarMetadata.level, "day"), between(calendarMetadata.dateId, monthKey * 100, monthKey * 100 + 99)),
@@ -271,9 +336,11 @@ function taggedDaysInMonth(
 	);
 	const nodes = deps.cache.getMultipleNodes(rows.map(({id}) => id));
 	const days = new Map<number, string>();
-	for (const {id, calendar} of rows) {
+	for (const {id, calendar} of rows)
+	{
 		const node = nodes.get(id);
-		if (calendar.dateId !== undefined && !days.has(calendar.dateId) && node !== undefined && under(node.parentId)) {
+		if (calendar.dateId !== undefined && !days.has(calendar.dateId) && node !== undefined && under(node.parentId))
+		{
 			days.set(calendar.dateId, id);
 		}
 	}
@@ -281,12 +348,15 @@ function taggedDaysInMonth(
 }
 
 /** The day nodes of `date`'s month found by the root > `YYYY` > `MM` name walk, keyed by day of month, the first per day. */
-function namedDaysInMonth(cache: CacheService, root: string, date: CalendarDate): Map<number, string> {
+function namedDaysInMonth(cache: CacheService, root: string, date: CalendarDate): Map<number, string>
+{
 	const days = new Map<number, string>();
 	const month = walkNames(cache, root, date, "month");
-	for (const child of month === null ? [] : cache.getChildren(month)) {
+	for (const child of month === null ? [] : cache.getChildren(month))
+	{
 		const named = dayNameDate(child.name);
-		if (named?.year === date.year && named.month === date.month && !days.has(named.day)) {
+		if (named?.year === date.year && named.month === date.month && !days.has(named.day))
+		{
 			days.set(named.day, child.id);
 		}
 	}
@@ -294,7 +364,8 @@ function namedDaysInMonth(cache: CacheService, root: string, date: CalendarDate)
 }
 
 /** {@link findTaggedCalendarRoot}, else the Home child named `📆 Calendar`. */
-export function findCalendarRoot(deps: Pick<CalendarDayDeps, "db" | "cache">): string | undefined {
+export function findCalendarRoot(deps: Pick<CalendarDayDeps, "db" | "cache">): string | undefined
+{
 	return findTaggedCalendarRoot(deps) ?? deps.cache.getChildByName(null, CALENDAR_ROOT_NAME)?.id;
 }
 
@@ -304,7 +375,8 @@ export function findCalendarRoot(deps: Pick<CalendarDayDeps, "db" | "cache">): s
  * Metadata patches are built against the cached `calendar` row, so a `calendar.*` write needs this
  * internal-metadata view of the account rather than the public tree's name lookup.
  */
-export function findTaggedCalendarRoot(deps: Pick<CalendarDayDeps, "db">): string | undefined {
+export function findTaggedCalendarRoot(deps: Pick<CalendarDayDeps, "db">): string | undefined
+{
 	return (
 		pointedCalendarRoot(deps) ??
 		calendarRows(deps, eq(calendarMetadata.root, 1)).find(({calendar}) => calendar.root === true)?.id
@@ -312,9 +384,14 @@ export function findTaggedCalendarRoot(deps: Pick<CalendarDayDeps, "db">): strin
 }
 
 /** The node root metadata `calendar.rootId` (`root_preferences.calendar_root_id`) names, when it is live. */
-function pointedCalendarRoot(deps: Pick<CalendarDayDeps, "db">): string | undefined {
+function pointedCalendarRoot(deps: Pick<CalendarDayDeps, "db">): string | undefined
+{
 	return deps.db
-		.select({id: nodeContent.id})
+		.select(
+			{
+				id: nodeContent.id,
+			},
+		)
 		.from(rootPreferences)
 		.innerJoin(nodeContent, eq(nodeContent.id, rootPreferences.calendarRootId))
 		.where(and(eq(rootPreferences.systemTo, FAR_FUTURE_DATE), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
@@ -322,14 +399,17 @@ function pointedCalendarRoot(deps: Pick<CalendarDayDeps, "db">): string | undefi
 }
 
 /** Nodes (only live ones unless `liveOnly` is false) whose stored calendar matches `where`, with that calendar's tag. */
-function calendarRows(deps: Pick<CalendarDayDeps, "db">, where: SQL | undefined, {liveOnly = true} = {}) {
+function calendarRows(deps: Pick<CalendarDayDeps, "db">, where: SQL | undefined, {liveOnly = true} = {})
+{
 	return deps.db
-		.select({
-			id: calendarMetadata.nodeId,
-			root: calendarMetadata.root,
-			level: calendarMetadata.level,
-			dateId: calendarMetadata.dateId,
-		})
+		.select(
+			{
+				id: calendarMetadata.nodeId,
+				root: calendarMetadata.root,
+				level: calendarMetadata.level,
+				dateId: calendarMetadata.dateId,
+			},
+		)
 		.from(calendarMetadata)
 		.where(
 			and(
@@ -338,7 +418,11 @@ function calendarRows(deps: Pick<CalendarDayDeps, "db">, where: SQL | undefined,
 				liveOnly
 					? exists(
 							deps.db
-								.select({live: sql`1`})
+								.select(
+									{
+										live: sql`1`,
+									},
+								)
 								.from(nodeContent)
 								.where(
 									and(
@@ -351,9 +435,11 @@ function calendarRows(deps: Pick<CalendarDayDeps, "db">, where: SQL | undefined,
 			),
 		)
 		.all()
-		.map(({id, root, level, dateId}) => ({
+		.map(({id, root, level, dateId}) => (
+		{
 			id,
-			calendar: {
+			calendar:
+			{
 				root: root === null ? undefined : root === 1,
 				level: level ?? undefined,
 				dateId: dateId ?? undefined,
@@ -362,11 +448,14 @@ function calendarRows(deps: Pick<CalendarDayDeps, "db">, where: SQL | undefined,
 }
 
 /** Whether `id` is a cached node strictly below `ancestor`. */
-function isUnder(cache: CacheService, id: string, ancestor: string): boolean {
+function isUnder(cache: CacheService, id: string, ancestor: string): boolean
+{
 	const seen = new Set<string>();
 	let parentId = cache.getNode(id)?.parentId ?? null;
-	while (parentId !== null && !seen.has(parentId)) {
-		if (parentId === ancestor) {
+	while (parentId !== null && !seen.has(parentId))
+	{
+		if (parentId === ancestor)
+		{
 			return true;
 		}
 		seen.add(parentId);
@@ -380,16 +469,19 @@ function walkNames(
 	root: string,
 	date: CalendarDate,
 	level: Exclude<CalendarLevel, "week">,
-): string | null {
+): string | null
+{
 	const year = cache.getChildByName(root, String(date.year));
-	if (level === "year") {
+	if (level === "year")
+	{
 		return year?.id ?? null;
 	}
 	const month =
 		year &&
 		(cache.getChildByName(year.id, String(date.month).padStart(2, "0")) ??
 			cache.getChildByName(year.id, String(date.month)));
-	if (level === "month") {
+	if (level === "month")
+	{
 		return month?.id ?? null;
 	}
 	const day = month && cache.getChildren(month.id).find((child) => namesDate(child.name, date));
@@ -401,22 +493,35 @@ function walkNames(
  * names a day. Journal entries that sit beside the days (a timed `<time>` or
  * extra text) name no day.
  */
-export function dayNameDate(name: string | null): CalendarDate | undefined {
+export function dayNameDate(name: string | null): CalendarDate | undefined
+{
 	const attrText = DAY_NAME.exec(name?.trim() ?? "")?.[1];
-	if (attrText === undefined) {
+	if (attrText === undefined)
+	{
 		return undefined;
 	}
-	try {
+	try
+	{
 		const {startYear, startMonth, startDay, ...rest} = parseTimeAttrs(attrText);
-		return Object.keys(rest).length === 0 ? {year: startYear, month: startMonth, day: startDay} : undefined;
-	} catch {
+		return Object.keys(rest).length === 0
+			?
+				{
+					year: startYear,
+					month: startMonth,
+					day: startDay,
+				}
+			: undefined;
+	}
+	catch
+	{
 		// A <time> without start attributes names no date.
 		return undefined;
 	}
 }
 
 /** Whether `name` is exactly one date-only `<time>` on `date`. */
-function namesDate(name: string | null, date: CalendarDate): boolean {
+function namesDate(name: string | null, date: CalendarDate): boolean
+{
 	const named = dayNameDate(name);
 	return named?.year === date.year && named.month === date.month && named.day === date.day;
 }
@@ -429,14 +534,12 @@ function namesDate(name: string | null, date: CalendarDate): boolean {
 export function calendarParentContext(
 	deps: Pick<CalendarDayDeps, "db" | "cache">,
 	parentId: string,
-): CalendarParentContext | undefined {
+): CalendarParentContext | undefined
+{
 	const chainIds: string[] = [];
 	const seen = new Set<string>();
-	for (
-		let id: string | null = parentId;
-		id !== null && !seen.has(id);
-		id = deps.cache.getNode(id)?.parentId ?? null
-	) {
+	for (let id: string | null = parentId; id !== null && !seen.has(id); id = deps.cache.getNode(id)?.parentId ?? null)
+	{
 		seen.add(id);
 		chainIds.push(id);
 	}
@@ -444,12 +547,19 @@ export function calendarParentContext(
 	const tags = calendarTags(deps, [...chainIds, ...children]);
 	const rootIndex = chainIds.findIndex((id) => tags.get(id)?.root === true);
 	const rootId = chainIds[rootIndex];
-	if (rootId === undefined || tags.get(parentId) === undefined) {
+	if (rootId === undefined || tags.get(parentId) === undefined)
+	{
 		return undefined;
 	}
 	return {
-		parentChain: chainIds.slice(0, rootIndex + 1).map((id) => ({calendar: tags.get(id)})),
-		siblings: children.map((id) => ({calendar: tags.get(id)})),
+		parentChain: chainIds.slice(0, rootIndex + 1).map((id) => (
+		{
+			calendar: tags.get(id),
+		})),
+		siblings: children.map((id) => (
+		{
+			calendar: tags.get(id),
+		})),
 		levels: rootLevels(deps, rootId),
 	};
 }
@@ -463,29 +573,58 @@ export function calendarParentContext(
 export function auditCalendar(
 	deps: Pick<CalendarDayDeps, "db" | "cache">,
 	calendarRootId?: string,
-): CalendarAuditFinding[] {
+): CalendarAuditFinding[]
+{
 	const rootId = calendarRootId ?? findTaggedCalendarRoot(deps);
-	if (rootId === undefined) {
+	if (rootId === undefined)
+	{
 		return [];
 	}
 	const levels = rootLevels(deps, rootId);
-	const auditNodes = (parentId: string, withChildren: boolean): AuditNode[] => {
+	const auditNodes = (parentId: string, withChildren: boolean): AuditNode[] =>
+	{
 		const children = deps.cache.getChildren(parentId);
 		const tags = calendarTags(
 			deps,
 			children.map(({id}) => id),
 		);
-		return children.map(({id, name}) => {
+		return children.map(({id, name}) =>
+		{
 			const calendar = tags.get(id);
-			const node: AuditNode = {id, name, calendar};
-			return withChildren ? {...node, children: auditNodes(id, false)} : node;
+			const node: AuditNode =
+			{
+				id,
+				name,
+				calendar,
+			};
+			return withChildren
+				?
+					{
+						...node,
+						children: auditNodes(id, false),
+					}
+				: node;
 		});
 	};
 	const rootChildren = auditNodes(rootId, false);
-	const findings = auditCalendarRoot({children: rootChildren});
-	for (const year of rootChildren.filter(({calendar}) => calendar?.level === "year")) {
-		for (const month of auditNodes(year.id, false).filter(({calendar}) => calendar?.level === "month")) {
-			findings.push(...auditCalendarMonth({month, levels, children: auditNodes(month.id, true)}));
+	const findings = auditCalendarRoot(
+		{
+			children: rootChildren,
+		},
+	);
+	for (const year of rootChildren.filter(({calendar}) => calendar?.level === "year"))
+	{
+		for (const month of auditNodes(year.id, false).filter(({calendar}) => calendar?.level === "month"))
+		{
+			findings.push(
+				...auditCalendarMonth(
+					{
+						month,
+						levels,
+						children: auditNodes(month.id, true),
+					},
+				),
+			);
 		}
 	}
 	return findings;

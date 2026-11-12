@@ -1,4 +1,5 @@
-._theme-moon {
+._theme-moon
+{
 	--wf-background-primary: #fdf6f6;
 	--wf-background-secondary: #ece7ee;
 	--wf-background-tertiary: #dfdef2;
@@ -63,18 +64,21 @@
 	--wf-border-success: #8bc9a5;
 	--wf-button-background-danger-active: #fba59c;
 
-	.wf-header {
+	.wf-header
+	{
 		--wf-background-primary: #fbf0f1;
 		--wf-text-primary: #8b6fa8;
 		--wf-text-secondary: #4a4855;
 	}
 
-	.wf-menu {
+	.wf-menu
+	{
 		--wf-text-primary: #8b6fa8;
 		--wf-border-secondary: #b2b1d2;
 	}
 
-	.wf-helper {
+	.wf-helper
+	{
 		--wf-background-primary: #dfdef2;
 	}
 }

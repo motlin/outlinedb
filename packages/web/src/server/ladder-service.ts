@@ -14,7 +14,8 @@ import type {Ladder, RawNode} from "./ladder-model.js";
 
 export type LadderBuckets = Record<string, RawNode>;
 
-export interface LadderServiceOptions {
+export interface LadderServiceOptions
+{
 	readBuckets: () => Promise<LadderBuckets>;
 	/** Negative position prepends; zero appends. The fallback when {@link moveTo} is absent. */
 	moveNode: (nodeId: string, parentId: string, position: number) => Promise<unknown>;
@@ -33,17 +34,21 @@ export interface LadderServiceOptions {
 	now?: () => Date;
 }
 
-export class LadderService {
+export class LadderService
+{
 	readonly #options: LadderServiceOptions;
 
-	constructor(options: LadderServiceOptions) {
+	constructor(options: LadderServiceOptions)
+	{
 		this.#options = options;
 	}
 
-	async read(): Promise<Record<string, Ladder>> {
+	async read(): Promise<Record<string, Ladder>>
+	{
 		const buckets = await this.#options.readBuckets();
 		const ladders: Record<string, Ladder> = {};
-		for (const [root, bucket] of Object.entries(buckets)) {
+		for (const [root, bucket] of Object.entries(buckets))
+		{
 			ladders[root] = toLadder(root, bucket);
 		}
 		return ladders;
@@ -65,20 +70,24 @@ export class LadderService {
 		nodeId: string;
 		toTier: string;
 		beforeNodeId?: string;
-	}): Promise<LadderEvent> {
+	}): Promise<LadderEvent>
+	{
 		const buckets = await this.#options.readBuckets();
 		const ladder = ladderFrom(buckets, root);
 		const plan = planTierMove(ladder, nodeId, toTier);
 		const destination = ladder.tiers.find((tier) => tier.id === plan.parentId);
-		if (destination === undefined) {
+		if (destination === undefined)
+		{
 			throw new Error(`tier ${plan.parentId} is not in ladder ${root}`);
 		}
 		const remaining = destination.items.filter((item) => item.id !== nodeId);
 		const index = beforeNodeId ? remaining.findIndex((item) => item.id === beforeNodeId) : remaining.length;
-		if (index < 0) {
+		if (index < 0)
+		{
 			throw new Error(`node ${beforeNodeId} is not a destination row`);
 		}
-		const event = {
+		const event =
+		{
 			verb: "move" as const,
 			nodeId,
 			name: findItem(ladder, nodeId)?.name ?? null,
@@ -86,85 +95,138 @@ export class LadderService {
 			toTier,
 		};
 		const {moveTo} = this.#options;
-		if (moveTo !== undefined) {
+		if (moveTo !== undefined)
+		{
 			const children = buckets[root]?.children?.find((child) => child.id === plan.parentId)?.children ?? [];
 			const ids = children.map((child) => child.id);
 			await moveTo(nodeId, plan.parentId, beforeNodeId ? ids.indexOf(beforeNodeId) : ids.length);
-			return this.#landed(plan.parentId, {...event, beforeNodeId: beforeNodeId ?? ""});
+			return this.#landed(
+				plan.parentId,
+				{
+					...event,
+					beforeNodeId: beforeNodeId ?? "",
+				},
+			);
 		}
 		const slot = planSlot(
 			destination.items.map((item) => item.id),
 			nodeId,
 			index,
 		);
-		if (slot === null) {
-			return this.#landed(plan.parentId, {...event, beforeNodeId: beforeNodeId ?? ""});
+		if (slot === null)
+		{
+			return this.#landed(
+				plan.parentId,
+				{
+					...event,
+					beforeNodeId: beforeNodeId ?? "",
+				},
+			);
 		}
 		const position = slot.position === "top" ? -1 : 0;
 		await this.#options.moveNode(nodeId, plan.parentId, position);
-		if (slot.siblingIds.length === 0) {
-			return this.#landed(plan.parentId, {
+		if (slot.siblingIds.length === 0)
+		{
+			return this.#landed(
+				plan.parentId,
+				{
+					...event,
+					beforeNodeId: slot.position === "top" ? (remaining[0]?.id ?? "") : "",
+				},
+			);
+		}
+		this.#publish(
+			{
 				...event,
-				beforeNodeId: slot.position === "top" ? (remaining[0]?.id ?? "") : "",
-			});
-		}
-		this.#publish({...event, beforeNodeId: ""});
-		// Workflowy's API supports only top/bottom. Rotate the shorter side to preserve exact placement.
-		for (const siblingId of slot.siblingIds) {
-			await this.#options.moveNode(siblingId, plan.parentId, position);
-			this.#publish({
-				verb: "move",
-				nodeId: siblingId,
-				name: remaining.find((item) => item.id === siblingId)?.name ?? null,
-				fromTier: toTier,
-				toTier,
 				beforeNodeId: "",
-			});
+			},
+		);
+		// Workflowy's API supports only top/bottom. Rotate the shorter side to preserve exact placement.
+		for (const siblingId of slot.siblingIds)
+		{
+			await this.#options.moveNode(siblingId, plan.parentId, position);
+			this.#publish(
+				{
+					verb: "move",
+					nodeId: siblingId,
+					name: remaining.find((item) => item.id === siblingId)?.name ?? null,
+					fromTier: toTier,
+					toTier,
+					beforeNodeId: "",
+				},
+			);
 		}
-		return this.#landed(plan.parentId, {...event, beforeNodeId: beforeNodeId ?? ""});
+		return this.#landed(
+			plan.parentId,
+			{
+				...event,
+				beforeNodeId: beforeNodeId ?? "",
+			},
+		);
 	}
 
 	/** Announce a landed move, then refresh its tier without holding the response. */
-	#landed(parentId: string, event: Omit<LadderEvent, "at">): LadderEvent {
+	#landed(parentId: string, event: Omit<LadderEvent, "at">): LadderEvent
+	{
 		const published = this.#publish(event);
-		this.#options.refreshTier?.(parentId).catch((error: unknown) => {
+		this.#options.refreshTier?.(parentId).catch((error: unknown) =>
+		{
 			const message = error instanceof Error ? error.message : String(error);
 			console.error(`ladder: could not refresh tier ${parentId} after a move: ${message}`);
 		});
 		return published;
 	}
 
-	async complete({root, nodeId}: {root: string; nodeId: string}): Promise<LadderEvent> {
+	async complete({root, nodeId}: {root: string; nodeId: string}): Promise<LadderEvent>
+	{
 		const ladder = await this.#ladder(root);
 		const origin = ladder.tiers.find((tier) => tier.items.some((item) => item.id === nodeId));
-		if (!origin) {
+		if (!origin)
+		{
 			throw new Error(`node ${nodeId} is not on the ${root} ladder`);
 		}
 		const name = findItem(ladder, nodeId)?.name ?? null;
 		await this.#options.completeNode(nodeId);
-		return this.#publish({verb: "complete", nodeId, name, fromTier: origin.label, toTier: null});
+		return this.#publish(
+			{
+				verb: "complete",
+				nodeId,
+				name,
+				fromTier: origin.label,
+				toTier: null,
+			},
+		);
 	}
 
-	async #ladder(root: string): Promise<Ladder> {
+	async #ladder(root: string): Promise<Ladder>
+	{
 		return ladderFrom(await this.#options.readBuckets(), root);
 	}
 
-	#publish(event: Omit<LadderEvent, "at">): LadderEvent {
+	#publish(event: Omit<LadderEvent, "at">): LadderEvent
+	{
 		const at = (this.#options.now?.() ?? new Date()).toISOString();
-		const published = {...event, at};
+		const published =
+		{
+			...event,
+			at,
+		};
 		this.#options.events.publish(published);
 		return published;
 	}
 }
 
-function ladderFrom(buckets: LadderBuckets, root: string): Ladder {
+function ladderFrom(buckets: LadderBuckets, root: string): Ladder
+{
 	const bucket = buckets[root];
-	if (bucket === undefined) {
+	if (bucket === undefined)
+	{
 		throw new Error(`no ladder named ${root}`);
 	}
 	return toLadder(root, bucket);
 }
 
-function findItem(ladder: Ladder, nodeId: string) {
+function findItem(ladder: Ladder, nodeId: string)
+{
 	return ladder.tiers.flatMap((tier) => tier.items).find((candidate) => candidate.id === nodeId);
 }

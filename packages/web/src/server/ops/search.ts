@@ -17,7 +17,8 @@ import type {RankSwitcherOptions, SwitcherResponse} from "../switcher-search.js"
 import {computeTreeSearch, computeTreeSearchPaged, withRowText} from "../tree-search.js";
 import type {RowTextSource, TreeSearchRow} from "../tree-search.js";
 import {defineOp, ok, toJson} from "./define.js";
-import {
+import
+{
 	loadTreeRowText,
 	loadTreeRows,
 	loadTreeRowsWithBacklinks,
@@ -31,7 +32,8 @@ import {
 type TreeLoader = (database: AppDatabase, rootId: string | null) => TreeSearchRow[];
 
 /** The snapshot loader, or the SQL subtree query when `features.treeSnapshot` is off (no whole tree held in memory). */
-function treeLoader(ctx: ServerContext): TreeLoader {
+function treeLoader(ctx: ServerContext): TreeLoader
+{
 	return ctx.config.features.treeSnapshot ? loadTreeRows : loadTreeSearchRows;
 }
 
@@ -40,14 +42,23 @@ const TEXT_PAGE_SIZE = 2000;
 /** Rows the jump menu reads per text page from the highest score bound down; small, since it usually stops early. */
 const SWITCHER_PAGE_SIZE = 500;
 
-function textSource(ctx: ServerContext): RowTextSource {
-	return {pageSize: TEXT_PAGE_SIZE, read: (ids) => loadTreeRowText(ctx.db, ids)};
+function textSource(ctx: ServerContext): RowTextSource
+{
+	return {
+		pageSize: TEXT_PAGE_SIZE,
+		read: (ids) => loadTreeRowText(ctx.db, ids),
+	};
 }
 
 /** `rows` in order, each with its text read from `source` a page at a time. */
-function* pagedRows(rows: readonly TreeSearchRow[], source: RowTextSource): Generator<TreeSearchRow> {
-	const entries = rows.map((skeletonRow) => ({row: skeletonRow}));
-	for (const {row} of withRowText(entries, source)) {
+function* pagedRows(rows: readonly TreeSearchRow[], source: RowTextSource): Generator<TreeSearchRow>
+{
+	const entries = rows.map((skeletonRow) => (
+	{
+		row: skeletonRow,
+	}));
+	for (const {row} of withRowText(entries, source))
+	{
 		yield row;
 	}
 }
@@ -60,18 +71,22 @@ type SwitcherRanker = (
 	options: RankSwitcherOptions,
 ) => SwitcherResponse;
 
-interface SwitcherSearch {
+interface SwitcherSearch
+{
 	rows: TreeSearchRow[];
 	/** The earliest creation time of any row (Infinity when none), for the joined-at fallback. */
 	earliestCreatedMs: number;
 	rank: SwitcherRanker;
 }
 
-function earliestCreated(rows: readonly TreeSearchRow[]): number {
+function earliestCreated(rows: readonly TreeSearchRow[]): number
+{
 	// A loop, not Math.min(...), so a large tree cannot overflow the call stack.
 	let earliest = Infinity;
-	for (const row of rows) {
-		if (row.createdAt !== null && row.createdAt < earliest) {
+	for (const row of rows)
+	{
+		if (row.createdAt !== null && row.createdAt < earliest)
+		{
 			earliest = row.createdAt;
 		}
 	}
@@ -84,13 +99,20 @@ function earliestCreated(rows: readonly TreeSearchRow[]): number {
  * {@link rankSwitcherCompact} over a prefiltered text scan, or for quoted, emoji, date and nested queries the
  * text-free skeleton rows with {@link rankSwitcherPaged}.
  */
-function switcherSearch(ctx: ServerContext, query: string): SwitcherSearch {
-	if (ctx.config.features.treeSnapshot) {
+function switcherSearch(ctx: ServerContext, query: string): SwitcherSearch
+{
+	if (ctx.config.features.treeSnapshot)
+	{
 		const rows = loadTreeRows(ctx.db, null);
-		return {rows, earliestCreatedMs: earliestCreated(rows), rank: rankSwitcher};
+		return {
+			rows,
+			earliestCreatedMs: earliestCreated(rows),
+			rank: rankSwitcher,
+		};
 	}
 	const source = textSource(ctx);
-	if (isCompactSwitcherQuery(query)) {
+	if (isCompactSwitcherQuery(query))
+	{
 		const skeleton = loadSwitcherSkeleton(ctx.db);
 		const scan = switcherTextScan(ctx.db, SWITCHER_PAGE_SIZE);
 		return {
@@ -109,69 +131,100 @@ function switcherSearch(ctx: ServerContext, query: string): SwitcherSearch {
 	};
 }
 
-const SearchResultSchema = z.strictObject({
-	id: z.string(),
-	name: z.string().nullable(),
-	note: z.string().nullable(),
-	parentPath: z.string(),
-	/** Completion time in epoch seconds, or null when incomplete (as in the node responses). */
-	completedAt: z.number().nullable(),
-});
+const SearchResultSchema = z.strictObject(
+	{
+		id: z.string(),
+		name: z.string().nullable(),
+		note: z.string().nullable(),
+		parentPath: z.string(),
+		/** Completion time in epoch seconds, or null when incomplete (as in the node responses). */
+		completedAt: z.number().nullable(),
+	},
+);
 
 type SearchResult = z.output<typeof SearchResultSchema>;
 
-const TextSearchResponseSchema = z.strictObject({results: z.array(SearchResultSchema), totalCount: z.number()});
+const TextSearchResponseSchema = z.strictObject(
+	{
+		results: z.array(SearchResultSchema),
+		totalCount: z.number(),
+	},
+);
 
-export const HelperTagsSchema = z.strictObject({hashTags: z.array(z.string()), atTags: z.array(z.string())});
+export const HelperTagsSchema = z.strictObject(
+	{
+		hashTags: z.array(z.string()),
+		atTags: z.array(z.string()),
+	},
+);
 
-const TreeSearchResultSchema = z.strictObject({
-	matchIds: z.array(z.string()),
-	nameMatchIds: z.array(z.string()),
-	noteMatchIds: z.array(z.string()),
-	/** Operator-only matches: matched without a name or note text match. */
-	metaMatchIds: z.array(z.string()),
-	/** Nodes (excluding the root) with at least one matching descendant. */
-	ancestorIds: z.array(z.string()),
-	/** Ancestors with at least one child that neither matches nor has matching descendants. */
-	halfExpandedIds: z.array(z.string()),
-	rootHalfExpanded: z.boolean(),
-	/** Matches that are completed or sit under a completed ancestor. */
-	completedMatchCount: z.number(),
-	matchCount: z.number(),
-	revealsCompleted: z.boolean(),
-});
+const TreeSearchResultSchema = z.strictObject(
+	{
+		matchIds: z.array(z.string()),
+		nameMatchIds: z.array(z.string()),
+		noteMatchIds: z.array(z.string()),
+		/** Operator-only matches: matched without a name or note text match. */
+		metaMatchIds: z.array(z.string()),
+		/** Nodes (excluding the root) with at least one matching descendant. */
+		ancestorIds: z.array(z.string()),
+		/** Ancestors with at least one child that neither matches nor has matching descendants. */
+		halfExpandedIds: z.array(z.string()),
+		rootHalfExpanded: z.boolean(),
+		/** Matches that are completed or sit under a completed ancestor. */
+		completedMatchCount: z.number(),
+		matchCount: z.number(),
+		revealsCompleted: z.boolean(),
+	},
+);
 
-const SwitcherAncestorSchema = z.strictObject({id: z.string(), name: z.string()});
+const SwitcherAncestorSchema = z.strictObject(
+	{
+		id: z.string(),
+		name: z.string(),
+	},
+);
 
-const SwitcherResponseSchema = z.strictObject({
-	results: z.array(
-		z.strictObject({
-			id: z.string(),
-			labelHtml: z.string(),
-			completed: z.boolean(),
-			starred: z.boolean(),
-			/** Root-first, without Home; names are whole (the client slices them). */
-			ancestors: z.array(SwitcherAncestorSchema),
-		}),
-	),
-	hasMore: z.boolean(),
-});
+const SwitcherResponseSchema = z.strictObject(
+	{
+		results: z.array(
+			z.strictObject(
+				{
+					id: z.string(),
+					labelHtml: z.string(),
+					completed: z.boolean(),
+					starred: z.boolean(),
+					/** Root-first, without Home; names are whole (the client slices them). */
+					ancestors: z.array(SwitcherAncestorSchema),
+				},
+			),
+		),
+		hasMore: z.boolean(),
+	},
+);
 
-export const LocationResponseSchema = z.strictObject({
-	results: z.array(
-		z.strictObject({
-			id: z.string(),
-			labelHtml: z.string(),
-			/** Root-first, without Home. */
-			ancestors: z.array(SwitcherAncestorSchema),
-		}),
-	),
-	hasMore: z.boolean(),
-});
+export const LocationResponseSchema = z.strictObject(
+	{
+		results: z.array(
+			z.strictObject(
+				{
+					id: z.string(),
+					labelHtml: z.string(),
+					/** Root-first, without Home. */
+					ancestors: z.array(SwitcherAncestorSchema),
+				},
+			),
+		),
+		hasMore: z.boolean(),
+	},
+);
 
 // Get all descendant node IDs using a recursive CTE
-function getDescendantIds(database: AppDatabase, parentId: string): string[] {
-	const result = database.all<{id: string}>(sql`
+function getDescendantIds(database: AppDatabase, parentId: string): string[]
+{
+	const result = database.all<
+	{
+		id: string;
+	}>(sql`
 		WITH RECURSIVE descendants(id) AS (
 			SELECT id FROM node_content
 			WHERE parent_id = ${parentId}
@@ -187,167 +240,280 @@ function getDescendantIds(database: AppDatabase, parentId: string): string[] {
 }
 
 /** Search helper #tags/@tags of the live descendants of `rootId`, excluding the root (whole tree when empty). */
-export function loadHelperTags(database: AppDatabase, rootId: string, load: TreeLoader = loadTreeRows): HelperTags {
+export function loadHelperTags(database: AppDatabase, rootId: string, load: TreeLoader = loadTreeRows): HelperTags
+{
 	const rows = load(database, rootId === "" ? null : rootId);
 	return collectHelperTags(rows.filter((row) => row.id !== rootId));
 }
 
 /** `GET /api/search/helpers?rootId=` - subtree tags for the search helper's #TAGS / @TAGS sections. */
-export const searchHelpers = defineOp({
-	input: z.object({rootId: z.string()}),
-	output: HelperTagsSchema,
-	run(ctx, {rootId}) {
-		if (rootId === "" && !ctx.config.features.treeSnapshot) {
-			// The whole tree's text in pages, in loadTreeSearchRows order (first-seen tag casing depends on it).
-			return ok(toJson(collectHelperTags(pagedRows(loadTreeSkeletonRows(ctx.db), textSource(ctx)))));
-		}
-		return ok(toJson(loadHelperTags(ctx.db, rootId, treeLoader(ctx))));
+export const searchHelpers = defineOp(
+	{
+		input: z.object(
+			{
+				rootId: z.string(),
+			},
+		),
+		output: HelperTagsSchema,
+		run(ctx, {rootId})
+		{
+			if (rootId === "" && !ctx.config.features.treeSnapshot)
+			{
+				// The whole tree's text in pages, in loadTreeSearchRows order (first-seen tag casing depends on it).
+				return ok(toJson(collectHelperTags(pagedRows(loadTreeSkeletonRows(ctx.db), textSource(ctx)))));
+			}
+			return ok(toJson(loadHelperTags(ctx.db, rootId, treeLoader(ctx))));
+		},
 	},
-});
+);
 
 /** The account's stored date format (so strict `date:` queries parse it), or null when unset or unavailable. */
-async function loadDateFormat(ctx: ServerContext): Promise<string | null> {
+async function loadDateFormat(ctx: ServerContext): Promise<string | null>
+{
 	const adapter = ctx.internalAdapter?.();
-	if (!adapter) {
+	if (!adapter)
+	{
 		return null;
 	}
-	try {
+	try
+	{
 		const value = await adapter.getRootMeta(["dateFormat"]);
 		return typeof value === "string" && value !== "" ? value : null;
-	} catch {
+	}
+	catch
+	{
 		return null;
 	}
 }
 
 /** The account's week start (Monday = 1), or null for Sunday, unset or unavailable. */
-async function loadWeekStartDay(ctx: ServerContext): Promise<0 | 1 | null> {
+async function loadWeekStartDay(ctx: ServerContext): Promise<0 | 1 | null>
+{
 	const adapter = ctx.internalAdapter?.();
-	if (!adapter) {
+	if (!adapter)
+	{
 		return null;
 	}
-	try {
+	try
+	{
 		const value = await adapter.getRootMeta(["weekStartDay"]);
 		return value === 1 ? 1 : value === 0 ? 0 : null;
-	} catch {
+	}
+	catch
+	{
 		return null;
 	}
 }
 
 /** `POST /api/search/tree` - in-place search of the zoomed subtree, driven by the upstream query AST. */
-export const searchTree = defineOp({
-	input: z.object({query: z.string(), rootId: z.string().nullable()}),
-	output: TreeSearchResultSchema,
-	async run(ctx, {query, rootId}) {
-		const dateFormat = await loadDateFormat(ctx);
-		const weekStartDay = await loadWeekStartDay(ctx);
-		const opts = {
-			...(dateFormat === null ? {} : {dateFormat}),
-			...(weekStartDay === null ? {} : {weekStartDay}),
-		};
-		// Synchronous from here, so the skeleton and its text pages read one consistent database.
-		if (rootId === null && !ctx.config.features.treeSnapshot) {
-			// A Durable Object cannot hold every row's text: match over the text-free skeleton, reading text in pages.
-			const skeleton = queryNeedsBacklinks(query)
-				? loadTreeRowsWithBacklinks(ctx.db, null, (database) => loadTreeSkeletonRows(database))
-				: loadTreeSkeletonRows(ctx.db);
-			return ok(toJson(computeTreeSearchPaged(skeleton, query, Date.now(), opts, textSource(ctx))));
-		}
-		const load = treeLoader(ctx);
-		const rows = queryNeedsBacklinks(query)
-			? loadTreeRowsWithBacklinks(ctx.db, rootId, load)
-			: load(ctx.db, rootId);
-		return ok(toJson(computeTreeSearch(rows, rootId, query, Date.now(), opts)));
+export const searchTree = defineOp(
+	{
+		input: z.object(
+			{
+				query: z.string(),
+				rootId: z.string().nullable(),
+			},
+		),
+		output: TreeSearchResultSchema,
+		async run(ctx, {query, rootId})
+		{
+			const dateFormat = await loadDateFormat(ctx);
+			const weekStartDay = await loadWeekStartDay(ctx);
+			const opts =
+			{
+				...(dateFormat === null
+					? {}
+					:
+						{
+							dateFormat,
+						}),
+				...(weekStartDay === null
+					? {}
+					:
+						{
+							weekStartDay,
+						}),
+			};
+			// Synchronous from here, so the skeleton and its text pages read one consistent database.
+			if (rootId === null && !ctx.config.features.treeSnapshot)
+			{
+				// A Durable Object cannot hold every row's text: match over the text-free skeleton, reading text in pages.
+				const skeleton = queryNeedsBacklinks(query)
+					? loadTreeRowsWithBacklinks(ctx.db, null, (database) => loadTreeSkeletonRows(database))
+					: loadTreeSkeletonRows(ctx.db);
+				return ok(toJson(computeTreeSearchPaged(skeleton, query, Date.now(), opts, textSource(ctx))));
+			}
+			const load = treeLoader(ctx);
+			const rows = queryNeedsBacklinks(query)
+				? loadTreeRowsWithBacklinks(ctx.db, rootId, load)
+				: load(ctx.db, rootId);
+			return ok(toJson(computeTreeSearch(rows, rootId, query, Date.now(), opts)));
+		},
 	},
-});
+);
 
 let joinedSecPromise: Promise<number> | undefined;
 
 /** The account join date (once per server), else the earliest cached `created_at`, for switcher recency. */
-async function loadJoinedSec(ctx: ServerContext, earliestCreatedMs: number): Promise<number> {
+async function loadJoinedSec(ctx: ServerContext, earliestCreatedMs: number): Promise<number>
+{
 	const earliestCreatedSec = Number.isFinite(earliestCreatedMs) ? Math.floor(earliestCreatedMs / 1000) : 0;
 	const adapter = ctx.internalAdapter?.();
-	if (!adapter) {
-		return resolveJoinedSec({account: null, earliestCreatedSec});
+	if (!adapter)
+	{
+		return resolveJoinedSec(
+			{
+				account: null,
+				earliestCreatedSec,
+			},
+		);
 	}
 	joinedSecPromise ??= adapter.getAccount().then(
-		({joinedAt}) => resolveJoinedSec({account: {joinedAt: joinedAt.toISOString()}, earliestCreatedSec}),
-		() => {
+		({joinedAt}) =>
+			resolveJoinedSec(
+				{
+					account:
+					{
+						joinedAt: joinedAt.toISOString(),
+					},
+					earliestCreatedSec,
+				},
+			),
+		() =>
+		{
 			joinedSecPromise = undefined;
-			return resolveJoinedSec({account: null, earliestCreatedSec});
+			return resolveJoinedSec(
+				{
+					account: null,
+					earliestCreatedSec,
+				},
+			);
 		},
 	);
 	return joinedSecPromise;
 }
 
 /** `POST /api/search/switcher` - upstream jump-menu search: word-start matches ranked by staticScore x textFactor. */
-export const searchSwitcher = defineOp({
-	input: z.object({
-		query: z.string(),
-		offset: z.number().default(0),
-		limit: z.number().default(20),
-		starredIds: z.array(z.string()).default([]),
-		showCompleted: z.boolean().optional(),
-	}),
-	output: SwitcherResponseSchema,
-	async run(ctx, {query, offset, limit, starredIds, showCompleted}) {
-		const {rows, earliestCreatedMs: earliest, rank} = switcherSearch(ctx, query);
-		const joinedSec = await loadJoinedSec(ctx, earliest);
-		return ok(
-			toJson(
-				rank(rows, query, starredIds, Math.floor(Date.now() / 1000), {
-					joinedSec,
-					offset,
-					limit,
-					showCompleted,
-				}),
-			),
-		);
+export const searchSwitcher = defineOp(
+	{
+		input: z.object(
+			{
+				query: z.string(),
+				offset: z.number().default(0),
+				limit: z.number().default(20),
+				starredIds: z.array(z.string()).default([]),
+				showCompleted: z.boolean().optional(),
+			},
+		),
+		output: SwitcherResponseSchema,
+		async run(ctx, {query, offset, limit, starredIds, showCompleted})
+		{
+			const {rows, earliestCreatedMs: earliest, rank} = switcherSearch(ctx, query);
+			const joinedSec = await loadJoinedSec(ctx, earliest);
+			return ok(
+				toJson(
+					rank(
+						rows,
+						query,
+						starredIds,
+						Math.floor(Date.now() / 1000),
+						{
+							joinedSec,
+							offset,
+							limit,
+							showCompleted,
+						},
+					),
+				),
+			);
+		},
 	},
-});
+);
 
 /**
  * `POST /api/search/locations` - upstream move-to location picker: switcher matching without completed nodes or `excludeId`.
  * The HTTP layer answers 499 for a request the client aborted (an AbortSignal cannot cross RPC).
  */
-export const searchLocations = defineOp({
-	input: z.object({
-		query: z.string(),
-		offset: z.number().default(0),
-		limit: z.number().default(20),
-		excludeId: z.string().optional(),
-		starredIds: z.array(z.string()).optional(),
-		showCompleted: z.boolean().optional(),
-	}),
-	output: LocationResponseSchema,
-	async run(ctx, {query, offset, limit, excludeId, starredIds, showCompleted}) {
-		const {rows, earliestCreatedMs: earliest, rank} = switcherSearch(ctx, query);
-		const joinedSec = await loadJoinedSec(ctx, earliest);
-		return ok(
-			toJson(
-				filterLocations(rows, {query, excludeId, offset, limit, joinedSec, starredIds, showCompleted, rank}),
-			),
-		);
+export const searchLocations = defineOp(
+	{
+		input: z.object(
+			{
+				query: z.string(),
+				offset: z.number().default(0),
+				limit: z.number().default(20),
+				excludeId: z.string().optional(),
+				starredIds: z.array(z.string()).optional(),
+				showCompleted: z.boolean().optional(),
+			},
+		),
+		output: LocationResponseSchema,
+		async run(ctx, {query, offset, limit, excludeId, starredIds, showCompleted})
+		{
+			const {rows, earliestCreatedMs: earliest, rank} = switcherSearch(ctx, query);
+			const joinedSec = await loadJoinedSec(ctx, earliest);
+			return ok(
+				toJson(
+					filterLocations(
+						rows,
+						{
+							query,
+							excludeId,
+							offset,
+							limit,
+							joinedSec,
+							starredIds,
+							showCompleted,
+							rank,
+						},
+					),
+				),
+			);
+		},
 	},
-});
+);
 
 /** `POST /api/search` - text-based search with operators. */
-export const searchText = defineOp({
-	input: z.object({
-		query: z.string().optional(),
-		limit: z.number().default(10),
-		offset: z.number().default(0),
-		parentId: z.string().optional(),
-	}),
-	output: TextSearchResponseSchema,
-	run: (ctx, input) => ok(textSearch(ctx, input)),
-});
+export const searchText = defineOp(
+	{
+		input: z.object(
+			{
+				query: z.string().optional(),
+				limit: z.number().default(10),
+				offset: z.number().default(0),
+				parentId: z.string().optional(),
+			},
+		),
+		output: TextSearchResponseSchema,
+		run: (ctx, input) => ok(textSearch(ctx, input)),
+	},
+);
 
 function textSearch(
 	ctx: ServerContext,
-	{query, limit, offset, parentId}: {query?: string; limit: number; offset: number; parentId?: string},
-): {results: SearchResult[]; totalCount: number} {
-	if (!query || query.trim().length === 0) {
-		return {results: [], totalCount: 0};
+	{
+		query,
+		limit,
+		offset,
+		parentId,
+	}:
+	{
+		query?: string;
+		limit: number;
+		offset: number;
+		parentId?: string;
+	},
+):
+{
+	results: SearchResult[];
+	totalCount: number;
+}
+{
+	if (!query || query.trim().length === 0)
+	{
+		return {
+			results: [],
+			totalCount: 0,
+		};
 	}
 
 	const database = ctx.db;
@@ -357,17 +523,23 @@ function textSearch(
 	contentConditions.push(notReferencesContent());
 
 	// If parentId is provided, limit search to descendants of that node
-	if (parentId) {
+	if (parentId)
+	{
 		const descendantIds = getDescendantIds(database, parentId);
-		if (descendantIds.length === 0) {
-			return {results: [], totalCount: 0};
+		if (descendantIds.length === 0)
+		{
+			return {
+				results: [],
+				totalCount: 0,
+			};
 		}
 		contentConditions.push(inArray(nodeContent.id, descendantIds));
 	}
 
 	// Build combined WHERE clause
 	const allConditions = [...contentConditions];
-	if (needsMetadataJoin) {
+	if (needsMetadataJoin)
+	{
 		// Add metadata join condition and metadata filters
 		allConditions.push(
 			eq(nodeMetadata.nodeId, nodeContent.id),
@@ -377,12 +549,22 @@ function textSearch(
 	}
 
 	let totalCount: number;
-	let allResults: {id: string; name: string | null; note: string | null}[];
+	let allResults:
+	{
+		id: string;
+		name: string | null;
+		note: string | null;
+	}[];
 
-	if (needsMetadataJoin) {
+	if (needsMetadataJoin)
+	{
 		// Query with metadata join for completion/date filters
 		const countResult = database
-			.select({count: sql<number>`count(*)`})
+			.select(
+				{
+					count: sql<number>`count(*)`,
+				},
+			)
 			.from(nodeContent)
 			.innerJoin(nodeMetadata, eq(nodeMetadata.nodeId, nodeContent.id))
 			.where(and(...allConditions))
@@ -390,30 +572,40 @@ function textSearch(
 		totalCount = countResult?.count ?? 0;
 
 		allResults = database
-			.select({
-				id: nodeContent.id,
-				name: nodeContent.name,
-				note: nodeContent.note,
-			})
+			.select(
+				{
+					id: nodeContent.id,
+					name: nodeContent.name,
+					note: nodeContent.note,
+				},
+			)
 			.from(nodeContent)
 			.innerJoin(nodeMetadata, eq(nodeMetadata.nodeId, nodeContent.id))
 			.where(and(...allConditions))
 			.all();
-	} else {
+	}
+	else
+	{
 		// Simple query without metadata join
 		const countResult = database
-			.select({count: sql<number>`count(*)`})
+			.select(
+				{
+					count: sql<number>`count(*)`,
+				},
+			)
 			.from(nodeContent)
 			.where(and(...contentConditions))
 			.get();
 		totalCount = countResult?.count ?? 0;
 
 		allResults = database
-			.select({
-				id: nodeContent.id,
-				name: nodeContent.name,
-				note: nodeContent.note,
-			})
+			.select(
+				{
+					id: nodeContent.id,
+					name: nodeContent.name,
+					note: nodeContent.note,
+				},
+			)
 			.from(nodeContent)
 			.where(and(...contentConditions))
 			.all();
@@ -423,32 +615,47 @@ function textSearch(
 	const scoringTerms = getScoringTerms(parsed);
 
 	// Score results based on match quality
-	const scoredResults = allResults.map((result) => {
+	const scoredResults = allResults.map((result) =>
+	{
 		const namePlain = result.name ? stripHtmlTags(result.name).toLowerCase() : "";
 		const notePlain = result.note ? stripHtmlTags(result.note).toLowerCase() : "";
 
 		let score = 0;
 
-		if (scoringTerms.length === 0) {
+		if (scoringTerms.length === 0)
+		{
 			// No text terms to match, all results get base score
 			score = 50;
-		} else {
+		}
+		else
+		{
 			// Score based on how well terms match
-			for (const term of scoringTerms) {
+			for (const term of scoringTerms)
+			{
 				const termLower = term.toLowerCase();
-				if (namePlain === termLower) {
+				if (namePlain === termLower)
+				{
 					score += 100;
-				} else if (namePlain.startsWith(termLower)) {
+				}
+				else if (namePlain.startsWith(termLower))
+				{
 					score += 80;
-				} else if (namePlain.includes(termLower)) {
+				}
+				else if (namePlain.includes(termLower))
+				{
 					score += 60;
-				} else if (notePlain.includes(termLower)) {
+				}
+				else if (notePlain.includes(termLower))
+				{
 					score += 40;
 				}
 			}
 		}
 
-		return {...result, score};
+		return {
+			...result,
+			score,
+		};
 	});
 
 	// Sort by score descending
@@ -460,9 +667,21 @@ function textSearch(
 	// Build parent paths in two batched queries (parentId + completedAt lookup, then PathBuilder)
 	// rather than walking the ancestor chain per result. The parent path excludes the result
 	// node itself, so it is the full path of the node's parent.
-	const rowOf = new Map<string, {parentId: string | null; completedAt: Date | null}>(
+	const rowOf = new Map<
+		string,
+		{
+			parentId: string | null;
+			completedAt: Date | null;
+		}
+	>(
 		database
-			.select({id: nodeContent.id, parentId: nodeContent.parentId, completedAt: nodeMetadata.completedAt})
+			.select(
+				{
+					id: nodeContent.id,
+					parentId: nodeContent.parentId,
+					completedAt: nodeMetadata.completedAt,
+				},
+			)
 			.from(nodeContent)
 			.leftJoin(
 				nodeMetadata,
@@ -478,14 +697,21 @@ function textSearch(
 				),
 			)
 			.all()
-			.map(({id, parentId: rowParentId, completedAt}) => [id, {parentId: rowParentId, completedAt}]),
+			.map(({id, parentId: rowParentId, completedAt}) => [
+				id,
+				{
+					parentId: rowParentId,
+					completedAt,
+				},
+			]),
 	);
 	const parentIds = [
 		...new Set([...rowOf.values()].map((row) => row.parentId).filter((id): id is string => id !== null)),
 	];
 	const pathByParent = new PathBuilder(database).buildFullPathsBatch(parentIds);
 
-	const results: SearchResult[] = paginatedResults.map(({id, name, note}) => {
+	const results: SearchResult[] = paginatedResults.map(({id, name, note}) =>
+	{
 		const row = rowOf.get(id);
 		const nodeParentId = row?.parentId ?? null;
 		return {
@@ -497,5 +723,8 @@ function textSearch(
 		};
 	});
 
-	return {results, totalCount};
+	return {
+		results,
+		totalCount,
+	};
 }

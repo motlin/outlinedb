@@ -48,7 +48,8 @@ import {withClasses} from "../search-classes.js";
 import {highlightSearchMatches} from "../highlight-html.js";
 import {focusKeepsScroll} from "../quiet-focus.js";
 
-interface EditableNoteProps {
+interface EditableNoteProps
+{
 	nodeId: string;
 	initialValue: string;
 	/** The store's focused note (`editingNoteId`) is this node's. */
@@ -65,33 +66,46 @@ const PILL_UNIT = "\uFFFC";
 const NO_EXTRA_CLASSES: readonly string[] = [];
 
 /** The note's text container, where its caret offsets count from. */
-function noteTextElement(element: HTMLElement): HTMLElement {
+function noteTextElement(element: HTMLElement): HTMLElement
+{
 	return element.querySelector<HTMLElement>(".innerContentContainer") ?? element;
 }
 
 const CONTENT_CLASS = "notranslate content text-tertiary whitespace-pre-wrap overflow-hidden";
 
 /** The selection's start/end as plain-text offsets into `element`, or null when the selection is outside it. */
-function selectionOffsets(element: HTMLElement): {start: number; end: number} | null {
+function selectionOffsets(element: HTMLElement):
+{
+	start: number;
+	end: number;
+} | null
+{
 	const selection = globalThis.getSelection();
-	if (selection === null || selection.rangeCount === 0) {
+	if (selection === null || selection.rangeCount === 0)
+	{
 		return null;
 	}
 	const range = selection.getRangeAt(0);
-	if (!element.contains(range.startContainer) || !element.contains(range.endContainer)) {
+	if (!element.contains(range.startContainer) || !element.contains(range.endContainer))
+	{
 		return null;
 	}
 	const before = document.createRange();
 	before.selectNodeContents(element);
 	before.setEnd(range.startContainer, range.startOffset);
 	const start = before.toString().length;
-	return {start, end: start + range.toString().length};
+	return {
+		start,
+		end: start + range.toString().length,
+	};
 }
 
 /** Replaces the selection with `text` as a plain text node and puts the caret `caretInText` characters into it. */
-function insertAtSelection(text: string, caretInText: number): void {
+function insertAtSelection(text: string, caretInText: number): void
+{
 	const selection = globalThis.getSelection();
-	if (selection === null || selection.rangeCount === 0) {
+	if (selection === null || selection.rangeCount === 0)
+	{
 		return;
 	}
 	const range = selection.getRangeAt(0);
@@ -105,9 +119,11 @@ function insertAtSelection(text: string, caretInText: number): void {
 }
 
 /** Replaces the selection with the nodes of `html` and puts the caret after them. */
-function insertHtmlAtSelection(html: string): void {
+function insertHtmlAtSelection(html: string): void
+{
 	const selection = globalThis.getSelection();
-	if (selection === null || selection.rangeCount === 0) {
+	if (selection === null || selection.rangeCount === 0)
+	{
 		return;
 	}
 	const range = selection.getRangeAt(0);
@@ -117,7 +133,8 @@ function insertHtmlAtSelection(html: string): void {
 	const fragment = template.content;
 	const last = fragment.lastChild;
 	range.insertNode(fragment);
-	if (last !== null) {
+	if (last !== null)
+	{
 		range.setStartAfter(last);
 	}
 	range.collapse(true);
@@ -145,7 +162,8 @@ export function EditableNote({
 	isFocused,
 	isMain = false,
 	extraClasses = NO_EXTRA_CLASSES,
-}: EditableNoteProps) {
+}: EditableNoteProps)
+{
 	const contentRef = useRef<HTMLDivElement>(null);
 	const {focusNote, focusName, blurNote, openSettings} = outlineActions();
 	const updateNodeMutation = useUpdateNode();
@@ -159,15 +177,19 @@ export function EditableNote({
 	// Search highlights live only in the DOM: React keeps the plain HTML, so focusing never rewrites the DOM
 	// under the caret, and a focused (editing) note never carries .contentMatch spans.
 	const highlightedHtml = focusedHtml === null ? highlightSearchMatches(restingHtml, searchQuery) : null;
-	useLayoutEffect(() => {
+	useLayoutEffect(() =>
+	{
 		const element = contentRef.current;
-		if (element !== null && highlightedHtml !== null && element.innerHTML !== highlightedHtml) {
+		if (element !== null && highlightedHtml !== null && element.innerHTML !== highlightedHtml)
+		{
 			element.innerHTML = highlightedHtml;
 		}
 	}, [highlightedHtml]);
-	const clearSearchHighlights = useCallback(() => {
+	const clearSearchHighlights = useCallback(() =>
+	{
 		const element = contentRef.current;
-		if (element?.querySelector(".contentMatch")) {
+		if (element?.querySelector(".contentMatch"))
+		{
 			element.innerHTML = restingHtml;
 		}
 	}, [restingHtml]);
@@ -178,24 +200,39 @@ export function EditableNote({
 	// One saver per node, so a pending save flushed after a node change still targets its own node.
 	const noteSaver = useMemo(
 		() =>
-			createEditDebouncer({
-				delay: TEXT_SAVE_DEBOUNCE_MS,
-				save: ({after}) => {
-					updateNode.current({nodeId, note: after});
+			createEditDebouncer(
+				{
+					delay: TEXT_SAVE_DEBOUNCE_MS,
+					save: ({after}) =>
+					{
+						updateNode.current(
+							{
+								nodeId,
+								note: after,
+							},
+						);
+					},
 				},
-			}),
+			),
 		[nodeId, updateNode],
 	);
 
 	// Focus from the store puts the caret at the requested start or end (Shift+Enter: end); a click keeps its caret.
-	useEffect(() => {
+	useEffect(() =>
+	{
 		const element = contentRef.current;
-		if (!isFocused || element === null || document.activeElement === element) {
+		if (!isFocused || element === null || document.activeElement === element)
+		{
 			return;
 		}
-		element.focus({preventScroll: focusKeepsScroll(element.getBoundingClientRect(), window.innerHeight)});
+		element.focus(
+			{
+				preventScroll: focusKeepsScroll(element.getBoundingClientRect(), window.innerHeight),
+			},
+		);
 		const caret = useOutlineStore.getState().editingNoteCaret;
-		if (caret !== "end" && caret > 0) {
+		if (caret !== "end" && caret > 0)
+		{
 			placeCaretAtTextOffset(noteTextElement(element), caret);
 			return;
 		}
@@ -207,9 +244,11 @@ export function EditableNote({
 		selection?.addRange(range);
 	}, [isFocused]);
 
-	const saveNow = useCallback(() => {
+	const saveNow = useCallback(() =>
+	{
 		const element = contentRef.current;
-		if (element === null) {
+		if (element === null)
+		{
 			noteSaver.flush();
 			return;
 		}
@@ -218,7 +257,8 @@ export function EditableNote({
 
 	// Flush a pending debounced save if the editor unmounts first.
 	useEffect(
-		() => () => {
+		() => () =>
+		{
 			noteSaver.flush();
 		},
 		[noteSaver],
@@ -231,9 +271,11 @@ export function EditableNote({
 	const datePickerOpen = useRef(false);
 
 	const insertDate = useCallback(
-		(attrs: TimeAttrs, offset: number) => {
+		(attrs: TimeAttrs, offset: number) =>
+		{
 			const element = contentRef.current;
-			if (element !== null) {
+			if (element !== null)
+			{
 				const plan = planDateInsertion(planNoteSave(noteSaver.saved, element.innerHTML).note, offset, attrs);
 				element.focus();
 				element.innerHTML = noteContentHtml(plan.html, dateSettings, undefined, account);
@@ -245,101 +287,131 @@ export function EditableNote({
 		[dateSettings, account, noteSaver],
 	);
 
-	const cancelDate = useCallback((offset: number) => {
+	const cancelDate = useCallback((offset: number) =>
+	{
 		const element = contentRef.current;
-		if (element !== null) {
+		if (element !== null)
+		{
 			element.focus();
 			placeCaretAtTextOffset(element, offset);
 		}
 		datePickerOpen.current = false;
 	}, []);
 
-	const openDate = useCallback(() => {
+	const openDate = useCallback(() =>
+	{
 		datePickerOpen.current = true;
 	}, []);
 
-	const datePicker = useBangDatePicker({
-		editorRef: contentRef,
-		dateSettings,
-		onOpen: openDate,
-		onInsert: insertDate,
-		onCancel: cancelDate,
-	});
+	const datePicker = useBangDatePicker(
+		{
+			editorRef: contentRef,
+			dateSettings,
+			onOpen: openDate,
+			onInsert: insertDate,
+			onCancel: cancelDate,
+		},
+	);
 	const {handleInput: handleDateTrigger, openForPhrase, isOpen: isDatePickerOpen} = datePicker;
 
 	// Typing a natural-language date ("tomorrow") offers a flyout; Tab or a click converts it to a pill.
-	const dateAutocomplete = useDateAutocomplete({
-		editorRef: contentRef,
-		dateSettings,
-		isBlocked: isDatePickerOpen,
-		onApply: (phrase) => {
-			const element = contentRef.current;
-			if (element !== null) {
-				const plan = applyDatePhrase(planNoteSave(noteSaver.saved, element.innerHTML).note, phrase);
-				element.innerHTML = noteContentHtml(plan.html, dateSettings, undefined, account);
-				placeCaretAtTextOffset(element, plan.caretOffset);
-				noteSaver.saveNow(plan.html);
-			}
+	const dateAutocomplete = useDateAutocomplete(
+		{
+			editorRef: contentRef,
+			dateSettings,
+			isBlocked: isDatePickerOpen,
+			onApply: (phrase) =>
+			{
+				const element = contentRef.current;
+				if (element !== null)
+				{
+					const plan = applyDatePhrase(planNoteSave(noteSaver.saved, element.innerHTML).note, phrase);
+					element.innerHTML = noteContentHtml(plan.html, dateSettings, undefined, account);
+					placeCaretAtTextOffset(element, plan.caretOffset);
+					noteSaver.saveNow(plan.html);
+				}
+			},
+			onOpenPicker: (phrase, position) =>
+			{
+				openForPhrase(
+					{
+						offset: phrase.start,
+						replaceEnd: phrase.end,
+						position,
+						term: formatPillLabel(
+							phrase.attrs,
+							{
+								dateFormat: dateSettings.dateFormat,
+							},
+						),
+						isRange: phrase.attrs.endYear !== undefined,
+					},
+				);
+			},
+			onOpenSettings: () =>
+			{
+				openSettings("Dates");
+			},
 		},
-		onOpenPicker: (phrase, position) => {
-			openForPhrase({
-				offset: phrase.start,
-				replaceEnd: phrase.end,
-				position,
-				term: formatPillLabel(phrase.attrs, {dateFormat: dateSettings.dateFormat}),
-				isRange: phrase.attrs.endYear !== undefined,
-			});
-		},
-		onOpenSettings: () => {
-			openSettings("Dates");
-		},
-	});
+	);
 	const {handleInput: handleDateAutocomplete, hide: hideDateAutocomplete} = dateAutocomplete;
 
 	// A plain click on a pill (the note at rest or focused) edits or removes just that pill in the live note, which
 	// keeps focus: like the `!!` picker, the picker's focus neither saves nor re-renders the note.
 	const pillCaret = useRef(0);
-	const pillPicker = usePillDatePicker({
-		dateSettings,
-		onChange: (pillIndex, attrs) => {
-			const element = contentRef.current;
-			if (element !== null) {
-				const plan = planPillReplacement(
-					planNoteSave(noteSaver.saved, element.innerHTML).note,
-					pillIndex,
-					attrs,
-				);
-				element.focus();
-				element.innerHTML = noteContentHtml(plan.html, dateSettings, undefined, account);
-				placeCaretAtTextOffset(element, plan.caretOffset);
-				noteSaver.saveNow(plan.html);
-			}
-			datePickerOpen.current = false;
+	const pillPicker = usePillDatePicker(
+		{
+			dateSettings,
+			onChange: (pillIndex, attrs) =>
+			{
+				const element = contentRef.current;
+				if (element !== null)
+				{
+					const plan = planPillReplacement(
+						planNoteSave(noteSaver.saved, element.innerHTML).note,
+						pillIndex,
+						attrs,
+					);
+					element.focus();
+					element.innerHTML = noteContentHtml(plan.html, dateSettings, undefined, account);
+					placeCaretAtTextOffset(element, plan.caretOffset);
+					noteSaver.saveNow(plan.html);
+				}
+				datePickerOpen.current = false;
+			},
+			onDismiss: () =>
+			{
+				cancelDate(pillCaret.current);
+			},
 		},
-		onDismiss: () => {
-			cancelDate(pillCaret.current);
-		},
-	});
+	);
 	const {open: openPillPicker} = pillPicker;
-	const tagPointer = useTagPointer({
-		getHtml: () =>
-			contentRef.current === null ? "" : planNoteSave(noteSaver.saved, contentRef.current.innerHTML).note,
-		save: (note, caret) => {
-			const element = contentRef.current;
-			if (element !== null) {
-				element.innerHTML = noteContentHtml(note, dateSettings, undefined, account);
-				placeCaretAtTextOffset(element, caret);
-				noteSaver.saveNow(note);
-			}
+	const tagPointer = useTagPointer(
+		{
+			getHtml: () =>
+				contentRef.current === null ? "" : planNoteSave(noteSaver.saved, contentRef.current.innerHTML).note,
+			save: (note, caret) =>
+			{
+				const element = contentRef.current;
+				if (element !== null)
+				{
+					element.innerHTML = noteContentHtml(note, dateSettings, undefined, account);
+					placeCaretAtTextOffset(element, caret);
+					noteSaver.saveNow(note);
+				}
+			},
 		},
-	});
+	);
 	const handleClick = useCallback(
-		(event: React.MouseEvent<HTMLDivElement>) => {
-			if (tagPointer.onClick(event)) {
+		(event: React.MouseEvent<HTMLDivElement>) =>
+		{
+			if (tagPointer.onClick(event))
+			{
 				return;
 			}
 			const clicked = clickedPill(event, event.currentTarget);
-			if (clicked === null) {
+			if (clicked === null)
+			{
 				return;
 			}
 			event.preventDefault();
@@ -360,9 +432,11 @@ export function EditableNote({
 		[noteSaver],
 	);
 	const acceptTag = useCallback<TagAcceptHandler>(
-		(edit) => {
+		(edit) =>
+		{
 			const element = contentRef.current;
-			if (element !== null) {
+			if (element !== null)
+			{
 				const note = spliceAcceptedTag(planNoteSave(noteSaver.saved, element.innerHTML).note, edit);
 				element.innerHTML = noteContentHtml(note, dateSettings, undefined, account);
 				placeCaretAtTextOffset(element, edit.caret);
@@ -371,37 +445,52 @@ export function EditableNote({
 		},
 		[dateSettings, account, noteSaver],
 	);
-	const tagAutocomplete = useTagAutocomplete({
-		editorRef: contentRef,
-		nodeId,
-		field: "note",
-		readPlain: readNotePlain,
-		onAccept: acceptTag,
-	});
-	const {
+	const tagAutocomplete = useTagAutocomplete(
+		{
+			editorRef: contentRef,
+			nodeId,
+			field: "note",
+			readPlain: readNotePlain,
+			onAccept: acceptTag,
+		},
+	);
+	const
+	{
 		handleInput: handleTagAutocomplete,
 		handleKeyDown: handleTagAutocompleteKey,
 		detach: detachTagAutocomplete,
 	} = tagAutocomplete;
 
 	// Typing a first or standalone "/" opens the slash command menu under a chip; it never schedules a save while open.
-	const changeNote = useCallback(() => {
+	const changeNote = useCallback(() =>
+	{
 		const element = contentRef.current;
-		if (element !== null) {
+		if (element !== null)
+		{
 			noteSaver.change(planNoteSave(noteSaver.saved, stripMentionChip(stripSlashChip(element.innerHTML))).note);
 		}
 	}, [noteSaver]);
-	const slashMenu = useSlashMenu({editorRef: contentRef, nodeId, onChange: changeNote, onSave: saveNow});
-	const {
+	const slashMenu = useSlashMenu(
+		{
+			editorRef: contentRef,
+			nodeId,
+			onChange: changeNote,
+			onSave: saveNow,
+		},
+	);
+	const
+	{
 		handleInput: handleSlashInput,
 		handleKeyDown: handleSlashKey,
 		isOpen: isSlashOpen,
 		detach: detachSlashMenu,
 	} = slashMenu;
 	// Typing a spaced "@" opens the mention popup (people and @tags) under a chip, like the slash menu.
-	const acceptMention = useCallback(() => {
+	const acceptMention = useCallback(() =>
+	{
 		const element = contentRef.current;
-		if (element !== null) {
+		if (element !== null)
+		{
 			retagEditor(
 				element,
 				noteContentHtml(editorHtmlToNote(element.innerHTML), dateSettings, undefined, account),
@@ -409,30 +498,47 @@ export function EditableNote({
 		}
 		saveNow();
 	}, [account, dateSettings, saveNow]);
-	const mentionMenu = useMentionMenu({editorRef: contentRef, onChange: changeNote, onAccept: acceptMention});
+	const mentionMenu = useMentionMenu(
+		{
+			editorRef: contentRef,
+			onChange: changeNote,
+			onAccept: acceptMention,
+		},
+	);
 	const {handleInput: handleMentionInput, handleKeyDown: handleMentionKey, detach: detachMentionMenu} = mentionMenu;
 
 	const handleInput = useCallback(
-		(event?: React.SyntheticEvent<HTMLDivElement>) => {
+		(event?: React.SyntheticEvent<HTMLDivElement>) =>
+		{
 			// The note codec drops the slash chip, so tags wait while the slash menu is open.
 			const element = contentRef.current;
 			// Upstream's inline-code input rule: a closing backtick or a double space typed at the end of code.
 			if (
 				element !== null &&
 				!isSlashOpen() &&
-				applyInlineCodeInput(element, event?.nativeEvent, {
-					read: () => planNoteSave(noteSaver.saved, element.innerHTML).note,
-					render: (note) => noteContentHtml(note, dateSettings, undefined, account),
-				}) !== null
-			) {
+				applyInlineCodeInput(
+					element,
+					event?.nativeEvent,
+					{
+						read: () => planNoteSave(noteSaver.saved, element.innerHTML).note,
+						render: (note) => noteContentHtml(note, dateSettings, undefined, account),
+					},
+				) !== null
+			)
+			{
 				changeNote();
 				return;
 			}
 			const mention =
 				isSlashOpen() || event === undefined
-					? {armedBefore: false, armedAfter: false}
+					?
+						{
+							armedBefore: false,
+							armedAfter: false,
+						}
 					: handleMentionInput(event.nativeEvent);
-			if (element !== null && !isSlashOpen() && !mention.armedAfter && !isComposingInput(event?.nativeEvent)) {
+			if (element !== null && !isSlashOpen() && !mention.armedAfter && !isComposingInput(event?.nativeEvent))
+			{
 				wrapBareNoteText(element);
 				retagEditor(
 					element,
@@ -442,34 +548,50 @@ export function EditableNote({
 			// Upstream's typed-input pipe: an armed chip swallows the input, including the one that disarms it.
 			const slash =
 				mention.armedBefore || mention.armedAfter
-					? {armedBefore: false, armedAfter: false}
+					?
+						{
+							armedBefore: false,
+							armedAfter: false,
+						}
 					: handleSlashInput(event?.nativeEvent);
 			const armedBefore = mention.armedBefore || slash.armedBefore;
 			const armedAfter = mention.armedAfter || slash.armedAfter;
-			const route = routeTypedInput({
-				chipArmedBefore: armedBefore,
-				chipArmedAfter: armedAfter,
-				datePopupOpened: false,
-			});
+			const route = routeTypedInput(
+				{
+					chipArmedBefore: armedBefore,
+					chipArmedAfter: armedAfter,
+					datePopupOpened: false,
+				},
+			);
 			let datePopupOpened = false;
-			if (route.dateTrigger && event !== undefined) {
+			if (route.dateTrigger && event !== undefined)
+			{
 				const wasOpen = isDatePickerOpen();
 				handleDateTrigger(event.nativeEvent);
 				datePopupOpened = !wasOpen && isDatePickerOpen();
 			}
 			if (
-				routeTypedInput({chipArmedBefore: armedBefore, chipArmedAfter: armedAfter, datePopupOpened})
-					.dateAutocomplete
-			) {
+				routeTypedInput(
+					{
+						chipArmedBefore: armedBefore,
+						chipArmedAfter: armedAfter,
+						datePopupOpened,
+					},
+				).dateAutocomplete
+			)
+			{
 				handleDateAutocomplete();
 			}
-			if (route.detachTags) {
+			if (route.detachTags)
+			{
 				detachTagAutocomplete();
 			}
-			if (route.tagAutocomplete) {
+			if (route.tagAutocomplete)
+			{
 				handleTagAutocomplete();
 			}
-			if (route.save) {
+			if (route.save)
+			{
 				changeNote();
 			}
 		},
@@ -494,62 +616,82 @@ export function EditableNote({
 		() => (contentRef.current === null ? "" : planNoteSave(noteSaver.saved, contentRef.current.innerHTML).note),
 		[noteSaver],
 	);
-	const {applyInlineToggle, applyLatestColor, applyColorToggle} = useInlineFormat({
-		editorRef: contentRef,
-		active: true,
-		read: readNote,
-		render: (note) => noteContentHtml(note, dateSettings, undefined, account),
-		onChange: (note) => {
-			noteSaver.change(note);
+	const {applyInlineToggle, applyLatestColor, applyColorToggle} = useInlineFormat(
+		{
+			editorRef: contentRef,
+			active: true,
+			read: readNote,
+			render: (note) => noteContentHtml(note, dateSettings, undefined, account),
+			onChange: (note) =>
+			{
+				noteSaver.change(note);
+			},
 		},
-	});
+	);
 
 	// Upstream's floating format toolbar over a stretched selection in the focused note (no type buttons).
-	const {
+	const
+	{
 		view: toolbarView,
 		refresh: refreshToolbar,
 		hide: hideToolbar,
-	} = useSelectionToolbar({
-		editorRef: contentRef,
-		active: isFocused,
-		read: readNote,
-		modalOpen: isModalOpen,
-	});
+	} = useSelectionToolbar(
+		{
+			editorRef: contentRef,
+			active: isFocused,
+			read: readNote,
+			modalOpen: isModalOpen,
+		},
+	);
 	const lastColorClass = useLatestColorClass();
-	const {
+	const
+	{
 		popup: colorPopup,
 		openPalette,
 		applyLatestOrOpen,
-	} = useColorPopup({
-		editorRef: contentRef,
-		read: readNote,
-		applyColorToggle,
-		applyLatestColor,
-		hideToolbar,
-		refreshToolbar,
-	});
+	} = useColorPopup(
+		{
+			editorRef: contentRef,
+			read: readNote,
+			applyColorToggle,
+			applyLatestColor,
+			hideToolbar,
+			refreshToolbar,
+		},
+	);
 	const {openLinkPopup} = outlineActions();
 	const handleToolbarAction = useCallback(
-		(action: SelectionToolbarAction) => {
+		(action: SelectionToolbarAction) =>
+		{
 			const attr = toolbarFormatAttr(action);
-			if (attr !== null) {
+			if (attr !== null)
+			{
 				applyInlineToggle(attr);
-			} else if (action === "link") {
+			}
+			else if (action === "link")
+			{
 				const target = toolbarLinkTarget(nodeId);
-				if (target !== null) {
+				if (target !== null)
+				{
 					openLinkPopup(target);
 				}
-			} else if (action === "latest-color") {
+			}
+			else if (action === "latest-color")
+			{
 				applyLatestOrOpen();
-			} else if (action === "show-palette") {
+			}
+			else if (action === "show-palette")
+			{
 				openPalette();
 			}
 		},
 		[applyInlineToggle, applyLatestOrOpen, nodeId, openLinkPopup, openPalette],
 	);
 
-	const handleFocus = useCallback(() => {
-		if (datePickerOpen.current) {
+	const handleFocus = useCallback(() =>
+	{
+		if (datePickerOpen.current)
+		{
 			return;
 		}
 		clearSearchHighlights();
@@ -557,17 +699,20 @@ export function EditableNote({
 		// As stored on the next edit: auto-links the editor shows do not make an untouched note look changed.
 		noteSaver.reset(planNoteSave(initialValue, restingHtml).note);
 		setFocusedHtml(restingHtml);
-		if (!isFocused) {
+		if (!isFocused)
+		{
 			focusNote(nodeId);
 		}
 	}, [clearSearchHighlights, initialValue, restingHtml, isFocused, nodeId, focusNote, noteSaver, queryClient]);
 
-	const handleBlur = useCallback(() => {
+	const handleBlur = useCallback(() =>
+	{
 		detachSlashMenu();
 		detachMentionMenu();
 		detachTagAutocomplete();
 		hideDateAutocomplete();
-		if (datePickerOpen.current) {
+		if (datePickerOpen.current)
+		{
 			return;
 		}
 		saveNow();
@@ -575,104 +720,126 @@ export function EditableNote({
 		blurNote(nodeId);
 	}, [detachSlashMenu, detachMentionMenu, detachTagAutocomplete, hideDateAutocomplete, saveNow, blurNote, nodeId]);
 
-	const focusNextRowName = useCallback(() => {
+	const focusNextRowName = useCallback(() =>
+	{
 		const {zoomedNodeId, expandedIds, showCompleted, animatingCompletionIds} = activePaneView();
 		const visibleIds = navigableIds(
 			zoomedNodeId,
 			collectVisibleNodeIds(queryClient, zoomedNodeId, expandedIds, showCompleted, animatingCompletionIds),
 		);
 		const targetId = adjacentVisibleNode(visibleIds, nodeId, "down");
-		if (targetId !== null) {
+		if (targetId !== null)
+		{
 			saveNow();
 			focusName(targetId, 0);
 		}
 	}, [focusName, nodeId, queryClient, saveNow]);
 
 	const handleKeyDown = useCallback(
-		(event: React.KeyboardEvent<HTMLDivElement>) => {
-			if (handleSlashKey(event)) {
+		(event: React.KeyboardEvent<HTMLDivElement>) =>
+		{
+			if (handleSlashKey(event))
+			{
 				return;
 			}
-			if (handleMentionKey(event)) {
+			if (handleMentionKey(event))
+			{
 				return;
 			}
 			const element = contentRef.current;
-			if (element === null || handleTagAutocompleteKey(event)) {
+			if (element === null || handleTagAutocompleteKey(event))
+			{
 				return;
 			}
-			if (event.key === "Enter" && event.altKey && openLinkAtCaret(element)) {
+			if (event.key === "Enter" && event.altKey && openLinkAtCaret(element))
+			{
 				event.preventDefault();
 				return;
 			}
-			if (isHighlightKey(event, isMacPlatform()) && !event.nativeEvent.isComposing) {
+			if (isHighlightKey(event, isMacPlatform()) && !event.nativeEvent.isComposing)
+			{
 				event.preventDefault();
 				applyLatestOrOpen();
 				return;
 			}
 			const formatAttr = classifyFormatKey(event, isMacPlatform());
-			if (formatAttr !== null && !event.nativeEvent.isComposing) {
+			if (formatAttr !== null && !event.nativeEvent.isComposing)
+			{
 				event.preventDefault();
 				applyInlineToggle(formatAttr);
 				return;
 			}
-			if (event.key === "Backspace" || event.key === "Delete") {
+			if (event.key === "Backspace" || event.key === "Delete")
+			{
 				const next = deleteAdjacentPill(
 					element,
 					planNoteSave(noteSaver.saved, element.innerHTML).note,
 					event.key === "Backspace" ? "backward" : "forward",
 					(note) => noteContentHtml(note, dateSettings, undefined, account),
 				);
-				if (next !== null) {
+				if (next !== null)
+				{
 					event.preventDefault();
 					noteSaver.saveNow(next);
 					return;
 				}
 			}
 			const offsets = selectionOffsets(element);
-			if (offsets === null) {
+			if (offsets === null)
+			{
 				return;
 			}
 			const text = element.textContent;
-			const plan = planNoteKey({
-				key: event.key,
-				shift: event.shiftKey,
-				text,
-				start: offsets.start,
-				end: offsets.end,
-				onFirstLine: !text.slice(0, offsets.start).includes("\n"),
-				onLastLine: !text.slice(offsets.end).includes("\n"),
-			});
-			if (plan.kind === "native") {
+			const plan = planNoteKey(
+				{
+					key: event.key,
+					shift: event.shiftKey,
+					text,
+					start: offsets.start,
+					end: offsets.end,
+					onFirstLine: !text.slice(0, offsets.start).includes("\n"),
+					onLastLine: !text.slice(offsets.end).includes("\n"),
+				},
+			);
+			if (plan.kind === "native")
+			{
 				return;
 			}
-			if (plan.kind === "appendSentinelThenNative") {
+			if (plan.kind === "appendSentinelThenNative")
+			{
 				// A trailing newline node, selection untouched; the native Backspace then runs and handleInput saves.
 				noteTextElement(element).append(document.createTextNode("\n"));
 				return;
 			}
 			event.preventDefault();
-			switch (plan.kind) {
-				case "insert": {
+			switch (plan.kind)
+			{
+				case "insert":
+				{
 					insertAtSelection(plan.text, plan.caret - offsets.start);
 					handleInput();
 					break;
 				}
-				case "focusName": {
+				case "focusName":
+				{
 					saveNow();
 					focusName(nodeId, plan.caret);
 					break;
 				}
-				case "focusNextRowName": {
+				case "focusNextRowName":
+				{
 					focusNextRowName();
 					break;
 				}
-				case "clearAndFocusName": {
+				case "clearAndFocusName":
+				{
 					element.innerHTML = "";
 					saveNow();
 					focusName(nodeId, "end");
 					break;
 				}
-				case "noop": {
+				case "noop":
+				{
 					break;
 				}
 			}
@@ -697,10 +864,12 @@ export function EditableNote({
 	const plainPasteKey = usePlainPasteKey();
 	// Upstream `MD4`: a paste goes in place with its newlines and allowed formatting; it never creates rows.
 	const handlePaste = useCallback(
-		(event: React.ClipboardEvent<HTMLDivElement>) => {
+		(event: React.ClipboardEvent<HTMLDivElement>) =>
+		{
 			const element = contentRef.current;
 			const data = event.clipboardData;
-			if (element === null || (data.files.length > 0 && data.getData("text/plain") === "")) {
+			if (element === null || (data.files.length > 0 && data.getData("text/plain") === ""))
+			{
 				return;
 			}
 			event.preventDefault();
@@ -711,20 +880,24 @@ export function EditableNote({
 			const selectedText = selection?.toString() ?? "";
 			const linkPlan = plainPasteKey.current
 				? null
-				: planLinkPaste({
-						clipboardText: data.getData("text/plain"),
-						selectionText: selectedText,
-						collapsed: selection?.isCollapsed ?? true,
-						inCode: anchorElement?.closest("code") != null,
-						resolveTargetName: (href) => cachedLinkTargetName(queryClient, href),
-					});
+				: planLinkPaste(
+						{
+							clipboardText: data.getData("text/plain"),
+							selectionText: selectedText,
+							collapsed: selection?.isCollapsed ?? true,
+							inCode: anchorElement?.closest("code") != null,
+							resolveTargetName: (href) => cachedLinkTargetName(queryClient, href),
+						},
+					);
 			insertHtmlAtSelection(
 				linkPlan === null
-					? notePasteHtml({
-							text: data.getData("text/plain"),
-							html: data.getData("text/html"),
-							plain: plainPasteKey.current,
-						})
+					? notePasteHtml(
+							{
+								text: data.getData("text/plain"),
+								html: data.getData("text/html"),
+								plain: plainPasteKey.current,
+							},
+						)
 					: linkPasteAnchorHtml(linkPlan, selectedText),
 			);
 			handleInput();
@@ -739,7 +912,8 @@ export function EditableNote({
 			<div
 				className={isFocused ? `${CONTENT_CLASS} active` : CONTENT_CLASS}
 				contentEditable
-				dangerouslySetInnerHTML={{
+				dangerouslySetInnerHTML={
+				{
 					__html: focusedHtml ?? restingHtml,
 				}}
 				onBlur={handleBlur}
@@ -748,7 +922,8 @@ export function EditableNote({
 				onInput={handleInput}
 				onKeyDown={handleKeyDown}
 				onPaste={handlePaste}
-				onMouseDown={(event) => {
+				onMouseDown={(event) =>
+				{
 					// Before the browser places the caret, so the click lands in the plain DOM it will edit.
 					tagPointer.onMouseDown(event);
 					clearSearchHighlights();

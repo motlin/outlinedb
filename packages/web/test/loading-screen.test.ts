@@ -7,19 +7,24 @@ const {hideLoadingScreen} = await import("../src/client/loading-screen.js");
 
 const html = readFileSync(join(import.meta.dirname, "../src/client/index.html"), "utf8");
 
-function parsed(): Document {
+function parsed(): Document
+{
 	return new DOMParser().parseFromString(html, "text/html");
 }
 
-describe("boot loading screen", () => {
-	beforeEach(() => {
+describe("boot loading screen", () =>
+{
+	beforeEach(() =>
+	{
 		vi.useFakeTimers();
 	});
-	afterEach(() => {
+	afterEach(() =>
+	{
 		vi.useRealTimers();
 	});
 
-	it("ships upstream's six animated bars before #root", () => {
+	it("ships upstream's six animated bars before #root", () =>
+	{
 		const doc = parsed();
 		const bars = [...doc.querySelectorAll("#loadingScreen > .b")].map((b) => [
 			b.id,
@@ -43,7 +48,8 @@ describe("boot loading screen", () => {
 		);
 	});
 
-	it("fades out over 150ms, then removes itself and clears the body background", async () => {
+	it("fades out over 150ms, then removes itself and clears the body background", async () =>
+	{
 		const doc = parsed();
 		doc.body.style.background = "red";
 		const screen = doc.querySelector<HTMLElement>("#loadingScreen")!;
@@ -61,7 +67,8 @@ describe("boot loading screen", () => {
 		expect(doc.body.style.background).toBe("");
 	});
 
-	it("does nothing without a loading screen", async () => {
+	it("does nothing without a loading screen", async () =>
+	{
 		const doc = new DOMParser().parseFromString("<body></body>", "text/html");
 		await expect(hideLoadingScreen(doc)).resolves.toBeUndefined();
 	});

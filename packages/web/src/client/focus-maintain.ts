@@ -13,26 +13,51 @@ export function caretAfterSelectionCommand({
 	editorFocused,
 }: {
 	firstId: string;
-	before: {parentId: string | null; index: number};
+	before:
+	{
+		parentId: string | null;
+		index: number;
+	};
 	rows: readonly FlatRow[];
 	selectionActive: boolean;
 	editorFocused: boolean;
-}): {id: string; offset: "end"} | null {
-	if (selectionActive || editorFocused) {
+}):
+{
+	id: string;
+	offset: "end";
+} | null
+{
+	if (selectionActive || editorFocused)
+	{
 		return null;
 	}
-	if (rows.some((row) => row.id === firstId)) {
-		return {id: firstId, offset: "end"};
+	if (rows.some((row) => row.id === firstId))
+	{
+		return {
+			id: firstId,
+			offset: "end",
+		};
 	}
 	const siblings = rows.filter((row) => row.parentId === before.parentId);
 	const target = siblings[before.index] ?? siblings[before.index - 1] ?? rows[0];
-	return target === undefined ? null : {id: target.id, offset: "end"};
+	return target === undefined
+		? null
+		:
+			{
+				id: target.id,
+				offset: "end",
+			};
 }
 
-export interface FocusMaintainEnv {
+export interface FocusMaintainEnv
+{
 	/** The row whose caret is kept: the edited row, else the first selection entry in insertion order. */
 	firstId: () => string | null;
-	position: (id: string) => {parentId: string | null; index: number};
+	position: (id: string) =>
+	{
+		parentId: string | null;
+		index: number;
+	};
 	rows: () => readonly FlatRow[];
 	selectionActive: () => boolean;
 	editorFocused: () => boolean;
@@ -42,22 +67,28 @@ export interface FocusMaintainEnv {
 }
 
 /** Upstream `WF.Focus.maintain(fn)`: run `fn`, then restore the caret if it left the selection without one. */
-export function maintainFocus(fn: () => void, env: FocusMaintainEnv): void {
+export function maintainFocus(fn: () => void, env: FocusMaintainEnv): void
+{
 	const firstId = env.firstId();
 	const before = firstId === null ? null : env.position(firstId);
 	fn();
-	if (firstId === null || before === null) {
+	if (firstId === null || before === null)
+	{
 		return;
 	}
-	env.defer(() => {
-		const caret = caretAfterSelectionCommand({
-			firstId,
-			before,
-			rows: env.rows(),
-			selectionActive: env.selectionActive(),
-			editorFocused: env.editorFocused(),
-		});
-		if (caret !== null) {
+	env.defer(() =>
+	{
+		const caret = caretAfterSelectionCommand(
+			{
+				firstId,
+				before,
+				rows: env.rows(),
+				selectionActive: env.selectionActive(),
+				editorFocused: env.editorFocused(),
+			},
+		);
+		if (caret !== null)
+		{
 			env.resume(caret.id);
 		}
 	});

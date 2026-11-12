@@ -7,7 +7,8 @@ import {currentVersion} from "./cache-temporal.js";
 import {inIds} from "./in-ids.js";
 import {withMirrorText} from "./mirror-text.js";
 
-interface NodeInfo {
+interface NodeInfo
+{
 	id: string;
 	name: string | null;
 	parentId: string | null;
@@ -20,16 +21,20 @@ interface NodeInfo {
  * search enrichment, embeddings) and the web server (path enrichment) so ancestor
  * walking lives in one place.
  */
-export class PathBuilder {
+export class PathBuilder
+{
 	private readonly database: AppDatabase;
 
-	constructor(database: AppDatabase) {
+	constructor(database: AppDatabase)
+	{
 		this.database = database;
 	}
 
 	/** A node's ancestor path, or "Home" for `null` (the top level). */
-	buildFullPath(nodeId: string | null): string {
-		if (nodeId === null) {
+	buildFullPath(nodeId: string | null): string
+	{
+		if (nodeId === null)
+		{
 			return "Home";
 		}
 		const paths = this.buildFullPathsBatch([nodeId]);
@@ -47,40 +52,51 @@ export class PathBuilder {
 	 * 4. Repeat until we've reached all roots (no more new parents)
 	 * 5. Reconstruct each path by walking the in-memory map
 	 */
-	buildFullPathPartsBatch(nodeIds: string[]): Map<string, string[]> {
-		if (nodeIds.length === 0) {
+	buildFullPathPartsBatch(nodeIds: string[]): Map<string, string[]>
+	{
+		if (nodeIds.length === 0)
+		{
 			return new Map();
 		}
 
 		const nodeMap = new Map<string, NodeInfo>();
 		let currentIds = [...new Set(nodeIds)];
 
-		while (currentIds.length > 0) {
+		while (currentIds.length > 0)
+		{
 			const nextIds: string[] = [];
 
 			const results = withMirrorText(
 				this.database,
 				this.database
-					.select({
-						id: nodeContent.id,
-						name: nodeContent.name,
-						note: nodeContent.note,
-						parentId: nodeContent.parentId,
-					})
+					.select(
+						{
+							id: nodeContent.id,
+							name: nodeContent.name,
+							note: nodeContent.note,
+							parentId: nodeContent.parentId,
+						},
+					)
 					.from(nodeContent)
 					.where(and(inIds(nodeContent.id, currentIds), currentVersion(nodeContent)))
 					.all(),
 			);
 
-			for (const row of results) {
-				if (!nodeMap.has(row.id)) {
-					nodeMap.set(row.id, {
-						id: row.id,
-						name: row.name,
-						parentId: row.parentId,
-					});
+			for (const row of results)
+			{
+				if (!nodeMap.has(row.id))
+				{
+					nodeMap.set(
+						row.id,
+						{
+							id: row.id,
+							name: row.name,
+							parentId: row.parentId,
+						},
+					);
 
-					if (row.parentId && !nodeMap.has(row.parentId)) {
+					if (row.parentId && !nodeMap.has(row.parentId))
+					{
 						nextIds.push(row.parentId);
 					}
 				}
@@ -91,7 +107,8 @@ export class PathBuilder {
 
 		const partsMap = new Map<string, string[]>();
 
-		for (const nodeId of nodeIds) {
+		for (const nodeId of nodeIds)
+		{
 			const pathParts = ancestorChain(nodeId, (linkId) => nodeMap.get(linkId))
 				.map((info) => stripHtmlTags(info.name ?? ""))
 				.filter((name) => name !== "")
@@ -105,16 +122,19 @@ export class PathBuilder {
 	/**
 	 * Build full `' > '`-joined paths for multiple nodes.
 	 */
-	buildFullPathsBatch(nodeIds: string[]): Map<string, string> {
+	buildFullPathsBatch(nodeIds: string[]): Map<string, string>
+	{
 		const partsMap = this.buildFullPathPartsBatch(nodeIds);
 		const pathMap = new Map<string, string>();
-		for (const [id, parts] of partsMap) {
+		for (const [id, parts] of partsMap)
+		{
 			pathMap.set(id, parts.join(" > "));
 		}
 		return pathMap;
 	}
 
-	buildTextContent(nodeId: string): string {
+	buildTextContent(nodeId: string): string
+	{
 		const contents = this.buildTextContentBatch([nodeId]);
 		return contents.get(nodeId) ?? "";
 	}
@@ -122,8 +142,10 @@ export class PathBuilder {
 	/**
 	 * Build text content for multiple nodes.
 	 */
-	buildTextContentBatch(nodeIds: string[]): Map<string, string> {
-		if (nodeIds.length === 0) {
+	buildTextContentBatch(nodeIds: string[]): Map<string, string>
+	{
+		if (nodeIds.length === 0)
+		{
 			return new Map();
 		}
 
@@ -132,17 +154,20 @@ export class PathBuilder {
 		const results = withMirrorText(
 			this.database,
 			this.database
-				.select({
-					id: nodeContent.id,
-					name: nodeContent.name,
-					note: nodeContent.note,
-				})
+				.select(
+					{
+						id: nodeContent.id,
+						name: nodeContent.name,
+						note: nodeContent.note,
+					},
+				)
 				.from(nodeContent)
 				.where(and(inIds(nodeContent.id, nodeIds), currentVersion(nodeContent)))
 				.all(),
 		);
 
-		for (const node of results) {
+		for (const node of results)
+		{
 			const name = stripHtmlTags(node.name ?? "");
 			const note = node.note ? stripHtmlTags(node.note) : "";
 			contentMap.set(node.id, note ? `${name}\n\n${note}` : name);
@@ -155,8 +180,10 @@ export class PathBuilder {
 	 * Identify which nodes have children (are non-leaf nodes).
 	 * Returns a Set of node IDs that have at least one child.
 	 */
-	getNonLeafNodeIds(nodeIds: string[]): Set<string> {
-		if (nodeIds.length === 0) {
+	getNonLeafNodeIds(nodeIds: string[]): Set<string>
+	{
+		if (nodeIds.length === 0)
+		{
 			return new Set();
 		}
 
@@ -164,15 +191,19 @@ export class PathBuilder {
 
 		// Find all nodes whose parentId is in nodeIds
 		const results = this.database
-			.selectDistinct({
-				parentId: nodeContent.parentId,
-			})
+			.selectDistinct(
+				{
+					parentId: nodeContent.parentId,
+				},
+			)
 			.from(nodeContent)
 			.where(and(inIds(nodeContent.parentId, nodeIds), currentVersion(nodeContent)))
 			.all();
 
-		for (const row of results) {
-			if (row.parentId) {
+		for (const row of results)
+		{
+			if (row.parentId)
+			{
 				nonLeafIds.add(row.parentId);
 			}
 		}
@@ -185,8 +216,10 @@ export class PathBuilder {
 	 * Returns a map of parent node ID to combined children text content.
 	 * Only includes direct children (one level deep).
 	 */
-	buildChildrenTextBatch(parentIds: string[]): Map<string, string> {
-		if (parentIds.length === 0) {
+	buildChildrenTextBatch(parentIds: string[]): Map<string, string>
+	{
+		if (parentIds.length === 0)
+		{
 			return new Map();
 		}
 
@@ -195,19 +228,23 @@ export class PathBuilder {
 		const results = withMirrorText(
 			this.database,
 			this.database
-				.select({
-					id: nodeContent.id,
-					parentId: nodeContent.parentId,
-					name: nodeContent.name,
-					note: nodeContent.note,
-				})
+				.select(
+					{
+						id: nodeContent.id,
+						parentId: nodeContent.parentId,
+						name: nodeContent.name,
+						note: nodeContent.note,
+					},
+				)
 				.from(nodeContent)
 				.where(and(inIds(nodeContent.parentId, parentIds), currentVersion(nodeContent)))
 				.all(),
 		);
 
-		for (const row of results) {
-			if (!row.parentId) {
+		for (const row of results)
+		{
+			if (!row.parentId)
+			{
 				continue;
 			}
 
@@ -216,7 +253,8 @@ export class PathBuilder {
 			const childText = note ? `${name}: ${note}` : name;
 
 			let siblings = childrenMap.get(row.parentId);
-			if (siblings === undefined) {
+			if (siblings === undefined)
+			{
 				siblings = [];
 				childrenMap.set(row.parentId, siblings);
 			}
@@ -225,7 +263,8 @@ export class PathBuilder {
 
 		// Convert array of children texts to combined string
 		const contentMap = new Map<string, string>();
-		for (const [parentId, childTexts] of childrenMap) {
+		for (const [parentId, childTexts] of childrenMap)
+		{
 			contentMap.set(parentId, childTexts.join("\n"));
 		}
 

@@ -7,28 +7,46 @@ import {createRoot} from "react-dom/client";
 import {EXPANSION_POLL_MS, expansionPollQuery, loadExpansion} from "../src/client/hooks/use-expansion-sync.js";
 import {useOutlineLiveSync} from "../src/client/hooks/use-outline-live-sync.js";
 
-declare global {
+declare global
+{
 	// React reads this to know act() wraps every update.
 	var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
-describe("expansion poll query", () => {
+describe("expansion poll query", () =>
+{
 	const fetchMock = vi.fn<typeof fetch>();
 
-	afterEach(() => {
+	afterEach(() =>
+	{
 		vi.useRealTimers();
 		vi.unstubAllGlobals();
 	});
 
-	it("polls the expansion change feed every 15s after the page load through a TanStack Query refetch interval", async () => {
+	it("polls the expansion change feed every 15s after the page load through a TanStack Query refetch interval", async () =>
+	{
 		vi.stubGlobal("fetch", fetchMock);
 		fetchMock.mockImplementation(async () =>
-			Promise.resolve(Response.json({version: "aaaaaaaaaaaaaaaa", expandedIds: ["a"]})),
+			Promise.resolve(
+				Response.json(
+					{
+						version: "aaaaaaaaaaaaaaaa",
+						expandedIds: ["a"],
+					},
+				),
+			),
 		);
 		await loadExpansion();
 		fetchMock.mockReset();
 		fetchMock.mockImplementation(async () =>
-			Promise.resolve(Response.json({version: "aaaaaaaaaaaaaaaa", expandedIds: null})),
+			Promise.resolve(
+				Response.json(
+					{
+						version: "aaaaaaaaaaaaaaaa",
+						expandedIds: null,
+					},
+				),
+			),
 		);
 		vi.useFakeTimers();
 		const queryClient = new QueryClient();
@@ -38,43 +56,61 @@ describe("expansion poll query", () => {
 		unsubscribe();
 		queryClient.clear();
 
-		expect({period: EXPANSION_POLL_MS, urls: fetchMock.mock.calls.map(([url]) => url)}).toStrictEqual({
-			period: 15_000,
-			urls: [
-				"/api/v1/expansion?version=aaaaaaaaaaaaaaaa",
-				"/api/v1/expansion?version=aaaaaaaaaaaaaaaa",
-				"/api/v1/expansion?version=aaaaaaaaaaaaaaaa",
-			],
-		});
+		expect(
+			{
+				period: EXPANSION_POLL_MS,
+				urls: fetchMock.mock.calls.map(([url]) => url),
+			},
+		).toStrictEqual(
+			{
+				period: 15_000,
+				urls: [
+					"/api/v1/expansion?version=aaaaaaaaaaaaaaaa",
+					"/api/v1/expansion?version=aaaaaaaaaaaaaaaa",
+					"/api/v1/expansion?version=aaaaaaaaaaaaaaaa",
+				],
+			},
+		);
 	});
 });
 
-describe("expansion socket frame", () => {
+describe("expansion socket frame", () =>
+{
 	const VERSION = "aaaaaaaaaaaaaaaa";
 	const NEWER = "bbbbbbbbbbbbbbbb";
 
 	/** A WebSocket the test opens and feeds frames to by hand. */
-	class FakeSocket {
+	class FakeSocket
+	{
 		static readonly instances: FakeSocket[] = [];
 		readyState = 0;
 		readonly #listeners = new Map<string, ((event: {data?: string}) => void)[]>();
 
-		constructor() {
+		constructor()
+		{
 			FakeSocket.instances.push(this);
 		}
 
-		addEventListener(name: string, callback: (event: {data?: string}) => void): void {
+		addEventListener(name: string, callback: (event: {data?: string}) => void): void
+		{
 			this.#listeners.set(name, [...(this.#listeners.get(name) ?? []), callback]);
 		}
 
-		close(): void {
+		close(): void
+		{
 			this.readyState = 3;
 		}
 
-		emit(name: "open" | "message", data?: string): void {
+		emit(name: "open" | "message", data?: string): void
+		{
 			this.readyState = name === "open" ? 1 : this.readyState;
-			for (const callback of this.#listeners.get(name) ?? []) {
-				callback({data});
+			for (const callback of this.#listeners.get(name) ?? [])
+			{
+				callback(
+					{
+						data,
+					},
+				);
 			}
 		}
 	}
@@ -84,26 +120,38 @@ describe("expansion socket frame", () => {
 	let unsubscribe: () => void;
 	let urls: string[];
 
-	function Harness(): null {
+	function Harness(): null
+	{
 		useOutlineLiveSync();
 		return null;
 	}
 
-	async function settle(): Promise<void> {
-		await act(async () => {
+	async function settle(): Promise<void>
+	{
+		await act(async () =>
+		{
 			await vi.advanceTimersByTimeAsync(0);
 		});
 	}
 
-	beforeEach(async () => {
+	beforeEach(async () =>
+	{
 		globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 		urls = [];
 		vi.stubGlobal("WebSocket", FakeSocket);
 		vi.stubGlobal(
 			"fetch",
-			vi.fn(async (input: string) => {
+			vi.fn(async (input: string) =>
+			{
 				urls.push(input);
-				return Promise.resolve(Response.json({version: VERSION, expandedIds: input.includes("?") ? null : []}));
+				return Promise.resolve(
+					Response.json(
+						{
+							version: VERSION,
+							expandedIds: input.includes("?") ? null : [],
+						},
+					),
+				);
 			}),
 		);
 		await loadExpansion();
@@ -113,16 +161,27 @@ describe("expansion socket frame", () => {
 		const container = document.createElement("div");
 		document.body.append(container);
 		root = createRoot(container);
-		act(() => {
-			root?.render(createElement(QueryClientProvider, {client}, createElement(Harness)));
+		act(() =>
+		{
+			root?.render(
+				createElement(
+					QueryClientProvider,
+					{
+						client,
+					},
+					createElement(Harness),
+				),
+			);
 		});
 		FakeSocket.instances.at(-1)!.emit("open");
 		await settle();
 		urls = [];
 	});
 
-	afterEach(() => {
-		act(() => {
+	afterEach(() =>
+	{
+		act(() =>
+		{
 			root?.unmount();
 		});
 		root = undefined;
@@ -133,16 +192,25 @@ describe("expansion socket frame", () => {
 		vi.unstubAllGlobals();
 	});
 
-	const expansionFrame = (version: string) => JSON.stringify({type: "expansion.changed", version});
+	const expansionFrame = (version: string) =>
+		JSON.stringify(
+			{
+				type: "expansion.changed",
+				version,
+			},
+		);
 
-	describe("expansion.changed frames on the events socket", () => {
-		it("polls the expansion feed once for a new version", async () => {
+	describe("expansion.changed frames on the events socket", () =>
+	{
+		it("polls the expansion feed once for a new version", async () =>
+		{
 			FakeSocket.instances.at(-1)!.emit("message", expansionFrame(NEWER));
 			await settle();
 			expect(urls).toStrictEqual([`/api/v1/expansion?version=${VERSION}`]);
 		});
 
-		it("does not poll for the version the tab already holds", async () => {
+		it("does not poll for the version the tab already holds", async () =>
+		{
 			FakeSocket.instances.at(-1)!.emit("message", expansionFrame(VERSION));
 			await settle();
 			expect(urls).toStrictEqual([]);

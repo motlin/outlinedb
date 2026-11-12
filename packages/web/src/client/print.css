@@ -4,8 +4,10 @@
  * body's left padding print rules sit next to their screen rules in styles.css). A Vite CSS import cannot carry
  * a `media` attribute, so the whole file sits in one @media block. Imported after styles.css so it wins ties.
  */
-@media print {
-	.page {
+@media print
+{
+	.page
+	{
 		border: none !important;
 		margin-top: 0 !important;
 		margin-bottom: 0 !important;
@@ -20,7 +22,8 @@
 		transform: none !important;
 	}
 
-	.mainTreeRoot {
+	.mainTreeRoot
+	{
 		min-height: 0px !important;
 		padding-top: 0 !important;
 		padding-bottom: 0 !important;
@@ -28,20 +31,24 @@
 		margin-bottom: 0 !important;
 	}
 
-	.children {
+	.children
+	{
 		border-left: none;
 	}
 
-	body {
+	body
+	{
 		color: #000;
 		background: #fff !important;
 	}
 
-	.bullet {
+	.bullet
+	{
 		color: var(--wf-text-quaternary);
 	}
 
-	.print\:\!min-h-0 {
+	.print\:\!min-h-0
+	{
 		min-height: 0px !important;
 	}
 }

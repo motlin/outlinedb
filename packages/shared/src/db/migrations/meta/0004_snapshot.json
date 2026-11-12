@@ -3,60 +3,71 @@
 	"dialect": "sqlite",
 	"id": "a551383e-fe4c-4bf6-bcf0-fcace327305b",
 	"prevId": "c09d884f-432c-48c0-851a-832ec3181658",
-	"tables": {
-		"account": {
+	"tables":
+	{
+		"account":
+		{
 			"name": "account",
-			"columns": {
-				"user_id": {
+			"columns":
+			{
+				"user_id":
+				{
 					"name": "user_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"full_name": {
+				"full_name":
+				{
 					"name": "full_name",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"date_joined_sec": {
+				"date_joined_sec":
+				{
 					"name": "date_joined_sec",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"entropy_key": {
+				"entropy_key":
+				{
 					"name": "entropy_key",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"username": {
+				"username":
+				{
 					"name": "username",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"email": {
+				"email":
+				{
 					"name": "email",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -64,13 +75,16 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"account_system_to_idx": {
+			"indexes":
+			{
+				"account_system_to_idx":
+				{
 					"name": "account_system_to_idx",
 					"columns": ["user_id", "system_to"],
 					"isUnique": true
 				},
-				"account_closed_at_idx": {
+				"account_closed_at_idx":
+				{
 					"name": "account_closed_at_idx",
 					"columns": ["system_to"],
 					"isUnique": false,
@@ -78,8 +92,10 @@
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"account_user_id_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"account_user_id_system_from_pk":
+				{
 					"columns": ["user_id", "system_from"],
 					"name": "account_user_id_system_from_pk"
 				}
@@ -87,143 +103,165 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"account_settings": {
+		"account_settings":
+		{
 			"name": "account_settings",
-			"columns": {
-				"user_id": {
+			"columns":
+			{
+				"user_id":
+				{
 					"name": "user_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"theme": {
+				"theme":
+				{
 					"name": "theme",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"font": {
+				"font":
+				{
 					"name": "font",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"timezone": {
+				"timezone":
+				{
 					"name": "timezone",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"show_completed": {
+				"show_completed":
+				{
 					"name": "show_completed",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"show_keyboard_shortcuts": {
+				"show_keyboard_shortcuts":
+				{
 					"name": "show_keyboard_shortcuts",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"same_color_for_links": {
+				"same_color_for_links":
+				{
 					"name": "same_color_for_links",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"display_image_previews_as_thumbnails": {
+				"display_image_previews_as_thumbnails":
+				{
 					"name": "display_image_previews_as_thumbnails",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"ignore_youtube": {
+				"ignore_youtube":
+				{
 					"name": "ignore_youtube",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"ignore_yt_short": {
+				"ignore_yt_short":
+				{
 					"name": "ignore_yt_short",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"ignore_twitter": {
+				"ignore_twitter":
+				{
 					"name": "ignore_twitter",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"ignore_loom": {
+				"ignore_loom":
+				{
 					"name": "ignore_loom",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"unsubscribe_from_summary_emails": {
+				"unsubscribe_from_summary_emails":
+				{
 					"name": "unsubscribe_from_summary_emails",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"unsubscribe_from_comments_emails": {
+				"unsubscribe_from_comments_emails":
+				{
 					"name": "unsubscribe_from_comments_emails",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"backup_to_dropbox": {
+				"backup_to_dropbox":
+				{
 					"name": "backup_to_dropbox",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"mfa_enabled": {
+				"mfa_enabled":
+				{
 					"name": "mfa_enabled",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"ai_default_agent_id": {
+				"ai_default_agent_id":
+				{
 					"name": "ai_default_agent_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"ai_context_limit": {
+				"ai_context_limit":
+				{
 					"name": "ai_context_limit",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -231,13 +269,16 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"account_settings_system_to_idx": {
+			"indexes":
+			{
+				"account_settings_system_to_idx":
+				{
 					"name": "account_settings_system_to_idx",
 					"columns": ["user_id", "system_to"],
 					"isUnique": true
 				},
-				"account_settings_closed_at_idx": {
+				"account_settings_closed_at_idx":
+				{
 					"name": "account_settings_closed_at_idx",
 					"columns": ["system_to"],
 					"isUnique": false,
@@ -245,8 +286,10 @@
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"account_settings_user_id_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"account_settings_user_id_system_from_pk":
+				{
 					"columns": ["user_id", "system_from"],
 					"name": "account_settings_user_id_system_from_pk"
 				}
@@ -254,52 +297,61 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"ai_assistants": {
+		"ai_assistants":
+		{
 			"name": "ai_assistants",
-			"columns": {
-				"assistant_id": {
+			"columns":
+			{
+				"assistant_id":
+				{
 					"name": "assistant_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"name": {
+				"name":
+				{
 					"name": "name",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"model": {
+				"model":
+				{
 					"name": "model",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"system_user_id": {
+				"system_user_id":
+				{
 					"name": "system_user_id",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"position": {
+				"position":
+				{
 					"name": "position",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -307,13 +359,16 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"ai_assistants_system_to_idx": {
+			"indexes":
+			{
+				"ai_assistants_system_to_idx":
+				{
 					"name": "ai_assistants_system_to_idx",
 					"columns": ["assistant_id", "system_to"],
 					"isUnique": true
 				},
-				"ai_assistants_closed_at_idx": {
+				"ai_assistants_closed_at_idx":
+				{
 					"name": "ai_assistants_closed_at_idx",
 					"columns": ["system_to"],
 					"isUnique": false,
@@ -321,8 +376,10 @@
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"ai_assistants_assistant_id_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"ai_assistants_assistant_id_system_from_pk":
+				{
 					"columns": ["assistant_id", "system_from"],
 					"name": "ai_assistants_assistant_id_system_from_pk"
 				}
@@ -330,31 +387,37 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"ai_metadata": {
+		"ai_metadata":
+		{
 			"name": "ai_metadata",
-			"columns": {
-				"node_id": {
+			"columns":
+			{
+				"node_id":
+				{
 					"name": "node_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"in_chat": {
+				"in_chat":
+				{
 					"name": "in_chat",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -362,16 +425,20 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"ai_metadata_system_to_idx": {
+			"indexes":
+			{
+				"ai_metadata_system_to_idx":
+				{
 					"name": "ai_metadata_system_to_idx",
 					"columns": ["node_id", "system_to"],
 					"isUnique": true
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"ai_metadata_node_id_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"ai_metadata_node_id_system_from_pk":
+				{
 					"columns": ["node_id", "system_from"],
 					"name": "ai_metadata_node_id_system_from_pk"
 				}
@@ -379,52 +446,61 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"ai_prompt_buttons": {
+		"ai_prompt_buttons":
+		{
 			"name": "ai_prompt_buttons",
-			"columns": {
-				"kind": {
+			"columns":
+			{
+				"kind":
+				{
 					"name": "kind",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"position": {
+				"position":
+				{
 					"name": "position",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"button_id": {
+				"button_id":
+				{
 					"name": "button_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"name": {
+				"name":
+				{
 					"name": "name",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"icon": {
+				"icon":
+				{
 					"name": "icon",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -432,13 +508,16 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"ai_prompt_buttons_system_to_idx": {
+			"indexes":
+			{
+				"ai_prompt_buttons_system_to_idx":
+				{
 					"name": "ai_prompt_buttons_system_to_idx",
 					"columns": ["kind", "position", "system_to"],
 					"isUnique": true
 				},
-				"ai_prompt_buttons_closed_at_idx": {
+				"ai_prompt_buttons_closed_at_idx":
+				{
 					"name": "ai_prompt_buttons_closed_at_idx",
 					"columns": ["system_to"],
 					"isUnique": false,
@@ -446,8 +525,10 @@
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"ai_prompt_buttons_kind_position_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"ai_prompt_buttons_kind_position_system_from_pk":
+				{
 					"columns": ["kind", "position", "system_from"],
 					"name": "ai_prompt_buttons_kind_position_system_from_pk"
 				}
@@ -455,31 +536,37 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"api_import_timestamp": {
+		"api_import_timestamp":
+		{
 			"name": "api_import_timestamp",
-			"columns": {
-				"name": {
+			"columns":
+			{
+				"name":
+				{
 					"name": "name",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"timestamp": {
+				"timestamp":
+				{
 					"name": "timestamp",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -487,13 +574,16 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"api_import_timestamp_system_to_idx": {
+			"indexes":
+			{
+				"api_import_timestamp_system_to_idx":
+				{
 					"name": "api_import_timestamp_system_to_idx",
 					"columns": ["name", "system_to"],
 					"isUnique": true
 				},
-				"api_import_timestamp_closed_at_idx": {
+				"api_import_timestamp_closed_at_idx":
+				{
 					"name": "api_import_timestamp_closed_at_idx",
 					"columns": ["system_to"],
 					"isUnique": false,
@@ -501,8 +591,10 @@
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"api_import_timestamp_name_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"api_import_timestamp_name_system_from_pk":
+				{
 					"columns": ["name", "system_from"],
 					"name": "api_import_timestamp_name_system_from_pk"
 				}
@@ -510,31 +602,37 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"backup_imports": {
+		"backup_imports":
+		{
 			"name": "backup_imports",
-			"columns": {
-				"filename": {
+			"columns":
+			{
+				"filename":
+				{
 					"name": "filename",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"backup_date": {
+				"backup_date":
+				{
 					"name": "backup_date",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -542,16 +640,20 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"backup_imports_system_to_idx": {
+			"indexes":
+			{
+				"backup_imports_system_to_idx":
+				{
 					"name": "backup_imports_system_to_idx",
 					"columns": ["filename", "system_to"],
 					"isUnique": true
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"backup_imports_filename_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"backup_imports_filename_system_from_pk":
+				{
 					"columns": ["filename", "system_from"],
 					"name": "backup_imports_filename_system_from_pk"
 				}
@@ -559,31 +661,37 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"calendar_layout_applies": {
+		"calendar_layout_applies":
+		{
 			"name": "calendar_layout_applies",
-			"columns": {
-				"root_id": {
+			"columns":
+			{
+				"root_id":
+				{
 					"name": "root_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"applied_at_system_time": {
+				"applied_at_system_time":
+				{
 					"name": "applied_at_system_time",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -591,13 +699,16 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"calendar_layout_applies_system_to_idx": {
+			"indexes":
+			{
+				"calendar_layout_applies_system_to_idx":
+				{
 					"name": "calendar_layout_applies_system_to_idx",
 					"columns": ["root_id", "system_to"],
 					"isUnique": true
 				},
-				"calendar_layout_applies_closed_at_idx": {
+				"calendar_layout_applies_closed_at_idx":
+				{
 					"name": "calendar_layout_applies_closed_at_idx",
 					"columns": ["system_to"],
 					"isUnique": false,
@@ -605,8 +716,10 @@
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"calendar_layout_applies_root_id_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"calendar_layout_applies_root_id_system_from_pk":
+				{
 					"columns": ["root_id", "system_from"],
 					"name": "calendar_layout_applies_root_id_system_from_pk"
 				}
@@ -614,52 +727,61 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"calendar_levels": {
+		"calendar_levels":
+		{
 			"name": "calendar_levels",
-			"columns": {
-				"node_id": {
+			"columns":
+			{
+				"node_id":
+				{
 					"name": "node_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"day": {
+				"day":
+				{
 					"name": "day",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"week": {
+				"week":
+				{
 					"name": "week",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"month": {
+				"month":
+				{
 					"name": "month",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"year": {
+				"year":
+				{
 					"name": "year",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -667,16 +789,20 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"calendar_levels_system_to_idx": {
+			"indexes":
+			{
+				"calendar_levels_system_to_idx":
+				{
 					"name": "calendar_levels_system_to_idx",
 					"columns": ["node_id", "system_to"],
 					"isUnique": true
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"calendar_levels_node_id_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"calendar_levels_node_id_system_from_pk":
+				{
 					"columns": ["node_id", "system_from"],
 					"name": "calendar_levels_node_id_system_from_pk"
 				}
@@ -684,73 +810,85 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"calendar_metadata": {
+		"calendar_metadata":
+		{
 			"name": "calendar_metadata",
-			"columns": {
-				"node_id": {
+			"columns":
+			{
+				"node_id":
+				{
 					"name": "node_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"root": {
+				"root":
+				{
 					"name": "root",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"level": {
+				"level":
+				{
 					"name": "level",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"value": {
+				"value":
+				{
 					"name": "value",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"date_id": {
+				"date_id":
+				{
 					"name": "date_id",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"timestamp": {
+				"timestamp":
+				{
 					"name": "timestamp",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"found_dates": {
+				"found_dates":
+				{
 					"name": "found_dates",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"day_prefix": {
+				"day_prefix":
+				{
 					"name": "day_prefix",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -758,26 +896,32 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"calendar_metadata_system_to_idx": {
+			"indexes":
+			{
+				"calendar_metadata_system_to_idx":
+				{
 					"name": "calendar_metadata_system_to_idx",
 					"columns": ["node_id", "system_to"],
 					"isUnique": true
 				},
-				"calendar_metadata_root_idx": {
+				"calendar_metadata_root_idx":
+				{
 					"name": "calendar_metadata_root_idx",
 					"columns": ["root", "system_to"],
 					"isUnique": false
 				},
-				"calendar_metadata_level_idx": {
+				"calendar_metadata_level_idx":
+				{
 					"name": "calendar_metadata_level_idx",
 					"columns": ["level", "system_to", "date_id"],
 					"isUnique": false
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"calendar_metadata_node_id_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"calendar_metadata_node_id_system_from_pk":
+				{
 					"columns": ["node_id", "system_from"],
 					"name": "calendar_metadata_node_id_system_from_pk"
 				}
@@ -785,31 +929,37 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"changelog_reads": {
+		"changelog_reads":
+		{
 			"name": "changelog_reads",
-			"columns": {
-				"entry": {
+			"columns":
+			{
+				"entry":
+				{
 					"name": "entry",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"read": {
+				"read":
+				{
 					"name": "read",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -817,13 +967,16 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"changelog_reads_system_to_idx": {
+			"indexes":
+			{
+				"changelog_reads_system_to_idx":
+				{
 					"name": "changelog_reads_system_to_idx",
 					"columns": ["entry", "system_to"],
 					"isUnique": true
 				},
-				"changelog_reads_closed_at_idx": {
+				"changelog_reads_closed_at_idx":
+				{
 					"name": "changelog_reads_closed_at_idx",
 					"columns": ["system_to"],
 					"isUnique": false,
@@ -831,8 +984,10 @@
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"changelog_reads_entry_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"changelog_reads_entry_system_from_pk":
+				{
 					"columns": ["entry", "system_from"],
 					"name": "changelog_reads_entry_system_from_pk"
 				}
@@ -840,31 +995,37 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"changes_metadata": {
+		"changes_metadata":
+		{
 			"name": "changes_metadata",
-			"columns": {
-				"node_id": {
+			"columns":
+			{
+				"node_id":
+				{
 					"name": "node_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"ct_by": {
+				"ct_by":
+				{
 					"name": "ct_by",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -872,16 +1033,20 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"changes_metadata_system_to_idx": {
+			"indexes":
+			{
+				"changes_metadata_system_to_idx":
+				{
 					"name": "changes_metadata_system_to_idx",
 					"columns": ["node_id", "system_to"],
 					"isUnique": true
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"changes_metadata_node_id_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"changes_metadata_node_id_system_from_pk":
+				{
 					"columns": ["node_id", "system_from"],
 					"name": "changes_metadata_node_id_system_from_pk"
 				}
@@ -889,31 +1054,37 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"enabled_features": {
+		"enabled_features":
+		{
 			"name": "enabled_features",
-			"columns": {
-				"codename": {
+			"columns":
+			{
+				"codename":
+				{
 					"name": "codename",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"enabled": {
+				"enabled":
+				{
 					"name": "enabled",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -921,13 +1092,16 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"enabled_features_system_to_idx": {
+			"indexes":
+			{
+				"enabled_features_system_to_idx":
+				{
 					"name": "enabled_features_system_to_idx",
 					"columns": ["codename", "system_to"],
 					"isUnique": true
 				},
-				"enabled_features_closed_at_idx": {
+				"enabled_features_closed_at_idx":
+				{
 					"name": "enabled_features_closed_at_idx",
 					"columns": ["system_to"],
 					"isUnique": false,
@@ -935,8 +1109,10 @@
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"enabled_features_codename_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"enabled_features_codename_system_from_pk":
+				{
 					"columns": ["codename", "system_from"],
 					"name": "enabled_features_codename_system_from_pk"
 				}
@@ -944,24 +1120,29 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"expanded_nodes": {
+		"expanded_nodes":
+		{
 			"name": "expanded_nodes",
-			"columns": {
-				"short_key": {
+			"columns":
+			{
+				"short_key":
+				{
 					"name": "short_key",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -969,13 +1150,16 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"expanded_nodes_system_to_idx": {
+			"indexes":
+			{
+				"expanded_nodes_system_to_idx":
+				{
 					"name": "expanded_nodes_system_to_idx",
 					"columns": ["short_key", "system_to"],
 					"isUnique": true
 				},
-				"expanded_nodes_closed_at_idx": {
+				"expanded_nodes_closed_at_idx":
+				{
 					"name": "expanded_nodes_closed_at_idx",
 					"columns": ["system_to"],
 					"isUnique": false,
@@ -983,8 +1167,10 @@
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"expanded_nodes_short_key_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"expanded_nodes_short_key_system_from_pk":
+				{
 					"columns": ["short_key", "system_from"],
 					"name": "expanded_nodes_short_key_system_from_pk"
 				}
@@ -992,66 +1178,77 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"file_blobs": {
+		"file_blobs":
+		{
 			"name": "file_blobs",
-			"columns": {
-				"node_id": {
+			"columns":
+			{
+				"node_id":
+				{
 					"name": "node_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"status": {
+				"status":
+				{
 					"name": "status",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"sha256": {
+				"sha256":
+				{
 					"name": "sha256",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"size": {
+				"size":
+				{
 					"name": "size",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"content_type": {
+				"content_type":
+				{
 					"name": "content_type",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"local_path": {
+				"local_path":
+				{
 					"name": "local_path",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"error": {
+				"error":
+				{
 					"name": "error",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -1059,13 +1256,16 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"file_blobs_system_to_idx": {
+			"indexes":
+			{
+				"file_blobs_system_to_idx":
+				{
 					"name": "file_blobs_system_to_idx",
 					"columns": ["node_id", "system_to"],
 					"isUnique": true
 				},
-				"file_blobs_closed_at_idx": {
+				"file_blobs_closed_at_idx":
+				{
 					"name": "file_blobs_closed_at_idx",
 					"columns": ["system_to"],
 					"isUnique": false,
@@ -1073,8 +1273,10 @@
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"file_blobs_node_id_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"file_blobs_node_id_system_from_pk":
+				{
 					"columns": ["node_id", "system_from"],
 					"name": "file_blobs_node_id_system_from_pk"
 				}
@@ -1082,31 +1284,37 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"location_renames": {
+		"location_renames":
+		{
 			"name": "location_renames",
-			"columns": {
-				"location_key": {
+			"columns":
+			{
+				"location_key":
+				{
 					"name": "location_key",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"name": {
+				"name":
+				{
 					"name": "name",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -1114,13 +1322,16 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"location_renames_system_to_idx": {
+			"indexes":
+			{
+				"location_renames_system_to_idx":
+				{
 					"name": "location_renames_system_to_idx",
 					"columns": ["location_key", "system_to"],
 					"isUnique": true
 				},
-				"location_renames_closed_at_idx": {
+				"location_renames_closed_at_idx":
+				{
 					"name": "location_renames_closed_at_idx",
 					"columns": ["system_to"],
 					"isUnique": false,
@@ -1128,8 +1339,10 @@
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"location_renames_location_key_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"location_renames_location_key_system_from_pk":
+				{
 					"columns": ["location_key", "system_from"],
 					"name": "location_renames_location_key_system_from_pk"
 				}
@@ -1137,31 +1350,37 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"mirrors": {
+		"mirrors":
+		{
 			"name": "mirrors",
-			"columns": {
-				"mirror_id": {
+			"columns":
+			{
+				"mirror_id":
+				{
 					"name": "mirror_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"original_id": {
+				"original_id":
+				{
 					"name": "original_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -1169,26 +1388,32 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"mirrors_system_to_idx": {
+			"indexes":
+			{
+				"mirrors_system_to_idx":
+				{
 					"name": "mirrors_system_to_idx",
 					"columns": ["mirror_id", "original_id", "system_to"],
 					"isUnique": true
 				},
-				"mirrors_mirror_idx": {
+				"mirrors_mirror_idx":
+				{
 					"name": "mirrors_mirror_idx",
 					"columns": ["mirror_id", "system_to"],
 					"isUnique": false
 				},
-				"mirrors_original_idx": {
+				"mirrors_original_idx":
+				{
 					"name": "mirrors_original_idx",
 					"columns": ["original_id", "system_to"],
 					"isUnique": false
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"mirrors_mirror_id_original_id_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"mirrors_mirror_id_original_id_system_from_pk":
+				{
 					"columns": ["mirror_id", "original_id", "system_from"],
 					"name": "mirrors_mirror_id_original_id_system_from_pk"
 				}
@@ -1196,45 +1421,53 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"node_content": {
+		"node_content":
+		{
 			"name": "node_content",
-			"columns": {
-				"id": {
+			"columns":
+			{
+				"id":
+				{
 					"name": "id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"name": {
+				"name":
+				{
 					"name": "name",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"note": {
+				"note":
+				{
 					"name": "note",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"parent_id": {
+				"parent_id":
+				{
 					"name": "parent_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -1242,23 +1475,28 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"node_content_system_to_idx": {
+			"indexes":
+			{
+				"node_content_system_to_idx":
+				{
 					"name": "node_content_system_to_idx",
 					"columns": ["id", "system_to"],
 					"isUnique": true
 				},
-				"node_content_parent_idx": {
+				"node_content_parent_idx":
+				{
 					"name": "node_content_parent_idx",
 					"columns": ["parent_id", "system_from", "system_to", "id"],
 					"isUnique": true
 				},
-				"node_content_system_from_idx": {
+				"node_content_system_from_idx":
+				{
 					"name": "node_content_system_from_idx",
 					"columns": ["system_from"],
 					"isUnique": false
 				},
-				"node_content_closed_at_idx": {
+				"node_content_closed_at_idx":
+				{
 					"name": "node_content_closed_at_idx",
 					"columns": ["system_to"],
 					"isUnique": false,
@@ -1266,8 +1504,10 @@
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"node_content_id_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"node_content_id_system_from_pk":
+				{
 					"columns": ["id", "system_from"],
 					"name": "node_content_id_system_from_pk"
 				}
@@ -1275,66 +1515,77 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"node_display_metadata": {
+		"node_display_metadata":
+		{
 			"name": "node_display_metadata",
-			"columns": {
-				"node_id": {
+			"columns":
+			{
+				"node_id":
+				{
 					"name": "node_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"numbered_start": {
+				"numbered_start":
+				{
 					"name": "numbered_start",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"restorable_unique_node": {
+				"restorable_unique_node":
+				{
 					"name": "restorable_unique_node",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"table_headers": {
+				"table_headers":
+				{
 					"name": "table_headers",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"table_skip_headers": {
+				"table_skip_headers":
+				{
 					"name": "table_skip_headers",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"table_bg": {
+				"table_bg":
+				{
 					"name": "table_bg",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"priority_default_to_bottom": {
+				"priority_default_to_bottom":
+				{
 					"name": "priority_default_to_bottom",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -1342,13 +1593,16 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"node_display_metadata_system_to_idx": {
+			"indexes":
+			{
+				"node_display_metadata_system_to_idx":
+				{
 					"name": "node_display_metadata_system_to_idx",
 					"columns": ["node_id", "system_to"],
 					"isUnique": true
 				},
-				"node_display_metadata_closed_at_idx": {
+				"node_display_metadata_closed_at_idx":
+				{
 					"name": "node_display_metadata_closed_at_idx",
 					"columns": ["system_to"],
 					"isUnique": false,
@@ -1356,8 +1610,10 @@
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"node_display_metadata_node_id_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"node_display_metadata_node_id_system_from_pk":
+				{
 					"columns": ["node_id", "system_from"],
 					"name": "node_display_metadata_node_id_system_from_pk"
 				}
@@ -1365,17 +1621,21 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"node_embeddings": {
+		"node_embeddings":
+		{
 			"name": "node_embeddings",
-			"columns": {
-				"node_id": {
+			"columns":
+			{
+				"node_id":
+				{
 					"name": "node_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"model": {
+				"model":
+				{
 					"name": "model",
 					"type": "text",
 					"primaryKey": false,
@@ -1383,21 +1643,24 @@
 					"autoincrement": false,
 					"default": "'minilm'"
 				},
-				"embedding": {
+				"embedding":
+				{
 					"name": "embedding",
 					"type": "blob",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -1405,16 +1668,20 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"node_embeddings_system_to_idx": {
+			"indexes":
+			{
+				"node_embeddings_system_to_idx":
+				{
 					"name": "node_embeddings_system_to_idx",
 					"columns": ["node_id", "model", "system_to"],
 					"isUnique": true
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"node_embeddings_node_id_model_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"node_embeddings_node_id_model_system_from_pk":
+				{
 					"columns": ["node_id", "model", "system_from"],
 					"name": "node_embeddings_node_id_model_system_from_pk"
 				}
@@ -1422,59 +1689,69 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"node_label_suggestions": {
+		"node_label_suggestions":
+		{
 			"name": "node_label_suggestions",
-			"columns": {
-				"node_id": {
+			"columns":
+			{
+				"node_id":
+				{
 					"name": "node_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"label": {
+				"label":
+				{
 					"name": "label",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"label_kind": {
+				"label_kind":
+				{
 					"name": "label_kind",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"source": {
+				"source":
+				{
 					"name": "source",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"score": {
+				"score":
+				{
 					"name": "score",
 					"type": "real",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"content_from": {
+				"content_from":
+				{
 					"name": "content_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -1482,13 +1759,16 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"node_label_suggestions_system_to_idx": {
+			"indexes":
+			{
+				"node_label_suggestions_system_to_idx":
+				{
 					"name": "node_label_suggestions_system_to_idx",
 					"columns": ["node_id", "label", "source", "system_to"],
 					"isUnique": true
 				},
-				"node_label_suggestions_closed_at_idx": {
+				"node_label_suggestions_closed_at_idx":
+				{
 					"name": "node_label_suggestions_closed_at_idx",
 					"columns": ["system_to"],
 					"isUnique": false,
@@ -1496,8 +1776,10 @@
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"node_label_suggestions_node_id_label_source_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"node_label_suggestions_node_id_label_source_system_from_pk":
+				{
 					"columns": ["node_id", "label", "source", "system_from"],
 					"name": "node_label_suggestions_node_id_label_source_system_from_pk"
 				}
@@ -1505,66 +1787,77 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"node_metadata": {
+		"node_metadata":
+		{
 			"name": "node_metadata",
-			"columns": {
-				"node_id": {
+			"columns":
+			{
+				"node_id":
+				{
 					"name": "node_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"short_id": {
+				"short_id":
+				{
 					"name": "short_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"priority": {
+				"priority":
+				{
 					"name": "priority",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"created_at": {
+				"created_at":
+				{
 					"name": "created_at",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"modified_at": {
+				"modified_at":
+				{
 					"name": "modified_at",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"completed_at": {
+				"completed_at":
+				{
 					"name": "completed_at",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"layout_mode": {
+				"layout_mode":
+				{
 					"name": "layout_mode",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -1572,23 +1865,28 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"node_metadata_system_to_idx": {
+			"indexes":
+			{
+				"node_metadata_system_to_idx":
+				{
 					"name": "node_metadata_system_to_idx",
 					"columns": ["node_id", "system_to"],
 					"isUnique": true
 				},
-				"node_metadata_short_id_idx": {
+				"node_metadata_short_id_idx":
+				{
 					"name": "node_metadata_short_id_idx",
 					"columns": ["short_id", "system_to"],
 					"isUnique": false
 				},
-				"node_metadata_system_from_idx": {
+				"node_metadata_system_from_idx":
+				{
 					"name": "node_metadata_system_from_idx",
 					"columns": ["system_from"],
 					"isUnique": false
 				},
-				"node_metadata_closed_at_idx": {
+				"node_metadata_closed_at_idx":
+				{
 					"name": "node_metadata_closed_at_idx",
 					"columns": ["system_to"],
 					"isUnique": false,
@@ -1596,8 +1894,10 @@
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"node_metadata_node_id_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"node_metadata_node_id_system_from_pk":
+				{
 					"columns": ["node_id", "system_from"],
 					"name": "node_metadata_node_id_system_from_pk"
 				}
@@ -1605,38 +1905,45 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"node_table_cell_sizes": {
+		"node_table_cell_sizes":
+		{
 			"name": "node_table_cell_sizes",
-			"columns": {
-				"node_id": {
+			"columns":
+			{
+				"node_id":
+				{
 					"name": "node_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"cell_id": {
+				"cell_id":
+				{
 					"name": "cell_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"size": {
+				"size":
+				{
 					"name": "size",
 					"type": "real",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -1644,13 +1951,16 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"node_table_cell_sizes_system_to_idx": {
+			"indexes":
+			{
+				"node_table_cell_sizes_system_to_idx":
+				{
 					"name": "node_table_cell_sizes_system_to_idx",
 					"columns": ["node_id", "cell_id", "system_to"],
 					"isUnique": true
 				},
-				"node_table_cell_sizes_closed_at_idx": {
+				"node_table_cell_sizes_closed_at_idx":
+				{
 					"name": "node_table_cell_sizes_closed_at_idx",
 					"columns": ["system_to"],
 					"isUnique": false,
@@ -1658,8 +1968,10 @@
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"node_table_cell_sizes_node_id_cell_id_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"node_table_cell_sizes_node_id_cell_id_system_from_pk":
+				{
 					"columns": ["node_id", "cell_id", "system_from"],
 					"name": "node_table_cell_sizes_node_id_cell_id_system_from_pk"
 				}
@@ -1667,24 +1979,29 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"node_tags": {
+		"node_tags":
+		{
 			"name": "node_tags",
-			"columns": {
-				"node_id": {
+			"columns":
+			{
+				"node_id":
+				{
 					"name": "node_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"tag_key": {
+				"tag_key":
+				{
 					"name": "tag_key",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"tag": {
+				"tag":
+				{
 					"name": "tag",
 					"type": "text",
 					"primaryKey": false,
@@ -1692,16 +2009,20 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"node_tags_tag_key_idx": {
+			"indexes":
+			{
+				"node_tags_tag_key_idx":
+				{
 					"name": "node_tags_tag_key_idx",
 					"columns": ["tag_key"],
 					"isUnique": false
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"node_tags_node_id_tag_key_pk": {
+			"compositePrimaryKeys":
+			{
+				"node_tags_node_id_tag_key_pk":
+				{
 					"columns": ["node_id", "tag_key"],
 					"name": "node_tags_node_id_tag_key_pk"
 				}
@@ -1709,24 +2030,29 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"references_roots": {
+		"references_roots":
+		{
 			"name": "references_roots",
-			"columns": {
-				"node_id": {
+			"columns":
+			{
+				"node_id":
+				{
 					"name": "node_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -1734,16 +2060,20 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"references_roots_system_to_idx": {
+			"indexes":
+			{
+				"references_roots_system_to_idx":
+				{
 					"name": "references_roots_system_to_idx",
 					"columns": ["node_id", "system_to"],
 					"isUnique": true
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"references_roots_node_id_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"references_roots_node_id_system_from_pk":
+				{
 					"columns": ["node_id", "system_from"],
 					"name": "references_roots_node_id_system_from_pk"
 				}
@@ -1751,171 +2081,197 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"root_preferences": {
+		"root_preferences":
+		{
 			"name": "root_preferences",
-			"columns": {
-				"user_id": {
+			"columns":
+			{
+				"user_id":
+				{
 					"name": "user_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"date_format": {
+				"date_format":
+				{
 					"name": "date_format",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"time_format": {
+				"time_format":
+				{
 					"name": "time_format",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"week_start_day": {
+				"week_start_day":
+				{
 					"name": "week_start_day",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"slash_discovered": {
+				"slash_discovered":
+				{
 					"name": "slash_discovered",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"notes_root_id": {
+				"notes_root_id":
+				{
 					"name": "notes_root_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"weekly_report_on": {
+				"weekly_report_on":
+				{
 					"name": "weekly_report_on",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"home_layout_mode": {
+				"home_layout_mode":
+				{
 					"name": "home_layout_mode",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"latest_color_attribute": {
+				"latest_color_attribute":
+				{
 					"name": "latest_color_attribute",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"latest_color_value": {
+				"latest_color_value":
+				{
 					"name": "latest_color_value",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"search_for_changes_after": {
+				"search_for_changes_after":
+				{
 					"name": "search_for_changes_after",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"starring_is_synced": {
+				"starring_is_synced":
+				{
 					"name": "starring_is_synced",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"ai_embedding_status": {
+				"ai_embedding_status":
+				{
 					"name": "ai_embedding_status",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"ai_embedding_tooltip_dismissed": {
+				"ai_embedding_tooltip_dismissed":
+				{
 					"name": "ai_embedding_tooltip_dismissed",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"ai_mailbox_id": {
+				"ai_mailbox_id":
+				{
 					"name": "ai_mailbox_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"cmd_metrics_failed": {
+				"cmd_metrics_failed":
+				{
 					"name": "cmd_metrics_failed",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"calendar_root_id": {
+				"calendar_root_id":
+				{
 					"name": "calendar_root_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"calendar_ts_added_v2": {
+				"calendar_ts_added_v2":
+				{
 					"name": "calendar_ts_added_v2",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"calendar_tooltip_seen": {
+				"calendar_tooltip_seen":
+				{
 					"name": "calendar_tooltip_seen",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"calendar_date_id_added_v1": {
+				"calendar_date_id_added_v1":
+				{
 					"name": "calendar_date_id_added_v1",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"emoji_selected": {
+				"emoji_selected":
+				{
 					"name": "emoji_selected",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"inbox_id": {
+				"inbox_id":
+				{
 					"name": "inbox_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -1923,13 +2279,16 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"root_preferences_system_to_idx": {
+			"indexes":
+			{
+				"root_preferences_system_to_idx":
+				{
 					"name": "root_preferences_system_to_idx",
 					"columns": ["user_id", "system_to"],
 					"isUnique": true
 				},
-				"root_preferences_closed_at_idx": {
+				"root_preferences_closed_at_idx":
+				{
 					"name": "root_preferences_closed_at_idx",
 					"columns": ["system_to"],
 					"isUnique": false,
@@ -1937,8 +2296,10 @@
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"root_preferences_user_id_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"root_preferences_user_id_system_from_pk":
+				{
 					"columns": ["user_id", "system_from"],
 					"name": "root_preferences_user_id_system_from_pk"
 				}
@@ -1946,80 +2307,93 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"s3_files": {
+		"s3_files":
+		{
 			"name": "s3_files",
-			"columns": {
-				"node_id": {
+			"columns":
+			{
+				"node_id":
+				{
 					"name": "node_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"file_name": {
+				"file_name":
+				{
 					"name": "file_name",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"file_type": {
+				"file_type":
+				{
 					"name": "file_type",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"object_folder": {
+				"object_folder":
+				{
 					"name": "object_folder",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"is_animated_gif": {
+				"is_animated_gif":
+				{
 					"name": "is_animated_gif",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"image_original_width": {
+				"image_original_width":
+				{
 					"name": "image_original_width",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"image_original_height": {
+				"image_original_height":
+				{
 					"name": "image_original_height",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"image_original_pixels": {
+				"image_original_pixels":
+				{
 					"name": "image_original_pixels",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"is_deleted": {
+				"is_deleted":
+				{
 					"name": "is_deleted",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -2027,16 +2401,20 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"s3_files_system_to_idx": {
+			"indexes":
+			{
+				"s3_files_system_to_idx":
+				{
 					"name": "s3_files_system_to_idx",
 					"columns": ["node_id", "system_to"],
 					"isUnique": true
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"s3_files_node_id_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"s3_files_node_id_system_from_pk":
+				{
 					"columns": ["node_id", "system_from"],
 					"name": "s3_files_node_id_system_from_pk"
 				}
@@ -2044,45 +2422,53 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"saved_views": {
+		"saved_views":
+		{
 			"name": "saved_views",
-			"columns": {
-				"position": {
+			"columns":
+			{
+				"position":
+				{
 					"name": "position",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"project_id": {
+				"project_id":
+				{
 					"name": "project_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"auxiliary_root_project_id": {
+				"auxiliary_root_project_id":
+				{
 					"name": "auxiliary_root_project_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"search_query": {
+				"search_query":
+				{
 					"name": "search_query",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -2090,13 +2476,16 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"saved_views_system_to_idx": {
+			"indexes":
+			{
+				"saved_views_system_to_idx":
+				{
 					"name": "saved_views_system_to_idx",
 					"columns": ["position", "system_to"],
 					"isUnique": true
 				},
-				"saved_views_closed_at_idx": {
+				"saved_views_closed_at_idx":
+				{
 					"name": "saved_views_closed_at_idx",
 					"columns": ["system_to"],
 					"isUnique": false,
@@ -2104,8 +2493,10 @@
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"saved_views_position_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"saved_views_position_system_from_pk":
+				{
 					"columns": ["position", "system_from"],
 					"name": "saved_views_position_system_from_pk"
 				}
@@ -2113,31 +2504,37 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"star_order": {
+		"star_order":
+		{
 			"name": "star_order",
-			"columns": {
-				"position": {
+			"columns":
+			{
+				"position":
+				{
 					"name": "position",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"entry": {
+				"entry":
+				{
 					"name": "entry",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -2145,13 +2542,16 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"star_order_system_to_idx": {
+			"indexes":
+			{
+				"star_order_system_to_idx":
+				{
 					"name": "star_order_system_to_idx",
 					"columns": ["position", "system_to"],
 					"isUnique": true
 				},
-				"star_order_closed_at_idx": {
+				"star_order_closed_at_idx":
+				{
 					"name": "star_order_closed_at_idx",
 					"columns": ["system_to"],
 					"isUnique": false,
@@ -2159,8 +2559,10 @@
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"star_order_position_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"star_order_position_system_from_pk":
+				{
 					"columns": ["position", "system_from"],
 					"name": "star_order_position_system_from_pk"
 				}
@@ -2168,31 +2570,37 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"stars": {
+		"stars":
+		{
 			"name": "stars",
-			"columns": {
-				"location_key": {
+			"columns":
+			{
+				"location_key":
+				{
 					"name": "location_key",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"tree_root": {
+				"tree_root":
+				{
 					"name": "tree_root",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -2200,13 +2608,16 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"stars_system_to_idx": {
+			"indexes":
+			{
+				"stars_system_to_idx":
+				{
 					"name": "stars_system_to_idx",
 					"columns": ["location_key", "system_to"],
 					"isUnique": true
 				},
-				"stars_closed_at_idx": {
+				"stars_closed_at_idx":
+				{
 					"name": "stars_closed_at_idx",
 					"columns": ["system_to"],
 					"isUnique": false,
@@ -2214,8 +2625,10 @@
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"stars_location_key_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"stars_location_key_system_from_pk":
+				{
 					"columns": ["location_key", "system_from"],
 					"name": "stars_location_key_system_from_pk"
 				}
@@ -2223,45 +2636,53 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"surveys": {
+		"surveys":
+		{
 			"name": "surveys",
-			"columns": {
-				"survey": {
+			"columns":
+			{
+				"survey":
+				{
 					"name": "survey",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"status": {
+				"status":
+				{
 					"name": "status",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"rating": {
+				"rating":
+				{
 					"name": "rating",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"at": {
+				"at":
+				{
 					"name": "at",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -2269,13 +2690,16 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"surveys_system_to_idx": {
+			"indexes":
+			{
+				"surveys_system_to_idx":
+				{
 					"name": "surveys_system_to_idx",
 					"columns": ["survey", "system_to"],
 					"isUnique": true
 				},
-				"surveys_closed_at_idx": {
+				"surveys_closed_at_idx":
+				{
 					"name": "surveys_closed_at_idx",
 					"columns": ["system_to"],
 					"isUnique": false,
@@ -2283,8 +2707,10 @@
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"surveys_survey_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"surveys_survey_system_from_pk":
+				{
 					"columns": ["survey", "system_from"],
 					"name": "surveys_survey_system_from_pk"
 				}
@@ -2292,31 +2718,37 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"tag_colors": {
+		"tag_colors":
+		{
 			"name": "tag_colors",
-			"columns": {
-				"tag": {
+			"columns":
+			{
+				"tag":
+				{
 					"name": "tag",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"color_index": {
+				"color_index":
+				{
 					"name": "color_index",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -2324,13 +2756,16 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"tag_colors_system_to_idx": {
+			"indexes":
+			{
+				"tag_colors_system_to_idx":
+				{
 					"name": "tag_colors_system_to_idx",
 					"columns": ["tag", "system_to"],
 					"isUnique": true
 				},
-				"tag_colors_closed_at_idx": {
+				"tag_colors_closed_at_idx":
+				{
 					"name": "tag_colors_closed_at_idx",
 					"columns": ["system_to"],
 					"isUnique": false,
@@ -2338,8 +2773,10 @@
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"tag_colors_tag_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"tag_colors_tag_system_from_pk":
+				{
 					"columns": ["tag", "system_from"],
 					"name": "tag_colors_tag_system_from_pk"
 				}
@@ -2347,31 +2784,37 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"tree_transactions": {
+		"tree_transactions":
+		{
 			"name": "tree_transactions",
-			"columns": {
-				"tree_id": {
+			"columns":
+			{
+				"tree_id":
+				{
 					"name": "tree_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"transaction_id": {
+				"transaction_id":
+				{
 					"name": "transaction_id",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -2379,13 +2822,16 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"tree_transactions_system_to_idx": {
+			"indexes":
+			{
+				"tree_transactions_system_to_idx":
+				{
 					"name": "tree_transactions_system_to_idx",
 					"columns": ["tree_id", "system_to"],
 					"isUnique": true
 				},
-				"tree_transactions_closed_at_idx": {
+				"tree_transactions_closed_at_idx":
+				{
 					"name": "tree_transactions_closed_at_idx",
 					"columns": ["system_to"],
 					"isUnique": false,
@@ -2393,8 +2839,10 @@
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"tree_transactions_tree_id_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"tree_transactions_tree_id_system_from_pk":
+				{
 					"columns": ["tree_id", "system_from"],
 					"name": "tree_transactions_tree_id_system_from_pk"
 				}
@@ -2402,52 +2850,61 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"visible_features": {
+		"visible_features":
+		{
 			"name": "visible_features",
-			"columns": {
-				"codename": {
+			"columns":
+			{
+				"codename":
+				{
 					"name": "codename",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"name": {
+				"name":
+				{
 					"name": "name",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"label": {
+				"label":
+				{
 					"name": "label",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"description": {
+				"description":
+				{
 					"name": "description",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
 				},
-				"position": {
+				"position":
+				{
 					"name": "position",
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -2455,13 +2912,16 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"visible_features_system_to_idx": {
+			"indexes":
+			{
+				"visible_features_system_to_idx":
+				{
 					"name": "visible_features_system_to_idx",
 					"columns": ["codename", "system_to"],
 					"isUnique": true
 				},
-				"visible_features_closed_at_idx": {
+				"visible_features_closed_at_idx":
+				{
 					"name": "visible_features_closed_at_idx",
 					"columns": ["system_to"],
 					"isUnique": false,
@@ -2469,8 +2929,10 @@
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"visible_features_codename_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"visible_features_codename_system_from_pk":
+				{
 					"columns": ["codename", "system_from"],
 					"name": "visible_features_codename_system_from_pk"
 				}
@@ -2478,24 +2940,29 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"whats_new_reads": {
+		"whats_new_reads":
+		{
 			"name": "whats_new_reads",
-			"columns": {
-				"entry": {
+			"columns":
+			{
+				"entry":
+				{
 					"name": "entry",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_from": {
+				"system_from":
+				{
 					"name": "system_from",
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
 				},
-				"system_to": {
+				"system_to":
+				{
 					"name": "system_to",
 					"type": "text",
 					"primaryKey": false,
@@ -2503,13 +2970,16 @@
 					"autoincrement": false
 				}
 			},
-			"indexes": {
-				"whats_new_reads_system_to_idx": {
+			"indexes":
+			{
+				"whats_new_reads_system_to_idx":
+				{
 					"name": "whats_new_reads_system_to_idx",
 					"columns": ["entry", "system_to"],
 					"isUnique": true
 				},
-				"whats_new_reads_closed_at_idx": {
+				"whats_new_reads_closed_at_idx":
+				{
 					"name": "whats_new_reads_closed_at_idx",
 					"columns": ["system_to"],
 					"isUnique": false,
@@ -2517,8 +2987,10 @@
 				}
 			},
 			"foreignKeys": {},
-			"compositePrimaryKeys": {
-				"whats_new_reads_entry_system_from_pk": {
+			"compositePrimaryKeys":
+			{
+				"whats_new_reads_entry_system_from_pk":
+				{
 					"columns": ["entry", "system_from"],
 					"name": "whats_new_reads_entry_system_from_pk"
 				}
@@ -2529,12 +3001,14 @@
 	},
 	"views": {},
 	"enums": {},
-	"_meta": {
+	"_meta":
+	{
 		"schemas": {},
 		"tables": {},
 		"columns": {}
 	},
-	"internal": {
+	"internal":
+	{
 		"indexes": {}
 	}
 }

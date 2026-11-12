@@ -6,20 +6,45 @@ import type {SuggestRange} from "./hooks/use-suggest.js";
 export const MIRROR_FROM_HEADER = "mirror from";
 
 /** Opens on the second `(` of `((` just typed at `index`. */
-export function planMirrorOpen(text: string, index: number): SuggestRange | null {
-	return text[index] === "(" && text[index - 1] === "(" ? {start: index - 1, end: index + 1} : null;
+export function planMirrorOpen(text: string, index: number): SuggestRange | null
+{
+	return text[index] === "(" && text[index - 1] === "("
+		?
+			{
+				start: index - 1,
+				end: index + 1,
+			}
+		: null;
 }
 
 /** A resting `((query` that ends at the caret, to re-wrap as a chip after a deletion. */
-export function planMirrorRearm(text: string, caret: number): SuggestRange | null {
+export function planMirrorRearm(text: string, caret: number): SuggestRange | null
+{
 	const before = text.slice(0, caret);
 	const at = before.lastIndexOf("((");
-	return at === -1 || before.slice(at).includes("))") ? null : {start: at, end: caret};
+	return at === -1 || before.slice(at).includes("))")
+		? null
+		:
+			{
+				start: at,
+				end: caret,
+			};
 }
 
-export type InlineMirrorPlan = {kind: "replace-row"} | {kind: "split"; before: string; after: string};
+export type InlineMirrorPlan =
+	|
+	  {
+			kind: "replace-row";
+	  }
+	|
+	  {
+			kind: "split";
+			before: string;
+			after: string;
+	  };
 
-function isBlank(html: string): boolean {
+function isBlank(html: string): boolean
+{
 	return (
 		stripHtmlTags(html)
 			.replaceAll(/&nbsp;| /gu, "")
@@ -31,15 +56,24 @@ function isBlank(html: string): boolean {
  * What choosing a location does: a row whose whole name is `((…))` is replaced by the mirror; otherwise the row is
  * split at the chip, the text before it (minus one trailing whitespace) stays and the text after follows the mirror.
  */
-export function planInlineMirror({beforeHtml, afterHtml}: {beforeHtml: string; afterHtml: string}): InlineMirrorPlan {
-	if (isBlank(beforeHtml) && isBlank(afterHtml)) {
-		return {kind: "replace-row"};
+export function planInlineMirror({beforeHtml, afterHtml}: {beforeHtml: string; afterHtml: string}): InlineMirrorPlan
+{
+	if (isBlank(beforeHtml) && isBlank(afterHtml))
+	{
+		return {
+			kind: "replace-row",
+		};
 	}
-	return {kind: "split", before: beforeHtml.replace(/\s$/u, ""), after: afterHtml};
+	return {
+		kind: "split",
+		before: beforeHtml.replace(/\s$/u, ""),
+		after: afterHtml,
+	};
 }
 
 /** The palette command `insert_inline_mirror`: `((`, or ` ((` after a non-space. */
-export function inlineMirrorInsertion(textBeforeCaret: string): string {
+export function inlineMirrorInsertion(textBeforeCaret: string): string
+{
 	return textBeforeCaret === "" || /\s$/u.test(textBeforeCaret) ? "((" : " ((";
 }
 
@@ -53,8 +87,10 @@ export function inlineMirrorRefusal({
 	rowId: string;
 	/** The row's parent and each of its ancestors. */
 	parentLineage: readonly string[];
-}): "Cannot mirror Home" | "Cannot mirror an item into itself" | null {
-	if (pickId === "None" || pickId === "") {
+}): "Cannot mirror Home" | "Cannot mirror an item into itself" | null
+{
+	if (pickId === "None" || pickId === "")
+	{
 		return "Cannot mirror Home";
 	}
 	return pickId === rowId || parentLineage.includes(pickId) ? "Cannot mirror an item into itself" : null;

@@ -10,7 +10,8 @@ import {FlyoutAlign} from "./flyout/flyout-style.js";
 const INPUT_CLASS = `${domkitInputClass()} desktop:w-[420px]`;
 const LABEL_CLASS = "text-left text-s mobile:text-base font-medium";
 
-export interface LinkPopupProps {
+export interface LinkPopupProps
+{
 	/** The link's current text, and its href (empty for a new link). */
 	text: string;
 	href: string;
@@ -33,46 +34,63 @@ export function LinkPopup({
 	onApply,
 	onUnlink,
 	onCancel,
-}: LinkPopupProps) {
+}: LinkPopupProps)
+{
 	const [text, setText] = useState(initialText);
 	const [href, setHref] = useState(initialHref);
 	const textRef = useRef<HTMLInputElement>(null);
 	const hrefRef = useRef<HTMLInputElement>(null);
 	const applicable = canApply(text, href);
 
-	useLayoutEffect(() => {
+	useLayoutEffect(() =>
+	{
 		const input = initialHref === "" ? hrefRef.current : textRef.current;
 		input?.focus();
 		input?.select();
 	}, [initialHref]);
 
-	useEffect(() => {
-		const onKeyDown = (event: globalThis.KeyboardEvent) => {
-			if (event.key === "Escape") {
+	useEffect(() =>
+	{
+		const onKeyDown = (event: globalThis.KeyboardEvent) =>
+		{
+			if (event.key === "Escape")
+			{
 				event.stopImmediatePropagation();
 				onCancel();
 			}
 		};
 		document.addEventListener("keydown", onKeyDown);
-		return () => {
+		return () =>
+		{
 			document.removeEventListener("keydown", onKeyDown);
 		};
 	}, [onCancel]);
 
-	const apply = () => {
-		if (applicable) {
-			onApply({text: text.trim(), href: normalizeLinkHref(href)});
+	const apply = () =>
+	{
+		if (applicable)
+		{
+			onApply(
+				{
+					text: text.trim(),
+					href: normalizeLinkHref(href),
+				},
+			);
 		}
 	};
-	const handleKeyDown = (event: KeyboardEvent) => {
-		if (event.key === "Enter") {
+	const handleKeyDown = (event: KeyboardEvent) =>
+	{
+		if (event.key === "Enter")
+		{
 			event.stopPropagation();
 			event.preventDefault();
 			apply();
 		}
 	};
-	const handleBlur = (event: FocusEvent<HTMLElement>) => {
-		if (!event.currentTarget.contains(event.relatedTarget)) {
+	const handleBlur = (event: FocusEvent<HTMLElement>) =>
+	{
+		if (!event.currentTarget.contains(event.relatedTarget))
+		{
 			onCancel();
 		}
 	};
@@ -86,7 +104,14 @@ export function LinkPopup({
 			className="px-l pt-xl pb-l text-center"
 		>
 			<div>
-				<div tabIndex={-1} style={{outline: "none"}} onBlur={handleBlur}>
+				<div
+					tabIndex={-1}
+					style={
+					{
+						outline: "none",
+					}}
+					onBlur={handleBlur}
+				>
 					{/* oxlint-disable-next-line jsx-a11y/no-static-element-interactions -- upstream's form handles Enter on its wrapper */}
 					<div className="flex flex-col gap-l" onKeyDown={handleKeyDown}>
 						<div className="flex flex-col gap-m">
@@ -99,7 +124,8 @@ export function LinkPopup({
 									type="text"
 									autoComplete="off"
 									value={text}
-									onChange={(event) => {
+									onChange={(event) =>
+									{
 										setText(event.currentTarget.value);
 									}}
 								/>
@@ -115,7 +141,8 @@ export function LinkPopup({
 									type="text"
 									autoComplete="off"
 									value={href}
-									onChange={(event) => {
+									onChange={(event) =>
+									{
 										setHref(event.currentTarget.value);
 									}}
 								/>

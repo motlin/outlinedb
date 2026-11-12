@@ -1,7 +1,8 @@
 import {readFileSync} from "node:fs";
 import {describe, expect, it} from "vite-plus/test";
 
-describe("print classes", () => {
+describe("print classes", () =>
+{
 	const FILES = [
 		"components/outline-tree.tsx",
 		"components/expand-arrow.tsx",
@@ -14,8 +15,10 @@ describe("print classes", () => {
 		"components/side-pane.tsx",
 	];
 
-	describe("print:hidden on floating chrome", () => {
-		it("is present in every chrome surface's class string", () => {
+	describe("print:hidden on floating chrome", () =>
+	{
+		it("is present in every chrome surface's class string", () =>
+		{
 			const pairs = FILES.map((file) => [
 				file,
 				readFileSync(new URL(`../src/client/${file}`, import.meta.url), "utf8").includes("print:hidden"),
@@ -23,7 +26,8 @@ describe("print classes", () => {
 			expect(pairs).toStrictEqual(FILES.map((file) => [file, true]));
 		});
 
-		it("keeps export, settings, link insert, shortcuts and jump dialogs inside the print-hidden backdrop", () => {
+		it("keeps export, settings, link insert, shortcuts and jump dialogs inside the print-hidden backdrop", () =>
+		{
 			const unshelled = ["export-dialog", "jump-menu", "alert-dialog", "mirrors-dialog"].filter(
 				(name) =>
 					readFileSync(new URL(`../src/client/components/${name}.tsx`, import.meta.url), "utf8").match(
@@ -35,19 +39,23 @@ describe("print classes", () => {
 	});
 });
 
-describe("print styles", () => {
+describe("print styles", () =>
+{
 	const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 
-	function printRules(css: string): [string, string][] {
-		const body = /@media print \{([\s\S]*)\}\s*$/u.exec(css)?.[1] ?? "";
+	function printRules(css: string): [string, string][]
+	{
+		const body = /@media print\s*\{([\s\S]*)\}\s*$/u.exec(css)?.[1] ?? "";
 		return [...body.matchAll(/([^{}]+)\{([^{}]*)\}/gu)].map((match) => [
 			match[1].trim(),
 			match[2].replaceAll(/\s+/gu, " ").trim(),
 		]);
 	}
 
-	describe("print.css", () => {
-		it("holds upstream's remaining print rules in one @media print block", () => {
+	describe("print.css", () =>
+	{
+		it("holds upstream's remaining print rules in one @media print block", () =>
+		{
 			expect(printRules(read("../src/client/print.css"))).toStrictEqual([
 				[
 					".page",
@@ -64,16 +72,20 @@ describe("print styles", () => {
 			]);
 		});
 
-		it("is imported from main.tsx after the app and its styles", () => {
+		it("is imported from main.tsx after the app and its styles", () =>
+		{
 			const main = read("../src/client/main.tsx");
 			expect(main.includes('import "./print.css";')).toBe(true);
 			expect(main.indexOf('import {App} from "./app.js";')).toBeLessThan(main.indexOf('import "./print.css";'));
 		});
 
-		it("prints content links blue and underlined (LID5)", () => {
+		it("prints content links blue and underlined (LID5)", () =>
+		{
 			const css = read("../src/client/styles.css");
 			expect(
-				/@media print \{\s*\.contentLink \{\s*color: #00f;\s*text-decoration: underline;\s*\}\s*\}/u.test(css),
+				/@media print\s*\{\s*\.contentLink\s*\{\s*color: #00f;\s*text-decoration: underline;\s*\}\s*\}/u.test(
+					css,
+				),
 			).toBe(true);
 		});
 	});

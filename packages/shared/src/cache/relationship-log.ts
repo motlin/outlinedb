@@ -27,68 +27,101 @@ import type {UnitOfWork} from "./node-composite.js";
 import {closeCurrentVersions, joinKey} from "./temporal-merge.js";
 
 /** A logged op, as `PushAndPoll` reports it. */
-export interface LoggedOp {
+export interface LoggedOp
+{
 	type: string;
 	data: Record<string, unknown>;
 	/** The transaction's client timestamp: seconds since the account's join date. */
 	client_timestamp?: number;
 }
 
-interface LoggedTree {
+interface LoggedTree
+{
 	id: string;
 	metadata?: unknown;
 	ch?: LoggedTree[] | undefined;
 }
 
 const LoggedTreeSchema: z.ZodType<LoggedTree> = z.lazy(() =>
-	z.object({id: z.string(), metadata: z.unknown().optional(), ch: z.array(LoggedTreeSchema).optional()}).loose(),
+	z
+		.object(
+			{
+				id: z.string(),
+				metadata: z.unknown().optional(),
+				ch: z.array(LoggedTreeSchema).optional(),
+			},
+		)
+		.loose(),
 );
 
 const BulkCreateSchema = z
-	.object({
-		project_trees: z.union([
-			z.string().transform((json, context): unknown => {
-				try {
-					return JSON.parse(json);
-				} catch {
-					context.addIssue({code: "custom", message: "project_trees is not JSON"});
-					return z.NEVER;
-				}
-			}),
-			z.array(z.unknown()),
-		]),
-	})
+	.object(
+		{
+			project_trees: z.union([
+				z.string().transform((json, context): unknown =>
+				{
+					try
+					{
+						return JSON.parse(json);
+					}
+					catch
+					{
+						context.addIssue(
+							{
+								code: "custom",
+								message: "project_trees is not JSON",
+							},
+						);
+						return z.NEVER;
+					}
+				}),
+				z.array(z.unknown()),
+			]),
+		},
+	)
 	.loose();
 
 const EditSchema = z
-	.object({
-		projectid: z.string(),
-		metadataPatches: z
-			.array(
-				z
-					.object({
-						op: z.string(),
-						path: z.array(z.union([z.string(), z.number()]).transform(String)),
-						value: z.unknown().optional(),
-					})
-					.loose(),
-			)
-			.optional(),
-	})
+	.object(
+		{
+			projectid: z.string(),
+			metadataPatches: z
+				.array(
+					z
+						.object(
+							{
+								op: z.string(),
+								path: z.array(z.union([z.string(), z.number()]).transform(String)),
+								value: z.unknown().optional(),
+							},
+						)
+						.loose(),
+				)
+				.optional(),
+		},
+	)
 	.loose();
 
-const DeleteSchema = z.object({projectid: z.string()}).loose();
+const DeleteSchema = z
+	.object(
+		{
+			projectid: z.string(),
+		},
+	)
+	.loose();
 
 type Patch = NonNullable<z.output<typeof EditSchema>["metadataPatches"]>[number];
 
-interface MirrorRow {
+interface MirrorRow
+{
 	mirrorId: string;
 	originalId: string;
 }
 
 const mirrorKey = (row: MirrorRow): string => joinKey(row.mirrorId, row.originalId);
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isRecord(value: unknown): value is Record<string, unknown>
+{
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -96,27 +129,37 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 const ID_BATCH_SIZE = 40;
 
 /** The current edge rows of the nodes an op batch touches, edited in memory and diffed back once. */
-class EdgeModel {
+class EdgeModel
+{
 	readonly mirrors = new Map<string, MirrorRow>();
 	/** The mirrors that are backlink items, which a whole `backlinkMirrorRootIds` remove ends. */
 	readonly backlinkItems = new Set<string>();
 	readonly roots = new Set<string>();
 
-	addMirror(mirrorId: string, originalId: string): void {
-		const row = {mirrorId, originalId};
+	addMirror(mirrorId: string, originalId: string): void
+	{
+		const row =
+		{
+			mirrorId,
+			originalId,
+		};
 		this.mirrors.set(mirrorKey(row), row);
 	}
 
-	removeMirrors(matches: (row: MirrorRow) => boolean): void {
-		for (const [key, row] of this.mirrors) {
-			if (matches(row)) {
+	removeMirrors(matches: (row: MirrorRow) => boolean): void
+	{
+		for (const [key, row] of this.mirrors)
+		{
+			if (matches(row))
+			{
 				this.mirrors.delete(key);
 			}
 		}
 	}
 
 	/** A backlink item mirrors exactly its source. */
-	setBacklink(nodeId: string, sourceId: string): void {
+	setBacklink(nodeId: string, sourceId: string): void
+	{
 		this.removeMirrors((row) => row.mirrorId === nodeId);
 		this.addMirror(nodeId, sourceId);
 		this.backlinkItems.add(nodeId);
@@ -124,17 +167,22 @@ class EdgeModel {
 }
 
 /** Parent to children of the nodes `ops` create, so a delete in the same batch reaches them. */
-function createdChildren(ops: readonly LoggedOp[]): Map<string, string[]> {
+function createdChildren(ops: readonly LoggedOp[]): Map<string, string[]>
+{
 	const children = new Map<string, string[]>();
-	const link = (parentId: string, trees: LoggedTree[]): void => {
-		for (const tree of trees) {
+	const link = (parentId: string, trees: LoggedTree[]): void =>
+	{
+		for (const tree of trees)
+		{
 			children.set(parentId, [...(children.get(parentId) ?? []), tree.id]);
 			link(tree.id, tree.ch ?? []);
 		}
 	};
-	for (const op of ops) {
+	for (const op of ops)
+	{
 		const parentId = op.type === "bulk_create" ? op.data.parentid : undefined;
-		if (typeof parentId === "string") {
+		if (typeof parentId === "string")
+		{
 			link(parentId, createdTrees(op));
 		}
 	}
@@ -142,41 +190,56 @@ function createdChildren(ops: readonly LoggedOp[]): Map<string, string[]> {
 }
 
 /** Each deleted node with its cached and same-batch descendants, by the deleted node's id. */
-function deletedSubtrees(unitOfWork: UnitOfWork, ops: readonly LoggedOp[]): Map<string, string[]> {
+function deletedSubtrees(unitOfWork: UnitOfWork, ops: readonly LoggedOp[]): Map<string, string[]>
+{
 	const created = createdChildren(ops);
 	const subtrees = new Map<string, string[]>();
-	for (const op of ops) {
+	for (const op of ops)
+	{
 		const deleted = op.type === "delete" ? DeleteSchema.safeParse(op.data) : undefined;
-		if (deleted?.success === true && !subtrees.has(deleted.data.projectid)) {
+		if (deleted?.success === true && !subtrees.has(deleted.data.projectid))
+		{
 			subtrees.set(deleted.data.projectid, subtreeIds(unitOfWork, deleted.data.projectid, created));
 		}
 	}
 	return subtrees;
 }
 
-function subtreeIds(unitOfWork: UnitOfWork, rootId: string, created: Map<string, string[]>): string[] {
+function subtreeIds(unitOfWork: UnitOfWork, rootId: string, created: Map<string, string[]>): string[]
+{
 	const seen = new Set([rootId]);
 	let level = [rootId];
-	while (level.length > 0) {
+	while (level.length > 0)
+	{
 		const next: string[] = [];
-		const visit = (id: string): void => {
-			if (!seen.has(id)) {
+		const visit = (id: string): void =>
+		{
+			if (!seen.has(id))
+			{
 				seen.add(id);
 				next.push(id);
 			}
 		};
-		for (let start = 0; start < level.length; start += ID_BATCH_SIZE) {
+		for (let start = 0; start < level.length; start += ID_BATCH_SIZE)
+		{
 			const batch = level.slice(start, start + ID_BATCH_SIZE);
 			for (const row of unitOfWork.tx
-				.select({id: nodeContent.id})
+				.select(
+					{
+						id: nodeContent.id,
+					},
+				)
 				.from(nodeContent)
 				.where(and(inArray(nodeContent.parentId, batch), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
-				.all()) {
+				.all())
+			{
 				visit(row.id);
 			}
 		}
-		for (const id of level) {
-			for (const child of created.get(id) ?? []) {
+		for (const id of level)
+		{
+			for (const child of created.get(id) ?? [])
+			{
 				visit(child);
 			}
 		}
@@ -185,20 +248,28 @@ function subtreeIds(unitOfWork: UnitOfWork, rootId: string, created: Map<string,
 	return [...seen];
 }
 
-function touchedIds(ops: readonly LoggedOp[], subtrees: Map<string, string[]>): Set<string> {
+function touchedIds(ops: readonly LoggedOp[], subtrees: Map<string, string[]>): Set<string>
+{
 	const ids = new Set<string>([...subtrees.values()].flat());
-	const visit = (trees: LoggedTree[]): void => {
-		for (const tree of trees) {
+	const visit = (trees: LoggedTree[]): void =>
+	{
+		for (const tree of trees)
+		{
 			ids.add(tree.id);
 			visit(tree.ch ?? []);
 		}
 	};
-	for (const op of ops) {
-		if (op.type === "bulk_create") {
+	for (const op of ops)
+	{
+		if (op.type === "bulk_create")
+		{
 			visit(createdTrees(op));
-		} else if (op.type === "edit") {
+		}
+		else if (op.type === "edit")
+		{
 			const edit = parseEdit(op);
-			if (edit !== undefined && (edit.metadataPatches?.length ?? 0) > 0) {
+			if (edit !== undefined && (edit.metadataPatches?.length ?? 0) > 0)
+			{
 				ids.add(edit.projectid);
 			}
 		}
@@ -206,20 +277,24 @@ function touchedIds(ops: readonly LoggedOp[], subtrees: Map<string, string[]>): 
 	return ids;
 }
 
-function parseCreatedTrees(op: LoggedOp): LoggedTree[] | undefined {
+function parseCreatedTrees(op: LoggedOp): LoggedTree[] | undefined
+{
 	const parsed = BulkCreateSchema.safeParse(op.data);
-	if (!parsed.success) {
+	if (!parsed.success)
+	{
 		return undefined;
 	}
 	const trees = z.array(LoggedTreeSchema).safeParse(parsed.data.project_trees);
 	return trees.success ? trees.data : undefined;
 }
 
-function createdTrees(op: LoggedOp): LoggedTree[] {
+function createdTrees(op: LoggedOp): LoggedTree[]
+{
 	return parseCreatedTrees(op) ?? [];
 }
 
-function parseEdit(op: LoggedOp): z.output<typeof EditSchema> | undefined {
+function parseEdit(op: LoggedOp): z.output<typeof EditSchema> | undefined
+{
 	const edit = EditSchema.safeParse(op.data);
 	return edit.success ? edit.data : undefined;
 }
@@ -230,40 +305,58 @@ function parseEdit(op: LoggedOp): z.output<typeof EditSchema> | undefined {
  * `projectid`. Other ops carry
  * none, so they always are.
  */
-export function isReplayable(op: LoggedOp): boolean {
-	if (op.type === "bulk_create") {
+export function isReplayable(op: LoggedOp): boolean
+{
+	if (op.type === "bulk_create")
+	{
 		return !Object.hasOwn(op.data, "project_trees") || parseCreatedTrees(op) !== undefined;
 	}
-	if (op.type === "edit") {
+	if (op.type === "edit")
+	{
 		return !Object.hasOwn(op.data, "metadataPatches") || parseEdit(op) !== undefined;
 	}
-	if (op.type === "delete") {
+	if (op.type === "delete")
+	{
 		return DeleteSchema.safeParse(op.data).success;
 	}
 	return true;
 }
 
-function loadModel(unitOfWork: UnitOfWork, ids: readonly string[]): EdgeModel {
+function loadModel(unitOfWork: UnitOfWork, ids: readonly string[]): EdgeModel
+{
 	const {tx} = unitOfWork;
 	const model = new EdgeModel();
-	for (let start = 0; start < ids.length; start += ID_BATCH_SIZE) {
+	for (let start = 0; start < ids.length; start += ID_BATCH_SIZE)
+	{
 		const batch = ids.slice(start, start + ID_BATCH_SIZE);
 		const touches = or(inArray(mirrors.mirrorId, batch), inArray(mirrors.originalId, batch));
 		for (const row of tx
-			.select({mirrorId: mirrors.mirrorId, originalId: mirrors.originalId})
+			.select(
+				{
+					mirrorId: mirrors.mirrorId,
+					originalId: mirrors.originalId,
+				},
+			)
 			.from(mirrors)
 			.where(and(touches, eq(mirrors.systemTo, FAR_FUTURE_DATE)))
-			.all()) {
+			.all())
+		{
 			model.addMirror(row.mirrorId, row.originalId);
 		}
-		for (const item of currentBacklinkItems(tx, touches)) {
+		for (const item of currentBacklinkItems(tx, touches))
+		{
 			model.backlinkItems.add(item.nodeId);
 		}
 		for (const row of tx
-			.select({nodeId: referencesRoots.nodeId})
+			.select(
+				{
+					nodeId: referencesRoots.nodeId,
+				},
+			)
 			.from(referencesRoots)
 			.where(and(inArray(referencesRoots.nodeId, batch), eq(referencesRoots.systemTo, FAR_FUTURE_DATE)))
-			.all()) {
+			.all())
+		{
 			model.roots.add(row.nodeId);
 		}
 	}
@@ -271,67 +364,96 @@ function loadModel(unitOfWork: UnitOfWork, ids: readonly string[]): EdgeModel {
 }
 
 /** A created node's own rows; a copied `mirrorRootIds` describes the copied node, so it is left out. */
-function applyBulkCreate(model: EdgeModel, op: LoggedOp): void {
+function applyBulkCreate(model: EdgeModel, op: LoggedOp): void
+{
 	const created = new Set<string>();
 	const relationships = emptyItemRelationships();
-	const visit = (trees: LoggedTree[]): void => {
-		for (const tree of trees) {
+	const visit = (trees: LoggedTree[]): void =>
+	{
+		for (const tree of trees)
+		{
 			created.add(tree.id);
 			collectItemRelationships(relationships, tree.id, tree.metadata);
-			if (isRecord(tree.metadata) && isRecord(tree.metadata.backlink)) {
+			if (isRecord(tree.metadata) && isRecord(tree.metadata.backlink))
+			{
 				model.backlinkItems.add(tree.id);
 			}
 			visit(tree.ch ?? []);
 		}
 	};
 	visit(createdTrees(op));
-	for (const row of relationships.mirrors.filter((mirror) => created.has(mirror.mirrorId))) {
+	for (const row of relationships.mirrors.filter((mirror) => created.has(mirror.mirrorId)))
+	{
 		model.addMirror(row.mirrorId, row.originalId);
 	}
-	for (const {nodeId} of relationships.referencesRoots) {
+	for (const {nodeId} of relationships.referencesRoots)
+	{
 		model.roots.add(nodeId);
 	}
 }
 
 const ROOT_MAPS = new Set(["mirrorRootIds", "backlinkMirrorRootIds"]);
 
-function applyMirrorPatch(model: EdgeModel, nodeId: string, {op, path, value}: Patch): void {
+function applyMirrorPatch(model: EdgeModel, nodeId: string, {op, path, value}: Patch): void
+{
 	const [, field, leaf] = path;
-	if (field === undefined) {
-		if (op === "add") {
+	if (field === undefined)
+	{
+		if (op === "add")
+		{
 			const relationships = emptyItemRelationships();
-			collectItemRelationships(relationships, nodeId, {mirror: value});
-			for (const row of relationships.mirrors) {
+			collectItemRelationships(
+				relationships,
+				nodeId,
+				{
+					mirror: value,
+				},
+			);
+			for (const row of relationships.mirrors)
+			{
 				model.addMirror(row.mirrorId, row.originalId);
 			}
-		} else if (op === "remove") {
+		}
+		else if (op === "remove")
+		{
 			model.removeMirrors((row) => row.originalId === nodeId || row.mirrorId === nodeId);
 		}
 		return;
 	}
-	if (field === "originalId" && path.length === 2) {
+	if (field === "originalId" && path.length === 2)
+	{
 		model.removeMirrors((row) => row.mirrorId === nodeId);
-		if (op === "add" && typeof value === "string" && value !== "") {
+		if (op === "add" && typeof value === "string" && value !== "")
+		{
 			model.addMirror(nodeId, value);
 		}
 		return;
 	}
-	if (!ROOT_MAPS.has(field)) {
+	if (!ROOT_MAPS.has(field))
+	{
 		return;
 	}
-	if (leaf !== undefined) {
-		if (op === "add") {
+	if (leaf !== undefined)
+	{
+		if (op === "add")
+		{
 			model.addMirror(leaf, nodeId);
-		} else if (op === "remove") {
+		}
+		else if (op === "remove")
+		{
 			model.removeMirrors((row) => row.mirrorId === leaf && row.originalId === nodeId);
 		}
 		return;
 	}
-	if (op === "add" && isRecord(value)) {
-		for (const mirrorId of Object.keys(value)) {
+	if (op === "add" && isRecord(value))
+	{
+		for (const mirrorId of Object.keys(value))
+		{
 			model.addMirror(mirrorId, nodeId);
 		}
-	} else if (op === "remove") {
+	}
+	else if (op === "remove")
+	{
 		const backlinkMap = field === "backlinkMirrorRootIds";
 		model.removeMirrors(
 			(row) => row.originalId === nodeId && model.backlinkItems.has(row.mirrorId) === backlinkMap,
@@ -339,27 +461,41 @@ function applyMirrorPatch(model: EdgeModel, nodeId: string, {op, path, value}: P
 	}
 }
 
-function applyEdit(model: EdgeModel, op: LoggedOp): void {
+function applyEdit(model: EdgeModel, op: LoggedOp): void
+{
 	const edit = parseEdit(op);
-	if (edit === undefined) {
+	if (edit === undefined)
+	{
 		return;
 	}
 	const nodeId = edit.projectid;
-	for (const patch of edit.metadataPatches ?? []) {
+	for (const patch of edit.metadataPatches ?? [])
+	{
 		const [head] = patch.path;
-		if (head === "mirror") {
+		if (head === "mirror")
+		{
 			applyMirrorPatch(model, nodeId, patch);
-		} else if (head === "backlink" && patch.path.length === 1) {
+		}
+		else if (head === "backlink" && patch.path.length === 1)
+		{
 			const {value} = patch;
-			if (patch.op === "add" && isRecord(value) && typeof value.sourceID === "string" && value.sourceID !== "") {
+			if (patch.op === "add" && isRecord(value) && typeof value.sourceID === "string" && value.sourceID !== "")
+			{
 				model.setBacklink(nodeId, value.sourceID);
-			} else if (patch.op === "remove") {
+			}
+			else if (patch.op === "remove")
+			{
 				model.backlinkItems.delete(nodeId);
 			}
-		} else if (head === "isReferencesRoot" && patch.path.length === 1) {
-			if (patch.op === "add" && patch.value === true) {
+		}
+		else if (head === "isReferencesRoot" && patch.path.length === 1)
+		{
+			if (patch.op === "add" && patch.value === true)
+			{
 				model.roots.add(nodeId);
-			} else {
+			}
+			else
+			{
 				model.roots.delete(nodeId);
 			}
 		}
@@ -367,20 +503,29 @@ function applyEdit(model: EdgeModel, op: LoggedOp): void {
 }
 
 /** End every row a node of the deleted subtree owns; rows of mirrors elsewhere pointing into it stay. */
-function applyDelete(model: EdgeModel, subtree: readonly string[]): void {
+function applyDelete(model: EdgeModel, subtree: readonly string[]): void
+{
 	const ids = new Set(subtree);
 	model.removeMirrors((row) => ids.has(row.mirrorId));
-	for (const id of ids) {
+	for (const id of ids)
+	{
 		model.backlinkItems.delete(id);
 		model.roots.delete(id);
 	}
 }
 
-function writeDiff(unitOfWork: UnitOfWork, before: EdgeModel, after: EdgeModel): void {
+function writeDiff(unitOfWork: UnitOfWork, before: EdgeModel, after: EdgeModel): void
+{
 	const {tx, systemTime} = unitOfWork;
-	const current = {systemFrom: systemTime, systemTo: FAR_FUTURE_DATE};
-	for (const [key, row] of before.mirrors) {
-		if (!after.mirrors.has(key)) {
+	const current =
+	{
+		systemFrom: systemTime,
+		systemTo: FAR_FUTURE_DATE,
+	};
+	for (const [key, row] of before.mirrors)
+	{
+		if (!after.mirrors.has(key))
+		{
 			closeCurrentVersions(
 				tx,
 				mirrors,
@@ -389,22 +534,38 @@ function writeDiff(unitOfWork: UnitOfWork, before: EdgeModel, after: EdgeModel):
 			);
 		}
 	}
-	for (const [key, row] of after.mirrors) {
-		if (!before.mirrors.has(key)) {
+	for (const [key, row] of after.mirrors)
+	{
+		if (!before.mirrors.has(key))
+		{
 			tx.insert(mirrors)
-				.values({...row, ...current})
+				.values(
+					{
+						...row,
+						...current,
+					},
+				)
 				.run();
 		}
 	}
-	for (const nodeId of before.roots) {
-		if (!after.roots.has(nodeId)) {
+	for (const nodeId of before.roots)
+	{
+		if (!after.roots.has(nodeId))
+		{
 			closeCurrentVersions(tx, referencesRoots, systemTime, eq(referencesRoots.nodeId, nodeId));
 		}
 	}
-	for (const nodeId of after.roots) {
-		if (!before.roots.has(nodeId)) {
+	for (const nodeId of after.roots)
+	{
+		if (!before.roots.has(nodeId))
+		{
 			tx.insert(referencesRoots)
-				.values({nodeId, ...current})
+				.values(
+					{
+						nodeId,
+						...current,
+					},
+				)
 				.run();
 		}
 	}
@@ -415,22 +576,31 @@ function writeDiff(unitOfWork: UnitOfWork, before: EdgeModel, after: EdgeModel):
  * caller's unit of work. Each key ends or starts at most once, so an `add`
  * followed by a `remove` of the same row in one batch leaves no trace.
  */
-export function applyRelationshipOps(unitOfWork: UnitOfWork, ops: readonly LoggedOp[]): void {
+export function applyRelationshipOps(unitOfWork: UnitOfWork, ops: readonly LoggedOp[]): void
+{
 	const subtrees = deletedSubtrees(unitOfWork, ops);
 	const ids = [...touchedIds(ops, subtrees)];
-	if (ids.length === 0) {
+	if (ids.length === 0)
+	{
 		return;
 	}
 	const before = loadModel(unitOfWork, ids);
 	const after = loadModel(unitOfWork, ids);
-	for (const op of ops) {
-		if (op.type === "bulk_create") {
+	for (const op of ops)
+	{
+		if (op.type === "bulk_create")
+		{
 			applyBulkCreate(after, op);
-		} else if (op.type === "edit") {
+		}
+		else if (op.type === "edit")
+		{
 			applyEdit(after, op);
-		} else if (op.type === "delete") {
+		}
+		else if (op.type === "delete")
+		{
 			const deleted = DeleteSchema.safeParse(op.data);
-			if (deleted.success) {
+			if (deleted.success)
+			{
 				applyDelete(after, subtrees.get(deleted.data.projectid) ?? []);
 			}
 		}

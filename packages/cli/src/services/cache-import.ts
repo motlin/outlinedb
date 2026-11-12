@@ -1,7 +1,8 @@
 import {WorkflowyInternalClient} from "@outlinedb/shared/api";
 import {backupImports, nodeContent, nodeMetadata} from "@outlinedb/shared/db";
 import type {NodeContentType, NodeMetadataType, AppDatabase} from "@outlinedb/shared/db";
-import {
+import
+{
 	applyRows,
 	calendarRows,
 	collectItemRelationships,
@@ -16,7 +17,8 @@ import {
 	s3FileRow,
 	seedAccount,
 } from "@outlinedb/shared/cache";
-import type {
+import type
+{
 	ItemRelationships,
 	TemporalTransaction,
 	NormalizedAiMetadataRow,
@@ -40,14 +42,16 @@ import {contentMatches, metadataComparisonStats, metadataMatches, normalizeLayou
 import {logger} from "./logger.js";
 import {nonEmpty} from "../utils/non-empty.js";
 
-function backupTimeOrNull(backupTime: number | undefined, workflowyEpoch: number): number | null {
+function backupTimeOrNull(backupTime: number | undefined, workflowyEpoch: number): number | null
+{
 	return backupTime === undefined || backupTime === 0 ? null : backupToUnixTime(backupTime, workflowyEpoch);
 }
 
 /**
  * The Workflowy epoch: the WORKFLOWY_EPOCH env var, else the live account row's join date.
  */
-function getWorkflowyEpoch(tx: TemporalTransaction): number | undefined {
+function getWorkflowyEpoch(tx: TemporalTransaction): number | undefined
+{
 	const envEpoch = process.env.WORKFLOWY_EPOCH;
 	const envParsed = envEpoch ? parseStrictInteger(envEpoch) : undefined;
 	return envParsed ?? readWorkflowyEpoch(tx);
@@ -58,25 +62,50 @@ function getWorkflowyEpoch(tx: TemporalTransaction): number | undefined {
  *
  * @throws Error if no epoch is known and no credentials are set
  */
-async function getOrFetchWorkflowyEpoch(tx: TemporalTransaction): Promise<number> {
+async function getOrFetchWorkflowyEpoch(tx: TemporalTransaction): Promise<number>
+{
 	const existingEpoch = getWorkflowyEpoch(tx);
-	if (existingEpoch !== undefined) {
+	if (existingEpoch !== undefined)
+	{
 		return existingEpoch;
 	}
 
 	const username = process.env.WORKFLOWY_USERNAME;
 	const password = process.env.WORKFLOWY_PASSWORD;
 
-	if (username && password) {
+	if (username && password)
+	{
 		logger.debug("Fetching the Workflowy account (its join date is the epoch) from the internal API...");
-		const session = await new WorkflowyInternalClient({credentials: {username, password}}).bootstrap();
-		runUnitOfWork(tx, (unitOfWork) => {
-			seedAccount(unitOfWork, {
-				userId: String(session.userId),
-				dateJoinedSec: session.dateJoinedSec,
-				...(session.fullName === undefined ? {} : {fullName: session.fullName}),
-				...(session.entropyKey === undefined ? {} : {entropyKey: session.entropyKey}),
-			});
+		const session = await new WorkflowyInternalClient(
+			{
+				credentials:
+				{
+					username,
+					password,
+				},
+			},
+		).bootstrap();
+		runUnitOfWork(tx, (unitOfWork) =>
+		{
+			seedAccount(
+				unitOfWork,
+				{
+					userId: String(session.userId),
+					dateJoinedSec: session.dateJoinedSec,
+					...(session.fullName === undefined
+						? {}
+						:
+							{
+								fullName: session.fullName,
+							}),
+					...(session.entropyKey === undefined
+						? {}
+						:
+							{
+								entropyKey: session.entropyKey,
+							}),
+				},
+			);
 		});
 		logger.debug(`Workflowy epoch fetched and stored on the account row: ${session.dateJoinedSec}`);
 		return session.dateJoinedSec;
@@ -92,11 +121,13 @@ async function getOrFetchWorkflowyEpoch(tx: TemporalTransaction): Promise<number
  * Convert a Unix timestamp (seconds) to a Date object.
  * Returns null if the input is null or undefined.
  */
-function timestampToDate(timestamp: number | null | undefined): Date | null {
+function timestampToDate(timestamp: number | null | undefined): Date | null
+{
 	return timestamp === null || timestamp === undefined ? null : new Date(timestamp * 1000);
 }
 
-interface KnownPriority {
+interface KnownPriority
+{
 	index: number;
 	priority: number;
 }
@@ -104,11 +135,17 @@ interface KnownPriority {
 /**
  * Find the previous element with a non-null priority.
  */
-function findPrevWithPriority(arr: (number | null)[], start: number): KnownPriority | null {
-	for (let i = start - 1; i >= 0; i--) {
+function findPrevWithPriority(arr: (number | null)[], start: number): KnownPriority | null
+{
+	for (let i = start - 1; i >= 0; i--)
+	{
 		const priority = arr[i];
-		if (priority !== null && priority !== undefined) {
-			return {index: i, priority};
+		if (priority !== null && priority !== undefined)
+		{
+			return {
+				index: i,
+				priority,
+			};
 		}
 	}
 	return null;
@@ -117,11 +154,17 @@ function findPrevWithPriority(arr: (number | null)[], start: number): KnownPrior
 /**
  * Find the next element with a non-null priority.
  */
-function findNextWithPriority(arr: (number | null)[], start: number): KnownPriority | null {
-	for (let i = start + 1; i < arr.length; i++) {
+function findNextWithPriority(arr: (number | null)[], start: number): KnownPriority | null
+{
+	for (let i = start + 1; i < arr.length; i++)
+	{
 		const priority = arr[i];
-		if (priority !== null && priority !== undefined) {
-			return {index: i, priority};
+		if (priority !== null && priority !== undefined)
+		{
+			return {
+				index: i,
+				priority,
+			};
 		}
 	}
 	return null;
@@ -132,13 +175,22 @@ function findNextWithPriority(arr: (number | null)[], start: number): KnownPrior
  * sibling 100 apart from it. Used when the existing order changed, or when a new
  * node has no free integer between its neighbours.
  */
-function respaceFromAnchor(siblings: {id: string; existingPriority: number | null}[]): Map<string, number> {
+function respaceFromAnchor(
+	siblings:
+	{
+		id: string;
+		existingPriority: number | null;
+	}[],
+): Map<string, number>
+{
 	const result = new Map<string, number>();
 	const anchorIdx = siblings.findLastIndex((s) => s.existingPriority !== null);
 	const anchorPriority = siblings[anchorIdx]?.existingPriority ?? 0;
-	for (const [i, sibling] of siblings.entries()) {
+	for (const [i, sibling] of siblings.entries())
+	{
 		const priority = anchorPriority + (i - anchorIdx) * 100;
-		if (sibling.existingPriority !== priority) {
+		if (sibling.existingPriority !== priority)
+		{
 			result.set(sibling.id, priority);
 		}
 	}
@@ -156,19 +208,34 @@ function respaceFromAnchor(siblings: {id: string; existingPriority: number | nul
  * @returns Map of nodeId → priority (only for nodes that need updating)
  */
 function calculatePriorities(
-	siblings: {id: string; backupPosition: number; existingPriority: number | null}[],
-): Map<string, number> {
+	siblings:
+	{
+		id: string;
+		backupPosition: number;
+		existingPriority: number | null;
+	}[],
+): Map<string, number>
+{
 	const result = new Map<string, number>();
 
 	// Separate new nodes from existing nodes
 	const existingNodes = siblings.flatMap((s) =>
-		s.existingPriority === null ? [] : [{id: s.id, existingPriority: s.existingPriority}],
+		s.existingPriority === null
+			? []
+			: [
+					{
+						id: s.id,
+						existingPriority: s.existingPriority,
+					},
+				],
 	);
 	const newNodes = siblings.filter((s) => s.existingPriority === null);
 
 	// If all nodes are new, assign priorities based on backup position
-	if (existingNodes.length === 0) {
-		for (const [i, sibling] of siblings.entries()) {
+	if (existingNodes.length === 0)
+	{
+		for (const [i, sibling] of siblings.entries())
+		{
 			result.set(sibling.id, i * 100);
 		}
 		return result;
@@ -182,12 +249,14 @@ function calculatePriorities(
 
 	const orderChanged = existingOrder.some((id, i) => id !== backupOrderOfExisting[i]);
 
-	if (!orderChanged && newNodes.length === 0) {
+	if (!orderChanged && newNodes.length === 0)
+	{
 		// Order unchanged, no new nodes - nothing to do
 		return result;
 	}
 
-	if (orderChanged) {
+	if (orderChanged)
+	{
 		return respaceFromAnchor(siblings);
 	}
 
@@ -196,10 +265,13 @@ function calculatePriorities(
 
 	// Handle new nodes using middle-out algorithm (expand from known priorities)
 	let changed = true;
-	while (changed) {
+	while (changed)
+	{
 		changed = false;
-		for (const [i, sibling] of siblings.entries()) {
-			if (priorities[i] !== null) {
+		for (const [i, sibling] of siblings.entries())
+		{
+			if (priorities[i] !== null)
+			{
 				continue;
 			}
 
@@ -209,22 +281,31 @@ function calculatePriorities(
 			const adjacentToPrev = prev?.index === i - 1;
 			const adjacentToNext = next?.index === i + 1;
 
-			if (!adjacentToPrev && !adjacentToNext) {
+			if (!adjacentToPrev && !adjacentToNext)
+			{
 				continue;
 			}
 
 			let newPriority: number;
-			if (prev && next) {
+			if (prev && next)
+			{
 				// No integer fits strictly between the neighbours, so the gap is used up.
-				if (next.priority - prev.priority < 2) {
+				if (next.priority - prev.priority < 2)
+				{
 					return respaceFromAnchor(siblings);
 				}
 				newPriority = Math.floor((prev.priority + next.priority) / 2);
-			} else if (prev) {
+			}
+			else if (prev)
+			{
 				newPriority = prev.priority + 100;
-			} else if (next) {
+			}
+			else if (next)
+			{
 				newPriority = next.priority - 100;
-			} else {
+			}
+			else
+			{
 				continue;
 			}
 
@@ -238,18 +319,22 @@ function calculatePriorities(
 }
 
 /** Convert a cached timestamp column to Unix seconds, the unit backups use. */
-function toUnixSeconds(value: Date | null): number | null {
+function toUnixSeconds(value: Date | null): number | null
+{
 	return value ? Math.floor(value.getTime() / 1000) : null;
 }
 
 /** A backup node's newest content timestamp in Unix seconds, or 0 when it has none. */
-function newestUnix(node: {createdAt: number | null; modifiedAt: number | null; completedAt: number | null}): number {
+function newestUnix(node: {createdAt: number | null; modifiedAt: number | null; completedAt: number | null}): number
+{
 	return Math.max(node.createdAt ?? 0, node.modifiedAt ?? 0, node.completedAt ?? 0);
 }
 
 /** A cached node's newest content timestamp in Unix seconds, or 0 when it has none or is not cached. */
-function newestCachedUnix(metadata: NodeMetadataType | undefined): number {
-	if (metadata === undefined) {
+function newestCachedUnix(metadata: NodeMetadataType | undefined): number
+{
+	if (metadata === undefined)
+	{
 		return 0;
 	}
 	return Math.max(
@@ -263,7 +348,8 @@ function newestCachedUnix(metadata: NodeMetadataType | undefined): number {
  * Stamp the import with a system time taken from the backup instead of the clock,
  * for replaying historical backups. See {@link resolveBackupSystemTime}.
  */
-export interface BackupSystemTime {
+export interface BackupSystemTime
+{
 	/** The date in the backup's filename. */
 	backupDate: Date;
 }
@@ -281,7 +367,8 @@ const BACKUP_FALLBACK_UTC_HOUR = 12;
  * deletes nodes keeps (or lowers) the watermark, and a unit must never close a
  * version stamped after itself.
  */
-function resolveBackupSystemTime(incomingWatermarkMs: number | null, backupDate: Date, floor: string | null): Date {
+function resolveBackupSystemTime(incomingWatermarkMs: number | null, backupDate: Date, floor: string | null): Date
+{
 	const fallback = Date.UTC(
 		backupDate.getUTCFullYear(),
 		backupDate.getUTCMonth(),
@@ -294,9 +381,14 @@ function resolveBackupSystemTime(incomingWatermarkMs: number | null, backupDate:
 }
 
 /** The newest system_from among current backup_imports rows, or null when none. */
-function latestBackupImportStamp(database: AppDatabase): string | null {
+function latestBackupImportStamp(database: AppDatabase): string | null
+{
 	const row = database
-		.select({latest: max(backupImports.systemFrom)})
+		.select(
+			{
+				latest: max(backupImports.systemFrom),
+			},
+		)
 		.from(backupImports)
 		.where(eq(backupImports.systemTo, FAR_FUTURE_DATE))
 		.get();
@@ -304,9 +396,14 @@ function latestBackupImportStamp(database: AppDatabase): string | null {
 }
 
 /** Ids with a node_content version closed after `systemTime`. */
-function closedSince(database: AppDatabase, systemTime: string): Set<string> {
+function closedSince(database: AppDatabase, systemTime: string): Set<string>
+{
 	const rows = database
-		.selectDistinct({id: nodeContent.id})
+		.selectDistinct(
+			{
+				id: nodeContent.id,
+			},
+		)
 		.from(nodeContent)
 		.where(and(gt(nodeContent.systemTo, systemTime), ne(nodeContent.systemTo, FAR_FUTURE_DATE)))
 		.all();
@@ -320,10 +417,15 @@ function closedSince(database: AppDatabase, systemTime: string): Set<string> {
  * cache's own rows strand.
  */
 function strandedBacklinkItems(
-	nodes: readonly {id: string; parentId: string | null}[],
+	nodes: readonly
+	{
+		id: string;
+		parentId: string | null;
+	}[],
 	relationships: ItemRelationships,
 	protectedIds: ReadonlySet<string>,
-): Set<string> {
+): Set<string>
+{
 	const liveIds = new Set([...nodes.map((node) => node.id), ...protectedIds]);
 	const referencesRootIds = new Set(relationships.referencesRoots.map((row) => row.nodeId));
 	const withLiveOriginal = new Set(
@@ -340,17 +442,21 @@ function strandedBacklinkItems(
 }
 
 /** Remove, in place, the rows `keep` rejects. */
-function retainWhere<T>(rows: T[], keep: (row: T) => boolean): void {
+function retainWhere<T>(rows: T[], keep: (row: T) => boolean): void
+{
 	let kept = 0;
-	for (const row of rows) {
-		if (keep(row)) {
+	for (const row of rows)
+	{
+		if (keep(row))
+		{
 			rows[kept++] = row;
 		}
 	}
 	rows.length = kept;
 }
 
-export interface ImportBackupResult {
+export interface ImportBackupResult
+{
 	totalNodes: number;
 	nodesAdded: number;
 	nodesUpdated: number;
@@ -397,16 +503,20 @@ export async function importBackup(
 	verbose = false,
 	timestamp?: Date | BackupSystemTime,
 	force = false,
-): Promise<ImportBackupResult> {
+): Promise<ImportBackupResult>
+{
 	const startTime = Date.now();
 	let lastTime = startTime;
 
-	if (verbose) {
+	if (verbose)
+	{
 		logger.debug(`[IMPORT] Starting import with verbose=${verbose}`);
 	}
 
-	const logTiming = (phase: string) => {
-		if (!verbose) {
+	const logTiming = (phase: string) =>
+	{
+		if (!verbose)
+		{
 			return;
 		}
 		const now = Date.now();
@@ -423,18 +533,33 @@ export async function importBackup(
 	const rootNodes = BackupFileSchema.parse(parsedJson);
 	logTiming(`Parse and validate JSON (${rootNodes.length} root nodes)`);
 
-	const allNodes: {node: BackupNode; parentId: string | null; priority: number}[] = [];
-	const collectNodes = (node: BackupNode, parentId: string | null, priority: number) => {
-		allNodes.push({node, parentId, priority});
-		if (node.ch && Array.isArray(node.ch)) {
-			for (const [childIndex, child] of node.ch.entries()) {
+	const allNodes:
+	{
+		node: BackupNode;
+		parentId: string | null;
+		priority: number;
+	}[] = [];
+	const collectNodes = (node: BackupNode, parentId: string | null, priority: number) =>
+	{
+		allNodes.push(
+			{
+				node,
+				parentId,
+				priority,
+			},
+		);
+		if (node.ch && Array.isArray(node.ch))
+		{
+			for (const [childIndex, child] of node.ch.entries())
+			{
 				// Use raw index as backup position; actual priority is inferred later
 				collectNodes(child, node.id, childIndex);
 			}
 		}
 	};
 
-	for (const [rootIndex, rootNode] of rootNodes.entries()) {
+	for (const [rootIndex, rootNode] of rootNodes.entries())
+	{
 		// Use raw index as backup position; actual priority is inferred later
 		collectNodes(rootNode, null, rootIndex);
 	}
@@ -445,7 +570,8 @@ export async function importBackup(
 	const workflowyEpoch = await getOrFetchWorkflowyEpoch(database);
 	logTiming(`Using Workflowy epoch: ${workflowyEpoch}`);
 
-	const nodesToProcess: {
+	const nodesToProcess:
+	{
 		id: string;
 		shortId: string;
 		name: string;
@@ -460,43 +586,56 @@ export async function importBackup(
 	// Mirrors (backlink items included) and references roots, parsed by the shared item-metadata normalizer.
 	const relationships = emptyItemRelationships();
 	const s3FileRecords: NormalizedS3FileRow[] = [];
-	const changesMetadataRecords: {nodeId: string; ctBy: number}[] = [];
+	const changesMetadataRecords:
+	{
+		nodeId: string;
+		ctBy: number;
+	}[] = [];
 	const calendarMetadataRecords: NormalizedCalendarMetadataRow[] = [];
 	const calendarLevelsRecords: NormalizedCalendarLevelsRow[] = [];
 
 	// BackupFileSchema.parse above validated the whole tree: one invalid node aborts
 	// the import, so no node is dropped here and then closed as deleted.
-	for (const {node: validatedNode, parentId, priority} of allNodes) {
-		nodesToProcess.push({
-			id: validatedNode.id,
-			shortId: uuidToShortId(validatedNode.id),
-			name: validatedNode.nm ?? "",
-			note: nonEmpty(validatedNode.no) ?? null,
-			parentId,
-			priority,
-			createdAt: backupTimeOrNull(validatedNode.ct, workflowyEpoch),
-			modifiedAt: backupTimeOrNull(validatedNode.lm, workflowyEpoch),
-			completedAt: backupTimeOrNull(validatedNode.cp, workflowyEpoch),
-			layoutMode: normalizeLayoutMode(validatedNode.metadata.layoutMode),
-		});
+	for (const {node: validatedNode, parentId, priority} of allNodes)
+	{
+		nodesToProcess.push(
+			{
+				id: validatedNode.id,
+				shortId: uuidToShortId(validatedNode.id),
+				name: validatedNode.nm ?? "",
+				note: nonEmpty(validatedNode.no) ?? null,
+				parentId,
+				priority,
+				createdAt: backupTimeOrNull(validatedNode.ct, workflowyEpoch),
+				modifiedAt: backupTimeOrNull(validatedNode.lm, workflowyEpoch),
+				completedAt: backupTimeOrNull(validatedNode.cp, workflowyEpoch),
+				layoutMode: normalizeLayoutMode(validatedNode.metadata.layoutMode),
+			},
+		);
 
 		collectItemRelationships(relationships, validatedNode.id, validatedNode.metadata);
 
-		if (validatedNode.metadata.s3File) {
+		if (validatedNode.metadata.s3File)
+		{
 			s3FileRecords.push(s3FileRow(validatedNode.id, validatedNode.metadata.s3File));
 		}
 
-		if (validatedNode.metadata.changes?.ct) {
-			changesMetadataRecords.push({
-				nodeId: validatedNode.id,
-				ctBy: validatedNode.metadata.changes.ct.by,
-			});
+		if (validatedNode.metadata.changes?.ct)
+		{
+			changesMetadataRecords.push(
+				{
+					nodeId: validatedNode.id,
+					ctBy: validatedNode.metadata.changes.ct.by,
+				},
+			);
 		}
 
-		if (validatedNode.metadata.calendar) {
+		if (validatedNode.metadata.calendar)
+		{
 			const rows = calendarRows(validatedNode.id, validatedNode.metadata.calendar);
 			calendarMetadataRecords.push(rows.calendarMetadata);
-			if (rows.calendarLevels !== undefined) {
+			if (rows.calendarLevels !== undefined)
+			{
 				calendarLevelsRecords.push(rows.calendarLevels);
 			}
 		}
@@ -522,7 +661,8 @@ export async function importBackup(
 	// as the local watermark made every backup look stale forever, because
 	// `cache import-api` stamps it with the wall clock on each daily run.
 	let incomingMaxUnix = 0;
-	for (const n of nodesToProcess) {
+	for (const n of nodesToProcess)
+	{
 		incomingMaxUnix = Math.max(incomingMaxUnix, newestUnix(n));
 	}
 	const incomingWatermarkMs = incomingMaxUnix === 0 ? null : incomingMaxUnix * 1000;
@@ -549,7 +689,8 @@ export async function importBackup(
 	// shared importer's applyRows(); these reads only feed the stats and the
 	// priority inference below.
 	const existingContentMap = new Map<string, NodeContentType>();
-	for (const content of database.select().from(nodeContent).where(eq(nodeContent.systemTo, FAR_FUTURE_DATE)).all()) {
+	for (const content of database.select().from(nodeContent).where(eq(nodeContent.systemTo, FAR_FUTURE_DATE)).all())
+	{
 		existingContentMap.set(content.id, content);
 	}
 	logTiming(`Loaded ${existingContentMap.size} existing content records into Map`);
@@ -559,7 +700,8 @@ export async function importBackup(
 		.select()
 		.from(nodeMetadata)
 		.where(eq(nodeMetadata.systemTo, FAR_FUTURE_DATE))
-		.all()) {
+		.all())
+	{
 		existingMetadataMap.set(metadata.nodeId, metadata);
 	}
 	logTiming(`Loaded ${existingMetadataMap.size} existing metadata records into Map`);
@@ -568,19 +710,24 @@ export async function importBackup(
 	// snapshot predates. `force` waives the protection and imports the snapshot
 	// verbatim, tombstoning anything it omits.
 	let localMaxUnix = 0;
-	for (const metadata of existingMetadataMap.values()) {
+	for (const metadata of existingMetadataMap.values())
+	{
 		localMaxUnix = Math.max(localMaxUnix, newestCachedUnix(metadata));
 	}
 	const localWatermark: string | null =
 		localMaxUnix === 0 ? null : formatTemporalTimestamp(new Date(localMaxUnix * 1000));
 
-	if (!force && incomingMaxUnix > 0) {
+	if (!force && incomingMaxUnix > 0)
+	{
 		const backupNodeIds = new Set(nodesToProcess.map((n) => n.id));
-		for (const [nodeId, metadata] of existingMetadataMap) {
-			if (backupNodeIds.has(nodeId)) {
+		for (const [nodeId, metadata] of existingMetadataMap)
+		{
+			if (backupNodeIds.has(nodeId))
+			{
 				continue;
 			}
-			if (newestCachedUnix(metadata) > incomingMaxUnix) {
+			if (newestCachedUnix(metadata) > incomingMaxUnix)
+			{
 				protectedIds.add(nodeId);
 			}
 		}
@@ -594,16 +741,21 @@ export async function importBackup(
 	// before the watermark predates the snapshot, so a node the snapshot still
 	// holds was restored and is re-added.
 	const keptDeletedIds = new Set<string>();
-	if (!force && incomingWatermark !== null) {
+	if (!force && incomingWatermark !== null)
+	{
 		const deletedAfterSnapshot = closedSince(database, incomingWatermark);
-		for (const node of nodesToProcess) {
-			if (deletedAfterSnapshot.has(node.id) && !existingContentMap.has(node.id)) {
+		for (const node of nodesToProcess)
+		{
+			if (deletedAfterSnapshot.has(node.id) && !existingContentMap.has(node.id))
+			{
 				keptDeletedIds.add(node.id);
 			}
 		}
 	}
-	const dropNodes = (ids: ReadonlySet<string>) => {
-		if (ids.size === 0) {
+	const dropNodes = (ids: ReadonlySet<string>) =>
+	{
+		if (ids.size === 0)
+		{
 			return;
 		}
 		const isKept = (row: {nodeId: string}) => !ids.has(row.nodeId);
@@ -623,15 +775,18 @@ export async function importBackup(
 	// watermark is newer than the snapshot's version of that node, unless the
 	// node's own timestamps say the snapshot saw a later edit. A move leaves
 	// those timestamps alone, so only the write time shows it.
-	if (!force && incomingWatermark !== null && incomingMaxUnix < localMaxUnix) {
+	if (!force && incomingWatermark !== null && incomingMaxUnix < localMaxUnix)
+	{
 		const newerIds = new Set<string>();
-		for (const node of nodesToProcess) {
+		for (const node of nodesToProcess)
+		{
 			const content = existingContentMap.get(node.id);
 			const metadata = existingMetadataMap.get(node.id);
 			const writtenAfterSnapshot =
 				(content !== undefined && content.systemFrom > incomingWatermark) ||
 				(metadata !== undefined && metadata.systemFrom > incomingWatermark);
-			if (writtenAfterSnapshot && newestUnix(node) <= newestCachedUnix(metadata)) {
+			if (writtenAfterSnapshot && newestUnix(node) <= newestCachedUnix(metadata))
+			{
 				newerIds.add(node.id);
 				protectedIds.add(node.id);
 			}
@@ -660,7 +815,8 @@ export async function importBackup(
 		orphanIds = [...existingContentMap.keys()].filter((id) => !backupNodeIds.has(id) && !protectedIds.has(id));
 
 		// Sanity check: if backup has far fewer nodes than DB, something is wrong
-		if (nodesToProcess.length < existingContentMap.size * 0.5 && existingContentMap.size > 1000) {
+		if (nodesToProcess.length < existingContentMap.size * 0.5 && existingContentMap.size > 1000)
+		{
 			throw new Error(
 				`Backup has only ${nodesToProcess.length} nodes but DB has ${existingContentMap.size}. ` +
 					`This looks like a corrupted or partial backup. Aborting to prevent data loss.`,
@@ -670,7 +826,8 @@ export async function importBackup(
 
 		// Build set of incoming node IDs for deletion detection
 		const incomingNodeIds = new Set<string>();
-		for (const nodeData of nodesToProcess) {
+		for (const nodeData of nodesToProcess)
+		{
 			incomingNodeIds.add(nodeData.id);
 		}
 
@@ -685,24 +842,29 @@ export async function importBackup(
 			}[]
 		>();
 
-		for (const nodeData of nodesToProcess) {
+		for (const nodeData of nodesToProcess)
+		{
 			const existing = existingMetadataMap.get(nodeData.id);
 			const siblings = siblingsByParent.get(nodeData.parentId) ?? [];
-			siblings.push({
-				id: nodeData.id,
-				backupPosition: nodeData.priority,
-				existingPriority: existing?.priority ?? null,
-			});
+			siblings.push(
+				{
+					id: nodeData.id,
+					backupPosition: nodeData.priority,
+					existingPriority: existing?.priority ?? null,
+				},
+			);
 			siblingsByParent.set(nodeData.parentId, siblings);
 		}
 
 		// Sort and calculate priorities for each parent's children
 		// Handles new nodes AND order changes for existing nodes
 		const calculatedPriorities = new Map<string, number>();
-		for (const siblings of siblingsByParent.values()) {
+		for (const siblings of siblingsByParent.values())
+		{
 			siblings.sort((a, b) => a.backupPosition - b.backupPosition);
 			const calculated = calculatePriorities(siblings);
-			for (const [id, priority] of calculated) {
+			for (const [id, priority] of calculated)
+			{
 				calculatedPriorities.set(id, priority);
 			}
 		}
@@ -717,7 +879,8 @@ export async function importBackup(
 		// resolvedPriorities holds the priority each node should be stored with;
 		// the metadata merge below reads it instead of nodeData.priority (which is
 		// only the backup-tree position, not the inferred priority).
-		for (const nodeData of nodesToProcess) {
+		for (const nodeData of nodesToProcess)
+		{
 			const existingContent = existingContentMap.get(nodeData.id);
 			const existingMetadata = existingMetadataMap.get(nodeData.id);
 
@@ -725,9 +888,12 @@ export async function importBackup(
 			let contentChanged = false;
 			let metadataChanged = false;
 
-			if (!existingContent) {
+			if (!existingContent)
+			{
 				contentChanged = true;
-			} else if (!contentMatches(existingContent, nodeData)) {
+			}
+			else if (!contentMatches(existingContent, nodeData))
+			{
 				contentUpdated++;
 				contentChanged = true;
 			}
@@ -738,42 +904,59 @@ export async function importBackup(
 			const priorityChanged =
 				newPriority !== undefined && existingMetadata && newPriority !== existingMetadata.priority;
 
-			if (existingMetadata) {
+			if (existingMetadata)
+			{
 				resolvedPriorities.set(nodeData.id, newPriority ?? existingMetadata.priority ?? nodeData.priority);
 				if (
 					priorityChanged ||
-					!metadataMatches(existingMetadata, {
-						...nodeData,
-						// For backup imports, compare against existing priority, not tree position
-						// (priority is calculated separately, not derived from nodeData.priority).
-						priority: existingMetadata.priority,
-					})
-				) {
-					if (priorityChanged) {
+					!metadataMatches(
+						existingMetadata,
+						{
+							...nodeData,
+							// For backup imports, compare against existing priority, not tree position
+							// (priority is calculated separately, not derived from nodeData.priority).
+							priority: existingMetadata.priority,
+						},
+					)
+				)
+				{
+					if (priorityChanged)
+					{
 						priorityUpdated++;
-					} else {
+					}
+					else
+					{
 						metadataUpdated++;
 					}
 					metadataChanged = true;
 				}
-			} else {
+			}
+			else
+			{
 				resolvedPriorities.set(nodeData.id, newPriority ?? nodeData.priority);
 				metadataChanged = true;
 			}
 
-			if (isNew) {
+			if (isNew)
+			{
 				nodesAdded++;
-			} else if (contentChanged || metadataChanged) {
+			}
+			else if (contentChanged || metadataChanged)
+			{
 				nodesUpdated++;
-			} else {
+			}
+			else
+			{
 				nodesUnchanged++;
 			}
 		}
 
 		// Deleted nodes: existing but not in incoming (counted for stats; the
 		// temporal-merge engine phases them out via absence detection).
-		for (const existingId of existingContentMap.keys()) {
-			if (!incomingNodeIds.has(existingId)) {
+		for (const existingId of existingContentMap.keys())
+		{
+			if (!incomingNodeIds.has(existingId))
+			{
 				nodesPhasedOut++;
 			}
 		}
@@ -790,13 +973,15 @@ export async function importBackup(
 	// the node-keyed temporal tables to the shared importer. applyRows() owns the
 	// temporal merge and FK-correct insertion order for these tables; scoped to
 	// the backup's ids, it leaves protected nodes alone.
-	const nodeContentRows: NormalizedNodeContentRow[] = nodesToProcess.map((node) => ({
+	const nodeContentRows: NormalizedNodeContentRow[] = nodesToProcess.map((node) => (
+	{
 		id: node.id,
 		name: node.name,
 		note: node.note,
 		parentId: node.parentId,
 	}));
-	const nodeMetadataRows: NormalizedNodeMetadataRow[] = nodesToProcess.map((node) => ({
+	const nodeMetadataRows: NormalizedNodeMetadataRow[] = nodesToProcess.map((node) => (
+	{
 		nodeId: node.id,
 		shortId: node.shortId,
 		priority: resolvedPriorities.get(node.id) ?? node.priority,
@@ -814,7 +999,8 @@ export async function importBackup(
 			: resolveBackupSystemTime(incomingWatermarkMs, timestamp.backupDate, latestBackupImportStamp(database));
 	const importTimestamp = runBulkUnitOfWork(
 		database,
-		(unitOfWork, at) => {
+		(unitOfWork, at) =>
+		{
 			const merged = applyRows(
 				unitOfWork,
 				{

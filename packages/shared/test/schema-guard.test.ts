@@ -13,28 +13,51 @@ import {buildTestDb, bulkImportWithWatermarkGuard, loadFixtureBackup} from "./he
  */
 const NON_TEMPORAL_ALLOWLIST = new Set(["__drizzle_migrations", "sqlite_sequence", "node_tags"]);
 
-function isAllowlisted(table: string): boolean {
+function isAllowlisted(table: string): boolean
+{
 	return NON_TEMPORAL_ALLOWLIST.has(table) || table === "node_fts" || table.startsWith("node_fts_");
 }
 
-function tableNames(sqlite: Database): string[] {
+function tableNames(sqlite: Database): string[]
+{
 	return sqlite
-		.prepare<[], {name: string}>("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+		.prepare<
+			[],
+			{
+				name: string;
+			}
+		>("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
 		.all()
 		.map((row) => row.name);
 }
 
-function columns(sqlite: Database, table: string): {name: string; type: string}[] {
+function columns(
+	sqlite: Database,
+	table: string,
+):
+{
+	name: string;
+	type: string;
+}[]
+{
 	return sqlite
-		.prepare<[string], {name: string; type: string}>("SELECT name, type FROM pragma_table_info(?)")
+		.prepare<
+			[string],
+			{
+				name: string;
+				type: string;
+			}
+		>("SELECT name, type FROM pragma_table_info(?)")
 		.all(table);
 }
 
 /** Tables outside the allowlist that lack system_from or system_to. */
-function nonTemporalTables(sqlite: Database): string[] {
+function nonTemporalTables(sqlite: Database): string[]
+{
 	return tableNames(sqlite)
 		.filter((table) => !isAllowlisted(table))
-		.filter((table) => {
+		.filter((table) =>
+		{
 			const names = new Set(columns(sqlite, table).map((column) => column.name));
 			return !names.has("system_from") || !names.has("system_to");
 		});
@@ -44,25 +67,43 @@ function nonTemporalTables(sqlite: Database): string[] {
  * Temporal tables whose primary key is not (key..., system_from) with a UNIQUE index on (key..., system_to),
  * the index that makes the database reject two live versions of one row.
  */
-function tablesWithoutUniqueSystemTo(sqlite: Database): string[] {
+function tablesWithoutUniqueSystemTo(sqlite: Database): string[]
+{
 	return tableNames(sqlite)
 		.filter((table) => !isAllowlisted(table))
-		.filter((table) => {
+		.filter((table) =>
+		{
 			const primaryKey = sqlite
-				.prepare<[string], {name: string}>("SELECT name FROM pragma_table_info(?) WHERE pk > 0 ORDER BY pk")
+				.prepare<
+					[string],
+					{
+						name: string;
+					}
+				>("SELECT name FROM pragma_table_info(?) WHERE pk > 0 ORDER BY pk")
 				.all(table)
 				.map((column) => column.name);
-			if (primaryKey.at(-1) !== "system_from") {
+			if (primaryKey.at(-1) !== "system_from")
+			{
 				return true;
 			}
 			const expected = [...primaryKey.slice(0, -1), "system_to"].join(", ");
 			const uniqueIndexes = sqlite
-				.prepare<[string], {name: string}>('SELECT name FROM pragma_index_list(?) WHERE "unique" = 1')
+				.prepare<
+					[string],
+					{
+						name: string;
+					}
+				>('SELECT name FROM pragma_index_list(?) WHERE "unique" = 1')
 				.all(table);
 			return !uniqueIndexes.some(
 				(index) =>
 					sqlite
-						.prepare<[string], {name: string}>("SELECT name FROM pragma_index_info(?) ORDER BY seqno")
+						.prepare<
+							[string],
+							{
+								name: string;
+							}
+						>("SELECT name FROM pragma_index_info(?) ORDER BY seqno")
 						.all(index.name)
 						.map((column) => column.name)
 						.join(", ") === expected,
@@ -71,7 +112,8 @@ function tablesWithoutUniqueSystemTo(sqlite: Database): string[] {
 }
 
 /** `table.column` for every column whose name ends in json, in any table. */
-function jsonNamedColumns(sqlite: Database): string[] {
+function jsonNamedColumns(sqlite: Database): string[]
+{
 	return tableNames(sqlite).flatMap((table) =>
 		columns(sqlite, table)
 			.filter((column) => column.name.toLowerCase().endsWith("json"))
@@ -80,12 +122,14 @@ function jsonNamedColumns(sqlite: Database): string[] {
 }
 
 /** `table.column` for every column outside the allowlist holding a value that starts with { or [. */
-function jsonValuedColumns(sqlite: Database): string[] {
+function jsonValuedColumns(sqlite: Database): string[]
+{
 	return tableNames(sqlite)
 		.filter((table) => !isAllowlisted(table))
 		.flatMap((table) =>
 			columns(sqlite, table)
-				.filter((column) => {
+				.filter((column) =>
+				{
 					const quoted = `"${column.name.replaceAll('"', '""')}"`;
 					const hit = sqlite
 						.prepare(
@@ -98,16 +142,20 @@ function jsonValuedColumns(sqlite: Database): string[] {
 		);
 }
 
-describe("schema guard", () => {
+describe("schema guard", () =>
+{
 	let open: Database[] = [];
-	afterEach(() => {
-		for (const sqlite of open) {
+	afterEach(() =>
+	{
+		for (const sqlite of open)
+		{
 			sqlite.close();
 		}
 		open = [];
 	});
 
-	function seededDb(): Database {
+	function seededDb(): Database
+	{
 		const {database, sqlite} = buildTestDb();
 		open.push(sqlite);
 		bulkImportWithWatermarkGuard(
@@ -116,34 +164,63 @@ describe("schema guard", () => {
 			new Date("2026-10-01T00:00:00Z"),
 		);
 		bulkImportWithWatermarkGuard(database, loadFixtureBackup("mirror-backup"), new Date("2026-10-02T00:00:00Z"));
-		runUnitOfWork(database, (unitOfWork) => {
-			writeAccountSnapshot(unitOfWork, {
-				account: {userId: "107", dateJoinedSec: 1_324_752_241, fullName: "Alice Smith"},
-				rootMetadata: {starring: {locations: {n1: "None", n2: "None"}, order: "None/n2/,None/n1/"}},
-				settings: {theme: "dark", font: "default"},
-				visibleFeatures: [],
-			});
+		runUnitOfWork(database, (unitOfWork) =>
+		{
+			writeAccountSnapshot(
+				unitOfWork,
+				{
+					account:
+					{
+						userId: "107",
+						dateJoinedSec: 1_324_752_241,
+						fullName: "Alice Smith",
+					},
+					rootMetadata:
+					{
+						starring:
+						{
+							locations:
+							{
+								n1: "None",
+								n2: "None",
+							},
+							order: "None/n2/,None/n1/",
+						},
+					},
+					settings:
+					{
+						theme: "dark",
+						font: "default",
+					},
+					visibleFeatures: [],
+				},
+			);
 		});
 		return sqlite;
 	}
 
-	it("gives every non-derived table system_from and system_to", () => {
+	it("gives every non-derived table system_from and system_to", () =>
+	{
 		expect(nonTemporalTables(seededDb())).toStrictEqual([]);
 	});
 
-	it("gives every temporal table PK (key, system_from) and a UNIQUE (key, system_to) index", () => {
+	it("gives every temporal table PK (key, system_from) and a UNIQUE (key, system_to) index", () =>
+	{
 		expect(tablesWithoutUniqueSystemTo(seededDb())).toStrictEqual([]);
 	});
 
-	it("names no column *json", () => {
+	it("names no column *json", () =>
+	{
 		expect(jsonNamedColumns(seededDb())).toStrictEqual([]);
 	});
 
-	it("stores no value that starts with { or [", () => {
+	it("stores no value that starts with { or [", () =>
+	{
 		expect(jsonValuedColumns(seededDb())).toStrictEqual([]);
 	});
 
-	it("flags a table without system time, a missing unique system_to index, a *_json column, and a JSON-shaped value", () => {
+	it("flags a table without system time, a missing unique system_to index, a *_json column, and a JSON-shaped value", () =>
+	{
 		const sqlite = new DatabaseConstructor(":memory:");
 		open.push(sqlite);
 		sqlite.exec(`
@@ -158,16 +235,20 @@ describe("schema guard", () => {
 			INSERT INTO node_tags VALUES ('a', '{derived}');
 		`);
 
-		expect({
-			nonTemporal: nonTemporalTables(sqlite),
-			withoutUniqueSystemTo: tablesWithoutUniqueSystemTo(sqlite),
-			jsonNamed: jsonNamedColumns(sqlite),
-			jsonValued: jsonValuedColumns(sqlite),
-		}).toStrictEqual({
-			nonTemporal: ["plain"],
-			withoutUniqueSystemTo: ["plain", "versioned"],
-			jsonNamed: ["plain.payload_json"],
-			jsonValued: ["versioned.value"],
-		});
+		expect(
+			{
+				nonTemporal: nonTemporalTables(sqlite),
+				withoutUniqueSystemTo: tablesWithoutUniqueSystemTo(sqlite),
+				jsonNamed: jsonNamedColumns(sqlite),
+				jsonValued: jsonValuedColumns(sqlite),
+			},
+		).toStrictEqual(
+			{
+				nonTemporal: ["plain"],
+				withoutUniqueSystemTo: ["plain", "versioned"],
+				jsonNamed: ["plain.payload_json"],
+				jsonValued: ["versioned.value"],
+			},
+		);
 	});
 });

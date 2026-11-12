@@ -46,18 +46,21 @@ CREATE INDEX IF NOT EXISTS embedding_state_closed_at_idx ON embedding_state (sys
 /** `backfilling` until every container is embedded once, then `ready`; `off` until Enable AI requests embeddings. */
 type Phase = "off" | "backfilling" | "ready";
 
-interface State {
+interface State
+{
 	phase: Exclude<Phase, "off">;
 	scannedTo: string;
 }
 
-export interface EmbeddingStatus {
+export interface EmbeddingStatus
+{
 	phase: Phase;
 	queued: number;
 	lastError?: string;
 }
 
-export interface EmbeddingDeps {
+export interface EmbeddingDeps
+{
 	storage: DurableObjectStorage;
 	db: AppDatabase;
 	index: EmbeddingIndex;
@@ -73,32 +76,42 @@ export interface EmbeddingDeps {
  * container; afterwards each sync run and app write queues the nodes whose text changed and their parents (whose
  * CHILDREN text moved). Alarm runs embed the queue in batches and drop vectors of nodes that stopped being containers.
  */
-export class EmbeddingJob {
+export class EmbeddingJob
+{
 	private lastError: string | undefined;
 
-	constructor(private readonly deps: EmbeddingDeps) {
+	constructor(private readonly deps: EmbeddingDeps)
+	{
 		deps.storage.sql.exec(EMBEDDING_TABLES);
 	}
 
-	private get sql(): SqlStorage {
+	private get sql(): SqlStorage
+	{
 		return this.deps.storage.sql;
 	}
 
-	private now(): number {
+	private now(): number
+	{
 		return (this.deps.now ?? Date.now)();
 	}
 
-	private readState(): State | undefined {
+	private readState(): State | undefined
+	{
 		const row = this.sql
 			.exec("SELECT phase, scanned_to FROM embedding_state WHERE system_to = ?", FAR_FUTURE_DATE)
 			.toArray()[0];
-		if (row === undefined || typeof row.scanned_to !== "string") {
+		if (row === undefined || typeof row.scanned_to !== "string")
+		{
 			return undefined;
 		}
-		return {phase: row.phase === "ready" ? "ready" : "backfilling", scannedTo: row.scanned_to};
+		return {
+			phase: row.phase === "ready" ? "ready" : "backfilling",
+			scannedTo: row.scanned_to,
+		};
 	}
 
-	private writeState(state: State): void {
+	private writeState(state: State): void
+	{
 		const systemTime = newSystemTimestamp();
 		this.sql.exec(
 			"DELETE FROM embedding_state WHERE system_to = ? AND system_from >= ?",
@@ -115,24 +128,32 @@ export class EmbeddingJob {
 		);
 	}
 
-	private requested(): boolean {
+	private requested(): boolean
+	{
 		const row = this.sql
 			.exec("SELECT ai_embedding_status AS status FROM root_preferences WHERE system_to = ?", FAR_FUTURE_DATE)
 			.toArray()[0];
 		return row?.status === "requested";
 	}
 
-	private queued(): number {
+	private queued(): number
+	{
 		return Number(
 			this.sql.exec("SELECT count(*) AS n FROM embedding_queue WHERE system_to = ?", FAR_FUTURE_DATE).one().n,
 		);
 	}
 
-	status(): EmbeddingStatus {
+	status(): EmbeddingStatus
+	{
 		return {
 			phase: this.readState()?.phase ?? "off",
 			queued: this.queued(),
-			...(this.lastError === undefined ? {} : {lastError: this.lastError}),
+			...(this.lastError === undefined
+				? {}
+				:
+					{
+						lastError: this.lastError,
+					}),
 		};
 	}
 
@@ -140,29 +161,47 @@ export class EmbeddingJob {
 	 * Queue what needs embedding: every container when Enable AI has just requested it, otherwise the nodes changed
 	 * since the last scan. Schedules an alarm run when anything is queued.
 	 */
-	async notice(): Promise<void> {
+	async notice(): Promise<void>
+	{
 		const state = this.readState();
 		const watermark = changeWatermark(this.deps.db);
-		if (this.requested() && state?.phase !== "backfilling") {
+		if (this.requested() && state?.phase !== "backfilling")
+		{
 			this.queueAllContainers();
-			this.writeState({phase: "backfilling", scannedTo: watermark});
-		} else if (state === undefined || !this.queueChangesSince(state.scannedTo)) {
+			this.writeState(
+				{
+					phase: "backfilling",
+					scannedTo: watermark,
+				},
+			);
+		}
+		else if (state === undefined || !this.queueChangesSince(state.scannedTo))
+		{
 			return;
-		} else if (watermark > state.scannedTo) {
-			this.writeState({...state, scannedTo: watermark});
+		}
+		else if (watermark > state.scannedTo)
+		{
+			this.writeState(
+				{
+					...state,
+					scannedTo: watermark,
+				},
+			);
 			this.sql.exec(
 				"DELETE FROM embedding_queue WHERE system_to < ? AND system_from < ?",
 				FAR_FUTURE_DATE,
 				watermark,
 			);
 		}
-		if (this.queued() > 0) {
+		if (this.queued() > 0)
+		{
 			await this.deps.alarm.setAlarm(this.now());
 		}
 	}
 
 	/** Queue every current container that is not a mirror and not already queued. */
-	private queueAllContainers(): void {
+	private queueAllContainers(): void
+	{
 		const systemTime = newSystemTimestamp();
 		this.sql.exec(
 			`INSERT INTO embedding_queue (node_id, system_from, system_to)
@@ -184,10 +223,13 @@ export class EmbeddingJob {
 	 * Queue the nodes whose content rows opened or closed after `since`, with their old and new parents, skipping
 	 * those already queued or taken since the change. Returns whether any change was seen.
 	 */
-	private queueChangesSince(since: string): boolean {
+	private queueChangesSince(since: string): boolean
+	{
 		const changedAt = new Map<string, string>();
-		const note = (id: unknown, at: unknown) => {
-			if (typeof id === "string" && typeof at === "string" && (changedAt.get(id) ?? "") < at) {
+		const note = (id: unknown, at: unknown) =>
+		{
+			if (typeof id === "string" && typeof at === "string" && (changedAt.get(id) ?? "") < at)
+			{
 				changedAt.set(id, at);
 			}
 		};
@@ -199,11 +241,13 @@ export class EmbeddingJob {
 			`SELECT id, parent_id, system_to AS at FROM node_content WHERE system_to < '${FAR_FUTURE_DATE}' AND system_to > ?`,
 			since,
 		);
-		for (const row of [...opened, ...closed]) {
+		for (const row of [...opened, ...closed])
+		{
 			note(row.id, row.at);
 			note(row.parent_id, row.at);
 		}
-		if (changedAt.size === 0) {
+		if (changedAt.size === 0)
+		{
 			return false;
 		}
 		const handled = new Map<string, string>();
@@ -212,14 +256,18 @@ export class EmbeddingJob {
 				"WHERE node_id IN (SELECT value FROM json_each(?)) GROUP BY node_id",
 			FAR_FUTURE_DATE,
 			JSON.stringify([...changedAt.keys()]),
-		)) {
-			if (typeof row.node_id === "string" && typeof row.taken === "string") {
+		))
+		{
+			if (typeof row.node_id === "string" && typeof row.taken === "string")
+			{
 				handled.set(row.node_id, row.live === 1 ? FAR_FUTURE_DATE : row.taken);
 			}
 		}
 		const systemTime = newSystemTimestamp();
-		for (const [id, at] of changedAt) {
-			if ((handled.get(id) ?? "") < at) {
+		for (const [id, at] of changedAt)
+		{
+			if ((handled.get(id) ?? "") < at)
+			{
 				this.sql.exec(
 					"INSERT INTO embedding_queue (node_id, system_from, system_to) VALUES (?, ?, ?)",
 					id,
@@ -232,11 +280,14 @@ export class EmbeddingJob {
 	}
 
 	/** One alarm run: embed queued batches until the queue empties or the budget runs out. */
-	async tick(): Promise<void> {
+	async tick(): Promise<void>
+	{
 		const started = this.now();
 		const pathBuilder = new PathBuilder(this.deps.db);
-		try {
-			for (;;) {
+		try
+		{
+			for (;;)
+			{
 				const ids = this.sql
 					.exec(
 						"SELECT node_id FROM embedding_queue WHERE system_to = ? LIMIT ?",
@@ -245,22 +296,32 @@ export class EmbeddingJob {
 					)
 					.toArray()
 					.flatMap((row) => (typeof row.node_id === "string" ? [row.node_id] : []));
-				if (ids.length === 0) {
+				if (ids.length === 0)
+				{
 					break;
 				}
 				await this.embedBatch(ids, pathBuilder);
-				if (this.now() - started > RUN_BUDGET_MS) {
+				if (this.now() - started > RUN_BUDGET_MS)
+				{
 					await this.deps.alarm.setAlarm(this.now());
 					return;
 				}
 			}
 			const state = this.readState();
-			if (state?.phase === "backfilling") {
+			if (state?.phase === "backfilling")
+			{
 				await this.deps.markFinished();
-				this.writeState({...state, phase: "ready"});
+				this.writeState(
+					{
+						...state,
+						phase: "ready",
+					},
+				);
 			}
 			this.lastError = undefined;
-		} catch (error) {
+		}
+		catch (error)
+		{
 			this.lastError = error instanceof Error ? error.message : String(error);
 			console.error(`Embedding run failed: ${this.lastError}`);
 			await this.deps.alarm.setAlarm(this.now() + RETRY_DELAY_MS);
@@ -268,15 +329,23 @@ export class EmbeddingJob {
 	}
 
 	/** Embed the containers among `ids`, drop the vectors of the rest, then close their queue rows. */
-	private async embedBatch(ids: string[], pathBuilder: PathBuilder): Promise<void> {
+	private async embedBatch(ids: string[], pathBuilder: PathBuilder): Promise<void>
+	{
 		const embeddable = filterEmbeddable(this.deps.db, ids, pathBuilder);
 		const kept = new Set(embeddable);
-		if (embeddable.length > 0) {
+		if (embeddable.length > 0)
+		{
 			const texts = buildEmbedTexts(this.deps.db, embeddable, pathBuilder);
 			const vectors = await this.deps.embedder.embed(
 				embeddable.map((id) => (texts.get(id) ?? "").slice(0, MAX_TEXT_CHARS)),
 			);
-			await this.deps.index.upsert(embeddable.map((id, i) => ({id, vector: vectors[i] ?? []})));
+			await this.deps.index.upsert(
+				embeddable.map((id, i) => (
+				{
+					id,
+					vector: vectors[i] ?? [],
+				})),
+			);
 		}
 		await this.deps.index.delete(ids.filter((id) => !kept.has(id)));
 		const systemTime = newSystemTimestamp();

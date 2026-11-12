@@ -6,19 +6,25 @@ const HOVER_HIDE_DELAY_MS = 100;
 
 export type ButtonMenuClickAction = "none" | "open" | "hide" | "blur";
 
-export interface ButtonMenuControllerOptions {
+export interface ButtonMenuControllerOptions
+{
 	actOnHover?: boolean;
 	blockCloseOnInternalClick?: boolean;
 	forId?: string;
 	setTimeout: (fn: () => void, ms: number) => number;
 	clearTimeout: (id: number) => void;
-	bodyClassList: {add(name: string): void; remove(name: string): void};
+	bodyClassList:
+	{
+		add(name: string): void;
+		remove(name: string): void;
+	};
 	onShow?: () => void;
 	onHide?: () => void;
 	focusTrigger?: () => void;
 }
 
-export interface ButtonMenuController {
+export interface ButtonMenuController
+{
 	focus(): void;
 	blur(): void;
 	mouseEnter(): void;
@@ -33,7 +39,8 @@ export interface ButtonMenuController {
 	isOpen(): boolean;
 }
 
-export function createButtonMenuController(options: ButtonMenuControllerOptions): ButtonMenuController {
+export function createButtonMenuController(options: ButtonMenuControllerOptions): ButtonMenuController
+{
 	const {actOnHover = false, blockCloseOnInternalClick = false, forId} = options;
 	const bodyClass = forId === undefined ? undefined : `button-menu-for-${forId}`;
 	let open = false;
@@ -42,37 +49,46 @@ export function createButtonMenuController(options: ButtonMenuControllerOptions)
 	let hideTimer: number | undefined;
 	let pointerDownInFlyout = false;
 
-	function show(): void {
-		if (bodyClass !== undefined) {
+	function show(): void
+	{
+		if (bodyClass !== undefined)
+		{
 			options.bodyClassList.add(bodyClass);
 		}
 		open = true;
 		justOpened = true;
-		if (guardTimer !== undefined) {
+		if (guardTimer !== undefined)
+		{
 			options.clearTimeout(guardTimer);
 		}
-		guardTimer = options.setTimeout(() => {
+		guardTimer = options.setTimeout(() =>
+		{
 			justOpened = false;
 			guardTimer = undefined;
 		}, JUST_OPENED_GUARD_MS);
 		options.onShow?.();
 	}
 
-	function hide(): void {
-		if (pointerDownInFlyout && blockCloseOnInternalClick) {
+	function hide(): void
+	{
+		if (pointerDownInFlyout && blockCloseOnInternalClick)
+		{
 			pointerDownInFlyout = false;
 			options.focusTrigger?.();
 			return;
 		}
-		if (bodyClass !== undefined) {
+		if (bodyClass !== undefined)
+		{
 			options.bodyClassList.remove(bodyClass);
 		}
 		open = false;
 		options.onHide?.();
 	}
 
-	function clearHideTimer(): void {
-		if (hideTimer !== undefined) {
+	function clearHideTimer(): void
+	{
+		if (hideTimer !== undefined)
+		{
 			options.clearTimeout(hideTimer);
 		}
 		hideTimer = undefined;
@@ -81,41 +97,53 @@ export function createButtonMenuController(options: ButtonMenuControllerOptions)
 	return {
 		focus: show,
 		blur: hide,
-		mouseEnter() {
-			if (!actOnHover) {
+		mouseEnter()
+		{
+			if (!actOnHover)
+			{
 				return;
 			}
 			clearHideTimer();
 			show();
 		},
-		mouseLeave() {
-			if (!actOnHover) {
+		mouseLeave()
+		{
+			if (!actOnHover)
+			{
 				return;
 			}
 			clearHideTimer();
-			hideTimer = options.setTimeout(() => {
+			hideTimer = options.setTimeout(() =>
+			{
 				hideTimer = undefined;
 				hide();
 			}, HOVER_HIDE_DELAY_MS);
 		},
-		flyoutPointerDown() {
+		flyoutPointerDown()
+		{
 			pointerDownInFlyout = true;
 		},
-		click(activeInsideTrigger, fromFlyout = false) {
-			if (fromFlyout) {
+		click(activeInsideTrigger, fromFlyout = false)
+		{
+			if (fromFlyout)
+			{
 				return "none";
 			}
-			if (!open) {
-				if (actOnHover) {
+			if (!open)
+			{
+				if (actOnHover)
+				{
 					return "none";
 				}
 				show();
 				return "open";
 			}
-			if (justOpened || actOnHover) {
+			if (justOpened || actOnHover)
+			{
 				return "none";
 			}
-			if (activeInsideTrigger !== true) {
+			if (activeInsideTrigger !== true)
+			{
 				hide();
 				return "hide";
 			}

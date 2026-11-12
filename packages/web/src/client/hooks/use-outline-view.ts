@@ -19,7 +19,8 @@ export function outlineViewShape(
 	expandedIds: ReadonlySet<string>,
 	showCompleted: boolean,
 	scrollY = 0,
-): OutlineViewShape {
+): OutlineViewShape
+{
 	return {
 		expandedIds,
 		showCompleted,
@@ -31,11 +32,13 @@ export function outlineViewShape(
  * While the page load's expansion GET is in flight, the main outline's view expands the account's rows on the server
  * instead of waiting on it, and adopts the ones it reached, so the first view still loads every level it expands.
  */
-function viewQuery(queryClient: QueryClient, rootId: string | null, shape: () => OutlineViewShape) {
+function viewQuery(queryClient: QueryClient, rootId: string | null, shape: () => OutlineViewShape)
+{
 	return {
 		queryKey: outlineViewKey(rootId),
 		// A failed load leaves each level to its own children query.
-		queryFn: async () => {
+		queryFn: async () =>
+		{
 			const current = shape();
 			const accountExpansion =
 				initialExpansionPending() && current.expandedIds === useOutlineStore.getState().expandedIds
@@ -53,14 +56,17 @@ function viewQuery(queryClient: QueryClient, rootId: string | null, shape: () =>
 	} as const;
 }
 
-function ignoreFailure(): void {}
+function ignoreFailure(): void
+{
+}
 
 /** Load the outline view under `rootId` (see `loadOutlineView`) through the query the outline waits on. */
 export async function queryOutlineView(
 	queryClient: QueryClient,
 	rootId: string | null,
 	shape: OutlineViewShape,
-): Promise<void> {
+): Promise<void>
+{
 	await queryClient.query(viewQuery(queryClient, rootId, () => shape));
 }
 
@@ -68,30 +74,36 @@ export async function queryOutlineView(
  * Whether the outline view under `rootId` is still loading in one request, for the outline to keep the previous view
  * on screen until the new one renders whole. Already cached, it is loaded from the first render.
  */
-export function useOutlineViewPending(rootId: string | null): boolean {
+export function useOutlineViewPending(rootId: string | null): boolean
+{
 	const queryClient = useQueryClient();
 	const paneId = usePaneId();
 	const expandedIds = usePaneExpandedIds();
 	const showCompleted = useOutlineStore((state) => state.showCompleted);
 	const shape = outlineViewShape(expandedIds, showCompleted, poppedScrollY(rootId));
-	const currentShape = () => {
+	const currentShape = () =>
+	{
 		const state = useOutlineStore.getState();
 		return outlineViewShape(paneExpandedIds(state, paneId), state.showCompleted, poppedScrollY(rootId));
 	};
-	return useQuery({
-		...viewQuery(queryClient, rootId, currentShape),
-		initialData: () => (outlineViewCached(queryClient, rootId, shape) ? true : undefined),
-	}).isPending;
+	return useQuery(
+		{
+			...viewQuery(queryClient, rootId, currentShape),
+			initialData: () => (outlineViewCached(queryClient, rootId, shape) ? true : undefined),
+		},
+	).isPending;
 }
 
 /** The main outline's view zoomed into `target`, rows down to the scroll Back/Forward will restore there. */
-function mainZoomShape(target: string | null): OutlineViewShape {
+function mainZoomShape(target: string | null): OutlineViewShape
+{
 	const state = useOutlineStore.getState();
 	return outlineViewShape(paneExpandedIds(state, MAIN_PANE_ID), state.showCompleted, poppedScrollY(target));
 }
 
 /** Whether the cache holds everything the main outline renders zoomed into `target`: tree, title and breadcrumbs. */
-export function mainZoomViewCached(queryClient: QueryClient, target: string | null): boolean {
+export function mainZoomViewCached(queryClient: QueryClient, target: string | null): boolean
+{
 	const headerCached =
 		target === null ||
 		(readNode(queryClient, target) !== undefined && cachedAncestors(queryClient, target) !== undefined);
@@ -99,7 +111,8 @@ export function mainZoomViewCached(queryClient: QueryClient, target: string | nu
 }
 
 /** Load everything the main outline renders zoomed into `target`, as a bullet click's zoom does; never rejects. */
-export async function loadMainZoomView(queryClient: QueryClient, target: string | null): Promise<void> {
+export async function loadMainZoomView(queryClient: QueryClient, target: string | null): Promise<void>
+{
 	await Promise.all([
 		target === null ? undefined : prefetchZoomView(queryClient, target),
 		queryOutlineView(queryClient, target, mainZoomShape(target)),

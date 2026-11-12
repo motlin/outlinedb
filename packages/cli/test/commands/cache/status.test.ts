@@ -12,7 +12,8 @@ import Status from "../../../src/commands/cache/status.js";
 import {cleanupTestDatabase, createTestDatabase} from "../../db/migration-helper.js";
 import type {TestDatabase} from "../../db/migration-helper.js";
 
-describe("cache:status command", () => {
+describe("cache:status command", () =>
+{
 	let fsExistsSyncStub: MockInstance;
 	let fsStatSyncStub: MockInstance;
 	let tempDir: string;
@@ -20,8 +21,13 @@ describe("cache:status command", () => {
 	let testDatabase: TestDatabase;
 	let originalDbPath: string | undefined;
 
-	beforeEach(() => {
-		vi.useFakeTimers({shouldAdvanceTime: true});
+	beforeEach(() =>
+	{
+		vi.useFakeTimers(
+			{
+				shouldAdvanceTime: true,
+			},
+		);
 		vi.setSystemTime(new Date("2026-01-01T12:00:00.000Z"));
 
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-test-"));
@@ -40,34 +46,50 @@ describe("cache:status command", () => {
 		fsStatSyncStub = vi.spyOn(fs, "statSync");
 	});
 
-	afterEach(() => {
+	afterEach(() =>
+	{
 		vi.useRealTimers();
 		cleanupTestDatabase(testDatabase);
 
-		if (originalDbPath === undefined) {
+		if (originalDbPath === undefined)
+		{
 			delete process.env.OUTLINEDB_DB_PATH;
-		} else {
+		}
+		else
+		{
 			process.env.OUTLINEDB_DB_PATH = originalDbPath;
 		}
 
-		if (fs.existsSync(tempDir)) {
-			try {
-				if (fs.existsSync(testDatabase.path)) {
+		if (fs.existsSync(tempDir))
+		{
+			try
+			{
+				if (fs.existsSync(testDatabase.path))
+				{
 					fs.unlinkSync(testDatabase.path);
 				}
 				fs.rmdirSync(tempDir);
-			} catch {
+			}
+			catch
+			{
 				// Ignore cleanup errors
 			}
 		}
 	});
 
-	describe("with empty database", () => {
-		it("displays zero counts for empty database", async () => {
+	describe("with empty database", () =>
+	{
+		it("displays zero counts for empty database", async () =>
+		{
 			fsExistsSyncStub.mockReturnValue(true);
-			fsStatSyncStub.mockReturnValue({size: 1024});
+			fsStatSyncStub.mockReturnValue(
+				{
+					size: 1024,
+				},
+			);
 
-			const {stdout} = await captureOutput(async () => {
+			const {stdout} = await captureOutput(async () =>
+			{
 				await Status.run([]);
 			});
 
@@ -79,8 +101,10 @@ describe("cache:status command", () => {
 		});
 	});
 
-	describe("with cached nodes", () => {
-		beforeEach(() => {
+	describe("with cached nodes", () =>
+	{
+		beforeEach(() =>
+		{
 			const testNodeContent: NewNodeContent[] = [
 				{
 					id: "root-1",
@@ -138,19 +162,27 @@ describe("cache:status command", () => {
 				},
 			];
 
-			for (const content of testNodeContent) {
+			for (const content of testNodeContent)
+			{
 				testDatabase.db.insert(nodeContent).values(content).run();
 			}
-			for (const metadata of testNodeMetadata) {
+			for (const metadata of testNodeMetadata)
+			{
 				testDatabase.db.insert(nodeMetadata).values(metadata).run();
 			}
 		});
 
-		it("displays correct node counts", async () => {
+		it("displays correct node counts", async () =>
+		{
 			fsExistsSyncStub.mockReturnValue(true);
-			fsStatSyncStub.mockReturnValue({size: 2048});
+			fsStatSyncStub.mockReturnValue(
+				{
+					size: 2048,
+				},
+			);
 
-			const {stdout} = await captureOutput(async () => {
+			const {stdout} = await captureOutput(async () =>
+			{
 				await Status.run([]);
 			});
 
@@ -165,27 +197,35 @@ describe("cache:status command", () => {
 			);
 		});
 
-		it("displays last sync from most recent node systemFrom", async () => {
+		it("displays last sync from most recent node systemFrom", async () =>
+		{
 			const now = new Date();
 			const tenSecondsAgo = new Date(now.getTime() - 10_000);
 			const systemFromStr = formatTemporalTimestamp(tenSecondsAgo);
 
 			testDatabase.db
 				.insert(nodeContent)
-				.values({
-					id: "recent-node",
-					name: "Recent Node",
-					note: null,
-					parentId: null,
-					systemFrom: systemFromStr,
-					systemTo: "9999-12-31 23:59:59",
-				})
+				.values(
+					{
+						id: "recent-node",
+						name: "Recent Node",
+						note: null,
+						parentId: null,
+						systemFrom: systemFromStr,
+						systemTo: "9999-12-31 23:59:59",
+					},
+				)
 				.run();
 
 			fsExistsSyncStub.mockReturnValue(true);
-			fsStatSyncStub.mockReturnValue({size: 3072});
+			fsStatSyncStub.mockReturnValue(
+				{
+					size: 3072,
+				},
+			);
 
-			const {stdout} = await captureOutput(async () => {
+			const {stdout} = await captureOutput(async () =>
+			{
 				await Status.run([]);
 			});
 
@@ -196,21 +236,29 @@ describe("cache:status command", () => {
 			);
 		});
 
-		it("displays backup import information when backup imports exist", async () => {
+		it("displays backup import information when backup imports exist", async () =>
+		{
 			testDatabase.db
 				.insert(backupImports)
-				.values({
-					backupDate: "2024-01-15",
-					filename: "test-backup.json",
-					systemFrom: "2024-01-15 10:00:00",
-					systemTo: "9999-12-31 23:59:59",
-				})
+				.values(
+					{
+						backupDate: "2024-01-15",
+						filename: "test-backup.json",
+						systemFrom: "2024-01-15 10:00:00",
+						systemTo: "9999-12-31 23:59:59",
+					},
+				)
 				.run();
 
 			fsExistsSyncStub.mockReturnValue(true);
-			fsStatSyncStub.mockReturnValue({size: 4096});
+			fsStatSyncStub.mockReturnValue(
+				{
+					size: 4096,
+				},
+			);
 
-			const {stdout} = await captureOutput(async () => {
+			const {stdout} = await captureOutput(async () =>
+			{
 				await Status.run([]);
 			});
 
@@ -226,33 +274,65 @@ describe("cache:status command", () => {
 		});
 	});
 
-	describe("with stranded relationship rows", () => {
-		beforeEach(() => {
-			const seeded = {systemFrom: "2024-01-01 00:00:00", systemTo: "9999-12-31 23:59:59"};
+	describe("with stranded relationship rows", () =>
+	{
+		beforeEach(() =>
+		{
+			const seeded =
+			{
+				systemFrom: "2024-01-01 00:00:00",
+				systemTo: "9999-12-31 23:59:59",
+			};
 			for (const [id, parentId] of [
 				["target", null],
 				["refs", "target"],
 				["item", "refs"],
-			] as const) {
+			] as const)
+			{
 				testDatabase.db
 					.insert(nodeContent)
-					.values({id, name: "", note: null, parentId, ...seeded})
+					.values(
+						{
+							id,
+							name: "",
+							note: null,
+							parentId,
+							...seeded,
+						},
+					)
 					.run();
 			}
 			testDatabase.db
 				.insert(referencesRoots)
-				.values({nodeId: "refs", ...seeded})
+				.values(
+					{
+						nodeId: "refs",
+						...seeded,
+					},
+				)
 				.run();
 			testDatabase.db
 				.insert(mirrors)
-				.values({mirrorId: "item", originalId: "gone", ...seeded})
+				.values(
+					{
+						mirrorId: "item",
+						originalId: "gone",
+						...seeded,
+					},
+				)
 				.run();
 			fsExistsSyncStub.mockReturnValue(true);
-			fsStatSyncStub.mockReturnValue({size: 1024});
+			fsStatSyncStub.mockReturnValue(
+				{
+					size: 1024,
+				},
+			);
 		});
 
-		it("lists the stranded rows a delete or import left", async () => {
-			const {stdout} = await captureOutput(async () => {
+		it("lists the stranded rows a delete or import left", async () =>
+		{
+			const {stdout} = await captureOutput(async () =>
+			{
 				await Status.run([]);
 			});
 
@@ -266,25 +346,44 @@ describe("cache:status command", () => {
 			);
 		});
 
-		it("returns the stranded counts as JSON", async () => {
-			const {stdout} = await captureOutput(async () => {
+		it("returns the stranded counts as JSON", async () =>
+		{
+			const {stdout} = await captureOutput(async () =>
+			{
 				await Status.run(["--json"]);
 			});
 
-			expect(z.object({stranded: z.unknown()}).parse(JSON.parse(stdout)).stranded).toStrictEqual({
-				backlinkItems: 1,
-				mirrors: 1,
-				referencesRoots: 0,
-			});
+			expect(
+				z
+					.object(
+						{
+							stranded: z.unknown(),
+						},
+					)
+					.parse(JSON.parse(stdout)).stranded,
+			).toStrictEqual(
+				{
+					backlinkItems: 1,
+					mirrors: 1,
+					referencesRoots: 0,
+				},
+			);
 		});
 	});
 
-	describe("database file size formatting", () => {
-		it("formats bytes correctly", async () => {
+	describe("database file size formatting", () =>
+	{
+		it("formats bytes correctly", async () =>
+		{
 			fsExistsSyncStub.mockReturnValue(true);
-			fsStatSyncStub.mockReturnValue({size: 512});
+			fsStatSyncStub.mockReturnValue(
+				{
+					size: 512,
+				},
+			);
 
-			const {stdout} = await captureOutput(async () => {
+			const {stdout} = await captureOutput(async () =>
+			{
 				await Status.run([]);
 			});
 
@@ -295,11 +394,17 @@ describe("cache:status command", () => {
 			);
 		});
 
-		it("formats kilobytes correctly", async () => {
+		it("formats kilobytes correctly", async () =>
+		{
 			fsExistsSyncStub.mockReturnValue(true);
-			fsStatSyncStub.mockReturnValue({size: 10_240});
+			fsStatSyncStub.mockReturnValue(
+				{
+					size: 10_240,
+				},
+			);
 
-			const {stdout} = await captureOutput(async () => {
+			const {stdout} = await captureOutput(async () =>
+			{
 				await Status.run([]);
 			});
 
@@ -310,11 +415,17 @@ describe("cache:status command", () => {
 			);
 		});
 
-		it("formats megabytes correctly", async () => {
+		it("formats megabytes correctly", async () =>
+		{
 			fsExistsSyncStub.mockReturnValue(true);
-			fsStatSyncStub.mockReturnValue({size: 5 * 1024 * 1024});
+			fsStatSyncStub.mockReturnValue(
+				{
+					size: 5 * 1024 * 1024,
+				},
+			);
 
-			const {stdout} = await captureOutput(async () => {
+			const {stdout} = await captureOutput(async () =>
+			{
 				await Status.run([]);
 			});
 
@@ -326,28 +437,37 @@ describe("cache:status command", () => {
 		});
 	});
 
-	describe("time formatting", () => {
-		it("formats recent times as seconds ago", async () => {
+	describe("time formatting", () =>
+	{
+		it("formats recent times as seconds ago", async () =>
+		{
 			const now = new Date();
 			const tenSecondsAgo = new Date(now.getTime() - 10_000);
 			const systemFromStr = formatTemporalTimestamp(tenSecondsAgo);
 
 			testDatabase.db
 				.insert(nodeContent)
-				.values({
-					id: "test-1",
-					name: "Test",
-					note: null,
-					parentId: null,
-					systemFrom: systemFromStr,
-					systemTo: "9999-12-31 23:59:59",
-				})
+				.values(
+					{
+						id: "test-1",
+						name: "Test",
+						note: null,
+						parentId: null,
+						systemFrom: systemFromStr,
+						systemTo: "9999-12-31 23:59:59",
+					},
+				)
 				.run();
 
 			fsExistsSyncStub.mockReturnValue(true);
-			fsStatSyncStub.mockReturnValue({size: 1024});
+			fsStatSyncStub.mockReturnValue(
+				{
+					size: 1024,
+				},
+			);
 
-			const {stdout} = await captureOutput(async () => {
+			const {stdout} = await captureOutput(async () =>
+			{
 				await Status.run([]);
 			});
 
@@ -358,27 +478,35 @@ describe("cache:status command", () => {
 			);
 		});
 
-		it("formats times as minutes ago", async () => {
+		it("formats times as minutes ago", async () =>
+		{
 			const now = new Date();
 			const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
 			const systemFromStr = formatTemporalTimestamp(fiveMinutesAgo);
 
 			testDatabase.db
 				.insert(nodeContent)
-				.values({
-					id: "test-2",
-					name: "Test",
-					note: null,
-					parentId: null,
-					systemFrom: systemFromStr,
-					systemTo: "9999-12-31 23:59:59",
-				})
+				.values(
+					{
+						id: "test-2",
+						name: "Test",
+						note: null,
+						parentId: null,
+						systemFrom: systemFromStr,
+						systemTo: "9999-12-31 23:59:59",
+					},
+				)
 				.run();
 
 			fsExistsSyncStub.mockReturnValue(true);
-			fsStatSyncStub.mockReturnValue({size: 1024});
+			fsStatSyncStub.mockReturnValue(
+				{
+					size: 1024,
+				},
+			);
 
-			const {stdout} = await captureOutput(async () => {
+			const {stdout} = await captureOutput(async () =>
+			{
 				await Status.run([]);
 			});
 

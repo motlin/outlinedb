@@ -16,7 +16,8 @@ import {useHelpMenuRows, useMainMenuRows} from "./main-menu-rows.js";
 import {movePaneItems} from "./move-pane-items.js";
 
 /** Where the Help submenu hangs: upstream anchors it at the main flyout's top and horizontal centre. */
-interface HelpAnchor {
+interface HelpAnchor
+{
 	top: number;
 	left: number;
 	width: number;
@@ -31,11 +32,18 @@ function HelpSubmenu({
 	anchor: HelpAnchor;
 	changelogUnread: boolean;
 	onClose: () => void;
-}) {
+})
+{
 	const openChangelog = useOutlineStore((state) => state.openChangelog);
-	const rows = useHelpMenuRows({changelogUnread, onOpenChangelog: openChangelog});
+	const rows = useHelpMenuRows(
+		{
+			changelogUnread,
+			onOpenChangelog: openChangelog,
+		},
+	);
 	const menu = useRef<ButtonMenuHandle>(null);
-	useEffect(() => {
+	useEffect(() =>
+	{
 		menu.current?.focus();
 	}, []);
 	return createPortal(
@@ -44,7 +52,12 @@ function HelpSubmenu({
 			minWidth={anchor.width - 12}
 			onHide={onClose}
 			ref={menu}
-			style={{position: "absolute", top: anchor.top - 4, left: anchor.left + anchor.width / 2}}
+			style={
+			{
+				position: "absolute",
+				top: anchor.top - 4,
+				left: anchor.left + anchor.width / 2,
+			}}
 		>
 			{rows}
 		</ButtonMenu>,
@@ -53,17 +66,24 @@ function HelpSubmenu({
 }
 
 /** The open main flyout's page rect: the last portaled `.flyout` in the body. */
-function mainFlyoutAnchor(): HelpAnchor | null {
+function mainFlyoutAnchor(): HelpAnchor | null
+{
 	const flyouts = document.body.querySelectorAll(":scope > .flyout.menu");
 	const flyout = flyouts[flyouts.length - 1];
-	if (!flyout) {
+	if (!flyout)
+	{
 		return null;
 	}
 	const rect = flyout.getBoundingClientRect();
-	return {top: rect.top + window.scrollY, left: rect.left + window.scrollX, width: rect.width};
+	return {
+		top: rect.top + window.scrollY,
+		left: rect.left + window.scrollX,
+		width: rect.width,
+	};
 }
 
-interface HeaderMoreMenuProps {
+interface HeaderMoreMenuProps
+{
 	/** The zoom the menu's actions act on (null is Home). */
 	zoomedId: string | null;
 	/** A pane's committed search query; its Star entry stars that search. Omitted for the main header. */
@@ -83,15 +103,8 @@ interface HeaderMoreMenuProps {
  * kebab carry upstream's blue dot; with panes open only the last pane's kebab shows it. Its Expand/Collapse all act on
  * the zoomed item's whole subtree (every top-level item at Home).
  */
-export function HeaderMoreMenu({
-	zoomedId,
-	query = null,
-	paneId,
-	compact,
-	onToday,
-	onUndo,
-	onRedo,
-}: HeaderMoreMenuProps) {
+export function HeaderMoreMenu({zoomedId, query = null, paneId, compact, onToday, onUndo, onRedo}: HeaderMoreMenuProps)
+{
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
 	const panes = useOutlineStore((state) => state.panes);
@@ -102,25 +115,42 @@ export function HeaderMoreMenu({
 	const changelogUnread = useChangelogUnread();
 	// Upstream `showBlueDot: !WF.Panes.any() || WF.Panes.panes().at(-1)?.id === pane?.id`.
 	const showBlueDot = panes.length === 0 || panes.at(-1)?.id === paneId;
-	const rows = useMainMenuRows({
-		changelogUnread,
-		headerItems: compact ? compactHeaderItems(actions, zoomedId, onToday, query) : [],
-		paneItems: movePaneItems({panes}, paneId, (id, index) => {
-			movePane(navigate, id, index, (locationId) => cachedResolvedId(queryClient, locationId) ?? locationId);
-		}),
-		onCollapseAll: () => {
-			expandAll(zoomedId, false);
+	const rows = useMainMenuRows(
+		{
+			changelogUnread,
+			headerItems: compact ? compactHeaderItems(actions, zoomedId, onToday, query) : [],
+			paneItems: movePaneItems(
+				{
+					panes,
+				},
+				paneId,
+				(id, index) =>
+				{
+					movePane(
+						navigate,
+						id,
+						index,
+						(locationId) => cachedResolvedId(queryClient, locationId) ?? locationId,
+					);
+				},
+			),
+			onCollapseAll: () =>
+			{
+				expandAll(zoomedId, false);
+			},
+			onExpandAll: () =>
+			{
+				expandAll(zoomedId, true);
+			},
+			onOpenHelp: () =>
+			{
+				setHelpAnchor(mainFlyoutAnchor());
+			},
+			onOpenSettings: openSettings,
+			onRedo,
+			onUndo,
 		},
-		onExpandAll: () => {
-			expandAll(zoomedId, true);
-		},
-		onOpenHelp: () => {
-			setHelpAnchor(mainFlyoutAnchor());
-		},
-		onOpenSettings: openSettings,
-		onRedo,
-		onUndo,
-	});
+	);
 	return (
 		<>
 			<ButtonMenu
@@ -143,7 +173,8 @@ export function HeaderMoreMenu({
 				<HelpSubmenu
 					anchor={helpAnchor}
 					changelogUnread={changelogUnread}
-					onClose={() => {
+					onClose={() =>
+					{
 						setHelpAnchor(null);
 					}}
 				/>

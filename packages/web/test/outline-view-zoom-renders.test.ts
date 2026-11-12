@@ -4,7 +4,8 @@ import type {Root} from "react-dom/client";
 import {renders} from "./helpers/render-counter.js";
 import type {NodeResponse} from "../src/node-types.js";
 
-declare global {
+declare global
+{
 	// React reads this to know act() wraps every update.
 	var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -24,14 +25,18 @@ const {RESIZE_DEBOUNCE_MS} = await import("../src/client/hooks/use-container-rec
 
 const ROWS = 55;
 
-function row(id: string, parentId: string | null, priority: number, hasChildren: boolean): NodeResponse {
+function row(id: string, parentId: string | null, priority: number, hasChildren: boolean): NodeResponse
+{
 	return {
 		id,
 		parent_id: parentId,
 		name: id,
 		note: null,
 		priority,
-		data: {layoutMode: null},
+		data:
+		{
+			layoutMode: null,
+		},
 		completedAt: null,
 		createdAt: 0,
 		modifiedAt: 0,
@@ -41,18 +46,41 @@ function row(id: string, parentId: string | null, priority: number, hasChildren:
 }
 
 // Home holds 55 rows; the first, "parent", holds 55 leaves of its own.
-const homeRows = Array.from({length: ROWS}, (_, i) => row(i === 0 ? "parent" : `home${i}`, null, i, i === 0));
-const childRows = Array.from({length: ROWS}, (_, i) => row(`child${i}`, "parent", i, false));
+const homeRows = Array.from(
+	{
+		length: ROWS,
+	},
+	(_, i) => row(i === 0 ? "parent" : `home${i}`, null, i, i === 0),
+);
+const childRows = Array.from(
+	{
+		length: ROWS,
+	},
+	(_, i) => row(`child${i}`, "parent", i, false),
+);
 
-const queryClient = new QueryClient({defaultOptions: {queries: {retry: false, staleTime: Number.POSITIVE_INFINITY}}});
+const queryClient = new QueryClient(
+	{
+		defaultOptions:
+		{
+			queries:
+			{
+				retry: false,
+				staleTime: Number.POSITIVE_INFINITY,
+			},
+		},
+	},
+);
 let root: Root | undefined;
 
 /**
  * Waits out the row window's growth: the hook queues its step of slack below the fold with `afterNextPaint` when the
  * view commits, so a paint queued after that commit resolves after the step lands, however long the event loop stalls.
  */
-async function afterRowWindowGrows(): Promise<void> {
-	await act(async () => {
+async function afterRowWindowGrows(): Promise<void>
+{
+	await act(async () =>
+	{
 		await afterNextPaint();
 	});
 }
@@ -61,26 +89,36 @@ async function afterRowWindowGrows(): Promise<void> {
  * Waits out the crumbs' first container measure, which `useContainerRect` queues on mount for `RESIZE_DEBOUNCE_MS`:
  * a timeout as long, queued after the mount, fires after it.
  */
-async function afterCrumbsMeasure(): Promise<void> {
-	await act(async () => {
-		await new Promise((resolve) => {
+async function afterCrumbsMeasure(): Promise<void>
+{
+	await act(async () =>
+	{
+		await new Promise((resolve) =>
+		{
 			setTimeout(resolve, RESIZE_DEBOUNCE_MS);
 		});
 	});
 }
 
 /** Components rendered, by name, since `renders.clear()`. */
-function renderMap(): Record<string, number> {
+function renderMap(): Record<string, number>
+{
 	return Object.fromEntries(renders);
 }
 
 let mounted: Record<string, number> = {};
 
 /** The test's providers, which mount alongside the view. */
-const PROVIDERS = {QueryClientProvider: 1, MemoryRouter: 1, Router: 1};
+const PROVIDERS =
+{
+	QueryClientProvider: 1,
+	MemoryRouter: 1,
+	Router: 1,
+};
 
 /** The page shell around the panes, each mounted once. */
-const SHELL = {
+const SHELL =
+{
 	OutlineView: 1,
 	OfflineNotice: 1,
 	PaneWorkspace: 1,
@@ -108,7 +146,8 @@ const SHELL = {
 };
 
 /** The header parts a zoom re-renders: they show the zoomed location. */
-const HEADER = {
+const HEADER =
+{
 	TopBar: 1,
 	Breadcrumbs: 1,
 	SearchBox: 1,
@@ -124,7 +163,8 @@ const HEADER = {
 };
 
 /** The left bar's frame around its Home rows. */
-const LEFT_BAR = {
+const LEFT_BAR =
+{
 	LeftBar: 1,
 	LeftBarDropBar: 1,
 	LeftBarSections: 1,
@@ -138,7 +178,8 @@ const LEFT_BAR = {
 };
 
 /** The outline's frame, rendered once for the first row window and again as the window grows to every row. */
-const TREE_FRAME = {
+const TREE_FRAME =
+{
 	OutlineTree: 2,
 	ZoomRootRow: 2,
 	RootOutlineChildren: 2,
@@ -147,37 +188,70 @@ const TREE_FRAME = {
 	AddChildButton: 2,
 };
 
-beforeAll(async () => {
+beforeAll(async () =>
+{
 	globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 	vi.stubGlobal(
 		"fetch",
-		vi.fn<typeof fetch>(async () => Promise.resolve(Response.json({}, {status: 404}))),
+		vi.fn<typeof fetch>(async () =>
+			Promise.resolve(
+				Response.json(
+					{},
+					{
+						status: 404,
+					},
+				),
+			),
+		),
 	);
 	// Everything both views read is cached, as after a page load and a bullet click's view load.
-	queryClient.setQueryData(starKeys.all, {stars: [], unavailable: false});
+	queryClient.setQueryData(
+		starKeys.all,
+		{
+			stars: [],
+			unavailable: false,
+		},
+	);
 	queryClient.setQueryData(accountKeys.all, null);
 	// A seen calendar tooltip keeps the plain Today, so the counts cover the header the account usually shows.
-	queryClient.setQueryData(preferenceKeys.all, {
-		preferences: {...EMPTY_PREFERENCES, calendarTooltipSeen: true},
-		available: true,
-		error: null,
-	});
+	queryClient.setQueryData(
+		preferenceKeys.all,
+		{
+			preferences:
+			{
+				...EMPTY_PREFERENCES,
+				calendarTooltipSeen: true,
+			},
+			available: true,
+			error: null,
+		},
+	);
 	queryClient.setQueryData(nodeKeys.children(null), homeRows);
 	queryClient.setQueryData(nodeKeys.children("parent"), childRows);
-	queryClient.setQueryData(nodeKeys.backlinks("parent"), {rootId: "parent", items: []});
+	queryClient.setQueryData(
+		nodeKeys.backlinks("parent"),
+		{
+			rootId: "parent",
+			items: [],
+		},
+	);
 	queryClient.setQueryData(nodeKeys.ancestors("parent"), []);
-	for (const node of [...homeRows, ...childRows]) {
+	for (const node of [...homeRows, ...childRows])
+	{
 		queryClient.setQueryData(nodeKeys.detail(node.id), node);
 	}
 	const container = document.createElement("div");
 	document.body.append(container);
 	root = createRoot(container);
 	renders.clear();
-	act(() => {
+	act(() =>
+	{
 		root?.render(
 			createElement(
 				QueryClientProvider,
-				{client: queryClient},
+				{
+					client: queryClient,
+				},
 				createElement(MemoryRouter, null, createElement(OutlineView)),
 			),
 		);
@@ -187,63 +261,73 @@ beforeAll(async () => {
 	mounted = renderMap();
 });
 
-afterAll(() => {
-	act(() => {
+afterAll(() =>
+{
+	act(() =>
+	{
 		root?.unmount();
 	});
 	vi.unstubAllGlobals();
 });
 
-describe("55-row OutlineView renders", () => {
+describe("55-row OutlineView renders", () =>
+{
 	// 299 renders, from 570: each left-bar row is one component, and each outline row three.
-	it("mounts each component once, beyond the rows' three, the row window's second pass, and the crumbs' measure", () => {
-		expect(mounted).toStrictEqual({
-			...PROVIDERS,
-			...SHELL,
-			...HEADER,
-			// Once to mount and once more when the crumbs measure their container: the Home crumb and its icon button.
-			Breadcrumbs: 2,
-			BreadcrumbItem: 2,
-			DocumentTitle: 1,
-			FaIcon: 18,
-			IconButton: 13,
-			NewPaneIcon: 1,
-			...LEFT_BAR,
-			FilesListBranch: ROWS,
-			...TREE_FRAME,
-			OutlineRow: ROWS,
-			NodeName: ROWS,
-			RestingText: ROWS,
-		});
+	it("mounts each component once, beyond the rows' three, the row window's second pass, and the crumbs' measure", () =>
+	{
+		expect(mounted).toStrictEqual(
+			{
+				...PROVIDERS,
+				...SHELL,
+				...HEADER,
+				// Once to mount and once more when the crumbs measure their container: the Home crumb and its icon button.
+				Breadcrumbs: 2,
+				BreadcrumbItem: 2,
+				DocumentTitle: 1,
+				FaIcon: 18,
+				IconButton: 13,
+				NewPaneIcon: 1,
+				...LEFT_BAR,
+				FilesListBranch: ROWS,
+				...TREE_FRAME,
+				OutlineRow: ROWS,
+				NodeName: ROWS,
+				RestingText: ROWS,
+			},
+		);
 	});
 
-	it("swaps a bullet click's zoom into 55 rows rendering the rows, the header, and the tree's frame", async () => {
+	it("swaps a bullet click's zoom into 55 rows rendering the rows, the header, and the tree's frame", async () =>
+	{
 		renders.clear();
-		act(() => {
+		act(() =>
+		{
 			useOutlineStore.getState().zoom("parent");
 		});
 		await afterRowWindowGrows();
 		// 205 renders, from 523: no page shell, no left bar beyond the row that becomes current, no header icon that
 		// did not change, and no row text twice.
-		expect(renderMap()).toStrictEqual({
-			...HEADER,
-			BreadcrumbItem: 1,
-			// The tab title follows the zoom.
-			DocumentTitle: 1,
-			FaIcon: 2,
-			IconButton: 13,
-			StarButton: 1,
-			StarIcon: 1,
-			GlobalCommands: 1,
-			RecordStarViews: 1,
-			FilesListBranch: 1,
-			MainOutline: 1,
-			SearchCountIndicator: 1,
-			...TREE_FRAME,
-			OutlineRow: ROWS,
-			NodeName: ROWS,
-			// The rows' and the zoomed title's.
-			RestingText: ROWS + 1,
-		});
+		expect(renderMap()).toStrictEqual(
+			{
+				...HEADER,
+				BreadcrumbItem: 1,
+				// The tab title follows the zoom.
+				DocumentTitle: 1,
+				FaIcon: 2,
+				IconButton: 13,
+				StarButton: 1,
+				StarIcon: 1,
+				GlobalCommands: 1,
+				RecordStarViews: 1,
+				FilesListBranch: 1,
+				MainOutline: 1,
+				SearchCountIndicator: 1,
+				...TREE_FRAME,
+				OutlineRow: ROWS,
+				NodeName: ROWS,
+				// The rows' and the zoomed title's.
+				RestingText: ROWS + 1,
+			},
+		);
 	});
 });

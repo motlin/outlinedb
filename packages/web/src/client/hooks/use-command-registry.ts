@@ -14,7 +14,8 @@ import {cachedResolvedId, nodeKeys, readChildren, readItemNode, readNode, render
 import type {NodeResponse} from "../../node-types.js";
 import {useStableNavigate} from "./use-stable-navigate.js";
 import {useCustomizeCommands} from "./use-customize-commands.js";
-import {
+import
+{
 	activeCommittedQuery,
 	activePaneView,
 	activeZoomedId,
@@ -30,7 +31,8 @@ import type {SearchFilter} from "../search-filter.js";
 import {editingAfterRemoval, firstLastNavigable, planCompleteFocus} from "../caret-navigation.js";
 import type {CompleteFocus} from "../caret-navigation.js";
 import {selectCompletedVisibility} from "../completed-visibility.js";
-import {
+import
+{
 	cacheMoveTree,
 	needsChildrenBeforeMove,
 	rowHasChildren,
@@ -45,7 +47,8 @@ import {
 	planVerticalMove,
 } from "../tree-ops.js";
 import type {BlockMoveDirection, MoveNodePayload} from "../tree-ops.js";
-import {
+import
+{
 	fetchChildren,
 	sendBlockMoves,
 	useChildren,
@@ -69,7 +72,8 @@ import {useMoveToDate} from "./use-move-to-date.js";
 import {MOVE_TO_DATE_COMMANDS} from "../move-to-date.js";
 import {inlineMirrorInsertion} from "../inline-mirror.js";
 import {planInsertInlineLink} from "../inline-link.js";
-import {
+import
+{
 	isMirrorRootId,
 	useDetachMirror,
 	useMirrorCopy,
@@ -96,7 +100,8 @@ import type {ItemTypeSelectDeps} from "../item-type-select.js";
 import {useCopyLink, useSortChildren} from "./use-item-actions.js";
 import {useAccount} from "./use-account.js";
 import {useDateSettings} from "./use-preferences.js";
-import {
+import
+{
 	plainLength,
 	plainText,
 	planItemsAttrToggle,
@@ -132,44 +137,60 @@ const toggleDetector = createDoublePressDetector();
  * The ids of `nodes` the outline can show, in priority order. `search` is the filter the rows are shown under; zooming
  * lands on a new page with the search cleared, so those callers pass null.
  */
-function potentiallyVisibleIds(nodes: NodeResponse[] | undefined, search: SearchFilter | null): string[] {
+function potentiallyVisibleIds(nodes: NodeResponse[] | undefined, search: SearchFilter | null): string[]
+{
 	const {showCompleted, animatingCompletionIds} = useOutlineStore.getState();
-	return focusableSiblingIds(nodes, {showCompleted, animatingCompletionIds, search});
+	return focusableSiblingIds(
+		nodes,
+		{
+			showCompleted,
+			animatingCompletionIds,
+			search,
+		},
+	);
 }
 
 /** Upstream `JM4`: whether the row's box overlaps the viewport. */
-function isRowInView(id: string): boolean {
+function isRowInView(id: string): boolean
+{
 	const rect = rowContent(id)?.closest(".project")?.getBoundingClientRect();
-	if (rect === undefined) {
+	if (rect === undefined)
+	{
 		return false;
 	}
 	return rect.bottom > 0 && rect.top < Math.max(document.documentElement.clientHeight, globalThis.innerHeight);
 }
 
 /** Whether completed rows render now: the preference, or a revealing search forcing them. */
-function completedRowsShown(): boolean {
+function completedRowsShown(): boolean
+{
 	return selectCompletedVisibility(useOutlineStore.getState()).shown;
 }
 
 /** Whether items are selected, so `ctx.items` is the selection rather than the edited row. */
-function hasItemSelection(): boolean {
+function hasItemSelection(): boolean
+{
 	return useOutlineStore.getState().itemSelection.entries.length > 0;
 }
 
 /** A command on the single item, as upstream's palette-only item commands. */
-function singleItemCommand(run: (nodeId: string) => void): Command {
+function singleItemCommand(run: (nodeId: string) => void): Command
+{
 	return {
 		available: (ctx) => ctx.items.length === 1,
-		execute(ctx) {
+		execute(ctx)
+		{
 			const [nodeId] = ctx.items;
-			if (nodeId !== undefined) {
+			if (nodeId !== undefined)
+			{
 				run(nodeId);
 			}
 		},
 	};
 }
 
-function isJumpMenuOpen(): boolean {
+function isJumpMenuOpen(): boolean
+{
 	return useOutlineStore.getState().jumpMenuOpen;
 }
 
@@ -188,10 +209,12 @@ function isJumpMenuOpen(): boolean {
  * and `focus_prev_sibling` / `focus_next_sibling` (⌥⌘↑ / ⌥⌘↓) move the caret to the edited row's sibling; the
  * layout commands set the layout rather than toggling it.
  */
-export function useCommandRegistry(): CommandRegistry {
+export function useCommandRegistry(): CommandRegistry
+{
 	const navigate = useStableNavigate();
 	const queryClient = useQueryClient();
-	const customizeCommands = useCustomizeCommands((url) => {
+	const customizeCommands = useCustomizeCommands((url) =>
+	{
 		void navigate(url);
 	});
 	const zoomedNodeId = useOutlineStore(activeZoomedId);
@@ -217,9 +240,11 @@ export function useCommandRegistry(): CommandRegistry {
 	const zoomTo = useZoomTo();
 	const moveTo = useMoveTo();
 	const {moveToPreset, moveItemsToDate, mirrorItemsToDate, mirrorToToday} = useMoveToDate();
-	const moveToPresetCommand = (key: Parameters<typeof moveToPreset>[0]): Command => ({
+	const moveToPresetCommand = (key: Parameters<typeof moveToPreset>[0]): Command => (
+	{
 		available: (ctx) => ctx.items.length > 0,
-		execute(ctx) {
+		execute(ctx)
+		{
 			void moveToPreset(key, ctx.items);
 		},
 	});
@@ -232,7 +257,8 @@ export function useCommandRegistry(): CommandRegistry {
 	const zoomPane = useOutlineStore((state) => state.zoomPane);
 	const navigateToToday = useNavigateToToday();
 	// ⌃T in an open pane zooms that pane: the active pane is read when today's page resolves.
-	const navigateActivePaneToToday = useNavigateToToday((id) => {
+	const navigateActivePaneToToday = useNavigateToToday((id) =>
+	{
 		const {activePaneId} = useOutlineStore.getState();
 		zoomPane(activePaneId, id);
 	});
@@ -259,8 +285,10 @@ export function useCommandRegistry(): CommandRegistry {
 		readItemNode(queryClient, ctx.items[0], editedNode);
 
 	/** Commit the edited text and stop editing, exactly as clicking away would. */
-	const commitEdit = useCallback(() => {
-		if (editingId !== null) {
+	const commitEdit = useCallback(() =>
+	{
+		if (editingId !== null)
+		{
 			editorElement(editingId)?.blur();
 		}
 	}, [editingId]);
@@ -271,23 +299,41 @@ export function useCommandRegistry(): CommandRegistry {
 	 */
 	const moveEditedNode = useCallback(
 		(
-			plan: (MoveNodePayload & {expandParentId?: string | null}) | null,
+			plan:
+				| (MoveNodePayload &
+				  {
+						expandParentId?: string | null;
+				  })
+				| null,
 			reveal: RevealBuffer = FIT_REVEAL_BUFFER,
-		) => {
-			if (plan === null) {
+		) =>
+		{
+			if (plan === null)
+			{
 				return;
 			}
 			const {expandParentId, ...payload} = plan;
 			const editor = editorElement(payload.nodeId);
-			if (editor) {
+			if (editor)
+			{
 				const {start, end, reversed} = selectionTextRange(editor);
 				holdEditing(start, end, reversed);
-			} else {
+			}
+			else
+			{
 				holdEditing(Number.MAX_SAFE_INTEGER);
 			}
 			// The plan only ever expands the new parent; the mutation opens it in the same render as the splice.
 			const expandParent = expandParentId !== undefined && expandParentId !== null;
-			moveNodeMutation.mutate({...payload, expandParent}, {onSettled: releaseEditing});
+			moveNodeMutation.mutate(
+				{
+					...payload,
+					expandParent,
+				},
+				{
+					onSettled: releaseEditing,
+				},
+			);
 			revealRowsAfterPaint([payload.nodeId], reveal);
 		},
 		[holdEditing, releaseEditing, moveNodeMutation],
@@ -297,19 +343,26 @@ export function useCommandRegistry(): CommandRegistry {
 	 * Runs `then` once `parentId`'s children are cached, holding the edited row's selection meanwhile (a move into a
 	 * never-opened collapsed row would otherwise vanish until the children landed). A failed load changes nothing.
 	 */
-	const loadChildrenThen = async (parentId: string | null, then: () => void): Promise<void> => {
+	const loadChildrenThen = async (parentId: string | null, then: () => void): Promise<void> =>
+	{
 		const editor = editingId === null ? null : editorElement(editingId);
-		if (editor !== null) {
+		if (editor !== null)
+		{
 			const {start, end, reversed} = selectionTextRange(editor);
 			holdEditing(start, end, reversed);
 		}
-		try {
-			await queryClient.query({
-				queryKey: nodeKeys.children(parentId),
-				queryFn: async () => fetchChildren(parentId),
-				staleTime: "static",
-			});
-		} catch {
+		try
+		{
+			await queryClient.query(
+				{
+					queryKey: nodeKeys.children(parentId),
+					queryFn: async () => fetchChildren(parentId),
+					staleTime: "static",
+				},
+			);
+		}
+		catch
+		{
 			releaseEditing();
 			return;
 		}
@@ -320,27 +373,32 @@ export function useCommandRegistry(): CommandRegistry {
 	 * Move the item selection as blocks (`planBlockMove`) in one undo step, keeping it selected and expanding each
 	 * new parent.
 	 */
-	const moveSelection = (ctx: CommandContext, direction: BlockMoveDirection): void => {
+	const moveSelection = (ctx: CommandContext, direction: BlockMoveDirection): void =>
+	{
 		const state = useOutlineStore.getState();
 		const tree = cacheMoveTree(queryClient, state);
 		const moves = planBlockMove(ctx.items, direction, tree, zoomedNodeId);
 		const unloaded = moves.find(({parentId}) => needsChildrenBeforeMove(tree, parentId));
-		if (unloaded !== undefined) {
+		if (unloaded !== undefined)
+		{
 			// Planned again once the target's children are cached, so the block lands among them.
-			void loadChildrenThen(unloaded.parentId, () => {
+			void loadChildrenThen(unloaded.parentId, () =>
+			{
 				moveSelection(ctx, direction);
 			});
 			return;
 		}
 		// Each new parent expands in the same render as its optimistic splice, never a frame before it.
-		const expanding = moves.map((move) => ({
+		const expanding = moves.map((move) => (
+		{
 			...move,
 			expandParent:
 				move.parentId !== null &&
 				move.parentId !== zoomedNodeId &&
 				!activePaneView().expandedIds.has(move.parentId),
 		}));
-		if (moves.length > 0) {
+		if (moves.length > 0)
+		{
 			void runInUndoBatch(captureOutlineView, async () => sendBlockMoves(expanding, moveNodesMutation.mutate));
 			// Upstream `WF.Scroll.fit`: both ends of the moved selection stay in view.
 			revealRowsAfterPaint(
@@ -351,48 +409,71 @@ export function useCommandRegistry(): CommandRegistry {
 	};
 
 	/** Swap with a sibling or cross into the parent's sibling, expanding it. */
-	const moveEditedNodeVertically = (ctx: CommandContext, direction: "up" | "down"): void => {
-		if (hasItemSelection()) {
+	const moveEditedNodeVertically = (ctx: CommandContext, direction: "up" | "down"): void =>
+	{
+		if (hasItemSelection())
+		{
 			moveSelection(ctx, direction);
 			return;
 		}
 		const [nodeId] = ctx.items;
-		if (nodeId === undefined) {
+		if (nodeId === undefined)
+		{
 			return;
 		}
 		const tree = cacheMoveTree(queryClient, useOutlineStore.getState());
-		const plan = planVerticalMove({nodeId, direction, zoomRootId: zoomedNodeId, tree});
-		if (plan === null) {
+		const plan = planVerticalMove(
+			{
+				nodeId,
+				direction,
+				zoomRootId: zoomedNodeId,
+				tree,
+			},
+		);
+		if (plan === null)
+		{
 			return;
 		}
-		if (needsChildrenBeforeMove(tree, plan.parentId)) {
-			void loadChildrenThen(plan.parentId, () => {
+		if (needsChildrenBeforeMove(tree, plan.parentId))
+		{
+			void loadChildrenThen(plan.parentId, () =>
+			{
 				moveEditedNodeVertically(ctx, direction);
 			});
 			return;
 		}
 		moveEditedNode(
-			{nodeId: plan.nodeId, parent_id: plan.parentId, index: plan.index, expandParentId: plan.expandParentId},
+			{
+				nodeId: plan.nodeId,
+				parent_id: plan.parentId,
+				index: plan.index,
+				expandParentId: plan.expandParentId,
+			},
 			MOVE_REVEAL_BUFFER,
 		);
 		flashMoving([plan.nodeId]);
 	};
 
 	/** Tab: the selection as blocks, else the edited row as the last child of its previous sibling. */
-	const indentItem = (ctx: CommandContext): void => {
-		if (hasItemSelection()) {
+	const indentItem = (ctx: CommandContext): void =>
+	{
+		if (hasItemSelection())
+		{
 			moveSelection(ctx, "indent");
 			return;
 		}
 		const node = itemNode(ctx);
-		if (node === undefined) {
+		if (node === undefined)
+		{
 			return;
 		}
 		const plan = planIndent(queryClient, node, activePaneView().expandedIds);
 		const tree = cacheMoveTree(queryClient, useOutlineStore.getState());
-		if (plan !== null && needsChildrenBeforeMove(tree, plan.parent_id)) {
+		if (plan !== null && needsChildrenBeforeMove(tree, plan.parent_id))
+		{
 			// Without the previous sibling's children the row could not be placed after them.
-			void loadChildrenThen(plan.parent_id, () => {
+			void loadChildrenThen(plan.parent_id, () =>
+			{
 				indentItem(ctx);
 			});
 			return;
@@ -401,11 +482,15 @@ export function useCommandRegistry(): CommandRegistry {
 	};
 
 	/** Continue editing beside the edited node, which is about to leave the view. */
-	const editBesideRemovedNode = (nodeId: string): void => {
+	const editBesideRemovedNode = (nodeId: string): void =>
+	{
 		const next = editingAfterRemoval(currentNavigableIds(queryClient), nodeId);
-		if (next === null) {
+		if (next === null)
+		{
 			stopEditing();
-		} else {
+		}
+		else
+		{
 			resumeEditing(next.nodeId, next.caretOffset);
 		}
 	};
@@ -414,99 +499,143 @@ export function useCommandRegistry(): CommandRegistry {
 	 * Upstream's layout toggles (`planLayoutToggle`) over the command targets, in one undo step. While editing, the
 	 * unsaved text is committed first and the editor stays open with the caret in place, showing any rewritten name.
 	 */
-	const toggleLayout = (ctx: CommandContext, command: LayoutToggleCommand): void => {
+	const toggleLayout = (ctx: CommandContext, command: LayoutToggleCommand): void =>
+	{
 		const nodes = ctx.items.flatMap((id) => readNode(queryClient, id) ?? []);
-		if (nodes.length === 0) {
+		if (nodes.length === 0)
+		{
 			return;
 		}
 		const editor = editingId !== null && !hasItemSelection() ? editorElement(editingId) : null;
 		const edited =
 			editor !== null && editingId !== null
-				? {nodeId: editingId, name: serializeEditorHtml(editor.innerHTML)}
+				?
+					{
+						nodeId: editingId,
+						name: serializeEditorHtml(editor.innerHTML),
+					}
 				: undefined;
 		const plan = planLayoutHotkey(command, nodes, edited);
-		if (editor !== null && edited !== undefined) {
+		if (editor !== null && edited !== undefined)
+		{
 			flushEditing();
 			let caret = caretTextOffset(editor);
 			const renamed = plan.updates.find((update) => update.nodeId === edited.nodeId)?.name;
-			if (renamed !== undefined) {
+			if (renamed !== undefined)
+			{
 				caret = Math.max(0, caret - (plainLength(edited.name) - plainLength(renamed)));
 				editor.innerHTML = renderEditorHtml(renamed, dateSettings, account);
 				placeCaretAtTextOffset(editor, caret);
 			}
 			holdEditing(caret);
 		}
-		void runInUndoBatch(captureOutlineView, () => {
-			for (const update of plan.updates) {
-				updateNodeMutation.mutate(update, {onSettled: releaseEditing});
+		void runInUndoBatch(captureOutlineView, () =>
+		{
+			for (const update of plan.updates)
+			{
+				updateNodeMutation.mutate(
+					update,
+					{
+						onSettled: releaseEditing,
+					},
+				);
 			}
-			for (const nodeId of plan.deletes) {
+			for (const nodeId of plan.deletes)
+			{
 				deleteNodeMutation.mutate(nodeId);
 			}
-			for (const request of lineSplitRequests(queryClient, plan.creates)) {
+			for (const request of lineSplitRequests(queryClient, plan.creates))
+			{
 				createNodeMutation.mutate(request);
 			}
 		});
-		if (plan.clearSelection) {
+		if (plan.clearSelection)
+		{
 			useOutlineStore.getState().clearItemSelection();
 		}
 	};
 
-	const layoutCommand = (command: LayoutToggleCommand): Command => ({
-		execute(ctx) {
+	const layoutCommand = (command: LayoutToggleCommand): Command => (
+	{
+		execute(ctx)
+		{
 			toggleLayout(ctx, command);
 		},
 	});
 
 	/** The table commands' effects over this registry's mutations. */
 	const tableDeps = (): TableDeps =>
-		makeTableDeps(queryClient, {
-			create: createNodeMutation.mutate,
-			remove: deleteNodeMutation.mutate,
-			move: moveNodeMutation.mutate,
-			update: updateNodeMutation.mutate,
-		});
+		makeTableDeps(
+			queryClient,
+			{
+				create: createNodeMutation.mutate,
+				remove: deleteNodeMutation.mutate,
+				move: moveNodeMutation.mutate,
+				update: updateNodeMutation.mutate,
+			},
+		);
 
 	/** The table cell a keyboard command acts on: the single caret item, when no item selection is up. */
-	const tableCellOf = (ctx: CommandContext) => {
+	const tableCellOf = (ctx: CommandContext) =>
+	{
 		const [nodeId] = ctx.items;
 		return hasItemSelection() || ctx.items.length !== 1 || nodeId === undefined
 			? null
 			: locateCell(queryClient, nodeId);
 	};
 
-	const itemTypeDeps: ItemTypeSelectDeps = {
-		structureTable: (nodeId, on) => {
+	const itemTypeDeps: ItemTypeSelectDeps =
+	{
+		structureTable: (nodeId, on) =>
+		{
 			void structureTable(tableDeps(), nodeId, on);
 		},
-		update: (nodeId, layoutMode, extra) => {
-			updateNodeMutation.mutate({nodeId, layoutMode, ...extra});
+		update: (nodeId, layoutMode, extra) =>
+		{
+			updateNodeMutation.mutate(
+				{
+					nodeId,
+					layoutMode,
+					...extra,
+				},
+			);
 		},
 		plainName: (nodeId) => plainText(readNode(queryClient, nodeId)?.name ?? "", ""),
-		createAfter: (nodeId, lines) => {
+		createAfter: (nodeId, lines) =>
+		{
 			for (const request of lineSplitRequests(
 				queryClient,
-				lines.map((line) => ({afterId: nodeId, ...line})),
-			)) {
+				lines.map((line) => (
+				{
+					afterId: nodeId,
+					...line,
+				})),
+			))
+			{
 				createNodeMutation.mutate(request);
 			}
 		},
 		hasNote: (nodeId) => (readNode(queryClient, nodeId)?.note ?? "") !== "",
-		expandAll: (ids) => {
+		expandAll: (ids) =>
+		{
 			replaceExpanded(new Set([...activePaneView().expandedIds, ...ids]));
 		},
 		childIds: (nodeId) => (readChildren(queryClient, nodeId) ?? []).map((child) => child.id),
-		createChild: (parentId) => {
+		createChild: (parentId) =>
+		{
 			const id = crypto.randomUUID();
-			createNodeMutation.mutate({
-				id,
-				parent_id: parentId === HOME_TARGET ? undefined : parentId,
-				name: "",
-				index: 0,
-			});
+			createNodeMutation.mutate(
+				{
+					id,
+					parent_id: parentId === HOME_TARGET ? undefined : parentId,
+					name: "",
+					index: 0,
+				},
+			);
 			return id;
 		},
-		startEditing: (nodeId) => {
+		startEditing: (nodeId) =>
+		{
 			useOutlineStore.getState().resumeEditing(nodeId, 0);
 		},
 		layoutMode: (nodeId) => readNode(queryClient, nodeId)?.data.layoutMode ?? null,
@@ -514,20 +643,29 @@ export function useCommandRegistry(): CommandRegistry {
 
 	/** Upstream `toggle_board` / `toggle_table` on the single item, in one undo step. */
 	const boardOrTableCommand = (command: "toggle_board" | "toggle_table"): Command =>
-		singleItemCommand((nodeId) => {
-			void runInUndoBatch(captureOutlineView, () => {
+		singleItemCommand((nodeId) =>
+		{
+			void runInUndoBatch(captureOutlineView, () =>
+			{
 				toggleBoardOrTable(command, nodeId, itemTypeDeps);
 			});
 		});
 
 	/** Upstream `insert_board_column_left/right`: a new empty column beside the board, column or card. */
-	const insertColumnCommand = (kind: "left" | "right"): Command => {
-		const tree: BoardTreeReader = {
-			node: (id) => {
+	const insertColumnCommand = (kind: "left" | "right"): Command =>
+	{
+		const tree: BoardTreeReader =
+		{
+			node: (id) =>
+			{
 				const node = readNode(queryClient, id);
 				return node === undefined
 					? undefined
-					: {parent_id: node.parent_id, layoutMode: node.data.layoutMode ?? null};
+					:
+						{
+							parent_id: node.parent_id,
+							layoutMode: node.data.layoutMode ?? null,
+						};
 			},
 			childIds: (parentId) => (readChildren(queryClient, parentId) ?? []).map((child) => child.id),
 			renders: (id) => cachedCanRender(queryClient, id, "board"),
@@ -535,16 +673,26 @@ export function useCommandRegistry(): CommandRegistry {
 		return {
 			available: (ctx) =>
 				ctx.items.length === 1 && ctx.items.every((id) => insertColumnSubject(id, tree) !== null),
-			execute(ctx) {
+			execute(ctx)
+			{
 				const [nodeId] = ctx.items;
 				const subject = nodeId === undefined ? null : insertColumnSubject(nodeId, tree);
-				if (subject === null) {
+				if (subject === null)
+				{
 					return;
 				}
 				const target = insertColumnTarget(kind, subject);
 				const id = crypto.randomUUID();
-				void runInUndoBatch(captureOutlineView, () => {
-					createNodeMutation.mutate({id, parent_id: target.parentId, name: "", index: target.index});
+				void runInUndoBatch(captureOutlineView, () =>
+				{
+					createNodeMutation.mutate(
+						{
+							id,
+							parent_id: target.parentId,
+							name: "",
+							index: target.index,
+						},
+					);
 				});
 				useOutlineStore.getState().resumeEditing(id, 0);
 			},
@@ -556,28 +704,36 @@ export function useCommandRegistry(): CommandRegistry {
 	 * places away, scroll to the top, then edit its first visible child (or its title) at offset 0. In an open pane
 	 * (`paneId`) it zooms the pane and scrolls the pane's scroller.
 	 */
-	const jumpToSibling = async (step: -1 | 1, paneId: string | null): Promise<void> => {
-		if (zoomedNodeId === null || zoomedNode === undefined) {
+	const jumpToSibling = async (step: -1 | 1, paneId: string | null): Promise<void> =>
+	{
+		if (zoomedNodeId === null || zoomedNode === undefined)
+		{
 			return;
 		}
 		const siblings = readChildren(queryClient, zoomedNode.parent_id) ?? zoomedNodeSiblings ?? [];
 		const targetId = nextPotentiallyVisibleSibling(siblings, zoomedNodeId, step, showCompleted);
-		if (targetId === null) {
+		if (targetId === null)
+		{
 			return;
 		}
 		commitEdit();
-		if (paneId === null) {
+		if (paneId === null)
+		{
 			void navigate(nodeUrl(targetId));
 			scrollPaneToTop(MAIN_PANE_ID);
-		} else {
+		}
+		else
+		{
 			zoomPane(paneId, targetId);
 			scrollPaneToTop(paneId);
 		}
-		const children = await queryClient.query({
-			queryKey: nodeKeys.children(targetId),
-			queryFn: async () => fetchChildren(targetId),
-			staleTime: "static",
-		});
+		const children = await queryClient.query(
+			{
+				queryKey: nodeKeys.children(targetId),
+				queryFn: async () => fetchChildren(targetId),
+				staleTime: "static",
+			},
+		);
 		resumeEditing(potentiallyVisibleIds(children, null)[0] ?? targetId, 0);
 	};
 
@@ -585,7 +741,8 @@ export function useCommandRegistry(): CommandRegistry {
 	 * Upstream `focus_next_sibling` / `prev`: edit the edited row's focusable sibling at offset 0, honoring the search.
 	 * With nothing focused, the first child in the viewport. Going down centers the target.
 	 */
-	const focusSibling = (ctx: CommandContext, step: -1 | 1): void => {
+	const focusSibling = (ctx: CommandContext, step: -1 | 1): void =>
+	{
 		const currentId = ctx.items[0] ?? null;
 		const currentNode =
 			currentId === null || currentId === zoomedNodeId ? undefined : readNode(queryClient, currentId);
@@ -604,9 +761,11 @@ export function useCommandRegistry(): CommandRegistry {
 			},
 			step,
 		);
-		if (targetId !== null) {
+		if (targetId !== null)
+		{
 			commitEdit();
-			if (step === 1 || currentId === null) {
+			if (step === 1 || currentId === null)
+			{
 				focusCenterNext(targetId);
 			}
 			resumeEditing(targetId, 0);
@@ -614,15 +773,25 @@ export function useCommandRegistry(): CommandRegistry {
 	};
 
 	/** Upstream `focus_parent` (unbound): edit the row's parent at offset 0, centered; the title from a top-level row. */
-	const focusParent = (ctx: CommandContext): void => {
+	const focusParent = (ctx: CommandContext): void =>
+	{
 		const currentId = ctx.items[0] ?? null;
 		const parentId = currentId === null ? null : (readNode(queryClient, currentId)?.parent_id ?? null);
-		const targetId = planFocusParent({
-			zoomedId: zoomedNodeId,
-			currentId,
-			parentOf: currentId === null || parentId === null ? {} : {[currentId]: parentId},
-		});
-		if (targetId !== null) {
+		const targetId = planFocusParent(
+			{
+				zoomedId: zoomedNodeId,
+				currentId,
+				parentOf:
+					currentId === null || parentId === null
+						? {}
+						:
+							{
+								[currentId]: parentId,
+							},
+			},
+		);
+		if (targetId !== null)
+		{
 			commitEdit();
 			focusCenterNext(targetId);
 			resumeEditing(targetId, 0);
@@ -633,7 +802,8 @@ export function useCommandRegistry(): CommandRegistry {
 	 * Upstream `focus_first` / `focus_last`: caret at the start of the first navigable node or the end of the last.
 	 * `skipTitle` skips the zoomed title, for upstream's `WF.Focus.firstChildOfSelected`.
 	 */
-	const focusEdge = (edge: "first" | "last", skipTitle = false): void => {
+	const focusEdge = (edge: "first" | "last", skipTitle = false): void =>
+	{
 		const state = activePaneView();
 		const visibleIds = collectVisibleNodeIds(
 			queryClient,
@@ -645,25 +815,37 @@ export function useCommandRegistry(): CommandRegistry {
 		const targets = firstLastNavigable(
 			visibleIds,
 			state.zoomedNodeId === null || skipTitle
-				? {titleEditable: false}
-				: {titleEditable: true, zoomedId: state.zoomedNodeId},
+				?
+					{
+						titleEditable: false,
+					}
+				:
+					{
+						titleEditable: true,
+						zoomedId: state.zoomedNodeId,
+					},
 		);
-		if (targets === null) {
+		if (targets === null)
+		{
 			return;
 		}
 		const targetId = targets[edge];
 		const offset = edge === "first" ? 0 : Number.MAX_SAFE_INTEGER;
 		const editor = targetId === state.editingId ? editorElement(targetId) : null;
-		if (editor === null) {
+		if (editor === null)
+		{
 			commitEdit();
 			resumeEditing(targetId, offset);
-		} else {
+		}
+		else
+		{
 			placeCaretAtTextOffset(editor, offset);
 		}
 	};
 
 	/** `"column"` when the node's parent is a board. */
-	const columnRole = (node: NodeResponse): "column" | null => {
+	const columnRole = (node: NodeResponse): "column" | null =>
+	{
 		const parent = node.parent_id === null ? undefined : readNode(queryClient, node.parent_id);
 		return parent !== undefined && cachedCanRender(queryClient, parent.id, "board") ? "column" : null;
 	};
@@ -672,25 +854,29 @@ export function useCommandRegistry(): CommandRegistry {
 	 * Upstream ⌘↓ / ⌘↑ / ⌃Space: act on the edited row, or on the zoom root when its title is edited or nothing is.
 	 * The caret stays where it is.
 	 */
-	const expandKey = (ctx: CommandContext, key: ExpandKey): void => {
+	const expandKey = (ctx: CommandContext, key: ExpandKey): void =>
+	{
 		const [itemId] = ctx.items;
 		const isRoot = itemId === undefined || itemId === ctx.zoomedId;
 		const node = itemNode(ctx);
 		const {expandedIds, showCompleted: completedShown} = activePaneView();
 		const rowId = itemId ?? "";
-		const plan = planExpandKey({
-			key,
-			target: isRoot ? "root" : "row",
-			id: rowId,
-			isOpen: expandedIds.has(rowId),
-			hasVisibleChildren: node === undefined || rowHasChildren(node, completedShown),
-			now: performance.now(),
-			detector: toggleDetector,
-			rows: isRoot ? currentExpansionRows(queryClient) : [],
-			expanded: expandedIds,
-			role: node === undefined ? null : columnRole(node),
-		});
-		switch (plan.type) {
+		const plan = planExpandKey(
+			{
+				key,
+				target: isRoot ? "root" : "row",
+				id: rowId,
+				isOpen: expandedIds.has(rowId),
+				hasVisibleChildren: node === undefined || rowHasChildren(node, completedShown),
+				now: performance.now(),
+				detector: toggleDetector,
+				rows: isRoot ? currentExpansionRows(queryClient) : [],
+				expanded: expandedIds,
+				role: node === undefined ? null : columnRole(node),
+			},
+		);
+		switch (plan.type)
+		{
 			case "none":
 				return;
 			case "expand":
@@ -705,12 +891,17 @@ export function useCommandRegistry(): CommandRegistry {
 			case "all":
 				expandAll(isRoot ? ctx.zoomedId : plan.id, plan.open);
 				return;
-			case "level": {
+			case "level":
+			{
 				const next = new Set(expandedIds);
-				for (const id of plan.ids) {
-					if (plan.open) {
+				for (const id of plan.ids)
+				{
+					if (plan.open)
+					{
 						next.add(id);
-					} else {
+					}
+					else
+					{
 						next.delete(id);
 					}
 				}
@@ -720,108 +911,178 @@ export function useCommandRegistry(): CommandRegistry {
 	};
 
 	/** Rewrites the name and non-empty note of every selected item as one undo step; the selection stays. */
-	const editSelectionFields = (ctx: CommandContext, plan: (fields: ItemField[]) => ItemField[]): void => {
+	const editSelectionFields = (ctx: CommandContext, plan: (fields: ItemField[]) => ItemField[]): void =>
+	{
 		commitEdit();
 		const fields: ItemField[] = [];
-		for (const id of new Set(ctx.items)) {
+		for (const id of new Set(ctx.items))
+		{
 			const node = readNode(queryClient, id);
-			if (node === undefined) {
+			if (node === undefined)
+			{
 				continue;
 			}
-			fields.push({id, field: "name", html: node.name ?? ""});
-			if (node.note !== null && node.note !== "") {
-				fields.push({id, field: "note", html: node.note});
+			fields.push(
+				{
+					id,
+					field: "name",
+					html: node.name ?? "",
+				},
+			);
+			if (node.note !== null && node.note !== "")
+			{
+				fields.push(
+					{
+						id,
+						field: "note",
+						html: node.note,
+					},
+				);
 			}
 		}
 		const changed = plan(fields);
-		const updates = new Map<string, {nodeId: string; name?: string; note?: string}>();
-		for (const {id, field, html} of changed) {
-			updates.set(id, {...updates.get(id), nodeId: id, [field]: html});
+		const updates = new Map<
+			string,
+			{
+				nodeId: string;
+				name?: string;
+				note?: string;
+			}
+		>();
+		for (const {id, field, html} of changed)
+		{
+			updates.set(
+				id,
+				{
+					...updates.get(id),
+					nodeId: id,
+					[field]: html,
+				},
+			);
 		}
-		if (updates.size === 0) {
+		if (updates.size === 0)
+		{
 			return;
 		}
-		void runInUndoBatch(captureOutlineView, () => {
-			for (const update of updates.values()) {
+		void runInUndoBatch(captureOutlineView, () =>
+		{
+			for (const update of updates.values())
+			{
 				updateNodeMutation.mutate(update);
 			}
 		});
 	};
 
-	const formatSelection = (ctx: CommandContext, attr: InlineAttr): void => {
+	const formatSelection = (ctx: CommandContext, attr: InlineAttr): void =>
+	{
 		editSelectionFields(ctx, (fields) =>
 			attr === "code" ? planItemsCodeToggle(fields) : planItemsAttrToggle(fields, attr),
 		);
 	};
 
 	/** Upstream's `toggleAttributeForItems` with a color: the selected items' names and notes. */
-	const colorSelection = (ctx: CommandContext, choice: ColorChoice): void => {
+	const colorSelection = (ctx: CommandContext, choice: ColorChoice): void =>
+	{
 		editSelectionFields(ctx, (fields) => planItemsColorToggle(fields, choice));
 	};
 
 	/** Upstream's `openForItems`: the color popup under the last selected item's content. */
-	const openColorPopupForItems = (ctx: CommandContext): void => {
+	const openColorPopupForItems = (ctx: CommandContext): void =>
+	{
 		const [last] = ctx.items.toReversed();
 		const box = (last === undefined ? null : rowContent(last))?.getBoundingClientRect();
-		if (box === undefined) {
+		if (box === undefined)
+		{
 			return;
 		}
-		openItemColorPopup({
-			left: box.left,
-			top: box.bottom,
-			onPick: (kind, color) => {
-				// Upstream `ItemSelectColor` on a table cell writes the cell's `table.bg` instead of a text color.
-				const cells = ctx.items.filter((id) => locateCell(queryClient, id) !== null);
-				for (const nodeId of cells) {
-					updateNodeMutation.mutate({nodeId, tableSet: [{path: ["table", "bg"], value: color ?? undefined}]});
-				}
-				const rest: CommandContext = {...ctx, items: ctx.items.filter((id) => !cells.includes(id))};
-				if (rest.items.length === 0) {
-					return;
-				}
-				if (color === null) {
-					// "remove color" leaves the latest color alone and strips both kinds from every item.
-					editSelectionFields(rest, planItemsColorClear);
-					return;
-				}
-				latestColor.change(kind, color);
-				colorSelection(rest, {kind, color});
+		openItemColorPopup(
+			{
+				left: box.left,
+				top: box.bottom,
+				onPick: (kind, color) =>
+				{
+					// Upstream `ItemSelectColor` on a table cell writes the cell's `table.bg` instead of a text color.
+					const cells = ctx.items.filter((id) => locateCell(queryClient, id) !== null);
+					for (const nodeId of cells)
+					{
+						updateNodeMutation.mutate(
+							{
+								nodeId,
+								tableSet: [
+									{
+										path: ["table", "bg"],
+										value: color ?? undefined,
+									},
+								],
+							},
+						);
+					}
+					const rest: CommandContext =
+					{
+						...ctx,
+						items: ctx.items.filter((id) => !cells.includes(id)),
+					};
+					if (rest.items.length === 0)
+					{
+						return;
+					}
+					if (color === null)
+					{
+						// "remove color" leaves the latest color alone and strips both kinds from every item.
+						editSelectionFields(rest, planItemsColorClear);
+						return;
+					}
+					latestColor.change(kind, color);
+					colorSelection(
+						rest,
+						{
+							kind,
+							color,
+						},
+					);
+				},
 			},
-		});
+		);
 	};
 
 	/** Upstream's `dL2` blocks read-only items and backlink roots. */
 	const isCompleteBlocked = (id: string): boolean => readNode(queryClient, id)?.readOnly === true;
 
 	/** Where the caret goes after toggling completion on `ids`, which must be in display order. */
-	const planCompletionFocus = (ids: readonly string[], completing: boolean): CompleteFocus => {
+	const planCompletionFocus = (ids: readonly string[], completing: boolean): CompleteFocus =>
+	{
 		const visibleRows = currentNavigableIds(queryClient);
-		return planCompleteFocus({
-			ids,
-			completing,
-			showCompleted: completedRowsShown(),
-			zoomRootId: zoomedNodeId,
-			siblingsOf: (id) =>
-				sortByPriority(
-					queryClient.getQueryData<NodeResponse[]>(
-						nodeKeys.children(readNode(queryClient, id)?.parent_id ?? null),
-					) ?? [],
-				).map((sibling) => sibling.id),
-			visibleRows,
-			completedIds: new Set(visibleRows.filter((id) => readNode(queryClient, id)?.completedAt != null)),
-		});
+		return planCompleteFocus(
+			{
+				ids,
+				completing,
+				showCompleted: completedRowsShown(),
+				zoomRootId: zoomedNodeId,
+				siblingsOf: (id) =>
+					sortByPriority(
+						queryClient.getQueryData<NodeResponse[]>(
+							nodeKeys.children(readNode(queryClient, id)?.parent_id ?? null),
+						) ?? [],
+					).map((sibling) => sibling.id),
+				visibleRows,
+				completedIds: new Set(visibleRows.filter((id) => readNode(queryClient, id)?.completedAt != null)),
+			},
+		);
 	};
 
 	/** Upstream zooms a completed zoom root out on a timer that does not wait for the server. */
-	const scheduleZoomOut = (): void => {
+	const scheduleZoomOut = (): void =>
+	{
 		const parentOfZoomed = zoomedNode?.parent_id ?? null;
-		setTimeout(() => {
+		setTimeout(() =>
+		{
 			void navigate(parentOfZoomed === null ? "/" : nodeUrl(parentOfZoomed));
 		}, zoomOutDelayMs(completedRowsShown()));
 	};
 
 	/** Toggle complete on every selected item as one undo step, then clear the selection. */
-	const completeSelection = (ids: readonly string[]): void => {
+	const completeSelection = (ids: readonly string[]): void =>
+	{
 		const store = useOutlineStore.getState();
 		store.clearItemSelection();
 		const order = currentNavigableIds(queryClient);
@@ -830,47 +1091,67 @@ export function useCommandRegistry(): CommandRegistry {
 			sortedIds.map((id) => readNode(queryClient, id)).filter((node) => node !== undefined),
 			isCompleteBlocked,
 		);
-		if (plan.action === "none") {
+		if (plan.action === "none")
+		{
 			return;
 		}
 		const completing = plan.action === "complete";
 		const focus = planCompletionFocus(plan.ids, completing);
-		if (completing && !completedRowsShown()) {
+		if (completing && !completedRowsShown())
+		{
 			scheduleCompletionHide(
 				renderedCopyIds(queryClient, plan.ids),
 				store,
 				(id) => !completedRowsShown() && readNode(queryClient, id)?.completedAt !== null,
 			);
 		}
-		void runInUndoBatch(captureOutlineView, () => {
-			for (const nodeId of plan.ids) {
-				toggleCompleteMutation.mutate({nodeId, isCurrentlyCompleted: !completing});
+		void runInUndoBatch(captureOutlineView, () =>
+		{
+			for (const nodeId of plan.ids)
+			{
+				toggleCompleteMutation.mutate(
+					{
+						nodeId,
+						isCurrentlyCompleted: !completing,
+					},
+				);
 			}
 		});
 		const [first] = plan.ids;
-		if (focus.kind === "row") {
+		if (focus.kind === "row")
+		{
 			resumeEditing(focus.id, focus.offset);
-		} else if (focus.kind === "zoomTitle" && zoomedNodeId !== null) {
+		}
+		else if (focus.kind === "zoomTitle" && zoomedNodeId !== null)
+		{
 			resumeEditing(zoomedNodeId, 0);
-		} else if (focus.kind === "zoomOut") {
+		}
+		else if (focus.kind === "zoomOut")
+		{
 			scheduleZoomOut();
-		} else if (!completing && first !== undefined) {
+		}
+		else if (!completing && first !== undefined)
+		{
 			resumeEditing(first, 0);
 		}
 	};
 
 	/** Toggle complete on the edited node and move the caret as upstream does, or on the whole selection. */
-	const complete = (ctx: CommandContext): void => {
-		if (hasItemSelection()) {
+	const complete = (ctx: CommandContext): void =>
+	{
+		if (hasItemSelection())
+		{
 			completeSelection(ctx.items);
 			return;
 		}
 		const node = itemNode(ctx);
-		if (node === undefined) {
+		if (node === undefined)
+		{
 			return;
 		}
 		const plan = planToggleComplete([node], isCompleteBlocked);
-		if (plan.action === "none") {
+		if (plan.action === "none")
+		{
 			return;
 		}
 		const completing = plan.action === "complete";
@@ -879,38 +1160,57 @@ export function useCommandRegistry(): CommandRegistry {
 		// Pending text is its own undo step (upstream `saveFocused()` before `startOperationBatch`); the command's step
 		// then captures the view BEFORE the caret moves, so undo returns to the completed row.
 		flushEditing();
-		void runInUndoBatch(captureOutlineView, () => {
+		void runInUndoBatch(captureOutlineView, () =>
+		{
 			// The text is saved above. Upstream leaves the caret alone when it stays in the edited row or the title
 			// is being completed, and otherwise blurs it before moving.
 			const staysInPlace =
 				focus.kind === "stay" || focus.kind === "zoomOut" || (focus.kind === "row" && focus.id === editingId);
-			if (!staysInPlace) {
+			if (!staysInPlace)
+			{
 				commitEdit();
 			}
-			if (focus.kind === "row" && focus.id === editingId) {
+			if (focus.kind === "row" && focus.id === editingId)
+			{
 				const editor = editorElement(focus.id);
-				if (editor === null) {
+				if (editor === null)
+				{
 					resumeEditing(focus.id, focus.offset);
-				} else {
+				}
+				else
+				{
 					placeCaretAtTextOffset(editor, focus.offset);
 				}
-			} else if (focus.kind === "row") {
+			}
+			else if (focus.kind === "row")
+			{
 				resumeEditing(focus.id, focus.offset);
-			} else if (focus.kind === "zoomTitle" && zoomedNodeId !== null) {
+			}
+			else if (focus.kind === "zoomTitle" && zoomedNodeId !== null)
+			{
 				resumeEditing(zoomedNodeId, 0);
 			}
 
 			// Hidden completed rows stay for upstream's deferred hide; the caret has already moved
-			if (completing && !completedRowsShown()) {
-				scheduleCompletionHide(renderedCopyIds(queryClient, plan.ids), useOutlineStore.getState(), (id) => {
+			if (completing && !completedRowsShown())
+			{
+				scheduleCompletionHide(renderedCopyIds(queryClient, plan.ids), useOutlineStore.getState(), (id) =>
+				{
 					const current = readNode(queryClient, id);
 					return !completedRowsShown() && current?.completedAt !== null;
 				});
 			}
-			for (const nodeId of plan.ids) {
-				toggleCompleteMutation.mutate({nodeId, isCurrentlyCompleted: !completing});
+			for (const nodeId of plan.ids)
+			{
+				toggleCompleteMutation.mutate(
+					{
+						nodeId,
+						isCurrentlyCompleted: !completing,
+					},
+				);
 			}
-			if (focus.kind === "zoomOut") {
+			if (focus.kind === "zoomOut")
+			{
 				scheduleZoomOut();
 			}
 		});
@@ -920,19 +1220,23 @@ export function useCommandRegistry(): CommandRegistry {
 	 * ⌘K: with a selection clear of links or a caret inside a link, upstream's Text/Link popup; otherwise the Jump menu
 	 * (a selection touching a link falls through to it).
 	 */
-	const showSwitcher = (ctx: CommandContext): void => {
+	const showSwitcher = (ctx: CommandContext): void =>
+	{
 		const [itemId] = ctx.items;
 		const target = itemId === undefined ? null : readLinkPopupTarget(itemId);
-		if (target !== null) {
+		if (target !== null)
+		{
 			openLinkPopup(target);
 			return;
 		}
-		if (switcherCommandAction(isJumpMenuOpen()) === "open") {
+		if (switcherCommandAction(isJumpMenuOpen()) === "open")
+		{
 			openJumpMenu();
 		}
 	};
 
-	const undoRunner: UndoRunner = {
+	const undoRunner: UndoRunner =
+	{
 		flush: flushEditing,
 		settled: settleUndoNow,
 		pop: (direction, match) =>
@@ -941,63 +1245,92 @@ export function useCommandRegistry(): CommandRegistry {
 					? undoHistory.popUndo()
 					: undoHistory.popUndoWhere(match)
 				: undoHistory.popRedo(),
-		blur() {
+		blur()
+		{
 			// Committed at once, so the editor unmounts: a row edited both before and after the undo would otherwise keep
 			// its held text, since stopping and resuming in one render never leaves editing.
-			flushSync(() => {
+			flushSync(() =>
+			{
 				const {editingId: editedId, editingNoteId: editedNoteId} = useOutlineStore.getState();
-				if (editedId !== null) {
+				if (editedId !== null)
+				{
 					editorElement(editedId)?.blur();
 				}
 				// A focused note holds its typed HTML, so it must blur to re-render the restored text.
 				const active = document.activeElement;
-				if (active instanceof HTMLElement && active.isContentEditable && active.closest(".notes") !== null) {
+				if (active instanceof HTMLElement && active.isContentEditable && active.closest(".notes") !== null)
+				{
 					active.blur();
 				}
-				if (editedNoteId !== null) {
+				if (editedNoteId !== null)
+				{
 					useOutlineStore.getState().blurNote(editedNoteId);
 				}
 				stopEditing();
 			});
 		},
-		hold(ops) {
+		hold(ops)
+		{
 			return holdUndoReplay(queryClient, ops);
 		},
-		preview(ops) {
+		preview(ops)
+		{
 			// A refetch still in flight from the forward action would land over the previewed rows.
-			void queryClient.cancelQueries({queryKey: nodeKeys.all});
+			void queryClient.cancelQueries(
+				{
+					queryKey: nodeKeys.all,
+				},
+			);
 			previewUndoOps(queryClient, ops);
 		},
-		async apply(ops) {
+		async apply(ops)
+		{
 			await applyOps(ops, undoAdapter);
 		},
-		async reconcile() {
+		async reconcile()
+		{
 			await queryClient.invalidateQueries();
 		},
 		current: captureOutlineView,
-		editorFocused() {
+		editorFocused()
+		{
 			const active = document.activeElement;
 			return (
 				active instanceof HTMLElement &&
 				(active.isContentEditable || active.tagName === "INPUT" || active.tagName === "TEXTAREA")
 			);
 		},
-		select(ids) {
+		select(ids)
+		{
 			useOutlineStore.getState().restoreItemSelection(ids);
 		},
-		textLength(nodeId, field) {
+		textLength(nodeId, field)
+		{
 			const node = readNode(queryClient, nodeId);
 			return plainLength((field === "name" ? node?.name : node?.note) ?? "");
 		},
-		zoomTo(nodeId) {
+		zoomTo(nodeId)
+		{
 			goToNode(navigate, nodeId);
 		},
-		focus({nodeId, field, start, end, reversed}) {
+		focus({nodeId, field, start, end, reversed})
+		{
 			// Queued behind the preview's cache notifications, so the editor mounts on the restored text.
-			notifyManager.schedule(() => {
-				if (field === "name") {
-					resumeEditing(nodeId, start, {end, reversed});
-				} else {
+			notifyManager.schedule(() =>
+			{
+				if (field === "name")
+				{
+					resumeEditing(
+						nodeId,
+						start,
+						{
+							end,
+							reversed,
+						},
+					);
+				}
+				else
+				{
 					useOutlineStore.getState().focusNote(nodeId, start);
 				}
 			});
@@ -1005,9 +1338,12 @@ export function useCommandRegistry(): CommandRegistry {
 	};
 
 	/** Upstream ⌘Z / ⇧⌘Z: claimed even with an empty stack, so the browser's native undo never runs. */
-	const undoCommand = (direction: UndoDirection) => ({
-		execute(ctx?: CommandContext) {
-			queueUndo(direction, undoRunner, ctx?.undoMatch).catch((error: unknown) => {
+	const undoCommand = (direction: UndoDirection) => (
+	{
+		execute(ctx?: CommandContext)
+		{
+			queueUndo(direction, undoRunner, ctx?.undoMatch).catch((error: unknown) =>
+			{
 				useOutlineStore
 					.getState()
 					.addErrorNotification(
@@ -1017,9 +1353,11 @@ export function useCommandRegistry(): CommandRegistry {
 		},
 	});
 
-	const selectionFormatCommand = (attr: InlineAttr): Command => ({
+	const selectionFormatCommand = (attr: InlineAttr): Command => (
+	{
 		available: (ctx) => hasItemSelection() && ctx.items.length > 0,
-		execute: (ctx) => {
+		execute: (ctx) =>
+		{
 			formatSelection(ctx, attr);
 		},
 	});
@@ -1027,49 +1365,67 @@ export function useCommandRegistry(): CommandRegistry {
 	return {
 		undo: undoCommand("undo"),
 		redo: undoCommand("redo"),
-		save_and_sync: saveAndSyncCommand(() => {
+		save_and_sync: saveAndSyncCommand(() =>
+		{
 			void queryClient.invalidateQueries();
 		}),
-		zoom_in: {
-			execute(ctx) {
+		zoom_in:
+		{
+			execute(ctx)
+			{
 				const [nodeId] = ctx.items;
-				if (nodeId !== undefined) {
+				if (nodeId !== undefined)
+				{
 					void zoomTo(nodeId, "first_child");
 				}
 			},
 		},
-		zoom_out: {
-			execute() {
+		zoom_out:
+		{
+			execute()
+			{
 				void zoomTo(null, "last_selected");
 			},
 		},
-		focus_prev_sibling: {
-			execute(ctx) {
+		focus_prev_sibling:
+		{
+			execute(ctx)
+			{
 				focusSibling(ctx, -1);
 			},
 		},
-		focus_next_sibling: {
-			execute(ctx) {
+		focus_next_sibling:
+		{
+			execute(ctx)
+			{
 				focusSibling(ctx, 1);
 			},
 		},
-		focus_parent: {
-			execute(ctx) {
+		focus_parent:
+		{
+			execute(ctx)
+			{
 				focusParent(ctx);
 			},
 		},
-		focus_first: {
-			execute() {
+		focus_first:
+		{
+			execute()
+			{
 				focusEdge("first");
 			},
 		},
-		focus_last: {
-			execute() {
+		focus_last:
+		{
+			execute()
+			{
 				focusEdge("last");
 			},
 		},
-		expand: {
-			execute(ctx) {
+		expand:
+		{
+			execute(ctx)
+			{
 				expandKey(ctx, "expand");
 			},
 		},
@@ -1081,76 +1437,113 @@ export function useCommandRegistry(): CommandRegistry {
 		toggle_code: selectionFormatCommand("code"),
 		// ⇧⌘H over an item selection reapplies the latest color, or opens the popup when none was picked. The editor
 		// handles it itself while it has the caret.
-		highlight_selected: {
+		highlight_selected:
+		{
 			available: (ctx) => hasItemSelection() && ctx.items.length > 0,
-			execute: (ctx) => {
+			execute: (ctx) =>
+			{
 				const latest = latestColor.get();
-				if (latest === undefined) {
+				if (latest === undefined)
+				{
 					openColorPopupForItems(ctx);
-				} else {
+				}
+				else
+				{
 					colorSelection(ctx, latest);
 				}
 			},
 		},
-		show_color_popup: {
+		show_color_popup:
+		{
 			available: (ctx) =>
 				ctx.items.length > 0 && ctx.items.every((id) => readNode(queryClient, id)?.readOnly !== true),
 			execute: openColorPopupForItems,
 		},
 		print: printCommand(),
-		show_command_palette: {
-			execute(ctx) {
+		show_command_palette:
+		{
+			execute(ctx)
+			{
 				useOutlineStore.getState().openCommandPalette(ctx);
 			},
 		},
-		toggle_full_width_page: {
-			execute() {
+		toggle_full_width_page:
+		{
+			execute()
+			{
 				useOutlineStore.getState().toggleFullWidthPage();
 			},
 		},
-		zen_mode: {
+		zen_mode:
+		{
 			available: () => !IS_MOBILE,
 			execute: toggleZenMode,
 		},
-		present_it: {
-			execute(ctx) {
-				presentCommand({
-					open: (nodeId) => {
-						useOutlineStore.getState().openPresentation(nodeId);
+		present_it:
+		{
+			execute(ctx)
+			{
+				presentCommand(
+					{
+						open: (nodeId) =>
+						{
+							useOutlineStore.getState().openPresentation(nodeId);
+						},
+						expand: (nodeId) =>
+						{
+							expandKey(
+								{
+									items: [nodeId],
+									zoomedId: ctx.zoomedId,
+								},
+								"expand",
+							);
+						},
 					},
-					expand: (nodeId) => {
-						expandKey({items: [nodeId], zoomedId: ctx.zoomedId}, "expand");
-					},
-				}).execute(ctx);
+				).execute(ctx);
 			},
 		},
-		collapse: {
-			execute(ctx) {
+		collapse:
+		{
+			execute(ctx)
+			{
 				expandKey(ctx, "collapse");
 			},
 		},
-		expand_or_collapse: {
-			execute(ctx) {
+		expand_or_collapse:
+		{
+			execute(ctx)
+			{
 				expandKey(ctx, "toggle");
 			},
 		},
-		indent: {execute: indentItem},
-		outdent: {
-			execute(ctx) {
-				if (hasItemSelection()) {
+		indent:
+		{
+			execute: indentItem,
+		},
+		outdent:
+		{
+			execute(ctx)
+			{
+				if (hasItemSelection())
+				{
 					moveSelection(ctx, "outdent");
 					return;
 				}
 				const node = itemNode(ctx);
-				if (node !== undefined) {
+				if (node !== undefined)
+				{
 					moveEditedNode(planOutdent(queryClient, node, zoomedNodeId));
 				}
 			},
 		},
-		move_up: {
-			execute(ctx) {
+		move_up:
+		{
+			execute(ctx)
+			{
 				const cell = tableCellOf(ctx);
-				if (cell !== null) {
+				if (cell !== null)
+				{
 					flushEditing();
 					void moveCell(tableDeps(), cell, "up");
 					return;
@@ -1158,10 +1551,13 @@ export function useCommandRegistry(): CommandRegistry {
 				moveEditedNodeVertically(ctx, "up");
 			},
 		},
-		move_down: {
-			execute(ctx) {
+		move_down:
+		{
+			execute(ctx)
+			{
 				const cell = tableCellOf(ctx);
-				if (cell !== null) {
+				if (cell !== null)
+				{
 					flushEditing();
 					void moveCell(tableDeps(), cell, "down");
 					return;
@@ -1169,29 +1565,37 @@ export function useCommandRegistry(): CommandRegistry {
 				moveEditedNodeVertically(ctx, "down");
 			},
 		},
-		duplicate_table_column: {
+		duplicate_table_column:
+		{
 			available: (ctx) => tableCellOf(ctx) !== null,
-			execute(ctx) {
+			execute(ctx)
+			{
 				const cell = tableCellOf(ctx);
-				if (cell !== null) {
+				if (cell !== null)
+				{
 					flushEditing();
 					void duplicateColumn(tableDeps(), cell);
 				}
 			},
 		},
-		delete_table_column: {
+		delete_table_column:
+		{
 			available: (ctx) => tableCellOf(ctx)?.rowIndex === 0,
-			execute(ctx) {
+			execute(ctx)
+			{
 				const cell = tableCellOf(ctx);
-				if (cell !== null) {
+				if (cell !== null)
+				{
 					flushEditing();
 					void cellDelete(tableDeps(), cell, []);
 				}
 			},
 		},
-		move_to: {
+		move_to:
+		{
 			available: (ctx) => ctx.items.length > 0 && ctx.items.every((id) => id !== ctx.zoomedId),
-			execute(ctx) {
+			execute(ctx)
+			{
 				void moveTo(ctx.items);
 			},
 		},
@@ -1199,110 +1603,152 @@ export function useCommandRegistry(): CommandRegistry {
 		move_to_tomorrow: moveToPresetCommand("move_to_tomorrow"),
 		move_to_next_week: moveToPresetCommand("move_to_next_week"),
 		move_7_days_out: moveToPresetCommand("move_7_days_out"),
-		move_to_date: {
+		move_to_date:
+		{
 			available: (ctx) => ctx.items.length > 0,
-			execute(ctx) {
+			execute(ctx)
+			{
 				const [first] = ctx.items;
-				if (first !== undefined) {
-					useOutlineStore.getState().requestDatePicker(first, undefined, {
-						headerText: MOVE_TO_DATE_COMMANDS.move_to_date.label,
-						onSelect: ([date]) => {
-							if (date !== undefined) {
-								void moveItemsToDate(ctx.items, date);
-							}
+				if (first !== undefined)
+				{
+					useOutlineStore.getState().requestDatePicker(
+						first,
+						undefined,
+						{
+							headerText: MOVE_TO_DATE_COMMANDS.move_to_date.label,
+							onSelect: ([date]) =>
+							{
+								if (date !== undefined)
+								{
+									void moveItemsToDate(ctx.items, date);
+								}
+							},
 						},
-					});
+					);
 				}
 			},
 		},
-		mirror_to_today: {
+		mirror_to_today:
+		{
 			available: (ctx) => ctx.items.length > 0,
-			execute(ctx) {
+			execute(ctx)
+			{
 				void mirrorToToday(ctx.items);
 			},
 		},
-		mirror_to_date: {
+		mirror_to_date:
+		{
 			available: (ctx) => ctx.items.length > 0,
-			execute(ctx) {
+			execute(ctx)
+			{
 				const [first] = ctx.items;
-				if (first !== undefined) {
-					useOutlineStore.getState().requestDatePicker(first, undefined, {
-						headerText: MOVE_TO_DATE_COMMANDS.mirror_to_date.label,
-						onSelect: ([date]) => {
-							if (date !== undefined) {
-								void mirrorItemsToDate(ctx.items, date);
-							}
+				if (first !== undefined)
+				{
+					useOutlineStore.getState().requestDatePicker(
+						first,
+						undefined,
+						{
+							headerText: MOVE_TO_DATE_COMMANDS.mirror_to_date.label,
+							onSelect: ([date]) =>
+							{
+								if (date !== undefined)
+								{
+									void mirrorItemsToDate(ctx.items, date);
+								}
+							},
 						},
-					});
+					);
 				}
 			},
 		},
-		mirror: {
+		mirror:
+		{
 			available: (ctx) => ctx.items.length > 0,
-			execute(ctx) {
+			execute(ctx)
+			{
 				mirrorCopy(ctx.items);
 			},
 		},
-		mirror_to: {
+		mirror_to:
+		{
 			available: (ctx) => ctx.items.length > 0,
-			execute(ctx) {
+			execute(ctx)
+			{
 				void mirrorTo(ctx.items);
 			},
 		},
-		mirror_to_child: {
+		mirror_to_child:
+		{
 			available: (ctx) => ctx.items.length > 0,
-			execute(ctx) {
+			execute(ctx)
+			{
 				void mirrorTo(ctx.items);
 			},
 		},
-		mirror_here: {
+		mirror_here:
+		{
 			available: (ctx) => ctx.items.length === 1,
-			execute(ctx) {
+			execute(ctx)
+			{
 				const [itemId] = ctx.items;
-				if (itemId !== undefined) {
+				if (itemId !== undefined)
+				{
 					void mirrorHere(itemId);
 				}
 			},
 		},
-		show_mirror_breadcrumbs: {
+		show_mirror_breadcrumbs:
+		{
 			available: (ctx) => ctx.items.length === 1 && ctx.items.every((id) => isMirrorRootId(queryClient, id)),
-			execute(ctx) {
+			execute(ctx)
+			{
 				const [itemId] = ctx.items;
 				const node = itemId === undefined ? undefined : readNode(queryClient, itemId);
-				if (node !== undefined) {
+				if (node !== undefined)
+				{
 					openMirrorsDialog(node.isMirror === true ? (node.originalNodeId ?? node.id) : node.id);
 				}
 			},
 		},
-		detach_mirror: {
+		detach_mirror:
+		{
 			available: (ctx) => ctx.items.length === 1 && ctx.items.every((id) => isMirrorRootId(queryClient, id)),
-			execute(ctx) {
+			execute(ctx)
+			{
 				const [itemId] = ctx.items;
-				if (itemId !== undefined) {
+				if (itemId !== undefined)
+				{
 					void detachMirror(itemId);
 				}
 			},
 		},
-		swap_mirror_origin: {
+		swap_mirror_origin:
+		{
 			// Upstream: one mirror whose original is known, or one original that has mirrors.
 			available: (ctx) => ctx.items.length === 1 && ctx.items.every((id) => isMirrorRootId(queryClient, id)),
-			execute(ctx) {
+			execute(ctx)
+			{
 				const [itemId] = ctx.items;
-				if (itemId !== undefined) {
+				if (itemId !== undefined)
+				{
 					void swapMirrorOrigin(itemId);
 				}
 			},
 		},
-		insert_inline_mirror: {
+		insert_inline_mirror:
+		{
 			available: () => editingId !== null,
-			execute() {
+			execute()
+			{
 				const editor = editingId === null ? null : editorElement(editingId);
-				if (editor === null) {
+				if (editor === null)
+				{
 					return;
 				}
 				const text = inlineMirrorInsertion(editor.textContent.slice(0, caretTextOffset(editor)));
 				const selection = globalThis.getSelection();
-				if (selection === null || selection.rangeCount === 0) {
+				if (selection === null || selection.rangeCount === 0)
+				{
 					return;
 				}
 				const range = selection.getRangeAt(0);
@@ -1311,21 +1757,34 @@ export function useCommandRegistry(): CommandRegistry {
 				range.insertNode(inserted);
 				selection.collapse(inserted, text.length);
 				// The input event arms the `((` popup like typed characters.
-				editor.dispatchEvent(new InputEvent("input", {bubbles: true, inputType: "insertText", data: text}));
+				editor.dispatchEvent(
+					new InputEvent(
+						"input",
+						{
+							bubbles: true,
+							inputType: "insertText",
+							data: text,
+						},
+					),
+				);
 			},
 		},
-		insert_inline_link: {
+		insert_inline_link:
+		{
 			available: () => editingId !== null,
-			execute() {
+			execute()
+			{
 				const editor = editingId === null ? null : editorElement(editingId);
-				if (editor === null) {
+				if (editor === null)
+				{
 					return;
 				}
 				const caret = caretTextOffset(editor);
 				const before = editor.textContent.slice(0, caret);
 				const text = planInsertInlineLink(before, before.length).text.slice(before.length);
 				const selection = globalThis.getSelection();
-				if (selection === null || selection.rangeCount === 0) {
+				if (selection === null || selection.rangeCount === 0)
+				{
 					return;
 				}
 				const range = selection.getRangeAt(0);
@@ -1334,26 +1793,43 @@ export function useCommandRegistry(): CommandRegistry {
 				range.insertNode(inserted);
 				selection.collapse(inserted, text.length);
 				// The input event closes the pair with "]]" and opens the popup, like typed characters.
-				editor.dispatchEvent(new InputEvent("input", {bubbles: true, inputType: "insertText", data: "["}));
+				editor.dispatchEvent(
+					new InputEvent(
+						"input",
+						{
+							bubbles: true,
+							inputType: "insertText",
+							data: "[",
+						},
+					),
+				);
 			},
 		},
-		complete: {
+		complete:
+		{
 			available: (ctx) => !ctx.items.some((id) => isCompleteBlocked(id)),
 			execute: complete,
 		},
-		duplicate: {
-			execute(ctx) {
+		duplicate:
+		{
+			execute(ctx)
+			{
 				const cell = tableCellOf(ctx);
-				if (cell !== null) {
+				if (cell !== null)
+				{
 					flushEditing();
 					void duplicateColumn(tableDeps(), cell);
 					return;
 				}
-				if (hasItemSelection()) {
-					void runInUndoBatch(captureOutlineView, () => {
-						for (const id of ctx.items) {
+				if (hasItemSelection())
+				{
+					void runInUndoBatch(captureOutlineView, () =>
+					{
+						for (const id of ctx.items)
+						{
 							const selected = readNode(queryClient, id);
-							if (selected !== undefined) {
+							if (selected !== undefined)
+							{
 								createNodeMutation.mutate(planDuplicate(queryClient, selected));
 							}
 						}
@@ -1361,39 +1837,57 @@ export function useCommandRegistry(): CommandRegistry {
 					return;
 				}
 				const node = itemNode(ctx);
-				if (node === undefined) {
+				if (node === undefined)
+				{
 					return;
 				}
 				// Copy the unsaved text too
 				const editor = editorElement(node.id);
 				const name = editor === null ? node.name : serializeEditorHtml(editor.innerHTML);
 				flushEditing();
-				void runInUndoBatch(captureOutlineView, () => {
+				void runInUndoBatch(captureOutlineView, () =>
+				{
 					commitEdit();
-					createNodeMutation.mutate(planDuplicate(queryClient, {...node, name}), {
-						onSuccess(createdNode) {
-							resumeEditing(createdNode.id, Number.MAX_SAFE_INTEGER);
+					createNodeMutation.mutate(
+						planDuplicate(
+							queryClient,
+							{
+								...node,
+								name,
+							},
+						),
+						{
+							onSuccess(createdNode)
+							{
+								resumeEditing(createdNode.id, Number.MAX_SAFE_INTEGER);
+							},
 						},
-					});
+					);
 				});
 			},
 		},
-		delete: {
-			execute(ctx) {
+		delete:
+		{
+			execute(ctx)
+			{
 				const cell = tableCellOf(ctx);
-				if (cell !== null) {
+				if (cell !== null)
+				{
 					flushEditing();
 					void cellDelete(tableDeps(), cell, []);
 					return;
 				}
-				if (hasItemSelection()) {
+				if (hasItemSelection())
+				{
 					deleteSelectedItems(queryClient, ctx.items, deleteNodeMutation.mutate, navigate);
 					return;
 				}
 				const [nodeId] = ctx.items;
-				if (nodeId !== undefined) {
+				if (nodeId !== undefined)
+				{
 					flushEditing();
-					void runInUndoBatch(captureOutlineView, () => {
+					void runInUndoBatch(captureOutlineView, () =>
+					{
 						editBesideRemovedNode(nodeId);
 						deleteNodeMutation.mutate(nodeId);
 					});
@@ -1409,9 +1903,11 @@ export function useCommandRegistry(): CommandRegistry {
 		toggle_bullet: layoutCommand("toggle_bullet"),
 		toggle_todo: layoutCommand("toggle_todo"),
 		// The selection menu's row: shown only while some selected item can take the to-do layout.
-		toggle_todo_mode: {
+		toggle_todo_mode:
+		{
 			available: (ctx) => todoModeAvailable(ctx.items.flatMap((id) => readNode(queryClient, id) ?? [])),
-			execute(ctx) {
+			execute(ctx)
+			{
 				toggleLayout(ctx, "toggle_todo");
 			},
 		},
@@ -1422,126 +1918,219 @@ export function useCommandRegistry(): CommandRegistry {
 		insert_board_column_right: insertColumnCommand("right"),
 		toggle_table: boardOrTableCommand("toggle_table"),
 		// Upstream: "Add note" from inside the note moves the caret to the end of the name.
-		add_note: singleItemCommand((nodeId) => {
+		add_note: singleItemCommand((nodeId) =>
+		{
 			const {editingNoteId, focusName, focusNote} = useOutlineStore.getState();
-			if (editingNoteId === nodeId) {
+			if (editingNoteId === nodeId)
+			{
 				focusName(nodeId, "end");
-			} else if (canHaveNote(readNode(queryClient, nodeId)?.data.layoutMode)) {
+			}
+			else if (canHaveNote(readNode(queryClient, nodeId)?.data.layoutMode))
+			{
 				focusNote(nodeId);
 			}
 		}),
-		add_date: {
+		add_date:
+		{
 			available: (ctx) => ctx.items.length === 1,
-			execute(ctx) {
+			execute(ctx)
+			{
 				const [nodeId] = ctx.items;
-				if (nodeId !== undefined) {
+				if (nodeId !== undefined)
+				{
 					useOutlineStore.getState().requestDatePicker(nodeId, ctx.anchorRect);
 				}
 			},
 		},
-		delete_dates: {
+		delete_dates:
+		{
 			available: (ctx) =>
 				ctx.items.length > 0 && ctx.items.every((id) => readNode(queryClient, id)?.readOnly !== true),
-			execute: (ctx) => {
-				editSelectionFields(ctx, (fields) => {
-					const byId = new Map<string, {id: string; name: string; note: string}>();
-					for (const {id, field, html} of fields) {
-						const node = byId.get(id) ?? {id, name: "", note: ""};
+			execute: (ctx) =>
+			{
+				editSelectionFields(ctx, (fields) =>
+				{
+					const byId = new Map<
+						string,
+						{
+							id: string;
+							name: string;
+							note: string;
+						}
+					>();
+					for (const {id, field, html} of fields)
+					{
+						const node = byId.get(id) ??
+						{
+							id,
+							name: "",
+							note: "",
+						};
 						node[field] = html;
 						byId.set(id, node);
 					}
 					return planDeleteDates([...byId.values()]).flatMap(({id, name, note}) => [
-						...(name === undefined ? [] : [{id, field: "name" as const, html: name}]),
-						...(note === undefined ? [] : [{id, field: "note" as const, html: note}]),
+						...(name === undefined
+							? []
+							: [
+									{
+										id,
+										field: "name" as const,
+										html: name,
+									},
+								]),
+						...(note === undefined
+							? []
+							: [
+									{
+										id,
+										field: "note" as const,
+										html: note,
+									},
+								]),
 					]);
 				});
 			},
 		},
-		open_in_pane: singleItemCommand((nodeId) => {
+		open_in_pane: singleItemCommand((nodeId) =>
+		{
 			openInPane(useOutlineStore.getState(), nodeId);
 		}),
-		expand_all: singleItemCommand((nodeId) => {
+		expand_all: singleItemCommand((nodeId) =>
+		{
 			expandAll(nodeId, true);
 		}),
-		collapse_all: singleItemCommand((nodeId) => {
+		collapse_all: singleItemCommand((nodeId) =>
+		{
 			expandAll(nodeId, false);
 		}),
-		sort_children_asc: singleItemCommand((nodeId) => {
+		sort_children_asc: singleItemCommand((nodeId) =>
+		{
 			void sortChildren(nodeId, "asc");
 		}),
-		sort_children_desc: singleItemCommand((nodeId) => {
+		sort_children_desc: singleItemCommand((nodeId) =>
+		{
 			void sortChildren(nodeId, "desc");
 		}),
-		copy_link: singleItemCommand((nodeId) => {
+		copy_link: singleItemCommand((nodeId) =>
+		{
 			void copyLink(nodeId);
 		}),
-		toggle_leftbar: {execute: toggleLeftBar},
-		toggle_rightbar: {execute: toggleRightBar},
-		...paneCommands({
-			getState: useOutlineStore.getState,
-			closeMainPane: () => {
-				closeMainPane(navigate);
+		toggle_leftbar:
+		{
+			execute: toggleLeftBar,
+		},
+		toggle_rightbar:
+		{
+			execute: toggleRightBar,
+		},
+		...paneCommands(
+			{
+				getState: useOutlineStore.getState,
+				closeMainPane: () =>
+				{
+					closeMainPane(navigate);
+				},
+				movePane: (paneId, index) =>
+				{
+					movePane(navigate, paneId, index, (id) => cachedResolvedId(queryClient, id) ?? id);
+				},
 			},
-			movePane: (paneId, index) => {
-				movePane(navigate, paneId, index, (id) => cachedResolvedId(queryClient, id) ?? id);
+		),
+		...paneNumberCommands(
+			{
+				getState: useOutlineStore.getState,
+				focusPane: (paneId, caret) =>
+				{
+					commitEdit();
+					useOutlineStore.getState().setActivePane(paneId);
+					if (caret === "first_child")
+					{
+						focusEdge("first", true);
+						return;
+					}
+					const state = useOutlineStore.getState();
+					const zoomedId = paneId === MAIN_PANE_ID ? null : (findPane(state.panes, paneId)?.zoomedId ?? null);
+					requestPaneFocus(
+						{
+							paneId,
+							zoomedId,
+							reveal: true,
+						},
+						{
+							resumeEditing: state.resumeEditing,
+						},
+					);
+				},
+				zoomPaneTo: (paneId, nodeId) =>
+				{
+					commitEdit();
+					const state = useOutlineStore.getState();
+					state.setActivePane(paneId);
+					if (paneId === MAIN_PANE_ID)
+					{
+						goToNode(navigate, nodeId);
+						requestPaneFocus(
+							{
+								paneId,
+								zoomedId: nodeId,
+								reveal: true,
+							},
+							{
+								resumeEditing: state.resumeEditing,
+							},
+						);
+					}
+					else
+					{
+						// The store's pane focus request moves the caret to the new title.
+						state.zoomPane(paneId, nodeId);
+					}
+				},
 			},
-		}),
-		...paneNumberCommands({
-			getState: useOutlineStore.getState,
-			focusPane: (paneId, caret) => {
-				commitEdit();
-				useOutlineStore.getState().setActivePane(paneId);
-				if (caret === "first_child") {
-					focusEdge("first", true);
-					return;
-				}
-				const state = useOutlineStore.getState();
-				const zoomedId = paneId === MAIN_PANE_ID ? null : (findPane(state.panes, paneId)?.zoomedId ?? null);
-				requestPaneFocus({paneId, zoomedId, reveal: true}, {resumeEditing: state.resumeEditing});
+		),
+		...paneNavCommands(
+			{
+				getState: useOutlineStore.getState,
+				commitEdit,
+				goHome: () =>
+				{
+					void navigate("/");
+				},
+				stepMain: (direction) =>
+				{
+					stepNav(navigate, direction, (id) => cachedResolvedId(queryClient, id));
+				},
+				navigateToToday: async (paneId) => (paneId === null ? navigateToToday() : navigateActivePaneToToday()),
+				jumpToSibling,
 			},
-			zoomPaneTo: (paneId, nodeId) => {
-				commitEdit();
-				const state = useOutlineStore.getState();
-				state.setActivePane(paneId);
-				if (paneId === MAIN_PANE_ID) {
-					goToNode(navigate, nodeId);
-					requestPaneFocus({paneId, zoomedId: nodeId, reveal: true}, {resumeEditing: state.resumeEditing});
-				} else {
-					// The store's pane focus request moves the caret to the new title.
-					state.zoomPane(paneId, nodeId);
-				}
-			},
-		}),
-		...paneNavCommands({
-			getState: useOutlineStore.getState,
-			commitEdit,
-			goHome: () => {
-				void navigate("/");
-			},
-			stepMain: (direction) => {
-				stepNav(navigate, direction, (id) => cachedResolvedId(queryClient, id));
-			},
-			navigateToToday: async (paneId) => (paneId === null ? navigateToToday() : navigateActivePaneToToday()),
-			jumpToSibling,
-		}),
+		),
 		// The open search panel stands in for upstream's search-in-progress until search-filtering SF3
 		show_or_hide_completed: showCompletedCommand(
 			toggleShowCompleted,
 			() => useOutlineStore.getState().searchQuery !== "",
 		),
 		star_current_item: starCurrentItemCommand(toggleStar, () => activeCommittedQuery(useOutlineStore.getState())),
-		show_switcher: {execute: showSwitcher},
+		show_switcher:
+		{
+			execute: showSwitcher,
+		},
 		/** Upstream "Changelog: Show": the What's New dialog. */
-		show_changelog: {
-			execute() {
+		show_changelog:
+		{
+			execute()
+			{
 				useOutlineStore.getState().openChangelog();
 			},
 		},
 		_select_next_in_switcher: switcherStepCommand("next", isJumpMenuOpen, openJumpMenu),
 		_select_prev_in_switcher: switcherStepCommand("prev", isJumpMenuOpen, openJumpMenu),
-		show_export: {
-			execute(ctx) {
-				if (ctx.items.length > 0) {
+		show_export:
+		{
+			execute(ctx)
+			{
+				if (ctx.items.length > 0)
+				{
 					commitEdit();
 					openExportDialog(selectionExportRequest(ctx.items));
 					useOutlineStore.getState().clearItemSelection();

@@ -1,4 +1,5 @@
-export interface ShowZoomDeps {
+export interface ShowZoomDeps
+{
 	/** The active open pane, or null while the main outline is active. */
 	paneId: string | null;
 	zoomPane: (paneId: string, id: string | null) => void;
@@ -8,13 +9,18 @@ export interface ShowZoomDeps {
 }
 
 /** Show `destination` in the active pane: zoom an open pane while it is active, else navigate the main outline. */
-export function showZoom(destination: string | null, scrollTop: boolean, deps: ShowZoomDeps): void {
-	if (deps.paneId === null) {
+export function showZoom(destination: string | null, scrollTop: boolean, deps: ShowZoomDeps): void
+{
+	if (deps.paneId === null)
+	{
 		deps.goToNode(destination);
-	} else {
+	}
+	else
+	{
 		deps.zoomPane(deps.paneId, destination);
 	}
-	if (scrollTop) {
+	if (scrollTop)
+	{
 		deps.scrollToTop(deps.paneId);
 	}
 }
@@ -28,6 +34,7 @@ export function outlineRootToShow(
 	requested: string | null,
 	loading: boolean,
 	lastShown: string | null | undefined,
-): string | null {
+): string | null
+{
 	return loading && lastShown !== undefined ? lastShown : requested;
 }

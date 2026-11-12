@@ -8,30 +8,36 @@ import {hintFrom, overlayHotkeys} from "./custom-overlay.js";
 import {useCustomKeymapStore} from "../stores/custom-keymap.js";
 
 /** The mac `[combo, command]` table in upstream insertion order, using upstream combo spelling. */
-export const MAC_HOTKEYS: readonly Hotkey[] = buildHotkeys({
-	mac: true,
-	safari: false,
-	windows: false,
-	linux: false,
-	chromeos: false,
-	electron: false,
-});
+export const MAC_HOTKEYS: readonly Hotkey[] = buildHotkeys(
+	{
+		mac: true,
+		safari: false,
+		windows: false,
+		linux: false,
+		chromeos: false,
+		electron: false,
+	},
+);
 
-const OFF_MAC_HOTKEYS: readonly Hotkey[] = buildHotkeys({
-	mac: false,
-	safari: false,
-	windows: true,
-	linux: false,
-	chromeos: false,
-	electron: false,
-});
+const OFF_MAC_HOTKEYS: readonly Hotkey[] = buildHotkeys(
+	{
+		mac: false,
+		safari: false,
+		windows: true,
+		linux: false,
+		chromeos: false,
+		electron: false,
+	},
+);
 
 /** The `[combo, command]` table `hint` searches for one platform flag. */
-function hotkeysFor(isMac: boolean): readonly Hotkey[] {
+function hotkeysFor(isMac: boolean): readonly Hotkey[]
+{
 	return isMac ? MAC_HOTKEYS : OFF_MAC_HOTKEYS;
 }
 
-const MAC_KEYS: Readonly<Record<string, string>> = {
+const MAC_KEYS: Readonly<Record<string, string>> =
+{
 	meta: "⌘",
 	ctrl: "⌃",
 	alt: "⌥",
@@ -47,7 +53,8 @@ const MAC_KEYS: Readonly<Record<string, string>> = {
 	right: "→",
 };
 
-const OTHER_KEYS: Readonly<Record<string, string>> = {
+const OTHER_KEYS: Readonly<Record<string, string>> =
+{
 	meta: "",
 	ctrl: "Ctrl",
 	alt: "Alt",
@@ -63,13 +70,15 @@ const OTHER_KEYS: Readonly<Record<string, string>> = {
 	right: "→",
 };
 
-export function hint(command: string, isMac = true): string | undefined {
+export function hint(command: string, isMac = true): string | undefined
+{
 	const {overrides} = useCustomKeymapStore.getState();
 	const combo = hintFrom(
 		overrides.length > 0 ? overlayHotkeys(hotkeysFor(isMac), overrides) : hotkeysFor(isMac),
 		command,
 	);
-	if (combo === undefined) {
+	if (combo === undefined)
+	{
 		return undefined;
 	}
 	const keys = isMac ? MAC_KEYS : OTHER_KEYS;

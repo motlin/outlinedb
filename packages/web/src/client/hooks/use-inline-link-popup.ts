@@ -21,7 +21,8 @@ const TOAST_TIMEOUT = 5000;
 /** Keys the open popup's menu takes from the editor. */
 const POPUP_KEYS = new Set(["ArrowUp", "ArrowDown", "Enter", "Tab", "Escape"]);
 
-export interface InlineLinkPopupOptions {
+export interface InlineLinkPopupOptions
+{
 	nodeId: string;
 	contentRef: RefObject<HTMLElement | null>;
 	dateSettings: DateSettings;
@@ -30,7 +31,8 @@ export interface InlineLinkPopupOptions {
 	applyLink: (html: string, caret: number) => void;
 }
 
-export interface InlineLinkPopup {
+export interface InlineLinkPopup
+{
 	/** After each typed input: closes a fresh `[[` with `]]`, and keeps the popup's filter current. */
 	handleInput: (event: Event) => void;
 	/** True when the open popup's menu takes the key. */
@@ -42,14 +44,24 @@ export interface InlineLinkPopup {
 }
 
 /** The editor's plain text (pills as one unit each) and the caret in the same units. */
-function editorState(content: HTMLElement): {text: string; caret: number} {
-	return {text: plainText(serializeEditorHtml(content.innerHTML), PILL_UNIT), caret: caretTextOffset(content)};
+function editorState(content: HTMLElement):
+{
+	text: string;
+	caret: number;
+}
+{
+	return {
+		text: plainText(serializeEditorHtml(content.innerHTML), PILL_UNIT),
+		caret: caretTextOffset(content),
+	};
 }
 
 /** Insert `]]` at the caret, leaving the caret before it. */
-function insertClosingBrackets(): void {
+function insertClosingBrackets(): void
+{
 	const selection = globalThis.getSelection();
-	if (selection === null || selection.rangeCount === 0) {
+	if (selection === null || selection.rangeCount === 0)
+	{
 		return;
 	}
 	const range = selection.getRangeAt(0);
@@ -62,9 +74,20 @@ function insertClosingBrackets(): void {
 }
 
 /** The picker anchor: the bottom-left of the `[[` box. */
-function bracketAnchor(content: HTMLElement, index: number): {x: number; y: number} {
+function bracketAnchor(
+	content: HTMLElement,
+	index: number,
+):
+{
+	x: number;
+	y: number;
+}
+{
 	const {x, y} = caretAnchor([textRangeBox(content, index, index + 2)], content.getBoundingClientRect());
-	return {x: x + window.scrollX, y: y + window.scrollY};
+	return {
+		x: x + window.scrollX,
+		y: y + window.scrollY,
+	};
 }
 
 /**
@@ -78,51 +101,85 @@ export function useInlineLinkPopup({
 	dateSettings,
 	account,
 	applyLink,
-}: InlineLinkPopupOptions): InlineLinkPopup {
+}: InlineLinkPopupOptions): InlineLinkPopup
+{
 	const queryClient = useQueryClient();
 	const openRef = useRef(false);
 	const session = useRef(0);
-	const matchRef = useRef<BracketMatch>({index: -1, text: ""});
+	const matchRef = useRef<BracketMatch>(
+		{
+			index: -1,
+			text: "",
+		},
+	);
 	const filterRef = useRef("");
-	const latest = useRef({dateSettings, account, applyLink});
-	useEffect(() => {
-		latest.current = {dateSettings, account, applyLink};
+	const latest = useRef(
+		{
+			dateSettings,
+			account,
+			applyLink,
+		},
+	);
+	useEffect(() =>
+	{
+		latest.current =
+		{
+			dateSettings,
+			account,
+			applyLink,
+		};
 	});
 
 	const isOpen = useCallback(() => openRef.current, []);
 
-	const close = useCallback(() => {
-		if (openRef.current && useOutlineStore.getState().locationPicker?.forItemId === nodeId) {
+	const close = useCallback(() =>
+	{
+		if (openRef.current && useOutlineStore.getState().locationPicker?.forItemId === nodeId)
+		{
 			useOutlineStore.getState().closeLocationPicker(undefined);
 		}
 		openRef.current = false;
 	}, [nodeId]);
 
 	const link = useCallback(
-		async (result: Exclude<LocationPickerResult, undefined>, match: BracketMatch, filter: string) => {
+		async (result: Exclude<LocationPickerResult, undefined>, match: BracketMatch, filter: string) =>
+		{
 			const store = useOutlineStore.getState();
 			const id = "createdId" in result ? result.createdId : result.id;
-			if (id === "None" || id === "") {
-				store.showAppMessage("Cannot link Home", {timeout: TOAST_TIMEOUT, type: "failure"});
+			if (id === "None" || id === "")
+			{
+				store.showAppMessage(
+					"Cannot link Home",
+					{
+						timeout: TOAST_TIMEOUT,
+						type: "failure",
+					},
+				);
 				return;
 			}
 			let label = filter;
-			if ("id" in result) {
+			if ("id" in result)
+			{
 				const name = readNode(queryClient, id)?.name ?? (await fetchNode(id)).name ?? "";
-				label = formatCrumbLabel(name, {
-					now: new Date(),
-					dateFormat: latest.current.dateSettings.dateFormat,
-					timeFormat: latest.current.dateSettings.timeFormat,
-					account: latest.current.account,
-				});
+				label = formatCrumbLabel(
+					name,
+					{
+						now: new Date(),
+						dateFormat: latest.current.dateSettings.dateFormat,
+						timeFormat: latest.current.dateSettings.timeFormat,
+						account: latest.current.account,
+					},
+				);
 			}
 			const content = contentRef.current;
-			if (content === null) {
+			if (content === null)
+			{
 				return;
 			}
 			const html = serializeEditorHtml(content.innerHTML);
 			const text = plainText(html, PILL_UNIT);
-			if (text.slice(match.index, match.index + match.text.length) !== match.text) {
+			if (text.slice(match.index, match.index + match.text.length) !== match.text)
+			{
 				return;
 			}
 			const plan = planLinkInsert(html, match, label === "" ? "Untitled" : label, internalLinkUrl(id));
@@ -132,9 +189,11 @@ export function useInlineLinkPopup({
 	);
 
 	const open = useCallback(
-		(match: BracketMatch) => {
+		(match: BracketMatch) =>
+		{
 			const content = contentRef.current;
-			if (content === null) {
+			if (content === null)
+			{
 				return;
 			}
 			matchRef.current = match;
@@ -153,11 +212,14 @@ export function useInlineLinkPopup({
 					},
 					bracketAnchor(content, match.index),
 				)
-				.then(async (result) => {
-					if (token === session.current) {
+				.then(async (result) =>
+				{
+					if (token === session.current)
+					{
 						openRef.current = false;
 					}
-					if (result !== undefined) {
+					if (result !== undefined)
+					{
 						await link(result, matchRef.current, filterRef.current);
 					}
 					return;
@@ -168,64 +230,82 @@ export function useInlineLinkPopup({
 
 	/** Open, refresh or close the popup for the caret's place; `allowOpen` lets a closed popup open. */
 	const sync = useCallback(
-		(allowOpen: boolean) => {
+		(allowOpen: boolean) =>
+		{
 			const content = contentRef.current;
 			const selection = globalThis.getSelection();
-			if (content === null || selection === null || selection.rangeCount === 0) {
+			if (content === null || selection === null || selection.rangeCount === 0)
+			{
 				return;
 			}
-			if (!content.contains(selection.anchorNode)) {
+			if (!content.contains(selection.anchorNode))
+			{
 				return;
 			}
-			if (!selection.isCollapsed) {
+			if (!selection.isCollapsed)
+			{
 				close();
 				return;
 			}
 			const {text, caret} = editorState(content);
 			const match = bracketMatch(text, caret);
-			if (match.index === -1) {
+			if (match.index === -1)
+			{
 				close();
-			} else if (openRef.current) {
-				if (match.index !== matchRef.current.index || match.text !== matchRef.current.text) {
+			}
+			else if (openRef.current)
+			{
+				if (match.index !== matchRef.current.index || match.text !== matchRef.current.text)
+				{
 					matchRef.current = match;
 					filterRef.current = innerText(match);
 					useOutlineStore.getState().refreshLocationPicker();
 				}
-			} else if (allowOpen) {
+			}
+			else if (allowOpen)
+			{
 				open(match);
 			}
 		},
 		[close, contentRef, open],
 	);
 
-	useEffect(() => {
-		const onSelectionChange = () => {
+	useEffect(() =>
+	{
+		const onSelectionChange = () =>
+		{
 			sync(true);
 		};
 		document.addEventListener("selectionchange", onSelectionChange);
-		return () => {
+		return () =>
+		{
 			document.removeEventListener("selectionchange", onSelectionChange);
 		};
 	}, [sync]);
 
 	// The row going away takes its popup with it.
 	useEffect(
-		() => () => {
+		() => () =>
+		{
 			close();
 		},
 		[close],
 	);
 
 	const handleInput = useCallback(
-		(event: Event) => {
+		(event: Event) =>
+		{
 			const content = contentRef.current;
-			if (content === null || isComposingInput(event)) {
+			if (content === null || isComposingInput(event))
+			{
 				return;
 			}
 			let closed = false;
-			if (event instanceof InputEvent && event.inputType === "insertText") {
+			if (event instanceof InputEvent && event.inputType === "insertText")
+			{
 				const {text, caret} = editorState(content);
-				if (planAutoClose(text, caret) !== null) {
+				if (planAutoClose(text, caret) !== null)
+				{
 					insertClosingBrackets();
 					closed = true;
 				}
@@ -247,9 +327,11 @@ export function useInlineLinkPopup({
 	);
 
 	const handleBlur = useCallback(
-		(event: FocusEvent) => {
+		(event: FocusEvent) =>
+		{
 			const next = event.relatedTarget;
-			if (next instanceof Element && next.closest("[data-popper-placement]") !== null) {
+			if (next instanceof Element && next.closest("[data-popper-placement]") !== null)
+			{
 				return;
 			}
 			close();
@@ -257,5 +339,11 @@ export function useInlineLinkPopup({
 		[close],
 	);
 
-	return {handleInput, handleKeyDown, handleBlur, isOpen, close};
+	return {
+		handleInput,
+		handleKeyDown,
+		handleBlur,
+		isOpen,
+		close,
+	};
 }

@@ -69,94 +69,315 @@ export const SLASH_MENU_KEYS = [
 
 export type SlashCommandKey = (typeof SLASH_MENU_KEYS)[number];
 
-export interface SlashCommand {
+export interface SlashCommand
+{
 	label: string;
 	icon: FaIconKey;
 }
 
 /** Label and rendered FA light icon for every command upstream renders on a plain row. */
-export const SLASH_COMMANDS: Partial<Record<SlashCommandKey, SlashCommand>> = {
-	toggle_bullet: {label: "Bullets", icon: "fal:list-ul"},
-	toggle_board: {label: "Board", icon: "fal:table-columns"},
-	toggle_table: {label: "Table", icon: "fal:table-cells"},
-	toggle_todo: {label: "To-do", icon: "fal:list-check"},
-	toggle_h1: {label: "Heading 1", icon: "fal:h1"},
-	toggle_h2: {label: "Heading 2", icon: "fal:h2"},
-	toggle_h3: {label: "Heading 3", icon: "fal:h3"},
-	toggle_paragraph: {label: "Paragraph", icon: "fal:paragraph"},
-	toggle_quote_block: {label: "Quote", icon: "fal:block-quote"},
-	toggle_code_block: {label: "Code Block", icon: "fal:rectangle-code"},
-	toggle_divider: {label: "Divider", icon: "fal:horizontal-rule"},
-	assign_shortcut: {label: "Shortcut", icon: "fal:bolt"},
-	upload_file: {label: "Upload file", icon: "fal:file"},
-	toggle_numbered: {label: "Number", icon: "fal:list-ol"},
-	complete: {label: "Complete", icon: "fal:check"},
-	add_date: {label: "Add date", icon: "fal:calendar-days"},
-	comment: {label: "Add comment", icon: "fal:message-lines"},
-	add_note: {label: "Add note", icon: "fal:pencil"},
-	open_in_pane: {label: "Open in Pane", icon: "fal:table-columns"},
-	duplicate: {label: "Duplicate", icon: "fal:copy"},
-	move_to: {label: "Move To...", icon: "fal:arrow-right-long"},
-	move_here: {label: "Move Here...", icon: "fal:arrow-down-long"},
-	move_to_child: {label: "Move To Child...", icon: "fal:arrow-right-long"},
-	move_to_today: {label: "Move to Today", icon: "fal:calendar-day"},
-	move_to_tomorrow: {label: "Move to Tomorrow", icon: "fal:calendar-circle-plus"},
-	move_to_next_week: {label: "Move to Next Week", icon: "fal:calendar-week"},
-	move_to_date: {label: "Move to Date...", icon: "fal:calendar-days"},
-	share: {label: "Share", icon: "fal:user-group"},
-	show_export: {label: "Export", icon: "fal:file-export"},
-	mirror: {label: "Mirror", icon: "fal:diamond"},
-	mirror_to: {label: "Mirror To...", icon: "fal:diamond-turn-right"},
-	mirror_to_child: {label: "Mirror To Child...", icon: "fal:diamond-turn-right"},
-	mirror_here: {label: "Mirror Here...", icon: "fal:diamond-turn-right"},
-	mirror_to_today: {label: "Mirror to Today", icon: "fal:diamond-turn-right"},
-	mirror_to_date: {label: "Mirror to Date...", icon: "fal:diamond-turn-right"},
+export const SLASH_COMMANDS: Partial<Record<SlashCommandKey, SlashCommand>> =
+{
+	toggle_bullet:
+	{
+		label: "Bullets",
+		icon: "fal:list-ul",
+	},
+	toggle_board:
+	{
+		label: "Board",
+		icon: "fal:table-columns",
+	},
+	toggle_table:
+	{
+		label: "Table",
+		icon: "fal:table-cells",
+	},
+	toggle_todo:
+	{
+		label: "To-do",
+		icon: "fal:list-check",
+	},
+	toggle_h1:
+	{
+		label: "Heading 1",
+		icon: "fal:h1",
+	},
+	toggle_h2:
+	{
+		label: "Heading 2",
+		icon: "fal:h2",
+	},
+	toggle_h3:
+	{
+		label: "Heading 3",
+		icon: "fal:h3",
+	},
+	toggle_paragraph:
+	{
+		label: "Paragraph",
+		icon: "fal:paragraph",
+	},
+	toggle_quote_block:
+	{
+		label: "Quote",
+		icon: "fal:block-quote",
+	},
+	toggle_code_block:
+	{
+		label: "Code Block",
+		icon: "fal:rectangle-code",
+	},
+	toggle_divider:
+	{
+		label: "Divider",
+		icon: "fal:horizontal-rule",
+	},
+	assign_shortcut:
+	{
+		label: "Shortcut",
+		icon: "fal:bolt",
+	},
+	upload_file:
+	{
+		label: "Upload file",
+		icon: "fal:file",
+	},
+	toggle_numbered:
+	{
+		label: "Number",
+		icon: "fal:list-ol",
+	},
+	complete:
+	{
+		label: "Complete",
+		icon: "fal:check",
+	},
+	add_date:
+	{
+		label: "Add date",
+		icon: "fal:calendar-days",
+	},
+	comment:
+	{
+		label: "Add comment",
+		icon: "fal:message-lines",
+	},
+	add_note:
+	{
+		label: "Add note",
+		icon: "fal:pencil",
+	},
+	open_in_pane:
+	{
+		label: "Open in Pane",
+		icon: "fal:table-columns",
+	},
+	duplicate:
+	{
+		label: "Duplicate",
+		icon: "fal:copy",
+	},
+	move_to:
+	{
+		label: "Move To...",
+		icon: "fal:arrow-right-long",
+	},
+	move_here:
+	{
+		label: "Move Here...",
+		icon: "fal:arrow-down-long",
+	},
+	move_to_child:
+	{
+		label: "Move To Child...",
+		icon: "fal:arrow-right-long",
+	},
+	move_to_today:
+	{
+		label: "Move to Today",
+		icon: "fal:calendar-day",
+	},
+	move_to_tomorrow:
+	{
+		label: "Move to Tomorrow",
+		icon: "fal:calendar-circle-plus",
+	},
+	move_to_next_week:
+	{
+		label: "Move to Next Week",
+		icon: "fal:calendar-week",
+	},
+	move_to_date:
+	{
+		label: "Move to Date...",
+		icon: "fal:calendar-days",
+	},
+	share:
+	{
+		label: "Share",
+		icon: "fal:user-group",
+	},
+	show_export:
+	{
+		label: "Export",
+		icon: "fal:file-export",
+	},
+	mirror:
+	{
+		label: "Mirror",
+		icon: "fal:diamond",
+	},
+	mirror_to:
+	{
+		label: "Mirror To...",
+		icon: "fal:diamond-turn-right",
+	},
+	mirror_to_child:
+	{
+		label: "Mirror To Child...",
+		icon: "fal:diamond-turn-right",
+	},
+	mirror_here:
+	{
+		label: "Mirror Here...",
+		icon: "fal:diamond-turn-right",
+	},
+	mirror_to_today:
+	{
+		label: "Mirror to Today",
+		icon: "fal:diamond-turn-right",
+	},
+	mirror_to_date:
+	{
+		label: "Mirror to Date...",
+		icon: "fal:diamond-turn-right",
+	},
 	// Upstream draws `diamond-half-stroke`, which the local FontAwesome subset lacks.
-	show_mirror_breadcrumbs: {label: "View mirrors", icon: "fal:diamond"},
-	detach_mirror: {label: "Detach Mirror", icon: "fal:xmark"},
-	expand_all: {label: "Expand all", icon: "fal:up-right-and-down-left-from-center"},
-	collapse_all: {label: "Collapse all", icon: "fal:down-left-and-up-right-to-center"},
-	sort_children_asc: {label: "Sort A-Z", icon: "fal:arrow-down-a-z"},
-	sort_children_desc: {label: "Sort Z-A", icon: "fal:arrow-down-z-a"},
-	copy_link: {label: "Copy internal link", icon: "fal:link"},
-	add_from_template: {label: "Add from template", icon: "fal:puzzle-piece"},
-	insert_board_column_left: {label: "Insert column left", icon: "fal:table-columns"},
-	insert_board_column_right: {label: "Insert column right", icon: "fal:table-columns"},
-	delete: {label: "Delete", icon: "fal:trash-can"},
-	count: {label: "Count", icon: "fal:abacus"},
-	set_priority_default_bottom: {label: "Priority: Default to Bottom", icon: "fal:arrow-down"},
-	show_command_palette: {label: "Show Command Palette", icon: "fal:palette"},
+	show_mirror_breadcrumbs:
+	{
+		label: "View mirrors",
+		icon: "fal:diamond",
+	},
+	detach_mirror:
+	{
+		label: "Detach Mirror",
+		icon: "fal:xmark",
+	},
+	expand_all:
+	{
+		label: "Expand all",
+		icon: "fal:up-right-and-down-left-from-center",
+	},
+	collapse_all:
+	{
+		label: "Collapse all",
+		icon: "fal:down-left-and-up-right-to-center",
+	},
+	sort_children_asc:
+	{
+		label: "Sort A-Z",
+		icon: "fal:arrow-down-a-z",
+	},
+	sort_children_desc:
+	{
+		label: "Sort Z-A",
+		icon: "fal:arrow-down-z-a",
+	},
+	copy_link:
+	{
+		label: "Copy internal link",
+		icon: "fal:link",
+	},
+	add_from_template:
+	{
+		label: "Add from template",
+		icon: "fal:puzzle-piece",
+	},
+	insert_board_column_left:
+	{
+		label: "Insert column left",
+		icon: "fal:table-columns",
+	},
+	insert_board_column_right:
+	{
+		label: "Insert column right",
+		icon: "fal:table-columns",
+	},
+	delete:
+	{
+		label: "Delete",
+		icon: "fal:trash-can",
+	},
+	count:
+	{
+		label: "Count",
+		icon: "fal:abacus",
+	},
+	set_priority_default_bottom:
+	{
+		label: "Priority: Default to Bottom",
+		icon: "fal:arrow-down",
+	},
+	show_command_palette:
+	{
+		label: "Show Command Palette",
+		icon: "fal:palette",
+	},
 };
 
-export interface SlashCommandOption extends SlashCommand {
+export interface SlashCommandOption extends SlashCommand
+{
 	key: SlashCommandKey;
 }
 
-export interface SlashMathOption {
+export interface SlashMathOption
+{
 	label: string;
 	noop?: true;
 }
 
-export type SlashGroup = {name: "Actions"; options: SlashCommandOption[]} | {name: "="; options: SlashMathOption[]};
+export type SlashGroup =
+	|
+	  {
+			name: "Actions";
+			options: SlashCommandOption[];
+	  }
+	|
+	  {
+			name: "=";
+			options: SlashMathOption[];
+	  };
 
-export interface SlashContext {
+export interface SlashContext
+{
 	available(key: SlashCommandKey): boolean;
 	/** Evaluates a math expression: its result, the literal "incomplete" while still being typed, or null when it is not math. */
 	evalMath?(expression: string): string | null;
 }
 
-function commandOptions(term: string, ctx: SlashContext): SlashCommandOption[] {
-	if (/^\s/u.test(term)) {
+function commandOptions(term: string, ctx: SlashContext): SlashCommandOption[]
+{
+	if (/^\s/u.test(term))
+	{
 		return [];
 	}
 	const options: SlashCommandOption[] = [];
-	for (const key of SLASH_MENU_KEYS) {
+	for (const key of SLASH_MENU_KEYS)
+	{
 		const command = SLASH_COMMANDS[key];
-		if (command && ctx.available(key) && (term === "" || fuzzyMatch(term, command.label))) {
-			options.push({key, ...command});
+		if (command && ctx.available(key) && (term === "" || fuzzyMatch(term, command.label)))
+		{
+			options.push(
+				{
+					key,
+					...command,
+				},
+			);
 		}
 	}
-	if (term !== "") {
+	if (term !== "")
+	{
 		options.sort((a, b) => fuzzyScore(term, b.label) - fuzzyScore(term, a.label));
 	}
 	return options;
@@ -166,17 +387,41 @@ function commandOptions(term: string, ctx: SlashContext): SlashCommandOption[] {
  * Resolves the slash chip's text (" /term" or "/term") into menu groups: matching commands first,
  * else the math result, else null so the caller disarms the chip.
  */
-export function resolveSlash(chipText: string, ctx: SlashContext): SlashGroup[] | null {
+export function resolveSlash(chipText: string, ctx: SlashContext): SlashGroup[] | null
+{
 	const term = chipText.trimStart().slice(1);
 	const options = commandOptions(term, ctx);
-	if (options.length > 0) {
-		return [{name: "Actions", options}];
+	if (options.length > 0)
+	{
+		return [
+			{
+				name: "Actions",
+				options,
+			},
+		];
 	}
 	const result = ctx.evalMath?.(term) ?? null;
-	if (result === null) {
+	if (result === null)
+	{
 		return null;
 	}
-	return [{name: "=", options: [result === "incomplete" ? {label: "...", noop: true} : {label: result}]}];
+	return [
+		{
+			name: "=",
+			options: [
+				result === "incomplete"
+					?
+						{
+							label: "...",
+							noop: true,
+						}
+					:
+						{
+							label: result,
+						},
+			],
+		},
+	];
 }
 
 /**
@@ -226,6 +471,7 @@ const LOCAL_SLASH_KEYS: ReadonlySet<SlashCommandKey> = new Set<SlashCommandKey>(
 	"show_command_palette",
 ]);
 
-export function LOCAL_SLASH_AVAILABLE(key: SlashCommandKey): boolean {
+export function LOCAL_SLASH_AVAILABLE(key: SlashCommandKey): boolean
+{
 	return LOCAL_SLASH_KEYS.has(key);
 }

@@ -8,16 +8,26 @@ export type ChangelogTag = "h2" | "h3" | "p" | "ul" | "li" | "a" | "b" | "strong
 /** A body node: text, or an element with its React props and children. */
 export type ChangelogNode =
 	| string
-	| {t: ChangelogTag; p?: Readonly<Record<string, string>>; c?: readonly ChangelogNode[]};
+	|
+	  {
+			t: ChangelogTag;
+			p?: Readonly<Record<string, string>>;
+			c?: readonly ChangelogNode[];
+	  };
 
-export interface ChangelogEntry {
+export interface ChangelogEntry
+{
 	id: string;
 	date: string;
 	title: string;
 	body: readonly ChangelogNode[];
 }
 
-const code = (text: string): ChangelogNode => ({t: "code", c: [text]});
+const code = (text: string): ChangelogNode => (
+{
+	t: "code",
+	c: [text],
+});
 
 export const WHATS_NEW_ENTRIES: readonly ChangelogEntry[] = [
 	{
@@ -38,7 +48,15 @@ export const WHATS_NEW_ENTRIES: readonly ChangelogEntry[] = [
 						t: "li",
 						c: [
 							"Open ",
-							{t: "a", p: {href: "/changes", className: "contentLink !text-tint"}, c: ["Node Changes"]},
+							{
+								t: "a",
+								p:
+								{
+									href: "/changes",
+									className: "contentLink !text-tint",
+								},
+								c: ["Node Changes"],
+							},
 							" and enter how far back to look: a duration such as ",
 							code("12h"),
 							", ",
@@ -56,7 +74,10 @@ export const WHATS_NEW_ENTRIES: readonly ChangelogEntry[] = [
 							"Each node that changed since then is shown under its ancestors and labeled Added, Deleted, Changed, Moved, Completed, Uncompleted or Note edited, with a count of each kind at the top.",
 						],
 					},
-					{t: "li", c: ["Edited text shows a character-by-character diff of the old and new versions."]},
+					{
+						t: "li",
+						c: ["Edited text shows a character-by-character diff of the old and new versions."],
+					},
 					{
 						t: "li",
 						c: [

@@ -7,27 +7,37 @@ import type {ProvisionInput, ProvisionResult} from "../src/user-store";
 import worker from "../src/worker";
 
 /** Test-only subclass exposing the DO's raw SQLite state. */
-export class ProbeStore extends UserStore {
+export class ProbeStore extends UserStore
+{
 	private calls = 0;
 
 	/** Counts every op so tests can assert the one-call-per-request rule. */
-	override async call<K extends OpName>(op: K, input: OpInput<K>): Promise<OpResult<OpOutput<K>>> {
+	override async call<K extends OpName>(op: K, input: OpInput<K>): Promise<OpResult<OpOutput<K>>>
+	{
 		this.calls++;
 		return super.call(op, input);
 	}
 
 	/** Counts every `provision` RPC, kept in storage so the count survives a restart. */
-	override provision(input: ProvisionInput): ProvisionResult {
+	override provision(input: ProvisionInput): ProvisionResult
+	{
 		this.ctx.storage.kv.put("__provisions", String(Number(this.ctx.storage.kv.get("__provisions") ?? 0) + 1));
 		return super.provision(input);
 	}
 
-	override fetch(request: Request): Response {
+	override fetch(request: Request): Response
+	{
 		const url = new URL(request.url);
-		if (url.pathname === "/__provisions") {
-			return Response.json({provisions: Number(this.ctx.storage.kv.get("__provisions") ?? 0)});
+		if (url.pathname === "/__provisions")
+		{
+			return Response.json(
+				{
+					provisions: Number(this.ctx.storage.kv.get("__provisions") ?? 0),
+				},
+			);
 		}
-		if (url.pathname === "/__probe") {
+		if (url.pathname === "/__probe")
+		{
 			const names = this.ctx.storage.sql
 				.exec("SELECT name FROM sqlite_master ORDER BY name")
 				.toArray()
@@ -38,34 +48,61 @@ export class ProbeStore extends UserStore {
 			const migrations = Number(
 				this.ctx.storage.sql.exec("SELECT count(*) AS n FROM __drizzle_migrations").one().n,
 			);
-			return Response.json({names, schema, migrations, appliedOnBoot: this.appliedOnBoot});
+			return Response.json(
+				{
+					names,
+					schema,
+					migrations,
+					appliedOnBoot: this.appliedOnBoot,
+				},
+			);
 		}
-		if (url.pathname === "/__calls") {
+		if (url.pathname === "/__calls")
+		{
 			const calls = this.calls;
-			if (url.searchParams.has("reset")) {
+			if (url.searchParams.has("reset"))
+			{
 				this.calls = 0;
 			}
-			return Response.json({calls});
+			return Response.json(
+				{
+					calls,
+				},
+			);
 		}
-		if (url.pathname === "/__session") {
+		if (url.pathname === "/__session")
+		{
 			const write = url.searchParams.get("write");
-			if (write !== null) {
+			if (write !== null)
+			{
 				this.sessionStore.write(write);
 			}
-			return Response.json({cookie: this.sessionStore.read() ?? null});
+			return Response.json(
+				{
+					cookie: this.sessionStore.read() ?? null,
+				},
+			);
 		}
-		if (url.pathname === "/__publish") {
-			this.ladderEvents.publish({
-				verb: "move",
-				nodeId: "node-1",
-				name: "Write the report",
-				fromTier: "3",
-				toTier: "1",
-				at: "2026-10-27T00:00:00.000Z",
-			});
-			return Response.json({ok: true});
+		if (url.pathname === "/__publish")
+		{
+			this.ladderEvents.publish(
+				{
+					verb: "move",
+					nodeId: "node-1",
+					name: "Write the report",
+					fromTier: "3",
+					toTier: "1",
+					at: "2026-10-27T00:00:00.000Z",
+				},
+			);
+			return Response.json(
+				{
+					ok: true,
+				},
+			);
 		}
-		if (url.pathname === "/__system-froms") {
+		if (url.pathname === "/__system-froms")
+		{
 			return Response.json(
 				this.ctx.storage.sql
 					.exec(
@@ -75,32 +112,39 @@ export class ProbeStore extends UserStore {
 					.map((row) => row.n),
 			);
 		}
-		if (url.pathname === "/__sync-tables") {
+		if (url.pathname === "/__sync-tables")
+		{
 			const sql = this.ctx.storage.sql;
 			const live = "CASE WHEN system_to = '9999-12-31 23:59:59' THEN 1 ELSE 0 END";
-			return Response.json({
-				runs: sql
-					.exec(`SELECT phase, applied, status, ${live} AS live FROM sync_runs ORDER BY system_from, run_id`)
-					.toArray(),
-				runSystemFroms: Number(sql.exec("SELECT count(DISTINCT system_from) AS n FROM sync_runs").one().n),
-				seen: sql
-					.exec(`SELECT ${live} AS live, count(*) AS n FROM sync_seen GROUP BY live ORDER BY live`)
-					.toArray(),
-				seedRequests: sql
-					.exec(
-						`SELECT ${live} AS live, CASE WHEN system_from <= system_to THEN 1 ELSE 0 END AS ordered FROM sync_seed_requests ORDER BY system_from`,
-					)
-					.toArray(),
-			});
+			return Response.json(
+				{
+					runs: sql
+						.exec(
+							`SELECT phase, applied, status, ${live} AS live FROM sync_runs ORDER BY system_from, run_id`,
+						)
+						.toArray(),
+					runSystemFroms: Number(sql.exec("SELECT count(DISTINCT system_from) AS n FROM sync_runs").one().n),
+					seen: sql
+						.exec(`SELECT ${live} AS live, count(*) AS n FROM sync_seen GROUP BY live ORDER BY live`)
+						.toArray(),
+					seedRequests: sql
+						.exec(
+							`SELECT ${live} AS live, CASE WHEN system_from <= system_to THEN 1 ELSE 0 END AS ordered FROM sync_seed_requests ORDER BY system_from`,
+						)
+						.toArray(),
+				},
+			);
 		}
-		if (url.pathname === "/__live-ids") {
+		if (url.pathname === "/__live-ids")
+		{
 			const ids = this.ctx.storage.sql
 				.exec("SELECT id FROM node_content WHERE system_to = '9999-12-31 23:59:59'")
 				.toArray()
 				.flatMap((row) => (typeof row.id === "string" ? [row.id] : []));
 			return Response.json(ids);
 		}
-		if (url.pathname === "/__internal-metadata") {
+		if (url.pathname === "/__internal-metadata")
+		{
 			return Response.json(
 				this.ctx.storage.sql
 					.exec(
@@ -109,7 +153,8 @@ export class ProbeStore extends UserStore {
 					.toArray(),
 			);
 		}
-		if (url.pathname === "/__files") {
+		if (url.pathname === "/__files")
+		{
 			return Response.json(
 				this.ctx.storage.sql
 					.exec(
@@ -118,7 +163,8 @@ export class ProbeStore extends UserStore {
 					.toArray(),
 			);
 		}
-		if (url.pathname === "/__tree-log") {
+		if (url.pathname === "/__tree-log")
+		{
 			const txId = this.ctx.storage.sql
 				.exec(
 					"SELECT transaction_id FROM tree_transactions WHERE tree_id = 'main' AND system_to = '9999-12-31 23:59:59'",
@@ -130,18 +176,32 @@ export class ProbeStore extends UserStore {
 					"SELECT mirror_id, original_id FROM mirrors WHERE system_to = '9999-12-31 23:59:59' ORDER BY mirror_id",
 				)
 				.toArray();
-			return Response.json({txId: txId[0] ?? null, mirrors});
+			return Response.json(
+				{
+					txId: txId[0] ?? null,
+					mirrors,
+				},
+			);
 		}
-		if (url.pathname === "/__account") {
+		if (url.pathname === "/__account")
+		{
 			return Response.json(
 				this.ctx.storage.sql
 					.exec("SELECT user_id, date_joined_sec FROM account WHERE system_to = '9999-12-31 23:59:59'")
 					.toArray(),
 			);
 		}
-		if (url.pathname === "/__seed") {
+		if (url.pathname === "/__seed")
+		{
 			const parentId = url.searchParams.get("parent");
-			new CacheService(drizzle(this.ctx.storage, {schema: dbSchema})).insertNode(
+			new CacheService(
+				drizzle(
+					this.ctx.storage,
+					{
+						schema: dbSchema,
+					},
+				),
+			).insertNode(
 				{
 					id: url.searchParams.get("id") ?? "seed-node",
 					name: url.searchParams.get("name") ?? "seeded",
@@ -153,7 +213,11 @@ export class ProbeStore extends UserStore {
 				},
 				parentId,
 			);
-			return Response.json({ok: true});
+			return Response.json(
+				{
+					ok: true,
+				},
+			);
 		}
 		return super.fetch(request);
 	}

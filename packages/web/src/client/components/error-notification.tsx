@@ -4,11 +4,13 @@ import {useOutlineStore} from "../stores/outline.js";
  * Displays error notifications as toast-like messages in the top-right corner.
  * Supports error, warning, and info types with optional retry actions.
  */
-export function ErrorNotifications() {
+export function ErrorNotifications()
+{
 	const errorNotifications = useOutlineStore((state) => state.errorNotifications);
 	const removeErrorNotification = useOutlineStore((state) => state.removeErrorNotification);
 
-	if (errorNotifications.length === 0) {
+	if (errorNotifications.length === 0)
+	{
 		return null;
 	}
 
@@ -28,7 +30,8 @@ export function ErrorNotifications() {
 						{notification.retryAction && (
 							<button
 								className="error-notification-retry"
-								onClick={() => {
+								onClick={() =>
+								{
 									notification.retryAction?.();
 									removeErrorNotification(notification.id);
 								}}
@@ -39,7 +42,8 @@ export function ErrorNotifications() {
 						)}
 						<button
 							className="error-notification-dismiss"
-							onClick={() => {
+							onClick={() =>
+							{
 								removeErrorNotification(notification.id);
 							}}
 							type="button"

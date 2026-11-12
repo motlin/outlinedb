@@ -4,7 +4,15 @@ import {afterEach, describe, expect, it, vi} from "vite-plus/test";
 import {buildHotkeys, comboFromEvent, currentPlatform, HOTKEYS} from "../src/client/keys/keymap.js";
 import type {KeyComboEvent, Platform} from "../src/client/keys/keymap.js";
 
-const CHROME: Platform = {mac: false, safari: false, windows: false, linux: false, chromeos: false, electron: false};
+const CHROME: Platform =
+{
+	mac: false,
+	safari: false,
+	windows: false,
+	linux: false,
+	chromeos: false,
+	electron: false,
+};
 
 /** Upstream's mac Chrome `WF.map.Hotkeys`, in insertion order (dumps/keymap-parity-mac-chrome-table.json). */
 const MAC_CHROME_TABLE = [
@@ -204,70 +212,136 @@ const WINDOWS_CHROME_TABLE = [
 	["alt+ctrl+p", "previous_unread"],
 ];
 
-function event(which: number, modifiers: Partial<Omit<KeyComboEvent, "which">> = {}): KeyComboEvent {
-	return {which, altKey: false, ctrlKey: false, metaKey: false, shiftKey: false, ...modifiers};
+function event(which: number, modifiers: Partial<Omit<KeyComboEvent, "which">> = {}): KeyComboEvent
+{
+	return {
+		which,
+		altKey: false,
+		ctrlKey: false,
+		metaKey: false,
+		shiftKey: false,
+		...modifiers,
+	};
 }
 
-describe("buildHotkeys", () => {
-	it("matches upstream's mac Chrome table entry for entry", () => {
-		expect(buildHotkeys({...CHROME, mac: true})).toStrictEqual(MAC_CHROME_TABLE);
-	});
-
-	it("matches upstream's Windows Chrome table entry for entry", () => {
-		expect(buildHotkeys({...CHROME, windows: true})).toStrictEqual(WINDOWS_CHROME_TABLE);
-	});
-
-	it("binds zoom_in to all six mac Chrome combos in table order", () => {
+describe("buildHotkeys", () =>
+{
+	it("matches upstream's mac Chrome table entry for entry", () =>
+	{
 		expect(
-			buildHotkeys({...CHROME, mac: true})
+			buildHotkeys(
+				{
+					...CHROME,
+					mac: true,
+				},
+			),
+		).toStrictEqual(MAC_CHROME_TABLE);
+	});
+
+	it("matches upstream's Windows Chrome table entry for entry", () =>
+	{
+		expect(
+			buildHotkeys(
+				{
+					...CHROME,
+					windows: true,
+				},
+			),
+		).toStrictEqual(WINDOWS_CHROME_TABLE);
+	});
+
+	it("binds zoom_in to all six mac Chrome combos in table order", () =>
+	{
+		expect(
+			buildHotkeys(
+				{
+					...CHROME,
+					mac: true,
+				},
+			)
 				.filter(([, command]) => command === "zoom_in")
 				.map(([combo]) => combo),
 		).toStrictEqual(["meta+.", "ctrl+right", "ctrl+.", "meta+shift+.", "ctrl+meta+shift+.", "ctrl+shift+."]);
 	});
 
-	it("puts Safari's shifted zoom combos first and moves show_or_hide_completed to meta+shift+o", () => {
-		const table = buildHotkeys({...CHROME, mac: true, safari: true});
-		expect({
-			zoomIn: table.filter(([, command]) => command === "zoom_in").map(([combo]) => combo),
-			zoomOut: table.filter(([, command]) => command === "zoom_out").map(([combo]) => combo),
-			completed: table.filter(([, command]) => command === "show_or_hide_completed"),
-			metaO: table.filter(([combo]) => combo === "meta+o"),
-		}).toStrictEqual({
-			zoomIn: ["meta+shift+.", "ctrl+right", "ctrl+.", "meta+.", "ctrl+meta+shift+.", "ctrl+shift+."],
-			zoomOut: ["meta+shift+,", "ctrl+left", "ctrl+,", "meta+,", "ctrl+meta+shift+,"],
-			completed: [["meta+shift+o", "show_or_hide_completed"]],
-			metaO: [],
-		});
+	it("puts Safari's shifted zoom combos first and moves show_or_hide_completed to meta+shift+o", () =>
+	{
+		const table = buildHotkeys(
+			{
+				...CHROME,
+				mac: true,
+				safari: true,
+			},
+		);
+		expect(
+			{
+				zoomIn: table.filter(([, command]) => command === "zoom_in").map(([combo]) => combo),
+				zoomOut: table.filter(([, command]) => command === "zoom_out").map(([combo]) => combo),
+				completed: table.filter(([, command]) => command === "show_or_hide_completed"),
+				metaO: table.filter(([combo]) => combo === "meta+o"),
+			},
+		).toStrictEqual(
+			{
+				zoomIn: ["meta+shift+.", "ctrl+right", "ctrl+.", "meta+.", "ctrl+meta+shift+.", "ctrl+shift+."],
+				zoomOut: ["meta+shift+,", "ctrl+left", "ctrl+,", "meta+,", "ctrl+meta+shift+,"],
+				completed: [["meta+shift+o", "show_or_hide_completed"]],
+				metaO: [],
+			},
+		);
 	});
 
-	it("binds navigate backward/forward only in Electron", () => {
+	it("binds navigate backward/forward only in Electron", () =>
+	{
 		const navigation = (platform: Platform) =>
 			buildHotkeys(platform).filter(
 				([, command]) => command === "navigate_backward" || command === "navigate_forward",
 			);
-		expect({
-			chrome: navigation({...CHROME, mac: true}),
-			electron: navigation({...CHROME, mac: true, electron: true}),
-		}).toStrictEqual({
-			chrome: [],
-			electron: [
-				["meta+[", "navigate_backward"],
-				["meta+]", "navigate_forward"],
-				["ctrl+[", "navigate_backward"],
-				["ctrl+]", "navigate_forward"],
-			],
-		});
+		expect(
+			{
+				chrome: navigation(
+					{
+						...CHROME,
+						mac: true,
+					},
+				),
+				electron: navigation(
+					{
+						...CHROME,
+						mac: true,
+						electron: true,
+					},
+				),
+			},
+		).toStrictEqual(
+			{
+				chrome: [],
+				electron: [
+					["meta+[", "navigate_backward"],
+					["meta+]", "navigate_forward"],
+					["ctrl+[", "navigate_backward"],
+					["ctrl+]", "navigate_forward"],
+				],
+			},
+		);
 	});
 
-	it("lets a later assignment win while keeping the combo's first position, like upstream's object", () => {
-		const table = buildHotkeys({...CHROME, linux: true});
+	it("lets a later assignment win while keeping the combo's first position, like upstream's object", () =>
+	{
+		const table = buildHotkeys(
+			{
+				...CHROME,
+				linux: true,
+			},
+		);
 		expect(table.filter(([combo]) => combo === "ctrl+shift+8")).toStrictEqual([["ctrl+shift+8", "open_in_pane_8"]]);
 		expect(table.findIndex(([combo]) => combo === "ctrl+shift+8")).toBe(1);
 	});
 });
 
-describe("currentPlatform", () => {
-	afterEach(() => {
+describe("currentPlatform", () =>
+{
+	afterEach(() =>
+	{
 		vi.unstubAllGlobals();
 	});
 
@@ -275,77 +349,194 @@ describe("currentPlatform", () => {
 		[
 			"MacIntel",
 			"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
-			{...CHROME, mac: true, safari: true},
+			{
+				...CHROME,
+				mac: true,
+				safari: true,
+			},
 		],
 		[
 			"MacIntel",
 			"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-			{...CHROME, mac: true},
+			{
+				...CHROME,
+				mac: true,
+			},
 		],
 		[
 			"MacIntel",
 			"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) WorkFlowy/4.0 Chrome/130.0.0.0 Electron/33.0.0 Safari/537.36",
-			{...CHROME, mac: true, electron: true},
+			{
+				...CHROME,
+				mac: true,
+				electron: true,
+			},
 		],
 		[
 			"Win32",
 			"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-			{...CHROME, windows: true},
+			{
+				...CHROME,
+				windows: true,
+			},
 		],
 		[
 			"Linux x86_64",
 			"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-			{...CHROME, linux: true},
+			{
+				...CHROME,
+				linux: true,
+			},
 		],
 		[
 			"Linux x86_64",
 			"Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-			{...CHROME, chromeos: true},
+			{
+				...CHROME,
+				chromeos: true,
+			},
 		],
-	])("reads %s / %s", (platform, userAgent, expected) => {
-		vi.stubGlobal("navigator", {platform, userAgent});
+	])("reads %s / %s", (platform, userAgent, expected) =>
+	{
+		vi.stubGlobal(
+			"navigator",
+			{
+				platform,
+				userAgent,
+			},
+		);
 		expect(currentPlatform()).toStrictEqual(expected);
 	});
 
-	it("builds HOTKEYS for the platform the module loaded on", () => {
+	it("builds HOTKEYS for the platform the module loaded on", () =>
+	{
 		expect(HOTKEYS).toStrictEqual(buildHotkeys(currentPlatform()));
 	});
 });
 
-describe("comboFromEvent", () => {
+describe("comboFromEvent", () =>
+{
 	it.each([
-		[event(190, {metaKey: true, shiftKey: true}), "meta+shift+."],
-		[event(57, {metaKey: true, shiftKey: true}), "meta+shift+9"],
-		[event(40, {altKey: true, metaKey: true}), "alt+meta+down"],
-		[event(13, {metaKey: true}), "meta+return"],
+		[
+			event(
+				190,
+				{
+					metaKey: true,
+					shiftKey: true,
+				},
+			),
+			"meta+shift+.",
+		],
+		[
+			event(
+				57,
+				{
+					metaKey: true,
+					shiftKey: true,
+				},
+			),
+			"meta+shift+9",
+		],
+		[
+			event(
+				40,
+				{
+					altKey: true,
+					metaKey: true,
+				},
+			),
+			"alt+meta+down",
+		],
+		[
+			event(
+				13,
+				{
+					metaKey: true,
+				},
+			),
+			"meta+return",
+		],
 		[event(27), "esc"],
-		[event(32, {ctrlKey: true}), "ctrl+space"],
-		[event(91, {metaKey: true}), "meta"],
-		[event(186, {altKey: true}), "alt+;"],
-		[event(65, {altKey: true, ctrlKey: true, metaKey: true, shiftKey: true}), "alt+ctrl+meta+shift+a"],
+		[
+			event(
+				32,
+				{
+					ctrlKey: true,
+				},
+			),
+			"ctrl+space",
+		],
+		[
+			event(
+				91,
+				{
+					metaKey: true,
+				},
+			),
+			"meta",
+		],
+		[
+			event(
+				186,
+				{
+					altKey: true,
+				},
+			),
+			"alt+;",
+		],
+		[
+			event(
+				65,
+				{
+					altKey: true,
+					ctrlKey: true,
+					metaKey: true,
+					shiftKey: true,
+				},
+			),
+			"alt+ctrl+meta+shift+a",
+		],
 		[event(103), "7"],
-	])("canonicalizes %o as %s", (keyEvent, combo) => {
+	])("canonicalizes %o as %s", (keyEvent, combo) =>
+	{
 		expect(comboFromEvent(keyEvent)).toBe(combo);
 	});
 });
 
-describe("color commands", () => {
-	it("registers every command the color hotkeys and the selection menu run", () => {
+describe("color commands", () =>
+{
+	it("registers every command the color hotkeys and the selection menu run", () =>
+	{
 		const registry = readFileSync(
 			fileURLToPath(new URL("../src/client/hooks/use-command-registry.ts", import.meta.url)),
 			"utf8",
 		);
 		const bound = [...hotkeyTable("highlight_selected")];
-		expect({
-			bound,
-			registered: ["highlight_selected", "show_color_popup"].map((id) => registry.includes(`\t\t${id}: {`)),
-		}).toStrictEqual({bound: ["meta+shift+h", "ctrl+shift+h"], registered: [true, true]});
+		expect(
+			{
+				bound,
+				registered: ["highlight_selected", "show_color_popup"].map((id) =>
+					registry.includes(`\t\t${id}:\n\t\t{`),
+				),
+			},
+		).toStrictEqual(
+			{
+				bound: ["meta+shift+h", "ctrl+shift+h"],
+				registered: [true, true],
+			},
+		);
 	});
 });
 
-function hotkeyTable(command: string): string[] {
+function hotkeyTable(command: string): string[]
+{
 	return [
-		...buildHotkeys({...CHROME, mac: true}).filter(([, id]) => id === command),
+		...buildHotkeys(
+			{
+				...CHROME,
+				mac: true,
+			},
+		).filter(([, id]) => id === command),
 		...buildHotkeys(CHROME).filter(([, id]) => id === command),
 	].map(([combo]) => combo);
 }

@@ -24,14 +24,16 @@ import type {ResolveStore} from "./response.js";
 export {parseInput, toResponse} from "./response.js";
 export type {ResolveStore} from "./response.js";
 
-export interface HttpAppOptions {
+export interface HttpAppOptions
+{
 	resolveStore: ResolveStore;
 	/** Browser origin allowed by CORS (the Vite dev server); omitted when the page is served same-origin. */
 	corsOrigin?: string;
 }
 
 /** Every migrated route, without middleware, so a host can mount them inside an app that already has its own. */
-function createHttpRoutes(resolveStore: ResolveStore): Hono {
+function createHttpRoutes(resolveStore: ResolveStore): Hono
+{
 	const routes = new Hono();
 	routes.route("/api/v1/account", accountRoutes(resolveStore));
 	routes.route("/api/v1/features", featuresRoutes(resolveStore));
@@ -55,22 +57,38 @@ function createHttpRoutes(resolveStore: ResolveStore): Hono {
 }
 
 /** The Worker's HTTP layer: routing, validation and response building over a {@link StoreClient}. */
-export function createHttpApp(options: HttpAppOptions): Hono {
+export function createHttpApp(options: HttpAppOptions): Hono
+{
 	const app = new Hono();
-	if (options.corsOrigin !== undefined) {
+	if (options.corsOrigin !== undefined)
+	{
 		app.use(
 			"/*",
-			cors({
-				origin: options.corsOrigin,
-				allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-				allowHeaders: ["Content-Type", "Authorization"],
-			}),
+			cors(
+				{
+					origin: options.corsOrigin,
+					allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+					allowHeaders: ["Content-Type", "Authorization"],
+				},
+			),
 		);
 	}
 	app.use("/api/*", apiCompression());
-	app.get("/health", (c) => c.json({status: "ok"}));
+	app.get("/health", (c) =>
+		c.json(
+			{
+				status: "ok",
+			},
+		),
+	);
 	// The hosted Worker answers this route itself, ahead of this app; the Node host has no accounts.
-	app.get("/api/auth-config", (c) => c.json({hosted: false}));
+	app.get("/api/auth-config", (c) =>
+		c.json(
+			{
+				hosted: false,
+			},
+		),
+	);
 	const routes = createHttpRoutes(options.resolveStore);
 	let spec: ReturnType<typeof openApiDocument> | undefined;
 	app.get("/api/openapi.json", (c) => c.json((spec ??= openApiDocument(routes.routes))));

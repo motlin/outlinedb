@@ -9,14 +9,16 @@ import type {MenuKeyboardState} from "../src/client/components/flyout/menu-keybo
 import {slashKeyAction, slashMode} from "../src/client/slash-menu-state.js";
 import type {SlashKeyAction, SlashKeyInput} from "../src/client/slash-menu-state.js";
 import {QueryClient} from "@tanstack/react-query";
-import {
+import
+{
 	EMPTY_PREFERENCES,
 	markSlashDiscovered,
 	preferenceKeys,
 	slashDiscoveredFrom,
 } from "../src/client/hooks/use-preferences.js";
 import type {PreferencesState} from "../src/client/hooks/use-preferences.js";
-import {
+import
+{
 	placeholderFor,
 	planSlashOpen,
 	planSlashRearm,
@@ -24,7 +26,8 @@ import {
 	stripSlashChip,
 } from "../src/client/slash-trigger.js";
 
-describe("slash commands", () => {
+describe("slash commands", () =>
+{
 	const HIDDEN_ON_PLAIN_ROW: ReadonlySet<string> = new Set([
 		"toggle_ai_item",
 		"delete_file",
@@ -44,7 +47,10 @@ describe("slash commands", () => {
 		"show_treemap",
 	]);
 
-	const plainRow = {available: (key: SlashCommandKey) => !HIDDEN_ON_PLAIN_ROW.has(key)};
+	const plainRow =
+	{
+		available: (key: SlashCommandKey) => !HIDDEN_ON_PLAIN_ROW.has(key),
+	};
 
 	const PLAIN_ROW_LABELS = [
 		"Bullets",
@@ -94,13 +100,16 @@ describe("slash commands", () => {
 		"Show Command Palette",
 	];
 
-	describe("SLASH_MENU_KEYS", () => {
-		it("has the 61 upstream keys, 45 of which render on a plain row", () => {
+	describe("SLASH_MENU_KEYS", () =>
+	{
+		it("has the 61 upstream keys, 45 of which render on a plain row", () =>
+		{
 			expect(SLASH_MENU_KEYS).toHaveLength(61);
 			expect(SLASH_MENU_KEYS.filter((key) => plainRow.available(key))).toHaveLength(45);
 		});
 
-		it("maps every rendered command to an icon in the shared FA map", () => {
+		it("maps every rendered command to an icon in the shared FA map", () =>
+		{
 			const missing = Object.values(SLASH_COMMANDS)
 				.map((command) => command.icon)
 				.filter((icon) => !(icon in FA_ICONS));
@@ -108,20 +117,33 @@ describe("slash commands", () => {
 		});
 	});
 
-	describe("resolveSlash", () => {
-		it("lists the 45 plain-row commands in upstream order for a bare slash", () => {
+	describe("resolveSlash", () =>
+	{
+		it("lists the 45 plain-row commands in upstream order for a bare slash", () =>
+		{
 			const groups = resolveSlash(" /", plainRow);
 			expect(groups?.map((group) => group.name)).toStrictEqual(["Actions"]);
 			expect(groups?.[0]?.options.map((option) => option.label)).toStrictEqual(PLAIN_ROW_LABELS);
 		});
 
-		it("carries key and icon on each option", () => {
+		it("carries key and icon on each option", () =>
+		{
 			expect(resolveSlash("/h1", plainRow)).toStrictEqual([
-				{name: "Actions", options: [{key: "toggle_h1", label: "Heading 1", icon: "fal:h1"}]},
+				{
+					name: "Actions",
+					options: [
+						{
+							key: "toggle_h1",
+							label: "Heading 1",
+							icon: "fal:h1",
+						},
+					],
+				},
 			]);
 		});
 
-		it("filters fuzzily and ranks by score with a stable sort", () => {
+		it("filters fuzzily and ranks by score with a stable sort", () =>
+		{
 			expect(resolveSlash(" /mo", plainRow)?.[0]?.options.map((option) => option.label)).toStrictEqual([
 				"Move To...",
 				"Move Here...",
@@ -144,35 +166,101 @@ describe("slash commands", () => {
 			]);
 		});
 
-		it("drops unavailable commands", () => {
-			expect(resolveSlash("/", {available: (key) => key === "complete" || key === "ask_ai"})).toStrictEqual([
-				{name: "Actions", options: [{key: "complete", label: "Complete", icon: "fal:check"}]},
+		it("drops unavailable commands", () =>
+		{
+			expect(
+				resolveSlash(
+					"/",
+					{
+						available: (key) => key === "complete" || key === "ask_ai",
+					},
+				),
+			).toStrictEqual([
+				{
+					name: "Actions",
+					options: [
+						{
+							key: "complete",
+							label: "Complete",
+							icon: "fal:check",
+						},
+					],
+				},
 			]);
 		});
 
-		it("returns null when the term starts with whitespace", () => {
+		it("returns null when the term starts with whitespace", () =>
+		{
 			expect(resolveSlash("/ x", plainRow)).toBeNull();
 		});
 
-		it("falls back to the math group", () => {
-			expect(resolveSlash(" /2*3", {...plainRow, evalMath: () => "6"})).toStrictEqual([
-				{name: "=", options: [{label: "6"}]},
+		it("falls back to the math group", () =>
+		{
+			expect(
+				resolveSlash(
+					" /2*3",
+					{
+						...plainRow,
+						evalMath: () => "6",
+					},
+				),
+			).toStrictEqual([
+				{
+					name: "=",
+					options: [
+						{
+							label: "6",
+						},
+					],
+				},
 			]);
-			expect(resolveSlash(" /2*", {...plainRow, evalMath: () => "incomplete"})).toStrictEqual([
-				{name: "=", options: [{label: "...", noop: true}]},
+			expect(
+				resolveSlash(
+					" /2*",
+					{
+						...plainRow,
+						evalMath: () => "incomplete",
+					},
+				),
+			).toStrictEqual([
+				{
+					name: "=",
+					options: [
+						{
+							label: "...",
+							noop: true,
+						},
+					],
+				},
 			]);
 		});
 
-		it("returns null when neither commands nor math match", () => {
+		it("returns null when neither commands nor math match", () =>
+		{
 			expect(resolveSlash(" /moq", plainRow)).toBeNull();
-			expect(resolveSlash(" /moq", {...plainRow, evalMath: () => null})).toBeNull();
+			expect(
+				resolveSlash(
+					" /moq",
+					{
+						...plainRow,
+						evalMath: () => null,
+					},
+				),
+			).toBeNull();
 		});
 	});
 
-	describe("LOCAL_SLASH_AVAILABLE", () => {
-		it("offers only the commands with a local executor, in upstream order", () => {
+	describe("LOCAL_SLASH_AVAILABLE", () =>
+	{
+		it("offers only the commands with a local executor, in upstream order", () =>
+		{
 			expect(
-				resolveSlash(" /", {available: LOCAL_SLASH_AVAILABLE})?.[0]?.options.map((o) => o.label),
+				resolveSlash(
+					" /",
+					{
+						available: LOCAL_SLASH_AVAILABLE,
+					},
+				)?.[0]?.options.map((o) => o.label),
 			).toStrictEqual([
 				"Bullets",
 				"Board",
@@ -217,56 +305,91 @@ describe("slash commands", () => {
 			]);
 		});
 
-		it("carries key and icon for /palette", () => {
-			expect(resolveSlash("/palette", {available: LOCAL_SLASH_AVAILABLE})).toStrictEqual([
+		it("carries key and icon for /palette", () =>
+		{
+			expect(
+				resolveSlash(
+					"/palette",
+					{
+						available: LOCAL_SLASH_AVAILABLE,
+					},
+				),
+			).toStrictEqual([
 				{
 					name: "Actions",
-					options: [{key: "show_command_palette", label: "Show Command Palette", icon: "fal:palette"}],
+					options: [
+						{
+							key: "show_command_palette",
+							label: "Show Command Palette",
+							icon: "fal:palette",
+						},
+					],
 				},
 			]);
 		});
 
-		it("matches Add date for /add d", () => {
+		it("matches Add date for /add d", () =>
+		{
 			expect(
-				resolveSlash(" /add d", {available: LOCAL_SLASH_AVAILABLE})?.[0]?.options.map((o) => o.label),
+				resolveSlash(
+					" /add d",
+					{
+						available: LOCAL_SLASH_AVAILABLE,
+					},
+				)?.[0]?.options.map((o) => o.label),
 			).toStrictEqual(["Add date"]);
 		});
 
-		it("has a command-registry executor for every locally available key, and the slash hook gates on it", () => {
+		it("has a command-registry executor for every locally available key, and the slash hook gates on it", () =>
+		{
 			const registry = readFileSync(
 				new URL("../src/client/hooks/use-command-registry.ts", import.meta.url),
 				"utf8",
 			);
 			const hook = readFileSync(new URL("../src/client/hooks/use-slash-menu.tsx", import.meta.url), "utf8");
-			expect({
-				missing: SLASH_MENU_KEYS.filter(
-					(key) => LOCAL_SLASH_AVAILABLE(key) && !new RegExp(`^\\t\\t${key}: `, "mu").test(registry),
-				),
-				gated: hook.includes("LOCAL_SLASH_AVAILABLE(key)"),
-			}).toStrictEqual({missing: [], gated: true});
+			expect(
+				{
+					missing: SLASH_MENU_KEYS.filter(
+						(key) => LOCAL_SLASH_AVAILABLE(key) && !new RegExp(`^\\t\\t${key}:\\s`, "mu").test(registry),
+					),
+					gated: hook.includes("LOCAL_SLASH_AVAILABLE(key)"),
+				},
+			).toStrictEqual(
+				{
+					missing: [],
+					gated: true,
+				},
+			);
 		});
 	});
 });
 
-describe("slash math", () => {
-	describe("evalMath", () => {
-		it("returns the result as a string", () => {
+describe("slash math", () =>
+{
+	describe("evalMath", () =>
+	{
+		it("returns the result as a string", () =>
+		{
 			expect(evalMath("2*3")).toBe("6");
 			expect(evalMath("10/4")).toBe("2.5");
 		});
 
-		it("returns incomplete while the expression is still being typed", () => {
+		it("returns incomplete while the expression is still being typed", () =>
+		{
 			expect(evalMath("2*")).toBe("incomplete");
 		});
 
-		it("returns null for anything that is not math", () => {
+		it("returns null for anything that is not math", () =>
+		{
 			expect(evalMath("abc")).toBeNull();
 		});
 	});
 });
 
-describe("slash menu state", () => {
-	const input = (key: string, extra: Partial<SlashKeyInput> = {}): SlashKeyInput => ({
+describe("slash menu state", () =>
+{
+	const input = (key: string, extra: Partial<SlashKeyInput> = {}): SlashKeyInput => (
+	{
 		key,
 		ctrlKey: false,
 		metaKey: false,
@@ -274,83 +397,259 @@ describe("slash menu state", () => {
 		...extra,
 	});
 
-	describe("slashKeyAction", () => {
+	describe("slashKeyAction", () =>
+	{
 		it.each<[string, SlashKeyInput, SlashKeyAction | null]>([
 			["ArrowDown", input("ArrowDown"), "down"],
-			["Ctrl+N", input("n", {ctrlKey: true}), "down"],
+			[
+				"Ctrl+N",
+				input(
+					"n",
+					{
+						ctrlKey: true,
+					},
+				),
+				"down",
+			],
 			["ArrowUp", input("ArrowUp"), "up"],
-			["Ctrl+P", input("p", {ctrlKey: true}), "up"],
+			[
+				"Ctrl+P",
+				input(
+					"p",
+					{
+						ctrlKey: true,
+					},
+				),
+				"up",
+			],
 			["Enter", input("Enter"), "select"],
 			["Tab", input("Tab"), "select"],
 			["Escape", input("Escape"), "abandon"],
-			["ArrowRight at chip end", input("ArrowRight", {caretAtChipEnd: true}), "abandon"],
+			[
+				"ArrowRight at chip end",
+				input(
+					"ArrowRight",
+					{
+						caretAtChipEnd: true,
+					},
+				),
+				"abandon",
+			],
 			["ArrowRight inside chip", input("ArrowRight"), null],
-			["Meta+Z", input("z", {metaKey: true}), "disarmNoAbandon"],
-			["Ctrl+Z", input("z", {ctrlKey: true}), "disarmNoAbandon"],
+			[
+				"Meta+Z",
+				input(
+					"z",
+					{
+						metaKey: true,
+					},
+				),
+				"disarmNoAbandon",
+			],
+			[
+				"Ctrl+Z",
+				input(
+					"z",
+					{
+						ctrlKey: true,
+					},
+				),
+				"disarmNoAbandon",
+			],
 			["plain z", input("z"), null],
-			["Ctrl+X", input("x", {ctrlKey: true}), null],
-		])("%s", (_name, event, expected) => {
+			[
+				"Ctrl+X",
+				input(
+					"x",
+					{
+						ctrlKey: true,
+					},
+				),
+				null,
+			],
+		])("%s", (_name, event, expected) =>
+		{
 			expect(slashKeyAction(event)).toStrictEqual(expected);
 		});
 	});
 
-	describe("slashMode", () => {
-		const keyboardAt2: MenuKeyboardState = {index: 2, hidden: false, keyboardMode: true};
+	describe("slashMode", () =>
+	{
+		const keyboardAt2: MenuKeyboardState =
+		{
+			index: 2,
+			hidden: false,
+			keyboardMode: true,
+		};
 
-		it("mouseMove leaves the index and enters mouse mode", () => {
-			expect(slashMode(keyboardAt2, {type: "mouseMove"})).toStrictEqual({
-				index: 2,
-				hidden: false,
-				keyboardMode: false,
-			});
+		it("mouseMove leaves the index and enters mouse mode", () =>
+		{
+			expect(
+				slashMode(
+					keyboardAt2,
+					{
+						type: "mouseMove",
+					},
+				),
+			).toStrictEqual(
+				{
+					index: 2,
+					hidden: false,
+					keyboardMode: false,
+				},
+			);
 		});
 
-		it("hover then ArrowDown continues from the hovered row in keyboard mode", () => {
-			const mouse = slashMode(keyboardAt2, {type: "mouseMove"});
-			const hovered = slashMode(mouse, {type: "hover", index: 4});
-			expect(hovered).toStrictEqual({index: 4, hidden: false, keyboardMode: false});
+		it("hover then ArrowDown continues from the hovered row in keyboard mode", () =>
+		{
+			const mouse = slashMode(
+				keyboardAt2,
+				{
+					type: "mouseMove",
+				},
+			);
+			const hovered = slashMode(
+				mouse,
+				{
+					type: "hover",
+					index: 4,
+				},
+			);
+			expect(hovered).toStrictEqual(
+				{
+					index: 4,
+					hidden: false,
+					keyboardMode: false,
+				},
+			);
 			const down = menuKeyboard(
 				hovered,
-				{key: "ArrowDown", ctrlKey: false, shiftKey: false, composing: false},
-				{count: 13, cyclic: true, selectOnTab: true, stopPropagation: true},
+				{
+					key: "ArrowDown",
+					ctrlKey: false,
+					shiftKey: false,
+					composing: false,
+				},
+				{
+					count: 13,
+					cyclic: true,
+					selectOnTab: true,
+					stopPropagation: true,
+				},
 			);
-			expect(down.state).toStrictEqual({index: 5, hidden: false, keyboardMode: true});
+			expect(down.state).toStrictEqual(
+				{
+					index: 5,
+					hidden: false,
+					keyboardMode: true,
+				},
+			);
 		});
 	});
 });
 
-describe("slash trigger", () => {
-	describe("planSlashOpen", () => {
+describe("slash trigger", () =>
+{
+	describe("planSlashOpen", () =>
+	{
 		it.each([
-			["Slash Alpha /", 12, {start: 11, end: 13}],
-			["/", 0, {start: 0, end: 1}],
+			[
+				"Slash Alpha /",
+				12,
+				{
+					start: 11,
+					end: 13,
+				},
+			],
+			[
+				"/",
+				0,
+				{
+					start: 0,
+					end: 1,
+				},
+			],
 			["Betax/", 5, null],
-			["a / b", 2, {start: 2, end: 3}],
+			[
+				"a / b",
+				2,
+				{
+					start: 2,
+					end: 3,
+				},
+			],
 			["a /b", 2, null],
-			["/b", 0, {start: 0, end: 1}],
-			["a\t/", 2, {start: 1, end: 3}],
-		] as const)("planSlashOpen(%j, %i)", (text, slashIndex, expected) => {
+			[
+				"/b",
+				0,
+				{
+					start: 0,
+					end: 1,
+				},
+			],
+			[
+				"a\t/",
+				2,
+				{
+					start: 1,
+					end: 3,
+				},
+			],
+		] as const)("planSlashOpen(%j, %i)", (text, slashIndex, expected) =>
+		{
 			expect(planSlashOpen(text, slashIndex)).toStrictEqual(expected);
 		});
 	});
 
-	describe("planSlashRearm", () => {
+	describe("planSlashRearm", () =>
+	{
 		it.each([
-			["Slash Alpha /mo", 15, {start: 11, end: 15}],
+			[
+				"Slash Alpha /mo",
+				15,
+				{
+					start: 11,
+					end: 15,
+				},
+			],
 			["x/mo", 4, null],
 			["a / mo", 6, null],
-			["/mo", 3, {start: 0, end: 3}],
-			["a /mo", 4, {start: 1, end: 4}],
+			[
+				"/mo",
+				3,
+				{
+					start: 0,
+					end: 3,
+				},
+			],
+			[
+				"a /mo",
+				4,
+				{
+					start: 1,
+					end: 4,
+				},
+			],
 			["a /abcdefghij", 13, null],
-			["a /abcdefgh", 11, {start: 1, end: 11}],
+			[
+				"a /abcdefgh",
+				11,
+				{
+					start: 1,
+					end: 11,
+				},
+			],
 			["plain", 5, null],
-		] as const)("planSlashRearm(%j, %i)", (text, caret, expected) => {
+		] as const)("planSlashRearm(%j, %i)", (text, caret, expected) =>
+		{
 			expect(planSlashRearm(text, caret)).toStrictEqual(expected);
 		});
 	});
 
-	describe("stripSlashChip", () => {
-		it("unwraps the chip span to its text", () => {
+	describe("stripSlashChip", () =>
+	{
+		it("unwraps the chip span to its text", () =>
+		{
 			expect(
 				stripSlashChip(
 					'Slash Alpha<span class="slash-input bg-tertiary py-2xs pr-xs pl-xs rounded-s leading-none"> /mo</span>',
@@ -358,129 +657,331 @@ describe("slash trigger", () => {
 			).toBe("Slash Alpha /mo");
 		});
 
-		it("returns HTML without a chip unchanged", () => {
+		it("returns HTML without a chip unchanged", () =>
+		{
 			const html = 'a <b>bold</b> <span class="colored c-red">red</span> /x';
 			expect(stripSlashChip(html)).toBe(html);
 		});
 
-		it("exports the upstream chip class", () => {
+		it("exports the upstream chip class", () =>
+		{
 			expect(SLASH_CHIP_CLASS).toBe("slash-input bg-tertiary py-2xs pr-xs pl-xs rounded-s leading-none");
 		});
 	});
 
-	describe("placeholderFor", () => {
+	describe("placeholderFor", () =>
+	{
 		it.each([
-			[{focused: true, empty: true, layoutMode: "bullets", slashDiscovered: false}, 'Type "/" for commands'],
-			[{focused: true, empty: true, layoutMode: undefined, slashDiscovered: false}, 'Type "/" for commands'],
-			[{focused: true, empty: true, layoutMode: "bullets", slashDiscovered: true}, undefined],
-			[{focused: true, empty: true, layoutMode: "divider", slashDiscovered: false}, undefined],
-			[{focused: true, empty: true, layoutMode: "numbered", slashDiscovered: false}, undefined],
-			[{focused: true, empty: true, layoutMode: "code-block", slashDiscovered: false}, undefined],
-			[{focused: true, empty: true, layoutMode: "quote-block", slashDiscovered: false}, undefined],
-			[{focused: false, empty: true, layoutMode: "divider", isZoomRoot: true}, undefined],
-			[{focused: false, empty: true, layoutMode: "code-block", isZoomRoot: true}, undefined],
-			[{focused: false, empty: true, layoutMode: "h1", isZoomRoot: true}, "Untitled"],
-			[{focused: false, empty: true, layoutMode: "bullets", slashDiscovered: false}, undefined],
-			[{focused: true, empty: false, layoutMode: "bullets", slashDiscovered: false}, undefined],
-			[{isZoomRoot: true, empty: true, focused: false}, "Untitled"],
-			[{isZoomRoot: true, empty: true, focused: true, slashDiscovered: true}, "Untitled"],
-			[{isZoomRoot: true, empty: false, focused: false}, undefined],
-		] as const)("placeholderFor(%j)", (input, expected) => {
+			[
+				{
+					focused: true,
+					empty: true,
+					layoutMode: "bullets",
+					slashDiscovered: false,
+				},
+				'Type "/" for commands',
+			],
+			[
+				{
+					focused: true,
+					empty: true,
+					layoutMode: undefined,
+					slashDiscovered: false,
+				},
+				'Type "/" for commands',
+			],
+			[
+				{
+					focused: true,
+					empty: true,
+					layoutMode: "bullets",
+					slashDiscovered: true,
+				},
+				undefined,
+			],
+			[
+				{
+					focused: true,
+					empty: true,
+					layoutMode: "divider",
+					slashDiscovered: false,
+				},
+				undefined,
+			],
+			[
+				{
+					focused: true,
+					empty: true,
+					layoutMode: "numbered",
+					slashDiscovered: false,
+				},
+				undefined,
+			],
+			[
+				{
+					focused: true,
+					empty: true,
+					layoutMode: "code-block",
+					slashDiscovered: false,
+				},
+				undefined,
+			],
+			[
+				{
+					focused: true,
+					empty: true,
+					layoutMode: "quote-block",
+					slashDiscovered: false,
+				},
+				undefined,
+			],
+			[
+				{
+					focused: false,
+					empty: true,
+					layoutMode: "divider",
+					isZoomRoot: true,
+				},
+				undefined,
+			],
+			[
+				{
+					focused: false,
+					empty: true,
+					layoutMode: "code-block",
+					isZoomRoot: true,
+				},
+				undefined,
+			],
+			[
+				{
+					focused: false,
+					empty: true,
+					layoutMode: "h1",
+					isZoomRoot: true,
+				},
+				"Untitled",
+			],
+			[
+				{
+					focused: false,
+					empty: true,
+					layoutMode: "bullets",
+					slashDiscovered: false,
+				},
+				undefined,
+			],
+			[
+				{
+					focused: true,
+					empty: false,
+					layoutMode: "bullets",
+					slashDiscovered: false,
+				},
+				undefined,
+			],
+			[
+				{
+					isZoomRoot: true,
+					empty: true,
+					focused: false,
+				},
+				"Untitled",
+			],
+			[
+				{
+					isZoomRoot: true,
+					empty: true,
+					focused: true,
+					slashDiscovered: true,
+				},
+				"Untitled",
+			],
+			[
+				{
+					isZoomRoot: true,
+					empty: false,
+					focused: false,
+				},
+				undefined,
+			],
+		] as const)("placeholderFor(%j)", (input, expected) =>
+		{
 			expect(placeholderFor(input)).toBe(expected);
 		});
 	});
 
-	function preferencesClient(state: PreferencesState | undefined): QueryClient {
-		const queryClient = new QueryClient({defaultOptions: {queries: {retry: false}}});
-		if (state !== undefined) {
+	function preferencesClient(state: PreferencesState | undefined): QueryClient
+	{
+		const queryClient = new QueryClient(
+			{
+				defaultOptions:
+				{
+					queries:
+					{
+						retry: false,
+					},
+				},
+			},
+		);
+		if (state !== undefined)
+		{
 			queryClient.setQueryData(preferenceKeys.all, state);
 		}
 		return queryClient;
 	}
 
-	const AVAILABLE = (slashDiscovered: boolean): PreferencesState => ({
-		preferences: {...EMPTY_PREFERENCES, slashDiscovered},
+	const AVAILABLE = (slashDiscovered: boolean): PreferencesState => (
+	{
+		preferences:
+		{
+			...EMPTY_PREFERENCES,
+			slashDiscovered,
+		},
 		available: true,
 		error: null,
 	});
 
-	describe("slashDiscoveredFrom", () => {
-		it("is true while loading or unavailable so the hint never flashes", () => {
-			expect({
-				loading: slashDiscoveredFrom(undefined),
-				unavailable: slashDiscoveredFrom({preferences: EMPTY_PREFERENCES, available: false, error: "x"}),
-				undiscovered: slashDiscoveredFrom(AVAILABLE(false)),
-				discovered: slashDiscoveredFrom(AVAILABLE(true)),
-			}).toStrictEqual({loading: true, unavailable: true, undiscovered: false, discovered: true});
+	describe("slashDiscoveredFrom", () =>
+	{
+		it("is true while loading or unavailable so the hint never flashes", () =>
+		{
+			expect(
+				{
+					loading: slashDiscoveredFrom(undefined),
+					unavailable: slashDiscoveredFrom(
+						{
+							preferences: EMPTY_PREFERENCES,
+							available: false,
+							error: "x",
+						},
+					),
+					undiscovered: slashDiscoveredFrom(AVAILABLE(false)),
+					discovered: slashDiscoveredFrom(AVAILABLE(true)),
+				},
+			).toStrictEqual(
+				{
+					loading: true,
+					unavailable: true,
+					undiscovered: false,
+					discovered: true,
+				},
+			);
 		});
 	});
 
-	describe("markSlashDiscovered", () => {
-		afterEach(() => {
+	describe("markSlashDiscovered", () =>
+	{
+		afterEach(() =>
+		{
 			vi.unstubAllGlobals();
 		});
 
-		function stubFetch(): {url: string; method: string; body: unknown}[] {
-			const requests: {url: string; method: string; body: unknown}[] = [];
-			vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
-				requests.push({url, method: init?.method ?? "GET", body: init?.body});
-				return Promise.resolve(Response.json({...EMPTY_PREFERENCES, slashDiscovered: true}));
+		function stubFetch():
+		{
+			url: string;
+			method: string;
+			body: unknown;
+		}[]
+		{
+			const requests:
+			{
+				url: string;
+				method: string;
+				body: unknown;
+			}[] = [];
+			vi.stubGlobal("fetch", async (url: string, init?: RequestInit) =>
+			{
+				requests.push(
+					{
+						url,
+						method: init?.method ?? "GET",
+						body: init?.body,
+					},
+				);
+				return Promise.resolve(
+					Response.json(
+						{
+							...EMPTY_PREFERENCES,
+							slashDiscovered: true,
+						},
+					),
+				);
 			});
 			return requests;
 		}
 
-		it("PATCHes slashDiscovered once when it is false", async () => {
+		it("PATCHes slashDiscovered once when it is false", async () =>
+		{
 			const requests = stubFetch();
 			const queryClient = preferencesClient(AVAILABLE(false));
 			await markSlashDiscovered(queryClient);
 			await markSlashDiscovered(queryClient);
 			expect(requests).toStrictEqual([
-				{url: "/api/v1/preferences", method: "PATCH", body: '{"slashDiscovered":true}'},
+				{
+					url: "/api/v1/preferences",
+					method: "PATCH",
+					body: '{"slashDiscovered":true}',
+				},
 			]);
 		});
 
-		it("issues no request when already discovered, loading or unavailable", async () => {
+		it("issues no request when already discovered, loading or unavailable", async () =>
+		{
 			const requests = stubFetch();
 			await markSlashDiscovered(preferencesClient(AVAILABLE(true)));
 			await markSlashDiscovered(preferencesClient(undefined));
 			await markSlashDiscovered(
-				preferencesClient({preferences: EMPTY_PREFERENCES, available: false, error: "x"}),
+				preferencesClient(
+					{
+						preferences: EMPTY_PREFERENCES,
+						available: false,
+						error: "x",
+					},
+				),
 			);
 			expect(requests).toStrictEqual([]);
 		});
 	});
 });
 
-describe("slash wiring", () => {
-	function source(path: string): string {
+describe("slash wiring", () =>
+{
+	function source(path: string): string
+	{
 		return readFileSync(new URL(`../src/client/components/${path}`, import.meta.url), "utf8");
 	}
 
 	/** The body of the `const <name> = useCallback(` declaration, up to its dependency list. */
-	function callbackBody(text: string, name: string): string {
+	function callbackBody(text: string, name: string): string
+	{
 		const start = text.indexOf(`const ${name} = useCallback(`);
-		if (start === -1) {
+		if (start === -1)
+		{
 			return "";
 		}
-		const end = text.indexOf("\n\t}, [", start);
-		return text.slice(start, end === -1 ? undefined : end);
+		const end = /\n\t\t?\},\s*\[/u.exec(text.slice(start))?.index;
+		return text.slice(start, end === undefined ? undefined : start + end);
 	}
 
-	describe("slash menu wiring", () => {
-		it("wires useSlashMenu into both editors' input and keydown, and strips the chip in their save paths", () => {
+	describe("slash menu wiring", () =>
+	{
+		it("wires useSlashMenu into both editors' input and keydown, and strips the chip in their save paths", () =>
+		{
 			const files = [
 				["editable-text.tsx", "saveInPlace"],
 				["editable-note.tsx", "saveNow"],
 			] as const;
 			expect(
-				files.map(([file, save]) => {
+				files.map(([file, save]) =>
+				{
 					const text = source(file);
 					return [
 						file,
 						text.includes('import {useSlashMenu} from "../hooks/use-slash-menu.js";'),
 						text.includes("onInput={handleInput}"),
 						/handleSlashInput\(/u.test(callbackBody(text, "handleInput")),
-						/^\t{3}if \(handleSlashKey\(event\)\) \{$/mu.test(callbackBody(text, "handleKeyDown")),
+						/^\t{3}if \(handleSlashKey\(event\)\)$/mu.test(callbackBody(text, "handleKeyDown")),
 						callbackBody(text, save).includes("stripSlashChip("),
 					];
 				}),
@@ -490,11 +991,12 @@ describe("slash wiring", () => {
 			]);
 		});
 
-		it("passes evalMath to resolveSlash so /2*3 offers the = math group", () => {
+		it("passes evalMath to resolveSlash so /2*3 offers the = math group", () =>
+		{
 			const text = readFileSync(new URL("../src/client/hooks/use-slash-menu.tsx", import.meta.url), "utf8");
 			expect([
 				text.includes('import {evalMath} from "../slash-math.js";'),
-				/resolveSlash\(chipText, \{[\s\S]*?\n\t\tevalMath,\n\t\}\);/u.test(text),
+				/resolveSlash\(\n\t\tchipText,\n\t\t\{[\s\S]*?\n\t{3}evalMath,\n\t\t\},\n\t\);/u.test(text),
 			]).toStrictEqual([true, true]);
 		});
 	});

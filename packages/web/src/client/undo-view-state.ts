@@ -4,7 +4,8 @@ import type {UndoBatch, UndoOp, ViewState} from "./undo-history.js";
 
 type Editing = NonNullable<ViewState["editing"]>;
 
-export interface RestorePlan {
+export interface RestorePlan
+{
 	/** The route to push when the saved zoom differs from the current one, else null. */
 	navigateTo: string | null;
 	/** The row and caret to focus, clamped to the restored text; null when nothing was being edited. */
@@ -19,25 +20,47 @@ export function planRestore(
 	target: ViewState,
 	textLength: number,
 	editorFocused = false,
-): RestorePlan {
+): RestorePlan
+{
 	const navigateTo =
 		current.zoomedNodeId === target.zoomedNodeId
 			? null
 			: target.zoomedNodeId === null
 				? "/"
-				: locationUrl({id: target.zoomedNodeId});
+				: locationUrl(
+						{
+							id: target.zoomedNodeId,
+						},
+					);
 	const clamp = (offset: number): number => Math.max(0, Math.min(offset, textLength));
 	const focus =
 		target.editing === null
 			? null
-			: {...target.editing, start: clamp(target.editing.start), end: clamp(target.editing.end)};
-	return editorFocused ? {navigateTo, focus} : {navigateTo, focus, selectedIds: target.selectedIds};
+			:
+				{
+					...target.editing,
+					start: clamp(target.editing.start),
+					end: clamp(target.editing.end),
+				};
+	return editorFocused
+		?
+			{
+				navigateTo,
+				focus,
+			}
+		:
+			{
+				navigateTo,
+				focus,
+				selectedIds: target.selectedIds,
+			};
 }
 
 export type UndoDirection = "undo" | "redo";
 
 /** The app services an undo or redo touches; injected so tests can record the order. */
-export interface UndoRunner {
+export interface UndoRunner
+{
 	/** Saves the edited row's pending text, which becomes its own undo step. */
 	flush(): void;
 	/**
@@ -68,7 +91,8 @@ export interface UndoRunner {
 }
 
 /** A popped step shown in the outline, with the release of its hold on server answers. */
-interface Previewed {
+interface Previewed
+{
 	batch: UndoBatch;
 	release: () => void;
 }
@@ -82,9 +106,11 @@ function previewStep(
 	direction: UndoDirection,
 	runner: UndoRunner,
 	match?: (batch: UndoBatch) => boolean,
-): Previewed | undefined {
+): Previewed | undefined
+{
 	const batch = runner.pop(direction, match);
-	if (batch === undefined) {
+	if (batch === undefined)
+	{
 		return undefined;
 	}
 	runner.blur();
@@ -93,16 +119,22 @@ function previewStep(
 	const target = batch.after;
 	const length = target.editing === null ? 0 : runner.textLength(target.editing.nodeId, target.editing.field);
 	const plan = planRestore(runner.current(), target, length, runner.editorFocused());
-	if (plan.navigateTo !== null) {
+	if (plan.navigateTo !== null)
+	{
 		runner.zoomTo(target.zoomedNodeId);
 	}
-	if (plan.selectedIds !== undefined) {
+	if (plan.selectedIds !== undefined)
+	{
 		runner.select(plan.selectedIds);
 	}
-	if (plan.focus !== null) {
+	if (plan.focus !== null)
+	{
 		runner.focus(plan.focus);
 	}
-	return {batch, release};
+	return {
+		batch,
+		release,
+	};
 }
 
 /** Flushes the pending text, then previews once every step is pushed: synchronously when nothing awaits a reply. */
@@ -110,7 +142,8 @@ function previewUndo(
 	direction: UndoDirection,
 	runner: UndoRunner,
 	match?: (batch: UndoBatch) => boolean,
-): Previewed | undefined | Promise<Previewed | undefined> {
+): Previewed | undefined | Promise<Previewed | undefined>
+{
 	runner.flush();
 	const waiting = runner.settled();
 	return waiting === undefined
@@ -129,17 +162,21 @@ function startPreview(
 	direction: UndoDirection,
 	runner: UndoRunner,
 	match?: (batch: UndoBatch) => boolean,
-): Previewed | undefined | Promise<Previewed | undefined> {
+): Previewed | undefined | Promise<Previewed | undefined>
+{
 	const previewed =
 		waitingPreview === undefined
 			? previewUndo(direction, runner, match)
 			: waitingPreview.then(async () => previewUndo(direction, runner, match));
-	if (previewed instanceof Promise) {
+	if (previewed instanceof Promise)
+	{
 		waitingPresses++;
-		waitingPreview = (async () => {
+		waitingPreview = (async () =>
+		{
 			await previewed.catch(() => {});
 			waitingPresses--;
-			if (waitingPresses === 0) {
+			if (waitingPresses === 0)
+			{
 				waitingPreview = undefined;
 			}
 		})();
@@ -157,18 +194,24 @@ export async function queueUndo(
 	direction: UndoDirection,
 	runner: UndoRunner,
 	match?: (batch: UndoBatch) => boolean,
-): Promise<void> {
+): Promise<void>
+{
 	const previewed = await startPreview(direction, runner, match);
-	if (previewed === undefined) {
+	if (previewed === undefined)
+	{
 		return;
 	}
 	pendingReplays++;
-	try {
+	try
+	{
 		await serializeWrite(async () => runner.apply(previewed.batch.ops));
-	} finally {
+	}
+	finally
+	{
 		previewed.release();
 		pendingReplays--;
-		if (pendingReplays === 0) {
+		if (pendingReplays === 0)
+		{
 			await runner.reconcile();
 		}
 	}

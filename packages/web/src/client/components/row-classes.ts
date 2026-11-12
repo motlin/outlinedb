@@ -1,14 +1,17 @@
 /** Upstream `WF.Mirrors.isMirrorRoot`: a mirror, or an original that has mirrors. Both draw the diamond bullet. */
-export function isMirrorRoot(node: {isMirror?: boolean; hasMirrors?: boolean}): boolean {
+export function isMirrorRoot(node: {isMirror?: boolean; hasMirrors?: boolean}): boolean
+{
 	return node.isMirror === true || node.hasMirrors === true;
 }
 
 /** Upstream gives only an original that has mirrors the `hasMirrors` project class. */
-export function hasMirrorsClass(node: {isMirror?: boolean; hasMirrors?: boolean}): boolean {
+export function hasMirrorsClass(node: {isMirror?: boolean; hasMirrors?: boolean}): boolean
+{
 	return node.hasMirrors === true && node.isMirror !== true;
 }
 
-export interface ProjectClassState {
+export interface ProjectClassState
+{
 	hasChildren: boolean;
 	/** The row has children, hidden completed ones included; `open` follows this, `collapsed` needs visible ones. */
 	hasAnyChildren?: boolean;
@@ -43,7 +46,8 @@ export interface ProjectClassState {
 	dragHoveredAt?: boolean;
 }
 
-export interface NameClassState {
+export interface NameClassState
+{
 	focused?: boolean;
 	/** A trailing run of classes (a board column or card's), appended after the base ones. */
 	tail?: string;
@@ -57,7 +61,8 @@ export interface NameClassState {
 }
 
 // Mirrors upstream's `.project` class order; layout classes come last.
-export function projectClassName(state: ProjectClassState): string {
+export function projectClassName(state: ProjectClassState): string
+{
 	const branch = state.hasChildren && !state.isZoomRoot && state.collapsingChildren !== true;
 	const open =
 		(state.hasChildren || state.hasAnyChildren === true) &&
@@ -91,7 +96,8 @@ export function projectClassName(state: ProjectClassState): string {
 }
 
 // Mirrors upstream's `.name` class order.
-export function nameClassName(state: NameClassState): string {
+export function nameClassName(state: NameClassState): string
+{
 	return [
 		"name",
 		state.withEmbedder && "name--with-embedder",

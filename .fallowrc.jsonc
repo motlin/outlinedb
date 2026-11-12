@@ -25,7 +25,8 @@
 		"test/evals/**/*.test.ts",
 		"packages/web/src/**/*.mdx",
 	],
-	"workspaces": {
+	"workspaces":
+	{
 		"patterns": ["packages/*"],
 	},
 	"publicPackages": ["@outlinedb/shared"],
@@ -38,17 +39,20 @@
 		"backups/**",
 		"node_modules/**",
 	],
-	"duplicates": {
+	"duplicates":
+	{
 		// Hide pair-only clones; focus on widespread copy-paste
 		// worth refactoring. Lower to 2 to report every duplicate pair.
 		"minOccurrences": 3,
 	},
-	"rules": {
+	"rules":
+	{
 		"unused-dependencies": "error",
 	},
 	// Resolve @outlinedb/shared imports to src/ (via the "source" export condition) instead of dist/,
 	// so cross-package usages of shared class members are seen.
-	"resolve": {
+	"resolve":
+	{
 		"conditions": ["source"],
 	},
 	// eslint-plugin-storybook is loaded by name from the vite.config.ts lint jsPlugins, which fallow does not trace.

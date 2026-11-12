@@ -4,7 +4,8 @@
 		"nm": "Projects",
 		"ct": 1700000000,
 		"lm": 1700000100,
-		"metadata": {
+		"metadata":
+		{
 			"layoutMode": "bullets"
 		},
 		"ch": [
@@ -31,8 +32,10 @@
 		"nm": "Mirror of Ship Phase 4",
 		"ct": 1700000700,
 		"lm": 1700000800,
-		"metadata": {
-			"mirror": {
+		"metadata":
+		{
+			"mirror":
+			{
 				"originalId": "33333333-3333-3333-3333-333333333333",
 				"isMirrorRoot": true
 			}

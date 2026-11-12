@@ -14,63 +14,152 @@ import {fetchThroughRestarts} from "../restart-retry.js";
 const CHECKED = "did";
 const UNCHECKED = "skip";
 
-type SubmitState = {kind: "idle"} | {kind: "submitting"} | {kind: "submitted"} | {kind: "error"; message: string};
+type SubmitState =
+	|
+	  {
+			kind: "idle";
+	  }
+	|
+	  {
+			kind: "submitting";
+	  }
+	|
+	  {
+			kind: "submitted";
+	  }
+	|
+	  {
+			kind: "error";
+			message: string;
+	  };
 
 /** The last save that failed, named by the row's title. */
-type SaveError = {title: string; message: string} | null;
+type SaveError =
+{
+	title: string;
+	message: string;
+} | null;
 
-function initialChecked(page: DecisionPage): Record<string, boolean> {
+function initialChecked(page: DecisionPage): Record<string, boolean>
+{
 	return Object.fromEntries(
 		page.groups.flatMap((group) => group.items.map((item) => [item.id, item.answer?.choice === CHECKED])),
 	);
 }
 
-export function ChecklistSheet({page, base}: {page: DecisionPage; base: string}) {
+export function ChecklistSheet({page, base}: {page: DecisionPage; base: string})
+{
 	const [checked, setChecked] = useState(() => initialChecked(page));
 	// Mirrors `checked` so a failed save reverts only the row it was for.
 	const checkedRef = useRef(checked);
 	const [saveError, setSaveError] = useState<SaveError>(null);
-	const [submit, setSubmit] = useState<SubmitState>(page.submittedAt === null ? {kind: "idle"} : {kind: "submitted"});
+	const [submit, setSubmit] = useState<SubmitState>(
+		page.submittedAt === null
+			?
+				{
+					kind: "idle",
+				}
+			:
+				{
+					kind: "submitted",
+				},
+	);
 
-	function set(id: string, value: boolean): void {
-		checkedRef.current = {...checkedRef.current, [id]: value};
+	function set(id: string, value: boolean): void
+	{
+		checkedRef.current =
+		{
+			...checkedRef.current,
+			[id]: value,
+		};
 		setChecked(checkedRef.current);
 	}
 
-	async function toggle(id: string, title: string): Promise<void> {
+	async function toggle(id: string, title: string): Promise<void>
+	{
 		const value = checkedRef.current[id] !== true;
 		set(id, value);
 		let error: string;
-		try {
-			const response = await fetchThroughRestarts(`${base}/${encodeURIComponent(id)}`, {
-				method: "PUT",
-				headers: {"content-type": "application/json"},
-				body: JSON.stringify({choice: value ? CHECKED : UNCHECKED, note: ""}),
-			});
-			if (response.ok) {
+		try
+		{
+			const response = await fetchThroughRestarts(
+				`${base}/${encodeURIComponent(id)}`,
+				{
+					method: "PUT",
+					headers:
+					{
+						"content-type": "application/json",
+					},
+					body: JSON.stringify(
+						{
+							choice: value ? CHECKED : UNCHECKED,
+							note: "",
+						},
+					),
+				},
+			);
+			if (response.ok)
+			{
 				setSaveError(null);
 				return;
 			}
 			error = await errorOf(response);
-		} catch (caught) {
+		}
+		catch (caught)
+		{
 			error = messageOf(caught);
 		}
 		set(id, !value);
-		setSaveError({title, message: error});
+		setSaveError(
+			{
+				title,
+				message: error,
+			},
+		);
 	}
 
-	async function submitPage(): Promise<void> {
-		setSubmit({kind: "submitting"});
-		try {
-			const response = await fetchThroughRestarts(`${base}/submit`, {method: "POST"});
-			if (response.ok) {
+	async function submitPage(): Promise<void>
+	{
+		setSubmit(
+			{
+				kind: "submitting",
+			},
+		);
+		try
+		{
+			const response = await fetchThroughRestarts(
+				`${base}/submit`,
+				{
+					method: "POST",
+				},
+			);
+			if (response.ok)
+			{
 				await readJson<DecisionSubmitResult>(new Response(response.text));
-				setSubmit({kind: "submitted"});
-			} else {
-				setSubmit({kind: "error", message: await errorOf(response)});
+				setSubmit(
+					{
+						kind: "submitted",
+					},
+				);
 			}
-		} catch (error) {
-			setSubmit({kind: "error", message: messageOf(error)});
+			else
+			{
+				setSubmit(
+					{
+						kind: "error",
+						message: await errorOf(response),
+					},
+				);
+			}
+		}
+		catch (error)
+		{
+			setSubmit(
+				{
+					kind: "error",
+					message: messageOf(error),
+				},
+			);
 		}
 	}
 
@@ -92,7 +181,8 @@ export function ChecklistSheet({page, base}: {page: DecisionPage; base: string})
 					<section className="checklist-section" key={group.heading}>
 						<h2>{group.heading}</h2>
 						<ul>
-							{group.items.map((item) => {
+							{group.items.map((item) =>
+							{
 								const subtitle = item.body[0];
 								return (
 									<li key={item.id}>
@@ -105,7 +195,8 @@ export function ChecklistSheet({page, base}: {page: DecisionPage; base: string})
 												checked={checked[item.id] === true}
 												className="checklist-input"
 												name={`checklist-${item.id}`}
-												onChange={() => {
+												onChange={() =>
+												{
 													void toggle(item.id, item.title);
 												}}
 												type="checkbox"
@@ -146,7 +237,8 @@ export function ChecklistSheet({page, base}: {page: DecisionPage; base: string})
 					<button
 						className="checklist-submit"
 						disabled={submit.kind === "submitting"}
-						onClick={() => {
+						onClick={() =>
+						{
 							void submitPage();
 						}}
 						type="button"

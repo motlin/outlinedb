@@ -1,5 +1,6 @@
 {
-	"compilerOptions": {
+	"compilerOptions":
+	{
 		"target": "es2023",
 		"module": "esnext",
 		"moduleResolution": "bundler",
@@ -9,7 +10,8 @@
 		"allowImportingTsExtensions": true,
 		"skipLibCheck": true,
 		"types": [],
-		"paths": {
+		"paths":
+		{
 			"@outlinedb/mcp/tools": ["../mcp/src/register.ts"],
 			"@outlinedb/web/server-app": ["../web/src/server/app.ts"]
 		}

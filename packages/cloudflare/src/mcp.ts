@@ -13,17 +13,35 @@ export async function mcpHandler(
 	userId: string,
 	env: Pick<Env, "USER_STORE">,
 	access: ToolAccess = {},
-): Promise<Response> {
-	if (request.method !== "POST") {
-		return new Response("Method not allowed", {status: 405, headers: {allow: "POST"}});
+): Promise<Response>
+{
+	if (request.method !== "POST")
+	{
+		return new Response(
+			"Method not allowed",
+			{
+				status: 405,
+				headers:
+				{
+					allow: "POST",
+				},
+			},
+		);
 	}
 	const store = storeClient(env.USER_STORE.getByName(userId));
-	const server = new McpServer({name: "outlinedb", version: "0.1.0"});
+	const server = new McpServer(
+		{
+			name: "outlinedb",
+			version: "0.1.0",
+		},
+	);
 	registerOutlineTools(server, store, access);
-	const transport = new WebStandardStreamableHTTPServerTransport({
-		sessionIdGenerator: undefined,
-		enableJsonResponse: true,
-	});
+	const transport = new WebStandardStreamableHTTPServerTransport(
+		{
+			sessionIdGenerator: undefined,
+			enableJsonResponse: true,
+		},
+	);
 	await server.connect(transport);
 	return transport.handleRequest(request);
 }

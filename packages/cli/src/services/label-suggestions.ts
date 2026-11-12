@@ -8,7 +8,8 @@ import type {LabelKind} from "./label-pool.js";
 /** Which Clef pass produced a score: the pass 1 shortlist, or the pass 2 verifier model. */
 export type SuggestionSource = "clef" | "clef-flash" | "clef-flash-shortlist";
 
-export interface LabelSuggestion {
+export interface LabelSuggestion
+{
 	/** Canonical `#tag` or `@Name`. */
 	readonly label: string;
 	readonly kind: LabelKind;
@@ -16,20 +17,23 @@ export interface LabelSuggestion {
 	readonly score: number;
 }
 
-export interface LabelHint {
+export interface LabelHint
+{
 	readonly label: string;
 	readonly kind: LabelKind;
 	readonly score: number;
 	readonly source: string;
 }
 
-export interface EntryHints {
+export interface EntryHints
+{
 	readonly nodeId: string;
 	readonly suggestions: LabelHint[];
 }
 
 /** An entry to score, with the `node_content.system_from` its text was read at. */
-export interface ScoredEntry {
+export interface ScoredEntry
+{
 	readonly nodeId: string;
 	readonly contentFrom: string;
 }
@@ -39,9 +43,11 @@ const ID_CHUNK = 90;
 /** Eight columns per suggestion row. */
 const ROW_CHUNK = 11;
 
-function chunks<T>(items: readonly T[], size: number): T[][] {
+function chunks<T>(items: readonly T[], size: number): T[][]
+{
 	const result: T[][] = [];
-	for (let start = 0; start < items.length; start += size) {
+	for (let start = 0; start < items.length; start += size)
+	{
 		result.push(items.slice(start, start + size));
 	}
 	return result;
@@ -55,35 +61,64 @@ function chunks<T>(items: readonly T[], size: number): T[][] {
 export function entriesToScore(
 	tx: TemporalTransaction,
 	nodeIds: readonly string[],
-	{force}: {force: boolean},
-): ScoredEntry[] {
+	{
+		force,
+	}:
+	{
+		force: boolean;
+	},
+): ScoredEntry[]
+{
 	const contentFrom = new Map<string, string>();
 	const fresh = new Set<string>();
-	for (const ids of chunks(nodeIds, ID_CHUNK)) {
+	for (const ids of chunks(nodeIds, ID_CHUNK))
+	{
 		for (const row of tx
-			.select({id: nodeContent.id, systemFrom: nodeContent.systemFrom})
+			.select(
+				{
+					id: nodeContent.id,
+					systemFrom: nodeContent.systemFrom,
+				},
+			)
 			.from(nodeContent)
 			.where(and(inArray(nodeContent.id, ids), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
-			.all()) {
+			.all())
+		{
 			contentFrom.set(row.id, row.systemFrom);
 		}
-		if (!force) {
+		if (!force)
+		{
 			for (const row of tx
-				.selectDistinct({nodeId: nodeLabelSuggestions.nodeId, contentFrom: nodeLabelSuggestions.contentFrom})
+				.selectDistinct(
+					{
+						nodeId: nodeLabelSuggestions.nodeId,
+						contentFrom: nodeLabelSuggestions.contentFrom,
+					},
+				)
 				.from(nodeLabelSuggestions)
 				.where(
 					and(inArray(nodeLabelSuggestions.nodeId, ids), eq(nodeLabelSuggestions.systemTo, FAR_FUTURE_DATE)),
 				)
-				.all()) {
-				if (contentFrom.get(row.nodeId) === row.contentFrom) {
+				.all())
+			{
+				if (contentFrom.get(row.nodeId) === row.contentFrom)
+				{
 					fresh.add(row.nodeId);
 				}
 			}
 		}
 	}
-	return [...new Set(nodeIds)].flatMap((nodeId) => {
+	return [...new Set(nodeIds)].flatMap((nodeId) =>
+	{
 		const from = contentFrom.get(nodeId);
-		return from === undefined || fresh.has(nodeId) ? [] : [{nodeId, contentFrom: from}];
+		return from === undefined || fresh.has(nodeId)
+			? []
+			: [
+					{
+						nodeId,
+						contentFrom: from,
+					},
+				];
 	});
 }
 
@@ -96,10 +131,13 @@ export function saveLabelSuggestions(
 	entry: ScoredEntry,
 	suggestions: readonly LabelSuggestion[],
 	systemTime: string,
-): void {
+): void
+{
 	closeCurrentVersions(tx, nodeLabelSuggestions, systemTime, eq(nodeLabelSuggestions.nodeId, entry.nodeId));
-	for (const batch of chunks(suggestions, ROW_CHUNK)) {
-		const rows = batch.map((suggestion) => ({
+	for (const batch of chunks(suggestions, ROW_CHUNK))
+	{
+		const rows = batch.map((suggestion) => (
+		{
 			nodeId: entry.nodeId,
 			label: suggestion.label,
 			labelKind: suggestion.kind,
@@ -114,9 +152,11 @@ export function saveLabelSuggestions(
 }
 
 /** Each entry's live verify-pass suggestions at or above `threshold`, best first, in the order given. */
-export function liveHints(tx: TemporalTransaction, nodeIds: readonly string[], threshold: number): EntryHints[] {
+export function liveHints(tx: TemporalTransaction, nodeIds: readonly string[], threshold: number): EntryHints[]
+{
 	const byNode = new Map<string, LabelHint[]>(nodeIds.map((id) => [id, []]));
-	for (const ids of chunks(nodeIds, ID_CHUNK)) {
+	for (const ids of chunks(nodeIds, ID_CHUNK))
+	{
 		const rows = tx
 			.select()
 			.from(nodeLabelSuggestions)
@@ -130,14 +170,21 @@ export function liveHints(tx: TemporalTransaction, nodeIds: readonly string[], t
 			)
 			.orderBy(desc(nodeLabelSuggestions.score), asc(nodeLabelSuggestions.label))
 			.all();
-		for (const row of rows) {
-			byNode.get(row.nodeId)?.push({
-				label: row.label,
-				kind: row.labelKind === "person" ? "person" : "tag",
-				score: row.score,
-				source: row.source,
-			});
+		for (const row of rows)
+		{
+			byNode.get(row.nodeId)?.push(
+				{
+					label: row.label,
+					kind: row.labelKind === "person" ? "person" : "tag",
+					score: row.score,
+					source: row.source,
+				},
+			);
 		}
 	}
-	return [...byNode].map(([nodeId, suggestions]) => ({nodeId, suggestions}));
+	return [...byNode].map(([nodeId, suggestions]) => (
+	{
+		nodeId,
+		suggestions,
+	}));
 }

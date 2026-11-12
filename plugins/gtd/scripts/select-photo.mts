@@ -10,8 +10,10 @@ import {spawnSync} from "node:child_process";
 import {takeValue} from "./cli-args.mts";
 import {isMain} from "./is-main.mts";
 
-export function buildSelectAppleScript(filename: string, date: string): string[] {
-	if (!/^\d{4}-\d{2}-\d{2}$/u.test(date)) {
+export function buildSelectAppleScript(filename: string, date: string): string[]
+{
+	if (!/^\d{4}-\d{2}-\d{2}$/u.test(date))
+	{
 		throw new Error(`date must be YYYY-MM-DD, got ${date}`);
 	}
 	const escaped = filename.replaceAll("\\", String.raw`\\`).replaceAll('"', String.raw`\"`);
@@ -37,24 +39,38 @@ export function buildSelectAppleScript(filename: string, date: string): string[]
 	];
 }
 
-if (isMain(import.meta.url)) {
+if (isMain(import.meta.url))
+{
 	let filename = "";
 	let date = "";
 	const args = process.argv.slice(2)[Symbol.iterator]();
-	for (const arg of args) {
-		if (arg === "--filename") {
+	for (const arg of args)
+	{
+		if (arg === "--filename")
+		{
 			filename = takeValue(args, arg);
-		} else if (arg === "--date") {
+		}
+		else if (arg === "--date")
+		{
 			date = takeValue(args, arg);
-		} else {
+		}
+		else
+		{
 			throw new Error(`Unknown argument ${arg}`);
 		}
 	}
-	if (filename === "" || date === "") {
+	if (filename === "" || date === "")
+	{
 		throw new Error("Usage: select-photo.mts --filename <name.ext> --date YYYY-MM-DD");
 	}
 	const script = buildSelectAppleScript(filename, date).flatMap((line) => ["-e", line]);
-	const result = spawnSync("osascript", script, {encoding: "utf8"});
+	const result = spawnSync(
+		"osascript",
+		script,
+		{
+			encoding: "utf8",
+		},
+	);
 	process.stdout.write(result.stdout);
 	process.stderr.write(result.stderr);
 	process.exit(result.status ?? 1);

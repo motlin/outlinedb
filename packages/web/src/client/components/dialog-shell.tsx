@@ -19,12 +19,14 @@ export type DialogPadding = "xl" | "lg" | "none";
 /** The box class for a padding: `DIALOG_CLASS` carries `p-0`, the padded boxes swap it for `p-xl`. */
 const BOX_TRANSITION = " transition-[transform,opacity] duration-300 transition-base";
 
-function dialogClass(padding: DialogPadding, instant: boolean): string {
+function dialogClass(padding: DialogPadding, instant: boolean): string
+{
 	const base = padding === "none" ? DIALOG_CLASS : DIALOG_CLASS.replace(" p-0 ", " p-xl ");
 	return instant ? base.replace(BOX_TRANSITION, "") : base;
 }
 
-export interface DialogShellProps {
+export interface DialogShellProps
+{
 	open?: boolean;
 	onClose: () => void;
 	padding?: DialogPadding;
@@ -42,69 +44,107 @@ export function DialogShell({
 	instant = false,
 	onScroll,
 	children,
-}: DialogShellProps) {
+}: DialogShellProps)
+{
 	const [entered, setEntered] = useState(false);
 	const [mounted, setMounted] = useState(open);
 	const [previousOpen, setPreviousOpen] = useState(open);
-	if (open !== previousOpen) {
+	if (open !== previousOpen)
+	{
 		setPreviousOpen(open);
-		if (open) {
+		if (open)
+		{
 			setMounted(true);
-		} else {
+		}
+		else
+		{
 			setEntered(false);
 		}
 	}
 
-	useEffect(() => {
-		if (!open) {
-			const timer = window.setTimeout(() => {
+	useEffect(() =>
+	{
+		if (!open)
+		{
+			const timer = window.setTimeout(() =>
+			{
 				setMounted(false);
 			}, EXIT_MS);
-			return () => {
+			return () =>
+			{
 				window.clearTimeout(timer);
 			};
 		}
-		const frame = window.requestAnimationFrame(() => {
+		const frame = window.requestAnimationFrame(() =>
+		{
 			setEntered(true);
 		});
-		return () => {
+		return () =>
+		{
 			window.cancelAnimationFrame(frame);
 		};
 	}, [open]);
 
 	const latestClose = useRef(onClose);
-	useEffect(() => {
+	useEffect(() =>
+	{
 		latestClose.current = onClose;
 	});
-	useEffect(() => {
-		if (!open) {
-			return () => {};
+	useEffect(() =>
+	{
+		if (!open)
+		{
+			return () =>
+			{
+			};
 		}
-		const onKeyDown = (event: KeyboardEvent) => {
+		const onKeyDown = (event: KeyboardEvent) =>
+		{
 			const escape = event.key === "Escape";
-			if (escape || event.key === "Enter") {
+			if (escape || event.key === "Enter")
+			{
 				event.stopPropagation();
 			}
-			if (escape) {
+			if (escape)
+			{
 				latestClose.current();
 			}
 		};
 		document.body.addEventListener("keydown", onKeyDown);
-		return () => {
+		return () =>
+		{
 			document.body.removeEventListener("keydown", onKeyDown);
 		};
 	}, [open]);
 
-	if (!mounted) {
+	if (!mounted)
+	{
 		return null;
 	}
 	return (
-		<div className={BACKDROP_CLASS} style={{zIndex: 600}}>
+		<div
+			className={BACKDROP_CLASS}
+			style={
+			{
+				zIndex: 600,
+			}}
+		>
 			{/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- Escape closes through the body listener */}
-			<div className={SCRIM_CLASS} style={{opacity: entered ? 0.2 : 0}} onClick={onClose} />
+			<div
+				className={SCRIM_CLASS}
+				style={
+				{
+					opacity: entered ? 0.2 : 0,
+				}}
+				onClick={onClose}
+			/>
 			<div
 				className={dialogClass(padding, instant)}
-				style={{opacity: entered ? 1 : 0, transform: entered ? "" : "translateY(-48px) scale(0.98)"}}
+				style={
+				{
+					opacity: entered ? 1 : 0,
+					transform: entered ? "" : "translateY(-48px) scale(0.98)",
+				}}
 				onScroll={onScroll}
 			>
 				{children}
@@ -114,7 +154,8 @@ export function DialogShell({
 }
 
 /** Upstream WF.DomKit.DialogTitle. */
-export function DialogTitle({children}: {children?: ReactNode}) {
+export function DialogTitle({children}: {children?: ReactNode})
+{
 	return (
 		<h1 className="title text-l leading-xs font-bold whitespace-nowrap overflow-hidden text-ellipsis mr-3xl">
 			{children}
@@ -132,12 +173,23 @@ export function DialogCloseButton({
 	style?: CSSProperties;
 	/** Sits in the flow of a header instead of the box's top right corner (no inline style at all). */
 	inline?: boolean;
-}) {
+})
+{
 	return (
 		// oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- verbatim upstream markup: a plain div; Escape closes through the shell
 		<div
 			className="group relative w-[20px] h-[20px] flex flex-col items-center justify-center rounded-[10px] text-[12px] text-tertiary cursor-pointer"
-			style={inline ? undefined : {position: "absolute", top: 30, right: 30, ...style}}
+			style={
+				inline
+					? undefined
+					:
+						{
+							position: "absolute",
+							top: 30,
+							right: 30,
+							...style,
+						}
+			}
 			onClick={onClose}
 		>
 			<div className="absolute top-1/2 left-1/2 -mt-[18px] -ml-[18px] w-[36px] h-[36px] rounded-[18px] group-hover:bg-tertiary group-active:bg-tertiary" />

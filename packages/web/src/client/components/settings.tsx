@@ -24,13 +24,21 @@ import {Toggle} from "./toggle.js";
 const MOMENT_FORMAT_DOCS = "https://momentjscom.readthedocs.io/en/latest/moment/04-displaying/01-format/";
 
 /** The options, plus the current value rendered in itself when it is a custom format. */
-function withCurrent(options: FormatOption[], current: string, label: () => string): FormatOption[] {
+function withCurrent(options: FormatOption[], current: string, label: () => string): FormatOption[]
+{
 	return options.some((option) => option.value === current)
 		? options
-		: [{value: current, label: label()}, ...options];
+		: [
+				{
+					value: current,
+					label: label(),
+				},
+				...options,
+			];
 }
 
-interface CustomFormatInputProps {
+interface CustomFormatInputProps
+{
 	ariaLabel: string;
 	className: string;
 	disabled: boolean;
@@ -40,11 +48,14 @@ interface CustomFormatInputProps {
 }
 
 /** A text field holding a draft that is saved on blur or Enter, only when it changed. Key it by `value` to reset the draft. */
-function CustomFormatInput({ariaLabel, className, disabled, id, value, onSave}: CustomFormatInputProps) {
+function CustomFormatInput({ariaLabel, className, disabled, id, value, onSave}: CustomFormatInputProps)
+{
 	const [draft, setDraft] = useState(value);
-	const save = () => {
+	const save = () =>
+	{
 		const next = draft.trim();
-		if (next !== "" && next !== value) {
+		if (next !== "" && next !== value)
+		{
 			onSave(next);
 		}
 	};
@@ -55,11 +66,14 @@ function CustomFormatInput({ariaLabel, className, disabled, id, value, onSave}: 
 			disabled={disabled}
 			id={id}
 			onBlur={save}
-			onChange={(event) => {
+			onChange={(event) =>
+			{
 				setDraft(event.target.value);
 			}}
-			onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
-				if (event.key === "Enter") {
+			onKeyDown={(event: KeyboardEvent<HTMLInputElement>) =>
+			{
+				if (event.key === "Enter")
+				{
 					save();
 				}
 			}}
@@ -73,18 +87,31 @@ function CustomFormatInput({ariaLabel, className, disabled, id, value, onSave}: 
  * Settings > Dates: date format, time format, start of week and custom formats,
  * stored in the account's root metadata through `/api/v1/preferences`.
  */
-export function DatesSection({now: nowProp}: {now?: Date}) {
+export function DatesSection({now: nowProp}: {now?: Date})
+{
 	const [openedAt] = useState(() => new Date());
 	const now = nowProp ?? openedAt;
 	const {available, error, dateSettings, setPreferences} = usePreferences();
 	const {dateFormat, timeFormat, weekStartDay} = dateSettings;
 	const disabled = !available;
-	const change = (patch: PreferencesPatch) => {
+	const change = (patch: PreferencesPatch) =>
+	{
 		setPreferences(patch).catch(() => {});
 	};
-	const today = {startYear: now.getFullYear(), startMonth: now.getMonth() + 1, startDay: now.getDate()};
+	const today =
+	{
+		startYear: now.getFullYear(),
+		startMonth: now.getMonth() + 1,
+		startDay: now.getDate(),
+	};
 	const dateOptions = withCurrent(dateFormatOptions(now), dateFormat, () =>
-		formatPillLabel(today, {dateFormat, now}),
+		formatPillLabel(
+			today,
+			{
+				dateFormat,
+				now,
+			},
+		),
 	);
 	const timeOptions = withCurrent(timeFormatOptions(now), timeFormat, () => timeFormat);
 
@@ -103,8 +130,13 @@ export function DatesSection({now: nowProp}: {now?: Date}) {
 					className="settings-select"
 					disabled={disabled}
 					id="settings-date-format"
-					onChange={(event) => {
-						change({dateFormat: event.target.value});
+					onChange={(event) =>
+					{
+						change(
+							{
+								dateFormat: event.target.value,
+							},
+						);
 					}}
 					value={dateFormat}
 				>
@@ -123,8 +155,13 @@ export function DatesSection({now: nowProp}: {now?: Date}) {
 					className="settings-select"
 					disabled={disabled}
 					id="settings-time-format"
-					onChange={(event) => {
-						change({timeFormat: event.target.value});
+					onChange={(event) =>
+					{
+						change(
+							{
+								timeFormat: event.target.value,
+							},
+						);
 					}}
 					value={timeFormat}
 				>
@@ -143,7 +180,8 @@ export function DatesSection({now: nowProp}: {now?: Date}) {
 					className="settings-select"
 					disabled={disabled}
 					id="settings-week-start"
-					onChange={(event) => {
+					onChange={(event) =>
+					{
 						change(weekStartPatch(event.target.value === "1" ? 1 : 0));
 					}}
 					value={String(weekStartDay === 1 ? 1 : 0)}
@@ -163,8 +201,13 @@ export function DatesSection({now: nowProp}: {now?: Date}) {
 						disabled={disabled}
 						id="settings-custom-date-format"
 						key={dateFormat}
-						onSave={(value) => {
-							change({dateFormat: value});
+						onSave={(value) =>
+						{
+							change(
+								{
+									dateFormat: value,
+								},
+							);
 						}}
 						value={dateFormat}
 					/>
@@ -174,8 +217,13 @@ export function DatesSection({now: nowProp}: {now?: Date}) {
 						key={timeFormat}
 						className="w-[120px]"
 						disabled={disabled}
-						onSave={(value) => {
-							change({timeFormat: value});
+						onSave={(value) =>
+						{
+							change(
+								{
+									timeFormat: value,
+								},
+							);
 						}}
 						value={timeFormat}
 					/>
@@ -202,7 +250,8 @@ const SETTINGS_SECTION_TITLES = [
 const DAILY_SUMMARY_HINT =
 	"Note: enabling this option means all content you add to OutlineDB will be emailed to you. You'll receive a breakdown of the number of additions, edits, moves, completions, uncompletions and deletions made the previous day \u2013 both in private and shared lists. If collaborators in shared lists have made any changes, the summary will indicate who has done what.";
 
-interface SectionProps {
+interface SectionProps
+{
 	preferences: Preferences;
 	change: (patch: PreferencesPatch) => void;
 }
@@ -215,8 +264,10 @@ const MANAGE_MFA_URL = "https://workflowy.com/";
  * "Manage MFA" or "Setup MFA" by `mfa.enabled`. Upstream's button opens the disable/recovery
  * dialog or the TOTP setup via `/api/mfa/*`; locally it is read-only and links to workflowy.com.
  */
-function MfaBlock({mfa}: {mfa: Preferences["mfa"]}) {
-	if (mfa === null) {
+function MfaBlock({mfa}: {mfa: Preferences["mfa"]})
+{
+	if (mfa === null)
+	{
 		return null;
 	}
 	return (
@@ -238,12 +289,15 @@ function MfaBlock({mfa}: {mfa: Preferences["mfa"]}) {
 }
 
 /** Ends the OutlineDB session and goes to login. Only the hosted app has one; the Node host never signs in. */
-function LogOutBlock() {
+function LogOutBlock()
+{
 	return (
 		<ActionBlock label="Log out" hint="Sign out of OutlineDB in this browser.">
 			<SettingsButton
-				onClick={() => {
-					void authClient.signOut().finally(() => {
+				onClick={() =>
+				{
+					void authClient.signOut().finally(() =>
+					{
 						globalThis.location.assign("/login");
 					});
 				}}
@@ -254,10 +308,12 @@ function LogOutBlock() {
 	);
 }
 
-function AccountSection({preferences}: SectionProps) {
+function AccountSection({preferences}: SectionProps)
+{
 	const {account} = preferences;
 	const hosted = useAuthConfig().data?.hosted === true;
-	if (account === null && !hosted) {
+	if (account === null && !hosted)
+	{
 		return null;
 	}
 	return (
@@ -276,7 +332,8 @@ function AccountSection({preferences}: SectionProps) {
 	);
 }
 
-function PersonalizationSection({preferences, change}: SectionProps) {
+function PersonalizationSection({preferences, change}: SectionProps)
+{
 	const theme = useOutlineStore((state) => state.theme);
 	const setTheme = useOutlineStore((state) => state.setTheme);
 	const customThemes = useCustomThemesStore((state) => state.themes);
@@ -293,8 +350,13 @@ function PersonalizationSection({preferences, change}: SectionProps) {
 								key={option.name}
 								label={option.prettyName}
 								isSelected={current === option.name}
-								onSelect={() => {
-									change({theme: option.name});
+								onSelect={() =>
+								{
+									change(
+										{
+											theme: option.name,
+										},
+									);
 									setTheme(option.name);
 								}}
 							/>
@@ -309,8 +371,13 @@ function PersonalizationSection({preferences, change}: SectionProps) {
 								label={label}
 								className={`fontOption ${name}`}
 								isSelected={font === name}
-								onSelect={() => {
-									change({font: name});
+								onSelect={() =>
+								{
+									change(
+										{
+											font: name,
+										},
+									);
 									applyFont(name);
 								}}
 							/>
@@ -324,8 +391,13 @@ function PersonalizationSection({preferences, change}: SectionProps) {
 								key={name}
 								label={label}
 								isSelected={emoji === name}
-								onSelect={() => {
-									change({emojiSelected: name});
+								onSelect={() =>
+								{
+									change(
+										{
+											emojiSelected: name,
+										},
+									);
 									applyEmoji(name);
 								}}
 							/>
@@ -337,7 +409,8 @@ function PersonalizationSection({preferences, change}: SectionProps) {
 	);
 }
 
-function MediaSection({preferences, change}: SectionProps) {
+function MediaSection({preferences, change}: SectionProps)
+{
 	const embeds = [
 		["Embed YouTube videos", "ignoreYoutube"],
 		["Embed YouTube Shorts", "ignoreYtShort"],
@@ -352,15 +425,25 @@ function MediaSection({preferences, change}: SectionProps) {
 						<DropdownOption
 							label="Small"
 							isSelected={preferences.displayImagePreviewsAsThumbnails}
-							onSelect={() => {
-								change({displayImagePreviewsAsThumbnails: true});
+							onSelect={() =>
+							{
+								change(
+									{
+										displayImagePreviewsAsThumbnails: true,
+									},
+								);
 							}}
 						/>
 						<DropdownOption
 							label="Big"
 							isSelected={!preferences.displayImagePreviewsAsThumbnails}
-							onSelect={() => {
-								change({displayImagePreviewsAsThumbnails: false});
+							onSelect={() =>
+							{
+								change(
+									{
+										displayImagePreviewsAsThumbnails: false,
+									},
+								);
 							}}
 						/>
 					</Dropdown>
@@ -369,8 +452,13 @@ function MediaSection({preferences, change}: SectionProps) {
 					<ControlRow key={key} label={label}>
 						<Toggle
 							on={!preferences[key]}
-							onClick={() => {
-								change({[key]: !preferences[key]});
+							onClick={() =>
+							{
+								change(
+									{
+										[key]: !preferences[key],
+									},
+								);
 							}}
 						/>
 					</ControlRow>
@@ -389,7 +477,8 @@ const RESTORE_FROM_BACKUP_URL = "https://workflowy.com/accounts/restore_from_bac
  * "Set up Dropbox backup", which sets the flag and opens the authorize page) and Restore Backup.
  * Upstream hides it for non-Pro accounts; the local app has no plan state, so it always shows.
  */
-function BackupSection({preferences, change}: SectionProps) {
+function BackupSection({preferences, change}: SectionProps)
+{
 	const on = preferences.backupToDropbox;
 	return (
 		<SettingsSection title="Backup">
@@ -399,9 +488,15 @@ function BackupSection({preferences, change}: SectionProps) {
 					hint="Automatically back up your workflowy.com account to Dropbox every day."
 				>
 					<SettingsButton
-						onClick={() => {
-							change({backupToDropbox: !on});
-							if (!on) {
+						onClick={() =>
+						{
+							change(
+								{
+									backupToDropbox: !on,
+								},
+							);
+							if (!on)
+							{
 								window.open(AUTHORIZE_DROPBOX_URL, "_blank");
 							}
 						}}
@@ -425,23 +520,34 @@ function BackupSection({preferences, change}: SectionProps) {
 	);
 }
 
-function NotificationsSection({preferences, change}: SectionProps) {
+function NotificationsSection({preferences, change}: SectionProps)
+{
 	return (
 		<SettingsSection title="Notifications">
 			<SectionBody>
 				<ControlRow label="Show weekly report">
 					<Toggle
 						on={preferences.weeklyReportOn}
-						onClick={() => {
-							change({weeklyReportOn: !preferences.weeklyReportOn});
+						onClick={() =>
+						{
+							change(
+								{
+									weeklyReportOn: !preferences.weeklyReportOn,
+								},
+							);
 						}}
 					/>
 				</ControlRow>
 				<ControlRow label="Daily change email summary" hint={DAILY_SUMMARY_HINT}>
 					<Toggle
 						on={!preferences.unsubscribeFromSummaryEmails}
-						onClick={() => {
-							change({unsubscribeFromSummaryEmails: !preferences.unsubscribeFromSummaryEmails});
+						onClick={() =>
+						{
+							change(
+								{
+									unsubscribeFromSummaryEmails: !preferences.unsubscribeFromSummaryEmails,
+								},
+							);
 						}}
 					/>
 				</ControlRow>
@@ -450,7 +556,8 @@ function NotificationsSection({preferences, change}: SectionProps) {
 	);
 }
 
-function FeaturesSection() {
+function FeaturesSection()
+{
 	const showKeyboardShortcuts = useOutlineStore((state) => state.showKeyboardShortcuts);
 	const setShowKeyboardShortcuts = useOutlineStore((state) => state.setShowKeyboardShortcuts);
 	const {visible, enabled, setFeature} = useFeatures();
@@ -461,12 +568,14 @@ function FeaturesSection() {
 					<Toggle
 						className="showKeyboardShortcuts"
 						on={showKeyboardShortcuts}
-						onClick={() => {
+						onClick={() =>
+						{
 							setShowKeyboardShortcuts(!showKeyboardShortcuts);
 						}}
 					/>
 				</ControlRow>
-				{visible.map(({codename, name, label, description}) => {
+				{visible.map(({codename, name, label, description}) =>
+				{
 					const on = enabled[codename] === true;
 					return (
 						<ControlRow
@@ -478,7 +587,8 @@ function FeaturesSection() {
 							<Toggle
 								className={codename}
 								on={on}
-								onClick={() => {
+								onClick={() =>
+								{
 									void setFeature(codename, !on).catch(() => {});
 								}}
 							/>
@@ -491,13 +601,18 @@ function FeaturesSection() {
 }
 
 /** Upstream `ll4`: the version and browser tags, copied on click, with a 2s "copied!" flash. */
-function SettingsVersion({label = currentVersionLabel()}: {label?: string}) {
+function SettingsVersion({label = currentVersionLabel()}: {label?: string})
+{
 	const [flashing, flash] = useFlash(2000);
-	const copy = async () => {
-		try {
+	const copy = async () =>
+	{
+		try
+		{
 			await navigator.clipboard.writeText(label);
 			flash();
-		} catch {
+		}
+		catch
+		{
 			// Clipboard access can be denied; nothing was copied.
 		}
 	};
@@ -505,7 +620,8 @@ function SettingsVersion({label = currentVersionLabel()}: {label?: string}) {
 		// oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- verbatim upstream markup: a plain div
 		<div
 			className="inline-block text-xs space-x-2xs"
-			onClick={() => {
+			onClick={() =>
+			{
 				void copy();
 			}}
 		>
@@ -516,34 +632,42 @@ function SettingsVersion({label = currentVersionLabel()}: {label?: string}) {
 }
 
 /** Scroll `title`'s section to the top of the dialog box without highlighting it. */
-function jumpTo(root: HTMLElement | null, title: string): void {
+function jumpTo(root: HTMLElement | null, title: string): void
+{
 	const box = root?.closest<HTMLElement>(".dialog-box");
 	const section = findSection(root, title);
-	if (box && section) {
+	if (box && section)
+	{
 		box.scrollTop += section.getBoundingClientRect().top - box.getBoundingClientRect().top - box.clientTop;
 	}
 }
 
-function findSection(root: HTMLElement | null, title: string): HTMLElement | undefined {
+function findSection(root: HTMLElement | null, title: string): HTMLElement | undefined
+{
 	const sections = root?.querySelectorAll<HTMLElement>("[data-section-title]") ?? [];
 	return [...sections].find((section) => section.dataset.sectionTitle === title);
 }
 
-interface SettingsHeaderProps {
+interface SettingsHeaderProps
+{
 	titles: readonly string[];
 	jump: string;
 	onJump: (title: string) => void;
 	onClose: () => void;
 }
 
-function SettingsHeader({titles, jump, onJump, onClose}: SettingsHeaderProps) {
+function SettingsHeader({titles, jump, onJump, onClose}: SettingsHeaderProps)
+{
 	return (
 		<div className="-mx-xl mb-l box-border w-[calc(100%+3rem)] bg-primary px-xl mobile:pb-l">
 			<div className="flex items-center gap-xl">
 				<div className="flex min-w-0 flex-1 flex-col gap-2xs">
 					<h1
 						className="title text-l leading-xs font-bold whitespace-nowrap overflow-hidden text-ellipsis mr-3xl"
-						style={{marginRight: 0}}
+						style={
+						{
+							marginRight: 0,
+						}}
 					>
 						Settings
 					</h1>
@@ -563,7 +687,8 @@ function SettingsHeader({titles, jump, onJump, onClose}: SettingsHeaderProps) {
 									key={title}
 									label={title}
 									isSelected={jump === title}
-									onSelect={() => {
+									onSelect={() =>
+									{
 										onJump(title);
 									}}
 								/>
@@ -578,44 +703,65 @@ function SettingsHeader({titles, jump, onJump, onClose}: SettingsHeaderProps) {
 }
 
 /** Registered titles in the order of `SETTINGS_SECTION_TITLES`, so a section that mounts late keeps its place. */
-function orderedTitles(titles: readonly string[]): string[] {
+function orderedTitles(titles: readonly string[]): string[]
+{
 	const order: readonly string[] = SETTINGS_SECTION_TITLES;
 	return titles.toSorted((a, b) => order.indexOf(a) - order.indexOf(b));
 }
 
-function SettingsBody({initialSection, onClose}: {initialSection: string | null; onClose: () => void}) {
+function SettingsBody({initialSection, onClose}: {initialSection: string | null; onClose: () => void})
+{
 	const {preferences, setPreferences} = usePreferences();
 	const datesOn = useFeatureOn("dates");
 	const rootRef = useRef<HTMLDivElement>(null);
 	const [titles, setTitles] = useState<string[]>([]);
 	const [jump, setJump] = useState(initialSection ?? "");
-	const change = (patch: PreferencesPatch) => {
+	const change = (patch: PreferencesPatch) =>
+	{
 		setPreferences(patch).catch(() => {});
 	};
-	const register = useCallback((title: string) => {
+	const register = useCallback((title: string) =>
+	{
 		setTitles((current) => [...current, title]);
-		return () => {
+		return () =>
+		{
 			setTitles((current) => current.filter((existing) => existing !== title));
 		};
 	}, []);
 
-	useEffect(() => {
-		if (initialSection === null) {
-			return () => {};
+	useEffect(() =>
+	{
+		if (initialSection === null)
+		{
+			return () =>
+			{
+			};
 		}
-		const timer = window.setTimeout(() => {
+		const timer = window.setTimeout(() =>
+		{
 			const section = findSection(rootRef.current, initialSection);
-			if (section) {
-				section.scrollIntoView({block: "center", inline: "nearest"});
+			if (section)
+			{
+				section.scrollIntoView(
+					{
+						block: "center",
+						inline: "nearest",
+					},
+				);
 				section.dataset.sectionHighlight = "true";
 			}
 		}, 300);
-		return () => {
+		return () =>
+		{
 			window.clearTimeout(timer);
 		};
 	}, [initialSection]);
 
-	const sectionProps: SectionProps = {preferences, change};
+	const sectionProps: SectionProps =
+	{
+		preferences,
+		change,
+	};
 	const sections: ReactNode[] = [
 		<AccountSection key="Account" {...sectionProps} />,
 		<PersonalizationSection key="Personalization" {...sectionProps} />,
@@ -636,7 +782,8 @@ function SettingsBody({initialSection, onClose}: {initialSection: string | null;
 				<SettingsHeader
 					titles={orderedTitles(titles)}
 					jump={jump}
-					onJump={(title) => {
+					onJump={(title) =>
+					{
 						setJump(title);
 						jumpTo(rootRef.current, title);
 					}}
@@ -649,11 +796,13 @@ function SettingsBody({initialSection, onClose}: {initialSection: string | null;
 }
 
 /** Upstream's Settings dialog, opened from the main menu and the date format gears. */
-export function Settings() {
+export function Settings()
+{
 	const settingsOpen = useOutlineStore((state) => state.settingsOpen);
 	const closeSettings = useOutlineStore((state) => state.closeSettings);
 	const settingsSection = useOutlineStore((state) => state.settingsSection);
-	if (!settingsOpen) {
+	if (!settingsOpen)
+	{
 		return null;
 	}
 	return (

@@ -1,6 +1,7 @@
 import type {SearchItem} from "../../src/search/index.js";
 
-export function searchItem(nameHtml: string, noteHtml = "", overrides: Partial<SearchItem> = {}): SearchItem {
+export function searchItem(nameHtml: string, noteHtml = "", overrides: Partial<SearchItem> = {}): SearchItem
+{
 	return {
 		id: nameHtml,
 		nameHtml,
@@ -30,9 +31,22 @@ export const SO_ROWS: SearchItem[] = [
 	searchItem('<span class="colored c-red">red text</span> line'),
 	searchItem('<span class="colored bc-yellow">hl text</span> line'),
 	searchItem('Link <a href="https://example.com/">example</a>'),
-	searchItem("Parent with kids", "", {childCount: 1}),
+	searchItem(
+		"Parent with kids",
+		"",
+		{
+			childCount: 1,
+		},
+	),
 	searchItem("kid one"),
-	searchItem("Todo list", "", {layoutMode: "todo", childCount: 1}),
+	searchItem(
+		"Todo list",
+		"",
+		{
+			layoutMode: "todo",
+			childCount: 1,
+		},
+	),
 	searchItem("todo kid"),
 ];
 

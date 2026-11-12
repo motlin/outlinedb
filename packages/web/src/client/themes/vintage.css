@@ -1,4 +1,5 @@
-._theme-vintage {
+._theme-vintage
+{
 	--wf-background-primary: var(--wf-gray-0);
 	--wf-background-secondary: var(--wf-gray-100);
 	--wf-background-tertiary: var(--wf-gray-300);
@@ -62,7 +63,8 @@
 	--wf-border-warning: var(--wf-yellow-200);
 	--wf-border-success: var(--wf-green-700);
 
-	.wf-header {
+	.wf-header
+	{
 		--wf-background-primary: var(--wf-gray-800);
 		--wf-background-secondary: var(--wf-dark-gray-600);
 		--wf-text-primary: var(--wf-gray-400);
@@ -70,7 +72,8 @@
 		--wf-border-primary: var(--wf-dark-gray-500);
 	}
 
-	.wf-menu {
+	.wf-menu
+	{
 		--wf-background-primary: var(--wf-gray-800);
 		--wf-background-secondary: var(--wf-dark-gray-600);
 		--wf-background-tertiary: var(--wf-dark-gray-500);
@@ -82,7 +85,8 @@
 		--wf-border-secondary: var(--wf-dark-gray-400);
 	}
 
-	.wf-helper {
+	.wf-helper
+	{
 		--wf-background-primary: var(--wf-gray-100);
 	}
 }

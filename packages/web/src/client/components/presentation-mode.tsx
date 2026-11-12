@@ -15,7 +15,8 @@ function Slide({
 	nodeName: string;
 	parentName: string | null;
 	isFirstSlide: boolean;
-}) {
+})
+{
 	return (
 		<div className="presentation-slide">
 			{isFirstSlide ? (
@@ -45,7 +46,8 @@ function NavigationControls({
 	totalSlides: number;
 	onPrevious: () => void;
 	onNext: () => void;
-}) {
+})
+{
 	const canGoPrevious = currentIndex > 0;
 	const canGoNext = currentIndex < totalSlides - 1;
 
@@ -80,7 +82,8 @@ function NavigationControls({
 /**
  * Header bar for presentation mode with close button.
  */
-function PresentationHeader({parentName, onClose}: {parentName: string | null; onClose: () => void}) {
+function PresentationHeader({parentName, onClose}: {parentName: string | null; onClose: () => void})
+{
 	return (
 		<div className="presentation-header">
 			<div className="presentation-header-title">{parentName}</div>
@@ -110,9 +113,11 @@ function PresentationHeader({parentName, onClose}: {parentName: string | null; o
  * - Arrow key navigation
  * - Close with X button or Escape key
  */
-export function PresentationMode() {
+export function PresentationMode()
+{
 	const {presentationOpen, presentationContext, closePresentation, nextSlide, previousSlide} = useOutlineStore(
-		useShallow((state) => ({
+		useShallow((state) => (
+		{
 			presentationOpen: state.presentationOpen,
 			presentationContext: state.presentationContext,
 			closePresentation: state.closePresentation,
@@ -128,16 +133,32 @@ export function PresentationMode() {
 	const {data: children} = useChildren(presentationContext?.nodeId ?? null);
 
 	// Build slides array: first slide is the root node, then each child
-	const slides = useMemo(() => {
-		if (!rootNode) {
+	const slides = useMemo(() =>
+	{
+		if (!rootNode)
+		{
 			return [];
 		}
 
-		const slideList = [{id: rootNode.id, name: rootNode.name ?? "", isTitle: true}];
+		const slideList = [
+			{
+				id: rootNode.id,
+				name: rootNode.name ?? "",
+				isTitle: true,
+			},
+		];
 
-		if (children) {
-			for (const child of children) {
-				slideList.push({id: child.id, name: child.name ?? "", isTitle: false});
+		if (children)
+		{
+			for (const child of children)
+			{
+				slideList.push(
+					{
+						id: child.id,
+						name: child.name ?? "",
+						isTitle: false,
+					},
+				);
 			}
 		}
 
@@ -149,30 +170,38 @@ export function PresentationMode() {
 
 	// Keyboard navigation
 	const handleKeyDown = useCallback(
-		(event: KeyboardEvent) => {
-			if (!presentationOpen) {
+		(event: KeyboardEvent) =>
+		{
+			if (!presentationOpen)
+			{
 				return;
 			}
 
-			switch (event.key) {
+			switch (event.key)
+			{
 				case "ArrowRight":
 				case "ArrowDown":
-				case " ": {
+				case " ":
+				{
 					event.preventDefault();
-					if (currentIndex < slides.length - 1) {
+					if (currentIndex < slides.length - 1)
+					{
 						nextSlide();
 					}
 					break;
 				}
 				case "ArrowLeft":
-				case "ArrowUp": {
+				case "ArrowUp":
+				{
 					event.preventDefault();
-					if (currentIndex > 0) {
+					if (currentIndex > 0)
+					{
 						previousSlide();
 					}
 					break;
 				}
-				case "Escape": {
+				case "Escape":
+				{
 					event.preventDefault();
 					closePresentation();
 					break;
@@ -183,21 +212,25 @@ export function PresentationMode() {
 	);
 
 	// Register keyboard handler
-	useEffect(() => {
-		if (presentationOpen) {
+	useEffect(() =>
+	{
+		if (presentationOpen)
+		{
 			document.addEventListener("keydown", handleKeyDown);
 			// Prevent body scroll when presentation is open
 			document.body.style.overflow = "hidden";
 		}
 
-		return () => {
+		return () =>
+		{
 			document.removeEventListener("keydown", handleKeyDown);
 			document.body.style.overflow = "";
 		};
 	}, [presentationOpen, handleKeyDown]);
 
 	// Don't render if not open
-	if (!presentationOpen || !presentationContext) {
+	if (!presentationOpen || !presentationContext)
+	{
 		return null;
 	}
 

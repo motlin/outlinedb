@@ -7,14 +7,16 @@ import {htmlToAnsi} from "../../utils/html-to-ansi.js";
 import {BaseListCommand} from "../base-list-command.js";
 import type {ListCommandFlags} from "../base-list-command.js";
 
-interface GetFlags extends ListCommandFlags {
+interface GetFlags extends ListCommandFlags
+{
 	id?: string;
 	path?: string;
 	fields?: string[];
 	"follow-mirror"?: boolean;
 }
 
-export default class Get extends BaseListCommand {
+export default class Get extends BaseListCommand
+{
 	static override hidden = false;
 	static override description = "Read a single Workflowy node with optional children";
 
@@ -44,30 +46,39 @@ export default class Get extends BaseListCommand {
 		'<%= config.bin %> <%= command.id %> --path "Metadata,Inboxes" --depth 3 --json --fields id,name,note,completed,children',
 	];
 
-	static override flags = {
+	static override flags =
+	{
 		...BaseListCommand.baseFlags,
-		id: Flags.string({
-			char: "i",
-			description: "ID of the node to read (full UUID or 12-char short ID from URL)",
-			exclusive: ["path"],
-		}),
-		path: Flags.string({
-			char: "p",
-			description: 'Comma-separated path to the node (e.g., "Work,Projects,My Project")',
-			exclusive: ["id"],
-		}),
-		"follow-mirror": Flags.boolean({
-			char: "m",
-			description: "If the node is a mirror, follow it to the original node",
-			default: false,
-		}),
+		id: Flags.string(
+			{
+				char: "i",
+				description: "ID of the node to read (full UUID or 12-char short ID from URL)",
+				exclusive: ["path"],
+			},
+		),
+		path: Flags.string(
+			{
+				char: "p",
+				description: 'Comma-separated path to the node (e.g., "Work,Projects,My Project")',
+				exclusive: ["id"],
+			},
+		),
+		"follow-mirror": Flags.boolean(
+			{
+				char: "m",
+				description: "If the node is a mirror, follow it to the original node",
+				default: false,
+			},
+		),
 	};
 
-	public async run(): Promise<void> {
+	public async run(): Promise<void>
+	{
 		const {flags} = await this.parse(Get);
 		const typedFlags = flags as GetFlags;
 
-		if (!typedFlags.id && !typedFlags.path) {
+		if (!typedFlags.id && !typedFlags.path)
+		{
 			this.error("Either --id or --path is required");
 		}
 
@@ -76,74 +87,114 @@ export default class Get extends BaseListCommand {
 		let nodeId: string | undefined;
 
 		// Resolve the node ID from --id (UUID or short ID) or --path.
-		if (typedFlags.id) {
+		if (typedFlags.id)
+		{
 			const idInput = typedFlags.id;
-			if (isShortId(idInput)) {
+			if (isShortId(idInput))
+			{
 				const resolvedId = this.cacheService.resolveShortIdToUuid(idInput);
-				if (resolvedId) {
+				if (resolvedId)
+				{
 					nodeId = resolvedId;
 					logger.debug(`Resolved short ID ${idInput} to full UUID ${resolvedId}`);
-				} else {
+				}
+				else
+				{
 					this.error(`No node found for short ID: ${idInput}`);
 				}
-			} else {
+			}
+			else
+			{
 				nodeId = idInput;
 			}
-		} else if (typedFlags.path) {
+		}
+		else if (typedFlags.path)
+		{
 			const nodePath = typedFlags.path.split(",").map((s) => s.trim());
 			const cachedNode = this.cacheService.findNodeByPath(nodePath);
-			if (cachedNode) {
+			if (cachedNode)
+			{
 				nodeId = cachedNode.id;
-			} else {
+			}
+			else
+			{
 				this.error(`Node not found at path: ${nodePath.join(" > ")}`);
 			}
 		}
 
-		if (!nodeId) {
+		if (!nodeId)
+		{
 			this.error("Could not resolve a node ID");
 		}
 
 		// Detect a mirror so we can report it (or follow it) before reading the tree.
 		let isMirror = false;
 		let originalId: string | null = this.cacheService.getMirrorOriginal(nodeId);
-		if (originalId) {
+		if (originalId)
+		{
 			isMirror = true;
-			if (typedFlags["follow-mirror"]) {
+			if (typedFlags["follow-mirror"])
+			{
 				logger.debug(`Node ${nodeId} is a mirror of ${originalId}, following to original`);
 				nodeId = originalId;
 				originalId = null;
 			}
 		}
 
-		const trees = await new NodeTreeReader(this.cacheService).readNodes([nodeId], {
-			depth: typedFlags.depth,
-			followLinks: typedFlags["follow-links"],
-		});
+		const trees = await new NodeTreeReader(this.cacheService).readNodes(
+			[nodeId],
+			{
+				depth: typedFlags.depth,
+				followLinks: typedFlags["follow-links"],
+			},
+		);
 		const node = trees[0];
-		if (node === undefined) {
+		if (node === undefined)
+		{
 			this.error(`Node not found with ID: ${nodeId}`);
 		}
 
-		await this.displayNodeWithChildren(node, typedFlags, {isMirror, originalId});
+		await this.displayNodeWithChildren(
+			node,
+			typedFlags,
+			{
+				isMirror,
+				originalId,
+			},
+		);
 	}
 
 	private async displayNodeWithChildren(
 		node: NodeTree,
 		flags: GetFlags,
-		mirrorInfo: {isMirror: boolean; originalId: string | null},
-	): Promise<void> {
+		mirrorInfo:
+		{
+			isMirror: boolean;
+			originalId: string | null;
+		},
+	): Promise<void>
+	{
 		const fullPath = this.pathBuilder.buildFullPath(node.id);
 
-		if (flags.json) {
+		if (flags.json)
+		{
 			let outputNode: Record<string, unknown>;
-			if (flags.fields) {
+			if (flags.fields)
+			{
 				const parsedFields = this.parseFields(flags.fields);
 				outputNode = this.filterNodeFields(node, parsedFields);
-				if (parsedFields.includes("path")) {
+				if (parsedFields.includes("path"))
+				{
 					outputNode.path = fullPath;
 				}
-			} else {
-				outputNode = {...node, path: fullPath};
+			}
+			else
+			{
+				outputNode =
+				{
+					...node,
+					path: fullPath,
+				};
 			}
 			this.log(JSON.stringify(outputNode, null, 2));
 			return;
@@ -153,44 +204,58 @@ export default class Get extends BaseListCommand {
 		this.log(`Node: ${fullPath}`);
 		this.log(`🔗 \u001B[90mhttps://workflowy.com/#/${node.id}\u001B[0m`);
 
-		if (mirrorInfo.isMirror && !flags["follow-mirror"] && mirrorInfo.originalId) {
+		if (mirrorInfo.isMirror && !flags["follow-mirror"] && mirrorInfo.originalId)
+		{
 			this.log(`\u001B[33m🪞 This is a mirror of: ${mirrorInfo.originalId}\u001B[0m`);
 			this.log(`   Use --follow-mirror (-m) to view the original node`);
 		}
 		this.log("");
 
-		if (flags.depth > 0 && node.children && node.children.length > 0) {
+		if (flags.depth > 0 && node.children && node.children.length > 0)
+		{
 			this.log(htmlToAnsi(node.name ?? ""));
 			this.log(`Children (${this.countDescendants(node)} nodes):`);
 			await this.displayNodes(node.children, flags);
-		} else if (flags.depth > 0) {
+		}
+		else if (flags.depth > 0)
+		{
 			this.log(htmlToAnsi(node.name ?? ""));
 			this.log("No children");
-		} else {
+		}
+		else
+		{
 			this.log(`Name: ${htmlToAnsi(node.name ?? "")}`);
-			if (node.note) {
+			if (node.note)
+			{
 				this.log(`Note: ${node.note}`);
 			}
 			this.log(`Completed: ${node.completedAt !== null}`);
-			if (node.createdAt) {
+			if (node.createdAt)
+			{
 				this.log(`Created: ${node.createdAt.toISOString()}`);
 			}
-			if (node.modifiedAt) {
+			if (node.modifiedAt)
+			{
 				this.log(`Modified: ${node.modifiedAt.toISOString()}`);
 			}
-			if (node.completedAt) {
+			if (node.completedAt)
+			{
 				this.log(`Completed At: ${node.completedAt.toISOString()}`);
 			}
-			if (node.layoutMode) {
+			if (node.layoutMode)
+			{
 				this.log(`Layout: ${node.layoutMode}`);
 			}
 		}
 	}
 
-	private countDescendants(node: NodeTree): number {
+	private countDescendants(node: NodeTree): number
+	{
 		let count = 0;
-		if (node.children) {
-			for (const child of node.children) {
+		if (node.children)
+		{
+			for (const child of node.children)
+			{
 				count += 1 + this.countDescendants(child);
 			}
 		}

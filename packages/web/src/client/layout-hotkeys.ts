@@ -19,7 +19,8 @@ export const LAYOUT_HOTKEY_COMMANDS = [
 export type LayoutHotkeyCommand = (typeof LAYOUT_HOTKEY_COMMANDS)[number];
 
 /** One node's layout write: name, layoutMode and numberedStart in one update request. */
-export interface LayoutUpdateRequest {
+export interface LayoutUpdateRequest
+{
 	nodeId: string;
 	layoutMode: string;
 	numberedStart?: number | null;
@@ -27,7 +28,8 @@ export interface LayoutUpdateRequest {
 	note?: "";
 }
 
-export interface LayoutHotkeyWrites {
+export interface LayoutHotkeyWrites
+{
 	updates: LayoutUpdateRequest[];
 	deletes: string[];
 	clearSelection: boolean;
@@ -36,12 +38,14 @@ export interface LayoutHotkeyWrites {
 }
 
 /** The edited row's unsaved text, which replaces its cached name. */
-export interface EditedName {
+export interface EditedName
+{
 	nodeId: string;
 	name: string;
 }
 
-function toggleItem(node: NodeResponse, edited: EditedName | undefined): LayoutToggleItem {
+function toggleItem(node: NodeResponse, edited: EditedName | undefined): LayoutToggleItem
+{
 	const name = edited?.nodeId === node.id ? edited.name : (node.name ?? "");
 	return {
 		id: node.id,
@@ -62,13 +66,18 @@ export function planLayoutHotkey(
 	command: LayoutToggleCommand,
 	nodes: readonly NodeResponse[],
 	edited?: EditedName,
-): LayoutHotkeyWrites {
+): LayoutHotkeyWrites
+{
 	const plan = planLayoutToggle(
 		command,
 		nodes.map((node) => toggleItem(node, edited)),
 	);
 	return {
-		updates: plan.updates.map(({id, ...rest}) => ({nodeId: id, ...rest})),
+		updates: plan.updates.map(({id, ...rest}) => (
+		{
+			nodeId: id,
+			...rest,
+		})),
 		deletes: plan.deletes,
 		clearSelection: plan.clearSelection,
 		creates: plan.creates ?? [],
@@ -82,6 +91,7 @@ const NO_TODO_LAYOUTS = new Set(["code-block", "quote-block", "divider"]);
  * Upstream `toggle_todo_mode` availability (`xL1`): hidden when every target is read-only or no target can take the
  * to-do layout.
  */
-export function todoModeAvailable(nodes: readonly NodeResponse[]): boolean {
+export function todoModeAvailable(nodes: readonly NodeResponse[]): boolean
+{
 	return nodes.some((node) => node.readOnly !== true && !NO_TODO_LAYOUTS.has(node.data.layoutMode ?? ""));
 }

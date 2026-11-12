@@ -10,9 +10,14 @@ import type {TemporalTransaction} from "./temporal-merge.js";
  */
 
 /** The ids of every entry read so far, sorted. */
-export function readWhatsNewReads(tx: TemporalTransaction): string[] {
+export function readWhatsNewReads(tx: TemporalTransaction): string[]
+{
 	return tx
-		.select({entry: whatsNewReads.entry})
+		.select(
+			{
+				entry: whatsNewReads.entry,
+			},
+		)
 		.from(whatsNewReads)
 		.where(eq(whatsNewReads.systemTo, FAR_FUTURE_DATE))
 		.all()
@@ -21,15 +26,27 @@ export function readWhatsNewReads(tx: TemporalTransaction): string[] {
 }
 
 /** Record `entries` as read, inserting only those not read yet, in one unit of work. */
-export function markWhatsNewRead(database: TemporalTransaction, entries: readonly string[]): void {
+export function markWhatsNewRead(database: TemporalTransaction, entries: readonly string[]): void
+{
 	const read = new Set(readWhatsNewReads(database));
 	const unread = [...new Set(entries)].filter((entry) => !read.has(entry));
-	if (unread.length === 0) {
+	if (unread.length === 0)
+	{
 		return;
 	}
-	runUnitOfWork(database, ({tx, systemTime}) => {
-		for (const entry of unread) {
-			tx.insert(whatsNewReads).values({entry, systemFrom: systemTime, systemTo: FAR_FUTURE_DATE}).run();
+	runUnitOfWork(database, ({tx, systemTime}) =>
+	{
+		for (const entry of unread)
+		{
+			tx.insert(whatsNewReads)
+				.values(
+					{
+						entry,
+						systemFrom: systemTime,
+						systemTo: FAR_FUTURE_DATE,
+					},
+				)
+				.run();
 		}
 	});
 }

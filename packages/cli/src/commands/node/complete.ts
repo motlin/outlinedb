@@ -1,7 +1,8 @@
 import type {WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
 import {BaseCompletionCommand} from "../base-completion-command.js";
 
-export default class Complete extends BaseCompletionCommand {
+export default class Complete extends BaseCompletionCommand
+{
 	static override hidden = false;
 	static override description = "Mark a Workflowy node as completed";
 
@@ -19,19 +20,23 @@ export default class Complete extends BaseCompletionCommand {
 		"<%= config.bin %> <%= command.id %> --id abc123 --verbose",
 	];
 
-	protected override get action(): "complete" | "uncomplete" {
+	protected override get action(): "complete" | "uncomplete"
+	{
 		return "complete";
 	}
 
-	protected override get actionPastTense(): string {
+	protected override get actionPastTense(): string
+	{
 		return "marked node as completed";
 	}
 
-	protected override get actionPresent(): string {
+	protected override get actionPresent(): string
+	{
 		return "Marking node as completed";
 	}
 
-	protected override async executeAction(client: WorkflowyWriteThroughClient, nodeId: string): Promise<void> {
+	protected override async executeAction(client: WorkflowyWriteThroughClient, nodeId: string): Promise<void>
+	{
 		await client.completeNode(nodeId);
 	}
 }

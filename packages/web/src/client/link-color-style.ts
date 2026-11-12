@@ -11,8 +11,10 @@ const INTERNAL_PREFIXES = [
 ] as const;
 
 /** Gray (`sameColor`): every link tertiary. Blue: tint, internal links tertiary, search matches sky. */
-export function linkColorCss(sameColor: boolean): string {
-	if (sameColor) {
+export function linkColorCss(sameColor: boolean): string
+{
+	if (sameColor)
+	{
 		return ".contentLink { color: var(--wf-text-tertiary); }";
 	}
 	const internal = INTERNAL_PREFIXES.map((prefix) => `.contentLink[href^='${prefix}']`).join(",");

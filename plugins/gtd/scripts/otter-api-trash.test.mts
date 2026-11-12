@@ -11,7 +11,13 @@ import {fileURLToPath} from "node:url";
 const SCRIPT = fileURLToPath(new URL("otter-api.sh", import.meta.url));
 
 /** Sandbox with a fake `curl` that records its arguments and never touches the network. */
-function sandbox(): {cache: string; bin: string; argsLog: string} {
+function sandbox():
+{
+	cache: string;
+	bin: string;
+	argsLog: string;
+}
+{
 	const dir = mkdtempSync(join(tmpdir(), "otter-trash-"));
 	const bin = join(dir, "bin");
 	const cache = join(dir, "cache");
@@ -39,18 +45,44 @@ function sandbox(): {cache: string; bin: string; argsLog: string} {
 		].join("\n"),
 	);
 	chmodSync(join(bin, "curl"), 0o755);
-	return {cache, bin, argsLog};
+	return {
+		cache,
+		bin,
+		argsLog,
+	};
 }
 
-function run(sb: {cache: string; bin: string}, ...args: string[]) {
-	const result = spawnSync("bash", [SCRIPT, ...args], {
-		env: {...process.env, PATH: `${sb.bin}:${process.env.PATH}`, OTTER_CACHE_DIR: sb.cache},
-		encoding: "utf8",
-	});
-	return {status: result.status, stdout: result.stdout, stderr: result.stderr};
+function run(
+	sb:
+	{
+		cache: string;
+		bin: string;
+	},
+	...args: string[]
+)
+{
+	const result = spawnSync(
+		"bash",
+		[SCRIPT, ...args],
+		{
+			env:
+			{
+				...process.env,
+				PATH: `${sb.bin}:${process.env.PATH}`,
+				OTTER_CACHE_DIR: sb.cache,
+			},
+			encoding: "utf8",
+		},
+	);
+	return {
+		status: result.status,
+		stdout: result.stdout,
+		stderr: result.stderr,
+	};
 }
 
-test("trash posts move_to_trash_bin with otid, csrf header, cookie file and referer", () => {
+test("trash posts move_to_trash_bin with otid, csrf header, cookie file and referer", () =>
+{
 	const sb = sandbox();
 	const result = run(sb, "trash", "otid-xyz");
 	assert.equal(result.status, 0, result.stderr);
@@ -74,7 +106,8 @@ test("trash posts move_to_trash_bin with otid, csrf header, cookie file and refe
 	]);
 });
 
-test("trash without an otid fails and sends nothing", () => {
+test("trash without an otid fails and sends nothing", () =>
+{
 	const sb = sandbox();
 	const result = run(sb, "trash");
 	assert.equal(result.status, 1);

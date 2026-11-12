@@ -27,11 +27,23 @@ import {dropViewRestore, oweViewRestore} from "./view-state.js";
  * `zoomedNodeId` always holds a full id. Every node link must go through this
  * helper so the form stays consistent.
  */
-export function nodeUrl(nodeId: string, instance: MirrorInstance | null = null): string {
-	if (instance !== null) {
-		return `/#/${virtualShortId({childId: nodeId, mirrorRootId: instance.rootId, path: instance.path})}`;
+export function nodeUrl(nodeId: string, instance: MirrorInstance | null = null): string
+{
+	if (instance !== null)
+	{
+		return `/#/${virtualShortId(
+			{
+				childId: nodeId,
+				mirrorRootId: instance.rootId,
+				path: instance.path,
+			},
+		)}`;
 	}
-	return locationUrl({id: nodeId});
+	return locationUrl(
+		{
+			id: nodeId,
+		},
+	);
 }
 
 /**
@@ -49,18 +61,23 @@ export function bulletClickAction(event: {
 	button: number;
 	armed: boolean;
 	inSelection: boolean;
-}): "ignore" | "clear-selection" | "browser" | "zoom" {
-	if (!event.armed) {
+}): "ignore" | "clear-selection" | "browser" | "zoom"
+{
+	if (!event.armed)
+	{
 		return "ignore";
 	}
-	if (event.inSelection) {
+	if (event.inSelection)
+	{
 		return "clear-selection";
 	}
 	return event.metaKey || event.ctrlKey || event.button !== 0 ? "browser" : "zoom";
 }
 
-export function resolveZoomTarget(param: string | null, lookup: (id: string) => string | null) {
-	if (param === null) {
+export function resolveZoomTarget(param: string | null, lookup: (id: string) => string | null)
+{
+	if (param === null)
+	{
 		return "home";
 	}
 	return isShortId(param) || parseVirtualShortId(param) !== null ? lookup(param) : param;
@@ -68,7 +85,8 @@ export function resolveZoomTarget(param: string | null, lookup: (id: string) => 
 
 export type ZoomFocus = "first_child" | "last_selected";
 
-export interface ZoomFocusInput {
+export interface ZoomFocusInput
+{
 	zoomedId: string | null;
 	/** `first_child`: the node to zoom into (null for home). Unused by `last_selected`. */
 	targetId: string | null;
@@ -80,7 +98,8 @@ export interface ZoomFocusInput {
 	previousOffset: number;
 }
 
-export interface ZoomFocusPlan {
+export interface ZoomFocusPlan
+{
 	route: string;
 	/** The row to edit after navigating, or null to stop editing. */
 	editId: string | null;
@@ -98,16 +117,25 @@ export interface ZoomFocusPlan {
 export function planZoomFocus(
 	focus: ZoomFocus,
 	{zoomedId, targetId, firstChildId, parentOfZoomed, previousEditingId, previousOffset}: ZoomFocusInput,
-): ZoomFocusPlan | null {
-	if (focus === "first_child") {
-		if (targetId === zoomedId) {
+): ZoomFocusPlan | null
+{
+	if (focus === "first_child")
+	{
+		if (targetId === zoomedId)
+		{
 			return null;
 		}
 		const editId = firstChildId ?? targetId;
 		const offset = editId !== null && editId === previousEditingId ? previousOffset : 0;
-		return {route: targetId === null ? "/" : nodeUrl(targetId), editId, offset, scrollTop: true};
+		return {
+			route: targetId === null ? "/" : nodeUrl(targetId),
+			editId,
+			offset,
+			scrollTop: true,
+		};
 	}
-	if (zoomedId === null) {
+	if (zoomedId === null)
+	{
 		return null;
 	}
 	return {
@@ -124,16 +152,20 @@ export type ZoomStep = "animate-in" | "navigate" | "animate-out" | "focus";
  * The order of a zoom's phases. Zooming in animates, navigates, then focuses; zooming out navigates, animates, then
  * focuses, because the animation hides the row until it ends and a caret set earlier would be lost.
  */
-export function zoomSteps({animate, isOut, hasEdit}: {animate: boolean; isOut: boolean; hasEdit: boolean}): ZoomStep[] {
+export function zoomSteps({animate, isOut, hasEdit}: {animate: boolean; isOut: boolean; hasEdit: boolean}): ZoomStep[]
+{
 	const steps: ZoomStep[] = [];
-	if (animate && !isOut) {
+	if (animate && !isOut)
+	{
 		steps.push("animate-in");
 	}
 	steps.push("navigate");
-	if (animate && isOut) {
+	if (animate && isOut)
+	{
 		steps.push("animate-out");
 	}
-	if (hasEdit) {
+	if (hasEdit)
+	{
 		steps.push("focus");
 	}
 	return steps;
@@ -144,19 +176,23 @@ export function zoomSteps({animate, isOut, hasEdit}: {animate: boolean; isOut: b
  * the same caret after the paint (when nothing else took the edit meanwhile), without scrolling to the row. A row that mounts editing focuses in its
  * commit, which forces a style and layout pass of the whole new view inside that frame; after the paint it is cheap.
  */
-function holdEditingAcrossSwap(): void {
+function holdEditingAcrossSwap(): void
+{
 	const {editingId, editingCaretOffset, stopEditing} = useOutlineStore.getState();
-	if (editingId === null) {
+	if (editingId === null)
+	{
 		return;
 	}
 	const editor = editorElement(editingId);
 	const offset = editor === null ? (editingCaretOffset ?? 0) : caretTextOffset(editor);
 	stopEditing();
-	void (async () => {
+	void (async () =>
+	{
 		await afterNextPaint();
 		const state = useOutlineStore.getState();
 		// A row the new view does not show is not resumed: the store would say "editing" with focus on BODY.
-		if (state.editingId === null && rowContent(editingId) !== null) {
+		if (state.editingId === null && rowContent(editingId) !== null)
+		{
 			focusQuietlyNext(editingId);
 			state.resumeEditing(editingId, offset);
 		}
@@ -177,35 +213,69 @@ export function goToNode(
 	structural = false,
 	/** The mirror instance the row was met in: the location is its virtual `v_…` id and the zoom keeps the instance. */
 	instance: MirrorInstance | null = null,
-): void {
+): void
+{
 	const {dispatchNav, zoom, panes, mainPaneUrlId} = useOutlineStore.getState();
 	dropViewRestore();
 	// Upstream replaces the entry while panes are open and leaves the app stacks alone.
 	const replace = panes.length > 0 && !structural;
-	const url = locationUrl({id: nodeId, instance, query, fragments: workspaceFragments(panes, mainPaneUrlId)});
+	const url = locationUrl(
+		{
+			id: nodeId,
+			instance,
+			query,
+			fragments: workspaceFragments(panes, mainPaneUrlId),
+		},
+	);
 	const locId =
 		nodeId === null
 			? null
 			: instance === null
 				? shortId(nodeId)
-				: virtualShortId({childId: nodeId, mirrorRootId: instance.rootId, path: instance.path});
-	dispatchNav({type: replace ? "replace" : "navigate", loc: {id: locId, query}});
-	zoomWhenViewReady(nodeId, () => {
-		if (nodeId !== useOutlineStore.getState().zoomedNodeId) {
+				: virtualShortId(
+						{
+							childId: nodeId,
+							mirrorRootId: instance.rootId,
+							path: instance.path,
+						},
+					);
+	dispatchNav(
+		{
+			type: replace ? "replace" : "navigate",
+			loc:
+			{
+				id: locId,
+				query,
+			},
+		},
+	);
+	zoomWhenViewReady(nodeId, () =>
+	{
+		if (nodeId !== useOutlineStore.getState().zoomedNodeId)
+		{
 			holdEditingAcrossSwap();
 		}
 		zoom(nodeId, instance);
 	});
-	void (replace ? navigate(url, {replace: true}) : navigate(url));
+	void (replace
+		? navigate(
+				url,
+				{
+					replace: true,
+				},
+			)
+		: navigate(url));
 }
 
 /**
  * Upstream's close of the main pane: the first pane becomes the main outline, so the URL navigates to its zoom and
  * search while the remaining panes stay open. A no-op with no pane open.
  */
-export function closeMainPane(navigate: NavigateFn): void {
+export function closeMainPane(navigate: NavigateFn): void
+{
 	const promoted = useOutlineStore.getState().closeMainPane();
-	if (promoted !== null) {
+	if (promoted !== null)
+	{
 		goToNode(navigate, promoted.zoomedId, promoted.query === "" ? null : promoted.query, true);
 	}
 }
@@ -221,13 +291,19 @@ export function movePane(
 	index: number,
 	/** Expand a location's short id to the node id (from the cache) so the demoted main pane can zoom back to it. */
 	resolveId?: (locationId: string) => string,
-): void {
+): void
+{
 	const promoted = useOutlineStore.getState().movePane(paneId, index, resolveId)?.promoted ?? null;
-	if (promoted !== null) {
+	if (promoted !== null)
+	{
 		// The promoted pane arrives with its own history; navigating to it must not add the old main location to it.
 		const {mainPaneHistory} = useOutlineStore.getState();
 		goToNode(navigate, promoted.zoomedId, promoted.query === "" ? null : promoted.query, true);
-		useOutlineStore.setState({mainPaneHistory});
+		useOutlineStore.setState(
+			{
+				mainPaneHistory,
+			},
+		);
 	}
 }
 
@@ -236,7 +312,8 @@ export function movePane(
  * navigate path as a node move (an empty query clears it). A new query on the same
  * node is a distinct location, so it is never deduped.
  */
-export function navigateToSearch(navigate: NavigateFn, query: string): void {
+export function navigateToSearch(navigate: NavigateFn, query: string): void
+{
 	useOutlineStore.getState().pushSearchLocation(query, navigate);
 }
 
@@ -245,22 +322,34 @@ export function navigateToSearch(navigate: NavigateFn, query: string): void {
  * outline swaps in the same render as the URL change rather than after the hash route resolves it, or, when its view
  * is not cached, in the render after the view loads. An id the cache cannot resolve leaves the zoom to the route.
  */
-export function zoomToCachedLocation(hash: string, resolve: (locationId: string) => string | undefined): void {
+export function zoomToCachedLocation(hash: string, resolve: (locationId: string) => string | undefined): void
+{
 	zoomToCachedId(parseLocationHash(hash).id, resolve);
 }
 
-function zoomToCachedId(locationId: string | null, resolve: (locationId: string) => string | undefined): void {
+function zoomToCachedId(locationId: string | null, resolve: (locationId: string) => string | undefined): void
+{
 	const target = locationId === null ? null : resolve(locationId);
-	if (target === undefined) {
+	if (target === undefined)
+	{
 		return;
 	}
 	// A virtual location also names the mirror root the row was met in; a root the cache lacks zooms the plain row.
 	const virtual = locationId === null ? null : parseVirtualShortId(locationId);
 	const rootId = virtual === null ? undefined : resolve(virtual.mirrorShortId);
-	const instance = virtual === null || rootId === undefined ? null : {rootId, path: virtual.path};
-	zoomWhenViewReady(target, () => {
+	const instance =
+		virtual === null || rootId === undefined
+			? null
+			:
+				{
+					rootId,
+					path: virtual.path,
+				};
+	zoomWhenViewReady(target, () =>
+	{
 		const state = useOutlineStore.getState();
-		if (target !== state.zoomedNodeId || instance?.rootId !== state.zoomedInstance?.rootId) {
+		if (target !== state.zoomedNodeId || instance?.rootId !== state.zoomedInstance?.rootId)
+		{
 			holdEditingAcrossSwap();
 			state.zoom(target, instance);
 		}
@@ -277,25 +366,44 @@ export function stepNav(
 	navigate: NavigateFn,
 	direction: "back" | "forward",
 	resolve: (locationId: string) => string | undefined,
-): void {
+): void
+{
 	const {nav: before, dispatchNav, panes: panesBefore, stepMainPaneHistory} = useOutlineStore.getState();
 	let target: Loc | null;
-	if (panesBefore.length > 0) {
+	if (panesBefore.length > 0)
+	{
 		target = stepMainPaneHistory(direction);
-	} else if ((direction === "back" ? before.back : before.forward).length === 0) {
+	}
+	else if ((direction === "back" ? before.back : before.forward).length === 0)
+	{
 		return;
-	} else {
-		dispatchNav({type: direction});
+	}
+	else
+	{
+		dispatchNav(
+			{
+				type: direction,
+			},
+		);
 		target = useOutlineStore.getState().nav.current;
 	}
-	if (target !== null) {
+	if (target !== null)
+	{
 		const {panes, mainPaneUrlId} = useOutlineStore.getState();
-		if (panes.length === 0) {
+		if (panes.length === 0)
+		{
 			oweAppStepScroll(target);
 		}
 		oweViewRestore(target);
 		zoomToCachedId(target.id, resolve);
-		void navigate(locationUrl({...target, fragments: workspaceFragments(panes, mainPaneUrlId)}));
+		void navigate(
+			locationUrl(
+				{
+					...target,
+					fragments: workspaceFragments(panes, mainPaneUrlId),
+				},
+			),
+		);
 	}
 }
 
@@ -305,13 +413,20 @@ export function stepNav(
  * deduped against the URL the app itself just pushed. A replaced entry, or the push of the canonical URL for an unknown
  * id, sets the current location only, as upstream's `replaceState` and root fallback leave the stacks alone.
  */
-export function syncNavLocation(hash: string, isPop: boolean, isReplace = false): void {
+export function syncNavLocation(hash: string, isPop: boolean, isReplace = false): void
+{
 	const loc = locFromHash(hash);
 	const type = isReplace ? "replace" : isPop ? "popstate" : "navigate";
-	useOutlineStore.getState().dispatchNav({type, loc});
+	useOutlineStore.getState().dispatchNav(
+		{
+			type,
+			loc,
+		},
+	);
 }
 
-export interface EmptyDayCleanupDeps {
+export interface EmptyDayCleanupDeps
+{
 	getNode: (id: string) => NodeResponse | undefined;
 	getChildren: (id: string) => readonly NodeResponse[] | undefined;
 	deleteNode: (id: string) => unknown;
@@ -324,46 +439,59 @@ export interface EmptyDayCleanupDeps {
  * no blank row. A childless lone child means the day's only descendant is that
  * child, so "not inside" is "not the day and not the child".
  */
-export function cleanupEmptyDayOnLeave(fromId: string | null, toId: string | null, deps: EmptyDayCleanupDeps): void {
-	if (fromId === null || fromId === toId || deps.getNode(fromId)?.calendar?.level !== "day") {
+export function cleanupEmptyDayOnLeave(fromId: string | null, toId: string | null, deps: EmptyDayCleanupDeps): void
+{
+	if (fromId === null || fromId === toId || deps.getNode(fromId)?.calendar?.level !== "day")
+	{
 		return;
 	}
 	const children = deps.getChildren(fromId);
 	const child = children?.length === 1 ? children[0] : undefined;
-	if (child === undefined) {
+	if (child === undefined)
+	{
 		return;
 	}
 	const empty = (child.name ?? "") === "" && (child.note ?? "") === "" && child.hasChildren !== true;
-	if (empty && child.isMirror !== true && child.id !== toId) {
+	if (empty && child.isMirror !== true && child.id !== toId)
+	{
 		deps.deleteNode(child.id);
 	}
 }
 
 /** Run the empty-day cleanup whenever the zoomed node changes. Mount once (the outline route owns it). */
-export function useEmptyDayCleanup(): void {
+export function useEmptyDayCleanup(): void
+{
 	const queryClient = useQueryClient();
 	const {mutate: deleteNode} = useDeleteNode();
 	const zoomedNodeId = useOutlineStore((state) => state.zoomedNodeId);
 	const previous = useRef(zoomedNodeId);
 
-	useEffect(() => {
+	useEffect(() =>
+	{
 		const fromId = previous.current;
 		previous.current = zoomedNodeId;
-		cleanupEmptyDayOnLeave(fromId, zoomedNodeId, {
-			getNode: (id) => readNode(queryClient, id),
-			getChildren: (id) => readChildren(queryClient, id),
-			deleteNode,
-		});
+		cleanupEmptyDayOnLeave(
+			fromId,
+			zoomedNodeId,
+			{
+				getNode: (id) => readNode(queryClient, id),
+				getChildren: (id) => readChildren(queryClient, id),
+				deleteNode,
+			},
+		);
 	}, [deleteNode, queryClient, zoomedNodeId]);
 }
 
 /** Keep the in-app stacks in step with the outline route's URL. Mount once (the top bar owns it). */
-export function useNavStackSync(): void {
+export function useNavStackSync(): void
+{
 	const location = useLocation();
 	const navigationType = useNavigationType();
 
-	useEffect(() => {
-		if (location.pathname === "/") {
+	useEffect(() =>
+	{
+		if (location.pathname === "/")
+		{
 			const state: unknown = location.state;
 			const canonical =
 				typeof state === "object" && state !== null && "wfCanonical" in state && state.wfCanonical === true;
@@ -376,20 +504,25 @@ export function useNavStackSync(): void {
 	}, [location, navigationType]);
 }
 
-export function useNodeNavigation() {
+export function useNodeNavigation()
+{
 	const navigate = useStableNavigate();
 
 	return {
-		navigateToNode: (nodeId: string | null, instance: MirrorInstance | null = null) => {
+		navigateToNode: (nodeId: string | null, instance: MirrorInstance | null = null) =>
+		{
 			goToNode(navigate, nodeId, null, false, instance);
 		},
-		navigateToRoot: () => {
+		navigateToRoot: () =>
+		{
 			goToNode(navigate, null);
 		},
-		navigateToSearch: (query: string) => {
+		navigateToSearch: (query: string) =>
+		{
 			navigateToSearch(navigate, query);
 		},
-		cancelSearch: () => {
+		cancelSearch: () =>
+		{
 			useOutlineStore.getState().cancelSearch(navigate);
 		},
 	};

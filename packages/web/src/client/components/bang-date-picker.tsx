@@ -13,7 +13,8 @@ import {CalendarDatePickerPopup} from "./date-picker-popup.js";
 const TRIGGER_INPUT_TYPES = new Set(["insertText", "insertCompositionText"]);
 const TRIGGER_DATA = new Set(["!", "！"]);
 
-interface BangDatePickerOptions {
+interface BangDatePickerOptions
+{
 	/** The contenteditable whose caret offsets (a pill counting one) the callbacks receive. */
 	editorRef: React.RefObject<HTMLElement | null>;
 	dateSettings: DateSettings;
@@ -28,9 +29,14 @@ interface BangDatePickerOptions {
 	onCancel: (offset: number) => void;
 }
 
-interface OpenPicker {
+interface OpenPicker
+{
 	offset: number;
-	position: {left: number; top: number};
+	position:
+	{
+		left: number;
+		top: number;
+	};
 	term: string;
 	isRange: boolean;
 	/** Set when the picker edits an autocompleted phrase from `offset` up to here. */
@@ -44,10 +50,12 @@ interface OpenPicker {
 }
 
 /** Deletes the `!!` just typed before a collapsed caret in a text node; false when it is not there. */
-function removeTypedBangs(editor: HTMLElement): boolean {
+function removeTypedBangs(editor: HTMLElement): boolean
+{
 	const selection = globalThis.getSelection();
 	const caret = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
-	if (!caret?.collapsed || caret.startContainer.nodeType !== Node.TEXT_NODE || caret.startOffset < 2) {
+	if (!caret?.collapsed || caret.startContainer.nodeType !== Node.TEXT_NODE || caret.startOffset < 2)
+	{
 		return false;
 	}
 	const before = document.createRange();
@@ -57,7 +65,8 @@ function removeTypedBangs(editor: HTMLElement): boolean {
 	after.selectNodeContents(editor);
 	after.setStart(caret.startContainer, caret.startOffset);
 	const head = before.toString();
-	if (!shouldTriggerDatePopup(head + after.toString(), head.length)) {
+	if (!shouldTriggerDatePopup(head + after.toString(), head.length))
+	{
 		return false;
 	}
 	const bangs = document.createRange();
@@ -68,15 +77,19 @@ function removeTypedBangs(editor: HTMLElement): boolean {
 }
 
 /** A collapsed range at the end of `editor`'s last text, or null when it holds no text. */
-function endOfTextRange(editor: HTMLElement): Range | null {
+function endOfTextRange(editor: HTMLElement): Range | null
+{
 	const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
 	let last: Text | null = null;
-	for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
-		if (node instanceof Text && node.data.length > 0) {
+	for (let node = walker.nextNode(); node !== null; node = walker.nextNode())
+	{
+		if (node instanceof Text && node.data.length > 0)
+		{
 			last = node;
 		}
 	}
-	if (last === null) {
+	if (last === null)
+	{
 		return null;
 	}
 	const range = document.createRange();
@@ -89,12 +102,20 @@ function endOfTextRange(editor: HTMLElement): Range | null {
  * A caret at an element boundary (focused at the end of the name) has no rects, so it falls
  * back to the end of `editor`'s text, then to the editor's own box.
  */
-function caretPosition(editor?: HTMLElement): {left: number; top: number} {
+function caretPosition(editor?: HTMLElement):
+{
+	left: number;
+	top: number;
+}
+{
 	const selection = globalThis.getSelection();
 	const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
 	const fallback = editor === undefined ? undefined : (endOfTextRange(editor) ?? editor);
 	const rect = range?.getClientRects()[0] ?? fallback?.getClientRects()[0] ?? range?.getBoundingClientRect();
-	return {left: (rect?.left ?? 0) + globalThis.scrollX, top: (rect?.bottom ?? 0) + globalThis.scrollY};
+	return {
+		left: (rect?.left ?? 0) + globalThis.scrollX,
+		top: (rect?.bottom ?? 0) + globalThis.scrollY,
+	};
 }
 
 /**
@@ -103,7 +124,8 @@ function caretPosition(editor?: HTMLElement): {left: number; top: number} {
  * Enter with nothing parsed and Escape insert nothing and do not restore the `!!`.
  * Call `handleInput` with the `onInput` native event before saving the edited text.
  */
-export function useBangDatePicker({editorRef, dateSettings, onOpen, onInsert, onCancel}: BangDatePickerOptions): {
+export function useBangDatePicker({editorRef, dateSettings, onOpen, onInsert, onCancel}: BangDatePickerOptions):
+{
 	handleInput: (native: Event) => void;
 	/** Open the picker to replace the plain text `offset`..`replaceEnd`, its input prefilled with `term`. */
 	openForPhrase: (phrase: Required<Pick<OpenPicker, "replaceEnd">> & Omit<OpenPicker, "replaceEnd">) => void;
@@ -111,14 +133,16 @@ export function useBangDatePicker({editorRef, dateSettings, onOpen, onInsert, on
 	openAtCaret: (anchorRect?: DOMRect | null, options?: Pick<OpenPicker, "headerText" | "onSelect">) => void;
 	isOpen: () => boolean;
 	popup: ReactNode;
-} {
+}
+{
 	const [picker, setPicker] = useState<OpenPicker | null>(null);
 	// The open picker for close callbacks that can fire twice (a preset row selects, then the menu exits).
 	const openRef = useRef<OpenPicker | null>(null);
 	const {openSettings} = outlineActions();
 
 	const handleInput = useCallback(
-		(native: Event) => {
+		(native: Event) =>
+		{
 			const editor = editorRef.current;
 			if (
 				editor === null ||
@@ -127,11 +151,18 @@ export function useBangDatePicker({editorRef, dateSettings, onOpen, onInsert, on
 				!TRIGGER_INPUT_TYPES.has(native.inputType) ||
 				!TRIGGER_DATA.has(native.data ?? "") ||
 				!removeTypedBangs(editor)
-			) {
+			)
+			{
 				return;
 			}
 			const offset = caretTextOffset(editor);
-			const opened: OpenPicker = {offset, position: caretPosition(), term: "", isRange: false};
+			const opened: OpenPicker =
+			{
+				offset,
+				position: caretPosition(),
+				term: "",
+				isRange: false,
+			};
 			openRef.current = opened;
 			onOpen(offset);
 			setPicker(opened);
@@ -140,7 +171,8 @@ export function useBangDatePicker({editorRef, dateSettings, onOpen, onInsert, on
 	);
 
 	const openForPhrase = useCallback(
-		(opened: OpenPicker) => {
+		(opened: OpenPicker) =>
+		{
 			openRef.current = opened;
 			onOpen(opened.offset);
 			setPicker(opened);
@@ -149,9 +181,11 @@ export function useBangDatePicker({editorRef, dateSettings, onOpen, onInsert, on
 	);
 
 	const openAtCaret = useCallback(
-		(anchorRect?: DOMRect | null, options?: Pick<OpenPicker, "headerText" | "onSelect">) => {
+		(anchorRect?: DOMRect | null, options?: Pick<OpenPicker, "headerText" | "onSelect">) =>
+		{
 			const editor = editorRef.current;
-			if (editor === null || openRef.current !== null) {
+			if (editor === null || openRef.current !== null)
+			{
 				return;
 			}
 			const offset = caretTextOffset(editor);
@@ -159,15 +193,29 @@ export function useBangDatePicker({editorRef, dateSettings, onOpen, onInsert, on
 			const position =
 				anchorRect === undefined || anchorRect === null
 					? caretPosition(editor)
-					: {left: anchorRect.left + globalThis.scrollX, top: anchorRect.bottom + globalThis.scrollY};
-			openForPhrase({offset, position, term: "", isRange: false, addSpaceBefore: true, ...options});
+					:
+						{
+							left: anchorRect.left + globalThis.scrollX,
+							top: anchorRect.bottom + globalThis.scrollY,
+						};
+			openForPhrase(
+				{
+					offset,
+					position,
+					term: "",
+					isRange: false,
+					addSpaceBefore: true,
+					...options,
+				},
+			);
 		},
 		[editorRef, openForPhrase],
 	);
 
 	const isOpen = useCallback(() => openRef.current !== null, []);
 
-	const close = useCallback((): OpenPicker | null => {
+	const close = useCallback((): OpenPicker | null =>
+	{
 		const opened = openRef.current;
 		openRef.current = null;
 		setPicker(null);
@@ -175,31 +223,46 @@ export function useBangDatePicker({editorRef, dateSettings, onOpen, onInsert, on
 	}, []);
 
 	const apply = useCallback(
-		(dates: Date[]) => {
+		(dates: Date[]) =>
+		{
 			const opened = close();
-			if (opened !== null) {
-				applyDatePick(opened, dates, {
-					insert: (attrs) => {
-						onInsert(attrs, opened.offset, opened.replaceEnd, opened.addSpaceBefore);
+			if (opened !== null)
+			{
+				applyDatePick(
+					opened,
+					dates,
+					{
+						insert: (attrs) =>
+						{
+							onInsert(attrs, opened.offset, opened.replaceEnd, opened.addSpaceBefore);
+						},
+						cancel: onCancel,
 					},
-					cancel: onCancel,
-				});
+				);
 			}
 		},
 		[close, onInsert, onCancel],
 	);
 
-	const cancel = useCallback(() => {
+	const cancel = useCallback(() =>
+	{
 		const opened = close();
-		if (opened !== null) {
+		if (opened !== null)
+		{
 			onCancel(opened.replaceEnd ?? opened.offset);
 		}
 	}, [close, onCancel]);
 
-	const update = useCallback((patch: Partial<OpenPicker>) => {
+	const update = useCallback((patch: Partial<OpenPicker>) =>
+	{
 		const opened = openRef.current;
-		if (opened !== null) {
-			openRef.current = {...opened, ...patch};
+		if (opened !== null)
+		{
+			openRef.current =
+			{
+				...opened,
+				...patch,
+			};
 			setPicker(openRef.current);
 		}
 	}, []);
@@ -207,7 +270,13 @@ export function useBangDatePicker({editorRef, dateSettings, onOpen, onInsert, on
 	const guess =
 		picker === null
 			? []
-			: guessDates(picker.term, {dateFormat: dateSettings.dateFormat, weekStartDay: dateSettings.weekStartDay});
+			: guessDates(
+					picker.term,
+					{
+						dateFormat: dateSettings.dateFormat,
+						weekStartDay: dateSettings.weekStartDay,
+					},
+				);
 	const popup =
 		picker === null
 			? null
@@ -221,36 +290,68 @@ export function useBangDatePicker({editorRef, dateSettings, onOpen, onInsert, on
 						headerText={picker.headerText}
 						showControls={picker.onSelect === undefined}
 						showNoDate={picker.onSelect === undefined}
-						onTermChange={(term) => {
-							update({term});
+						onTermChange={(term) =>
+						{
+							update(
+								{
+									term,
+								},
+							);
 						}}
-						onEnter={() => {
-							if (guess.length > 0) {
+						onEnter={() =>
+						{
+							if (guess.length > 0)
+							{
 								apply(guess);
-							} else {
+							}
+							else
+							{
 								cancel();
 							}
 						}}
-						onApply={(dates) => {
+						onApply={(dates) =>
+						{
 							const [first] = dates;
-							if (picker.isRange && dates.length === 1 && first !== undefined) {
+							if (picker.isRange && dates.length === 1 && first !== undefined)
+							{
 								// A range's first click only fills the input; the second inserts the sorted range.
-								update({
-									term: formatPillLabel(timeAttrsFromDates([first]), {
-										dateFormat: dateSettings.dateFormat,
-									}),
-								});
-							} else {
+								update(
+									{
+										term: formatPillLabel(
+											timeAttrsFromDates([first]),
+											{
+												dateFormat: dateSettings.dateFormat,
+											},
+										),
+									},
+								);
+							}
+							else
+							{
 								apply(dates);
 							}
 						}}
-						onPreset={(preset: DatePreset) => {
-							apply([presetDate(preset, {weekStartDay: dateSettings.weekStartDay})]);
+						onPreset={(preset: DatePreset) =>
+						{
+							apply([
+								presetDate(
+									preset,
+									{
+										weekStartDay: dateSettings.weekStartDay,
+									},
+								),
+							]);
 						}}
-						onToggleRange={() => {
-							update({isRange: !picker.isRange});
+						onToggleRange={() =>
+						{
+							update(
+								{
+									isRange: !picker.isRange,
+								},
+							);
 						}}
-						onFormat={() => {
+						onFormat={() =>
+						{
 							cancel();
 							openSettings("Dates");
 						}}
@@ -259,5 +360,11 @@ export function useBangDatePicker({editorRef, dateSettings, onOpen, onInsert, on
 					/>,
 					document.body,
 				);
-	return {handleInput, openForPhrase, openAtCaret, isOpen, popup};
+	return {
+		handleInput,
+		openForPhrase,
+		openAtCaret,
+		isOpen,
+		popup,
+	};
 }

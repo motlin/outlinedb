@@ -13,25 +13,36 @@ import {readJson} from "../read-json.js";
 
 type RelatedNode = RelatedResponse["results"][number];
 
-function formatSimilarityScore(distance: number): string {
+function formatSimilarityScore(distance: number): string
+{
 	// Convert distance to similarity percentage (1 - distance)
 	// Cosine distance of 0 means identical, 1 means orthogonal
 	const similarity = Math.max(0, Math.min(100, (1 - distance) * 100));
 	return `${similarity.toFixed(0)}%`;
 }
 
-async function fetchRelatedNodes(nodeId: string): Promise<RelatedNode[]> {
-	const response = await fetch("/api/related", {
-		method: "POST",
-		headers: {"Content-Type": "application/json"},
-		body: JSON.stringify({
-			nodeId,
-			type: "similar",
-			limit: 10,
-			threshold: 0.7,
-		}),
-	});
-	if (!response.ok) {
+async function fetchRelatedNodes(nodeId: string): Promise<RelatedNode[]>
+{
+	const response = await fetch(
+		"/api/related",
+		{
+			method: "POST",
+			headers:
+			{
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(
+				{
+					nodeId,
+					type: "similar",
+					limit: 10,
+					threshold: 0.7,
+				},
+			),
+		},
+	);
+	if (!response.ok)
+	{
 		const data = await readJson<OpErrorBody>(response);
 		throw new Error(data.error ?? "Failed to fetch related nodes");
 	}
@@ -40,7 +51,8 @@ async function fetchRelatedNodes(nodeId: string): Promise<RelatedNode[]> {
 }
 
 /** Upstream's AI chat welcome heading (`cZ4`/`tZ4`): title and Beta badge. */
-function AiWelcomeTitle() {
+function AiWelcomeTitle()
+{
 	return (
 		<div className="title-row flex gap-m items-center">
 			<h3 className="text-l font-medium">Chat with Your Notes</h3>
@@ -55,7 +67,8 @@ function AiWelcomeTitle() {
  * Upstream's AI onboarding (`cZ4`), shown while `ai.embeddingStatus` is unset: Not now turns the `ai` feature off and
  * closes the window; Enable AI sets the status to "requested" so the server starts indexing the notes.
  */
-function AiEnablePrompt({onNotNow, onEnable}: {onNotNow: () => void; onEnable: () => void}) {
+function AiEnablePrompt({onNotNow, onEnable}: {onNotNow: () => void; onEnable: () => void})
+{
 	return (
 		<div className="welcome flex flex-col px-xl pt-xl gap-m leading-base text-base">
 			<div className="flex flex-col gap-xs">
@@ -91,7 +104,8 @@ function AiEnablePrompt({onNotNow, onEnable}: {onNotNow: () => void; onEnable: (
 }
 
 /** Upstream's `tZ4`, shown while `ai.embeddingStatus` is "requested" and the server indexes the notes. */
-function AiGettingReady() {
+function AiGettingReady()
+{
 	return (
 		<div className="welcome flex flex-col px-xl pt-xl gap-m leading-base text-base">
 			<div className="flex flex-col gap-xs">
@@ -113,20 +127,25 @@ const ENABLE_FLOW_DELAY_MS = 3000;
  * Upstream's `ai.enable-flow`: with the `ai` feature on and `ai.embeddingStatus` unset, open the AI window on the
  * Enable AI prompt 3s after load, once per page load.
  */
-function useAiEnableFlow(stage: ReturnType<typeof useAiEmbeddingStage>, open: () => void): void {
+function useAiEnableFlow(stage: ReturnType<typeof useAiEmbeddingStage>, open: () => void): void
+{
 	const aiOn = useFeatureOn("ai");
 	const [fired, setFired] = useState(false);
 	const due = aiOn && stage === "onboarding" && !fired;
-	useEffect(() => {
-		if (!due) {
+	useEffect(() =>
+	{
+		if (!due)
+		{
 			// oxlint-disable-next-line unicorn/no-useless-undefined -- consistent-return needs a value beside the cleanup return
 			return undefined;
 		}
-		const timer = setTimeout(() => {
+		const timer = setTimeout(() =>
+		{
 			setFired(true);
 			open();
 		}, ENABLE_FLOW_DELAY_MS);
-		return () => {
+		return () =>
+		{
 			clearTimeout(timer);
 		};
 	}, [due, open]);
@@ -139,9 +158,11 @@ function useAiEnableFlow(stage: ReturnType<typeof useAiEmbeddingStage>, open: ()
  * `ai.embeddingStatus`: unset shows the Enable AI prompt, "requested" the indexing notice, and the first ready open
  * sets `ai.embedding_tooltip_dismissed`.
  */
-export function RelatedNodesPanel() {
+export function RelatedNodesPanel()
+{
 	const {lastEditedId, relatedNodesPanelOpen, toggleRelatedNodesPanel} = useOutlineStore(
-		useShallow((state) => ({
+		useShallow((state) => (
+		{
 			lastEditedId: state.lastEditedId,
 			relatedNodesPanelOpen: state.relatedNodesPanelOpen,
 			toggleRelatedNodesPanel: state.toggleRelatedNodesPanel,
@@ -151,49 +172,65 @@ export function RelatedNodesPanel() {
 	const queryClient = useQueryClient();
 	const stage = useAiEmbeddingStage();
 	const ready = stage === "ready";
-	const openPanel = useCallback(() => {
-		if (!useOutlineStore.getState().relatedNodesPanelOpen) {
+	const openPanel = useCallback(() =>
+	{
+		if (!useOutlineStore.getState().relatedNodesPanelOpen)
+		{
 			toggleRelatedNodesPanel();
 		}
 	}, [toggleRelatedNodesPanel]);
 	useAiEnableFlow(stage, openPanel);
 
-	useEffect(() => {
-		if (relatedNodesPanelOpen && ready) {
+	useEffect(() =>
+	{
+		if (relatedNodesPanelOpen && ready)
+		{
 			void markAiEmbeddingTooltipDismissed(queryClient);
 		}
 	}, [relatedNodesPanelOpen, ready, queryClient]);
 
-	const {
+	const
+	{
 		data: relatedNodes = [],
 		isLoading,
 		error: queryError,
-	} = useQuery({
-		queryKey: ["related", lastEditedId],
-		queryFn:
-			relatedNodesPanelOpen && ready && lastEditedId !== null
-				? async () => fetchRelatedNodes(lastEditedId)
-				: skipToken,
-	});
+	} = useQuery(
+		{
+			queryKey: ["related", lastEditedId],
+			queryFn:
+				relatedNodesPanelOpen && ready && lastEditedId !== null
+					? async () => fetchRelatedNodes(lastEditedId)
+					: skipToken,
+		},
+	);
 	const error = queryError?.message ?? null;
 
 	const handleNavigateToNode = useCallback(
-		(nodeId: string) => {
+		(nodeId: string) =>
+		{
 			void navigate(nodeUrl(nodeId));
 		},
 		[navigate],
 	);
 
-	if (!relatedNodesPanelOpen) {
+	if (!relatedNodesPanelOpen)
+	{
 		return null;
 	}
 
-	const notNow = () => {
+	const notNow = () =>
+	{
 		void setFeature(queryClient, "ai", false);
 		toggleRelatedNodesPanel();
 	};
-	const enable = () => {
-		void setPreferences(queryClient, {aiEmbeddingStatus: "requested"});
+	const enable = () =>
+	{
+		void setPreferences(
+			queryClient,
+			{
+				aiEmbeddingStatus: "requested",
+			},
+		);
 	};
 
 	return (
@@ -233,7 +270,8 @@ export function RelatedNodesPanel() {
 									<li key={node.id}>
 										<button
 											className="related-nodes-panel-item"
-											onClick={() => {
+											onClick={() =>
+											{
 												handleNavigateToNode(node.id);
 											}}
 											type="button"

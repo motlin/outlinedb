@@ -6,7 +6,8 @@ import path from "node:path";
 import {compressBuffer, resolveBackupsDirectory} from "../../utils/backup-archive.js";
 import {nonEmpty} from "../../utils/non-empty.js";
 
-function formatTimestamp(): string {
+function formatTimestamp(): string
+{
 	return new Date().toISOString();
 }
 
@@ -14,7 +15,8 @@ type DropboxFolder = "Data" | "History";
 
 const MAX_REMOTE_BACKUPS = 3;
 
-interface DownloadResult {
+interface DownloadResult
+{
 	path: string;
 	filename: string;
 	size: number;
@@ -22,19 +24,22 @@ interface DownloadResult {
 	success: boolean;
 }
 
-interface DeletedBackup {
+interface DeletedBackup
+{
 	filename: string;
 	path: string;
 }
 
-interface DownloadAllResult {
+interface DownloadAllResult
+{
 	downloaded: DownloadResult[];
 	skipped: string[];
 	deleted: DeletedBackup[];
 	total: number;
 }
 
-export default class DownloadBackup extends Command {
+export default class DownloadBackup extends Command
+{
 	static override enableJsonFlag = true;
 
 	static override examples = [
@@ -46,38 +51,48 @@ export default class DownloadBackup extends Command {
 
 	static override description = "Download all Workflowy backups from Dropbox that are not already downloaded locally";
 
-	static override flags = {
-		folder: Flags.option({
-			char: "f",
-			description: "Which Dropbox folder to download from (default: downloads from both Data and History)",
-			options: ["Data", "History"] as const,
-		})(),
-		date: Flags.string({
-			char: "d",
-			description: "Download backup from specific date only (YYYY-MM-DD format)",
-		}),
-		quiet: Flags.boolean({
-			char: "q",
-			description: "Suppress all output except the downloaded filenames (for scripting)",
-			default: false,
-		}),
+	static override flags =
+	{
+		folder: Flags.option(
+			{
+				char: "f",
+				description: "Which Dropbox folder to download from (default: downloads from both Data and History)",
+				options: ["Data", "History"] as const,
+			},
+		)(),
+		date: Flags.string(
+			{
+				char: "d",
+				description: "Download backup from specific date only (YYYY-MM-DD format)",
+			},
+		),
+		quiet: Flags.boolean(
+			{
+				char: "q",
+				description: "Suppress all output except the downloaded filenames (for scripting)",
+				default: false,
+			},
+		),
 	};
 
-	public async run(): Promise<DownloadAllResult> {
+	public async run(): Promise<DownloadAllResult>
+	{
 		const {flags} = await this.parse(DownloadBackup);
 
 		const dropbox = this.initializeDropbox();
 
 		const folders: DropboxFolder[] = flags.folder ? [flags.folder] : ["Data", "History"];
 
-		const allResults: DownloadAllResult = {
+		const allResults: DownloadAllResult =
+		{
 			downloaded: [],
 			skipped: [],
 			deleted: [],
 			total: 0,
 		};
 
-		for (const folder of folders) {
+		for (const folder of folders)
+		{
 			const result = await this.downloadAllFromFolder(dropbox, folder, flags.date, flags.quiet);
 			allResults.downloaded.push(...result.downloaded);
 			allResults.skipped.push(...result.skipped);
@@ -85,16 +100,20 @@ export default class DownloadBackup extends Command {
 			allResults.total += result.total;
 		}
 
-		if (!flags.quiet) {
+		if (!flags.quiet)
+		{
 			this.log("");
 			this.log(`📊 Dropbox has ${allResults.total} backup(s) (max ${MAX_REMOTE_BACKUPS} per folder)`);
-			if (allResults.downloaded.length > 0) {
+			if (allResults.downloaded.length > 0)
+			{
 				this.log(`   Downloaded:    ${allResults.downloaded.length}`);
 			}
-			if (allResults.skipped.length > 0) {
+			if (allResults.skipped.length > 0)
+			{
 				this.log(`   Already local: ${allResults.skipped.length}`);
 			}
-			if (allResults.deleted.length > 0) {
+			if (allResults.deleted.length > 0)
+			{
 				this.log(`   Cleaned up:    ${allResults.deleted.length} old backup(s) removed from Dropbox`);
 			}
 		}
@@ -102,18 +121,31 @@ export default class DownloadBackup extends Command {
 		return allResults;
 	}
 
-	private initializeDropbox(): Dropbox {
+	private initializeDropbox(): Dropbox
+	{
 		const accessToken = process.env.DROPBOX_ACCESS_TOKEN;
 		const refreshToken = process.env.DROPBOX_REFRESH_TOKEN;
 		const clientId = nonEmpty(process.env.DROPBOX_ACCESS_KEY) ?? process.env.DROPBOX_APP_KEY;
 		const clientSecret = nonEmpty(process.env.DROPBOX_ACCESS_SECRET) ?? process.env.DROPBOX_APP_SECRET;
 
-		if (refreshToken && clientId && clientSecret) {
-			return new Dropbox({refreshToken, clientId, clientSecret});
+		if (refreshToken && clientId && clientSecret)
+		{
+			return new Dropbox(
+				{
+					refreshToken,
+					clientId,
+					clientSecret,
+				},
+			);
 		}
 
-		if (accessToken) {
-			return new Dropbox({accessToken});
+		if (accessToken)
+		{
+			return new Dropbox(
+				{
+					accessToken,
+				},
+			);
 		}
 
 		return this.error(
@@ -130,25 +162,34 @@ export default class DownloadBackup extends Command {
 		folder: DropboxFolder,
 		dateFilter?: string,
 		quiet = false,
-	): Promise<DownloadAllResult> {
-		const conditionalLog = (message: string): void => {
-			if (!quiet) {
+	): Promise<DownloadAllResult>
+	{
+		const conditionalLog = (message: string): void =>
+		{
+			if (!quiet)
+			{
 				this.log(`[${formatTimestamp()}] ${message}`);
 			}
 		};
 
 		const dropboxPath = `/Apps/WorkFlowy/${folder}`;
-		const result: DownloadAllResult = {
+		const result: DownloadAllResult =
+		{
 			downloaded: [],
 			skipped: [],
 			deleted: [],
 			total: 0,
 		};
 
-		try {
+		try
+		{
 			conditionalLog(`Searching:   ${dropboxPath}`);
 
-			const response = await dropbox.filesListFolder({path: dropboxPath});
+			const response = await dropbox.filesListFolder(
+				{
+					path: dropboxPath,
+				},
+			);
 
 			const fileExtension = folder === "Data" ? ".workflowy.backup" : ".txt";
 			let backupFiles = response.result.entries
@@ -156,20 +197,24 @@ export default class DownloadBackup extends Command {
 					(entry): entry is files.FileMetadataReference =>
 						entry[".tag"] === "file" && entry.name.endsWith(fileExtension),
 				)
-				.toSorted((a, b) => {
+				.toSorted((a, b) =>
+				{
 					const dateA = new Date(a.client_modified).getTime();
 					const dateB = new Date(b.client_modified).getTime();
 					return dateA - dateB;
 				});
 
-			if (dateFilter) {
-				backupFiles = backupFiles.filter((entry) => {
+			if (dateFilter)
+			{
+				backupFiles = backupFiles.filter((entry) =>
+				{
 					const dateMatch = entry.name.match(/\.(\d{4}-\d{2}-\d{2})\.(workflowy\.backup|txt)$/u);
 					return dateMatch?.[1] === dateFilter;
 				});
 			}
 
-			if (backupFiles.length === 0) {
+			if (backupFiles.length === 0)
+			{
 				conditionalLog(`No backup files found in ${dropboxPath}`);
 				return result;
 			}
@@ -178,16 +223,24 @@ export default class DownloadBackup extends Command {
 			conditionalLog(`Found ${backupFiles.length} backup(s) in ${folder}`);
 
 			const localDirectory = path.join(resolveBackupsDirectory(), folder);
-			if (!fs.existsSync(localDirectory)) {
-				fs.mkdirSync(localDirectory, {recursive: true});
+			if (!fs.existsSync(localDirectory))
+			{
+				fs.mkdirSync(
+					localDirectory,
+					{
+						recursive: true,
+					},
+				);
 			}
 
-			for (const backupFile of backupFiles) {
+			for (const backupFile of backupFiles)
+			{
 				const rawPath = path.join(localDirectory, backupFile.name);
 				// Backups are stored compressed; a pre-existing raw file still counts as downloaded.
 				const outputPath = `${rawPath}.zst`;
 
-				if (fs.existsSync(outputPath) || fs.existsSync(rawPath)) {
+				if (fs.existsSync(outputPath) || fs.existsSync(rawPath))
+				{
 					conditionalLog(`✓ Already have: ${backupFile.name}`);
 					result.skipped.push(backupFile.name);
 					continue;
@@ -196,10 +249,15 @@ export default class DownloadBackup extends Command {
 				const sizeMB = (backupFile.size / (1024 * 1024)).toFixed(2);
 				conditionalLog(`Downloading: ${backupFile.name} (${sizeMB} MB)`);
 
-				const downloadResponse = await dropbox.filesDownload({path: backupFile.path_lower ?? ""});
+				const downloadResponse = await dropbox.filesDownload(
+					{
+						path: backupFile.path_lower ?? "",
+					},
+				);
 				const {fileBinary} = downloadResponse.result;
 
-				if (fileBinary === undefined) {
+				if (fileBinary === undefined)
+				{
 					this.warn(`Failed to download: ${backupFile.name}`);
 					continue;
 				}
@@ -208,7 +266,8 @@ export default class DownloadBackup extends Command {
 				fs.writeFileSync(outputPath, compressBuffer(fileContent));
 
 				const fileStats = fs.statSync(outputPath);
-				const downloadResult: DownloadResult = {
+				const downloadResult: DownloadResult =
+				{
 					path: outputPath,
 					filename: `${backupFile.name}.zst`,
 					size: fileStats.size,
@@ -218,9 +277,12 @@ export default class DownloadBackup extends Command {
 
 				result.downloaded.push(downloadResult);
 
-				if (quiet && !this.jsonEnabled()) {
+				if (quiet && !this.jsonEnabled())
+				{
 					this.log(outputPath);
-				} else {
+				}
+				else
+				{
 					conditionalLog(`✓ Downloaded: ${backupFile.name}`);
 				}
 			}
@@ -230,13 +292,17 @@ export default class DownloadBackup extends Command {
 			result.deleted.push(...deleted);
 
 			return result;
-		} catch (error) {
-			if (error instanceof Error) {
+		}
+		catch (error)
+		{
+			if (error instanceof Error)
+			{
 				if (
 					error.message.includes("400") ||
 					error.message.includes("unauthorized") ||
 					error.message.includes("invalid_access_token")
-				) {
+				)
+				{
 					this.error(
 						"Dropbox authentication failed. Your credentials may be missing or invalid.\n\n" +
 							"To authenticate with Dropbox, run:\n" +
@@ -259,10 +325,12 @@ export default class DownloadBackup extends Command {
 		dropboxPath: string,
 		backupFiles: files.FileMetadataReference[],
 		conditionalLog: (message: string) => void,
-	): Promise<DeletedBackup[]> {
+	): Promise<DeletedBackup[]>
+	{
 		const deleted: DeletedBackup[] = [];
 
-		if (backupFiles.length <= MAX_REMOTE_BACKUPS) {
+		if (backupFiles.length <= MAX_REMOTE_BACKUPS)
+		{
 			return deleted;
 		}
 
@@ -272,16 +340,23 @@ export default class DownloadBackup extends Command {
 
 		conditionalLog(`Cleaning up: removing ${filesToDelete.length} old backup(s) from Dropbox`);
 
-		for (const file of filesToDelete) {
+		for (const file of filesToDelete)
+		{
 			const filePath = `${dropboxPath}/${file.name}`;
 			conditionalLog(`Deleting:    ${file.name}`);
 
-			await dropbox.filesDeleteV2({path: filePath});
+			await dropbox.filesDeleteV2(
+				{
+					path: filePath,
+				},
+			);
 
-			deleted.push({
-				filename: file.name,
-				path: filePath,
-			});
+			deleted.push(
+				{
+					filename: file.name,
+					path: filePath,
+				},
+			);
 		}
 
 		return deleted;

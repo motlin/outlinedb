@@ -5,19 +5,23 @@
  */
 
 /** Lowercase every tag key, so lookups by `data-val` (or `tag.toLowerCase()`) hit. */
-export function normalizeTagColors(colors: Readonly<Record<string, string>>): Record<string, string> {
+export function normalizeTagColors(colors: Readonly<Record<string, string>>): Record<string, string>
+{
 	return Object.fromEntries(Object.entries(colors).map(([tag, color]) => [tag.toLowerCase(), color]));
 }
 
-function escapeCssString(value: string): string {
+function escapeCssString(value: string): string
+{
 	return value.replaceAll("\\", String.raw`\\`).replaceAll('"', String.raw`\"`);
 }
 
-function rule(selectors: string, declarations: readonly string[]): string {
+function rule(selectors: string, declarations: readonly string[]): string
+{
 	return `${selectors} {\n${declarations.map((declaration) => `    ${declaration};\n`).join("")}}`;
 }
 
-function tagSelectors(list: readonly string[], suffix: string, prefix = ""): string {
+function tagSelectors(list: readonly string[], suffix: string, prefix = ""): string
+{
 	return list.map((tag) => `${prefix}.contentTag[data-val="${escapeCssString(tag)}"]${suffix}`).join(",");
 }
 
@@ -25,12 +29,15 @@ function tagSelectors(list: readonly string[], suffix: string, prefix = ""): str
 const COLOR_ORDER = ["red", "orange", "yellow", "green", "blue", "purple", "gray", "teal", "sky", "pink"];
 
 /** The stylesheet text for a lowercased tag -> color name map; empty without colors. */
-export function buildTagColorCss(colors: Readonly<Record<string, string>>): string {
+export function buildTagColorCss(colors: Readonly<Record<string, string>>): string
+{
 	const tags = Object.keys(colors);
-	if (tags.length === 0) {
+	if (tags.length === 0)
+	{
 		return "";
 	}
-	const perColor = COLOR_ORDER.flatMap((color) => {
+	const perColor = COLOR_ORDER.flatMap((color) =>
+	{
 		const members = tags.filter((tag) => colors[tag] === color);
 		return members.length === 0
 			? []

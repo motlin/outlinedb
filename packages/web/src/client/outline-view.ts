@@ -7,14 +7,16 @@ import {pendingMoves} from "./pending-moves.js";
 import {viewParentIds} from "./render-window.js";
 
 /** What an outline view under a root renders: expansion, completion, and the rows it mounts at most. */
-export interface OutlineViewShape {
+export interface OutlineViewShape
+{
 	expandedIds: ReadonlySet<string>;
 	showCompleted: boolean;
 	budget: number;
 }
 
 /** The body of `POST /api/v1/nodes/view`; `expandedIds: null` expands the account's expanded rows. */
-export interface OutlineViewRequest {
+export interface OutlineViewRequest
+{
 	rootId: string | null;
 	expandedIds: string[] | null;
 	limit: number;
@@ -22,7 +24,8 @@ export interface OutlineViewRequest {
 }
 
 /** The query an outline view's load runs under; outside `nodes`, so a tree write's invalidation does not rerun it. */
-export function outlineViewKey(rootId: string | null) {
+export function outlineViewKey(rootId: string | null)
+{
 	return ["outline-view", rootId] as const;
 }
 
@@ -30,12 +33,14 @@ export function outlineViewKey(rootId: string | null) {
  * Whether the cache holds every list and Backlinks section the view under `rootId` renders within its budget, and a
  * day page's Found Dates.
  */
-export function outlineViewCached(queryClient: QueryClient, rootId: string | null, shape: OutlineViewShape): boolean {
+export function outlineViewCached(queryClient: QueryClient, rootId: string | null, shape: OutlineViewShape): boolean
+{
 	if (
 		rootId !== null &&
 		readNode(queryClient, rootId)?.calendar?.level === "day" &&
 		!foundDatesCached(queryClient, rootId)
-	) {
+	)
+	{
 		return false;
 	}
 	const parentIds = viewParentIds(
@@ -58,7 +63,8 @@ export function outlineViewCached(queryClient: QueryClient, rootId: string | nul
 	);
 }
 
-function foundDatesCached(queryClient: QueryClient, dayId: string): boolean {
+function foundDatesCached(queryClient: QueryClient, dayId: string): boolean
+{
 	return queryClient.getQueryData<FoundDatesResponse>(nodeKeys.foundDates(dayId)) !== undefined;
 }
 
@@ -77,20 +83,32 @@ export async function loadOutlineView(
 	shape: OutlineViewShape,
 	fetchView: (request: OutlineViewRequest) => Promise<OutlineViewResponse>,
 	accountExpansion?: (expandedIds: string[]) => void,
-): Promise<void> {
-	if (accountExpansion === undefined && outlineViewCached(queryClient, rootId, shape)) {
+): Promise<void>
+{
+	if (accountExpansion === undefined && outlineViewCached(queryClient, rootId, shape))
+	{
 		return;
 	}
 	await pendingMoves.settled(rootId);
-	const {lists, expandedIds, foundDates} = await fetchView({
-		rootId,
-		expandedIds: accountExpansion === undefined ? [...shape.expandedIds] : null,
-		limit: shape.budget,
-		showCompleted: shape.showCompleted,
-	});
-	notifyManager.batch(() => {
+	const {lists, expandedIds, foundDates} = await fetchView(
+		{
+			rootId,
+			expandedIds: accountExpansion === undefined ? [...shape.expandedIds] : null,
+			limit: shape.budget,
+			showCompleted: shape.showCompleted,
+		},
+	);
+	notifyManager.batch(() =>
+	{
 		accountExpansion?.(expandedIds ?? []);
-		seedOutlineView(queryClient, rootId, {lists, foundDates});
+		seedOutlineView(
+			queryClient,
+			rootId,
+			{
+				lists,
+				foundDates,
+			},
+		);
 	});
 }
 
@@ -102,20 +120,25 @@ export function seedOutlineView(
 	queryClient: QueryClient,
 	rootId: string | null,
 	{lists, foundDates}: Pick<OutlineViewResponse, "lists" | "foundDates">,
-): void {
-	for (const {parentId, nodes, backlinks} of lists) {
-		if (queryClient.getQueryData(nodeKeys.children(parentId)) === undefined && !pendingMoves.has(parentId)) {
+): void
+{
+	for (const {parentId, nodes, backlinks} of lists)
+	{
+		if (queryClient.getQueryData(nodeKeys.children(parentId)) === undefined && !pendingMoves.has(parentId))
+		{
 			queryClient.setQueryData(nodeKeys.children(parentId), pendingCreates.withPending(parentId, nodes));
 		}
 		if (
 			parentId !== null &&
 			backlinks !== null &&
 			queryClient.getQueryData(nodeKeys.backlinks(parentId)) === undefined
-		) {
+		)
+		{
 			queryClient.setQueryData(nodeKeys.backlinks(parentId), backlinks);
 		}
 	}
-	if (rootId !== null && foundDates !== undefined && !foundDatesCached(queryClient, rootId)) {
+	if (rootId !== null && foundDates !== undefined && !foundDatesCached(queryClient, rootId))
+	{
 		queryClient.setQueryData(nodeKeys.foundDates(rootId), foundDates);
 	}
 }

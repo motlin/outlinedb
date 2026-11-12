@@ -7,18 +7,24 @@ import type {Logger as DrizzleLogger} from "drizzle-orm";
  *
  * Logging is enabled by the host (`ServerConfig.sqlQueryLogging`).
  */
-export function createSqlLogger(enabled: boolean): DrizzleLogger {
+export function createSqlLogger(enabled: boolean): DrizzleLogger
+{
 	return {
-		logQuery(query: string, params: unknown[]): void {
-			if (!enabled) {
+		logQuery(query: string, params: unknown[]): void
+		{
+			if (!enabled)
+			{
 				return;
 			}
 
 			const isWrite = /^\s*(INSERT|UPDATE|DELETE)/iu.test(query);
 
-			if (isWrite) {
+			if (isWrite)
+			{
 				console.info("[SQL]", query, params);
-			} else {
+			}
+			else
+			{
 				console.debug("[SQL]", query, params);
 			}
 		},

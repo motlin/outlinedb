@@ -1,6 +1,16 @@
 import {MAIN_PANE_ID} from "./pane-ids.js";
 
-export type CheckboxClickPlan = {kind: "command"; focusRowAfter: boolean} | {kind: "pane"; zoomPaneTo: string | null};
+export type CheckboxClickPlan =
+	|
+	  {
+			kind: "command";
+			focusRowAfter: boolean;
+	  }
+	|
+	  {
+			kind: "pane";
+			zoomPaneTo: string | null;
+	  };
 
 /**
  * What a to-do checkbox click does, as upstream's checkbox `onChange` + `Oj4`: a side pane's own zoom item completes
@@ -12,9 +22,17 @@ export function planCheckboxClick(input: {
 	paneId: string;
 	isPaneZoomItem: boolean;
 	parentId: string | null;
-}): CheckboxClickPlan {
-	if (input.paneId !== MAIN_PANE_ID && input.isPaneZoomItem) {
-		return {kind: "pane", zoomPaneTo: input.isCompleted ? null : input.parentId};
+}): CheckboxClickPlan
+{
+	if (input.paneId !== MAIN_PANE_ID && input.isPaneZoomItem)
+	{
+		return {
+			kind: "pane",
+			zoomPaneTo: input.isCompleted ? null : input.parentId,
+		};
 	}
-	return {kind: "command", focusRowAfter: input.isCompleted};
+	return {
+		kind: "command",
+		focusRowAfter: input.isCompleted,
+	};
 }

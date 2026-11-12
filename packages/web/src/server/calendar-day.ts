@@ -17,17 +17,22 @@ export {findCalendarDay, findCalendarDays, findTaggedCalendarRoot} from "@outlin
 export type {CalendarDayDeps} from "@outlinedb/shared/calendar-lookup";
 
 /** The 📆 Calendar root's picker settings (upstream `T10`/`k10`): each is true unless the root sets it false. */
-interface CalendarSettings {
+interface CalendarSettings
+{
 	foundDates: boolean;
 	dayPrefix: boolean;
 }
 
 /** The calendar root's Found Dates and Friendly day names settings, each defaulting to true. */
-export function readCalendarSettings(deps: Pick<CalendarDayDeps, "db" | "cache">): CalendarSettings {
+export function readCalendarSettings(deps: Pick<CalendarDayDeps, "db" | "cache">): CalendarSettings
+{
 	const rootId = findCalendarRoot(deps);
 	const rootNode = rootId === undefined ? undefined : deps.cache.getNode(rootId);
 	const info = rootNode === undefined ? undefined : loadCalendarInfo(deps, [rootNode]).get(rootNode.id);
-	return {foundDates: info?.foundDates !== false, dayPrefix: info?.dayPrefix !== false};
+	return {
+		foundDates: info?.foundDates !== false,
+		dayPrefix: info?.dayPrefix !== false,
+	};
 }
 
 /**
@@ -40,17 +45,33 @@ export function readCalendarSettings(deps: Pick<CalendarDayDeps, "db" | "cache">
  */
 export function loadCalendarInfo(
 	deps: Pick<CalendarDayDeps, "db" | "cache">,
-	nodes: readonly {id: string; parentId: string | null; name: string | null}[],
-	{fromNames = true}: {fromNames?: boolean} = {},
-): Map<string, CalendarInfo> {
+	nodes: readonly
+	{
+		id: string;
+		parentId: string | null;
+		name: string | null;
+	}[],
+	{
+		fromNames = true,
+	}:
+	{
+		fromNames?: boolean;
+	} = {},
+): Map<string, CalendarInfo>
+{
 	const map = new Map<string, CalendarInfo>();
 	const ids = nodes.map(({id}) => id);
-	if (ids.length === 0) {
+	if (ids.length === 0)
+	{
 		return map;
 	}
 	const restorable = new Set(
 		deps.db
-			.select({nodeId: nodeDisplayMetadata.nodeId})
+			.select(
+				{
+					nodeId: nodeDisplayMetadata.nodeId,
+				},
+			)
 			.from(nodeDisplayMetadata)
 			.where(
 				and(
@@ -67,10 +88,12 @@ export function loadCalendarInfo(
 		.from(calendarMetadata)
 		.where(and(inIds(calendarMetadata.nodeId, ids), eq(calendarMetadata.systemTo, FAR_FUTURE_DATE)))
 		.all();
-	for (const row of calendarRows) {
+	for (const row of calendarRows)
+	{
 		map.set(row.nodeId, calendarInfoOfRow(row, restorable.has(row.nodeId)));
 	}
-	if (fromNames) {
+	if (fromNames)
+	{
 		addNamedCalendarDays(deps, nodes, map);
 	}
 	return map;
@@ -78,7 +101,8 @@ export function loadCalendarInfo(
 
 /** A stored `calendar_metadata` row as the node DTO's calendar role, with the node's `restorableUniqueNode`. */
 export function calendarInfoOfRow(
-	row: {
+	row:
+	{
 		level: string | null;
 		dateId: number | null;
 		root: number | null;
@@ -86,7 +110,8 @@ export function calendarInfoOfRow(
 		dayPrefix: number | null;
 	},
 	restorableUniqueNode: boolean,
-): CalendarInfo {
+): CalendarInfo
+{
 	return {
 		level: row.level,
 		dateId: row.dateId,
@@ -104,40 +129,62 @@ export function calendarInfoOfRow(
  */
 export function addNamedCalendarDays(
 	deps: Pick<CalendarDayDeps, "db" | "cache">,
-	nodes: readonly {id: string; parentId: string | null; name: string | null}[],
+	nodes: readonly
+	{
+		id: string;
+		parentId: string | null;
+		name: string | null;
+	}[],
 	map: Map<string, CalendarInfo>,
-): void {
-	const named = nodes.flatMap((node) => {
+): void
+{
+	const named = nodes.flatMap((node) =>
+	{
 		const date = map.has(node.id) ? undefined : dayNameDate(node.name);
-		return date === undefined ? [] : [{node, date}];
+		return date === undefined
+			? []
+			: [
+					{
+						node,
+						date,
+					},
+				];
 	});
-	if (named.length === 0 || findTaggedCalendarRoot(deps) !== undefined) {
+	if (named.length === 0 || findTaggedCalendarRoot(deps) !== undefined)
+	{
 		return;
 	}
 	let root: string | undefined;
-	for (const {node, date} of named) {
+	for (const {node, date} of named)
+	{
 		root ??= findCalendarRoot(deps);
-		if (root !== undefined && sitsInMonth(deps.cache, node.parentId, root, date)) {
+		if (root !== undefined && sitsInMonth(deps.cache, node.parentId, root, date))
+		{
 			const dateId = date.year * 10_000 + date.month * 100 + date.day;
-			map.set(node.id, {
-				level: "day",
-				dateId,
-				root: false,
-				foundDates: null,
-				dayPrefix: null,
-				restorableUniqueNode: false,
-			});
+			map.set(
+				node.id,
+				{
+					level: "day",
+					dateId,
+					root: false,
+					foundDates: null,
+					dayPrefix: null,
+					restorableUniqueNode: false,
+				},
+			);
 		}
 	}
 }
 
 /** A nullable 0/1 column as a boolean, keeping null. */
-function intToBoolean(value: number | null): boolean | null {
+function intToBoolean(value: number | null): boolean | null
+{
 	return value === null ? null : value === 1;
 }
 
 /** Whether `parentId` is the `MM` (or `M`) month node of `date` under its `YYYY` year under the calendar root. */
-function sitsInMonth(cache: CacheService, parentId: string | null, root: string, date: CalendarDate): boolean {
+function sitsInMonth(cache: CacheService, parentId: string | null, root: string, date: CalendarDate): boolean
+{
 	const month = parentId === null ? undefined : cache.getNode(parentId);
 	const year = month?.parentId == null ? undefined : cache.getNode(month.parentId);
 	return (

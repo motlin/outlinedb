@@ -3,7 +3,8 @@ import type {CSSProperties, MouseEvent, ReactElement, ReactNode, Ref} from "reac
 import {FaIcon} from "../fa-icons.js";
 import type {FaIconKey} from "../fa-icons.js";
 
-interface MenuItemClassOptions {
+interface MenuItemClassOptions
+{
 	checked: boolean | null;
 	disabled: boolean;
 	isSelected: boolean | undefined;
@@ -12,7 +13,8 @@ interface MenuItemClassOptions {
 }
 
 /** Upstream MenuItem's className template, literal newlines and 8-space indents included. */
-export function menuItemClassName({checked, disabled, isSelected, canHover, className}: MenuItemClassOptions): string {
+export function menuItemClassName({checked, disabled, isSelected, canHover, className}: MenuItemClassOptions): string
+{
 	return `${checked === null ? "pl-l" : "pl-xl"} py-xs pr-l
         block !no-underline cursor-pointer whitespace-nowrap leading-base
         border-solid border-primary
@@ -23,7 +25,8 @@ export function menuItemClassName({checked, disabled, isSelected, canHover, clas
         menuItem ${className} ${isSelected ? "active" : ""} ${canHover ? "canHover" : ""}`;
 }
 
-interface ClickLike {
+interface ClickLike
+{
 	altKey: boolean;
 	ctrlKey: boolean;
 	metaKey: boolean;
@@ -45,15 +48,24 @@ export function menuItemClick(
 		href,
 		disabled,
 		onSelect,
-	}: {href: string | undefined; disabled: boolean; onSelect: ((event?: MenuSelectEvent) => unknown) | undefined},
-): void {
-	if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.button === 1) {
+	}:
+	{
+		href: string | undefined;
+		disabled: boolean;
+		onSelect: ((event?: MenuSelectEvent) => unknown) | undefined;
+	},
+): void
+{
+	if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.button === 1)
+	{
 		return;
 	}
-	if (onSelect && !href) {
+	if (onSelect && !href)
+	{
 		event.preventDefault();
 	}
-	if (disabled) {
+	if (disabled)
+	{
 		event.stopPropagation();
 		return;
 	}
@@ -61,14 +73,22 @@ export function menuItemClick(
 }
 
 /** Upstream MenuItem onMouseDown: always preventDefault so focus stays on the menu trigger. */
-export function menuItemMouseDown(event: {preventDefault: () => void}, onMouseDown: (() => void) | undefined): void {
+export function menuItemMouseDown(
+	event:
+	{
+		preventDefault: () => void;
+	},
+	onMouseDown: (() => void) | undefined,
+): void
+{
 	onMouseDown?.();
 	event.preventDefault();
 }
 
 type MenuItemIcon = FaIconKey | ReactElement;
 
-export interface MenuItemProps {
+export interface MenuItemProps
+{
 	label?: ReactNode;
 	handbook?: string;
 	clarifyingText?: ReactNode;
@@ -97,11 +117,13 @@ export interface MenuItemProps {
 }
 
 /** Upstream's `x && <el>` truthiness for optional ReactNode slots. */
-function shown(node: ReactNode): boolean {
+function shown(node: ReactNode): boolean
+{
 	return node !== undefined && node !== null && node !== false && node !== "" && node !== 0;
 }
 
-function renderIcon(icon: MenuItemIcon): ReactNode {
+function renderIcon(icon: MenuItemIcon): ReactNode
+{
 	return isValidElement(icon) ? icon : <FaIcon fixedWidth icon={icon} />;
 }
 
@@ -130,22 +152,43 @@ export function MenuItem({
 	onMouseDown,
 	withPlaceForIcon,
 	ref,
-}: MenuItemProps) {
+}: MenuItemProps)
+{
 	const canHover = !disabled && !isInKeyboardMode;
 	return (
 		<a
 			ref={ref}
 			data-handbook={handbook}
 			data-handbook-placement="right"
-			style={{...style}}
-			onClick={(event) => {
-				menuItemClick(event, {href, disabled, onSelect});
+			style={
+			{
+				...style,
 			}}
-			className={menuItemClassName({checked, disabled, isSelected, canHover, className})}
+			onClick={(event) =>
+			{
+				menuItemClick(
+					event,
+					{
+						href,
+						disabled,
+						onSelect,
+					},
+				);
+			}}
+			className={menuItemClassName(
+				{
+					checked,
+					disabled,
+					isSelected,
+					canHover,
+					className,
+				},
+			)}
 			href={href}
 			onMouseEnter={onMouseEnter}
 			onMouseLeave={onMouseLeave}
-			onMouseDown={(event) => {
+			onMouseDown={(event) =>
+			{
 				menuItemMouseDown(event, onMouseDown);
 			}}
 		>
@@ -160,7 +203,10 @@ export function MenuItem({
 				)}
 				{blueDot && (
 					<div
-						style={{left: checked === null ? -12 : -15}}
+						style={
+						{
+							left: checked === null ? -12 : -15,
+						}}
 						className="absolute top-1/2 w-[7px] h-[7px] rounded-[7px] bg-tint -translate-y-1/2"
 					/>
 				)}
@@ -185,7 +231,16 @@ export function MenuItem({
 					)}
 				</span>
 				{shown(shortcut) && <span className="text ml-l min-w-[22px] text-xs text-tertiary">{shortcut}</span>}
-				{shown(extra) && <span style={{marginLeft: 6}}>{extra}</span>}
+				{shown(extra) && (
+					<span
+						style={
+						{
+							marginLeft: 6,
+						}}
+					>
+						{extra}
+					</span>
+				)}
 			</span>
 			{shown(subtext) && (
 				<span
@@ -203,12 +258,14 @@ export function MenuItem({
 MenuItem.componentType = "menuItem" as const;
 
 /** Upstream DomKit Menu.Separator (`x24`). */
-export function MenuSeparator({style}: {style?: CSSProperties}) {
+export function MenuSeparator({style}: {style?: CSSProperties})
+{
 	return <div className="border-t border-primary border-solid my-s" style={style} />;
 }
 
 /** Upstream DomKit Menu.Header (`C24`). */
-export function MenuSectionHeader({children, className = ""}: {children?: ReactNode; className?: string}) {
+export function MenuSectionHeader({children, className = ""}: {children?: ReactNode; className?: string})
+{
 	return (
 		<div
 			className={`py-m px-l text-tertiary text-xs uppercase bg-inherit mobile:bg-secondary menu-section-header mobile:landscape:pl-safe-left mobile:landscape:pr-safe-right ${className}`}

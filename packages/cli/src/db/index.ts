@@ -10,7 +10,8 @@ import {nonEmpty} from "../utils/non-empty.js";
 import {DEFAULT_DB_FILE} from "./default-db-file.js";
 
 /** Open (and migrate) the cache database; a Buffer opens an in-memory copy of that serialized database. */
-export function createDatabase(dbPath?: string | Buffer) {
+export function createDatabase(dbPath?: string | Buffer)
+{
 	const source = Buffer.isBuffer(dbPath)
 		? dbPath
 		: (nonEmpty(dbPath) ?? nonEmpty(process.env.OUTLINEDB_DB_PATH) ?? DEFAULT_DB_FILE);
@@ -18,22 +19,33 @@ export function createDatabase(dbPath?: string | Buffer) {
 
 	sqliteVec.load(sqlite);
 
-	if (!process.env.OUTLINEDB_DB_PATH) {
+	if (!process.env.OUTLINEDB_DB_PATH)
+	{
 		sqlite.pragma("journal_mode = WAL");
 	}
 
-	const db = drizzle(sqlite, {
-		schema,
-		logger: sqlLogger,
-	});
+	const db = drizzle(
+		sqlite,
+		{
+			schema,
+			logger: sqlLogger,
+		},
+	);
 
-	if (process.env.OUTLINEDB_SKIP_MIGRATIONS !== "true") {
+	if (process.env.OUTLINEDB_SKIP_MIGRATIONS !== "true")
+	{
 		const migrationsFolder = join(import.meta.dirname, "../../../shared/dist/db/migrations");
-		migrate(db, {migrationsFolder});
+		migrate(
+			db,
+			{
+				migrationsFolder,
+			},
+		);
 		ensureNodeTags(db);
 	}
 
-	if (process.env.OUTLINEDB_TEST_DISABLE_FK !== "true") {
+	if (process.env.OUTLINEDB_TEST_DISABLE_FK !== "true")
+	{
 		sqlite.pragma("foreign_keys = ON");
 	}
 

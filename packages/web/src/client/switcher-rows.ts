@@ -8,7 +8,8 @@ import {matchSwitcherRow} from "@outlinedb/shared/search";
 import type {SwitcherAncestor, SwitcherResult} from "../server/switcher-search.js";
 
 /** A starred location with its node's text; callers pass these in `mostRecent` order. */
-export interface StarredEntry {
+export interface StarredEntry
+{
 	star: Star;
 	/** The node's raw name HTML ("" for Home). */
 	name: string;
@@ -22,7 +23,8 @@ export interface StarredEntry {
  * Each starred node id once, in first-seen order, without Home. A node can be starred both bare and with a query, and
  * `useQueries` warns about duplicate keys when the ancestor queries repeat one.
  */
-export function starredNodeIds(stars: readonly Star[]): string[] {
+export function starredNodeIds(stars: readonly Star[]): string[]
+{
 	return [...new Set(stars.flatMap((star) => (star.nodeId === null ? [] : [star.nodeId])))];
 }
 
@@ -32,12 +34,14 @@ export function starredNodeIds(stars: readonly Star[]): string[] {
  */
 export type SwitcherSearchStatus = "idle" | "pending" | "done" | "error";
 
-export interface SwitcherServerResults {
+export interface SwitcherServerResults
+{
 	status: SwitcherSearchStatus;
 	results: readonly SwitcherResult[];
 }
 
-export interface SwitcherRow extends SwitcherResult {
+export interface SwitcherRow extends SwitcherResult
+{
 	/** The location key (a page's key is its node id), unique among the rows. */
 	key: string;
 	nodeId: string | null;
@@ -50,7 +54,8 @@ export interface SwitcherRow extends SwitcherResult {
 /** Upstream's `batchSize`: rows per page, counting the starred matches. */
 const SWITCHER_PAGE_SIZE = 20;
 
-export interface SwitcherRows {
+export interface SwitcherRows
+{
 	rows: SwitcherRow[];
 	/** Plain text shown after the list, or null for none. */
 	emptyText: string | null;
@@ -63,15 +68,32 @@ const NO_MATCHES = "No matches found. Try adjusting your search.";
 const INDEXING = "Indexing your data! One sec …";
 const SEARCH_UNAVAILABLE = "Search is unavailable right now.";
 
-function starredRow(entry: StarredEntry, filter: string): SwitcherRow | null {
+function starredRow(entry: StarredEntry, filter: string): SwitcherRow | null
+{
 	const {star} = entry;
 	const starLabel = label(star, () => entry.name);
-	const match = matchSwitcherRow({name: entry.name, note: entry.note, starLabel}, filter);
-	if (match === null) {
+	const match = matchSwitcherRow(
+		{
+			name: entry.name,
+			note: entry.note,
+			starLabel,
+		},
+		filter,
+	);
+	if (match === null)
+	{
 		return null;
 	}
 	const isSearch = star.query !== null && star.query !== "";
-	const self = star.nodeId === null ? [] : [{id: star.nodeId, name: stripHtmlTags(entry.name)}];
+	const self =
+		star.nodeId === null
+			? []
+			: [
+					{
+						id: star.nodeId,
+						name: stripHtmlTags(entry.name),
+					},
+				];
 	const search = match.searchHtml ?? starLabel;
 	return {
 		key: star.key,
@@ -92,23 +114,51 @@ function emptyState(
 	listed: number,
 	starredCount: number,
 	status: SwitcherSearchStatus,
-): {emptyText: string | null; indexing: boolean} {
-	if (listed > 0) {
-		return {emptyText: null, indexing: false};
+):
+{
+	emptyText: string | null;
+	indexing: boolean;
+}
+{
+	if (listed > 0)
+	{
+		return {
+			emptyText: null,
+			indexing: false,
+		};
 	}
-	if (filter === "") {
-		return {emptyText: STARRED_HINT, indexing: false};
+	if (filter === "")
+	{
+		return {
+			emptyText: STARRED_HINT,
+			indexing: false,
+		};
 	}
-	if (status === "error") {
-		return {emptyText: SEARCH_UNAVAILABLE, indexing: false};
+	if (status === "error")
+	{
+		return {
+			emptyText: SEARCH_UNAVAILABLE,
+			indexing: false,
+		};
 	}
-	if (status === "idle") {
-		return {emptyText: null, indexing: false};
+	if (status === "idle")
+	{
+		return {
+			emptyText: null,
+			indexing: false,
+		};
 	}
-	if (status === "pending") {
-		return {emptyText: INDEXING, indexing: true};
+	if (status === "pending")
+	{
+		return {
+			emptyText: INDEXING,
+			indexing: true,
+		};
 	}
-	return {emptyText: starredCount === 0 ? STARRED_HINT : NO_MATCHES, indexing: false};
+	return {
+		emptyText: starredCount === 0 ? STARRED_HINT : NO_MATCHES,
+		indexing: false,
+	};
 }
 
 /**
@@ -121,7 +171,8 @@ export function buildSwitcherRows(
 	filter: string,
 	pages = 1,
 	specialCount = 0,
-): SwitcherRows {
+): SwitcherRows
+{
 	const trimmed = filter.trim();
 	const starredRows = starred.flatMap((entry) => starredRow(entry, trimmed) ?? []);
 	const listed = new Set(starredRows.map((row) => row.key));
@@ -130,13 +181,24 @@ export function buildSwitcherRows(
 			? []
 			: server.results
 					.filter((result) => !listed.has(result.id))
-					.map((result) => ({...result, key: result.id, nodeId: result.id, query: null, search: null}));
+					.map((result) => (
+					{
+						...result,
+						key: result.id,
+						nodeId: result.id,
+						query: null,
+						search: null,
+					}));
 	const rows = [...starredRows, ...serverRows].slice(0, SWITCHER_PAGE_SIZE * pages);
-	return {rows, ...emptyState(trimmed, rows.length + specialCount, starred.length, server.status)};
+	return {
+		rows,
+		...emptyState(trimmed, rows.length + specialCount, starred.length, server.status),
+	};
 }
 
 /** Whether two rows show the same thing, so a rebuilt row list can skip re-rendering the rows a keystroke left alone. */
-export function sameSwitcherRow(a: SwitcherRow, b: SwitcherRow): boolean {
+export function sameSwitcherRow(a: SwitcherRow, b: SwitcherRow): boolean
+{
 	return (
 		a === b ||
 		(a.key === b.key &&
@@ -148,7 +210,8 @@ export function sameSwitcherRow(a: SwitcherRow, b: SwitcherRow): boolean {
 			a.completed === b.completed &&
 			a.starred === b.starred &&
 			a.ancestors.length === b.ancestors.length &&
-			a.ancestors.every((ancestor, index) => {
+			a.ancestors.every((ancestor, index) =>
+			{
 				const other = b.ancestors.at(index);
 				return ancestor.id === other?.id && ancestor.name === other.name;
 			}))

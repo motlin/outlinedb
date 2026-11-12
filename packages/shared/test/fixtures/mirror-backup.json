@@ -19,8 +19,10 @@
 		"nm": "Quarterly planning",
 		"ct": 1700000400,
 		"lm": 1700000500,
-		"metadata": {
-			"mirror": {
+		"metadata":
+		{
+			"mirror":
+			{
 				"originalId": "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
 				"isMirrorRoot": true
 			}

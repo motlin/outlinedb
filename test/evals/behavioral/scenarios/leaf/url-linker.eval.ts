@@ -14,47 +14,66 @@ import type {EvalContext} from "../../helpers/eval-types.js";
 import {runLlmEval, claudeCliAvailable} from "../../helpers/llm-eval-harness.js";
 
 // urls is optional, but must be a non-empty array when present.
-const UrlLinkerResponseSchema = z.looseObject({urls: z.array(z.unknown()).nonempty().nullish()});
+const UrlLinkerResponseSchema = z.looseObject(
+	{
+		urls: z.array(z.unknown()).nonempty().nullish(),
+	},
+);
 
-describe("Leaf Eval: url-linker", {timeout: 300_000}, () => {
-	let ctx: EvalContext;
-	let skipSuite = false;
-	const agentFile = "plugins/gtd/prompts/refinement/url-linker.md";
+describe(
+	"Leaf Eval: url-linker",
+	{
+		timeout: 300_000,
+	},
+	() =>
+	{
+		let ctx: EvalContext;
+		let skipSuite = false;
+		const agentFile = "plugins/gtd/prompts/refinement/url-linker.md";
 
-	beforeAll(() => {
-		if (!claudeCliAvailable()) {
-			skipSuite = true;
-			return;
-		}
+		beforeAll(() =>
+		{
+			if (!claudeCliAvailable())
+			{
+				skipSuite = true;
+				return;
+			}
 
-		ctx = createEvalContext();
-		const agentPath = path.join(ctx.projectRoot, agentFile);
+			ctx = createEvalContext();
+			const agentPath = path.join(ctx.projectRoot, agentFile);
 
-		if (!fs.existsSync(agentPath)) {
-			skipSuite = true;
-		}
-	});
+			if (!fs.existsSync(agentPath))
+			{
+				skipSuite = true;
+			}
+		});
 
-	afterAll(() => {
-		ctx.cleanup();
-	});
+		afterAll(() =>
+		{
+			ctx.cleanup();
+		});
 
-	it("should extract URLs from item text", async (context) => {
-		if (skipSuite) {
-			context.skip();
-		}
+		it("should extract URLs from item text", async (context) =>
+		{
+			if (skipSuite)
+			{
+				context.skip();
+			}
 
-		const result = await runLlmEval(
-			agentFile,
-			`Analyze this item for URLs:\nID: test-item-1\nName: Read article https://example.com/article-about-productivity`,
-			ctx,
-			{maxTurns: 15},
-		);
+			const result = await runLlmEval(
+				agentFile,
+				`Analyze this item for URLs:\nID: test-item-1\nName: Read article https://example.com/article-about-productivity`,
+				ctx,
+				{
+					maxTurns: 15,
+				},
+			);
 
-		const response = result.finalResponse;
-		const jsonMatch = response.match(/\{[\s\S]*\}/u);
-		assert(jsonMatch, "Response should contain JSON");
+			const response = result.finalResponse;
+			const jsonMatch = response.match(/\{[\s\S]*\}/u);
+			assert(jsonMatch, "Response should contain JSON");
 
-		expect(() => UrlLinkerResponseSchema.parse(JSON.parse(jsonMatch[0]))).not.toThrow();
-	});
-});
+			expect(() => UrlLinkerResponseSchema.parse(JSON.parse(jsonMatch[0]))).not.toThrow();
+		});
+	},
+);

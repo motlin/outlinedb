@@ -6,14 +6,16 @@
  */
 
 /** Captured tool call from an LLM eval conversation. */
-export interface CapturedToolCall {
+export interface CapturedToolCall
+{
 	name: string;
 	input: Record<string, unknown>;
 	result: string;
 }
 
 /** Result of running an LLM eval scenario. */
-export interface LlmEvalResult {
+export interface LlmEvalResult
+{
 	toolCalls: CapturedToolCall[];
 	finalResponse: string;
 	inputTokens: number;
@@ -22,7 +24,8 @@ export interface LlmEvalResult {
 	subagentExecutions: SubagentExecution[];
 }
 
-export interface SubagentExecution {
+export interface SubagentExecution
+{
 	/** The subagent_type string from the Agent tool call */
 	agentName: string;
 	/** The prompt sent to the subagent */
@@ -31,7 +34,8 @@ export interface SubagentExecution {
 	result: LlmEvalResult;
 }
 
-export interface EvalContext {
+export interface EvalContext
+{
 	/** Path to the temporary copy of outlinedb.sqlite */
 	dbPath: string;
 	/** Path to the temporary .llm/ directory for intermediate files */
@@ -48,7 +52,8 @@ export interface EvalContext {
 	mockServerPort?: number;
 }
 
-export interface EvalResult {
+export interface EvalResult
+{
 	/** Standard output from the command */
 	stdout: string;
 	/** Standard error from the command */

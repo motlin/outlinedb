@@ -2,14 +2,23 @@ import type {Meta, StoryObj} from "@storybook/react-vite";
 
 import {StaticNode} from "./primitives.js";
 
-const meta: Meta = {
+const meta: Meta =
+{
 	title: "Compositions/TreeView",
-	parameters: {
+	parameters:
+	{
 		layout: "padded",
 	},
 	decorators: [
 		(Story) => (
-			<div className="outline-view" style={{width: "700px", position: "relative"}}>
+			<div
+				className="outline-view"
+				style={
+				{
+					width: "700px",
+					position: "relative",
+				}}
+			>
 				<Story />
 			</div>
 		),
@@ -19,7 +28,8 @@ const meta: Meta = {
 export default meta;
 type Story = StoryObj;
 
-export const MultipleNestingLevels: Story = {
+export const MultipleNestingLevels: Story =
+{
 	render: () => (
 		<>
 			<StaticNode isExpanded name="Root level item">
@@ -39,7 +49,8 @@ export const MultipleNestingLevels: Story = {
 	),
 };
 
-export const MixedCompletedUncompleted: Story = {
+export const MixedCompletedUncompleted: Story =
+{
 	render: () => (
 		<StaticNode isExpanded name="Project Tasks">
 			<StaticNode isCompleted name="Design mockups" />
@@ -53,7 +64,8 @@ export const MixedCompletedUncompleted: Story = {
 	),
 };
 
-export const NodesWithAndWithoutNotes: Story = {
+export const NodesWithAndWithoutNotes: Story =
+{
 	render: () => (
 		<>
 			<StaticNode isExpanded name="Meeting Notes" note="Weekly sync with the team">
@@ -73,7 +85,8 @@ export const NodesWithAndWithoutNotes: Story = {
 	),
 };
 
-export const ComplexTree: Story = {
+export const ComplexTree: Story =
+{
 	render: () => (
 		<>
 			<StaticNode isExpanded name='<span class="colored c-green">Work</span>'>
@@ -101,7 +114,8 @@ export const ComplexTree: Story = {
 	),
 };
 
-export const DeepNesting: Story = {
+export const DeepNesting: Story =
+{
 	render: () => (
 		<StaticNode isExpanded name="Level 0">
 			<StaticNode isExpanded name="Level 1">

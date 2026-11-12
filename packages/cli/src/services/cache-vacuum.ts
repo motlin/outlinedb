@@ -6,7 +6,8 @@ import path from "node:path";
 import {nonEmpty} from "../utils/non-empty.js";
 import {DEFAULT_DB_FILE} from "../db/default-db-file.js";
 
-export interface VacuumResult {
+export interface VacuumResult
+{
 	path: string;
 	sizeBeforeBytes: number;
 	sizeAfterBytes: number;
@@ -14,14 +15,17 @@ export interface VacuumResult {
 	freelistAfter: number;
 }
 
-export class CacheVacuumService {
+export class CacheVacuumService
+{
 	private readonly database: BetterSQLite3Database<typeof schema>;
 
-	constructor(database: BetterSQLite3Database<typeof schema>) {
+	constructor(database: BetterSQLite3Database<typeof schema>)
+	{
 		this.database = database;
 	}
 
-	vacuum(): VacuumResult {
+	vacuum(): VacuumResult
+	{
 		const dbPath = path.resolve(nonEmpty(process.env.OUTLINEDB_DB_PATH) ?? DEFAULT_DB_FILE);
 
 		// In WAL mode pages live in the -wal file until a checkpoint, so both sizes are
@@ -47,17 +51,24 @@ export class CacheVacuumService {
 		};
 	}
 
-	private checkpoint(): void {
+	private checkpoint(): void
+	{
 		this.database.run(sql.raw("PRAGMA wal_checkpoint(TRUNCATE)"));
 	}
 
-	private getFreelistCount(): number {
-		const row = this.database.get<{freelist_count: number}>(sql.raw("PRAGMA freelist_count"));
+	private getFreelistCount(): number
+	{
+		const row = this.database.get<
+		{
+			freelist_count: number;
+		}>(sql.raw("PRAGMA freelist_count"));
 		return row.freelist_count;
 	}
 
-	private getFileSize(dbPath: string): number {
-		if (!fs.existsSync(dbPath)) {
+	private getFileSize(dbPath: string): number
+	{
+		if (!fs.existsSync(dbPath))
+		{
 			return 0;
 		}
 
@@ -65,12 +76,15 @@ export class CacheVacuumService {
 	}
 }
 
-export function formatBytes(sizeInBytes: number): string {
-	if (sizeInBytes < 1024) {
+export function formatBytes(sizeInBytes: number): string
+{
+	if (sizeInBytes < 1024)
+	{
 		return `${sizeInBytes} bytes`;
 	}
 
-	if (sizeInBytes < 1024 * 1024) {
+	if (sizeInBytes < 1024 * 1024)
+	{
 		return `${(sizeInBytes / 1024).toFixed(2)} KB`;
 	}
 

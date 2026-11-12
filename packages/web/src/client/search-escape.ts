@@ -1,4 +1,5 @@
-export interface SearchEscapeState {
+export interface SearchEscapeState
+{
 	/** The committed search ("" when none). */
 	searchQuery: string;
 	/** The header search box's live text. */
@@ -13,8 +14,10 @@ export type SearchEscapeAction = "cancel" | "blur" | "focus";
  * Upstream's `focus_or_unfocus_search` (Escape): cancel a committed or typed search, else leave a focused empty
  * search box, else focus it.
  */
-export function escapeAction({searchQuery, searchInput, inputFocused}: SearchEscapeState): SearchEscapeAction {
-	if (searchQuery !== "" || searchInput !== "") {
+export function escapeAction({searchQuery, searchInput, inputFocused}: SearchEscapeState): SearchEscapeAction
+{
+	if (searchQuery !== "" || searchInput !== "")
+	{
 		return "cancel";
 	}
 	return inputFocused ? "blur" : "focus";
@@ -30,7 +33,18 @@ export function outlineFocusTarget({
 }: {
 	zoomedNodeId: string | null;
 	firstVisibleId: string | undefined;
-}): {nodeId: string; offset: number} | null {
+}):
+{
+	nodeId: string;
+	offset: number;
+} | null
+{
 	const nodeId = zoomedNodeId ?? firstVisibleId;
-	return nodeId === undefined ? null : {nodeId, offset: 0};
+	return nodeId === undefined
+		? null
+		:
+			{
+				nodeId,
+				offset: 0,
+			};
 }

@@ -5,13 +5,15 @@ import type {AppMessageAction, AppMessageType} from "./stores/outline.js";
 import {defaultIndexIn} from "./tree-ops.js";
 import type {BlockMove} from "./tree-ops.js";
 
-export interface MoveToTarget {
+export interface MoveToTarget
+{
 	id: string;
 	name: string;
 	defaultToBottom?: boolean;
 }
 
-export interface MoveToToast {
+export interface MoveToToast
+{
 	text: string;
 	timeout: number;
 	actions: AppMessageAction[];
@@ -21,9 +23,12 @@ export interface MoveToToast {
 const MOVE_TOAST_TIMEOUT = 5000;
 
 /** Upstream `canMoveUnder`: false when `targetId` is the item itself or anywhere beneath it. */
-export function canMoveUnder(parentOf: (id: string) => string | null, itemId: string, targetId: string): boolean {
-	for (let id: string | null = targetId; id !== null; id = parentOf(id)) {
-		if (id === itemId) {
+export function canMoveUnder(parentOf: (id: string) => string | null, itemId: string, targetId: string): boolean
+{
+	for (let id: string | null = targetId; id !== null; id = parentOf(id))
+	{
+		if (id === itemId)
+		{
 			return false;
 		}
 	}
@@ -31,7 +36,8 @@ export function canMoveUnder(parentOf: (id: string) => string | null, itemId: st
 }
 
 /** Upstream's levels for a calendar root that sets none. */
-export const DEFAULT_CALENDAR_LEVELS: Readonly<Record<CalendarLevel, boolean>> = {
+export const DEFAULT_CALENDAR_LEVELS: Readonly<Record<CalendarLevel, boolean>> =
+{
 	year: true,
 	month: true,
 	week: false,
@@ -45,23 +51,35 @@ export const DEFAULT_CALENDAR_LEVELS: Readonly<Record<CalendarLevel, boolean>> =
  * `restorableUniqueNode`, and every other row move freely.
  */
 export function canMoveUnderCalendar(
-	item: {calendar?: CalendarInfo | null; isMirror?: boolean},
-	target: {calendar?: CalendarInfo | null},
+	item:
+	{
+		calendar?: CalendarInfo | null;
+		isMirror?: boolean;
+	},
+	target:
+	{
+		calendar?: CalendarInfo | null;
+	},
 	levels: Readonly<Record<CalendarLevel, boolean>>,
-): boolean {
+): boolean
+{
 	const {calendar} = item;
-	if (calendar === null || calendar === undefined || calendar.root || item.isMirror === true) {
+	if (calendar === null || calendar === undefined || calendar.root || item.isMirror === true)
+	{
 		return true;
 	}
-	if (!calendar.restorableUniqueNode || calendar.dateId === null) {
+	if (!calendar.restorableUniqueNode || calendar.dateId === null)
+	{
 		return true;
 	}
 	const enabled = CALENDAR_LEVELS.filter((level) => levels[level]);
 	const index = enabled.findIndex((level) => level === calendar.level);
-	if (index === -1) {
+	if (index === -1)
+	{
 		return true;
 	}
-	if (index === 0) {
+	if (index === 0)
+	{
 		return target.calendar?.root === true;
 	}
 	const previous = enabled[index - 1];
@@ -83,19 +101,30 @@ export function planMoveTo({
 	items: readonly string[];
 	target: Pick<MoveToTarget, "id" | "defaultToBottom">;
 	childCount: number;
-}): BlockMove {
-	return {ids: [...items], parentId: target.id, index: defaultIndexIn(target, childCount)};
+}): BlockMove
+{
+	return {
+		ids: [...items],
+		parentId: target.id,
+		index: defaultIndexIn(target, childCount),
+	};
 }
 
-export interface MoveVerb {
+export interface MoveVerb
+{
 	verb: string;
 	verbPast: string;
 }
 
-export const MOVE_VERB: MoveVerb = {verb: "move", verbPast: "moved"};
+export const MOVE_VERB: MoveVerb =
+{
+	verb: "move",
+	verbPast: "moved",
+};
 
 /** Upstream's literal toast text: lowercase success (the toast CSS capitalizes it) and `Can't <verb> to '<name>'`. */
-export function moveToastText(kind: "ok" | "cant", {verb, verbPast}: MoveVerb, name: string): string {
+export function moveToastText(kind: "ok" | "cant", {verb, verbPast}: MoveVerb, name: string): string
+{
 	return kind === "ok" ? `${verbPast} to '${name}'` : `Can't ${verb} to '${name}'`;
 }
 
@@ -135,40 +164,56 @@ export function runMoveTo({
 	verb?: MoveVerb;
 	/** An extra per-item rule beyond the ancestry check, such as the 📆 Calendar level guard. */
 	allowed?: (itemId: string, targetId: string) => boolean;
-}): boolean {
-	if (!items.every((item) => canMoveUnder(parentOf, item, target.id) && allowed(item, target.id))) {
-		showToast({
-			text: moveToastText("cant", verb, target.name),
-			timeout: MOVE_TOAST_TIMEOUT,
-			actions: [],
-			type: "failure",
-		});
+}): boolean
+{
+	if (!items.every((item) => canMoveUnder(parentOf, item, target.id) && allowed(item, target.id)))
+	{
+		showToast(
+			{
+				text: moveToastText("cant", verb, target.name),
+				timeout: MOVE_TOAST_TIMEOUT,
+				actions: [],
+				type: "failure",
+			},
+		);
 		return false;
 	}
 	leaveItem?.();
-	moveNodes([planMoveTo({items, target, childCount})]);
-	showToast({
-		text: moveToastText("ok", verb, target.name),
-		timeout: MOVE_TOAST_TIMEOUT,
-		actions: [
+	moveNodes([
+		planMoveTo(
 			{
-				label: "View",
-				shortcut: "shift+return",
-				run: () => {
-					view(target.id);
+				items,
+				target,
+				childCount,
+			},
+		),
+	]);
+	showToast(
+		{
+			text: moveToastText("ok", verb, target.name),
+			timeout: MOVE_TOAST_TIMEOUT,
+			actions: [
+				{
+					label: "View",
+					shortcut: "shift+return",
+					run: () =>
+					{
+						view(target.id);
+					},
 				},
-			},
-			{
-				label: "Undo",
-				run: undo,
-			},
-		],
-	});
+				{
+					label: "Undo",
+					run: undo,
+				},
+			],
+		},
+	);
 	return true;
 }
 
 /** A loaded Move To location: its name and priority default, child count and ancestry. */
-export interface LoadedMoveTarget {
+export interface LoadedMoveTarget
+{
 	target: MoveToTarget;
 	childCount: number;
 	parentOf: (id: string) => string | null;
@@ -182,16 +227,34 @@ export async function executeMoveTo({
 	pick,
 	loadTarget,
 	...move
-}: Omit<Parameters<typeof runMoveTo>[0], "target" | "childCount" | "parentOf"> & {
-	pick: () => Promise<{id: string} | {createdId: string} | undefined>;
+}: Omit<Parameters<typeof runMoveTo>[0], "target" | "childCount" | "parentOf"> &
+{
+	pick: () => Promise<
+		|
+		  {
+				id: string;
+		  }
+		|
+		  {
+				createdId: string;
+		  }
+		| undefined
+	>;
 	loadTarget: (id: string) => Promise<LoadedMoveTarget>;
-}): Promise<boolean> {
+}): Promise<boolean>
+{
 	const picked = await pick();
-	if (picked === undefined) {
+	if (picked === undefined)
+	{
 		return false;
 	}
 	const loaded = await loadTarget("id" in picked ? picked.id : picked.createdId);
-	return runMoveTo({...move, ...loaded});
+	return runMoveTo(
+		{
+			...move,
+			...loaded,
+		},
+	);
 }
 
 /**
@@ -201,11 +264,19 @@ export async function executeMoveTo({
 export function viewMovedTarget(
 	targetId: string,
 	paneId: string | null,
-	actions: {zoomPane: (paneId: string, targetId: string) => void; zoomMain: (targetId: string) => void},
-): void {
-	if (paneId === null) {
+	actions:
+	{
+		zoomPane: (paneId: string, targetId: string) => void;
+		zoomMain: (targetId: string) => void;
+	},
+): void
+{
+	if (paneId === null)
+	{
 		actions.zoomMain(targetId);
-	} else {
+	}
+	else
+	{
 		actions.zoomPane(paneId, targetId);
 	}
 }

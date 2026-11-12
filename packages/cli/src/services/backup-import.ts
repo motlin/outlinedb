@@ -6,7 +6,8 @@ import {EmbeddingGeneratorService} from "./embedding-generator.js";
 import {readBackupFile} from "../utils/backup-archive.js";
 import path from "node:path";
 
-export interface BackupImportStats {
+export interface BackupImportStats
+{
 	totalNodes: number;
 	nodesAdded: number;
 	nodesUpdated: number;
@@ -25,18 +26,21 @@ export interface BackupImportStats {
 	incomingWatermark?: string | null;
 }
 
-export interface BackupFileNode {
+export interface BackupFileNode
+{
 	ch?: BackupFileNode[];
 }
 
-export interface BackupImportProgress {
+export interface BackupImportProgress
+{
 	phase: "parsing" | "importing" | "embeddings";
 	current: number;
 	total: number;
 	message?: string;
 }
 
-export interface BackupImportOptions {
+export interface BackupImportOptions
+{
 	filePath: string;
 	generateEmbeddings?: boolean;
 	embeddingBatchSize?: number;
@@ -46,17 +50,21 @@ export interface BackupImportOptions {
 	onProgress?: (progress: BackupImportProgress) => void;
 }
 
-export class BackupImportService {
+export class BackupImportService
+{
 	private readonly database: ReturnType<typeof createDatabase>;
 	private readonly cacheService: CacheService;
 
-	constructor(database: ReturnType<typeof createDatabase>) {
+	constructor(database: ReturnType<typeof createDatabase>)
+	{
 		this.database = database;
 		this.cacheService = new CacheService(database);
 	}
 
-	async importBackup(options: BackupImportOptions): Promise<BackupImportStats> {
-		const {
+	async importBackup(options: BackupImportOptions): Promise<BackupImportStats>
+	{
+		const
+		{
 			filePath,
 			generateEmbeddings = false,
 			embeddingBatchSize = 20,
@@ -69,33 +77,41 @@ export class BackupImportService {
 		const rootNodes = BackupFileSchema.parse(JSON.parse(fileContent));
 
 		const nodeCount = this.countNodes(rootNodes);
-		onProgress?.({
-			phase: "parsing",
-			current: nodeCount,
-			total: nodeCount,
-		});
+		onProgress?.(
+			{
+				phase: "parsing",
+				current: nodeCount,
+				total: nodeCount,
+			},
+		);
 
-		onProgress?.({
-			phase: "importing",
-			current: 0,
-			total: nodeCount,
-			message: "Processing nodes...",
-		});
+		onProgress?.(
+			{
+				phase: "importing",
+				current: 0,
+				total: nodeCount,
+				message: "Processing nodes...",
+			},
+		);
 
 		const filename = path.basename(filePath);
 		const stats = await this.cacheService.importBackup(filePath, filename, false, force, systemTime);
 
-		if (generateEmbeddings && !stats.skipped) {
+		if (generateEmbeddings && !stats.skipped)
+		{
 			await this.generateEmbeddingsForImport(embeddingBatchSize, onProgress);
 		}
 
 		return stats;
 	}
 
-	countNodes(rootNodes: BackupFileNode[]): number {
+	countNodes(rootNodes: BackupFileNode[]): number
+	{
 		let count = rootNodes.length;
-		for (const node of rootNodes) {
-			if (node.ch) {
+		for (const node of rootNodes)
+		{
+			if (node.ch)
+			{
 				count += this.countNodes(node.ch);
 			}
 		}
@@ -105,22 +121,35 @@ export class BackupImportService {
 	private async generateEmbeddingsForImport(
 		batchSize: number,
 		onProgress?: (progress: BackupImportProgress) => void,
-	): Promise<void> {
+	): Promise<void>
+	{
 		const embeddingGenerator = new EmbeddingGeneratorService(this.database);
-		const result = await embeddingGenerator.generateEmbeddings({batchSize, force: false}, (progress) => {
-			onProgress?.({
-				phase: "embeddings",
-				current: progress.processed,
-				total: progress.total,
-				message: progress.message ?? `[${progress.currentModel}] ${progress.processed}/${progress.total}`,
-			});
-		});
+		const result = await embeddingGenerator.generateEmbeddings(
+			{
+				batchSize,
+				force: false,
+			},
+			(progress) =>
+			{
+				onProgress?.(
+					{
+						phase: "embeddings",
+						current: progress.processed,
+						total: progress.total,
+						message:
+							progress.message ?? `[${progress.currentModel}] ${progress.processed}/${progress.total}`,
+					},
+				);
+			},
+		);
 
-		onProgress?.({
-			phase: "embeddings",
-			current: result.totalProcessed,
-			total: result.totalProcessed,
-			message: `Generated embeddings for ${result.totalProcessed} nodes across all models`,
-		});
+		onProgress?.(
+			{
+				phase: "embeddings",
+				current: result.totalProcessed,
+				total: result.totalProcessed,
+				message: `Generated embeddings for ${result.totalProcessed} nodes across all models`,
+			},
+		);
 	}
 }
