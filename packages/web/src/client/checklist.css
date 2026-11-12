@@ -1,0 +1,280 @@
+/*
+ * The checklist layout of a decision page: a Letter-size paper sheet on a light gray desk that
+ * prints as itself on one page. Scoped under .checklist-page; the sheet keeps its paper colors in
+ * every theme because it stands for the printout.
+ */
+
+.checklist-page {
+	--ink: #1d1d1f;
+	--muted: #6e6e73;
+	--rule: #d2d2d7;
+	--accent: #b4235a;
+	--paper: #fff;
+	--desk: #f2f2f4;
+
+	min-height: 100vh;
+	padding: 24px 0;
+	background: var(--desk);
+	color: var(--ink);
+	font:
+		14px/1.4 -apple-system,
+		"SF Pro Text",
+		"Helvetica Neue",
+		Helvetica,
+		sans-serif;
+}
+
+.checklist-page *,
+.checklist-page *::before,
+.checklist-page *::after {
+	box-sizing: border-box;
+}
+
+.checklist-sheet {
+	width: 8.5in;
+	max-width: calc(100vw - 32px);
+	min-height: 11in;
+	margin: 0 auto;
+	padding: 0.6in 0.65in;
+	background: var(--paper);
+	box-shadow:
+		0 1px 3px rgba(0, 0, 0, 0.12),
+		0 8px 24px rgba(0, 0, 0, 0.06);
+}
+
+.checklist-head {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	gap: 16px;
+	border-bottom: 2px solid var(--ink);
+	padding-bottom: 8px;
+	margin-bottom: 18px;
+}
+
+.checklist-head h1 {
+	margin: 0;
+	font:
+		700 26px/1.1 "New York",
+		"Iowan Old Style",
+		Georgia,
+		serif;
+	letter-spacing: -0.01em;
+}
+
+.checklist-count {
+	font-size: 13px;
+	color: var(--muted);
+	white-space: nowrap;
+}
+
+.checklist-hint {
+	margin: -8px 0 18px;
+	font-size: 12px;
+	color: var(--muted);
+}
+
+.checklist-section {
+	margin-bottom: 20px;
+	break-inside: avoid;
+}
+
+.checklist-section h2 {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0 0 8px;
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--accent);
+}
+
+.checklist-section h2::after {
+	content: "";
+	flex: 1;
+	border-top: 1px solid var(--rule);
+}
+
+.checklist-section ul {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	columns: 2;
+	column-gap: 32px;
+}
+
+.checklist-section li {
+	break-inside: avoid;
+	border-bottom: 1px dotted var(--rule);
+}
+
+.checklist-row {
+	display: grid;
+	grid-template-columns: 18px 1fr;
+	gap: 10px;
+	align-items: start;
+	width: 100%;
+	padding: 6px 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	font: inherit;
+	cursor: pointer;
+}
+
+.checklist-input {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	padding: 0;
+	overflow: hidden;
+	clip-path: inset(50%);
+	border: 0;
+	white-space: nowrap;
+}
+
+.checklist-section li {
+	position: relative;
+}
+
+.checklist-input:focus-visible + .checklist-box {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+.checklist-box {
+	position: relative;
+	width: 16px;
+	height: 16px;
+	margin-top: 1px;
+	border: 1.6px solid var(--ink);
+	border-radius: 3px;
+}
+
+.checklist-row[data-checked="true"] .checklist-box::after {
+	content: "";
+	position: absolute;
+	left: 4px;
+	top: 0;
+	width: 5px;
+	height: 10px;
+	border: solid var(--ink);
+	border-width: 0 2px 2px 0;
+	transform: rotate(45deg);
+}
+
+.checklist-row[data-checked="true"] .checklist-title {
+	color: var(--muted);
+	text-decoration: line-through;
+}
+
+.checklist-title {
+	font-size: 14px;
+}
+
+.checklist-number {
+	margin-left: 4px;
+	color: var(--muted);
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+}
+
+.checklist-subtitle {
+	display: block;
+	color: var(--muted);
+	font-size: 11.5px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.checklist-notes {
+	display: flex;
+	gap: 24px;
+	margin-top: 24px;
+	padding-top: 10px;
+	border-top: 1px solid var(--rule);
+	font-size: 12px;
+	color: var(--muted);
+}
+
+.checklist-notes-line {
+	flex: 1;
+	height: 18px;
+	border-bottom: 1px solid var(--rule);
+}
+
+.checklist-actions {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 16px;
+	margin-top: 24px;
+}
+
+.checklist-status {
+	font-size: 12px;
+	color: var(--muted);
+}
+
+.checklist-error {
+	color: #dc2626;
+}
+
+.checklist-submit {
+	padding: 8px 20px;
+	border: 0;
+	border-radius: 6px;
+	background: var(--ink);
+	color: var(--paper);
+	font: inherit;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.checklist-submit:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+@page {
+	size: letter;
+	margin: 0;
+}
+
+@media print {
+	html,
+	body,
+	.checklist-page {
+		background: #fff !important;
+	}
+
+	.checklist-page {
+		min-height: 0;
+		padding: 0;
+	}
+
+	.checklist-sheet {
+		width: auto;
+		max-width: none;
+		min-height: 0;
+		margin: 0;
+		box-shadow: none;
+	}
+
+	.checklist-section h2 {
+		color: #000;
+	}
+
+	.checklist-row[data-checked="true"] .checklist-title {
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.checklist-actions {
+		display: none;
+	}
+}

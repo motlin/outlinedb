@@ -164,6 +164,11 @@ const DecisionDocumentSchema = z.strictObject({
 	slug: z.string(),
 	title: z.string(),
 	intro: z.string().optional(),
+	/**
+	 * How the page shows its items: one card at a time (the default), or `checklist`, a printable sheet
+	 * of checkbox rows where checking a row answers `did` and unchecking it answers `skip`.
+	 */
+	layout: z.enum(["checklist"]).optional(),
 	groups: z.array(GroupSchema),
 });
 

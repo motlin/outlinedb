@@ -199,6 +199,19 @@ describe("GET /api/v1/decisions/:slug", () => {
 		});
 	});
 
+	it("passes the page's checklist layout through, and rejects a layout it does not know", async () => {
+		const request = setup({
+			"meetings.json": JSON.stringify({...DOCUMENT, layout: "checklist"}),
+			"other.json": JSON.stringify({...DOCUMENT, slug: "other", layout: "grid"}),
+		});
+		const checklist = await request("GET", "/meetings");
+		const unknown = await request("GET", "/other");
+		expect({checklist: [checklist.status, checklist.body.layout], unknown: unknown.status}).toStrictEqual({
+			checklist: [200, "checklist"],
+			unknown: 500,
+		});
+	});
+
 	it("passes an item's before/after diff through to the page", async () => {
 		const diff = {before: "Ran 5k with Gary", after: "Ran 5k with Frank"};
 		const item = {...DOCUMENT.groups[0].items[0], diff};

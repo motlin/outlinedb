@@ -10,13 +10,14 @@ import {useEffect, useMemo, useRef, useState} from "react";
 import type {ReactNode} from "react";
 import {useParams} from "react-router-dom";
 import type {DecisionItem, DecisionPage, DecisionSubmitResult} from "../../server/decisions.js";
+import {errorOf, messageOf} from "../decision-fetch.js";
 import {bodyTokens} from "../decision-tokens.js";
 import "../decisions.css";
 import {hideLoadingScreenOnce} from "../loading-screen.js";
 import {readJson} from "../read-json.js";
 import {fetchThroughRestarts} from "../restart-retry.js";
-import type {FetchedText} from "../restart-retry.js";
 import {useOutlineStore} from "../stores/outline.js";
+import {ChecklistSheet} from "./checklist-sheet.js";
 
 const NOTE_DEBOUNCE_MS = 600;
 
@@ -47,14 +48,6 @@ interface Card {
 	item: Group["items"][number];
 }
 
-async function errorOf(response: FetchedText): Promise<string> {
-	try {
-		return (await readJson<{error: string}>(new Response(response.text))).error;
-	} catch {
-		return `HTTP ${response.status}`;
-	}
-}
-
 const STATUS_TEXT: Record<Exclude<SaveStatus["kind"], "error">, string> = {idle: "", saving: "Saving…", saved: "Saved"};
 
 function statusText(status: SaveStatus): string {
@@ -64,10 +57,6 @@ function statusText(status: SaveStatus): string {
 /** A submission time as the viewer's local clock time. */
 function clockTime(iso: string): string {
 	return new Date(iso).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"});
-}
-
-function messageOf(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
 }
 
 /** The staged page, or the reason it could not be loaded. */
@@ -322,6 +311,7 @@ export function DecisionPageView({slug}: {slug: string}) {
 		onKeyRef.current = (event) => {
 			if (
 				done ||
+				page?.layout === "checklist" ||
 				current === undefined ||
 				event.altKey ||
 				event.ctrlKey ||
@@ -359,6 +349,10 @@ export function DecisionPageView({slug}: {slug: string}) {
 	}
 	if (page === null) {
 		return <main className="decisions-page" aria-busy="true" />;
+	}
+
+	if (page.layout === "checklist") {
+		return <ChecklistSheet base={base} page={page} />;
 	}
 
 	const currentState = current === undefined ? undefined : items[current.item.id];

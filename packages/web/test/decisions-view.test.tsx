@@ -854,3 +854,107 @@ describe("DecisionPageView", () => {
 		expect(text(".decisions-error")).toStrictEqual(["No decision page staged as meetings"]);
 	});
 });
+
+const CHECKLIST: DecisionPage = {
+	slug: "meetings",
+	title: "Skipped today",
+	intro: "Check the ones you have since done.",
+	layout: "checklist",
+	groups: [
+		{
+			heading: "Recurring review",
+			items: ["did", "skip"].map((choice, index) => ({
+				id: `r-${index + 1}`,
+				title: `Chore ${index + 1}`,
+				body: index === 0 ? ["Weekly Review · overdue 4d", "second line"] : [],
+				links: [{label: "Open", href: "https://workflowy.com/#/r"}],
+				options: [
+					{value: "did", label: "Did it"},
+					{value: "skip", label: "Still skipped"},
+				],
+				default: "skip",
+				answer: index === 0 ? {choice, note: "", answeredAt: "2026-10-27T14:00:00.000Z"} : null,
+			})),
+		},
+		{
+			heading: "Due tasks",
+			items: [
+				{
+					id: "d-1",
+					title: "Renew passport",
+					body: [],
+					links: [],
+					options: [
+						{value: "did", label: "Did it"},
+						{value: "skip", label: "Still skipped"},
+					],
+					default: "skip",
+					answer: null,
+				},
+			],
+		},
+	],
+	submittedAt: null,
+};
+
+function checklistRows(): [string | undefined, boolean | undefined, string[]][] {
+	return [...(host?.querySelectorAll<HTMLElement>(".checklist-row") ?? [])].map((row) => [
+		row.dataset.itemId,
+		row.querySelector<HTMLInputElement>("input[type=checkbox]")?.checked,
+		text(".checklist-title, .checklist-number, .checklist-subtitle", row),
+	]);
+}
+
+function checkbox(id: string): HTMLInputElement | null | undefined {
+	return host?.querySelector<HTMLInputElement>(`.checklist-row[data-item-id="${id}"] input[type=checkbox]`);
+}
+
+describe("DecisionPageView checklist layout", () => {
+	it("renders compact sections of checkbox rows, restoring checked rows from saved answers", async () => {
+		stubFetch(defaultWrite, CHECKLIST);
+		await mount();
+		expect({
+			title: text(".checklist-sheet h1"),
+			hint: text(".checklist-hint"),
+			count: text(".checklist-count"),
+			headings: text(".checklist-section h2"),
+			rows: checklistRows(),
+			cards: host?.querySelectorAll(".decisions-card, .decisions-nav").length,
+			links: host?.querySelectorAll(".checklist-sheet a").length,
+		}).toStrictEqual({
+			title: ["Skipped today"],
+			hint: ["Check the ones you have since done."],
+			count: ["3 items"],
+			headings: ["Recurring review", "Due tasks"],
+			rows: [
+				["r-1", true, ["Chore 1", "1", "Weekly Review · overdue 4d"]],
+				["r-2", false, ["Chore 2", "2"]],
+				["d-1", false, ["Renew passport", "3"]],
+			],
+			cards: 0,
+			links: 0,
+		});
+	});
+
+	it("saves did when a row is checked and skip when it is unchecked, then submits", async () => {
+		stubFetch(defaultWrite, CHECKLIST);
+		await mount();
+		await click(checkbox("d-1"));
+		await click(checkbox("r-1"));
+		const rows = checklistRows().map(([id, checked]) => [id, checked]);
+		await click(button("Submit"));
+		expect({calls: calls.slice(1), rows, submitted: text(".checklist-submitted")}).toStrictEqual({
+			calls: [
+				{method: "PUT", url: "/api/v1/decisions/meetings/d-1", body: {choice: "did", note: ""}},
+				{method: "PUT", url: "/api/v1/decisions/meetings/r-1", body: {choice: "skip", note: ""}},
+				{method: "POST", url: "/api/v1/decisions/meetings/submit", body: undefined},
+			],
+			rows: [
+				["r-1", false],
+				["r-2", false],
+				["d-1", true],
+			],
+			submitted: ["Submitted. Tell Claude you're done."],
+		});
+	});
+});

@@ -3,7 +3,7 @@
 //
 // Reads the skip log for items whose last outcome since the run started is `skip`, looks each one up
 // in the staged `overdue.json` (recurring review) and `due-items.json` (one-shot due tasks), and stages
-// a Did it / Still skipped card per item at `<decisions-dir>/skipped-<today>.json`. Writes no page when
+// a checklist row per item (checked answers `did`, unchecked `skip`) at `<decisions-dir>/skipped-<today>.json`. Writes no page when
 // nothing was skipped.
 //
 // Usage:
@@ -91,14 +91,19 @@ const SOURCE_LABELS: Record<string, string> = {
 	reminders: "Apple Reminders",
 };
 
-function lateness(days: number | null): string[] {
+function lateness(days: number | null): string {
 	if (days === null) {
-		return ["no date"];
+		return "no date";
 	}
 	if (days === 0) {
-		return ["due today"];
+		return "due today";
 	}
-	return days > 0 ? [`overdue ${days}d`] : [`due in ${-days}d`];
+	return days > 0 ? `overdue ${days}d` : `due in ${-days}d`;
+}
+
+/** The checklist row's one muted line: where the item lives and how late it is. */
+function subtitle(where: string, days: number | null): string {
+	return `${where} · ${lateness(days)}`;
 }
 
 function workflowyLink(url: string | null): Link[] {
@@ -149,11 +154,11 @@ export function buildSkippedPage({
 		if (overdue) {
 			const title = stripMarkup(overdue.name);
 			recurring.push(
-				card(key, title, [overdue.section, ...lateness(overdue.overdueByDays)], workflowyLink(overdue.url)),
+				card(key, title, [subtitle(overdue.section, overdue.overdueByDays)], workflowyLink(overdue.url)),
 			);
 			items.push({id: key, title, segment: "recurring", source: "workflowy", done: overdue.applyOp});
 		} else if (dueRow) {
-			const body = [SOURCE_LABELS[dueRow.source] ?? dueRow.source, ...lateness(dueRow.overdueByDays)];
+			const body = [subtitle(SOURCE_LABELS[dueRow.source] ?? dueRow.source, dueRow.overdueByDays)];
 			due.push(card(key, dueRow.title, body, workflowyLink(dueRow.url)));
 			items.push({
 				id: key,
@@ -179,7 +184,8 @@ export function buildSkippedPage({
 		page: {
 			slug: `skipped-${today}`,
 			title: "Skipped today",
-			intro: "Everything you skipped during the daily review. Mark the ones you have since done.",
+			intro: "Everything you skipped during the daily review. Check the ones you have since done.",
+			layout: "checklist",
 			groups,
 		},
 		items,

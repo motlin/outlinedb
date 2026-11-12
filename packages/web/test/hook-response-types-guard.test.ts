@@ -82,7 +82,7 @@ function handTypedResponses(): string[] {
  */
 const EXEMPT_READS = [
 	// The decisions page is GTD and moves to its own repo with its backend; it gets no op here.
-	"components/decisions-view.tsx: readJson<{error: string}>",
+	"decision-fetch.ts: readJson<{error: string}>",
 ];
 
 describe("client modules read op responses as schema-inferred types", () => {
