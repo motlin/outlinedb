@@ -1,0 +1,23 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`node dto > canonical Node DTO snapshot > matches the snapshotted shape for a known fixture node 1`] = `
+{
+  "collapsed": false,
+  "completedAt": 2023-11-14T22:23:20.000Z,
+  "createdAt": 2023-11-14T22:20:00.000Z,
+  "id": "33333333-3333-3333-3333-333333333333",
+  "layoutMode": null,
+  "mirror": {
+    "isMirror": false,
+    "originalNodeId": null,
+  },
+  "modifiedAt": 2023-11-14T22:21:40.000Z,
+  "name": "Ship Phase 4",
+  "note": "Depends on the importer rewrite.",
+  "parentId": "11111111-1111-1111-1111-111111111111",
+  "priority": 1,
+  "shortId": "333333333333",
+  "systemFrom": "2026-05-22 10:00:00.000",
+  "systemTo": "9999-12-31 23:59:59",
+}
+`;

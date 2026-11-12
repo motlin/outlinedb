@@ -71,7 +71,7 @@ SELECT * FROM nodes WHERE system_from <= @importTimestamp AND system_to > @impor
 
 See Liftwizard's [Composites](https://liftwizard.io/docs/temporal-data/versioning#composites) and [Reladomo](https://github.com/goldmansachs/reladomo).
 
-- A node is the composite root. The ownership map is `NODE_COMPOSITE_PARTS` in `packages/shared/src/cache/node-composite.ts`; `packages/shared/test/node-composite.test.ts` fails when a table or node-id column is unclassified.
+- A node is the composite root. The ownership map is `NODE_COMPOSITE_PARTS` in `packages/shared/src/cache/node-composite.ts`; `packages/shared/test/node.test.ts` fails when a table or node-id column is unclassified.
 - Here the leading primary-key column names the owner; every other node-id column is a reference.
 - Unit of work: one logical operation may edit several composites, and all of them share one transaction and one system time (`UnitOfWork` from `runUnitOfWork`). That time is every ended row's `system_to` and every new row's `system_from`. Helpers take the unit of work from the caller and never call `now()` or open their own transaction.
 - System time comes from the application's UTC clock, read once per unit of work (`newSystemTime`/`newSystemTimestamp` in `packages/shared/src/cache/system-time.ts`), as Reladomo reads its processing time once per transaction. A unit split across several transactions (the batched `beginApiImport`, the Durable Object's alarm-driven import) stages the time once and passes it to every transaction. Never shift a time to make it unique: two units may share a millisecond, and times need not be monotonic across units.

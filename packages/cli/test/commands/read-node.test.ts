@@ -86,7 +86,7 @@ describe("node get command", () => {
 			expect(output.note).toBe("A test note");
 		});
 
-		// Short ID resolution is tested at the CacheService level (test/shared/cache-service.test.ts)
+		// Short ID resolution is tested at the CacheService level (packages/cli/test/services/cache.test.ts)
 		// Command-level testing has environment isolation issues with separate DB connections
 
 		it("errors when node not found", async () => {

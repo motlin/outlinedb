@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`MCP tools over a store > advertises every tool with its name, description and input schema 1`] = `
+exports[`tools > MCP tools over a store > advertises every tool with its name, description and input schema 1`] = `
 [
   {
     "_meta": undefined,
@@ -451,7 +451,7 @@ exports[`MCP tools over a store > advertises every tool with its name, descripti
 ]
 `;
 
-exports[`MCP tools over a store > gets a node by path in the NodeTreeReader shape 1`] = `
+exports[`tools > MCP tools over a store > gets a node by path in the NodeTreeReader shape 1`] = `
 {
   "isError": undefined,
   "node": {
@@ -478,7 +478,7 @@ exports[`MCP tools over a store > gets a node by path in the NodeTreeReader shap
 }
 `;
 
-exports[`MCP tools over a store > lists a parent's children to the requested depth 1`] = `
+exports[`tools > MCP tools over a store > lists a parent's children to the requested depth 1`] = `
 {
   "isError": undefined,
   "nodes": [

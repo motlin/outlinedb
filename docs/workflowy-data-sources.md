@@ -118,7 +118,7 @@ What it lacks: anything account-level (settings, stars, tag colors, expansion, `
 
 Known problems:
 
-- Dead mirror references persist in backups: ids of deleted mirrors remain in the original's `mirrorRootIds`, and a mirror keeps `originalId` after its original is deleted. `mergeItemRelationships` therefore keeps only rows whose both sides are live nodes. Tests: `packages/cli/test/services/cache-import.test.ts`, describe blocks "dangling mirror records" and "mirror records".
+- Dead mirror references persist in backups: ids of deleted mirrors remain in the original's `mirrorRootIds`, and a mirror keeps `originalId` after its original is deleted. `mergeItemRelationships` therefore keeps only rows whose both sides are live nodes. Tests: `packages/cli/test/services/cache.test.ts`, describe blocks "dangling mirror records" and "mirror records".
 - Staleness against newer writes. A backup is older than the cache whenever anything was written since. Merging it naively would tombstone every node created after the snapshot. The watermark guard compares content timestamps (not cache-write time) and protects only the nodes the snapshot predates, so an older backup still contributes attachments and mirrors without rolling back newer writes. `force` waives it. Tests: describe block "stale-snapshot watermark guard".
 - A backup with under half the nodes of a non-trivial cache is rejected as corrupt.
 
@@ -188,7 +188,7 @@ Mirrors are the single most confusing part of the data and the main reason a RES
 - `backlinkMirrorRootIds` is the same relationship for backlink items under a generated references root.
 - The cache stores one row per pair in `mirrors(mirror_id, original_id)` plus the bitemporal columns. Completion is also derived: a mirror is completed exactly when its original is (`effective-completion.ts`).
 - Both directions are client-maintained upstream. The web app creates a mirror by `bulk_create` of a node with `mirror.originalId` and an `edit` patch that adds the id to the original's `mirrorRootIds`. The server does not clean up after a REST-side delete, which is why dead ids occur.
-- `import-api` does not touch the `mirrors` table by itself. Without tree data, only backup imports fill and repair it. With tree data, `importFromApi` merges `mirrors` and `references_roots` in the same unit of work. Mirror rows close when either node is gone (the merge keeps only rows whose both sides are live). Tests: `packages/cli/test/services/cache-import-api.test.ts`, describe blocks "mirror rows of deleted nodes" and the tree-data tests.
+- `import-api` does not touch the `mirrors` table by itself. Without tree data, only backup imports fill and repair it. With tree data, `importFromApi` merges `mirrors` and `references_roots` in the same unit of work. Mirror rows close when either node is gone (the merge keeps only rows whose both sides are live). Tests: `packages/cli/test/services/cache.test.ts`, describe blocks "mirror rows of deleted nodes" and the tree-data tests.
 - To repair mirror rows, re-import a backup, then run `import-api` for current content.
 
 ## How the importers merge the sources today
@@ -221,7 +221,7 @@ flowchart LR
 
 ### Importer 1: `cache import-api`
 
-Code: `packages/cli/src/commands/cache/import-api.ts`, `packages/shared/src/cache/api-import.ts`. Tests: `packages/shared/test/api-import.test.ts`, `packages/cli/test/services/cache-import-api.test.ts`.
+Code: `packages/cli/src/commands/cache/import-api.ts`, `packages/shared/src/cache/api-import.ts`. Tests: `packages/shared/test/api-import.test.ts`, `packages/cli/test/services/cache.test.ts`.
 
 - Fetches `nodes-export` (source 1), then `/get_tree_data/` (source 2) when internal credentials exist.
 - Merges content and metadata in batches under one system time (`beginApiImport`, `applyApiBatch`, `finishApiImport`). A three-batch import yields the same rows as a one-shot import.
@@ -231,7 +231,7 @@ Code: `packages/cli/src/commands/cache/import-api.ts`, `packages/shared/src/cach
 
 ### Importer 2: `cache import-backup` and `import-backups`
 
-Code: `packages/cli/src/services/cache-import.ts`. Tests: `packages/cli/test/services/cache-import.test.ts`, `packages/cli/test/utils/backup-archive.test.ts`.
+Code: `packages/cli/src/services/cache-import.ts`. Tests: `packages/cli/test/services/cache.test.ts`, `packages/cli/test/utils/backup-archive.test.ts`.
 
 - Downloads missing files, then imports each backup in date order.
 - Validates with the strict zod schema, converts epoch-relative timestamps, infers sibling priorities from tree position.
@@ -301,12 +301,12 @@ The standalone plan (`.llm/plans/2026-10-25-standalone-dual-write.md`) flips the
 ## Test and tool reference
 
 - REST client: `packages/cli/test/services/api-sync.test.ts` (including 429 handling)
-- API import and batching: `packages/shared/test/api-import.test.ts`, `packages/cli/test/services/cache-import-api.test.ts`
-- Backup import, mirrors, watermark guard: `packages/cli/test/services/cache-import.test.ts`
+- API import and batching: `packages/shared/test/api-import.test.ts`, `packages/cli/test/services/cache.test.ts`
+- Backup import, mirrors, watermark guard: `packages/cli/test/services/cache.test.ts`
 - Backup schema tolerance: `packages/shared/test/backup-node-schema.test.ts`
 - Tree-data metadata: `packages/shared/test/import-internal-metadata.test.ts`, `packages/cli/test/services/node-sync-relationships.test.ts`
 - Mirror text: `packages/cli/test/services/mirror-text.test.ts`
-- Internal client and write path: `packages/shared/test/internal-client-bootstrap.test.ts`, `internal-client-session-store.test.ts`, `internal-client-signed-file.test.ts`, `push-and-poll.test.ts`, `internal-ops.test.ts`, `internal-adapter-*.test.ts`
+- Internal client and write path: `packages/shared/test/internal.test.ts`, `push-and-poll.test.ts`
 - REST and backup equivalence on fixtures: `packages/shared/test/round-trip.test.ts`
 - Live protocol probing: `./bin/run.js internal probe` (writes `.llm/upstream-sync/internal-api-probes.md`)
 - Output schemas of the cache read model: `./bin/run.js node schema`

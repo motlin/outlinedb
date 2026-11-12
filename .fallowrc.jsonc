@@ -58,4 +58,22 @@
 		"better-sqlite3",
 		"eslint-plugin-storybook",
 	],
+	"ignoreExports": [
+		{
+			"file": "packages/web/src/node-types.ts",
+			"exports": ["*"],
+		},
+		{
+			"file": "packages/web/src/server/helper-tags.ts",
+			"exports": ["*"],
+		},
+		{
+			"file": "packages/shared/test/helpers/search-so-fixture.ts",
+			"exports": ["*"],
+		},
+		{
+			"file": "packages/web/src/server/tree-search.ts",
+			"exports": ["*"],
+		},
+	],
 }

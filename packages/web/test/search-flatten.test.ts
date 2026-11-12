@@ -58,7 +58,7 @@ const CHILDREN = new Map<string, NodeResponse[]>([
 	["veg", [node("carrot", "veg", "Carrot zebra", 0), node("potato", "veg", "Potato", 0)]],
 ]);
 
-// computeTreeSearch's result for "apple" on the same fixture (test/search-tree.test.ts).
+// computeTreeSearch's result for "apple" on the same fixture (test/search.test.ts).
 const APPLE: TreeSearchResult = {
 	matchIds: ["fruit", "green", "deep", "done"],
 	nameMatchIds: ["fruit", "green", "deep", "done"],

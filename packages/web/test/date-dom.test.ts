@@ -1,0 +1,291 @@
+// @vitest-environment happy-dom
+import {afterEach, beforeEach, describe, expect, it, beforeAll, vi} from "vite-plus/test";
+import {act, createElement, useEffect} from "react";
+import type {RefObject} from "react";
+import {createRoot} from "react-dom/client";
+import type {Root} from "react-dom/client";
+import {useDateAutocomplete} from "../src/client/components/date-autocomplete.js";
+import {setAccountFeatures} from "../src/client/features.js";
+import {is, pop, resetPopupsForTests, unpop} from "../src/client/popups.js";
+import {DatePickerPopup} from "../src/client/components/date-picker-popup.js";
+import {calendarPickerSettingsRows} from "../src/client/components/calendar-picker-settings.js";
+
+declare global {
+	var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
+	// React reads this to know act() wraps every update.
+}
+
+describe("date autocomplete popup guard", () => {
+	let root: Root | undefined;
+	let host: HTMLDivElement | undefined;
+	const editorRef: RefObject<HTMLElement | null> = {current: null};
+	const bridge: {handleInput: () => void} = {handleInput: () => {}};
+
+	function Harness() {
+		const api = useDateAutocomplete({
+			editorRef,
+			dateSettings: {dateFormat: "YYYY-MM-DD", timeFormat: "24"} as never,
+			isBlocked: () => false,
+			onApply: () => {},
+			onOpenPicker: () => {},
+			onOpenSettings: () => {},
+		});
+		useEffect(() => {
+			bridge.handleInput = api.handleInput;
+		});
+		return createElement(
+			"div",
+			null,
+			createElement(
+				"div",
+				{
+					ref: (element: HTMLElement | null) => {
+						// oxlint-disable-next-line react-hooks-js/immutability -- test bridge to a module-level ref
+						editorRef.current = element;
+					},
+					id: "editor",
+				},
+				"tomorrow",
+			),
+			api.flyout,
+		);
+	}
+
+	function typeAtEnd(): void {
+		const editor = document.querySelector("#editor");
+		if (!editor?.firstChild) {
+			throw new Error("no editor");
+		}
+		const range = document.createRange();
+		range.setStart(editor.firstChild, 8);
+		range.collapse(true);
+		const selection = globalThis.getSelection();
+		selection?.removeAllRanges();
+		selection?.addRange(range);
+		act(() => {
+			bridge.handleInput();
+		});
+	}
+
+	beforeEach(() => {
+		globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+		host = document.createElement("div");
+		document.body.append(host);
+		root = createRoot(host);
+		act(() => {
+			root?.render(createElement(Harness));
+		});
+	});
+
+	afterEach(() => {
+		act(() => {
+			root?.unmount();
+		});
+		host?.remove();
+		for (const element of document.body.querySelectorAll(".flyout")) {
+			element.remove();
+		}
+		resetPopupsForTests();
+	});
+
+	const flyouts = () => document.querySelectorAll(".flyout").length;
+
+	describe("date autocomplete popup guard", () => {
+		it("shows the flyout and registers date.autocomplete when no popup is open", () => {
+			typeAtEnd();
+			expect({flyouts: flyouts(), registered: is("date.autocomplete")}).toStrictEqual({
+				flyouts: 1,
+				registered: true,
+			});
+		});
+
+		it("stays hidden while the selection toolbar is registered, and shows after it closes", () => {
+			pop("CTX_MENU_POPUP");
+			typeAtEnd();
+			const blocked = flyouts();
+			unpop();
+			typeAtEnd();
+			expect({blocked, after: flyouts()}).toStrictEqual({blocked: 0, after: 1});
+		});
+
+		it("unregisters when hidden", () => {
+			typeAtEnd();
+			const sel = globalThis.getSelection();
+			sel?.removeAllRanges();
+			act(() => {
+				bridge.handleInput();
+			});
+			expect({flyouts: flyouts(), registered: is("date.autocomplete")}).toStrictEqual({
+				flyouts: 0,
+				registered: false,
+			});
+		});
+	});
+
+	describe("dates flag", () => {
+		it("never shows the flyout when the account flag is off", () => {
+			setAccountFeatures({});
+			try {
+				typeAtEnd();
+				expect({flyouts: flyouts(), registered: is("date.autocomplete")}).toStrictEqual({
+					flyouts: 0,
+					registered: false,
+				});
+			} finally {
+				setAccountFeatures(null);
+			}
+		});
+	});
+});
+
+describe("date picker popup keys", () => {
+	let root: Root | undefined;
+	let host: HTMLElement | undefined;
+
+	beforeAll(() => {
+		globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+	});
+
+	afterEach(() => {
+		act(() => {
+			root?.unmount();
+		});
+		host?.remove();
+	});
+
+	async function mount(props: Record<string, unknown> = {}): Promise<void> {
+		host = document.createElement("div");
+		document.body.append(host);
+		root = createRoot(host);
+		await act(async () => {
+			root?.render(createElement(DatePickerPopup, {selected: [new Date(2026, 9, 15)], ...props}));
+			await Promise.resolve();
+		});
+	}
+
+	async function press(key: string, target: EventTarget = window): Promise<void> {
+		await act(async () => {
+			target.dispatchEvent(new KeyboardEvent("keydown", {key, bubbles: true, cancelable: true}));
+			await Promise.resolve();
+		});
+	}
+
+	function activeRows(): string[] {
+		return [...document.querySelectorAll(".menuItem.active")].map((row) => row.textContent);
+	}
+
+	describe("DatePickerPopup keyboard mode", () => {
+		it("renders preset rows without hover classes", async () => {
+			await mount();
+			const today = [...document.querySelectorAll(".menuItem")].find((row) => row.textContent === "Today");
+			const tokens = (today?.className ?? "").split(/\s+/u);
+			expect({
+				menuItem: tokens.includes("menuItem"),
+				hover: tokens.includes("hover:bg-secondary"),
+				canHover: tokens.includes("canHover"),
+			}).toStrictEqual({menuItem: true, hover: false, canHover: false});
+		});
+
+		it("walks Today, Tomorrow, Next week with ArrowDown, then focuses the month header", async () => {
+			await mount();
+			document.querySelector<HTMLInputElement>("input")?.focus();
+			const seen: string[][] = [];
+			for (let i = 0; i < 3; i++) {
+				await press("ArrowDown");
+				seen.push(activeRows());
+			}
+			await press("ArrowDown");
+			expect({
+				seen,
+				focused: document.activeElement?.hasAttribute("data-date-picker-header-button"),
+				text: document.activeElement?.textContent,
+			}).toStrictEqual({seen: [["Today"], ["Tomorrow"], ["Next week"]], focused: true, text: "Oct"});
+		});
+
+		it("selects the active preset with Enter exactly once", async () => {
+			const onPreset = vi.fn<(...args: never[]) => void>();
+			await mount({onPreset});
+			document.querySelector<HTMLInputElement>("input")?.focus();
+			await press("ArrowDown");
+			await press("ArrowDown");
+			await press("Enter");
+			expect(onPreset.mock.calls).toStrictEqual([["tomorrow"]]);
+		});
+
+		it("reaches the strip picker settings rows with ArrowUp from the input", async () => {
+			const onToggle = vi.fn<(key: "foundDates" | "dayPrefix") => void>();
+			const onLayout = vi.fn<() => void>();
+			await mount({
+				showControls: false,
+				afterCalendar: calendarPickerSettingsRows({foundDates: true, dayPrefix: true}, onToggle, onLayout),
+			});
+			document.querySelector<HTMLInputElement>("input")?.focus();
+			const seen: string[][] = [];
+			for (let i = 0; i < 3; i++) {
+				await press("ArrowUp");
+				seen.push(activeRows());
+			}
+			await press("Enter");
+			expect({seen, toggles: onToggle.mock.calls, layouts: onLayout.mock.calls.length}).toStrictEqual({
+				seen: [
+					["Calendar Layout"],
+					["Friendly day namesYesterday, Today, Tomorrow"],
+					["Found DatesShows all matching dates"],
+				],
+				toggles: [["foundDates"]],
+				layouts: 0,
+			});
+		});
+
+		it("clicks a focused day button on Enter instead of closing", async () => {
+			const onApply = vi.fn<(...args: never[]) => void>();
+			const onClose = vi.fn<(...args: never[]) => void>();
+			await mount({onApply, onClose});
+			const first = document.querySelector<HTMLElement>('[data-date-picker-day-button="true"]');
+			first?.focus();
+			await press("Enter", first ?? window);
+			expect({applied: onApply.mock.calls, closed: onClose.mock.calls.length}).toStrictEqual({
+				applied: [[[new Date(2026, 8, 27)]]],
+				closed: 0,
+			});
+		});
+
+		it("opens the month view when Enter is pressed on the month header", async () => {
+			await mount();
+			const header = document.querySelector<HTMLElement>('[data-date-picker-header-button="true"]');
+			header?.focus();
+			await press("Enter", header ?? window);
+			const months = [...document.querySelectorAll('[data-date-picker-grid-button="true"]')].map(
+				(button) => button.textContent,
+			);
+			expect(months).toStrictEqual([
+				"Jan",
+				"Feb",
+				"Mar",
+				"Apr",
+				"May",
+				"Jun",
+				"Jul",
+				"Aug",
+				"Sep",
+				"Oct",
+				"Nov",
+				"Dec",
+			]);
+		});
+
+		it("does not register Escape while the body is replaced", async () => {
+			const onEscape = vi.fn<(...args: never[]) => void>();
+			await mount({onEscape, content: createElement("div")});
+			await press("Escape");
+			expect(onEscape.mock.calls).toHaveLength(0);
+		});
+
+		it("registers Escape with the normal body", async () => {
+			const onEscape = vi.fn<(...args: never[]) => void>();
+			await mount({onEscape});
+			await press("Escape");
+			expect(onEscape.mock.calls).toHaveLength(1);
+		});
+	});
+});
