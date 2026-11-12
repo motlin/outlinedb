@@ -26,7 +26,7 @@ import {
 test("favoritesQuery selects uncaptioned, untrashed, visible favorite photos within the window", () => {
 	assert.strictEqual(
 		favoritesQuery(14),
-		"SELECT A.ZUUID AS uuid, datetime(A.ZDATECREATED+978307200,'unixepoch','localtime') AS created, A.ZDIRECTORY AS directory, A.ZFILENAME AS filename, COALESCE(B.ZORIGINALFILENAME,'') AS originalFilename, A.ZORIENTATION AS orientation FROM ZASSET A LEFT JOIN ZADDITIONALASSETATTRIBUTES B ON A.Z_PK=B.ZASSET WHERE A.ZFAVORITE=1 AND A.ZTRASHEDSTATE=0 AND A.ZHIDDEN=0 AND A.ZKIND=0 AND A.ZDATECREATED > strftime('%s','now','-14 days')-978307200 AND COALESCE(B.ZTITLE,'')='' AND COALESCE(B.ZACCESSIBILITYDESCRIPTION,'')='' ORDER BY A.ZDATECREATED DESC;",
+		"SELECT A.ZUUID AS uuid, datetime(A.ZDATECREATED+978307200,'unixepoch','localtime') AS created, A.ZDIRECTORY AS directory, A.ZFILENAME AS filename, COALESCE(B.ZORIGINALFILENAME,'') AS originalFilename FROM ZASSET A LEFT JOIN ZADDITIONALASSETATTRIBUTES B ON A.Z_PK=B.ZASSET WHERE A.ZFAVORITE=1 AND A.ZTRASHEDSTATE=0 AND A.ZHIDDEN=0 AND A.ZKIND=0 AND A.ZDATECREATED > strftime('%s','now','-14 days')-978307200 AND COALESCE(B.ZTITLE,'')='' AND COALESCE(B.ZACCESSIBILITYDESCRIPTION,'')='' ORDER BY A.ZDATECREATED DESC;",
 	);
 });
 
@@ -147,7 +147,6 @@ test("planSources splits favorites into local originals and iCloud-only ones", (
 			directory: "A",
 			filename: "AAA.heic",
 			originalFilename: "IMG_1.HEIC",
-			orientation: 1,
 		},
 		{
 			uuid: "BBB",
@@ -155,7 +154,6 @@ test("planSources splits favorites into local originals and iCloud-only ones", (
 			directory: "B",
 			filename: "BBB.heic",
 			originalFilename: "IMG_2.HEIC",
-			orientation: 1,
 		},
 	];
 	const exists = (path: string): boolean => path === "/lib/originals/A/AAA.heic";
@@ -344,15 +342,15 @@ test("cacheIsStale compares the newest cached node version (UTC) with the allowe
 	assert.strictEqual(cacheIsStale(null, now, 60), true);
 });
 
-test("viewJpegArgs rotates by the EXIF orientation, since sips drops the flag when converting", () => {
-	assert.deepStrictEqual(
-		[1, 3, 6, 8, 0].map((orientation) => viewJpegArgs("in.heic", "out.jpg", orientation)),
-		[
-			["-s", "format", "jpeg", "-Z", "900", "in.heic", "--out", "out.jpg"],
-			["-s", "format", "jpeg", "-Z", "900", "-r", "180", "in.heic", "--out", "out.jpg"],
-			["-s", "format", "jpeg", "-Z", "900", "-r", "90", "in.heic", "--out", "out.jpg"],
-			["-s", "format", "jpeg", "-Z", "900", "-r", "270", "in.heic", "--out", "out.jpg"],
-			["-s", "format", "jpeg", "-Z", "900", "in.heic", "--out", "out.jpg"],
-		],
-	);
+test("viewJpegArgs keeps the EXIF orientation flag instead of rotating, since sips carries the flag over and a rotated copy would display sideways", () => {
+	assert.deepStrictEqual(viewJpegArgs("in.heic", "out.jpg"), [
+		"-s",
+		"format",
+		"jpeg",
+		"-Z",
+		"900",
+		"in.heic",
+		"--out",
+		"out.jpg",
+	]);
 });
