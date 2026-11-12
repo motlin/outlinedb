@@ -34,11 +34,11 @@ describe("GET /api/admin/status", () => {
 	let cold: Harness;
 
 	beforeAll(async () => {
-		warm = await startHarness("./probe-entry.ts", "ProbeStore");
-		cold = await startHarness("./probe-entry.ts", "ProbeStore", undefined, {
+		warm = await startHarness("./probe-entry.ts", "ProbeStore", undefined, {
 			ACCESS_DEV_IDENTITY: "dev",
-			TREE_SNAPSHOT: "false",
+			TREE_SNAPSHOT: "true",
 		});
+		cold = await startHarness("./probe-entry.ts", "ProbeStore");
 		for (const h of [warm, cold]) {
 			await probeStore(h.mf, "/__seed");
 		}

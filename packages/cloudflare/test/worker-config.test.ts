@@ -27,7 +27,7 @@ describe("readWorkerConfig", () => {
 			sqlQueryLogging: false,
 			calendarEnsureEnabled: true,
 			calendarLayoutEnabled: true,
-			features: {embeddings: false, treeSnapshot: true},
+			features: {embeddings: false, treeSnapshot: false},
 		});
 	});
 
@@ -62,14 +62,14 @@ describe("readWorkerConfig", () => {
 			sqlQueryLogging: false,
 			calendarEnsureEnabled: true,
 			calendarLayoutEnabled: true,
-			features: {embeddings: false, treeSnapshot: true},
+			features: {embeddings: false, treeSnapshot: false},
 		});
 	});
 
-	it("turns the tree snapshot off when TREE_SNAPSHOT is false", () => {
-		expect(readWorkerConfig({TREE_SNAPSHOT: "false"}, true).features).toStrictEqual({
+	it("turns the tree snapshot on only when TREE_SNAPSHOT is true", () => {
+		expect(readWorkerConfig({TREE_SNAPSHOT: "true"}, true).features).toStrictEqual({
 			embeddings: false,
-			treeSnapshot: false,
+			treeSnapshot: true,
 		});
 	});
 

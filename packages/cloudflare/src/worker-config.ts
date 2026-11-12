@@ -9,7 +9,10 @@ export interface WorkerSecrets {
 	WORKFLOWY_SESSION_COOKIE?: string;
 	/** Var; tests point it at a fake upstream. */
 	WORKFLOWY_API_URL?: string;
-	/** Var; "false" serves search from SQL instead of an in-memory whole-tree snapshot. */
+	/**
+	 * Var; "true" serves search from an in-memory whole-tree snapshot. Off by default: a large account's snapshot with
+	 * its text outgrows the 128 MB Durable Object isolate, which is reset, so search reads SQL and the jump-menu skeleton.
+	 */
 	TREE_SNAPSHOT?: string;
 	/** Workers AI; with RELATED_INDEX it turns related notes on. */
 	AI?: unknown;
@@ -50,7 +53,7 @@ export function readWorkerConfig(env: WorkerSecrets, isOwner: boolean): ServerCo
 		calendarLayoutEnabled: true,
 		features: {
 			embeddings: env.AI !== undefined && env.RELATED_INDEX !== undefined,
-			treeSnapshot: env.TREE_SNAPSHOT !== "false",
+			treeSnapshot: env.TREE_SNAPSHOT === "true",
 		},
 	};
 }
