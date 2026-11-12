@@ -13,6 +13,7 @@ import {
 	readWorkflowyEpoch,
 	runBulkUnitOfWork,
 	runUnitOfWork,
+	s3FileRow,
 	seedAccount,
 } from "@outlinedb/shared/cache";
 import type {
@@ -38,11 +39,6 @@ import {parseStrictInteger} from "../utils/parse-strict-number.js";
 import {contentMatches, metadataComparisonStats, metadataMatches, normalizeLayoutMode} from "./cache-temporal.js";
 import {logger} from "./logger.js";
 import {nonEmpty} from "../utils/non-empty.js";
-
-// Backups write 0 for unknown image dimensions and timestamps.
-function nonZeroOrNull(value: number | undefined): number | null {
-	return value === undefined || value === 0 ? null : value;
-}
 
 function backupTimeOrNull(backupTime: number | undefined, workflowyEpoch: number): number | null {
 	return backupTime === undefined || backupTime === 0 ? null : backupToUnixTime(backupTime, workflowyEpoch);
@@ -463,17 +459,7 @@ export async function importBackup(
 	}[] = [];
 	// Mirrors (backlink items included) and references roots, parsed by the shared item-metadata normalizer.
 	const relationships = emptyItemRelationships();
-	const s3FileRecords: {
-		nodeId: string;
-		fileName: string;
-		fileType: string;
-		objectFolder: string | null;
-		isAnimatedGif: number | null;
-		imageOriginalWidth: number | null;
-		imageOriginalHeight: number | null;
-		imageOriginalPixels: number | null;
-		isDeleted: number | null;
-	}[] = [];
+	const s3FileRecords: NormalizedS3FileRow[] = [];
 	const changesMetadataRecords: {nodeId: string; ctBy: number}[] = [];
 	const calendarMetadataRecords: NormalizedCalendarMetadataRow[] = [];
 	const calendarLevelsRecords: NormalizedCalendarLevelsRow[] = [];
@@ -497,17 +483,7 @@ export async function importBackup(
 		collectItemRelationships(relationships, validatedNode.id, validatedNode.metadata);
 
 		if (validatedNode.metadata.s3File) {
-			s3FileRecords.push({
-				nodeId: validatedNode.id,
-				fileName: validatedNode.metadata.s3File.fileName,
-				fileType: validatedNode.metadata.s3File.fileType,
-				objectFolder: nonEmpty(validatedNode.metadata.s3File.objectFolder) ?? null,
-				isAnimatedGif: validatedNode.metadata.s3File.isAnimatedGIF ? 1 : 0,
-				imageOriginalWidth: nonZeroOrNull(validatedNode.metadata.s3File.imageOriginalWidth),
-				imageOriginalHeight: nonZeroOrNull(validatedNode.metadata.s3File.imageOriginalHeight),
-				imageOriginalPixels: nonZeroOrNull(validatedNode.metadata.s3File.imageOriginalPixels),
-				isDeleted: validatedNode.metadata.s3File.isDeleted ? 1 : 0,
-			});
+			s3FileRecords.push(s3FileRow(validatedNode.id, validatedNode.metadata.s3File));
 		}
 
 		if (validatedNode.metadata.changes?.ct) {

@@ -7,6 +7,7 @@
  *   - `numbered_start`, `restorableUniqueNode`, `table.headers`/`.skipHeaders`/`.bg`
  *     and `priority.defaultToBottom` in `node_display_metadata`.
  *   - `table.sizes` in `node_table_cell_sizes`.
+ *   - `s3File` (a file or photo attachment) in `s3_files`, the same row a backup import writes.
  * {@link readInternalMetadata} rebuilds the upstream-shaped object from those
  * rows, so metadata patches can be built against it.
  */
@@ -23,6 +24,7 @@ import {
 	nodeDisplayMetadata,
 	nodeMetadata,
 	nodeTableCellSizes,
+	s3Files,
 } from "../db/schema.js";
 import type {NewNodeDisplayMetadata, NewNodeTableCellSize} from "../db/schema.js";
 import {FAR_FUTURE_DATE} from "../temporal/index.js";
@@ -30,7 +32,11 @@ import {normalizeLayoutMode} from "./cache-temporal.js";
 import {replaceExpansion} from "./expansion-store.js";
 import {runUnitOfWork} from "./node-composite.js";
 import type {UnitOfWork} from "./node-composite.js";
-import type {NormalizedCalendarLevelsRow, NormalizedCalendarMetadataRow} from "./normalized-rows.js";
+import type {
+	NormalizedCalendarLevelsRow,
+	NormalizedCalendarMetadataRow,
+	NormalizedS3FileRow,
+} from "./normalized-rows.js";
 import {inIds} from "./in-ids.js";
 import {closeCurrentVersions, joinKey, temporalMerge} from "./temporal-merge.js";
 import type {TemporalTransaction} from "./temporal-merge.js";
@@ -48,11 +54,18 @@ type CellSizeRow = Omit<NewNodeTableCellSize, "systemFrom" | "systemTo">;
 const ID_CHUNK = 90;
 
 /** Top-level item metadata keys the app reads; `mirror` stays with the mirror import. */
-const KEPT_METADATA_KEYS = ["numbered_start", "calendar", "layoutMode", "table", "restorableUniqueNode"] as const;
+const KEPT_METADATA_KEYS = [
+	"numbered_start",
+	"calendar",
+	"layoutMode",
+	"table",
+	"restorableUniqueNode",
+	"s3File",
+] as const;
 
 /**
  * The subset of an item's internal metadata the cache keeps:
- * `numbered_start`, `calendar`, `restorableUniqueNode`, `layoutMode`, `table` and `priority.defaultToBottom`.
+ * `numbered_start`, `calendar`, `restorableUniqueNode`, `layoutMode`, `table`, `s3File` and `priority.defaultToBottom`.
  * Undefined when none of them is present.
  */
 export function keptInternalMetadata(metadata: InternalMetadata | undefined): InternalMetadata | undefined {
@@ -119,6 +132,67 @@ const TableSchema = z
 	})
 	.loose();
 
+/** Upstream's `metadata.s3File`, as both a backup and `/get_tree_data/` carry it. */
+export interface UpstreamS3File {
+	fileName: string;
+	fileType: string;
+	objectFolder?: string | undefined;
+	isAnimatedGIF?: boolean | undefined;
+	imageOriginalWidth?: number | undefined;
+	imageOriginalHeight?: number | undefined;
+	imageOriginalPixels?: number | undefined;
+	isDeleted?: boolean | undefined;
+}
+
+const optionalNumber = lenient(z.number());
+const UpstreamS3FileSchema = z
+	.object({
+		fileName: z.string(),
+		fileType: z.string(),
+		objectFolder: lenient(z.string()),
+		isAnimatedGIF: lenient(z.boolean()),
+		imageOriginalWidth: optionalNumber,
+		imageOriginalHeight: optionalNumber,
+		imageOriginalPixels: optionalNumber,
+		isDeleted: lenient(z.boolean()),
+	})
+	.loose();
+
+const nonZeroOrNull = (value: number | undefined): number | null => (value === undefined || value === 0 ? null : value);
+
+/**
+ * The `s3_files` row of one node's attachment: an empty folder and zero sizes (upstream's "unknown") stored as NULL,
+ * the flags as 0 or 1.
+ */
+export function s3FileRow(nodeId: string, file: UpstreamS3File): NormalizedS3FileRow {
+	return {
+		nodeId,
+		fileName: file.fileName,
+		fileType: file.fileType,
+		objectFolder: file.objectFolder === undefined || file.objectFolder === "" ? null : file.objectFolder,
+		isAnimatedGif: file.isAnimatedGIF === true ? 1 : 0,
+		imageOriginalWidth: nonZeroOrNull(file.imageOriginalWidth),
+		imageOriginalHeight: nonZeroOrNull(file.imageOriginalHeight),
+		imageOriginalPixels: nonZeroOrNull(file.imageOriginalPixels),
+		isDeleted: file.isDeleted === true ? 1 : 0,
+	};
+}
+
+/** The upstream-shaped `s3File` of a stored row; `isFile` is always true upstream, so it is rebuilt rather than stored. */
+function s3FileOf(row: typeof s3Files.$inferSelect): InternalMetadata {
+	return {
+		isFile: true,
+		fileName: row.fileName,
+		fileType: row.fileType,
+		...(row.objectFolder === null ? {} : {objectFolder: row.objectFolder}),
+		...(row.isAnimatedGif === 1 ? {isAnimatedGIF: true} : {}),
+		...(row.imageOriginalWidth === null ? {} : {imageOriginalWidth: row.imageOriginalWidth}),
+		...(row.imageOriginalHeight === null ? {} : {imageOriginalHeight: row.imageOriginalHeight}),
+		...(row.imageOriginalPixels === null ? {} : {imageOriginalPixels: row.imageOriginalPixels}),
+		...(row.isDeleted === 1 ? {isDeleted: true} : {}),
+	};
+}
+
 function booleanToInt(value: boolean | undefined): 0 | 1 | null {
 	return value === undefined ? null : value ? 1 : 0;
 }
@@ -163,6 +237,7 @@ interface TypedRows {
 	layoutMode: string | null;
 	calendarMetadata?: NormalizedCalendarMetadataRow;
 	calendarLevels?: NormalizedCalendarLevelsRow;
+	s3File?: NormalizedS3FileRow;
 	display?: DisplayRow;
 	cellSizes: CellSizeRow[];
 }
@@ -176,6 +251,10 @@ function typedRows(nodeId: string, metadata: InternalMetadata | undefined): Type
 	const calendar = UpstreamCalendarSchema.safeParse(kept.calendar);
 	if (calendar.success) {
 		Object.assign(rows, calendarRows(nodeId, calendar.data));
+	}
+	const file = UpstreamS3FileSchema.safeParse(kept.s3File);
+	if (file.success) {
+		rows.s3File = s3FileRow(nodeId, file.data);
 	}
 	const table = TableSchema.safeParse(kept.table);
 	const priority = z.object({defaultToBottom: optionalBoolean}).safeParse(kept.priority);
@@ -310,6 +389,50 @@ function mergeLayoutModes(
 	}
 }
 
+function mergeS3Files(
+	unitOfWork: UnitOfWork,
+	incoming: NormalizedS3FileRow[],
+	ownerIds: readonly string[] | undefined,
+): void {
+	mergeOwned(
+		unitOfWork,
+		{
+			table: s3Files,
+			owner: s3Files.nodeId,
+			systemTo: s3Files.systemTo,
+			keyColumns: [s3Files.nodeId],
+			key: nodeKey,
+			fields: [
+				"fileName",
+				"fileType",
+				"objectFolder",
+				"isAnimatedGif",
+				"imageOriginalWidth",
+				"imageOriginalHeight",
+				"imageOriginalPixels",
+				"isDeleted",
+			],
+		},
+		incoming,
+		ownerIds,
+	);
+}
+
+/**
+ * Write each node's upstream `s3File` (undefined or malformed: none) to `s3_files` in the caller's unit of work,
+ * leaving the node's other metadata and every other node untouched.
+ */
+export function writeS3Files(unitOfWork: UnitOfWork, fileById: ReadonlyMap<string, unknown>): void {
+	const rows: NormalizedS3FileRow[] = [];
+	for (const [id, file] of fileById) {
+		const parsed = UpstreamS3FileSchema.safeParse(file);
+		if (parsed.success) {
+			rows.push(s3FileRow(id, parsed.data));
+		}
+	}
+	mergeS3Files(unitOfWork, rows, [...fileById.keys()]);
+}
+
 /**
  * Write the kept metadata of each node in `metadataById` (undefined: none) to
  * the typed tables in the caller's unit of work, phasing out what a node no
@@ -325,6 +448,7 @@ export function writeInternalMetadata(
 	const scope = wholeTree ? undefined : ids;
 	const calendarRowsOut: NormalizedCalendarMetadataRow[] = [];
 	const levelsRowsOut: NormalizedCalendarLevelsRow[] = [];
+	const s3FileRowsOut: NormalizedS3FileRow[] = [];
 	const displayRowsOut: DisplayRow[] = [];
 	const cellSizeRowsOut: CellSizeRow[] = [];
 	const layoutModes = new Map<string, string | null>();
@@ -336,6 +460,9 @@ export function writeInternalMetadata(
 		}
 		if (rows.calendarLevels !== undefined) {
 			levelsRowsOut.push(rows.calendarLevels);
+		}
+		if (rows.s3File !== undefined) {
+			s3FileRowsOut.push(rows.s3File);
 		}
 		if (rows.display !== undefined) {
 			displayRowsOut.push(rows.display);
@@ -368,6 +495,7 @@ export function writeInternalMetadata(
 		levelsRowsOut,
 		scope,
 	);
+	mergeS3Files(unitOfWork, s3FileRowsOut, scope);
 	mergeOwned(
 		unitOfWork,
 		{
@@ -445,7 +573,7 @@ function calendarOf(row: typeof calendarMetadata.$inferSelect, levels: typeof ca
 
 /**
  * Each of `ids`' stored kept metadata in upstream's shape (`layoutMode`,
- * `numbered_start`, `calendar`, `table`, `restorableUniqueNode`,
+ * `numbered_start`, `calendar`, `table`, `restorableUniqueNode`, `s3File`,
  * `priority.defaultToBottom`); ids with none are absent. Live rows by
  * default, or the rows current at system time `asOf`.
  */
@@ -487,6 +615,7 @@ export function readInternalMetadata(
 		unique,
 		asOf,
 	);
+	const fileRows = liveRows(database, s3Files, s3Files.nodeId, s3Files.systemTo, unique, asOf);
 	const sizeRows = liveRows(
 		database,
 		nodeTableCellSizes,
@@ -521,6 +650,9 @@ export function readInternalMetadata(
 			},
 			levels,
 		);
+	}
+	for (const row of fileRows) {
+		entry(row.nodeId).s3File = s3FileOf(row);
 	}
 	const tables = new Map<string, InternalMetadata>();
 	const table = (id: string): InternalMetadata => {

@@ -179,23 +179,79 @@ describe("importInternalMetadata", () => {
 		});
 	});
 
-	it("round-trips restorableUniqueNode, table settings and column sizes through the typed tables", () => {
-		const {db, rows} = tracked(["day", "grid"]);
+	it("round-trips restorableUniqueNode, table settings, column sizes and file attachments through the typed tables", () => {
+		const {db, rows} = tracked(["day", "grid", "photo", "gif"]);
 		const table = {headers: true, skipHeaders: false, bg: "blue", sizes: {c1: 200, c2: 80.5}};
+		const photo = {
+			isFile: true,
+			fileName: "example-photo.jpg",
+			fileType: "image/jpeg",
+			objectFolder: "example-folder",
+			imageOriginalWidth: 4032,
+			imageOriginalHeight: 3024,
+			imageOriginalPixels: 12_192_768,
+		};
+		const gif = {
+			isFile: true,
+			fileName: "example.gif",
+			fileType: "image/gif",
+			isAnimatedGIF: true,
+			isDeleted: true,
+		};
 
 		importInternalMetadata(
 			db,
 			snapshot([
 				{id: "day", metadata: {restorableUniqueNode: true, calendar: {level: "day", dateId: 20_261_005}}},
 				{id: "grid", metadata: {layoutMode: "table", table}},
+				{id: "photo", metadata: {s3File: photo}},
+				{id: "gif", metadata: {s3File: gif}},
 			]),
 			FETCHED_AT,
 		);
 
-		expect(rows()).toStrictEqual([
-			{nodeId: "day", metadata: {restorableUniqueNode: true, calendar: {level: "day", dateId: 20_261_005}}},
-			{nodeId: "grid", metadata: {layoutMode: "table", table}},
-		]);
+		expect({
+			rows: rows(),
+			files: db
+				.select()
+				.from(schema.s3Files)
+				.all()
+				.map(({systemFrom: _from, ...row}) => row)
+				.toSorted((a, b) => a.nodeId.localeCompare(b.nodeId)),
+		}).toStrictEqual({
+			rows: [
+				{nodeId: "day", metadata: {restorableUniqueNode: true, calendar: {level: "day", dateId: 20_261_005}}},
+				{nodeId: "gif", metadata: {s3File: gif}},
+				{nodeId: "grid", metadata: {layoutMode: "table", table}},
+				{nodeId: "photo", metadata: {s3File: photo}},
+			],
+			files: [
+				{
+					nodeId: "gif",
+					fileName: "example.gif",
+					fileType: "image/gif",
+					objectFolder: null,
+					isAnimatedGif: 1,
+					imageOriginalWidth: null,
+					imageOriginalHeight: null,
+					imageOriginalPixels: null,
+					isDeleted: 1,
+					systemTo: FAR_FUTURE_DATE,
+				},
+				{
+					nodeId: "photo",
+					fileName: "example-photo.jpg",
+					fileType: "image/jpeg",
+					objectFolder: "example-folder",
+					isAnimatedGif: 0,
+					imageOriginalWidth: 4032,
+					imageOriginalHeight: 3024,
+					imageOriginalPixels: 12_192_768,
+					isDeleted: 0,
+					systemTo: FAR_FUTURE_DATE,
+				},
+			],
+		});
 	});
 
 	it("drops only a malformed calendar field, keeping the rest of the calendar", () => {

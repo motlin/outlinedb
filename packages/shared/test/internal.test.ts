@@ -3669,6 +3669,76 @@ describe("internal adapter transaction log", () => {
 			});
 		});
 
+		it("records the file attachments a remote transaction creates, adds, edits and removes as s3_files rows", async () => {
+			const {db, api, adapter} = tracked();
+			storeTreeTxId(db, "100");
+			const photo = {
+				isFile: true,
+				fileName: "example-photo.jpg",
+				fileType: "image/jpeg",
+				imageOriginalWidth: 800,
+			};
+			storeInternalMetadata(
+				db,
+				new Map([
+					["edited", {s3File: {isFile: true, fileName: "old.png", fileType: "image/png"}}],
+					["removed", {s3File: {isFile: true, fileName: "gone.png", fileType: "image/png"}}],
+				]),
+			);
+			api.respondOnce(
+				"/push_and_poll",
+				poll("150", [
+					transaction(141, [
+						{
+							type: "bulk_create",
+							data: {
+								parentid: "box",
+								starting_priority: 0,
+								project_trees: JSON.stringify([{id: "created", nm: "", metadata: {s3File: photo}}]),
+							},
+						},
+						{
+							type: "edit",
+							data: {
+								projectid: "attached",
+								metadataPatches: [{op: "add", path: ["s3File"], value: photo}],
+							},
+						},
+						{
+							type: "edit",
+							data: {
+								projectid: "edited",
+								metadataPatches: [{op: "add", path: ["s3File", "isDeleted"], value: true}],
+							},
+						},
+						{
+							type: "edit",
+							data: {projectid: "removed", metadataPatches: [{op: "remove", path: ["s3File"]}]},
+						},
+					]),
+				]),
+			);
+
+			await adapter.catchUp();
+
+			expect(
+				db
+					.select({
+						nodeId: schema.s3Files.nodeId,
+						fileName: schema.s3Files.fileName,
+						isDeleted: schema.s3Files.isDeleted,
+					})
+					.from(schema.s3Files)
+					.where(eq(schema.s3Files.systemTo, FAR_FUTURE_DATE))
+					.all()
+					.toSorted((a, b) => a.nodeId.localeCompare(b.nodeId)),
+			).toStrictEqual([
+				{nodeId: "attached", fileName: "example-photo.jpg", isDeleted: 0},
+				{nodeId: "created", fileName: "example-photo.jpg", isDeleted: 0},
+				{nodeId: "edited", fileName: "old.png", isDeleted: 1},
+			]);
+		});
+
 		it("merges a whole-map REST add instead of replacing it, then applies the leaf remove", async () => {
 			const {db, api, adapter, cache, edges} = tracked();
 			storeTreeTxId(db, "100");

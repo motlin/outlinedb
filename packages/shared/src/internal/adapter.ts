@@ -22,6 +22,7 @@ import {
 import type {AccountSnapshot, StoredAccount} from "../cache/account-store.js";
 import {applyNodeOps, isNodeReplayable} from "../cache/node-log.js";
 import {applyRelationshipOps, isReplayable} from "../cache/relationship-log.js";
+import {applyFileOps} from "../cache/file-log.js";
 import {withRootMetaChanges, withSetting} from "../cache/local-account.js";
 import {applyExpansionDelta, expansionVersion, readExpansion, resolveExpandedIds} from "../cache/expansion-store.js";
 import {advanceTreeTxId, readTreeTxId} from "../cache/tree-transaction.js";
@@ -602,6 +603,7 @@ export class WorkflowyInternalAdapter {
 		runUnitOfWork(this.db, (unitOfWork) => {
 			// Edges first: their delete replay reads the subtree's node rows before the node replay ends them.
 			applyRelationshipOps(unitOfWork, ops);
+			applyFileOps(unitOfWork, ops);
 			applyNodeOps(unitOfWork, ops, ownOps);
 			advanceTreeTxId(unitOfWork, result.txId);
 		});

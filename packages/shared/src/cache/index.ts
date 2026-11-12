@@ -54,8 +54,10 @@ export {
 	keptInternalMetadata,
 	readInternalMetadata,
 	readNodeInternalMetadata,
+	s3FileRow,
 	storeInternalMetadata,
 	type UpstreamCalendar,
+	type UpstreamS3File,
 	writeInternalMetadata,
 } from "./internal-metadata.js";
 export {
