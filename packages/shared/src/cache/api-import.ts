@@ -12,6 +12,7 @@ import {applyNodeRowsBatch, applyRows} from "./importer.js";
 import type {NormalizedRowsByTable} from "./importer.js";
 import {collectItemRelationships, emptyItemRelationships, mergeItemRelationships} from "./item-relationships.js";
 import type {ItemRelationships} from "./item-relationships.js";
+import {runBulkUnitOfWork} from "./bulk-import.js";
 import {endNodeComposites, endOrphanedParts, runUnitOfWork} from "./node-composite.js";
 import {endStrandedBacklinkItems} from "./stranded-relationships.js";
 import type {UnitOfWork} from "./node-composite.js";
@@ -454,7 +455,8 @@ export function finishApiImport(state: ApiImportState, treeItems?: InternalTreeI
 }
 
 /**
- * Import nodes from the Workflowy API export endpoint in one unit of work.
+ * Import nodes from the Workflowy API export endpoint as one bulk unit of work:
+ * atomic, under one system time (see {@link runBulkUnitOfWork}).
  *
  * The input is a flat list whose nodes already carry `parent_id`. The merge
  * runs through the same batch path as {@link applyApiBatch}, with a single batch.
@@ -464,18 +466,21 @@ export function importFromApi(
 	apiNodes: WorkflowyNode[],
 	options: ImportFromApiOptions = {},
 ): ImportApiResult {
-	const state = beginApiImport(database, options);
-	const result = runUnitOfWork(
+	let validationErrors = 0;
+	const result = runBulkUnitOfWork(
 		database,
-		(unitOfWork) => {
+		(unitOfWork, at) => {
+			const state = beginApiImport(database, {...options, timestamp: at});
 			applyBatchIn(unitOfWork, state, apiNodes);
-			return finishIn(unitOfWork, state, options.treeItems);
+			const finished = finishIn(unitOfWork, state, options.treeItems);
+			validationErrors = state.validationErrors;
+			return finished;
 		},
-		state.start,
+		options.timestamp,
 	);
 	metadataComparisonStats.log();
-	if (state.validationErrors > 0) {
-		state.logger?.warn(`Encountered ${state.validationErrors} validation errors during import`);
+	if (validationErrors > 0) {
+		options.logger?.warn(`Encountered ${validationErrors} validation errors during import`);
 	}
 	return result;
 }

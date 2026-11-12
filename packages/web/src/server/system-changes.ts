@@ -5,7 +5,7 @@
  * exactly those with `system_from` or a closing `system_to` after the cache's last system time.
  */
 
-import {TRANSACTION_TIMEOUT_MS} from "@outlinedb/shared/cache";
+import {bulkImportLeaseStart, TRANSACTION_TIMEOUT_MS} from "@outlinedb/shared/cache";
 import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@outlinedb/shared/temporal";
 import {sql} from "drizzle-orm";
 import type {SQL} from "drizzle-orm";
@@ -104,9 +104,17 @@ export function readConsistently<T>(database: Database, read: () => T): T {
  * {@link TRANSACTION_TIMEOUT_MS}. A unit of work that would commit later than that after reading its system time rolls
  * back, so every row stamped at or before the watermark has already committed or never will; a reader that next asks
  * for rows opened or closed after it cannot miss a late commit. The price is re-reading the last timeout window.
+ * A bulk import may run longer, so while its lease is open the watermark stays a millisecond before the lease, and
+ * the import's rows, all stamped at or after the lease, land after it.
  */
-export function changeWatermark(): string {
-	return formatTemporalTimestamp(new Date(Date.now() - TRANSACTION_TIMEOUT_MS));
+export function changeWatermark(database: Database): string {
+	const watermark = formatTemporalTimestamp(new Date(Date.now() - TRANSACTION_TIMEOUT_MS));
+	const lease = bulkImportLeaseStart(database);
+	if (lease === undefined) {
+		return watermark;
+	}
+	const beforeLease = formatTemporalTimestamp(new Date(Date.parse(`${lease.replace(" ", "T")}Z`) - 1));
+	return beforeLease < watermark ? beforeLease : watermark;
 }
 
 /** A temporal timestamp as {@link changeWatermark} formats it. */
@@ -126,7 +134,7 @@ export interface ChangesAfter {
  * nodes changed. Rows re-read from the last timeout window repeat across polls; the id set reports each node once.
  */
 export function changesAfter(database: Database, after: string, limit: number): ChangesAfter | undefined {
-	if (!WATERMARK.test(after) || after > changeWatermark()) {
+	if (!WATERMARK.test(after) || after > changeWatermark(database)) {
 		return undefined;
 	}
 	const ids = changedNodeIds(database, after, limit);

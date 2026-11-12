@@ -142,7 +142,7 @@ export class EmbeddingJob {
 	 */
 	async notice(): Promise<void> {
 		const state = this.readState();
-		const watermark = changeWatermark();
+		const watermark = changeWatermark(this.deps.db);
 		if (this.requested() && state?.phase !== "backfilling") {
 			this.queueAllContainers();
 			this.writeState({phase: "backfilling", scannedTo: watermark});

@@ -2,9 +2,11 @@ import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
-import {afterEach, describe, expect, it, vi} from "vite-plus/test";
+import {afterEach, assert, describe, expect, it, vi} from "vite-plus/test";
 import {applyApiBatch, beginApiImport, finishApiImport, importFromApi} from "../src/cache/api-import.js";
+import {BULK_IMPORT_LEASE_NAME} from "../src/cache/bulk-import.js";
 import {CacheService} from "../src/cache/cache-service.js";
+import {BULK_IMPORT_TIMEOUT_MS, TRANSACTION_TIMEOUT_MS, TransactionTimeoutError} from "../src/cache/system-time.js";
 import * as schema from "../src/db/schema.js";
 import {FAR_FUTURE_DATE} from "../src/temporal/index.js";
 import type {WorkflowyNode} from "../src/types/index.js";
@@ -70,6 +72,63 @@ describe("shared API import", () => {
 		for (const sqlite of open.splice(0)) {
 			sqlite.close();
 		}
+	});
+
+	describe("one-shot import as a bulk unit of work", () => {
+		/** A database whose clock moves `tick` ms on every node_content insert, so a merge's length grows with its size. */
+		function slowDb(tick: number) {
+			const db = createDb();
+			const sqlite = open.at(-1);
+			assert(sqlite !== undefined);
+			sqlite.function("advance_clock", () => {
+				vi.setSystemTime(Date.now() + tick);
+				return 0;
+			});
+			sqlite.exec(
+				"CREATE TEMP TRIGGER advance_clock_on_insert AFTER INSERT ON node_content BEGIN SELECT advance_clock(); END",
+			);
+			return {
+				db,
+				stampsAndLeases: () => ({
+					stamps: sqlite
+						.prepare(
+							"SELECT system_from AS systemFrom, count(*) AS rows FROM node_content WHERE system_to = ? GROUP BY system_from",
+						)
+						.all(FAR_FUTURE_DATE),
+					openLeases: sqlite
+						.prepare("SELECT count(*) AS open FROM api_import_timestamp WHERE name = ? AND system_to = ?")
+						.get(BULK_IMPORT_LEASE_NAME, FAR_FUTURE_DATE),
+				}),
+			};
+		}
+
+		it("commits an import that outlasts the transaction timeout under one system time", () => {
+			vi.useFakeTimers({toFake: ["Date"], now: T0});
+			const {db, stampsAndLeases} = slowDb(TRANSACTION_TIMEOUT_MS / 2);
+
+			const result = importFromApi(db, FIXTURE);
+
+			expect({importTimestamp: result.importTimestamp, ...stampsAndLeases()}).toStrictEqual({
+				importTimestamp: T0,
+				stamps: [{systemFrom: "2026-03-01 00:00:00.000", rows: FIXTURE.length}],
+				openLeases: {open: 0},
+			});
+		});
+
+		it("commits nothing when the import outlasts the bulk import timeout", () => {
+			vi.useFakeTimers({toFake: ["Date"], now: T0});
+			const {db, stampsAndLeases} = slowDb(BULK_IMPORT_TIMEOUT_MS / 2);
+
+			expect(() => importFromApi(db, FIXTURE)).toThrow(
+				new TransactionTimeoutError(
+					"2026-03-01 00:00:00.000",
+					FIXTURE.length * (BULK_IMPORT_TIMEOUT_MS / 2),
+					BULK_IMPORT_TIMEOUT_MS,
+				),
+			);
+
+			expect(stampsAndLeases()).toStrictEqual({stamps: [], openLeases: {open: 0}});
+		});
 	});
 
 	it("importing a 3-batch split gives the same rows as the one-shot import", () => {

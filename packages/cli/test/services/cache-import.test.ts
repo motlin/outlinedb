@@ -1,11 +1,18 @@
-import {countStrandedRows, currentBacklinkItems, TRANSACTION_TIMEOUT_MS} from "@outlinedb/shared/cache";
+import {
+	BULK_IMPORT_LEASE_NAME,
+	BULK_IMPORT_TIMEOUT_MS,
+	countStrandedRows,
+	currentBacklinkItems,
+	TRANSACTION_TIMEOUT_MS,
+	TransactionTimeoutError,
+} from "@outlinedb/shared/cache";
 import {mirrors, nodeContent, nodeMetadata} from "@outlinedb/shared/db";
-import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {and, eq} from "drizzle-orm";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import {BACKUP_IMPORT_CHUNK_SIZE, importBackup} from "../../src/services/cache-import.js";
+import {importBackup} from "../../src/services/cache-import.js";
 import {importFromApi} from "../../src/services/cache-import-api.js";
 import {cleanupTestDatabase, createTestDatabase} from "../db/migration-helper.js";
 import type {TestDatabase} from "../db/migration-helper.js";
@@ -838,7 +845,7 @@ describe("cache-import service", () => {
 	});
 
 	describe("units of work", () => {
-		it("keeps the committed node chunks and rolls back the final unit when merging a relationship table fails", async () => {
+		it("rolls back the whole import when merging a relationship table fails", async () => {
 			await importBackup(
 				testDatabase.db,
 				writeBackupFile([
@@ -878,11 +885,11 @@ describe("cache-import service", () => {
 				),
 			).rejects.toThrow("mirror failed");
 
-			// The node chunk committed the rename; the final unit's deletion of "gone" rolled back with the mirror.
+			// The rename and the deletion of "gone" rolled back with the mirror.
 			expect(currentContent()).toStrictEqual([
 				{id: "doomed", name: "Doomed"},
 				{id: "gone", name: "Gone"},
-				{id: "kept", name: "Kept, renamed"},
+				{id: "kept", name: "Kept"},
 			]);
 		});
 	});
@@ -1645,10 +1652,8 @@ describe("cache-import service", () => {
 			vi.useRealTimers();
 		});
 
-		it("commits a backup whose merge outlasts the transaction timeout as one unit per chunk", async () => {
-			vi.useFakeTimers({toFake: ["Date"], now: T0});
-			// Every node_content insert costs a chunk's share of the timeout, so one chunk fits and one more node does not.
-			const tick = Math.floor(TRANSACTION_TIMEOUT_MS / BACKUP_IMPORT_CHUNK_SIZE);
+		/** Every node_content insert moves the clock `tick` ms, so a merge's length grows with its node count. */
+		function advanceClockOnInsert(tick: number): void {
 			testDatabase.sqlite.function("advance_clock", () => {
 				vi.setSystemTime(Date.now() + tick);
 				return 0;
@@ -1656,7 +1661,25 @@ describe("cache-import service", () => {
 			testDatabase.sqlite.exec(
 				"CREATE TEMP TRIGGER advance_clock_on_insert AFTER INSERT ON node_content BEGIN SELECT advance_clock(); END",
 			);
-			const nodeCount = BACKUP_IMPORT_CHUNK_SIZE + 1;
+		}
+
+		function stampsAndLeases() {
+			return {
+				stamps: testDatabase.sqlite
+					.prepare(
+						"SELECT system_from AS systemFrom, count(*) AS rows FROM node_content WHERE system_to = ? GROUP BY system_from ORDER BY system_from",
+					)
+					.all(FAR_FUTURE_DATE),
+				openLeases: testDatabase.sqlite
+					.prepare("SELECT count(*) AS open FROM api_import_timestamp WHERE name = ? AND system_to = ?")
+					.get(BULK_IMPORT_LEASE_NAME, FAR_FUTURE_DATE),
+			};
+		}
+
+		it("commits a backup whose merge outlasts the transaction timeout under one system time", async () => {
+			vi.useFakeTimers({toFake: ["Date"], now: T0});
+			const nodeCount = 200;
+			advanceClockOnInsert(Math.ceil(TRANSACTION_TIMEOUT_MS / 100));
 			const filePath = writeBackupFile(
 				Array.from({length: nodeCount}, (_, index) => ({id: `node-${index}`, nm: `Node ${index}`})),
 			);
@@ -1674,19 +1697,30 @@ describe("cache-import service", () => {
 				metadataUpdated: 0,
 				priorityUpdated: 0,
 			});
-			const stamps = testDatabase.sqlite
-				.prepare(
-					"SELECT system_from AS systemFrom, count(*) AS rows FROM node_content WHERE system_to = ? GROUP BY system_from ORDER BY system_from",
-				)
-				.all(FAR_FUTURE_DATE);
-			expect(stamps).toStrictEqual([
-				{systemFrom: "2024-01-01 00:00:00.000", rows: BACKUP_IMPORT_CHUNK_SIZE},
-				{
-					systemFrom: formatTemporalTimestamp(new Date(T0.getTime() + BACKUP_IMPORT_CHUNK_SIZE * tick)),
-					rows: 1,
-				},
-			]);
-			expect(result.importTimestamp).toStrictEqual(new Date(T0.getTime() + nodeCount * tick));
+			expect(stampsAndLeases()).toStrictEqual({
+				stamps: [{systemFrom: "2024-01-01 00:00:00.000", rows: nodeCount}],
+				openLeases: {open: 0},
+			});
+			expect(result.importTimestamp).toStrictEqual(T0);
+		});
+
+		it("commits nothing when a backup's merge outlasts the bulk import timeout", async () => {
+			vi.useFakeTimers({toFake: ["Date"], now: T0});
+			const nodeCount = 101;
+			advanceClockOnInsert(BULK_IMPORT_TIMEOUT_MS / 100);
+			const filePath = writeBackupFile(
+				Array.from({length: nodeCount}, (_, index) => ({id: `node-${index}`, nm: `Node ${index}`})),
+			);
+
+			await expect(importBackup(testDatabase.db, filePath, "backup.json")).rejects.toThrow(
+				new TransactionTimeoutError(
+					"2024-01-01 00:00:00.000",
+					nodeCount * (BULK_IMPORT_TIMEOUT_MS / 100),
+					BULK_IMPORT_TIMEOUT_MS,
+				),
+			);
+
+			expect(stampsAndLeases()).toStrictEqual({stamps: [], openLeases: {open: 0}});
 		});
 	});
 });

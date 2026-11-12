@@ -161,7 +161,7 @@ const CHANGES_LIMIT = 500;
  */
 function readNodeChanges(ctx: ServerContext, since: string | undefined): NodeChangesResponse {
 	return readConsistently(ctx.db, () => {
-		const latest = changeWatermark();
+		const latest = changeWatermark(ctx.db);
 		const none = {latest, reset: false, changedIds: [], deletedIds: [], children: []};
 		if (since === undefined) {
 			return none;

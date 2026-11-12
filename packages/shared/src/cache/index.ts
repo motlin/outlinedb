@@ -158,8 +158,10 @@ export {
 } from "./node-composite.js";
 export {countStrandedRows, endStrandedBacklinkItems, type StrandedRowCounts} from "./stranded-relationships.js";
 export {ensureNodeTags, rebuildNodeTags} from "./node-tags.js";
+export {BULK_IMPORT_LEASE_NAME, bulkImportLeaseStart, runBulkUnitOfWork} from "./bulk-import.js";
 export {
 	assertWithinTransactionTimeout,
+	BULK_IMPORT_TIMEOUT_MS,
 	newSystemTime,
 	newSystemTimestamp,
 	startUnitOfWork,

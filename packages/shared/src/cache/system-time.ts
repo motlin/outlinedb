@@ -27,11 +27,19 @@ export function newSystemTimestamp(): string {
  */
 export const TRANSACTION_TIMEOUT_MS = 60_000;
 
-/** A unit of work that would commit after {@link TRANSACTION_TIMEOUT_MS}. */
+/**
+ * The longest a bulk import (a whole backup or API snapshot, one atomic unit
+ * under one system time) may run between taking its lease and committing.
+ * While its lease is open, change-feed watermarks stop just before the lease,
+ * so its rows, stamped after the lease, cannot fall behind a watermark.
+ */
+export const BULK_IMPORT_TIMEOUT_MS = 15 * 60_000;
+
+/** A unit of work that would commit after its timeout, {@link TRANSACTION_TIMEOUT_MS} unless it is a bulk import. */
 export class TransactionTimeoutError extends Error {
-	constructor(systemTime: string, elapsedMs: number) {
+	constructor(systemTime: string, elapsedMs: number, timeoutMs = TRANSACTION_TIMEOUT_MS) {
 		super(
-			`Unit of work stamped ${systemTime} would commit ${elapsedMs}ms after it started, past the ${TRANSACTION_TIMEOUT_MS}ms transaction timeout; rolled back`,
+			`Unit of work stamped ${systemTime} would commit ${elapsedMs}ms after it started, past the ${timeoutMs}ms transaction timeout; rolled back`,
 		);
 		this.name = "TransactionTimeoutError";
 	}
@@ -56,11 +64,11 @@ function elapsedSince(start: UnitOfWorkStart): number {
 	return Date.now() - start.startedAt;
 }
 
-/** Throw {@link TransactionTimeoutError} when the unit has run past the timeout. Call it right before commit. */
-export function assertWithinTransactionTimeout(start: UnitOfWorkStart): void {
+/** Throw {@link TransactionTimeoutError} when the unit has run past `timeoutMs`. Call it right before commit. */
+export function assertWithinTransactionTimeout(start: UnitOfWorkStart, timeoutMs = TRANSACTION_TIMEOUT_MS): void {
 	const elapsed = elapsedSince(start);
-	if (elapsed > TRANSACTION_TIMEOUT_MS) {
-		throw new TransactionTimeoutError(start.systemTime, elapsed);
+	if (elapsed > timeoutMs) {
+		throw new TransactionTimeoutError(start.systemTime, elapsed, timeoutMs);
 	}
 }
 

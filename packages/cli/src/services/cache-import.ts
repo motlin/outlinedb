@@ -10,8 +10,8 @@ import {
 	endOrphanedParts,
 	endStrandedBacklinkItems,
 	mergeItemRelationships,
-	startUnitOfWork,
 	readWorkflowyEpoch,
+	runBulkUnitOfWork,
 	runUnitOfWork,
 	seedAccount,
 } from "@outlinedb/shared/cache";
@@ -353,12 +353,6 @@ function retainWhere<T>(rows: T[], keep: (row: T) => boolean): void {
 	}
 	rows.length = kept;
 }
-
-/**
- * Nodes merged per unit of work. Each chunk commits as its own unit, so a full
- * backup never holds one transaction open past the transaction timeout.
- */
-export const BACKUP_IMPORT_CHUNK_SIZE = 5000;
 
 export interface ImportBackupResult {
 	totalNodes: number;
@@ -817,9 +811,9 @@ export async function importBackup(
 	}
 
 	// Normalize the bulk-export tree into the shared in-DB row shape, then hand
-	// the node-keyed temporal tables to the shared importer one chunk of nodes
-	// at a time. applyRows() owns the temporal merge and FK-correct insertion
-	// order for these tables; scoped to a chunk's ids, it touches no other node.
+	// the node-keyed temporal tables to the shared importer. applyRows() owns the
+	// temporal merge and FK-correct insertion order for these tables; scoped to
+	// the backup's ids, it leaves protected nodes alone.
 	const nodeContentRows: NormalizedNodeContentRow[] = nodesToProcess.map((node) => ({
 		id: node.id,
 		name: node.name,
@@ -835,80 +829,36 @@ export async function importBackup(
 		completedAt: timestampToDate(node.completedAt),
 		layoutMode: node.layoutMode,
 	}));
-	const chunkOf = new Map(
-		nodesToProcess.map((node, index) => [node.id, Math.floor(index / BACKUP_IMPORT_CHUNK_SIZE)]),
-	);
-	const chunkCount = Math.ceil(nodesToProcess.length / BACKUP_IMPORT_CHUNK_SIZE);
-	const byChunk = <T>(rows: T[], nodeId: (row: T) => string): T[][] => {
-		const chunks: T[][] = Array.from({length: chunkCount}, () => []);
-		for (const row of rows) {
-			const chunk = chunkOf.get(nodeId(row));
-			if (chunk !== undefined) {
-				chunks[chunk]?.push(row);
-			}
-		}
-		return chunks;
-	};
-	const contentChunks = byChunk(nodeContentRows, (row) => row.id);
-	const metadataChunks = byChunk(nodeMetadataRows, (row) => row.nodeId);
-	const calendarMetadataChunks = byChunk(calendarMetadataRecords, (row) => row.nodeId);
-	const calendarLevelsChunks = byChunk(calendarLevelsRecords, (row) => row.nodeId);
-	const aiMetadataChunks = byChunk<NormalizedAiMetadataRow>(relationships.aiMetadata, (row) => row.nodeId);
-	const s3FileChunks = byChunk<NormalizedS3FileRow>(s3FileRecords, (row) => row.nodeId);
-	const changesMetadataChunks = byChunk<NormalizedChangesMetadataRow>(changesMetadataRecords, (row) => row.nodeId);
-	const referencesRootsChunks = byChunk<NormalizedReferencesRootsRow>(
-		relationships.referencesRoots,
-		(row) => row.nodeId,
-	);
-
-	// Each timeout counts from its own unit's start, after the parse, so only the merge itself is timed.
+	// Each import is one bulk unit: atomic and under one system time, so a backup
+	// never shows in history as several partial states. Its timeout counts from
+	// the unit's lease, after the parse, so only the merge itself is timed.
 	const stamp =
 		timestamp === undefined || timestamp instanceof Date
 			? timestamp
 			: resolveBackupSystemTime(incomingWatermarkMs, timestamp.backupDate, latestBackupImportStamp(database));
-	// One unit of work per chunk, each committing within the transaction timeout,
-	// so a full backup never sets the lag every change-feed poll re-reads. A
-	// failure leaves the earlier chunks committed; re-running the import converges.
-	let contentInserted = 0;
-	let metadataInserted = 0;
-	for (let chunk = 0; chunk < chunkCount; chunk++) {
-		const chunkIds = (contentChunks[chunk] ?? []).map((row) => row.id);
-		runUnitOfWork(
-			database,
-			(unitOfWork) => {
-				const merged = applyRows(
-					unitOfWork,
-					{
-						nodeContent: contentChunks[chunk],
-						nodeMetadata: metadataChunks[chunk],
-						calendarMetadata: calendarMetadataChunks[chunk],
-						calendarLevels: calendarLevelsChunks[chunk],
-						aiMetadata: aiMetadataChunks[chunk],
-						s3Files: s3FileChunks[chunk],
-						changesMetadata: changesMetadataChunks[chunk],
-						referencesRoots: referencesRootsChunks[chunk],
-					},
-					undefined,
-					chunkIds,
-				);
-				contentInserted += merged.nodeContent?.inserted ?? 0;
-				metadataInserted += merged.nodeMetadata?.inserted ?? 0;
-			},
-			startUnitOfWork(stamp),
-		);
-	}
-	logTiming(
-		`Merged node-keyed tables in ${chunkCount} units: ${contentInserted} content, ${metadataInserted} metadata`,
-	);
-	logTiming(`Content updates: ${contentUpdated}, Metadata updates: ${metadataUpdated}`);
-
-	// The last unit ends the nodes absent from the backup and merges the
-	// relationships, which span nodes of every chunk. The import is stamped with it.
-	const finalStart = startUnitOfWork(stamp);
-	const importTimestamp = stamp ?? new Date(finalStart.startedAt);
-	runUnitOfWork(
+	const importTimestamp = runBulkUnitOfWork(
 		database,
-		(unitOfWork) => {
+		(unitOfWork, at) => {
+			const merged = applyRows(
+				unitOfWork,
+				{
+					nodeContent: nodeContentRows,
+					nodeMetadata: nodeMetadataRows,
+					calendarMetadata: calendarMetadataRecords,
+					calendarLevels: calendarLevelsRecords,
+					aiMetadata: relationships.aiMetadata,
+					s3Files: s3FileRecords,
+					changesMetadata: changesMetadataRecords,
+					referencesRoots: relationships.referencesRoots,
+				},
+				undefined,
+				nodeContentRows.map((row) => row.id),
+			);
+			logTiming(
+				`Merged node-keyed tables: ${merged.nodeContent?.inserted ?? 0} content, ${merged.nodeMetadata?.inserted ?? 0} metadata`,
+			);
+			logTiming(`Content updates: ${contentUpdated}, Metadata updates: ${metadataUpdated}`);
+
 			// Nodes deleted in Workflowy (absent from this backup) take their whole composite with them.
 			endNodeComposites(unitOfWork, orphanIds);
 			nodesDeleted = orphanIds.length;
@@ -926,8 +876,9 @@ export async function importBackup(
 			endOrphanedParts(unitOfWork);
 			// Upstream has no backlink item without its source; one in the backup is dropped.
 			endStrandedBacklinkItems(unitOfWork);
+			return at;
 		},
-		finalStart,
+		stamp,
 	);
 
 	logTiming("Transaction complete");

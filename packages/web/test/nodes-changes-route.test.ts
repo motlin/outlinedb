@@ -4,7 +4,15 @@ import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {Hono} from "hono";
 import {join} from "node:path";
-import {TRANSACTION_TIMEOUT_MS} from "@outlinedb/shared/cache";
+import {
+	BULK_IMPORT_LEASE_NAME,
+	BULK_IMPORT_TIMEOUT_MS,
+	closeCurrentVersions,
+	runUnitOfWork,
+	stampImportTime,
+	TRANSACTION_TIMEOUT_MS,
+} from "@outlinedb/shared/cache";
+import {eq} from "drizzle-orm";
 import * as schema from "@outlinedb/shared/db";
 import type {WorkflowyNode} from "@outlinedb/shared/types";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
@@ -66,7 +74,7 @@ function setup(parents: number) {
 		const body = (await res.json()) as NodeChangesResponse;
 		return {status: res.status, body, statements: statements - before};
 	};
-	return {cacheService, changes};
+	return {db, cacheService, changes};
 }
 
 /** A response reduced to what a test compares: id sets, and each list as parent -> child ids. */
@@ -202,6 +210,61 @@ describe("GET /api/v1/nodes/changes", () => {
 			},
 		});
 		expect(second.body.changedIds).toStrictEqual([...new Set(second.body.changedIds)]);
+	});
+
+	it("holds the watermark before an in-flight bulk import's lease, so its late commit still arrives", async () => {
+		const {db, cacheService, changes} = setup(1);
+		const leaseAt = T0 + TRANSACTION_TIMEOUT_MS + 60_000;
+		runUnitOfWork(db, (unitOfWork) => {
+			stampImportTime(unitOfWork, BULK_IMPORT_LEASE_NAME, leaseAt + BULK_IMPORT_TIMEOUT_MS);
+		});
+		// The import runs five minutes, far past the transaction timeout.
+		vi.setSystemTime(leaseAt + 300_000);
+		const during = await changes(null);
+		// It commits a row stamped when it read the clock, right after taking its lease, and ends the lease.
+		vi.setSystemTime(leaseAt);
+		cacheService.insertNode(apiNode("Bulk", "P0", 5), "P0");
+		vi.setSystemTime(leaseAt + 300_001);
+		runUnitOfWork(db, ({tx, systemTime}) => {
+			closeCurrentVersions(
+				tx,
+				schema.apiImportTimestamp,
+				systemTime,
+				eq(schema.apiImportTimestamp.name, BULK_IMPORT_LEASE_NAME),
+			);
+		});
+		const after = await changes(during.body.latest);
+
+		const reduce = ({body}: {body: NodeChangesResponse}) => ({latest: body.latest, ...shape(body)});
+		expect({during: reduce(during), after: reduce(after)}).toStrictEqual({
+			during: {
+				latest: stamp(TRANSACTION_TIMEOUT_MS + 60_000 - 1),
+				reset: false,
+				changedIds: new Set(),
+				deletedIds: new Set(),
+				children: {},
+			},
+			after: {
+				latest: stamp(TRANSACTION_TIMEOUT_MS + 60_000 + 300_001 - TRANSACTION_TIMEOUT_MS),
+				reset: false,
+				changedIds: new Set(["Bulk"]),
+				deletedIds: new Set(),
+				children: {P0: ["P0c0", "P0c1", "Bulk"]},
+			},
+		});
+	});
+
+	it("ignores a bulk import lease past its expiry, which a crashed import leaves open", async () => {
+		const {db, changes} = setup(1);
+		const leaseAt = T0 + TRANSACTION_TIMEOUT_MS + 60_000;
+		runUnitOfWork(db, (unitOfWork) => {
+			stampImportTime(unitOfWork, BULK_IMPORT_LEASE_NAME, leaseAt + BULK_IMPORT_TIMEOUT_MS);
+		});
+		vi.setSystemTime(leaseAt + BULK_IMPORT_TIMEOUT_MS + 1000);
+
+		const {body} = await changes(null);
+
+		expect(body.latest).toBe(stamp(60_000 + BULK_IMPORT_TIMEOUT_MS + 1000));
 	});
 
 	it("answers reset for a cursor it never issued", async () => {

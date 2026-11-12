@@ -804,14 +804,20 @@ describe("cache-import-api service", () => {
 			vi.useRealTimers();
 		});
 
-		it("fails the later of two imports changing a node within one millisecond and keeps the earlier's version", () => {
+		it("fails the later of two imports within one millisecond and keeps the earlier's version", () => {
 			vi.useFakeTimers({toFake: ["Date"], now: new Date("2026-02-01T00:00:00.000Z")});
 
 			importFromApi(testDatabase.db, [createApiNode({id: "node-1", name: "Original Name", priority: 0})]);
 
 			expect(() =>
 				importFromApi(testDatabase.db, [createApiNode({id: "node-1", name: "Updated Name", priority: 0})]),
-			).toThrow(new SameMillisecondOverwriteError("node_content", "id=node-1", "2026-02-01 00:00:00.000"));
+			).toThrow(
+				new SameMillisecondOverwriteError(
+					"api_import_timestamp",
+					"name=bulk_import",
+					"2026-02-01 00:00:00.000",
+				),
+			);
 			expect(
 				testDatabase.db
 					.select({

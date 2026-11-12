@@ -1,6 +1,8 @@
 import DatabaseConstructor from "better-sqlite3";
 import {sql} from "drizzle-orm";
 import {drizzle} from "drizzle-orm/better-sqlite3";
+import {migrate} from "drizzle-orm/better-sqlite3/migrator";
+import {join} from "node:path";
 import {afterEach, describe, expect, it, vi} from "vite-plus/test";
 import {z} from "zod";
 import * as schema from "@outlinedb/shared/db";
@@ -36,6 +38,8 @@ function scratchDb(): AppDatabase {
 	const sqlite = new DatabaseConstructor(":memory:");
 	open.push(sqlite);
 	const db = drizzle(sqlite, {schema});
+	// The tree.changed watermark reads the bulk-import lease from the migrated schema.
+	migrate(db, {migrationsFolder: join(import.meta.dirname, "../../shared/src/db/migrations")});
 	db.run(sql`CREATE TABLE scratch (x INTEGER)`);
 	return db;
 }
