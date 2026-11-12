@@ -502,7 +502,6 @@ export class SyncJob {
 		let snapshot: TreeSnapshot | undefined;
 		let internalSyncError: string | undefined;
 		if (seeding) {
-			this.closeLive("sync_seed_requests", "1 = 1");
 			try {
 				snapshot = await this.deps.readTreeSnapshot?.(unitOfWorkSignal(state.start));
 				if (snapshot === undefined) {
@@ -518,6 +517,11 @@ export class SyncJob {
 		const result = finishApiImport(state, snapshot?.items);
 		if (snapshot !== undefined) {
 			importInternalMetadata(this.deps.db, snapshot, this.now());
+		}
+		if (seeding) {
+			// Closed only once the tree read has landed or failed: a run cut off mid-read (a deploy restarts the object)
+			// keeps its request, so the alarm's retry seeds instead of silently running a plain catch-up.
+			this.closeLive("sync_seed_requests", "1 = 1");
 		}
 		if (!seeding) {
 			try {

@@ -65,8 +65,9 @@ const ProjectIdSchema = z.object({projectid: z.string()}).loose();
 
 interface CreatedTree {
 	id: string;
-	nm?: string | undefined;
-	no?: string | undefined;
+	nm?: string | null | undefined;
+	/** Null in the trees a node created through the public REST API logs. */
+	no?: string | null | undefined;
 	ct?: number | undefined;
 	cp?: number | undefined;
 	metadata?: unknown;
@@ -77,8 +78,8 @@ const CreatedTreeSchema: z.ZodType<CreatedTree> = z.lazy(() =>
 	z
 		.object({
 			id: z.string(),
-			nm: z.string().optional(),
-			no: z.string().optional(),
+			nm: z.string().nullish(),
+			no: z.string().nullish(),
 			ct: z.number().optional(),
 			cp: z.number().optional(),
 			metadata: z.unknown().optional(),
@@ -153,7 +154,8 @@ interface CreatedNode {
 	layoutMode: string | null;
 }
 
-const noteOrNull = (note: string | undefined): string | null => (note === undefined || note === "" ? null : note);
+const noteOrNull = (note: string | null | undefined): string | null =>
+	note === undefined || note === null || note === "" ? null : note;
 
 function layoutModeOf(metadata: unknown): string | null {
 	if (typeof metadata !== "object" || metadata === null || !("layoutMode" in metadata)) {

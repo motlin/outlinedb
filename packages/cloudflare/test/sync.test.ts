@@ -114,6 +114,13 @@ async function accountRows(h: Harness): Promise<unknown> {
 	return response.json();
 }
 
+async function files(h: Harness): Promise<unknown> {
+	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
+	const ns = (await h.mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace;
+	const response = await ns.get(ns.idFromName("dev")).fetch("http://localhost/__files");
+	return response.json();
+}
+
 async function internalMetadata(h: Harness): Promise<unknown> {
 	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
 	const ns = (await h.mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace;
@@ -157,6 +164,8 @@ describe("sync from a fake upstream", () => {
 	let pushAndPoll: () => Response = () => pollResult("1");
 	let exportGate: Promise<void> | undefined;
 	let exportReached: (() => void) | undefined;
+	let treeGate: Promise<void> | undefined;
+	let treeReached: (() => void) | undefined;
 	const internalCalls: string[] = [];
 	const pollStarts: string[] = [];
 	const auths: (string | null)[] = [];
@@ -209,6 +218,8 @@ describe("sync from a fake upstream", () => {
 								user: {id: 123},
 							});
 						}
+						treeReached?.();
+						await treeGate;
 						return treeData?.() ?? new Response("no tree data", {status: 500});
 					}
 					return new Response(`unexpected ${url.pathname}`, {status: 500});
@@ -368,7 +379,26 @@ describe("sync from a fake upstream", () => {
 			Response.json({
 				items: [
 					{id: uuid(1), prnt: null, pr: 0, nm: "node 0", ct: 1, lm: 2, metadata: {numbered_start: 7}},
-					{id: uuid(2), prnt: null, pr: 1, nm: "node 1", ct: 1, lm: 2},
+					{
+						id: uuid(2),
+						prnt: null,
+						pr: 1,
+						nm: "node 1",
+						ct: 1,
+						lm: 2,
+						metadata: {
+							s3File: {
+								isFile: true,
+								fileName: "example-photo.jpg",
+								fileType: "image/jpeg",
+								isAnimatedGIF: false,
+								imageOriginalWidth: 1536,
+								imageOriginalHeight: 2048,
+								imageOriginalPixels: 1,
+							},
+							layoutMode: "bullets",
+						},
+					},
 				],
 				most_recent_operation_transaction_id: "1",
 			});
@@ -380,6 +410,7 @@ describe("sync from a fake upstream", () => {
 		expect(seeded.lastResult?.internalSyncError).toBeUndefined();
 		expect(internalCalls.filter((path) => path === "/get_tree_data/")).toStrictEqual(["/get_tree_data/"]);
 		await expect(internalMetadata(h)).resolves.toStrictEqual([{node_id: uuid(1), numbered_start: 7}]);
+		await expect(files(h)).resolves.toStrictEqual([{node_id: uuid(2), file_name: "example-photo.jpg"}]);
 		await expect(treeLog(h)).resolves.toStrictEqual({txId: "1", mirrors: []});
 		await expect(syncTables(h).then((tables) => tables.seedRequests)).resolves.toStrictEqual([
 			{live: 0, ordered: 1},
@@ -414,6 +445,43 @@ describe("sync from a fake upstream", () => {
 			log: {txId: "5", mirrors: [{mirror_id: uuid(4), original_id: uuid(3)}]},
 		});
 		pushAndPoll = () => pollResult("1");
+		await stop(h);
+	}, 60_000);
+
+	it("keeps the seed request live until the tree read lands, so a run cut off mid-read seeds again on its retry", async () => {
+		current = makeNodes(100);
+		treeData = () => Response.json({items: [], most_recent_operation_transaction_id: "1"});
+		let release = (): void => {};
+		treeGate = new Promise((resolve) => {
+			release = resolve;
+		});
+		const reached = new Promise<void>((resolve) => {
+			treeReached = resolve;
+		});
+		const h = await start(undefined, internalAuthBindings);
+		await h.mf.dispatchFetch("http://localhost/api/admin/seed", {method: "POST"});
+		await reached;
+		const whileReading = (await syncTables(h)).seedRequests;
+		release();
+		treeGate = undefined;
+		treeReached = undefined;
+		let done: SyncStatus | undefined;
+		for (let i = 0; i < 30_000 / POLL_MS; i++) {
+			done = await status(h);
+			if (done.phase === "idle" && done.lastResult !== null) {
+				break;
+			}
+			await sleep(POLL_MS);
+		}
+		expect({
+			whileReading,
+			result: done?.lastResult?.status,
+			afterwards: (await syncTables(h)).seedRequests,
+		}).toStrictEqual({
+			whileReading: [{live: 1, ordered: 1}],
+			result: "ok",
+			afterwards: [{live: 0, ordered: 1}],
+		});
 		await stop(h);
 	}, 60_000);
 

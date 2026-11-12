@@ -3619,7 +3619,7 @@ describe("internal adapter transaction log", () => {
 		it("records bulk_create metadata in the REST log format: mirror roots, references roots and backlink items", async () => {
 			const {db, api, adapter, edges} = tracked();
 			storeTreeTxId(db, "100");
-			const restTrees = `[{"id": "m3", "nm": "", "no": "", "ct": 1, "metadata": {"mirror": {"originalId": "o3", "isMirrorRoot": true}}}]`;
+			const restTrees = `[{"id": "m3", "nm": "", "no": null, "ct": 1, "metadata": {"mirror": {"originalId": "o3", "isMirrorRoot": true}}}]`;
 			api.respondOnce(
 				"/push_and_poll",
 				poll("110", [

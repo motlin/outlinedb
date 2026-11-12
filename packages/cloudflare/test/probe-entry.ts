@@ -109,6 +109,15 @@ export class ProbeStore extends UserStore {
 					.toArray(),
 			);
 		}
+		if (url.pathname === "/__files") {
+			return Response.json(
+				this.ctx.storage.sql
+					.exec(
+						"SELECT node_id, file_name FROM s3_files WHERE system_to = '9999-12-31 23:59:59' ORDER BY node_id",
+					)
+					.toArray(),
+			);
+		}
 		if (url.pathname === "/__tree-log") {
 			const txId = this.ctx.storage.sql
 				.exec(
