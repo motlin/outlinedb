@@ -44,7 +44,14 @@ export default class SeedAccountState extends Command {
 			method: "PUT",
 			headers,
 			body: JSON.stringify(state),
+			// Access answers a missing or unaccepted service token with a 302 to its login page, which 404s a PUT.
+			redirect: "manual",
 		});
+		if (response.status >= 300 && response.status < 400) {
+			this.error(
+				`Seeding failed: ${response.status} redirect to the Cloudflare Access login, so no service token was accepted. Set CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET (or pass --access-client-id and --access-client-secret) to an Access service token allowed by the Worker's ALLOWED_SERVICE_TOKENS.`,
+			);
+		}
 		if (!response.ok) {
 			this.error(`Seeding failed: ${response.status} ${await response.text()}`);
 		}

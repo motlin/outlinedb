@@ -16,6 +16,7 @@ describe("cache:seed-account-state command", () => {
 	let server: http.Server;
 	let received: {method?: string; url?: string; body: string}[];
 	let receivedHeaders: http.IncomingHttpHeaders[];
+	let redirectTo: string | undefined;
 
 	beforeEach(async () => {
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-seed-test-"));
@@ -25,6 +26,7 @@ describe("cache:seed-account-state command", () => {
 		process.env.OUTLINEDB_DB_PATH = testDbPath;
 		received = [];
 		receivedHeaders = [];
+		redirectTo = undefined;
 		server = http.createServer((request, response) => {
 			let body = "";
 			request.on("data", (chunk: Buffer) => {
@@ -33,6 +35,11 @@ describe("cache:seed-account-state command", () => {
 			request.on("end", () => {
 				receivedHeaders.push(request.headers);
 				received.push({method: request.method, url: request.url, body});
+				if (redirectTo !== undefined) {
+					response.writeHead(302, {location: redirectTo});
+					response.end();
+					return;
+				}
 				response.setHeader("content-type", "application/json");
 				response.end(JSON.stringify({rows: 4, expandedKeys: 1}));
 			});
@@ -122,5 +129,21 @@ describe("cache:seed-account-state command", () => {
 		}
 		expect(receivedHeaders[0]?.["cf-access-client-id"]).toBe("env-id.access");
 		expect(receivedHeaders[0]?.["cf-access-client-secret"]).toBe("env-secret");
+	});
+
+	it("reports an Access login redirect instead of following it to the login page's 404", async () => {
+		const address = server.address();
+		const port = typeof address === "object" && address ? address.port : 0;
+		redirectTo = `http://127.0.0.1:${port}/cdn-cgi/access/login/app.example.test`;
+
+		const {error} = await captureOutput(async () => SeedAccountState.run(["--url", `http://127.0.0.1:${port}`]));
+
+		expect({
+			requests: received.map(({method, url}) => ({method, url})),
+			error: error?.message,
+		}).toStrictEqual({
+			requests: [{method: "PUT", url: "/api/admin/account-state"}],
+			error: "Seeding failed: 302 redirect to the Cloudflare Access login, so no service token was accepted. Set CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET (or pass --access-client-id and --access-client-secret) to an Access service token allowed by the Worker's ALLOWED_SERVICE_TOKENS.",
+		});
 	});
 });
