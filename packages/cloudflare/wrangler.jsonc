@@ -46,5 +46,7 @@
 		"APP_ORIGIN": "https://app.outlinedb.com",
 		// closed, invite (emails in the SIGNUP_INVITES secret) or open.
 		"SIGNUP_MODE": "invite",
+		// Public key of the OutlineDB Turnstile widget (app.outlinedb.com, managed); its secret is the TURNSTILE_SECRET_KEY secret.
+		"TURNSTILE_SITE_KEY": "0x4AAAAAAF9lnLIbCzEVI1SE",
 	},
 }
