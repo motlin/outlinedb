@@ -60,7 +60,7 @@
 		"@types/better-sqlite3": "^9.6.0",
 		"@types/node": "^26.6.6",
 		"drizzle-kit": "^0.31.11",
-		"eslint-plugin-storybook": "^10.6.5",
+		"eslint-plugin-storybook": "^10.6.6",
 		"fallow": "^3.39.0",
 		"markdownlint-cli2": "^0.24.0",
 		"oclif": "^6",
