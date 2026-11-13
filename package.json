@@ -61,7 +61,7 @@
 		"@types/node": "^26.6.6",
 		"drizzle-kit": "^0.31.11",
 		"eslint-plugin-storybook": "^10.6.6",
-		"fallow": "^3.39.0",
+		"fallow": "^3.40.0",
 		"markdownlint-cli2": "^0.24.0",
 		"oclif": "^6",
 		"shx": "^0.4.0",
