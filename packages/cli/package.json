@@ -40,7 +40,7 @@
 		"chalk": "^6.0.1",
 		"drizzle-orm": "^0.45.3",
 		"dropbox": "^10.66.0",
-		"node-html-parser": "^9.0.6",
+		"node-html-parser": "^9.0.7",
 		"pino": "^10.4.0",
 		"sql-formatter": "^15.9.0",
 		"sql-highlight": "^6.1.0",
