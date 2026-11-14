@@ -20,7 +20,8 @@
 #       └── ...
 set -Eeuo pipefail
 
-PROJECT_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+# The project is the working directory, not the script's location: installed plugin copies live under ~/.claude/plugins/cache.
+PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 OUTPUT_DIR="$PROJECT_ROOT/.llm/gtd"
 CLI="$PROJECT_ROOT/bin/run.js"
 

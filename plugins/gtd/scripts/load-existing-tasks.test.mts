@@ -3,7 +3,7 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {execFileSync} from "node:child_process";
-import {mkdirSync, mkdtempSync, readFileSync, writeFileSync} from "node:fs";
+import {mkdirSync, mkdtempSync, readFileSync, renameSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {arrayField, expectObject, parseJson, stringField} from "./json.mts";
@@ -110,6 +110,55 @@ test("nextActions includes open tasks on the asap ladder tiers and skips tiers a
 				name: "Set up a weekly Dev Practice meeting",
 			},
 		],
+	);
+});
+
+test("the loader finds the project from the working directory when run from an installed plugin copy", () =>
+{
+	const pluginScripts = join(mkdtempSync(join(tmpdir(), "installed-plugin-")), "gtd", "0.1.0", "scripts");
+	mkdirSync(
+		pluginScripts,
+		{
+			recursive: true,
+		},
+	);
+	const installedLoader = join(pluginScripts, "load-existing-tasks.sh");
+	writeFileSync(installedLoader, readFileSync(loader, "utf8"));
+	const project = mkdtempSync(join(tmpdir(), "project-"));
+	mkdirSync(
+		join(project, ".llm", "gtd"),
+		{
+			recursive: true,
+		},
+	);
+	renameSync(
+		metadataDirWith(node("root", "☑️ Next (Work)", [node("t-open", "Arrange Dev Practice work into Arcs")])),
+		join(project, ".llm", "gtd", "metadata"),
+	);
+	const environment: NodeJS.ProcessEnv =
+	{
+		...process.env,
+	};
+	delete environment.GTD_METADATA_DIR;
+
+	const output = expectObject(
+		parseJson(
+			execFileSync(
+				"bash",
+				[installedLoader],
+				{
+					cwd: project,
+					env: environment,
+					encoding: "utf8",
+				},
+			),
+		),
+		"loader output",
+	);
+
+	assert.deepEqual(
+		arrayField(output, "nextActions").map((task) => stringField(expectObject(task, "next action"), "id")),
+		["t-open"],
 	);
 });
 
