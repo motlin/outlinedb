@@ -159,6 +159,12 @@ export interface UpstreamLane
 	requestDrain(): void;
 	/** Run `job` once every drain and job started before it has settled. */
 	exclusive<T>(job: () => Promise<T>): Promise<T>;
+	/**
+	 * Run a catch-up in its lane turn, after one outbox drain in that same turn: on the Node host the catch-up is the
+	 * scheduled sync tick, so rows left pending while workflowy.com was unreachable go out once it is back. A failed
+	 * drain is logged and the catch-up still runs; its rows wait for the next trigger.
+	 */
+	catchUp<T>(job: () => Promise<T>): Promise<T>;
 }
 
 /**
@@ -184,6 +190,21 @@ export function upstreamLane(drain: () => Promise<unknown>, log: (message: strin
 			"outbox drain failed",
 		),
 		exclusive,
+		catchUp: async <T>(job: () => Promise<T>): Promise<T> =>
+			exclusive(async () =>
+			{
+				try
+				{
+					await drain();
+				}
+				catch (error)
+				{
+					log(
+						`outbox drain before catch-up failed: ${error instanceof Error ? error.message : String(error)}`,
+					);
+				}
+				return job();
+			}),
 	};
 }
 

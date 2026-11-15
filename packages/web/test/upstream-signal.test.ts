@@ -450,4 +450,48 @@ describe("upstreamLane", () =>
 			},
 		);
 	});
+
+	it("drains the outbox once before each catch-up, and still catches up after a failed drain", async () =>
+	{
+		const order: string[] = [];
+		const logged: string[] = [];
+		let failNext = false;
+		const caughtUp = async (): Promise<void> =>
+		{
+			order.push("catchUp");
+			return Promise.resolve();
+		};
+		const lane = upstreamLane(
+			async () =>
+			{
+				order.push("drain");
+				if (failNext)
+				{
+					failNext = false;
+					return Promise.reject(new Error("offline"));
+				}
+				return Promise.resolve();
+			},
+			(message) =>
+			{
+				logged.push(message);
+			},
+		);
+
+		await lane.catchUp(caughtUp);
+		failNext = true;
+		await lane.catchUp(caughtUp);
+
+		expect(
+			{
+				order,
+				logged,
+			},
+		).toStrictEqual(
+			{
+				order: ["drain", "catchUp", "drain", "catchUp"],
+				logged: ["outbox drain before catch-up failed: offline"],
+			},
+		);
+	});
 });

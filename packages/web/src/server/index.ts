@@ -115,7 +115,8 @@ nodeWebSocket.injectWebSocket(server);
  * Edits made on workflowy.com reach the cache within about a second: upstream's
  * signal socket nudges, and each nudge runs one coalesced catch-up poll. A
  * mirror-mode write triggers an outbox drain on the same lane, so a drain and a
- * catch-up never run at the same time.
+ * catch-up never run at the same time. Each catch-up drains first, so rows left
+ * pending while workflowy.com was unreachable go out once the socket reconnects.
  */
 const internalAuth = serverContext.internalAuth;
 const internalAdapter = serverContext.internalAdapter?.();
@@ -152,7 +153,7 @@ if (internalAuth && internalAdapter)
 			},
 			openSocket: nodeSignalSocket,
 			catchUp: async () =>
-				lane.exclusive(async () =>
+				lane.catchUp(async () =>
 					withTreeChangePublish(serverContext.db, treeEvents, async () => internalAdapter.catchUp()),
 				),
 		},
