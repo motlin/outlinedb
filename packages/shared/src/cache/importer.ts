@@ -255,7 +255,7 @@ export function applyRows(
 				metadataMatches(
 					current,
 					{
-						priority: incoming.priority ?? null,
+						orderKey: incoming.orderKey ?? null,
 						createdAt: toUnix(incoming.createdAt),
 						modifiedAt: toUnix(incoming.modifiedAt),
 						completedAt: toUnix(incoming.completedAt),
@@ -474,7 +474,7 @@ export function applyNodeRowsBatch(
 			metadataMatches(
 				current,
 				{
-					priority: incoming.priority ?? null,
+					orderKey: incoming.orderKey ?? null,
 					createdAt: toUnix(incoming.createdAt),
 					modifiedAt: toUnix(incoming.modifiedAt),
 					completedAt: toUnix(incoming.completedAt),

@@ -253,14 +253,10 @@ function defaultService(ctx: ServerContext): LadderService
 						},
 					),
 			}),
-			// Reordering can renumber siblings, so refresh their cached priorities too.
+			// Reordering can renumber siblings, so store the tier's whole child list in its new order.
 			refreshTier: async (parentId) =>
 			{
-				const children = await apiClient(ctx).getChildNodes(parentId);
-				for (const child of children)
-				{
-					ctx.cacheService.insertNode(child, parentId);
-				}
+				ctx.cacheService.storeApiResponse(await apiClient(ctx).getChildNodes(parentId), parentId);
 			},
 			completeNode: async (nodeId) => writeClient(ctx).completeNode(nodeId),
 			events: ctx.ladderEvents,

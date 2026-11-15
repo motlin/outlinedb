@@ -625,8 +625,8 @@ export function readHomeLayoutMode(tx: TemporalTransaction): string | null
 /**
  * Writes the outline of a standalone account, which has no workflowy.com behind it, straight into the temporal node
  * tables. Each write is one unit of work. Siblings are read in `node_metadata.order_key` order. A write gives only the
- * nodes it creates or moves a key between their new neighbours, so no sibling is renumbered; this writer leaves
- * `priority` null, and only rows whose values changed get a new version.
+ * nodes it creates or moves a key between their new neighbours, so no sibling is renumbered, and only rows whose
+ * values changed get a new version.
  */
 export class LocalTreeWriter
 {
@@ -1134,7 +1134,6 @@ export class LocalTreeWriter
 					.values(
 						{
 							...metadata,
-							priority: null,
 							systemFrom: systemTime,
 							systemTo: FAR_FUTURE_DATE,
 						},

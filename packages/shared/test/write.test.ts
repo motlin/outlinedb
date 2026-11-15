@@ -1,5 +1,6 @@
 import {vi, afterEach, describe, expect, it} from "vite-plus/test";
 import DatabaseConstructor from "better-sqlite3";
+import {generateNKeysBetween} from "fractional-indexing";
 import {and, eq} from "drizzle-orm";
 import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
@@ -10,6 +11,7 @@ import {createNodeTree} from "../src/cache/create-node-tree.js";
 import {WorkflowyWriteThroughClient} from "../src/cache/workflowy-write-through-client.js";
 import * as schema from "../src/db/schema.js";
 import {nodeContent, nodeMetadata, mirrors, nodeEmbeddings, referencesRoots} from "../src/db/schema.js";
+import {compareBinary} from "../src/cache/order-key.js";
 import {FAR_FUTURE_DATE} from "../src/temporal/constants.js";
 import {resolveOrCreateNodePath} from "../src/utils/node-resolver.js";
 import {requestJson, requestBody} from "./helpers/request-body.js";
@@ -20,6 +22,9 @@ import {deletePlanCalls} from "../src/cache/delete-plan.js";
 import type {DeletePlan} from "../src/cache/delete-plan.js";
 import type {ExactMover} from "../src/cache/workflowy-write-through-client.js";
 import type {UpdateNodeRequest} from "../src/api/workflowy-client.js";
+
+/** The fractional-indexing integer key of `n`, so seeded keys sort like the seeded priorities. */
+const integerOrderKey = (n: number): string => generateNKeysBetween(null, null, n + 1).at(-1) ?? "a0";
 
 describe("write through create", () =>
 {
@@ -89,7 +94,7 @@ describe("write through create", () =>
 				seed.map(([id, , priority]) => (
 				{
 					nodeId: id,
-					priority,
+					orderKey: integerOrderKey(priority),
 					systemFrom: SEEDED_AT,
 					systemTo: FAR_FUTURE_DATE,
 				})),
@@ -246,14 +251,16 @@ describe("write through create", () =>
 		const cacheService = new CacheService(database);
 		const client = new WorkflowyWriteThroughClient(apiClient, cacheService);
 
-		/** Every current cached node with its parent and priority, ordered by id. */
+		/** Each cached parent's current children in sibling order (order key, then id), Home's under `root`. */
 		const cached = () =>
-			database
+		{
+			const outline: Record<string, string[]> = {};
+			for (const row of database
 				.select(
 					{
 						id: nodeContent.id,
 						parentId: nodeContent.parentId,
-						priority: nodeMetadata.priority,
+						orderKey: nodeMetadata.orderKey,
 					},
 				)
 				.from(nodeContent)
@@ -262,8 +269,13 @@ describe("write through create", () =>
 					and(eq(nodeMetadata.nodeId, nodeContent.id), eq(nodeMetadata.systemTo, FAR_FUTURE_DATE)),
 				)
 				.where(eq(nodeContent.systemTo, FAR_FUTURE_DATE))
-				.orderBy(nodeContent.id)
-				.all();
+				.all()
+				.toSorted((a, b) => compareBinary(a.orderKey ?? "", b.orderKey ?? "") || compareBinary(a.id, b.id)))
+			{
+				(outline[row.parentId ?? "root"] ??= []).push(row.id);
+			}
+			return outline;
+		};
 
 		return {
 			client,
@@ -325,33 +337,11 @@ describe("write through create", () =>
 						"GET /nodes/a3-id",
 						"GET /nodes?parent_id=home",
 					],
-					cached: [
-						{
-							id: "a1-id",
-							parentId: "home",
-							priority: 50,
-						},
-						{
-							id: "a2-id",
-							parentId: "home",
-							priority: 200,
-						},
-						{
-							id: "a3-id",
-							parentId: "home",
-							priority: 300,
-						},
-						{
-							id: "existing",
-							parentId: "home",
-							priority: 100,
-						},
-						{
-							id: "home",
-							parentId: null,
-							priority: 0,
-						},
-					],
+					cached:
+					{
+						home: ["a1-id", "existing", "a2-id", "a3-id"],
+						root: ["home"],
+					},
 				},
 			);
 		});
@@ -377,33 +367,13 @@ describe("write through create", () =>
 				"top",
 			);
 
-			expect(cached()).toStrictEqual([
+			expect(cached()).toStrictEqual(
 				{
-					id: "existing",
-					parentId: "home",
-					priority: 100,
+					home: ["tree-id", "existing"],
+					root: ["home"],
+					"tree-id": ["leaf1-id", "leaf2-id"],
 				},
-				{
-					id: "home",
-					parentId: null,
-					priority: 0,
-				},
-				{
-					id: "leaf1-id",
-					parentId: "tree-id",
-					priority: 100,
-				},
-				{
-					id: "leaf2-id",
-					parentId: "tree-id",
-					priority: 200,
-				},
-				{
-					id: "tree-id",
-					parentId: "home",
-					priority: 50,
-				},
-			]);
+			);
 		});
 
 		it("caches path segments created by resolveOrCreateNodePath at their real priority", async () =>
@@ -420,23 +390,11 @@ describe("write through create", () =>
 			).toStrictEqual(
 				{
 					id: "made-id",
-					cached: [
-						{
-							id: "existing",
-							parentId: "home",
-							priority: 100,
-						},
-						{
-							id: "home",
-							parentId: null,
-							priority: 0,
-						},
-						{
-							id: "made-id",
-							parentId: "home",
-							priority: 200,
-						},
-					],
+					cached:
+					{
+						home: ["existing", "made-id"],
+						root: ["home"],
+					},
 				},
 			);
 		});
@@ -476,28 +434,12 @@ describe("write through create", () =>
 			vi.setSystemTime(new Date("2026-02-01T00:00:00.001Z"));
 			await client.moveNode("existing2", "home", -1);
 
-			expect(cached()).toStrictEqual([
+			expect(cached()).toStrictEqual(
 				{
-					id: "existing1",
-					parentId: "home",
-					priority: 100,
+					home: ["existing2", "n-id", "existing1"],
+					root: ["home"],
 				},
-				{
-					id: "existing2",
-					parentId: "home",
-					priority: 25,
-				},
-				{
-					id: "home",
-					parentId: null,
-					priority: 0,
-				},
-				{
-					id: "n-id",
-					parentId: "home",
-					priority: 50,
-				},
-			]);
+			);
 		});
 
 		it("re-reads every sibling after a top create, so the renumbered siblings stay in server order", async () =>
@@ -512,28 +454,12 @@ describe("write through create", () =>
 				},
 			);
 
-			expect(cached()).toStrictEqual([
+			expect(cached()).toStrictEqual(
 				{
-					id: "existing1",
-					parentId: "home",
-					priority: 100,
+					home: ["n-id", "existing1", "existing2"],
+					root: ["home"],
 				},
-				{
-					id: "existing2",
-					parentId: "home",
-					priority: 200,
-				},
-				{
-					id: "home",
-					parentId: null,
-					priority: 0,
-				},
-				{
-					id: "n-id",
-					parentId: "home",
-					priority: 50,
-				},
-			]);
+			);
 		});
 
 		it("re-reads every sibling after a top move, so the renumbered siblings stay in server order", async () =>
@@ -542,23 +468,12 @@ describe("write through create", () =>
 
 			await client.moveNode("existing2", "home", -1);
 
-			expect(cached()).toStrictEqual([
+			expect(cached()).toStrictEqual(
 				{
-					id: "existing1",
-					parentId: "home",
-					priority: 100,
+					home: ["existing2", "existing1"],
+					root: ["home"],
 				},
-				{
-					id: "existing2",
-					parentId: "home",
-					priority: 50,
-				},
-				{
-					id: "home",
-					parentId: null,
-					priority: 0,
-				},
-			]);
+			);
 		});
 	});
 });
@@ -944,7 +859,7 @@ describe("write through mirror delete", () =>
 				TREE.map(([id, parentId]) => (
 				{
 					nodeId: id,
-					priority: seededLists.get(parentId)!.indexOf(id),
+					orderKey: integerOrderKey(seededLists.get(parentId)!.indexOf(id)),
 					systemFrom: SEEDED_AT,
 					systemTo: FAR_FUTURE_DATE,
 				})),
@@ -1112,7 +1027,7 @@ describe("write through mirror delete", () =>
 			exactMover ? mover : undefined,
 		);
 
-		/** Each cached parent's current children in priority order (roots under `root`), and the current mirrors. */
+		/** Each cached parent's current children in sibling order (roots under `root`), and the current mirrors. */
 		const cacheState = () =>
 		{
 			const rows = database
@@ -1120,7 +1035,7 @@ describe("write through mirror delete", () =>
 					{
 						id: nodeContent.id,
 						parentId: nodeContent.parentId,
-						priority: nodeMetadata.priority,
+						orderKey: nodeMetadata.orderKey,
 					},
 				)
 				.from(nodeContent)
@@ -1130,7 +1045,7 @@ describe("write through mirror delete", () =>
 				)
 				.where(eq(nodeContent.systemTo, FAR_FUTURE_DATE))
 				.all()
-				.toSorted((a, b) => (a.priority ?? 0) - (b.priority ?? 0) || a.id.localeCompare(b.id));
+				.toSorted((a, b) => compareBinary(a.orderKey ?? "", b.orderKey ?? "") || compareBinary(a.id, b.id));
 			const outline: Record<string, string[]> = {};
 			for (const row of rows)
 			{

@@ -110,7 +110,7 @@ Payload shape (`BackupNodeSchema`): a nested array of `{id, nm, no, ct, lm, cp, 
 
 Timestamps (`ct`, `lm`, `cp`) are seconds since the account join date. `getOrFetchWorkflowyEpoch` resolves the epoch from `WORKFLOWY_EPOCH`, then the live `account.date_joined_sec`, then the internal API (bootstrapping the account and seeding its row).
 
-Ordering: there is no priority field. Position is the array index inside `ch`, and `calculatePriorities` infers the stored priority from it.
+Ordering: there is no priority field. Position is the array index inside `ch`, and the backup import maps each parent's children in that order onto `node_metadata.order_key` (`orderKeysFor`).
 
 Freshness: one snapshot per day, taken by Workflowy on its own schedule. Hours to a day behind the live account.
 

@@ -74,6 +74,7 @@ import {inProcessStore} from "../src/server/store.js";
 import {and, eq} from "drizzle-orm";
 import {computeTreeSearch, computeTreeSearchPaged} from "../src/server/tree-search.js";
 import {compactSwitcherSkeleton, peekSwitcherText} from "../src/server/switcher-search.js";
+import {integerOrderKey} from "./helpers/integer-order-key.js";
 
 describe("search autocomplete values", () =>
 {
@@ -2300,13 +2301,13 @@ describe("search text op", () =>
 			.values([
 				{
 					nodeId: "done",
-					priority: 0,
+					orderKey: integerOrderKey(0),
 					completedAt: new Date(1_600_000_100_000),
 					...live,
 				},
 				{
 					nodeId: "open",
-					priority: 1,
+					orderKey: integerOrderKey(1),
 					completedAt: null,
 					...live,
 				},
@@ -2506,7 +2507,7 @@ describe("search tree route", () =>
 				.values(
 					{
 						nodeId: id,
-						priority,
+						orderKey: integerOrderKey(priority),
 						createdAt: id === "a" ? CREATED : null,
 						modifiedAt: id === "a" ? MODIFIED : null,
 						completedAt: id === "a" ? COMPLETED : null,
@@ -2839,7 +2840,7 @@ describe("search tree route", () =>
 					.values(
 						{
 							nodeId: id,
-							priority,
+							orderKey: integerOrderKey(priority),
 							modifiedAt: MODIFIED,
 							completedAt: extra.completed === true ? COMPLETED : null,
 							systemFrom: SEEDED_AT,

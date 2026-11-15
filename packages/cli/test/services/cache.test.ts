@@ -24,6 +24,7 @@ import
 	TRANSACTION_TIMEOUT_MS,
 	TransactionTimeoutError,
 	CacheService,
+	compareBinary,
 } from "@outlinedb/shared/cache";
 import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@outlinedb/shared/temporal";
 import type {WorkflowyNode} from "@outlinedb/shared/types";
@@ -518,8 +519,7 @@ describe("cache import api", () =>
 					{
 						nodeId: "node-1",
 						shortId: "node1",
-						priority: 5,
-						orderKey: "a5",
+						orderKey: "a0",
 						createdAt: new Date(createdAtTimestamp * 1000),
 						modifiedAt: new Date(modifiedAtTimestamp * 1000),
 						completedAt: null,
@@ -1834,7 +1834,7 @@ describe("cache import", () =>
 					.from(nodeMetadata)
 					.where(eq(nodeMetadata.systemTo, FAR_FUTURE_DATE))
 					.all();
-				expect(allMetadata.map((m) => m.priority)).toStrictEqual([0, 100, 200]);
+				expect(allMetadata.map((m) => m.orderKey)).toStrictEqual(["a0", "a1", "a2"]);
 			});
 
 			it("imports nested nodes with correct parent relationships", async () =>
@@ -1902,16 +1902,16 @@ describe("cache import", () =>
 					childMetaRecords.map((m) => (
 					{
 						nodeId: m.nodeId,
-						priority: m.priority,
+						orderKey: m.orderKey,
 					})),
 				).toStrictEqual([
 					{
 						nodeId: "child-1",
-						priority: 0,
+						orderKey: "a0",
 					},
 					{
 						nodeId: "child-2",
-						priority: 100,
+						orderKey: "a1",
 					},
 				]);
 			});
@@ -2088,7 +2088,7 @@ describe("cache import", () =>
 
 		describe("import with modifications", () =>
 		{
-			it("stores correct priority order during initial import", async () =>
+			it("stores the backup order as order keys during initial import", async () =>
 			{
 				const initialBackup = [
 					{
@@ -2111,16 +2111,16 @@ describe("cache import", () =>
 					metas.map((m) => (
 					{
 						nodeId: m.nodeId,
-						priority: m.priority,
+						orderKey: m.orderKey,
 					})),
 				).toStrictEqual([
 					{
 						nodeId: "node-1",
-						priority: 0,
+						orderKey: "a0",
 					},
 					{
 						nodeId: "node-2",
-						priority: 100,
+						orderKey: "a1",
 					},
 				]);
 			});
@@ -2417,7 +2417,6 @@ describe("cache import", () =>
 					{
 						nodeId: "node-1",
 						shortId: "node1",
-						priority: 0,
 						orderKey: "a0",
 						createdAt: new Date(1_704_067_200 * 1000),
 						modifiedAt: new Date(1_704_153_600 * 1000),
@@ -2465,7 +2464,6 @@ describe("cache import", () =>
 					{
 						nodeId: "node-1",
 						shortId: "node1",
-						priority: 0,
 						orderKey: "a0",
 						createdAt: new Date(1_704_067_200 * 1000),
 						modifiedAt: null,
@@ -3296,9 +3294,9 @@ describe("cache import", () =>
 			});
 		});
 
-		describe("priority inference for new nodes", () =>
+		describe("order keys for new nodes", () =>
 		{
-			it("infers priorities for new nodes at front of existing siblings", async () =>
+			it("keys new nodes before the existing siblings they precede", async () =>
 			{
 				const initialBackup = [
 					{
@@ -3329,8 +3327,7 @@ describe("cache import", () =>
 					.from(nodeMetadata)
 					.where(eq(nodeMetadata.nodeId, "existing-2"))
 					.get()!;
-				expect(meta1.priority).toBe(0);
-				expect(meta2.priority).toBe(100);
+				expect([meta1.orderKey, meta2.orderKey]).toStrictEqual(["a0", "a1"]);
 
 				const updatedBackup = [
 					{
@@ -3373,8 +3370,7 @@ describe("cache import", () =>
 					.all()
 					.find((m) => m.systemTo === FAR_FUTURE_DATE)!;
 
-				expect(newMeta2.priority).toBe(-100);
-				expect(newMeta1.priority).toBe(-200);
+				expect([newMeta1.orderKey, newMeta2.orderKey]).toStrictEqual(["Zy", "Zz"]);
 
 				const existingMeta1 = testDatabase.db
 					.select()
@@ -3382,10 +3378,10 @@ describe("cache import", () =>
 					.where(eq(nodeMetadata.nodeId, "existing-1"))
 					.all()
 					.find((m) => m.systemTo === FAR_FUTURE_DATE)!;
-				expect(existingMeta1.priority).toBe(0);
+				expect(existingMeta1.orderKey).toBe("a0");
 			});
 
-			it("infers priorities for new nodes at end of existing siblings", async () =>
+			it("keys new nodes after the existing siblings they follow", async () =>
 			{
 				const initialBackup = [
 					{
@@ -3447,11 +3443,10 @@ describe("cache import", () =>
 					.all()
 					.find((m) => m.systemTo === FAR_FUTURE_DATE)!;
 
-				expect(newMeta1.priority).toBe(200);
-				expect(newMeta2.priority).toBe(300);
+				expect([newMeta1.orderKey, newMeta2.orderKey]).toStrictEqual(["a2", "a3"]);
 			});
 
-			it("infers priority for new node between existing nodes", async () =>
+			it("keys a new node between the existing nodes around it", async () =>
 			{
 				const initialBackup = [
 					{
@@ -3503,10 +3498,10 @@ describe("cache import", () =>
 					.all()
 					.find((m) => m.systemTo === FAR_FUTURE_DATE)!;
 
-				expect(newMeta.priority).toBe(50);
+				expect(newMeta.orderKey).toBe("a0V");
 			});
 
-			it("respaces siblings instead of tying a new node with its neighbour when the gap is used up", async () =>
+			it("keys many new nodes between two neighbours without touching the neighbours", async () =>
 			{
 				const existing = [
 					{
@@ -3527,7 +3522,6 @@ describe("cache import", () =>
 				]);
 				await importBackup(testDatabase.db, initialPath, "backup.json", false, T0);
 
-				// Eight new nodes between priorities 0 and 100 halve the gap down to nothing: 50, 75, 87, 93, 96, 98, 99, 99.
 				const newNodes = Array.from(
 					{
 						length: 8,
@@ -3555,60 +3549,60 @@ describe("cache import", () =>
 					.select(
 						{
 							nodeId: nodeMetadata.nodeId,
-							priority: nodeMetadata.priority,
+							orderKey: nodeMetadata.orderKey,
 						},
 					)
 					.from(nodeMetadata)
 					.where(eq(nodeMetadata.systemTo, FAR_FUTURE_DATE))
 					.all()
 					.filter((m) => m.nodeId !== "parent-1")
-					.toSorted((a, b) => (a.priority ?? 0) - (b.priority ?? 0));
+					.toSorted((a, b) => compareBinary(a.orderKey ?? "", b.orderKey ?? ""));
 
 				expect(current).toStrictEqual([
 					{
 						nodeId: "existing-1",
-						priority: -800,
+						orderKey: "a0",
 					},
 					{
 						nodeId: "new-1",
-						priority: -700,
+						orderKey: "a04",
 					},
 					{
 						nodeId: "new-2",
-						priority: -600,
+						orderKey: "a08",
 					},
 					{
 						nodeId: "new-3",
-						priority: -500,
+						orderKey: "a0G",
 					},
 					{
 						nodeId: "new-4",
-						priority: -400,
+						orderKey: "a0O",
 					},
 					{
 						nodeId: "new-5",
-						priority: -300,
+						orderKey: "a0V",
 					},
 					{
 						nodeId: "new-6",
-						priority: -200,
+						orderKey: "a0d",
 					},
 					{
 						nodeId: "new-7",
-						priority: -100,
+						orderKey: "a0l",
 					},
 					{
 						nodeId: "new-8",
-						priority: 0,
+						orderKey: "a0t",
 					},
 					{
 						nodeId: "existing-2",
-						priority: 100,
+						orderKey: "a1",
 					},
 				]);
 			});
 
-			it("handles all new nodes with no existing siblings", async () =>
+			it("keys all new siblings in backup order", async () =>
 			{
 				const backupContent = [
 					{
@@ -3650,12 +3644,10 @@ describe("cache import", () =>
 					.where(eq(nodeMetadata.nodeId, "child-3"))
 					.get()!;
 
-				expect(meta1.priority).toBe(0);
-				expect(meta2.priority).toBe(100);
-				expect(meta3.priority).toBe(200);
+				expect([meta1.orderKey, meta2.orderKey, meta3.orderKey]).toStrictEqual(["a0", "a1", "a2"]);
 			});
 
-			it("preserves existing priority on re-import even if tree position changes", async () =>
+			it("keeps existing order keys on a re-import of the same order", async () =>
 			{
 				const initialBackup = [
 					{
@@ -3680,8 +3672,7 @@ describe("cache import", () =>
 					.from(nodeMetadata)
 					.where(eq(nodeMetadata.nodeId, "node-2"))
 					.get()!;
-				expect(initialMeta1.priority).toBe(0);
-				expect(initialMeta2.priority).toBe(100);
+				expect([initialMeta1.orderKey, initialMeta2.orderKey]).toStrictEqual(["a0", "a1"]);
 
 				const result = await importBackup(testDatabase.db, initialPath, "backup.json", false, T1);
 
@@ -3700,8 +3691,7 @@ describe("cache import", () =>
 					.where(eq(nodeMetadata.nodeId, "node-2"))
 					.all()
 					.find((m) => m.systemTo === FAR_FUTURE_DATE)!;
-				expect(finalMeta1.priority).toBe(0);
-				expect(finalMeta2.priority).toBe(100);
+				expect([finalMeta1.orderKey, finalMeta2.orderKey]).toStrictEqual(["a0", "a1"]);
 			});
 		});
 
@@ -5774,8 +5764,7 @@ describe("cache service", () =>
 					{
 						nodeId: "node-1",
 						shortId: "node1",
-						priority: 5,
-						orderKey: "a5",
+						orderKey: "a0",
 						createdAt: FIXED_DATE,
 						modifiedAt: FIXED_DATE,
 						completedAt: null,
@@ -5810,7 +5799,6 @@ describe("cache service", () =>
 					{
 						nodeId: "new-node",
 						shortId: "newnode",
-						priority: 0,
 						orderKey: "a0",
 						createdAt: FIXED_DATE,
 						modifiedAt: FIXED_DATE,

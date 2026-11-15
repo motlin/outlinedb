@@ -10,6 +10,7 @@ import {aiMetadata, nodeContent, nodeMetadata} from "@outlinedb/shared/db";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
 import {httpAppFor} from "./http-app-for.js";
+import {integerOrderKey} from "./helpers/integer-order-key.js";
 
 const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 const SEEDED_AT = "2026-01-01 00:00:00.000";
@@ -66,7 +67,7 @@ function setup()
 			.values(
 				{
 					nodeId: id,
-					priority,
+					orderKey: integerOrderKey(priority),
 					systemFrom: SEEDED_AT,
 					systemTo: FAR_FUTURE_DATE,
 				},

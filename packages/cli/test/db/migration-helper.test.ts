@@ -210,7 +210,7 @@ describe("migration-helper", () =>
 					{
 						nodeId: "split-id",
 						shortId: "split",
-						priority: node.priority,
+						orderKey: "a0",
 						createdAt: node.createdAt,
 						modifiedAt: node.modifiedAt,
 						completedAt: node.completedAt,

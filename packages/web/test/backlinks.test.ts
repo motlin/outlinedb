@@ -12,6 +12,7 @@ import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
 import {notReferencesContent, backlinkTargetsOfSource, backlinksNeedSync} from "../src/server/backlinks.js";
 import {httpAppFor} from "./http-app-for.js";
+import {integerOrderKey} from "./helpers/integer-order-key.js";
 
 describe("backlinks route", () =>
 {
@@ -86,7 +87,7 @@ describe("backlinks route", () =>
 				.values(
 					{
 						nodeId: id,
-						priority,
+						orderKey: integerOrderKey(priority),
 						completedAt: id === "src-2" ? COMPLETED_AT : null,
 						systemFrom: SEEDED_AT,
 						systemTo: FAR_FUTURE_DATE,
@@ -273,7 +274,7 @@ describe("backlinks route", () =>
 								parent_id: "refs",
 								name: "Also Target",
 								note: null,
-								priority: 1,
+								priority: 0,
 								data:
 								{
 									layoutMode: null,
@@ -485,7 +486,7 @@ describe("backlinks sync need", () =>
 					{
 						nodeId: id,
 						shortId: short(id),
-						priority: 0,
+						orderKey: integerOrderKey(0),
 						systemFrom: SEEDED_AT,
 						systemTo: FAR_FUTURE_DATE,
 					},

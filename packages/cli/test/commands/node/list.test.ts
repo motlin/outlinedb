@@ -177,7 +177,7 @@ describe("node:list command", () =>
 					{
 						nodeId: "real-inbox-0000-41bd95477fbc",
 						shortId: "41bd95477fbc",
-						priority: 0,
+						orderKey: "a0",
 						...current,
 					},
 				)

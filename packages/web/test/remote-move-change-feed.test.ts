@@ -234,7 +234,7 @@ describe("remote transactions reach the nodes change feed", () =>
 		expect(shape(body)).toStrictEqual(
 			{
 				reset: false,
-				changedIds: new Set(["X", "Y"]),
+				changedIds: new Set(["X"]),
 				deletedIds: new Set(),
 				children:
 				{
@@ -282,7 +282,7 @@ describe("remote transactions reach the nodes change feed", () =>
 		expect(shape(body)).toStrictEqual(
 			{
 				reset: false,
-				changedIds: new Set(["Y", "Z", "P2"]),
+				changedIds: new Set(["Y", "Z"]),
 				deletedIds: new Set(),
 				children:
 				{
@@ -403,7 +403,7 @@ describe("remote transactions reach the nodes change feed", () =>
 		).toStrictEqual(
 			{
 				reset: false,
-				changedIds: new Set(["N", "C", "Y"]),
+				changedIds: new Set(["N", "C"]),
 				deletedIds: new Set(),
 				children:
 				{
@@ -597,7 +597,7 @@ describe("remote transactions reach the nodes change feed", () =>
 		);
 	});
 
-	it("a remote delete ends the node's subtree and closes the gap among its siblings", async () =>
+	it("a remote delete ends the node's subtree and leaves its siblings' keys alone", async () =>
 	{
 		const {sqlite, api, adapter, changes} = setup();
 		open.push(sqlite);
@@ -625,7 +625,7 @@ describe("remote transactions reach the nodes change feed", () =>
 		expect(shape(body)).toStrictEqual(
 			{
 				reset: false,
-				changedIds: new Set(["P1", "X", "Y", "P2"]),
+				changedIds: new Set(["P1", "X", "Y"]),
 				deletedIds: new Set(["P1", "X", "Y"]),
 				children:
 				{

@@ -1,6 +1,7 @@
 import DatabaseConstructor from "better-sqlite3";
 import type {Database} from "better-sqlite3";
 import {eq} from "drizzle-orm";
+import {generateNKeysBetween} from "fractional-indexing";
 import {drizzle} from "drizzle-orm/better-sqlite3";
 import type {BetterSQLite3Database} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
@@ -18,6 +19,12 @@ import {BackupFileSchema} from "@outlinedb/shared/schemas";
 import type {BackupNode} from "@outlinedb/shared/schemas";
 
 const currentDirectory = import.meta.dirname;
+
+/** The order key of a 0-based sibling index: the fractional-indexing integer key, so index order is key order. */
+function indexOrderKey(index: number): string
+{
+	return generateNKeysBetween(null, null, index + 1).at(-1) ?? "a0";
+}
 const migrationsFolder = join(currentDirectory, "../../src/db/migrations");
 const fixturesFolder = join(currentDirectory, "../fixtures");
 
@@ -103,8 +110,8 @@ function unixSecondsToDate(seconds: number | null | undefined): Date | null
  * production adapter lives in `packages/cli`, which `packages/shared` cannot
  * import, so this is the deliberate handcrafted twin from the Phase 4 plan.
  *
- * The bulk-export tree uses sibling order for priority: each node's priority is
- * its zero-based index among its siblings.
+ * The bulk-export tree uses sibling order: each node's order key is the integer
+ * key of its zero-based index among its siblings.
  */
 export function normalizeBackupNodes(nodes: BackupNode[]): NormalizedRowsByTable
 {
@@ -127,7 +134,7 @@ export function normalizeBackupNodes(nodes: BackupNode[]): NormalizedRowsByTable
 				{
 					nodeId: node.id,
 					shortId: uuidToShortId(node.id),
-					priority: index,
+					orderKey: indexOrderKey(index),
 					createdAt: unixSecondsToDate(node.ct),
 					modifiedAt: unixSecondsToDate(node.lm),
 					completedAt: unixSecondsToDate(node.cp),
@@ -221,7 +228,7 @@ export function normalizeRestNodes(nodes: WorkflowyNode[]): NormalizedRowsByTabl
 			{
 				nodeId: node.id,
 				shortId: uuidToShortId(node.id),
-				priority: node.priority,
+				orderKey: indexOrderKey(node.priority),
 				createdAt: unixSecondsToDate(node.createdAt),
 				modifiedAt: unixSecondsToDate(node.modifiedAt),
 				completedAt: unixSecondsToDate(node.completedAt),
@@ -306,7 +313,7 @@ export function restDtoToNormalizedRows(dtos: RestDto[]): NormalizedRowsByTable
 			{
 				nodeId: dto.id,
 				shortId: uuidToShortId(dto.id),
-				priority: dto.priority,
+				orderKey: indexOrderKey(dto.priority),
 				createdAt: unixSecondsToDate(dto.createdAt),
 				modifiedAt: unixSecondsToDate(dto.modifiedAt),
 				completedAt: unixSecondsToDate(dto.completedAt),

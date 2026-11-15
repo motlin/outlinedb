@@ -452,6 +452,7 @@ export class WorkflowyWriteThroughClient
 				note: null,
 			},
 			mirrorParentId,
+			position,
 		);
 		this.cacheService.insertMirror(result.originId, result.mirrorId);
 		return result;

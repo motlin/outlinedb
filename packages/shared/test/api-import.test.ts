@@ -604,10 +604,10 @@ describe("shared API import", () =>
 		expect(snapshot(db).content).toHaveLength(7);
 	});
 
-	describe("sibling priority numbering schemes", () =>
+	describe("sibling order keys", () =>
 	{
 		// Backup imports number siblings 0,100,200 while REST numbers them 0,1,2 for the
-		// same order; re-importing one scheme over the other must not open versions.
+		// same order; only the order maps to keys, so re-importing one scheme over the other opens no version.
 		const parent = apiNode(
 			"p",
 			{
@@ -663,7 +663,7 @@ describe("shared API import", () =>
 			),
 		];
 
-		function priorities(db: ReturnType<typeof createDb>)
+		function orderKeys(db: ReturnType<typeof createDb>)
 		{
 			return db
 				.select()
@@ -671,7 +671,7 @@ describe("shared API import", () =>
 				.all()
 				.filter((row) => row.systemTo === FAR_FUTURE_DATE && row.nodeId !== "p")
 				.toSorted((x, y) => x.nodeId.localeCompare(y.nodeId))
-				.map((row) => [row.nodeId, row.priority]);
+				.map((row) => [row.nodeId, row.orderKey]);
 		}
 
 		function versionCount(db: ReturnType<typeof createDb>)
@@ -700,16 +700,16 @@ describe("shared API import", () =>
 			expect(
 				{
 					versions: versionCount(db),
-					priorities: priorities(db),
+					orderKeys: orderKeys(db),
 					metadataUpdated: result.metadataUpdated,
 				},
 			).toStrictEqual(
 				{
 					versions: 4,
-					priorities: [
-						["x", 0],
-						["y", 100],
-						["z", 200],
+					orderKeys: [
+						["x", "a0"],
+						["y", "a1"],
+						["z", "a2"],
 					],
 					metadataUpdated: 0,
 				},
@@ -737,17 +737,17 @@ describe("shared API import", () =>
 			expect(versionCount(db)).toBe(4);
 		});
 
-		it("takes the incoming numbers when the sibling order really changed", () =>
+		it("gives only the moved sibling a new key when one sibling moves to the front", () =>
 		{
 			const db = createDb();
 			importFromApi(
 				db,
-				backupScheme,
+				restScheme,
 				{
 					timestamp: T0,
 				},
 			);
-			importFromApi(
+			const result = importFromApi(
 				db,
 				[
 					parent,
@@ -755,21 +755,21 @@ describe("shared API import", () =>
 						"x",
 						{
 							parent_id: "p",
-							priority: 2,
+							priority: 1,
 						},
 					),
 					apiNode(
 						"y",
 						{
 							parent_id: "p",
-							priority: 0,
+							priority: 2,
 						},
 					),
 					apiNode(
 						"z",
 						{
 							parent_id: "p",
-							priority: 1,
+							priority: 0,
 						},
 					),
 				],
@@ -778,14 +778,26 @@ describe("shared API import", () =>
 				},
 			);
 
-			expect(priorities(db)).toStrictEqual([
-				["x", 2],
-				["y", 0],
-				["z", 1],
-			]);
+			expect(
+				{
+					versions: versionCount(db),
+					orderKeys: orderKeys(db),
+					metadataUpdated: result.metadataUpdated,
+				},
+			).toStrictEqual(
+				{
+					versions: 5,
+					orderKeys: [
+						["x", "a0"],
+						["y", "a1"],
+						["z", "Zz"],
+					],
+					metadataUpdated: 1,
+				},
+			);
 		});
 
-		it("takes the incoming numbers when a sibling is new", () =>
+		it("gives a new sibling a key between its neighbours", () =>
 		{
 			const db = createDb();
 			importFromApi(
@@ -803,7 +815,7 @@ describe("shared API import", () =>
 						"n",
 						{
 							parent_id: "p",
-							priority: 3,
+							priority: 1,
 						},
 					),
 				],
@@ -812,11 +824,54 @@ describe("shared API import", () =>
 				},
 			);
 
-			expect(priorities(db)).toStrictEqual([
-				["n", 3],
-				["x", 0],
-				["y", 1],
-				["z", 2],
+			expect(orderKeys(db)).toStrictEqual([
+				["n", "a0V"],
+				["x", "a0"],
+				["y", "a1"],
+				["z", "a2"],
+			]);
+		});
+
+		it("places a new sibling between neighbours that an earlier batch placed", () =>
+		{
+			const db = createDb();
+			importFromApi(
+				db,
+				restScheme,
+				{
+					timestamp: T0,
+				},
+			);
+			const state = beginApiImport(
+				db,
+				{
+					timestamp: T1,
+				},
+			);
+			applyApiBatch(state, restScheme.slice(0, 3));
+			applyApiBatch(state, [
+				apiNode(
+					"n",
+					{
+						parent_id: "p",
+						priority: 2,
+					},
+				),
+				apiNode(
+					"z",
+					{
+						parent_id: "p",
+						priority: 3,
+					},
+				),
+			]);
+			finishApiImport(state);
+
+			expect(orderKeys(db)).toStrictEqual([
+				["n", "a1V"],
+				["x", "a0"],
+				["y", "a1"],
+				["z", "a2"],
 			]);
 		});
 	});
@@ -850,7 +905,8 @@ describe("shared API import", () =>
 				.toSorted((x, y) => x.systemFrom.localeCompare(y.systemFrom))
 				.map((row) => (
 				{
-					priority: row.priority,
+					orderKey: row.orderKey,
+					layoutMode: row.layoutMode,
 					createdAt: row.createdAt?.getTime() ?? null,
 					modifiedAt: row.modifiedAt?.getTime() ?? null,
 					completedAt: row.completedAt?.getTime() ?? null,
@@ -894,7 +950,8 @@ describe("shared API import", () =>
 
 			expect(metadataVersions(db)).toStrictEqual([
 				{
-					priority: 0,
+					orderKey: "a0",
+					layoutMode: null,
 					createdAt: ceilSide.createdAt * 1000,
 					modifiedAt: ceilSide.modifiedAt * 1000,
 					completedAt: ceilSide.completedAt * 1000,
@@ -949,12 +1006,14 @@ describe("shared API import", () =>
 			};
 			expect(metadataVersions(db)).toStrictEqual([
 				{
-					priority: 0,
+					orderKey: "a0",
+					layoutMode: null,
 					...kept,
 					open: false,
 				},
 				{
-					priority: 0,
+					orderKey: "a0",
+					layoutMode: "todo",
 					...kept,
 					open: true,
 				},
@@ -1002,7 +1061,8 @@ describe("shared API import", () =>
 
 			expect(metadataVersions(db).at(-1)).toStrictEqual(
 				{
-					priority: 0,
+					orderKey: "a0",
+					layoutMode: "todo",
 					createdAt: ceilSide.createdAt * 1000,
 					modifiedAt: 1_758_565_500_000,
 					completedAt: ceilSide.completedAt * 1000,
@@ -1041,7 +1101,10 @@ describe("shared API import", () =>
 						SKEW_NODE,
 						{
 							name: "Placeholder",
-							priority: 100,
+							data:
+							{
+								layoutMode: "todo",
+							},
 							...floorSide,
 						},
 					),
@@ -1057,12 +1120,14 @@ describe("shared API import", () =>
 			};
 			expect(metadataVersions(db)).toStrictEqual([
 				{
-					priority: 0,
+					orderKey: "a0",
+					layoutMode: null,
 					...kept,
 					open: false,
 				},
 				{
-					priority: 100,
+					orderKey: "a0",
+					layoutMode: "todo",
 					...kept,
 					open: true,
 				},

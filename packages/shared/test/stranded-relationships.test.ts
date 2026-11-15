@@ -67,7 +67,7 @@ function setup()
 			.values(
 				{
 					nodeId: id,
-					priority: 0,
+					orderKey: "a0",
 					systemFrom: SEEDED,
 					systemTo,
 				},
@@ -226,7 +226,7 @@ describe("stranded relationship rows", () =>
 					.values(
 						{
 							nodeId: "item-new",
-							priority: 3,
+							orderKey: "a3",
 							...temporal,
 						},
 					)

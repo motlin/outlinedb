@@ -83,17 +83,15 @@ function place(cache: CacheService, ids: readonly string[], parentId: string | n
 	const others = before.filter((id) => !moving.has(id));
 	const at = before.slice(0, index).filter((id) => !moving.has(id)).length;
 	const order = [...others.slice(0, at), ...ids, ...others.slice(at)];
-	for (const [priority, id] of order.entries())
-	{
-		cache.insertNode(
-			{
-				...read(cache, id),
-				parent_id: parentId,
-				priority,
-			},
-			parentId,
-		);
-	}
+	cache.storeApiResponse(
+		order.map((id, priority) => (
+		{
+			...read(cache, id),
+			parent_id: parentId,
+			priority,
+		})),
+		parentId,
+	);
 }
 
 /** Stands in for `WorkflowyWriteThroughClient`, with the constructor arguments the routes pass it. */

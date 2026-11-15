@@ -1,3 +1,4 @@
+import {orderKeysFor} from "@outlinedb/shared/cache";
 import type {NewNodeContent, NewNodeMetadata} from "@outlinedb/shared/db";
 import type {WorkflowyNode} from "@outlinedb/shared/types";
 import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@outlinedb/shared/temporal";
@@ -17,6 +18,24 @@ export interface TestNode
 	layoutMode: string | null;
 	systemFrom: string;
 	systemTo: string;
+}
+
+/** The order key of a 0-based sibling index: the fractional-indexing integer key, so index order is key order. */
+function indexOrderKey(index: number): string
+{
+	const keys = orderKeysFor(
+		Array.from(
+			{
+				length: index + 1,
+			},
+			(_, at) => (
+			{
+				id: String(at),
+				orderKey: null,
+			}),
+		),
+	);
+	return keys.get(String(index)) ?? "a0";
 }
 
 function generateTestId(): string
@@ -110,6 +129,7 @@ export function splitNodeIntoContentAndMetadata(node: TestNode):
 {
 	const {id, name, note, parentId, systemFrom, systemTo} = node;
 	const {shortId, priority, createdAt, modifiedAt, completedAt, layoutMode} = node;
+	const orderKey = priority === null ? null : indexOrderKey(priority);
 
 	return {
 		content:
@@ -125,7 +145,7 @@ export function splitNodeIntoContentAndMetadata(node: TestNode):
 		{
 			nodeId: id,
 			shortId,
-			priority,
+			orderKey,
 			createdAt,
 			modifiedAt,
 			completedAt,

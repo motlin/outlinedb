@@ -49,7 +49,7 @@ export type WithoutTemporal<T> = Omit<T, "systemFrom" | "systemTo">;
 export type NormalizedNodeContentRow = WithoutTemporal<NewNodeContent>;
 
 /**
- * One `node_metadata` row as produced by an import adapter: shortId, priority,
+ * One `node_metadata` row as produced by an import adapter: shortId, order key,
  * timestamps, layoutMode. Does NOT affect embeddings.
  */
 export type NormalizedNodeMetadataRow = WithoutTemporal<NewNodeMetadata>;

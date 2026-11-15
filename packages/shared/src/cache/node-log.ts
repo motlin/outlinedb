@@ -1,7 +1,7 @@
 /**
  * Replays the node ops of `/push_and_poll` transaction logs onto `node_content` and `node_metadata`, so a change made
  * by another client lands in the cache (and so in the nodes change feed) without a tree read:
- * - `move` and `bulk_move` set parents and priorities. Upstream's index semantics (internal-api.md): a `move`'s
+ * - `move` and `bulk_move` set parents and sibling order. Upstream's index semantics (internal-api.md): a `move`'s
  *   `priority` is the slot after the node leaves its old place, and a `bulk_move`'s is the count of non-moved siblings
  *   before the block.
  * - `edit` sets the name and note (`description`) when it carries them.
@@ -28,6 +28,7 @@ import {readWorkflowyEpoch} from "./account-store.js";
 import {normalizeLayoutMode, systemFromToDate} from "./cache-temporal.js";
 import type {LoggedOp} from "./relationship-log.js";
 import type {UnitOfWork} from "./node-composite.js";
+import {DEFAULT_ORDER_KEY, orderKeysFor} from "./order-key.js";
 import {withdrawNodeComposites} from "./node-composite.js";
 import {closeCurrentVersions} from "./temporal-merge.js";
 
@@ -238,6 +239,8 @@ class TreeModel
 		{
 			parentId: string | null;
 			ids: string[];
+			/** The order key of each child the list held when it was loaded. */
+			loadedKeys: Map<string, string | null>;
 		}
 	>();
 	readonly changes = new Map<string, NodeChange>();
@@ -290,13 +293,14 @@ class TreeModel
 		{
 			return loaded.ids;
 		}
-		const ids =
+		const rows =
 			parentId !== null && this.created.has(parentId)
 				? []
 				: this.unitOfWork.tx
 						.select(
 							{
 								id: nodeContent.id,
+								orderKey: nodeMetadata.orderKey,
 							},
 						)
 						.from(nodeContent)
@@ -311,18 +315,18 @@ class TreeModel
 							),
 						)
 						.orderBy(
-							sql`${nodeMetadata.orderKey} IS NULL`,
-							asc(nodeMetadata.orderKey),
+							sql`coalesce(${nodeMetadata.orderKey}, ${DEFAULT_ORDER_KEY})`,
 							sql`coalesce(${nodeMetadata.createdAt}, 0)`,
 							asc(nodeContent.id),
 						)
-						.all()
-						.map((row) => row.id);
+						.all();
+		const ids = rows.map((row) => row.id);
 		this.children.set(
 			key,
 			{
 				parentId,
 				ids,
+				loadedKeys: new Map(rows.map((row) => [row.id, row.orderKey])),
 			},
 		);
 		return ids;
@@ -407,6 +411,7 @@ class TreeModel
 				{
 					parentId: tree.id,
 					ids: [],
+					loadedKeys: new Map(),
 				},
 			);
 			this.create(tree.id, 0, tree.ch ?? [], opTime);
@@ -442,15 +447,25 @@ class TreeModel
 	}
 }
 
-/** The priority of every node in a loaded child list. */
-function priorities(model: TreeModel): Map<string, number>
+/**
+ * The new order key of every node whose place the batch changed: each touched child list maps onto keys, so a sibling
+ * still in the order it was loaded in keeps its key and only created, moved or reordered nodes get one between their
+ * neighbours.
+ */
+function changedOrderKeys(model: TreeModel): Map<string, string>
 {
-	const result = new Map<string, number>();
-	for (const {ids} of model.children.values())
+	const result = new Map<string, string>();
+	for (const {ids, loadedKeys} of model.children.values())
 	{
-		for (const [priority, id] of ids.entries())
+		for (const [id, orderKey] of orderKeysFor(
+			ids.map((childId) => (
+			{
+				id: childId,
+				orderKey: loadedKeys.get(childId),
+			})),
+		))
 		{
-			result.set(id, priority);
+			result.set(id, orderKey);
 		}
 	}
 	return result;
@@ -466,7 +481,7 @@ function writeModel(unitOfWork: UnitOfWork, model: TreeModel): void
 		systemTo: FAR_FUTURE_DATE,
 	};
 	withdrawNodeComposites(unitOfWork, [...model.deleted]);
-	const slots = priorities(model);
+	const orderKeys = changedOrderKeys(model);
 	for (const [id, node] of model.created)
 	{
 		tx.insert(nodeContent)
@@ -485,7 +500,7 @@ function writeModel(unitOfWork: UnitOfWork, model: TreeModel): void
 				{
 					nodeId: id,
 					shortId: uuidToShortId(id),
-					priority: slots.get(id) ?? null,
+					orderKey: orderKeys.get(id) ?? null,
 					createdAt: node.createdAt,
 					modifiedAt: node.createdAt,
 					completedAt: node.completedAt,
@@ -530,7 +545,7 @@ function writeModel(unitOfWork: UnitOfWork, model: TreeModel): void
 			)
 			.run();
 	}
-	const metadataIds = new Set([...slots.keys(), ...model.changes.keys()].filter(kept));
+	const metadataIds = new Set([...orderKeys.keys(), ...model.changes.keys()].filter(kept));
 	for (const id of metadataIds)
 	{
 		const row = tx
@@ -545,10 +560,10 @@ function writeModel(unitOfWork: UnitOfWork, model: TreeModel): void
 		const completedAt = model.changes.get(id)?.completedAt;
 		const next =
 		{
-			priority: slots.get(id) ?? row.priority,
+			orderKey: orderKeys.get(id) ?? row.orderKey,
 			completedAt: completedAt === undefined ? row.completedAt : completedAt,
 		};
-		if (next.priority === row.priority && next.completedAt?.getTime() === row.completedAt?.getTime())
+		if (next.orderKey === row.orderKey && next.completedAt?.getTime() === row.completedAt?.getTime())
 		{
 			continue;
 		}
@@ -558,13 +573,6 @@ function writeModel(unitOfWork: UnitOfWork, model: TreeModel): void
 				{
 					...row,
 					...next,
-					// A null key lets the insert trigger derive the key from the new priority.
-					...(next.priority === row.priority
-						? {}
-						:
-							{
-								orderKey: null,
-							}),
 					...current,
 				},
 			)

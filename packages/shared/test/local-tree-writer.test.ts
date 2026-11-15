@@ -78,7 +78,7 @@ function setup()
 			SEED.map(([id, , priority]) => (
 			{
 				nodeId: id,
-				priority,
+				orderKey: `a${priority}`,
 				createdAt: SEEDED,
 				modifiedAt: SEEDED,
 				systemFrom: SEEDED_AT,
@@ -130,7 +130,6 @@ function setup()
 			.select(
 				{
 					nodeId: nodeMetadata.nodeId,
-					priority: nodeMetadata.priority,
 					orderKey: nodeMetadata.orderKey,
 					createdAt: nodeMetadata.createdAt,
 					modifiedAt: nodeMetadata.modifiedAt,
@@ -188,12 +187,11 @@ function setup()
 	};
 }
 
-/** A metadata version a seeded node keeps, or the one it ends at `NOW`; the migration triggers key it by its priority. */
+/** A metadata version a seeded node keeps, or the one it ends at `NOW`, keyed as the integer key of its seed position. */
 function seeded(nodeId: string, priority: number, systemTo = FAR_FUTURE_DATE)
 {
 	return {
 		nodeId,
-		priority,
 		orderKey: `a${priority}`,
 		createdAt: SEEDED,
 		modifiedAt: SEEDED,
@@ -285,7 +283,6 @@ describe("LocalTreeWriter", () =>
 					seeded("c", 2),
 					{
 						nodeId: "n",
-						priority: null,
 						orderKey: "Zz",
 						createdAt: NOW_DATE,
 						modifiedAt: NOW_DATE,
@@ -364,7 +361,7 @@ describe("LocalTreeWriter", () =>
 			.update(nodeMetadata)
 			.set(
 				{
-					priority: 0,
+					orderKey: "a0",
 				},
 			)
 			.where(eq(nodeMetadata.nodeId, "b"))
@@ -954,7 +951,6 @@ describe("LocalTreeWriter", () =>
 		const created = (nodeId: string, orderKey: string, extra: object = {}) => (
 		{
 			nodeId,
-			priority: null,
 			orderKey,
 			createdAt: NOW_DATE,
 			modifiedAt: NOW_DATE,
@@ -1278,13 +1274,11 @@ describe("LocalTreeWriter", () =>
 					seeded("c", 2, NOW),
 					{
 						...seeded("c", 2),
-						priority: null,
 						systemFrom: LATER,
 					},
 					seeded("c1", 0, NOW),
 					{
 						...seeded("c1", 0),
-						priority: null,
 						systemFrom: LATER,
 					},
 				],

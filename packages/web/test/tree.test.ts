@@ -56,6 +56,7 @@ import type {Hono} from "hono";
 import {nodeTreeHost} from "../src/server/node-host.js";
 import type {ServerContext} from "../src/server/context.js";
 import {httpAppFor} from "./http-app-for.js";
+import {integerOrderKey} from "./helpers/integer-order-key.js";
 
 describe("tree host", () =>
 {
@@ -131,7 +132,7 @@ describe("tree host", () =>
 			.values(
 				{
 					nodeId: id,
-					priority,
+					orderKey: integerOrderKey(priority),
 					systemFrom: SEEDED_AT,
 					systemTo: FAR_FUTURE_DATE,
 				},
@@ -4368,7 +4369,7 @@ describe("tree snapshot flag", () =>
 				.values(
 					{
 						nodeId: id,
-						priority,
+						orderKey: integerOrderKey(priority),
 						systemFrom: SEEDED_AT,
 						systemTo: FAR_FUTURE_DATE,
 					},

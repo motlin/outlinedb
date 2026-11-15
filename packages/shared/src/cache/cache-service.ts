@@ -8,6 +8,7 @@ import {isSystemTarget} from "../types/targets.js";
 import type {WorkflowyNode} from "../types/workflowy.js";
 import {uuidToShortId} from "../workflowy/constants.js";
 import {and, eq, isNull, like, notInArray, or, sql} from "drizzle-orm";
+import {generateKeyBetween} from "fractional-indexing";
 import
 {
 	contentMatches,
@@ -23,7 +24,7 @@ import {inIds} from "./in-ids.js";
 import {loadMirrorOriginals, notAMirror} from "./mirror-text.js";
 import {endNodeComposites, runUnitOfWork} from "./node-composite.js";
 import {currentSiblingIndexes, NodeReader} from "./node-reader.js";
-import {compareSiblingOrder} from "./order-key.js";
+import {compareBinary, compareSiblingOrder, DEFAULT_ORDER_KEY, orderKeysFor} from "./order-key.js";
 import {newSystemTimestamp} from "./system-time.js";
 import {closeCurrentVersions} from "./temporal-merge.js";
 import type {TemporalTransaction} from "./temporal-merge.js";
@@ -78,7 +79,7 @@ function metadataFields(metadata: NodeMetadataRow | null)
 {
 	return {
 		shortId: metadata?.shortId ?? null,
-		priority: metadata?.priority ?? null,
+		priority: null,
 		createdAt: metadata?.createdAt ?? null,
 		modifiedAt: metadata?.modifiedAt ?? null,
 		completedAt: metadata?.completedAt ?? null,
@@ -207,6 +208,7 @@ function insertContent(db: TemporalTransaction, node: WorkflowyNode, parentId: s
 function insertMetadata(
 	db: TemporalTransaction,
 	node: WorkflowyNode,
+	orderKey: string | null,
 	systemFrom: string,
 	existing?: NodeMetadataRow,
 ): void
@@ -222,7 +224,7 @@ function insertMetadata(
 			{
 				nodeId: node.id,
 				shortId: uuidToShortId(node.id),
-				priority: node.priority,
+				orderKey,
 				...(existing ? keepSkewedTimestamps(existing, timestamps) : timestamps),
 				layoutMode: normalizeLayoutMode(node.data?.layoutMode),
 				systemFrom,
@@ -244,6 +246,7 @@ function upsertNodeVersion(
 	db: TemporalTransaction,
 	node: WorkflowyNode,
 	parentId: string | null,
+	orderKey: string | null,
 	systemTime: string,
 ): void
 {
@@ -256,7 +259,7 @@ function upsertNodeVersion(
 	if (!existingContent)
 	{
 		insertContent(db, node, parentId, systemTime);
-		insertMetadata(db, node, systemTime);
+		insertMetadata(db, node, orderKey, systemTime);
 		return;
 	}
 
@@ -282,7 +285,7 @@ function upsertNodeVersion(
 		.get();
 	const metadata =
 	{
-		priority: node.priority,
+		orderKey,
 		createdAt: node.createdAt,
 		modifiedAt: node.modifiedAt,
 		completedAt: node.completedAt ?? null,
@@ -290,13 +293,74 @@ function upsertNodeVersion(
 	};
 	if (!existingMetadata)
 	{
-		insertMetadata(db, node, systemTime);
+		insertMetadata(db, node, orderKey, systemTime);
 	}
 	else if (!metadataMatches(existingMetadata, metadata))
 	{
 		closeCurrentVersions(db, nodeMetadata, systemTime, eq(nodeMetadata.nodeId, node.id));
-		insertMetadata(db, node, systemTime, existingMetadata);
+		insertMetadata(db, node, orderKey, systemTime, existingMetadata);
 	}
+}
+
+/** The live children of `parentId` in sibling order, each with its order key. */
+function currentChildKeys(
+	db: TemporalTransaction,
+	parentId: string | null,
+):
+{
+	id: string;
+	orderKey: string | null;
+}[]
+{
+	return db
+		.select(
+			{
+				id: nodeContent.id,
+				orderKey: nodeMetadata.orderKey,
+			},
+		)
+		.from(nodeContent)
+		.leftJoin(nodeMetadata, and(eq(nodeMetadata.nodeId, nodeContent.id), currentVersion(nodeMetadata)))
+		.where(
+			and(
+				parentId === null ? isNull(nodeContent.parentId) : eq(nodeContent.parentId, parentId),
+				currentVersion(nodeContent),
+			),
+		)
+		.orderBy(
+			sql`coalesce(${nodeMetadata.orderKey}, ${DEFAULT_ORDER_KEY})`,
+			sql`coalesce(${nodeMetadata.createdAt}, 0)`,
+			nodeContent.id,
+		)
+		.all();
+}
+
+/**
+ * Write one API node under `parentId`. A single node's upstream priority says nothing about where it sits among the
+ * cached siblings, so a node already keyed under `parentId` keeps its key and any other node goes to the `position` end.
+ */
+function upsertPlacedNode(
+	db: TemporalTransaction,
+	node: WorkflowyNode,
+	parentId: string | null,
+	position: "top" | "bottom",
+	systemTime: string,
+): void
+{
+	const siblings = currentChildKeys(db, parentId);
+	const kept = siblings.find((sibling) => sibling.id === node.id)?.orderKey;
+	if (kept !== undefined && kept !== null)
+	{
+		upsertNodeVersion(db, node, parentId, kept, systemTime);
+		return;
+	}
+	const keys = siblings
+		.filter((sibling) => sibling.id !== node.id)
+		.map((sibling) => sibling.orderKey ?? DEFAULT_ORDER_KEY)
+		.toSorted(compareBinary);
+	const orderKey =
+		position === "top" ? generateKeyBetween(null, keys[0] ?? null) : generateKeyBetween(keys.at(-1) ?? null, null);
+	upsertNodeVersion(db, node, parentId, orderKey, systemTime);
 }
 
 /**
@@ -350,7 +414,7 @@ function storeChildren(
 					{
 						nodeId: parentId,
 						shortId: uuidToShortId(parentId),
-						priority: null,
+						orderKey: null,
 						createdAt: null,
 						modifiedAt: null,
 						completedAt: null,
@@ -367,9 +431,25 @@ function storeChildren(
 	// references roots, ai, s3, changes), so closing them here would be
 	// permanent data loss, not a refresh (#1712). import-api's /get_tree_data/ merge,
 	// backup imports and deleteNode() own their lifecycle.
-	for (const apiNode of apiNodes)
+	// The list is the parent's whole child list, so it maps onto keys in upstream order.
+	const ordered = apiNodes.toSorted((a, b) => a.priority - b.priority || compareBinary(a.id, b.id));
+	const cachedKeys = new Map(currentChildKeys(tx, parentId).map((row) => [row.id, row.orderKey]));
+	const changed = orderKeysFor(
+		ordered.map((apiNode) => (
+		{
+			id: apiNode.id,
+			orderKey: cachedKeys.get(apiNode.id),
+		})),
+	);
+	for (const apiNode of ordered)
 	{
-		upsertNodeVersion(tx, apiNode, parentId, systemTime);
+		upsertNodeVersion(
+			tx,
+			apiNode,
+			parentId,
+			changed.get(apiNode.id) ?? cachedKeys.get(apiNode.id) ?? null,
+			systemTime,
+		);
 	}
 
 	if (parentId === null)
@@ -766,12 +846,13 @@ export class CacheService
 	 *
 	 * @param node The newly created node from the API
 	 * @param parentId The parent ID this node belongs to (null for root)
+	 * @param position The end of the cached siblings an uncached node goes to; a cached node keeps its place
 	 */
-	insertNode(node: WorkflowyNode, parentId: string | null): void
+	insertNode(node: WorkflowyNode, parentId: string | null, position: "top" | "bottom" = "bottom"): void
 	{
 		runUnitOfWork(this.database, ({tx, systemTime}) =>
 		{
-			upsertNodeVersion(tx, node, parentId, systemTime);
+			upsertPlacedNode(tx, node, parentId, position, systemTime);
 		});
 	}
 
@@ -825,7 +906,7 @@ export class CacheService
 		runUnitOfWork(this.database, (unitOfWork) =>
 		{
 			endNodeComposites(unitOfWork, [mirrorId]);
-			upsertNodeVersion(unitOfWork.tx, original, parentId, unitOfWork.systemTime);
+			upsertPlacedNode(unitOfWork.tx, original, parentId, "bottom", unitOfWork.systemTime);
 		});
 	}
 

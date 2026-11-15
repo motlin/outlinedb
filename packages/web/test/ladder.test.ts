@@ -23,6 +23,7 @@ import {readFileSync} from "node:fs";
 import {fileURLToPath} from "node:url";
 import {LadderService} from "../src/server/ladder-service.js";
 import {ladderSocketHandlers} from "../src/server/ladder-socket.js";
+import {integerOrderKey} from "./helpers/integer-order-key.js";
 import
 {
 	applyLadderEvent,
@@ -421,7 +422,7 @@ describe("ladder route events", () =>
 				{
 					nodeId: id,
 					shortId: id.slice(-12),
-					priority: counter,
+					orderKey: integerOrderKey(counter),
 					systemFrom: SEEDED_AT,
 					systemTo: FAR_FUTURE_DATE,
 				},

@@ -14,7 +14,7 @@ import type
 	SearchResult as QmdSearchResult,
 	QMDStore,
 } from "@tobilu/qmd";
-import {buildEmbedTexts, loadEmbeddableNodes, PathBuilder} from "@outlinedb/shared/cache";
+import {buildEmbedTexts, currentSiblingIndexes, loadEmbeddableNodes, PathBuilder} from "@outlinedb/shared/cache";
 import {logger} from "./logger.js";
 import {nullable} from "../utils/nullable.js";
 
@@ -350,7 +350,7 @@ export class QmdSearchService
 			const referencesRoot = nullable(nodeWithRelations.referencesRoot);
 			const aiMetadata = nullable(nodeWithRelations.aiMetadata);
 
-			const priority = metadata?.priority ?? 0;
+			const priority = currentSiblingIndexes(this.database, [nodeWithRelations]).get(nodeWithRelations.id) ?? 0;
 			const data: Record<string, unknown> = {};
 
 			if (metadata?.layoutMode)

@@ -11,6 +11,7 @@ import
 	endOrphanedParts,
 	endStrandedBacklinkItems,
 	mergeItemRelationships,
+	orderKeysFor,
 	readWorkflowyEpoch,
 	runBulkUnitOfWork,
 	runUnitOfWork,
@@ -124,198 +125,6 @@ async function getOrFetchWorkflowyEpoch(tx: TemporalTransaction): Promise<number
 function timestampToDate(timestamp: number | null | undefined): Date | null
 {
 	return timestamp === null || timestamp === undefined ? null : new Date(timestamp * 1000);
-}
-
-interface KnownPriority
-{
-	index: number;
-	priority: number;
-}
-
-/**
- * Find the previous element with a non-null priority.
- */
-function findPrevWithPriority(arr: (number | null)[], start: number): KnownPriority | null
-{
-	for (let i = start - 1; i >= 0; i--)
-	{
-		const priority = arr[i];
-		if (priority !== null && priority !== undefined)
-		{
-			return {
-				index: i,
-				priority,
-			};
-		}
-	}
-	return null;
-}
-
-/**
- * Find the next element with a non-null priority.
- */
-function findNextWithPriority(arr: (number | null)[], start: number): KnownPriority | null
-{
-	for (let i = start + 1; i < arr.length; i++)
-	{
-		const priority = arr[i];
-		if (priority !== null && priority !== undefined)
-		{
-			return {
-				index: i,
-				priority,
-			};
-		}
-	}
-	return null;
-}
-
-/**
- * Anchor on the existing node furthest right in backup order and space every
- * sibling 100 apart from it. Used when the existing order changed, or when a new
- * node has no free integer between its neighbours.
- */
-function respaceFromAnchor(
-	siblings:
-	{
-		id: string;
-		existingPriority: number | null;
-	}[],
-): Map<string, number>
-{
-	const result = new Map<string, number>();
-	const anchorIdx = siblings.findLastIndex((s) => s.existingPriority !== null);
-	const anchorPriority = siblings[anchorIdx]?.existingPriority ?? 0;
-	for (const [i, sibling] of siblings.entries())
-	{
-		const priority = anchorPriority + (i - anchorIdx) * 100;
-		if (sibling.existingPriority !== priority)
-		{
-			result.set(sibling.id, priority);
-		}
-	}
-	return result;
-}
-
-/**
- * Calculate priorities for siblings, handling both new nodes and order changes.
- *
- * For NEW nodes (existingPriority is null): infer priority from neighbors.
- * For EXISTING nodes: check if ORDER changed. If order matches, keep existing priorities.
- * If order changed, recalculate using anchors (nodes whose relative position is stable).
- *
- * @param siblings - Array of {id, backupPosition, existingPriority} sorted by backupPosition
- * @returns Map of nodeId → priority (only for nodes that need updating)
- */
-function calculatePriorities(
-	siblings:
-	{
-		id: string;
-		backupPosition: number;
-		existingPriority: number | null;
-	}[],
-): Map<string, number>
-{
-	const result = new Map<string, number>();
-
-	// Separate new nodes from existing nodes
-	const existingNodes = siblings.flatMap((s) =>
-		s.existingPriority === null
-			? []
-			: [
-					{
-						id: s.id,
-						existingPriority: s.existingPriority,
-					},
-				],
-	);
-	const newNodes = siblings.filter((s) => s.existingPriority === null);
-
-	// If all nodes are new, assign priorities based on backup position
-	if (existingNodes.length === 0)
-	{
-		for (const [i, sibling] of siblings.entries())
-		{
-			result.set(sibling.id, i * 100);
-		}
-		return result;
-	}
-
-	// Check if order changed for existing nodes
-	// Existing order: sort by priority, extract IDs
-	const existingOrder = existingNodes.toSorted((a, b) => a.existingPriority - b.existingPriority).map((s) => s.id);
-	// Backup order: already sorted by backupPosition, just extract IDs of existing nodes
-	const backupOrderOfExisting = existingNodes.map((s) => s.id);
-
-	const orderChanged = existingOrder.some((id, i) => id !== backupOrderOfExisting[i]);
-
-	if (!orderChanged && newNodes.length === 0)
-	{
-		// Order unchanged, no new nodes - nothing to do
-		return result;
-	}
-
-	if (orderChanged)
-	{
-		return respaceFromAnchor(siblings);
-	}
-
-	// Build working array of priorities (null means needs calculation)
-	const priorities: (number | null)[] = siblings.map((s) => s.existingPriority);
-
-	// Handle new nodes using middle-out algorithm (expand from known priorities)
-	let changed = true;
-	while (changed)
-	{
-		changed = false;
-		for (const [i, sibling] of siblings.entries())
-		{
-			if (priorities[i] !== null)
-			{
-				continue;
-			}
-
-			const prev = findPrevWithPriority(priorities, i);
-			const next = findNextWithPriority(priorities, i);
-
-			const adjacentToPrev = prev?.index === i - 1;
-			const adjacentToNext = next?.index === i + 1;
-
-			if (!adjacentToPrev && !adjacentToNext)
-			{
-				continue;
-			}
-
-			let newPriority: number;
-			if (prev && next)
-			{
-				// No integer fits strictly between the neighbours, so the gap is used up.
-				if (next.priority - prev.priority < 2)
-				{
-					return respaceFromAnchor(siblings);
-				}
-				newPriority = Math.floor((prev.priority + next.priority) / 2);
-			}
-			else if (prev)
-			{
-				newPriority = prev.priority + 100;
-			}
-			else if (next)
-			{
-				newPriority = next.priority - 100;
-			}
-			else
-			{
-				continue;
-			}
-
-			priorities[i] = newPriority;
-			result.set(sibling.id, newPriority);
-			changed = true;
-		}
-	}
-
-	return result;
 }
 
 /** Convert a cached timestamp column to Unix seconds, the unit backups use. */
@@ -537,22 +346,22 @@ export async function importBackup(
 	{
 		node: BackupNode;
 		parentId: string | null;
-		priority: number;
+		position: number;
 	}[] = [];
-	const collectNodes = (node: BackupNode, parentId: string | null, priority: number) =>
+	const collectNodes = (node: BackupNode, parentId: string | null, position: number) =>
 	{
 		allNodes.push(
 			{
 				node,
 				parentId,
-				priority,
+				position,
 			},
 		);
 		if (node.ch && Array.isArray(node.ch))
 		{
 			for (const [childIndex, child] of node.ch.entries())
 			{
-				// Use raw index as backup position; actual priority is inferred later
+				// The index among its siblings; order keys are mapped from it later
 				collectNodes(child, node.id, childIndex);
 			}
 		}
@@ -560,7 +369,7 @@ export async function importBackup(
 
 	for (const [rootIndex, rootNode] of rootNodes.entries())
 	{
-		// Use raw index as backup position; actual priority is inferred later
+		// The index among its siblings; order keys are mapped from it later
 		collectNodes(rootNode, null, rootIndex);
 	}
 	logTiming(`Traverse tree (${allNodes.length} total nodes)`);
@@ -577,7 +386,7 @@ export async function importBackup(
 		name: string;
 		note: string | null;
 		parentId: string | null;
-		priority: number;
+		position: number;
 		createdAt: number | null;
 		modifiedAt: number | null;
 		completedAt: number | null;
@@ -596,7 +405,7 @@ export async function importBackup(
 
 	// BackupFileSchema.parse above validated the whole tree: one invalid node aborts
 	// the import, so no node is dropped here and then closed as deleted.
-	for (const {node: validatedNode, parentId, priority} of allNodes)
+	for (const {node: validatedNode, parentId, position} of allNodes)
 	{
 		nodesToProcess.push(
 			{
@@ -605,7 +414,7 @@ export async function importBackup(
 				name: validatedNode.nm ?? "",
 				note: nonEmpty(validatedNode.no) ?? null,
 				parentId,
-				priority,
+				position,
 				createdAt: backupTimeOrNull(validatedNode.ct, workflowyEpoch),
 				modifiedAt: backupTimeOrNull(validatedNode.lm, workflowyEpoch),
 				completedAt: backupTimeOrNull(validatedNode.cp, workflowyEpoch),
@@ -684,10 +493,10 @@ export async function importBackup(
 	let metadataUpdated = 0;
 	let priorityUpdated = 0;
 
-	// Load existing active rows for classification and priority calculation.
+	// Load existing active rows for classification and order-key mapping.
 	// The actual phase-out/insert of the node-keyed tables is owned by the
 	// shared importer's applyRows(); these reads only feed the stats and the
-	// priority inference below.
+	// order-key mapping below.
 	const existingContentMap = new Map<string, NodeContentType>();
 	for (const content of database.select().from(nodeContent).where(eq(nodeContent.systemTo, FAR_FUTURE_DATE)).all())
 	{
@@ -802,9 +611,9 @@ export async function importBackup(
 	dropNodes(strandedIds);
 	logTiming(`Left out ${strandedIds.size} backlink items whose source is absent`);
 
-	// resolvedPriorities is populated by the classification block below and read
+	// resolvedOrderKeys is populated by the classification block below and read
 	// when building the node_metadata rows.
-	const resolvedPriorities = new Map<string, number>();
+	const resolvedOrderKeys = new Map<string, string | null>();
 	let orphanIds: string[] = [];
 
 	{
@@ -831,54 +640,42 @@ export async function importBackup(
 			incomingNodeIds.add(nodeData.id);
 		}
 
-		// Build sibling map and infer priorities for new nodes
-		// Group nodes by parent with their backup position (tree traversal order)
-		const siblingsByParent = new Map<
-			string | null,
-			{
-				id: string;
-				backupPosition: number;
-				existingPriority: number | null;
-			}[]
-		>();
-
+		// Map each parent's children, in backup order, onto order keys: a sibling already under that parent keeps its
+		// key while the order around it holds, and a new, moved or reordered one gets a key between its neighbours.
+		const siblingsByParent = new Map<string | null, typeof nodesToProcess>();
 		for (const nodeData of nodesToProcess)
 		{
-			const existing = existingMetadataMap.get(nodeData.id);
 			const siblings = siblingsByParent.get(nodeData.parentId) ?? [];
-			siblings.push(
-				{
-					id: nodeData.id,
-					backupPosition: nodeData.priority,
-					existingPriority: existing?.priority ?? null,
-				},
-			);
+			siblings.push(nodeData);
 			siblingsByParent.set(nodeData.parentId, siblings);
 		}
-
-		// Sort and calculate priorities for each parent's children
-		// Handles new nodes AND order changes for existing nodes
-		const calculatedPriorities = new Map<string, number>();
-		for (const siblings of siblingsByParent.values())
+		const changedOrderKeys = new Map<string, string>();
+		for (const [parentId, siblings] of siblingsByParent)
 		{
-			siblings.sort((a, b) => a.backupPosition - b.backupPosition);
-			const calculated = calculatePriorities(siblings);
-			for (const [id, priority] of calculated)
+			const changed = orderKeysFor(
+				siblings
+					.toSorted((a, b) => a.position - b.position)
+					.map((sibling) => (
+					{
+						id: sibling.id,
+						orderKey:
+							existingContentMap.get(sibling.id)?.parentId === parentId
+								? existingMetadataMap.get(sibling.id)?.orderKey
+								: undefined,
+					})),
+			);
+			for (const [id, orderKey] of changed)
 			{
-				calculatedPriorities.set(id, priority);
+				changedOrderKeys.set(id, orderKey);
 			}
 		}
-		logTiming(`Calculated priorities for ${calculatedPriorities.size} nodes`);
+		logTiming(`Mapped order keys for ${changedOrderKeys.size} nodes`);
 
-		// Classify nodes for node-level stats and resolve each node's final priority.
+		// Classify nodes for node-level stats and resolve each node's final order key.
 		// (a) Unchanged - no DB operations
 		// (b) Changed - phase out old, insert new
 		// (c) New - insert only
 		// (d) Deleted - phase out only (handled by temporalMerge's absence detection)
-		//
-		// resolvedPriorities holds the priority each node should be stored with;
-		// the metadata merge below reads it instead of nodeData.priority (which is
-		// only the backup-tree position, not the inferred priority).
 		for (const nodeData of nodesToProcess)
 		{
 			const existingContent = existingContentMap.get(nodeData.id);
@@ -898,29 +695,24 @@ export async function importBackup(
 				contentChanged = true;
 			}
 
-			// For new nodes: use calculated priority.
-			// For existing nodes: check if order changed (priority recalculated) or other metadata changed.
-			const newPriority = calculatedPriorities.get(nodeData.id);
-			const priorityChanged =
-				newPriority !== undefined && existingMetadata && newPriority !== existingMetadata.priority;
-
+			const newOrderKey = changedOrderKeys.get(nodeData.id);
+			const orderKey = newOrderKey ?? existingMetadata?.orderKey ?? null;
+			resolvedOrderKeys.set(nodeData.id, orderKey);
 			if (existingMetadata)
 			{
-				resolvedPriorities.set(nodeData.id, newPriority ?? existingMetadata.priority ?? nodeData.priority);
+				const orderKeyChanged = newOrderKey !== undefined && newOrderKey !== existingMetadata.orderKey;
 				if (
-					priorityChanged ||
+					orderKeyChanged ||
 					!metadataMatches(
 						existingMetadata,
 						{
 							...nodeData,
-							// For backup imports, compare against existing priority, not tree position
-							// (priority is calculated separately, not derived from nodeData.priority).
-							priority: existingMetadata.priority,
+							orderKey: existingMetadata.orderKey,
 						},
 					)
 				)
 				{
-					if (priorityChanged)
+					if (orderKeyChanged)
 					{
 						priorityUpdated++;
 					}
@@ -933,7 +725,6 @@ export async function importBackup(
 			}
 			else
 			{
-				resolvedPriorities.set(nodeData.id, newPriority ?? nodeData.priority);
 				metadataChanged = true;
 			}
 
@@ -984,7 +775,7 @@ export async function importBackup(
 	{
 		nodeId: node.id,
 		shortId: node.shortId,
-		priority: resolvedPriorities.get(node.id) ?? node.priority,
+		orderKey: resolvedOrderKeys.get(node.id) ?? null,
 		createdAt: timestampToDate(node.createdAt),
 		modifiedAt: timestampToDate(node.modifiedAt),
 		completedAt: timestampToDate(node.completedAt),

@@ -11,6 +11,7 @@ import type {ServerContext} from "../src/server/context.js";
 import {httpAppFor} from "./http-app-for.js";
 import {collectCustomSections, findCustomRoot} from "../src/server/custom-tree.js";
 import type {CustomNode} from "../src/server/custom-tree.js";
+import {integerOrderKey} from "./helpers/integer-order-key.js";
 
 const grammars = new Set(["Hotkeys", "Themes"]);
 const node = (name: string, children: CustomNode[] = [], completed = false): CustomNode => (
@@ -136,7 +137,7 @@ describe("GET /api/v1/custom-tree", () =>
 				.values(
 					{
 						nodeId: id,
-						priority,
+						orderKey: integerOrderKey(priority),
 						systemFrom: AT,
 						systemTo: FAR_FUTURE_DATE,
 					},

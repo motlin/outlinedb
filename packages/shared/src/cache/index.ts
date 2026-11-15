@@ -1,7 +1,15 @@
 export {ancestorChain} from "./ancestor-chain.js";
 export {buildEmbedTexts, filterEmbeddable, loadEmbeddableNodes} from "./embed-text.js";
 export {inIds} from "./in-ids.js";
-export {compareBinary, compareSiblingOrder, DEFAULT_ORDER_KEY, type SiblingOrder} from "./order-key.js";
+export
+{
+	compareBinary,
+	compareSiblingOrder,
+	DEFAULT_ORDER_KEY,
+	orderKeysFor,
+	type SiblingOrder,
+	type TargetSibling,
+} from "./order-key.js";
 export
 {
 	type ApiImportState,
@@ -126,7 +134,7 @@ export
 	relationalRowId,
 	withMirrorText,
 } from "./mirror-text.js";
-export {NodeReader} from "./node-reader.js";
+export {currentSiblingIndexes, NodeReader} from "./node-reader.js";
 export {PathBuilder} from "./path-builder.js";
 export {type LinkTarget, type NodeTree, NodeTreeReader, type ReadTreeOptions} from "./node-tree-reader.js";
 export type

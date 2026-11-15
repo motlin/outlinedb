@@ -42,6 +42,7 @@ import type {CalendarTarget} from "../src/client/today.js";
 import type {BlockMove} from "../src/client/tree-ops.js";
 import {CalendarStripView} from "../src/client/components/calendar-strip-view.js";
 import type {CalendarStripViewProps} from "../src/client/components/calendar-strip-view.js";
+import {integerOrderKey} from "./helpers/integer-order-key.js";
 
 describe("calendar day", () =>
 {
@@ -288,7 +289,7 @@ describe("calendar day", () =>
 				.values(
 					{
 						nodeId: id,
-						priority,
+						orderKey: integerOrderKey(priority),
 						systemFrom: "2026-01-01",
 						systemTo,
 					},
@@ -1108,6 +1109,9 @@ describe("calendar found", () =>
 				},
 				parentId,
 			);
+			sqlite
+				.prepare("UPDATE node_metadata SET order_key = ? WHERE node_id = ?")
+				.run(integerOrderKey(priority), id);
 		}
 		cacheService.insertMirror("due", "mirror");
 		if (rootMetadata !== undefined)

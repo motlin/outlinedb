@@ -146,8 +146,7 @@ describe("API Sync with Cache", () =>
 				{
 					nodeId: "api-root-1",
 					shortId: "apiroot1", // getShortId removes dashes and takes last 12 chars
-					priority: 100,
-					orderKey: "b1c",
+					orderKey: "a0",
 					createdAt: new Date(1_700_000_000 * 1000),
 					modifiedAt: new Date(1_700_001_000 * 1000),
 					completedAt: null,
@@ -159,8 +158,7 @@ describe("API Sync with Cache", () =>
 				{
 					nodeId: "api-root-2",
 					shortId: "apiroot2",
-					priority: 200,
-					orderKey: "b3E",
+					orderKey: "a1",
 					createdAt: new Date(1_700_002_000 * 1000),
 					modifiedAt: new Date(1_700_003_000 * 1000),
 					completedAt: new Date(1_700_004_000 * 1000),
@@ -284,8 +282,7 @@ describe("API Sync with Cache", () =>
 				{
 					nodeId: "child-1",
 					shortId: "child1",
-					priority: 150,
-					orderKey: "b2Q",
+					orderKey: "a0",
 					createdAt: new Date(1_700_010_000 * 1000),
 					modifiedAt: new Date(1_700_011_000 * 1000),
 					completedAt: null,
@@ -297,8 +294,7 @@ describe("API Sync with Cache", () =>
 				{
 					nodeId: "child-2",
 					shortId: "child2",
-					priority: 250,
-					orderKey: "b42",
+					orderKey: "a1",
 					createdAt: new Date(1_700_020_000 * 1000),
 					modifiedAt: new Date(1_700_021_000 * 1000),
 					completedAt: null,
@@ -383,8 +379,7 @@ describe("API Sync with Cache", () =>
 				{
 					nodeId: "existing-node",
 					shortId: "existingnode",
-					priority: 150,
-					orderKey: "b2Q",
+					orderKey: "ao",
 					createdAt: new Date(1_700_000_000 * 1000),
 					modifiedAt: new Date(1_700_005_000 * 1000),
 					completedAt: new Date(1_700_006_000 * 1000),
@@ -605,7 +600,6 @@ describe("API Sync with Cache", () =>
 				{
 					nodeId: "node-0",
 					shortId: "node0",
-					priority: 0,
 					orderKey: "a0",
 					createdAt: new Date(1_700_000_000 * 1000),
 					modifiedAt: new Date(1_700_001_000 * 1000),
@@ -634,8 +628,7 @@ describe("API Sync with Cache", () =>
 				{
 					nodeId: "node-50",
 					shortId: "node50",
-					priority: 500,
-					orderKey: "b84",
+					orderKey: "ao",
 					createdAt: new Date(1_700_000_050 * 1000),
 					modifiedAt: new Date(1_700_001_050 * 1000),
 					completedAt: null, // 50 % 3 !== 0, so completedAt is null

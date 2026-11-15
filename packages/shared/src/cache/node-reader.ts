@@ -68,7 +68,7 @@ function bySiblingOrder(a: ContentWithMetadata, b: ContentWithMetadata): number
 
 /**
  * Each node's 0-based index among its current siblings, in sibling order (order key, creation time, id): the
- * `priority` API DTOs report, since `node_metadata.priority` is no longer kept by every writer.
+ * `priority` API DTOs report, since the cache stores only order keys.
  */
 export function currentSiblingIndexes(
 	database: AppDatabase,
@@ -246,7 +246,7 @@ export class NodeReader
 			parentId: row.parentId,
 			name: row.name,
 			note: row.note,
-			priority: row.metadata?.priority ?? 0,
+			priority: 0,
 			layoutMode: row.metadata?.layoutMode ?? null,
 			createdAt: row.metadata?.createdAt ?? null,
 			modifiedAt: row.metadata?.modifiedAt ?? null,

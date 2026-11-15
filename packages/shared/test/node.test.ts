@@ -186,7 +186,7 @@ describe("node composite", () =>
 					{
 						nodeId: id,
 						shortId: null,
-						priority: 0,
+						orderKey: "a0",
 						createdAt: null,
 						modifiedAt: null,
 						completedAt: null,
@@ -709,15 +709,11 @@ describe("node dto", () =>
 					('second-by-priority', 'B', 'parent', '${seeded}', '${FAR_FUTURE_DATE}'),
 					('tie-later', 'C', 'parent', '${seeded}', '${FAR_FUTURE_DATE}'),
 					('tie-earlier', 'D', 'parent', '${seeded}', '${FAR_FUTURE_DATE}');
-				INSERT INTO node_metadata (node_id, priority, created_at, system_from, system_to) VALUES
-					('first-by-priority', 0, 100, '${seeded}', '${FAR_FUTURE_DATE}'),
-					('second-by-priority', 1, 100, '${seeded}', '${FAR_FUTURE_DATE}'),
-					('tie-later', 2, 300, '${seeded}', '${FAR_FUTURE_DATE}'),
-					('tie-earlier', 3, 200, '${seeded}', '${FAR_FUTURE_DATE}');
-				UPDATE node_metadata SET order_key = CASE node_id
-					WHEN 'first-by-priority' THEN 'a5'
-					WHEN 'second-by-priority' THEN 'a1'
-					ELSE 'a3' END;
+				INSERT INTO node_metadata (node_id, order_key, created_at, system_from, system_to) VALUES
+					('first-by-priority', 'a5', 100, '${seeded}', '${FAR_FUTURE_DATE}'),
+					('second-by-priority', 'a1', 100, '${seeded}', '${FAR_FUTURE_DATE}'),
+					('tie-later', 'a3', 300, '${seeded}', '${FAR_FUTURE_DATE}'),
+					('tie-earlier', 'a3', 200, '${seeded}', '${FAR_FUTURE_DATE}');
 			`);
 
 			expect(
@@ -811,7 +807,7 @@ describe("node order key migration", () =>
 			migrate(
 				drizzle(sqlite),
 				{
-					migrationsFolder,
+					migrationsFolder: migrationsBefore("0007_node_metadata_drop_priority"),
 				},
 			);
 			insert([0, null, -1, -62, -63, -14_900], "inserted");
@@ -869,6 +865,36 @@ describe("node order key migration", () =>
 					order_key: "cVlM",
 				},
 			]);
+
+			// Dropping priority keeps every key.
+			migrate(
+				drizzle(sqlite),
+				{
+					migrationsFolder,
+				},
+			);
+			expect(
+				{
+					columns: sqlite
+						.prepare(
+							"SELECT name FROM pragma_table_info('node_metadata') WHERE name IN ('priority', 'order_key')",
+						)
+						.all(),
+					orderKeys: sqlite
+						.prepare("SELECT order_key FROM node_metadata ORDER BY order_key, node_id")
+						.pluck()
+						.all(),
+				},
+			).toStrictEqual(
+				{
+					columns: [
+						{
+							name: "order_key",
+						},
+					],
+					orderKeys: ["Xw7g", "Yyz", "Z0", "Zz", "a0", "a1", "a5", "az", "b10", "bzz", "c100", "cVlM"],
+				},
+			);
 		}
 		finally
 		{

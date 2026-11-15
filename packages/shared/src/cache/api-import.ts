@@ -1,4 +1,4 @@
-import {and, eq, gt, inArray, isNull, ne, or} from "drizzle-orm";
+import {and, eq, gt, inArray, ne, or} from "drizzle-orm";
 import type {InternalTreeItem} from "../api/workflowy-internal-client.js";
 import {nodeContent, nodeMetadata} from "../db/schema.js";
 import type {NodeContentType, NodeMetadataType} from "../db/schema.js";
@@ -17,6 +17,7 @@ import {endNodeComposites, endOrphanedParts, runUnitOfWork} from "./node-composi
 import {endStrandedBacklinkItems} from "./stranded-relationships.js";
 import type {UnitOfWork} from "./node-composite.js";
 import type {NormalizedNodeContentRow, NormalizedNodeMetadataRow} from "./normalized-rows.js";
+import {compareBinary, DEFAULT_ORDER_KEY, orderKeysFor} from "./order-key.js";
 import {startUnitOfWork} from "./system-time.js";
 import type {UnitOfWorkStart} from "./system-time.js";
 
@@ -77,6 +78,13 @@ interface ProcessedNode
 	layoutMode: string | null;
 }
 
+interface PlacedSibling
+{
+	id: string;
+	priority: number;
+	orderKey: string;
+}
+
 /** Progress of one batched import. Opaque to callers; pass it between the three calls. */
 export interface ApiImportState
 {
@@ -90,6 +98,8 @@ export interface ApiImportState
 	readonly seenIds: Set<string>;
 	/** Ids of nodes that failed validation: kept as they are, never ended as deleted. */
 	readonly invalidIds: Set<string>;
+	/** Per parent, the siblings earlier batches placed, with their upstream priority and final order key. */
+	readonly placed: Map<string | null, PlacedSibling[]>;
 	totalNodes: number;
 	nodesAdded: number;
 	nodesUpdated: number;
@@ -176,6 +186,7 @@ export function beginApiImport(
 			options.snapshotTakenAt === undefined ? undefined : formatTemporalTimestamp(options.snapshotTakenAt),
 		seenIds: new Set(),
 		invalidIds: new Set(),
+		placed: new Map(),
 		totalNodes: 0,
 		nodesAdded: 0,
 		nodesUpdated: 0,
@@ -187,37 +198,18 @@ export function beginApiImport(
 	};
 }
 
-/** The ids ordered by priority, ties by id, as one comparable string. */
-function siblingOrder(
-	items:
-	{
-		id: string;
-		priority: number;
-	}[],
-): string
-{
-	return items
-		.toSorted((a, b) => a.priority - b.priority || a.id.localeCompare(b.id))
-		.map((item) => item.id)
-		.join("\n");
-}
-
 /**
- * Keep each parent's stored sibling numbers when the incoming ones only renumber
- * the same order.
- *
- * REST numbers siblings 0,1,2 while backup imports space them 100 apart, so
- * importing one over the other would open a node_metadata version per sibling
- * with no change to the order. When a batch carries every current child of a
- * parent, all of them already known, and their order by priority is unchanged,
- * the stored priorities replace the incoming ones. A new, removed or reordered
- * sibling takes the incoming numbers as before.
+ * Give each incoming node its order key. Per parent, the incoming siblings in upstream order (priority, then id) map
+ * onto keys: a sibling already under that parent keeps its key while the order around it holds, and a new, moved or
+ * reordered one gets a key between its neighbours. The siblings an earlier batch of this import placed keep the keys
+ * they got, so a parent whose children span batches still ends up in upstream order.
  */
-function keepEquivalentPriorities(
-	tx: UnitOfWork["tx"],
+function assignOrderKeys(
+	state: ApiImportState,
 	nodes: ProcessedNode[],
+	existingContent: Map<string, NodeContentType>,
 	existingMetadata: Map<string, NodeMetadataType>,
-): void
+): Map<string, string>
 {
 	const incomingByParent = new Map<string | null, ProcessedNode[]>();
 	for (const node of nodes)
@@ -226,105 +218,47 @@ function keepEquivalentPriorities(
 		siblings.push(node);
 		incomingByParent.set(node.parentId, siblings);
 	}
-
-	const currentChildren = new Map<string | null, Set<string>>();
-	const addChildren = (
-		rows:
-		{
-			id: string;
-			parentId: string | null;
-		}[],
-	) =>
+	const result = new Map<string, string>();
+	for (const [parentId, incoming] of incomingByParent)
 	{
-		for (const row of rows)
-		{
-			const children = currentChildren.get(row.parentId) ?? new Set<string>();
-			children.add(row.id);
-			currentChildren.set(row.parentId, children);
-		}
-	};
-	const parentIds = [...incomingByParent.keys()].filter((parentId) => parentId !== null);
-	for (let start = 0; start < parentIds.length; start += LOOKUP_CHUNK_SIZE)
-	{
-		addChildren(
-			tx
-				.select(
-					{
-						id: nodeContent.id,
-						parentId: nodeContent.parentId,
-					},
-				)
-				.from(nodeContent)
-				.where(
-					and(
-						eq(nodeContent.systemTo, FAR_FUTURE_DATE),
-						inArray(nodeContent.parentId, parentIds.slice(start, start + LOOKUP_CHUNK_SIZE)),
-					),
-				)
-				.all(),
-		);
-	}
-	if (incomingByParent.has(null))
-	{
-		addChildren(
-			tx
-				.select(
-					{
-						id: nodeContent.id,
-						parentId: nodeContent.parentId,
-					},
-				)
-				.from(nodeContent)
-				.where(and(eq(nodeContent.systemTo, FAR_FUTURE_DATE), isNull(nodeContent.parentId)))
-				.all(),
-		);
-	}
-
-	for (const [parentId, siblings] of incomingByParent)
-	{
-		const current = currentChildren.get(parentId) ?? new Set<string>();
-		if (siblings.length !== current.size || siblings.some((node) => !current.has(node.id)))
-		{
-			continue;
-		}
-		const stored = siblings.map((node) => (
-		{
-			id: node.id,
-			priority: existingMetadata.get(node.id)?.priority,
-		}));
-		const known = stored.flatMap((item) =>
-			item.priority === null || item.priority === undefined
-				? []
-				: [
-						{
-							...item,
-							priority: item.priority,
-						},
-					],
-		);
-		if (
-			known.length !== siblings.length ||
-			siblingOrder(known) !==
-				siblingOrder(
-					siblings.map((node) => (
-					{
-						id: node.id,
-						priority: node.priority,
-					})),
-				)
-		)
-		{
-			continue;
-		}
-		for (const item of known)
-		{
-			const node = siblings.find((sibling) => sibling.id === item.id);
-			if (node)
+		const placed = state.placed.get(parentId) ?? [];
+		const sequence = [
+			...placed.map((sibling) => (
 			{
-				node.priority = item.priority;
+				...sibling,
+				pinned: true,
+			})),
+			...incoming.map((node) => (
+			{
+				id: node.id,
+				priority: node.priority,
+				orderKey:
+					existingContent.get(node.id)?.parentId === parentId
+						? existingMetadata.get(node.id)?.orderKey
+						: undefined,
+				pinned: false,
+			})),
+		].toSorted((a, b) => a.priority - b.priority || compareBinary(a.id, b.id));
+		const changed = orderKeysFor(sequence);
+		for (const sibling of sequence)
+		{
+			if (sibling.pinned)
+			{
+				continue;
 			}
+			const orderKey = changed.get(sibling.id) ?? sibling.orderKey ?? DEFAULT_ORDER_KEY;
+			result.set(sibling.id, orderKey);
+			placed.push(
+				{
+					id: sibling.id,
+					priority: sibling.priority,
+					orderKey,
+				},
+			);
 		}
+		state.placed.set(parentId, placed);
 	}
+	return result;
 }
 
 /**
@@ -425,13 +359,21 @@ function applyBatchIn(unitOfWork: UnitOfWork, state: ApiImportState, apiNodes: W
 			existingMetadata.set(row.nodeId, row);
 		}
 	}
-	keepEquivalentPriorities(tx, nodes, existingMetadata);
+	const orderKeys = assignOrderKeys(state, nodes, existingContent, existingMetadata);
 	for (const node of nodes)
 	{
 		const content = existingContent.get(node.id);
 		const metadata = existingMetadata.get(node.id);
 		const contentChanged = content && !contentMatches(content, node);
-		const metadataChanged = metadata && !metadataMatches(metadata, node);
+		const metadataChanged =
+			metadata &&
+			!metadataMatches(
+				metadata,
+				{
+					...node,
+					orderKey: orderKeys.get(node.id) ?? null,
+				},
+			);
 		if (!content)
 		{
 			state.nodesAdded++;
@@ -467,7 +409,7 @@ function applyBatchIn(unitOfWork: UnitOfWork, state: ApiImportState, apiNodes: W
 	{
 		nodeId: node.id,
 		shortId: node.shortId,
-		priority: node.priority,
+		orderKey: orderKeys.get(node.id) ?? null,
 		createdAt: timestampToDate(node.createdAt),
 		modifiedAt: timestampToDate(node.modifiedAt),
 		completedAt: timestampToDate(node.completedAt),

@@ -71,7 +71,7 @@ export const metadataComparisonStats =
 	createdAtMismatch: 0,
 	completedAtMismatch: 0,
 	layoutModeMismatch: 0,
-	priorityMismatch: 0,
+	orderKeyMismatch: 0,
 	total: 0,
 	diffCounts: new Map<number, number>(), // Track frequency of each diff value
 	reset()
@@ -79,7 +79,7 @@ export const metadataComparisonStats =
 		this.createdAtMismatch = 0;
 		this.completedAtMismatch = 0;
 		this.layoutModeMismatch = 0;
-		this.priorityMismatch = 0;
+		this.orderKeyMismatch = 0;
 		this.total = 0;
 		this.diffCounts = new Map();
 	},
@@ -92,7 +92,7 @@ export const metadataComparisonStats =
 					`createdAt=${this.createdAtMismatch}, ` +
 					`completedAt=${this.completedAtMismatch}, ` +
 					`layoutMode=${this.layoutModeMismatch}, ` +
-					`priority=${this.priorityMismatch} ` +
+					`orderKey=${this.orderKeyMismatch} ` +
 					`(total comparisons: ${this.total})`,
 			);
 			if (this.diffCounts.size > 0)
@@ -155,7 +155,7 @@ function keepWithinSkew(existing: Date | null | undefined, incoming: Date | null
  * and backup round them down, so the sources disagree by one second on about a
  * quarter of timestamps. {@link metadataMatches} already ignores that skew when
  * deciding whether to open a version; this keeps a version opened for a real change
- * (priority, completion, layout) from also rewriting the timestamps to the other
+ * (order key, completion, layout) from also rewriting the timestamps to the other
  * source's rounding, so history never records a one-second edit that never happened.
  */
 export function keepSkewedTimestamps<T extends MetadataTimestamps>(existing: MetadataTimestamps, incoming: T): T
@@ -179,7 +179,7 @@ export function keepSkewedTimestamps<T extends MetadataTimestamps>(existing: Met
 export function metadataMatches(
 	existing:
 	{
-		priority: number | null;
+		orderKey: string | null;
 		createdAt: Date | null;
 		modifiedAt: Date | null;
 		completedAt: Date | null;
@@ -187,7 +187,7 @@ export function metadataMatches(
 	},
 	newData:
 	{
-		priority: number | null;
+		orderKey: string | null;
 		createdAt: number | null;
 		modifiedAt: number | null;
 		completedAt: number | null;
@@ -201,7 +201,7 @@ export function metadataMatches(
 	const createdAtMatch = timestampsMatch(existingCreatedAt, newData.createdAt);
 	const completedAtMatch = timestampsMatch(existingCompletedAt, newData.completedAt);
 	const layoutModeMatch = existing.layoutMode === newData.layoutMode;
-	const priorityMatch = existing.priority === newData.priority;
+	const orderKeyMatch = existing.orderKey === newData.orderKey;
 
 	metadataComparisonStats.total++;
 	if (!createdAtMatch)
@@ -222,10 +222,10 @@ export function metadataMatches(
 	{
 		metadataComparisonStats.layoutModeMismatch++;
 	}
-	if (!priorityMatch)
+	if (!orderKeyMatch)
 	{
-		metadataComparisonStats.priorityMismatch++;
+		metadataComparisonStats.orderKeyMismatch++;
 	}
 
-	return createdAtMatch && completedAtMatch && layoutModeMatch && priorityMatch;
+	return createdAtMatch && completedAtMatch && layoutModeMatch && orderKeyMatch;
 }

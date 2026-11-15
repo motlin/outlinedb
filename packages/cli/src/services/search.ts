@@ -8,7 +8,7 @@ import {embeddingService, getEmbeddingModel} from "./embeddings.js";
 import type {EmbeddingModelKey} from "./embeddings.js";
 import {logger} from "./logger.js";
 import {nullable} from "../utils/nullable.js";
-import {notAMirror, PathBuilder} from "@outlinedb/shared/cache";
+import {currentSiblingIndexes, notAMirror, PathBuilder} from "@outlinedb/shared/cache";
 
 export type SearchMode = "vector" | "keyword" | "hybrid";
 
@@ -245,7 +245,9 @@ export class SearchService
 
 			// Drizzle types these one() relations as always present, but a node can lack any of these rows.
 			const metadata = nodeWithRelations ? nullable(nodeWithRelations.metadata) : null;
-			const priority = metadata?.priority ?? 0;
+			const priority = nodeWithRelations
+				? (currentSiblingIndexes(this.database, [nodeWithRelations]).get(nodeWithRelations.id) ?? 0)
+				: 0;
 			const data: Record<string, unknown> = {};
 
 			if (metadata?.layoutMode)

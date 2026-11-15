@@ -10,6 +10,7 @@ import type {ServerContext} from "../src/server/context.js";
 import {childFlags, childFlagsFromRows} from "../src/server/backlinks.js";
 import {CacheService} from "@outlinedb/shared/cache";
 import {mirrors, nodeContent, nodeMetadata, referencesRoots} from "@outlinedb/shared/db";
+import {integerOrderKey} from "./helpers/integer-order-key.js";
 
 describe("child flags mirror", () =>
 {
@@ -176,7 +177,7 @@ describe("child flags", () =>
 					.values(
 						{
 							nodeId: id,
-							priority: 0,
+							orderKey: integerOrderKey(0),
 							completedAt: id === SOURCE && sourceCompleted ? new Date("2026-02-01T00:00:00Z") : null,
 							systemFrom: SEEDED_AT,
 							systemTo: FAR_FUTURE_DATE,

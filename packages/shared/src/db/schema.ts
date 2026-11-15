@@ -35,7 +35,7 @@ export const nodeContent = sqliteTable(
 
 /**
  * node_metadata: Fields that do NOT affect embeddings
- * Changes to these fields (like priority reordering) do not trigger embedding regeneration.
+ * Changes to these fields (like sibling reordering) do not trigger embedding regeneration.
  */
 export const nodeMetadata = sqliteTable(
 	"node_metadata",
@@ -44,11 +44,9 @@ export const nodeMetadata = sqliteTable(
 		// Last 12 hex chars of UUID (after final hyphen), used for resolving Workflowy short links
 		shortId: text("short_id"),
 
-		priority: integer("priority"),
 		/**
 		 * Sibling order: a fractional index (base-62 digits that sort as plain strings), read in order with
-		 * `created_at` and `id` as tie-breakers. Until writers set it themselves, the `node_metadata_order_key_*`
-		 * triggers (migration 0005) derive it from `priority` as a fractional-index integer key.
+		 * `created_at` and `id` as tie-breakers. Upstream positions map onto it (see `orderKeysFor`).
 		 */
 		orderKey: text("order_key"),
 
@@ -965,7 +963,7 @@ export const nodeTags = sqliteTable(
  *   - `table_headers`, `table_skip_headers`, `table_bg`: `metadata.table.headers`,
  *     `.skipHeaders` and `.bg`; `.sizes` lives in `node_table_cell_sizes`.
  *   - `priority_default_to_bottom`: `metadata.priority.defaultToBottom`.
- * Separate from `node_metadata`, which versions on every priority or modified
+ * Separate from `node_metadata`, which versions on every reorder or modified
  * change, while these rarely change.
  */
 export const nodeDisplayMetadata = sqliteTable(

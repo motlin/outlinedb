@@ -283,7 +283,7 @@ describe("node:mirror command", () =>
 			const metadata = testDatabase.db
 				.select(
 					{
-						priority: nodeMetadata.priority,
+						orderKey: nodeMetadata.orderKey,
 					},
 				)
 				.from(nodeMetadata)
@@ -291,7 +291,7 @@ describe("node:mirror command", () =>
 				.all();
 			expect(metadata).toStrictEqual([
 				{
-					priority: 3,
+					orderKey: "a0",
 				},
 			]);
 			expect(currentMirrorRows()).toStrictEqual([

@@ -29,6 +29,7 @@ import {LadderEventBus} from "../src/server/ladder-events.js";
 import {inProcessStore} from "../src/server/store.js";
 import type {StoreClient} from "../src/server/store.js";
 import {upstreamExpansionKey} from "@outlinedb/shared/workflowy";
+import {integerOrderKey} from "./helpers/integer-order-key.js";
 
 describe("nodes changes route", () =>
 {
@@ -3534,15 +3535,23 @@ describe("nodes view route", () =>
 				body: await res.json(),
 			};
 		};
+		/** Key `id` among its siblings as the integer `priority`, so the seeds sort by the numbers they were given. */
+		const setOrderKey = (id: string, priority: number) =>
+		{
+			sqlite
+				.prepare("UPDATE node_metadata SET order_key = ? WHERE node_id = ?")
+				.run(integerOrderKey(priority), id);
+		};
 		/** Make `mirrorId` (a new child of `parentId`) a mirror of `originalId`. */
 		const mirror = (mirrorId: string, parentId: string, originalId: string) =>
 		{
 			cacheService.insertNode(apiNode(mirrorId, parentId, 9), parentId);
+			setOrderKey(mirrorId, 9);
 			sqlite
 				.prepare("INSERT INTO mirrors (mirror_id, original_id, system_from, system_to) VALUES (?, ?, ?, ?)")
 				.run(mirrorId, originalId, "2000-01-01T00:00:00.000Z", FAR_FUTURE_DATE);
 		};
-		/** Add `id` under `parentId`; without metadata its priority and creation time read as 0. */
+		/** Add `id` under `parentId` keyed by `priority`; without metadata its order key reads as `a0` and creation time as 0. */
 		const add = (
 			id: string,
 			parentId: string,
@@ -3555,6 +3564,7 @@ describe("nodes view route", () =>
 		) =>
 		{
 			cacheService.insertNode(apiNode(id, parentId, priority, completedAt), parentId);
+			setOrderKey(id, priority);
 			if (!metadata)
 			{
 				sqlite.prepare("DELETE FROM node_metadata WHERE node_id = ?").run(id);
@@ -3564,6 +3574,7 @@ describe("nodes view route", () =>
 		const referencesRoot = (id: string, targetId: string) =>
 		{
 			cacheService.insertNode(apiNode(id, targetId, 99), targetId);
+			setOrderKey(id, 99);
 			sqlite
 				.prepare("INSERT INTO references_roots (node_id, system_from, system_to) VALUES (?, ?, ?)")
 				.run(id, "2000-01-01T00:00:00.000Z", FAR_FUTURE_DATE);
@@ -3599,7 +3610,7 @@ describe("nodes view route", () =>
 	};
 
 	/**
-	 * A Backlinks section item as the view sends it: the item row (named after its source, priority 9 from `mirror`)
+	 * A Backlinks section item as the view sends it: the item row (named after its source, priority 0 as no list holds it)
 	 * carrying its source's text, completion and child flags. A crumb given as a string is a node named after its id.
 	 */
 	function backlinkItem(
@@ -3632,7 +3643,7 @@ describe("nodes view route", () =>
 				parent_id: rootId,
 				name: sourceId,
 				note: null,
-				priority: 9,
+				priority: 0,
 				data:
 				{
 					layoutMode: null,
@@ -3778,7 +3789,7 @@ describe("nodes view route", () =>
 			]);
 		});
 
-		it("orders siblings by priority then creation time and spends the budget in that order", async () =>
+		it("orders siblings by order key then creation time and spends the budget in that order", async () =>
 		{
 			const {post, add} = setup();
 			add("Neg", "Beta", -5);
