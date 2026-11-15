@@ -22,6 +22,12 @@ export interface OpMeta
 	notModified?: true;
 	redirect?: string;
 	timing?: string[];
+	/** Stored bytes to answer with, as a 200 of this content type; Workers RPC carries the bytes. */
+	file?:
+	{
+		bytes: Uint8Array<ArrayBuffer>;
+		contentType: string;
+	};
 }
 
 /** Errors are values, not exceptions: Workers RPC keeps only the message of a thrown error. */

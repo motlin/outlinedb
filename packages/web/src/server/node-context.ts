@@ -1,4 +1,5 @@
-import {readInternalAuth} from "@outlinedb/shared/node";
+import {defaultStoreDir, readInternalAuth} from "@outlinedb/shared/node";
+import {diskBlobStore} from "./blob-store-disk.js";
 import {readNodeConfig} from "./config.js";
 import {buildServerContext} from "./context.js";
 import type {ServerContext} from "./context.js";
@@ -27,6 +28,8 @@ export function createServerContext(): ServerContext
 			// A standalone host has no workflowy.com behind it: a saved session must not sync or push into its outline.
 			internalAuth: config.mode === "mirror" ? readInternalAuth() : undefined,
 			embeddingIndex: (model) => new SqliteVecIndex(db, model),
+			// The directory `files mirror` fills, so its copies and new uploads are served from one store.
+			blobs: diskBlobStore(defaultStoreDir(process.env, process.cwd())),
 		},
 	);
 }

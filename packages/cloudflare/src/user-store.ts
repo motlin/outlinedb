@@ -38,6 +38,7 @@ import {drizzle} from "drizzle-orm/durable-sqlite";
 import {migrate} from "drizzle-orm/durable-sqlite/migrator";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {AlarmSchedule} from "./alarm-schedule";
+import {r2BlobStore} from "./blob-store-r2";
 import {doMigrationConfig} from "./do-migrations";
 import {EmbeddingJob} from "./embedding-job";
 import type {EmbeddingStatus} from "./embedding-job";
@@ -188,6 +189,8 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 				ladderEvents: this.ladderEvents,
 				internalAuth,
 				embeddingIndex: embedding && (() => embedding.index),
+				// Namespaced by object id like the related-notes index, so one user can never read another's bytes.
+				blobs: r2BlobStore(env.FILES, ctx.id.toString()),
 			},
 		);
 		this.embeddings =

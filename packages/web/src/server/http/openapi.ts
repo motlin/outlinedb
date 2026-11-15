@@ -18,6 +18,8 @@ interface Binding
 	headers?: Record<string, string>;
 	/** The input field the whole JSON body fills, for an op that takes the body as one field. */
 	body?: string;
+	/** The input field the raw (non-JSON) body's bytes fill, for an upload. */
+	rawBody?: string;
 	/** The success status when it is not 200. */
 	status?: 201 | 302;
 	/** Responses the route adds beyond its success and error responses, keyed by status. */
@@ -167,10 +169,46 @@ const BINDINGS: Record<string, Binding> =
 	{
 		op: "expansion.leftBarPatch",
 	},
+	"POST /api/v1/files":
+	{
+		op: "files.upload",
+		query:
+		{
+			parentId: "parentId",
+			index: "index",
+			name: "fileName",
+			width: "width",
+			height: "height",
+		},
+		headers:
+		{
+			"Content-Type": "fileType",
+		},
+		rawBody: "bytes",
+		status: 201,
+	},
 	"GET /api/v1/files/:nodeId/:variant{preview|original}":
 	{
 		op: "files.signedUrl",
 		status: 302,
+		responses:
+		{
+			"200":
+			{
+				description: "The bytes the blob store holds for this attachment, at full size",
+				content:
+				{
+					"*/*":
+					{
+						schema:
+						{
+							type: "string",
+							format: "binary",
+						},
+					},
+				},
+			},
+		},
 	},
 	"GET /api/v1/home":
 	{
@@ -440,6 +478,23 @@ function parameter(name: string, location: string, required: boolean, schema: Sc
 
 function requestBody(binding: Binding, input: ObjectSchema, consumed: Set<string>, method: string): Schema | undefined
 {
+	if (binding.rawBody !== undefined)
+	{
+		return {
+			required: true,
+			content:
+			{
+				"*/*":
+				{
+					schema:
+					{
+						type: "string",
+						format: "binary",
+					},
+				},
+			},
+		};
+	}
 	if (binding.body !== undefined)
 	{
 		return {

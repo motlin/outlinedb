@@ -3,6 +3,7 @@ import type {InternalAuth} from "@outlinedb/shared/api";
 import {CacheService, WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
 import {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import type {AppDatabase} from "@outlinedb/shared/db";
+import type {BlobStore} from "./blob-store.js";
 import type {ServerConfig, ServerMode} from "./config.js";
 import type {DecisionStore} from "./decisions.js";
 import type {EmbeddingIndex} from "./embedding-index.js";
@@ -56,6 +57,8 @@ export interface ServerContext
 	calendarLayoutEnabled?: boolean;
 	/** The vector index for an embedding model, or undefined when the host has no vector store. */
 	embeddingIndex?: (model: string) => EmbeddingIndex;
+	/** Where attachment bytes are stored (R2 or disk), or undefined when the host keeps none: uploads then answer 503. */
+	blobs?: BlobStore;
 }
 
 /** Hono environment: routers read the {@link ServerContext} via `c.get('ctx')`. */
@@ -79,12 +82,14 @@ export interface ServerContextDeps
 	internalAuth?: InternalAuth;
 	/** Undefined when the host has no vector store; related notes then answer an empty list. */
 	embeddingIndex?: (model: string) => EmbeddingIndex;
+	/** Undefined when the host keeps no attachment bytes. */
+	blobs?: BlobStore;
 }
 
 /** Assemble a {@link ServerContext} from host-supplied dependencies, with no process or filesystem access. */
 export function buildServerContext(deps: ServerContextDeps): ServerContext
 {
-	const {db, config, ladderEvents, decisions, internalAuth, embeddingIndex} = deps;
+	const {db, config, ladderEvents, decisions, internalAuth, embeddingIndex, blobs} = deps;
 	const cacheService = new CacheService(db);
 	const apiKey = config.apiKey;
 	let adapter: WorkflowyInternalAdapter | undefined;
@@ -98,6 +103,7 @@ export function buildServerContext(deps: ServerContextDeps): ServerContext
 		apiKey,
 		internalAuth,
 		embeddingIndex,
+		blobs,
 		calendarEnsureEnabled: config.calendarEnsureEnabled,
 		calendarLayoutEnabled: config.calendarLayoutEnabled,
 		internalAdapter: () =>

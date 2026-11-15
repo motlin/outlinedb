@@ -1,8 +1,8 @@
 import {WorkflowyInternalClient} from "@outlinedb/shared/api";
-import {readInternalAuth} from "@outlinedb/shared/node";
+import {readInternalAuth, defaultStoreDir} from "@outlinedb/shared/node";
 import {Command, Flags} from "@oclif/core";
 import {createDatabase} from "../../db/index.js";
-import {defaultStoreDir, mirrorFiles} from "../../services/files-mirror.js";
+import {mirrorFiles} from "../../services/files-mirror.js";
 import type {FileUrlSigner} from "../../services/files-mirror.js";
 
 /** Signs `/file-proxy/signed-original/<ownerId>/<nodeId>/` with the internal session, as the web server's files route does. */

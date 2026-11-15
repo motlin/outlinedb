@@ -6,7 +6,7 @@ import type {StoreClient} from "../store.js";
 
 export type ResolveStore = (request: Request) => StoreClient | Promise<StoreClient>;
 
-/** Builds the Response for an op result: 204 for null, 304, 302, ETag and Server-Timing, or the error body. */
+/** Builds the Response for an op result: 204 for null, stored file bytes, 304, 302, ETag and Server-Timing, or the error body. */
 export function toResponse(result: OpResult<unknown>): Response
 {
 	if (!result.ok)
@@ -27,6 +27,18 @@ export function toResponse(result: OpResult<unknown>): Response
 	if (meta?.timing !== undefined && meta.timing.length > 0)
 	{
 		headers.set("Server-Timing", meta.timing.join(", "));
+	}
+	if (meta?.file !== undefined)
+	{
+		headers.set("Content-Type", meta.file.contentType);
+		// Content-addressed bytes never change under a node, but another account's must never come from a shared cache.
+		headers.set("Cache-Control", "private, max-age=86400");
+		return new Response(
+			meta.file.bytes,
+			{
+				headers,
+			},
+		);
 	}
 	if (meta?.redirect !== undefined)
 	{

@@ -126,6 +126,57 @@ describe("user store Durable Object behind the Worker", () =>
 		);
 	});
 
+	it("stores an uploaded attachment in R2 under the object's prefix and serves the bytes back", async () =>
+	{
+		const bytes = new Uint8Array([0x47, 0x49, 0x46, 0x38, 9, 8, 7]);
+		const created = await harness.mf.dispatchFetch(
+			"http://localhost/api/v1/files?parentId=home&name=clip.gif",
+			{
+				method: "POST",
+				headers:
+				{
+					"content-type": "image/gif",
+				},
+				body: bytes,
+			},
+		);
+		const {id} = (await readJson(created)) as
+		{
+			id: string;
+		};
+		const read = await harness.mf.dispatchFetch(`http://localhost/api/v1/files/${id}/original`);
+		const digest = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))]
+			.map((byte) => byte.toString(16).padStart(2, "0"))
+			.join("");
+		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its bucket with undici classes
+		const bucket = (await harness.mf.getR2Bucket("FILES")) as unknown as R2Bucket;
+		const keys = (await bucket.list()).objects.map(({key}) => key.split("/").slice(1).join("/"));
+
+		expect(
+			{
+				created: created.status,
+				read:
+				{
+					status: read.status,
+					type: read.headers.get("content-type"),
+					bytes: [...new Uint8Array(await read.arrayBuffer())],
+				},
+				keys,
+			},
+		).toStrictEqual(
+			{
+				created: 201,
+				read:
+				{
+					status: 200,
+					type: "image/gif",
+					bytes: [...bytes],
+				},
+				keys: [`blobs/${digest.slice(0, 2)}/${digest}`],
+			},
+		);
+	});
+
 	it("keeps node_tags in step with a write, so tag autocomplete drops a removed tag", async () =>
 	{
 		const tags = async () =>

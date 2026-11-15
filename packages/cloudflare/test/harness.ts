@@ -92,7 +92,7 @@ export async function startHarness(
 				},
 			},
 			durableObjectsPersist: join(persistDir, "do"),
-			r2Buckets: ["SNAPSHOTS"],
+			r2Buckets: ["SNAPSHOTS", "FILES"],
 			r2Persist: join(persistDir, "r2"),
 			kvNamespaces: ["OAUTH_KV"],
 			kvPersist: join(persistDir, "kv"),

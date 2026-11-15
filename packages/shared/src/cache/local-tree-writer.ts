@@ -1,6 +1,15 @@
 import {and, asc, desc, eq, isNull, lte, gt, ne, sql} from "drizzle-orm";
 import type {AnySQLiteColumn} from "drizzle-orm/sqlite-core";
-import {account, mirrors, nodeContent, nodeMetadata, referencesRoots, rootPreferences} from "../db/schema.js";
+import
+{
+	account,
+	fileBlobs,
+	mirrors,
+	nodeContent,
+	nodeMetadata,
+	referencesRoots,
+	rootPreferences,
+} from "../db/schema.js";
 import type {AppDatabase} from "../db/types.js";
 import type {LayoutWrite} from "../internal/calendar-layout-apply.js";
 import {applyMetadataPatches} from "../internal/metadata-patch.js";
@@ -69,6 +78,24 @@ export interface LocalCreateTreesInput
 	/** The sibling the first tree follows (null: first); while it is a live sibling it decides the slot over `index`. */
 	afterId?: string | null;
 	trees: readonly NewTree[];
+}
+
+export interface LocalAttachmentInput
+{
+	/** The parent node id; `null` or `home` for Home. */
+	parentId: Parent;
+	/** 0-based slot among all current siblings, clamped. Omitted = the bottom. */
+	index?: number;
+	/** Upstream's `metadata.s3File` shape: `fileName`, `fileType`, optional image sizes. */
+	s3File: Record<string, unknown>;
+	/** Where the bytes are: `localPath` is the blob store key. */
+	blob:
+	{
+		sha256: string;
+		size: number;
+		contentType: string;
+		localPath: string;
+	};
 }
 
 /** One metadata write at an upstream key path; an undefined value removes the key. */
@@ -582,6 +609,53 @@ export class LocalTreeWriter
 		{
 			ids: this.insertTrees(pending, unitOfWork, input),
 		}));
+	}
+
+	/**
+	 * Create an attachment node (empty name, upstream's `s3File` metadata) at a slot under a parent, with the live
+	 * `file_blobs` version of its stored bytes, in one unit of work. The bytes must already be in the blob store.
+	 */
+	createAttachmentAt(input: LocalAttachmentInput):
+	{
+		id: string;
+	}
+	{
+		return this.write((pending, unitOfWork) =>
+		{
+			const [id = ""] = this.insertTrees(
+				pending,
+				unitOfWork,
+				{
+					parentId: input.parentId,
+					index: input.index,
+					trees: [
+						{
+							name: "",
+							metadata:
+							{
+								s3File: input.s3File,
+							},
+						},
+					],
+				},
+			);
+			unitOfWork.tx
+				.insert(fileBlobs)
+				.values(
+					{
+						nodeId: id,
+						status: "ok",
+						...input.blob,
+						error: null,
+						systemFrom: unitOfWork.systemTime,
+						systemTo: FAR_FUTURE_DATE,
+					},
+				)
+				.run();
+			return {
+				id,
+			};
+		});
 	}
 
 	/** Mirror each original, in order, at consecutive slots under a parent. Returns the new mirrors' ids. */

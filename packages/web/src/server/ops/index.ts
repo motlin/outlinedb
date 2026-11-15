@@ -6,7 +6,7 @@ import {calendarOps} from "./calendar.js";
 import {changesList} from "./changes.js";
 import {customTreeGet} from "./custom-tree.js";
 import {expansionGet, expansionLeftBarGet, expansionLeftBarPatch, expansionPatch} from "./expansion.js";
-import {filesSignedUrl} from "./files.js";
+import {filesSignedUrl, filesUpload} from "./files.js";
 import {featuresGet, featuresSet} from "./features.js";
 import {inboxShare} from "./inbox.js";
 import {ladderOps} from "./ladder.js";
@@ -62,6 +62,7 @@ export const Ops =
 	"expansion.leftBarPatch": expansionLeftBarPatch,
 	"expansion.patch": expansionPatch,
 	"files.signedUrl": filesSignedUrl,
+	"files.upload": filesUpload,
 	"features.get": featuresGet,
 	"features.set": featuresSet,
 	"home.get": homeGet,

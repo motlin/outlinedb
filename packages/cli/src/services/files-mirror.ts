@@ -20,29 +20,10 @@ import type * as schema from "@outlinedb/shared/db";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {and, eq, isNull, or} from "drizzle-orm";
 import type {BetterSQLite3Database} from "drizzle-orm/better-sqlite3";
-import {DEFAULT_DB_FILE} from "../db/default-db-file.js";
 
 const DEFAULT_CONCURRENCY = 3;
 const DEFAULT_MAX_ATTEMPTS = 3;
 const DEFAULT_RETRY_DELAY_MS = 1000;
-
-/** The store directory name used beside the database when none is configured. */
-const STORE_DIR_NAME = "files-mirror";
-
-/**
- * `OUTLINEDB_FILES_DIR`, else a `files-mirror` directory beside the cache database
- * (`OUTLINEDB_DB_PATH`, default `outlinedb.sqlite` in the working directory).
- */
-export function defaultStoreDir(env: NodeJS.ProcessEnv, cwd: string): string
-{
-	const configured = env.OUTLINEDB_FILES_DIR ?? "";
-	if (configured !== "")
-	{
-		return path.resolve(cwd, configured);
-	}
-	const dbPath = (env.OUTLINEDB_DB_PATH ?? "") || DEFAULT_DB_FILE;
-	return path.join(path.dirname(path.resolve(cwd, dbPath)), STORE_DIR_NAME);
-}
 
 /** Mints a fresh signed URL for one attachment's original bytes. */
 export interface FileUrlSigner

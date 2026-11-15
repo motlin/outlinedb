@@ -283,8 +283,9 @@ describe("worker routes each Access email to its own Durable Object", () =>
 
 		expect(viaDo).toStrictEqual([404, 404, 404, 404, 404, 404, 404, 404, 404, 404]);
 		// Alice is in ALLOWED_EMAILS, so her object is a mirror: with no internal API, tags, stars, preferences and
-		// expansion answer 503 instead of writing locally and diverging from workflowy.com.
-		expect(viaWorker.map(({status}) => status)).toStrictEqual([200, 200, 200, 200, 503, 503, 503, 503, 503]);
+		// expansion answer 503 instead of writing locally and diverging from workflowy.com. Files has the R2 blob store, so
+		// an attachment the object does not have is a 404.
+		expect(viaWorker.map(({status}) => status)).toStrictEqual([200, 200, 200, 200, 503, 503, 503, 503, 404]);
 		// A fresh database with no workflowy.com account still answers the 20 Settings rows and the default flags.
 		const features = viaWorker[0]?.body as
 		{

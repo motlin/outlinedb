@@ -15,7 +15,7 @@ function readWranglerConfig(): Record<string, unknown>
 
 describe("wrangler.jsonc", () =>
 {
-	it("names the Worker outlinedb and its R2 snapshots bucket outlinedb-snapshots", () =>
+	it("names the Worker outlinedb, its R2 snapshots bucket outlinedb-snapshots and its attachments bucket outlinedb-files", () =>
 	{
 		const {name, r2_buckets} = readWranglerConfig();
 		expect(
@@ -30,6 +30,10 @@ describe("wrangler.jsonc", () =>
 					{
 						binding: "SNAPSHOTS",
 						bucket_name: "outlinedb-snapshots",
+					},
+					{
+						binding: "FILES",
+						bucket_name: "outlinedb-files",
 					},
 				],
 			},
