@@ -148,22 +148,110 @@ export interface MetadataChange
  * Build the patches for several changes applied in order, as one `produce`
  * would: each change is built against the result of the ones before it, and
  * the inverse patches undo them in reverse order.
+ *
+ * Like Immer, a value that an earlier change added or replaced whole goes out
+ * as that one patch carrying its final value: workflowy.com does not apply a
+ * later patch inside an object an earlier patch of the same edit created.
  */
 export function buildMetadataChanges(metadata: MetadataObject, changes: MetadataChange[]): MetadataPatchSet
 {
-	const patches: MetadataPatch[] = [];
-	const inverse: MetadataPatch[] = [];
+	const entries: MetadataPatchSet[] = [];
 	let current = metadata;
 	for (const change of changes)
 	{
 		const set = buildMetadataPatches(current, change.path, change.value);
-		patches.push(...set.patches);
-		inverse.unshift(...set.inverse);
 		current = applyMetadataPatches(current, set.patches);
+		const [patch] = set.patches;
+		if (patch === undefined)
+		{
+			continue;
+		}
+		const holder = entries.find(
+			({patches: [earlier]}) =>
+				earlier !== undefined && earlier.op !== "remove" && isPrefix(earlier.path, patch.path),
+		);
+		if (holder === undefined)
+		{
+			entries.push(set);
+			continue;
+		}
+		const [earlier] = holder.patches;
+		if (earlier === undefined || earlier.op === "remove")
+		{
+			throw new Error("unreachable");
+		}
+		const exists = valueAt(current, earlier.path);
+		if (!exists.found)
+		{
+			// The change removed the very value an earlier one wrote: an add leaves nothing, a replace becomes a remove.
+			const [undo] = holder.inverse;
+			const replaced = earlier.op === "replace" && undo !== undefined && undo.op !== "remove";
+			holder.patches = replaced
+				? [
+						{
+							op: "remove",
+							path: earlier.path,
+						},
+					]
+				: [];
+			holder.inverse = replaced
+				? [
+						{
+							op: "add",
+							path: earlier.path,
+							value: undo.value,
+						},
+					]
+				: [];
+			continue;
+		}
+		holder.patches = [
+			{
+				op: earlier.op,
+				path: earlier.path,
+				value: structuredClone(exists.value),
+			},
+		];
 	}
 	return {
-		patches,
-		inverse,
+		patches: entries.flatMap(({patches}) => patches),
+		inverse: entries.toReversed().flatMap(({inverse}) => inverse),
+	};
+}
+
+function isPrefix(prefix: string[], path: string[]): boolean
+{
+	return prefix.length <= path.length && prefix.every((key, index) => path[index] === key);
+}
+
+function valueAt(
+	metadata: MetadataObject,
+	path: string[],
+):
+	|
+	  {
+			found: true;
+			value: unknown;
+	  }
+	|
+	  {
+			found: false;
+	  }
+{
+	let current: unknown = metadata;
+	for (const key of path)
+	{
+		if (!isObject(current) || !Object.hasOwn(current, key))
+		{
+			return {
+				found: false,
+			};
+		}
+		current = current[key];
+	}
+	return {
+		found: true,
+		value: current,
 	};
 }
 

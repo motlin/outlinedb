@@ -1,6 +1,7 @@
 import {and, asc, desc, eq, isNotNull, lte, sql} from "drizzle-orm";
+import {alias} from "drizzle-orm/sqlite-core";
 import type {SQL} from "drizzle-orm";
-import {nodeContent, outbox} from "../db/schema.js";
+import {mirrors, nodeContent, outbox} from "../db/schema.js";
 import {accountOutboxStatus} from "./account-outbox.js";
 import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 import {currentVersion} from "./cache-temporal.js";
@@ -249,7 +250,10 @@ export function outboxStatus(tx: TemporalTransaction): OutboxStatus
 	};
 }
 
-/** One pending outbox row with its node's current name (null once the node's content version has ended). */
+/**
+ * One pending outbox row with its node's current name (null once the node's content version has ended);
+ * a mirror, whose own name is empty, shows its original's.
+ */
 export interface PendingOutboxListing extends PendingOutboxRow
 {
 	name: string | null;
@@ -258,11 +262,12 @@ export interface PendingOutboxListing extends PendingOutboxRow
 /** Every current outbox row with its node's current name, oldest first, for `outbox status`. */
 export function listPendingOutbox(tx: TemporalTransaction): PendingOutboxListing[]
 {
+	const original = alias(nodeContent, "original");
 	const rows = tx
 		.select(
 			{
 				nodeId: outbox.nodeId,
-				name: nodeContent.name,
+				name: sql<string | null>`coalesce(${original.name}, ${nodeContent.name})`,
 				aspect: outbox.aspect,
 				enqueuedAt: outbox.enqueuedAt,
 				lastError: outbox.lastError,
@@ -270,6 +275,8 @@ export function listPendingOutbox(tx: TemporalTransaction): PendingOutboxListing
 		)
 		.from(outbox)
 		.leftJoin(nodeContent, and(eq(nodeContent.id, outbox.nodeId), currentVersion(nodeContent)))
+		.leftJoin(mirrors, and(eq(mirrors.mirrorId, outbox.nodeId), currentVersion(mirrors)))
+		.leftJoin(original, and(eq(original.id, mirrors.originalId), currentVersion(original)))
 		.where(currentVersion(outbox))
 		.orderBy(asc(outbox.enqueuedAt), asc(outbox.nodeId), asc(outbox.aspect))
 		.all();

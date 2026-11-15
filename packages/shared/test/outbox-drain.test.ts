@@ -7,7 +7,7 @@ import {join} from "node:path";
 import {LocalCalendar} from "../src/cache/local-calendar.js";
 import {LocalTreeWriter} from "../src/cache/local-tree-writer.js";
 import {runUnitOfWork} from "../src/cache/node-composite.js";
-import {OutboxRecorder, outboxStatus} from "../src/cache/outbox.js";
+import {listPendingOutbox, OutboxRecorder, outboxStatus} from "../src/cache/outbox.js";
 import type {OutboxAspect} from "../src/cache/outbox.js";
 import * as schema from "../src/db/schema.js";
 import {mirrors, nodeContent, nodeMetadata, outbox} from "../src/db/schema.js";
@@ -923,13 +923,13 @@ describe("drainOutbox", () =>
 			},
 		);
 	});
-	it("sends each new mirror's create, then one edit per original listing its new mirrors", async () =>
+	it("sends each new mirror's create, then one edit per original listing all its new mirrors in one patch", async () =>
 	{
 		const {writer, outboxRows, pushes, drain} = setup();
 		setClock(at(0));
 		writer.createMirrorsAt(
 			{
-				originalIds: ["a", "c1"],
+				originalIds: ["a", "c1", "a"],
 				parentId: "q",
 				index: 0,
 			},
@@ -947,8 +947,8 @@ describe("drainOutbox", () =>
 			{
 				result:
 				{
-					ops: 4,
-					closed: 6,
+					ops: 5,
+					closed: 9,
 				},
 				pushes: [
 					[
@@ -984,6 +984,22 @@ describe("drainOutbox", () =>
 								},
 							},
 						),
+						bulkCreate(
+							"g3",
+							"q",
+							2,
+							{
+								name: "",
+								metadata:
+								{
+									mirror:
+									{
+										originalId: "a",
+										isMirrorRoot: true,
+									},
+								},
+							},
+						),
 						metadataEdit(
 							"a",
 							[
@@ -995,6 +1011,7 @@ describe("drainOutbox", () =>
 										mirrorRootIds:
 										{
 											g1: true,
+											g3: true,
 										},
 									},
 								},
@@ -1031,8 +1048,35 @@ describe("drainOutbox", () =>
 					row("g2", "create", at(0)),
 					row("g2", "mirror", at(0)),
 					row("g2", "placement", at(0)),
+					row("g3", "create", at(0)),
+					row("g3", "mirror", at(0)),
+					row("g3", "placement", at(0)),
 				],
 			},
+		);
+	});
+
+	it("lists a pending mirror's rows under its original's name", () =>
+	{
+		const {database, writer} = setup();
+		setClock(at(0));
+		writer.createMirrorsAt(
+			{
+				originalIds: ["a"],
+				parentId: "q",
+				index: 0,
+			},
+		);
+
+		expect(listPendingOutbox(database)).toStrictEqual(
+			["create", "mirror", "placement"].map((aspect) => (
+			{
+				nodeId: "g1",
+				name: "a",
+				aspect,
+				enqueuedAt: at(0),
+				lastError: null,
+			})),
 		);
 	});
 
