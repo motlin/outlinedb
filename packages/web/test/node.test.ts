@@ -309,6 +309,22 @@ describe("node cache", () =>
 			]);
 		});
 
+		it("lands a block in its slot even when every sibling reports priority 0", () =>
+		{
+			const children = [row("a", 0), row("b", 0), row("c", 0)];
+			expect(
+				[
+					spliceBlock(children, [row("x", 0)], 0),
+					spliceBlock(children, [row("x", 0)], 1),
+					spliceBlock(children, [row("x", 0)], 3),
+				].map(ids),
+			).toStrictEqual([
+				["x", "a", "b", "c"],
+				["a", "x", "b", "c"],
+				["a", "b", "c", "x"],
+			]);
+		});
+
 		it("renumbers from 0 when the block has no gap, keeping each row whose slot did not change as the same object", () =>
 		{
 			const children = [row("a", 0), row("b", 1), row("c", 2), row("d", 3)];

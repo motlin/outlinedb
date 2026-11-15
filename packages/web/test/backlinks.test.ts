@@ -274,7 +274,7 @@ describe("backlinks route", () =>
 								parent_id: "refs",
 								name: "Also Target",
 								note: null,
-								priority: 0,
+								priority: 1,
 								data:
 								{
 									layoutMode: null,

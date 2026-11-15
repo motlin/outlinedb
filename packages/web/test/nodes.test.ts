@@ -3610,8 +3610,9 @@ describe("nodes view route", () =>
 	};
 
 	/**
-	 * A Backlinks section item as the view sends it: the item row (named after its source, priority 0 as no list holds it)
-	 * carrying its source's text, completion and child flags. A crumb given as a string is a node named after its id.
+	 * A Backlinks section item as the view sends it: the item row (named after its source, its index in the section as
+	 * its priority) carrying its source's text, completion and child flags. A crumb given as a string is a node named
+	 * after its id.
 	 */
 	function backlinkItem(
 		id: string,
@@ -3620,11 +3621,13 @@ describe("nodes view route", () =>
 		{
 			completedAt = null,
 			children = false,
+			index = 0,
 			crumbs,
 		}:
 		{
 			completedAt?: number | null;
 			children?: boolean;
+			index?: number;
 			crumbs: (
 				| string
 				|
@@ -3643,7 +3646,7 @@ describe("nodes view route", () =>
 				parent_id: rootId,
 				name: sourceId,
 				note: null,
-				priority: 0,
+				priority: index,
 				data:
 				{
 					layoutMode: null,
@@ -3813,10 +3816,27 @@ describe("nodes view route", () =>
 				},
 			);
 
-			expect(lists(body)).toStrictEqual([
-				["Beta", ["Neg", "NoMeta", "B1", "Huge"], NO_BACKLINKS],
-				["B1", [], NO_BACKLINKS],
-			]);
+			expect(
+				{
+					lists: lists(body),
+					priorities: body.lists.map(
+						(list: {
+							nodes:
+							{
+								priority: number;
+							}[];
+						}) => list.nodes.map((node) => node.priority),
+					),
+				},
+			).toStrictEqual(
+				{
+					lists: [
+						["Beta", ["Neg", "NoMeta", "B1", "Huge"], NO_BACKLINKS],
+						["B1", [], NO_BACKLINKS],
+					],
+					priorities: [[0, 1, 2, 3], []],
+				},
+			);
 		});
 
 		it("neither counts nor expands a hidden completed row", async () =>
@@ -4004,6 +4024,7 @@ describe("nodes view route", () =>
 						"Cmp",
 						{
 							completedAt: 300,
+							index: 1,
 							crumbs: ["Beta"],
 						},
 					),

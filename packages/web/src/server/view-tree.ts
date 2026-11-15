@@ -620,7 +620,19 @@ export function readBacklinkItems(ctx: ServerContext, targets: SQL): Map<string,
 		);
 		byRoot.set(parentId, items);
 	}
+	// An item's priority is its index in the section, which lists the references root's children in sibling order.
 	return new Map(
-		[...byRoot].map(([rootId, items]) => [rootId, items.toSorted(compareSiblings).map(({item}) => item)]),
+		[...byRoot].map(([rootId, items]) => [
+			rootId,
+			items.toSorted(compareSiblings).map(({item}, index) => (
+			{
+				...item,
+				node:
+				{
+					...item.node,
+					priority: index,
+				},
+			})),
+		]),
 	);
 }
