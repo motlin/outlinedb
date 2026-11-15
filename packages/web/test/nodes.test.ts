@@ -1198,6 +1198,7 @@ describe("nodes lookup op", () =>
 				db,
 				config: readNodeConfig(
 					{
+						OUTLINEDB_MODE: "mirror",
 						WORKFLOWY_API_KEY: "test-api-key",
 					},
 				),
@@ -2037,11 +2038,15 @@ describe("nodes standalone op", () =>
 				migrationsFolder,
 			},
 		);
-		// No WORKFLOWY_API_KEY: a standalone Node host.
+		// A standalone Node host.
 		const ctx = buildServerContext(
 			{
 				db,
-				config: readNodeConfig({}),
+				config: readNodeConfig(
+					{
+						OUTLINEDB_MODE: "standalone",
+					},
+				),
 				ladderEvents: new LadderEventBus(),
 			},
 		);

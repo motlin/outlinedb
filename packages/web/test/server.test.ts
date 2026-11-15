@@ -14,12 +14,16 @@ describe("server config", () =>
 			expect(
 				readNodeConfig(
 					{
+						OUTLINEDB_MODE: "mirror",
 						WORKFLOWY_API_KEY: "key",
 						WORKFLOWY_API_URL: "http://localhost:9",
 						WORKFLOWY_USERNAME: "user@example.com",
+						OUTLINEDB_DB_PATH: "/tmp/outline.sqlite",
 						OUTLINEDB_SQL_QUERY_LOGGING: "true",
 						CALENDAR_ENSURE_ENABLED: "false",
 						CALENDAR_LAYOUT_ENABLED: "false",
+						OUTLINEDB_EMBEDDINGS: "false",
+						TREE_SNAPSHOT: "false",
 					},
 				),
 			).toStrictEqual(
@@ -28,26 +32,34 @@ describe("server config", () =>
 					apiKey: "key",
 					apiUrl: "http://localhost:9",
 					accountEmail: "user@example.com",
+					dbPath: "/tmp/outline.sqlite",
 					sqlQueryLogging: true,
 					calendarEnsureEnabled: false,
 					calendarLayoutEnabled: false,
 					features:
 					{
-						embeddings: true,
-						treeSnapshot: true,
+						embeddings: false,
+						treeSnapshot: false,
 					},
 				},
 			);
 		});
 
-		it("defaults: flags on, logging off, no key so standalone, empty email", () =>
+		it("defaults: flags on, logging off, default database, empty email", () =>
 		{
-			expect(readNodeConfig({})).toStrictEqual(
+			expect(
+				readNodeConfig(
+					{
+						OUTLINEDB_MODE: "standalone",
+					},
+				),
+			).toStrictEqual(
 				{
 					mode: "standalone",
 					apiKey: undefined,
 					apiUrl: undefined,
 					accountEmail: "",
+					dbPath: undefined,
 					sqlQueryLogging: false,
 					calendarEnsureEnabled: true,
 					calendarLayoutEnabled: true,
@@ -58,6 +70,55 @@ describe("server config", () =>
 					},
 				},
 			);
+		});
+
+		it("keeps an API key in standalone mode without writing through to it", () =>
+		{
+			expect(
+				readNodeConfig(
+					{
+						OUTLINEDB_MODE: "standalone",
+						WORKFLOWY_API_KEY: "key",
+					},
+				).mode,
+			).toBe("standalone");
+		});
+
+		it("fails fast when OUTLINEDB_MODE is unset, so a missing key never silently turns writes local", () =>
+		{
+			expect(() =>
+				readNodeConfig(
+					{
+						WORKFLOWY_API_KEY: "key",
+					},
+				),
+			).toThrow(
+				'OUTLINEDB_MODE must be set to "mirror" (write through to workflowy.com) or "standalone" (local writes only); it is unset.',
+			);
+		});
+
+		it("fails fast when OUTLINEDB_MODE is not a known mode", () =>
+		{
+			expect(() =>
+				readNodeConfig(
+					{
+						OUTLINEDB_MODE: "Mirror",
+					},
+				),
+			).toThrow(
+				'OUTLINEDB_MODE must be set to "mirror" (write through to workflowy.com) or "standalone" (local writes only); got "Mirror".',
+			);
+		});
+
+		it("fails fast in mirror mode without WORKFLOWY_API_KEY instead of answering 500 per write", () =>
+		{
+			expect(() =>
+				readNodeConfig(
+					{
+						OUTLINEDB_MODE: "mirror",
+					},
+				),
+			).toThrow("OUTLINEDB_MODE=mirror needs WORKFLOWY_API_KEY to write through to workflowy.com; it is unset.");
 		});
 	});
 

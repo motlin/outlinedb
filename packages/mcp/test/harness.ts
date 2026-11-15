@@ -51,6 +51,7 @@ export function openHarness(prefix: string): Harness
 		{
 			OUTLINEDB_DB_PATH: dbPath,
 			OUTLINEDB_SKIP_MIGRATIONS: "true",
+			OUTLINEDB_MODE: "mirror",
 			WORKFLOWY_API_KEY: "test-api-key",
 			OUTLINEDB_SESSION_FILE: path.join(tempDir, "workflowy-session"),
 		},

@@ -17,8 +17,9 @@ const ladderEvents = new LadderEventBus();
  */
 export function createServerContext(): ServerContext
 {
-	const db = getDatabase();
+	// Config first: an unset or invalid OUTLINEDB_MODE fails before the database is opened.
 	const config = readNodeConfig(process.env);
+	const db = getDatabase(config);
 	return buildServerContext(
 		{
 			db,

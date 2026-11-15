@@ -6,24 +6,25 @@ import {ensureNodeTags} from "@outlinedb/shared/cache";
 import * as schema from "@outlinedb/shared/db";
 import {join} from "node:path";
 import {nodeTreeHost} from "./node-host.js";
+import type {NodeServerConfig} from "./config.js";
 import {createSqlLogger} from "./sql-logger.js";
 import {bindTreeHost} from "./tree-snapshot.js";
 
 let dbInstance: ReturnType<typeof drizzle<typeof schema>> | null = null;
 
-export function getDatabase()
+/** The process database over `config.dbPath`; settings come from `readNodeConfig`, read once by the host. */
+export function getDatabase(config: Pick<NodeServerConfig, "dbPath" | "sqlQueryLogging">)
 {
 	if (dbInstance)
 	{
 		return dbInstance;
 	}
 
-	const dbPath = (process.env.OUTLINEDB_DB_PATH ?? "") || "outlinedb.sqlite";
-	const sqlite = new Database(dbPath);
+	const sqlite = new Database(config.dbPath ?? "outlinedb.sqlite");
 
 	sqliteVec.load(sqlite);
 
-	if (!process.env.OUTLINEDB_DB_PATH)
+	if (config.dbPath === undefined)
 	{
 		sqlite.pragma("journal_mode = WAL");
 	}
@@ -32,7 +33,7 @@ export function getDatabase()
 		sqlite,
 		{
 			schema,
-			logger: createSqlLogger(process.env.OUTLINEDB_SQL_QUERY_LOGGING === "true"),
+			logger: createSqlLogger(config.sqlQueryLogging),
 		},
 	);
 

@@ -47,6 +47,7 @@ beforeEach(() =>
 			db,
 			config: readNodeConfig(
 				{
+					OUTLINEDB_MODE: "mirror",
 					WORKFLOWY_API_KEY: "test-key",
 				},
 			),

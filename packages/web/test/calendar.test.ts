@@ -2728,7 +2728,11 @@ describe("calendar in a standalone context", () =>
 		const ctx = buildServerContext(
 			{
 				db,
-				config: readNodeConfig({}),
+				config: readNodeConfig(
+					{
+						OUTLINEDB_MODE: "standalone",
+					},
+				),
 				ladderEvents: new LadderEventBus(),
 			},
 		);

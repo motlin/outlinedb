@@ -10,6 +10,7 @@ Why this project merges several upstream data sources: see [docs/workflowy-data-
 
 - [OutlineDB](#outlinedb)
 - [Usage](#usage)
+- [Web server environment](#web-server-environment)
 - [Commands](#commands)
 
 <!-- tocstop -->
@@ -31,6 +32,25 @@ USAGE
 ```
 
 <!-- usagestop -->
+
+# Web server environment
+
+The web server's Node host (`just web`, `just dev-node`) and the stdio MCP server read every setting once, in `readNodeConfig` (`packages/web/src/server/config.ts`), one env var each:
+
+| Variable                      | Default                     | Meaning                                                                                                                   |
+| ----------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `OUTLINEDB_MODE`              | required                    | `mirror` writes through to workflowy.com and persists the result locally; `standalone` writes only to the local database. |
+| `WORKFLOWY_API_KEY`           | unset                       | The Workflowy API key; required when `OUTLINEDB_MODE=mirror`.                                                             |
+| `WORKFLOWY_API_URL`           | workflowy.com               | Override for the Workflowy API base URL (tests, proxies).                                                                 |
+| `WORKFLOWY_USERNAME`          | empty                       | The account email shown by `GET /api/v1/account`.                                                                         |
+| `OUTLINEDB_DB_PATH`           | `outlinedb.sqlite` in `cwd` | The SQLite cache file; the default path also switches on WAL.                                                             |
+| `OUTLINEDB_SQL_QUERY_LOGGING` | `false`                     | `true` logs every SQL query.                                                                                              |
+| `CALENDAR_ENSURE_ENABLED`     | `true`                      | `false` stops `POST /api/v1/calendar/day/:dateId/ensure` from creating day nodes.                                         |
+| `CALENDAR_LAYOUT_ENABLED`     | `true`                      | `false` stops `PUT /api/v1/calendar/layout` from restructuring the calendar.                                              |
+| `TREE_SNAPSHOT`               | `true`                      | `false` serves search from SQL instead of an in-memory whole-tree snapshot.                                               |
+| `OUTLINEDB_EMBEDDINGS`        | `true`                      | `false` turns off related notes (the sqlite-vec index).                                                                   |
+
+The server fails at startup when `OUTLINEDB_MODE` is unset or unknown, or is `mirror` without `WORKFLOWY_API_KEY`. The Cloudflare Worker reads its own bindings (`packages/cloudflare/src/worker-config.ts`): a store is `mirror` when it is listed in `OUTLINEDB_ENV_OWNERS` (else `ALLOWED_EMAILS`), and `TREE_SNAPSHOT` is off unless `true`.
 
 # Commands
 

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import {afterEach, describe, expect, it, vi} from "vite-plus/test";
+import {afterEach, beforeEach, describe, expect, it, vi} from "vite-plus/test";
 import {Hono} from "hono";
 import type {CacheService} from "@outlinedb/shared/cache";
 import {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
@@ -14,6 +14,13 @@ vi.mock("../src/server/db.js", () => (
 {
 	getDatabase: () => ({}),
 }));
+
+// A mirror host by default; a test that needs standalone stubs OUTLINEDB_MODE itself.
+beforeEach(() =>
+{
+	vi.stubEnv("OUTLINEDB_MODE", "mirror");
+	vi.stubEnv("WORKFLOWY_API_KEY", "fake-api-key");
+});
 
 afterEach(() =>
 {
@@ -90,7 +97,7 @@ describe("createServerContext internalAuth", () =>
 	it("is undefined in a standalone host, so it never syncs or pushes to workflowy.com even with credentials and a saved cookie", () =>
 	{
 		stubAuthEnv("alice@example.com", "pw", "sessionid=saved");
-		vi.stubEnv("WORKFLOWY_API_KEY", "");
+		vi.stubEnv("OUTLINEDB_MODE", "standalone");
 		const ctx = createServerContext();
 		expect([ctx.mode, ctx.internalAuth, ctx.internalAdapter?.()]).toStrictEqual([
 			"standalone",
