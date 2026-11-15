@@ -28,6 +28,12 @@
 			"types": "./dist/cache/calendar-lookup.d.ts",
 			"import": "./dist/cache/calendar-lookup.js"
 		},
+		"./local-calendar":
+		{
+			"source": "./src/cache/local-calendar.ts",
+			"types": "./dist/cache/local-calendar.d.ts",
+			"import": "./dist/cache/local-calendar.js"
+		},
 		"./internal":
 		{
 			"source": "./src/internal/index.ts",

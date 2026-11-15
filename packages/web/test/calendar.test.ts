@@ -3,14 +3,17 @@ import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
 import {afterEach, describe, expect, it, vi} from "vite-plus/test";
-import {CacheService, storeInternalMetadata} from "@outlinedb/shared/cache";
+import {CacheService, provisionLocalAccount, storeInternalMetadata} from "@outlinedb/shared/cache";
 import * as schema from "@outlinedb/shared/db";
-import {calendarNodeId, CalendarRootMissing} from "@outlinedb/shared/internal";
+import {calendarNodeId, calendarRootId, CalendarRootMissing} from "@outlinedb/shared/internal";
 import type {WorkflowyInternalAdapter, CalendarLayoutSnapshot, LayoutTimings} from "@outlinedb/shared/internal";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {findCalendarDay, findCalendarDays, findTaggedCalendarRoot} from "../src/server/calendar-day.js";
 import type {ServerContext, AppEnv} from "../src/server/context.js";
 import {httpAppFor} from "./http-app-for.js";
+import {readNodeConfig} from "../src/server/config.js";
+import {buildServerContext} from "../src/server/context.js";
+import {LadderEventBus} from "../src/server/ladder-events.js";
 import {Hono} from "hono";
 import type {FoundDatesResponse, CalendarLayout} from "../src/node-types.js";
 import {z} from "zod";
@@ -2617,6 +2620,242 @@ describe("calendar route", () =>
 				},
 			);
 		});
+	});
+});
+
+describe("calendar in a standalone context", () =>
+{
+	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
+	const PROVISIONED = 1_600_000_000_000;
+	const DAY_NAME = '<time startYear="2026" startMonth="10" startDay="17">Sat, Oct 17, 2026</time>';
+
+	let sqlite: DatabaseConstructor.Database;
+	let clock = PROVISIONED;
+
+	afterEach(() =>
+	{
+		vi.useRealTimers();
+		vi.restoreAllMocks();
+		sqlite.close();
+	});
+
+	/** A provisioned standalone store with an empty outline; any request to an upstream fails the test. */
+	function setup()
+	{
+		vi.useFakeTimers(
+			{
+				toFake: ["Date"],
+			},
+		);
+		clock = PROVISIONED;
+		vi.setSystemTime(clock);
+		sqlite = new DatabaseConstructor(":memory:");
+		const db = drizzle(
+			sqlite,
+			{
+				schema,
+			},
+		);
+		migrate(
+			db,
+			{
+				migrationsFolder,
+			},
+		);
+		provisionLocalAccount(
+			db,
+			{
+				userId: "user-1",
+				email: "a@example.com",
+				joinedAt: new Date(PROVISIONED),
+			},
+		);
+		const ctx = buildServerContext(
+			{
+				db,
+				config: readNodeConfig({}),
+				ladderEvents: new LadderEventBus(),
+			},
+		);
+		vi.spyOn(globalThis, "fetch").mockRejectedValue(
+			new Error("unexpected fetch: a standalone calendar write called an upstream"),
+		);
+		const hono = httpAppFor(ctx);
+		const send = async (method: string, path: string, body?: unknown) =>
+		{
+			// Each request a second later: a unit of work may not overwrite a version from its own millisecond.
+			clock += 1000;
+			vi.setSystemTime(clock);
+			const res = await hono.fetch(
+				new Request(
+					`http://x/api/v1/calendar/${path}`,
+					{
+						method,
+						headers:
+						{
+							"content-type": "application/json",
+						},
+						...(body === undefined
+							? {}
+							:
+								{
+									body: JSON.stringify(body),
+								}),
+					},
+				),
+			);
+			return {
+				status: res.status,
+				body: (await res.json()) as unknown,
+			};
+		};
+		const entropyKey = db.select().from(schema.account).get()?.entropyKey ?? "";
+		/** The outline under `parentId` as nested `[name, children]`, `children` left out for a leaf. */
+		const outline = (parentId: string | null): unknown[] =>
+			ctx.cacheService.getChildren(parentId).map((node) =>
+			{
+				const children = outline(node.id);
+				return children.length === 0 ? (node.name ?? "") : [node.name ?? "", children];
+			});
+		return {
+			send,
+			entropyKey,
+			outline,
+			cacheService: ctx.cacheService,
+		};
+	}
+
+	it("ensures a day with the account's deterministic ids, creating the calendar root, and reads it back", async () =>
+	{
+		const {send, entropyKey, outline} = setup();
+		const year = calendarNodeId(entropyKey, "year", 20_260_000);
+		const month = calendarNodeId(entropyKey, "month", 20_261_000);
+		const day = calendarNodeId(entropyKey, "day", 20_261_017);
+
+		const ensured = await send("POST", "day/20261017/ensure");
+		const {firstChildId} = ensured.body as
+		{
+			firstChildId: string;
+		};
+
+		expect(
+			{
+				entropyKey: entropyKey.length > 0,
+				ensured,
+				again: await send("POST", "day/20261017/ensure"),
+				lookup: await send("GET", "day/20261017"),
+				outline: outline(null),
+			},
+		).toStrictEqual(
+			{
+				entropyKey: true,
+				ensured:
+				{
+					status: 200,
+					body:
+					{
+						dayId: day,
+						firstChildId,
+						created: [year, month, day, firstChildId],
+					},
+				},
+				again:
+				{
+					status: 200,
+					body:
+					{
+						dayId: day,
+						firstChildId,
+						created: [],
+					},
+				},
+				lookup:
+				{
+					status: 200,
+					body:
+					{
+						id: day,
+						firstChildId,
+					},
+				},
+				outline: [["📆 Calendar", [["2026", [["10", [[DAY_NAME, [""]]]]]]]]],
+			},
+		);
+	});
+
+	it("applies a layout and undoes it in the local tables", async () =>
+	{
+		const {send, entropyKey, outline} = setup();
+		const rootId = calendarRootId(entropyKey);
+		await send("POST", "day/20261017/ensure");
+		const before = outline(null);
+
+		expect(
+			{
+				applied: await send(
+					"PUT",
+					"layout",
+					{
+						levels:
+						{
+							year: true,
+							day: true,
+						},
+					},
+				),
+				afterApply: outline(null),
+				layout: await send("GET", "layout"),
+				undone: await send("POST", "layout/undo"),
+				afterUndo: outline(null),
+				nothing: await send("POST", "layout/undo"),
+			},
+		).toStrictEqual(
+			{
+				applied:
+				{
+					status: 200,
+					body:
+					{
+						rootId,
+						writes: 3,
+					},
+				},
+				afterApply: [["📆 Calendar", [["2026", [[DAY_NAME, [""]]]]]]],
+				layout:
+				{
+					status: 200,
+					body:
+					{
+						levels:
+						{
+							year: true,
+							day: true,
+						},
+						customLevels: [],
+						needsConfirm: false,
+						applyEnabled: true,
+					},
+				},
+				undone:
+				{
+					status: 200,
+					body:
+					{
+						rootId,
+						writes: 3,
+					},
+				},
+				afterUndo: before,
+				nothing:
+				{
+					status: 409,
+					body:
+					{
+						error: "There is no calendar layout to undo",
+					},
+				},
+			},
+		);
 	});
 });
 

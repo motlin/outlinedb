@@ -2,6 +2,8 @@ import {and, asc, desc, eq, isNull, lte, gt, ne, sql} from "drizzle-orm";
 import type {AnySQLiteColumn} from "drizzle-orm/sqlite-core";
 import {account, mirrors, nodeContent, nodeMetadata, referencesRoots, rootPreferences} from "../db/schema.js";
 import type {AppDatabase} from "../db/types.js";
+import type {LayoutWrite} from "../internal/calendar-layout-apply.js";
+import {applyMetadataPatches} from "../internal/metadata-patch.js";
 import type {NewTree} from "../internal/ops.js";
 import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 import {HOME_TARGET} from "../types/targets.js";
@@ -254,6 +256,25 @@ class PendingWrites
 		return order;
 	}
 
+	/** A node's parent as this unit leaves it so far. */
+	parentOf(id: string): string | null
+	{
+		const patched = this.content.get(id);
+		return patched?.parentId === undefined ? (currentContent(this.tx, id)?.parentId ?? null) : patched.parentId;
+	}
+
+	/** `id` and every descendant as this unit leaves them so far, breadth-first. */
+	subtree(id: string): string[]
+	{
+		const ids = [id];
+		// for-of visits elements pushed during the loop, so this walks every level.
+		for (const parentId of ids)
+		{
+			ids.push(...(this.orders.get(parentId) ?? currentChildIds(this.tx, parentId)));
+		}
+		return ids;
+	}
+
 	markCreated(id: string): void
 	{
 		this.created.add(id);
@@ -366,7 +387,7 @@ class PendingWrites
 }
 
 /** A parent's current children ids (Home's for null) in sort order: priority, then createdAt. */
-function currentChildIds(tx: TemporalTransaction, parentId: string | null): string[]
+export function currentChildIds(tx: TemporalTransaction, parentId: string | null): string[]
 {
 	return tx
 		.select(
@@ -431,29 +452,6 @@ function writeTarget(tx: TemporalTransaction, id: string): string
 		.where(and(eq(mirrors.mirrorId, id), currentVersion(mirrors)))
 		.get();
 	return mirror?.originalId ?? id;
-}
-
-/** `id` and every current descendant, breadth-first. */
-function subtreeIds(tx: TemporalTransaction, id: string): string[]
-{
-	const ids = [id];
-	// for-of visits elements pushed during the loop, so this walks every level.
-	for (const parentId of ids)
-	{
-		for (const child of tx
-			.select(
-				{
-					id: nodeContent.id,
-				},
-			)
-			.from(nodeContent)
-			.where(and(eq(nodeContent.parentId, parentId), currentVersion(nodeContent)))
-			.all())
-		{
-			ids.push(child.id);
-		}
-	}
-	return ids;
 }
 
 /** Whether `id` is a current references root. */
@@ -875,104 +873,107 @@ export class LocalTreeWriter
 	 */
 	restoreNode(input: LocalRestoreInput): boolean
 	{
-		return this.write((pending, unitOfWork) =>
+		return this.write((pending, unitOfWork) => this.restoreInUnit(pending, unitOfWork, input));
+	}
+
+	/** {@link restoreNode} inside a unit of work; the restored rows count as created in it. */
+	private restoreInUnit(pending: PendingWrites, unitOfWork: UnitOfWork, input: LocalRestoreInput): boolean
+	{
+		const {tx, systemTime} = unitOfWork;
+		if (currentContent(tx, input.id) !== undefined)
 		{
-			const {tx, systemTime} = unitOfWork;
-			if (currentContent(tx, input.id) !== undefined)
+			throw new Error(`Node ${input.id} is not deleted`);
+		}
+		const closed = tx
+			.select(
+				{
+					systemTo: nodeContent.systemTo,
+				},
+			)
+			.from(nodeContent)
+			.where(and(eq(nodeContent.id, input.id), ne(nodeContent.systemTo, FAR_FUTURE_DATE)))
+			.orderBy(desc(nodeContent.systemTo))
+			.get();
+		if (closed === undefined)
+		{
+			return false;
+		}
+		const asOf = systemTimeJustBefore(closed.systemTo);
+		const at = (table: {systemFrom: AnySQLiteColumn; systemTo: AnySQLiteColumn}) =>
+			and(lte(table.systemFrom, asOf), gt(table.systemTo, asOf));
+		const rowAt = (id: string) => (
+		{
+			content: tx
+				.select()
+				.from(nodeContent)
+				.where(and(eq(nodeContent.id, id), at(nodeContent)))
+				.get(),
+			metadata: tx
+				.select()
+				.from(nodeMetadata)
+				.where(and(eq(nodeMetadata.nodeId, id), at(nodeMetadata)))
+				.get(),
+		});
+		const root = rowAt(input.id);
+		if (root.content === undefined)
+		{
+			return false;
+		}
+		const parentId = input.parentId === undefined ? root.content.parentId : toParent(input.parentId);
+		requireParent(tx, parentId);
+		const order = pending.order(parentId);
+		const index = clampIndex(
+			input.index ?? (input.parentId === undefined ? (root.metadata?.priority ?? order.length) : order.length),
+			order.length,
+		);
+		const subtree = readSubtreeAt(tx, input.id, asOf);
+		const restored: string[] = [];
+		const reopen = (id: string, nodeParent: string | null, priority: number): void =>
+		{
+			if (currentContent(tx, id) !== undefined)
 			{
-				throw new Error(`Node ${input.id} is not deleted`);
+				return;
 			}
-			const closed = tx
-				.select(
+			const {content, metadata} = rowAt(id);
+			if (content === undefined)
+			{
+				return;
+			}
+			tx.insert(nodeContent)
+				.values(
 					{
-						systemTo: nodeContent.systemTo,
+						...content,
+						parentId: nodeParent,
+						systemFrom: systemTime,
+						systemTo: FAR_FUTURE_DATE,
 					},
 				)
-				.from(nodeContent)
-				.where(and(eq(nodeContent.id, input.id), ne(nodeContent.systemTo, FAR_FUTURE_DATE)))
-				.orderBy(desc(nodeContent.systemTo))
-				.get();
-			if (closed === undefined)
+				.run();
+			if (metadata !== undefined)
 			{
-				return false;
-			}
-			const asOf = systemTimeJustBefore(closed.systemTo);
-			const at = (table: {systemFrom: AnySQLiteColumn; systemTo: AnySQLiteColumn}) =>
-				and(lte(table.systemFrom, asOf), gt(table.systemTo, asOf));
-			const rowAt = (id: string) => (
-			{
-				content: tx
-					.select()
-					.from(nodeContent)
-					.where(and(eq(nodeContent.id, id), at(nodeContent)))
-					.get(),
-				metadata: tx
-					.select()
-					.from(nodeMetadata)
-					.where(and(eq(nodeMetadata.nodeId, id), at(nodeMetadata)))
-					.get(),
-			});
-			const root = rowAt(input.id);
-			if (root.content === undefined)
-			{
-				return false;
-			}
-			const parentId = input.parentId === undefined ? root.content.parentId : toParent(input.parentId);
-			requireParent(tx, parentId);
-			const order = pending.order(parentId);
-			const index = clampIndex(
-				input.index ??
-					(input.parentId === undefined ? (root.metadata?.priority ?? order.length) : order.length),
-				order.length,
-			);
-			const subtree = readSubtreeAt(tx, input.id, asOf);
-			const restored: string[] = [];
-			const reopen = (id: string, nodeParent: string | null, priority: number): void =>
-			{
-				if (currentContent(tx, id) !== undefined)
-				{
-					return;
-				}
-				const {content, metadata} = rowAt(id);
-				if (content === undefined)
-				{
-					return;
-				}
-				tx.insert(nodeContent)
+				tx.insert(nodeMetadata)
 					.values(
 						{
-							...content,
-							parentId: nodeParent,
+							...metadata,
+							priority,
 							systemFrom: systemTime,
 							systemTo: FAR_FUTURE_DATE,
 						},
 					)
 					.run();
-				if (metadata !== undefined)
-				{
-					tx.insert(nodeMetadata)
-						.values(
-							{
-								...metadata,
-								priority,
-								systemFrom: systemTime,
-								systemTo: FAR_FUTURE_DATE,
-							},
-						)
-						.run();
-				}
-				restored.push(id);
-				for (const [childPriority, childId] of (subtree.children.get(id) ?? []).entries())
-				{
-					reopen(childId, id, childPriority);
-				}
-			};
-			reopen(input.id, parentId, index);
-			order.splice(index, 0, input.id);
-			writeInternalMetadata(unitOfWork, new Map(restored.map((id) => [id, subtree.metadata.get(id)])));
-			this.reopenMirrors(unitOfWork, restored, asOf);
-			return true;
-		});
+			}
+			restored.push(id);
+			pending.markCreated(id);
+			for (const [childPriority, childId] of (subtree.children.get(id) ?? []).entries())
+			{
+				reopen(childId, id, childPriority);
+			}
+		};
+		reopen(input.id, parentId, index);
+		order.splice(index, 0, input.id);
+		writeInternalMetadata(unitOfWork, new Map(restored.map((id) => [id, subtree.metadata.get(id)])));
+		this.reopenMirrors(unitOfWork, restored, asOf);
+		return true;
 	}
 
 	/** Reopen the mirror rows live at `asOf` that join a restored node to a node live now (or restored too). */
@@ -1104,13 +1105,9 @@ export class LocalTreeWriter
 	{
 		const {tx} = unitOfWork;
 		const ended: string[] = [];
-		/** Each node's parent as this unit leaves it. */
-		const parentOf = new Map<string, string | null>();
-		const parent = (id: string): string | null =>
-			parentOf.has(id) ? (parentOf.get(id) ?? null) : (currentContent(tx, id)?.parentId ?? null);
 		const unlink = (id: string): void =>
 		{
-			const order = pending.order(parent(id));
+			const order = pending.order(pending.parentOf(id));
 			const at = order.indexOf(id);
 			if (at !== -1)
 			{
@@ -1120,7 +1117,7 @@ export class LocalTreeWriter
 		const end = (id: string): void =>
 		{
 			unlink(id);
-			ended.push(...subtreeIds(tx, id));
+			ended.push(...pending.subtree(id));
 		};
 		for (const mirrorId of plan.mirrorIds)
 		{
@@ -1129,11 +1126,10 @@ export class LocalTreeWriter
 		for (const {originalId, mirrorId} of plan.promotions)
 		{
 			unlink(originalId);
-			const target = parent(mirrorId);
+			const target = pending.parentOf(mirrorId);
 			const order = pending.order(target);
 			order.splice(order.indexOf(mirrorId), 1, originalId);
-			ended.push(...subtreeIds(tx, mirrorId));
-			parentOf.set(originalId, target);
+			ended.push(...pending.subtree(mirrorId));
 			pending.setContent(
 				originalId,
 				{
@@ -1149,9 +1145,9 @@ export class LocalTreeWriter
 		}
 		if (plan.nodeId !== null)
 		{
-			const kept = new Set(plan.promotions.flatMap(({originalId}) => subtreeIds(tx, originalId)));
+			const kept = new Set(plan.promotions.flatMap(({originalId}) => pending.subtree(originalId)));
 			unlink(plan.nodeId);
-			ended.push(...subtreeIds(tx, plan.nodeId).filter((id) => !kept.has(id)));
+			ended.push(...pending.subtree(plan.nodeId).filter((id) => !kept.has(id)));
 		}
 		// Upstream deletes a deleted source's backlink items; its references roots stay, even when emptied.
 		const dead = new Set(ended);
@@ -1293,57 +1289,147 @@ export class LocalTreeWriter
 	{
 		this.write((pending, {tx}) =>
 		{
-			const now = this.nowDate();
-			const parentOf = new Map<string, string | null>();
-			for (const move of moves)
+			this.moveInUnit(pending, tx, moves);
+		});
+	}
+
+	/**
+	 * Apply a calendar layout's tree writes (or the writes undoing one), in order, in one unit of work: creates with
+	 * their metadata, moves and undeletes at the writes' slots, deletes of the emptied level nodes, and metadata edits
+	 * patched over each node's stored metadata. Each write is planned against the outline the earlier ones leave.
+	 */
+	applyLayoutWrites(writes: readonly LayoutWrite[]): void
+	{
+		this.write((pending, unitOfWork) =>
+		{
+			const {tx} = unitOfWork;
+			const edited = new Map<string, InternalMetadata>();
+			for (const write of writes)
 			{
-				if (move.ids.length === 0)
+				switch (write.op)
 				{
-					continue;
-				}
-				const target = toParent(move.parentId);
-				requireParent(tx, target);
-				for (const id of move.ids)
-				{
-					if (!parentOf.has(id))
+					case "edit":
 					{
-						parentOf.set(id, requireNode(tx, id).parentId);
+						const current = edited.get(write.id) ?? readNodeInternalMetadata(tx, write.id);
+						edited.set(write.id, applyMetadataPatches(current, write.patches));
+						break;
 					}
-					if (target !== null && this.isInSubtree(tx, parentOf, target, id))
+					case "create":
 					{
-						throw new Error(`Cannot move ${id} under its own subtree`);
-					}
-				}
-				const order = pending.order(target);
-				const index = clampIndex(move.index ?? order.length, order.length);
-				const moving = new Set(move.ids);
-				const before = order.slice(0, index).filter((sibling) => !moving.has(sibling));
-				const after = order.slice(index).filter((sibling) => !moving.has(sibling));
-				for (const id of move.ids)
-				{
-					const source = parentOf.get(id) ?? null;
-					if (source !== target)
-					{
-						const sourceOrder = pending.order(source);
-						sourceOrder.splice(sourceOrder.indexOf(id), 1);
-						pending.setContent(
-							id,
+						this.insertTrees(
+							pending,
+							unitOfWork,
 							{
-								parentId: target,
+								parentId: write.parentId,
+								index: write.index,
+								trees: [
+									{
+										id: write.id,
+										name: write.name,
+										metadata: write.metadata,
+									},
+								],
 							},
 						);
-						parentOf.set(id, target);
+						break;
 					}
-					pending.setMetadata(
+					case "move":
+					{
+						this.moveInUnit(pending, tx, [
+							{
+								ids: [write.id],
+								parentId: write.parentId,
+								index: write.index,
+							},
+						]);
+						break;
+					}
+					case "delete":
+					{
+						this.removeNodes(
+							pending,
+							unitOfWork,
+							{
+								mirrorIds: [],
+								promotions: [],
+								nodeId: write.id,
+							},
+						);
+						break;
+					}
+					case "undelete":
+					{
+						this.restoreInUnit(
+							pending,
+							unitOfWork,
+							{
+								id: write.id,
+								parentId: write.parentId,
+								index: write.index,
+							},
+						);
+						break;
+					}
+				}
+			}
+			const live = [...edited].filter(([id]) => currentContent(tx, id) !== undefined);
+			writeInternalMetadata(unitOfWork, new Map(live));
+		});
+	}
+
+	/** {@link moveBlocks} inside a unit of work. */
+	private moveInUnit(pending: PendingWrites, tx: TemporalTransaction, moves: readonly LocalMoveInput[]): void
+	{
+		const now = this.nowDate();
+		const parentOf = new Map<string, string | null>();
+		for (const move of moves)
+		{
+			if (move.ids.length === 0)
+			{
+				continue;
+			}
+			const target = toParent(move.parentId);
+			requireParent(tx, target);
+			for (const id of move.ids)
+			{
+				if (!parentOf.has(id))
+				{
+					parentOf.set(id, requireNode(tx, id).parentId);
+				}
+				if (target !== null && this.isInSubtree(tx, parentOf, target, id))
+				{
+					throw new Error(`Cannot move ${id} under its own subtree`);
+				}
+			}
+			const order = pending.order(target);
+			const index = clampIndex(move.index ?? order.length, order.length);
+			const moving = new Set(move.ids);
+			const before = order.slice(0, index).filter((sibling) => !moving.has(sibling));
+			const after = order.slice(index).filter((sibling) => !moving.has(sibling));
+			for (const id of move.ids)
+			{
+				const source = parentOf.get(id) ?? null;
+				if (source !== target)
+				{
+					const sourceOrder = pending.order(source);
+					sourceOrder.splice(sourceOrder.indexOf(id), 1);
+					pending.setContent(
 						id,
 						{
-							modifiedAt: now,
+							parentId: target,
 						},
 					);
+					parentOf.set(id, target);
 				}
-				order.splice(0, order.length, ...before, ...move.ids, ...after);
+				pending.setMetadata(
+					id,
+					{
+						modifiedAt: now,
+					},
+				);
 			}
-		});
+			order.splice(0, order.length, ...before, ...move.ids, ...after);
+		}
 	}
 
 	/** Whether `nodeId` is `ancestorId` or below it, following moves already planned in this unit. */

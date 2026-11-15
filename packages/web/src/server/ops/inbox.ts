@@ -2,8 +2,8 @@
  * `GET /api/v1/inbox/share?title=&text=&url=` -> 302 to the Inbox: the web manifest's
  * Share to Workflowy target (a Web Share Target). The shared fields, blanks and a url the
  * text already holds left out, become one item at the top of the Inbox, which the adapter
- * finds (or, standalone, creates). 400 when nothing was shared, 409 when workflowy.com has no
- * Inbox, 503 without the internal API.
+ * finds. 400 when nothing was shared, 409 when workflowy.com has no Inbox, 503 without the
+ * internal API.
  */
 
 import {InboxMissing} from "@outlinedb/shared/internal";

@@ -7,9 +7,9 @@ import type {WorkflowyWriteThroughClient} from "../cache/workflowy-write-through
 import {keptInternalMetadata, readNodeInternalMetadata, storeInternalMetadata} from "../cache/internal-metadata.js";
 import {collectItemRelationships, currentBacklinkItems, emptyItemRelationships} from "../cache/item-relationships.js";
 import {runUnitOfWork} from "../cache/node-composite.js";
+import {endLayoutApplied, layoutAppliedAt, recordLayoutApplied} from "../cache/calendar-layout-applies.js";
 import {readSubtreeAt, systemTimeJustBefore} from "../cache/subtree-history.js";
 import {newSystemTimestamp} from "../cache/system-time.js";
-import {closeCurrentVersions} from "../cache/temporal-merge.js";
 import
 {
 	ACCOUNT_IMPORT_NAME,
@@ -28,27 +28,17 @@ import {withRootMetaChanges, withSetting} from "../cache/local-account.js";
 import {applyExpansionDelta, expansionVersion, readExpansion, resolveExpandedIds} from "../cache/expansion-store.js";
 import {advanceTreeTxId, readTreeTxId} from "../cache/tree-transaction.js";
 import type {ItemRelationships} from "../cache/item-relationships.js";
-import {calendarLayoutApplies, mirrors as mirrorsTable, nodeContent} from "../db/schema.js";
+import {mirrors as mirrorsTable, nodeContent} from "../db/schema.js";
 import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 import {HOME_TARGET} from "../types/targets.js";
 import {hasInternalLink, internalLinkShortIds} from "../workflowy/internal-links.js";
 import {upstreamExpansionKey} from "../workflowy/virtual-id.js";
-import
-{
-	CALENDAR_LEVELS,
-	DEFAULT_CALENDAR_LEVELS,
-	CalendarRootMissing,
-	calendarDateId,
-	calendarInsertIndex,
-	calendarLevelMetadata,
-	calendarLevelName,
-	parseDateId,
-} from "./calendar-day.js";
+import {CalendarRootMissing, calendarInsertIndex, parseDateId} from "./calendar-day.js";
 import type {CalendarLevel} from "./calendar-day.js";
+import {calendarChainSpecs} from "./calendar-chain.js";
 import {backfilledCalendarDateId, backfilledCalendarTimestamp} from "./calendar-backfill.js";
-import {CALENDAR_ID_NAMESPACE, calendarNodeId, uuidv5} from "./calendar-ids.js";
-import {CALENDAR_ROOT_NAME, findTaggedCalendarRoot} from "../cache/calendar-lookup.js";
-import {findInbox, INBOX_NAME} from "../cache/inbox-lookup.js";
+import {findTaggedCalendarRoot} from "../cache/calendar-lookup.js";
+import {findInbox} from "../cache/inbox-lookup.js";
 import {calendarLayoutWrites, layoutWriteParents} from "./calendar-layout-apply.js";
 import {calendarLayoutUndoWrites} from "./calendar-layout-undo.js";
 import type {LayoutWrite} from "./calendar-layout-apply.js";
@@ -454,11 +444,6 @@ export interface WorkflowyInternalAdapterOptions
 	writeThrough?: WorkflowyWriteThroughClient;
 	/** Ids for created nodes; defaults to `crypto.randomUUID`. */
 	generateId?: () => string;
-	/**
-	 * Disconnected from workflowy.com, so a calendar root the cache lacks is created lazily.
-	 * Defaults to false: workflowy.com always has the root, so a cache miss re-syncs or fails loudly.
-	 */
-	standalone?: boolean;
 }
 
 /** Log a resync error at error level before it propagates, so a missing or stale seed never goes unnoticed. */
@@ -622,7 +607,6 @@ export class WorkflowyInternalAdapter
 	private readonly pusher: PushAndPoll;
 	private readonly writeThrough: WorkflowyWriteThroughClient | undefined;
 	private readonly generateId: () => string;
-	private readonly standalone: boolean;
 	private accountRefresh: Promise<void> | undefined;
 	/** Bumped on every account snapshot store, so a background refresh never overwrites a newer write. */
 	private accountStores = 0;
@@ -651,7 +635,6 @@ export class WorkflowyInternalAdapter
 		);
 		this.writeThrough = options.writeThrough;
 		this.generateId = options.generateId ?? (() => crypto.randomUUID());
-		this.standalone = options.standalone ?? false;
 	}
 
 	/**
@@ -1385,36 +1368,25 @@ export class WorkflowyInternalAdapter
 			throw new RangeError(`${dateId} is not a YYYYMMDD date`);
 		}
 		const root = await this.ensureCalendarRoot();
-		// Upstream `GO`: the root's levels (a missing key is off), else year, month and day.
-		const shown = root.levels ?? DEFAULT_CALENDAR_LEVELS;
-		const levels = CALENDAR_LEVELS.slice(0, CALENDAR_LEVELS.indexOf(stopAt) + 1).filter((level) => shown[level]);
 		const session = await this.session();
 		const rootMetadata = await this.getRootMeta([]);
 		const dateFormat = getPath(rootMetadata, ["dateFormat"]);
 		const weekStartDay = getPath(rootMetadata, ["weekStartDay"]);
-		const weekStart = typeof weekStartDay === "number" ? weekStartDay : 0;
-		const specs = levels.map((level) =>
-		{
-			const levelDateId = calendarDateId(level, date, weekStart);
-			const id =
-				session.entropyKey === undefined
-					? undefined
-					: calendarNodeId(session.entropyKey, level, levelDateId, date.year);
-			return {
-				level,
-				levelDateId,
-				id,
-			};
-		});
-		const toCreate = ({level, id}: (typeof specs)[number]): CalendarChainNode => (
+		const specs = calendarChainSpecs(
+			date,
+			{
+				shown: root.levels,
+				stopAt,
+				dateFormat: typeof dateFormat === "string" ? dateFormat : "",
+				weekStartDay: typeof weekStartDay === "number" ? weekStartDay : 0,
+				entropyKey: session.entropyKey,
+			},
+		);
+		const toCreate = ({id, name, metadata}: (typeof specs)[number]): CalendarChainNode => (
 		{
 			id: id ?? this.generateId(),
-			name: calendarLevelName(level, date, typeof dateFormat === "string" ? dateFormat : "", weekStart),
-			metadata:
-			{
-				restorableUniqueNode: true,
-				calendar: calendarLevelMetadata(level, date, weekStart),
-			},
+			name,
+			metadata,
 		});
 		const tree = this.tree();
 		let live = false;
@@ -1730,7 +1702,7 @@ export class WorkflowyInternalAdapter
 		await this.pushLayoutWrites(writes);
 		time("push");
 		// Recorded before the cache refresh, so a failed read-back still leaves the pushed layout undoable.
-		this.recordLayoutApplied(rootId, appliedAt);
+		recordLayoutApplied(this.db, rootId, appliedAt);
 		await this.refreshLayout(touchedParents, metadata);
 		time("refresh");
 		return {
@@ -1751,20 +1723,12 @@ export class WorkflowyInternalAdapter
 	async undoCalendarLayout(rootId: string): Promise<AppliedCalendarLayout | undefined>
 	{
 		requireRootId(rootId);
-		const applied = this.db
-			.select(
-				{
-					appliedAt: calendarLayoutApplies.appliedAtSystemTime,
-				},
-			)
-			.from(calendarLayoutApplies)
-			.where(and(eq(calendarLayoutApplies.rootId, rootId), eq(calendarLayoutApplies.systemTo, FAR_FUTURE_DATE)))
-			.get();
-		if (applied === undefined)
+		const appliedAt = layoutAppliedAt(this.db, rootId);
+		if (appliedAt === undefined)
 		{
 			return undefined;
 		}
-		const before = readSubtreeAt(this.db, rootId, systemTimeJustBefore(applied.appliedAt));
+		const before = readSubtreeAt(this.db, rootId, systemTimeJustBefore(appliedAt));
 		const now = readSubtreeAt(this.db, rootId);
 		const writes = calendarLayoutUndoWrites(rootId, before, now, (id) => this.isCached(id));
 		this.assertLayoutWritesUnder(rootId, writes);
@@ -1772,7 +1736,7 @@ export class WorkflowyInternalAdapter
 		{
 			await this.pushLayoutWrites(writes);
 		}
-		this.endLayoutApplied(rootId);
+		endLayoutApplied(this.db, rootId);
 		const restored = new Map(
 			writes.flatMap((write) =>
 				write.op === "edit" || write.op === "undelete"
@@ -1950,43 +1914,13 @@ export class WorkflowyInternalAdapter
 		);
 	}
 
-	/** Record that a layout under `rootId` was pushed at `appliedAt`, replacing any earlier one there. */
-	private recordLayoutApplied(rootId: string, appliedAt: string): void
-	{
-		runUnitOfWork(this.db, ({tx, systemTime}) =>
-		{
-			closeCurrentVersions(tx, calendarLayoutApplies, systemTime, eq(calendarLayoutApplies.rootId, rootId));
-			tx.insert(calendarLayoutApplies)
-				.values(
-					{
-						rootId,
-						appliedAtSystemTime: appliedAt,
-						systemFrom: systemTime,
-						systemTo: FAR_FUTURE_DATE,
-					},
-				)
-				.run();
-		});
-	}
-
-	/** Phase out the applied layout under `rootId`, keeping it in history. */
-	private endLayoutApplied(rootId: string): void
-	{
-		runUnitOfWork(this.db, ({tx, systemTime}) =>
-		{
-			closeCurrentVersions(tx, calendarLayoutApplies, systemTime, eq(calendarLayoutApplies.rootId, rootId));
-		});
-	}
-
 	/**
 	 * Upstream's `Calendar.ensure`: the root {@link findTaggedCalendarRoot} finds (root metadata
 	 * `calendar.rootId` when it names a cached node, else the `calendar.root`-tagged node).
-	 * Connected to workflowy.com, which always has the root, a miss re-syncs: a fresh bootstrap's
-	 * `calendar.rootId`, when Workflowy has that node, is cached and used, else it fails loudly
-	 * with {@link CalendarRootMissing} rather than create a duplicate root. Only in standalone
-	 * mode does a miss create a new `📆 Calendar` at the end of Home with id
-	 * `uuidv5("calendar-root")` and `{restorableUniqueNode, calendar: {root: true}}`, which
-	 * `calendar.rootId` then names.
+	 * workflowy.com always has the root, so a miss re-syncs: a fresh bootstrap's `calendar.rootId`,
+	 * when Workflowy has that node, is cached and used, else it fails loudly with
+	 * {@link CalendarRootMissing} rather than create a duplicate root. A standalone account's root
+	 * is created locally by `LocalCalendar`.
 	 */
 	private async ensureCalendarRoot(): Promise<
 	{
@@ -2003,49 +1937,17 @@ export class WorkflowyInternalAdapter
 							db: this.db,
 						},
 					);
-		if (found !== undefined)
-		{
-			const parsed = CalendarMetadataSchema.safeParse(this.readNodeMetadata(found));
-			return {
-				id: found,
-				levels: parsed.success ? parsed.data.calendar.levels : undefined,
-			};
-		}
-		if (!this.standalone)
+		if (found === undefined)
 		{
 			return {
 				id: await this.resyncCalendarRoot(),
 				levels: undefined,
 			};
 		}
-		const {entropyKey} = await this.session();
-		const {id} = await this.createAt(
-			{
-				parentId: HOME,
-				id:
-					entropyKey === undefined
-						? this.generateId()
-						: uuidv5(`${entropyKey}-calendar-root`, CALENDAR_ID_NAMESPACE),
-				name: CALENDAR_ROOT_NAME,
-				metadata:
-				{
-					restorableUniqueNode: true,
-					calendar:
-					{
-						root: true,
-					},
-				},
-			},
-		);
-		await this.setRootMetaValues([
-			{
-				path: ["calendar", "rootId"],
-				value: id,
-			},
-		]);
+		const parsed = CalendarMetadataSchema.safeParse(this.readNodeMetadata(found));
 		return {
-			id,
-			levels: undefined,
+			id: found,
+			levels: parsed.success ? parsed.data.calendar.levels : undefined,
 		};
 	}
 
@@ -2067,50 +1969,19 @@ export class WorkflowyInternalAdapter
 
 	/**
 	 * Upstream's `AppInbox.ensured`: the Inbox {@link findInbox} finds (the cached node root metadata
-	 * `inbox_id` names, else the Home child named `Inbox`). Connected to workflowy.com, a miss
-	 * re-syncs: a fresh bootstrap's `inbox_id`, when Workflowy has that node, is cached and used,
-	 * else Home is re-read for a node named `Inbox`, else it fails loudly with {@link InboxMissing}
-	 * rather than create a duplicate. Only in standalone mode does a miss create an `Inbox` at the
-	 * end of Home, which `inbox_id` then names.
+	 * `inbox_id` names, else the Home child named `Inbox`). A miss re-syncs: a fresh bootstrap's
+	 * `inbox_id`, when Workflowy has that node, is cached and used, else Home is re-read for a node
+	 * named `Inbox`, else it fails loudly with {@link InboxMissing} rather than create a duplicate.
 	 */
 	async ensureInbox(): Promise<
 	{
 		id: string;
-		created: boolean;
 	}>
 	{
 		// Stores the account snapshot first, so findInbox can read its `inbox_id`.
 		await this.snapshot();
-		const found = findInbox(this.db);
-		if (found !== undefined)
-		{
-			return {
-				id: found.id,
-				created: false,
-			};
-		}
-		if (!this.standalone)
-		{
-			return {
-				id: await this.resyncInbox(),
-				created: false,
-			};
-		}
-		const {id} = await this.createAt(
-			{
-				parentId: HOME,
-				name: INBOX_NAME,
-			},
-		);
-		await this.setRootMetaValues([
-			{
-				path: ["inbox_id"],
-				value: id,
-			},
-		]);
 		return {
-			id,
-			created: true,
+			id: findInbox(this.db)?.id ?? (await this.resyncInbox()),
 		};
 	}
 

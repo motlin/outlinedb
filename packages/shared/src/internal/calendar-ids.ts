@@ -38,3 +38,9 @@ export function calendarNodeId(entropyKey: string, level: CalendarIdLevel, dateI
 	}
 	return uuidv5(`${entropyKey}-calendar-week-${year}-${dateId}`, CALENDAR_ID_NAMESPACE);
 }
+
+/** The id a `📆 Calendar` root created for an account gets: upstream's `WF.Id.uuidv5("calendar-root")`. */
+export function calendarRootId(entropyKey: string): string
+{
+	return uuidv5(`${entropyKey}-calendar-root`, CALENDAR_ID_NAMESPACE);
+}

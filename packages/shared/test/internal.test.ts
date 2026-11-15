@@ -64,7 +64,7 @@ import
 	calendarLevelName,
 	parseDateId,
 } from "../src/internal/calendar-day.js";
-import {CALENDAR_ID_NAMESPACE, calendarNodeId, uuidv5} from "../src/internal/calendar-ids.js";
+import {calendarNodeId} from "../src/internal/calendar-ids.js";
 import {PushAndPoll} from "../src/internal/push-and-poll.js";
 import {FAR_FUTURE_DATE} from "../src/temporal/constants.js";
 import {expansionVersion, readExpansion, replaceExpansion} from "../src/cache/expansion-store.js";
@@ -4222,7 +4222,6 @@ describe("internal adapter calendar", () =>
 		session?: InternalSession;
 		/** What every bootstrap after the first returns; defaults to `session`. */
 		freshSession?: InternalSession;
-		standalone?: boolean;
 	})
 	{
 		const sqlite = new DatabaseConstructor(":memory:");
@@ -4332,12 +4331,6 @@ describe("internal adapter calendar", () =>
 				client,
 				db,
 				writeThrough,
-				...(options.standalone === undefined
-					? {}
-					:
-						{
-							standalone: options.standalone,
-						}),
 				now: () => 1_800_000_000_000,
 				generateId: () => `random-${++generated}`,
 			},
@@ -5355,103 +5348,6 @@ describe("internal adapter calendar", () =>
 			);
 
 			expect(calls).toStrictEqual([["live", CAL], yearCreate(CAL), ["refresh", [CAL]]]);
-		});
-
-		it("creates the 📆 Calendar root at the end of Home and points calendar.rootId at it when none exists in standalone mode, like upstream's Calendar.ensure", async () =>
-		{
-			const {adapter, calls, children, cachedMetadata} = tracked(
-				{
-					children:
-					{
-						home: ["a"],
-					},
-					metadata: {},
-					standalone: true,
-				},
-			);
-			const root = uuidv5(`${ENTROPY}-calendar-root`, CALENDAR_ID_NAMESPACE);
-
-			const result = await adapter.ensureCalendarDay(
-				20_261_017,
-				{
-					stopAt: "year",
-					createChild: false,
-				},
-			);
-
-			expect(
-				{
-					result,
-					calls,
-					home: children.get("home"),
-					rootMetadata: cachedMetadata(root),
-					rootId: await adapter.getRootMeta(["calendar", "rootId"]),
-				},
-			).toStrictEqual(
-				{
-					result:
-					{
-						dayId: Y2026,
-						firstChildId: null,
-						created: [Y2026],
-					},
-					calls: [
-						["live", null],
-						[
-							"bulk_create",
-							{
-								parentId: "None",
-								index: 1,
-								trees: [
-									{
-										id: root,
-										nm: "📆 Calendar",
-										metadata:
-										{
-											restorableUniqueNode: true,
-											calendar:
-											{
-												root: true,
-											},
-										},
-										ch: [],
-									},
-								],
-							},
-						],
-						["refreshChildren", [null]],
-						[
-							"edit",
-							{
-								id: "None",
-								metadataPatches: [
-									{
-										op: "add",
-										path: ["calendar"],
-										value:
-										{
-											rootId: root,
-										},
-									},
-								],
-							},
-						],
-						["live", root],
-						yearCreate(root),
-						["refresh", [root]],
-					],
-					home: ["a", root],
-					rootMetadata:
-					{
-						calendar:
-						{
-							root: true,
-						},
-						restorableUniqueNode: true,
-					},
-					rootId: root,
-				},
-			);
 		});
 
 		it("re-syncs calendar.rootId from workflowy.com and walks from that live root when the cache misses it while connected", async () =>
@@ -6702,7 +6598,6 @@ describe("internal adapter inbox", () =>
 		>;
 		session?: InternalSession;
 		freshSession?: InternalSession;
-		standalone?: boolean;
 	})
 	{
 		const sqlite = new DatabaseConstructor(":memory:");
@@ -6799,12 +6694,6 @@ describe("internal adapter inbox", () =>
 				client,
 				db,
 				writeThrough,
-				...(options.standalone === undefined
-					? {}
-					:
-						{
-							standalone: options.standalone,
-						}),
 				now: () => 1_800_000_000_000,
 				generateId: () => `random-${++generated}`,
 			},
@@ -6940,7 +6829,6 @@ describe("internal adapter inbox", () =>
 					result:
 					{
 						id: "capture",
-						created: false,
 					},
 					calls: [],
 				},
@@ -6979,7 +6867,6 @@ describe("internal adapter inbox", () =>
 					result:
 					{
 						id: "inbox",
-						created: false,
 					},
 					calls: [],
 				},
@@ -7031,7 +6918,6 @@ describe("internal adapter inbox", () =>
 					result:
 					{
 						id: "live-inbox",
-						created: false,
 					},
 					calls: [
 						["findLive", "live-inbox"],
@@ -7040,7 +6926,6 @@ describe("internal adapter inbox", () =>
 					again:
 					{
 						id: "live-inbox",
-						created: false,
 					},
 				},
 			);
@@ -7087,7 +6972,6 @@ describe("internal adapter inbox", () =>
 					result:
 					{
 						id: "live-inbox",
-						created: false,
 					},
 					calls: [["refreshChildren", [null]]],
 				},
@@ -7128,90 +7012,6 @@ describe("internal adapter inbox", () =>
 						},
 					],
 					logged: [[new InboxMissing()]],
-				},
-			);
-		});
-
-		it("creates an Inbox at the end of Home and points inbox_id at it when none exists in standalone mode", async () =>
-		{
-			const {adapter, calls, live} = tracked(
-				{
-					live:
-					{
-						home: [
-							{
-								id: "a",
-								name: "a",
-							},
-						],
-					},
-					standalone: true,
-				},
-			);
-
-			const result = await adapter.ensureInbox();
-
-			expect(
-				{
-					result,
-					calls,
-					home: live.get("home"),
-					inboxId: await adapter.getRootMeta(["inbox_id"]),
-					again: await adapter.ensureInbox(),
-				},
-			).toStrictEqual(
-				{
-					result:
-					{
-						id: "random-1",
-						created: true,
-					},
-					calls: [
-						["live", null],
-						[
-							"bulk_create",
-							{
-								parentId: "None",
-								index: 1,
-								trees: [
-									{
-										id: "random-1",
-										nm: "Inbox",
-									},
-								],
-							},
-						],
-						["refreshChildren", [null]],
-						[
-							"edit",
-							{
-								id: "None",
-								metadataPatches: [
-									{
-										op: "add",
-										path: ["inbox_id"],
-										value: "random-1",
-									},
-								],
-							},
-						],
-					],
-					home: [
-						{
-							id: "a",
-							name: "a",
-						},
-						{
-							id: "random-1",
-							name: "Inbox",
-						},
-					],
-					inboxId: "random-1",
-					again:
-					{
-						id: "random-1",
-						created: false,
-					},
 				},
 			);
 		});

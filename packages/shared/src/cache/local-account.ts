@@ -85,7 +85,10 @@ export interface LocalIdentity
 	joinedAt: Date;
 }
 
-/** Write the account row of a newly provisioned standalone store, in one unit of work. */
+/**
+ * Write the account row of a newly provisioned standalone store, in one unit of work, with a fresh entropy key: the
+ * salt of the account's deterministic calendar ids, as workflowy.com gives each account one.
+ */
 export function provisionLocalAccount(db: TemporalTransaction, identity: LocalIdentity): void
 {
 	runUnitOfWork(db, (unitOfWork) =>
@@ -99,7 +102,7 @@ export function provisionLocalAccount(db: TemporalTransaction, identity: LocalId
 						userId: identity.userId,
 						fullName: null,
 						dateJoinedSec: Math.floor(identity.joinedAt.getTime() / 1000),
-						entropyKey: null,
+						entropyKey: crypto.randomUUID(),
 						username: null,
 						email: identity.email,
 					},
@@ -174,6 +177,17 @@ export class LocalAccount
 	{
 		this.update((snapshot) => withSetting(snapshot, "saved_views_json", json));
 		return Promise.resolve();
+	}
+
+	/** The account's entropy key, or undefined for a store provisioned without one. */
+	async getEntropyKey(): Promise<string | undefined>
+	{
+		const row = readAccountRows(this.db).account[0];
+		if (row === undefined)
+		{
+			throw new AccountNotProvisionedError();
+		}
+		return Promise.resolve(row.entropyKey ?? undefined);
 	}
 
 	/** The provisioned account and its email. */

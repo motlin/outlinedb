@@ -39,7 +39,9 @@ import
 	parseDateId,
 	planCalendarLayout,
 } from "@outlinedb/shared/internal";
-import type {CalendarLevel, LayoutTimings} from "@outlinedb/shared/internal";
+import type {CalendarLevel, LayoutTimings, WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
+import {AccountNotProvisionedError, LocalAccount} from "@outlinedb/shared/cache";
+import {LocalCalendar} from "@outlinedb/shared/local-calendar";
 import {z} from "zod";
 import {findCalendarDay, findCalendarDays, findTaggedCalendarRoot, readCalendarSettings} from "../calendar-day.js";
 import {foundDaysInMonth} from "../calendar-found.js";
@@ -196,18 +198,54 @@ const DEFAULT_LAYOUT_LEVELS =
 	day: true,
 };
 
-/** The account date format, which names year and month nodes; empty (upstream's defaults) without the internal API. */
+/** Where the account's root metadata and entropy key live: a standalone store's local tables, or the internal API. */
+function calendarAccount(ctx: ServerContext): Pick<LocalAccount, "getRootMeta" | "getEntropyKey"> | undefined
+{
+	return ctx.mode === "standalone" ? new LocalAccount(ctx.db) : ctx.internalAdapter?.();
+}
+
+/** A root metadata value, or undefined without the internal API or a provisioned standalone account. */
+async function accountRootMeta(ctx: ServerContext, key: string): Promise<unknown>
+{
+	try
+	{
+		return await calendarAccount(ctx)?.getRootMeta([key]);
+	}
+	catch (error)
+	{
+		if (error instanceof AccountNotProvisionedError)
+		{
+			return undefined;
+		}
+		throw error;
+	}
+}
+
+/** The account date format, which names year and month nodes; empty (upstream's defaults) when unknown. */
 async function accountDateFormat(ctx: ServerContext): Promise<string>
 {
-	const dateFormat = await ctx.internalAdapter?.()?.getRootMeta(["dateFormat"]);
+	const dateFormat = await accountRootMeta(ctx, "dateFormat");
 	return typeof dateFormat === "string" ? dateFormat : "";
 }
 
-/** The account's `weekStartDay`, which places weeks; undefined (Sunday) when unset or without the internal API. */
+/** The account's `weekStartDay`, which places weeks; undefined (Sunday) when unset or unknown. */
 async function accountWeekStartDay(ctx: ServerContext): Promise<number | undefined>
 {
-	const weekStartDay = await ctx.internalAdapter?.()?.getRootMeta(["weekStartDay"]);
+	const weekStartDay = await accountRootMeta(ctx, "weekStartDay");
 	return typeof weekStartDay === "number" ? weekStartDay : undefined;
+}
+
+/**
+ * What writes the calendar: a standalone store's local tables, or workflowy.com through the internal API, whose tree
+ * writes refresh the cache through the public API and so need its key too. Undefined for a mirror without either.
+ */
+function calendarWriter(ctx: ServerContext): LocalCalendar | WorkflowyInternalAdapter | undefined
+{
+	if (ctx.mode === "standalone")
+	{
+		return new LocalCalendar(ctx.db);
+	}
+	return ctx.apiKey ? ctx.internalAdapter?.() : undefined;
 }
 
 /** The `?level=` query parameter (default day), else undefined. */
@@ -257,12 +295,12 @@ function intParam(raw: string | undefined, min: number, max: number): number | u
 	return raw !== undefined && /^\d+$/u.test(raw) && value >= min && value <= max ? value : undefined;
 }
 
-/** The lookup deps, with the account entropy key when the internal API can supply it. */
+/** The lookup deps, with the account entropy key when the account can supply it. */
 async function calendarDayDeps(ctx: ServerContext): Promise<CalendarDayDeps>
 {
 	try
 	{
-		const entropyKey = await ctx.internalAdapter?.()?.getEntropyKey();
+		const entropyKey = await calendarAccount(ctx)?.getEntropyKey();
 		return {
 			db: ctx.db,
 			cache: ctx.cacheService,
@@ -617,8 +655,8 @@ const calendarLayoutPut = defineOp(
 					},
 				);
 			}
-			const adapter = ctx.apiKey ? ctx.internalAdapter?.() : undefined;
-			if (!adapter)
+			const writer = calendarWriter(ctx);
+			if (!writer)
 			{
 				return notConfigured();
 			}
@@ -637,7 +675,7 @@ const calendarLayoutPut = defineOp(
 			const timings: LayoutTimings = {};
 			try
 			{
-				const applied = await adapter.applyCalendarLayout(
+				const applied = await writer.applyCalendarLayout(
 					levels,
 					{
 						rootId,
@@ -674,6 +712,10 @@ const calendarLayoutPut = defineOp(
 						},
 					);
 				}
+				if (error instanceof AccountNotProvisionedError)
+				{
+					return notConfigured();
+				}
 				throw error;
 			}
 		},
@@ -700,8 +742,8 @@ const calendarLayoutUndo = defineOp(
 					},
 				);
 			}
-			const adapter = ctx.apiKey ? ctx.internalAdapter?.() : undefined;
-			if (!adapter)
+			const writer = calendarWriter(ctx);
+			if (!writer)
 			{
 				return notConfigured();
 			}
@@ -716,7 +758,7 @@ const calendarLayoutUndo = defineOp(
 				);
 			}
 			console.info(`calendar layout: undoing under root ${rootId}`);
-			const undone = await adapter.undoCalendarLayout(rootId);
+			const undone = await writer.undoCalendarLayout(rootId);
 			return undone === undefined
 				? fail(
 						409,
@@ -850,9 +892,8 @@ const calendarEnsure = defineOp(
 					},
 				);
 			}
-			// Tree writes refresh the cache through the public API, so they need its key too.
-			const adapter = ctx.apiKey ? ctx.internalAdapter?.() : undefined;
-			if (!adapter)
+			const writer = calendarWriter(ctx);
+			if (!writer)
 			{
 				return notConfigured();
 			}
@@ -880,7 +921,7 @@ const calendarEnsure = defineOp(
 			{
 				return ok(
 					toJson(
-						await adapter.ensureCalendarDay(
+						await writer.ensureCalendarDay(
 							dateId,
 							{
 								stopAt,
@@ -900,6 +941,10 @@ const calendarEnsure = defineOp(
 							error: error.message,
 						},
 					);
+				}
+				if (error instanceof AccountNotProvisionedError)
+				{
+					return notConfigured();
 				}
 				throw error;
 			}
