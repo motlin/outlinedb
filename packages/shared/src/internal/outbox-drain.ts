@@ -15,6 +15,9 @@
  * changed after that, and none before it. It supplies the previous values the ops' undo data carries, and decides
  * which name, note, completion and metadata changes still differ from upstream.
  *
+ * A pending mirror whose `mirrors` row was ended while its original stayed live is held back with `last_error` and
+ * logged, rather than sent as an empty plain node.
+ *
  * Failures are never retried here (Craig approved re-delivery only on the next drain trigger, 2026-11-15): a failed or
  * unacknowledged push records `last_error` on every row it carried and leaves them pending.
  */
@@ -35,6 +38,7 @@ import type {OutboxAspect, OutboxEntry, PendingOutboxRow} from "../cache/outbox.
 import {systemTimeJustBefore} from "../cache/subtree-history.js";
 import type {TemporalTransaction} from "../cache/temporal-merge.js";
 import {mirrors, nodeContent, nodeMetadata, referencesRoots} from "../db/schema.js";
+import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 import {OutboxNotAcknowledged} from "./errors.js";
 import {buildMetadataChanges} from "./metadata-patch.js";
 import type {MetadataChange} from "./metadata-patch.js";
@@ -561,6 +565,100 @@ function upstreamLinks(
 	);
 }
 
+interface LostMirror
+{
+	originalId: string;
+	/** The mirror's rows and those of the pending creates under it. */
+	held: PendingOutboxRow[];
+}
+
+/**
+ * The pending mirrors that lost their `mirrors` row after their mirror write was enqueued while their original stayed
+ * live, each with the rows to hold back: its own and those of the pending creates under it. No local write ends a live
+ * mirror's row (a deleted original promotes into a mirror's slot instead), so the row was ended wrongly; sending the
+ * node would turn the mirror into an empty plain node upstream.
+ */
+function lostMirrors(tx: TemporalTransaction, rows: readonly PendingOutboxRow[]): Map<string, LostMirror>
+{
+	const enqueued = new Map(
+		rows.filter(({aspect}) => aspect === "mirror").map(({nodeId, enqueuedAt}) => [nodeId, enqueuedAt] as const),
+	);
+	const lost = new Map<string, LostMirror>();
+	if (enqueued.size === 0)
+	{
+		return lost;
+	}
+	const history = tx
+		.select(
+			{
+				mirrorId: mirrors.mirrorId,
+				originalId: mirrors.originalId,
+				systemTo: mirrors.systemTo,
+			},
+		)
+		.from(mirrors)
+		.where(inIds(mirrors.mirrorId, [...enqueued.keys()]))
+		.all();
+	const linked = new Set(history.filter(({systemTo}) => systemTo === FAR_FUTURE_DATE).map(({mirrorId}) => mirrorId));
+	const candidates = history.filter(
+		({mirrorId, systemTo}) => !linked.has(mirrorId) && systemTo > (enqueued.get(mirrorId) ?? FAR_FUTURE_DATE),
+	);
+	const creates = new Set(rows.filter(({aspect}) => aspect === "create").map(({nodeId}) => nodeId));
+	const parents = new Map(
+		tx
+			.select(
+				{
+					id: nodeContent.id,
+					parentId: nodeContent.parentId,
+				},
+			)
+			.from(nodeContent)
+			.where(
+				and(
+					inIds(nodeContent.id, [
+						...new Set([
+							...candidates.flatMap(({mirrorId, originalId}) => [mirrorId, originalId]),
+							...creates,
+						]),
+					]),
+					currentVersion(nodeContent),
+				),
+			)
+			.all()
+			.map(({id, parentId}) => [id, parentId] as const),
+	);
+	for (const {mirrorId, originalId} of candidates)
+	{
+		if (lost.has(mirrorId) || !parents.has(mirrorId) || !parents.has(originalId))
+		{
+			continue;
+		}
+		const under = new Set([mirrorId]);
+		let grew = true;
+		while (grew)
+		{
+			grew = false;
+			for (const id of creates)
+			{
+				const parentId = parents.get(id);
+				if (!under.has(id) && parentId !== undefined && parentId !== null && under.has(parentId))
+				{
+					under.add(id);
+					grew = true;
+				}
+			}
+		}
+		lost.set(
+			mirrorId,
+			{
+				originalId,
+				held: rows.filter(({nodeId}) => under.has(nodeId)),
+			},
+		);
+	}
+	return lost;
+}
+
 /** Build the push for `rows` from the nodes' current local state. */
 function planDrain(
 	tx: TemporalTransaction,
@@ -1054,7 +1152,24 @@ export async function drainOutbox(
 	}
 	const plan = runUnitOfWork(database, (unitOfWork) =>
 	{
-		const planned = planDrain(unitOfWork.tx, readPendingOutbox(unitOfWork.tx, cap), session, now());
+		const read = readPendingOutbox(unitOfWork.tx, cap);
+		const held = new Set<PendingOutboxRow>();
+		for (const [mirrorId, {originalId, held: rows}] of lostMirrors(unitOfWork.tx, read))
+		{
+			const message = `Mirror ${mirrorId} of ${originalId} lost its mirrors row while its mirror write was pending; not sending it as a plain node`;
+			console.error(`[OUTBOX] ${message}`);
+			failOutboxRows(unitOfWork, rows, message);
+			for (const row of rows)
+			{
+				held.add(row);
+			}
+		}
+		const planned = planDrain(
+			unitOfWork.tx,
+			read.filter((row) => !held.has(row)),
+			session,
+			now(),
+		);
 		closeOutboxRows(unitOfWork, planned.dropped);
 		if (planned.ops.length === 0)
 		{

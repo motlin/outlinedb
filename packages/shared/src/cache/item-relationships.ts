@@ -18,6 +18,7 @@ import {FAR_FUTURE_DATE} from "../temporal/index.js";
 import {inIds} from "./in-ids.js";
 import type {UnitOfWork} from "./node-composite.js";
 import type {NormalizedAiMetadataRow, NormalizedMirrorRow, NormalizedReferencesRootsRow} from "./normalized-rows.js";
+import {pendingAspects} from "./outbox.js";
 import {joinKey, temporalMerge} from "./temporal-merge.js";
 import type {TemporalMergeResult, TemporalTransaction} from "./temporal-merge.js";
 
@@ -127,7 +128,9 @@ const mirrorKey = (m: NormalizedMirrorRow): string => joinKey(m.mirrorId, m.orig
  * Globally merge `mirrors` to the desired state in `relationships`, in the
  * caller's unit of work. Only rows with both sides in `liveNodeIds` are kept:
  * Workflowy keeps a mirror's `originalId` after deleting its original, and an
- * original's `mirrorRootIds` after deleting a mirror.
+ * original's `mirrorRootIds` after deleting a mirror. A current row whose mirror or
+ * original has any pending outbox row is kept: that local write is ahead of
+ * workflowy.com, which may not list the mirror yet.
  */
 export function mergeItemRelationships(
 	unitOfWork: UnitOfWork,
@@ -137,8 +140,13 @@ export function mergeItemRelationships(
 {
 	const {tx, systemTime} = unitOfWork;
 
+	const currentRows = tx.select().from(mirrors).where(eq(mirrors.systemTo, FAR_FUTURE_DATE)).all();
+	const pending = pendingAspects(tx, [...new Set(currentRows.flatMap((row) => [row.mirrorId, row.originalId]))]);
 	const mirrorRows = dedupe(
-		relationships.mirrors.filter((m) => liveNodeIds.has(m.mirrorId) && liveNodeIds.has(m.originalId)),
+		[
+			...relationships.mirrors.filter((m) => liveNodeIds.has(m.mirrorId) && liveNodeIds.has(m.originalId)),
+			...currentRows.filter((row) => pending.has(row.mirrorId) || pending.has(row.originalId)),
+		],
 		mirrorKey,
 	);
 	const mirrorResult = temporalMerge(
@@ -156,7 +164,7 @@ export function mergeItemRelationships(
 			}),
 		},
 		mirrorRows,
-		tx.select().from(mirrors).where(eq(mirrors.systemTo, FAR_FUTURE_DATE)).all(),
+		currentRows,
 		systemTime,
 	);
 

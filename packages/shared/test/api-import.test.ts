@@ -701,6 +701,62 @@ describe("shared API import", () =>
 				},
 			);
 		});
+
+		it("keeps the mirrors row of a pending mirror that the tree data lacks", () =>
+		{
+			const db = createDb();
+			const upstream = writePending(db);
+			vi.setSystemTime(LOCAL_WRITE);
+			const
+			{
+				ids: [mirrorId],
+			} = new LocalTreeWriter(
+				db,
+				{
+					outbox: new OutboxRecorder(),
+				},
+			).createMirrorsAt(
+				{
+					originalIds: ["c"],
+					parentId: "e",
+				},
+			);
+			vi.setSystemTime(T1);
+
+			const state = beginApiImport(
+				db,
+				{
+					timestamp: T1,
+				},
+			);
+			applyApiBatch(state, upstream);
+			finishApiImport(
+				state,
+				upstream.map((node) => (
+				{
+					id: node.id,
+				})),
+			);
+
+			expect(
+				db
+					.select(
+						{
+							mirrorId: schema.mirrors.mirrorId,
+							originalId: schema.mirrors.originalId,
+							systemTo: schema.mirrors.systemTo,
+						},
+					)
+					.from(schema.mirrors)
+					.all(),
+			).toStrictEqual([
+				{
+					mirrorId,
+					originalId: "c",
+					systemTo: FAR_FUTURE_DATE,
+				},
+			]);
+		});
 	});
 
 	it("does not phase out a node in an earlier batch when a later batch is applied", () =>

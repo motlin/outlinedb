@@ -1,6 +1,6 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from "vite-plus/test";
 import DatabaseConstructor from "better-sqlite3";
-import {asc} from "drizzle-orm";
+import {and, asc, eq} from "drizzle-orm";
 import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
@@ -1007,6 +1007,95 @@ describe("drainOutbox", () =>
 					row("g2", "mirror", at(0)),
 					row("g2", "placement", at(0)),
 				],
+			},
+		);
+	});
+
+	it("holds a pending mirror whose mirrors row ended with an error instead of sending it as a plain node", async () =>
+	{
+		const {database, writer, outboxRows, pushes, drain} = setup();
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+		setClock(at(0));
+		writer.createMirrorsAt(
+			{
+				originalIds: ["a"],
+				parentId: "q",
+				index: 0,
+			},
+		);
+		writer.updateNode(
+			"b",
+			{
+				name: "B",
+			},
+		);
+		// An import that missed the pending mirror ended its row.
+		database
+			.update(mirrors)
+			.set(
+				{
+					systemTo: at(1),
+				},
+			)
+			.where(and(eq(mirrors.mirrorId, "g1"), eq(mirrors.systemTo, FAR_FUTURE_DATE)))
+			.run();
+		const error =
+			"Mirror g1 of a lost its mirrors row while its mirror write was pending; not sending it as a plain node";
+
+		const result = await drain();
+
+		expect(
+			{
+				result,
+				pushes,
+				outbox: outboxRows(),
+				logged: logged.mock.calls,
+			},
+		).toStrictEqual(
+			{
+				result:
+				{
+					ops: 1,
+					closed: 1,
+				},
+				pushes: [[rename("b", "B", "b")]],
+				outbox: [
+					row("b", "name", at(0)),
+					row("g1", "create", at(0)),
+					row(
+						"g1",
+						"create",
+						at(0),
+						{
+							systemFrom: DRAIN,
+							systemTo: FAR_FUTURE_DATE,
+							lastError: error,
+						},
+					),
+					row("g1", "mirror", at(0)),
+					row(
+						"g1",
+						"mirror",
+						at(0),
+						{
+							systemFrom: DRAIN,
+							systemTo: FAR_FUTURE_DATE,
+							lastError: error,
+						},
+					),
+					row("g1", "placement", at(0)),
+					row(
+						"g1",
+						"placement",
+						at(0),
+						{
+							systemFrom: DRAIN,
+							systemTo: FAR_FUTURE_DATE,
+							lastError: error,
+						},
+					),
+				],
+				logged: [[`[OUTBOX] ${error}`]],
 			},
 		);
 	});
