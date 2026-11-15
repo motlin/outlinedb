@@ -5,6 +5,7 @@ import type {Node} from "../types/node.js";
 import {and, eq, isNull} from "drizzle-orm";
 import {currentVersion} from "./cache-temporal.js";
 import {inIds} from "./in-ids.js";
+import {compareSiblingOrder} from "./order-key.js";
 import {mirrorOriginalText, relationalRowId} from "./mirror-text.js";
 
 /**
@@ -46,6 +47,23 @@ const NODE_SHAPE =
 		originalNote: mirrorOriginalText(relationalRowId, "note").as("original_note"),
 	},
 } as const;
+
+/** Sibling order: order key, then creation time, then id. */
+function bySiblingOrder(a: ContentWithMetadata, b: ContentWithMetadata): number
+{
+	return compareSiblingOrder(
+		{
+			orderKey: a.metadata?.orderKey,
+			createdAt: a.metadata?.createdAt,
+			id: a.id,
+		},
+		{
+			orderKey: b.metadata?.orderKey,
+			createdAt: b.metadata?.createdAt,
+			id: b.id,
+		},
+	);
+}
 
 /**
  * Single read service for loading current nodes from the SQLite cache.
@@ -91,8 +109,8 @@ export class NodeReader
 	}
 
 	/**
-	 * Load the current children of a parent node, ordered by priority then
-	 * creation time. Pass null to load root-level nodes.
+	 * Load the current children of a parent node in sibling order (order key, then creation time, then id), each
+	 * with its 0-based sibling index as its priority. Pass null to load root-level nodes.
 	 */
 	getChildren(parentId: string | null): Node[]
 	{
@@ -110,17 +128,11 @@ export class NodeReader
 			)
 			.sync();
 
-		return this.toNodes(results).toSorted((a, b) =>
+		return this.toNodes(results.toSorted(bySiblingOrder)).map((node, index) => (
 		{
-			const priorityDifference = a.priority - b.priority;
-			if (priorityDifference !== 0)
-			{
-				return priorityDifference;
-			}
-			const aTime = a.createdAt?.getTime() ?? 0;
-			const bTime = b.createdAt?.getTime() ?? 0;
-			return aTime - bTime;
-		});
+			...node,
+			priority: index,
+		}));
 	}
 
 	/**

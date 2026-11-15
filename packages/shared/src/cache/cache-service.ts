@@ -23,6 +23,7 @@ import {inIds} from "./in-ids.js";
 import {loadMirrorOriginals, notAMirror} from "./mirror-text.js";
 import {endNodeComposites, runUnitOfWork} from "./node-composite.js";
 import {NodeReader} from "./node-reader.js";
+import {compareSiblingOrder} from "./order-key.js";
 import {newSystemTimestamp} from "./system-time.js";
 import {closeCurrentVersions} from "./temporal-merge.js";
 import type {TemporalTransaction} from "./temporal-merge.js";
@@ -38,29 +39,32 @@ function metadataOf(row: {metadata: NodeMetadataRow}): NodeMetadataRow | null
 	return row.metadata;
 }
 
-/** Sort siblings by priority, then createdAt, treating missing metadata as 0. */
+/** Sort siblings by order key, then createdAt, then id, treating missing metadata as key `a0` created at 0. */
 function compareByMetadata(
 	a:
 	{
+		id: string;
 		metadata: NodeMetadataRow;
 	},
 	b:
 	{
+		id: string;
 		metadata: NodeMetadataRow;
 	},
 ): number
 {
-	const metadataA = metadataOf(a);
-	const metadataB = metadataOf(b);
-	const priorityA = metadataA?.priority ?? 0;
-	const priorityB = metadataB?.priority ?? 0;
-	if (priorityA !== priorityB)
-	{
-		return priorityA - priorityB;
-	}
-	const createdAtA = metadataA?.createdAt?.getTime() ?? 0;
-	const createdAtB = metadataB?.createdAt?.getTime() ?? 0;
-	return createdAtA - createdAtB;
+	return compareSiblingOrder(
+		{
+			orderKey: metadataOf(a)?.orderKey,
+			createdAt: metadataOf(a)?.createdAt,
+			id: a.id,
+		},
+		{
+			orderKey: metadataOf(b)?.orderKey,
+			createdAt: metadataOf(b)?.createdAt,
+			id: b.id,
+		},
+	);
 }
 
 /** The cached note: Workflowy sends an empty note as "", which the cache stores as null. */
@@ -88,7 +92,7 @@ function metadataFields(metadata: NodeMetadataRow | null)
  *
  * Distinct from the canonical `Node` DTO: it carries the joined relation
  * tables (mirrors, calendar, etc.) that the canonical type
- * deliberately excludes, and keeps `priority` nullable as stored in the DB.
+ * deliberately excludes. `priority` is the 0-based sibling index in a child list, else the stored value (nullable).
  */
 export interface NodeWithRelations
 {
@@ -537,17 +541,17 @@ export class CacheService
 			)
 			.sync();
 
-		// Sort by priority and createdAt (metadata fields)
 		results.sort(compareByMetadata);
 
 		// Transform nodeContent results to Node format
-		return results.map((result) => (
+		return results.map((result, index) => (
 		{
 			id: result.id,
 			name: result.name,
 			note: result.note,
 			parentId: result.parentId,
 			...metadataFields(metadataOf(result)),
+			priority: index,
 			systemFrom: result.systemFrom,
 			systemTo: result.systemTo,
 			mirrorsAsOriginal: result.mirrorsAsOriginal,
@@ -1060,7 +1064,7 @@ export class CacheService
 	/**
 	 * The cached subtree under `nodeId` as a delete plans it (see
 	 * {@link SubtreeMirrors}). Children are walked breadth-first, siblings in
-	 * priority order then by id, and the walk stops at each mirror: a mirror's
+	 * sibling order (order key, creation time, id), and the walk stops at each mirror: a mirror's
 	 * own children live under its original.
 	 */
 	getSubtreeMirrors(nodeId: string): SubtreeMirrors
@@ -1077,14 +1081,16 @@ export class CacheService
 				id: string;
 				parentId: string;
 				levelIndex: number;
-				priority: number;
+				orderKey: string | null;
+				createdAt: Date | null;
 			}[] = [];
 			const children = this.database
 				.select(
 					{
 						id: nodeContent.id,
 						parentId: nodeContent.parentId,
-						priority: nodeMetadata.priority,
+						orderKey: nodeMetadata.orderKey,
+						createdAt: nodeMetadata.createdAt,
 					},
 				)
 				.from(nodeContent)
@@ -1104,11 +1110,12 @@ export class CacheService
 						id: row.id,
 						parentId: row.parentId,
 						levelIndex: parentIndex,
-						priority: row.priority ?? 0,
+						orderKey: row.orderKey,
+						createdAt: row.createdAt,
 					},
 				);
 			}
-			rows.sort((a, b) => a.levelIndex - b.levelIndex || a.priority - b.priority || a.id.localeCompare(b.id));
+			rows.sort((a, b) => a.levelIndex - b.levelIndex || compareSiblingOrder(a, b));
 			for (const row of rows)
 			{
 				parents.set(row.id, row.parentId);

@@ -1,12 +1,14 @@
 import {matchNested, parseNestedQuery, parseQuery} from "@outlinedb/shared/search";
 import type {MatchResult, SearchItem} from "@outlinedb/shared/search";
+import {compareBinary, DEFAULT_ORDER_KEY} from "@outlinedb/shared/cache";
 
 /** A live node as loaded for tree search. Timestamps are epoch milliseconds. */
 export interface TreeSearchRow
 {
 	id: string;
 	parentId: string | null;
-	priority: number | null;
+	/** The node's `node_metadata.order_key`; siblings sort by it. */
+	orderKey: string | null;
 	name: string | null;
 	note: string | null;
 	createdAt: number | null;
@@ -18,6 +20,12 @@ export interface TreeSearchRow
 	isBacklink: boolean;
 	/** The MIME type of the node's live (not deleted) attachment, or null without one. */
 	fileType: string | null;
+}
+
+/** Siblings by order key, a missing key as `a0`; a stable sort keeps load order among equal keys. */
+export function byOrderKey(a: TreeSearchRow, b: TreeSearchRow): number
+{
+	return compareBinary(a.orderKey ?? DEFAULT_ORDER_KEY, b.orderKey ?? DEFAULT_ORDER_KEY);
 }
 
 export interface TreeSearchResult
@@ -92,7 +100,7 @@ function childrenByParent(rows: TreeSearchRow[]): Map<string | null, TreeSearchR
 	}
 	for (const siblings of children.values())
 	{
-		siblings.sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0));
+		siblings.sort(byOrderKey);
 	}
 	childrenCache.set(rows, children);
 	return children;
@@ -285,7 +293,7 @@ function summarize(
 
 /**
  * Port of upstream's in-place search: matches every descendant of `rootId` (the whole tree when null) against the
- * query AST, never the root itself, and reports ids in document order (parent, then children by priority).
+ * query AST, never the root itself, and reports ids in document order (parent, then children by order key).
  */
 export function computeTreeSearch(
 	rows: TreeSearchRow[],

@@ -54,7 +54,7 @@ interface TreeSqlRow
 {
 	id: string;
 	parentId: string | null;
-	priority: number | null;
+	orderKey: string | null;
 	name: string | null;
 	note: string | null;
 	createdAt: number | null;
@@ -83,7 +83,7 @@ function toSearchRow(row: TreeSqlRow): TreeSearchRow
 	return {
 		id: row.id,
 		parentId: row.parentId,
-		priority: row.priority,
+		orderKey: row.orderKey,
 		name: row.name,
 		note: row.note,
 		createdAt: toMillis(row.createdAt),
@@ -130,7 +130,7 @@ function selectTreeRows(database: Database, seeds: SQL, recursive: boolean, with
 		SELECT
 			c.id AS id,
 			c.parent_id AS parentId,
-			m.priority AS priority,
+			m.order_key AS orderKey,
 			${withText ? sql`CASE WHEN o.id IS NULL THEN c.name ELSE o.name END` : sql`NULL`} AS name,
 			${withText ? sql`CASE WHEN o.id IS NULL THEN c.note ELSE o.note END` : sql`NULL`} AS note,
 			m.created_at AS createdAt,
@@ -227,7 +227,7 @@ interface FlatSkeletonSqlRow
 {
 	id: string;
 	parentId: string | null;
-	priority: number | null;
+	orderKey: string | null;
 	createdAt: number | null;
 	modifiedAt: number | null;
 	completedAt: number | null;
@@ -252,7 +252,7 @@ export function buildSwitcherSkeleton(database: Database): SwitcherSkeleton
 		SELECT
 			c.id AS id,
 			c.parent_id AS parentId,
-			m.priority AS priority,
+			m.order_key AS orderKey,
 			m.created_at AS createdAt,
 			m.modified_at AS modifiedAt,
 			CASE WHEN mi.mirror_id IS NULL THEN m.completed_at ELSE om.completed_at END AS completedAt,
@@ -321,7 +321,7 @@ export function buildSwitcherSkeleton(database: Database): SwitcherSkeleton
 		{
 			id: row.id,
 			parentId: row.parentId,
-			priority: row.priority,
+			orderKey: row.orderKey,
 			name: null,
 			note: null,
 			createdAt: toMillis(row.createdAt),
@@ -517,7 +517,7 @@ function changeState(database: Database): ChangeState
 const ROW_FIELDS = [
 	"id",
 	"parentId",
-	"priority",
+	"orderKey",
 	"name",
 	"note",
 	"createdAt",

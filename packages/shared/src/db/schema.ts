@@ -45,6 +45,12 @@ export const nodeMetadata = sqliteTable(
 		shortId: text("short_id"),
 
 		priority: integer("priority"),
+		/**
+		 * Sibling order: a fractional index (base-62 digits that sort as plain strings), read in order with
+		 * `created_at` and `id` as tie-breakers. Until writers set it themselves, the `node_metadata_order_key_*`
+		 * triggers (migration 0005) derive it from `priority` as a fractional-index integer key.
+		 */
+		orderKey: text("order_key"),
 
 		createdAt: integer(
 			"created_at",

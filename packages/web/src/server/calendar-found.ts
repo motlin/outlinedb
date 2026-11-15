@@ -7,8 +7,9 @@
 
 import {and, eq, like, or} from "drizzle-orm";
 import {parseTimeAttrs} from "@outlinedb/shared";
-import type {CacheService} from "@outlinedb/shared/cache";
-import {nodeContent} from "@outlinedb/shared/db";
+import {compareSiblingOrder, inIds} from "@outlinedb/shared/cache";
+import type {CacheService, SiblingOrder} from "@outlinedb/shared/cache";
+import {nodeContent, nodeMetadata} from "@outlinedb/shared/db";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import type {Node} from "@outlinedb/shared/types";
 import type {BacklinkCrumb} from "../node-types.js";
@@ -150,18 +151,38 @@ function inTreeChecker(cache: CacheService): (node: Node) => boolean
 	};
 }
 
-/** Tree order: compare the priority paths from the top level down; an ancestor comes before its descendants. */
-function compareTreeOrder(a: number[], b: number[]): number
+/** Tree order: compare the sibling-order paths from the top level down; an ancestor comes before its descendants. */
+function compareTreeOrder(a: SiblingOrder[], b: SiblingOrder[]): number
 {
 	for (let index = 0; index < Math.min(a.length, b.length); index++)
 	{
-		const delta = (a[index] ?? 0) - (b[index] ?? 0);
+		const left = a[index];
+		const right = b[index];
+		const delta = left === undefined || right === undefined ? 0 : compareSiblingOrder(left, right);
 		if (delta !== 0)
 		{
 			return delta;
 		}
 	}
 	return a.length - b.length;
+}
+
+/** The current order key of each of `ids` that has metadata. */
+function orderKeys(deps: Pick<CalendarDayDeps, "db">, ids: string[]): Map<string, string | null>
+{
+	return new Map(
+		deps.db
+			.select(
+				{
+					nodeId: nodeMetadata.nodeId,
+					orderKey: nodeMetadata.orderKey,
+				},
+			)
+			.from(nodeMetadata)
+			.where(and(inIds(nodeMetadata.nodeId, ids), eq(nodeMetadata.systemTo, FAR_FUTURE_DATE)))
+			.all()
+			.map(({nodeId, orderKey}) => [nodeId, orderKey]),
+	);
 }
 
 /**
@@ -185,27 +206,41 @@ export function findFoundDates(deps: Pick<CalendarDayDeps, "db" | "cache">, dayI
 		return node === undefined || node.mirror.isMirror ? [] : [node];
 	});
 	const calendarInfo = loadCalendarInfo(deps, nodes);
-	return nodes
-		.flatMap((node) =>
+	const found = nodes.flatMap((node) =>
+	{
+		const info = calendarInfo.get(node.id);
+		if (node.id === dayId || info?.root === true || info?.level != null)
 		{
-			const info = calendarInfo.get(node.id);
-			if (node.id === dayId || info?.root === true || info?.level != null)
+			return [];
+		}
+		const ancestors = ancestorsOf(deps.cache, node);
+		if (ancestors === undefined || ancestors.some(({id}) => id === dayId))
+		{
+			return [];
+		}
+		return [
 			{
-				return [];
-			}
-			const ancestors = ancestorsOf(deps.cache, node);
-			if (ancestors === undefined || ancestors.some(({id}) => id === dayId))
-			{
-				return [];
-			}
-			return [
-				{
-					node,
-					ancestors,
-					path: [...ancestors, node].map(({priority}) => priority),
-				},
-			];
-		})
+				node,
+				ancestors,
+			},
+		];
+	});
+	const keys = orderKeys(deps, [
+		...new Set(found.flatMap(({node, ancestors}) => [...ancestors, node].map(({id}) => id))),
+	]);
+	const pathOf = ({node, ancestors}: (typeof found)[number]): SiblingOrder[] =>
+		[...ancestors, node].map(({id, createdAt}) => (
+		{
+			orderKey: keys.get(id),
+			createdAt,
+			id,
+		}));
+	return found
+		.map((entry) => (
+		{
+			...entry,
+			path: pathOf(entry),
+		}))
 		.toSorted((a, b) => compareTreeOrder(a.path, b.path))
 		.map(({node, ancestors}) => (
 		{

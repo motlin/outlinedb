@@ -1,4 +1,4 @@
-import {and, asc, eq, gt, inArray, lte} from "drizzle-orm";
+import {and, asc, eq, gt, inArray, lte, sql} from "drizzle-orm";
 import type {SQL} from "drizzle-orm";
 import type {AnySQLiteColumn} from "drizzle-orm/sqlite-core";
 import {nodeContent, nodeMetadata} from "../db/schema.js";
@@ -6,6 +6,7 @@ import {formatTemporalTimestamp} from "../temporal/constants.js";
 import {FAR_FUTURE_DATE} from "../temporal/index.js";
 import {systemFromToDate} from "./cache-temporal.js";
 import {readInternalMetadata} from "./internal-metadata.js";
+import {DEFAULT_ORDER_KEY} from "./order-key.js";
 import type {InternalMetadata} from "./internal-metadata.js";
 import type {TemporalTransaction} from "./temporal-merge.js";
 
@@ -49,7 +50,7 @@ function versionAt(
 /**
  * The cached subtree under `rootId` (the root included), read level by level:
  * the live rows by default, or the rows current at system time `asOf`.
- * Children are ordered by priority, then creation time, like the cache's reads.
+ * Children are in sibling order (order key, creation time, id), like the cache's reads.
  */
 export function readSubtreeAt(database: TemporalTransaction, rootId: string, asOf?: string): SubtreeAt
 {
@@ -75,7 +76,11 @@ export function readSubtreeAt(database: TemporalTransaction, rootId: string, asO
 						versionAt(nodeContent, asOf),
 					),
 				)
-				.orderBy(asc(nodeMetadata.priority), asc(nodeMetadata.createdAt))
+				.orderBy(
+					sql`coalesce(${nodeMetadata.orderKey}, ${DEFAULT_ORDER_KEY})`,
+					sql`coalesce(${nodeMetadata.createdAt}, 0)`,
+					asc(nodeContent.id),
+				)
 				.all();
 			for (const {id, parentId} of rows)
 			{

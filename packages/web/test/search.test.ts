@@ -3012,7 +3012,7 @@ describe("search tree route", () =>
 					{
 						id: "a",
 						parentId: "root",
-						priority: 1,
+						orderKey: "a1",
 						name: "Alpha",
 						note: null,
 						createdAt: CREATED.getTime(),
@@ -3026,7 +3026,7 @@ describe("search tree route", () =>
 					{
 						id: "a1",
 						parentId: "a",
-						priority: 2,
+						orderKey: "a2",
 						name: "Alpha child",
 						note: null,
 						...NO_META,
@@ -3037,7 +3037,7 @@ describe("search tree route", () =>
 					{
 						id: "mirror",
 						parentId: "root",
-						priority: 3,
+						orderKey: "a3",
 						name: "Other",
 						note: "other note",
 						...NO_META,
@@ -3048,7 +3048,7 @@ describe("search tree route", () =>
 					{
 						id: "root",
 						parentId: null,
-						priority: 0,
+						orderKey: "a0",
 						name: "Root",
 						note: null,
 						...NO_META,
@@ -3956,7 +3956,7 @@ describe("search tree", () =>
 		return {
 			id,
 			parentId,
-			priority,
+			orderKey: `a${String(priority).padStart(4, "0")}`,
 			name,
 			note: null,
 			createdAt: null,

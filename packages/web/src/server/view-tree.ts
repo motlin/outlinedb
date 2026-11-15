@@ -12,7 +12,14 @@
  * The listed rows' Backlinks sections are one more statement nesting the same walk: every backlink item under a list
  * parent's references root, shaped with its source's text, completion, child flags and ancestor crumbs.
  */
-import {currentVersion, mirrorOriginalText, relationalRowId} from "@outlinedb/shared/cache";
+import
+{
+	compareSiblingOrder,
+	currentVersion,
+	DEFAULT_ORDER_KEY,
+	mirrorOriginalText,
+	relationalRowId,
+} from "@outlinedb/shared/cache";
 import {mirrors, nodeContent, nodeTableCellSizes} from "@outlinedb/shared/db";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import type {Node} from "@outlinedb/shared/types";
@@ -57,15 +64,16 @@ const LIVE = sql.raw(`'${FAR_FUTURE_DATE}'`);
 const REFERENCES_ROOTS = sql`(SELECT node_id FROM references_roots WHERE system_to = ${LIVE})`;
 const IN_CHAT = sql`(SELECT node_id FROM ai_metadata WHERE in_chat = 1 AND system_to = ${LIVE})`;
 
-/** Added to priorities and creation times so negative values keep their order in a fixed-width sort key. */
+/** Added to creation times so negative values keep their order in a fixed-width sort key. */
 const SORT_OFFSET = sql.raw("1000000000000000000");
 
 /**
- * One row's slice of the walk's sort key: priority, then creation time (missing metadata as 0), then id, as the
- * lists are sorted. Fixed width up to the id, and the trailing space sorts below every id character, so a parent's
- * key followed by any child's sorts before its next sibling's: ordering by the concatenated key is document order.
+ * One row's slice of the walk's sort key: order key, then creation time (missing metadata as `a0` and 0), then id,
+ * as the lists are sorted. The order key and the id each end in a space, which sorts below every key and id
+ * character, and the creation time is fixed width, so a parent's key followed by any child's sorts before its next
+ * sibling's: ordering by the concatenated key is document order.
  */
-const SORT_SLICE = sql`printf('%020d%020d%s ', coalesce(m.priority, 0) + ${SORT_OFFSET}, coalesce(m.created_at, 0) + ${SORT_OFFSET}, c.id)`;
+const SORT_SLICE = sql`printf('%s %020d%s ', coalesce(m.order_key, ${sql.raw(`'${DEFAULT_ORDER_KEY}'`)}), coalesce(m.created_at, 0) + ${SORT_OFFSET}, c.id)`;
 
 /** A walk row's effective completion: a mirror is completed exactly when its current original is. */
 const WALK_COMPLETED = sql`CASE WHEN o.original_id IS NULL THEN m.completed_at ELSE (SELECT om.completed_at FROM node_content oc JOIN node_metadata om ON om.node_id = oc.id AND om.system_to = ${LIVE} WHERE oc.id = o.original_id AND oc.system_to = ${LIVE}) END`;
@@ -311,20 +319,27 @@ function attachmentOf(row: ViewRow): NodeAttachment | null
 			};
 }
 
-/** Siblings by priority, then creation time (missing metadata as 0), then id: the walk's order. */
-function compareSiblings(a: Node, b: Node): number
+interface Sibling
 {
-	if (a.priority !== b.priority)
-	{
-		return a.priority - b.priority;
-	}
-	const createdA = a.createdAt?.getTime() ?? 0;
-	const createdB = b.createdAt?.getTime() ?? 0;
-	if (createdA !== createdB)
-	{
-		return createdA - createdB;
-	}
-	return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+	node: Node;
+	orderKey: string | null | undefined;
+}
+
+/** Siblings by order key, then creation time (missing metadata as `a0` and 0), then id: the walk's order. */
+function compareSiblings(a: Sibling, b: Sibling): number
+{
+	return compareSiblingOrder(
+		{
+			orderKey: a.orderKey,
+			createdAt: a.node.createdAt,
+			id: a.node.id,
+		},
+		{
+			orderKey: b.orderKey,
+			createdAt: b.node.createdAt,
+			id: b.node.id,
+		},
+	);
 }
 
 /** The view's tree as read by {@link readViewTree}. */
@@ -352,10 +367,10 @@ export function readViewTree(ctx: ServerContext, query: ViewTreeQuery): ViewTree
 	const rootRow = query.rootId === null ? undefined : rows.find((row) => row.id === query.rootId);
 	const byParent = new Map<
 		string | null,
+		(Sibling &
 		{
 			row: ViewRow;
-			node: Node;
-		}[]
+		})[]
 	>();
 	const referencesRootOf = new Map<string, string>();
 	// The root row is read for its own fields and lands in its parent's group too, which only a view that also read
@@ -379,6 +394,7 @@ export function readViewTree(ctx: ServerContext, query: ViewTreeQuery): ViewTree
 			{
 				row,
 				node: nodeOf(row),
+				orderKey: nullable(row.metadata)?.orderKey,
 			},
 		);
 		byParent.set(row.parentId, siblings);
@@ -417,23 +433,24 @@ export function readViewTree(ctx: ServerContext, query: ViewTreeQuery): ViewTree
 	{
 		lists.set(
 			parentId,
-			siblings
-				.toSorted((a, b) => compareSiblings(a.node, b.node))
-				.map(({row, node}) =>
-					nodeToRestDto(
-						node,
-						{
-							hasMirrors: !node.mirror.isMirror && row.mirrorsAsOriginal.length > 0,
-							hasChildren: Boolean(row.hasChildren),
-							hasUncompletedChildren: Boolean(row.hasUncompletedChildren),
-							name: node.name,
-							note: node.note,
-							attachment: attachmentOf(row),
-							metadata: displayMetadataFields(nullable(row.displayMetadata), row.tableCellSizes),
-							calendar: calendar.get(row.id),
-						},
-					),
+			siblings.toSorted(compareSiblings).map(({row, node}, index) =>
+				nodeToRestDto(
+					{
+						...node,
+						priority: index,
+					},
+					{
+						hasMirrors: !node.mirror.isMirror && row.mirrorsAsOriginal.length > 0,
+						hasChildren: Boolean(row.hasChildren),
+						hasUncompletedChildren: Boolean(row.hasUncompletedChildren),
+						name: node.name,
+						note: node.note,
+						attachment: attachmentOf(row),
+						metadata: displayMetadataFields(nullable(row.displayMetadata), row.tableCellSizes),
+						calendar: calendar.get(row.id),
+					},
 				),
+			),
 		);
 	}
 	return {
@@ -539,10 +556,10 @@ export function readBacklinkItems(ctx: ServerContext, targets: SQL): Map<string,
 {
 	const byRoot = new Map<
 		string,
+		(Sibling &
 		{
-			node: Node;
 			item: BacklinkItem;
-		}[]
+		})[]
 	>();
 	for (const row of selectBacklinkItems(ctx, targets))
 	{
@@ -584,6 +601,7 @@ export function readBacklinkItems(ctx: ServerContext, targets: SQL): Map<string,
 		items.push(
 			{
 				node,
+				orderKey: metadata?.orderKey,
 				item:
 				{
 					node: nodeToRestDto(
@@ -603,9 +621,6 @@ export function readBacklinkItems(ctx: ServerContext, targets: SQL): Map<string,
 		byRoot.set(parentId, items);
 	}
 	return new Map(
-		[...byRoot].map(([rootId, items]) => [
-			rootId,
-			items.toSorted((a, b) => compareSiblings(a.node, b.node)).map(({item}) => item),
-		]),
+		[...byRoot].map(([rootId, items]) => [rootId, items.toSorted(compareSiblings).map(({item}) => item)]),
 	);
 }

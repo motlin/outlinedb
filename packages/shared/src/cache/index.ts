@@ -1,6 +1,7 @@
 export {ancestorChain} from "./ancestor-chain.js";
 export {buildEmbedTexts, filterEmbeddable, loadEmbeddableNodes} from "./embed-text.js";
 export {inIds} from "./in-ids.js";
+export {compareBinary, compareSiblingOrder, DEFAULT_ORDER_KEY, type SiblingOrder} from "./order-key.js";
 export
 {
 	type ApiImportState,

@@ -1,6 +1,7 @@
 import {z} from "zod";
 import
 {
+	DEFAULT_ORDER_KEY,
 	NodeReader,
 	NodeTreeReader,
 	ancestorChain,
@@ -661,7 +662,11 @@ function readTreeShape(ctx: ServerContext)
 			and(eq(nodeMetadata.nodeId, nodeContent.id), eq(nodeMetadata.systemTo, FAR_FUTURE_DATE)),
 		)
 		.where(and(eq(nodeContent.systemTo, FAR_FUTURE_DATE), notReferencesRoot()))
-		.orderBy(nodeMetadata.priority, nodeMetadata.createdAt)
+		.orderBy(
+			sql`coalesce(${nodeMetadata.orderKey}, ${DEFAULT_ORDER_KEY})`,
+			sql`coalesce(${nodeMetadata.createdAt}, 0)`,
+			nodeContent.id,
+		)
 		.all();
 	const children = new Map<
 		string | null,

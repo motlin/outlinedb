@@ -44,7 +44,7 @@ export interface PhotoGroup
 	entryId: string;
 	/** The blank wrapper to delete once emptied, or null for loose groups. */
 	wrapperId: string | null;
-	/** Members in current display order (by priority). */
+	/** Members in current display order (by sibling index). */
 	members: PhotoGroupMember[];
 }
 

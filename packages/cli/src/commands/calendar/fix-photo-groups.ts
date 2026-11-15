@@ -1,5 +1,5 @@
 import {WorkflowyApiClient} from "@outlinedb/shared/api";
-import {WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
+import {DEFAULT_ORDER_KEY, WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {resolveIdOrShortId} from "@outlinedb/shared/utils";
 import {Command, Flags} from "@oclif/core";
@@ -48,7 +48,10 @@ function loadCandidateRows(database: ReturnType<typeof createDatabase>): CachedN
 				nc.name,
 				nc.note,
 				nc.parent_id,
-				COALESCE(nm.priority, 0) AS priority,
+				ROW_NUMBER() OVER (
+					PARTITION BY nc.parent_id
+					ORDER BY COALESCE(nm.order_key, ${DEFAULT_ORDER_KEY}), COALESCE(nm.created_at, 0), nc.id
+				) - 1 AS priority,
 				nm.created_at
 			FROM node_content nc
 			LEFT JOIN node_metadata nm ON nm.node_id = nc.id AND nm.system_to = ${FAR_FUTURE_DATE}

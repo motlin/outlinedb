@@ -1,5 +1,6 @@
 import {stripHtmlTags} from "@outlinedb/shared/html";
 import {guessDates} from "@outlinedb/shared";
+import {compareBinary, DEFAULT_ORDER_KEY} from "@outlinedb/shared/cache";
 import
 {
 	baseScore,
@@ -14,7 +15,7 @@ import
 	textFactor,
 	withMonthNames,
 } from "@outlinedb/shared/search";
-import {searchItem, withRowText} from "./tree-search.js";
+import {byOrderKey, searchItem, withRowText} from "./tree-search.js";
 import type {RowTextSource, TreeSearchRow} from "./tree-search.js";
 
 /** Upstream's index keys words by their first 16 characters. */
@@ -95,7 +96,7 @@ interface RowIndex
 	byId: Map<string, TreeSearchRow>;
 	childCount: Map<string, number>;
 	placements: Map<string, Placement>;
-	/** Position of each row in a depth-first walk with children by priority: upstream's index insertion order. */
+	/** Position of each row in a depth-first walk with children by order key: upstream's index insertion order. */
 	preorder?: Map<string, number>;
 	childrenOf?: Map<string | null, TreeSearchRow[]>;
 }
@@ -209,14 +210,14 @@ function childrenByParent(rows: readonly TreeSearchRow[], index: RowIndex): Map<
 		}
 		for (const siblings of children.values())
 		{
-			siblings.sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0));
+			siblings.sort(byOrderKey);
 		}
 		index.childrenOf = children;
 	}
 	return index.childrenOf;
 }
 
-/** The rows in tree preorder (children by priority). */
+/** The rows in tree preorder (children by order key). */
 function preorderRows(rows: readonly TreeSearchRow[], index: RowIndex): TreeSearchRow[]
 {
 	const children = childrenByParent(rows, index);
@@ -681,7 +682,7 @@ interface Placed
 	underCompleted: boolean;
 }
 
-/** The rows in tree preorder (children by priority) with their {@link placement}, computed on the walk. */
+/** The rows in tree preorder (children by order key) with their {@link placement}, computed on the walk. */
 function* placedPreorder(rows: readonly TreeSearchRow[], index: RowIndex): Generator<Placed>
 {
 	const children = childrenByParent(rows, index);
@@ -1059,7 +1060,7 @@ export function compactSwitcherSkeleton(
 			childCount[parent] = (childCount[parent] ?? 0) + 1;
 		}
 	});
-	// Children grouped by parent (a row whose parent is not a row hangs at the top), each group by priority, stably.
+	// Children grouped by parent (a row whose parent is not a row hangs at the top), each group by order key, stably.
 	const top: number[] = [];
 	const children: (number[] | undefined)[] = Array.from(
 		{
@@ -1078,11 +1079,12 @@ export function compactSwitcherSkeleton(
 			(children[parent] ??= []).push(i);
 		}
 	}
-	const byPriority = (a: number, b: number) => (rows[a]?.priority ?? 0) - (rows[b]?.priority ?? 0) || a - b;
-	top.sort(byPriority);
+	const byOrder = (a: number, b: number) =>
+		compareBinary(rows[a]?.orderKey ?? DEFAULT_ORDER_KEY, rows[b]?.orderKey ?? DEFAULT_ORDER_KEY) || a - b;
+	top.sort(byOrder);
 	for (const group of children)
 	{
-		group?.sort(byPriority);
+		group?.sort(byOrder);
 	}
 	const order: number[] = [];
 	const stack = top.toReversed();

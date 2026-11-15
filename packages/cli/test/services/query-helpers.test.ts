@@ -135,7 +135,7 @@ describe("QueryHelpers", () =>
 			]);
 		});
 
-		it("returns children ordered by priority when available", () =>
+		it("returns children in order-key order, each with its sibling index as its priority", () =>
 		{
 			const children = queryHelpers.getChildren("parent");
 
@@ -148,15 +148,15 @@ describe("QueryHelpers", () =>
 			).toStrictEqual([
 				{
 					id: "child-2",
-					priority: 100,
+					priority: 0,
 				},
 				{
 					id: "child-3",
-					priority: 200,
+					priority: 1,
 				},
 				{
 					id: "child-1",
-					priority: 300,
+					priority: 2,
 				},
 			]);
 		});
@@ -205,7 +205,7 @@ describe("QueryHelpers", () =>
 
 			const children = queryHelpers.getChildren("other-parent");
 
-			// The canonical Node defaults a missing DB priority to 0.
+			// Equal order keys fall back to creation time, then id; priority is the sibling index.
 			expect(
 				children.map(({id, priority}) => (
 				{
@@ -219,7 +219,7 @@ describe("QueryHelpers", () =>
 				},
 				{
 					id: "other-child-2",
-					priority: 0,
+					priority: 1,
 				},
 			]);
 		});

@@ -21,6 +21,7 @@ import {internalLinkShortIds} from "../workflowy/internal-links.js";
 import {AccountNotProvisionedError} from "./account-store.js";
 import {currentVersion, normalizeLayoutMode} from "./cache-temporal.js";
 import {inIds} from "./in-ids.js";
+import {DEFAULT_ORDER_KEY} from "./order-key.js";
 import {readNodeInternalMetadata, writeInternalMetadata} from "./internal-metadata.js";
 import type {InternalMetadata} from "./internal-metadata.js";
 import {currentBacklinkItems} from "./item-relationships.js";
@@ -413,7 +414,7 @@ class PendingWrites
 	}
 }
 
-/** A parent's current children ids (Home's for null) in sort order: priority, then createdAt. */
+/** A parent's current children ids (Home's for null) in sibling order: order key, then createdAt, then id. */
 export function currentChildIds(tx: TemporalTransaction, parentId: string | null): string[]
 {
 	return tx
@@ -431,7 +432,7 @@ export function currentChildIds(tx: TemporalTransaction, parentId: string | null
 			),
 		)
 		.orderBy(
-			sql`coalesce(${nodeMetadata.priority}, 0)`,
+			sql`coalesce(${nodeMetadata.orderKey}, ${DEFAULT_ORDER_KEY})`,
 			sql`coalesce(${nodeMetadata.createdAt}, 0)`,
 			asc(nodeContent.id),
 		)
@@ -531,8 +532,9 @@ export function readHomeLayoutMode(tx: TemporalTransaction): string | null
 
 /**
  * Writes the outline of a standalone account, which has no workflowy.com behind it, straight into the temporal node
- * tables. Each write is one unit of work. Sibling order is `node_metadata.priority`: after a write, every touched
- * parent's children are renumbered 0..n-1, and only rows whose values changed get a new version.
+ * tables. Each write is one unit of work. Siblings are read in `node_metadata.order_key` order; after a write, every
+ * touched parent's children get priorities 0..n-1, from which the migration 0005 triggers derive their order keys, and
+ * only rows whose values changed get a new version.
  */
 export class LocalTreeWriter
 {

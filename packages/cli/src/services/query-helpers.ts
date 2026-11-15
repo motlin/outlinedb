@@ -29,7 +29,7 @@ export class QueryHelpers
 	}
 
 	/**
-	 * Fetch children of a node ordered by priority, then createdAt
+	 * Fetch children of a node in sibling order: order key, then createdAt, then id
 	 */
 	getChildren(parentId: string | null): Node[]
 	{

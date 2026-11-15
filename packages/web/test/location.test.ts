@@ -1081,7 +1081,7 @@ describe("location search", () =>
 		return {
 			id,
 			parentId,
-			priority,
+			orderKey: `a${String(priority).padStart(4, "0")}`,
 			name,
 			note: null,
 			createdAt: null,

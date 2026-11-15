@@ -3,6 +3,8 @@ import {and, eq, is, sql} from "drizzle-orm";
 import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {getTableConfig, SQLiteTable} from "drizzle-orm/sqlite-core";
+import {copyFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync} from "node:fs";
+import {tmpdir} from "node:os";
 import path, {join} from "node:path";
 import {beforeEach, afterEach, describe, expect, it} from "vite-plus/test";
 import
@@ -692,6 +694,186 @@ describe("node dto", () =>
 
 			sqlite.close();
 		});
+	});
+
+	describe("children order", () =>
+	{
+		it("orders children by order key, then creation time, then id, and reports each one's sibling index as its priority", () =>
+		{
+			const {database, sqlite} = buildTestDb();
+			const seeded = "2026-01-01 00:00:00.000";
+			sqlite.exec(`
+				INSERT INTO node_content (id, name, parent_id, system_from, system_to) VALUES
+					('parent', 'Parent', NULL, '${seeded}', '${FAR_FUTURE_DATE}'),
+					('first-by-priority', 'A', 'parent', '${seeded}', '${FAR_FUTURE_DATE}'),
+					('second-by-priority', 'B', 'parent', '${seeded}', '${FAR_FUTURE_DATE}'),
+					('tie-later', 'C', 'parent', '${seeded}', '${FAR_FUTURE_DATE}'),
+					('tie-earlier', 'D', 'parent', '${seeded}', '${FAR_FUTURE_DATE}');
+				INSERT INTO node_metadata (node_id, priority, created_at, system_from, system_to) VALUES
+					('first-by-priority', 0, 100, '${seeded}', '${FAR_FUTURE_DATE}'),
+					('second-by-priority', 1, 100, '${seeded}', '${FAR_FUTURE_DATE}'),
+					('tie-later', 2, 300, '${seeded}', '${FAR_FUTURE_DATE}'),
+					('tie-earlier', 3, 200, '${seeded}', '${FAR_FUTURE_DATE}');
+				UPDATE node_metadata SET order_key = CASE node_id
+					WHEN 'first-by-priority' THEN 'a5'
+					WHEN 'second-by-priority' THEN 'a1'
+					ELSE 'a3' END;
+			`);
+
+			expect(
+				new NodeReader(database).getChildren("parent").map(({id, priority}) => (
+				{
+					id,
+					priority,
+				})),
+			).toStrictEqual([
+				{
+					id: "second-by-priority",
+					priority: 0,
+				},
+				{
+					id: "tie-earlier",
+					priority: 1,
+				},
+				{
+					id: "tie-later",
+					priority: 2,
+				},
+				{
+					id: "first-by-priority",
+					priority: 3,
+				},
+			]);
+
+			sqlite.close();
+		});
+	});
+});
+
+describe("node order key migration", () =>
+{
+	const migrationsFolder = path.join(import.meta.dirname, "../src/db/migrations");
+
+	/** A folder holding every migration before `tag`, so a database can be migrated to just before it. */
+	function migrationsBefore(tag: string): string
+	{
+		const folder = mkdtempSync(path.join(tmpdir(), "before-order-key-"));
+		mkdirSync(path.join(folder, "meta"));
+		const journal = JSON.parse(readFileSync(path.join(migrationsFolder, "meta/_journal.json"), "utf8")) as
+		{
+			entries:
+			{
+				tag: string;
+			}[];
+		};
+		const entries = journal.entries.slice(
+			0,
+			journal.entries.findIndex((entry) => entry.tag === tag),
+		);
+		writeFileSync(
+			path.join(folder, "meta/_journal.json"),
+			JSON.stringify(
+				{
+					...journal,
+					entries,
+				},
+			),
+		);
+		for (const entry of entries)
+		{
+			copyFileSync(path.join(migrationsFolder, `${entry.tag}.sql`), path.join(folder, `${entry.tag}.sql`));
+		}
+		return folder;
+	}
+
+	it("keys every metadata row, backfilled or written later, by its priority as a fractional-index integer that sorts like the priority", () =>
+	{
+		const sqlite = new DatabaseConstructor(":memory:");
+		try
+		{
+			migrate(
+				drizzle(sqlite),
+				{
+					migrationsFolder: migrationsBefore("0005_node_order_key"),
+				},
+			);
+			const insert = (priorities: (number | null)[], prefix: string): void =>
+			{
+				const statement = sqlite.prepare(
+					"INSERT INTO node_metadata (node_id, priority, system_from, system_to) VALUES (?, ?, '2026-01-01 00:00:00.000', ?)",
+				);
+				for (const [index, priority] of priorities.entries())
+				{
+					statement.run(`${prefix}-${index}`, priority, FAR_FUTURE_DATE);
+				}
+			};
+			insert([122_100, 3844, 3843, 62, 61, 1], "backfilled");
+			migrate(
+				drizzle(sqlite),
+				{
+					migrationsFolder,
+				},
+			);
+			insert([0, null, -1, -62, -63, -14_900], "inserted");
+			sqlite.prepare("UPDATE node_metadata SET priority = 5 WHERE node_id = 'inserted-0'").run();
+
+			expect(
+				sqlite.prepare("SELECT priority, order_key FROM node_metadata ORDER BY order_key, node_id").all(),
+			).toStrictEqual([
+				{
+					priority: -14_900,
+					order_key: "Xw7g",
+				},
+				{
+					priority: -63,
+					order_key: "Yyz",
+				},
+				{
+					priority: -62,
+					order_key: "Z0",
+				},
+				{
+					priority: -1,
+					order_key: "Zz",
+				},
+				{
+					priority: null,
+					order_key: "a0",
+				},
+				{
+					priority: 1,
+					order_key: "a1",
+				},
+				{
+					priority: 5,
+					order_key: "a5",
+				},
+				{
+					priority: 61,
+					order_key: "az",
+				},
+				{
+					priority: 62,
+					order_key: "b10",
+				},
+				{
+					priority: 3843,
+					order_key: "bzz",
+				},
+				{
+					priority: 3844,
+					order_key: "c100",
+				},
+				{
+					priority: 122_100,
+					order_key: "cVlM",
+				},
+			]);
+		}
+		finally
+		{
+			sqlite.close();
+		}
 	});
 });
 

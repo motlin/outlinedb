@@ -310,7 +310,12 @@ class TreeModel
 								eq(nodeContent.systemTo, FAR_FUTURE_DATE),
 							),
 						)
-						.orderBy(sql`${nodeMetadata.priority} IS NULL`, asc(nodeMetadata.priority), asc(nodeContent.id))
+						.orderBy(
+							sql`${nodeMetadata.orderKey} IS NULL`,
+							asc(nodeMetadata.orderKey),
+							sql`coalesce(${nodeMetadata.createdAt}, 0)`,
+							asc(nodeContent.id),
+						)
 						.all()
 						.map((row) => row.id);
 		this.children.set(
