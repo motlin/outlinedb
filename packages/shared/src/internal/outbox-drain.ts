@@ -7,7 +7,9 @@
  * mirrors and backlink items it gained or lost), deletes. A node's Workflowy index is its position among its current
  * local siblings that exist upstream: siblings with a pending create or placement count only once this push has sent
  * theirs. A pending delete makes the node's other rows moot, and a node created and deleted before any drain sends
- * nothing. A restored node is an undelete once its delete went out, and only a move when the delete is still pending.
+ * nothing. A restored node is an undelete once its delete went out, and only a move when the delete is still pending;
+ * a node restored where upstream still has it sends only the edits that differ from upstream, and no mirror link
+ * upstream still holds.
  *
  * What upstream holds now is the node's local state just before its oldest pending row: every aspect still pending
  * changed after that, and none before it. It supplies the previous values the ops' undo data carries, and decides
@@ -520,6 +522,45 @@ function restoredNodes(tx: TemporalTransaction, creates: readonly PendingOutboxR
 	);
 }
 
+/**
+ * Which mirrors' links were live at their `asOf`: every change to a link leaves a pending row on its mirror or its
+ * original, so the link as of just before the older of the two nodes' oldest pending rows is what upstream holds.
+ */
+function upstreamLinks(
+	tx: TemporalTransaction,
+	links: readonly
+	{
+		mirrorId: string;
+		originalId: string;
+		asOf: string;
+	}[],
+): Set<string>
+{
+	return new Set(
+		links
+			.filter(
+				({mirrorId, originalId, asOf}) =>
+					tx
+						.select(
+							{
+								mirrorId: mirrors.mirrorId,
+							},
+						)
+						.from(mirrors)
+						.where(
+							and(
+								eq(mirrors.mirrorId, mirrorId),
+								eq(mirrors.originalId, originalId),
+								lte(mirrors.systemFrom, asOf),
+								gt(mirrors.systemTo, asOf),
+							),
+						)
+						.get() !== undefined,
+			)
+			.map(({mirrorId}) => mirrorId),
+	);
+}
+
 /** Build the push for `rows` from the nodes' current local state. */
 function planDrain(
 	tx: TemporalTransaction,
@@ -700,6 +741,12 @@ function planDrain(
 							parentId: internalParent(before.parentId),
 							index: before.index,
 						};
+			notUpstream.delete(id);
+			if (before?.parentId === parent && before.index === index)
+			{
+				// Already there upstream, as for a node deleted and restored in place before any drain.
+				continue;
+			}
 			const sameParentBefore = before?.parentId === parent && before.index <= index;
 			ops.push(
 				moveOp(
@@ -713,7 +760,6 @@ function planDrain(
 					},
 				),
 			);
-			notUpstream.delete(id);
 		}
 	}
 
@@ -794,13 +840,27 @@ function planDrain(
 		ops.push(completed ? completeOp(input) : uncompleteOp(input));
 	}
 
-	const linked = ids.filter(
-		(id) => has(id, "mirror") && states.get(id)?.relationships.mirror?.originalId !== undefined,
+	const originalOf = (id: string): string => states.get(id)?.relationships.mirror?.originalId ?? "";
+	const linkedUpstream = upstreamLinks(
+		tx,
+		ids
+			.filter((id) => has(id, "mirror") && !created.has(id) && originalOf(id) !== "")
+			.map((id) =>
+			{
+				const times = [oldest.get(id), oldest.get(originalOf(id))].filter((time) => time !== undefined);
+				return {
+					mirrorId: id,
+					originalId: originalOf(id),
+					asOf: systemTimeJustBefore(times.toSorted()[0] ?? ""),
+				};
+			}),
 	);
+	// A link upstream already holds, as when a delete that unlinked it was undone before any drain, sends nothing.
+	const linked = ids.filter((id) => has(id, "mirror") && originalOf(id) !== "" && !linkedUpstream.has(id));
 	const added = new Map<string, string[]>();
 	for (const id of linked)
 	{
-		const originalId = states.get(id)?.relationships.mirror?.originalId ?? "";
+		const originalId = originalOf(id);
 		if (!created.has(id))
 		{
 			const {patches, inverse} = buildMetadataChanges({}, [
@@ -961,7 +1021,8 @@ function errorMessage(error: unknown): string
 /**
  * One drain pass over the oldest pending outbox rows: one push, or none when nothing needs sending. On acknowledgement
  * the carried rows close in the unit of work that applies the push's transactions. A failed or unacknowledged push
- * records its error as `last_error` on every row it carried, which stay pending, and throws.
+ * records its error as `last_error` on every row it carried, which stay pending, and throws; a failed session fetch
+ * records its error on every row the pass read.
  */
 export async function drainOutbox(
 	database: TemporalTransaction,
@@ -978,7 +1039,19 @@ export async function drainOutbox(
 			closed: 0,
 		};
 	}
-	const session = await pusher.session();
+	let session: OutboxSession;
+	try
+	{
+		session = await pusher.session();
+	}
+	catch (error)
+	{
+		runUnitOfWork(database, (unitOfWork) =>
+		{
+			failOutboxRows(unitOfWork, readPendingOutbox(unitOfWork.tx, cap), errorMessage(error));
+		});
+		throw error;
+	}
 	const plan = runUnitOfWork(database, (unitOfWork) =>
 	{
 		const planned = planDrain(unitOfWork.tx, readPendingOutbox(unitOfWork.tx, cap), session, now());

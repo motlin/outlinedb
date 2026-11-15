@@ -130,9 +130,9 @@ describe("Workflowy secrets reach only the owner's Durable Object", () =>
 		};
 		const owner = await named("dev");
 		// The write armed the outbox job for now; its drain reaches the fake upstream, which fails it.
-		const drained = () => calls.some(({path}) => path === "/get_initialization_data");
+		const failed = async () => (await owner.syncStatus()).outbox.lastError !== null;
 		const deadline = Date.now() + 10_000;
-		while (!drained() && Date.now() < deadline)
+		while (!(await failed()) && Date.now() < deadline)
 		{
 			await new Promise((resolve) =>
 			{
@@ -156,7 +156,8 @@ describe("Workflowy secrets reach only the owner's Durable Object", () =>
 				status: response.status,
 				listed: listed.value.nodes.map(({id}) => id),
 				pending: outbox.pending,
-				drainedUpstream: drained(),
+				lastError: outbox.lastError,
+				drainedUpstream: calls.some(({path}) => path === "/get_initialization_data"),
 				publicApiWrites: calls.filter(({path}) => path.startsWith("/api/v1/")),
 			},
 		).toStrictEqual(
@@ -165,6 +166,8 @@ describe("Workflowy secrets reach only the owner's Durable Object", () =>
 				listed: [node.id],
 				// The create and its placement stay pending after the failed drain.
 				pending: 2,
+				lastError:
+					"Failed to GET /get_initialization_data?client_version=21&client_version_v2=28&no_root_children=1: 500 ",
 				drainedUpstream: true,
 				publicApiWrites: [],
 			},

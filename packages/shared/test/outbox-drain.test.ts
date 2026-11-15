@@ -752,6 +752,58 @@ describe("drainOutbox", () =>
 		);
 	});
 
+	it("records a failed session fetch as last_error on every pending row, keeps them pending, and throws", async () =>
+	{
+		const {database, writer, outboxRows, pushes, pusher, drain} = setup();
+		setClock(at(0));
+		writer.updateNode(
+			"a",
+			{
+				name: "A",
+			},
+		);
+
+		await expect(
+			drain(
+				{
+					...pusher(),
+					session: async () => Promise.reject(new Error("workflowy.com is down")),
+				},
+			),
+		).rejects.toThrow("workflowy.com is down");
+
+		expect(
+			{
+				pushes: pushes.length,
+				outbox: outboxRows(),
+				status: outboxStatus(database),
+			},
+		).toStrictEqual(
+			{
+				pushes: 0,
+				outbox: [
+					row("a", "name", at(0)),
+					row(
+						"a",
+						"name",
+						at(0),
+						{
+							systemFrom: DRAIN,
+							systemTo: FAR_FUTURE_DATE,
+							lastError: "workflowy.com is down",
+						},
+					),
+				],
+				status:
+				{
+					pending: 1,
+					oldestEnqueuedAt: at(0),
+					lastError: "workflowy.com is down",
+				},
+			},
+		);
+	});
+
 	it("keeps the rows pending with last_error when the server run does not echo every op", async () =>
 	{
 		const {writer, outboxRows, pusher, drain} = setup();
@@ -1394,6 +1446,54 @@ describe("drainOutbox", () =>
 					],
 				],
 				outbox: [row("b", "create", at(1)), row("b", "delete", at(0)), row("b", "placement", at(1))],
+			},
+		);
+	});
+
+	it("sends only the edits made before a delete when a node and its mirrored child are restored in place before any drain", async () =>
+	{
+		const {writer, outboxRows, pushes, drain} = setup();
+		setClock(at(0));
+		writer.updateNode(
+			"c",
+			{
+				name: "C",
+			},
+		);
+		setClock(at(1));
+		writer.deleteNode("c");
+		setClock(at(2));
+		writer.restoreNode(
+			{
+				id: "c",
+			},
+		);
+
+		const result = await drain();
+
+		expect(
+			{
+				result,
+				pushes,
+				outbox: outboxRows(),
+			},
+		).toStrictEqual(
+			{
+				result:
+				{
+					ops: 1,
+					closed: 7,
+				},
+				pushes: [[rename("c", "C", "c")]],
+				outbox: [
+					row("c", "create", at(2)),
+					row("c", "delete", at(1)),
+					row("c", "name", at(0)),
+					row("c", "placement", at(2)),
+					row("c1", "create", at(2)),
+					row("c1", "delete", at(1)),
+					row("m", "mirror", at(2)),
+				],
 			},
 		);
 	});
