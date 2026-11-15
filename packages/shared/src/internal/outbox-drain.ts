@@ -4,9 +4,10 @@
  *
  * Ops go out in this order: undeletes, creates (parents first, siblings in order-key order), placements, name and
  * note and metadata edits, completions, mirror links (a new mirror's link, and each original's edit listing the
- * mirrors and backlink items it gained or lost), deletes. A node's Workflowy index is its position among its current
- * local siblings that exist upstream: siblings with a pending create or placement count only once this push has sent
- * theirs. A pending delete makes the node's other rows moot, and a node created and deleted before any drain sends
+ * mirrors and backlink items it gained or lost), deletes. A node's Workflowy index is its position among the
+ * children upstream holds at that point in the push, right after its nearest earlier local sibling already in place
+ * there: siblings with a pending create or placement count only once this push has sent theirs, and a sibling whose
+ * delete or move away is still to come counts where upstream still has it. A pending delete makes the node's other rows moot, and a node created and deleted before any drain sends
  * nothing. A restored node is an undelete once its delete went out, and only a move when the delete is still pending;
  * a node restored where upstream still has it sends only the edits that differ from upstream, and no mirror link
  * upstream still holds.
@@ -712,16 +713,71 @@ function planDrain(
 	);
 
 	const ops: InternalOp[] = [];
+	const placedSet = new Set(placed);
+	const deleted = new Set(ids.filter((id) => has(id, "delete") && !states.has(id) && !droppedIds.has(id)));
+	// Nodes upstream holds where they were until this push sends their move or delete.
+	const leaving = [...placed, ...deleted].filter((id) => upstream.has(id));
+	const upstreamParentOf = (id: string): string | null => upstream.get(id)?.parentId ?? null;
+	/** Nodes this push has yet to put in place upstream. */
 	const notUpstream = new Set([...created, ...placed, ...undeleted]);
 	const parentOf = (id: string): string | null => states.get(id)?.parentId ?? null;
 	const parentOrder = [...new Set([...created, ...placed, ...undeleted].map(parentOf))];
-	const siblings = siblingsAt(tx, [...parentOrder, ...created]);
+	const siblings = siblingsAt(tx, [...new Set([...parentOrder, ...created, ...leaving.map(upstreamParentOf)])]);
 	const childrenOf = (parent: string | null): string[] => siblings.get(parent) ?? [];
-	/** The node's index among its parent's children that exist upstream, itself excluded. */
+	/** Each parent's children as upstream holds them at this point in the push. */
+	const held = new Map<string | null, string[]>();
+	for (const parent of siblings.keys())
+	{
+		const children = childrenOf(parent).filter((child) => !notUpstream.has(child));
+		const stayed = leaving
+			.filter((id) => upstreamParentOf(id) === parent)
+			.toSorted((left, right) => (upstream.get(left)?.index ?? 0) - (upstream.get(right)?.index ?? 0));
+		for (const id of stayed)
+		{
+			children.splice(Math.min(upstream.get(id)?.index ?? 0, children.length), 0, id);
+		}
+		held.set(parent, children);
+	}
+	const heldBy = (parent: string | null): string[] =>
+	{
+		let children = held.get(parent);
+		if (children === undefined)
+		{
+			children = [];
+			held.set(parent, children);
+		}
+		return children;
+	};
+	/** Take the node out of the children upstream holds, returning the index it had there. */
+	const leave = (id: string, parent: string | null): number =>
+	{
+		const children = heldBy(parent);
+		const index = children.indexOf(id);
+		if (index !== -1)
+		{
+			children.splice(index, 1);
+		}
+		return index;
+	};
+	/**
+	 * The node's index among the children upstream holds of its local parent, itself excluded: right after its
+	 * nearest earlier local sibling already in place there, or first.
+	 */
 	const slot = (id: string): number =>
 	{
-		const order = childrenOf(parentOf(id));
-		return order.slice(0, order.indexOf(id)).filter((sibling) => !notUpstream.has(sibling)).length;
+		const parent = parentOf(id);
+		const children = heldBy(parent).filter((child) => child !== id);
+		const order = childrenOf(parent);
+		const previous = order
+			.slice(0, order.indexOf(id))
+			.findLast((sibling) => !notUpstream.has(sibling) && children.includes(sibling));
+		return previous === undefined ? 0 : children.indexOf(previous) + 1;
+	};
+	/** Record the node as in place upstream at `index` among its local parent's children. */
+	const arrive = (id: string, index: number): void =>
+	{
+		heldBy(parentOf(id)).splice(index, 0, id);
+		notUpstream.delete(id);
 	};
 
 	const undeletedSet = new Set(undeleted);
@@ -731,17 +787,18 @@ function planDrain(
 		{
 			if (undeletedSet.has(id))
 			{
+				const index = slot(id);
 				ops.push(
 					undeleteOp(
 						{
 							...clock,
 							id,
 							parentId: internalParent(parent),
-							index: slot(id),
+							index,
 						},
 					),
 				);
-				notUpstream.delete(id);
+				arrive(id, index);
 			}
 		}
 	}
@@ -781,18 +838,19 @@ function planDrain(
 						completed: true,
 					}),
 		};
+		const index = slot(id);
 		ops.push(
 			bulkCreateOp(
 				{
 					...clock,
 					parentId: internalParent(state.parentId),
-					index: slot(id),
+					index,
 					trees: [tree],
 					userId: session.userId,
 				},
 			).op,
 		);
-		notUpstream.delete(id);
+		arrive(id, index);
 		for (const child of childrenOf(id))
 		{
 			if (created.has(child))
@@ -816,7 +874,6 @@ function planDrain(
 		}
 	}
 
-	const placedSet = new Set(placed);
 	for (const parent of parentOrder)
 	{
 		for (const id of childrenOf(parent))
@@ -827,25 +884,19 @@ function planDrain(
 			}
 			const index = slot(id);
 			const before = upstream.get(id);
+			const fromIndex = before === undefined ? index : leave(id, before.parentId);
 			const from =
-				before === undefined
-					?
-						{
-							parentId: internalParent(parent),
-							index,
-						}
-					:
-						{
-							parentId: internalParent(before.parentId),
-							index: before.index,
-						};
-			notUpstream.delete(id);
-			if (before?.parentId === parent && before.index === index)
+			{
+				parentId: internalParent(before === undefined ? parent : before.parentId),
+				index: fromIndex === -1 ? (before?.index ?? index) : fromIndex,
+			};
+			arrive(id, index);
+			if (before?.parentId === parent && from.index === index)
 			{
 				// Already there upstream, as for a node deleted and restored in place before any drain.
 				continue;
 			}
-			const sameParentBefore = before?.parentId === parent && before.index <= index;
+			const sameParentBefore = before?.parentId === parent && from.index <= index;
 			ops.push(
 				moveOp(
 					{
@@ -1041,7 +1092,6 @@ function planDrain(
 		);
 	}
 
-	const deleted = new Set(ids.filter((id) => has(id, "delete") && !states.has(id) && !droppedIds.has(id)));
 	for (const id of deleted)
 	{
 		const before = upstream.get(id);
@@ -1049,6 +1099,7 @@ function planDrain(
 		{
 			continue;
 		}
+		const index = leave(id, before.parentId);
 		ops.push(
 			deleteOp(
 				{
@@ -1057,7 +1108,7 @@ function planDrain(
 					from:
 					{
 						parentId: internalParent(before.parentId),
-						index: before.index,
+						index: index === -1 ? before.index : index,
 					},
 				},
 			),

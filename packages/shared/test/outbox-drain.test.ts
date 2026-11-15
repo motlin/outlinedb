@@ -605,7 +605,7 @@ describe("drainOutbox", () =>
 		);
 	});
 
-	it("sends nothing for a node created and deleted before the drain, and only the delete for a renamed node it deleted", async () =>
+	it("sends nothing for a node created and deleted before the drain, only the delete for a renamed node it deleted, and a sibling's move against upstream still holding the deleted node", async () =>
 	{
 		const {writer, outboxRows, pushes, drain} = setup();
 		setClock(at(0));
@@ -627,6 +627,14 @@ describe("drainOutbox", () =>
 		);
 		setClock(at(3));
 		writer.deleteNode("b");
+		setClock(at(4));
+		writer.moveTo(
+			{
+				ids: ["a"],
+				parentId: "p",
+				index: 2,
+			},
+		);
 
 		const result = await drain();
 
@@ -640,11 +648,27 @@ describe("drainOutbox", () =>
 			{
 				result:
 				{
-					ops: 1,
-					closed: 5,
+					ops: 2,
+					closed: 6,
 				},
 				pushes: [
 					[
+						{
+							type: "move",
+							data:
+							{
+								projectid: "a",
+								parentid: "p",
+								priority: 2,
+							},
+							client_timestamp: CT,
+							undo_data:
+							{
+								previous_parentid: "p",
+								previous_priority: 0,
+								...NO_PREVIOUS,
+							},
+						},
 						{
 							type: "delete",
 							data:
@@ -656,12 +680,13 @@ describe("drainOutbox", () =>
 							{
 								...NO_PREVIOUS,
 								parentid: "p",
-								priority: 1,
+								priority: 0,
 							},
 						},
 					],
 				],
 				outbox: [
+					row("a", "placement", at(4)),
 					row("b", "delete", at(3)),
 					row("b", "name", at(2)),
 					row("n", "create", at(0)),
