@@ -1,14 +1,12 @@
 import {z} from "zod";
-import {LocalTreeWriter, planBlockSlot} from "@outlinedb/shared/cache";
-import type {LocalRestoreInput, SlotPlan} from "@outlinedb/shared/cache";
-import type {RestoreInput, WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
+import {LocalTreeWriter} from "@outlinedb/shared/cache";
+import type {LocalRestoreInput} from "@outlinedb/shared/cache";
 import {calendarParentContext} from "@outlinedb/shared/calendar-lookup";
-import {adoptAfterCreate, calendarAdoptWarning, datesInName, linkedSourcesInSubtree} from "@outlinedb/shared/internal";
+import {adoptAfterCreate, datesInName} from "@outlinedb/shared/internal";
 import {HOME_TARGET} from "@outlinedb/shared/types";
 import {hasInternalLink} from "@outlinedb/shared/workflowy";
-import type {WorkflowyNode} from "@outlinedb/shared/types";
-import type {NodeResponse, SaveEffects, UpdateNodeResponse} from "../../node-types.js";
-import {backlinksNeedSync, backlinkTargetsOfSource} from "../backlinks.js";
+import type {UpdateNodeResponse} from "../../node-types.js";
+import {backlinksNeedSync} from "../backlinks.js";
 import {INTERNAL_API_NOT_CONFIGURED} from "../internal-api.js";
 import {defineOp, fail, ok, toJson} from "./define.js";
 import type {OpResult} from "./define.js";
@@ -23,11 +21,7 @@ import
 } from "./schemas.js";
 import
 {
-	adapterParent,
-	childIds,
-	countChildren,
 	getAdapter,
-	getApiClient,
 	getNodeWriter,
 	localDeletePlan,
 	AfterIdSchema,
@@ -36,8 +30,6 @@ import
 	ParentIdSchema,
 	slotIndex,
 	parseParent,
-	publicEnd,
-	publicMovePosition,
 	readNodeDto,
 	resolveNodeId,
 	saveEffects,
@@ -66,77 +58,48 @@ const TableSetSchema = z.array(
 	),
 );
 
-/** The public API's node in Workflowy response format, for a host without the cache row. */
-function wireNodeResponse(node: WorkflowyNode, parentId: string | null, hasUncompletedChildren: boolean): NodeResponse
-{
-	return {
-		id: node.id,
-		parent_id: parentId,
-		name: node.name,
-		note: node.note ?? null,
-		priority: node.priority,
-		data:
-		{
-			layoutMode: node.data?.layoutMode ?? null,
-		},
-		numberedStart: null,
-		createdAt: node.createdAt,
-		modifiedAt: node.modifiedAt,
-		completedAt: node.completedAt ?? null,
-		hasChildren: true,
-		...(hasUncompletedChildren
-			?
-				{
-					hasUncompletedChildren: true,
-				}
-			: {}),
-		isMirror: false,
-		originalNodeId: null,
-		attachment: null,
-		defaultToBottom: false,
-		calendar: null,
-		table: null,
-	};
-}
-
 /**
  * Tag a dated row just created under a 📆 Calendar month as that day, as upstream's `mb1` hook does for web edits,
- * so workflowy.com uses it as the day. Answers the warning to return when it needed tagging but there is no
- * internal adapter to write the metadata.
+ * so workflowy.com uses it as the day. The tag is local metadata, which the drain delivers with the create.
  */
 async function adoptUnderCalendar(
 	ctx: ServerContext,
-	adapter: WorkflowyInternalAdapter | undefined,
+	local: LocalTreeWriter,
 	created:
 	{
 		id: string;
 		name: string;
 		parentId: string | null;
 	},
-): Promise<string | undefined>
+): Promise<void>
 {
 	const {id, name, parentId} = created;
 	// Most creates are undated (every empty row the web app adds), so skip the calendar walk for them.
 	if (parentId === null || datesInName(name).length === 0)
 	{
-		return undefined;
+		return;
 	}
-	const context = calendarParentContext(
-		{
-			db: ctx.db,
-			cache: ctx.cacheService,
-		},
-		parentId,
-	);
-	const adoption = await adoptAfterCreate(
+	await adoptAfterCreate(
 		{
 			id,
 			name,
-			context,
-			adapter,
+			context: calendarParentContext(
+				{
+					db: ctx.db,
+					cache: ctx.cacheService,
+				},
+				parentId,
+			),
+			adapter:
+			{
+				setNodeMetaValues: async (nodeId, changes) =>
+				{
+					local.setNodeMetaValues(nodeId, changes);
+					return Promise.resolve();
+				},
+			},
 		},
 	);
-	return adoption.status === "unadoptable" ? calendarAdoptWarning(name) : undefined;
 }
 
 /** The create reply for a node the cache now holds. */
@@ -187,8 +150,7 @@ export const nodesCreate = defineOp(
 				after_id: AfterIdSchema,
 				/**
 				 * A client-generated lowercase UUID for the new node, so the client can edit the
-				 * optimistic row before this reply. Honored through the internal API only; the
-				 * public-API fallback assigns its own id (the reply carries the real one).
+				 * optimistic row before this reply.
 				 */
 				id: z.string().regex(CLIENT_ID_PATTERN).optional(),
 			},
@@ -229,164 +191,69 @@ export const nodesCreate = defineOp(
 				);
 			}
 
-			if (writer.mode === "standalone")
+			if (parentId !== null && !ctx.cacheService.getNode(parentId))
 			{
-				if (parentId !== null && !ctx.cacheService.getNode(parentId))
-				{
-					return fail(
-						404,
-						{
-							error: "Parent node not found",
-						},
-					);
-				}
-				const {id} = writer.local.createAt(
+				return fail(
+					404,
 					{
-						parentId,
-						...(index === undefined
-							? {}
-							:
-								{
-									index,
-								}),
-						...(afterId === undefined || index === undefined
-							? {}
-							:
-								{
-									afterId,
-								}),
-						name,
-						...(body.id === undefined
-							? {}
-							:
-								{
-									id: body.id,
-								}),
-						...(note === undefined
-							? {}
-							:
-								{
-									note,
-								}),
-						...(layoutMode === undefined
-							? {}
-							:
-								{
-									layoutMode,
-								}),
+						error: "Parent node not found",
 					},
 				);
-				if (hasInternalLink(`${name} ${note ?? ""}`))
-				{
-					writer.local.syncBacklinks([id]);
-				}
-				return createdNodeResult(ctx, id);
 			}
-			const {client} = writer;
-			const count = countChildren(ctx, parentId);
-
-			const adapter = getAdapter(ctx);
-			if (adapter)
+			const {local} = writer;
+			const {id} = local.createAt(
+				{
+					parentId,
+					...(index === undefined
+						? {}
+						:
+							{
+								index,
+							}),
+					...(afterId === undefined || index === undefined
+						? {}
+						:
+							{
+								afterId,
+							}),
+					name,
+					...(body.id === undefined
+						? {}
+						:
+							{
+								id: body.id,
+							}),
+					...(note === undefined
+						? {}
+						:
+							{
+								note,
+							}),
+					...(layoutMode === undefined
+						? {}
+						:
+							{
+								layoutMode,
+							}),
+				},
+			);
+			if (hasInternalLink(`${name} ${note ?? ""}`))
 			{
-				const {id} = await adapter.createAt(
-					{
-						parentId: adapterParent(parentId),
-						...(index === undefined
-							? {}
-							:
-								{
-									index,
-								}),
-						...(afterId === undefined || index === undefined
-							? {}
-							:
-								{
-									afterId,
-								}),
-						name,
-						...(body.id === undefined
-							? {}
-							:
-								{
-									id: body.id,
-								}),
-						...(note === undefined
-							? {}
-							:
-								{
-									note,
-								}),
-						...(layoutMode === undefined
-							? {}
-							:
-								{
-									metadata:
-									{
-										layoutMode,
-									},
-								}),
-					},
-				);
+				local.syncBacklinks([id]);
+			}
+			if (writer.mode === "mirror")
+			{
 				await adoptUnderCalendar(
 					ctx,
-					adapter,
+					local,
 					{
 						id,
 						name,
 						parentId,
 					},
 				);
-				return createdNodeResult(ctx, id);
 			}
-
-			// Without the internal API a middle slot is the nearer end plus a rotation of the siblings on the shorter side.
-			const end = publicEnd(index, count);
-			const rotation: SlotPlan =
-				end === undefined
-					? planBlockSlot(childIds(ctx, parentId), [], index ?? count)
-					:
-						{
-							position: end,
-							siblingIds: [],
-						};
-			const createdNode = await client.createNode(
-				{
-					parent_id: parentId ?? HOME_TARGET,
-					name,
-					note,
-					layoutMode,
-					position: rotation.position,
-				},
-			);
-			for (const siblingId of rotation.siblingIds)
-			{
-				await client.moveNode(siblingId, parentId, publicMovePosition(rotation.position));
-			}
-			const warning = await adoptUnderCalendar(
-				ctx,
-				undefined,
-				{
-					id: createdNode.id,
-					name,
-					parentId,
-				},
-			);
-			return ok(
-				toJson(
-					{
-						node: wireNodeResponse(createdNode, parentId, true),
-						...(warning === undefined
-							? {}
-							:
-								{
-									warning,
-								}),
-					},
-				),
-				{
-					created: true,
-				},
-			);
+			return createdNodeResult(ctx, id);
 		},
 	},
 );
@@ -512,195 +379,11 @@ export const nodesUpdate = defineOp(
 				);
 			}
 
-			if (writer.mode === "standalone")
-			{
-				// Text lives on a mirror's original, which is the backlink source.
-				const sourceId = cacheService.getMirrorOriginal(id) ?? id;
-				const before = cacheService.getNode(sourceId);
-				const effects = saveEffects(ctx, before, name, note);
-				writer.local.updateNode(
-					id,
-					{
-						...(name === undefined
-							? {}
-							:
-								{
-									name,
-								}),
-						...(note === undefined
-							? {}
-							:
-								{
-									note,
-								}),
-						...(layoutMode === undefined
-							? {}
-							:
-								{
-									layoutMode,
-								}),
-						metadata: [
-							...(numberedStart === undefined
-								? []
-								: [
-										{
-											path: ["numbered_start"],
-											value: numberedStart ?? undefined,
-										},
-									]),
-							...tableChanges,
-						],
-					},
-				);
-				const beforeText = `${before?.name ?? ""} ${before?.note ?? ""}`;
-				const afterText = `${name ?? before?.name ?? ""} ${note ?? before?.note ?? ""}`;
-				const synced =
-					(name !== undefined || note !== undefined) &&
-					backlinksNeedSync(ctx, sourceId, beforeText, afterText)
-						? writer.local.syncBacklinks([sourceId])
-						: undefined;
-				const node = await readNodeDto(ctx, id);
-				if (node === undefined)
-				{
-					return fail(
-						404,
-						{
-							error: "Node not found",
-						},
-					);
-				}
-				return ok(
-					toJson(
-						{
-							node,
-							effects:
-							{
-								...effects,
-								backlinkTargets: [
-									...new Set([
-										...effects.backlinkTargets,
-										...(synced?.created ?? []).map((item) => item.targetId),
-										...(synced?.deleted ?? []).map((item) => item.targetId),
-									]),
-								],
-							},
-						} satisfies UpdateNodeResponse,
-					),
-				);
-			}
-			const {client} = writer;
-
-			// Metadata goes through the internal API as one edit when it is configured;
-			// without it only layoutMode can be written (through the public API).
-			const adapter = getAdapter(ctx);
-			if (adapter)
-			{
-				const changes = [
-					...(layoutMode === undefined
-						? []
-						: [
-								{
-									path: ["layoutMode"],
-									value: layoutModeValue(layoutMode),
-								},
-							]),
-					...(numberedStart === undefined
-						? []
-						: [
-								{
-									path: ["numbered_start"],
-									value: numberedStart ?? undefined,
-								},
-							]),
-					...tableChanges,
-				];
-				let effects: SaveEffects =
-				{
-					backlinkTargets: [],
-					dates: false,
-				};
-				if (name !== undefined || note !== undefined)
-				{
-					// Text lives on a mirror's original, which is the backlink source.
-					const sourceId = cacheService.getMirrorOriginal(id) ?? id;
-					const before = cacheService.getNode(sourceId);
-					effects = saveEffects(ctx, before, name, note);
-					await client.updateNode(
-						id,
-						{
-							...(name === undefined
-								? {}
-								:
-									{
-										name,
-									}),
-							...(note === undefined
-								? {}
-								:
-									{
-										note,
-									}),
-						},
-					);
-					// Upstream's client keeps backlinks in step with a source's links; the whole-tree
-					// sync runs only when a link moved or a linked target lacks its backlink.
-					const beforeText = `${before?.name ?? ""} ${before?.note ?? ""}`;
-					const afterText = `${name ?? before?.name ?? ""} ${note ?? before?.note ?? ""}`;
-					if (backlinksNeedSync(ctx, sourceId, beforeText, afterText))
-					{
-						const existing = backlinkTargetsOfSource(ctx.db, sourceId);
-						const synced = await adapter.syncBacklinks([sourceId]);
-						const touched = [
-							...synced.created.map((created) => created.targetId),
-							...synced.deleted.flatMap((itemId) => existing.get(itemId) ?? []),
-						];
-						effects =
-						{
-							...effects,
-							backlinkTargets: [...new Set([...effects.backlinkTargets, ...touched])],
-						};
-					}
-				}
-				if (changes.length > 0)
-				{
-					await adapter.setNodeMetaValues(id, changes);
-				}
-				const node = await readNodeDto(ctx, id);
-				if (node === undefined)
-				{
-					return fail(
-						404,
-						{
-							error: "Node not found",
-						},
-					);
-				}
-				return ok(
-					toJson(
-						{
-							node,
-							effects,
-						} satisfies UpdateNodeResponse,
-					),
-				);
-			}
-			if (numberedStart !== undefined || tableChanges.length > 0)
-			{
-				return fail(
-					503,
-					{
-						error: INTERNAL_API_NOT_CONFIGURED,
-					},
-				);
-			}
-
-			const effects = saveEffects(
-				ctx,
-				cacheService.getNode(cacheService.getMirrorOriginal(id) ?? id),
-				name,
-				note,
-			);
-			const updatedNode = await client.updateNode(
+			// Text lives on a mirror's original, which is the backlink source.
+			const sourceId = cacheService.getMirrorOriginal(id) ?? id;
+			const before = cacheService.getNode(sourceId);
+			const effects = saveEffects(ctx, before, name, note);
+			writer.local.updateNode(
 				id,
 				{
 					...(name === undefined
@@ -721,13 +404,50 @@ export const nodesUpdate = defineOp(
 							{
 								layoutMode,
 							}),
+					metadata: [
+						...(numberedStart === undefined
+							? []
+							: [
+									{
+										path: ["numbered_start"],
+										value: numberedStart ?? undefined,
+									},
+								]),
+						...tableChanges,
+					],
 				},
 			);
+			const beforeText = `${before?.name ?? ""} ${before?.note ?? ""}`;
+			const afterText = `${name ?? before?.name ?? ""} ${note ?? before?.note ?? ""}`;
+			const synced =
+				(name !== undefined || note !== undefined) && backlinksNeedSync(ctx, sourceId, beforeText, afterText)
+					? writer.local.syncBacklinks([sourceId])
+					: undefined;
+			const node = await readNodeDto(ctx, id);
+			if (node === undefined)
+			{
+				return fail(
+					404,
+					{
+						error: "Node not found",
+					},
+				);
+			}
 			return ok(
 				toJson(
 					{
-						node: wireNodeResponse(updatedNode, existingNode.parentId, true),
-						effects,
+						node,
+						effects:
+						{
+							...effects,
+							backlinkTargets: [
+								...new Set([
+									...effects.backlinkTargets,
+									...(synced?.created ?? []).map((item) => item.targetId),
+									...(synced?.deleted ?? []).map((item) => item.targetId),
+								]),
+							],
+						},
 					} satisfies UpdateNodeResponse,
 				),
 			);
@@ -779,22 +499,7 @@ export const nodesDelete = defineOp(
 				);
 			}
 
-			if (writer.mode === "standalone")
-			{
-				writer.local.deleteNode(id, await localDeletePlan(ctx, id));
-				return ok(null);
-			}
-			const {client} = writer;
-
-			// Upstream's client deletes a deleted source's backlink items; read the linked
-			// sources before the delete drops the subtree from the cache.
-			const adapter = getAdapter(ctx);
-			const linked = adapter ? linkedSourcesInSubtree(ctx.db, id) : undefined;
-			await client.deleteNode(id);
-			if (adapter && linked && linked.ids.length > 0)
-			{
-				await adapter.deleteBacklinksOf(linked);
-			}
+			writer.local.deleteNode(id, await localDeletePlan(ctx, id));
 			return ok(null);
 		},
 	},
@@ -849,53 +554,29 @@ function completionOp(operation: CompletionOp)
 					);
 				}
 
-				if (writer.mode === "standalone")
+				if (operation === "complete")
 				{
-					if (operation === "complete")
-					{
-						writer.local.completeNode(id);
-					}
-					else
-					{
-						writer.local.uncompleteNode(id);
-					}
-					const node = await readNodeDto(ctx, id);
-					return node === undefined
-						? fail(
-								404,
-								{
-									error: "Node not found",
-								},
-							)
-						: ok(
-								toJson(
-									{
-										node,
-									},
-								),
-							);
+					writer.local.completeNode(id);
 				}
-				const {client} = writer;
-				const changed = await (operation === "complete" ? client.completeNode(id) : client.uncompleteNode(id));
-
-				const cached = await readNodeDto(ctx, id);
-				if (cached)
+				else
 				{
-					return ok(
-						toJson(
+					writer.local.uncompleteNode(id);
+				}
+				const node = await readNodeDto(ctx, id);
+				return node === undefined
+					? fail(
+							404,
 							{
-								node: cached,
+								error: "Node not found",
 							},
-						),
-					);
-				}
-				return ok(
-					toJson(
-						{
-							node: wireNodeResponse(changed, existingNode.parentId, operation === "uncomplete"),
-						},
-					),
-				);
+						)
+					: ok(
+							toJson(
+								{
+									node,
+								},
+							),
+						);
 			},
 		},
 	);
@@ -907,9 +588,10 @@ export const nodesComplete = completionOp("complete");
 // POST /api/v1/nodes/:id/uncomplete - Mark node as not completed
 export const nodesUncomplete = completionOp("uncomplete");
 
-/** Restore in a standalone account: reopen the node's subtree from its last closed versions; the cache is the truth. */
+/** Restore: reopen the node's subtree from its last closed versions; the local tables are the truth. */
 async function restoreLocally(
 	ctx: ServerContext,
+	local: LocalTreeWriter,
 	body:
 	{
 		id: string;
@@ -959,7 +641,7 @@ async function restoreLocally(
 	{
 		input.index = body.index;
 	}
-	if (!new LocalTreeWriter(ctx.db).restoreNode(input))
+	if (!local.restoreNode(input))
 	{
 		return fail(
 			404,
@@ -998,79 +680,17 @@ export const nodesRestore = defineOp(
 		output: NodeEnvelopeSchema,
 		async run(ctx, body)
 		{
-			if (ctx.mode === "standalone")
-			{
-				return restoreLocally(ctx, body);
-			}
-			const adapter = getAdapter(ctx);
-			const apiClient = getApiClient(ctx);
-			if (!adapter || !apiClient)
-			{
-				return fail(
-					503,
-					{
-						error: INTERNAL_API_NOT_CONFIGURED,
-					},
-				);
-			}
-
-			const {id} = body;
-			// Ask Workflowy, not the cache: a node deleted on workflowy.com lingers in a stale cache.
-			if ((await apiClient.findNode(id)) !== null)
-			{
-				return fail(
-					409,
-					{
-						error: "Node is not deleted",
-					},
-				);
-			}
-			const input: RestoreInput =
-			{
-				id,
-			};
-			if (body.parent_id !== undefined)
-			{
-				const parent = parseParent(ctx, body.parent_id);
-				if (!parent.ok)
-				{
-					return fail(
-						parent.status,
-						{
-							error: parent.error,
-						},
-					);
-				}
-				input.parentId = adapterParent(parent.parentId);
-			}
-			if (body.index !== undefined)
-			{
-				input.index = body.index;
-			}
-
-			// End the stale rows (the whole cached subtree) so the restore's refresh stores only what came back.
-			if (ctx.cacheService.getNode(id))
-			{
-				ctx.cacheService.deleteNode(id);
-			}
-			await adapter.restore(input);
-			const node = await readNodeDto(ctx, id);
-			if (node === undefined)
+			const writer = getNodeWriter(ctx);
+			if (!writer)
 			{
 				return fail(
 					500,
 					{
-						error: `Restored node ${id} is missing from the cache`,
+						error: WRITE_CLIENT_REQUIRED,
 					},
 				);
 			}
-			return ok(
-				toJson(
-					{
-						node,
-					},
-				),
-			);
+			return restoreLocally(ctx, writer.local, body);
 		},
 	},
 );

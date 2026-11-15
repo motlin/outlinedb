@@ -1,4 +1,4 @@
-import {afterAll, beforeAll, beforeEach, describe, expect, it} from "vite-plus/test";
+import {afterAll, beforeAll, beforeEach, describe, expect, it, vi} from "vite-plus/test";
 import type {StoreClient} from "@outlinedb/web/node-host";
 import {callTool, openHarness} from "./harness.js";
 import type {Harness} from "./harness.js";
@@ -225,14 +225,8 @@ describe("outlinedb_search filters", () =>
 
 describe("outlinedb_node_update clearNote", () =>
 {
-	it("clears the note", async () =>
+	it("clears the note locally", async () =>
 	{
-		const upstream = stubPublicApi([
-			{
-				...fakeNode("p-noted", "Noted", null),
-				note: "old note",
-			},
-		]);
 		harness.cache.insertNode(
 			{
 				...fakeNode("p-noted", "Noted", null),
@@ -242,7 +236,7 @@ describe("outlinedb_node_update clearNote", () =>
 		);
 
 		const result = await callTool(
-			harness.store,
+			harness.authStore,
 			"outlinedb_node_update",
 			{
 				id: "p-noted",
@@ -254,18 +248,19 @@ describe("outlinedb_node_update clearNote", () =>
 			{
 				isError: result.isError,
 				value: JSON.parse(text(result)),
-				upstreamNote: upstream.get("p-noted")?.note,
+				localNote: harness.cache.getNode("p-noted")?.note,
 			},
 		).toStrictEqual(
 			{
 				isError: undefined,
+				// The local tables store a cleared note as no note.
 				value:
 				{
 					id: "p-noted",
 					name: "Noted",
-					note: "",
+					note: null,
 				},
-				upstreamNote: "",
+				localNote: null,
 			},
 		);
 	});
@@ -298,12 +293,42 @@ describe("outlinedb_node_update clearNote", () =>
 
 describe("outlinedb_node_create children", () =>
 {
+	/** A created node as the tool answers it. */
+	interface CreatedTree
+	{
+		id: string;
+		name: string;
+		url: string;
+		children?: CreatedTree[];
+	}
+
+	/** The local tree under `parentId`, as name, note and children. */
+	function localTree(parentId: string): unknown[]
+	{
+		return harness.cache.getChildren(parentId).map((node) => (
+		{
+			name: node.name,
+			note: node.note,
+			children: localTree(node.id),
+		}));
+	}
+
+	/** Whether every node in the answer links to its own id. */
+	function urlsMatchIds(trees: CreatedTree[]): boolean
+	{
+		return trees.every(
+			(tree) =>
+				tree.url === `https://workflowy.com/#/${tree.id.replaceAll("-", "")}` &&
+				urlsMatchIds(tree.children ?? []),
+		);
+	}
+
 	it("creates a tree depth-first under the new node", async () =>
 	{
-		const upstream = stubPublicApi(OUTLINE);
+		stubPublicApi(OUTLINE);
 
 		const result = await callTool(
-			harness.store,
+			harness.authStore,
 			"outlinedb_node_create",
 			{
 				parentId: "p-work",
@@ -324,78 +349,40 @@ describe("outlinedb_node_create children", () =>
 				],
 			},
 		);
+		const value = JSON.parse(text(result)) as CreatedTree;
 
 		expect(
 			{
 				isError: result.isError,
-				value: JSON.parse(text(result)),
-				created: [...upstream.values()]
-					.filter((node) => node.id.startsWith("created-"))
-					.map(({id, name, note, parent_id: parentId}) => (
-					{
-						id,
-						name,
-						note,
-						parentId,
-					})),
+				names: [value.name, ...(value.children ?? []).map((child) => child.name)],
+				urlsMatchIds: urlsMatchIds([value]),
+				local: localTree(value.id),
+				fetches: vi.mocked(globalThis.fetch).mock.calls.length,
 			},
 		).toStrictEqual(
 			{
 				isError: undefined,
-				value:
-				{
-					id: "created-1",
-					name: "Plan",
-					createdAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/u),
-					url: "https://workflowy.com/#/created1",
-					children: [
-						{
-							id: "created-2",
-							name: "Step 1",
-							url: "https://workflowy.com/#/created2",
-							children: [
-								{
-									id: "created-3",
-									name: "Step 1a",
-									url: "https://workflowy.com/#/created3",
-									children: [],
-								},
-							],
-						},
-						{
-							id: "created-4",
-							name: "Step 2",
-							url: "https://workflowy.com/#/created4",
-							children: [],
-						},
-					],
-				},
-				created: [
+				names: ["Plan", "Step 1", "Step 2"],
+				urlsMatchIds: true,
+				local: [
 					{
-						id: "created-1",
-						name: "Plan",
-						note: null,
-						parentId: "p-work",
-					},
-					{
-						id: "created-2",
 						name: "Step 1",
 						note: "first",
-						parentId: "created-1",
+						children: [
+							{
+								name: "Step 1a",
+								note: null,
+								children: [],
+							},
+						],
 					},
 					{
-						id: "created-3",
-						name: "Step 1a",
-						note: null,
-						parentId: "created-2",
-					},
-					{
-						id: "created-4",
 						name: "Step 2",
 						note: null,
-						parentId: "created-1",
+						children: [],
 					},
 				],
+				fetches: 0,
 			},
 		);
 	});

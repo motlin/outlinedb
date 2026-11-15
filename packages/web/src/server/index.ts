@@ -12,7 +12,7 @@ import {nodeEventsSocketHandlers} from "./node-events-socket.js";
 import {createDecisionsApp} from "./routes/decisions.js";
 import {resolvePort} from "./port.js";
 import {warmTreeSnapshot} from "./tree-snapshot.js";
-import {nodeSignalSocket, startUpstreamSignal} from "./upstream-signal.js";
+import {nodeSignalSocket, startUpstreamSignal, upstreamLane} from "./upstream-signal.js";
 
 process.title = "outlinedb-web-server";
 
@@ -113,12 +113,28 @@ nodeWebSocket.injectWebSocket(server);
 
 /**
  * Edits made on workflowy.com reach the cache within about a second: upstream's
- * signal socket nudges, and each nudge runs one coalesced catch-up poll.
+ * signal socket nudges, and each nudge runs one coalesced catch-up poll. A
+ * mirror-mode write triggers an outbox drain on the same lane, so a drain and a
+ * catch-up never run at the same time.
  */
 const internalAuth = serverContext.internalAuth;
 const internalAdapter = serverContext.internalAdapter?.();
 if (internalAuth && internalAdapter)
 {
+	const lane = upstreamLane(
+		async () => withTreeChangePublish(serverContext.db, treeEvents, async () => internalAdapter.drainOutbox()),
+		(message) =>
+		{
+			console.warn(message);
+		},
+	);
+	if (serverContext.mode === "mirror")
+	{
+		serverContext.outboxWritten = () =>
+		{
+			lane.requestDrain();
+		};
+	}
 	startUpstreamSignal(
 		{
 			connect: async () =>
@@ -136,7 +152,9 @@ if (internalAuth && internalAdapter)
 			},
 			openSocket: nodeSignalSocket,
 			catchUp: async () =>
-				withTreeChangePublish(serverContext.db, treeEvents, async () => internalAdapter.catchUp()),
+				lane.exclusive(async () =>
+					withTreeChangePublish(serverContext.db, treeEvents, async () => internalAdapter.catchUp()),
+				),
 		},
 	);
 }

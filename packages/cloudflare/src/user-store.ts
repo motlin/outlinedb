@@ -76,8 +76,10 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 	private checkAccount: () => void = () =>
 	{
 	};
-	/** The one alarm, shared by the sync and the embedding job. */
+	/** The one alarm, shared by the outbox drain, the sync and the embedding job. */
 	private readonly alarms = new AlarmSchedule(this.ctx.storage);
+	/** Delivers mirror-mode writes' outbox rows to workflowy.com; undefined without the internal API. */
+	private drainOutbox: (() => Promise<unknown>) | undefined;
 	private sync!: SyncJob;
 	/** Keeps the related-notes index current; undefined without the AI and RELATED_INDEX bindings. */
 	private embeddings: EmbeddingJob | undefined;
@@ -193,6 +195,15 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 				blobs: r2BlobStore(env.FILES, ctx.id.toString()),
 			},
 		);
+		this.drainOutbox = internalAuth && (async () => serverContext.internalAdapter?.()?.drainOutbox());
+		// A mirror-mode write arms the outbox job for now; the request never waits for the drain.
+		serverContext.outboxWritten = () =>
+		{
+			this.alarms.set("outbox", Date.now()).catch((error: unknown) =>
+			{
+				console.error("arming the outbox drain failed", error);
+			});
+		};
 		this.embeddings =
 			embedding &&
 			new EmbeddingJob(
@@ -474,13 +485,31 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 	{
 		try
 		{
-			// A non-owner's sync slot is cleared without a run: it has nothing to sync from.
-			if (this.alarms.take("sync", Date.now()) && this.isOwner)
+			// Outbox before sync, so a catch-up starts from a drained outbox; a scheduled sync tick is also a drain trigger
+			// (approved 2026-11-15), and a drain with nothing pending sends nothing. A non-owner's outbox and sync slots are
+			// cleared without a run: it never enqueues, and has nothing to sync from.
+			const due = this.alarms.takeDue(Date.now());
+			if ((due.includes("outbox") || due.includes("sync")) && this.isOwner && this.drainOutbox !== undefined)
+			{
+				try
+				{
+					await this.drainOutbox();
+				}
+				catch (error)
+				{
+					// The rows keep last_error and stay pending for the next trigger; the sync status reports them.
+					console.error("outbox drain failed", error);
+				}
+			}
+			if (due.includes("sync") && this.isOwner)
 			{
 				await this.sync.tick();
 			}
 			await this.noticeEmbeddings();
-			if (this.embeddings !== undefined && this.alarms.take("embeddings", Date.now()))
+			if (
+				this.embeddings !== undefined &&
+				(due.includes("embeddings") || this.alarms.take("embeddings", Date.now()))
+			)
 			{
 				await this.embeddings.tick();
 			}

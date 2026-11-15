@@ -13,6 +13,7 @@ import
 	stampImportTime,
 	TRANSACTION_TIMEOUT_MS,
 	CacheService,
+	readPendingOutbox,
 } from "@outlinedb/shared/cache";
 import {eq} from "drizzle-orm";
 import * as schema from "@outlinedb/shared/db";
@@ -710,34 +711,16 @@ describe("nodes complete mirror route", () =>
 			.prepare("INSERT INTO mirrors (mirror_id, original_id, system_from, system_to) VALUES (?, ?, ?, ?)")
 			.run("M", "O", "2000-01-01T00:00:00.000Z", FAR_FUTURE_DATE);
 
-		// The public API stores completion on exactly the id it is given.
-		const completedAt = new Map<string, number>();
-		const written: string[] = [];
-		vi.spyOn(WorkflowyApiClient.prototype, "completeNode").mockImplementation(async (id) =>
-		{
-			written.push(`complete:${id}`);
-			completedAt.set(id, 5000);
-			return Promise.resolve();
-		});
-		vi.spyOn(WorkflowyApiClient.prototype, "uncompleteNode").mockImplementation(async (id) =>
-		{
-			written.push(`uncomplete:${id}`);
-			completedAt.delete(id);
-			return Promise.resolve();
-		});
-		vi.spyOn(WorkflowyApiClient.prototype, "getNode").mockImplementation(async (id) =>
-		{
-			const at = completedAt.get(id);
-			const parent = id === "O" ? "Q" : "P";
-			return Promise.resolve(apiNode(id, parent, 0, at));
-		});
-
+		// A mirror host whose adapter is never called: completion is a local write plus an outbox row.
 		const ctx =
 		{
 			db,
 			cacheService,
+			mode: "mirror",
 			apiKey: "test-key",
 			config: {} as ServerContext["config"],
+			internalAuth: {},
+			internalAdapter: () => ({}) as WorkflowyInternalAdapter,
 		} as unknown as ServerContext;
 		const app = new Hono<AppEnv>();
 		app.use("*", async (c, next) =>
@@ -761,9 +744,15 @@ describe("nodes complete mirror route", () =>
 				body: (await res.json()) as CompleteBody,
 			};
 		};
+		/** Every pending outbox row as `id:aspect`, sorted. */
+		const pending = () =>
+			readPendingOutbox(db, 1000)
+				.map(({nodeId, aspect}) => `${nodeId}:${aspect}`)
+				// oxlint-disable-next-line unicorn/no-array-sort -- the test tsconfig lib has no toSorted
+				.sort();
 		return {
 			request,
-			written,
+			pending,
 		};
 	}
 
@@ -776,7 +765,7 @@ describe("nodes complete mirror route", () =>
 
 		it("completes the original, answers the mirror row with the original's completion, and lists both as done", async () =>
 		{
-			const {request, written} = setup();
+			const {request, pending} = setup();
 
 			const completed = await request("POST", "/M/complete");
 			const mirrorList = await request("GET", "?parent_id=P");
@@ -784,7 +773,7 @@ describe("nodes complete mirror route", () =>
 
 			expect(
 				{
-					written,
+					pending: pending(),
 					node:
 					{
 						id: completed.body.node.id,
@@ -798,7 +787,7 @@ describe("nodes complete mirror route", () =>
 				},
 			).toStrictEqual(
 				{
-					written: ["complete:O"],
+					pending: ["O:completion"],
 					node:
 					{
 						id: "M",
@@ -815,19 +804,19 @@ describe("nodes complete mirror route", () =>
 
 		it("uncompletes the original and answers the mirror row as open", async () =>
 		{
-			const {request, written} = setup();
+			const {request, pending} = setup();
 			await request("POST", "/M/complete");
 
 			const reopened = await request("POST", "/M/uncomplete");
 
 			expect(
 				{
-					written,
+					pending: pending(),
 					node: [reopened.body.node.id, reopened.body.node.isMirror, reopened.body.node.completedAt],
 				},
 			).toStrictEqual(
 				{
-					written: ["complete:O", "uncomplete:O"],
+					pending: ["O:completion"],
 					node: ["M", true, null],
 				},
 			);
@@ -947,133 +936,139 @@ describe("nodes duplicate route", () =>
 					},
 				),
 			);
+		/** Every pending outbox row as `id:aspect`. */
+		const pending = () => readPendingOutbox(db, 1000).map(({nodeId, aspect}) => `${nodeId}:${aspect}`);
 		return {
 			createTreesAt,
 			setExpanded,
 			post,
 			cacheService,
+			pending,
 		};
 	}
 
-	const anyId = expect.any(String) as string;
-
 	describe("POST /api/v1/nodes/duplicate", () =>
 	{
-		it("deep-copies each item to consecutive slots with one bulk create: note, completion, children, and child mirrors stay mirrors", async () =>
+		it("deep-copies each item to consecutive slots locally in mirror mode, records the creates, and keeps child mirrors as mirrors", async () =>
 		{
-			const {createTreesAt, post} = setup();
+			const {createTreesAt, post, cacheService, pending} = setup();
+			const shape = (parentId: string | null): unknown[] =>
+				cacheService.getChildren(parentId).map((node) => (
+				{
+					name: node.name,
+					completed: node.completedAt !== null,
+					mirrorOf: cacheService.getMirrorOriginal(node.id) ?? null,
+					children: shape(node.id),
+				}));
 
 			const res = await post(
 				{
 					ids: ["O", "P"],
 					parent_id: "P",
-					index: 2,
+					index: 1,
 				},
 			);
+			const {ids} = (await res.json()) as
+			{
+				ids: string[];
+			};
+			const rootRows = ids.flatMap((id) => [`${id}:create`, `${id}:placement`]);
 
-			const call = createTreesAt.mock.calls[0]?.[0];
 			expect(
 				{
 					status: res.status,
-					call,
-					ids: (
-						(await res.json()) as
-						{
-							ids: string[];
-						}
-					).ids,
+					copies: shape("P").slice(1),
+					placed: cacheService
+						.getChildren("P")
+						.slice(1)
+						.map((node) => node.id),
+					rootRows: rootRows.every((row) => pending().includes(row)),
+					calls: createTreesAt.mock.calls.length,
 				},
 			).toStrictEqual(
 				{
 					status: 201,
-					call:
-					{
-						parentId: "P",
-						index: 2,
-						trees: [
-							{
-								id: anyId,
-								name: "o",
-								note: "n",
-								completed: true,
-								children: [
-									{
-										id: anyId,
-										name: "c",
-										children: [
-											{
-												id: anyId,
-												name: "g",
-											},
-										],
-									},
-									{
-										id: anyId,
-										name: "",
-										metadata:
+					copies: [
+						{
+							name: "o",
+							completed: true,
+							mirrorOf: null,
+							children: [
+								{
+									name: "c",
+									completed: false,
+									mirrorOf: null,
+									children: [
 										{
-											mirror:
-											{
-												originalId: "X",
-												isMirrorRoot: true,
-											},
+											name: "g",
+											completed: false,
+											mirrorOf: null,
+											children: [],
 										},
-									},
-								],
-							},
-							{
-								id: anyId,
-								name: "p",
-								children: [
-									{
-										id: anyId,
-										name: "",
-										metadata:
-										{
-											mirror:
-											{
-												originalId: "O",
-												isMirrorRoot: true,
-											},
-										},
-									},
-								],
-							},
-						],
-					},
-					ids: call.trees.map((tree) => tree.id),
+									],
+								},
+								{
+									name: "x",
+									completed: false,
+									mirrorOf: "X",
+									children: [],
+								},
+							],
+						},
+						{
+							name: "p",
+							completed: false,
+							mirrorOf: null,
+							children: [
+								{
+									name: "o",
+									completed: false,
+									mirrorOf: "O",
+									children: [],
+								},
+							],
+						},
+					],
+					placed: ids,
+					rootRows: true,
+					calls: 0,
 				},
 			);
 		});
 
 		it("duplicates a mirror from its original and opens copies whose source rows are expanded", async () =>
 		{
-			const {createTreesAt, setExpanded, post} = setup(["M", "C"]);
+			const {setExpanded, post, cacheService} = setup(["M", "C"]);
 
-			await post(
+			const res = await post(
 				{
 					ids: ["M"],
 					parent_id: null,
 					index: 0,
 				},
 			);
+			const {ids} = (await res.json()) as
+			{
+				ids: string[];
+			};
+			const [copy] = cacheService.getChildren(null);
+			const [childCopy] = cacheService.getChildren(copy.id);
 
-			const [tree] = createTreesAt.mock.calls[0]?.[0].trees ?? [];
 			expect(
 				{
-					name: tree.name,
-					parent: createTreesAt.mock.calls[0]?.[0].parentId,
+					name: copy.name,
+					first: copy.id === ids[0],
 					opened: setExpanded.mock.calls,
 				},
 			).toStrictEqual(
 				{
 					name: "o",
-					parent: "home",
+					first: true,
 					opened: [
 						[
 							{
-								[tree.id ?? ""]: true,
-								[tree.children?.[0]?.id ?? ""]: true,
+								[copy.id]: true,
+								[childCopy.id]: true,
 							},
 						],
 					],

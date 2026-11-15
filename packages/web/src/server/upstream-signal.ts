@@ -110,19 +110,19 @@ function isOwnerDocumentUpdate(data: unknown): boolean
 }
 
 /**
- * Run `catchUp` so that a burst of requests gives one call in flight plus at
+ * Run `job` so that a burst of requests gives one call in flight plus at
  * most one queued behind it; a failure is logged and never stops later calls.
  */
-function coalesced(catchUp: () => Promise<void>, log: (message: string) => void): () => void
+function coalesced(job: () => Promise<void>, log: (message: string) => void, failure: string): () => void
 {
 	let inFlight: Promise<void> | undefined;
 	let queued = false;
 	const start = (): void =>
 	{
-		inFlight = catchUp()
+		inFlight = job()
 			.catch((error: unknown) =>
 			{
-				log(`upstream signal: catch-up failed: ${error instanceof Error ? error.message : String(error)}`);
+				log(`${failure}: ${error instanceof Error ? error.message : String(error)}`);
 			})
 			.finally(() =>
 			{
@@ -147,6 +147,46 @@ function coalesced(catchUp: () => Promise<void>, log: (message: string) => void)
 	};
 }
 
+/** A lane job's end, either way: the caller handles the outcome, and the lane only waits for it. */
+function settled(): void
+{
+	// Nothing to do.
+}
+
+export interface UpstreamLane
+{
+	/** Start an outbox drain, or queue one behind the drain in flight; a burst of requests coalesces into one more. */
+	requestDrain(): void;
+	/** Run `job` once every drain and job started before it has settled. */
+	exclusive<T>(job: () => Promise<T>): Promise<T>;
+}
+
+/**
+ * The Node host's one lane to workflowy.com: outbox drains and catch-ups run one at a time, so a drain's push and a
+ * catch-up's poll never overlap. A failed drain is logged; its rows stay pending until the next trigger.
+ */
+export function upstreamLane(drain: () => Promise<unknown>, log: (message: string) => void): UpstreamLane
+{
+	let tail: Promise<unknown> = Promise.resolve();
+	const exclusive = async <T>(job: () => Promise<T>): Promise<T> =>
+	{
+		const run = tail.then(job);
+		tail = run.then(settled, settled);
+		return run;
+	};
+	return {
+		requestDrain: coalesced(
+			async () =>
+			{
+				await exclusive(drain);
+			},
+			log,
+			"outbox drain failed",
+		),
+		exclusive,
+	};
+}
+
 export function startUpstreamSignal(options: UpstreamSignalOptions): UpstreamSignalWatcher
 {
 	const log =
@@ -156,7 +196,7 @@ export function startUpstreamSignal(options: UpstreamSignalOptions): UpstreamSig
 			console.warn(message);
 		});
 	const minimumDelay = 1000 + (options.random ?? Math.random)() * 4000;
-	const requestCatchUp = coalesced(options.catchUp, log);
+	const requestCatchUp = coalesced(options.catchUp, log, "upstream signal: catch-up failed");
 
 	let stopped = false;
 	let failures = 0;

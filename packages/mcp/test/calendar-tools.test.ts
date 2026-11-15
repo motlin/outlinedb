@@ -1,7 +1,6 @@
 import {afterAll, afterEach, beforeAll, describe, expect, it, vi} from "vite-plus/test";
-import {storeInternalMetadata} from "@outlinedb/shared/cache";
-import {calendarAdoptWarning, WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
-import {fakeNode, stubPublicApi} from "./fake-upstream.js";
+import {readInternalMetadata, storeInternalMetadata} from "@outlinedb/shared/cache";
+import {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import {callTool, openHarness, seed} from "./harness.js";
 import type {Harness} from "./harness.js";
 
@@ -280,18 +279,11 @@ describe("outlinedb_node_create under a calendar month", () =>
 		vi.restoreAllMocks();
 	});
 
-	it("tags the new row as that day through the adapter", async () =>
+	it("tags the new row as that day locally, with no upstream call", async () =>
 	{
-		vi.spyOn(WorkflowyInternalAdapter.prototype, "createAt").mockImplementation(async (input) =>
-		{
-			seed(harness.cache, "new-day", input.name, "m01");
-			return Promise.resolve(
-				{
-					id: "new-day",
-				},
-			);
-		});
-		const setMeta = vi.spyOn(WorkflowyInternalAdapter.prototype, "setNodeMetaValues").mockResolvedValue();
+		const fetch = vi
+			.spyOn(globalThis, "fetch")
+			.mockRejectedValue(new Error("unexpected fetch: a mirror-mode create called upstream"));
 
 		const result = await callTool(
 			harness.authStore,
@@ -301,96 +293,35 @@ describe("outlinedb_node_create under a calendar month", () =>
 				name,
 			},
 		);
+		const {id} = JSON.parse(
+			(
+				result.content as
+				{
+					text: string;
+				}[]
+			)[0]?.text ?? "{}",
+		) as
+		{
+			id: string;
+		};
 
 		expect(
 			{
-				result,
-				calls: setMeta.mock.calls,
+				isError: result.isError,
+				calendar: readInternalMetadata(harness.db, [id]).get(id)?.calendar,
+				fetches: fetch.mock.calls.length,
 			},
 		).toStrictEqual(
 			{
-				result:
-				{
-					isError: undefined,
-					content: [
-						{
-							type: "text",
-							text: JSON.stringify(
-								{
-									id: "new-day",
-									name,
-									createdAt: "1970-01-01T00:00:00.000Z",
-									url: "https://workflowy.com/#/newday",
-								},
-								null,
-								2,
-							),
-						},
-					],
-				},
-				calls: [
-					[
-						"new-day",
-						[
-							{
-								path: ["calendar"],
-								value:
-								{
-									level: "day",
-									value: "21",
-									timestamp: new Date(2026, 0, 21).getTime(),
-									dateId: 20_260_121,
-								},
-							},
-						],
-					],
-				],
-			},
-		);
-	});
-
-	it("returns a warning without internal auth", async () =>
-	{
-		vi.useFakeTimers(
-			{
-				toFake: ["Date"],
-				now: new Date("2026-01-22T12:00:00Z"),
-			},
-		);
-		stubPublicApi([
-			fakeNode("outer", '<time startYear="2026" startMonth="1" startDay="15">Thu, Jan 15, 2026</time>', "m01", 0),
-			fakeNode("d14", '<time startYear="2026" startMonth="1" startDay="14">Wed, Jan 14, 2026</time>', "m01", 1),
-		]);
-		const warnName = '<time startYear="2026" startMonth="1" startDay="22">Thu, Jan 22, 2026</time>';
-
-		const result = await callTool(
-			harness.store,
-			"outlinedb_node_create",
-			{
-				parentId: "m01",
-				name: warnName,
-			},
-		);
-
-		expect(result).toStrictEqual(
-			{
 				isError: undefined,
-				content: [
-					{
-						type: "text",
-						text: JSON.stringify(
-							{
-								id: "created-1",
-								name: warnName,
-								createdAt: "2026-01-22T12:00:00.000Z",
-								url: "https://workflowy.com/#/created1",
-								warning: calendarAdoptWarning(warnName),
-							},
-							null,
-							2,
-						),
-					},
-				],
+				calendar:
+				{
+					level: "day",
+					value: "21",
+					timestamp: new Date(2026, 0, 21).getTime(),
+					dateId: 20_260_121,
+				},
+				fetches: 0,
 			},
 		);
 	});

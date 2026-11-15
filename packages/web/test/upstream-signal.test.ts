@@ -4,6 +4,7 @@ import
 	SIGNAL_CONNECTION_TIMEOUT_MS,
 	SIGNAL_SAFETY_CATCH_UP_MS,
 	startUpstreamSignal,
+	upstreamLane,
 } from "../src/server/upstream-signal.js";
 import type {SignalSocket, UpstreamSignalOptions} from "../src/server/upstream-signal.js";
 
@@ -383,6 +384,69 @@ describe("startUpstreamSignal", () =>
 				closed: true,
 				sockets: 1,
 				catchUps: 1,
+			},
+		);
+	});
+});
+
+describe("upstreamLane", () =>
+{
+	beforeEach(() =>
+	{
+		vi.useFakeTimers();
+	});
+
+	afterEach(() =>
+	{
+		vi.useRealTimers();
+	});
+
+	it("runs a catch-up only after the drain in flight, and coalesces a burst of drain requests into one more", async () =>
+	{
+		const drains = controlledCatchUp();
+		const catchUps = controlledCatchUp();
+		const lane = upstreamLane(drains.catchUp, () => {});
+
+		lane.requestDrain();
+		const caughtUp = lane.exclusive(catchUps.catchUp);
+		lane.requestDrain();
+		lane.requestDrain();
+		lane.requestDrain();
+		await vi.advanceTimersByTimeAsync(0);
+		const whileFirstDrain =
+		{
+			drains: drains.catchUp.mock.calls.length,
+			catchUps: catchUps.catchUp.mock.calls.length,
+		};
+		await drains.settle();
+		const afterFirstDrain =
+		{
+			drains: drains.catchUp.mock.calls.length,
+			catchUps: catchUps.catchUp.mock.calls.length,
+		};
+		await catchUps.settle();
+		await caughtUp;
+		await drains.settle();
+
+		expect(
+			{
+				whileFirstDrain,
+				afterFirstDrain,
+				drains: drains.catchUp.mock.calls.length,
+			},
+		).toStrictEqual(
+			{
+				whileFirstDrain:
+				{
+					drains: 1,
+					catchUps: 0,
+				},
+				afterFirstDrain:
+				{
+					drains: 1,
+					catchUps: 1,
+				},
+				drains: 2,
 			},
 		);
 	});

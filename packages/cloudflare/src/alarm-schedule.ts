@@ -1,7 +1,8 @@
 /** The jobs sharing the Durable Object's one alarm. */
-type AlarmJob = "sync" | "embeddings";
+type AlarmJob = "outbox" | "sync" | "embeddings";
 
-const JOBS: readonly AlarmJob[] = ["sync", "embeddings"];
+/** Run order within one alarm: the outbox drains before the sync, so a catch-up starts from a drained outbox. */
+const JOBS: readonly AlarmJob[] = ["outbox", "sync", "embeddings"];
 
 /** One job's view of the alarm, shaped like the storage calls a job used before the alarm was shared. */
 export interface JobAlarm
@@ -28,7 +29,7 @@ export class AlarmSchedule
 	/** Adopt an alarm armed before the schedule existed as the sync's due time. */
 	async adoptLegacyAlarm(): Promise<void>
 	{
-		if (this.due("sync") === null && this.due("embeddings") === null)
+		if (JOBS.every((job) => this.due(job) === null))
 		{
 			const armed = await this.storage.getAlarm();
 			if (armed !== null)
@@ -54,6 +55,12 @@ export class AlarmSchedule
 		}
 		this.storage.kv.delete(this.key(job));
 		return true;
+	}
+
+	/** Every job due at `now`, in run order; each one's time is cleared, as {@link take} clears it. */
+	takeDue(now: number): AlarmJob[]
+	{
+		return JOBS.filter((job) => this.take(job, now));
 	}
 
 	async set(job: AlarmJob, at: number): Promise<void>

@@ -101,7 +101,7 @@ describe("Workflowy secrets reach only the owner's Durable Object", () =>
 		);
 	});
 
-	it("writes through to the upstream from the owner's object and never writes the node locally", async () =>
+	it("writes locally in the owner's object and drains the outbox upstream from its alarm", async () =>
 	{
 		calls.length = 0;
 		const response = await harness.mf.dispatchFetch(
@@ -120,34 +120,53 @@ describe("Workflowy secrets reach only the owner's Durable Object", () =>
 				),
 			},
 		);
-		await response.arrayBuffer();
-		// The fake fails the first read, which is enough to show the owner's key went upstream.
-		// A mirror's write goes upstream or nowhere: the failed write leaves no local-only node behind.
-		const listed = plain(await storeClient(await named("dev")).call("nodes.list", {}));
+		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the id is the store's to choose
+		const {node} = (await readJson(response)) as
+		{
+			node:
+			{
+				id: string;
+			};
+		};
+		const owner = await named("dev");
+		// The write armed the outbox job for now; its drain reaches the fake upstream, which fails it.
+		const drained = () => calls.some(({path}) => path === "/get_initialization_data");
+		const deadline = Date.now() + 10_000;
+		while (!drained() && Date.now() < deadline)
+		{
+			await new Promise((resolve) =>
+			{
+				setTimeout(resolve, 10);
+			});
+		}
+		const {outbox} = await owner.syncStatus();
+		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- nodes.list answers the node DTOs
+		const listed = plain(await storeClient(owner).call("nodes.list", {})) as
+		{
+			value:
+			{
+				nodes:
+				{
+					id: string;
+				}[];
+			};
+		};
 		expect(
 			{
 				status: response.status,
-				calls,
-				listed,
+				listed: listed.value.nodes.map(({id}) => id),
+				pending: outbox.pending,
+				drainedUpstream: drained(),
+				publicApiWrites: calls.filter(({path}) => path.startsWith("/api/v1/")),
 			},
 		).toStrictEqual(
 			{
-				status: 500,
-				calls: [
-					{
-						method: "GET",
-						path: "/api/v1/nodes",
-						auth: "Bearer fake-key-value",
-					},
-				],
-				listed:
-				{
-					ok: true,
-					value:
-					{
-						nodes: [],
-					},
-				},
+				status: 201,
+				listed: [node.id],
+				// The create and its placement stay pending after the failed drain.
+				pending: 2,
+				drainedUpstream: true,
+				publicApiWrites: [],
 			},
 		);
 	});

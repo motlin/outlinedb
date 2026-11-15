@@ -1,20 +1,14 @@
 import {z} from "zod";
-import {LocalTreeWriter, planBlockSlot} from "@outlinedb/shared/cache";
-import type {WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
 import type {NodeWriter} from "./nodes-shared.js";
 import type {NewTree} from "@outlinedb/shared/internal";
 import {MAX_COPY_ITEMS, copySubtree} from "../copy-tree.js";
 import type {ServerContext} from "../context.js";
-import {INTERNAL_API_NOT_CONFIGURED} from "../internal-api.js";
 import {defineOp, fail, ok, toJson} from "./define.js";
 import {CreatedIdsSchema, NodeListSchema} from "./schemas.js";
 import type {OpResult} from "./define.js";
 import type {BulkTree} from "../../node-types.js";
 import
 {
-	adapterParent,
-	childIds,
-	countChildren,
 	getAdapter,
 	getNodeWriter,
 	openCopies,
@@ -26,8 +20,6 @@ import
 	ParentIdSchema,
 	parseParent,
 	slotIndex,
-	publicEnd,
-	publicMovePosition,
 	readSiblingDtos,
 	resolveMirrorToOriginal,
 	resolveNodeId,
@@ -119,7 +111,7 @@ export const nodesTrees = defineOp(
 			},
 		),
 		output: CreatedIdsSchema,
-		async run(ctx, body)
+		run(ctx, body)
 		{
 			const parent = parseParent(ctx, body.parent_id);
 			if (!parent.ok)
@@ -157,49 +149,32 @@ export const nodesTrees = defineOp(
 						}),
 				trees: toNewTrees(body.trees),
 			};
-			if (ctx.mode === "standalone")
-			{
-				if (parent.parentId !== null && !ctx.cacheService.getNode(parent.parentId))
-				{
-					return fail(
-						404,
-						{
-							error: "Parent node not found",
-						},
-					);
-				}
-				return ok(
-					new LocalTreeWriter(ctx.db).createTreesAt(
-						{
-							parentId: parent.parentId,
-							...slot,
-						},
-					),
-					{
-						created: true,
-					},
-				);
-			}
-			const adapter = getAdapter(ctx);
-			if (!adapter)
+			const writer = getNodeWriter(ctx);
+			if (!writer)
 			{
 				return fail(
-					503,
+					500,
 					{
-						error: INTERNAL_API_NOT_CONFIGURED,
+						error: WRITE_CLIENT_REQUIRED,
 					},
 				);
 			}
-			const {ids} = await adapter.createTreesAt(
-				{
-					parentId: adapterParent(parent.parentId),
-					...slot,
-				},
-			);
+			if (parent.parentId !== null && !ctx.cacheService.getNode(parent.parentId))
+			{
+				return fail(
+					404,
+					{
+						error: "Parent node not found",
+					},
+				);
+			}
 			return ok(
-				{
-					ids,
-				},
+				writer.local.createTreesAt(
+					{
+						parentId: parent.parentId,
+						...slot,
+					},
+				),
 				{
 					created: true,
 				},
@@ -231,18 +206,17 @@ export const nodesDuplicate = defineOp(
 					},
 				);
 			}
-			const standalone = ctx.mode === "standalone";
-			const adapter = standalone ? undefined : getAdapter(ctx);
-			if (!standalone && !adapter)
+			const writer = getNodeWriter(ctx);
+			if (!writer)
 			{
 				return fail(
-					503,
+					500,
 					{
-						error: INTERNAL_API_NOT_CONFIGURED,
+						error: WRITE_CLIENT_REQUIRED,
 					},
 				);
 			}
-			if (standalone && parent.parentId !== null && !ctx.cacheService.getNode(parent.parentId))
+			if (parent.parentId !== null && !ctx.cacheService.getNode(parent.parentId))
 			{
 				return fail(
 					404,
@@ -310,32 +284,20 @@ export const nodesDuplicate = defineOp(
 						}),
 				trees,
 			};
-			if (!adapter)
-			{
-				// Expansion is upstream state; a standalone copy starts collapsed.
-				return ok(
-					new LocalTreeWriter(ctx.db).createTreesAt(
-						{
-							parentId: parent.parentId,
-							...slot,
-						},
-					),
-					{
-						created: true,
-					},
-				);
-			}
-			const {ids} = await adapter.createTreesAt(
+			const created = writer.local.createTreesAt(
 				{
-					parentId: adapterParent(parent.parentId),
+					parentId: parent.parentId,
 					...slot,
 				},
 			);
-			await openCopies(adapter, sourceToNew);
+			// Expansion is upstream account state, still pushed first in mirror mode; a standalone copy starts collapsed.
+			const adapter = writer.mode === "mirror" ? getAdapter(ctx) : undefined;
+			if (adapter)
+			{
+				await openCopies(adapter, sourceToNew);
+			}
 			return ok(
-				{
-					ids,
-				},
+				created,
 				{
 					created: true,
 				},
@@ -353,18 +315,14 @@ interface MoveBlock
 }
 
 /**
- * Move each block in turn, then answer `{nodes}`: the refreshed children of
- * every affected parent. A standalone account moves every block locally in one
- * unit of work. Through the internal API all the blocks go in one push of
- * exact-index ops; without it each block is placed through the public API's two
- * ends (a top block moves last-first so it keeps its order, a middle slot adds
- * a rotation of the siblings).
+ * Move every block locally in one unit of work, then answer `{nodes}`: the refreshed children of every affected
+ * parent.
  */
-async function moveNodes(
+function moveNodes(
 	ctx: ServerContext,
 	writer: NodeWriter,
 	rawBlocks: MoveBlock[],
-): Promise<OpResult<z.output<typeof NodeListSchema>>>
+): OpResult<z.output<typeof NodeListSchema>>
 {
 	const blocks:
 	{
@@ -394,34 +352,7 @@ async function moveNodes(
 	}
 	const oldParents = blocks.flatMap(({ids}) => ids.map((id) => ctx.cacheService.getNode(id)?.parentId ?? null));
 
-	const adapter = writer.mode === "mirror" ? getAdapter(ctx) : undefined;
-	if (writer.mode === "standalone")
-	{
-		writer.local.moveBlocks(blocks);
-	}
-	else if (adapter)
-	{
-		const moves = blocks.map(({ids, parentId, index}) => (
-		{
-			ids,
-			parentId: adapterParent(parentId),
-			...(index === undefined
-				? {}
-				:
-					{
-						index,
-					}),
-		}));
-		await (moves.length === 1 && moves[0] !== undefined ? adapter.moveTo(moves[0]) : adapter.moveBlocks(moves));
-	}
-	else
-	{
-		for (const block of blocks)
-		{
-			// oxlint-disable-next-line no-await-in-loop -- each block is planned against the outline the previous one left
-			await movePublic(ctx, writer.client, block);
-		}
-	}
+	writer.local.moveBlocks(blocks);
 
 	return ok(
 		toJson(
@@ -430,44 +361,6 @@ async function moveNodes(
 			},
 		),
 	);
-}
-
-/** One block through the public API, which places a node only at either end of its new parent. */
-async function movePublic(
-	ctx: ServerContext,
-	client: WorkflowyWriteThroughClient,
-	{
-		ids,
-		parentId,
-		index,
-	}:
-	{
-		ids: string[];
-		parentId: string | null;
-		index: number | undefined;
-	},
-): Promise<void>
-{
-	const end = publicEnd(index, countChildren(ctx, parentId));
-	if (end === undefined)
-	{
-		// A middle slot counts every child before removal; the rotation counts the others.
-		const order = childIds(ctx, parentId);
-		const moving = new Set(ids);
-		const othersBefore = order.slice(0, index ?? order.length).filter((id) => !moving.has(id)).length;
-		const {position, siblingIds} = planBlockSlot(order, ids, othersBefore);
-		for (const id of [...(position === "top" ? ids.toReversed() : ids), ...siblingIds])
-		{
-			await client.moveNode(id, parentId, publicMovePosition(position));
-		}
-	}
-	else
-	{
-		for (const id of end === "top" ? ids.toReversed() : ids)
-		{
-			await client.moveNode(id, parentId, publicMovePosition(end));
-		}
-	}
 }
 
 const MoveBlockSchema = z.object(
@@ -495,7 +388,7 @@ export const nodesMove = defineOp(
 			),
 		]),
 		output: NodeListSchema,
-		async run(ctx, body)
+		run(ctx, body)
 		{
 			const writer = getNodeWriter(ctx);
 			if (!writer)
@@ -552,7 +445,7 @@ export const nodesMoveOne = defineOp(
 			},
 		),
 		output: NodeListSchema,
-		async run(ctx, body)
+		run(ctx, body)
 		{
 			const writer = getNodeWriter(ctx);
 			if (!writer)

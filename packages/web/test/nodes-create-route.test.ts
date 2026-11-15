@@ -1,47 +1,103 @@
-import {beforeEach, describe, expect, it, vi} from "vite-plus/test";
-import {Hono} from "hono";
-import type * as SharedCache from "@outlinedb/shared/cache";
-import type {AppEnv, ServerContext} from "../src/server/context.js";
+import {afterEach, beforeEach, describe, expect, it, vi} from "vite-plus/test";
+import DatabaseConstructor from "better-sqlite3";
+import {drizzle} from "drizzle-orm/better-sqlite3";
+import {migrate} from "drizzle-orm/better-sqlite3/migrator";
+import {join} from "node:path";
+import {readPendingOutbox} from "@outlinedb/shared/cache";
+import * as schema from "@outlinedb/shared/db";
+import type {ServerContext} from "../src/server/context.js";
+import {readNodeConfig} from "../src/server/config.js";
+import {buildServerContext} from "../src/server/context.js";
+import {LadderEventBus} from "../src/server/ladder-events.js";
 import {httpAppFor} from "./http-app-for.js";
 
-const createNode = vi.hoisted(() => vi.fn<SharedCache.WorkflowyWriteThroughClient["createNode"]>());
+const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
+const SEEDED = 1_600_000_000;
+const NOW = 1_700_000_000;
+const NEW_ID = "0b6f3c1e-2d4a-4b8c-9e7f-1a2b3c4d5e6f";
 
-vi.mock("@outlinedb/shared/cache", async (importOriginal) =>
+let sqlite: DatabaseConstructor.Database;
+let ctx: ServerContext;
+let outboxWritten: ReturnType<typeof vi.fn<() => void>>;
+
+beforeEach(() =>
 {
-	const actual = await importOriginal<typeof SharedCache>();
-	return {
-		...actual,
-		WorkflowyWriteThroughClient: class
+	vi.useFakeTimers(
 		{
-			createNode = createNode;
+			toFake: ["Date"],
 		},
-	};
+	);
+	vi.setSystemTime(SEEDED * 1000);
+	sqlite = new DatabaseConstructor(":memory:");
+	const db = drizzle(
+		sqlite,
+		{
+			schema,
+		},
+	);
+	migrate(
+		db,
+		{
+			migrationsFolder,
+		},
+	);
+	// A mirror Node host: an API key and a saved internal session.
+	ctx = buildServerContext(
+		{
+			db,
+			config: readNodeConfig(
+				{
+					WORKFLOWY_API_KEY: "test-key",
+				},
+			),
+			ladderEvents: new LadderEventBus(),
+			internalAuth:
+			{
+				sessionStore:
+				{
+					read: () => "sessionid=test",
+					write: () =>
+					{
+						// No login happens in this test.
+					},
+					clear: () =>
+					{
+						// No login happens in this test.
+					},
+				},
+			},
+		},
+	);
+	outboxWritten = vi.fn<() => void>();
+	ctx.outboxWritten = outboxWritten;
+	ctx.cacheService.insertNode(
+		{
+			id: "p",
+			name: "p",
+			note: null,
+			priority: 0,
+			createdAt: SEEDED,
+			modifiedAt: SEEDED,
+			completedAt: null,
+		},
+		null,
+	);
+	// Writes start later than the seed: a unit of work may not overwrite a version from its own millisecond.
+	vi.setSystemTime(NOW * 1000);
+	// workflowy.com is down; a mirror write must not wait on it.
+	vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("workflowy.com is unreachable"));
 });
 
-function makeApp()
+afterEach(() =>
 {
-	const ctx =
-	{
-		apiKey: "test-key",
-		config: {} as ServerContext["config"],
-		cacheService:
-		{
-			getChildren: () => [],
-		},
-	} as unknown as ServerContext;
-	const app = new Hono<AppEnv>();
-	app.use("*", async (c, next) =>
-	{
-		c.set("ctx", ctx);
-		await next();
-	});
-	app.route("/", httpAppFor(ctx));
-	return app;
-}
+	vi.useRealTimers();
+	vi.restoreAllMocks();
+	sqlite.close();
+});
 
 async function post(body: unknown): Promise<Response>
 {
-	return makeApp().fetch(
+	return httpAppFor(ctx).fetch(
 		new Request(
 			"http://x/api/v1/nodes",
 			{
@@ -58,70 +114,75 @@ async function post(body: unknown): Promise<Response>
 
 describe("POST /api/v1/nodes", () =>
 {
-	beforeEach(() =>
+	it("creates a mirror-mode node locally while workflowy.com is down, leaves a pending create row and triggers a drain", async () =>
 	{
-		createNode.mockReset();
-	});
-
-	it("creates a node with an empty name", async () =>
-	{
-		createNode.mockResolvedValue(
-			{
-				id: "n1",
-				name: "",
-				priority: 0,
-				data: {},
-				createdAt: 100,
-				modifiedAt: 100,
-				completedAt: null,
-			},
-		);
-
 		const res = await post(
 			{
 				parent_id: "p",
 				name: "",
+				id: NEW_ID,
 			},
 		);
 
-		expect(res.status).toBe(201);
-		expect(createNode.mock.calls).toStrictEqual([
-			[
-				{
-					parent_id: "p",
-					name: "",
-					note: undefined,
-					layoutMode: undefined,
-					position: "bottom",
-				},
-			],
-		]);
-		await expect(res.json()).resolves.toStrictEqual(
+		await Promise.resolve();
+		expect(
 			{
-				node:
+				status: res.status,
+				body: await res.json(),
+				pending: readPendingOutbox(ctx.db, 100).map(({nodeId, aspect, lastError}) => (
 				{
-					id: "n1",
-					parent_id: "p",
-					name: "",
-					note: null,
-					priority: 0,
-					data:
+					nodeId,
+					aspect,
+					lastError,
+				})),
+				drains: outboxWritten.mock.calls.length,
+				fetches: vi.mocked(globalThis.fetch).mock.calls.length,
+			},
+		).toStrictEqual(
+			{
+				status: 201,
+				body:
+				{
+					node:
 					{
-						layoutMode: null,
+						id: NEW_ID,
+						parent_id: "p",
+						name: "",
+						note: null,
+						priority: 0,
+						data:
+						{
+							layoutMode: null,
+						},
+						numberedStart: null,
+						createdAt: NOW,
+						modifiedAt: NOW,
+						completedAt: null,
+						hasChildren: false,
+						hasUncompletedChildren: false,
+						isMirror: false,
+						hasMirrors: false,
+						originalNodeId: null,
+						attachment: null,
+						defaultToBottom: false,
+						calendar: null,
+						table: null,
 					},
-					numberedStart: null,
-					createdAt: 100,
-					modifiedAt: 100,
-					completedAt: null,
-					hasChildren: true,
-					hasUncompletedChildren: true,
-					isMirror: false,
-					originalNodeId: null,
-					attachment: null,
-					defaultToBottom: false,
-					calendar: null,
-					table: null,
 				},
+				pending: [
+					{
+						nodeId: NEW_ID,
+						aspect: "create",
+						lastError: null,
+					},
+					{
+						nodeId: NEW_ID,
+						aspect: "placement",
+						lastError: null,
+					},
+				],
+				drains: 1,
+				fetches: 0,
 			},
 		);
 	});
@@ -134,12 +195,21 @@ describe("POST /api/v1/nodes", () =>
 			},
 		);
 
-		expect(res.status).toBe(400);
-		await expect(res.json()).resolves.toStrictEqual(
+		expect(
 			{
-				error: "Invalid request body",
+				status: res.status,
+				body: await res.json(),
+				pending: readPendingOutbox(ctx.db, 100),
+			},
+		).toStrictEqual(
+			{
+				status: 400,
+				body:
+				{
+					error: "Invalid request body",
+				},
+				pending: [],
 			},
 		);
-		expect(createNode.mock.calls).toStrictEqual([]);
 	});
 });

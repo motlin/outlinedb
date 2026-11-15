@@ -36,6 +36,11 @@ export interface ServerContext
 	 * host announces the new version on the events socket.
 	 */
 	expansionWritten?: () => void;
+	/**
+	 * Called after a mirror-mode write records outbox rows, once its unit of work has committed; the host starts a
+	 * drain (the Node host's sync lane, the Worker's outbox alarm job). Undefined: the rows wait for the next trigger.
+	 */
+	outboxWritten?: () => void;
 	/** Internal-API auth (saved session cookie and/or login), or undefined when internal-API routes are unavailable. */
 	internalAuth?: InternalAuth;
 	/**

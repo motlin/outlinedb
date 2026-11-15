@@ -19,13 +19,14 @@ import
 {
 	LocalTreeWriter,
 	NodeReader,
+	OutboxRecorder,
 	NodeTreeReader,
 	WorkflowyWriteThroughClient,
 	inIds,
 	planSubtreeDelete,
 	readInternalMetadata,
 } from "@outlinedb/shared/cache";
-import type {ExactMover, LocalDeletePlan, SlotPlan} from "@outlinedb/shared/cache";
+import type {ExactMover, LocalDeletePlan, OutboxEntry, UnitOfWork} from "@outlinedb/shared/cache";
 import {MAX_COPY_ITEMS} from "../copy-tree.js";
 import {mirrors as mirrorsTable, s3Files} from "@outlinedb/shared/db";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
@@ -38,6 +39,7 @@ import {childFlags, referencesRootLabel} from "../backlinks.js";
 import {loadCalendarInfo} from "../calendar-day.js";
 import {timesDiffer} from "../calendar-found.js";
 import type {ServerContext} from "../context.js";
+import type {ServerMode} from "../config.js";
 import type {MirrorInstance} from "../../mirror-path.js";
 import {INTERNAL_API_NOT_CONFIGURED} from "../internal-api.js";
 import {TableMetadataSchema} from "./schemas.js";
@@ -340,22 +342,41 @@ export function getWriteClient(ctx: ServerContext): WorkflowyWriteThroughClient 
 	return new WorkflowyWriteThroughClient(apiClient, ctx.cacheService, exactMover);
 }
 
-/** Where a node write goes: the local node tables (standalone) or workflowy.com through the write-through client (mirror). */
-export type NodeWriter =
-	|
-	  {
-			mode: "standalone";
-			local: LocalTreeWriter;
-	  }
-	|
-	  {
-			mode: "mirror";
-			client: WorkflowyWriteThroughClient;
-	  };
+/**
+ * Records a mirror-mode write's outbox rows in its unit of work, then announces them. Units of work run synchronously,
+ * so the microtask runs after the commit; a rolled-back write only costs a drain that finds nothing new.
+ */
+class AnnouncingOutboxRecorder extends OutboxRecorder
+{
+	constructor(private readonly written: (() => void) | undefined)
+	{
+		super();
+	}
+
+	override record(unitOfWork: UnitOfWork, entries: readonly OutboxEntry[]): void
+	{
+		super.record(unitOfWork, entries);
+		const {written} = this;
+		if (entries.length > 0 && written !== undefined)
+		{
+			queueMicrotask(written);
+		}
+	}
+}
 
 /**
- * The context's node writer, chosen by its mode; undefined for a mirror with no API key, which answers 500 rather than
- * forking local-only nodes that the next sync would phase out.
+ * Where a node write goes: the local node tables in both modes. A mirror's writer also records outbox rows in each
+ * unit of work, which a drain later delivers to workflowy.com; the write never waits for it.
+ */
+export interface NodeWriter
+{
+	mode: ServerMode;
+	local: LocalTreeWriter;
+}
+
+/**
+ * The context's node writer, chosen by its mode; undefined for a mirror with no internal API to drain its outbox
+ * through, which answers 500 rather than forking local-only nodes that would never reach workflowy.com.
  */
 export function getNodeWriter(ctx: ServerContext): NodeWriter | undefined
 {
@@ -366,14 +387,19 @@ export function getNodeWriter(ctx: ServerContext): NodeWriter | undefined
 			local: new LocalTreeWriter(ctx.db),
 		};
 	}
-	const client = getWriteClient(ctx);
-	return (
-		client &&
-		{
-			mode: "mirror",
-			client,
-		}
-	);
+	if (getAdapter(ctx) === undefined)
+	{
+		return undefined;
+	}
+	return {
+		mode: "mirror",
+		local: new LocalTreeWriter(
+			ctx.db,
+			{
+				outbox: new AnnouncingOutboxRecorder(ctx.outboxWritten),
+			},
+		),
+	};
 }
 
 /**
@@ -615,26 +641,7 @@ export function adapterParent(parentId: string | null): string
 	return parentId ?? HOME_TARGET;
 }
 
-/**
- * Map a slot onto the public API's two ends: omitted or past the last child is
- * the bottom, 0 the top. Any other slot needs the internal API (undefined).
- */
-export function publicEnd(index: number | undefined, childCount: number): "top" | "bottom" | undefined
-{
-	if (index === undefined || index >= childCount)
-	{
-		return "bottom";
-	}
-	return index === 0 ? "top" : undefined;
-}
-
-/** The public API's move position for an end: negative is top, anything else bottom. */
-export function publicMovePosition(end: "top" | "bottom"): number
-{
-	return end === "top" ? -1 : 0;
-}
-
-export function childIds(ctx: ServerContext, parentId: string | null): string[]
+function childIds(ctx: ServerContext, parentId: string | null): string[]
 {
 	return ctx.cacheService.getChildren(parentId).map((child) => child.id);
 }

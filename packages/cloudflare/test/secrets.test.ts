@@ -105,7 +105,7 @@ describe("a Durable Object with no secrets", () =>
 	});
 });
 
-describe("write-through against a fake upstream", () =>
+describe("a mirror owner against a fake upstream", () =>
 {
 	let harness: Harness;
 	const calls:
@@ -125,6 +125,8 @@ describe("write-through against a fake upstream", () =>
 				OUTLINEDB_ENV_OWNERS: "dev",
 				WORKFLOWY_API_KEY: "fake-key-value",
 				WORKFLOWY_API_URL: "http://upstream.test",
+				// The internal session a mirror's outbox drains through.
+				WORKFLOWY_SESSION_COOKIE: "sessionid=owner",
 			},
 			{
 				outboundService: (request: Request): Response =>
@@ -168,7 +170,7 @@ describe("write-through against a fake upstream", () =>
 		await harness.dispose();
 	});
 
-	it("updates upstream first and then the Durable Object row", async () =>
+	it("updates the Durable Object row first and answers without waiting for upstream", async () =>
 	{
 		await seedNode(harness.mf);
 		const response = await harness.mf.dispatchFetch(
@@ -186,25 +188,23 @@ describe("write-through against a fake upstream", () =>
 				),
 			},
 		);
-		expect(response.status).toBe(200);
-		expect(calls).toStrictEqual([
-			{
-				method: "POST",
-				path: "/api/v1/nodes/seed-node",
-				auth: "Bearer fake-key-value",
-			},
-			{
-				method: "GET",
-				path: "/api/v1/nodes/seed-node",
-				auth: "Bearer fake-key-value",
-			},
-		]);
 		const read = await harness.mf.dispatchFetch("http://localhost/api/v1/nodes/seed-node");
+		expect(
+			{
+				status: response.status,
+				publicApiWrites: calls.filter(({method, path}) => method !== "GET" && path.startsWith("/api/v1/")),
+			},
+		).toStrictEqual(
+			{
+				status: 200,
+				publicApiWrites: [],
+			},
+		);
 		await expect(readJson(read)).resolves.toMatchObject(
 			{
 				node:
 				{
-					name: "changed upstream",
+					name: "changed",
 				},
 			},
 		);

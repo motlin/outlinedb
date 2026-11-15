@@ -4,35 +4,28 @@ import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {Hono} from "hono";
 import {join} from "node:path";
-import type * as SharedCache from "@outlinedb/shared/cache";
 import * as schema from "@outlinedb/shared/db";
 import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import type {WorkflowyNode} from "@outlinedb/shared/types";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
 import {httpAppFor} from "./http-app-for.js";
 
-const updateNode = vi.hoisted(() => vi.fn<SharedCache.WorkflowyWriteThroughClient["updateNode"]>());
-const deleteNode = vi.hoisted(() => vi.fn<SharedCache.WorkflowyWriteThroughClient["deleteNode"]>());
-
-vi.mock("@outlinedb/shared/cache", async (importOriginal) =>
+const
 {
-	const actual = await importOriginal<typeof SharedCache>();
-	return {
-		...actual,
-		WorkflowyWriteThroughClient: class
-		{
-			updateNode = updateNode;
-			deleteNode = deleteNode;
-		},
-	};
-});
-
-const {CacheService, collectItemRelationships, emptyItemRelationships, provisionLocalAccount, storeInternalMetadata} =
-	await import("@outlinedb/shared/cache");
+	CacheService,
+	collectItemRelationships,
+	emptyItemRelationships,
+	provisionLocalAccount,
+	readPendingOutbox,
+	storeInternalMetadata,
+} = await import("@outlinedb/shared/cache");
 
 const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 const NOT_CONFIGURED =
 	"Workflowy internal API is not configured (set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD, or run './bin/run.js internal login')";
+const WRITE_CLIENT_REQUIRED = "WORKFLOWY_API_KEY environment variable is required";
+/** When a test's request writes: after the seed, so no write replaces a version from its own millisecond. */
+const WRITE_MS = 1_700_000_000_000;
 
 function apiNode(id: string, layoutMode?: string): WorkflowyNode
 {
@@ -237,32 +230,67 @@ function setup(
 			body: res.status === 204 ? null : await res.json(),
 		};
 	};
+	/** Every pending outbox row as `id:aspect`, sorted. */
+	const pending = () =>
+		readPendingOutbox(db, 1000)
+			.map(({nodeId, aspect}) => `${nodeId}:${aspect}`)
+			// oxlint-disable-next-line unicorn/no-array-sort -- the test tsconfig lib has no toSorted
+			.sort();
 	return {
 		adapter,
 		request,
 		writeMetadata,
 		cacheService,
+		pending,
 	};
 }
 
-beforeEach(() =>
+/** Pin the clock before the seed; a test moves it to {@link WRITE_MS} before its request. */
+function useWriteClock(): void
 {
-	updateNode.mockReset();
-	deleteNode.mockReset();
-});
-
-describe("DELETE /api/v1/nodes/:id backlinks", () =>
-{
-	const LINK = '<a href="https://workflowy.com/#/0123456789ab">t</a>';
-
-	it("deletes the backlink items of the linked sources in the subtree after the node is deleted", async () =>
+	beforeEach(() =>
 	{
-		const {adapter, request, cacheService} = setup(
+		vi.useFakeTimers(
+			{
+				toFake: ["Date"],
+				now: WRITE_MS - 1000,
+			},
+		);
+	});
+
+	afterEach(() =>
+	{
+		vi.useRealTimers();
+	});
+}
+
+/** The adapter's node-write members: a mirror-mode node write must call none of them. */
+function nodeWriteCalls(adapter: FakeAdapter)
+{
+	return {
+		setNodeMetaValues: adapter.setNodeMetaValues.mock.calls,
+		syncBacklinks: adapter.syncBacklinks.mock.calls,
+		deleteBacklinksOf: adapter.deleteBacklinksOf.mock.calls,
+	};
+}
+
+const NO_UPSTREAM_CALLS =
+{
+	setNodeMetaValues: [],
+	syncBacklinks: [],
+	deleteBacklinksOf: [],
+};
+
+describe("DELETE /api/v1/nodes/:id backlinks in mirror mode", () =>
+{
+	it("deletes the subtree and the backlink items of its sources locally, and records each delete for the drain", async () =>
+	{
+		const {adapter, request, cacheService, pending} = setup(
 			true,
 			undefined,
 			"mirror",
 			{
-				name: LINK,
+				name: "link removed",
 			},
 		);
 		cacheService.insertNode(
@@ -272,66 +300,6 @@ describe("DELETE /api/v1/nodes/:id backlinks", () =>
 				name: "plain",
 			},
 			"n1",
-		);
-		cacheService.insertNode(
-			{
-				...apiNode("c2"),
-				parent_id: "n1",
-				note: LINK,
-			},
-			"n1",
-		);
-		const order: string[] = [];
-		deleteNode.mockImplementation(async () =>
-		{
-			order.push("delete");
-			return Promise.resolve(
-				{
-					mirrorIds: [],
-					promotions: [],
-					nodeId: "n1",
-				},
-			);
-		});
-		adapter.deleteBacklinksOf.mockImplementation(async () =>
-		{
-			order.push("backlinks");
-			return Promise.resolve([]);
-		});
-
-		const {status} = await request("DELETE", "/nodes/n1");
-
-		expect(
-			{
-				status,
-				order,
-				calls: adapter.deleteBacklinksOf.mock.calls,
-			},
-		).toStrictEqual(
-			{
-				status: 204,
-				order: ["delete", "backlinks"],
-				calls: [
-					[
-						{
-							ids: ["n1", "c2"],
-							mirrors: [],
-						},
-					],
-				],
-			},
-		);
-	});
-
-	it("deletes the backlink items of a source in the subtree whose text no longer links, so none are stranded", async () =>
-	{
-		const {adapter, request, cacheService} = setup(
-			true,
-			undefined,
-			"mirror",
-			{
-				name: "link removed",
-			},
 		);
 		cacheService.insertNode(apiNode("target"), null);
 		cacheService.insertNode(
@@ -375,63 +343,23 @@ describe("DELETE /api/v1/nodes/:id backlinks", () =>
 			},
 		);
 		cacheService.recordRelationships(relationships);
-		deleteNode.mockResolvedValue(
-			{
-				mirrorIds: [],
-				promotions: [],
-				nodeId: "n1",
-			},
-		);
 
 		const {status} = await request("DELETE", "/nodes/n1");
 
 		expect(
 			{
 				status,
-				calls: adapter.deleteBacklinksOf.mock.calls,
+				live: ["n1", "c1", "item", "refs"].filter((id) => cacheService.getNode(id) !== undefined),
+				pending: pending(),
+				calls: nodeWriteCalls(adapter),
 			},
 		).toStrictEqual(
 			{
 				status: 204,
-				calls: [
-					[
-						{
-							ids: ["n1"],
-							mirrors: [
-								{
-									originalId: "n1",
-									mirrorId: "item",
-								},
-							],
-						},
-					],
-				],
-			},
-		);
-	});
-
-	it("leaves backlinks alone when nothing in the subtree links anywhere", async () =>
-	{
-		const {adapter, request} = setup(true);
-		deleteNode.mockResolvedValue(
-			{
-				mirrorIds: [],
-				promotions: [],
-				nodeId: "n1",
-			},
-		);
-
-		const {status} = await request("DELETE", "/nodes/n1");
-
-		expect(
-			{
-				status,
-				calls: adapter.deleteBacklinksOf.mock.calls,
-			},
-		).toStrictEqual(
-			{
-				status: 204,
-				calls: [],
+				// Upstream keeps a references root even when it empties.
+				live: ["refs"],
+				pending: ["c1:delete", "item:delete", "n1:delete"],
+				calls: NO_UPSTREAM_CALLS,
 			},
 		);
 	});
@@ -642,11 +570,14 @@ describe("GET /api/v1/home", () =>
 	});
 });
 
-describe("PATCH /api/v1/nodes/:id metadata", () =>
+describe("PATCH /api/v1/nodes/:id metadata in mirror mode", () =>
 {
-	it("sets layoutMode and numberedStart with one adapter call", async () =>
+	useWriteClock();
+
+	it("sets layoutMode and numberedStart locally and records the metadata for the drain", async () =>
 	{
-		const {adapter, request} = setup(true);
+		const {adapter, request, pending} = setup(true);
+		vi.setSystemTime(WRITE_MS);
 
 		const res = await request(
 			"PATCH",
@@ -660,8 +591,8 @@ describe("PATCH /api/v1/nodes/:id metadata", () =>
 		expect(
 			{
 				res,
-				calls: adapter.setNodeMetaValues.mock.calls,
-				updates: updateNode.mock.calls,
+				pending: pending(),
+				calls: nodeWriteCalls(adapter),
 			},
 		).toStrictEqual(
 			{
@@ -670,7 +601,11 @@ describe("PATCH /api/v1/nodes/:id metadata", () =>
 					status: 200,
 					body:
 					{
-						node: dto("n1", "numbered", 5),
+						node:
+						{
+							...dto("n1", "numbered", 5),
+							modifiedAt: WRITE_MS / 1000,
+						},
 						effects:
 						{
 							backlinkTargets: [],
@@ -678,31 +613,34 @@ describe("PATCH /api/v1/nodes/:id metadata", () =>
 						},
 					},
 				},
-				calls: [
-					[
-						"n1",
-						[
-							{
-								path: ["layoutMode"],
-								value: "numbered",
-							},
-							{
-								path: ["numbered_start"],
-								value: 5,
-							},
-						],
-					],
-				],
-				updates: [],
+				pending: ["n1:metadata"],
+				calls: NO_UPSTREAM_CALLS,
 			},
 		);
 	});
 
 	it("removes numbered_start for a null numberedStart and the layoutMode key for bullets", async () =>
 	{
-		const {adapter, request} = setup(true);
+		const {request, writeMetadata} = setup(
+			true,
+			undefined,
+			"mirror",
+			{
+				data:
+				{
+					layoutMode: "numbered",
+				},
+			},
+		);
+		writeMetadata(
+			"n1",
+			{
+				numbered_start: 5,
+			},
+		);
+		vi.setSystemTime(WRITE_MS);
 
-		await request(
+		const res = await request(
 			"PATCH",
 			"/nodes/n1",
 			{
@@ -711,29 +649,32 @@ describe("PATCH /api/v1/nodes/:id metadata", () =>
 			},
 		);
 
-		expect(adapter.setNodeMetaValues.mock.calls).toStrictEqual([
-			[
-				"n1",
-				[
+		expect(res).toStrictEqual(
+			{
+				status: 200,
+				body:
+				{
+					node:
 					{
-						path: ["layoutMode"],
-						value: undefined,
+						...dto("n1", null, null),
+						modifiedAt: WRITE_MS / 1000,
 					},
+					effects:
 					{
-						path: ["numbered_start"],
-						value: undefined,
+						backlinkTargets: [],
+						dates: false,
 					},
-				],
-			],
-		]);
+				},
+			},
+		);
 	});
 
-	it("writes the name through the public API and the metadata through the adapter", async () =>
+	it("writes the name and the metadata in one local write", async () =>
 	{
-		const {adapter, request} = setup(true);
-		updateNode.mockResolvedValue(apiNode("n1"));
+		const {adapter, request, pending} = setup(true);
+		vi.setSystemTime(WRITE_MS);
 
-		await request(
+		const res = await request(
 			"POST",
 			"/nodes/n1",
 			{
@@ -744,174 +685,40 @@ describe("PATCH /api/v1/nodes/:id metadata", () =>
 
 		expect(
 			{
-				calls: adapter.setNodeMetaValues.mock.calls,
-				updates: updateNode.mock.calls,
+				res,
+				pending: pending(),
+				calls: nodeWriteCalls(adapter),
 			},
 		).toStrictEqual(
 			{
-				calls: [
-					[
-						"n1",
-						[
-							{
-								path: ["numbered_start"],
-								value: 3,
-							},
-						],
-					],
-				],
-				updates: [
-					[
-						"n1",
-						{
-							name: "Buy milk",
-						},
-					],
-				],
-			},
-		);
-	});
-
-	it("syncs backlinks after a text edit that adds an internal link", async () =>
-	{
-		const {adapter, request} = setup(true);
-		updateNode.mockResolvedValue(apiNode("n1"));
-
-		await request(
-			"PATCH",
-			"/nodes/n1",
-			{
-				note: 'see <a href="https://workflowy.com/#/0123456789ab">t</a>',
-			},
-		);
-
-		expect(adapter.syncBacklinks.mock.calls).toStrictEqual([[["n1"]]]);
-	});
-
-	it("syncs backlinks after a text edit that removes the last internal link", async () =>
-	{
-		const {adapter, request} = setup(
-			true,
-			undefined,
-			"mirror",
-			{
-				name: '<a href="https://workflowy.com/#/0123456789ab">t</a>',
-			},
-		);
-		updateNode.mockResolvedValue(apiNode("n1"));
-
-		await request(
-			"PATCH",
-			"/nodes/n1",
-			{
-				name: "plain",
-			},
-		);
-
-		expect(adapter.syncBacklinks.mock.calls).toStrictEqual([[["n1"]]]);
-	});
-
-	it("reports the target of a backlink recreated by an edit that leaves the link set unchanged", async () =>
-	{
-		const TARGET = "aaaaaaaa-aaaa-4aaa-8aaa-0123456789ab";
-		const link = '<a href="https://workflowy.com/#/0123456789ab">t</a>';
-		const {adapter, request, cacheService} = setup(
-			true,
-			undefined,
-			"mirror",
-			{
-				name: link,
-			},
-		);
-		cacheService.insertNode(
-			{
-				...apiNode(TARGET),
-				name: "target",
-			},
-			null,
-		);
-		updateNode.mockResolvedValue(apiNode("n1"));
-		adapter.syncBacklinks.mockResolvedValue(
-			{
-				created: [
-					{
-						id: "b",
-						sourceId: "n1",
-						targetId: TARGET,
-					},
-				],
-				referencesRoots: [],
-				deleted: [],
-			},
-		);
-
-		const {body} = await request(
-			"PATCH",
-			"/nodes/n1",
-			{
-				name: `${link} more`,
-			},
-		);
-
-		expect(
-			(
-				body as
+				res:
 				{
-					effects: unknown;
-				}
-			).effects,
-		).toStrictEqual(
-			{
-				backlinkTargets: [TARGET],
-				dates: false,
+					status: 200,
+					body:
+					{
+						node:
+						{
+							...dto("n1", null, 3),
+							name: "Buy milk",
+							modifiedAt: WRITE_MS / 1000,
+						},
+						effects:
+						{
+							backlinkTargets: [],
+							dates: false,
+						},
+					},
+				},
+				pending: ["n1:metadata", "n1:name"],
+				calls: NO_UPSTREAM_CALLS,
 			},
 		);
-	});
-
-	it("does not sync backlinks for a keystroke in a row whose link target is unknown to the cache and unchanged", async () =>
-	{
-		const link = '<a href="https://workflowy.com/#/0123456789ab">t</a>';
-		const {adapter, request} = setup(
-			true,
-			undefined,
-			"mirror",
-			{
-				name: link,
-			},
-		);
-		updateNode.mockResolvedValue(apiNode("n1"));
-
-		await request(
-			"PATCH",
-			"/nodes/n1",
-			{
-				name: `${link} more`,
-			},
-		);
-
-		expect(adapter.syncBacklinks.mock.calls).toStrictEqual([]);
-	});
-
-	it("leaves backlinks alone when neither the old nor the new text links anywhere", async () =>
-	{
-		const {adapter, request} = setup(true);
-		updateNode.mockResolvedValue(apiNode("n1"));
-
-		await request(
-			"PATCH",
-			"/nodes/n1",
-			{
-				name: "plain",
-			},
-		);
-
-		expect(adapter.syncBacklinks.mock.calls).toStrictEqual([]);
 	});
 
 	it("reports no effects for a plain text edit", async () =>
 	{
 		const {request} = setup(true);
-		updateNode.mockResolvedValue(apiNode("n1"));
+		vi.setSystemTime(WRITE_MS);
 
 		const {body} = await request(
 			"PATCH",
@@ -923,7 +730,12 @@ describe("PATCH /api/v1/nodes/:id metadata", () =>
 
 		expect(body).toStrictEqual(
 			{
-				node: dto("n1", null, null),
+				node:
+				{
+					...dto("n1", null, null),
+					name: "plain",
+					modifiedAt: WRITE_MS / 1000,
+				},
 				effects:
 				{
 					backlinkTargets: [],
@@ -933,13 +745,13 @@ describe("PATCH /api/v1/nodes/:id metadata", () =>
 		);
 	});
 
-	it("reports the targets of the links an edit adds or removes, but not those it keeps", async () =>
+	it("reports the targets of the links an edit adds or removes, plus the kept link whose missing backlink the local sync creates", async () =>
 	{
 		const kept = "11111111-2222-3333-4444-0123456789ab";
 		const removed = "11111111-2222-3333-4444-aaaaaaaaaaaa";
 		const added = "11111111-2222-3333-4444-bbbbbbbbbbbb";
 		const link = (id: string) => `<a href="https://workflowy.com/#/${id.slice(-12)}">t</a>`;
-		const {request, cacheService} = setup(
+		const {adapter, request, cacheService} = setup(
 			true,
 			undefined,
 			"mirror",
@@ -951,7 +763,7 @@ describe("PATCH /api/v1/nodes/:id metadata", () =>
 		{
 			cacheService.insertNode(apiNode(id), null);
 		}
-		updateNode.mockResolvedValue(apiNode("n1"));
+		vi.setSystemTime(WRITE_MS);
 
 		const {body} = await request(
 			"PATCH",
@@ -962,16 +774,23 @@ describe("PATCH /api/v1/nodes/:id metadata", () =>
 		);
 
 		expect(
-			(
-				body as
-				{
-					effects: unknown;
-				}
-			).effects,
+			{
+				effects: (
+					body as
+					{
+						effects: unknown;
+					}
+				).effects,
+				calls: nodeWriteCalls(adapter),
+			},
 		).toStrictEqual(
 			{
-				backlinkTargets: [removed, added],
-				dates: false,
+				effects:
+				{
+					backlinkTargets: [removed, added, kept],
+					dates: false,
+				},
+				calls: NO_UPSTREAM_CALLS,
 			},
 		);
 	});
@@ -979,7 +798,7 @@ describe("PATCH /api/v1/nodes/:id metadata", () =>
 	it("reports a date change when an edit adds a <time>", async () =>
 	{
 		const {request} = setup(true);
-		updateNode.mockResolvedValue(apiNode("n1"));
+		vi.setSystemTime(WRITE_MS);
 
 		const {body} = await request(
 			"PATCH",
@@ -1006,7 +825,7 @@ describe("PATCH /api/v1/nodes/:id metadata", () =>
 
 	it("rejects a numberedStart that is not an integer or null", async () =>
 	{
-		const {adapter, request} = setup(true);
+		const {pending, request} = setup(true);
 
 		const res = await request(
 			"PATCH",
@@ -1019,7 +838,7 @@ describe("PATCH /api/v1/nodes/:id metadata", () =>
 		expect(
 			{
 				res,
-				calls: adapter.setNodeMetaValues.mock.calls,
+				pending: pending(),
 			},
 		).toStrictEqual(
 			{
@@ -1031,12 +850,12 @@ describe("PATCH /api/v1/nodes/:id metadata", () =>
 						error: "Invalid request body",
 					},
 				},
-				calls: [],
+				pending: [],
 			},
 		);
 	});
 
-	it("answers 503 for numberedStart without the internal API", async () =>
+	it("answers 500 without the internal API to drain through", async () =>
 	{
 		const {request} = setup(false);
 
@@ -1045,41 +864,18 @@ describe("PATCH /api/v1/nodes/:id metadata", () =>
 				"PATCH",
 				"/nodes/n1",
 				{
-					numberedStart: 5,
+					layoutMode: "board",
 				},
 			),
 		).resolves.toStrictEqual(
 			{
-				status: 503,
+				status: 500,
 				body:
 				{
-					error: NOT_CONFIGURED,
+					error: WRITE_CLIENT_REQUIRED,
 				},
 			},
 		);
-	});
-
-	it("falls back to the public API for layoutMode without the internal API", async () =>
-	{
-		const {request} = setup(false);
-		updateNode.mockResolvedValue(apiNode("n1", "board"));
-
-		await request(
-			"PATCH",
-			"/nodes/n1",
-			{
-				layoutMode: "board",
-			},
-		);
-
-		expect(updateNode.mock.calls).toStrictEqual([
-			[
-				"n1",
-				{
-					layoutMode: "board",
-				},
-			],
-		]);
 	});
 });
 
@@ -1166,9 +962,12 @@ describe("node DTO defaultToBottom", () =>
 
 describe("PATCH /api/v1/nodes/:id tableSet", () =>
 {
-	it("forwards table paths to the adapter and returns them on the node", async () =>
+	useWriteClock();
+
+	it("writes table paths locally, records the metadata and returns them on the node", async () =>
 	{
-		const {adapter, request} = setup(true);
+		const {adapter, pending, request} = setup(true);
+		vi.setSystemTime(WRITE_MS);
 
 		const res = await request(
 			"PATCH",
@@ -1186,22 +985,30 @@ describe("PATCH /api/v1/nodes/:id tableSet", () =>
 		expect(
 			{
 				status: res.status,
-				calls: adapter.setNodeMetaValues.mock.calls,
+				table: (
+					res.body as
+					{
+						node:
+						{
+							table: unknown;
+						};
+					}
+				).node.table,
+				pending: pending(),
+				calls: nodeWriteCalls(adapter),
 			},
 		).toStrictEqual(
 			{
 				status: 200,
-				calls: [
-					[
-						"n1",
-						[
-							{
-								path: ["table", "sizes", "c1"],
-								value: 200,
-							},
-						],
-					],
-				],
+				table:
+				{
+					sizes:
+					{
+						c1: 200,
+					},
+				},
+				pending: ["n1:metadata"],
+				calls: NO_UPSTREAM_CALLS,
 			},
 		);
 	});
@@ -1232,34 +1039,6 @@ describe("PATCH /api/v1/nodes/:id tableSet", () =>
 			{
 				status: 400,
 				calls: [],
-			},
-		);
-	});
-
-	it("answers 503 without the internal API", async () =>
-	{
-		const {request} = setup(false);
-
-		await expect(
-			request(
-				"PATCH",
-				"/nodes/n1",
-				{
-					tableSet: [
-						{
-							path: ["table", "headers"],
-							value: true,
-						},
-					],
-				},
-			),
-		).resolves.toStrictEqual(
-			{
-				status: 503,
-				body:
-				{
-					error: NOT_CONFIGURED,
-				},
 			},
 		);
 	});

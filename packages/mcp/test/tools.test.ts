@@ -200,12 +200,12 @@ describe("tools", () =>
 			).toMatchSnapshot();
 		});
 
+		// Mirror-mode writes are local: the store with internal auth (which drains the outbox) answers from the local
+		// tables and never calls upstream.
 		it("creates a node under a path it creates", async () =>
 		{
-			const upstream = stubPublicApi(OUTLINE);
-
 			const result = await callTool(
-				harness.store,
+				harness.authStore,
 				"outlinedb_node_create",
 				{
 					parentPath: "Work,Ideas",
@@ -214,23 +214,25 @@ describe("tools", () =>
 					note: "soon",
 				},
 			);
+			const value = JSON.parse(text(result)) as
+			{
+				id: string;
+			};
+			const ideas = harness.cache.getChildren("work").find((node) => node.name === "Ideas");
 
 			expect(
 				{
 					result:
 					{
 						isError: result.isError,
-						value: JSON.parse(text(result)),
+						value,
 					},
-					created: [...upstream.values()]
-						.filter((node) => node.id.startsWith("created-"))
-						.map(({id, name, note, parent_id: parentId}) => (
-						{
-							id,
-							name,
-							note,
-							parentId,
-						})),
+					created: harness.cache.getChildren(ideas?.id ?? null).map(({id, name, note}) => (
+					{
+						id,
+						name,
+						note,
+					})),
 				},
 			).toStrictEqual(
 				{
@@ -239,24 +241,17 @@ describe("tools", () =>
 						isError: undefined,
 						value:
 						{
-							id: "created-2",
+							id: value.id,
 							name: "Write the plan",
 							createdAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/u),
-							url: "https://workflowy.com/#/created2",
+							url: `https://workflowy.com/#/${value.id.replaceAll("-", "")}`,
 						},
 					},
 					created: [
 						{
-							id: "created-1",
-							name: "Ideas",
-							note: null,
-							parentId: "work",
-						},
-						{
-							id: "created-2",
+							id: value.id,
 							name: "Write the plan",
 							note: "soon",
-							parentId: "created-1",
 						},
 					],
 				},
@@ -265,10 +260,8 @@ describe("tools", () =>
 
 		it("updates a node's name", async () =>
 		{
-			stubPublicApi(OUTLINE);
-
 			const result = await callTool(
-				harness.store,
+				harness.authStore,
 				"outlinedb_node_update",
 				{
 					id: "alpha",
@@ -280,6 +273,7 @@ describe("tools", () =>
 				{
 					isError: result.isError,
 					value: JSON.parse(text(result)),
+					local: harness.cache.getNode("alpha")?.name,
 				},
 			).toStrictEqual(
 				{
@@ -290,23 +284,22 @@ describe("tools", () =>
 						name: "Alpha 2",
 						note: null,
 					},
+					local: "Alpha 2",
 				},
 			);
 		});
 
 		it("completes and uncompletes a node", async () =>
 		{
-			stubPublicApi(OUTLINE);
-
 			const completed = await callTool(
-				harness.store,
+				harness.authStore,
 				"outlinedb_node_complete",
 				{
 					id: "alpha",
 				},
 			);
 			const uncompleted = await callTool(
-				harness.store,
+				harness.authStore,
 				"outlinedb_node_uncomplete",
 				{
 					id: "alpha",
@@ -346,10 +339,8 @@ describe("tools", () =>
 
 		it("moves a node to the top of a parent found by path", async () =>
 		{
-			const upstream = stubPublicApi(OUTLINE);
-
 			const result = await callTool(
-				harness.store,
+				harness.authStore,
 				"outlinedb_node_move",
 				{
 					nodeId: "beta",
@@ -361,7 +352,7 @@ describe("tools", () =>
 			expect(
 				{
 					result,
-					parentId: upstream.get("beta")?.parent_id,
+					first: harness.cache.getChildren("work")[0]?.id,
 				},
 			).toStrictEqual(
 				{
@@ -375,17 +366,15 @@ describe("tools", () =>
 							},
 						],
 					},
-					parentId: "work",
+					first: "beta",
 				},
 			);
 		});
 
 		it("deletes a node", async () =>
 		{
-			const upstream = stubPublicApi(OUTLINE);
-
 			const result = await callTool(
-				harness.store,
+				harness.authStore,
 				"outlinedb_node_delete",
 				{
 					id: "beta",
@@ -395,7 +384,7 @@ describe("tools", () =>
 			expect(
 				{
 					result,
-					deleted: !upstream.has("beta"),
+					deleted: harness.cache.getNode("beta") === undefined,
 				},
 			).toStrictEqual(
 				{
