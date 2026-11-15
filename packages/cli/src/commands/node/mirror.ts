@@ -1,11 +1,10 @@
-import {WorkflowyApiClient, WorkflowyInternalClient} from "@outlinedb/shared/api";
+import {WorkflowyApiClient} from "@outlinedb/shared/api";
 import {PathBuilder, WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
-import {HOME, WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
-import {readInternalAuth} from "@outlinedb/shared/node";
 import type {NodeMirrorResult} from "@outlinedb/shared/types";
 import {Command, Flags} from "@oclif/core";
 import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";
+import {drainAfterWrite, localParent, openLocalWrites} from "../../services/local-writes.js";
 import {logger} from "../../services/logger.js";
 import {resolveNodeId, resolveParent} from "@outlinedb/shared/utils";
 
@@ -17,7 +16,7 @@ export default class Mirror extends Command
 		"# Mirror a node into another parent (top by default)",
 		"<%= config.bin %> <%= command.id %> --node-id abc123 --parent-id def456",
 		"",
-		"# Mirror a node to the top level (Home); needs WORKFLOWY_USERNAME/WORKFLOWY_PASSWORD for the internal API",
+		"# Mirror a node to the top level (Home)",
 		"<%= config.bin %> <%= command.id %> --node-id abc123 --parent-id home",
 		"",
 		"# Mirror by path, placing the mirror at the bottom",
@@ -113,7 +112,20 @@ export default class Mirror extends Command
 
 		if (flags.delete)
 		{
-			await client.deleteMirror(nodeId);
+			if (cacheService.getMirrorOriginal(nodeId) === null)
+			{
+				this.error(`${nodeId} is not a mirror; pass the mirror node, not its origin`);
+			}
+			const writes = openLocalWrites(database, client);
+			writes.local.deleteNode(
+				nodeId,
+				{
+					mirrorIds: [nodeId],
+					promotions: [],
+					nodeId: null,
+				},
+			);
+			await drainAfterWrite(this, writes);
 			this.report(
 				{
 					action: "deleted",
@@ -147,62 +159,37 @@ export default class Mirror extends Command
 			this.log(`  Into:   ${parentId === null ? "Home" : pathBuilder.buildFullPath(parentId)}`);
 		}
 
-		const result =
-			parentId === null
-				? await this.mirrorToHome(nodeId, position, database, client)
-				: await client.createMirror(nodeId, parentId, position);
+		const writes = openLocalWrites(database, client);
+		const
+		{
+			ids: [mirrorId = ""],
+		} = writes.local.createMirrorsAt(
+			{
+				originalIds: [nodeId],
+				parentId: localParent(database, parentId),
+				...(position === "top"
+					?
+						{
+							index: 0,
+						}
+					: {}),
+			},
+		);
+		await drainAfterWrite(this, writes);
 
 		this.report(
 			{
 				action: "created",
-				mirrorId: result.mirrorId,
-				originId: result.originId,
+				mirrorId,
+				originId: nodeId,
 				parentId,
 			},
 			flags.json,
 			() =>
 			{
 				this.log("Successfully created mirror");
-				this.log(`  ID: ${result.mirrorId}`);
-				this.log(`  Origin: ${result.originId}`);
-			},
-		);
-	}
-
-	/**
-	 * POST /nodes/:id/mirror requires a string parent_id (it rejects null and 404s "home"),
-	 * so a mirror at Home goes through the internal API the way upstream creates one.
-	 */
-	private async mirrorToHome(
-		nodeId: string,
-		position: "top" | "bottom",
-		database: ReturnType<typeof createDatabase>,
-		writeThrough: WorkflowyWriteThroughClient,
-	): Promise<
-	{
-		mirrorId: string;
-		originId: string;
-	}>
-	{
-		const auth = readInternalAuth();
-		if (!auth)
-		{
-			this.error(
-				"Mirroring to Home needs the internal API: set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD in the environment (e.g. from .envrc)",
-			);
-		}
-		const adapter = new WorkflowyInternalAdapter(
-			{
-				client: new WorkflowyInternalClient(auth),
-				db: database,
-				writeThrough,
-			},
-		);
-		return adapter.createMirrorAt(
-			{
-				originalId: nodeId,
-				parentId: HOME,
-				index: position === "top" ? 0 : Number.MAX_SAFE_INTEGER,
+				this.log(`  ID: ${mirrorId}`);
+				this.log(`  Origin: ${nodeId}`);
 			},
 		);
 	}

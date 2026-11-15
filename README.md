@@ -87,6 +87,8 @@ USAGE
 - [`outlinedb node search`](#outlinedb-node-search)
 - [`outlinedb node uncomplete`](#outlinedb-node-uncomplete)
 - [`outlinedb node update`](#outlinedb-node-update)
+- [`outlinedb outbox drain`](#outlinedb-outbox-drain)
+- [`outlinedb outbox status`](#outlinedb-outbox-status)
 - [`outlinedb utils format-node`](#outlinedb-utils-format-node)
 - [`outlinedb utils path-to-id`](#outlinedb-utils-path-to-id)
 
@@ -966,10 +968,9 @@ Import Otter meetings to Workflowy Calendar
 
 ```text
 USAGE
-  $ outlinedb gtd otter import [-d <value>] [-m <value>] [--reset] [--calendar-id <value>] [--dry-run]
+  $ outlinedb gtd otter import [-m <value>] [--reset] [--calendar-id <value>] [--dry-run]
 
 FLAGS
-  -d, --delay=<value>        [default: 5] Seconds between API calls
   -m, --max=<value>          Maximum meetings to import (0 = unlimited)
       --calendar-id=<value>  [default: 8111d11c-b80e-f219-8ac3-08567aa37346] Calendar node ID to import into
       --dry-run              Show what would be imported without creating nodes
@@ -979,15 +980,15 @@ DESCRIPTION
   Import Otter meetings to Workflowy Calendar
 
 EXAMPLES
-  # Import meetings with 5 second delay between API calls
+  # Import new meetings
 
   $ outlinedb gtd otter import
 
 
 
-  # Import with custom delay and max count
+  # Import at most 10 meetings
 
-  $ outlinedb gtd otter import --delay 3 --max 10
+  $ outlinedb gtd otter import --max 10
 
 
 
@@ -1522,7 +1523,7 @@ EXAMPLES
 
 
 
-  # Mirror a node to the top level (Home); needs WORKFLOWY_USERNAME/WORKFLOWY_PASSWORD for the internal API
+  # Mirror a node to the top level (Home)
 
   $ outlinedb node mirror --node-id abc123 --parent-id home
 
@@ -1761,6 +1762,41 @@ EXAMPLES
   # Preview the API call without updating
 
   $ outlinedb node update --id abc123 --name "Updated" --dry-run
+```
+
+## `outlinedb outbox drain`
+
+Deliver the pending mirror-mode outbox to workflowy.com; a failure keeps the rows pending and exits non-zero
+
+```text
+USAGE
+  $ outlinedb outbox drain
+
+DESCRIPTION
+  Deliver the pending mirror-mode outbox to workflowy.com; a failure keeps the rows pending and exits non-zero
+
+EXAMPLES
+  $ outlinedb outbox drain
+```
+
+## `outlinedb outbox status`
+
+Show the mirror-mode outbox: writes saved locally that workflowy.com does not have yet
+
+```text
+USAGE
+  $ outlinedb outbox status [--json]
+
+GLOBAL FLAGS
+  --json  Format output as json.
+
+DESCRIPTION
+  Show the mirror-mode outbox: writes saved locally that workflowy.com does not have yet
+
+EXAMPLES
+  $ outlinedb outbox status
+
+  $ outlinedb outbox status --json
 ```
 
 ## `outlinedb utils format-node`

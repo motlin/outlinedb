@@ -1,10 +1,9 @@
 import {WorkflowyApiClient} from "@outlinedb/shared/api";
 import {deletePlanCalls, PathBuilder, WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
 import {Command, Flags} from "@oclif/core";
-import {linkedSourcesInSubtree} from "@outlinedb/shared/internal";
 import {createDatabase} from "../../db/index.js";
-import {deleteBacklinksOfDeleted} from "@outlinedb/shared/node";
 import {CacheService} from "../../services/cache.js";
+import {drainAfterWrite, localDeletePlan, openLocalWrites} from "../../services/local-writes.js";
 import {logger} from "../../services/logger.js";
 import {resolveNodeId} from "@outlinedb/shared/utils";
 
@@ -72,7 +71,7 @@ export default class Delete extends Command
 		const nodeId = await resolveNodeId(flags, cacheService, apiClient);
 
 		const fullPath = pathBuilder.buildFullPath(nodeId);
-		const plan = await client.planDelete(nodeId);
+		const plan = await localDeletePlan(cacheService, nodeId);
 		const removingMirror = plan.nodeId === null && plan.promotions.length === 0;
 		const innerMirrorPaths = removingMirror ? [] : plan.mirrorIds.map((id) => pathBuilder.buildFullPath(id));
 		const keptPaths = plan.promotions.map(({originalId, mirrorId}) => (
@@ -130,11 +129,10 @@ export default class Delete extends Command
 			return;
 		}
 
-		// Upstream's client deletes a deleted source's backlink items; read the
-		// linked sources before the delete drops the subtree from the cache.
-		const linked = linkedSourcesInSubtree(database, nodeId);
-		await client.deleteNode(nodeId, plan);
-		await deleteBacklinksOfDeleted(linked, database, client);
+		// The local delete also deletes the backlink items of every source in the subtree, as upstream's client does.
+		const writes = openLocalWrites(database, client);
+		writes.local.deleteNode(nodeId, plan);
+		await drainAfterWrite(this, writes);
 
 		this.log("");
 		if (removingMirror)

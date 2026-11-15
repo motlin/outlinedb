@@ -1,7 +1,8 @@
 import {it, vi, afterEach, expect, describe, beforeEach} from "vite-plus/test";
 import {captureOutput} from "@oclif/test";
-import {storeTreeTxId} from "@outlinedb/shared/cache";
+import {nodeContent} from "@outlinedb/shared/db";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {and, eq} from "drizzle-orm";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -9,14 +10,13 @@ import type {MockInstance} from "vite-plus/test";
 import Update from "../../../src/commands/node/update.js";
 import {cleanupTestDatabase, createTestDatabase, nodeFixtures, seedTestData} from "../../db/migration-helper.js";
 import type {TestDatabase} from "../../db/migration-helper.js";
-import {catchUpResponse} from "../../helpers/internal-catch-up.js";
 import {createTestNode} from "../../helpers/node-fixtures.js";
-import {requestBody} from "../../helpers/request-body.js";
+import {fakeUpstream, isolateInternalAuth, pendingOutbox} from "../../helpers/upstream-outbox.js";
 
 describe("node update command", () =>
 {
 	let originalEnv: typeof process.env;
-	let fetchStub: MockInstance;
+	let fetchStub: MockInstance<typeof fetch>;
 	let tempDir: string;
 	let testDatabase: TestDatabase;
 
@@ -32,6 +32,7 @@ describe("node update command", () =>
 		testDatabase = createTestDatabase(testDbPath);
 		process.env.OUTLINEDB_DB_PATH = testDbPath;
 		process.env.WORKFLOWY_API_KEY = "test-api-key";
+		isolateInternalAuth(tempDir);
 
 		fetchStub = vi.spyOn(globalThis, "fetch");
 	});
@@ -152,76 +153,180 @@ describe("node update command", () =>
 		});
 	});
 
+	/** Seed `Work > Tasks > My Task` (`work-id`, `tasks-id`, `target-id`). */
+	function seedTask(name = "My Task"): void
+	{
+		seedTestData(
+			testDatabase,
+			nodeFixtures([
+				createTestNode(
+					{
+						id: "work-id",
+						name: "Work",
+						parentId: null,
+					},
+				),
+				createTestNode(
+					{
+						id: "tasks-id",
+						name: "Tasks",
+						parentId: "work-id",
+					},
+				),
+				createTestNode(
+					{
+						id: "target-id",
+						name,
+						parentId: "tasks-id",
+					},
+				),
+			]),
+		);
+	}
+
+	describe("local write and drain", () =>
+	{
+		it("writes the node locally, then delivers it to workflowy.com in one push and leaves nothing pending", async () =>
+		{
+			seedTask();
+			const upstream = fakeUpstream(fetchStub, testDatabase, tempDir);
+
+			const {stdout, error} = await captureOutput(async () =>
+			{
+				await Update.run(["--id", "target-id", "--name", "Renamed", "--note", "Details"]);
+			});
+
+			expect(
+				{
+					error,
+					stdout,
+					node: testDatabase.db
+						.select(
+							{
+								name: nodeContent.name,
+								note: nodeContent.note,
+							},
+						)
+						.from(nodeContent)
+						.where(and(eq(nodeContent.id, "target-id"), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
+						.all(),
+					pushes: upstream.pushes,
+					pending: pendingOutbox(testDatabase),
+				},
+			).toStrictEqual(
+				{
+					error: undefined,
+					stdout: "Updating node: Work > Tasks > My Task\n\nSuccessfully updated node\n  New name: Renamed\n  New note: Details\n",
+					node: [
+						{
+							name: "Renamed",
+							note: "Details",
+						},
+					],
+					pushes: [
+						[
+							{
+								type: "edit",
+								data:
+								{
+									projectid: "target-id",
+									name: "Renamed",
+									description: "Details",
+									metadataPatches: [],
+									metadataInversePatches: [],
+								},
+							},
+						],
+					],
+					pending: [],
+				},
+			);
+		});
+
+		it("keeps the local write and its outbox rows when the push fails, and exits non-zero with the pending count", async () =>
+		{
+			seedTask();
+			const upstream = fakeUpstream(
+				fetchStub,
+				testDatabase,
+				tempDir,
+				{
+					failPush: true,
+				},
+			);
+
+			const {stdout, error} = await captureOutput(async () =>
+			{
+				await Update.run(["--id", "target-id", "--name", "Renamed", "--note", "Details"]);
+			});
+
+			expect(
+				{
+					stdout,
+					error: error?.message,
+					exit: error?.oclif?.exit,
+					name: testDatabase.db
+						.select(
+							{
+								name: nodeContent.name,
+							},
+						)
+						.from(nodeContent)
+						.where(and(eq(nodeContent.id, "target-id"), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
+						.get()?.name,
+					pushes: upstream.pushes,
+					pending: pendingOutbox(testDatabase),
+				},
+			).toStrictEqual(
+				{
+					stdout: "Updating node: Work > Tasks > My Task\n",
+					error: "Saved locally, but delivering it to workflowy.com failed: Workflowy rejected the operations: upstream_rejected\n2 outbox rows pending; they go out on the next write or with 'outbox drain'.",
+					exit: 1,
+					name: "Renamed",
+					pushes: [],
+					pending: [
+						{
+							nodeId: "target-id",
+							aspect: "name",
+							lastError: "Workflowy rejected the operations: upstream_rejected",
+						},
+						{
+							nodeId: "target-id",
+							aspect: "note",
+							lastError: "Workflowy rejected the operations: upstream_rejected",
+						},
+					],
+				},
+			);
+		});
+
+		it("refuses to write without internal-API credentials, leaving the node and the outbox alone", async () =>
+		{
+			seedTask();
+
+			await expect(Update.run(["--id", "target-id", "--name", "Renamed"])).rejects.toThrow(
+				"Writing needs the internal API",
+			);
+
+			expect(
+				{
+					pending: pendingOutbox(testDatabase),
+					fetches: fetchStub.mock.calls.length,
+				},
+			).toStrictEqual(
+				{
+					pending: [],
+					fetches: 0,
+				},
+			);
+		});
+	});
+
 	describe("backlinks", () =>
 	{
 		const TARGET_LINK = '<a href="https://workflowy.com/#/0123456789ab">t</a>';
 
-		/** Answers the public update and read-back, and the internal login, init and an empty catch-up poll; records each path. */
-		function stubApis(): string[]
-		{
-			const paths: string[] = [];
-			fetchStub.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) =>
-			{
-				const url = new URL(input instanceof Request ? input.url : String(input));
-				paths.push(`${init?.method ?? "GET"} ${url.pathname}`);
-				if (url.pathname === "/ajax_login")
-				{
-					return Promise.resolve(
-						new Response(
-							"",
-							{
-								status: 200,
-								headers:
-								{
-									"set-cookie": "sessionid=abc; Path=/",
-								},
-							},
-						),
-					);
-				}
-				const internal = catchUpResponse(url.pathname);
-				if (internal !== undefined)
-				{
-					return Promise.resolve(internal);
-				}
-				if (init?.method === "POST")
-				{
-					return Promise.resolve(
-						Response.json(
-							{
-								status: "ok",
-							},
-						),
-					);
-				}
-				return Promise.resolve(
-					Response.json(
-						{
-							node:
-							{
-								id: "source-id",
-								name: "x",
-								note: null,
-								priority: 0,
-								createdAt: 0,
-								modifiedAt: 0,
-							},
-						},
-					),
-				);
-			});
-			return paths;
-		}
-
-		beforeEach(() =>
-		{
-			process.env.WORKFLOWY_USERNAME = "alice@example.com";
-			process.env.WORKFLOWY_PASSWORD = "hunter2";
-			process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "workflowy-session");
-			storeTreeTxId(testDatabase.db, "1234567");
-		});
-
-		it("syncs the source's backlinks through the internal API when the new text links to a node", async () =>
+		it("creates the backlink item locally when the new text links to a node, and delivers it with the edit", async () =>
 		{
 			seedTestData(
 				testDatabase,
@@ -233,72 +338,35 @@ describe("node update command", () =>
 							parentId: null,
 						},
 					),
+					createTestNode(
+						{
+							id: "01234567-0000-4000-8000-0123456789ab",
+							name: "Target",
+							parentId: null,
+						},
+					),
 				]),
 			);
-			const paths = stubApis();
+			const upstream = fakeUpstream(fetchStub, testDatabase, tempDir);
 
-			await captureOutput(async () =>
+			const {error} = await captureOutput(async () =>
 			{
 				await Update.run(["--id", "source-id", "--name", `see ${TARGET_LINK}`]);
 			});
 
-			expect(paths.filter((entry) => !entry.includes("/api/v1/"))).toStrictEqual([
-				"POST /ajax_login",
-				"GET /get_initialization_data",
-				"POST /push_and_poll",
-			]);
-		});
-
-		it("syncs when the old text linked to a node and the new one does not", async () =>
-		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "source-id",
-							name: `see ${TARGET_LINK}`,
-							parentId: null,
-						},
-					),
-				]),
+			expect(
+				{
+					error,
+					types: upstream.pushes.map((ops) => ops.map((op) => op.type)),
+					pending: pendingOutbox(testDatabase),
+				},
+			).toStrictEqual(
+				{
+					error: undefined,
+					types: [["bulk_create", "bulk_create", "edit", "edit"]],
+					pending: [],
+				},
 			);
-			const paths = stubApis();
-
-			await captureOutput(async () =>
-			{
-				await Update.run(["--id", "source-id", "--name", "plain"]);
-			});
-
-			expect(paths.filter((entry) => !entry.includes("/api/v1/"))).toStrictEqual([
-				"POST /ajax_login",
-				"GET /get_initialization_data",
-				"POST /push_and_poll",
-			]);
-		});
-
-		it("leaves the internal API alone when no link is added or removed", async () =>
-		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "source-id",
-							name: "Old",
-							parentId: null,
-						},
-					),
-				]),
-			);
-			const paths = stubApis();
-
-			await captureOutput(async () =>
-			{
-				await Update.run(["--id", "source-id", "--name", "plain"]);
-			});
-
-			expect(paths.filter((entry) => !entry.includes("/api/v1/"))).toStrictEqual([]);
 		});
 	});
 
@@ -408,396 +476,14 @@ describe("node update command", () =>
 		});
 	});
 
-	describe("updating by ID", () =>
-	{
-		it("sends correct request body for name update", async () =>
-		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "update-id",
-							name: "Old Name",
-							parentId: null,
-						},
-					),
-				]),
-			);
-
-			let capturedBody: string | undefined;
-			fetchStub.mockImplementation(async (url: RequestInfo | URL, init?: RequestInit) =>
-			{
-				if (init?.body != null)
-				{
-					capturedBody = requestBody(init);
-				}
-				return Promise.resolve(
-					Response.json(
-						{
-							node:
-							{
-								id: "update-id",
-								name: "New Name",
-							},
-						},
-						{
-							status: 200,
-						},
-					),
-				);
-			});
-
-			await captureOutput(async () =>
-			{
-				try
-				{
-					await Update.run(["--id", "update-id", "--name", "New Name"]);
-				}
-				catch
-				{
-					// Ignore errors from cache update
-				}
-			});
-
-			const body: unknown = JSON.parse(capturedBody!);
-			expect(body).toStrictEqual(
-				{
-					name: "New Name",
-				},
-			);
-		});
-
-		it("sends correct request body for note update", async () =>
-		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "update-id",
-							name: "Test",
-							parentId: null,
-						},
-					),
-				]),
-			);
-
-			let capturedBody: string | undefined;
-			fetchStub.mockImplementation(async (url: RequestInfo | URL, init?: RequestInit) =>
-			{
-				if (init?.body != null)
-				{
-					capturedBody = requestBody(init);
-				}
-				return Promise.resolve(
-					Response.json(
-						{
-							node:
-							{
-								id: "update-id",
-								name: "Test",
-								note: "New note",
-							},
-						},
-						{
-							status: 200,
-						},
-					),
-				);
-			});
-
-			await captureOutput(async () =>
-			{
-				try
-				{
-					await Update.run(["--id", "update-id", "--note", "New note"]);
-				}
-				catch
-				{
-					// Ignore errors from cache update
-				}
-			});
-
-			const body: unknown = JSON.parse(capturedBody!);
-			expect(body).toStrictEqual(
-				{
-					note: "New note",
-				},
-			);
-		});
-
-		it("sends empty note to clear with --clear-note", async () =>
-		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "update-id",
-							name: "Test",
-							note: "Old note",
-							parentId: null,
-						},
-					),
-				]),
-			);
-
-			let capturedBody: string | undefined;
-			fetchStub.mockImplementation(async (url: RequestInfo | URL, init?: RequestInit) =>
-			{
-				if (init?.body != null)
-				{
-					capturedBody = requestBody(init);
-				}
-				return Promise.resolve(
-					Response.json(
-						{
-							node:
-							{
-								id: "update-id",
-								name: "Test",
-								note: "",
-							},
-						},
-						{
-							status: 200,
-						},
-					),
-				);
-			});
-
-			await captureOutput(async () =>
-			{
-				try
-				{
-					await Update.run(["--id", "update-id", "--clear-note"]);
-				}
-				catch
-				{
-					// Ignore errors from cache update
-				}
-			});
-
-			const body: unknown = JSON.parse(capturedBody!);
-			expect(body).toStrictEqual(
-				{
-					note: "",
-				},
-			);
-		});
-
-		it("sends empty name to clear with --clear-name", async () =>
-		{
-			// --name cannot clear a name because oclif rejects an empty string.
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "clear-id",
-							name: " #write",
-							parentId: null,
-						},
-					),
-				]),
-			);
-
-			let capturedBody: string | undefined;
-			fetchStub.mockImplementation(async (url: RequestInfo | URL, init?: RequestInit) =>
-			{
-				if (init?.body != null)
-				{
-					capturedBody = requestBody(init);
-				}
-				return Promise.resolve(
-					Response.json(
-						{
-							node:
-							{
-								id: "clear-id",
-								name: "",
-							},
-						},
-						{
-							status: 200,
-						},
-					),
-				);
-			});
-
-			await captureOutput(async () =>
-			{
-				try
-				{
-					await Update.run(["--id", "clear-id", "--clear-name"]);
-				}
-				catch
-				{
-					// Ignore errors from cache update
-				}
-			});
-
-			const body: unknown = JSON.parse(capturedBody!);
-			expect(body).toStrictEqual(
-				{
-					name: "",
-				},
-			);
-		});
-
-		it("sends correct request body for layout mode update", async () =>
-		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "update-id",
-							name: "Test",
-							parentId: null,
-						},
-					),
-				]),
-			);
-
-			let capturedBody: string | undefined;
-			fetchStub.mockImplementation(async (url: RequestInfo | URL, init?: RequestInit) =>
-			{
-				if (init?.body != null)
-				{
-					capturedBody = requestBody(init);
-				}
-				return Promise.resolve(
-					Response.json(
-						{
-							node:
-							{
-								id: "update-id",
-								name: "Test",
-								data:
-								{
-									layoutMode: "document",
-								},
-							},
-						},
-						{
-							status: 200,
-						},
-					),
-				);
-			});
-
-			await captureOutput(async () =>
-			{
-				try
-				{
-					await Update.run(["--id", "update-id", "--layout-mode", "document"]);
-				}
-				catch
-				{
-					// Ignore errors from cache update
-				}
-			});
-
-			const body: unknown = JSON.parse(capturedBody!);
-			expect(body).toStrictEqual(
-				{
-					layoutMode: "document",
-				},
-			);
-		});
-
-		it("sends all fields when updating multiple", async () =>
-		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "update-id",
-							name: "Old Name",
-							parentId: null,
-						},
-					),
-				]),
-			);
-
-			let capturedBody: string | undefined;
-			fetchStub.mockImplementation(async (url: RequestInfo | URL, init?: RequestInit) =>
-			{
-				if (init?.body != null)
-				{
-					capturedBody = requestBody(init);
-				}
-				return Promise.resolve(
-					Response.json(
-						{
-							node:
-							{
-								id: "update-id",
-								name: "New Name",
-								note: "New note",
-							},
-						},
-						{
-							status: 200,
-						},
-					),
-				);
-			});
-
-			await captureOutput(async () =>
-			{
-				try
-				{
-					await Update.run([
-						"--id",
-						"update-id",
-						"--name",
-						"New Name",
-						"--note",
-						"New note",
-						"--layout-mode",
-						"board",
-					]);
-				}
-				catch
-				{
-					// Ignore errors from cache update
-				}
-			});
-
-			const body: unknown = JSON.parse(capturedBody!);
-			expect(body).toStrictEqual(
-				{
-					name: "New Name",
-					note: "New note",
-					layoutMode: "board",
-				},
-			);
-		});
-	});
-
 	describe("--expect-name precondition", () =>
 	{
 		it("refuses to update when current name does not match --expect-name", async () =>
 		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "guard-id",
-							name: "Long current text the user expanded later",
-							parentId: null,
-						},
-					),
-				]),
-			);
+			seedTask("Long current text the user expanded later");
 
 			await expect(
-				Update.run(["--id", "guard-id", "--name", "Short stub", "--expect-name", "Stale original text"]),
+				Update.run(["--id", "target-id", "--name", "Short stub", "--expect-name", "Stale original text"]),
 			).rejects.toThrow(/does not match --expect-name/u);
 
 			expect(fetchStub.mock.calls).toStrictEqual([]);
@@ -805,68 +491,43 @@ describe("node update command", () =>
 
 		it("proceeds with the update when current name matches --expect-name", async () =>
 		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "guard-id",
-							name: "Exact current name",
-							parentId: null,
-						},
-					),
-				]),
-			);
+			seedTask("Exact current name");
+			const upstream = fakeUpstream(fetchStub, testDatabase, tempDir);
 
-			let called = false;
-			fetchStub.mockImplementation(async (_url: RequestInfo | URL, _init?: RequestInit) =>
+			const {error} = await captureOutput(async () =>
 			{
-				called = true;
-				return Promise.resolve(
-					Response.json(
-						{
-							node:
+				await Update.run(["--id", "target-id", "--name", "New Name", "--expect-name", "Exact current name"]);
+			});
+
+			expect(
+				{
+					error,
+					pushes: upstream.pushes,
+				},
+			).toStrictEqual(
+				{
+					error: undefined,
+					pushes: [
+						[
 							{
-								id: "guard-id",
-								name: "New Name",
+								type: "edit",
+								data:
+								{
+									projectid: "target-id",
+									name: "New Name",
+									metadataPatches: [],
+									metadataInversePatches: [],
+								},
 							},
-						},
-						{
-							status: 200,
-						},
-					),
-				);
-			});
-
-			await captureOutput(async () =>
-			{
-				try
-				{
-					await Update.run(["--id", "guard-id", "--name", "New Name", "--expect-name", "Exact current name"]);
-				}
-				catch
-				{
-					// Ignore errors from cache update
-				}
-			});
-
-			expect(called).toBe(true);
+						],
+					],
+				},
+			);
 		});
 
 		it("refuses when the node no longer exists in the cache", async () =>
 		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "other-id",
-							name: "Other",
-							parentId: null,
-						},
-					),
-				]),
-			);
+			seedTask();
 
 			await expect(
 				Update.run(["--id", "missing-id", "--name", "New Name", "--expect-name", "Anything"]),
@@ -880,66 +541,58 @@ describe("node update command", () =>
 	{
 		it("resolves path to correct node ID", async () =>
 		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "work-id",
-							name: "Work",
-							parentId: null,
-						},
-					),
-					createTestNode(
-						{
-							id: "tasks-id",
-							name: "Tasks",
-							parentId: "work-id",
-						},
-					),
-					createTestNode(
-						{
-							id: "target-id",
-							name: "My Task",
-							parentId: "tasks-id",
-						},
-					),
-				]),
-			);
+			seedTask();
+			const upstream = fakeUpstream(fetchStub, testDatabase, tempDir);
 
-			let capturedUrl: string | undefined;
-			fetchStub.mockImplementation(async (url: RequestInfo | URL, _init?: RequestInit) =>
+			const {stdout, error} = await captureOutput(async () =>
 			{
-				capturedUrl = url instanceof Request ? url.url : String(url);
-				return Promise.resolve(
-					Response.json(
-						{
-							node:
+				await Update.run([
+					"--path",
+					"Work,Tasks,My Task",
+					"--clear-name",
+					"--clear-note",
+					"--layout-mode",
+					"board",
+				]);
+			});
+
+			expect(
+				{
+					error,
+					stdout,
+					pushes: upstream.pushes,
+				},
+			).toStrictEqual(
+				{
+					error: undefined,
+					stdout: "Updating node: Work > Tasks > My Task\n\nSuccessfully updated node\n  Name cleared\n  Note cleared\n  Layout mode: board\n",
+					pushes: [
+						[
 							{
-								id: "target-id",
-								name: "Updated Task",
+								type: "edit",
+								data:
+								{
+									projectid: "target-id",
+									name: "",
+									metadataPatches: [
+										{
+											op: "add",
+											path: ["layoutMode"],
+											value: "board",
+										},
+									],
+									metadataInversePatches: [
+										{
+											op: "remove",
+											path: ["layoutMode"],
+										},
+									],
+								},
 							},
-						},
-						{
-							status: 200,
-						},
-					),
-				);
-			});
-
-			await captureOutput(async () =>
-			{
-				try
-				{
-					await Update.run(["--path", "Work,Tasks,My Task", "--name", "Updated Task"]);
-				}
-				catch
-				{
-					// Ignore errors from cache update
-				}
-			});
-
-			expect(capturedUrl).toBe("https://workflowy.com/api/v1/nodes/target-id");
+						],
+					],
+				},
+			);
 		});
 
 		it("errors when path not found", async () =>
@@ -959,59 +612,6 @@ describe("node update command", () =>
 			await expect(Update.run(["--path", "Missing,Path", "--name", "New Name"])).rejects.toThrow(
 				"Node not found at path: Missing > Path",
 			);
-		});
-	});
-
-	describe("output", () =>
-	{
-		// Note: Full output with success message requires integration testing
-		// due to command creating separate DB connections. API calls and path
-		// display are tested here; success message tested via integration tests.
-
-		it("displays full path when updating", async () =>
-		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "work-id",
-							name: "Work",
-							parentId: null,
-						},
-					),
-					createTestNode(
-						{
-							id: "target-id",
-							name: "Target",
-							parentId: "work-id",
-						},
-					),
-				]),
-			);
-
-			fetchStub.mockResolvedValue(
-				Response.json(
-					{},
-					{
-						status: 200,
-					},
-				),
-			);
-
-			const {stdout} = await captureOutput(async () =>
-			{
-				try
-				{
-					await Update.run(["--id", "target-id", "--name", "Updated"]);
-				}
-				catch
-				{
-					// Ignore errors from cache update
-				}
-			});
-
-			expect(stdout).toBe("Updating node: Work > Target\n");
 		});
 	});
 

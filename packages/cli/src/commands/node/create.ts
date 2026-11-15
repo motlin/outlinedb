@@ -1,15 +1,17 @@
 import {text} from "node:stream/consumers";
 import {WorkflowyApiClient} from "@outlinedb/shared/api";
-import {createNodeTree, NodeTreeSpecSchema, PathBuilder, WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
-import type {CreatedNodeTree, NodeTreeSpec} from "@outlinedb/shared/cache";
+import {NodeTreeSpecSchema, PathBuilder, WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
+import type {NodeTreeSpec} from "@outlinedb/shared/cache";
+import type {NewTree} from "@outlinedb/shared/internal";
 import {getWorkflowyUrl, hasInternalLink} from "@outlinedb/shared/workflowy";
 import {Command, Flags} from "@oclif/core";
 import fs from "node:fs";
 import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";
-import {syncBacklinksIfLinked, internalAdapter} from "@outlinedb/shared/node";
 import {logger} from "../../services/logger.js";
-import {resolveOrCreateNodePath, resolveParent} from "@outlinedb/shared/utils";
+import {drainAfterWrite, localParent, openLocalWrites, resolveOrCreateLocalPath} from "../../services/local-writes.js";
+import type {LocalWrites} from "../../services/local-writes.js";
+import {resolveParent} from "@outlinedb/shared/utils";
 import {adoptUnderCalendar, calendarMonthPath} from "../../services/calendar-adoption.js";
 
 /**
@@ -162,11 +164,29 @@ export default class Create extends Command
 			this.error("Parent node is required. Use --parent-id or --parent-path to specify a parent.");
 		}
 
+		// Read the input before anything is written: a JSON tree, an outline on stdin (a tree per top-level bullet), or a name.
+		const fromJson = Boolean(jsonFlag) || Boolean(flags["json-file"]);
+		const name = fromJson ? "" : flags.name === "-" ? await this.readStdinName() : (flags.name ?? "");
+		const trees = fromJson
+			? [
+					this.readJsonTree(
+						{
+							json: jsonFlag,
+							"json-file": flags["json-file"],
+						},
+					),
+				]
+			: flags.name === "-"
+				? parseBulletOutline(name)
+				: [];
+
+		// Writes go to the local tables, then one drain delivers them; --dry-run writes nothing.
+		const writes = flags["dry-run"] ? undefined : openLocalWrites(database, client);
+
 		// Resolve parent ID, optionally creating missing path segments
-		// Note: --create-path is ignored with --dry-run to avoid creating real nodes
 		const parentId =
-			flags["create-path"] && flags["parent-path"] && !flags["dry-run"]
-				? await this.resolveCreatePath(flags["parent-path"], cacheService, apiClient, client, database)
+			flags["create-path"] && flags["parent-path"] && writes !== undefined
+				? await this.resolveCreatePath(flags["parent-path"], cacheService, writes)
 				: await resolveParent(
 						{
 							id: flags["parent-id"],
@@ -176,94 +196,54 @@ export default class Create extends Command
 						apiClient,
 					);
 
-		// Handle JSON input mode
-		if (jsonFlag || flags["json-file"])
+		if (trees.length > 0)
 		{
-			await this.runJsonMode(flags, parentId, apiClient, cacheService, database);
+			await this.createTrees(trees, flags, parentId, cacheService, database, writes);
 			return;
 		}
-
-		// Handle stdin input when --name is "-"
-		if (flags.name === undefined)
-		{
-			this.error("Either --name, --json, or --json-file is required");
-		}
-		let {name} = flags;
-		if (name === "-")
-		{
-			try
-			{
-				name = await readStdin();
-			}
-			catch (error)
-			{
-				this.error(error instanceof Error ? error.message : "Failed to read from stdin");
-			}
-		}
-
-		// An indented bullet outline on stdin becomes a node tree per top-level bullet
-		const outline = flags.name === "-" ? parseBulletOutline(name) : [];
-		if (outline.length > 0)
-		{
-			// Each tree lands at the same end of the parent, so --position top creates them last-first.
-			const ordered = flags.position === "top" ? outline.toReversed() : outline;
-			for (const tree of ordered)
-			{
-				// oxlint-disable-next-line no-await-in-loop -- trees must be created in order
-				await this.createTree(tree, flags, parentId, apiClient, cacheService, database);
-			}
-			return;
-		}
-
-		// Handle single node creation mode (original behavior)
 		await this.runSingleNodeMode(
 			{
 				...flags,
 				name,
 			},
 			parentId,
-			client,
+			cacheService,
 			database,
+			writes,
 		);
+	}
+
+	private async readStdinName(): Promise<string>
+	{
+		let input: string;
+		try
+		{
+			input = await readStdin();
+		}
+		catch (error)
+		{
+			this.error(error instanceof Error ? error.message : "Failed to read from stdin");
+		}
+		return input;
 	}
 
 	/**
 	 * `--create-path`: create missing parent segments. A missing year or month of the 📆 Calendar is ensured through
 	 * the internal API (upstream-shaped, with `calendar` metadata) so workflowy.com uses it; a name-only one would be
-	 * invisible there. Without internal auth the segments are created by name, with a warning.
+	 * invisible there.
 	 */
 	private async resolveCreatePath(
 		parentPath: string,
 		cacheService: CacheService,
-		apiClient: WorkflowyApiClient,
-		client: WorkflowyWriteThroughClient,
-		database: ReturnType<typeof createDatabase>,
+		writes: LocalWrites,
 	): Promise<string>
 	{
 		const calendarPath = calendarMonthPath(parentPath);
 		if (calendarPath === undefined)
 		{
-			return resolveOrCreateNodePath(parentPath, cacheService, apiClient);
+			return resolveOrCreateLocalPath(parentPath, cacheService, writes.local);
 		}
-		const adapter = internalAdapter(database, client);
-		if (adapter === undefined)
-		{
-			if (
-				cacheService.findNodeByPath(
-					parentPath
-						.split(",")
-						.slice(0, 3)
-						.map((part) => part.trim()),
-				) === null
-			)
-			{
-				this.logToStderr(
-					`warning: ${parentPath} will be created by name, without 📆 Calendar metadata; workflowy.com will not use those year/month nodes. Set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD, or run ./bin/run.js calendar day --date ${calendarPath.year}-${String(calendarPath.month).padStart(2, "0")}-01 --ensure instead.`,
-				);
-			}
-			return resolveOrCreateNodePath(parentPath, cacheService, apiClient);
-		}
-		const {dayId} = await adapter.ensureCalendarDay(
+		const {dayId} = await writes.adapter.ensureCalendarDay(
 			calendarPath.dateId,
 			{
 				stopAt: "month",
@@ -273,16 +253,13 @@ export default class Create extends Command
 		let current = dayId;
 		for (const segment of calendarPath.rest)
 		{
-			const existing = cacheService.getChildByName(current, segment);
 			current =
-				existing?.id ??
-				(
-					await client.createNode(
-						{
-							parent_id: current,
-							name: segment,
-						},
-					)
+				cacheService.getChildByName(current, segment)?.id ??
+				writes.local.createAt(
+					{
+						parentId: current,
+						name: segment,
+					},
 				).id;
 		}
 		return current;
@@ -301,13 +278,14 @@ export default class Create extends Command
 			"dry-run": boolean;
 		},
 		parentId: string | null,
-		client: WorkflowyWriteThroughClient,
+		cacheService: CacheService,
 		database: ReturnType<typeof createDatabase>,
+		writes: LocalWrites | undefined,
 	): Promise<void>
 	{
 		const {name} = flags;
 
-		if (flags["dry-run"])
+		if (writes === undefined)
 		{
 			// Home has no API key: a top-level create omits parent_id.
 			const requestBody:
@@ -357,60 +335,68 @@ export default class Create extends Command
 			const parentPath = pathBuilder.buildFullPath(parentId);
 			this.log(`Parent: ${parentPath}`);
 
-			const newNode = await client.createNode(
+			const targetId = localParent(database, parentId);
+			const {id} = writes.local.createAt(
 				{
-					parent_id: parentId,
+					parentId: targetId,
 					name,
-					note: flags.note,
-					layoutMode: flags["layout-mode"],
-					position: flags.position,
+					...(flags.note === undefined
+						? {}
+						:
+							{
+								note: flags.note,
+							}),
+					...(flags["layout-mode"] === undefined
+						? {}
+						:
+							{
+								layoutMode: flags["layout-mode"],
+							}),
+					...(flags.position === "top"
+						?
+							{
+								index: 0,
+							}
+						: {}),
 				},
 			);
-			await syncBacklinksIfLinked([newNode.id], [name, flags.note], database, client);
+			if (hasInternalLink(`${name} ${flags.note ?? ""}`))
+			{
+				writes.local.syncBacklinks([id]);
+			}
 			await adoptUnderCalendar(
 				{
 					rows: [
 						{
-							id: newNode.id,
+							id,
 							name,
 						},
 					],
-					parentId,
+					parentId: targetId,
 					database,
-					cache: new CacheService(database),
-					writeThrough: client,
-					warn: (message) =>
-					{
-						this.logToStderr(message);
-					},
+					cache: cacheService,
+					local: writes.local,
 				},
 			);
+			await drainAfterWrite(this, writes);
 
+			const createdAt = cacheService.getNode(id)?.createdAt ?? new Date();
 			this.log("");
 			this.log("Successfully created node");
-			this.log(`  ID: ${newNode.id}`);
-			this.log(`  Name: ${newNode.name}`);
-			this.log(`  Created: ${new Date(newNode.createdAt * 1000).toISOString()}`);
-			this.log(`  URL: ${getWorkflowyUrl(newNode.id)}`);
+			this.log(`  ID: ${id}`);
+			this.log(`  Name: ${name}`);
+			this.log(`  Created: ${createdAt.toISOString()}`);
+			this.log(`  URL: ${getWorkflowyUrl(id)}`);
 		}
 	}
 
 	/**
 	 * Create nodes from JSON input (tree structure)
 	 */
-	private async runJsonMode(
-		flags:
-		{
-			json?: string;
-			"json-file"?: string;
-			"dry-run": boolean;
-			position?: "top" | "bottom";
-		},
-		parentId: string | null,
-		apiClient: WorkflowyApiClient,
-		cacheService: CacheService,
-		database: ReturnType<typeof createDatabase>,
-	): Promise<void>
+	/**
+	 * The node tree of --json or --json-file
+	 */
+	private readJsonTree(flags: {json?: string; "json-file"?: string}): NodeTreeSpec
 	{
 		// Parse JSON input
 		let jsonInput: unknown;
@@ -449,76 +435,83 @@ export default class Create extends Command
 		{
 			this.error(`Invalid JSON structure: ${parseResult.error.message}`);
 		}
-
-		await this.createTree(parseResult.data, flags, parentId, apiClient, cacheService, database);
+		return parseResult.data;
 	}
 
 	/**
-	 * Create one node tree under the parent (or preview it with --dry-run)
+	 * Create node trees side by side under the parent, in one unit of work (or preview them with --dry-run)
 	 */
-	private async createTree(
-		nodeTree: NodeTreeSpec,
+	private async createTrees(
+		specs: readonly NodeTreeSpec[],
 		flags:
 		{
-			"dry-run": boolean;
 			position?: "top" | "bottom";
 		},
 		parentId: string | null,
-		apiClient: WorkflowyApiClient,
 		cacheService: CacheService,
 		database: ReturnType<typeof createDatabase>,
+		writes: LocalWrites | undefined,
 	): Promise<void>
 	{
-		if (flags["dry-run"])
+		if (writes === undefined)
 		{
-			this.dryRunJsonMode(nodeTree, parentId, database);
+			for (const spec of specs)
+			{
+				this.dryRunJsonMode(spec, parentId, database);
+			}
 			return;
 		}
 
-		// Create nodes recursively
 		this.log("Creating node tree...");
 		const pathBuilder = new PathBuilder(database);
 		const parentPath = pathBuilder.buildFullPath(parentId);
 		this.log(`Parent: ${parentPath}`);
 		this.log("");
 
-		const client = new WorkflowyWriteThroughClient(apiClient, cacheService);
-		const result = await createNodeTree(nodeTree, parentId, client, flags.position);
-		const linked = linkedCreatedNodes(nodeTree, result);
-		await syncBacklinksIfLinked(
-			linked.map(({id}) => id),
-			linked.map((node) => node.text),
-			database,
-			client,
-		);
-
-		await adoptUnderCalendar(
+		const created = specs.map((spec) => withIds(spec));
+		const targetId = localParent(database, parentId);
+		writes.local.createTreesAt(
 			{
-				rows: [
-					{
-						id: result.id,
-						name: nodeTree.name,
-					},
-				],
-				parentId,
-				database,
-				cache: cacheService,
-				writeThrough: client,
-				warn: (message) =>
-				{
-					this.logToStderr(message);
-				},
+				parentId: targetId,
+				...(flags.position === "top"
+					?
+						{
+							index: 0,
+						}
+					: {}),
+				trees: created.map(({tree}) => tree),
 			},
 		);
+		const linked = created.flatMap(({tree}) => linkedCreatedNodes(tree));
+		if (linked.length > 0)
+		{
+			writes.local.syncBacklinks(linked);
+		}
+		await adoptUnderCalendar(
+			{
+				rows: created.map(({node}) => (
+				{
+					id: node.id,
+					name: node.name,
+				})),
+				parentId: targetId,
+				database,
+				cache: cacheService,
+				local: writes.local,
+			},
+		);
+		await drainAfterWrite(this, writes);
 
-		// Output results
-		this.log("Successfully created node tree:");
-		this.printCreatedTree(result, 0);
+		for (const {node} of created)
+		{
+			this.log("Successfully created node tree:");
+			this.printCreatedTree(node, 0);
 
-		// Output JSON result for programmatic use
-		this.log("");
-		this.log("Created node IDs (JSON):");
-		this.log(JSON.stringify(this.flattenCreatedNodes(result), null, 2));
+			// Output JSON result for programmatic use
+			this.log("");
+			this.log("Created node IDs (JSON):");
+			this.log(JSON.stringify(this.flattenCreatedNodes(node), null, 2));
+		}
 	}
 
 	/**
@@ -638,31 +631,60 @@ export default class Create extends Command
 	}
 }
 
-/** Each created node whose spec text holds an internal link, with that text, depth-first. */
-function linkedCreatedNodes(
-	spec: NodeTreeSpec,
-	created: CreatedNodeTree,
-):
+/** A created node and its descendants, as the output lists them. */
+interface CreatedNodeTree
 {
 	id: string;
-	text: string;
-}[]
+	name: string;
+	children: CreatedNodeTree[];
+}
+
+/** A spec as a local tree with an id chosen for every node, and those ids as the output lists them. */
+function withIds(spec: NodeTreeSpec):
 {
-	const specText = `${spec.name} ${spec.note ?? ""}`;
-	return [
-		...(hasInternalLink(specText)
-			? [
-					{
-						id: created.id,
-						text: specText,
-					},
-				]
-			: []),
-		...(spec.children ?? []).flatMap((child, index) =>
+	tree: NewTree;
+	node: CreatedNodeTree;
+}
+{
+	const id = crypto.randomUUID();
+	const children = (spec.children ?? []).map((child) => withIds(child));
+	return {
+		tree:
 		{
-			const createdChild = created.children[index];
-			return createdChild === undefined ? [] : linkedCreatedNodes(child, createdChild);
-		}),
+			id,
+			name: spec.name,
+			...(spec.note === undefined
+				? {}
+				:
+					{
+						note: spec.note,
+					}),
+			...(spec.layoutMode === undefined
+				? {}
+				:
+					{
+						metadata:
+						{
+							layoutMode: spec.layoutMode,
+						},
+					}),
+			children: children.map(({tree}) => tree),
+		},
+		node:
+		{
+			id,
+			name: spec.name,
+			children: children.map(({node}) => node),
+		},
+	};
+}
+
+/** The ids of each node of a tree whose text holds an internal link, depth-first. */
+function linkedCreatedNodes(tree: NewTree): string[]
+{
+	return [
+		...(tree.id !== undefined && hasInternalLink(`${tree.name} ${tree.note ?? ""}`) ? [tree.id] : []),
+		...(tree.children ?? []).flatMap((child) => linkedCreatedNodes(child)),
 	];
 }
 

@@ -1,11 +1,14 @@
 import {WorkflowyApiClient} from "@outlinedb/shared/api";
 import {WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
+import type {NewTree} from "@outlinedb/shared/internal";
 import {Command, Flags} from "@oclif/core";
 import fs from "node:fs";
 import path from "node:path";
 import {z} from "zod";
 import {createDatabase} from "../../../db/index.js";
 import {CacheService} from "../../../services/cache.js";
+import {drainAfterWrite, openLocalWrites} from "../../../services/local-writes.js";
+import type {LocalWrites} from "../../../services/local-writes.js";
 import {logger} from "../../../services/logger.js";
 import {DEFAULT_DB_FILE} from "../../../db/default-db-file.js";
 
@@ -61,20 +64,19 @@ const DEFAULT_CALENDAR_ID = "8111d11c-b80e-f219-8ac3-08567aa37346";
 const STATE_FILE = "/tmp/otter_import_state.json";
 
 /**
- * Efficient Otter meeting import using multiline markdown.
- *
- * Uses ~12 POST calls per meeting instead of 88 (JSON mode).
+ * Otter meeting import using multiline markdown: each meeting is one tree, written locally in one unit of work, and
+ * one drain delivers the run to workflowy.com.
  */
 export default class Import extends Command
 {
 	static override description = "Import Otter meetings to Workflowy Calendar";
 
 	static override examples = [
-		"# Import meetings with 5 second delay between API calls",
+		"# Import new meetings",
 		"<%= config.bin %> <%= command.id %>",
 		"",
-		"# Import with custom delay and max count",
-		"<%= config.bin %> <%= command.id %> --delay 3 --max 10",
+		"# Import at most 10 meetings",
+		"<%= config.bin %> <%= command.id %> --max 10",
 		"",
 		"# Reset state and start fresh",
 		"<%= config.bin %> <%= command.id %> --reset",
@@ -82,13 +84,6 @@ export default class Import extends Command
 
 	static override flags =
 	{
-		delay: Flags.integer(
-			{
-				char: "d",
-				description: "Seconds between API calls",
-				default: 5,
-			},
-		),
 		max: Flags.integer(
 			{
 				char: "m",
@@ -116,9 +111,6 @@ export default class Import extends Command
 		),
 	};
 
-	private client!: WorkflowyWriteThroughClient;
-	private delay = 5;
-
 	public async run(): Promise<
 	{
 		imported: number;
@@ -126,8 +118,6 @@ export default class Import extends Command
 	}>
 	{
 		const {flags} = await this.parse(Import);
-
-		this.delay = flags.delay;
 
 		const apiKey = process.env.WORKFLOWY_API_KEY;
 		if (!apiKey)
@@ -138,10 +128,11 @@ export default class Import extends Command
 		const apiClient = new WorkflowyApiClient(apiKey, logger, process.env.WORKFLOWY_API_URL);
 		const database = createDatabase();
 		const cacheService = new CacheService(database);
-		this.client = new WorkflowyWriteThroughClient(apiClient, cacheService);
+		const writes = flags["dry-run"]
+			? undefined
+			: openLocalWrites(database, new WorkflowyWriteThroughClient(apiClient, cacheService));
 
 		this.log("=== Otter Import ===");
-		this.log(`Delay between meetings: ${flags.delay}s`);
 		if (flags.max > 0)
 		{
 			this.log(`Max meetings: ${flags.max}`);
@@ -207,13 +198,13 @@ export default class Import extends Command
 			}
 
 			// Import meeting
-			if (flags["dry-run"])
+			if (writes === undefined)
 			{
 				this.log(`  Would import: ${meeting.title}`);
 			}
 			else
 			{
-				const success = await this.importMeeting(meeting, flags["calendar-id"]);
+				const success = this.importMeeting(writes, meeting, flags["calendar-id"]);
 				if (success)
 				{
 					state.imported_count++;
@@ -232,6 +223,11 @@ export default class Import extends Command
 				this.log(`Reached max meetings limit (${flags.max})`);
 				break;
 			}
+		}
+
+		if (writes !== undefined && totalImported > 0)
+		{
+			await drainAfterWrite(this, writes);
 		}
 
 		this.log("");
@@ -287,119 +283,78 @@ export default class Import extends Command
 		}
 	}
 
-	private async importMeeting(meeting: Meeting, calendarId: string): Promise<boolean>
+	private importMeeting(writes: LocalWrites, meeting: Meeting, calendarId: string): boolean
 	{
 		this.log(`  Importing: ${meeting.title}`);
 
 		try
 		{
-			// Build time tag
-			const timeTag = this.formatTimeTag(meeting.start_time);
-
-			// 1. Create meeting header
-			const escapedTitle = this.escapeHtml(meeting.title);
-			const header = `<a href="https://otter.ai/u/${meeting.otid}">${escapedTitle}</a> #meeting ${timeTag}`;
-			const meetingNode = await this.client.createNode(
+			const children: NewTree[] = [
 				{
-					parent_id: calendarId,
-					name: header,
-					position: "bottom",
-				},
-			);
-			await this.sleep(this.delay);
-
-			this.log(`    Created meeting: ${meetingNode.id}`);
-
-			// 2. Create URL (leaf)
-			await this.client.createNode(
-				{
-					parent_id: meetingNode.id,
 					name: `otter.ai/u/${meeting.otid}`,
-					position: "bottom",
 				},
-			);
-			await this.sleep(this.delay);
-
-			// 3. Create Overview + summary
+			];
 			if (meeting.summary)
 			{
-				const escapedSummary = this.escapeHtml(meeting.summary);
-				const overviewMd = `- <b>Overview</b>\n  - ${escapedSummary}`;
-				await this.client.createNode(
+				children.push(
 					{
-						parent_id: meetingNode.id,
-						name: overviewMd,
-						position: "bottom",
+						name: `- <b>Overview</b>\n  - ${this.escapeHtml(meeting.summary)}`,
 					},
 				);
-				await this.sleep(this.delay);
 			}
-
-			// 4. Create Action Items
 			if (meeting.action_items && meeting.action_items.length > 0)
 			{
-				let actionMd = "- <b>Action Items</b>";
-
-				for (const item of meeting.action_items)
+				const lines = meeting.action_items.map((item) =>
 				{
-					const escapedText = this.escapeHtml(item.text);
 					const checkbox = item.completed ? "[x]" : "[ ]";
-
-					actionMd += item.assignee
-						? `\n  - ${checkbox} ${escapedText} (@${item.assignee})`
-						: `\n  - ${checkbox} ${escapedText}`;
-				}
-
-				await this.client.createNode(
+					const assignee = item.assignee ? ` (@${item.assignee})` : "";
+					return `\n  - ${checkbox} ${this.escapeHtml(item.text)}${assignee}`;
+				});
+				children.push(
 					{
-						parent_id: meetingNode.id,
-						name: actionMd,
-						position: "bottom",
+						name: `- <b>Action Items</b>${lines.join("")}`,
 					},
 				);
-				await this.sleep(this.delay);
-
-				this.log(`    Created ${meeting.action_items.length} action items`);
 			}
-
-			// 5. Create Outline
 			if (meeting.outline.length > 0)
 			{
-				// Create Outline header
-				const outlineNode = await this.client.createNode(
+				children.push(
 					{
-						parent_id: meetingNode.id,
 						name: "<b>Outline</b>",
-						position: "bottom",
+						children: meeting.outline.map((section) => (
+						{
+							name: [
+								`- <b>${this.escapeHtml(section.title)}</b>`,
+								...section.segments.map((segment) => `  - ${this.escapeHtml(segment)}`),
+							].join("\n"),
+						})),
 					},
 				);
-				await this.sleep(this.delay);
-
-				// Create each section with segments
-				for (const section of meeting.outline)
+			}
+			const header = `<a href="https://otter.ai/u/${meeting.otid}">${this.escapeHtml(meeting.title)}</a> #meeting ${this.formatTimeTag(meeting.start_time)}`;
+			const
+			{
+				ids: [meetingId],
+			} = writes.local.createTreesAt(
 				{
-					const escapedSectionTitle = this.escapeHtml(section.title);
-					let sectionMd = `- <b>${escapedSectionTitle}</b>`;
-
-					for (const segment of section.segments)
-					{
-						const escapedSegment = this.escapeHtml(segment);
-						sectionMd += `\n  - ${escapedSegment}`;
-					}
-
-					await this.client.createNode(
+					parentId: calendarId,
+					trees: [
 						{
-							parent_id: outlineNode.id,
-							name: sectionMd,
-							position: "bottom",
+							name: header,
+							children,
 						},
-					);
-					await this.sleep(this.delay);
-				}
-
+					],
+				},
+			);
+			this.log(`    Created meeting: ${meetingId}`);
+			if (meeting.action_items && meeting.action_items.length > 0)
+			{
+				this.log(`    Created ${meeting.action_items.length} action items`);
+			}
+			if (meeting.outline.length > 0)
+			{
 				this.log(`    Created ${meeting.outline.length} outline sections`);
 			}
-
 			return true;
 		}
 		catch (error)
@@ -438,14 +393,6 @@ export default class Import extends Command
 	private escapeHtml(text: string): string
 	{
 		return text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
-	}
-
-	private async sleep(seconds: number): Promise<void>
-	{
-		return new Promise((resolve) =>
-		{
-			setTimeout(resolve, seconds * 1000);
-		});
 	}
 
 	private findProjectRoot(): string

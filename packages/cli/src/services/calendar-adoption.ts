@@ -1,14 +1,13 @@
-import type {WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
+import type {LocalTreeWriter} from "@outlinedb/shared/cache";
 import {calendarParentContext, CALENDAR_ROOT_NAME} from "@outlinedb/shared/calendar-lookup";
-import {adoptAfterCreate, calendarAdoptWarning} from "@outlinedb/shared/internal";
-import {internalAdapter} from "@outlinedb/shared/node";
+import {adoptAfterCreate} from "@outlinedb/shared/internal";
 import type {createDatabase} from "../db/index.js";
 import type {CacheService} from "./cache.js";
 
 /**
  * Tag rows just written under `parentId` the way upstream's `mb1` hook tags a dated row added under a 📆 Calendar
- * month in the web client, so workflowy.com recognises it as that day. Without internal auth, warns through `warn`
- * instead. Parents outside the calendar, and rows with no date, are left alone.
+ * month in the web client, so workflowy.com recognises it as that day. The tag is local metadata, which the drain
+ * delivers with the write. Parents outside the calendar, and rows with no date, are left alone.
  */
 export async function adoptUnderCalendar(input: {
 	rows: readonly
@@ -19,44 +18,38 @@ export async function adoptUnderCalendar(input: {
 	parentId: string | null;
 	database: ReturnType<typeof createDatabase>;
 	cache: CacheService;
-	writeThrough: WorkflowyWriteThroughClient;
-	warn: (message: string) => void;
+	local: LocalTreeWriter;
 }): Promise<void>
 {
-	const {rows, parentId, database, cache, writeThrough, warn} = input;
+	const {rows, parentId, database, cache, local} = input;
 	if (parentId === null)
 	{
 		return;
 	}
-	let adapter: ReturnType<typeof internalAdapter>;
-	let adapterLoaded = false;
 	for (const {id, name} of rows)
 	{
 		// Read per row: a row adopted as a day makes its date taken for the next one.
-		const context = calendarParentContext(
-			{
-				db: database,
-				cache,
-			},
-			parentId,
-		);
-		if (!adapterLoaded && context !== undefined)
-		{
-			adapter = internalAdapter(database, writeThrough);
-			adapterLoaded = true;
-		}
-		const result = await adoptAfterCreate(
+		await adoptAfterCreate(
 			{
 				id,
 				name,
-				context,
-				adapter,
+				context: calendarParentContext(
+					{
+						db: database,
+						cache,
+					},
+					parentId,
+				),
+				adapter:
+				{
+					setNodeMetaValues: async (nodeId, changes) =>
+					{
+						local.setNodeMetaValues(nodeId, changes);
+						return Promise.resolve();
+					},
+				},
 			},
 		);
-		if (result.status === "unadoptable")
-		{
-			warn(calendarAdoptWarning(name));
-		}
 	}
 }
 

@@ -5,6 +5,7 @@ import {HOME_TARGET} from "@outlinedb/shared/types";
 import {Command, Flags} from "@oclif/core";
 import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";
+import {drainAfterWrite, localParent, openLocalWrites} from "../../services/local-writes.js";
 import {logger} from "../../services/logger.js";
 import {resolveNodeId, resolveParent} from "@outlinedb/shared/utils";
 
@@ -124,9 +125,6 @@ export default class Move extends Command
 		const sourcePath = pathBuilder.buildFullPath(nodeId);
 		const destinationPath = pathBuilder.buildFullPath(parentId);
 
-		// Convert position string to number for API (-1 for top, 0 for bottom)
-		const positionValue = flags.position === "top" ? -1 : flags.position === "bottom" ? 0 : undefined;
-
 		if (flags["dry-run"])
 		{
 			let command = `${this.config.bin} node:move --node-id ${nodeId} --parent-id ${parentId ?? HOME_TARGET}`;
@@ -155,7 +153,21 @@ export default class Move extends Command
 				this.log(`  Position: ${flags.position}`);
 			}
 
-			await client.moveNode(nodeId, parentId, positionValue);
+			const writes = openLocalWrites(database, client);
+			const targetId = localParent(database, parentId);
+			writes.local.moveTo(
+				{
+					ids: [nodeId],
+					parentId: targetId,
+					// Upstream's move lands at the top unless asked for the bottom.
+					...(flags.position === "bottom"
+						? {}
+						:
+							{
+								index: 0,
+							}),
+				},
+			);
 			await adoptUnderCalendar(
 				{
 					rows: [
@@ -164,16 +176,13 @@ export default class Move extends Command
 							name: cacheService.getNode(nodeId)?.name ?? "",
 						},
 					],
-					parentId,
+					parentId: targetId,
 					database,
 					cache: cacheService,
-					writeThrough: client,
-					warn: (message) =>
-					{
-						this.logToStderr(message);
-					},
+					local: writes.local,
 				},
 			);
+			await drainAfterWrite(this, writes);
 
 			this.log(`Successfully moved node`);
 		}

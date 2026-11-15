@@ -7,12 +7,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type {MockInstance} from "vite-plus/test";
-import {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import Delete from "../../../src/commands/node/delete.js";
 import {cleanupTestDatabase, createTestDatabase, nodeFixtures, seedTestData} from "../../db/migration-helper.js";
 import type {TestDatabase} from "../../db/migration-helper.js";
 import {createApiNode, createTestNode} from "../../helpers/node-fixtures.js";
 import {requestBody, requestJson} from "../../helpers/request-body.js";
+import {fakeUpstream, isolateInternalAuth, pendingOutbox} from "../../helpers/upstream-outbox.js";
 import {z} from "zod";
 
 const moveBodySchema = z.looseObject(
@@ -25,7 +25,7 @@ const moveBodySchema = z.looseObject(
 describe("node delete command", () =>
 {
 	let originalEnv: typeof process.env;
-	let fetchStub: MockInstance;
+	let fetchStub: MockInstance<typeof fetch>;
 	let tempDir: string;
 	let testDatabase: TestDatabase;
 
@@ -41,6 +41,7 @@ describe("node delete command", () =>
 		testDatabase = createTestDatabase(testDbPath);
 		process.env.OUTLINEDB_DB_PATH = testDbPath;
 		process.env.WORKFLOWY_API_KEY = "test-api-key";
+		isolateInternalAuth(tempDir);
 
 		fetchStub = vi.spyOn(globalThis, "fetch");
 	});
@@ -158,174 +159,143 @@ describe("node delete command", () =>
 		});
 	});
 
+	/** `Work > Tasks > Old Task` (`target-id`), the task holding `Step` (`step-id`). */
+	function seedTask(): void
+	{
+		seedTestData(
+			testDatabase,
+			nodeFixtures([
+				createTestNode(
+					{
+						id: "work-id",
+						name: "Work",
+						parentId: null,
+					},
+				),
+				createTestNode(
+					{
+						id: "tasks-id",
+						name: "Tasks",
+						parentId: "work-id",
+					},
+				),
+				createTestNode(
+					{
+						id: "target-id",
+						name: "Old Task",
+						parentId: "tasks-id",
+					},
+				),
+				createTestNode(
+					{
+						id: "step-id",
+						name: "Step",
+						parentId: "target-id",
+					},
+				),
+			]),
+		);
+	}
+
+	function liveIds(): string[]
+	{
+		return testDatabase.db
+			.select(
+				{
+					id: nodeContent.id,
+				},
+			)
+			.from(nodeContent)
+			.where(eq(nodeContent.systemTo, FAR_FUTURE_DATE))
+			.orderBy(nodeContent.id)
+			.all()
+			.map(({id}) => id);
+	}
+
 	describe("deleting by ID", () =>
 	{
-		it("sends DELETE request to correct URL", async () =>
+		it("deletes the node and its subtree locally, delivers the delete, and leaves nothing pending", async () =>
 		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "delete-id",
-							name: "To Delete",
-							parentId: null,
-						},
-					),
-				]),
-			);
+			seedTask();
+			const upstream = fakeUpstream(fetchStub, testDatabase, tempDir);
 
-			let capturedUrl: string | undefined;
-			let capturedMethod: string | undefined;
-			fetchStub.mockImplementation(async (url: RequestInfo | URL, init?: RequestInit) =>
+			const {stdout, error} = await captureOutput(async () =>
 			{
-				capturedUrl = url instanceof Request ? url.url : String(url);
-				capturedMethod = init?.method;
-				return Promise.resolve(
-					Response.json(
-						{},
-						{
-							status: 200,
-						},
-					),
-				);
-			});
-
-			await captureOutput(async () =>
-			{
-				try
-				{
-					await Delete.run(["--id", "delete-id"]);
-				}
-				catch
-				{
-					// Ignore errors from cache update
-				}
-			});
-
-			expect(capturedUrl).toBe("https://workflowy.com/api/v1/nodes/delete-id");
-			expect(capturedMethod).toBe("DELETE");
-		});
-	});
-
-	describe("backlinks", () =>
-	{
-		const LINK = '<a href="https://workflowy.com/#/0123456789ab">t</a>';
-
-		beforeEach(() =>
-		{
-			process.env.WORKFLOWY_USERNAME = "alice@example.com";
-			process.env.WORKFLOWY_PASSWORD = "hunter2";
-			process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "workflowy-session");
-		});
-
-		it("deletes the backlink items of the subtree's linked sources after the node is deleted", async () =>
-		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "delete-id",
-							name: `see ${LINK}`,
-							parentId: null,
-						},
-					),
-					createTestNode(
-						{
-							id: "plain-id",
-							name: "plain",
-							parentId: "delete-id",
-						},
-					),
-					createTestNode(
-						{
-							id: "linked-id",
-							name: "child",
-							note: LINK,
-							parentId: "delete-id",
-						},
-					),
-				]),
-			);
-			const order: string[] = [];
-			fetchStub.mockImplementation(async (_url: RequestInfo | URL, init?: RequestInit) =>
-			{
-				order.push(init?.method ?? "GET");
-				return Promise.resolve(
-					Response.json(
-						{},
-						{
-							status: 200,
-						},
-					),
-				);
-			});
-			const deleteBacklinks = vi
-				.spyOn(WorkflowyInternalAdapter.prototype, "deleteBacklinksOf")
-				.mockImplementation(async () =>
-				{
-					order.push("backlinks");
-					return Promise.resolve([]);
-				});
-
-			await captureOutput(async () =>
-			{
-				await Delete.run(["--id", "delete-id"]);
+				await Delete.run(["--id", "target-id"]);
 			});
 
 			expect(
 				{
-					order,
-					calls: deleteBacklinks.mock.calls,
+					error,
+					stdout,
+					live: liveIds(),
+					pushes: upstream.pushes,
+					pending: pendingOutbox(testDatabase),
 				},
 			).toStrictEqual(
 				{
-					order: ["DELETE", "backlinks"],
-					calls: [
+					error: undefined,
+					stdout: "Deleting node: Work > Tasks > Old Task\n\nWARNING: This will permanently delete the node and all its children!\n\nSuccessfully deleted node\n",
+					live: ["tasks-id", "work-id"],
+					pushes: [
 						[
 							{
-								ids: ["delete-id", "linked-id"],
-								mirrors: [],
+								type: "delete",
+								data:
+								{
+									projectid: "target-id",
+								},
 							},
 						],
 					],
+					pending: [],
 				},
 			);
 		});
 
-		it("leaves the internal API alone when nothing in the subtree links anywhere", async () =>
+		it("keeps the local delete and its outbox rows when the push fails, and exits non-zero", async () =>
 		{
-			seedTestData(
+			seedTask();
+			fakeUpstream(
+				fetchStub,
 				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "delete-id",
-							name: "plain",
-							parentId: null,
-						},
-					),
-				]),
+				tempDir,
+				{
+					failPush: true,
+				},
 			);
-			fetchStub.mockImplementation(async () =>
-				Promise.resolve(
-					Response.json(
-						{},
-						{
-							status: 200,
-						},
-					),
-				),
-			);
-			const deleteBacklinks = vi.spyOn(WorkflowyInternalAdapter.prototype, "deleteBacklinksOf");
 
-			await captureOutput(async () =>
+			const {error} = await captureOutput(async () =>
 			{
-				await Delete.run(["--id", "delete-id"]);
+				await Delete.run(["--id", "target-id"]);
 			});
 
-			expect(deleteBacklinks.mock.calls).toStrictEqual([]);
+			expect(
+				{
+					error: error?.message,
+					exit: error?.oclif?.exit,
+					live: liveIds(),
+					pending: pendingOutbox(testDatabase),
+				},
+			).toStrictEqual(
+				{
+					error: "Saved locally, but delivering it to workflowy.com failed: Workflowy rejected the operations: upstream_rejected\n2 outbox rows pending; they go out on the next write or with 'outbox drain'.",
+					exit: 1,
+					live: ["tasks-id", "work-id"],
+					pending: [
+						{
+							nodeId: "step-id",
+							aspect: "delete",
+							lastError: "Workflowy rejected the operations: upstream_rejected",
+						},
+						{
+							nodeId: "target-id",
+							aspect: "delete",
+							lastError: "Workflowy rejected the operations: upstream_rejected",
+						},
+					],
+				},
+			);
 		});
 	});
 
@@ -333,60 +303,25 @@ describe("node delete command", () =>
 	{
 		it("resolves path to correct node ID", async () =>
 		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "work-id",
-							name: "Work",
-							parentId: null,
-						},
-					),
-					createTestNode(
-						{
-							id: "tasks-id",
-							name: "Tasks",
-							parentId: "work-id",
-						},
-					),
-					createTestNode(
-						{
-							id: "target-id",
-							name: "Old Task",
-							parentId: "tasks-id",
-						},
-					),
-				]),
+			seedTask();
+			fakeUpstream(fetchStub, testDatabase, tempDir);
+
+			const {error} = await captureOutput(async () =>
+			{
+				await Delete.run(["--path", "Work,Tasks,Old Task"]);
+			});
+
+			expect(
+				{
+					error,
+					live: liveIds(),
+				},
+			).toStrictEqual(
+				{
+					error: undefined,
+					live: ["tasks-id", "work-id"],
+				},
 			);
-
-			let capturedUrl: string | undefined;
-			fetchStub.mockImplementation(async (url: RequestInfo | URL, _init?: RequestInit) =>
-			{
-				capturedUrl = url instanceof Request ? url.url : String(url);
-				return Promise.resolve(
-					Response.json(
-						{},
-						{
-							status: 200,
-						},
-					),
-				);
-			});
-
-			await captureOutput(async () =>
-			{
-				try
-				{
-					await Delete.run(["--path", "Work,Tasks,Old Task"]);
-				}
-				catch
-				{
-					// Ignore errors from cache update
-				}
-			});
-
-			expect(capturedUrl).toBe("https://workflowy.com/api/v1/nodes/target-id");
 		});
 
 		it("errors when path not found", async () =>
@@ -405,57 +340,6 @@ describe("node delete command", () =>
 
 			await expect(Delete.run(["--path", "Missing,Path"])).rejects.toThrow(
 				"Node not found at path: Missing > Path",
-			);
-		});
-	});
-
-	describe("output", () =>
-	{
-		it("displays full path when deleting", async () =>
-		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "work-id",
-							name: "Work",
-							parentId: null,
-						},
-					),
-					createTestNode(
-						{
-							id: "target-id",
-							name: "Target",
-							parentId: "work-id",
-						},
-					),
-				]),
-			);
-
-			fetchStub.mockResolvedValue(
-				Response.json(
-					{},
-					{
-						status: 200,
-					},
-				),
-			);
-
-			const {stdout} = await captureOutput(async () =>
-			{
-				try
-				{
-					await Delete.run(["--id", "target-id"]);
-				}
-				catch
-				{
-					// Ignore errors from cache update
-				}
-			});
-
-			expect(stdout).toBe(
-				"Deleting node: Work > Target\n\nWARNING: This will permanently delete the node and all its children!\n\nSuccessfully deleted node\n",
 			);
 		});
 	});
@@ -729,7 +613,7 @@ describe("node delete command", () =>
 						"WARNING: This will permanently delete the node and all its children, except the nodes kept above!",
 						"",
 					].join("\n"),
-					calls: ["GET https://workflowy.com/api/v1/nodes?parent_id=agendas-id"],
+					calls: [],
 				},
 			);
 		});
@@ -764,7 +648,7 @@ describe("node delete command", () =>
 						"NOTE: Nothing is deleted: the node has a mirror elsewhere, so it moves into that mirror's place.",
 						"",
 					].join("\n"),
-					calls: ["GET https://workflowy.com/api/v1/nodes?parent_id=task-b-id"],
+					calls: [],
 				},
 			);
 		});
@@ -803,7 +687,7 @@ describe("node delete command", () =>
 
 		it("moves an original with a mirror elsewhere into the mirror slot before deleting the node, reports it, and updates the cache", async () =>
 		{
-			const calls = recordCalls();
+			const upstream = fakeUpstream(fetchStub, testDatabase, tempDir);
 
 			const {stdout} = await captureOutput(async () =>
 			{
@@ -813,7 +697,7 @@ describe("node delete command", () =>
 			expect(
 				{
 					stdout,
-					calls,
+					pushes: upstream.pushes,
 					cache: cacheState(),
 				},
 			).toStrictEqual(
@@ -833,15 +717,32 @@ describe("node delete command", () =>
 						"Kept Projects > Task A, now at Agendas > Task A",
 						"",
 					].join("\n"),
-					calls: [
-						"GET https://workflowy.com/api/v1/nodes?parent_id=agendas-id",
-						"DELETE https://workflowy.com/api/v1/nodes/mirror-in-id/mirror",
-						"DELETE https://workflowy.com/api/v1/nodes/mirror-nested-id/mirror",
-						"DELETE https://workflowy.com/api/v1/nodes/mirror-out-id/mirror",
-						'POST https://workflowy.com/api/v1/nodes/task-a-id/move {"parent_id":"agendas-id","position":"top"}',
-						"GET https://workflowy.com/api/v1/nodes/task-a-id",
-						"GET https://workflowy.com/api/v1/nodes?parent_id=agendas-id",
-						"DELETE https://workflowy.com/api/v1/nodes/projects-id",
+					pushes: [
+						[
+							{
+								type: "move",
+								data:
+								{
+									projectid: "task-a-id",
+									parentid: "agendas-id",
+									priority: 0,
+								},
+							},
+							{
+								type: "delete",
+								data:
+								{
+									projectid: "mirror-out-id",
+								},
+							},
+							{
+								type: "delete",
+								data:
+								{
+									projectid: "projects-id",
+								},
+							},
+						],
 					],
 					cache:
 					{
@@ -869,9 +770,9 @@ describe("node delete command", () =>
 			);
 		});
 
-		it("removes a mirror through the mirror endpoint", async () =>
+		it("removes only the mirror", async () =>
 		{
-			const calls = recordCalls();
+			const upstream = fakeUpstream(fetchStub, testDatabase, tempDir);
 
 			const {stdout} = await captureOutput(async () =>
 			{
@@ -881,7 +782,7 @@ describe("node delete command", () =>
 			expect(
 				{
 					stdout,
-					calls,
+					pushes: upstream.pushes,
 					cache: cacheState(),
 				},
 			).toStrictEqual(
@@ -894,7 +795,17 @@ describe("node delete command", () =>
 						"Successfully removed mirror",
 						"",
 					].join("\n"),
-					calls: ["DELETE https://workflowy.com/api/v1/nodes/mirror-out-id/mirror"],
+					pushes: [
+						[
+							{
+								type: "delete",
+								data:
+								{
+									projectid: "mirror-out-id",
+								},
+							},
+						],
+					],
 					cache:
 					{
 						nodes: [

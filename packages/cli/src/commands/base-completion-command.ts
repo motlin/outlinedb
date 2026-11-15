@@ -1,8 +1,10 @@
 import {WorkflowyApiClient} from "@outlinedb/shared/api";
 import {PathBuilder, WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
+import type {LocalTreeWriter} from "@outlinedb/shared/cache";
 import {Command, Flags} from "@oclif/core";
 import {createDatabase} from "../db/index.js";
 import {CacheService} from "../services/cache.js";
+import {drainAfterWrite, openLocalWrites} from "../services/local-writes.js";
 import {logger} from "../services/logger.js";
 import {resolveNodeId} from "@outlinedb/shared/utils";
 
@@ -39,7 +41,7 @@ export abstract class BaseCompletionCommand extends Command
 	protected abstract get actionPastTense(): string;
 	protected abstract get actionPresent(): string;
 
-	protected abstract executeAction(client: WorkflowyWriteThroughClient, nodeId: string): Promise<void>;
+	protected abstract executeAction(local: LocalTreeWriter, nodeId: string): void;
 
 	public async run(): Promise<void>
 	{
@@ -81,7 +83,9 @@ export abstract class BaseCompletionCommand extends Command
 		{
 			this.log(`${this.actionPresent}: ${fullPath}`);
 
-			await this.executeAction(client, nodeId);
+			const writes = openLocalWrites(database, client);
+			this.executeAction(writes.local, nodeId);
+			await drainAfterWrite(this, writes);
 
 			this.log("");
 			this.log(`✓ Successfully ${this.actionPastTense}`);

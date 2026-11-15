@@ -1,24 +1,21 @@
 import {it, vi, afterEach, expect, describe, beforeEach} from "vite-plus/test";
 import {captureOutput} from "@oclif/test";
-import {nodeContent} from "@outlinedb/shared/db";
-import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
-import {and, eq} from "drizzle-orm";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type {MockInstance} from "vite-plus/test";
 import Move from "../../../src/commands/node/move.js";
+import {CacheService} from "../../../src/services/cache.js";
 import {cleanupTestDatabase, createTestDatabase, nodeFixtures, seedTestData} from "../../db/migration-helper.js";
 import type {TestDatabase} from "../../db/migration-helper.js";
 import {seedTaggedCalendar} from "../../helpers/calendar-fixture.js";
 import {createTestNode} from "../../helpers/node-fixtures.js";
-import {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
-import {requestJson} from "../../helpers/request-body.js";
+import {fakeUpstream, isolateInternalAuth, pendingOutbox} from "../../helpers/upstream-outbox.js";
 
 describe("node:move command", () =>
 {
 	let originalEnv: typeof process.env;
-	let fetchStub: MockInstance;
+	let fetchStub: MockInstance<typeof fetch>;
 	let tempDir: string;
 	let testDatabase: TestDatabase;
 
@@ -34,6 +31,7 @@ describe("node:move command", () =>
 		testDatabase = createTestDatabase(testDbPath);
 		process.env.OUTLINEDB_DB_PATH = testDbPath;
 		process.env.WORKFLOWY_API_KEY = "test-api-key";
+		isolateInternalAuth(tempDir);
 
 		fetchStub = vi.spyOn(globalThis, "fetch");
 	});
@@ -195,315 +193,222 @@ describe("node:move command", () =>
 		});
 	});
 
-	/**
-	 * Answer a move with success, a GET of the moved node with `moved`, and the
-	 * re-read of its new parent's children with `moved` alone. Returns each
-	 * request as `METHOD url` and each request body, in order.
-	 */
-	function fakeMove(moved: {id: string; name: string; parent_id: string | null; priority: number}):
+	/** `Work > Source` and `Target > Existing` at Home, with `extra` nodes. */
+	function seedOutline(...extra: ReturnType<typeof createTestNode>[]): void
 	{
-		requests: string[];
-		bodies: unknown[];
-	}
-	{
-		const now = Math.floor(Date.now() / 1000);
-		const node =
-		{
-			...moved,
-			note: null,
-			completed: false,
-			createdAt: now,
-			modifiedAt: now,
-			completedAt: null,
-			data: {},
-		};
-		const requests: string[] = [];
-		const bodies: unknown[] = [];
-		fetchStub.mockImplementation(async (url: RequestInfo | URL, init?: RequestInit) =>
-		{
-			const urlStr = url instanceof Request ? url.url : String(url);
-			const method = init?.method ?? "GET";
-			requests.push(`${method} ${urlStr}`);
-			if (method === "POST" && urlStr.endsWith(`/nodes/${moved.id}/move`))
-			{
-				bodies.push(requestJson(init));
-				return Promise.resolve(
-					Response.json(
-						{},
-						{
-							status: 200,
-						},
-					),
-				);
-			}
-			if (method === "GET" && urlStr.endsWith(`/nodes/${moved.id}`))
-			{
-				return Promise.resolve(
-					Response.json(
-						{
-							node,
-						},
-						{
-							status: 200,
-						},
-					),
-				);
-			}
-			const childrenUrl =
-				moved.parent_id === null
-					? "https://workflowy.com/api/v1/nodes"
-					: `https://workflowy.com/api/v1/nodes?parent_id=${moved.parent_id}`;
-			if (method === "GET" && urlStr === childrenUrl)
-			{
-				return Promise.resolve(
-					Response.json(
-						{
-							nodes: [node],
-						},
-						{
-							status: 200,
-						},
-					),
-				);
-			}
-			return Promise.resolve(
-				Response.json(
+		seedTestData(
+			testDatabase,
+			nodeFixtures([
+				...extra,
+				createTestNode(
 					{
-						error: "Not found",
-					},
-					{
-						status: 404,
+						id: "work-id",
+						name: "Work",
+						parentId: null,
 					},
 				),
-			);
-		});
-		return {
-			requests,
-			bodies,
-		};
+				createTestNode(
+					{
+						id: "source-id",
+						name: "Source",
+						parentId: "work-id",
+					},
+				),
+				createTestNode(
+					{
+						id: "target-id",
+						name: "Target",
+						parentId: null,
+					},
+				),
+				createTestNode(
+					{
+						id: "existing-id",
+						name: "Existing",
+						parentId: "target-id",
+					},
+				),
+			]),
+		);
+	}
+
+	/** A parent's child ids in order, as the local tables hold them. */
+	function childIds(parentId: string | null): string[]
+	{
+		return new CacheService(testDatabase.db).getChildren(parentId).map((child) => child.id);
 	}
 
 	describe("moving by ID", () =>
 	{
-		it("moves node via API", async () =>
+		it("moves the node locally to the top of the parent, delivers the move, and leaves nothing pending", async () =>
 		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "source-id",
-							name: "Source",
-							parentId: null,
-						},
-					),
-					createTestNode(
-						{
-							id: "target-id",
-							name: "Target",
-							parentId: null,
-						},
-					),
-				]),
-			);
-			const {requests, bodies} = fakeMove(
-				{
-					id: "source-id",
-					name: "Source",
-					parent_id: "target-id",
-					priority: 0,
-				},
-			);
+			seedOutline();
+			const upstream = fakeUpstream(fetchStub, testDatabase, tempDir);
 
-			const {stdout} = await captureOutput(async () =>
+			const {stdout, error} = await captureOutput(async () =>
 			{
 				await Move.run(["--node-id", "source-id", "--parent-id", "target-id"]);
 			});
 
 			expect(
 				{
+					error,
 					stdout,
-					requests,
-					bodies,
+					work: childIds("work-id"),
+					target: childIds("target-id"),
+					pushes: upstream.pushes,
+					pending: pendingOutbox(testDatabase),
 				},
 			).toStrictEqual(
 				{
-					stdout: "Moving:\n  From: Source\n  To:   Target\nSuccessfully moved node\n",
-					requests: [
-						"POST https://workflowy.com/api/v1/nodes/source-id/move",
-						"GET https://workflowy.com/api/v1/nodes/source-id",
-						"GET https://workflowy.com/api/v1/nodes?parent_id=target-id",
+					error: undefined,
+					stdout: "Moving:\n  From: Work > Source\n  To:   Target\nSuccessfully moved node\n",
+					work: [],
+					target: ["source-id", "existing-id"],
+					pushes: [
+						[
+							{
+								type: "move",
+								data:
+								{
+									projectid: "source-id",
+									parentid: "target-id",
+									priority: 0,
+								},
+							},
+						],
 					],
-					bodies: [
-						{
-							parent_id: "target-id",
-						},
-					],
+					pending: [],
 				},
 			);
 		});
 
-		it("includes position in API request for top", async () =>
+		it("moves to the bottom with --position bottom", async () =>
 		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "source-id",
-							name: "Source",
-							parentId: null,
-						},
-					),
-					createTestNode(
-						{
-							id: "target-id",
-							name: "Target",
-							parentId: null,
-						},
-					),
-				]),
-			);
-			const {bodies} = fakeMove(
-				{
-					id: "source-id",
-					name: "Source",
-					parent_id: "target-id",
-					priority: -1,
-				},
-			);
+			seedOutline();
+			fakeUpstream(fetchStub, testDatabase, tempDir);
 
-			await captureOutput(async () =>
-			{
-				await Move.run(["--node-id", "source-id", "--parent-id", "target-id", "--position", "top"]);
-			});
-
-			expect(bodies).toStrictEqual([
-				{
-					parent_id: "target-id",
-					position: "top",
-				},
-			]);
-		});
-
-		it("includes position in API request for bottom", async () =>
-		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "source-id",
-							name: "Source",
-							parentId: null,
-						},
-					),
-					createTestNode(
-						{
-							id: "target-id",
-							name: "Target",
-							parentId: null,
-						},
-					),
-				]),
-			);
-			const {bodies} = fakeMove(
-				{
-					id: "source-id",
-					name: "Source",
-					parent_id: "target-id",
-					priority: 0,
-				},
-			);
-
-			await captureOutput(async () =>
+			const {error} = await captureOutput(async () =>
 			{
 				await Move.run(["--node-id", "source-id", "--parent-id", "target-id", "--position", "bottom"]);
 			});
 
-			expect(bodies).toStrictEqual([
+			expect(
 				{
-					parent_id: "target-id",
-					position: "bottom",
+					error,
+					target: childIds("target-id"),
 				},
-			]);
+			).toStrictEqual(
+				{
+					error: undefined,
+					target: ["existing-id", "source-id"],
+				},
+			);
+		});
+
+		it("keeps the local move and its outbox row when the push fails, and exits non-zero", async () =>
+		{
+			seedOutline();
+			fakeUpstream(
+				fetchStub,
+				testDatabase,
+				tempDir,
+				{
+					failPush: true,
+				},
+			);
+
+			const {error} = await captureOutput(async () =>
+			{
+				await Move.run(["--node-id", "source-id", "--parent-id", "target-id"]);
+			});
+
+			expect(
+				{
+					error: error?.message,
+					exit: error?.oclif?.exit,
+					target: childIds("target-id"),
+					pending: pendingOutbox(testDatabase),
+				},
+			).toStrictEqual(
+				{
+					error: "Saved locally, but delivering it to workflowy.com failed: Workflowy rejected the operations: upstream_rejected\n1 outbox row pending; they go out on the next write or with 'outbox drain'.",
+					exit: 1,
+					target: ["source-id", "existing-id"],
+					pending: [
+						{
+							nodeId: "source-id",
+							aspect: "placement",
+							lastError: "Workflowy rejected the operations: upstream_rejected",
+						},
+					],
+				},
+			);
 		});
 	});
 
 	describe("calendar adoption", () =>
 	{
-		const day21 = '<time startYear="2026" startMonth="10" startDay="21">Wed, Oct 21, 2026</time>';
-
-		it("tags a dated row moved under a calendar month as that day", async () =>
+		it("tags a dated row moved under a calendar month as that day, and delivers the tag with the move", async () =>
 		{
+			// `stray` is a dated row at Home.
 			seedTaggedCalendar(testDatabase);
-			process.env.WORKFLOWY_USERNAME = "alice@example.com";
-			process.env.WORKFLOWY_PASSWORD = "hunter2";
-			process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "workflowy-session");
-			fakeMove(
-				{
-					id: "stray",
-					name: day21,
-					parent_id: "m10",
-					priority: 0,
-				},
-			);
-			const moveApi = fetchStub.getMockImplementation()!;
-			fetchStub.mockImplementation(async (url: RequestInfo | URL, init?: RequestInit) =>
-			{
-				if ((url instanceof Request ? url.url : String(url)).endsWith("/nodes/m10"))
-				{
-					const now = Math.floor(Date.now() / 1000);
-					const node =
-					{
-						id: "m10",
-						name: "10",
-						note: null,
-						parent_id: "y2026",
-						priority: 0,
-						completed: false,
-					};
-					return Promise.resolve(
-						Response.json(
-							{
-								node:
-								{
-									...node,
-									createdAt: now,
-									modifiedAt: now,
-									completedAt: null,
-									data: {},
-								},
-							},
-						),
-					);
-				}
-				return moveApi(url, init) as Promise<Response>;
-			});
-			const setMeta = vi.spyOn(WorkflowyInternalAdapter.prototype, "setNodeMetaValues").mockResolvedValue();
+			const upstream = fakeUpstream(fetchStub, testDatabase, tempDir);
 
-			await captureOutput(async () =>
+			const {error} = await captureOutput(async () =>
 			{
 				await Move.run(["--node-id", "stray", "--parent-id", "m10"]);
 			});
 
-			expect(setMeta.mock.calls).toStrictEqual([
-				[
-					"stray",
-					[
-						{
-							path: ["calendar"],
-							value:
+			expect(
+				{
+					error,
+					pushes: upstream.pushes,
+				},
+			).toStrictEqual(
+				{
+					error: undefined,
+					pushes: [
+						[
 							{
-								level: "day",
-								value: "21",
-								timestamp: new Date(2026, 9, 21).getTime(),
-								dateId: 20_261_021,
+								type: "move",
+								data:
+								{
+									projectid: "stray",
+									parentid: "m10",
+									priority: 0,
+								},
 							},
-						},
+							{
+								type: "edit",
+								data:
+								{
+									projectid: "stray",
+									metadataPatches: [
+										{
+											op: "add",
+											path: ["calendar"],
+											value:
+											{
+												level: "day",
+												value: "21",
+												timestamp: new Date(2026, 9, 21).getTime(),
+												dateId: 20_261_021,
+											},
+										},
+									],
+									metadataInversePatches: [
+										{
+											op: "remove",
+											path: ["calendar"],
+										},
+									],
+								},
+							},
+						],
 					],
-				],
-			]);
+				},
+			);
 		});
 	});
 
@@ -511,72 +416,25 @@ describe("node:move command", () =>
 	{
 		it("resolves source and target paths", async () =>
 		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "work-id",
-							name: "Work",
-							parentId: null,
-						},
-					),
-					createTestNode(
-						{
-							id: "tasks-id",
-							name: "Tasks",
-							parentId: "work-id",
-						},
-					),
-					createTestNode(
-						{
-							id: "source-id",
-							name: "My Task",
-							parentId: "tasks-id",
-						},
-					),
-					createTestNode(
-						{
-							id: "archive-id",
-							name: "Archive",
-							parentId: "work-id",
-						},
-					),
-				]),
-			);
-			const {requests, bodies} = fakeMove(
-				{
-					id: "source-id",
-					name: "My Task",
-					parent_id: "archive-id",
-					priority: 0,
-				},
-			);
+			seedOutline();
+			fakeUpstream(fetchStub, testDatabase, tempDir);
 
-			const {stdout} = await captureOutput(async () =>
+			const {stdout, error} = await captureOutput(async () =>
 			{
-				await Move.run(["--node-path", "Work,Tasks,My Task", "--parent-path", "Work,Archive"]);
+				await Move.run(["--node-path", "Work,Source", "--parent-path", "Target,Existing"]);
 			});
 
 			expect(
 				{
+					error,
 					stdout,
-					requests,
-					bodies,
+					existing: childIds("existing-id"),
 				},
 			).toStrictEqual(
 				{
-					stdout: "Moving:\n  From: Work > Tasks > My Task\n  To:   Work > Archive\nSuccessfully moved node\n",
-					requests: [
-						"POST https://workflowy.com/api/v1/nodes/source-id/move",
-						"GET https://workflowy.com/api/v1/nodes/source-id",
-						"GET https://workflowy.com/api/v1/nodes?parent_id=archive-id",
-					],
-					bodies: [
-						{
-							parent_id: "archive-id",
-						},
-					],
+					error: undefined,
+					stdout: "Moving:\n  From: Work > Source\n  To:   Target > Existing\nSuccessfully moved node\n",
+					existing: ["source-id"],
 				},
 			);
 		});
@@ -584,37 +442,18 @@ describe("node:move command", () =>
 
 	describe("system targets", () =>
 	{
-		it("moves to inbox system target via --parent-id", async () =>
+		it("moves to the account's Inbox node via --parent-id inbox", async () =>
 		{
-			// The API accepts 'inbox' as parent_id on move but 404s on GET /nodes/inbox,
-			// so the real parent is learned from the moved node.
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "inbox-uuid",
-							name: "Inbox",
-							parentId: null,
-						},
-					),
-					createTestNode(
-						{
-							id: "source-id",
-							name: "Source",
-							parentId: null,
-						},
-					),
-				]),
+			seedOutline(
+				createTestNode(
+					{
+						id: "inbox-uuid",
+						name: "Inbox",
+						parentId: null,
+					},
+				),
 			);
-			const {requests, bodies} = fakeMove(
-				{
-					id: "source-id",
-					name: "Source",
-					parent_id: "inbox-uuid",
-					priority: 0,
-				},
-			);
+			fakeUpstream(fetchStub, testDatabase, tempDir);
 
 			const {error} = await captureOutput(async () =>
 			{
@@ -624,41 +463,14 @@ describe("node:move command", () =>
 			expect(
 				{
 					error,
-					requests,
-					bodies,
+					inbox: childIds("inbox-uuid"),
 				},
 			).toStrictEqual(
 				{
 					error: undefined,
-					requests: [
-						"POST https://workflowy.com/api/v1/nodes/source-id/move",
-						"GET https://workflowy.com/api/v1/nodes/source-id",
-						"GET https://workflowy.com/api/v1/nodes?parent_id=inbox-uuid",
-					],
-					bodies: [
-						{
-							parent_id: "inbox",
-						},
-					],
+					inbox: ["source-id"],
 				},
 			);
-			expect(
-				testDatabase.db
-					.select(
-						{
-							id: nodeContent.id,
-							parentId: nodeContent.parentId,
-						},
-					)
-					.from(nodeContent)
-					.where(and(eq(nodeContent.id, "source-id"), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
-					.all(),
-			).toStrictEqual([
-				{
-					id: "source-id",
-					parentId: "inbox-uuid",
-				},
-			]);
 		});
 	});
 
@@ -697,128 +509,41 @@ describe("node:move command", () =>
 			expect(fetchStub.mock.calls).toStrictEqual([]);
 		});
 
-		it("moves to the top level by omitting parent_id, and caches a null parent", async () =>
+		it("moves to the top level", async () =>
 		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "work-id",
-							name: "Work",
-							parentId: null,
-						},
-					),
-					createTestNode(
-						{
-							id: "source-id",
-							name: "Source",
-							parentId: "work-id",
-						},
-					),
-				]),
-			);
-			const {requests, bodies} = fakeMove(
-				{
-					id: "source-id",
-					name: "Source",
-					parent_id: null,
-					priority: 0,
-				},
-			);
+			seedOutline();
+			const upstream = fakeUpstream(fetchStub, testDatabase, tempDir);
 
-			const {stdout} = await captureOutput(async () =>
+			const {error} = await captureOutput(async () =>
 			{
-				await Move.run(["--node-id", "source-id", "--parent-id", "home", "--position", "top"]);
+				await Move.run(["--node-id", "source-id", "--parent-id", "home"]);
 			});
 
 			expect(
 				{
-					stdout,
-					requests,
-					bodies,
+					error,
+					home: childIds(null),
+					pushes: upstream.pushes,
 				},
 			).toStrictEqual(
 				{
-					stdout: "Moving:\n  From: Work > Source\n  To:   Home\n  Position: top\nSuccessfully moved node\n",
-					requests: [
-						"POST https://workflowy.com/api/v1/nodes/source-id/move",
-						"GET https://workflowy.com/api/v1/nodes/source-id",
-						"GET https://workflowy.com/api/v1/nodes",
-					],
-					bodies: [
-						{
-							position: "top",
-						},
+					error: undefined,
+					home: ["source-id", "target-id", "work-id"],
+					pushes: [
+						[
+							{
+								type: "move",
+								data:
+								{
+									projectid: "source-id",
+									parentid: "None",
+									priority: 0,
+								},
+							},
+						],
 					],
 				},
 			);
-			expect(
-				testDatabase.db
-					.select(
-						{
-							id: nodeContent.id,
-							parentId: nodeContent.parentId,
-						},
-					)
-					.from(nodeContent)
-					.where(and(eq(nodeContent.id, "source-id"), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
-					.all(),
-			).toStrictEqual([
-				{
-					id: "source-id",
-					parentId: null,
-				},
-			]);
-		});
-	});
-
-	describe("output", () =>
-	{
-		it("displays from and to paths", async () =>
-		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "work-id",
-							name: "Work",
-							parentId: null,
-						},
-					),
-					createTestNode(
-						{
-							id: "source-id",
-							name: "Source",
-							parentId: "work-id",
-						},
-					),
-					createTestNode(
-						{
-							id: "target-id",
-							name: "Target",
-							parentId: null,
-						},
-					),
-				]),
-			);
-
-			fetchStub.mockResolvedValue(
-				Response.json(
-					{},
-					{
-						status: 200,
-					},
-				),
-			);
-
-			const {stdout} = await captureOutput(async () =>
-			{
-				await Move.run(["--node-id", "source-id", "--parent-id", "target-id"]);
-			});
-
-			expect(stdout).toBe("Moving:\n  From: Work > Source\n  To:   Target\n");
 		});
 	});
 

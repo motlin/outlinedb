@@ -1,23 +1,34 @@
 import {it, vi, afterEach, expect, describe, beforeEach} from "vite-plus/test";
 import {captureOutput} from "@oclif/test";
-import {nodeContent} from "@outlinedb/shared/db";
-import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
-import {and, eq} from "drizzle-orm";
+import {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {Readable} from "node:stream";
 import type {MockInstance} from "vite-plus/test";
-import {z} from "zod";
-import {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
-import {storeTreeTxId} from "@outlinedb/shared/cache";
 import Create from "../../../src/commands/node/create.js";
+import {CacheService} from "../../../src/services/cache.js";
 import {cleanupTestDatabase, createTestDatabase, nodeFixtures, seedTestData} from "../../db/migration-helper.js";
 import type {TestDatabase} from "../../db/migration-helper.js";
 import {seedTaggedCalendar} from "../../helpers/calendar-fixture.js";
 import {createTestNode} from "../../helpers/node-fixtures.js";
-import {catchUpResponse} from "../../helpers/internal-catch-up.js";
-import {requestBody, requestJson} from "../../helpers/request-body.js";
+import {fakeUpstream, isolateInternalAuth, pendingOutbox} from "../../helpers/upstream-outbox.js";
+import type {UpstreamFake} from "../../helpers/upstream-outbox.js";
+
+/** The `n`th id the command generates: the internal client's transient id takes the first. */
+function uuid(n: number): string
+{
+	return `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+}
+
+/** A parent's children in order, as the local tables hold them, each with its own children. */
+interface LocalTree
+{
+	id: string;
+	name: string | null;
+	note?: string;
+	children?: LocalTree[];
+}
 
 describe("node create command", () =>
 {
@@ -38,21 +49,21 @@ describe("node create command", () =>
 		testDatabase = createTestDatabase(testDbPath);
 		process.env.OUTLINEDB_DB_PATH = testDbPath;
 		process.env.WORKFLOWY_API_KEY = "test-api-key";
+		isolateInternalAuth(tempDir);
 
 		fetchStub = vi.spyOn(globalThis, "fetch");
-
-		vi.useFakeTimers(
-			{
-				shouldAdvanceTime: true,
-			},
-		);
-		vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+		let generated = 0;
+		vi.spyOn(crypto, "randomUUID").mockImplementation(() =>
+		{
+			generated += 1;
+			// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- a well-formed UUID
+			return uuid(generated) as ReturnType<typeof crypto.randomUUID>;
+		});
 	});
 
 	afterEach(() =>
 	{
 		vi.restoreAllMocks();
-		vi.useRealTimers();
 		process.env = originalEnv;
 
 		cleanupTestDatabase(testDatabase);
@@ -69,102 +80,78 @@ describe("node create command", () =>
 		}
 	});
 
-	const createBodySchema = z.looseObject(
-		{
-			name: z.string(),
-			note: z.string().optional(),
-			parent_id: z.string(),
-		},
-	);
-
-	/** Each fetch made, as `METHOD url`. */
-	const requests = () =>
-		fetchStub.mock.calls.map(
-			([url, init]) => `${init?.method ?? "GET"} ${url instanceof Request ? url.url : String(url)}`,
-		);
-
-	/**
-	 * Answer each create with the next of `ids`, and a GET of a created node with
-	 * what was sent for it. Returns the create request bodies, in order.
-	 */
-	function fakeCreates(...ids: string[]): unknown[]
+	/** `Parent` (`parent-id`) at Home, holding `Sibling` (`sibling-id`). */
+	function seedParent(): void
 	{
-		const bodies: unknown[] = [];
-		const created = new Map<
-			string,
-			{
-				name: string;
-				note?: string;
-				parent_id: string;
-			}
-		>();
-		fetchStub.mockImplementation(async (url: RequestInfo | URL, init?: RequestInit) =>
-		{
-			if (init?.method === "POST")
-			{
-				const body = createBodySchema.parse(requestJson(init));
-				const id = ids[bodies.length];
-				if (id === undefined)
-				{
-					throw new Error("fakeCreates ran out of ids");
-				}
-				bodies.push(body);
-				created.set(id, body);
-				return Promise.resolve(
-					Response.json(
-						{
-							item_id: id,
-						},
-						{
-							status: 200,
-						},
-					),
-				);
-			}
-			const toApi = (id: string) =>
-			{
-				const body = created.get(id)!;
-				const now = Math.floor(Date.now() / 1000);
-				return {
-					id,
-					name: body.name,
-					note: body.note ?? null,
-					parent_id: body.parent_id,
-					priority: 100 * bodies.indexOf(body),
-					completed: false,
-					createdAt: now,
-					modifiedAt: now,
-					completedAt: null,
-				};
-			};
-			const target = new URL(url instanceof Request ? url.url : url.toString());
-			const parentId = target.searchParams.get("parent_id");
-			if (parentId !== null)
-			{
-				const nodes = [...created].filter(([, body]) => body.parent_id === parentId).map(([id]) => toApi(id));
-				return Promise.resolve(
-					Response.json(
-						{
-							nodes,
-						},
-						{
-							status: 200,
-						},
-					),
-				);
-			}
-			return Promise.resolve(
-				Response.json(
+		seedTestData(
+			testDatabase,
+			nodeFixtures([
+				createTestNode(
 					{
-						node: toApi(target.pathname.split("/").pop()!),
-					},
-					{
-						status: 200,
+						id: "parent-id",
+						name: "Parent",
+						parentId: null,
 					},
 				),
-			);
+				createTestNode(
+					{
+						id: "sibling-id",
+						name: "Sibling",
+						parentId: "parent-id",
+					},
+				),
+			]),
+		);
+	}
+
+	function localTree(parentId: string | null): LocalTree[]
+	{
+		const cache = new CacheService(testDatabase.db);
+		return cache.getChildren(parentId).map((child) =>
+		{
+			const children = localTree(child.id);
+			return {
+				id: child.id,
+				name: child.name,
+				...(child.note === null
+					? {}
+					:
+						{
+							note: child.note,
+						}),
+				...(children.length === 0
+					? {}
+					:
+						{
+							children,
+						}),
+			};
 		});
-		return bodies;
+	}
+
+	/** When the local tables say `id` was created, as the command prints it. */
+	function createdAt(id: string): string
+	{
+		return new CacheService(testDatabase.db).getNode(id)?.createdAt?.toISOString() ?? "";
+	}
+
+	/** Each push's ops: the op type, its parent and slot, and the created trees without their timestamps. */
+	function pushedCreates(upstream: UpstreamFake): unknown[][]
+	{
+		return upstream.pushes.map((ops) =>
+			ops.map(({type, data}) => (
+			{
+				type,
+				parentid: data.parentid,
+				priority: data.starting_priority,
+				trees:
+					typeof data.project_trees === "string"
+						? (JSON.parse(data.project_trees, (key, value: unknown) =>
+								key === "ct" || key === "cb" ? undefined : value,
+							) as unknown)
+						: undefined,
+			})),
+		);
 	}
 
 	describe("environment variable validation", () =>
@@ -330,59 +317,12 @@ describe("node create command", () =>
 
 	describe("single node creation", () =>
 	{
-		it("creates node via API and updates cache", async () =>
+		it("creates the node locally at the bottom of its parent, delivers it in one push, and leaves nothing pending", async () =>
 		{
-			const createdNodeId = "new-node-id";
+			seedParent();
+			const upstream = fakeUpstream(fetchStub, testDatabase, tempDir);
 
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "parent-id",
-							name: "Parent",
-							parentId: null,
-						},
-					),
-				]),
-			);
-
-			// The API returns just {item_id: "..."}, so the created node is read back for its priority
-			fakeCreates(createdNodeId);
-
-			const {stdout} = await captureOutput(async () =>
-			{
-				await Create.run(["--parent-id", "parent-id", "--name", "Test Node"]);
-			});
-
-			expect(stdout).toBe(
-				"Creating node: Test Node\nParent: Parent\n\nSuccessfully created node\n  ID: new-node-id\n  Name: Test Node\n  Created: 2026-01-01T00:00:00.000Z\n  URL: https://workflowy.com/#/newnodeid\n",
-			);
-			expect(requests()).toStrictEqual([
-				"POST https://workflowy.com/api/v1/nodes/",
-				"GET https://workflowy.com/api/v1/nodes/new-node-id",
-				"GET https://workflowy.com/api/v1/nodes?parent_id=parent-id",
-			]);
-		});
-
-		it("sends correct request body", async () =>
-		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "parent-id",
-							name: "Parent",
-							parentId: null,
-						},
-					),
-				]),
-			);
-
-			const bodies = fakeCreates("new-id");
-
-			await captureOutput(async () =>
+			const {stdout, error} = await captureOutput(async () =>
 			{
 				await Create.run([
 					"--parent-id",
@@ -396,24 +336,179 @@ describe("node create command", () =>
 				]);
 			});
 
-			expect(bodies).toStrictEqual([
+			expect(
 				{
-					parent_id: "parent-id",
-					name: "Test Node",
-					note: "A note",
-					layoutMode: "document",
+					error,
+					stdout,
+					local: localTree("parent-id"),
+					pushes: pushedCreates(upstream),
+					pending: pendingOutbox(testDatabase),
 				},
-			]);
+			).toStrictEqual(
+				{
+					error: undefined,
+					stdout: `Creating node: Test Node\nParent: Parent\n\nSuccessfully created node\n  ID: ${uuid(2)}\n  Name: Test Node\n  Created: ${createdAt(uuid(2))}\n  URL: https://workflowy.com/#/000000000002\n`,
+					local: [
+						{
+							id: "sibling-id",
+							name: "Sibling",
+						},
+						{
+							id: uuid(2),
+							name: "Test Node",
+							note: "A note",
+						},
+					],
+					pushes: [
+						[
+							{
+								type: "bulk_create",
+								parentid: "parent-id",
+								priority: 1,
+								trees: [
+									{
+										id: uuid(2),
+										nm: "Test Node",
+										no: "A note",
+										metadata:
+										{
+											layoutMode: "document",
+										},
+										ch: [],
+									},
+								],
+							},
+						],
+					],
+					pending: [],
+				},
+			);
+		});
+
+		it("keeps the created node and its outbox rows when the push fails, and exits non-zero with the pending count", async () =>
+		{
+			seedParent();
+			fakeUpstream(
+				fetchStub,
+				testDatabase,
+				tempDir,
+				{
+					failPush: true,
+				},
+			);
+
+			const {stdout, error} = await captureOutput(async () =>
+			{
+				await Create.run(["--parent-id", "parent-id", "--name", "Test Node"]);
+			});
+
+			expect(
+				{
+					stdout,
+					error: error?.message,
+					exit: error?.oclif?.exit,
+					local: localTree("parent-id"),
+					pending: pendingOutbox(testDatabase),
+				},
+			).toStrictEqual(
+				{
+					stdout: "Creating node: Test Node\nParent: Parent\n",
+					error: "Saved locally, but delivering it to workflowy.com failed: Workflowy rejected the operations: upstream_rejected\n2 outbox rows pending; they go out on the next write or with 'outbox drain'.",
+					exit: 1,
+					local: [
+						{
+							id: "sibling-id",
+							name: "Sibling",
+						},
+						{
+							id: uuid(2),
+							name: "Test Node",
+						},
+					],
+					pending: [
+						{
+							nodeId: uuid(2),
+							aspect: "create",
+							lastError: "Workflowy rejected the operations: upstream_rejected",
+						},
+						{
+							nodeId: uuid(2),
+							aspect: "placement",
+							lastError: "Workflowy rejected the operations: upstream_rejected",
+						},
+					],
+				},
+			);
+		});
+
+		it("creates at the top of the parent with --position top", async () =>
+		{
+			seedParent();
+			fakeUpstream(fetchStub, testDatabase, tempDir);
+
+			const {error} = await captureOutput(async () =>
+			{
+				await Create.run(["--parent-id", "parent-id", "--name", "First", "--position", "top"]);
+			});
+
+			expect(
+				{
+					error,
+					local: localTree("parent-id"),
+				},
+			).toStrictEqual(
+				{
+					error: undefined,
+					local: [
+						{
+							id: uuid(2),
+							name: "First",
+						},
+						{
+							id: "sibling-id",
+							name: "Sibling",
+						},
+					],
+				},
+			);
+		});
+
+		it("refuses to write without internal-API credentials, leaving the outline and the outbox alone", async () =>
+		{
+			seedParent();
+
+			await expect(Create.run(["--parent-id", "parent-id", "--name", "Test Node"])).rejects.toThrow(
+				"Writing needs the internal API",
+			);
+
+			expect(
+				{
+					local: localTree("parent-id"),
+					pending: pendingOutbox(testDatabase),
+					fetches: fetchStub.mock.calls.length,
+				},
+			).toStrictEqual(
+				{
+					local: [
+						{
+							id: "sibling-id",
+							name: "Sibling",
+						},
+					],
+					pending: [],
+					fetches: 0,
+				},
+			);
 		});
 	});
 
 	describe("backlinks", () =>
 	{
-		it("syncs the new node's backlinks through the internal API when its text links to a node", async () =>
+		const TARGET_ID = "01234567-0000-4000-8000-0123456789ab";
+		const TARGET_LINK = '<a href="https://workflowy.com/#/0123456789ab">t</a>';
+
+		function seedTarget(): void
 		{
-			process.env.WORKFLOWY_USERNAME = "alice@example.com";
-			process.env.WORKFLOWY_PASSWORD = "hunter2";
-			process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "workflowy-session");
 			seedTestData(
 				testDatabase,
 				nodeFixtures([
@@ -424,245 +519,200 @@ describe("node create command", () =>
 							parentId: null,
 						},
 					),
+					createTestNode(
+						{
+							id: TARGET_ID,
+							name: "Target",
+							parentId: null,
+						},
+					),
 				]),
 			);
-			storeTreeTxId(testDatabase.db, "1234567");
-			fakeCreates("new-id");
-			const publicApi = fetchStub.getMockImplementation()!;
-			fetchStub.mockImplementation(async (url: RequestInfo | URL, init?: RequestInit) =>
-			{
-				const {pathname} = new URL(url instanceof Request ? url.url : url.toString());
-				if (pathname === "/ajax_login")
-				{
-					return Promise.resolve(
-						new Response(
-							"",
-							{
-								status: 200,
-								headers:
-								{
-									"set-cookie": "sessionid=abc; Path=/",
-								},
-							},
-						),
-					);
-				}
-				const internal = catchUpResponse(pathname);
-				if (internal !== undefined)
-				{
-					return Promise.resolve(internal);
-				}
-				return publicApi(url, init);
-			});
+		}
 
-			await captureOutput(async () =>
+		it("creates a backlink item under the linked node, delivered in the same drain as the new node", async () =>
+		{
+			seedTarget();
+			const upstream = fakeUpstream(fetchStub, testDatabase, tempDir);
+
+			const {error} = await captureOutput(async () =>
 			{
-				await Create.run([
-					"--parent-id",
-					"parent-id",
-					"--name",
-					'see <a href="https://workflowy.com/#/0123456789ab">t</a>',
-				]);
+				await Create.run(["--parent-id", "parent-id", "--name", `see ${TARGET_LINK}`]);
 			});
 
 			expect(
-				requests()
-					.filter((entry) => !entry.includes("/api/v1/"))
-					.map((entry) => entry.split("?")[0]),
-			).toStrictEqual([
-				"POST https://workflowy.com/ajax_login",
-				"GET https://workflowy.com/get_initialization_data",
-				"POST https://workflowy.com/push_and_poll",
-			]);
-		});
-		it("syncs the backlinks of every node a --json tree creates with a link, in one call", async () =>
-		{
-			process.env.WORKFLOWY_USERNAME = "alice@example.com";
-			process.env.WORKFLOWY_PASSWORD = "hunter2";
-			process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "workflowy-session");
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "parent-id",
-							name: "Parent",
-							parentId: null,
-						},
-					),
-				]),
-			);
-			fakeCreates("root-id", "plain-id", "linked-id");
-			const sync = vi.spyOn(WorkflowyInternalAdapter.prototype, "syncBacklinks").mockResolvedValue(
 				{
-					created: [],
-					referencesRoots: [],
-					deleted: [],
+					error,
+					target: localTree(TARGET_ID),
+					types: upstream.pushes.map((ops) => ops.map((op) => op.type)),
+					pending: pendingOutbox(testDatabase),
 				},
-			);
-			const link = '<a href="https://workflowy.com/#/0123456789ab">t</a>';
-
-			await captureOutput(async () =>
-			{
-				await Create.run([
-					"--parent-id",
-					"parent-id",
-					"--json",
-					JSON.stringify(
+			).toStrictEqual(
+				{
+					error: undefined,
+					target: [
 						{
-							name: `root ${link}`,
+							id: uuid(3),
+							name: "",
 							children: [
 								{
-									name: "plain",
-								},
-								{
-									name: "linked",
-									note: link,
+									id: uuid(4),
+									name: `see ${TARGET_LINK}`,
 								},
 							],
 						},
-					),
-				]);
-			});
-
-			expect(sync.mock.calls).toStrictEqual([[["root-id", "linked-id"]]]);
+					],
+					types: [["bulk_create", "bulk_create", "bulk_create"]],
+					pending: [],
+				},
+			);
 		});
 
-		it("leaves the internal API alone when no node of a --json tree links anywhere", async () =>
+		it("creates backlink items for every node of a --json tree with a link", async () =>
 		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "parent-id",
-							name: "Parent",
-							parentId: null,
-						},
-					),
-				]),
-			);
-			fakeCreates("root-id");
-			const sync = vi.spyOn(WorkflowyInternalAdapter.prototype, "syncBacklinks");
-
-			await captureOutput(async () =>
-			{
-				await Create.run([
-					"--parent-id",
-					"parent-id",
-					"--json",
-					JSON.stringify(
+			seedTarget();
+			fakeUpstream(fetchStub, testDatabase, tempDir);
+			const json = JSON.stringify(
+				{
+					name: `root ${TARGET_LINK}`,
+					children: [
 						{
 							name: "plain",
 						},
-					),
-				]);
+						{
+							name: "child",
+							note: `note ${TARGET_LINK}`,
+						},
+					],
+				},
+			);
+
+			const {error} = await captureOutput(async () =>
+			{
+				await Create.run(["--parent-id", "parent-id", "--json", json]);
 			});
 
-			expect(sync.mock.calls).toStrictEqual([]);
+			expect(
+				{
+					error,
+					target: localTree(TARGET_ID),
+				},
+			).toStrictEqual(
+				{
+					error: undefined,
+					target: [
+						{
+							id: uuid(5),
+							name: "",
+							children: [
+								{
+									id: uuid(7),
+									name: "child",
+									note: `note ${TARGET_LINK}`,
+								},
+								{
+									id: uuid(6),
+									name: `root ${TARGET_LINK}`,
+								},
+							],
+						},
+					],
+				},
+			);
 		});
 	});
 
 	describe("calendar adoption", () =>
 	{
 		const day21 = '<time startYear="2026" startMonth="10" startDay="21">Wed, Oct 21, 2026</time>';
-		const useInternalAuth = () =>
-		{
-			process.env.WORKFLOWY_USERNAME = "alice@example.com";
-			process.env.WORKFLOWY_PASSWORD = "hunter2";
-			process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "workflowy-session");
-		};
-		// The fake clock stands still between its 20 ms steps, so step past the seed's millisecond before the command re-reads a seeded row.
 		const seedCalendar = () =>
 		{
 			seedTaggedCalendar(testDatabase);
-			vi.setSystemTime(Date.now() + 1);
-		};
-		const noInternalAuth = () =>
-		{
-			delete process.env.WORKFLOWY_USERNAME;
-			delete process.env.WORKFLOWY_PASSWORD;
-			process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "no-session");
 		};
 
-		it("tags a dated row created under a calendar month as that day", async () =>
+		it("tags a dated row created under a calendar month as that day, and delivers the tag with the create", async () =>
 		{
 			seedCalendar();
-			useInternalAuth();
-			fakeCreates("new-id");
-			const setMeta = vi.spyOn(WorkflowyInternalAdapter.prototype, "setNodeMetaValues").mockResolvedValue();
+			const upstream = fakeUpstream(fetchStub, testDatabase, tempDir);
 
-			await captureOutput(async () =>
-			{
-				await Create.run(["--parent-id", "m10", "--name", day21]);
-			});
-
-			expect(setMeta.mock.calls).toStrictEqual([
-				[
-					"new-id",
-					[
-						{
-							path: ["calendar"],
-							value:
-							{
-								level: "day",
-								value: "21",
-								timestamp: new Date(2026, 9, 21).getTime(),
-								dateId: 20_261_021,
-							},
-						},
-					],
-				],
-			]);
-		});
-
-		it("makes no metadata call under a non-calendar parent", async () =>
-		{
-			seedCalendar();
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "plain",
-							name: "Plain",
-							parentId: null,
-						},
-					),
-				]),
-			);
-			useInternalAuth();
-			fakeCreates("new-id");
-			const setMeta = vi.spyOn(WorkflowyInternalAdapter.prototype, "setNodeMetaValues").mockResolvedValue();
-
-			await captureOutput(async () =>
-			{
-				await Create.run(["--parent-id", "plain", "--name", day21]);
-			});
-
-			expect(setMeta.mock.calls).toStrictEqual([]);
-		});
-
-		it("warns on stderr and exits 0 without internal auth", async () =>
-		{
-			seedCalendar();
-			noInternalAuth();
-			fakeCreates("new-id");
-
-			const {stderr, error} = await captureOutput(async () =>
+			const {error} = await captureOutput(async () =>
 			{
 				await Create.run(["--parent-id", "m10", "--name", day21]);
 			});
 
 			expect(
 				{
-					stderr,
 					error,
+					pushes: pushedCreates(upstream),
 				},
 			).toStrictEqual(
 				{
-					stderr: `warning: ${day21} was created under a 📆 Calendar month without calendar metadata; workflowy.com will not use it as that day. Run ./bin/run.js calendar day --date YYYY-MM-DD --ensure instead.\n`,
 					error: undefined,
+					pushes: [
+						[
+							{
+								type: "bulk_create",
+								parentid: "m10",
+								priority: 3,
+								trees: [
+									{
+										id: uuid(2),
+										nm: day21,
+										metadata:
+										{
+											calendar:
+											{
+												level: "day",
+												value: "21",
+												timestamp: new Date(2026, 9, 21).getTime(),
+												dateId: 20_261_021,
+											},
+										},
+										ch: [],
+									},
+								],
+							},
+						],
+					],
+				},
+			);
+		});
+
+		it("adds no calendar metadata under a non-calendar parent", async () =>
+		{
+			seedCalendar();
+			seedParent();
+			const upstream = fakeUpstream(fetchStub, testDatabase, tempDir);
+
+			const {error} = await captureOutput(async () =>
+			{
+				await Create.run(["--parent-id", "parent-id", "--name", day21]);
+			});
+
+			expect(
+				{
+					error,
+					pushes: pushedCreates(upstream),
+				},
+			).toStrictEqual(
+				{
+					error: undefined,
+					pushes: [
+						[
+							{
+								type: "bulk_create",
+								parentid: "parent-id",
+								priority: 1,
+								trees: [
+									{
+										id: uuid(2),
+										nm: day21,
+										ch: [],
+									},
+								],
+							},
+						],
+					],
 				},
 			);
 		});
@@ -670,41 +720,48 @@ describe("node create command", () =>
 		it("ensures a missing calendar month for --create-path instead of creating a name-only one", async () =>
 		{
 			seedCalendar();
-			useInternalAuth();
+			fakeUpstream(fetchStub, testDatabase, tempDir);
 			const ensure = vi.spyOn(WorkflowyInternalAdapter.prototype, "ensureCalendarDay").mockResolvedValue(
 				{
-					dayId: "ensured-month",
+					dayId: "m10",
 					firstChildId: null,
-					created: ["ensured-month"],
+					created: [],
 				},
 			);
-			const bodies = fakeCreates("new-id");
 
-			await captureOutput(async () =>
+			const {error} = await captureOutput(async () =>
 			{
-				await Create.run(["--parent-path", "📆 Calendar,2026,11", "--create-path", "--name", "Entry"]);
+				await Create.run(["--parent-path", "📆 Calendar,2026,10,Notes", "--create-path", "--name", "Entry"]);
 			});
 
 			expect(
 				{
+					error,
 					calls: ensure.mock.calls,
-					bodies,
+					notes: localTree("m10").filter((node) => node.name === "Notes"),
 				},
 			).toStrictEqual(
 				{
+					error: undefined,
 					calls: [
 						[
-							20_261_101,
+							20_261_001,
 							{
 								stopAt: "month",
 								createChild: false,
 							},
 						],
 					],
-					bodies: [
+					notes: [
 						{
-							parent_id: "ensured-month",
-							name: "Entry",
+							id: uuid(2),
+							name: "Notes",
+							children: [
+								{
+									id: uuid(3),
+									name: "Entry",
+								},
+							],
 						},
 					],
 				},
@@ -714,77 +771,84 @@ describe("node create command", () =>
 
 	describe("parent resolution", () =>
 	{
-		it("resolves parent by ID", async () =>
-		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "specific-parent-id",
-							name: "Parent",
-							parentId: null,
-						},
-					),
-				]),
-			);
-
-			const bodies = fakeCreates("new-id");
-
-			await captureOutput(async () =>
-			{
-				await Create.run(["--parent-id", "specific-parent-id", "--name", "Test"]);
-			});
-
-			expect(bodies).toStrictEqual([
-				{
-					parent_id: "specific-parent-id",
-					name: "Test",
-				},
-			]);
-		});
-
 		it("resolves parent by path", async () =>
 		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "work-id",
-							name: "Work",
-							parentId: null,
-						},
-					),
-					createTestNode(
-						{
-							id: "projects-id",
-							name: "Projects",
-							parentId: "work-id",
-						},
-					),
-				]),
-			);
+			seedParent();
+			fakeUpstream(fetchStub, testDatabase, tempDir);
 
-			const bodies = fakeCreates("new-id");
-
-			await captureOutput(async () =>
+			const {stdout, error} = await captureOutput(async () =>
 			{
-				await Create.run(["--parent-path", "Work,Projects", "--name", "Test"]);
+				await Create.run(["--parent-path", "Parent,Sibling", "--name", "Nested"]);
 			});
 
-			expect(bodies).toStrictEqual([
+			expect(
 				{
-					parent_id: "projects-id",
-					name: "Test",
+					error,
+					stdout,
+					local: localTree("sibling-id"),
 				},
-			]);
+			).toStrictEqual(
+				{
+					error: undefined,
+					stdout: `Creating node: Nested\nParent: Parent > Sibling\n\nSuccessfully created node\n  ID: ${uuid(2)}\n  Name: Nested\n  Created: ${createdAt(uuid(2))}\n  URL: https://workflowy.com/#/000000000002\n`,
+					local: [
+						{
+							id: uuid(2),
+							name: "Nested",
+						},
+					],
+				},
+			);
 		});
 
-		it("resolves system target via --parent-id", async () =>
+		it("creates missing path segments locally with --create-path", async () =>
 		{
-			// The API accepts 'inbox' as parent_id on create but 404s on GET /nodes/inbox,
-			// so the real parent is learned by fetching the created node.
+			seedParent();
+			fakeUpstream(fetchStub, testDatabase, tempDir);
+
+			const {error} = await captureOutput(async () =>
+			{
+				await Create.run(["--parent-path", "Parent,New,Deeper", "--create-path", "--name", "Leaf"]);
+			});
+
+			expect(
+				{
+					error,
+					local: localTree("parent-id"),
+					pending: pendingOutbox(testDatabase),
+				},
+			).toStrictEqual(
+				{
+					error: undefined,
+					local: [
+						{
+							id: "sibling-id",
+							name: "Sibling",
+						},
+						{
+							id: uuid(2),
+							name: "New",
+							children: [
+								{
+									id: uuid(3),
+									name: "Deeper",
+									children: [
+										{
+											id: uuid(4),
+											name: "Leaf",
+										},
+									],
+								},
+							],
+						},
+					],
+					pending: [],
+				},
+			);
+		});
+
+		it("resolves the inbox system target to the account's Inbox node", async () =>
+		{
 			seedTestData(
 				testDatabase,
 				nodeFixtures([
@@ -797,125 +861,29 @@ describe("node create command", () =>
 					),
 				]),
 			);
+			fakeUpstream(fetchStub, testDatabase, tempDir);
 
-			const now = Math.floor(Date.now() / 1000);
-			const capturedRequests: string[] = [];
-			let capturedBody: string | undefined;
-
-			fetchStub.mockImplementation(async (url: RequestInfo | URL, init?: RequestInit) =>
-			{
-				const urlStr = url instanceof Request ? url.url : String(url);
-				const method = init?.method ?? "GET";
-				capturedRequests.push(`${method} ${urlStr}`);
-
-				if (method === "POST" && urlStr.endsWith("/nodes/"))
-				{
-					capturedBody = requestBody(init);
-					return Promise.resolve(
-						Response.json(
-							{
-								item_id: "new-id",
-							},
-							{
-								status: 200,
-							},
-						),
-					);
-				}
-
-				const node =
-				{
-					id: "new-id",
-					name: "Test",
-					note: null,
-					parent_id: "inbox-uuid",
-					priority: 0,
-					completed: false,
-					createdAt: now,
-					modifiedAt: now,
-					completedAt: null,
-					data:
-					{
-						layoutMode: "bullets",
-					},
-				};
-				if (method === "GET" && urlStr.endsWith("/nodes/new-id"))
-				{
-					return Promise.resolve(
-						Response.json(
-							{
-								node,
-							},
-							{
-								status: 200,
-							},
-						),
-					);
-				}
-				if (method === "GET" && urlStr.endsWith("/nodes?parent_id=inbox-uuid"))
-				{
-					return Promise.resolve(
-						Response.json(
-							{
-								nodes: [node],
-							},
-							{
-								status: 200,
-							},
-						),
-					);
-				}
-
-				return Promise.resolve(
-					Response.json(
-						{
-							error: "Not found",
-						},
-						{
-							status: 404,
-						},
-					),
-				);
-			});
-
-			const {stdout} = await captureOutput(async () =>
+			const {error} = await captureOutput(async () =>
 			{
 				await Create.run(["--parent-id", "inbox", "--name", "Test"]);
 			});
 
-			expect(stdout).toBe(
-				"Creating node: Test\nParent: \n\nSuccessfully created node\n  ID: new-id\n  Name: Test\n  Created: 2026-01-01T00:00:00.000Z\n  URL: https://workflowy.com/#/newid\n",
-			);
-			expect(JSON.parse(capturedBody!)).toStrictEqual(
-				{
-					parent_id: "inbox",
-					name: "Test",
-				},
-			);
-			expect(capturedRequests).toStrictEqual([
-				"POST https://workflowy.com/api/v1/nodes/",
-				"GET https://workflowy.com/api/v1/nodes/new-id",
-				"GET https://workflowy.com/api/v1/nodes?parent_id=inbox-uuid",
-			]);
 			expect(
-				testDatabase.db
-					.select(
-						{
-							id: nodeContent.id,
-							name: nodeContent.name,
-							parentId: nodeContent.parentId,
-						},
-					)
-					.from(nodeContent)
-					.where(and(eq(nodeContent.id, "new-id"), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
-					.all(),
-			).toStrictEqual([
 				{
-					id: "new-id",
-					name: "Test",
-					parentId: "inbox-uuid",
+					error,
+					local: localTree("inbox-uuid"),
 				},
-			]);
+			).toStrictEqual(
+				{
+					error: undefined,
+					local: [
+						{
+							id: uuid(2),
+							name: "Test",
+						},
+					],
+				},
+			);
 		});
 	});
 
@@ -925,188 +893,81 @@ describe("node create command", () =>
 		{
 			const {stdout} = await captureOutput(async () =>
 			{
-				await Create.run(["--parent-id", "home", "--name", "Top", "--dry-run"]);
+				await Create.run(["--parent-id", "home", "--name", "Area", "--dry-run"]);
 			});
 
-			expect(fetchStub.mock.calls).toStrictEqual([]);
 			expect(stdout).toBe(
-				'Would execute API call:\n  Method: POST\n  URL: https://workflowy.com/api/v1/nodes/\n  Headers:\n    Authorization: Bearer <WORKFLOWY_API_KEY>\n    Content-Type: application/json\n  Body:\n    {\n      "name": "Top"\n    }\n\nParent: Home\n',
+				'Would execute API call:\n  Method: POST\n  URL: https://workflowy.com/api/v1/nodes/\n  Headers:\n    Authorization: Bearer <WORKFLOWY_API_KEY>\n    Content-Type: application/json\n  Body:\n    {\n      "name": "Area"\n    }\n\nParent: Home\n',
 			);
 		});
 
-		it("creates a top-level node by omitting parent_id, and caches it with a null parent", async () =>
+		it("creates a top-level node with a null parent", async () =>
 		{
-			const now = Math.floor(Date.now() / 1000);
-			const node =
-			{
-				id: "new-id",
-				name: "Top",
-				note: null,
-				parent_id: null,
-				priority: 0,
-				completed: false,
-				createdAt: now,
-				modifiedAt: now,
-				completedAt: null,
-				data:
-				{
-					layoutMode: "bullets",
-				},
-			};
-			const bodies: unknown[] = [];
-			fetchStub.mockImplementation(async (url: RequestInfo | URL, init?: RequestInit) =>
-			{
-				const urlStr = url instanceof Request ? url.url : String(url);
-				const method = init?.method ?? "GET";
-				if (method === "POST" && urlStr === "https://workflowy.com/api/v1/nodes/")
-				{
-					bodies.push(requestJson(init));
-					return Promise.resolve(
-						Response.json(
-							{
-								item_id: "new-id",
-							},
-							{
-								status: 200,
-							},
-						),
-					);
-				}
-				if (method === "GET" && urlStr === "https://workflowy.com/api/v1/nodes/new-id")
-				{
-					return Promise.resolve(
-						Response.json(
-							{
-								node,
-							},
-							{
-								status: 200,
-							},
-						),
-					);
-				}
-				if (method === "GET" && urlStr === "https://workflowy.com/api/v1/nodes")
-				{
-					return Promise.resolve(
-						Response.json(
-							{
-								nodes: [node],
-							},
-							{
-								status: 200,
-							},
-						),
-					);
-				}
-				return Promise.resolve(
-					Response.json(
-						{
-							error: "Not found",
-						},
-						{
-							status: 404,
-						},
-					),
-				);
-			});
+			seedParent();
+			const upstream = fakeUpstream(fetchStub, testDatabase, tempDir);
 
-			const {stdout} = await captureOutput(async () =>
+			const {error} = await captureOutput(async () =>
 			{
-				await Create.run(["--parent-id", "home", "--name", "Top"]);
+				await Create.run(["--parent-id", "home", "--name", "Area"]);
 			});
 
 			expect(
 				{
-					stdout,
-					bodies,
-					requests: requests(),
+					error,
+					home: localTree(null),
+					pushes: pushedCreates(upstream),
 				},
 			).toStrictEqual(
 				{
-					stdout: "Creating node: Top\nParent: Home\n\nSuccessfully created node\n  ID: new-id\n  Name: Top\n  Created: 2026-01-01T00:00:00.000Z\n  URL: https://workflowy.com/#/newid\n",
-					bodies: [
+					error: undefined,
+					home: [
 						{
-							name: "Top",
+							id: "parent-id",
+							name: "Parent",
+							children: [
+								{
+									id: "sibling-id",
+									name: "Sibling",
+								},
+							],
+						},
+						{
+							id: uuid(2),
+							name: "Area",
 						},
 					],
-					requests: [
-						"POST https://workflowy.com/api/v1/nodes/",
-						"GET https://workflowy.com/api/v1/nodes/new-id",
-						"GET https://workflowy.com/api/v1/nodes",
+					pushes: [
+						[
+							{
+								type: "bulk_create",
+								parentid: "None",
+								priority: 1,
+								trees: [
+									{
+										id: uuid(2),
+										nm: "Area",
+										ch: [],
+									},
+								],
+							},
+						],
 					],
 				},
 			);
-			expect(
-				testDatabase.db
-					.select(
-						{
-							id: nodeContent.id,
-							name: nodeContent.name,
-							parentId: nodeContent.parentId,
-						},
-					)
-					.from(nodeContent)
-					.where(and(eq(nodeContent.id, "new-id"), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
-					.all(),
-			).toStrictEqual([
-				{
-					id: "new-id",
-					name: "Top",
-					parentId: null,
-				},
-			]);
 		});
 	});
 
 	describe("JSON mode", () =>
 	{
-		it("creates single node from JSON", async () =>
+		it("creates a nested tree in one unit of work and prints its ids", async () =>
 		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "parent-id",
-							name: "Parent",
-							parentId: null,
-						},
-					),
-				]),
-			);
-
-			fakeCreates("new-id");
-
-			const {stdout} = await captureOutput(async () =>
-			{
-				await Create.run(["--parent-id", "parent-id", "--json", '{"name": "JSON Node"}']);
-			});
-
-			expect(stdout).toBe(
-				'Creating node tree...\nParent: Parent\n\nSuccessfully created node tree:\n- JSON Node\n  ID: new-id\n  URL: https://workflowy.com/#/newid\n\nCreated node IDs (JSON):\n[\n  {\n    "id": "new-id",\n    "name": "JSON Node",\n    "parentId": null\n  }\n]\n',
-			);
-		});
-
-		it("creates nested tree from JSON", async () =>
-		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "parent-id",
-							name: "Parent",
-							parentId: null,
-						},
-					),
-				]),
-			);
-
-			fakeCreates("node-1", "node-2", "node-3");
-
+			seedParent();
+			const upstream = fakeUpstream(fetchStub, testDatabase, tempDir);
 			const json = JSON.stringify(
 				{
 					name: "Project",
+					note: "Plan",
+					layoutMode: "board",
 					children: [
 						{
 							name: "Task 1",
@@ -1118,24 +979,111 @@ describe("node create command", () =>
 				},
 			);
 
-			const {stdout} = await captureOutput(async () =>
+			const {stdout, error} = await captureOutput(async () =>
 			{
 				await Create.run(["--parent-id", "parent-id", "--json", json]);
 			});
 
-			expect(requests()).toStrictEqual([
-				"POST https://workflowy.com/api/v1/nodes/",
-				"GET https://workflowy.com/api/v1/nodes/node-1",
-				"GET https://workflowy.com/api/v1/nodes?parent_id=parent-id",
-				"POST https://workflowy.com/api/v1/nodes/",
-				"GET https://workflowy.com/api/v1/nodes/node-2",
-				"GET https://workflowy.com/api/v1/nodes?parent_id=node-1",
-				"POST https://workflowy.com/api/v1/nodes/",
-				"GET https://workflowy.com/api/v1/nodes/node-3",
-				"GET https://workflowy.com/api/v1/nodes?parent_id=node-1",
-			]);
-			expect(stdout).toBe(
-				'Creating node tree...\nParent: Parent\n\nSuccessfully created node tree:\n- Project\n  ID: node-1\n  URL: https://workflowy.com/#/node1\n  - Task 1\n    ID: node-2\n    URL: https://workflowy.com/#/node2\n  - Task 2\n    ID: node-3\n    URL: https://workflowy.com/#/node3\n\nCreated node IDs (JSON):\n[\n  {\n    "id": "node-1",\n    "name": "Project",\n    "parentId": null\n  },\n  {\n    "id": "node-2",\n    "name": "Task 1",\n    "parentId": "node-1"\n  },\n  {\n    "id": "node-3",\n    "name": "Task 2",\n    "parentId": "node-1"\n  }\n]\n',
+			expect(
+				{
+					error,
+					stdout,
+					local: localTree("parent-id"),
+					pushes: pushedCreates(upstream),
+					pending: pendingOutbox(testDatabase),
+				},
+			).toStrictEqual(
+				{
+					error: undefined,
+					stdout: `Creating node tree...\nParent: Parent\n\nSuccessfully created node tree:\n- Project\n  ID: ${uuid(2)}\n  URL: https://workflowy.com/#/000000000002\n  - Task 1\n    ID: ${uuid(3)}\n    URL: https://workflowy.com/#/000000000003\n  - Task 2\n    ID: ${uuid(4)}\n    URL: https://workflowy.com/#/000000000004\n\nCreated node IDs (JSON):\n${JSON.stringify(
+						[
+							{
+								id: uuid(2),
+								name: "Project",
+								parentId: null,
+							},
+							{
+								id: uuid(3),
+								name: "Task 1",
+								parentId: uuid(2),
+							},
+							{
+								id: uuid(4),
+								name: "Task 2",
+								parentId: uuid(2),
+							},
+						],
+						null,
+						2,
+					)}\n`,
+					local: [
+						{
+							id: "sibling-id",
+							name: "Sibling",
+						},
+						{
+							id: uuid(2),
+							name: "Project",
+							note: "Plan",
+							children: [
+								{
+									id: uuid(3),
+									name: "Task 1",
+								},
+								{
+									id: uuid(4),
+									name: "Task 2",
+								},
+							],
+						},
+					],
+					pushes: [
+						[
+							{
+								type: "bulk_create",
+								parentid: "parent-id",
+								priority: 1,
+								trees: [
+									{
+										id: uuid(2),
+										nm: "Project",
+										no: "Plan",
+										metadata:
+										{
+											layoutMode: "board",
+										},
+										ch: [],
+									},
+								],
+							},
+							{
+								type: "bulk_create",
+								parentid: uuid(2),
+								priority: 0,
+								trees: [
+									{
+										id: uuid(3),
+										nm: "Task 1",
+										ch: [],
+									},
+								],
+							},
+							{
+								type: "bulk_create",
+								parentid: uuid(2),
+								priority: 1,
+								trees: [
+									{
+										id: uuid(4),
+										nm: "Task 2",
+										ch: [],
+									},
+								],
+							},
+						],
+					],
+					pending: [],
+				},
 			);
 		});
 
@@ -1224,38 +1172,53 @@ describe("node create command", () =>
 	{
 		it("creates nodes from JSON file", async () =>
 		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "parent-id",
-							name: "Parent",
-							parentId: null,
-						},
-					),
-				]),
-			);
-
-			const jsonPath = path.join(tempDir, "nodes.json");
+			seedParent();
+			fakeUpstream(fetchStub, testDatabase, tempDir);
+			const jsonFile = path.join(tempDir, "tree.json");
 			fs.writeFileSync(
-				jsonPath,
+				jsonFile,
 				JSON.stringify(
 					{
-						name: "File Node",
+						name: "From File",
+						children: [
+							{
+								name: "Child",
+							},
+						],
 					},
 				),
 			);
 
-			fakeCreates("new-id");
-
-			const {stdout} = await captureOutput(async () =>
+			const {error} = await captureOutput(async () =>
 			{
-				await Create.run(["--parent-id", "parent-id", "--json-file", jsonPath]);
+				await Create.run(["--parent-id", "parent-id", "--json-file", jsonFile]);
 			});
 
-			expect(stdout).toBe(
-				'Creating node tree...\nParent: Parent\n\nSuccessfully created node tree:\n- File Node\n  ID: new-id\n  URL: https://workflowy.com/#/newid\n\nCreated node IDs (JSON):\n[\n  {\n    "id": "new-id",\n    "name": "File Node",\n    "parentId": null\n  }\n]\n',
+			expect(
+				{
+					error,
+					local: localTree("parent-id"),
+				},
+			).toStrictEqual(
+				{
+					error: undefined,
+					local: [
+						{
+							id: "sibling-id",
+							name: "Sibling",
+						},
+						{
+							id: uuid(2),
+							name: "From File",
+							children: [
+								{
+									id: uuid(3),
+									name: "Child",
+								},
+							],
+						},
+					],
+				},
 			);
 		});
 
@@ -1311,187 +1274,153 @@ describe("node create command", () =>
 
 		it("nests an indented 3-level bullet outline exactly like the equivalent --json tree", async () =>
 		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "parent-id",
-							name: "Parent",
-							parentId: null,
-						},
-					),
-				]),
-			);
-
-			const bodies = fakeCreates("node-1", "node-2", "node-3", "node-4");
+			seedParent();
+			fakeUpstream(fetchStub, testDatabase, tempDir);
 			pipeStdin("- Project\n  - Task 1\n    - Step A\n\n  - Task 2\n");
 
-			const {stdout} = await captureOutput(async () =>
+			const {stdout, error} = await captureOutput(async () =>
 			{
 				await Create.run(["--parent-id", "parent-id", "--name", "-"]);
 			});
 
-			expect(bodies).toStrictEqual([
+			expect(
 				{
-					parent_id: "parent-id",
-					name: "Project",
+					error,
+					stdout,
+					local: localTree("parent-id"),
 				},
+			).toStrictEqual(
 				{
-					parent_id: "node-1",
-					name: "Task 1",
-					position: "bottom",
+					error: undefined,
+					stdout: `Creating node tree...\nParent: Parent\n\nSuccessfully created node tree:\n- Project\n  ID: ${uuid(2)}\n  URL: https://workflowy.com/#/000000000002\n  - Task 1\n    ID: ${uuid(3)}\n    URL: https://workflowy.com/#/000000000003\n    - Step A\n      ID: ${uuid(4)}\n      URL: https://workflowy.com/#/000000000004\n  - Task 2\n    ID: ${uuid(5)}\n    URL: https://workflowy.com/#/000000000005\n\nCreated node IDs (JSON):\n${JSON.stringify(
+						[
+							{
+								id: uuid(2),
+								name: "Project",
+								parentId: null,
+							},
+							{
+								id: uuid(3),
+								name: "Task 1",
+								parentId: uuid(2),
+							},
+							{
+								id: uuid(4),
+								name: "Step A",
+								parentId: uuid(3),
+							},
+							{
+								id: uuid(5),
+								name: "Task 2",
+								parentId: uuid(2),
+							},
+						],
+						null,
+						2,
+					)}\n`,
+					local: [
+						{
+							id: "sibling-id",
+							name: "Sibling",
+						},
+						{
+							id: uuid(2),
+							name: "Project",
+							children: [
+								{
+									id: uuid(3),
+									name: "Task 1",
+									children: [
+										{
+											id: uuid(4),
+											name: "Step A",
+										},
+									],
+								},
+								{
+									id: uuid(5),
+									name: "Task 2",
+								},
+							],
+						},
+					],
 				},
-				{
-					parent_id: "node-2",
-					name: "Step A",
-					position: "bottom",
-				},
-				{
-					parent_id: "node-1",
-					name: "Task 2",
-					position: "bottom",
-				},
-			]);
-			expect(stdout).toBe(
-				'Creating node tree...\nParent: Parent\n\nSuccessfully created node tree:\n- Project\n  ID: node-1\n  URL: https://workflowy.com/#/node1\n  - Task 1\n    ID: node-2\n    URL: https://workflowy.com/#/node2\n    - Step A\n      ID: node-3\n      URL: https://workflowy.com/#/node3\n  - Task 2\n    ID: node-4\n    URL: https://workflowy.com/#/node4\n\nCreated node IDs (JSON):\n[\n  {\n    "id": "node-1",\n    "name": "Project",\n    "parentId": null\n  },\n  {\n    "id": "node-2",\n    "name": "Task 1",\n    "parentId": "node-1"\n  },\n  {\n    "id": "node-3",\n    "name": "Step A",\n    "parentId": "node-2"\n  },\n  {\n    "id": "node-4",\n    "name": "Task 2",\n    "parentId": "node-1"\n  }\n]\n',
 			);
 		});
 
-		it("creates each top-level bullet as its own tree under the parent, in order", async () =>
+		it("creates each top-level bullet as its own tree under the parent, in order, even at the top", async () =>
 		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "parent-id",
-							name: "Parent",
-							parentId: null,
-						},
-					),
-				]),
-			);
-
-			const bodies = fakeCreates("node-1", "node-2", "node-3");
+			seedParent();
+			fakeUpstream(fetchStub, testDatabase, tempDir);
 			pipeStdin("* First\n\t* Child\n* Second\n");
 
-			await captureOutput(async () =>
+			const {error} = await captureOutput(async () =>
 			{
-				await Create.run(["--parent-id", "parent-id", "--name", "-"]);
+				await Create.run(["--parent-id", "parent-id", "--name", "-", "--position", "top"]);
 			});
 
-			expect(bodies).toStrictEqual([
+			expect(
 				{
-					parent_id: "parent-id",
-					name: "First",
+					error,
+					local: localTree("parent-id"),
 				},
+			).toStrictEqual(
 				{
-					parent_id: "node-1",
-					name: "Child",
-					position: "bottom",
+					error: undefined,
+					local: [
+						{
+							id: uuid(2),
+							name: "First",
+							children: [
+								{
+									id: uuid(3),
+									name: "Child",
+								},
+							],
+						},
+						{
+							id: uuid(4),
+							name: "Second",
+						},
+						{
+							id: "sibling-id",
+							name: "Sibling",
+						},
+					],
 				},
-				{
-					parent_id: "parent-id",
-					name: "Second",
-				},
-			]);
+			);
 		});
 
 		it("sends non-outline markdown as a single node name", async () =>
 		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
-						{
-							id: "parent-id",
-							name: "Parent",
-							parentId: null,
-						},
-					),
-				]),
-			);
-
-			const bodies = fakeCreates("node-1");
+			seedParent();
+			fakeUpstream(fetchStub, testDatabase, tempDir);
 			pipeStdin("## Section 1\n\nParagraph text\n- a bullet\n");
 
-			await captureOutput(async () =>
+			const {error} = await captureOutput(async () =>
 			{
 				await Create.run(["--parent-id", "parent-id", "--name", "-"]);
 			});
 
-			expect(bodies).toStrictEqual([
+			expect(
 				{
-					parent_id: "parent-id",
-					name: "## Section 1\n\nParagraph text\n- a bullet\n",
+					error,
+					local: localTree("parent-id"),
 				},
-			]);
-		});
-	});
-
-	describe("output", () =>
-	{
-		it("displays node ID and URL after creation", async () =>
-		{
-			const newNodeId = "created-node-id";
-
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
+			).toStrictEqual(
+				{
+					error: undefined,
+					local: [
 						{
-							id: "parent-id",
-							name: "Parent",
-							parentId: null,
+							id: "sibling-id",
+							name: "Sibling",
 						},
-					),
-				]),
-			);
-
-			fakeCreates(newNodeId);
-
-			const {stdout} = await captureOutput(async () =>
-			{
-				await Create.run(["--parent-id", "parent-id", "--name", "Test Node"]);
-			});
-
-			expect(stdout).toBe(
-				"Creating node: Test Node\nParent: Parent\n\nSuccessfully created node\n  ID: created-node-id\n  Name: Test Node\n  Created: 2026-01-01T00:00:00.000Z\n  URL: https://workflowy.com/#/reatednodeid\n",
-			);
-		});
-
-		it("displays parent path in output", async () =>
-		{
-			seedTestData(
-				testDatabase,
-				nodeFixtures([
-					createTestNode(
 						{
-							id: "work-id",
-							name: "Work",
-							parentId: null,
+							id: uuid(2),
+							name: "## Section 1\n\nParagraph text\n- a bullet\n",
 						},
-					),
-					createTestNode(
-						{
-							id: "projects-id",
-							name: "Projects",
-							parentId: "work-id",
-						},
-					),
-				]),
-			);
-
-			fakeCreates("new-id");
-
-			const {stdout} = await captureOutput(async () =>
-			{
-				await Create.run(["--parent-path", "Work,Projects", "--name", "Test"]);
-			});
-
-			expect(stdout).toBe(
-				"Creating node: Test\nParent: Work > Projects\n\nSuccessfully created node\n  ID: new-id\n  Name: Test\n  Created: 2026-01-01T00:00:00.000Z\n  URL: https://workflowy.com/#/newid\n",
+					],
+				},
 			);
 		});
 	});

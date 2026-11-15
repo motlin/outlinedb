@@ -3,9 +3,10 @@ import {PathBuilder, WorkflowyWriteThroughClient} from "@outlinedb/shared/cache"
 import {Command, Flags} from "@oclif/core";
 import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";
-import {syncBacklinksIfLinked} from "@outlinedb/shared/node";
 import {logger} from "../../services/logger.js";
+import {drainAfterWrite, openLocalWrites} from "../../services/local-writes.js";
 import {resolveNodeId} from "@outlinedb/shared/utils";
+import {hasInternalLink} from "@outlinedb/shared/workflowy";
 
 export default class Update extends Command
 {
@@ -170,14 +171,15 @@ export default class Update extends Command
 			}
 			this.log(`Updating node: ${fullPath}`);
 
+			const writes = openLocalWrites(database, client);
 			const before = cacheService.getNode(nodeId);
-			await client.updateNode(nodeId, update);
-			await syncBacklinksIfLinked(
-				[nodeId],
-				[before?.name, before?.note, update.name, update.note],
-				database,
-				client,
-			);
+			writes.local.updateNode(nodeId, update);
+			// Only a link added or removed can change backlinks.
+			if (hasInternalLink([before?.name, before?.note, update.name, update.note].join(" ")))
+			{
+				writes.local.syncBacklinks([nodeId]);
+			}
+			await drainAfterWrite(this, writes);
 
 			this.log("");
 			this.log(`Successfully updated node`);

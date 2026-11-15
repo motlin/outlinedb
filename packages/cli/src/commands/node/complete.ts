@@ -1,4 +1,4 @@
-import type {WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
+import type {LocalTreeWriter} from "@outlinedb/shared/cache";
 import {BaseCompletionCommand} from "../base-completion-command.js";
 
 export default class Complete extends BaseCompletionCommand
@@ -35,8 +35,8 @@ export default class Complete extends BaseCompletionCommand
 		return "Marking node as completed";
 	}
 
-	protected override async executeAction(client: WorkflowyWriteThroughClient, nodeId: string): Promise<void>
+	protected override executeAction(local: LocalTreeWriter, nodeId: string): void
 	{
-		await client.completeNode(nodeId);
+		local.completeNode(nodeId);
 	}
 }
