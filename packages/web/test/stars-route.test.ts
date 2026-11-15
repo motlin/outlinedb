@@ -62,7 +62,6 @@ function setup(meta: Record<string, unknown> | undefined, savedViews?: string)
 	{
 		loadAccountState: vi.fn<WorkflowyInternalAdapter["loadAccountState"]>(async () => Promise.resolve()),
 		setRootMetaValues: vi.fn<WorkflowyInternalAdapter["setRootMetaValues"]>(unreachable),
-		setSavedViews: vi.fn<WorkflowyInternalAdapter["setSavedViews"]>(unreachable),
 	};
 	const db = drizzle(
 		new DatabaseConstructor(":memory:"),

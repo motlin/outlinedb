@@ -891,17 +891,7 @@ describe("nodes duplicate route", () =>
 		);
 		link.run("E", "X", "2000-01-01T00:00:00.000Z", FAR_FUTURE_DATE);
 		link.run("M", "O", "2000-01-01T00:00:00.000Z", FAR_FUTURE_DATE);
-		const createTreesAt = vi.fn<WorkflowyInternalAdapter["createTreesAt"]>(async (input) =>
-			Promise.resolve(
-				{
-					ids: input.trees.map((tree) => tree.id ?? ""),
-				},
-			),
-		);
 		// Expansion is account state: it lands in the seeded local store with account outbox rows, never pushed first.
-		const setExpanded = vi.fn<WorkflowyInternalAdapter["setExpanded"]>(async () =>
-			Promise.reject(new Error("workflowy.com is unreachable")),
-		);
 		runUnitOfWork(db, (unitOfWork) =>
 		{
 			replaceExpansion(unitOfWork, [], 0);
@@ -921,8 +911,6 @@ describe("nodes duplicate route", () =>
 			internalAdapter: () =>
 				(
 				{
-					createTreesAt,
-					setExpanded,
 					expansionTest,
 				}) as unknown as WorkflowyInternalAdapter,
 		} as unknown as ServerContext;
@@ -950,8 +938,6 @@ describe("nodes duplicate route", () =>
 		/** Every pending outbox row as `id:aspect`. */
 		const pending = () => readPendingOutbox(db, 1000).map(({nodeId, aspect}) => `${nodeId}:${aspect}`);
 		return {
-			createTreesAt,
-			setExpanded,
 			opened,
 			post,
 			cacheService,
@@ -963,7 +949,7 @@ describe("nodes duplicate route", () =>
 	{
 		it("deep-copies each item to consecutive slots locally in mirror mode, records the creates, and keeps child mirrors as mirrors", async () =>
 		{
-			const {createTreesAt, post, cacheService, pending} = setup();
+			const {post, cacheService, pending} = setup();
 			const shape = (parentId: string | null): unknown[] =>
 				cacheService.getChildren(parentId).map((node) => (
 				{
@@ -995,7 +981,6 @@ describe("nodes duplicate route", () =>
 						.slice(1)
 						.map((node) => node.id),
 					rootRows: rootRows.every((row) => pending().includes(row)),
-					calls: createTreesAt.mock.calls.length,
 				},
 			).toStrictEqual(
 				{
@@ -1043,7 +1028,6 @@ describe("nodes duplicate route", () =>
 					],
 					placed: ids,
 					rootRows: true,
-					calls: 0,
 				},
 			);
 		});
@@ -1084,7 +1068,7 @@ describe("nodes duplicate route", () =>
 
 		it("rejects an empty id list and an unknown id without writing", async () =>
 		{
-			const {createTreesAt, post} = setup();
+			const {post} = setup();
 
 			const empty = await post(
 				{
@@ -1105,20 +1089,18 @@ describe("nodes duplicate route", () =>
 				{
 					empty: empty.status,
 					unknown: unknown.status,
-					calls: createTreesAt.mock.calls.length,
 				},
 			).toStrictEqual(
 				{
 					empty: 400,
 					unknown: 404,
-					calls: 0,
 				},
 			);
 		});
 
 		it("deep-copies into the local tables in a standalone context, with no adapter", async () =>
 		{
-			const {createTreesAt, post, cacheService} = setup([], "standalone");
+			const {post, cacheService} = setup([], "standalone");
 			const shape = (parentId: string | null): unknown[] =>
 				cacheService.getChildren(parentId).map((node) => (
 				{
@@ -1146,7 +1128,6 @@ describe("nodes duplicate route", () =>
 					status: res.status,
 					copy: shape("P")[0],
 					first: ids[0] === cacheService.getChildren("P")[0]?.id,
-					calls: createTreesAt.mock.calls.length,
 				},
 			).toStrictEqual(
 				{
@@ -1183,7 +1164,6 @@ describe("nodes duplicate route", () =>
 						],
 					},
 					first: true,
-					calls: 0,
 				},
 			);
 		});
@@ -1517,14 +1497,8 @@ describe("nodes mirror route", () =>
 			counter += 1;
 			return `new${counter}` as ReturnType<typeof crypto.randomUUID>;
 		});
-		const createMirrorsAt = vi.fn<WorkflowyInternalAdapter["createMirrorsAt"]>(async () =>
-			Promise.reject(UNREACHABLE),
-		);
 		const moveTo = vi.fn<WorkflowyInternalAdapter["moveTo"]>(async () => Promise.reject(UNREACHABLE));
 		// Expansion is account state: it lands in the seeded local store with account outbox rows, never pushed first.
-		const setExpanded = vi.fn<WorkflowyInternalAdapter["setExpanded"]>(async () =>
-			Promise.reject(new Error("workflowy.com is unreachable")),
-		);
 		runUnitOfWork(db, (unitOfWork) =>
 		{
 			replaceExpansion(unitOfWork, [], 0);
@@ -1546,8 +1520,6 @@ describe("nodes mirror route", () =>
 				configured
 					? (
 						{
-							createMirrorsAt,
-							setExpanded,
 							expansionTest,
 							moveTo,
 						} as unknown as WorkflowyInternalAdapter)
@@ -1583,8 +1555,6 @@ describe("nodes mirror route", () =>
 		/** The pending outbox rows, as `node aspect`. */
 		const pending = () => readPendingOutbox(db, 100).map(({nodeId, aspect}) => `${nodeId} ${aspect}`);
 		return {
-			createMirrorsAt,
-			setExpanded,
 			opened,
 			moveTo,
 			cacheService,
@@ -1677,7 +1647,7 @@ describe("nodes mirror route", () =>
 	{
 		it("mirrors each item locally in order at consecutive indexes while workflowy.com is down, leaving pending rows", async () =>
 		{
-			const {createMirrorsAt, post, children, pending, outboxWritten} = setup();
+			const {post, children, pending, outboxWritten} = setup();
 
 			const res = await post(
 				"/mirror",
@@ -1710,7 +1680,6 @@ describe("nodes mirror route", () =>
 					children: children("P"),
 					pending: pending(),
 					drains: outboxWritten.mock.calls.length,
-					upstream: createMirrorsAt.mock.calls.length,
 				},
 			).toStrictEqual(
 				{
@@ -1740,7 +1709,6 @@ describe("nodes mirror route", () =>
 						"new2 placement",
 					],
 					drains: 1,
-					upstream: 0,
 				},
 			);
 		});
@@ -1806,7 +1774,7 @@ describe("nodes mirror route", () =>
 
 		it("rejects Home as the source", async () =>
 		{
-			const {createMirrorsAt, post} = setup();
+			const {post} = setup();
 
 			const res = await post(
 				"/mirror",
@@ -1821,7 +1789,6 @@ describe("nodes mirror route", () =>
 				{
 					status: res.status,
 					body: await res.json(),
-					calls: createMirrorsAt.mock.calls.length,
 				},
 			).toStrictEqual(
 				{
@@ -1830,14 +1797,13 @@ describe("nodes mirror route", () =>
 					{
 						error: "Cannot mirror Home",
 					},
-					calls: 0,
 				},
 			);
 		});
 
 		it("rejects a source that is the parent or an ancestor of the destination", async () =>
 		{
-			const {createMirrorsAt, post} = setup();
+			const {post} = setup();
 
 			const ancestor = await post(
 				"/mirror",
@@ -1860,7 +1826,6 @@ describe("nodes mirror route", () =>
 				{
 					ancestor: [ancestor.status, await ancestor.json()],
 					parent: [parent.status, await parent.json()],
-					calls: createMirrorsAt.mock.calls.length,
 				},
 			).toStrictEqual(
 				{
@@ -1876,7 +1841,6 @@ describe("nodes mirror route", () =>
 							error: "Cannot mirror an item into itself",
 						},
 					],
-					calls: 0,
 				},
 			);
 		});

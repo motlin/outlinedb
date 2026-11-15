@@ -127,14 +127,7 @@ function setup(expanded: string[] = [])
 		counter += 1;
 		return `copy${counter}` as ReturnType<typeof crypto.randomUUID>;
 	});
-	// workflowy.com is down: every upstream tree write fails, while expansion (account state) still answers.
-	const createTreesAt = vi.fn<WorkflowyInternalAdapter["createTreesAt"]>(async () =>
-		Promise.reject(new Error("workflowy.com is unreachable")),
-	);
 	// Expansion is account state: it lands in the seeded local store with account outbox rows, never pushed first.
-	const setExpanded = vi.fn<WorkflowyInternalAdapter["setExpanded"]>(async () =>
-		Promise.reject(new Error("workflowy.com is unreachable")),
-	);
 	runUnitOfWork(db, (unitOfWork) =>
 	{
 		replaceExpansion(unitOfWork, [], 0);
@@ -156,8 +149,6 @@ function setup(expanded: string[] = [])
 		internalAdapter: () =>
 			(
 			{
-				createTreesAt,
-				setExpanded,
 				expansionTest,
 			}) as unknown as WorkflowyInternalAdapter,
 	} as unknown as ServerContext;
@@ -188,8 +179,6 @@ function setup(expanded: string[] = [])
 		});
 	const pending = () => readPendingOutbox(db, 100).map(({nodeId, aspect}) => `${nodeId} ${aspect}`);
 	return {
-		createTreesAt,
-		setExpanded,
 		opened,
 		cacheService,
 		post,
@@ -208,7 +197,7 @@ describe("POST /api/v1/nodes/:id/detach-mirror", () =>
 {
 	it("copies a mirror locally as an open item at its slot: descendant mirrors and originals-with-mirrors stay mirrors, then removes the mirror", async () =>
 	{
-		const {createTreesAt, post, outline, pending} = setup();
+		const {post, outline, pending} = setup();
 
 		const res = await post("/M/detach-mirror");
 
@@ -235,7 +224,6 @@ describe("POST /api/v1/nodes/:id/detach-mirror", () =>
 				},
 				outline: outline("P"),
 				pending: pending(),
-				upstream: createTreesAt.mock.calls.length,
 			},
 		).toStrictEqual(
 			{
@@ -265,7 +253,6 @@ describe("POST /api/v1/nodes/:id/detach-mirror", () =>
 					"copy5 create",
 					"copy5 mirror",
 				],
-				upstream: 0,
 			},
 		);
 	});
@@ -308,7 +295,7 @@ describe("POST /api/v1/nodes/:id/detach-mirror", () =>
 
 	it("refuses a subtree of more than 2000 items without writing", async () =>
 	{
-		const {createTreesAt, cacheService, post, pending} = setup();
+		const {cacheService, post, pending} = setup();
 		for (let i = 0; i < 2000; i += 1)
 		{
 			cacheService.insertNode(apiNode(`bulk${i}`, "G", i), "G");
@@ -320,7 +307,6 @@ describe("POST /api/v1/nodes/:id/detach-mirror", () =>
 			{
 				status: res.status,
 				body: await res.json(),
-				created: createTreesAt.mock.calls.length,
 				pending: pending(),
 			},
 		).toStrictEqual(
@@ -330,7 +316,6 @@ describe("POST /api/v1/nodes/:id/detach-mirror", () =>
 				{
 					error: "Detaching mirror subtrees containing more than 2000 items is not supported.",
 				},
-				created: 0,
 				pending: [],
 			},
 		);
@@ -338,19 +323,19 @@ describe("POST /api/v1/nodes/:id/detach-mirror", () =>
 
 	it("refuses a plain node", async () =>
 	{
-		const {createTreesAt, post} = setup();
+		const {post, pending} = setup();
 
 		const res = await post("/A/detach-mirror");
 
 		expect(
 			{
 				status: res.status,
-				calls: createTreesAt.mock.calls.length,
+				pending: pending(),
 			},
 		).toStrictEqual(
 			{
 				status: 400,
-				calls: 0,
+				pending: [],
 			},
 		);
 	});

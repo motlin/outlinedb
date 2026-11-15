@@ -26,7 +26,7 @@ import
 	planSubtreeDelete,
 	readInternalMetadata,
 } from "@outlinedb/shared/cache";
-import type {ExactMover, LocalDeletePlan, OutboxEntry, UnitOfWork} from "@outlinedb/shared/cache";
+import type {LocalDeletePlan, OutboxEntry, UnitOfWork} from "@outlinedb/shared/cache";
 import {MAX_COPY_ITEMS} from "../copy-tree.js";
 import {mirrors as mirrorsTable, s3Files} from "@outlinedb/shared/db";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
@@ -327,20 +327,7 @@ export function getWriteClient(ctx: ServerContext): WorkflowyWriteThroughClient 
 	{
 		return undefined;
 	}
-	// With the internal API, a mirror-delete promotion is one exact-index move instead of a sibling rotation.
-	const adapter = getAdapter(ctx);
-	const exactMover: ExactMover | undefined = adapter &&
-	{
-		moveTo: async ({ids, parentId, index}) =>
-			adapter.moveTo(
-				{
-					ids,
-					parentId: adapterParent(parentId),
-					index,
-				},
-			),
-	};
-	return new WorkflowyWriteThroughClient(apiClient, ctx.cacheService, exactMover);
+	return new WorkflowyWriteThroughClient(apiClient, ctx.cacheService);
 }
 
 /**
@@ -640,12 +627,6 @@ export function slotIndex(index: number | undefined, position: number | undefine
 		return index;
 	}
 	return position !== undefined && position < 0 ? 0 : undefined;
-}
-
-/** The adapter's parent id: a node id, or `HOME_TARGET`. */
-function adapterParent(parentId: string | null): string
-{
-	return parentId ?? HOME_TARGET;
 }
 
 function childIds(ctx: ServerContext, parentId: string | null): string[]

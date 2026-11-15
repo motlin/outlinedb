@@ -76,9 +76,6 @@ export function mirrorAccountContext(
 		setRootMeta: vi.fn<WorkflowyInternalAdapter["setRootMeta"]>(unreachable),
 		setRootMetaValues: vi.fn<WorkflowyInternalAdapter["setRootMetaValues"]>(unreachable),
 		setSetting: vi.fn<WorkflowyInternalAdapter["setSetting"]>(unreachable),
-		setSavedViews: vi.fn<WorkflowyInternalAdapter["setSavedViews"]>(unreachable),
-		setExpanded: vi.fn<WorkflowyInternalAdapter["setExpanded"]>(unreachable),
-		setRawExpansionKeys: vi.fn<WorkflowyInternalAdapter["setRawExpansionKeys"]>(unreachable),
 		...extraAdapter,
 	};
 	const outboxWritten = vi.fn<() => void>();

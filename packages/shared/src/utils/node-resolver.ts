@@ -1,5 +1,4 @@
 import type {WorkflowyApiClient} from "../api/index.js";
-import {WorkflowyWriteThroughClient} from "../cache/index.js";
 import type {CacheService} from "../cache/index.js";
 import {HOME_TARGET, isSystemTarget} from "../types/index.js";
 import {isShortId} from "../workflowy/index.js";
@@ -101,70 +100,6 @@ export async function resolveOptionalNodeId(
 		return undefined;
 	}
 	return resolveNodeId(flags, cacheService, apiClient);
-}
-
-/**
- * Resolves a node path, creating missing segments as needed (like `mkdir -p`).
- * Walks the path from Home, finds existing nodes, and creates any missing ones,
- * including a missing first segment at the top level.
- *
- * @param path - Comma-separated path to resolve/create
- * @param cacheService - The cache service for local lookup and caching created nodes
- * @param apiClient - The API client for remote lookup and node creation
- * @returns The resolved node ID (creating path segments as needed)
- */
-export async function resolveOrCreateNodePath(
-	path: string,
-	cacheService: CacheService,
-	apiClient: WorkflowyApiClient,
-): Promise<string>
-{
-	const pathParts = path.split(",").map((s) => s.trim());
-
-	const createdNodes = new Map<string, string>();
-
-	let currentParentId: string | undefined;
-
-	for (const [i, part] of pathParts.entries())
-	{
-		const subPath = pathParts.slice(0, i + 1);
-		const subKey = subPath.join("/");
-
-		if (createdNodes.has(subKey))
-		{
-			currentParentId = createdNodes.get(subKey);
-			continue;
-		}
-
-		const cachedNode = cacheService.findNodeByPath(subPath);
-		const nodeId = cachedNode?.id ?? (await apiClient.findNodeByPath(subPath))?.id;
-
-		if (nodeId)
-		{
-			currentParentId = nodeId;
-			createdNodes.set(subKey, nodeId);
-		}
-		else
-		{
-			// A missing first segment is created at Home (the top level).
-			const newNode = await new WorkflowyWriteThroughClient(apiClient, cacheService).createNode(
-				{
-					parent_id: currentParentId ?? null,
-					name: part,
-				},
-			);
-
-			currentParentId = newNode.id;
-			createdNodes.set(subKey, newNode.id);
-		}
-	}
-
-	if (!currentParentId)
-	{
-		throw new Error(`Failed to resolve or create path: ${path}`);
-	}
-
-	return currentParentId;
 }
 
 /**

@@ -29,14 +29,7 @@ export
 	type TextSearchOptions,
 	type TextSearchRow,
 } from "./cache-service.js";
-export
-{
-	type CreatedNodeTree,
-	createNodeTree,
-	type NodeTreeSpec,
-	NodeTreeSpecSchema,
-	type TreeWriteClient,
-} from "./create-node-tree.js";
+export {type CreatedNodeTree, type NodeTreeSpec, NodeTreeSpecSchema} from "./create-node-tree.js";
 export
 {
 	contentMatches,
@@ -226,4 +219,3 @@ export
 } from "./system-time.js";
 export type {UnitOfWorkStart} from "./system-time.js";
 export {WorkflowyWriteThroughClient} from "./workflowy-write-through-client.js";
-export type {ExactMover} from "./workflowy-write-through-client.js";

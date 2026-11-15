@@ -241,7 +241,7 @@ describe("expansion route", () =>
 	{
 		it("applies each PATCH at once to the local store, each changed key pending for the outbox, with no push", async () =>
 		{
-			const {adapter, outboxWritten, local, expansionWritten, keys, request} = setup(["5e6f7a8b"]);
+			const {outboxWritten, local, expansionWritten, keys, request} = setup(["5e6f7a8b"]);
 
 			const first = await request(
 				"PATCH",
@@ -273,7 +273,6 @@ describe("expansion route", () =>
 					pending: local.pendingExpansion(),
 					announced: expansionWritten.mock.calls.length,
 					drainStarted: outboxWritten.mock.calls.length > 0,
-					pushes: adapter.setExpanded.mock.calls,
 				},
 			).toStrictEqual(
 				{
@@ -293,7 +292,6 @@ describe("expansion route", () =>
 					pending: ["1a2b3c4d", "5e6f7a8b"],
 					announced: 2,
 					drainStarted: true,
-					pushes: [],
 				},
 			);
 		});
@@ -389,7 +387,7 @@ describe("expansion route", () =>
 
 		it("stores raw keys locally at once, pending for the outbox, with no push", async () =>
 		{
-			const {adapter, local, keys, request} = setup();
+			const {local, keys, request} = setup();
 
 			const first = await request(
 				"PATCH",
@@ -408,7 +406,6 @@ describe("expansion route", () =>
 					first,
 					keys: keys(),
 					pending: local.pendingExpansion(),
-					pushes: adapter.setRawExpansionKeys.mock.calls,
 				},
 			).toStrictEqual(
 				{
@@ -420,7 +417,6 @@ describe("expansion route", () =>
 					},
 					keys: ["leftbar__home__None/x/__abcdefgh"],
 					pending: ["leftbar__home__None/x/__abcdefgh"],
-					pushes: [],
 				},
 			);
 		});

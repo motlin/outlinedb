@@ -6,7 +6,7 @@ import {afterEach, describe, expect, it, vi} from "vite-plus/test";
 import {CacheService, provisionLocalAccount, readPendingOutbox, storeInternalMetadata} from "@outlinedb/shared/cache";
 import * as schema from "@outlinedb/shared/db";
 import {calendarNodeId, calendarRootId, CalendarRootMissing} from "@outlinedb/shared/internal";
-import type {WorkflowyInternalAdapter, CalendarLayoutSnapshot, LayoutTimings} from "@outlinedb/shared/internal";
+import type {WorkflowyInternalAdapter, CalendarLayoutSnapshot} from "@outlinedb/shared/internal";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {findCalendarDay, findCalendarDays, findTaggedCalendarRoot} from "../src/server/calendar-day.js";
 import type {ServerContext, AppEnv} from "../src/server/context.js";
@@ -1359,7 +1359,6 @@ describe("calendar layout route", () =>
 		},
 	};
 
-	const UNREACHABLE = new Error("workflowy.com is unreachable");
 	const open: DatabaseConstructor.Database[] = [];
 	afterEach(() =>
 	{
@@ -1436,9 +1435,6 @@ describe("calendar layout route", () =>
 				calls.push(`getRootMeta ${path.join(".")}`);
 				return Promise.resolve(path[0] === "dateFormat" ? "YYYY-MM-DD ddd" : undefined);
 			},
-			// workflowy.com is down: a tree write that reached it would fail.
-			applyCalendarLayout: async () => Promise.reject(UNREACHABLE),
-			undoCalendarLayout: async () => Promise.reject(UNREACHABLE),
 		};
 		const ctx =
 		{

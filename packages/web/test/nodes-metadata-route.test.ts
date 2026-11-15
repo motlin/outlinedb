@@ -87,7 +87,6 @@ interface FakeAdapter
 {
 	setNodeMetaValues: ReturnType<typeof vi.fn<WorkflowyInternalAdapter["setNodeMetaValues"]>>;
 	syncBacklinks: ReturnType<typeof vi.fn<WorkflowyInternalAdapter["syncBacklinks"]>>;
-	deleteBacklinksOf: ReturnType<typeof vi.fn<WorkflowyInternalAdapter["deleteBacklinksOf"]>>;
 	getRootMeta: ReturnType<typeof vi.fn<WorkflowyInternalAdapter["getRootMeta"]>>;
 }
 
@@ -186,7 +185,6 @@ function setup(
 				},
 			),
 		),
-		deleteBacklinksOf: vi.fn<WorkflowyInternalAdapter["deleteBacklinksOf"]>(async () => Promise.resolve([])),
 	};
 	const ctx =
 	{
@@ -270,7 +268,6 @@ function nodeWriteCalls(adapter: FakeAdapter)
 	return {
 		setNodeMetaValues: adapter.setNodeMetaValues.mock.calls,
 		syncBacklinks: adapter.syncBacklinks.mock.calls,
-		deleteBacklinksOf: adapter.deleteBacklinksOf.mock.calls,
 	};
 }
 
@@ -278,7 +275,6 @@ const NO_UPSTREAM_CALLS =
 {
 	setNodeMetaValues: [],
 	syncBacklinks: [],
-	deleteBacklinksOf: [],
 };
 
 describe("DELETE /api/v1/nodes/:id backlinks in mirror mode", () =>

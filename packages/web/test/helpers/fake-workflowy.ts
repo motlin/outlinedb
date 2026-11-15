@@ -161,12 +161,6 @@ export class FakeWriteThroughClient
 		return this.#complete(nodeId, true);
 	}
 
-	// fallow-ignore-next-line unused-class-member -- called by the routes through the mocked shared client
-	async uncompleteNode(nodeId: string): Promise<WorkflowyNode>
-	{
-		return this.#complete(nodeId, false);
-	}
-
 	async #complete(nodeId: string, completed: boolean): Promise<WorkflowyNode>
 	{
 		const node = read(this.cache, nodeId);
@@ -309,10 +303,6 @@ export function fakeAdapter(cache: CacheService)
 			return Promise.resolve();
 		},
 		async syncBacklinks()
-		{
-			return Promise.resolve();
-		},
-		async deleteBacklinksOf()
 		{
 			return Promise.resolve();
 		},

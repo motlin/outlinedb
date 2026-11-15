@@ -7,20 +7,17 @@ import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
 import {WorkflowyApiClient} from "../src/api/workflowy-client.js";
 import {CacheService} from "../src/cache/cache-service.js";
-import {createNodeTree} from "../src/cache/create-node-tree.js";
 import {WorkflowyWriteThroughClient} from "../src/cache/workflowy-write-through-client.js";
 import * as schema from "../src/db/schema.js";
 import {nodeContent, nodeMetadata, mirrors, nodeEmbeddings, referencesRoots} from "../src/db/schema.js";
 import {compareBinary} from "../src/cache/order-key.js";
 import {FAR_FUTURE_DATE} from "../src/temporal/constants.js";
-import {resolveOrCreateNodePath} from "../src/utils/node-resolver.js";
 import {requestJson, requestBody} from "./helpers/request-body.js";
 import {z} from "zod";
 import type {WorkflowyNode} from "../src/types/workflowy.js";
 import {buildTestDb} from "./helpers/round-trip-helpers.js";
 import {deletePlanCalls} from "../src/cache/delete-plan.js";
 import type {DeletePlan} from "../src/cache/delete-plan.js";
-import type {ExactMover} from "../src/cache/workflowy-write-through-client.js";
 import type {UpdateNodeRequest} from "../src/api/workflowy-client.js";
 
 /** The fractional-indexing integer key of `n`, so seeded keys sort like the seeded priorities. */
@@ -345,59 +342,6 @@ describe("write through create", () =>
 				},
 			);
 		});
-
-		it("caches every node of a created tree at its real priority", async () =>
-		{
-			const {client, cached} = setup();
-
-			await createNodeTree(
-				{
-					name: "tree",
-					children: [
-						{
-							name: "leaf1",
-						},
-						{
-							name: "leaf2",
-						},
-					],
-				},
-				"home",
-				client,
-				"top",
-			);
-
-			expect(cached()).toStrictEqual(
-				{
-					home: ["tree-id", "existing"],
-					root: ["home"],
-					"tree-id": ["leaf1-id", "leaf2-id"],
-				},
-			);
-		});
-
-		it("caches path segments created by resolveOrCreateNodePath at their real priority", async () =>
-		{
-			const {apiClient, cacheService, cached} = setup();
-
-			const id = await resolveOrCreateNodePath("home,made", cacheService, apiClient);
-
-			expect(
-				{
-					id,
-					cached: cached(),
-				},
-			).toStrictEqual(
-				{
-					id: "made-id",
-					cached:
-					{
-						home: ["existing", "made-id"],
-						root: ["home"],
-					},
-				},
-			);
-		});
 	});
 
 	describe("WorkflowyWriteThroughClient positional writes after a server renumbering", () =>
@@ -645,11 +589,6 @@ describe("write through mirror complete", () =>
 			calls.push(["complete", id]);
 			return Promise.resolve();
 		});
-		vi.spyOn(apiClient, "uncompleteNode").mockImplementation(async (id) =>
-		{
-			calls.push(["uncomplete", id]);
-			return Promise.resolve();
-		});
 		vi.spyOn(apiClient, "getNode").mockImplementation(async (id) =>
 			Promise.resolve(
 				{
@@ -690,36 +629,13 @@ describe("write through mirror complete", () =>
 			);
 		});
 
-		it("uncompletes the original when a mirror is uncompleted", async () =>
-		{
-			const {client, calls} = fakes();
-
-			const node = await client.uncompleteNode(MIRROR_ID);
-
-			expect(
-				{
-					calls,
-					id: node.id,
-				},
-			).toStrictEqual(
-				{
-					calls: [["uncomplete", ORIGINAL_ID]],
-					id: ORIGINAL_ID,
-				},
-			);
-		});
-
-		it("completes and uncompletes a plain node in place", async () =>
+		it("completes a plain node in place", async () =>
 		{
 			const {client, calls} = fakes();
 
 			await client.completeNode(PLAIN_ID);
-			await client.uncompleteNode(PLAIN_ID);
 
-			expect(calls).toStrictEqual([
-				["complete", PLAIN_ID],
-				["uncomplete", PLAIN_ID],
-			]);
+			expect(calls).toStrictEqual([["complete", PLAIN_ID]]);
 		});
 	});
 });
@@ -814,12 +730,9 @@ describe("write through mirror delete", () =>
 		failCall,
 		serverOutline = {},
 		referencesRootIds = [],
-		exactMover = false,
 	}:
 	{
 		failCall?: string;
-		/** Give the client an exact-index mover (the internal API), recorded in `calls` as `moveTo <input>`. */
-		exactMover?: boolean;
 		serverOutline?: Record<string, string[]>;
 		/** Nodes to mark as references roots, making their mirror children backlink items. */
 		referencesRootIds?: string[];
@@ -1008,24 +921,7 @@ describe("write through mirror delete", () =>
 				maxDelayMs: 0,
 			},
 		);
-		const mover: ExactMover =
-		{
-			moveTo: async (input) =>
-			{
-				calls.push(`moveTo ${JSON.stringify(input)}`);
-				for (const id of input.ids)
-				{
-					detach(id);
-				}
-				server.get(input.parentId)!.splice(input.index, 0, ...input.ids);
-				return Promise.resolve();
-			},
-		};
-		const client = new WorkflowyWriteThroughClient(
-			apiClient,
-			new CacheService(database),
-			exactMover ? mover : undefined,
-		);
+		const client = new WorkflowyWriteThroughClient(apiClient, new CacheService(database));
 
 		/** Each cached parent's current children in sibling order (roots under `root`), and the current mirrors. */
 		const cacheState = () =>
@@ -1502,63 +1398,6 @@ describe("write through mirror delete", () =>
 			expect(cacheState()).toStrictEqual(before);
 		});
 
-		it("promotes a kept original into its mirror's exact slot with one exact-index move, touching no sibling, when an exact mover is given", async () =>
-		{
-			const {client, calls, cacheState} = setup(
-				{
-					exactMover: true,
-					serverOutline:
-					{
-						agendas: ["agenda-1", "agenda-2", "mirror-out", "agenda-3", "agenda-4"],
-					},
-				},
-			);
-
-			const plan = await client.deleteNode("projects");
-
-			expect(
-				{
-					index: plan.promotions.map(({index}) => index),
-					calls,
-					cache: cacheState(),
-				},
-			).toStrictEqual(
-				{
-					index: [2, 1],
-					calls: [
-						"GET /nodes?parent_id=agendas",
-						"GET /nodes?parent_id=task-a",
-						"DELETE /nodes/mirror-in/mirror",
-						"DELETE /nodes/mirror-nested/mirror",
-						"DELETE /nodes/mirror-b/mirror",
-						"DELETE /nodes/mirror-out/mirror",
-						'moveTo {"ids":["task-a"],"parentId":"agendas","index":2}',
-						"GET /nodes?parent_id=agendas",
-						"DELETE /nodes/mirror-y/mirror",
-						'moveTo {"ids":["task-y"],"parentId":"task-a","index":1}',
-						"GET /nodes?parent_id=task-a",
-						"DELETE /nodes/projects",
-					],
-					cache:
-					{
-						outline:
-						{
-							root: ["agendas", "other"],
-							agendas: ["agenda-1", "agenda-2", "task-a", "agenda-3", "agenda-4"],
-							"task-a": ["task-a1", "task-y"],
-							other: ["other-original", "mirror-a1"],
-						},
-						mirrors: [
-							{
-								originalId: "task-a1",
-								mirrorId: "mirror-a1",
-							},
-						],
-					},
-				},
-			);
-		});
-
 		it("deletes a node without mirrors through the generic endpoint only", async () =>
 		{
 			const {client, calls} = setup();
@@ -1899,7 +1738,6 @@ describe("write through uncached parent", () =>
 		const apiClient = new WorkflowyApiClient("test-key");
 		vi.spyOn(apiClient, "updateNode").mockResolvedValue();
 		vi.spyOn(apiClient, "completeNode").mockResolvedValue();
-		vi.spyOn(apiClient, "uncompleteNode").mockResolvedValue();
 		vi.spyOn(apiClient, "getNode").mockImplementation(async (id) =>
 			Promise.resolve(
 				id === NODE_ID
@@ -1950,15 +1788,6 @@ describe("write through uncached parent", () =>
 			const {client, cacheService} = fakes();
 
 			await client.completeNode(NODE_ID);
-
-			expect(cacheService.getNode(NODE_ID)?.parentId).toBe(PARENT_ID);
-		});
-
-		it("files an uncompleted node under the parent the API reports", async () =>
-		{
-			const {client, cacheService} = fakes();
-
-			await client.uncompleteNode(NODE_ID);
 
 			expect(cacheService.getNode(NODE_ID)?.parentId).toBe(PARENT_ID);
 		});

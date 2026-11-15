@@ -111,7 +111,7 @@ jq -r '.children[] | select(.name != null) | "\(.id)\t\(.name)"' "$OUTPUT_DIR/me
     fi
 done
 
-# Phase 3: Build the tag-frequency map from the SQLite write-through cache.
+# Phase 3: Build the tag-frequency map from the local SQLite database.
 # Gives refinement agents the "how many nodes use this tag" signal they need to
 # tell a canonical tag (used widely) from a one-off typo/junk tag (used once).
 # Read-only query against the cache — never mutates it.

@@ -1,22 +1,10 @@
-import type {ItemRelationships, UpstreamRelationshipMetadata} from "./item-relationships.js";
-import type
-{
-	CreateMirrorResult,
-	CreateNodeRequest,
-	UpdateNodeRequest,
-	WorkflowyApiClient,
-} from "../api/workflowy-client.js";
+import type {UpstreamRelationshipMetadata} from "./item-relationships.js";
+import type {CreateNodeRequest, UpdateNodeRequest, WorkflowyApiClient} from "../api/workflowy-client.js";
 import {isSystemTarget} from "../types/targets.js";
 import type {WorkflowyNode} from "../types/workflowy.js";
 import type {BacklinkSyncRecord, CacheService} from "./cache-service.js";
 import {planSubtreeDelete} from "./delete-plan.js";
 import type {DeletePlan} from "./delete-plan.js";
-
-/** Moves nodes to an exact slot among a parent's children (Home's for `null`), as the internal API can. */
-export interface ExactMover
-{
-	moveTo(input: {ids: string[]; parentId: string | null; index: number}): Promise<void>;
-}
 
 /**
  * Unified write-through client that wraps both WorkflowyApiClient and CacheService.
@@ -30,8 +18,6 @@ export class WorkflowyWriteThroughClient
 	constructor(
 		private readonly apiClient: WorkflowyApiClient,
 		private readonly cacheService: CacheService,
-		/** Places a promoted original in one move; without it, promotions rotate siblings through the REST API. */
-		private readonly exactMover?: ExactMover,
 	)
 	{
 	}
@@ -257,12 +243,6 @@ export class WorkflowyWriteThroughClient
 		return this.cacheService.resolveShortIdToUuid(shortId);
 	}
 
-	/** Whether `nodeId` is cached, or else live on Workflowy (one public read, a 404 meaning no). */
-	async exists(nodeId: string): Promise<boolean>
-	{
-		return this.cacheService.getNode(nodeId) !== undefined || (await this.apiClient.findNode(nodeId)) !== null;
-	}
-
 	/** Each node's upstream `mirror`/`backlink`/`isReferencesRoot` view, rebuilt from the cached edge tables. */
 	relationshipMetadata(nodeIds: readonly string[]): Map<string, UpstreamRelationshipMetadata>
 	{
@@ -336,8 +316,7 @@ export class WorkflowyWriteThroughClient
 	/**
 	 * Delete a node and remove it from the cache, carrying out {@link planDelete}
 	 * in order: inner mirrors, then each promotion (remove the mirror, move the
-	 * original into its slot, move siblings to fix the slot; with an
-	 * {@link ExactMover}, one exact-index move instead), then the generic
+	 * original into its slot, move siblings to fix the slot), then the generic
 	 * delete. The cache follows each call. If any call fails, the rest are not
 	 * sent, so the generic delete never runs before every kept original has
 	 * moved out of the subtree.
@@ -353,21 +332,8 @@ export class WorkflowyWriteThroughClient
 		{
 			await this.deleteMirror(mirrorId);
 		}
-		for (const {mirrorId, originalId, parentId, position, siblingIds, index} of plan.promotions)
+		for (const {mirrorId, originalId, parentId, position, siblingIds} of plan.promotions)
 		{
-			if (this.exactMover !== undefined)
-			{
-				await this.deleteMirror(mirrorId);
-				await this.exactMover.moveTo(
-					{
-						ids: [originalId],
-						parentId,
-						index,
-					},
-				);
-				await this.refreshChildren([parentId]);
-				continue;
-			}
 			const end = position === "top" ? -1 : 0;
 			await this.promote(mirrorId, originalId, parentId, end);
 			for (const siblingId of siblingIds)
@@ -433,38 +399,6 @@ export class WorkflowyWriteThroughClient
 	}
 
 	/**
-	 * Create a live mirror of a node and record it in the cache. The mirror row
-	 * is stored blank, matching backup imports: its content lives on the origin.
-	 * @param originId The node to mirror
-	 * @param parentId The parent to place the mirror under
-	 * @param position Where among the parent's children to place the mirror
-	 */
-	async createMirror(originId: string, parentId: string, position: "top" | "bottom"): Promise<CreateMirrorResult>
-	{
-		const result = await this.apiClient.createMirror(originId, parentId, position);
-		const mirrorNode = await this.apiClient.getNode(result.mirrorId);
-		const mirrorParentId = mirrorNode.parent_id ?? parentId;
-		await this.ensureParentInCache(mirrorParentId);
-		this.cacheService.insertNode(
-			{
-				...mirrorNode,
-				name: "",
-				note: null,
-			},
-			mirrorParentId,
-			position,
-		);
-		this.cacheService.insertMirror(result.originId, result.mirrorId);
-		return result;
-	}
-
-	/** Cache the mirror, backlink and references-root rows an accepted push created outside {@link createMirror}. */
-	recordRelationships(relationships: ItemRelationships): void
-	{
-		this.cacheService.recordRelationships(relationships);
-	}
-
-	/**
 	 * Remove a mirror and drop it, with its mirror relationship, from the cache.
 	 * @param mirrorId The mirror node to remove
 	 */
@@ -490,23 +424,5 @@ export class WorkflowyWriteThroughClient
 		await this.ensureParentInCache(parentId);
 		this.cacheService.insertNode(completedNode, parentId);
 		return completedNode;
-	}
-
-	/**
-	 * Mark a node as not completed and update the cache. Uncompleting a mirror
-	 * uncompletes its original.
-	 * @param requestedId The node ID to uncomplete
-	 * @returns The uncompleted node (the original, for a mirror)
-	 */
-	async uncompleteNode(requestedId: string): Promise<WorkflowyNode>
-	{
-		const nodeId = this.resolveUpdateTarget(requestedId);
-		await this.apiClient.uncompleteNode(nodeId);
-		// Fetch fresh node data from API to update cache correctly
-		const uncompletedNode = await this.apiClient.getNode(nodeId);
-		const parentId = this.cachedParentOr(nodeId, uncompletedNode);
-		await this.ensureParentInCache(parentId);
-		this.cacheService.insertNode(uncompletedNode, parentId);
-		return uncompletedNode;
 	}
 }
