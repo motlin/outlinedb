@@ -1734,6 +1734,17 @@ export class LocalTreeWriter
 				pending.markPlaced(id);
 			}
 			order.splice(0, order.length, ...before, ...move.ids, ...after);
+			// workflowy.com touches the destination parent on every move, a reorder in place included, but never the
+			// source parent or any sibling (.llm/plans/2026-11-10-move-modified-at.md).
+			if (target !== null)
+			{
+				pending.setMetadata(
+					target,
+					{
+						modifiedAt: now,
+					},
+				);
+			}
 		}
 	}
 

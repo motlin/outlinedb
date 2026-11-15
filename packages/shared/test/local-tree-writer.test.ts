@@ -724,7 +724,7 @@ describe("LocalTreeWriter", () =>
 		);
 	});
 
-	it("moves a node down within its parent, counting the slot before removal", () =>
+	it("moves a node down within its parent, counting the slot before removal and touching the parent's modifiedAt", () =>
 	{
 		const {writer, siblings, metadataVersions, contentVersions} = setup();
 
@@ -739,7 +739,7 @@ describe("LocalTreeWriter", () =>
 		expect(
 			{
 				siblings: siblings("p"),
-				metadata: metadataVersions(["a", "b", "c"]),
+				metadata: metadataVersions(["a", "b", "c", "p"]),
 				content: contentVersions(["a"]),
 			},
 		).toStrictEqual(
@@ -770,6 +770,11 @@ describe("LocalTreeWriter", () =>
 					},
 					seeded("b", 1),
 					seeded("c", 2),
+					seeded("p", 0, NOW),
+					{
+						...reversioned("p", 0),
+						modifiedAt: NOW_DATE,
+					},
 				],
 				content: [
 					{
@@ -785,7 +790,7 @@ describe("LocalTreeWriter", () =>
 		);
 	});
 
-	it("moves a node across parents with a key before its new first sibling, writing no sibling in either parent", () =>
+	it("moves a node across parents with a key before its new first sibling, touching only the new parent's modifiedAt", () =>
 	{
 		const {writer, siblings, metadataVersions, contentVersions, outboxRows} = setup();
 
@@ -801,7 +806,7 @@ describe("LocalTreeWriter", () =>
 			{
 				p: siblings("p"),
 				q: siblings("q"),
-				metadata: metadataVersions(["b", "c", "x", "m"]),
+				metadata: metadataVersions(["b", "c", "x", "m", "p", "q"]),
 				content: contentVersions(["b"]),
 				outbox: outboxRows(),
 			},
@@ -845,6 +850,12 @@ describe("LocalTreeWriter", () =>
 					},
 					seeded("c", 2),
 					seeded("m", 1),
+					seeded("p", 0),
+					seeded("q", 1, NOW),
+					{
+						...reversioned("q", 1),
+						modifiedAt: NOW_DATE,
+					},
 					seeded("x", 0),
 				],
 				content: [
