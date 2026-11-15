@@ -527,9 +527,9 @@ USAGE
   $ outlinedb cache temporal-rollback --to <value> [--exclude
     node_content|node_metadata|calendar_metadata|calendar_levels|node_display_metadata|node_table_cell_sizes|node_embedd
     ings|mirrors|ai_metadata|node_label_suggestions|s3_files|changes_metadata|references_roots|backup_imports|api_import
-    _timestamp|tree_transactions|calendar_layout_applies|file_blobs|whats_new_reads|account|root_preferences|account_set
-    tings|tag_colors|stars|star_order|location_renames|enabled_features|visible_features|expanded_nodes|changelog_reads|
-    surveys|saved_views|ai_assistants|ai_prompt_buttons...] [--dry-run] [-y]
+    _timestamp|tree_transactions|calendar_layout_applies|file_blobs|whats_new_reads|outbox|account|root_preferences|acco
+    unt_settings|tag_colors|stars|star_order|location_renames|enabled_features|visible_features|expanded_nodes|changelog
+    _reads|surveys|saved_views|ai_assistants|ai_prompt_buttons...] [--dry-run] [-y]
 
 FLAGS
   -y, --yes
@@ -542,9 +542,9 @@ FLAGS
       [default: ] Table to exclude from rollback (repeatable)
       <options: node_content|node_metadata|calendar_metadata|calendar_levels|node_display_metadata|node_table_cell_sizes|n
       ode_embeddings|mirrors|ai_metadata|node_label_suggestions|s3_files|changes_metadata|references_roots|backup_imports|
-      api_import_timestamp|tree_transactions|calendar_layout_applies|file_blobs|whats_new_reads|account|root_preferences|a
-      ccount_settings|tag_colors|stars|star_order|location_renames|enabled_features|visible_features|expanded_nodes|change
-      log_reads|surveys|saved_views|ai_assistants|ai_prompt_buttons>
+      api_import_timestamp|tree_transactions|calendar_layout_applies|file_blobs|whats_new_reads|outbox|account|root_prefer
+      ences|account_settings|tag_colors|stars|star_order|location_renames|enabled_features|visible_features|expanded_nodes
+      |changelog_reads|surveys|saved_views|ai_assistants|ai_prompt_buttons>
 
   --to=<value>
       (required) Target timestamp to roll back to (e.g., "2026-01-23 00:00:00")

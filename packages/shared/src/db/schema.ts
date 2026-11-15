@@ -335,6 +335,38 @@ export const referencesRoots = sqliteTable(
 	],
 );
 
+/**
+ * outbox: which aspect of which node is ahead of workflowy.com in mirror mode. A current row is pending; the drain
+ * closes it once upstream acknowledged the op. The change itself is the node's current local state. `node_id` is a
+ * reference, not an owner: a pending delete must outlive its node.
+ */
+export const outbox = sqliteTable(
+	"outbox",
+	{
+		nodeId: text("node_id").notNull(),
+		/** create | name | note | placement | completion | metadata | mirror | delete */
+		aspect: text("aspect").notNull(),
+		/** System time of the first local write still pending for this aspect. */
+		enqueuedAt: text("enqueued_at").notNull(),
+		/** Null until a drain fails on this row. */
+		lastError: text("last_error"),
+
+		systemFrom: text("system_from").notNull(),
+		systemTo: text("system_to").notNull(),
+	},
+	(table) => [
+		primaryKey(
+			{
+				columns: [table.nodeId, table.aspect, table.systemFrom],
+			},
+		),
+		uniqueIndex("outbox_system_to_idx").on(table.nodeId, table.aspect, table.systemTo),
+		index("outbox_closed_at_idx")
+			.on(table.systemTo)
+			.where(sql`system_to < '9999-12-31 23:59:59'`),
+	],
+);
+
 export const backupImports = sqliteTable(
 	"backup_imports",
 	{

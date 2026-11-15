@@ -57,6 +57,13 @@
 			"when": 1794760652570,
 			"tag": "0007_node_metadata_drop_priority",
 			"breakpoints": true
+		},
+		{
+			"idx": 8,
+			"version": "6",
+			"when": 1794763139502,
+			"tag": "0008_outbox",
+			"breakpoints": true
 		}
 	]
 }

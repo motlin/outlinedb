@@ -28,6 +28,7 @@ import
 	nodeMetadata,
 	nodeTableCellSizes,
 	nodeTags,
+	outbox,
 	referencesRoots,
 	rootPreferences,
 	s3Files,
@@ -183,6 +184,8 @@ export const NON_NODE_TABLES: Readonly<Record<string, string>> =
 		"each calendar root's last applied layout, as the system time undo reads the subtree's history at",
 	[getTableName(fileBlobs)]: "local copies of attachment bytes, kept after the attachment's node ends",
 	[getTableName(whatsNewReads)]: "our own What's New entries the user has seen, keyed by entry id",
+	// node_id is a reference, not an owner: ending a node must not end its pending delete row, which still has to drain.
+	[getTableName(outbox)]: "mirror mode's pending upstream deliveries, which outlive the nodes they reference",
 	...Object.fromEntries(ACCOUNT_COMPOSITE_TABLES.map((table) => [getTableName(table), "the account composite"])),
 };
 

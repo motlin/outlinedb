@@ -7,6 +7,8 @@ import {join} from "node:path";
 import {AccountNotProvisionedError} from "../src/cache/account-store.js";
 import {provisionLocalAccount} from "../src/cache/local-account.js";
 import {LocalTreeWriter} from "../src/cache/local-tree-writer.js";
+import {OutboxRecorder, pendingAspects} from "../src/cache/outbox.js";
+import type {OutboxAspect} from "../src/cache/outbox.js";
 import * as schema from "../src/db/schema.js";
 import
 {
@@ -15,6 +17,7 @@ import
 	nodeDisplayMetadata,
 	nodeMetadata,
 	nodeTableCellSizes,
+	outbox,
 	rootPreferences,
 } from "../src/db/schema.js";
 import {FAR_FUTURE_DATE} from "../src/temporal/constants.js";
@@ -98,7 +101,12 @@ function setup()
 		)
 		.run();
 
-	const writer = new LocalTreeWriter(database);
+	const writer = new LocalTreeWriter(
+		database,
+		{
+			outbox: new OutboxRecorder(),
+		},
+	);
 
 	/** A parent's current children (Home's for null) in sibling order, with their order key. */
 	const siblings = (parentId: string | null) =>
@@ -155,6 +163,9 @@ function setup()
 
 	const mirrorVersions = () => database.select().from(mirrors).all();
 
+	const outboxRows = () =>
+		database.select().from(outbox).orderBy(asc(outbox.nodeId), asc(outbox.aspect), asc(outbox.systemFrom)).all();
+
 	const displayVersions = () =>
 		database.select().from(nodeDisplayMetadata).orderBy(asc(nodeDisplayMetadata.systemFrom)).all();
 
@@ -181,9 +192,23 @@ function setup()
 		metadataVersions,
 		contentVersions,
 		mirrorVersions,
+		outboxRows,
 		displayVersions,
 		cellSizeVersions,
 		homeLayoutVersions,
+	};
+}
+
+/** A current outbox row first enqueued at `at`. */
+function pending(nodeId: string, aspect: OutboxAspect, at = NOW)
+{
+	return {
+		nodeId,
+		aspect,
+		enqueuedAt: at,
+		lastError: null,
+		systemFrom: at,
+		systemTo: FAR_FUTURE_DATE,
 	};
 }
 
@@ -230,7 +255,7 @@ describe("LocalTreeWriter", () =>
 
 	it("creates a node at the top with the client's id and a key before its first sibling, writing no sibling", () =>
 	{
-		const {writer, siblings, metadataVersions, contentVersions} = setup();
+		const {writer, siblings, metadataVersions, contentVersions, outboxRows} = setup();
 
 		const result = writer.createAt(
 			{
@@ -248,6 +273,7 @@ describe("LocalTreeWriter", () =>
 				siblings: siblings("p"),
 				metadata: metadataVersions(["a", "b", "c", "n"]),
 				content: contentVersions(["n"]),
+				outbox: outboxRows(),
 			},
 		).toStrictEqual(
 			{
@@ -302,6 +328,7 @@ describe("LocalTreeWriter", () =>
 						systemTo: FAR_FUTURE_DATE,
 					},
 				],
+				outbox: [pending("n", "create"), pending("n", "placement")],
 			},
 		);
 	});
@@ -500,7 +527,7 @@ describe("LocalTreeWriter", () =>
 
 	it("edits a node's name and note, closing the old content version and touching modifiedAt", () =>
 	{
-		const {writer, contentVersions, metadataVersions} = setup();
+		const {writer, contentVersions, metadataVersions, outboxRows} = setup();
 
 		writer.updateNode(
 			"a",
@@ -514,6 +541,7 @@ describe("LocalTreeWriter", () =>
 			{
 				content: contentVersions(["a"]),
 				metadata: metadataVersions(["a"]),
+				outbox: outboxRows(),
 			},
 		).toStrictEqual(
 			{
@@ -542,7 +570,56 @@ describe("LocalTreeWriter", () =>
 						modifiedAt: NOW_DATE,
 					},
 				],
+				outbox: [pending("a", "name"), pending("a", "note")],
 			},
+		);
+	});
+
+	it("coalesces two renames into the one pending name row the first opened, and writes no row for an unchanged name", () =>
+	{
+		const {writer, outboxRows} = setup();
+
+		writer.updateNode(
+			"a",
+			{
+				name: "first",
+			},
+		);
+		vi.setSystemTime(new Date("2026-03-02T00:00:00.000Z"));
+		writer.updateNode(
+			"a",
+			{
+				name: "second",
+			},
+		);
+		writer.updateNode(
+			"b",
+			{
+				name: "b",
+			},
+		);
+
+		expect(outboxRows()).toStrictEqual([pending("a", "name")]);
+	});
+
+	it("reads the pending aspects of the given nodes, including a deleted node's", () =>
+	{
+		const {database, writer} = setup();
+
+		writer.updateNode(
+			"a",
+			{
+				name: "renamed",
+				note: "noted",
+			},
+		);
+		writer.deleteNode("b");
+
+		expect(pendingAspects(database, ["a", "b", "c"])).toStrictEqual(
+			new Map([
+				["a", new Set(["name", "note"])],
+				["b", new Set(["delete"])],
+			]),
 		);
 	});
 
@@ -614,27 +691,37 @@ describe("LocalTreeWriter", () =>
 
 	it("completes and uncompletes a node, keeping every version", () =>
 	{
-		const {writer, metadataVersions} = setup();
+		const {writer, metadataVersions, outboxRows} = setup();
 
 		writer.completeNode("a");
 		const later = new Date("2026-03-02T00:00:00.000Z");
 		vi.setSystemTime(later);
 		writer.uncompleteNode("a");
 
-		expect(metadataVersions(["a"])).toStrictEqual([
-			seeded("a", 0, NOW),
+		expect(
 			{
-				...reversioned("a", 0),
-				modifiedAt: NOW_DATE,
-				completedAt: NOW_DATE,
-				systemTo: "2026-03-02 00:00:00.000",
+				metadata: metadataVersions(["a"]),
+				outbox: outboxRows(),
 			},
+		).toStrictEqual(
 			{
-				...seeded("a", 0),
-				modifiedAt: later,
-				systemFrom: "2026-03-02 00:00:00.000",
+				metadata: [
+					seeded("a", 0, NOW),
+					{
+						...reversioned("a", 0),
+						modifiedAt: NOW_DATE,
+						completedAt: NOW_DATE,
+						systemTo: "2026-03-02 00:00:00.000",
+					},
+					{
+						...seeded("a", 0),
+						modifiedAt: later,
+						systemFrom: "2026-03-02 00:00:00.000",
+					},
+				],
+				outbox: [pending("a", "completion")],
 			},
-		]);
+		);
 	});
 
 	it("moves a node down within its parent, counting the slot before removal", () =>
@@ -700,7 +787,7 @@ describe("LocalTreeWriter", () =>
 
 	it("moves a node across parents with a key before its new first sibling, writing no sibling in either parent", () =>
 	{
-		const {writer, siblings, metadataVersions, contentVersions} = setup();
+		const {writer, siblings, metadataVersions, contentVersions, outboxRows} = setup();
 
 		writer.moveTo(
 			{
@@ -716,6 +803,7 @@ describe("LocalTreeWriter", () =>
 				q: siblings("q"),
 				metadata: metadataVersions(["b", "c", "x", "m"]),
 				content: contentVersions(["b"]),
+				outbox: outboxRows(),
 			},
 		).toStrictEqual(
 			{
@@ -777,6 +865,7 @@ describe("LocalTreeWriter", () =>
 						systemTo: FAR_FUTURE_DATE,
 					},
 				],
+				outbox: [pending("b", "placement")],
 			},
 		);
 	});
@@ -853,7 +942,7 @@ describe("LocalTreeWriter", () =>
 
 	it("deletes a subtree, closing its rows and mirror rows, and leaves the remaining siblings' keys alone", () =>
 	{
-		const {writer, siblings, metadataVersions, contentVersions, mirrorVersions} = setup();
+		const {writer, siblings, metadataVersions, contentVersions, mirrorVersions, outboxRows} = setup();
 
 		writer.deleteNode("b");
 		vi.setSystemTime(new Date("2026-03-02T00:00:00.000Z"));
@@ -865,6 +954,7 @@ describe("LocalTreeWriter", () =>
 				metadata: metadataVersions(["b", "c", "c1"]),
 				content: contentVersions(["c1"]),
 				mirrors: mirrorVersions(),
+				outbox: outboxRows(),
 			},
 		).toStrictEqual(
 			{
@@ -898,13 +988,19 @@ describe("LocalTreeWriter", () =>
 						systemTo: "2026-03-02 00:00:00.000",
 					},
 				],
+				outbox: [
+					pending("b", "delete"),
+					pending("c", "delete", "2026-03-02 00:00:00.000"),
+					pending("c1", "delete", "2026-03-02 00:00:00.000"),
+				],
 			},
 		);
 	});
 
 	it("creates a forest of trees at one slot with notes, completion, metadata, children and child mirrors", () =>
 	{
-		const {writer, siblings, metadataVersions, contentVersions, mirrorVersions, displayVersions} = setup();
+		const {writer, siblings, metadataVersions, contentVersions, mirrorVersions, displayVersions, outboxRows} =
+			setup();
 
 		const result = writer.createTreesAt(
 			{
@@ -971,6 +1067,7 @@ describe("LocalTreeWriter", () =>
 				content: contentVersions(["t1", "t3"]),
 				mirrors: mirrorVersions(),
 				display: displayVersions(),
+				outbox: outboxRows(),
 			},
 		).toStrictEqual(
 			{
@@ -1076,13 +1173,23 @@ describe("LocalTreeWriter", () =>
 						systemTo: FAR_FUTURE_DATE,
 					},
 				],
+				// t4 is a generated UUID, which sorts before "t1".
+				outbox: [
+					pending(t4, "create"),
+					pending(t4, "placement"),
+					pending("t1", "create"),
+					pending("t1", "placement"),
+					pending("t2", "create"),
+					pending("t3", "create"),
+					pending("t3", "mirror"),
+				],
 			},
 		);
 	});
 
 	it("sets a node's metadata values in the typed tables and removes a key for an undefined value", () =>
 	{
-		const {writer, metadataVersions, displayVersions, cellSizeVersions} = setup();
+		const {writer, metadataVersions, displayVersions, cellSizeVersions, outboxRows} = setup();
 		const LATER = "2026-03-02 00:00:00.000";
 		const LATER_DATE = new Date("2026-03-02T00:00:00.000Z");
 
@@ -1127,6 +1234,7 @@ describe("LocalTreeWriter", () =>
 				metadata: metadataVersions(["a"]),
 				display: displayVersions(),
 				sizes: cellSizeVersions(),
+				outbox: outboxRows(),
 			},
 		).toStrictEqual(
 			{
@@ -1167,6 +1275,7 @@ describe("LocalTreeWriter", () =>
 						systemTo: FAR_FUTURE_DATE,
 					},
 				],
+				outbox: [pending("a", "metadata")],
 			},
 		);
 	});

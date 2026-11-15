@@ -25,6 +25,8 @@ export const TEMPORAL_TABLES = [
 	"calendar_layout_applies",
 	"file_blobs",
 	"whats_new_reads",
+	// Mirror mode's pending upstream deliveries roll back with the local writes that enqueued them.
+	"outbox",
 	// The account composite (ACCOUNT_COMPOSITE_TABLES): a rollback reverts settings with the tree.
 	"account",
 	"root_preferences",

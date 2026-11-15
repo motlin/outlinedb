@@ -28,6 +28,7 @@ import type {InternalMetadata} from "./internal-metadata.js";
 import {currentBacklinkItems} from "./item-relationships.js";
 import {endNodeComposites, runUnitOfWork} from "./node-composite.js";
 import type {UnitOfWork} from "./node-composite.js";
+import type {OutboxAspect, OutboxEntry, OutboxRecorder} from "./outbox.js";
 import {readSubtreeAt, systemTimeJustBefore} from "./subtree-history.js";
 import {closeCurrentVersions} from "./temporal-merge.js";
 import type {TemporalTransaction} from "./temporal-merge.js";
@@ -166,6 +167,11 @@ export interface LocalTreeWriterOptions
 	/** The clock, in milliseconds; node timestamps are stored in whole seconds of it. */
 	now?: () => number;
 	generateId?: () => string;
+	/**
+	 * Mirror mode's outbox: each write records the aspects it left ahead of workflowy.com in its own unit of work.
+	 * Standalone passes none.
+	 */
+	outbox?: OutboxRecorder;
 }
 
 type MetadataRow = typeof nodeMetadata.$inferSelect;
@@ -246,6 +252,23 @@ function applyPath(target: Record<string, unknown>, path: readonly string[], val
 	}
 }
 
+/** Whether `patch` sets `key` to something other than `current`'s value. */
+function patchChanges<T extends object>(current: Readonly<T>, patch: Readonly<Partial<T>>, key: keyof T): boolean
+{
+	if (!(key in patch))
+	{
+		return false;
+	}
+	const existing = current[key];
+	const value = patch[key];
+	return existing instanceof Date && value instanceof Date
+		? existing.getTime() !== value.getTime()
+		: existing !== value;
+}
+
+/** The aspects a node created in the same unit of work still records: its create already carries the rest. */
+const CREATED_NODE_ASPECTS: ReadonlySet<OutboxAspect> = new Set(["create", "placement", "mirror", "delete"]);
+
 function samePatch(current: Readonly<Record<string, unknown>>, patch: Readonly<Record<string, unknown>>): boolean
 {
 	return Object.entries(patch).every(([key, value]) =>
@@ -271,6 +294,8 @@ class PendingWrites
 	private readonly created = new Set<string>();
 	/** Nodes created or moved into a slot in this unit: each gets a new order key between its new neighbours. */
 	private readonly placed = new Set<string>();
+	/** The outbox aspects of each node this unit changed. */
+	private readonly touched = new Map<string, Set<OutboxAspect>>();
 
 	constructor(private readonly tx: TemporalTransaction)
 	{
@@ -309,11 +334,39 @@ class PendingWrites
 	markCreated(id: string): void
 	{
 		this.created.add(id);
+		this.touch(id, "create");
 	}
 
 	markPlaced(id: string): void
 	{
 		this.placed.add(id);
+		this.touch(id, "placement");
+	}
+
+	/** Note that this unit changed `aspect` of `id`. */
+	touch(id: string, aspect: OutboxAspect): void
+	{
+		let aspects = this.touched.get(id);
+		if (aspects === undefined)
+		{
+			aspects = new Set();
+			this.touched.set(id, aspects);
+		}
+		aspects.add(aspect);
+	}
+
+	/** Every aspect this unit changed, once each; a node created in it records only what its create cannot carry. */
+	outboxEntries(): OutboxEntry[]
+	{
+		return [...this.touched].flatMap(([nodeId, aspects]) =>
+			[...aspects]
+				.filter((aspect) => !this.created.has(nodeId) || CREATED_NODE_ASPECTS.has(aspect))
+				.map((aspect) => (
+				{
+					nodeId,
+					aspect,
+				})),
+		);
 	}
 
 	setContent(id: string, patch: ContentPatch): void
@@ -397,6 +450,17 @@ class PendingWrites
 			{
 				continue;
 			}
+			for (const [key, aspect] of [
+				["name", "name"],
+				["note", "note"],
+				["parentId", "placement"],
+			] as const)
+			{
+				if (patchChanges(current, patch, key))
+				{
+					this.touch(id, aspect);
+				}
+			}
 			if (this.created.has(id))
 			{
 				this.tx
@@ -429,6 +493,16 @@ class PendingWrites
 			if (current === undefined || samePatch(current, patch))
 			{
 				continue;
+			}
+			for (const [key, aspect] of [
+				["completedAt", "completion"],
+				["layoutMode", "metadata"],
+			] as const)
+			{
+				if (patchChanges(current, patch, key))
+				{
+					this.touch(id, aspect);
+				}
 			}
 			if (this.created.has(id))
 			{
@@ -632,6 +706,7 @@ export class LocalTreeWriter
 {
 	private readonly now: () => number;
 	private readonly generateId: () => string;
+	private readonly outbox: OutboxRecorder | undefined;
 
 	constructor(
 		private readonly database: AppDatabase,
@@ -640,6 +715,7 @@ export class LocalTreeWriter
 	{
 		this.now = options.now ?? Date.now;
 		this.generateId = options.generateId ?? (() => crypto.randomUUID());
+		this.outbox = options.outbox;
 	}
 
 	private nowDate(): Date
@@ -654,6 +730,7 @@ export class LocalTreeWriter
 			const pending = new PendingWrites(unitOfWork.tx);
 			const result = work(pending, unitOfWork);
 			pending.flush(unitOfWork.systemTime);
+			this.outbox?.record(unitOfWork, pending.outboxEntries());
 			return result;
 		});
 	}
@@ -904,6 +981,7 @@ export class LocalTreeWriter
 			const {mirror} = metadata;
 			if (isRecord(mirror) && typeof mirror.originalId === "string" && mirror.isMirrorRoot === true)
 			{
+				pending.touch(id, "mirror");
 				tx.insert(mirrors)
 					.values(
 						{
@@ -998,6 +1076,7 @@ export class LocalTreeWriter
 			applyPath(metadata, path, value);
 		}
 		writeInternalMetadata(unitOfWork, new Map([[id, metadata]]));
+		pending.touch(id, "metadata");
 	}
 
 	private writeHomeLayoutMode({tx, systemTime}: UnitOfWork, changes: readonly LocalMetaChange[]): void
@@ -1151,12 +1230,17 @@ export class LocalTreeWriter
 		order.splice(index, 0, input.id);
 		pending.markPlaced(input.id);
 		writeInternalMetadata(unitOfWork, new Map(restored.map((id) => [id, subtree.metadata.get(id)])));
-		this.reopenMirrors(unitOfWork, restored, asOf);
+		this.reopenMirrors(pending, unitOfWork, restored, asOf);
 		return true;
 	}
 
 	/** Reopen the mirror rows live at `asOf` that join a restored node to a node live now (or restored too). */
-	private reopenMirrors({tx, systemTime}: UnitOfWork, restored: readonly string[], asOf: string): void
+	private reopenMirrors(
+		pending: PendingWrites,
+		{tx, systemTime}: UnitOfWork,
+		restored: readonly string[],
+		asOf: string,
+	): void
 	{
 		const ids = new Set(restored);
 		const rows = tx
@@ -1182,6 +1266,7 @@ export class LocalTreeWriter
 				.get();
 			if (live && open === undefined)
 			{
+				pending.touch(row.mirrorId, "mirror");
 				tx.insert(mirrors)
 					.values(
 						{
@@ -1339,7 +1424,17 @@ export class LocalTreeWriter
 				end(item.nodeId);
 			}
 		}
-		endNodeComposites(unitOfWork, [...new Set(ended)]);
+		this.endNodes(pending, unitOfWork, [...new Set(ended)]);
+	}
+
+	/** End the composites of `ids`, each a pending delete. */
+	private endNodes(pending: PendingWrites, unitOfWork: UnitOfWork, ids: readonly string[]): void
+	{
+		for (const id of ids)
+		{
+			pending.touch(id, "delete");
+		}
+		endNodeComposites(unitOfWork, ids);
 	}
 
 	/**
@@ -1436,6 +1531,7 @@ export class LocalTreeWriter
 					);
 					pending.order(rootId).unshift(itemId);
 					pending.markPlaced(itemId);
+					pending.touch(itemId, "mirror");
 					tx.insert(mirrors)
 						.values(
 							{
@@ -1455,7 +1551,7 @@ export class LocalTreeWriter
 					);
 				}
 			}
-			endNodeComposites(unitOfWork, ended);
+			this.endNodes(pending, unitOfWork, ended);
 			return result;
 		});
 	}
@@ -1556,6 +1652,10 @@ export class LocalTreeWriter
 			}
 			const live = [...edited].filter(([id]) => currentContent(tx, id) !== undefined);
 			writeInternalMetadata(unitOfWork, new Map(live));
+			for (const [id] of live)
+			{
+				pending.touch(id, "metadata");
+			}
 		});
 	}
 
