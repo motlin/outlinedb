@@ -1,5 +1,5 @@
 import {z} from "zod";
-import {LocalTreeWriter, ancestorChain} from "@outlinedb/shared/cache";
+import {ancestorChain} from "@outlinedb/shared/cache";
 import {HOME_TARGET} from "@outlinedb/shared/types";
 import {planSwapOrigin} from "../../swap-origin.js";
 import {MAX_COPY_ITEMS, copySubtree} from "../copy-tree.js";
@@ -9,10 +9,9 @@ import {defineOp, fail, ok, toJson} from "./define.js";
 import {DetachMirrorResponseSchema, NodeListSchema, SwapMirrorOriginResponseSchema} from "./schemas.js";
 import
 {
-	adapterParent,
 	countChildren,
 	getAdapter,
-	getWriteClient,
+	getNodeWriter,
 	localDeletePlan,
 	openCopies,
 	originalsWithMirrors,
@@ -99,29 +98,8 @@ export const nodesMirror = defineOp(
 					},
 				);
 			}
-			if (ctx.mode === "standalone")
-			{
-				if (parentId !== null && !ctx.cacheService.getNode(parentId))
-				{
-					return fail(
-						404,
-						{
-							error: "Parent node not found",
-						},
-					);
-				}
-				// Expansion is upstream state; a standalone mirror starts collapsed, like a standalone copy.
-				const {ids} = new LocalTreeWriter(ctx.db).createMirrorsAt(
-					{
-						originalIds: originals,
-						parentId,
-						index: body.index ?? countChildren(ctx, parentId),
-					},
-				);
-				return mirroredNodes(ctx, ids);
-			}
-			const adapter = getAdapter(ctx);
-			if (!adapter)
+			const writer = getNodeWriter(ctx);
+			if (!writer)
 			{
 				return fail(
 					503,
@@ -130,24 +108,37 @@ export const nodesMirror = defineOp(
 					},
 				);
 			}
-			const {mirrors} = await adapter.createMirrorsAt(
+			if (parentId !== null && !ctx.cacheService.getNode(parentId))
+			{
+				return fail(
+					404,
+					{
+						error: "Parent node not found",
+					},
+				);
+			}
+			const {ids: mirrorIds} = writer.local.createMirrorsAt(
 				{
 					originalIds: originals,
-					parentId: adapterParent(parentId),
+					parentId,
 					index: body.index ?? countChildren(ctx, parentId),
 				},
 			);
-			const mirrorIds = mirrors.map((mirror) => mirror.mirrorId);
-			// A new mirror opens like its source row (upstream `mirrorProjectTree`: `expanded: source.isExpanded`).
-			const isExpanded = adapter.expansionTest();
-			const opened = Object.fromEntries(
-				mirrorIds.flatMap((mirrorId, offset) =>
-					isExpanded(sourceRows[offset] ?? "") ? [[mirrorId, true] as const] : [],
-				),
-			);
-			if (Object.keys(opened).length > 0)
+			// Expansion is upstream account state, still pushed first in mirror mode: a new mirror opens like its source
+			// row (upstream `mirrorProjectTree`: `expanded: source.isExpanded`). A standalone mirror starts collapsed.
+			const adapter = writer.mode === "mirror" ? getAdapter(ctx) : undefined;
+			if (adapter)
 			{
-				await adapter.setExpanded(opened);
+				const isExpanded = adapter.expansionTest();
+				const opened = Object.fromEntries(
+					mirrorIds.flatMap((mirrorId, offset) =>
+						isExpanded(sourceRows[offset] ?? "") ? [[mirrorId, true] as const] : [],
+					),
+				);
+				if (Object.keys(opened).length > 0)
+				{
+					await adapter.setExpanded(opened);
+				}
 			}
 			return mirroredNodes(ctx, mirrorIds);
 		},
@@ -182,10 +173,8 @@ export const nodesDetachMirror = defineOp(
 		output: DetachMirrorResponseSchema,
 		async run(ctx, {id: rawId})
 		{
-			const standalone = ctx.mode === "standalone";
-			const client = standalone ? undefined : getWriteClient(ctx);
-			const adapter = standalone ? undefined : getAdapter(ctx);
-			if (!standalone && (!client || !adapter))
+			const writer = getNodeWriter(ctx);
+			if (!writer)
 			{
 				return fail(
 					503,
@@ -244,36 +233,21 @@ export const nodesDetachMirror = defineOp(
 					},
 				);
 			}
-			if (!client || !adapter)
+			const copyId = writer.local.detachMirror(id, copied.tree, await localDeletePlan(ctx, id));
+			// Expansion is upstream account state, still pushed first in mirror mode; a standalone copy starts collapsed.
+			const adapter = writer.mode === "mirror" ? getAdapter(ctx) : undefined;
+			if (adapter)
 			{
-				const copyId = new LocalTreeWriter(ctx.db).detachMirror(
-					id,
-					copied.tree,
-					await localDeletePlan(ctx, id),
+				await openCopies(
+					adapter,
+					copied.sourceToNew,
+					{
+						original: originalId,
+						row: id,
+					},
 				);
-				return detachedCopy(ctx, copyId);
 			}
-			const index = Math.max(
-				ctx.cacheService.getChildren(node.parentId).findIndex((sibling) => sibling.id === id),
-				0,
-			);
-			const {ids} = await adapter.createTreesAt(
-				{
-					parentId: adapterParent(node.parentId),
-					index,
-					trees: [copied.tree],
-				},
-			);
-			await openCopies(
-				adapter,
-				copied.sourceToNew,
-				{
-					original: originalId,
-					row: id,
-				},
-			);
-			await client.deleteNode(id);
-			return detachedCopy(ctx, ids[0]);
+			return detachedCopy(ctx, copyId);
 		},
 	},
 );
@@ -302,11 +276,10 @@ export const nodesSwapMirrorOrigin = defineOp(
 			},
 		),
 		output: SwapMirrorOriginResponseSchema,
-		async run(ctx, {id: rawId})
+		run(ctx, {id: rawId})
 		{
-			const standalone = ctx.mode === "standalone";
-			const adapter = standalone ? undefined : getAdapter(ctx);
-			if (!standalone && !adapter)
+			const writer = getNodeWriter(ctx);
+			if (!writer)
 			{
 				return fail(
 					503,
@@ -385,30 +358,14 @@ export const nodesSwapMirrorOrigin = defineOp(
 					parentId: original.parentId,
 				},
 			);
-			if (adapter)
-			{
-				for (const move of moves)
+			writer.local.moveBlocks(
+				moves.map((move) => (
 				{
-					await adapter.moveTo(
-						{
-							ids: [move.id],
-							parentId: adapterParent(move.parentId),
-							index: move.index,
-						},
-					);
-				}
-			}
-			else
-			{
-				new LocalTreeWriter(ctx.db).moveBlocks(
-					moves.map((move) => (
-					{
-						ids: [move.id],
-						parentId: move.parentId,
-						index: move.index,
-					})),
-				);
-			}
+					ids: [move.id],
+					parentId: move.parentId,
+					index: move.index,
+				})),
+			);
 			return ok(
 				{
 					swapped:

@@ -729,6 +729,55 @@ describe("node delete command", () =>
 								},
 							},
 							{
+								type: "edit",
+								data:
+								{
+									projectid: "other-original-id",
+									metadataPatches: [
+										{
+											op: "remove",
+											path: ["mirror", "mirrorRootIds", "mirror-in-id"],
+										},
+									],
+									metadataInversePatches: [
+										{
+											op: "add",
+											path: ["mirror", "mirrorRootIds", "mirror-in-id"],
+											value: true,
+										},
+									],
+								},
+							},
+							{
+								type: "edit",
+								data:
+								{
+									projectid: "task-a-id",
+									metadataPatches: [
+										{
+											op: "remove",
+											path: ["mirror", "mirrorRootIds", "mirror-nested-id"],
+										},
+										{
+											op: "remove",
+											path: ["mirror", "mirrorRootIds", "mirror-out-id"],
+										},
+									],
+									metadataInversePatches: [
+										{
+											op: "add",
+											path: ["mirror", "mirrorRootIds", "mirror-out-id"],
+											value: true,
+										},
+										{
+											op: "add",
+											path: ["mirror", "mirrorRootIds", "mirror-nested-id"],
+											value: true,
+										},
+									],
+								},
+							},
+							{
 								type: "delete",
 								data:
 								{
@@ -797,6 +846,26 @@ describe("node delete command", () =>
 					].join("\n"),
 					pushes: [
 						[
+							{
+								type: "edit",
+								data:
+								{
+									projectid: "task-a-id",
+									metadataPatches: [
+										{
+											op: "remove",
+											path: ["mirror", "mirrorRootIds", "mirror-out-id"],
+										},
+									],
+									metadataInversePatches: [
+										{
+											op: "add",
+											path: ["mirror", "mirrorRootIds", "mirror-out-id"],
+											value: true,
+										},
+									],
+								},
+							},
 							{
 								type: "delete",
 								data:

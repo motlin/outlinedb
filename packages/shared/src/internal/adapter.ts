@@ -7,7 +7,13 @@ import type {WorkflowyWriteThroughClient} from "../cache/workflowy-write-through
 import {keptInternalMetadata, readNodeInternalMetadata, storeInternalMetadata} from "../cache/internal-metadata.js";
 import {collectItemRelationships, currentBacklinkItems, emptyItemRelationships} from "../cache/item-relationships.js";
 import {runUnitOfWork} from "../cache/node-composite.js";
-import {endLayoutApplied, layoutAppliedAt, recordLayoutApplied} from "../cache/calendar-layout-applies.js";
+import
+{
+	assertLayoutWritesUnder,
+	endLayoutApplied,
+	layoutAppliedAt,
+	recordLayoutApplied,
+} from "../cache/calendar-layout-applies.js";
 import {readSubtreeAt, systemTimeJustBefore} from "../cache/subtree-history.js";
 import {newSystemTimestamp} from "../cache/system-time.js";
 import
@@ -1707,7 +1713,7 @@ export class WorkflowyInternalAdapter
 			const ids = new Set(steps.map((step) => step.id));
 			const metadataById = new Map([...ids].map((id) => [id, this.readNodeMetadata(id)]));
 			const layoutWrites = calendarLayoutWrites(steps, metadataById);
-			this.assertLayoutWritesUnder(rootId, layoutWrites.writes);
+			assertLayoutWritesUnder(this.db, rootId, layoutWrites.writes);
 			return {
 				rootId,
 				childIds: layoutChildIds(snapshot.root),
@@ -1785,7 +1791,7 @@ export class WorkflowyInternalAdapter
 		const before = readSubtreeAt(this.db, rootId, systemTimeJustBefore(appliedAt));
 		const now = readSubtreeAt(this.db, rootId);
 		const writes = calendarLayoutUndoWrites(rootId, before, now, (id) => this.isCached(id));
-		this.assertLayoutWritesUnder(rootId, writes);
+		assertLayoutWritesUnder(this.db, rootId, writes);
 		if (writes.length > 0)
 		{
 			await this.pushLayoutWrites(writes);
@@ -1803,76 +1809,6 @@ export class WorkflowyInternalAdapter
 			rootId,
 			writes: writes.length,
 		};
-	}
-
-	/**
-	 * Throw unless every node `writes` touch (each written node and every
-	 * parent it leaves or enters) lies under `rootId` in the cache, or is a
-	 * node an earlier write in the batch creates or undeletes there. An
-	 * undeleted node is in the trash, so only its new parent is checked.
-	 */
-	private assertLayoutWritesUnder(rootId: string, writes: readonly LayoutWrite[]): void
-	{
-		const verdicts = new Map<string, boolean>([[rootId, true]]);
-		const cachedUnder = (id: string): boolean =>
-		{
-			const path: string[] = [];
-			let current: string | null | undefined = id;
-			let verdict = false;
-			while (current !== null && current !== undefined)
-			{
-				const known = verdicts.get(current);
-				if (known !== undefined)
-				{
-					verdict = known;
-					break;
-				}
-				path.push(current);
-				current = this.db
-					.select(
-						{
-							parentId: nodeContent.parentId,
-						},
-					)
-					.from(nodeContent)
-					.where(and(eq(nodeContent.id, current), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
-					.get()?.parentId;
-			}
-			for (const visited of path)
-			{
-				verdicts.set(visited, verdict);
-			}
-			return verdict;
-		};
-		const added = new Set<string>();
-		const inside = (id: string) => added.has(id) || cachedUnder(id);
-		const check = (id: string, ok: boolean) =>
-		{
-			if (!ok)
-			{
-				throw new Error(`calendar layout: a write to ${id} lies outside the calendar root ${rootId}`);
-			}
-		};
-		for (const write of writes)
-		{
-			if (write.op === "move" || write.op === "delete")
-			{
-				check(write.from.parentId, inside(write.from.parentId));
-			}
-			if (write.op === "create" || write.op === "move" || write.op === "undelete")
-			{
-				check(write.parentId, inside(write.parentId));
-			}
-			if (write.op === "create" || write.op === "undelete")
-			{
-				check(write.id, !this.isCached(write.id) || cachedUnder(write.id));
-				added.add(write.id);
-			}
-			else
-			{
-				check(write.id, inside(write.id));
-			}
-		}
 	}
 
 	/** Push layout writes as one batch of ops. */

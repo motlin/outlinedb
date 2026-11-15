@@ -1,6 +1,6 @@
 import {afterAll, afterEach, beforeAll, describe, expect, it, vi} from "vite-plus/test";
-import {readInternalMetadata, storeInternalMetadata} from "@outlinedb/shared/cache";
-import {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
+import {readInternalMetadata, readPendingOutbox, storeInternalMetadata} from "@outlinedb/shared/cache";
+import {calendarNodeId, WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import {callTool, openHarness, seed} from "./harness.js";
 import type {Harness} from "./harness.js";
 
@@ -86,6 +86,11 @@ afterAll(() =>
 
 describe("outlinedb_calendar_day", () =>
 {
+	afterEach(() =>
+	{
+		vi.restoreAllMocks();
+	});
+
 	it("finds a tagged day without calling ensure", async () =>
 	{
 		const ensure = vi.spyOn(WorkflowyInternalAdapter.prototype, "ensureCalendarDay");
@@ -129,22 +134,20 @@ describe("outlinedb_calendar_day", () =>
 		);
 	});
 
-	it("ensures a missing day through the adapter and returns its result", async () =>
+	it("ensures a missing day locally with the account's deterministic ids, without calling workflowy.com", async () =>
 	{
-		vi.spyOn(WorkflowyInternalAdapter.prototype, "getEntropyKey").mockResolvedValue(undefined);
-		const ensure = vi.spyOn(WorkflowyInternalAdapter.prototype, "ensureCalendarDay").mockResolvedValue(
-			{
-				dayId: "v5day",
-				firstChildId: "kid2",
-				created: ["v5day", "kid2"],
-			},
-		);
+		vi.spyOn(WorkflowyInternalAdapter.prototype, "getEntropyKey").mockResolvedValue("k");
+		vi.spyOn(WorkflowyInternalAdapter.prototype, "getRootMeta").mockResolvedValue(undefined);
+		vi.spyOn(crypto, "randomUUID").mockReturnValue("00000000-0000-4000-8000-0000000000c1");
+		const ensure = vi.spyOn(WorkflowyInternalAdapter.prototype, "ensureCalendarDay");
+		const month = calendarNodeId("k", "month", 20_261_000);
+		const day = calendarNodeId("k", "day", 20_261_023);
 
 		const result = await callTool(
 			harness.authStore,
 			"outlinedb_calendar_day",
 			{
-				date: "2026-10-22",
+				date: "2026-10-23",
 				ensure: true,
 			},
 		);
@@ -152,6 +155,7 @@ describe("outlinedb_calendar_day", () =>
 		expect(
 			{
 				result,
+				pending: readPendingOutbox(harness.db, 100).map(({nodeId, aspect}) => `${nodeId} ${aspect}`),
 				calls: ensure.mock.calls,
 			},
 		).toStrictEqual(
@@ -164,9 +168,9 @@ describe("outlinedb_calendar_day", () =>
 							type: "text",
 							text: JSON.stringify(
 								{
-									id: "v5day",
+									id: day,
 									created: true,
-									firstChildId: "kid2",
+									firstChildId: "00000000-0000-4000-8000-0000000000c1",
 								},
 								null,
 								2,
@@ -174,15 +178,14 @@ describe("outlinedb_calendar_day", () =>
 						},
 					],
 				},
-				calls: [
-					[
-						20_261_022,
-						{
-							stopAt: "day",
-							createChild: true,
-						},
-					],
+				// The month is placed under the year; the day and its empty child ride in the month's create.
+				pending: [
+					"00000000-0000-4000-8000-0000000000c1 create",
+					`${day} create`,
+					`${month} create`,
+					`${month} placement`,
 				],
+				calls: [],
 			},
 		);
 	});

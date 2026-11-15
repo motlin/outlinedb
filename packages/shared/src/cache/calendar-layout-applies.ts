@@ -4,7 +4,8 @@
  */
 
 import {and, eq} from "drizzle-orm";
-import {calendarLayoutApplies} from "../db/schema.js";
+import {calendarLayoutApplies, nodeContent} from "../db/schema.js";
+import type {LayoutWrite} from "../internal/calendar-layout-apply.js";
 import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 import {runUnitOfWork} from "./node-composite.js";
 import {closeCurrentVersions} from "./temporal-merge.js";
@@ -50,4 +51,89 @@ export function endLayoutApplied(db: TemporalTransaction, rootId: string): void
 	{
 		closeCurrentVersions(tx, calendarLayoutApplies, systemTime, eq(calendarLayoutApplies.rootId, rootId));
 	});
+}
+
+function isLive(db: TemporalTransaction, id: string): boolean
+{
+	return (
+		db
+			.select(
+				{
+					id: nodeContent.id,
+				},
+			)
+			.from(nodeContent)
+			.where(and(eq(nodeContent.id, id), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
+			.get() !== undefined
+	);
+}
+
+/**
+ * Throw unless every node `writes` touch (each written node and every
+ * parent it leaves or enters) lies under `rootId` in the local tables, or is a
+ * node an earlier write in the batch creates or undeletes there. An
+ * undeleted node is in the trash, so only its new parent is checked.
+ */
+export function assertLayoutWritesUnder(db: TemporalTransaction, rootId: string, writes: readonly LayoutWrite[]): void
+{
+	const verdicts = new Map<string, boolean>([[rootId, true]]);
+	const cachedUnder = (id: string): boolean =>
+	{
+		const path: string[] = [];
+		let current: string | null | undefined = id;
+		let verdict = false;
+		while (current !== null && current !== undefined)
+		{
+			const known = verdicts.get(current);
+			if (known !== undefined)
+			{
+				verdict = known;
+				break;
+			}
+			path.push(current);
+			current = db
+				.select(
+					{
+						parentId: nodeContent.parentId,
+					},
+				)
+				.from(nodeContent)
+				.where(and(eq(nodeContent.id, current), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
+				.get()?.parentId;
+		}
+		for (const visited of path)
+		{
+			verdicts.set(visited, verdict);
+		}
+		return verdict;
+	};
+	const added = new Set<string>();
+	const inside = (id: string) => added.has(id) || cachedUnder(id);
+	const check = (id: string, ok: boolean) =>
+	{
+		if (!ok)
+		{
+			throw new Error(`calendar layout: a write to ${id} lies outside the calendar root ${rootId}`);
+		}
+	};
+	for (const write of writes)
+	{
+		if (write.op === "move" || write.op === "delete")
+		{
+			check(write.from.parentId, inside(write.from.parentId));
+		}
+		if (write.op === "create" || write.op === "move" || write.op === "undelete")
+		{
+			check(write.parentId, inside(write.parentId));
+		}
+		if (write.op === "create" || write.op === "undelete")
+		{
+			check(write.id, !isLive(db, write.id) || cachedUnder(write.id));
+			added.add(write.id);
+		}
+		else
+		{
+			check(write.id, inside(write.id));
+		}
+	}
 }

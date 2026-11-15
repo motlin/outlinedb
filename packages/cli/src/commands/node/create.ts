@@ -9,7 +9,14 @@ import fs from "node:fs";
 import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";
 import {logger} from "../../services/logger.js";
-import {drainAfterWrite, localParent, openLocalWrites, resolveOrCreateLocalPath} from "../../services/local-writes.js";
+import
+{
+	drainAfterWrite,
+	localCalendar,
+	localParent,
+	openLocalWrites,
+	resolveOrCreateLocalPath,
+} from "../../services/local-writes.js";
 import type {LocalWrites} from "../../services/local-writes.js";
 import {resolveParent} from "@outlinedb/shared/utils";
 import {adoptUnderCalendar, calendarMonthPath} from "../../services/calendar-adoption.js";
@@ -228,9 +235,9 @@ export default class Create extends Command
 	}
 
 	/**
-	 * `--create-path`: create missing parent segments. A missing year or month of the 📆 Calendar is ensured through
-	 * the internal API (upstream-shaped, with `calendar` metadata) so workflowy.com uses it; a name-only one would be
-	 * invisible there.
+	 * `--create-path`: create missing parent segments. A missing year or month of the 📆 Calendar is ensured
+	 * upstream-shaped (deterministic ids, `calendar` metadata) so workflowy.com uses it once the outbox delivers it; a
+	 * name-only one would be invisible there.
 	 */
 	private async resolveCreatePath(
 		parentPath: string,
@@ -243,7 +250,7 @@ export default class Create extends Command
 		{
 			return resolveOrCreateLocalPath(parentPath, cacheService, writes.local);
 		}
-		const {dayId} = await writes.adapter.ensureCalendarDay(
+		const {dayId} = await localCalendar(writes).ensureCalendarDay(
 			calendarPath.dateId,
 			{
 				stopAt: "month",

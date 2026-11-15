@@ -3,7 +3,7 @@ import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
 import {afterEach, describe, expect, it, vi} from "vite-plus/test";
-import {CacheService, storeInternalMetadata} from "@outlinedb/shared/cache";
+import {CacheService, readPendingOutbox, storeInternalMetadata} from "@outlinedb/shared/cache";
 import * as schema from "@outlinedb/shared/db";
 import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import type {ServerContext} from "../src/server/context.js";
@@ -1771,20 +1771,29 @@ describe("preferences week layout", () =>
 				migrationsFolder,
 			},
 		);
-		db.insert(schema.nodeContent)
-			.values(
-				{
-					id: "cal",
-					name: "📆 Calendar",
-					parentId: null,
-					systemFrom: "2026-01-01",
-					systemTo: FAR_FUTURE_DATE,
-				},
-			)
-			.run();
+		// September 10, 2026 under its year and month, but in no week node yet.
+		for (const [id, parentId, name] of [
+			["cal", null, "📆 Calendar"],
+			["y2026", "cal", "2026"],
+			["m09", "y2026", "9"],
+			["d0910", "m09", "Thu, Sep 10, 2026"],
+		] as const)
+		{
+			db.insert(schema.nodeContent)
+				.values(
+					{
+						id,
+						name,
+						parentId,
+						systemFrom: "2026-01-01",
+						systemTo: FAR_FUTURE_DATE,
+					},
+				)
+				.run();
+		}
 		storeInternalMetadata(
 			db,
-			new Map([
+			new Map<string, Record<string, unknown>>([
 				[
 					"cal",
 					{
@@ -1792,6 +1801,42 @@ describe("preferences week layout", () =>
 						{
 							root: true,
 							levels,
+						},
+					},
+				],
+				[
+					"y2026",
+					{
+						calendar:
+						{
+							level: "year",
+							value: "2026",
+							timestamp: 0,
+							dateId: 20_260_000,
+						},
+					},
+				],
+				[
+					"m09",
+					{
+						calendar:
+						{
+							level: "month",
+							value: "9",
+							timestamp: 0,
+							dateId: 20_260_900,
+						},
+					},
+				],
+				[
+					"d0910",
+					{
+						calendar:
+						{
+							level: "day",
+							value: "10",
+							timestamp: 0,
+							dateId: 20_260_910,
 						},
 					},
 				],
@@ -1804,7 +1849,6 @@ describe("preferences week layout", () =>
 					{
 						weekStartDay,
 					};
-		const applied: unknown[] = [];
 		const adapter =
 		{
 			getSetting: async () => Promise.resolve(undefined),
@@ -1824,22 +1868,20 @@ describe("preferences week layout", () =>
 				}
 				return Promise.resolve();
 			},
-			applyCalendarLayout: async (appliedLevels: unknown) =>
-			{
-				applied.push(appliedLevels);
-				return Promise.resolve(
-					{
-						rootId: "cal",
-						writes: 1,
-					},
-				);
-			},
+			getEntropyKey: async () => Promise.resolve("k"),
+			// workflowy.com is down: a tree write that reached it would fail.
+			applyCalendarLayout: async () => Promise.reject(new Error("workflowy.com is unreachable")),
 		};
 		const ctx =
 		{
 			db,
 			cacheService: new CacheService(db),
+			apiKey: "key",
 			calendarLayoutEnabled: layoutEnabled,
+			outboxWritten: () =>
+			{
+				// The drain is the host's; these tests read the pending rows it would deliver.
+			},
 			internalAdapter: () => adapter as unknown as WorkflowyInternalAdapter,
 		} as unknown as ServerContext;
 		const hono = httpAppFor(ctx);
@@ -1857,17 +1899,19 @@ describe("preferences week layout", () =>
 					},
 				),
 			);
+		/** The local re-layout's pending outbox rows, as `node aspect`. */
+		const relaid = () => readPendingOutbox(db, 100).map(({nodeId, aspect}) => `${nodeId} ${aspect}`);
 		return {
 			patch,
-			applied,
+			relaid,
 		};
 	}
 
 	describe("PATCH /api/v1/preferences weekStartDay", () =>
 	{
-		it("re-applies the current layout once when the week start changes under a week-level calendar", async () =>
+		it("re-applies the current layout locally when the week start changes under a week-level calendar", async () =>
 		{
-			const {patch, applied} = app(
+			const {patch, relaid} = app(
 				{
 					year: true,
 					month: true,
@@ -1880,19 +1924,14 @@ describe("preferences week layout", () =>
 					weekStartDay: 1,
 				},
 			);
-			expect(applied).toStrictEqual([
-				{
-					year: true,
-					month: true,
-					week: true,
-					day: true,
-				},
-			]);
+			// The day moves into a new week node with the account's deterministic id for its Monday-start week.
+			const week = "1b217167-b3bd-572f-a004-3c3bc8adab70";
+			expect(relaid()).toStrictEqual([`${week} create`, `${week} placement`, "d0910 placement"]);
 		});
 
 		it("does not re-layout when the calendar has no week level", async () =>
 		{
-			const {patch, applied} = app(
+			const {patch, relaid} = app(
 				{
 					year: true,
 					month: true,
@@ -1904,12 +1943,12 @@ describe("preferences week layout", () =>
 					weekStartDay: 1,
 				},
 			);
-			expect(applied).toStrictEqual([]);
+			expect(relaid()).toStrictEqual([]);
 		});
 
 		it("does not re-layout when the week start is unchanged", async () =>
 		{
-			const {patch, applied} = app(
+			const {patch, relaid} = app(
 				{
 					year: true,
 					week: true,
@@ -1924,12 +1963,12 @@ describe("preferences week layout", () =>
 					weekStartDay: 1,
 				},
 			);
-			expect(applied).toStrictEqual([]);
+			expect(relaid()).toStrictEqual([]);
 		});
 
 		it("does not re-layout when applying layouts is disabled", async () =>
 		{
-			const {patch, applied} = app(
+			const {patch, relaid} = app(
 				{
 					year: true,
 					week: true,
@@ -1944,12 +1983,12 @@ describe("preferences week layout", () =>
 					weekStartDay: 1,
 				},
 			);
-			expect(applied).toStrictEqual([]);
+			expect(relaid()).toStrictEqual([]);
 		});
 
 		it("does not re-layout for other preferences", async () =>
 		{
-			const {patch, applied} = app(
+			const {patch, relaid} = app(
 				{
 					year: true,
 					week: true,
@@ -1961,7 +2000,7 @@ describe("preferences week layout", () =>
 					dateFormat: "YYYY-MM-DD",
 				},
 			);
-			expect(applied).toStrictEqual([]);
+			expect(relaid()).toStrictEqual([]);
 		});
 	});
 });

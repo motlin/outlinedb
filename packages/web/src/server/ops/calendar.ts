@@ -16,11 +16,11 @@
  * Update Layout first asks "Move nodes into your Calendar?", and whether Update Layout applies or only previews (409
  * without the root's cached internal metadata).
  * `PUT /api/v1/calendar/layout` `{levels, rootId?}` -> 200 `{rootId, writes}`: restructure the calendar (the tagged
- * root, or `rootId`, such as a sandbox copy) in one push, planned from the cache with only the written parents read
- * fresh, reporting each phase's time in `Server-Timing` (403 when `CALENDAR_LAYOUT_ENABLED=false`).
+ * root, or `rootId`, such as a sandbox copy) in one unit of work of the local tables, planned from them; a mirror's
+ * outbox delivers it to workflowy.com later (403 when `CALENDAR_LAYOUT_ENABLED=false`).
  * `POST /api/v1/calendar/layout/undo` `{rootId?}` -> 200 `{rootId, writes}`: undo the last applied layout once (409 when
  * there is none; 403 like PUT). PUT and undo resolve their root (409 when it is not cached), log it, and hand it to the
- * adapter, which refuses any write outside it.
+ * calendar writer, which refuses any write outside it.
  * `POST /api/v1/calendar/layout/preview` `{levels, rootId?}` -> 200 `{steps}`: the tree writes upstream's restructure
  * (`JX4`) would make for those levels, planned from the cache (under `rootId` when given); nothing is written.
  * `GET /api/v1/calendar/dots?from=YYYYMMDD&to=YYYYMMDD` -> 200 `{dateIds}`: the days in the range with journal
@@ -39,17 +39,17 @@ import
 	parseDateId,
 	planCalendarLayout,
 } from "@outlinedb/shared/internal";
-import type {CalendarLevel, LayoutTimings, WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
+import type {CalendarLevel} from "@outlinedb/shared/internal";
 import {AccountNotProvisionedError, LocalAccount} from "@outlinedb/shared/cache";
-import {LocalCalendar} from "@outlinedb/shared/local-calendar";
 import {z} from "zod";
 import {findCalendarDay, findCalendarDays, findTaggedCalendarRoot, readCalendarSettings} from "../calendar-day.js";
 import {foundDaysInMonth} from "../calendar-found.js";
-import {loadCalendarLayout} from "../calendar-layout.js";
+import {calendarWriter, loadCalendarLayout} from "../calendar-layout.js";
 import type {CalendarDayDeps} from "../calendar-day.js";
 import type {ServerContext} from "../context.js";
 import {INTERNAL_API_NOT_CONFIGURED} from "../internal-api-error.js";
 import {defineOp, fail, ok, toJson} from "./define.js";
+import {getNodeWriter} from "./nodes-shared.js";
 
 const ENSURE_DISABLED = "Calendar day ensure is disabled (CALENDAR_ENSURE_ENABLED=false)";
 const INVALID_DATE_ID = "dateId must be a YYYYMMDD calendar day";
@@ -233,19 +233,6 @@ async function accountWeekStartDay(ctx: ServerContext): Promise<number | undefin
 {
 	const weekStartDay = await accountRootMeta(ctx, "weekStartDay");
 	return typeof weekStartDay === "number" ? weekStartDay : undefined;
-}
-
-/**
- * What writes the calendar: a standalone store's local tables, or workflowy.com through the internal API, whose tree
- * writes refresh the cache through the public API and so need its key too. Undefined for a mirror without either.
- */
-function calendarWriter(ctx: ServerContext): LocalCalendar | WorkflowyInternalAdapter | undefined
-{
-	if (ctx.mode === "standalone")
-	{
-		return new LocalCalendar(ctx.db);
-	}
-	return ctx.apiKey ? ctx.internalAdapter?.() : undefined;
 }
 
 /** The `?level=` query parameter (default day), else undefined. */
@@ -535,7 +522,7 @@ const calendarSettingsPut = defineOp(
 			},
 		),
 		output: CalendarSettingsSchema,
-		async run(ctx, {body})
+		run(ctx, {body})
 		{
 			const changes = [
 				...(body.foundDates === undefined
@@ -555,8 +542,8 @@ const calendarSettingsPut = defineOp(
 							},
 						]),
 			];
-			const adapter = ctx.apiKey ? ctx.internalAdapter?.() : undefined;
-			if (!adapter)
+			const writer = getNodeWriter(ctx);
+			if (!writer)
 			{
 				return notConfigured();
 			}
@@ -574,7 +561,7 @@ const calendarSettingsPut = defineOp(
 					},
 				);
 			}
-			await adapter.setNodeMetaValues(rootId, changes);
+			writer.local.setNodeMetaValues(rootId, changes);
 			return ok(
 				toJson(
 					readCalendarSettings(
@@ -635,7 +622,7 @@ const calendarLayoutGet = defineOp(
 	},
 );
 
-/** Restructures the calendar in one push, reporting each phase's time in `Server-Timing`. */
+/** Restructures the calendar in one unit of work. */
 const calendarLayoutPut = defineOp(
 	{
 		input: z.object(
@@ -672,7 +659,6 @@ const calendarLayoutPut = defineOp(
 				);
 			}
 			console.info(`calendar layout: applying under root ${rootId}`);
-			const timings: LayoutTimings = {};
 			try
 			{
 				const applied = await writer.applyCalendarLayout(
@@ -687,19 +673,10 @@ const calendarLayoutPut = defineOp(
 								},
 								rootId,
 							),
-						timings,
 					},
 				);
-				const phases = Object.entries(timings).map(([phase, ms]) => `${phase};dur=${ms.toFixed(1)}`);
-				console.info(
-					`calendar layout: ${applied.writes} writes under root ${applied.rootId} (${phases.join(", ")})`,
-				);
-				return ok(
-					toJson(applied),
-					{
-						timing: phases,
-					},
-				);
+				console.info(`calendar layout: ${applied.writes} writes under root ${applied.rootId}`);
+				return ok(toJson(applied));
 			}
 			catch (error)
 			{

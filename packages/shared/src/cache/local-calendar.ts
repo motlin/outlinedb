@@ -20,7 +20,13 @@ import type {AppliedCalendarLayout, CalendarLayoutSnapshot, EnsuredCalendarDay} 
 import type {NewTree} from "../internal/ops.js";
 import type {AppDatabase} from "../db/types.js";
 import {CALENDAR_ROOT_NAME, findTaggedCalendarRoot} from "./calendar-lookup.js";
-import {endLayoutApplied, layoutAppliedAt, recordLayoutApplied} from "./calendar-layout-applies.js";
+import
+{
+	assertLayoutWritesUnder,
+	endLayoutApplied,
+	layoutAppliedAt,
+	recordLayoutApplied,
+} from "./calendar-layout-applies.js";
 import {readNodeInternalMetadata} from "./internal-metadata.js";
 import {LocalAccount} from "./local-account.js";
 import {LocalTreeWriter, currentChildIds} from "./local-tree-writer.js";
@@ -33,20 +39,39 @@ function isRecord(value: unknown): value is Record<string, unknown>
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** Where a calendar reads root metadata and the entropy key, and names a new calendar root. */
+export type CalendarAccount = Pick<LocalAccount, "getEntropyKey" | "getRootMeta" | "setRootMetaValues">;
+
+export interface LocalCalendarOptions extends LocalTreeWriterOptions
+{
+	/**
+	 * The account state: a standalone account's local tables by default. A mirror passes its internal adapter, since
+	 * account-level state still writes through to workflowy.com there.
+	 */
+	account?: CalendarAccount;
+	/**
+	 * Whether a missing calendar root is created (the default). A mirror passes false: its root lives on workflowy.com,
+	 * so a missing local one means a stale cache, and creating it would fork a second root.
+	 */
+	createRoot?: boolean;
+}
+
 export class LocalCalendar
 {
-	private readonly account: LocalAccount;
+	private readonly account: CalendarAccount;
 	private readonly writer: LocalTreeWriter;
 	private readonly generateId: () => string;
+	private readonly createRoot: boolean;
 
 	constructor(
 		private readonly db: AppDatabase,
-		options: LocalTreeWriterOptions = {},
+		options: LocalCalendarOptions = {},
 	)
 	{
-		this.account = new LocalAccount(db);
+		this.account = options.account ?? new LocalAccount(db);
 		this.writer = new LocalTreeWriter(db, options);
 		this.generateId = options.generateId ?? (() => crypto.randomUUID());
+		this.createRoot = options.createRoot ?? true;
 	}
 
 	/**
@@ -54,7 +79,7 @@ export class LocalCalendar
 	 * shows, down to `stopAt`, a child whose calendar metadata (or deterministic id) matches is reused; else the
 	 * deterministic node is moved back when it lives elsewhere, or created with the levels below it at the
 	 * timestamp-sorted slot. With `createChild` a new or empty final node gets one empty child. A missing calendar root
-	 * is created at the end of Home and named by root metadata `calendar.rootId`.
+	 * is created at the end of Home and named by root metadata `calendar.rootId`, unless `createRoot` is off.
 	 */
 	async ensureCalendarDay(
 		dateId: number,
@@ -175,7 +200,7 @@ export class LocalCalendar
 
 	/**
 	 * Restructure the calendar under `rootId` to show `levels` the way upstream's Update Layout does (`JX4`), planned
-	 * from `loadSnapshot` and written in one unit of work. A root tagged `calendar.root` gets the account's
+	 * from `loadSnapshot` and written in one unit of work, refused when a write would land outside `rootId`. A root tagged `calendar.root` gets the account's
 	 * deterministic ids for new level nodes; any other root (a sandbox copy) gets random ones. The system time just
 	 * before the writes is recorded for {@link undoCalendarLayout}.
 	 */
@@ -241,6 +266,7 @@ export class LocalCalendar
 			steps,
 			new Map([...ids].map((id) => [id, readNodeInternalMetadata(this.db, id)])),
 		);
+		assertLayoutWritesUnder(this.db, rootId, writes);
 		if (writes.length > 0)
 		{
 			const appliedAt = newSystemTimestamp();
@@ -268,6 +294,7 @@ export class LocalCalendar
 		const before = readSubtreeAt(this.db, rootId, systemTimeJustBefore(appliedAt));
 		const now = readSubtreeAt(this.db, rootId);
 		const writes = calendarLayoutUndoWrites(rootId, before, now, (id) => this.isLive(id));
+		assertLayoutWritesUnder(this.db, rootId, writes);
 		if (writes.length > 0)
 		{
 			this.writer.applyLayoutWrites(writes);
@@ -296,6 +323,10 @@ export class LocalCalendar
 		if (found !== undefined)
 		{
 			return found;
+		}
+		if (!this.createRoot)
+		{
+			throw new CalendarRootMissing();
 		}
 		const {ids} = this.writer.createTreesAt(
 			{

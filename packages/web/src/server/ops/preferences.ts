@@ -427,13 +427,13 @@ export const preferencesPatch = defineOp(
 				{
 					await adapter.setSetting(name, value);
 				}
-				// Re-laying out the calendar's weeks writes through the internal API; without one the layout stays as it is.
+				// Re-lay out the calendar's weeks for the new week start, locally; the outbox delivers it.
 				if (
 					patch.weekStartDay !== undefined &&
 					(patch.weekStartDay ?? undefined) !== (previousWeekStartDay ?? undefined)
 				)
 				{
-					await reapplyWeekLayout(ctx, adapter);
+					await reapplyWeekLayout(ctx);
 				}
 				return ok(await readPreferences(adapter));
 			});

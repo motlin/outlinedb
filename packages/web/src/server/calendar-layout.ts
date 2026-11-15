@@ -9,17 +9,13 @@
 import {and, eq} from "drizzle-orm";
 import {calendarLevels} from "@outlinedb/shared/db";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
-import type
-{
-	CalendarLayoutLevels,
-	CalendarLayoutSnapshot,
-	LayoutNode,
-	WorkflowyInternalAdapter,
-} from "@outlinedb/shared/internal";
+import type {CalendarLayoutLevels, CalendarLayoutSnapshot, LayoutNode} from "@outlinedb/shared/internal";
+import {LocalCalendar} from "@outlinedb/shared/local-calendar";
 import type {Node} from "@outlinedb/shared/types";
 import {findTaggedCalendarRoot, loadCalendarInfo} from "./calendar-day.js";
 import type {CalendarDayDeps} from "./calendar-day.js";
 import type {ServerContext} from "./context.js";
+import {getAdapter, mirrorOutbox} from "./ops/nodes-shared.js";
 
 function rootLevels(deps: Pick<CalendarDayDeps, "db">, rootId: string): CalendarLayoutLevels | undefined
 {
@@ -121,13 +117,38 @@ export function loadCalendarLayout(
 }
 
 /**
+ * What writes the calendar: the local tables in both modes. A mirror's writes also record outbox rows, which a drain
+ * delivers to workflowy.com, and its account state (root metadata, the entropy key) still comes from the internal API.
+ * Undefined for a mirror without the internal API, which reads that account state and drains its outbox.
+ */
+export function calendarWriter(ctx: ServerContext): LocalCalendar | undefined
+{
+	if (ctx.mode === "standalone")
+	{
+		return new LocalCalendar(ctx.db);
+	}
+	const adapter = getAdapter(ctx);
+	return adapter === undefined
+		? undefined
+		: new LocalCalendar(
+				ctx.db,
+				{
+					outbox: mirrorOutbox(ctx),
+					account: adapter,
+					createRoot: false,
+				},
+			);
+}
+
+/**
  * Re-applies the tagged calendar root's current levels so week nodes move to the new week start: upstream does this
  * when Start of week changes under a week-level calendar. Does nothing when layouts are disabled, no cached root is
- * tagged, or the root has no week level.
+ * tagged, the root has no week level, or a mirror has no internal API.
  */
-export async function reapplyWeekLayout(ctx: ServerContext, adapter: WorkflowyInternalAdapter): Promise<void>
+export async function reapplyWeekLayout(ctx: ServerContext): Promise<void>
 {
-	if (ctx.calendarLayoutEnabled === false)
+	const writer = calendarWriter(ctx);
+	if (ctx.calendarLayoutEnabled === false || writer === undefined)
 	{
 		return;
 	}
@@ -142,7 +163,7 @@ export async function reapplyWeekLayout(ctx: ServerContext, adapter: WorkflowyIn
 	{
 		return;
 	}
-	await adapter.applyCalendarLayout(
+	await writer.applyCalendarLayout(
 		levels,
 		{
 			rootId,

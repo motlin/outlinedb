@@ -1,6 +1,6 @@
 import {it, vi, afterEach, expect, describe, beforeEach} from "vite-plus/test";
 import {captureOutput} from "@oclif/test";
-import {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
+import {calendarNodeId, WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -720,50 +720,50 @@ describe("node create command", () =>
 		it("ensures a missing calendar month for --create-path instead of creating a name-only one", async () =>
 		{
 			seedCalendar();
-			fakeUpstream(fetchStub, testDatabase, tempDir);
-			const ensure = vi.spyOn(WorkflowyInternalAdapter.prototype, "ensureCalendarDay").mockResolvedValue(
-				{
-					dayId: "m10",
-					firstChildId: null,
-					created: [],
-				},
-			);
+			const upstream = fakeUpstream(fetchStub, testDatabase, tempDir);
+			vi.spyOn(WorkflowyInternalAdapter.prototype, "getEntropyKey").mockResolvedValue("k");
+			vi.spyOn(WorkflowyInternalAdapter.prototype, "getRootMeta").mockResolvedValue(undefined);
+			const ensure = vi.spyOn(WorkflowyInternalAdapter.prototype, "ensureCalendarDay");
+			const november = calendarNodeId("k", "month", 20_261_100);
 
 			const {error} = await captureOutput(async () =>
 			{
-				await Create.run(["--parent-path", "📆 Calendar,2026,10,Notes", "--create-path", "--name", "Entry"]);
+				await Create.run(["--parent-path", "📆 Calendar,2026,11,Notes", "--create-path", "--name", "Entry"]);
 			});
 
 			expect(
 				{
 					error,
 					calls: ensure.mock.calls,
-					notes: localTree("m10").filter((node) => node.name === "Notes"),
+					month: localTree("y2026").filter((node) => node.id === november),
+					pushed: upstream.pushes.map((ops) => ops.map(({type, data}) => `${type} ${String(data.parentid)}`)),
+					pending: pendingOutbox(testDatabase),
 				},
 			).toStrictEqual(
 				{
 					error: undefined,
-					calls: [
-						[
-							20_261_001,
-							{
-								stopAt: "month",
-								createChild: false,
-							},
-						],
-					],
-					notes: [
+					calls: [],
+					month: [
 						{
-							id: uuid(2),
-							name: "Notes",
+							id: november,
+							name: "11",
 							children: [
 								{
-									id: uuid(3),
-									name: "Entry",
+									id: uuid(2),
+									name: "Notes",
+									children: [
+										{
+											id: uuid(3),
+											name: "Entry",
+										},
+									],
 								},
 							],
 						},
 					],
+					// One drain delivers the month under its year, then the path under it.
+					pushed: [["bulk_create y2026", `bulk_create ${november}`, `bulk_create ${uuid(2)}`]],
+					pending: [],
 				},
 			);
 		});

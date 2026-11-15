@@ -3,11 +3,14 @@ import {captureOutput} from "@oclif/test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
+import {calendarNodeId, WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import CalendarDay from "../../../src/commands/calendar/day.js";
 import {cleanupTestDatabase, createTestDatabase} from "../../db/migration-helper.js";
 import type {TestDatabase} from "../../db/migration-helper.js";
 import {seedTaggedCalendar} from "../../helpers/calendar-fixture.js";
+import {fakeUpstream, pendingOutbox} from "../../helpers/upstream-outbox.js";
+
+const CHILD_ID = "00000000-0000-4000-8000-0000000000c9";
 
 describe("calendar day command", () =>
 {
@@ -116,17 +119,14 @@ describe("calendar day command", () =>
 		expect(ensure.mock.calls).toStrictEqual([]);
 	});
 
-	it("ensures a missing day once with the day level and a child, and prints the result", async () =>
+	it("ensures a missing day locally with the account's deterministic ids and a child, delivers it, and prints the result", async () =>
 	{
-		const ensure = vi.spyOn(WorkflowyInternalAdapter.prototype, "ensureCalendarDay").mockResolvedValue(
-			{
-				dayId: "v5day",
-				firstChildId: "kid",
-				created: ["v5day", "kid"],
-			},
-		);
-		process.env.WORKFLOWY_USERNAME = "alice@example.com";
-		process.env.WORKFLOWY_PASSWORD = "secret";
+		const upstream = fakeUpstream(vi.spyOn(globalThis, "fetch"), testDatabase, tempDir);
+		vi.spyOn(WorkflowyInternalAdapter.prototype, "getEntropyKey").mockResolvedValue("k");
+		vi.spyOn(WorkflowyInternalAdapter.prototype, "getRootMeta").mockResolvedValue(undefined);
+		vi.spyOn(crypto, "randomUUID").mockReturnValue(CHILD_ID);
+		const ensure = vi.spyOn(WorkflowyInternalAdapter.prototype, "ensureCalendarDay");
+		const day = calendarNodeId("k", "day", 20_261_022);
 
 		const {stdout} = await captureOutput(async () =>
 		{
@@ -135,56 +135,45 @@ describe("calendar day command", () =>
 
 		expect(
 			{
-				calls: ensure.mock.calls,
 				out: JSON.parse(stdout),
+				pushed: upstream.pushes.map((ops) => ops.map(({type, data}) => `${type} ${String(data.parentid)}`)),
+				pending: pendingOutbox(testDatabase),
+				calls: ensure.mock.calls,
 			},
 		).toStrictEqual(
 			{
-				calls: [
-					[
-						20_261_022,
-						{
-							stopAt: "day",
-							createChild: true,
-						},
-					],
-				],
 				out:
 				{
-					id: "v5day",
+					id: day,
 					created: true,
-					firstChildId: "kid",
+					firstChildId: CHILD_ID,
 				},
+				// The day under its month, then its empty first child under it.
+				pushed: [["bulk_create m10", `bulk_create ${day}`]],
+				pending: [],
+				calls: [],
 			},
 		);
 	});
 
-	it("passes --no-child and --level through to ensure", async () =>
+	it("honours --no-child and --level", async () =>
 	{
-		const ensure = vi.spyOn(WorkflowyInternalAdapter.prototype, "ensureCalendarDay").mockResolvedValue(
-			{
-				dayId: "m11",
-				firstChildId: null,
-				created: ["m11"],
-			},
-		);
-		process.env.WORKFLOWY_USERNAME = "alice@example.com";
-		process.env.WORKFLOWY_PASSWORD = "secret";
+		fakeUpstream(vi.spyOn(globalThis, "fetch"), testDatabase, tempDir);
+		vi.spyOn(WorkflowyInternalAdapter.prototype, "getEntropyKey").mockResolvedValue("k");
+		vi.spyOn(WorkflowyInternalAdapter.prototype, "getRootMeta").mockResolvedValue(undefined);
 
-		await captureOutput(async () =>
+		const {stdout} = await captureOutput(async () =>
 		{
-			await CalendarDay.run(["--date", "2026-11-01", "--ensure", "--no-child", "--level", "month"]);
+			await CalendarDay.run(["--date", "2026-11-01", "--ensure", "--no-child", "--level", "month", "--json"]);
 		});
 
-		expect(ensure.mock.calls).toStrictEqual([
-			[
-				20_261_101,
-				{
-					stopAt: "month",
-					createChild: false,
-				},
-			],
-		]);
+		expect(JSON.parse(stdout)).toStrictEqual(
+			{
+				id: calendarNodeId("k", "month", 20_261_100),
+				created: true,
+				firstChildId: null,
+			},
+		);
 	});
 
 	it("errors before any write when --ensure has no internal auth", async () =>

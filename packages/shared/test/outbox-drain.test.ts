@@ -4,6 +4,7 @@ import {asc} from "drizzle-orm";
 import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
+import {LocalCalendar} from "../src/cache/local-calendar.js";
 import {LocalTreeWriter} from "../src/cache/local-tree-writer.js";
 import {runUnitOfWork} from "../src/cache/node-composite.js";
 import {OutboxRecorder, outboxStatus} from "../src/cache/outbox.js";
@@ -11,6 +12,7 @@ import type {OutboxAspect} from "../src/cache/outbox.js";
 import * as schema from "../src/db/schema.js";
 import {mirrors, nodeContent, nodeMetadata, outbox} from "../src/db/schema.js";
 import {OutboxNotAcknowledged} from "../src/internal/errors.js";
+import {calendarNodeId, calendarRootId} from "../src/internal/calendar-ids.js";
 import {drainOutbox} from "../src/internal/outbox-drain.js";
 import type {OutboxPusher} from "../src/internal/outbox-drain.js";
 import type {InternalOp} from "../src/internal/push-and-poll.js";
@@ -85,6 +87,7 @@ function setup()
 			SEED.map(([id, , orderKey]) => (
 			{
 				nodeId: id,
+				shortId: id.padStart(12, "0"),
 				orderKey,
 				createdAt: SEEDED,
 				modifiedAt: SEEDED,
@@ -105,10 +108,17 @@ function setup()
 		)
 		.run();
 
+	let generated = 0;
+	const generateId = () =>
+	{
+		generated += 1;
+		return `g${generated}`;
+	};
 	const writer = new LocalTreeWriter(
 		database,
 		{
 			outbox: new OutboxRecorder(),
+			generateId,
 		},
 	);
 	const outboxRows = () =>
@@ -167,6 +177,7 @@ function setup()
 	return {
 		database,
 		writer,
+		generateId,
 		outboxRows,
 		pushes,
 		pusher,
@@ -207,7 +218,19 @@ const NO_PREVIOUS =
 	previous_last_modified_by: null,
 };
 
-function bulkCreate(id: string, parentId: string, index: number): InternalOp
+function bulkCreate(
+	id: string,
+	parentId: string,
+	index: number,
+	{
+		name = id,
+		metadata,
+	}:
+	{
+		name?: string;
+		metadata?: Record<string, unknown>;
+	} = {},
+): InternalOp
 {
 	return {
 		type: "bulk_create",
@@ -218,7 +241,13 @@ function bulkCreate(id: string, parentId: string, index: number): InternalOp
 			project_trees: JSON.stringify([
 				{
 					id,
-					nm: id,
+					nm: name,
+					...(metadata === undefined
+						? {}
+						:
+							{
+								metadata,
+							}),
 					ct: CT,
 					cb: USER_ID,
 					ch: [],
@@ -228,6 +257,48 @@ function bulkCreate(id: string, parentId: string, index: number): InternalOp
 		},
 		client_timestamp: CT,
 		undo_data: {},
+	};
+}
+
+/** A metadata-only `edit` of `id`. */
+function metadataEdit(id: string, patches: unknown[], inverse: unknown[], clientTimestamp = CT): InternalOp
+{
+	return {
+		type: "edit",
+		data:
+		{
+			projectid: id,
+			metadataPatches: patches,
+			metadataInversePatches: inverse,
+		},
+		client_timestamp: clientTimestamp,
+		undo_data:
+		{
+			...NO_PREVIOUS,
+			metadataPatches: inverse,
+		},
+	};
+}
+
+/** A rename of `id` from `previous` to `name`. */
+function rename(id: string, name: string, previous: string, clientTimestamp = CT): InternalOp
+{
+	return {
+		type: "edit",
+		data:
+		{
+			projectid: id,
+			name,
+			metadataPatches: [],
+			metadataInversePatches: [],
+		},
+		client_timestamp: clientTimestamp,
+		undo_data:
+		{
+			...NO_PREVIOUS,
+			previous_name: previous,
+			metadataPatches: [],
+		},
 	};
 }
 
@@ -772,6 +843,605 @@ describe("drainOutbox", () =>
 						},
 					),
 				],
+			},
+		);
+	});
+	it("sends each new mirror's create, then one edit per original listing its new mirrors", async () =>
+	{
+		const {writer, outboxRows, pushes, drain} = setup();
+		setClock(at(0));
+		writer.createMirrorsAt(
+			{
+				originalIds: ["a", "c1"],
+				parentId: "q",
+				index: 0,
+			},
+		);
+
+		const result = await drain();
+
+		expect(
+			{
+				result,
+				pushes,
+				outbox: outboxRows(),
+			},
+		).toStrictEqual(
+			{
+				result:
+				{
+					ops: 4,
+					closed: 6,
+				},
+				pushes: [
+					[
+						bulkCreate(
+							"g1",
+							"q",
+							0,
+							{
+								name: "",
+								metadata:
+								{
+									mirror:
+									{
+										originalId: "a",
+										isMirrorRoot: true,
+									},
+								},
+							},
+						),
+						bulkCreate(
+							"g2",
+							"q",
+							1,
+							{
+								name: "",
+								metadata:
+								{
+									mirror:
+									{
+										originalId: "c1",
+										isMirrorRoot: true,
+									},
+								},
+							},
+						),
+						metadataEdit(
+							"a",
+							[
+								{
+									op: "add",
+									path: ["mirror"],
+									value:
+									{
+										mirrorRootIds:
+										{
+											g1: true,
+										},
+									},
+								},
+							],
+							[
+								{
+									op: "remove",
+									path: ["mirror"],
+								},
+							],
+						),
+						metadataEdit(
+							"c1",
+							[
+								{
+									op: "add",
+									path: ["mirror", "mirrorRootIds", "g2"],
+									value: true,
+								},
+							],
+							[
+								{
+									op: "remove",
+									path: ["mirror", "mirrorRootIds", "g2"],
+								},
+							],
+						),
+					],
+				],
+				outbox: [
+					row("g1", "create", at(0)),
+					row("g1", "mirror", at(0)),
+					row("g1", "placement", at(0)),
+					row("g2", "create", at(0)),
+					row("g2", "mirror", at(0)),
+					row("g2", "placement", at(0)),
+				],
+			},
+		);
+	});
+
+	it("sends a backlink's references root, item and source listing, then the item's delete and the source's unlisting", async () =>
+	{
+		const {database, writer, outboxRows, pushes, pusher} = setup();
+		const link = '<a href="https://workflowy.com/#/00000000000b">b</a>';
+		setClock(at(0));
+		writer.updateNode(
+			"a",
+			{
+				name: link,
+			},
+		);
+		setClock(at(1));
+		writer.syncBacklinks(["a"]);
+		setClock(DRAIN);
+		const linked = await drainOutbox(database, pusher());
+		const UNLINKED = "2026-03-02 00:00:10.000";
+		setClock(UNLINKED);
+		writer.updateNode(
+			"a",
+			{
+				name: "a",
+			},
+		);
+		const UNSYNCED = "2026-03-02 00:00:11.000";
+		setClock(UNSYNCED);
+		writer.syncBacklinks(["a"]);
+		const SECOND_DRAIN = "2026-03-02 00:01:00.000";
+		setClock(SECOND_DRAIN);
+		const unlinked = await drainOutbox(database, pusher());
+		const secondCt = CT + 60;
+
+		expect(
+			{
+				linked,
+				unlinked,
+				pushes,
+				outbox: outboxRows(),
+			},
+		).toStrictEqual(
+			{
+				linked:
+				{
+					ops: 4,
+					closed: 6,
+				},
+				unlinked:
+				{
+					ops: 3,
+					closed: 3,
+				},
+				pushes: [
+					[
+						bulkCreate(
+							"g1",
+							"b",
+							0,
+							{
+								name: "",
+								metadata:
+								{
+									isReferencesRoot: true,
+								},
+							},
+						),
+						bulkCreate(
+							"g2",
+							"g1",
+							0,
+							{
+								name: "",
+								metadata:
+								{
+									mirror:
+									{
+										originalId: "a",
+										isMirrorRoot: true,
+									},
+									backlink:
+									{
+										sourceID: "a",
+										targetID: "b",
+									},
+								},
+							},
+						),
+						rename("a", link, "a"),
+						metadataEdit(
+							"a",
+							[
+								{
+									op: "add",
+									path: ["mirror"],
+									value:
+									{
+										backlinkMirrorRootIds:
+										{
+											g2: true,
+										},
+									},
+								},
+							],
+							[
+								{
+									op: "remove",
+									path: ["mirror"],
+								},
+							],
+						),
+					],
+					[
+						rename("a", "a", link, secondCt),
+						metadataEdit(
+							"a",
+							[
+								{
+									op: "remove",
+									path: ["mirror", "backlinkMirrorRootIds", "g2"],
+								},
+							],
+							[
+								{
+									op: "add",
+									path: ["mirror", "backlinkMirrorRootIds", "g2"],
+									value: true,
+								},
+							],
+							secondCt,
+						),
+						{
+							type: "delete",
+							data:
+							{
+								projectid: "g2",
+							},
+							client_timestamp: secondCt,
+							undo_data:
+							{
+								...NO_PREVIOUS,
+								parentid: "g1",
+								priority: 0,
+							},
+						},
+					],
+				],
+				outbox: [
+					row(
+						"a",
+						"mirror",
+						UNSYNCED,
+						{
+							systemTo: SECOND_DRAIN,
+						},
+					),
+					row("a", "name", at(0)),
+					row(
+						"a",
+						"name",
+						UNLINKED,
+						{
+							systemTo: SECOND_DRAIN,
+						},
+					),
+					row("g1", "create", at(1)),
+					row("g1", "placement", at(1)),
+					row("g2", "create", at(1)),
+					row(
+						"g2",
+						"delete",
+						UNSYNCED,
+						{
+							systemTo: SECOND_DRAIN,
+						},
+					),
+					row("g2", "mirror", at(1)),
+					row("g2", "placement", at(1)),
+				],
+			},
+		);
+	});
+
+	it("sends a metadata write at upstream key paths as one edit of the node's metadata", async () =>
+	{
+		const {writer, outboxRows, pushes, drain} = setup();
+		setClock(at(0));
+		writer.setNodeMetaValues("p", [
+			{
+				path: ["calendar", "found_dates"],
+				value: false,
+			},
+		]);
+
+		const result = await drain();
+
+		expect(
+			{
+				result,
+				pushes,
+				outbox: outboxRows(),
+			},
+		).toStrictEqual(
+			{
+				result:
+				{
+					ops: 1,
+					closed: 1,
+				},
+				pushes: [
+					[
+						metadataEdit(
+							"p",
+							[
+								{
+									op: "add",
+									path: ["calendar"],
+									value:
+									{
+										found_dates: false,
+									},
+								},
+							],
+							[
+								{
+									op: "remove",
+									path: ["calendar"],
+								},
+							],
+						),
+					],
+				],
+				outbox: [row("p", "metadata", at(0))],
+			},
+		);
+	});
+
+	it("creates a calendar root and day chain with their deterministic ids and calendar metadata", async () =>
+	{
+		const {database, generateId, outboxRows, pushes, drain} = setup();
+		const rootMeta: unknown[] = [];
+		const calendar = new LocalCalendar(
+			database,
+			{
+				outbox: new OutboxRecorder(),
+				generateId,
+				account:
+				{
+					getEntropyKey: async () => Promise.resolve("entropy"),
+					getRootMeta: async () => Promise.resolve(undefined),
+					setRootMetaValues: async (changes) =>
+					{
+						rootMeta.push(...changes);
+						return Promise.resolve();
+					},
+				},
+			},
+		);
+		setClock(at(0));
+		const ensured = await calendar.ensureCalendarDay(
+			20_260_301,
+			{
+				createChild: false,
+			},
+		);
+		const rootId = calendarRootId("entropy");
+		const yearId = calendarNodeId("entropy", "year", 20_260_000);
+		const monthId = calendarNodeId("entropy", "month", 20_260_300);
+		const dayId = calendarNodeId("entropy", "day", 20_260_301);
+
+		const result = await drain();
+
+		expect(
+			{
+				ensured,
+				rootMeta,
+				result,
+				pushes,
+				outbox: outboxRows(),
+			},
+		).toStrictEqual(
+			{
+				ensured:
+				{
+					dayId,
+					firstChildId: null,
+					created: [yearId, monthId, dayId],
+				},
+				rootMeta: [
+					{
+						path: ["calendar", "rootId"],
+						value: rootId,
+					},
+				],
+				result:
+				{
+					ops: 4,
+					closed: 6,
+				},
+				pushes: [
+					[
+						bulkCreate(
+							rootId,
+							"None",
+							2,
+							{
+								name: "📆 Calendar",
+								metadata:
+								{
+									calendar:
+									{
+										root: true,
+									},
+									restorableUniqueNode: true,
+								},
+							},
+						),
+						bulkCreate(
+							yearId,
+							rootId,
+							0,
+							{
+								name: "2026",
+								metadata:
+								{
+									calendar:
+									{
+										level: "year",
+										value: "2026",
+										dateId: 20_260_000,
+										timestamp: 1_767_243_600_000,
+									},
+									restorableUniqueNode: true,
+								},
+							},
+						),
+						bulkCreate(
+							monthId,
+							yearId,
+							0,
+							{
+								name: "3",
+								metadata:
+								{
+									calendar:
+									{
+										level: "month",
+										value: "3",
+										dateId: 20_260_300,
+										timestamp: 1_772_341_200_000,
+									},
+									restorableUniqueNode: true,
+								},
+							},
+						),
+						bulkCreate(
+							dayId,
+							monthId,
+							0,
+							{
+								name: '<time startYear="2026" startMonth="3" startDay="1">Sun, Mar 1, 2026</time>',
+								metadata:
+								{
+									calendar:
+									{
+										level: "day",
+										value: "1",
+										dateId: 20_260_301,
+										timestamp: 1_772_341_200_000,
+									},
+									restorableUniqueNode: true,
+								},
+							},
+						),
+					],
+				],
+				// The chain's top is placed under the root; the levels nested under it carry their slot in their create.
+				outbox: [
+					row(yearId, "create", at(0)),
+					row(yearId, "placement", at(0)),
+					row(monthId, "create", at(0)),
+					row(dayId, "create", at(0)),
+					row(rootId, "create", at(0)),
+					row(rootId, "placement", at(0)),
+				],
+			},
+		);
+	});
+	it("moves a node deleted and restored before any drain back where it was, since upstream never lost it", async () =>
+	{
+		const {writer, outboxRows, pushes, drain} = setup();
+		setClock(at(0));
+		writer.deleteNode("b");
+		setClock(at(1));
+		writer.restoreNode(
+			{
+				id: "b",
+				parentId: "q",
+				index: 0,
+			},
+		);
+
+		const result = await drain();
+
+		expect(
+			{
+				result,
+				pushes,
+				outbox: outboxRows(),
+			},
+		).toStrictEqual(
+			{
+				result:
+				{
+					ops: 1,
+					closed: 3,
+				},
+				pushes: [
+					[
+						{
+							type: "move",
+							data:
+							{
+								projectid: "b",
+								parentid: "q",
+								priority: 0,
+							},
+							client_timestamp: CT,
+							undo_data:
+							{
+								previous_parentid: "p",
+								previous_priority: 1,
+								...NO_PREVIOUS,
+							},
+						},
+					],
+				],
+				outbox: [row("b", "create", at(1)), row("b", "delete", at(0)), row("b", "placement", at(1))],
+			},
+		);
+	});
+
+	it("undeletes a restored node whose delete already went out", async () =>
+	{
+		const {database, writer, outboxRows, pushes, pusher, drain} = setup();
+		setClock(at(0));
+		writer.deleteNode("b");
+		await drain();
+		const RESTORED = "2026-03-02 00:00:10.000";
+		setClock(RESTORED);
+		writer.restoreNode(
+			{
+				id: "b",
+			},
+		);
+		const SECOND_DRAIN = "2026-03-02 00:01:00.000";
+		setClock(SECOND_DRAIN);
+		const result = await drainOutbox(database, pusher());
+
+		expect(
+			{
+				result,
+				undelete: pushes[1],
+				pending: outboxRows().filter(({systemTo}) => systemTo === FAR_FUTURE_DATE),
+			},
+		).toStrictEqual(
+			{
+				result:
+				{
+					ops: 1,
+					closed: 2,
+				},
+				undelete: [
+					{
+						type: "undelete",
+						data:
+						{
+							projectid: "b",
+							parentid: "p",
+							priority: 1,
+						},
+						client_timestamp: CT + 60,
+						undo_data: NO_PREVIOUS,
+					},
+				],
+				pending: [],
 			},
 		);
 	});

@@ -2,6 +2,7 @@ import type {Command} from "@oclif/core";
 import {findInbox, LocalTreeWriter, OutboxRecorder, outboxStatus, planSubtreeDelete} from "@outlinedb/shared/cache";
 import type {DeletePlan, OutboxStatus, WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
 import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
+import {LocalCalendar} from "@outlinedb/shared/local-calendar";
 import {internalAdapter} from "@outlinedb/shared/node";
 import {isSystemTarget} from "@outlinedb/shared/types";
 import type {createDatabase} from "../db/index.js";
@@ -44,6 +45,23 @@ export function openLocalWrites(database: Database, writeThrough: WorkflowyWrite
 		),
 		adapter,
 	};
+}
+
+/**
+ * The 📆 Calendar writer of `writes`: day nodes and layouts go into the local tables with outbox rows, while the
+ * account state they read (entropy key, root metadata) comes from the adapter. A missing calendar root is an error,
+ * never a second root.
+ */
+export function localCalendar(writes: LocalWrites): LocalCalendar
+{
+	return new LocalCalendar(
+		writes.database,
+		{
+			outbox: new OutboxRecorder(),
+			account: writes.adapter,
+			createRoot: false,
+		},
+	);
 }
 
 /**

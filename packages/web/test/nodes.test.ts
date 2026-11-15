@@ -1459,9 +1459,26 @@ describe("nodes mirror route", () =>
 		};
 	}
 
-	/** Home holds O, P, L; P holds Q; Q holds R; M under P mirrors O. */
+	const UNREACHABLE = new Error("workflowy.com is unreachable");
+
+	afterEach(() =>
+	{
+		vi.useRealTimers();
+		vi.restoreAllMocks();
+	});
+
+	/**
+	 * A mirror context: Home holds O, P, L; P holds Q; Q holds R; M under P mirrors O. workflowy.com is down: every
+	 * upstream tree write fails, while expansion (account state) still answers. New ids are new1, new2, ...
+	 */
 	function setup(configured = true, expanded: string[] = [])
 	{
+		vi.useFakeTimers(
+			{
+				toFake: ["Date"],
+			},
+		);
+		vi.setSystemTime(1_600_000_000_000);
 		const sqlite = new DatabaseConstructor(":memory:");
 		const db = drizzle(
 			sqlite,
@@ -1486,36 +1503,30 @@ describe("nodes mirror route", () =>
 		sqlite
 			.prepare("INSERT INTO mirrors (mirror_id, original_id, system_from, system_to) VALUES (?, ?, ?, ?)")
 			.run("M", "O", "2000-01-01T00:00:00.000Z", FAR_FUTURE_DATE);
+		// Writes start later than the seed: a unit of work may not overwrite a version from its own millisecond.
+		vi.setSystemTime(1_700_000_000_000);
 		let counter = 0;
-		const createMirrorsAt = vi.fn<WorkflowyInternalAdapter["createMirrorsAt"]>(async (input) =>
+		vi.spyOn(crypto, "randomUUID").mockImplementation(() =>
 		{
-			const mirrors = input.originalIds.map((originId) =>
-			{
-				counter += 1;
-				const mirrorId = `new${counter}`;
-				cacheService.insertNode(apiNode(mirrorId, input.parentId === "home" ? null : input.parentId, 9), null);
-				return {
-					mirrorId,
-					originId,
-				};
-			});
-			return Promise.resolve(
-				{
-					mirrors,
-				},
-			);
+			counter += 1;
+			return `new${counter}` as ReturnType<typeof crypto.randomUUID>;
 		});
-		const moveTo = vi.fn<WorkflowyInternalAdapter["moveTo"]>(async () => Promise.resolve());
+		const createMirrorsAt = vi.fn<WorkflowyInternalAdapter["createMirrorsAt"]>(async () =>
+			Promise.reject(UNREACHABLE),
+		);
+		const moveTo = vi.fn<WorkflowyInternalAdapter["moveTo"]>(async () => Promise.reject(UNREACHABLE));
 		const setExpanded = vi.fn<WorkflowyInternalAdapter["setExpanded"]>(async () => Promise.resolve());
 		const expansionTest = vi.fn<WorkflowyInternalAdapter["expansionTest"]>(
 			() => (id: string) => expanded.includes(id),
 		);
+		const outboxWritten = vi.fn<() => void>();
 		const ctx =
 		{
 			db,
 			cacheService,
 			apiKey: "test-key",
 			internalAuth: configured ? {} : undefined,
+			outboxWritten,
 			internalAdapter: () =>
 				configured
 					? (
@@ -1549,6 +1560,13 @@ describe("nodes mirror route", () =>
 				),
 			);
 		const get = async (path: string) => app.fetch(new Request(`http://x/api/v1/nodes${path}`));
+		/** Each parent's children in order, keyed by parent (`home` for Home). */
+		const children = (...parents: (string | null)[]) =>
+			Object.fromEntries(
+				parents.map((parent) => [parent ?? "home", cacheService.getChildren(parent).map((child) => child.id)]),
+			);
+		/** The pending outbox rows, as `node aspect`. */
+		const pending = () => readPendingOutbox(db, 100).map(({nodeId, aspect}) => `${nodeId} ${aspect}`);
 		return {
 			createMirrorsAt,
 			setExpanded,
@@ -1557,6 +1575,9 @@ describe("nodes mirror route", () =>
 			sqlite,
 			post,
 			get,
+			children,
+			pending,
+			outboxWritten,
 		};
 	}
 
@@ -1638,9 +1659,9 @@ describe("nodes mirror route", () =>
 
 	describe("POST /api/v1/nodes/mirror", () =>
 	{
-		it("mirrors each item in order at consecutive indexes", async () =>
+		it("mirrors each item locally in order at consecutive indexes while workflowy.com is down, leaving pending rows", async () =>
 		{
-			const {createMirrorsAt, post} = setup();
+			const {createMirrorsAt, post, children, pending, outboxWritten} = setup();
 
 			const res = await post(
 				"/mirror",
@@ -1650,39 +1671,67 @@ describe("nodes mirror route", () =>
 					index: 1,
 				},
 			);
-
-			expect(
-				{
-					status: res.status,
-					calls: createMirrorsAt.mock.calls,
-				},
-			).toStrictEqual(
-				{
-					status: 201,
-					calls: [
-						[
-							{
-								originalIds: ["O", "L"],
-								parentId: "P",
-								index: 1,
-							},
-						],
-					],
-				},
-			);
 			const body = (await res.json()) as
 			{
 				nodes:
 				{
 					id: string;
+					isMirror: boolean;
+					originalNodeId: string | null;
 				}[];
 			};
-			expect(body.nodes.map((node) => node.id)).toStrictEqual(["new1", "new2"]);
+			await Promise.resolve();
+
+			expect(
+				{
+					status: res.status,
+					nodes: body.nodes.map(({id, isMirror, originalNodeId}) => (
+					{
+						id,
+						isMirror,
+						originalNodeId,
+					})),
+					children: children("P"),
+					pending: pending(),
+					drains: outboxWritten.mock.calls.length,
+					upstream: createMirrorsAt.mock.calls.length,
+				},
+			).toStrictEqual(
+				{
+					status: 201,
+					nodes: [
+						{
+							id: "new1",
+							isMirror: true,
+							originalNodeId: "O",
+						},
+						{
+							id: "new2",
+							isMirror: true,
+							originalNodeId: "L",
+						},
+					],
+					children:
+					{
+						P: ["Q", "new1", "new2", "M"],
+					},
+					pending: [
+						"new1 create",
+						"new1 mirror",
+						"new1 placement",
+						"new2 create",
+						"new2 mirror",
+						"new2 placement",
+					],
+					drains: 1,
+					upstream: 0,
+				},
+			);
 		});
 
 		it("resolves a mirror source to its original", async () =>
 		{
-			const {createMirrorsAt, post} = setup();
+			const {cacheService, post, children} = setup();
 
 			await post(
 				"/mirror",
@@ -1693,20 +1742,25 @@ describe("nodes mirror route", () =>
 				},
 			);
 
-			expect(createMirrorsAt.mock.calls).toStrictEqual([
-				[
+			expect(
+				{
+					children: children("L"),
+					original: cacheService.getMirrorOriginal("new1"),
+				},
+			).toStrictEqual(
+				{
+					children:
 					{
-						originalIds: ["O"],
-						parentId: "L",
-						index: 0,
+						L: ["new1"],
 					},
-				],
-			]);
+					original: "O",
+				},
+			);
 		});
 
 		it("writes into the original's child list when the parent is a mirror", async () =>
 		{
-			const {createMirrorsAt, post} = setup();
+			const {cacheService, post, children} = setup();
 
 			await post(
 				"/mirror",
@@ -1717,15 +1771,21 @@ describe("nodes mirror route", () =>
 				},
 			);
 
-			expect(createMirrorsAt.mock.calls).toStrictEqual([
-				[
+			expect(
+				{
+					children: children("O", "M"),
+					original: cacheService.getMirrorOriginal("new1"),
+				},
+			).toStrictEqual(
+				{
+					children:
 					{
-						originalIds: ["L"],
-						parentId: "O",
-						index: 0,
+						O: ["new1"],
+						M: [],
 					},
-				],
-			]);
+					original: "L",
+				},
+			);
 		});
 
 		it("rejects Home as the source", async () =>
@@ -1863,36 +1923,29 @@ describe("nodes mirror route", () =>
 
 	describe("POST /api/v1/nodes/:id/swap-mirror-origin", () =>
 	{
-		it("moves the mirror next to its original, then the original into the mirror's old slot", async () =>
+		it("moves the mirror next to its original, then the original into the mirror's old slot, locally", async () =>
 		{
-			const {moveTo, post} = setup();
+			const {moveTo, post, children, pending} = setup();
 
 			const res = await post("/M/swap-mirror-origin", {});
 
 			expect(
 				{
 					status: res.status,
-					moves: moveTo.mock.calls,
+					children: children(null, "P"),
+					pending: pending(),
+					upstream: moveTo.mock.calls.length,
 				},
 			).toStrictEqual(
 				{
 					status: 200,
-					moves: [
-						[
-							{
-								ids: ["M"],
-								parentId: "home",
-								index: 0,
-							},
-						],
-						[
-							{
-								ids: ["O"],
-								parentId: "P",
-								index: 1,
-							},
-						],
-					],
+					children:
+					{
+						home: ["M", "P", "L"],
+						P: ["Q", "O"],
+					},
+					pending: ["M placement", "O placement"],
+					upstream: 0,
 				},
 			);
 		});

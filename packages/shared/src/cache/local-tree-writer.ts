@@ -1427,12 +1427,34 @@ export class LocalTreeWriter
 		this.endNodes(pending, unitOfWork, [...new Set(ended)]);
 	}
 
-	/** End the composites of `ids`, each a pending delete. */
+	/**
+	 * End the composites of `ids`, each a pending delete. An original that outlives an ended mirror of it has a pending
+	 * mirror change: upstream lists its mirrors (and backlink items) on it.
+	 */
 	private endNodes(pending: PendingWrites, unitOfWork: UnitOfWork, ids: readonly string[]): void
 	{
+		const ending = new Set(ids);
 		for (const id of ids)
 		{
 			pending.touch(id, "delete");
+		}
+		if (ids.length > 0)
+		{
+			for (const {originalId} of unitOfWork.tx
+				.select(
+					{
+						originalId: mirrors.originalId,
+					},
+				)
+				.from(mirrors)
+				.where(and(inIds(mirrors.mirrorId, ids), currentVersion(mirrors)))
+				.all())
+			{
+				if (!ending.has(originalId))
+				{
+					pending.touch(originalId, "mirror");
+				}
+			}
 		}
 		endNodeComposites(unitOfWork, ids);
 	}

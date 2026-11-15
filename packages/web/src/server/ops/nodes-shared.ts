@@ -396,10 +396,16 @@ export function getNodeWriter(ctx: ServerContext): NodeWriter | undefined
 		local: new LocalTreeWriter(
 			ctx.db,
 			{
-				outbox: new AnnouncingOutboxRecorder(ctx.outboxWritten),
+				outbox: mirrorOutbox(ctx),
 			},
 		),
 	};
+}
+
+/** A mirror-mode writer's outbox recorder: it records each unit of work's rows, then starts the host's drain. */
+export function mirrorOutbox(ctx: ServerContext): OutboxRecorder
+{
+	return new AnnouncingOutboxRecorder(ctx.outboxWritten);
 }
 
 /**
@@ -636,7 +642,7 @@ export function slotIndex(index: number | undefined, position: number | undefine
 }
 
 /** The adapter's parent id: a node id, or `HOME_TARGET`. */
-export function adapterParent(parentId: string | null): string
+function adapterParent(parentId: string | null): string
 {
 	return parentId ?? HOME_TARGET;
 }

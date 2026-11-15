@@ -1,32 +1,16 @@
-import {beforeEach, describe, expect, it, vi} from "vite-plus/test";
+import {afterEach, describe, expect, it, vi} from "vite-plus/test";
 import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {Hono} from "hono";
 import {join} from "node:path";
-import type * as SharedCache from "@outlinedb/shared/cache";
+import {CacheService, readPendingOutbox} from "@outlinedb/shared/cache";
 import * as schema from "@outlinedb/shared/db";
 import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import type {WorkflowyNode} from "@outlinedb/shared/types";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
 import {httpAppFor} from "./http-app-for.js";
-
-const deleteNode = vi.hoisted(() => vi.fn<SharedCache.WorkflowyWriteThroughClient["deleteNode"]>());
-
-vi.mock("@outlinedb/shared/cache", async (importOriginal) =>
-{
-	const actual = await importOriginal<typeof SharedCache>();
-	return {
-		...actual,
-		WorkflowyWriteThroughClient: class
-		{
-			deleteNode = deleteNode;
-		},
-	};
-});
-
-const {CacheService} = await import("@outlinedb/shared/cache");
 
 const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 
@@ -55,6 +39,12 @@ function apiNode(
  */
 function setup(expanded: string[] = [])
 {
+	vi.useFakeTimers(
+		{
+			toFake: ["Date"],
+		},
+	);
+	vi.setSystemTime(1_600_000_000_000);
 	const sqlite = new DatabaseConstructor(":memory:");
 	const db = drizzle(
 		sqlite,
@@ -122,15 +112,18 @@ function setup(expanded: string[] = [])
 	link.run("M", "O", "2000-01-01T00:00:00.000Z", FAR_FUTURE_DATE);
 	link.run("DM", "D", "2000-01-01T00:00:00.000Z", FAR_FUTURE_DATE);
 	link.run("E", "X", "2000-01-01T00:00:00.000Z", FAR_FUTURE_DATE);
-	const createTreesAt = vi.fn<WorkflowyInternalAdapter["createTreesAt"]>(async (input) =>
+	// Writes start later than the seed: a unit of work may not overwrite a version from its own millisecond.
+	vi.setSystemTime(1_700_000_000_000);
+	let counter = 0;
+	vi.spyOn(crypto, "randomUUID").mockImplementation(() =>
 	{
-		cacheService.insertNode(apiNode("COPY", input.parentId === "home" ? null : input.parentId, 9), null);
-		return Promise.resolve(
-			{
-				ids: ["COPY"],
-			},
-		);
+		counter += 1;
+		return `copy${counter}` as ReturnType<typeof crypto.randomUUID>;
 	});
+	// workflowy.com is down: every upstream tree write fails, while expansion (account state) still answers.
+	const createTreesAt = vi.fn<WorkflowyInternalAdapter["createTreesAt"]>(async () =>
+		Promise.reject(new Error("workflowy.com is unreachable")),
+	);
 	const setExpanded = vi.fn<WorkflowyInternalAdapter["setExpanded"]>(async () => Promise.resolve());
 	const expansionTest = vi.fn<WorkflowyInternalAdapter["expansionTest"]>(() => (id: string) => expanded.includes(id));
 	const ctx =
@@ -140,6 +133,10 @@ function setup(expanded: string[] = [])
 		apiKey: "test-key",
 		config: {} as ServerContext["config"],
 		internalAuth: {},
+		outboxWritten: () =>
+		{
+			// The drain is the host's; these tests read the pending rows it would deliver.
+		},
 		internalAdapter: () =>
 			(
 			{
@@ -164,160 +161,136 @@ function setup(expanded: string[] = [])
 				},
 			),
 		);
+	/** The subtree under `id` as nested `[label, children]` (a mirror labelled with its original), a leaf left bare. */
+	const outline = (id: string | null): unknown[] =>
+		cacheService.getChildren(id).map((node) =>
+		{
+			const original = cacheService.getMirrorOriginal(node.id);
+			const label = original === null ? `${node.id} ${node.name ?? ""}` : `${node.id} mirror of ${original}`;
+			const children = outline(node.id);
+			return children.length === 0 ? label : [label, children];
+		});
+	const pending = () => readPendingOutbox(db, 100).map(({nodeId, aspect}) => `${nodeId} ${aspect}`);
 	return {
 		createTreesAt,
 		setExpanded,
 		cacheService,
 		post,
+		outline,
+		pending,
 	};
 }
 
-beforeEach(() =>
+afterEach(() =>
 {
-	deleteNode.mockReset();
-	deleteNode.mockResolvedValue(
-		{
-			mirrorIds: [],
-			promotions: [],
-			nodeId: "x",
-		},
-	);
+	vi.useRealTimers();
+	vi.restoreAllMocks();
 });
-
-const anyId = expect.any(String) as string;
 
 describe("POST /api/v1/nodes/:id/detach-mirror", () =>
 {
-	it("copies a mirror as an open item at its slot: descendant mirrors and originals-with-mirrors stay mirrors, then removes the mirror", async () =>
+	it("copies a mirror locally as an open item at its slot: descendant mirrors and originals-with-mirrors stay mirrors, then removes the mirror", async () =>
 	{
-		const {createTreesAt, post} = setup();
+		const {createTreesAt, post, outline, pending} = setup();
 
 		const res = await post("/M/detach-mirror");
+
+		const {node} = (await res.json()) as
+		{
+			node:
+			{
+				id: string;
+				parent_id: string | null;
+				isMirror: boolean;
+				completedAt: number | null;
+			};
+		};
 
 		expect(
 			{
 				status: res.status,
-				calls: createTreesAt.mock.calls,
-				deleted: deleteNode.mock.calls,
+				node:
+				{
+					id: node.id,
+					parentId: node.parent_id,
+					isMirror: node.isMirror,
+					completedAt: node.completedAt,
+				},
+				outline: outline("P"),
+				pending: pending(),
+				upstream: createTreesAt.mock.calls.length,
 			},
 		).toStrictEqual(
 			{
 				status: 201,
-				calls: [
-					[
-						{
-							parentId: "P",
-							index: 1,
-							trees: [
-								{
-									id: anyId,
-									name: "o",
-									note: "n",
-									children: [
-										{
-											id: anyId,
-											name: "c",
-											metadata:
-											{
-												layoutMode: "board",
-											},
-											children: [
-												{
-													id: anyId,
-													name: "g",
-													completed: true,
-												},
-											],
-										},
-										{
-											id: anyId,
-											name: "",
-											metadata:
-											{
-												mirror:
-												{
-													originalId: "D",
-													isMirrorRoot: true,
-												},
-											},
-										},
-										{
-											id: anyId,
-											name: "",
-											metadata:
-											{
-												mirror:
-												{
-													originalId: "X",
-													isMirrorRoot: true,
-												},
-											},
-										},
-									],
-								},
-							],
-						},
-					],
-				],
-				deleted: [["M"]],
-			},
-		);
-		expect(
-			(
-				(await res.json()) as
+				node:
 				{
-					node:
-					{
-						id: string;
-						isMirror: boolean;
-					};
-				}
-			).node,
-		).toMatchObject(
-			{
-				id: "COPY",
-				isMirror: false,
+					id: "copy1",
+					parentId: "P",
+					isMirror: false,
+					completedAt: null,
+				},
+				outline: [
+					"A a",
+					["copy1 o", [["copy2 c", ["copy3 g"]], "copy4 mirror of D", "copy5 mirror of X"]],
+					"B b",
+				],
+				// O stops listing M upstream; the copy's descendants ride in its create.
+				pending: [
+					"M delete",
+					"O mirror",
+					"copy1 create",
+					"copy1 placement",
+					"copy2 create",
+					"copy3 create",
+					"copy4 create",
+					"copy4 mirror",
+					"copy5 create",
+					"copy5 mirror",
+				],
+				upstream: 0,
 			},
 		);
 	});
 
 	it("keeps an original's own completion when it detaches in place, and deletes it so its first mirror takes over", async () =>
 	{
-		const {createTreesAt, post} = setup();
+		const {cacheService, post, outline} = setup();
 
 		const res = await post("/O/detach-mirror");
+
+		// O took M's slot under P; its copy sits where O was.
 
 		expect(
 			{
 				status: res.status,
-				parent: createTreesAt.mock.calls[0]?.[0].parentId,
-				index: createTreesAt.mock.calls[0]?.[0].index,
-				completed: createTreesAt.mock.calls[0]?.[0].trees[0]?.completed,
-				deleted: deleteNode.mock.calls,
+				home: outline(null),
+				copyCompleted: cacheService.getNode("copy1")?.completedAt !== null,
 			},
 		).toStrictEqual(
 			{
 				status: 201,
-				parent: "home",
-				index: 1,
-				completed: true,
-				deleted: [["O"]],
+				home: [
+					["P p", ["A a", ["O o", [["C c", ["G g"]], "D d", "E mirror of X"]], "B b"]],
+					["copy1 o", [["copy2 c", ["copy3 g"]], "copy4 mirror of D", "copy5 mirror of X"]],
+					["X x", ["DM mirror of D"]],
+				],
+				copyCompleted: true,
 			},
 		);
 	});
 
 	it("opens the copy like the detached row", async () =>
 	{
-		const {createTreesAt, setExpanded, post} = setup(["M", "C"]);
+		const {setExpanded, post} = setup(["M", "C"]);
 
 		await post("/M/detach-mirror");
 
-		const [tree] = createTreesAt.mock.calls[0]?.[0].trees ?? [];
 		expect(setExpanded.mock.calls).toStrictEqual([
 			[
 				{
-					[tree.id ?? ""]: true,
-					[tree.children?.[0]?.id ?? ""]: true,
+					copy1: true,
+					copy2: true,
 				},
 			],
 		]);
@@ -325,7 +298,7 @@ describe("POST /api/v1/nodes/:id/detach-mirror", () =>
 
 	it("refuses a subtree of more than 2000 items without writing", async () =>
 	{
-		const {createTreesAt, cacheService, post} = setup();
+		const {createTreesAt, cacheService, post, pending} = setup();
 		for (let i = 0; i < 2000; i += 1)
 		{
 			cacheService.insertNode(apiNode(`bulk${i}`, "G", i), "G");
@@ -338,7 +311,7 @@ describe("POST /api/v1/nodes/:id/detach-mirror", () =>
 				status: res.status,
 				body: await res.json(),
 				created: createTreesAt.mock.calls.length,
-				deleted: deleteNode.mock.calls.length,
+				pending: pending(),
 			},
 		).toStrictEqual(
 			{
@@ -348,7 +321,7 @@ describe("POST /api/v1/nodes/:id/detach-mirror", () =>
 					error: "Detaching mirror subtrees containing more than 2000 items is not supported.",
 				},
 				created: 0,
-				deleted: 0,
+				pending: [],
 			},
 		);
 	});

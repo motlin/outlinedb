@@ -2,10 +2,12 @@
  * The mirror-mode outbox drain: read the pending outbox rows, build the internal ops that bring workflowy.com up to the
  * nodes' current local state, push them in one `push_and_poll`, and close the rows once the server run echoes every op.
  *
- * Ops go out in this order: creates (parents first, siblings in order-key order), placements, name and note and
- * metadata edits, completions, mirror links, deletes. A node's Workflowy index is its position among its current local
- * siblings that exist upstream: siblings with a pending create or placement count only once this push has sent theirs.
- * A pending delete makes the node's other rows moot, and a node created and deleted before any drain sends nothing.
+ * Ops go out in this order: undeletes, creates (parents first, siblings in order-key order), placements, name and
+ * note and metadata edits, completions, mirror links (a new mirror's link, and each original's edit listing the
+ * mirrors and backlink items it gained or lost), deletes. A node's Workflowy index is its position among its current
+ * local siblings that exist upstream: siblings with a pending create or placement count only once this push has sent
+ * theirs. A pending delete makes the node's other rows moot, and a node created and deleted before any drain sends
+ * nothing. A restored node is an undelete once its delete went out, and only a move when the delete is still pending.
  *
  * What upstream holds now is the node's local state just before its oldest pending row: every aspect still pending
  * changed after that, and none before it. It supplies the previous values the ops' undo data carries, and decides
@@ -15,7 +17,7 @@
  * unacknowledged push records `last_error` on every row it carried and leaves them pending.
  */
 
-import {and, eq, gt, isNull, lte, or} from "drizzle-orm";
+import {and, eq, gt, isNull, lte, or, sql} from "drizzle-orm";
 import type {SQL} from "drizzle-orm";
 import {currentVersion} from "../cache/cache-temporal.js";
 import {inIds} from "../cache/in-ids.js";
@@ -30,7 +32,7 @@ import {closeOutboxRows, failOutboxRows, readPendingOutbox} from "../cache/outbo
 import type {OutboxAspect, OutboxEntry, PendingOutboxRow} from "../cache/outbox.js";
 import {systemTimeJustBefore} from "../cache/subtree-history.js";
 import type {TemporalTransaction} from "../cache/temporal-merge.js";
-import {nodeContent, nodeMetadata} from "../db/schema.js";
+import {mirrors, nodeContent, nodeMetadata, referencesRoots} from "../db/schema.js";
 import {OutboxNotAcknowledged} from "./errors.js";
 import {buildMetadataChanges} from "./metadata-patch.js";
 import type {MetadataChange} from "./metadata-patch.js";
@@ -44,6 +46,7 @@ import
 	moveOp,
 	ROOT_PROJECT_ID,
 	uncompleteOp,
+	undeleteOp,
 } from "./ops.js";
 import type {NewTree, OpClock} from "./ops.js";
 import type {InternalOp, PushResult} from "./push-and-poll.js";
@@ -336,6 +339,187 @@ function withoutMirrorRoots(
 			};
 }
 
+type MirrorRootField = "mirrorRootIds" | "backlinkMirrorRootIds";
+
+const mirrorRootField = (backlink: boolean): MirrorRootField => (backlink ? "backlinkMirrorRootIds" : "mirrorRootIds");
+
+function asRecord(value: unknown): Record<string, unknown>
+{
+	return typeof value === "object" && value !== null && !Array.isArray(value)
+		?
+			{
+				...value,
+			}
+		: {};
+}
+
+/** `relationships` with each `[field, mirrorId]` listed under that mirror root list. */
+function withMirrorRoots(
+	relationships: Record<string, unknown>,
+	roots: readonly (readonly [MirrorRootField, string])[],
+): Record<string, unknown>
+{
+	if (roots.length === 0)
+	{
+		return relationships;
+	}
+	const mirror = asRecord(relationships.mirror);
+	for (const [field, mirrorId] of roots)
+	{
+		mirror[field] =
+		{
+			...asRecord(mirror[field]),
+			[mirrorId]: true,
+		};
+	}
+	return {
+		...relationships,
+		mirror,
+	};
+}
+
+/** A mirror an original listed upstream that no longer mirrors it locally. */
+interface RemovedMirror
+{
+	mirrorId: string;
+	/** Whether it was a backlink item: its parent then was a references root. */
+	backlink: boolean;
+}
+
+/**
+ * The mirrors each original had at its `asOf` (what workflowy.com lists on it) that are gone locally now, grouped
+ * into one read set per time.
+ */
+function removedMirrors(tx: TemporalTransaction, asOfById: ReadonlyMap<string, string>): Map<string, RemovedMirror[]>
+{
+	const result = new Map<string, RemovedMirror[]>();
+	const byTime = new Map<string, string[]>();
+	for (const [id, asOf] of asOfById)
+	{
+		byTime.set(asOf, [...(byTime.get(asOf) ?? []), id]);
+	}
+	for (const [asOf, ids] of byTime)
+	{
+		const then = tx
+			.select(
+				{
+					mirrorId: mirrors.mirrorId,
+					originalId: mirrors.originalId,
+				},
+			)
+			.from(mirrors)
+			.where(and(inIds(mirrors.originalId, ids), lte(mirrors.systemFrom, asOf), gt(mirrors.systemTo, asOf)))
+			.all();
+		const live = new Set(
+			tx
+				.select(
+					{
+						mirrorId: mirrors.mirrorId,
+					},
+				)
+				.from(mirrors)
+				.where(and(inIds(mirrors.originalId, ids), currentVersion(mirrors)))
+				.all()
+				.map(({mirrorId}) => mirrorId),
+		);
+		const gone = then.filter(({mirrorId}) => !live.has(mirrorId));
+		if (gone.length === 0)
+		{
+			continue;
+		}
+		const parents = new Map(
+			tx
+				.select(
+					{
+						id: nodeContent.id,
+						parentId: nodeContent.parentId,
+					},
+				)
+				.from(nodeContent)
+				.where(
+					and(
+						inIds(
+							nodeContent.id,
+							gone.map(({mirrorId}) => mirrorId),
+						),
+						versionAt(nodeContent, asOf),
+					),
+				)
+				.all()
+				.map(({id, parentId}) => [id, parentId]),
+		);
+		const parentIds = [...parents.values()].filter((parentId) => parentId !== null);
+		const roots = new Set(
+			parentIds.length === 0
+				? []
+				: tx
+						.select(
+							{
+								nodeId: referencesRoots.nodeId,
+							},
+						)
+						.from(referencesRoots)
+						.where(
+							and(
+								inIds(referencesRoots.nodeId, parentIds),
+								lte(referencesRoots.systemFrom, asOf),
+								gt(referencesRoots.systemTo, asOf),
+							),
+						)
+						.all()
+						.map(({nodeId}) => nodeId),
+		);
+		for (const {mirrorId, originalId} of gone)
+		{
+			const parentId = parents.get(mirrorId) ?? null;
+			result.set(originalId, [
+				...(result.get(originalId) ?? []),
+				{
+					mirrorId,
+					backlink: parentId !== null && roots.has(parentId),
+				},
+			]);
+		}
+	}
+	return result;
+}
+
+/**
+ * Which of the nodes with a pending create row are restores: the node had a version before the row was enqueued, so
+ * it existed (and upstream knew it) before a delete.
+ */
+function restoredNodes(tx: TemporalTransaction, creates: readonly PendingOutboxRow[]): Set<string>
+{
+	if (creates.length === 0)
+	{
+		return new Set();
+	}
+	const first = new Map(
+		tx
+			.select(
+				{
+					id: nodeContent.id,
+					since: sql<string>`min(${nodeContent.systemFrom})`,
+				},
+			)
+			.from(nodeContent)
+			.where(
+				inIds(
+					nodeContent.id,
+					creates.map(({nodeId}) => nodeId),
+				),
+			)
+			.groupBy(nodeContent.id)
+			.all()
+			.map(({id, since}) => [id, since]),
+	);
+	return new Set(
+		creates
+			.filter(({nodeId, enqueuedAt}) => (first.get(nodeId) ?? enqueuedAt) < enqueuedAt)
+			.map(({nodeId}) => nodeId),
+	);
+}
+
 /** Build the push for `rows` from the nodes' current local state. */
 function planDrain(
 	tx: TemporalTransaction,
@@ -367,21 +551,31 @@ function planDrain(
 	const states = readStates(tx, ids);
 
 	const droppedIds = new Set(ids.filter((id) => has(id, "create") && !states.has(id)));
-	const created = new Set(ids.filter((id) => has(id, "create") && states.has(id)));
-	const placed = ids.filter((id) => has(id, "placement") && states.has(id) && !created.has(id));
+	const restored = restoredNodes(
+		tx,
+		rows.filter(({nodeId, aspect}) => aspect === "create" && states.has(nodeId)),
+	);
+	// A node deleted and restored before any drain is still live upstream: its delete never went out.
+	const revived = new Set([...restored].filter((id) => has(id, "delete")));
+	// A restore of a node whose delete went out is an undelete there, which brings back its subtree with it.
+	const undeleted = [...restored].filter((id) => !revived.has(id) && has(id, "placement"));
+	const created = new Set(ids.filter((id) => has(id, "create") && states.has(id) && !restored.has(id)));
+	const placed = ids.filter(
+		(id) => has(id, "placement") && states.has(id) && !created.has(id) && !undeleted.includes(id),
+	);
 	const upstream = readUpstreamStates(
 		tx,
 		new Map(
 			ids
-				.filter((id) => !has(id, "create"))
+				.filter((id) => !has(id, "create") || revived.has(id))
 				.map((id) => [id, systemTimeJustBefore(oldest.get(id) ?? "")] as const),
 		),
 	);
 
 	const ops: InternalOp[] = [];
-	const notUpstream = new Set([...created, ...placed]);
+	const notUpstream = new Set([...created, ...placed, ...undeleted]);
 	const parentOf = (id: string): string | null => states.get(id)?.parentId ?? null;
-	const parentOrder = [...new Set([...created, ...placed].map(parentOf))];
+	const parentOrder = [...new Set([...created, ...placed, ...undeleted].map(parentOf))];
 	const siblings = siblingsAt(tx, [...parentOrder, ...created]);
 	const childrenOf = (parent: string | null): string[] => siblings.get(parent) ?? [];
 	/** The node's index among its parent's children that exist upstream, itself excluded. */
@@ -390,6 +584,28 @@ function planDrain(
 		const order = childrenOf(parentOf(id));
 		return order.slice(0, order.indexOf(id)).filter((sibling) => !notUpstream.has(sibling)).length;
 	};
+
+	const undeletedSet = new Set(undeleted);
+	for (const parent of parentOrder)
+	{
+		for (const id of childrenOf(parent))
+		{
+			if (undeletedSet.has(id))
+			{
+				ops.push(
+					undeleteOp(
+						{
+							...clock,
+							id,
+							parentId: internalParent(parent),
+							index: slot(id),
+						},
+					),
+				);
+				notUpstream.delete(id);
+			}
+		}
+	}
 
 	const create = (id: string): void =>
 	{
@@ -581,7 +797,7 @@ function planDrain(
 	const linked = ids.filter(
 		(id) => has(id, "mirror") && states.get(id)?.relationships.mirror?.originalId !== undefined,
 	);
-	const linksByOriginal = new Map<string, string[]>();
+	const added = new Map<string, string[]>();
 	for (const id of linked)
 	{
 		const originalId = states.get(id)?.relationships.mirror?.originalId ?? "";
@@ -610,27 +826,51 @@ function planDrain(
 		}
 		if (!created.has(originalId))
 		{
-			linksByOriginal.set(originalId, [...(linksByOriginal.get(originalId) ?? []), id]);
+			added.set(originalId, [...(added.get(originalId) ?? []), id]);
 		}
 	}
-	const originals = upstreamRelationshipMetadata(tx, [...linksByOriginal.keys()]);
-	for (const [originalId, mirrorIds] of linksByOriginal)
+	// An original with a pending mirror change of its own lost the mirrors upstream still lists on it.
+	const removed = removedMirrors(
+		tx,
+		new Map(
+			ids
+				.filter(
+					(id) =>
+						has(id, "mirror") &&
+						!created.has(id) &&
+						states.has(id) &&
+						states.get(id)?.relationships.mirror?.originalId === undefined,
+				)
+				.map((id) => [id, systemTimeJustBefore(oldest.get(id) ?? "")] as const),
+		),
+	);
+	const originalIds = [...new Set([...added.keys(), ...removed.keys()])];
+	const originals = upstreamRelationshipMetadata(tx, originalIds);
+	for (const originalId of originalIds)
 	{
-		const base = withoutMirrorRoots(originals.get(originalId) ?? {}, new Set(mirrorIds));
-		const {patches, inverse} = buildMetadataChanges(
-			base,
-			mirrorIds.map((mirrorId) => (
-			{
-				path: [
-					"mirror",
-					states.get(mirrorId)?.relationships.backlink === undefined
-						? "mirrorRootIds"
-						: "backlinkMirrorRootIds",
-					mirrorId,
-				],
-				value: true,
-			})),
+		const adds = added.get(originalId) ?? [];
+		const drops = removed.get(originalId) ?? [];
+		const isBacklink = (mirrorId: string) => states.get(mirrorId)?.relationships.backlink !== undefined;
+		const base = withMirrorRoots(
+			withoutMirrorRoots(originals.get(originalId) ?? {}, new Set(adds)),
+			drops.map(({mirrorId, backlink}) => [mirrorRootField(backlink), mirrorId] as const),
 		);
+		const {patches, inverse} = buildMetadataChanges(base, [
+			...adds.map((mirrorId) => (
+			{
+				path: ["mirror", mirrorRootField(isBacklink(mirrorId)), mirrorId],
+				value: true as unknown,
+			})),
+			...drops.map(({mirrorId, backlink}) => (
+			{
+				path: ["mirror", mirrorRootField(backlink), mirrorId],
+				value: undefined,
+			})),
+		]);
+		if (patches.length === 0)
+		{
+			continue;
+		}
 		ops.push(
 			editOp(
 				{

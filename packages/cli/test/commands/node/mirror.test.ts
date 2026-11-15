@@ -377,8 +377,29 @@ describe("node:mirror command", () =>
 							parentId: null,
 						},
 					],
+					// The original stops listing the mirror upstream.
 					pushes: [
 						[
+							{
+								type: "edit",
+								data:
+								{
+									projectid: ORIGIN_ID,
+									metadataPatches: [
+										{
+											op: "remove",
+											path: ["mirror", "mirrorRootIds", MIRROR_ID],
+										},
+									],
+									metadataInversePatches: [
+										{
+											op: "add",
+											path: ["mirror", "mirrorRootIds", MIRROR_ID],
+											value: true,
+										},
+									],
+								},
+							},
 							{
 								type: "delete",
 								data:

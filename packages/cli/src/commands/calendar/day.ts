@@ -3,10 +3,11 @@ import {WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
 import {findCalendarDay} from "@outlinedb/shared/calendar-lookup";
 import {CALENDAR_LEVELS} from "@outlinedb/shared/internal";
 import type {CalendarLevel} from "@outlinedb/shared/internal";
-import {internalAdapter} from "@outlinedb/shared/node";
 import {Command, Flags} from "@oclif/core";
 import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";
+import {drainAfterWrite, localCalendar, openLocalWrites} from "../../services/local-writes.js";
+import type {LocalWrites} from "../../services/local-writes.js";
 import {logger} from "../../services/logger.js";
 import {isoDateId} from "../../services/journal-existing-entries.js";
 import {localIsoDate} from "../../utils/local-date.js";
@@ -111,20 +112,25 @@ export default class CalendarDay extends Command
 				new WorkflowyApiClient(apiKey, logger, process.env.WORKFLOWY_API_URL),
 				cache,
 			);
-			const adapter = internalAdapter(database, writeThrough);
-			if (adapter === undefined)
+			let writes: LocalWrites;
+			try
+			{
+				writes = openLocalWrites(database, writeThrough);
+			}
+			catch
 			{
 				this.error(
 					"--ensure needs the internal API: set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD in the environment (e.g. from .envrc)",
 				);
 			}
-			const ensured = await adapter.ensureCalendarDay(
+			const ensured = await localCalendar(writes).ensureCalendarDay(
 				dateId,
 				{
 					stopAt: level,
 					createChild: !flags["no-child"],
 				},
 			);
+			await drainAfterWrite(this, writes);
 			id = ensured.dayId;
 			firstChildId = ensured.firstChildId;
 			created = ensured.created.length > 0;

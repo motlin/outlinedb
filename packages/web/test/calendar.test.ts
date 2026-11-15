@@ -3,7 +3,7 @@ import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
 import {afterEach, describe, expect, it, vi} from "vite-plus/test";
-import {CacheService, provisionLocalAccount, storeInternalMetadata} from "@outlinedb/shared/cache";
+import {CacheService, provisionLocalAccount, readPendingOutbox, storeInternalMetadata} from "@outlinedb/shared/cache";
 import * as schema from "@outlinedb/shared/db";
 import {calendarNodeId, calendarRootId, CalendarRootMissing} from "@outlinedb/shared/internal";
 import type {WorkflowyInternalAdapter, CalendarLayoutSnapshot, LayoutTimings} from "@outlinedb/shared/internal";
@@ -1359,9 +1359,11 @@ describe("calendar layout route", () =>
 		},
 	};
 
+	const UNREACHABLE = new Error("workflowy.com is unreachable");
 	const open: DatabaseConstructor.Database[] = [];
 	afterEach(() =>
 	{
+		vi.useRealTimers();
 		for (const sqlite of open.splice(0))
 		{
 			sqlite.close();
@@ -1383,6 +1385,13 @@ describe("calendar layout route", () =>
 		layoutEnabled?: boolean;
 	} = {})
 	{
+		vi.useFakeTimers(
+			{
+				toFake: ["Date"],
+			},
+		);
+		let clock = Date.parse("2026-10-01T00:00:00.000Z");
+		vi.setSystemTime(clock);
 		const sqlite = new DatabaseConstructor(":memory:");
 		open.push(sqlite);
 		const db = drizzle(
@@ -1427,62 +1436,28 @@ describe("calendar layout route", () =>
 				calls.push(`getRootMeta ${path.join(".")}`);
 				return Promise.resolve(path[0] === "dateFormat" ? "YYYY-MM-DD ddd" : undefined);
 			},
-			applyCalendarLayout: async (
-				levels: unknown,
-				{
-					rootId,
-					loadSnapshot,
-					timings,
-				}:
-				{
-					rootId: string;
-					loadSnapshot: () => CalendarLayoutSnapshot | undefined;
-					timings?: LayoutTimings;
-				},
-			) =>
-			{
-				const snapshot = loadSnapshot();
-				calls.push(
-					`applyCalendarLayout ${JSON.stringify(levels)} ${rootId} ${snapshot?.root.id ?? "no snapshot"}`,
-				);
-				if (timings !== undefined)
-				{
-					timings.plan = 1.25;
-					timings.push = 20;
-				}
-				return Promise.resolve(
-					{
-						rootId: snapshot?.root.id ?? "?",
-						writes: 3,
-					},
-				);
-			},
-			undoCalendarLayout: async (rootId: string) =>
-			{
-				calls.push(`undoCalendarLayout ${rootId}`);
-				return Promise.resolve(
-					undoes++ === 0
-						?
-							{
-								rootId: "cal",
-								writes: 3,
-							}
-						: undefined,
-				);
-			},
+			// workflowy.com is down: a tree write that reached it would fail.
+			applyCalendarLayout: async () => Promise.reject(UNREACHABLE),
+			undoCalendarLayout: async () => Promise.reject(UNREACHABLE),
 		};
-		let undoes = 0;
 		const ctx =
 		{
 			db,
 			cacheService: new CacheService(db),
 			apiKey: "key",
 			calendarLayoutEnabled: layoutEnabled,
+			outboxWritten: () =>
+			{
+				// The drain is the host's; these tests read the pending rows it would deliver.
+			},
 			internalAdapter: () => fake as unknown as WorkflowyInternalAdapter,
 		} as unknown as ServerContext;
 		const hono = httpAppFor(ctx);
 		const request = async (path: string, init?: RequestInit) =>
 		{
+			// Each request a second later: a unit of work may not overwrite a version from its own millisecond.
+			clock += 1000;
+			vi.setSystemTime(clock);
 			const res = await hono.fetch(new Request(`http://x/api/v1/calendar/${path}`, init));
 			return {
 				status: res.status,
@@ -1518,12 +1493,22 @@ describe("calendar layout route", () =>
 							}),
 				},
 			);
+		const cacheService = ctx.cacheService;
+		/** The subtree under `id` as nested `[name, children]`, a leaf left bare. */
+		const outline = (id: string | null): unknown[] =>
+			cacheService.getChildren(id).map((node) =>
+			{
+				const children = outline(node.id);
+				return children.length === 0 ? (node.name ?? "") : [node.name ?? "", children];
+			});
+		const pending = () => readPendingOutbox(db, 100).map(({nodeId, aspect}) => `${nodeId} ${aspect}`);
 		return {
 			request,
 			preview,
 			send,
 			calls,
-			hono,
+			outline,
+			pending,
 		};
 	}
 
@@ -1897,60 +1882,48 @@ describe("calendar layout route", () =>
 			);
 		});
 
-		it("applies the levels by default (to an explicit root when given), reports enabled, and undoes once", async () =>
+		it("applies the levels locally while workflowy.com is down, leaving pending rows, reports enabled, and undoes once", async () =>
 		{
-			const {request, send, calls} = app(
+			const {request, send, calls, outline, pending} = app();
+			const before = outline(null);
+			const layout = await request("layout");
+			const applied = await send(
+				"PUT",
+				"layout",
 				{
-					extra: [["sandbox-cal", null, "📆 Calendar copy"]],
+					levels:
+					{
+						year: true,
+						month: false,
+					},
 				},
 			);
+			const afterApply = outline(null);
+			const pendingAfterApply = pending();
+			const bad = await send(
+				"PUT",
+				"layout",
+				{
+					levels:
+					{
+						year: true,
+					},
+					rootId: 7,
+				},
+			);
+			const undo = await send("POST", "layout/undo");
+			const afterUndo = outline(null);
+
 			expect(
 				{
-					layout: await request("layout"),
-					tagged: await send(
-						"PUT",
-						"layout",
-						{
-							levels:
-							{
-								year: true,
-								month: false,
-							},
-						},
-					),
-					sandbox: await send(
-						"PUT",
-						"layout",
-						{
-							levels:
-							{
-								year: true,
-							},
-							rootId: "sandbox-cal",
-						},
-					),
-					week: await send(
-						"PUT",
-						"layout",
-						{
-							levels:
-							{
-								week: true,
-							},
-						},
-					),
-					bad: await send(
-						"PUT",
-						"layout",
-						{
-							levels:
-							{
-								year: true,
-							},
-							rootId: 7,
-						},
-					),
-					undo: await send("POST", "layout/undo"),
+					layout,
+					applied,
+					afterApply,
+					pendingAfterApply,
+					bad,
+					undo,
+					restored: afterUndo,
+					pendingAfterUndo: pending(),
 					nothing: await send("POST", "layout/undo"),
 					calls,
 				},
@@ -1972,33 +1945,29 @@ describe("calendar layout route", () =>
 							applyEnabled: true,
 						},
 					},
-					tagged:
+					applied:
 					{
 						status: 200,
 						body:
 						{
 							rootId: "cal",
-							writes: 3,
+							writes: 5,
 						},
 					},
-					sandbox:
-					{
-						status: 200,
-						body:
-						{
-							rootId: "sandbox-cal",
-							writes: 3,
-						},
-					},
-					week:
-					{
-						status: 200,
-						body:
-						{
-							rootId: "cal",
-							writes: 3,
-						},
-					},
+					// The month level is gone: its day moves up into the year, and the dated note moves in beside it.
+					afterApply: [
+						[
+							"📆 Calendar",
+							["Notes", ["2026", [`Call ${time(2026, 9, 11)}`, [time(2026, 9, 10), ["Journal entry"]]]]],
+						],
+					],
+					pendingAfterApply: [
+						"cal metadata",
+						"call metadata",
+						"call placement",
+						"d0910 placement",
+						"m09 delete",
+					],
 					bad:
 					{
 						status: 400,
@@ -2013,9 +1982,20 @@ describe("calendar layout route", () =>
 						body:
 						{
 							rootId: "cal",
-							writes: 3,
+							writes: 5,
 						},
 					},
+					restored: before,
+					// The month comes back before any drain sent its delete, so the drain only moves it.
+					pendingAfterUndo: [
+						"cal metadata",
+						"call metadata",
+						"call placement",
+						"d0910 placement",
+						"m09 delete",
+						"m09 create",
+						"m09 placement",
+					],
 					nothing:
 					{
 						status: 409,
@@ -2024,53 +2004,90 @@ describe("calendar layout route", () =>
 							error: "There is no calendar layout to undo",
 						},
 					},
-					calls: [
-						"getRootMeta dateFormat",
-						'applyCalendarLayout {"year":true,"month":false} cal cal',
-						'applyCalendarLayout {"year":true} sandbox-cal sandbox-cal',
-						'applyCalendarLayout {"week":true} cal cal',
-						"undoCalendarLayout cal",
-						"undoCalendarLayout cal",
+					calls: ["getRootMeta dateFormat", "getRootMeta dateFormat", "getRootMeta weekStartDay"],
+				},
+			);
+		});
+
+		it("applies to and undoes under an explicit root, logging the resolved root of each write", async () =>
+		{
+			const {send, outline} = app(
+				{
+					extra: [
+						["sandbox-cal", null, "📆 Calendar copy"],
+						["s2026", "sandbox-cal", "2026"],
+					],
+				},
+			);
+			const logged: unknown[] = [];
+			const info = vi.spyOn(console, "info").mockImplementation((message: unknown) =>
+			{
+				logged.push(message);
+			});
+			let applied: unknown;
+			let undone: unknown;
+			try
+			{
+				applied = await send(
+					"PUT",
+					"layout",
+					{
+						levels:
+						{
+							year: true,
+						},
+						rootId: "sandbox-cal",
+					},
+				);
+				undone = await send(
+					"POST",
+					"layout/undo",
+					{
+						rootId: "sandbox-cal",
+					},
+				);
+			}
+			finally
+			{
+				info.mockRestore();
+			}
+			expect(
+				{
+					applied,
+					undone,
+					sandbox: outline("sandbox-cal"),
+					logged,
+				},
+			).toStrictEqual(
+				{
+					applied:
+					{
+						status: 200,
+						body:
+						{
+							rootId: "sandbox-cal",
+							writes: 1,
+						},
+					},
+					undone:
+					{
+						status: 200,
+						body:
+						{
+							rootId: "sandbox-cal",
+							writes: 1,
+						},
+					},
+					sandbox: ["2026"],
+					logged: [
+						"calendar layout: applying under root sandbox-cal",
+						"calendar layout: 1 writes under root sandbox-cal",
+						"calendar layout: undoing under root sandbox-cal",
 					],
 				},
 			);
 		});
 
-		it("reports the apply's phase timings in a Server-Timing header", async () =>
-		{
-			const {hono} = app();
-			const res = await hono.fetch(
-				new Request(
-					"http://x/api/v1/calendar/layout",
-					{
-						method: "PUT",
-						headers:
-						{
-							"content-type": "application/json",
-						},
-						body: JSON.stringify(
-							{
-								levels:
-								{
-									year: true,
-								},
-							},
-						),
-					},
-				),
-			);
-			expect(
-				{
-					status: res.status,
-					timing: res.headers.get("server-timing"),
-				},
-			).toStrictEqual(
-				{
-					status: 200,
-					timing: "plan;dur=1.3, push;dur=20.0",
-				},
-			);
-		});
 		it("rejects a rootId it cannot resolve to a cached node, or no tagged root, without calling the adapter", async () =>
 		{
 			const untagged = app(
@@ -2127,63 +2144,6 @@ describe("calendar layout route", () =>
 					undoUnknown: missing,
 					undoUntagged: missing,
 					calls: [],
-				},
-			);
-		});
-
-		it("passes an explicit rootId to undo and logs the resolved root of each write", async () =>
-		{
-			const {send, calls} = app(
-				{
-					extra: [["sandbox-cal", null, "📆 Calendar copy"]],
-				},
-			);
-			const logged: unknown[] = [];
-			const info = vi.spyOn(console, "info").mockImplementation((message: unknown) =>
-			{
-				logged.push(message);
-			});
-			try
-			{
-				await send(
-					"PUT",
-					"layout",
-					{
-						levels:
-						{
-							year: true,
-						},
-						rootId: "sandbox-cal",
-					},
-				);
-				await send(
-					"POST",
-					"layout/undo",
-					{
-						rootId: "sandbox-cal",
-					},
-				);
-			}
-			finally
-			{
-				info.mockRestore();
-			}
-			expect(
-				{
-					calls,
-					logged,
-				},
-			).toStrictEqual(
-				{
-					calls: [
-						'applyCalendarLayout {"year":true} sandbox-cal sandbox-cal',
-						"undoCalendarLayout sandbox-cal",
-					],
-					logged: [
-						"calendar layout: applying under root sandbox-cal",
-						"calendar layout: 3 writes under root sandbox-cal (plan;dur=1.3, push;dur=20.0)",
-						"calendar layout: undoing under root sandbox-cal",
-					],
 				},
 			);
 		});
@@ -2396,38 +2356,115 @@ describe("calendar route", () =>
 {
 	const NOT_CONFIGURED =
 		"Workflowy internal API is not configured (set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD, or run './bin/run.js internal login')";
-	const ENSURED =
-	{
-		dayId: "day",
-		firstChildId: "child",
-		created: ["month", "day", "child"],
-	};
+	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
+	const open: DatabaseConstructor.Database[] = [];
 
+	afterEach(() =>
+	{
+		vi.useRealTimers();
+		vi.restoreAllMocks();
+		for (const sqlite of open.splice(0))
+		{
+			sqlite.close();
+		}
+	});
+
+	/**
+	 * A mirror context whose cache holds a tagged, empty `📆 Calendar` root (unless `root` is false). workflowy.com is
+	 * down: a tree write that reached it would fail, while the account state (entropy key, root metadata) answers from
+	 * the adapter's cache. New random ids are new1, new2, ...
+	 */
 	function setup(
 		options:
 		{
 			configured?: boolean;
 			enabled?: boolean;
-			ensure?: WorkflowyInternalAdapter["ensureCalendarDay"];
+			root?: boolean;
 		} = {},
 	)
 	{
+		vi.useFakeTimers(
+			{
+				toFake: ["Date"],
+			},
+		);
+		let clock = Date.parse("2026-10-01T00:00:00.000Z");
+		vi.setSystemTime(clock);
 		const configured = options.configured ?? true;
+		const sqlite = new DatabaseConstructor(":memory:");
+		open.push(sqlite);
+		const db = drizzle(
+			sqlite,
+			{
+				schema,
+			},
+		);
+		migrate(
+			db,
+			{
+				migrationsFolder,
+			},
+		);
+		const cacheService = new CacheService(db);
+		if (options.root ?? true)
+		{
+			cacheService.insertNode(
+				{
+					id: "cal",
+					name: "📆 Calendar",
+					note: null,
+					parent_id: null,
+					priority: 0,
+					createdAt: 100,
+					modifiedAt: 200,
+				},
+				null,
+			);
+			storeInternalMetadata(
+				db,
+				new Map([
+					[
+						"cal",
+						{
+							calendar:
+							{
+								root: true,
+							},
+						},
+					],
+				]),
+			);
+		}
+		let counter = 0;
+		vi.spyOn(crypto, "randomUUID").mockImplementation(() =>
+		{
+			counter += 1;
+			return `new${counter}` as ReturnType<typeof crypto.randomUUID>;
+		});
 		const adapter =
 		{
-			ensureCalendarDay: vi.fn<WorkflowyInternalAdapter["ensureCalendarDay"]>(
-				options.ensure ?? (async () => Promise.resolve(ENSURED)),
+			getEntropyKey: async () => Promise.resolve("k"),
+			getRootMeta: async () => Promise.resolve(undefined),
+			ensureCalendarDay: vi.fn<WorkflowyInternalAdapter["ensureCalendarDay"]>(async () =>
+				Promise.reject(new Error("workflowy.com is unreachable")),
 			),
 		};
+		const outboxWritten = vi.fn<() => void>();
 		const ctx =
 		{
+			db,
+			cacheService,
 			apiKey: configured ? "key" : undefined,
 			calendarEnsureEnabled: options.enabled ?? true,
+			outboxWritten,
 			internalAdapter: () => (configured ? (adapter as unknown as WorkflowyInternalAdapter) : undefined),
 		} as unknown as ServerContext;
 		const app = httpAppFor(ctx);
 		const ensure = async (dateId: string, query = "") =>
 		{
+			// Each request a second later: a unit of work may not overwrite a version from its own millisecond.
+			clock += 1000;
+			vi.setSystemTime(clock);
 			const res = await app.fetch(
 				new Request(
 					`http://x/api/v1/calendar/day/${dateId}/ensure${query}`,
@@ -2441,89 +2478,98 @@ describe("calendar route", () =>
 				body: (await res.json()) as unknown,
 			};
 		};
+		const pending = () => readPendingOutbox(db, 100).map(({nodeId, aspect}) => `${nodeId} ${aspect}`);
 		return {
 			adapter,
 			ensure,
+			pending,
+			outboxWritten,
 		};
 	}
 
+	const year = calendarNodeId("k", "year", 20_260_000);
+	const october = calendarNodeId("k", "month", 20_261_000);
+	const day = calendarNodeId("k", "day", 20_261_017);
+
 	describe("POST /api/v1/calendar/day/:dateId/ensure", () =>
 	{
-		it("ensures the day through the adapter and returns its ids", async () =>
+		it("ensures the day locally with the account's deterministic ids while workflowy.com is down, leaving pending rows", async () =>
 		{
-			const {adapter, ensure} = setup();
+			const {adapter, ensure, pending, outboxWritten} = setup();
 
 			const response = await ensure("20261017");
+			await Promise.resolve();
 
 			expect(
 				{
 					response,
-					calls: adapter.ensureCalendarDay.mock.calls,
+					pending: pending(),
+					drains: outboxWritten.mock.calls.length,
+					upstream: adapter.ensureCalendarDay.mock.calls.length,
 				},
 			).toStrictEqual(
 				{
 					response:
 					{
 						status: 200,
-						body: ENSURED,
+						body:
+						{
+							dayId: day,
+							firstChildId: "new1",
+							created: [year, october, day, "new1"],
+						},
 					},
-					calls: [
-						[
-							20_261_017,
-							{
-								stopAt: "day",
-								createChild: true,
-							},
-						],
+					// The chain's top is placed under the root; the levels nested under it carry their slot in their create.
+					pending: [
+						`${year} create`,
+						`${year} placement`,
+						`${day} create`,
+						`${october} create`,
+						"new1 create",
 					],
+					drains: 1,
+					upstream: 0,
 				},
 			);
 		});
 
-		it("passes ?level= as the level to stop at and ?createChild=false through", async () =>
+		it("stops at ?level= and honours ?createChild=false", async () =>
 		{
-			const {adapter, ensure} = setup();
+			const {ensure} = setup();
 
 			const responses = [
 				await ensure("20261001", "?level=month&createChild=false"),
 				await ensure("20261001", "?level=year"),
-				await ensure("20261001", "?level=week"),
 				await ensure("20261001", "?level=hour"),
 			];
 
-			expect(
+			expect(responses).toStrictEqual([
 				{
-					statuses: responses.map(({status}) => status),
-					calls: adapter.ensureCalendarDay.mock.calls,
+					status: 200,
+					body:
+					{
+						dayId: october,
+						firstChildId: null,
+						created: [year, october],
+					},
 				},
-			).toStrictEqual(
 				{
-					statuses: [200, 200, 200, 400],
-					calls: [
-						[
-							20_261_001,
-							{
-								stopAt: "month",
-								createChild: false,
-							},
-						],
-						[
-							20_261_001,
-							{
-								stopAt: "year",
-								createChild: true,
-							},
-						],
-						[
-							20_261_001,
-							{
-								stopAt: "week",
-								createChild: true,
-							},
-						],
-					],
+					status: 200,
+					body:
+					{
+						dayId: year,
+						firstChildId: october,
+						created: [],
+					},
 				},
-			);
+				{
+					status: 400,
+					body:
+					{
+						error: "level must be day, week, month or year",
+					},
+				},
+			]);
 		});
 
 		it("rejects a dateId that is not a real YYYYMMDD day", async () =>
@@ -2557,21 +2603,30 @@ describe("calendar route", () =>
 			);
 		});
 
-		it("answers 409 when no calendar root is cached", async () =>
+		it("answers 409 when no calendar root is cached, rather than create a second root", async () =>
 		{
-			const {ensure} = setup(
+			const {ensure, pending} = setup(
 				{
-					ensure: async () => Promise.reject(new CalendarRootMissing()),
+					root: false,
 				},
 			);
 
-			await expect(ensure("20261017")).resolves.toStrictEqual(
+			expect(
 				{
-					status: 409,
-					body:
+					response: await ensure("20261017"),
+					pending: pending(),
+				},
+			).toStrictEqual(
+				{
+					response:
 					{
-						error: new CalendarRootMissing().message,
+						status: 409,
+						body:
+						{
+							error: new CalendarRootMissing().message,
+						},
 					},
+					pending: [],
 				},
 			);
 		});
@@ -3001,6 +3056,7 @@ describe("calendar settings route", () =>
 		const fake =
 		{
 			getEntropyKey: async () => Promise.resolve("k"),
+			// workflowy.com is down: a tree write that reached it would fail.
 			setNodeMetaValues: async (id: string, changes: MetadataChange[]) =>
 			{
 				writes.push(
@@ -3009,21 +3065,7 @@ describe("calendar settings route", () =>
 						changes,
 					},
 				);
-				const calendar =
-				{
-					...(rootMetadata?.calendar as Record<string, unknown>),
-				};
-				for (const {path, value} of changes)
-				{
-					calendar[path[1] ?? ""] = value;
-				}
-				rootMetadata =
-				{
-					...rootMetadata,
-					calendar,
-				};
-				writeRoot(rootMetadata);
-				return Promise.resolve();
+				return Promise.reject(new Error("workflowy.com is unreachable"));
 			},
 		};
 		const ctx =
@@ -3031,6 +3073,10 @@ describe("calendar settings route", () =>
 			db,
 			cacheService: new CacheService(db),
 			apiKey: "key",
+			outboxWritten: () =>
+			{
+				// The drain is the host's; these tests read the pending rows it would deliver.
+			},
 			internalAdapter: () => (adapter ? (fake as unknown as WorkflowyInternalAdapter) : undefined),
 		} as unknown as ServerContext;
 		const hono = httpAppFor(ctx);
@@ -3054,10 +3100,12 @@ describe("calendar settings route", () =>
 					body: JSON.stringify(body),
 				},
 			);
+		const pending = () => readPendingOutbox(db, 100).map(({nodeId, aspect}) => `${nodeId} ${aspect}`);
 		return {
 			request,
 			put,
 			writes,
+			pending,
 		};
 	}
 
@@ -3118,9 +3166,9 @@ describe("calendar settings route", () =>
 
 	describe("PUT /api/v1/calendar/settings", () =>
 	{
-		it("writes each given setting to the root's calendar metadata in one edit and returns the new settings", async () =>
+		it("writes each given setting to the root's calendar metadata locally while workflowy.com is down, leaving a pending row", async () =>
 		{
-			const {put, writes} = app();
+			const {put, writes, pending} = app();
 
 			const result = await put(
 				{
@@ -3132,7 +3180,8 @@ describe("calendar settings route", () =>
 			expect(
 				{
 					result,
-					writes,
+					pending: pending(),
+					upstream: writes,
 				},
 			).toStrictEqual(
 				{
@@ -3145,21 +3194,8 @@ describe("calendar settings route", () =>
 							dayPrefix: false,
 						},
 					},
-					writes: [
-						{
-							id: "cal",
-							changes: [
-								{
-									path: ["calendar", "found_dates"],
-									value: false,
-								},
-								{
-									path: ["calendar", "day_prefix"],
-									value: false,
-								},
-							],
-						},
-					],
+					pending: ["cal metadata"],
+					upstream: [],
 				},
 			);
 		});
