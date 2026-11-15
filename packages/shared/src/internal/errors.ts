@@ -1,7 +1,8 @@
 /**
- * Failures of Workflowy's internal `/push_and_poll` write path. Each subclass
- * maps to one retry rule in `PushAndPoll`; callers outside `internal/` should
- * only ever need `instanceof InternalApiError` plus `message`.
+ * Failures of Workflowy's internal `/push_and_poll` write path. `PushAndPoll`
+ * throws each after one attempt (only `LoggedOut` gets a re-login and one
+ * redo); callers outside `internal/` should only ever need
+ * `instanceof InternalApiError` plus `message`.
  */
 export class InternalApiError extends Error
 {
@@ -12,7 +13,7 @@ export class InternalApiError extends Error
 	}
 }
 
-/** The server answered with its bot challenge. A Node client cannot solve it, so this is never retried. */
+/** The server answered with its bot challenge. A Node client cannot solve it. */
 export class CaptchaRequired extends InternalApiError
 {
 	constructor()
@@ -30,7 +31,7 @@ export class LoggedOut extends InternalApiError
 	}
 }
 
-/** The result reported `account_is_busy`; the batch was not run and may be pushed again. */
+/** The result reported `account_is_busy`; the batch was not run, so the outbox re-delivers it on its next drain trigger. */
 export class AccountBusy extends InternalApiError
 {
 	constructor()
@@ -39,7 +40,7 @@ export class AccountBusy extends InternalApiError
 	}
 }
 
-/** The response carried `push_lock_timeout`; the batch was not run and may be pushed again. */
+/** The response carried `push_lock_timeout`; the batch was not run, so the outbox re-delivers it on its next drain trigger. */
 export class PushLockTimeout extends InternalApiError
 {
 	constructor()
@@ -48,7 +49,7 @@ export class PushLockTimeout extends InternalApiError
 	}
 }
 
-/** The server refused the pushed operations. Never retried: upstream drops the batch too. */
+/** The server refused the pushed operations. Upstream drops the batch too. */
 export class OperationRejected extends InternalApiError
 {
 	constructor(readonly serverError: string)

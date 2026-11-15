@@ -99,7 +99,6 @@ function setup({fetch: wrapFetch}: Setup = {})
 
 function pusherFor(client: WorkflowyInternalClient)
 {
-	const sleeps: number[] = [];
 	const ids = ["pollid01", "pollid02", "pollid03", "pollid04", "pollid05"];
 	const pusher = new PushAndPoll(
 		client,
@@ -107,16 +106,10 @@ function pusherFor(client: WorkflowyInternalClient)
 			now: () => NOW_MS,
 			randomId: () => ids.shift() ?? "exhausted",
 			timezone: "America/New_York",
-			sleep: async (ms) =>
-			{
-				sleeps.push(ms);
-				await Promise.resolve();
-			},
 		},
 	);
 	return {
 		pusher,
-		sleeps,
 	};
 }
 
@@ -550,16 +543,14 @@ describe("PushAndPoll", () =>
 		]);
 	});
 
-	it("redoes a transport failure with the same push_poll_id and is_redo=true", async () =>
+	it("fails a fetch error once with TransportError, without a redo", async () =>
 	{
 		const api = createFakeInternalApi();
-		let failures = 1;
-		const flakyFetch: typeof fetch = async (input, init) =>
+		const failingFetch: typeof fetch = async (input, init) =>
 		{
 			const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-			if (url.includes("/push_and_poll") && failures > 0)
+			if (url.includes("/push_and_poll"))
 			{
-				failures -= 1;
 				await api.fetch(input, init);
 				throw new TypeError("fetch failed");
 			}
@@ -567,122 +558,62 @@ describe("PushAndPoll", () =>
 		};
 		const {client} = setup(
 			{
-				fetch: flakyFetch,
+				fetch: failingFetch,
 			},
 		);
 		await client.bootstrap();
-		const {pusher, sleeps} = pusherFor(client);
-		api.respond("/push_and_poll", () =>
-			json(
+		const {pusher} = pusherFor(client);
+
+		const error: unknown = await pusher
+			.pushAndPoll(
 				{
-					results: [
-						{
-							new_most_recent_operation_transaction_id: "4568",
-						},
-					],
+					ops: [EDIT_OP],
 				},
-			),
-		);
+			)
+			.catch((e: unknown) => e);
 
-		const result = await pusher.pushAndPoll(
-			{
-				ops: [EDIT_OP],
-			},
-		);
-
-		expect(result.txId).toBe("4568");
-		const [first, second] = pushes(api.requests);
-		expect(first?.url).toBe(`${BASE_URL}/push_and_poll?uti=123-${NOW_MS}-pollid01`);
-		expect(second?.url).toBe(`${BASE_URL}/push_and_poll?uti=123-${NOW_MS}-pollid01`);
-		expect(form(first)).toStrictEqual(
-			{
-				client_id: FAKE_CLIENT_ID,
-				client_version: "25",
-				push_poll_id: "pollid01",
-				push_poll_data: [
-					{
-						most_recent_operation_transaction_id: "4567",
-						operations: [EDIT_OP],
-					},
-				],
-				timezone: "America/New_York",
-				crosscheck_user_id: "123",
-			},
-		);
-		expect(form(second)).toStrictEqual(
-			{
-				...form(first),
-				is_redo: "true",
-			},
-		);
-		expect(sleeps).toStrictEqual([5000]);
+		expect(error).toBeInstanceOf(TransportError);
+		expect((error as TransportError).message).toBe("POST /push_and_poll failed");
+		expect(pushes(api.requests).map((r) => [form(r).push_poll_id, form(r).is_redo])).toStrictEqual([
+			["pollid01", undefined],
+		]);
+		expect(pusher.txId).toBe("4567");
 	});
 
-	it("gives up with TransportError after two redos", async () =>
+	it("fails a 500 response once with TransportError, without a redo", async () =>
 	{
-		const {api, pusher, sleeps} = await bootstrapped();
+		const {api, pusher} = await bootstrapped();
 		api.respond(
 			"/push_and_poll",
 			() =>
 				new Response(
-					"bad gateway",
+					"internal server error",
 					{
-						status: 502,
+						status: 500,
+						statusText: "Internal Server Error",
 					},
 				),
 		);
 
-		await expect(
-			pusher.pushAndPoll(
+		const error: unknown = await pusher
+			.pushAndPoll(
 				{
 					ops: [EDIT_OP],
 				},
-			),
-		).rejects.toThrow(TransportError);
-		expect(pushes(api.requests).map((r) => form(r).push_poll_id)).toStrictEqual([
-			"pollid01",
-			"pollid01",
-			"pollid01",
+			)
+			.catch((e: unknown) => e);
+
+		expect(error).toBeInstanceOf(TransportError);
+		expect((error as TransportError).message).toBe("POST /push_and_poll returned 500 Internal Server Error");
+		expect(pushes(api.requests).map((r) => [form(r).push_poll_id, form(r).is_redo])).toStrictEqual([
+			["pollid01", undefined],
 		]);
-		expect(pushes(api.requests).map((r) => form(r).is_redo)).toStrictEqual([undefined, "true", "true"]);
-		expect(sleeps).toStrictEqual([5000, 5000]);
 		expect(pusher.txId).toBe("4567");
 	});
 
-	it("retries account_is_busy as a fresh push after a 5s backoff", async () =>
+	it("throws AccountBusy after one attempt", async () =>
 	{
-		const {api, pusher, sleeps} = await bootstrapped();
-		api.respondOnce("/push_and_poll", () =>
-			json(
-				{
-					results: [
-						{
-							error: "account_is_busy",
-							new_most_recent_operation_transaction_id: "4567",
-						},
-					],
-				},
-			),
-		);
-		api.respondOnce("/push_and_poll", pushOk("4568"));
-
-		const result = await pusher.pushAndPoll(
-			{
-				ops: [EDIT_OP],
-			},
-		);
-
-		expect(result.txId).toBe("4568");
-		expect(pushes(api.requests).map((r) => [form(r).push_poll_id, form(r).is_redo])).toStrictEqual([
-			["pollid01", undefined],
-			["pollid02", undefined],
-		]);
-		expect(sleeps).toStrictEqual([5000]);
-	});
-
-	it("throws AccountBusy after three busy retries", async () =>
-	{
-		const {api, pusher, sleeps} = await bootstrapped();
+		const {api, pusher} = await bootstrapped();
 		api.respond("/push_and_poll", () =>
 			json(
 				{
@@ -703,37 +634,10 @@ describe("PushAndPoll", () =>
 				},
 			),
 		).rejects.toThrow(AccountBusy);
-		expect(pushes(api.requests)).toHaveLength(4);
-		expect(sleeps).toStrictEqual([5000, 5000, 5000]);
+		expect(pushes(api.requests)).toHaveLength(1);
 	});
 
-	it("retries push_lock_timeout like account_is_busy", async () =>
-	{
-		const {api, pusher, sleeps} = await bootstrapped();
-		api.respondOnce("/push_and_poll", () =>
-			json(
-				{
-					push_lock_timeout: true,
-					results: [],
-				},
-			),
-		);
-		api.respondOnce("/push_and_poll", pushOk("4568"));
-
-		expect(
-			(
-				await pusher.pushAndPoll(
-					{
-						ops: [EDIT_OP],
-					},
-				)
-			).txId,
-		).toBe("4568");
-		expect(pushes(api.requests).map((r) => form(r).push_poll_id)).toStrictEqual(["pollid01", "pollid02"]);
-		expect(sleeps).toStrictEqual([5000]);
-	});
-
-	it("throws PushLockTimeout once retries run out", async () =>
+	it("throws PushLockTimeout after one attempt", async () =>
 	{
 		const {api, pusher} = await bootstrapped();
 		api.respond("/push_and_poll", () =>
@@ -752,12 +656,12 @@ describe("PushAndPoll", () =>
 				},
 			),
 		).rejects.toThrow(PushLockTimeout);
-		expect(pushes(api.requests)).toHaveLength(4);
+		expect(pushes(api.requests)).toHaveLength(1);
 	});
 
 	it("throws OperationRejected carrying the server error, with no retry", async () =>
 	{
-		const {api, pusher, sleeps} = await bootstrapped();
+		const {api, pusher} = await bootstrapped();
 		api.respond("/push_and_poll", () =>
 			json(
 				{
@@ -782,7 +686,6 @@ describe("PushAndPoll", () =>
 		expect(error).toBeInstanceOf(OperationRejected);
 		expect((error as OperationRejected).serverError).toBe("anything");
 		expect(pushes(api.requests)).toHaveLength(1);
-		expect(sleeps).toStrictEqual([]);
 	});
 
 	it("throws OperationRejected for the live error-only result that carries no transaction id", async () =>
@@ -844,7 +747,7 @@ describe("PushAndPoll", () =>
 
 	it("throws CaptchaRequired after one request and never retries", async () =>
 	{
-		const {api, pusher, sleeps} = await bootstrapped();
+		const {api, pusher} = await bootstrapped();
 		api.respond("/push_and_poll", () =>
 			json(
 				{
@@ -861,7 +764,6 @@ describe("PushAndPoll", () =>
 			),
 		).rejects.toThrow(CaptchaRequired);
 		expect(pushes(api.requests)).toHaveLength(1);
-		expect(sleeps).toStrictEqual([]);
 	});
 
 	it("re-logs in once on logged_out and redoes the same push", async () =>

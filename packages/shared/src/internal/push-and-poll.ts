@@ -69,15 +69,10 @@ export interface PushAndPollOptions
 	randomId?: () => string;
 	/** IANA zone sent until the first successful push; defaults to the runtime's zone. */
 	timezone?: string;
-	/** Defaults to a `setTimeout` delay. */
-	sleep?: (ms: number) => Promise<void>;
 	/** Defaults to starting from the session's id, then each previous push's result. */
 	transactionLog?: TransactionLog;
 }
 
-const RETRY_BACKOFF_MS = 5000;
-const MAX_REDOS = 2;
-const MAX_BUSY_RETRIES = 3;
 const CAPTCHA_QUESTION = "do_androids_dream_of_electric_sheep?";
 const ID_ALPHABET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
@@ -192,15 +187,15 @@ interface Attempt
 
 /**
  * The single-flight `/push_and_poll` transport. One push is in flight at a
- * time; transport failures and session rejections redo the same batch
- * (`push_poll_id` reused, `is_redo=true`), busy/lock responses re-push it
- * fresh after a backoff, and captcha or operation errors are terminal.
+ * time. A session rejection logs in again and redoes the same batch once
+ * (`push_poll_id` reused, `is_redo=true`); every other failure (transport,
+ * busy, push lock, captcha, rejected op) throws after one attempt, and the
+ * caller's outbox re-delivers on its next trigger.
  */
 export class PushAndPoll
 {
 	private readonly now: () => number;
 	private readonly randomId: () => string;
-	private readonly sleep: (ms: number) => Promise<void>;
 	private readonly transactionLog: TransactionLog | undefined;
 	private timezone: string | undefined;
 	private currentTxId: string | undefined;
@@ -215,13 +210,6 @@ export class PushAndPoll
 		this.randomId = options.randomId ?? defaultRandomId;
 		this.transactionLog = options.transactionLog;
 		this.timezone = options.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
-		this.sleep =
-			options.sleep ??
-			(async (ms) =>
-				new Promise<void>((resolve) =>
-				{
-					setTimeout(resolve, ms);
-				}));
 	}
 
 	/** The main tree's most recent transaction id: the last push's result, else the bootstrap value. */
@@ -232,78 +220,51 @@ export class PushAndPoll
 
 	async pushAndPoll(input: PushInput = {}): Promise<PushResult>
 	{
-		const run = this.tail.then(async () => this.pushWithRetries(input));
+		const run = this.tail.then(async () => this.pushOnce(input));
 		this.tail = run.catch(() => {});
 		return run;
 	}
 
-	private async pushWithRetries(input: PushInput): Promise<PushResult>
+	private async pushOnce(input: PushInput): Promise<PushResult>
 	{
 		const session = this.client.session;
 		if (!session)
 		{
 			throw new Error("PushAndPoll needs a bootstrapped session; call client.bootstrap() first");
 		}
-		const hasOps = (input.ops?.length ?? 0) > 0;
-		let attempt: Attempt =
+		const pushPollId = this.randomId();
+		try
 		{
-			pushPollId: this.randomId(),
-			isRedo: false,
-		};
-		// Without ops in flight there is nothing to make idempotent, so a retry is just a new poll.
-		const redo = (): Attempt =>
-			hasOps
-				?
-					{
-						pushPollId: attempt.pushPollId,
-						isRedo: true,
-					}
-				:
-					{
-						pushPollId: this.randomId(),
-						isRedo: false,
-					};
-		let redos = 0;
-		let busyRetries = 0;
-		let reloggedIn = false;
-		for (;;)
+			return await this.send(
+				session,
+				input,
+				{
+					pushPollId,
+					isRedo: false,
+				},
+			);
+		}
+		catch (error)
 		{
-			try
+			if (!(error instanceof LoggedOut))
 			{
-				return await this.send(session, input, attempt);
+				throw error;
 			}
-			catch (error)
-			{
-				if (error instanceof TransportError && redos < MAX_REDOS)
-				{
-					redos += 1;
-					await this.sleep(RETRY_BACKOFF_MS);
-					attempt = redo();
-				}
-				else if (error instanceof LoggedOut && !reloggedIn)
-				{
-					reloggedIn = true;
-					await this.client.login();
-					attempt = redo();
-				}
-				else if (
-					(error instanceof AccountBusy || error instanceof PushLockTimeout) &&
-					busyRetries < MAX_BUSY_RETRIES
-				)
-				{
-					busyRetries += 1;
-					await this.sleep(RETRY_BACKOFF_MS);
-					attempt =
-					{
-						pushPollId: this.randomId(),
-						isRedo: false,
-					};
-				}
-				else
-				{
-					throw error;
-				}
-			}
+			await this.client.login();
+			// Without ops in flight there is nothing to make idempotent, so the redo is just a new poll.
+			const redo: Attempt =
+				(input.ops?.length ?? 0) > 0
+					?
+						{
+							pushPollId,
+							isRedo: true,
+						}
+					:
+						{
+							pushPollId: this.randomId(),
+							isRedo: false,
+						};
+			return this.send(session, input, redo);
 		}
 	}
 

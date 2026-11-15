@@ -152,9 +152,6 @@ describe("internal adapter account", () =>
 				{
 					randomId: () => "pollid01",
 					timezone: "America/New_York",
-					sleep: async () =>
-					{
-					},
 				},
 			},
 		);
@@ -1309,9 +1306,6 @@ describe("internal adapter backlinks", () =>
 				{
 					randomId: () => "pollid01",
 					timezone: "America/New_York",
-					sleep: async () =>
-					{
-					},
 				},
 			},
 		);
@@ -4252,9 +4246,6 @@ describe("internal adapter expansion", () =>
 					{
 						randomId: () => "pollid01",
 						timezone: "America/New_York",
-						sleep: async () =>
-						{
-						},
 					},
 				},
 			);
@@ -5092,9 +5083,6 @@ describe("internal adapter transaction log", () =>
 				{
 					randomId: () => "pollid01",
 					timezone: "America/New_York",
-					sleep: async () =>
-					{
-					},
 				},
 			},
 		);
@@ -6411,9 +6399,6 @@ describe("internal adapter tree", () =>
 				{
 					randomId: () => "pollid01",
 					timezone: "America/New_York",
-					sleep: async () =>
-					{
-					},
 				},
 			},
 		);

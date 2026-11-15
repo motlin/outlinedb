@@ -112,9 +112,6 @@ function setup()
 			{
 				randomId: () => "pollid01",
 				timezone: "America/New_York",
-				sleep: async () =>
-				{
-				},
 			},
 		},
 	);
