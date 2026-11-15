@@ -1,15 +1,18 @@
 import {and, asc, desc, eq, isNull, lte, gt, ne, sql} from "drizzle-orm";
 import type {AnySQLiteColumn} from "drizzle-orm/sqlite-core";
-import {account, mirrors, nodeContent, nodeMetadata, rootPreferences} from "../db/schema.js";
+import {account, mirrors, nodeContent, nodeMetadata, referencesRoots, rootPreferences} from "../db/schema.js";
 import type {AppDatabase} from "../db/types.js";
 import type {NewTree} from "../internal/ops.js";
 import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 import {HOME_TARGET} from "../types/targets.js";
 import {uuidToShortId} from "../workflowy/constants.js";
+import {internalLinkShortIds} from "../workflowy/internal-links.js";
 import {AccountNotProvisionedError} from "./account-store.js";
 import {currentVersion, normalizeLayoutMode} from "./cache-temporal.js";
+import {inIds} from "./in-ids.js";
 import {readNodeInternalMetadata, writeInternalMetadata} from "./internal-metadata.js";
 import type {InternalMetadata} from "./internal-metadata.js";
+import {currentBacklinkItems} from "./item-relationships.js";
 import {endNodeComposites, runUnitOfWork} from "./node-composite.js";
 import type {UnitOfWork} from "./node-composite.js";
 import {readSubtreeAt, systemTimeJustBefore} from "./subtree-history.js";
@@ -80,6 +83,51 @@ export interface LocalRestoreInput
 	parentId?: Parent;
 	/** Slot under the parent, clamped; omitted = its old slot without `parentId`, else the bottom. */
 	index?: number;
+}
+
+export interface LocalMirrorsInput
+{
+	/** The originals to mirror, in order; each must be a live node that is not itself a mirror. */
+	originalIds: readonly string[];
+	/** The parent node id; `null` or `home` for Home. */
+	parentId: Parent;
+	/** 0-based slot of the first mirror among all current siblings, clamped. Omitted = the bottom. */
+	index?: number;
+}
+
+/**
+ * What a delete removes, as `planSubtreeDelete` plans it from the cache: mirrors removed outright, originals kept by
+ * taking the slot of one of their mirrors outside the deleted part, then the node itself (null when it is kept).
+ */
+export interface LocalDeletePlan
+{
+	mirrorIds: readonly string[];
+	promotions: readonly
+	{
+		originalId: string;
+		mirrorId: string;
+	}[];
+	nodeId: string | null;
+}
+
+/** What {@link LocalTreeWriter.syncBacklinks} changed. */
+export interface LocalBacklinkSync
+{
+	/** Backlink items created: a mirror of `sourceId` at the top of `targetId`'s references root. */
+	created:
+	{
+		id: string;
+		sourceId: string;
+		targetId: string;
+	}[];
+	/** References roots created under targets that had none. */
+	referencesRoots: string[];
+	/** Backlink items deleted because their source no longer links to their target. */
+	deleted:
+	{
+		id: string;
+		targetId: string;
+	}[];
 }
 
 export interface LocalTreeWriterOptions
@@ -188,6 +236,8 @@ class PendingWrites
 	private readonly metadata = new Map<string, MetadataPatch>();
 	/** Each touched parent's children in their new order, loaded on first use. */
 	private readonly orders = new Map<string | null, string[]>();
+	/** Nodes inserted in this unit: their rows are updated in place, since a version may not open and close in one unit. */
+	private readonly created = new Set<string>();
 
 	constructor(private readonly tx: TemporalTransaction)
 	{
@@ -202,6 +252,11 @@ class PendingWrites
 			this.orders.set(parentId, order);
 		}
 		return order;
+	}
+
+	markCreated(id: string): void
+	{
+		this.created.add(id);
 	}
 
 	setContent(id: string, patch: ContentPatch): void
@@ -252,6 +307,15 @@ class PendingWrites
 			{
 				continue;
 			}
+			if (this.created.has(id))
+			{
+				this.tx
+					.update(nodeContent)
+					.set(patch)
+					.where(and(eq(nodeContent.id, id), currentVersion(nodeContent)))
+					.run();
+				continue;
+			}
 			closeCurrentVersions(this.tx, nodeContent, systemTime, eq(nodeContent.id, id));
 			this.tx
 				.insert(nodeContent)
@@ -274,6 +338,15 @@ class PendingWrites
 				.get();
 			if (current === undefined || samePatch(current, patch))
 			{
+				continue;
+			}
+			if (this.created.has(id))
+			{
+				this.tx
+					.update(nodeMetadata)
+					.set(patch)
+					.where(and(eq(nodeMetadata.nodeId, id), currentVersion(nodeMetadata)))
+					.run();
 				continue;
 			}
 			closeCurrentVersions(this.tx, nodeMetadata, systemTime, eq(nodeMetadata.nodeId, id));
@@ -383,6 +456,38 @@ function subtreeIds(tx: TemporalTransaction, id: string): string[]
 	return ids;
 }
 
+/** Whether `id` is a current references root. */
+function isReferencesRoot(tx: TemporalTransaction, id: string): boolean
+{
+	return (
+		tx
+			.select(
+				{
+					nodeId: referencesRoots.nodeId,
+				},
+			)
+			.from(referencesRoots)
+			.where(and(eq(referencesRoots.nodeId, id), currentVersion(referencesRoots)))
+			.get() !== undefined
+	);
+}
+
+/** The current node with this short id, or null. */
+function resolveShortId(tx: TemporalTransaction, shortId: string): string | null
+{
+	return (
+		tx
+			.select(
+				{
+					nodeId: nodeMetadata.nodeId,
+				},
+			)
+			.from(nodeMetadata)
+			.where(and(eq(nodeMetadata.shortId, shortId), currentVersion(nodeMetadata)))
+			.get()?.nodeId ?? null
+	);
+}
+
 /** Home's stored layout mode (`root_preferences.home_layout_mode`), null for the default. */
 export function readHomeLayoutMode(tx: TemporalTransaction): string | null
 {
@@ -442,44 +547,24 @@ export class LocalTreeWriter
 	{
 		const parentId = toParent(input.parentId);
 		const id = input.id ?? this.generateId();
-		return this.write((pending, {tx, systemTime}) =>
+		return this.write((pending, unitOfWork) =>
 		{
-			requireParent(tx, parentId);
-			if (currentContent(tx, id) !== undefined)
-			{
-				throw new Error(`Node ${id} already exists`);
-			}
+			requireParent(unitOfWork.tx, parentId);
 			const order = pending.order(parentId);
 			const index = anchoredSlot(order, input.afterId, input.index);
+			this.insertNode(
+				pending,
+				unitOfWork,
+				{
+					id,
+					name: input.name,
+					note: input.note,
+					parentId,
+					priority: index,
+					layoutMode: input.layoutMode,
+				},
+			);
 			order.splice(index, 0, id);
-			const now = this.nowDate();
-			tx.insert(nodeContent)
-				.values(
-					{
-						id,
-						name: input.name,
-						note: noteOrNull(input.note),
-						parentId,
-						systemFrom: systemTime,
-						systemTo: FAR_FUTURE_DATE,
-					},
-				)
-				.run();
-			tx.insert(nodeMetadata)
-				.values(
-					{
-						nodeId: id,
-						shortId: uuidToShortId(id),
-						priority: index,
-						createdAt: now,
-						modifiedAt: now,
-						completedAt: null,
-						layoutMode: normalizeLayoutMode(input.layoutMode),
-						systemFrom: systemTime,
-						systemTo: FAR_FUTURE_DATE,
-					},
-				)
-				.run();
 			return {
 				id,
 			};
@@ -495,79 +580,185 @@ export class LocalTreeWriter
 		ids: string[];
 	}
 	{
-		const parentId = toParent(input.parentId);
+		return this.write((pending, unitOfWork) => (
+		{
+			ids: this.insertTrees(pending, unitOfWork, input),
+		}));
+	}
+
+	/** Mirror each original, in order, at consecutive slots under a parent. Returns the new mirrors' ids. */
+	createMirrorsAt(input: LocalMirrorsInput):
+	{
+		ids: string[];
+	}
+	{
 		return this.write((pending, unitOfWork) =>
 		{
-			const {tx, systemTime} = unitOfWork;
-			requireParent(tx, parentId);
-			const now = this.nowDate();
-			const metadataById = new Map<string, InternalMetadata | undefined>();
-			const insert = (tree: NewTree, treeParent: string | null, priority: number): string =>
+			for (const originalId of input.originalIds)
 			{
-				const id = tree.id ?? this.generateId();
-				if (currentContent(tx, id) !== undefined)
+				requireNode(unitOfWork.tx, originalId);
+				if (writeTarget(unitOfWork.tx, originalId) !== originalId)
 				{
-					throw new Error(`Node ${id} already exists`);
+					throw new Error(`Node ${originalId} is a mirror`);
 				}
-				const metadata = tree.metadata ?? {};
-				const layoutMode = typeof metadata.layoutMode === "string" ? metadata.layoutMode : null;
-				tx.insert(nodeContent)
-					.values(
-						{
-							id,
-							name: tree.name,
-							note: noteOrNull(tree.note),
-							parentId: treeParent,
-							systemFrom: systemTime,
-							systemTo: FAR_FUTURE_DATE,
-						},
-					)
-					.run();
-				tx.insert(nodeMetadata)
-					.values(
-						{
-							nodeId: id,
-							shortId: uuidToShortId(id),
-							priority,
-							createdAt: now,
-							modifiedAt: now,
-							completedAt: tree.completed === true ? now : null,
-							layoutMode: normalizeLayoutMode(layoutMode),
-							systemFrom: systemTime,
-							systemTo: FAR_FUTURE_DATE,
-						},
-					)
-					.run();
-				metadataById.set(id, metadata);
-				const {mirror} = metadata;
-				if (isRecord(mirror) && typeof mirror.originalId === "string" && mirror.isMirrorRoot === true)
-				{
-					tx.insert(mirrors)
-						.values(
-							{
-								mirrorId: id,
-								originalId: mirror.originalId,
-								systemFrom: systemTime,
-								systemTo: FAR_FUTURE_DATE,
-							},
-						)
-						.run();
-				}
-				for (const [childPriority, child] of (tree.children ?? []).entries())
-				{
-					insert(child, id, childPriority);
-				}
-				return id;
-			};
-			const order = pending.order(parentId);
-			const index = anchoredSlot(order, input.afterId, input.index);
-			const ids = input.trees.map((tree, offset) => insert(tree, parentId, index + offset));
-			order.splice(index, 0, ...ids);
-			writeInternalMetadata(unitOfWork, metadataById);
+			}
 			return {
-				ids,
+				ids: this.insertTrees(
+					pending,
+					unitOfWork,
+					{
+						parentId: input.parentId,
+						...(input.index === undefined
+							? {}
+							:
+								{
+									index: input.index,
+								}),
+						trees: input.originalIds.map((originalId) => (
+						{
+							name: "",
+							metadata:
+							{
+								mirror:
+								{
+									originalId,
+									isMirrorRoot: true,
+								},
+							},
+						})),
+					},
+				),
 			};
 		});
+	}
+
+	/**
+	 * Replace a mirror (or an original that has mirrors) with `copy` at its slot, in one unit of work: the copy goes in,
+	 * then `plan` removes the row (an original is kept by its promotion into a mirror's slot). Returns the copy's id.
+	 */
+	detachMirror(id: string, copy: NewTree, plan: LocalDeletePlan): string
+	{
+		return this.write((pending, unitOfWork) =>
+		{
+			const node = requireNode(unitOfWork.tx, id);
+			const [copyId] = this.insertTrees(
+				pending,
+				unitOfWork,
+				{
+					parentId: node.parentId,
+					index: Math.max(pending.order(node.parentId).indexOf(id), 0),
+					trees: [copy],
+				},
+			);
+			this.removeNodes(pending, unitOfWork, plan);
+			if (copyId === undefined)
+			{
+				throw new Error("The copy produced no id");
+			}
+			return copyId;
+		});
+	}
+
+	private insertNode(
+		pending: PendingWrites,
+		{tx, systemTime}: UnitOfWork,
+		row:
+		{
+			id: string;
+			name: string;
+			note?: string | null;
+			parentId: string | null;
+			priority: number;
+			completed?: boolean;
+			layoutMode?: string | null;
+		},
+	): void
+	{
+		if (currentContent(tx, row.id) !== undefined)
+		{
+			throw new Error(`Node ${row.id} already exists`);
+		}
+		const now = this.nowDate();
+		tx.insert(nodeContent)
+			.values(
+				{
+					id: row.id,
+					name: row.name,
+					note: noteOrNull(row.note),
+					parentId: row.parentId,
+					systemFrom: systemTime,
+					systemTo: FAR_FUTURE_DATE,
+				},
+			)
+			.run();
+		tx.insert(nodeMetadata)
+			.values(
+				{
+					nodeId: row.id,
+					shortId: uuidToShortId(row.id),
+					priority: row.priority,
+					createdAt: now,
+					modifiedAt: now,
+					completedAt: row.completed === true ? now : null,
+					layoutMode: normalizeLayoutMode(row.layoutMode ?? null),
+					systemFrom: systemTime,
+					systemTo: FAR_FUTURE_DATE,
+				},
+			)
+			.run();
+		pending.markCreated(row.id);
+	}
+
+	private insertTrees(pending: PendingWrites, unitOfWork: UnitOfWork, input: LocalCreateTreesInput): string[]
+	{
+		const {tx, systemTime} = unitOfWork;
+		const parentId = toParent(input.parentId);
+		requireParent(tx, parentId);
+		const metadataById = new Map<string, InternalMetadata | undefined>();
+		const insert = (tree: NewTree, treeParent: string | null, priority: number): string =>
+		{
+			const id = tree.id ?? this.generateId();
+			const metadata = tree.metadata ?? {};
+			this.insertNode(
+				pending,
+				unitOfWork,
+				{
+					id,
+					name: tree.name,
+					note: tree.note,
+					parentId: treeParent,
+					priority,
+					completed: tree.completed === true,
+					layoutMode: typeof metadata.layoutMode === "string" ? metadata.layoutMode : null,
+				},
+			);
+			metadataById.set(id, metadata);
+			const {mirror} = metadata;
+			if (isRecord(mirror) && typeof mirror.originalId === "string" && mirror.isMirrorRoot === true)
+			{
+				tx.insert(mirrors)
+					.values(
+						{
+							mirrorId: id,
+							originalId: mirror.originalId,
+							systemFrom: systemTime,
+							systemTo: FAR_FUTURE_DATE,
+						},
+					)
+					.run();
+			}
+			for (const [childPriority, child] of (tree.children ?? []).entries())
+			{
+				insert(child, id, childPriority);
+			}
+			return id;
+		};
+		const order = pending.order(parentId);
+		const index = anchoredSlot(order, input.afterId, input.index);
+		const ids = input.trees.map((tree, offset) => insert(tree, parentId, index + offset));
+		order.splice(index, 0, ...ids);
+		writeInternalMetadata(unitOfWork, metadataById);
+		return ids;
 	}
 
 	/**
@@ -886,15 +1077,208 @@ export class LocalTreeWriter
 		});
 	}
 
-	/** Delete a node with its whole subtree and the mirror rows of every node in it, then close the gap it leaves. */
-	deleteNode(id: string): void
+	/**
+	 * Delete a node with its whole subtree, the mirror rows of every node in it and the backlink items of every source in
+	 * it, then close the gap it leaves. With a `plan` (from `planSubtreeDelete`), mirrors go first and each kept original
+	 * takes its mirror's slot, as upstream's web app keeps an original whose mirror lives on.
+	 */
+	deleteNode(id: string, plan?: LocalDeletePlan): void
 	{
 		this.write((pending, unitOfWork) =>
 		{
-			const node = requireNode(unitOfWork.tx, id);
-			const order = pending.order(node.parentId);
-			order.splice(order.indexOf(id), 1);
-			endNodeComposites(unitOfWork, subtreeIds(unitOfWork.tx, id));
+			requireNode(unitOfWork.tx, id);
+			this.removeNodes(
+				pending,
+				unitOfWork,
+				plan ??
+				{
+					mirrorIds: [],
+					promotions: [],
+					nodeId: id,
+				},
+			);
+		});
+	}
+
+	private removeNodes(pending: PendingWrites, unitOfWork: UnitOfWork, plan: LocalDeletePlan): void
+	{
+		const {tx} = unitOfWork;
+		const ended: string[] = [];
+		/** Each node's parent as this unit leaves it. */
+		const parentOf = new Map<string, string | null>();
+		const parent = (id: string): string | null =>
+			parentOf.has(id) ? (parentOf.get(id) ?? null) : (currentContent(tx, id)?.parentId ?? null);
+		const unlink = (id: string): void =>
+		{
+			const order = pending.order(parent(id));
+			const at = order.indexOf(id);
+			if (at !== -1)
+			{
+				order.splice(at, 1);
+			}
+		};
+		const end = (id: string): void =>
+		{
+			unlink(id);
+			ended.push(...subtreeIds(tx, id));
+		};
+		for (const mirrorId of plan.mirrorIds)
+		{
+			end(mirrorId);
+		}
+		for (const {originalId, mirrorId} of plan.promotions)
+		{
+			unlink(originalId);
+			const target = parent(mirrorId);
+			const order = pending.order(target);
+			order.splice(order.indexOf(mirrorId), 1, originalId);
+			ended.push(...subtreeIds(tx, mirrorId));
+			parentOf.set(originalId, target);
+			pending.setContent(
+				originalId,
+				{
+					parentId: target,
+				},
+			);
+			pending.setMetadata(
+				originalId,
+				{
+					modifiedAt: this.nowDate(),
+				},
+			);
+		}
+		if (plan.nodeId !== null)
+		{
+			const kept = new Set(plan.promotions.flatMap(({originalId}) => subtreeIds(tx, originalId)));
+			unlink(plan.nodeId);
+			ended.push(...subtreeIds(tx, plan.nodeId).filter((id) => !kept.has(id)));
+		}
+		// Upstream deletes a deleted source's backlink items; its references roots stay, even when emptied.
+		const dead = new Set(ended);
+		for (const item of currentBacklinkItems(tx, inIds(mirrors.originalId, [...dead])))
+		{
+			if (!dead.has(item.nodeId))
+			{
+				dead.add(item.nodeId);
+				end(item.nodeId);
+			}
+		}
+		endNodeComposites(unitOfWork, [...new Set(ended)]);
+	}
+
+	/**
+	 * Bring each source's backlink items in step with the links in its text, as upstream's client does on save: a target
+	 * it links to (a mirror's original, never the source itself) gets a references root at its bottom when it has none,
+	 * and an empty mirror of the source at that root's top; an item whose target is no longer linked is deleted. Mirrors,
+	 * references roots and nodes no longer live are never sources. One unit of work.
+	 */
+	syncBacklinks(sourceIds: readonly string[]): LocalBacklinkSync
+	{
+		return this.write((pending, unitOfWork) =>
+		{
+			const {tx, systemTime} = unitOfWork;
+			const result: LocalBacklinkSync =
+			{
+				created: [],
+				referencesRoots: [],
+				deleted: [],
+			};
+			const ended: string[] = [];
+			const rootOf = new Map<string, string>();
+			for (const sourceId of new Set(sourceIds))
+			{
+				const source = currentContent(tx, sourceId);
+				if (source === undefined || isReferencesRoot(tx, sourceId) || writeTarget(tx, sourceId) !== sourceId)
+				{
+					continue;
+				}
+				const targets = new Set(
+					internalLinkShortIds(`${source.name} ${source.note ?? ""}`).flatMap((shortId) =>
+					{
+						const id = resolveShortId(tx, shortId);
+						const target = id === null ? null : writeTarget(tx, id);
+						return target === null || target === sourceId ? [] : [target];
+					}),
+				);
+				for (const item of currentBacklinkItems(tx, eq(mirrors.originalId, sourceId)))
+				{
+					if (targets.delete(item.targetId))
+					{
+						continue;
+					}
+					const order = pending.order(currentContent(tx, item.nodeId)?.parentId ?? null);
+					order.splice(order.indexOf(item.nodeId), 1);
+					ended.push(item.nodeId);
+					result.deleted.push(
+						{
+							id: item.nodeId,
+							targetId: item.targetId,
+						},
+					);
+				}
+				for (const targetId of targets)
+				{
+					const children = pending.order(targetId);
+					let rootId = rootOf.get(targetId) ?? children.find((child) => isReferencesRoot(tx, child));
+					if (rootId === undefined)
+					{
+						rootId = this.generateId();
+						this.insertNode(
+							pending,
+							unitOfWork,
+							{
+								id: rootId,
+								name: "",
+								parentId: targetId,
+								priority: children.length,
+							},
+						);
+						children.push(rootId);
+						tx.insert(referencesRoots)
+							.values(
+								{
+									nodeId: rootId,
+									systemFrom: systemTime,
+									systemTo: FAR_FUTURE_DATE,
+								},
+							)
+							.run();
+						result.referencesRoots.push(rootId);
+					}
+					rootOf.set(targetId, rootId);
+					const itemId = this.generateId();
+					this.insertNode(
+						pending,
+						unitOfWork,
+						{
+							id: itemId,
+							name: "",
+							parentId: rootId,
+							priority: 0,
+						},
+					);
+					pending.order(rootId).unshift(itemId);
+					tx.insert(mirrors)
+						.values(
+							{
+								mirrorId: itemId,
+								originalId: sourceId,
+								systemFrom: systemTime,
+								systemTo: FAR_FUTURE_DATE,
+							},
+						)
+						.run();
+					result.created.push(
+						{
+							id: itemId,
+							sourceId,
+							targetId,
+						},
+					);
+				}
+			}
+			endNodeComposites(unitOfWork, ended);
+			return result;
 		});
 	}
 

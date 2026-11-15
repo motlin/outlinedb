@@ -22,9 +22,10 @@ import
 	NodeTreeReader,
 	WorkflowyWriteThroughClient,
 	inIds,
+	planSubtreeDelete,
 	readInternalMetadata,
 } from "@outlinedb/shared/cache";
-import type {ExactMover, SlotPlan} from "@outlinedb/shared/cache";
+import type {ExactMover, LocalDeletePlan, SlotPlan} from "@outlinedb/shared/cache";
 import {MAX_COPY_ITEMS} from "../copy-tree.js";
 import {mirrors as mirrorsTable, s3Files} from "@outlinedb/shared/db";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
@@ -373,6 +374,23 @@ export function getNodeWriter(ctx: ServerContext): NodeWriter | undefined
 			client,
 		}
 	);
+}
+
+/**
+ * How a standalone delete of `id` removes it, planned from the local tables like the mirror-mode client plans it: a
+ * mirror goes alone, and an original whose mirror lives on outside the deleted part takes that mirror's slot.
+ */
+export async function localDeletePlan(ctx: ServerContext, id: string): Promise<LocalDeletePlan>
+{
+	if (ctx.cacheService.getMirrorOriginal(id) !== null)
+	{
+		return {
+			mirrorIds: [id],
+			promotions: [],
+			nodeId: null,
+		};
+	}
+	return planSubtreeDelete(ctx.cacheService, id, async (parentId) => Promise.resolve(childIds(ctx, parentId)));
 }
 
 /**

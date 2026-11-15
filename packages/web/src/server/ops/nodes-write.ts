@@ -5,6 +5,7 @@ import type {RestoreInput, WorkflowyInternalAdapter} from "@outlinedb/shared/int
 import {calendarParentContext} from "@outlinedb/shared/calendar-lookup";
 import {adoptAfterCreate, calendarAdoptWarning, datesInName, linkedSourcesInSubtree} from "@outlinedb/shared/internal";
 import {HOME_TARGET} from "@outlinedb/shared/types";
+import {hasInternalLink} from "@outlinedb/shared/workflowy";
 import type {WorkflowyNode} from "@outlinedb/shared/types";
 import type {NodeResponse, SaveEffects, UpdateNodeResponse} from "../../node-types.js";
 import {backlinksNeedSync, backlinkTargetsOfSource} from "../backlinks.js";
@@ -28,6 +29,7 @@ import
 	getAdapter,
 	getApiClient,
 	getNodeWriter,
+	localDeletePlan,
 	AfterIdSchema,
 	IndexSchema,
 	LegacyPositionSchema,
@@ -274,6 +276,10 @@ export const nodesCreate = defineOp(
 								}),
 					},
 				);
+				if (hasInternalLink(`${name} ${note ?? ""}`))
+				{
+					writer.local.syncBacklinks([id]);
+				}
 				return createdNodeResult(ctx, id);
 			}
 			const {client} = writer;
@@ -508,13 +514,10 @@ export const nodesUpdate = defineOp(
 
 			if (writer.mode === "standalone")
 			{
-				// Local backlinks come later: the effects report changed links, but no backlink items are written.
-				const effects = saveEffects(
-					ctx,
-					cacheService.getNode(cacheService.getMirrorOriginal(id) ?? id),
-					name,
-					note,
-				);
+				// Text lives on a mirror's original, which is the backlink source.
+				const sourceId = cacheService.getMirrorOriginal(id) ?? id;
+				const before = cacheService.getNode(sourceId);
+				const effects = saveEffects(ctx, before, name, note);
 				writer.local.updateNode(
 					id,
 					{
@@ -549,6 +552,13 @@ export const nodesUpdate = defineOp(
 						],
 					},
 				);
+				const beforeText = `${before?.name ?? ""} ${before?.note ?? ""}`;
+				const afterText = `${name ?? before?.name ?? ""} ${note ?? before?.note ?? ""}`;
+				const synced =
+					(name !== undefined || note !== undefined) &&
+					backlinksNeedSync(ctx, sourceId, beforeText, afterText)
+						? writer.local.syncBacklinks([sourceId])
+						: undefined;
 				const node = await readNodeDto(ctx, id);
 				if (node === undefined)
 				{
@@ -563,7 +573,17 @@ export const nodesUpdate = defineOp(
 					toJson(
 						{
 							node,
-							effects,
+							effects:
+							{
+								...effects,
+								backlinkTargets: [
+									...new Set([
+										...effects.backlinkTargets,
+										...(synced?.created ?? []).map((item) => item.targetId),
+										...(synced?.deleted ?? []).map((item) => item.targetId),
+									]),
+								],
+							},
 						} satisfies UpdateNodeResponse,
 					),
 				);
@@ -761,7 +781,7 @@ export const nodesDelete = defineOp(
 
 			if (writer.mode === "standalone")
 			{
-				writer.local.deleteNode(id);
+				writer.local.deleteNode(id, await localDeletePlan(ctx, id));
 				return ok(null);
 			}
 			const {client} = writer;

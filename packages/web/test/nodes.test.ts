@@ -2626,6 +2626,349 @@ describe("nodes standalone op", () =>
 			);
 		});
 	});
+
+	describe("mirrors and backlinks in a standalone context", () =>
+	{
+		const TARGET = "7a1b2c3d-4e5f-4a6b-8c7d-0123456789ab";
+		const SOURCE = "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b";
+		const link = `<a href="https://workflowy.com/#/${TARGET.slice(-12)}">target</a>`;
+
+		interface Row
+		{
+			id: string;
+			name: string | null;
+			isMirror: boolean | undefined;
+			originalNodeId: string | null | undefined;
+		}
+
+		async function rows(parentId: string): Promise<Row[]>
+		{
+			const result = await store.call(
+				"nodes.children",
+				{
+					parentIds: [parentId],
+				},
+			);
+			if (!result.ok)
+			{
+				throw new Error(`children of ${parentId}: ${result.status}`);
+			}
+			return (result.value.children[parentId] ?? []).map((node) => (
+			{
+				id: node.id,
+				name: node.name,
+				isMirror: node.isMirror,
+				originalNodeId: node.originalNodeId,
+			}));
+		}
+
+		function row(id: string, name = id, originalNodeId: string | null = null): Row
+		{
+			return {
+				id,
+				name,
+				isMirror: originalNodeId !== null,
+				originalNodeId,
+			};
+		}
+
+		async function mirror(itemIds: string[], parentId: string, index: number): Promise<string[]>
+		{
+			const result = await store.call(
+				"nodes.mirror",
+				{
+					item_ids: itemIds,
+					parent_id: parentId,
+					index,
+				},
+			);
+			if (!result.ok)
+			{
+				throw new Error(`mirror: ${result.status} ${JSON.stringify(result.body)}`);
+			}
+			return result.value.nodes.map((node) => node.id);
+		}
+
+		/** The next write runs a second later: a unit of work may not overwrite a version from its own second. */
+		function tick(seconds = 1): void
+		{
+			vi.setSystemTime((NOW + seconds) * 1000);
+		}
+
+		async function backlinkSources(targetId: string): Promise<
+		{
+			rootId: string | null;
+			sourceIds: string[];
+		}>
+		{
+			const result = await store.call(
+				"nodes.backlinks",
+				{
+					id: targetId,
+				},
+			);
+			if (!result.ok)
+			{
+				throw new Error(`backlinks: ${result.status}`);
+			}
+			return {
+				rootId: result.value.rootId,
+				sourceIds: result.value.items.map((item) => item.sourceId),
+			};
+		}
+
+		/** Every current node under `parentId`, references roots and backlink items included. */
+		function liveChildIds(parentId: string): string[]
+		{
+			return sqlite
+				.prepare<
+					[string, string],
+					{
+						id: string;
+					}
+				>("SELECT id FROM node_content WHERE parent_id = ? AND system_to = ? ORDER BY id")
+				.all(parentId, FAR_FUTURE_DATE)
+				.map(({id}) => id);
+		}
+
+		it("mirrors items at consecutive slots, with no upstream", async () =>
+		{
+			const [mirrorA, mirrorB] = await mirror(["a", "b"], "q", 0);
+
+			expect(
+				{
+					q: await rows("q"),
+					p: await rows("p"),
+				},
+			).toStrictEqual(
+				{
+					q: [row(mirrorA, "a", "a"), row(mirrorB, "b", "b")],
+					p: [row("a"), row("b")],
+				},
+			);
+		});
+
+		it("detaches a mirror into a plain copy at its slot", async () =>
+		{
+			const [mirrorA] = await mirror(["a"], "q", 0);
+			tick();
+
+			const result = await store.call(
+				"nodes.detachMirror",
+				{
+					id: mirrorA,
+				},
+			);
+
+			const copyId = result.ok ? result.value.node?.id : undefined;
+			expect(
+				{
+					ok: result.ok,
+					q: await rows("q"),
+					p: await rows("p"),
+				},
+			).toStrictEqual(
+				{
+					ok: true,
+					q: [row(copyId ?? "", "a")],
+					p: [row("a"), row("b")],
+				},
+			);
+		});
+
+		it("detaches an original in place, promoting its mirror into the mirror's slot", async () =>
+		{
+			await mirror(["a"], "q", 0);
+			tick();
+
+			const result = await store.call(
+				"nodes.detachMirror",
+				{
+					id: "a",
+				},
+			);
+
+			const copyId = result.ok ? result.value.node?.id : undefined;
+			expect(
+				{
+					ok: result.ok,
+					q: await rows("q"),
+					p: await rows("p"),
+				},
+			).toStrictEqual(
+				{
+					ok: true,
+					q: [row("a")],
+					p: [row(copyId ?? "", "a"), row("b")],
+				},
+			);
+		});
+
+		it("swaps a mirror with its original", async () =>
+		{
+			const [mirrorA] = await mirror(["a"], "q", 0);
+			tick();
+
+			await expect(
+				store.call(
+					"nodes.swapMirrorOrigin",
+					{
+						id: mirrorA,
+					},
+				),
+			).resolves.toStrictEqual(
+				{
+					ok: true,
+					value:
+					{
+						swapped:
+						{
+							mirrorId: mirrorA,
+							originalId: "a",
+						},
+					},
+				},
+			);
+			expect(
+				{
+					q: await rows("q"),
+					p: await rows("p"),
+				},
+			).toStrictEqual(
+				{
+					q: [row("a")],
+					p: [row(mirrorA, "a", "a"), row("b")],
+				},
+			);
+		});
+
+		it("creates, keeps and removes a source's backlink items locally as its links change", async () =>
+		{
+			await store.call(
+				"nodes.create",
+				{
+					parent_id: "q",
+					name: "target",
+					id: TARGET,
+				},
+			);
+			await store.call(
+				"nodes.create",
+				{
+					parent_id: "p",
+					name: "source",
+					id: SOURCE,
+				},
+			);
+			tick();
+
+			const linked = await store.call(
+				"nodes.update",
+				{
+					id: SOURCE,
+					name: `see ${link}`,
+				},
+			);
+			const afterLink = await backlinkSources(TARGET);
+			tick(2);
+			await store.call(
+				"nodes.update",
+				{
+					id: SOURCE,
+					note: "still linked",
+				},
+			);
+			const afterNote = await backlinkSources(TARGET);
+			tick(3);
+			const unlinked = await store.call(
+				"nodes.update",
+				{
+					id: SOURCE,
+					name: "no link",
+				},
+			);
+
+			expect(
+				{
+					linkedEffects: linked.ok ? linked.value.effects.backlinkTargets : undefined,
+					afterLink,
+					afterNote,
+					unlinkedEffects: unlinked.ok ? unlinked.value.effects.backlinkTargets : undefined,
+					afterUnlink: await backlinkSources(TARGET),
+					rootChildren: afterLink.rootId === null ? undefined : liveChildIds(afterLink.rootId),
+					targetRows: await rows(TARGET),
+				},
+			).toStrictEqual(
+				{
+					linkedEffects: [TARGET],
+					afterLink:
+					{
+						rootId: expect.any(String) as string,
+						sourceIds: [SOURCE],
+					},
+					afterNote:
+					{
+						rootId: afterLink.rootId,
+						sourceIds: [SOURCE],
+					},
+					unlinkedEffects: [TARGET],
+					afterUnlink:
+					{
+						rootId: afterLink.rootId,
+						sourceIds: [],
+					},
+					rootChildren: [],
+					targetRows: [],
+				},
+			);
+		});
+
+		it("links a created source and removes its backlink item when the source is deleted", async () =>
+		{
+			await store.call(
+				"nodes.create",
+				{
+					parent_id: "q",
+					name: "target",
+					id: TARGET,
+				},
+			);
+			tick();
+			await store.call(
+				"nodes.create",
+				{
+					parent_id: "p",
+					name: `see ${link}`,
+					id: SOURCE,
+				},
+			);
+			const afterCreate = await backlinkSources(TARGET);
+			tick(2);
+
+			await store.call(
+				"nodes.delete",
+				{
+					id: "p",
+				},
+			);
+
+			expect(
+				{
+					afterCreate,
+					rootChildren: afterCreate.rootId === null ? undefined : liveChildIds(afterCreate.rootId),
+				},
+			).toStrictEqual(
+				{
+					afterCreate:
+					{
+						rootId: expect.any(String) as string,
+						sourceIds: [SOURCE],
+					},
+					rootChildren: [],
+				},
+			);
+		});
+	});
 });
 
 describe("nodes subtree ids route", () =>

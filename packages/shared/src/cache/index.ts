@@ -40,8 +40,11 @@ export
 export {findInbox, INBOX_NAME, type InboxLookup} from "./inbox-lookup.js";
 export
 {
+	type LocalBacklinkSync,
 	type LocalCreateInput,
 	type LocalCreateTreesInput,
+	type LocalDeletePlan,
+	type LocalMirrorsInput,
 	type LocalMetaChange,
 	type LocalMoveInput,
 	type LocalRestoreInput,
