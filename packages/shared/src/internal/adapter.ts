@@ -52,6 +52,7 @@ import
 	OperationRejected,
 	TransportError,
 	TreeNotSeeded,
+	PendingEditsDeletedUpstream,
 	TreeRefreshRequired,
 	UnreplayableTransaction,
 } from "./errors.js";
@@ -612,6 +613,8 @@ export class WorkflowyInternalAdapter
 	private accountStores = 0;
 	/** The stored id the push in flight started from, for the refresh error. */
 	private startedFrom: string | undefined;
+	/** Nodes a replayed remote delete ended while they had pending outbox edits, not yet reported by {@link catchUp}. */
+	private readonly deletedWithPendingEdits: string[] = [];
 
 	constructor(options: WorkflowyInternalAdapterOptions)
 	{
@@ -643,6 +646,20 @@ export class WorkflowyInternalAdapter
 	 * changed). Every push does the same as a side effect.
 	 */
 	async catchUp(): Promise<void>
+	{
+		await this.poll();
+		const lost = this.deletedWithPendingEdits.splice(0);
+		if (lost.length > 0)
+		{
+			throw loud(new PendingEditsDeletedUpstream(lost));
+		}
+	}
+
+	/**
+	 * {@link catchUp} for a write about to push: a remote delete of nodes with pending edits waits for the next
+	 * `catchUp` to be reported, so it never fails the write.
+	 */
+	private async poll(): Promise<void>
 	{
 		await this.session();
 		await this.pusher.pushAndPoll();
@@ -721,7 +738,7 @@ export class WorkflowyInternalAdapter
 			// Edges first: their delete replay reads the subtree's node rows before the node replay ends them.
 			applyRelationshipOps(unitOfWork, ops);
 			applyFileOps(unitOfWork, ops);
-			applyNodeOps(unitOfWork, ops, ownOps);
+			this.deletedWithPendingEdits.push(...applyNodeOps(unitOfWork, ops, ownOps));
 			advanceTreeTxId(unitOfWork, result.txId);
 		});
 	}
@@ -888,7 +905,7 @@ export class WorkflowyInternalAdapter
 		{
 			return [];
 		}
-		await this.catchUp();
+		await this.poll();
 		const originIds = [...new Set(roots.map((root) => root.originId))];
 		const metadataOf = this.originalMetadata(originIds);
 		return originIds.map((originId) =>
@@ -941,7 +958,7 @@ export class WorkflowyInternalAdapter
 			deleted: [],
 		};
 		const tree = this.tree();
-		await this.catchUp();
+		await this.poll();
 		const sources = [...new Set(sourceIds)];
 		const sourceRelations = tree.relationshipMetadata(sources);
 		// The session is read only once there is an op to build.
@@ -1245,7 +1262,7 @@ export class WorkflowyInternalAdapter
 	}>
 	{
 		const tree = this.tree();
-		await this.catchUp();
+		await this.poll();
 		await Promise.all(
 			[...new Set(input.originalIds)].map(async (requestedId) =>
 			{
@@ -2467,7 +2484,7 @@ export class WorkflowyInternalAdapter
 			return [];
 		}
 		const tree = this.tree();
-		await this.catchUp();
+		await this.poll();
 		const relations = tree.relationshipMetadata(deletedSources);
 		const sources = new Set(deletedSources);
 		const mirroredAtDelete = this.cachedIds(

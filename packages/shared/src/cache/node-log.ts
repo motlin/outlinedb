@@ -17,18 +17,26 @@
  * row is versioned once at the end, so several ops on one node in a batch never write a node twice in one unit of
  * work. An op on a node missing from the cache is skipped, and so is a `bulk_create` under a parent missing from it:
  * the log never carries enough to place them.
+ *
+ * Mirror mode's pending outbox rows win over the log, field by field: a move of a node whose placement is pending, and
+ * an edit, complete or uncomplete of a field whose aspect is pending, are dropped, so the next drain sends ours. A node
+ * with a pending create is ours alone. A delete still wins: the node's subtree ends, every pending row of it closes,
+ * and the replay reports the nodes that had pending edits.
  */
 
 import {and, asc, eq, isNull, sql} from "drizzle-orm";
 import {z} from "zod";
-import {nodeContent, nodeMetadata} from "../db/schema.js";
+import {nodeContent, nodeMetadata, outbox} from "../db/schema.js";
 import {FAR_FUTURE_DATE} from "../temporal/index.js";
 import {uuidToShortId} from "../workflowy/constants.js";
 import {readWorkflowyEpoch} from "./account-store.js";
 import {normalizeLayoutMode, systemFromToDate} from "./cache-temporal.js";
 import type {LoggedOp} from "./relationship-log.js";
 import type {UnitOfWork} from "./node-composite.js";
+import {inIds} from "./in-ids.js";
 import {DEFAULT_ORDER_KEY, orderKeysFor} from "./order-key.js";
+import {pendingAspects} from "./outbox.js";
+import type {OutboxAspect} from "./outbox.js";
 import {withdrawNodeComposites} from "./node-composite.js";
 import {closeCurrentVersions} from "./temporal-merge.js";
 
@@ -252,8 +260,17 @@ class TreeModel
 		private readonly unitOfWork: UnitOfWork,
 		/** Unix seconds of a Workflowy client timestamp. */
 		readonly toUnixSec: (clientTimestamp: number | undefined) => number,
+		/** The pending outbox aspects of the nodes the ops name. */
+		private readonly pending: ReadonlyMap<string, ReadonlySet<OutboxAspect>>,
 	)
 	{
+	}
+
+	/** Whether the node's local `aspect` is ahead of workflowy.com, so the log must not overwrite it. */
+	private localWins(id: string, aspect: OutboxAspect): boolean
+	{
+		const aspects = this.pending.get(id);
+		return aspects !== undefined && (aspects.has(aspect) || aspects.has("create"));
 	}
 
 	/** The node's current parent, or undefined when it is neither cached nor created, or is deleted. */
@@ -344,7 +361,7 @@ class TreeModel
 
 	move({ids, parentId, index}: Move): void
 	{
-		const moving = ids.filter((id) => this.parentOf(id) !== undefined);
+		const moving = ids.filter((id) => this.parentOf(id) !== undefined && !this.localWins(id, "placement"));
 		if (moving.length === 0)
 		{
 			return;
@@ -374,11 +391,24 @@ class TreeModel
 			Object.assign(created, change);
 			return;
 		}
+		const kept: NodeChange = {};
+		if (change.name !== undefined && !this.localWins(id, "name"))
+		{
+			kept.name = change.name;
+		}
+		if (change.note !== undefined && !this.localWins(id, "note"))
+		{
+			kept.note = change.note;
+		}
+		if (change.completedAt !== undefined && !this.localWins(id, "completion"))
+		{
+			kept.completedAt = change.completedAt;
+		}
 		this.changes.set(
 			id,
 			{
 				...this.changes.get(id),
-				...change,
+				...kept,
 			},
 		);
 	}
@@ -471,8 +501,29 @@ function changedOrderKeys(model: TreeModel): Map<string, string>
 	return result;
 }
 
-/** End the deleted nodes, insert the created ones and version every other changed row, once each. */
-function writeModel(unitOfWork: UnitOfWork, model: TreeModel): void
+/**
+ * Close every pending outbox row of the deleted nodes: the remote delete wins. Returns the deleted nodes that had
+ * pending edits, a pending delete of their own aside, sorted.
+ */
+function closeDeletedPending({tx, systemTime}: UnitOfWork, deleted: readonly string[]): string[]
+{
+	const pending = pendingAspects(tx, deleted);
+	if (pending.size === 0)
+	{
+		return [];
+	}
+	closeCurrentVersions(tx, outbox, systemTime, inIds(outbox.nodeId, [...pending.keys()]));
+	return [...pending]
+		.filter(([, aspects]) => [...aspects].some((aspect) => aspect !== "delete"))
+		.map(([id]) => id)
+		.toSorted();
+}
+
+/**
+ * End the deleted nodes, insert the created ones and version every other changed row, once each. Returns the deleted
+ * nodes that had pending edits.
+ */
+function writeModel(unitOfWork: UnitOfWork, model: TreeModel): string[]
 {
 	const {tx, systemTime} = unitOfWork;
 	const current =
@@ -480,6 +531,7 @@ function writeModel(unitOfWork: UnitOfWork, model: TreeModel): void
 		systemFrom: systemTime,
 		systemTo: FAR_FUTURE_DATE,
 	};
+	const deletedWithPendingEdits = closeDeletedPending(unitOfWork, [...model.deleted]);
 	withdrawNodeComposites(unitOfWork, [...model.deleted]);
 	const orderKeys = changedOrderKeys(model);
 	for (const [id, node] of model.created)
@@ -578,6 +630,31 @@ function writeModel(unitOfWork: UnitOfWork, model: TreeModel): void
 			)
 			.run();
 	}
+	return deletedWithPendingEdits;
+}
+
+/** The ids of existing nodes the ops move, edit, complete or uncomplete. */
+function namedNodeIds(ops: readonly LoggedOp[]): string[]
+{
+	const ids = new Set<string>();
+	for (const op of ops)
+	{
+		const move = parseMove(op);
+		if (move !== undefined)
+		{
+			for (const id of move.ids)
+			{
+				ids.add(id);
+			}
+			continue;
+		}
+		const projectId = ProjectIdSchema.safeParse(op.data);
+		if (projectId.success && op.type !== "delete")
+		{
+			ids.add(projectId.data.projectid);
+		}
+	}
+	return [...ids];
 }
 
 function applyOp(model: TreeModel, op: LoggedOp, opTime: number): void
@@ -638,26 +715,27 @@ function applyOp(model: TreeModel, op: LoggedOp, opTime: number): void
 
 /**
  * Apply the node ops of `ops`, in order, to the cached tree, in the caller's unit of work. The ops in `ownOps` (by
- * identity) are our own pushes, whose content is already written through, so only their moves replay.
+ * identity) are our own pushes, whose content is already written through, so only their moves replay. Returns the
+ * nodes a remote delete ended while they had pending outbox edits, whose rows it closed.
  */
 export function applyNodeOps(
 	unitOfWork: UnitOfWork,
 	ops: readonly LoggedOp[],
 	ownOps: ReadonlySet<LoggedOp> = new Set(),
-): void
+): string[]
 {
 	const replayed = ops.filter(
 		(op) => SCHEMAS[op.type] !== undefined && (!ownOps.has(op) || parseMove(op) !== undefined),
 	);
 	if (replayed.length === 0)
 	{
-		return;
+		return [];
 	}
 	const epoch = readWorkflowyEpoch(unitOfWork.tx);
 	const systemSec = Math.floor(systemFromToDate(unitOfWork.systemTime).getTime() / 1000);
 	const toUnixSec = (clientTimestamp: number | undefined): number =>
 		epoch === undefined || clientTimestamp === undefined ? systemSec : epoch + clientTimestamp;
-	const model = new TreeModel(unitOfWork, toUnixSec);
+	const model = new TreeModel(unitOfWork, toUnixSec, pendingAspects(unitOfWork.tx, namedNodeIds(replayed)));
 	for (const op of replayed)
 	{
 		const move = parseMove(op);
@@ -670,5 +748,5 @@ export function applyNodeOps(
 			model.move(move);
 		}
 	}
-	writeModel(unitOfWork, model);
+	return writeModel(unitOfWork, model);
 }

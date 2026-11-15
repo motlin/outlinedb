@@ -5,9 +5,18 @@ import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {Hono} from "hono";
 import {join} from "node:path";
 import {WorkflowyInternalClient} from "@outlinedb/shared/api";
-import {CacheService, TRANSACTION_TIMEOUT_MS, storeTreeTxId} from "@outlinedb/shared/cache";
+import
+{
+	CacheService,
+	LocalTreeWriter,
+	OutboxRecorder,
+	TRANSACTION_TIMEOUT_MS,
+	pendingAspects,
+	storeTreeTxId,
+} from "@outlinedb/shared/cache";
 import * as schema from "@outlinedb/shared/db";
-import {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
+import {PendingEditsDeletedUpstream, WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import type {WorkflowyNode} from "@outlinedb/shared/types";
 import {createFakeInternalApi, json} from "../../shared/test/helpers/fake-internal-api.js";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
@@ -129,6 +138,7 @@ function setup()
 	};
 	return {
 		sqlite,
+		db,
 		api,
 		adapter,
 		changes,
@@ -633,5 +643,175 @@ describe("remote transactions reach the nodes change feed", () =>
 				},
 			},
 		);
+	});
+	describe("around pending outbox rows", () =>
+	{
+		/** A mirror-mode local write, recorded in the outbox, made before the catch-up's clock. */
+		function writeLocally(db: ReturnType<typeof setup>["db"], write: (writer: LocalTreeWriter) => void): void
+		{
+			write(
+				new LocalTreeWriter(
+					db,
+					{
+						outbox: new OutboxRecorder(),
+					},
+				),
+			);
+			vi.setSystemTime(T0 + TRANSACTION_TIMEOUT_MS + 70_000);
+		}
+
+		/** Each live node's name, note and parent, and the pending outbox aspects of the seeded nodes. */
+		function state(db: ReturnType<typeof setup>["db"])
+		{
+			const live = db
+				.select()
+				.from(schema.nodeContent)
+				.all()
+				.filter((row) => row.systemTo === FAR_FUTURE_DATE)
+				.map((row) => `${row.id}:${row.name}:${row.note}:${row.parentId}`);
+			// oxlint-disable-next-line unicorn/no-array-sort -- the test tsconfig lib has no toSorted
+			live.sort();
+			return {
+				live,
+				pending: pendingAspects(db, ["P1", "P2", "X", "Y", "Z"]),
+			};
+		}
+
+		it("a remote edit keeps the pending local name and takes the remote note", async () =>
+		{
+			const {sqlite, db, api, adapter} = setup();
+			open.push(sqlite);
+			writeLocally(db, (writer) =>
+			{
+				writer.updateNode(
+					"X",
+					{
+						name: "Local",
+					},
+				);
+			});
+			respondWith(
+				api,
+				[
+					transaction(101, [
+						{
+							type: "edit",
+							data:
+							{
+								projectid: "X",
+								name: "Remote",
+								description: "A note",
+							},
+						},
+					]),
+				],
+				"101",
+			);
+
+			await adapter.catchUp();
+
+			expect(state(db)).toStrictEqual(
+				{
+					live: ["P1:P1:null:null", "P2:P2:null:null", "X:Local:A note:P1", "Y:Y:null:P1", "Z:Z:null:P2"],
+					pending: new Map([["X", new Set(["name"])]]),
+				},
+			);
+		});
+
+		it("a remote move keeps a node with a pending placement where the local move put it", async () =>
+		{
+			const {sqlite, db, api, adapter} = setup();
+			open.push(sqlite);
+			writeLocally(db, (writer) =>
+			{
+				writer.moveTo(
+					{
+						ids: ["X"],
+						parentId: "P2",
+					},
+				);
+			});
+			respondWith(
+				api,
+				[
+					transaction(101, [
+						{
+							type: "bulk_move",
+							data:
+							{
+								projectids_json: JSON.stringify(["X", "Y"]),
+								parentid: "None",
+								priority: 0,
+							},
+						},
+					]),
+				],
+				"101",
+			);
+
+			await adapter.catchUp();
+
+			expect(state(db)).toStrictEqual(
+				{
+					live: ["P1:P1:null:null", "P2:P2:null:null", "X:X:null:P2", "Y:Y:null:null", "Z:Z:null:P2"],
+					pending: new Map([["X", new Set(["placement"])]]),
+				},
+			);
+		});
+
+		it("a remote delete of a node with pending edits wins, closes their outbox rows and fails the catch-up loudly", async () =>
+		{
+			const {sqlite, db, api, adapter} = setup();
+			open.push(sqlite);
+			vi.spyOn(console, "error").mockImplementation(() => {});
+			writeLocally(db, (writer) =>
+			{
+				writer.updateNode(
+					"Y",
+					{
+						name: "Local",
+					},
+				);
+				writer.updateNode(
+					"Z",
+					{
+						name: "Kept",
+					},
+				);
+			});
+			respondWith(
+				api,
+				[
+					transaction(101, [
+						{
+							type: "delete",
+							data:
+							{
+								projectid: "P1",
+							},
+						},
+					]),
+				],
+				"101",
+			);
+
+			const error = await adapter.catchUp().then(
+				() => null,
+				(caught: unknown) => caught,
+			);
+
+			expect(
+				{
+					error: error instanceof PendingEditsDeletedUpstream ? error.nodeIds : error,
+					...state(db),
+				},
+			).toStrictEqual(
+				{
+					error: ["Y"],
+					live: ["P2:P2:null:null", "Z:Kept:null:P2"],
+					pending: new Map([["Z", new Set(["name"])]]),
+				},
+			);
+		});
 	});
 });

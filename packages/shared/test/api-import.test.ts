@@ -6,6 +6,8 @@ import {afterEach, assert, describe, expect, it, vi} from "vite-plus/test";
 import {applyApiBatch, beginApiImport, finishApiImport, importFromApi} from "../src/cache/api-import.js";
 import {BULK_IMPORT_LEASE_NAME} from "../src/cache/bulk-import.js";
 import {CacheService} from "../src/cache/cache-service.js";
+import {LocalTreeWriter} from "../src/cache/local-tree-writer.js";
+import {OutboxRecorder, pendingAspects} from "../src/cache/outbox.js";
 import {BULK_IMPORT_TIMEOUT_MS, TRANSACTION_TIMEOUT_MS, TransactionTimeoutError} from "../src/cache/system-time.js";
 import * as schema from "../src/db/schema.js";
 import {FAR_FUTURE_DATE} from "../src/temporal/index.js";
@@ -542,6 +544,162 @@ describe("shared API import", () =>
 				"f:Name f",
 				"g:Name g",
 			]);
+		});
+	});
+
+	describe("pending outbox rows", () =>
+	{
+		const LOCAL_WRITE = new Date("2026-03-01T13:00:00.000Z");
+
+		/**
+		 * After the FIXTURE import, a mirror-mode write creates n under a, renames c and moves d under e, leaving
+		 * pending create, name and placement rows; upstream meanwhile moved d under g.
+		 */
+		function writePending(db: ReturnType<typeof createDb>)
+		{
+			vi.useFakeTimers(
+				{
+					toFake: ["Date"],
+					now: T0,
+				},
+			);
+			importFromApi(
+				db,
+				FIXTURE,
+				{
+					timestamp: T0,
+				},
+			);
+			vi.setSystemTime(LOCAL_WRITE);
+			const writer = new LocalTreeWriter(
+				db,
+				{
+					outbox: new OutboxRecorder(),
+				},
+			);
+			writer.createAt(
+				{
+					parentId: "a",
+					id: "n",
+					name: "New",
+				},
+			);
+			writer.updateNode(
+				"c",
+				{
+					name: "Renamed",
+				},
+			);
+			writer.moveTo(
+				{
+					ids: ["d"],
+					parentId: "e",
+				},
+			);
+			vi.setSystemTime(T1);
+			return FIXTURE.map((node) =>
+				node.id === "d"
+					?
+						{
+							...node,
+							parent_id: "g",
+						}
+					: node,
+			);
+		}
+
+		function merged(db: ReturnType<typeof createDb>)
+		{
+			const metadata = new Map(
+				db
+					.select()
+					.from(schema.nodeMetadata)
+					.all()
+					.filter((row) => row.systemTo === FAR_FUTURE_DATE)
+					.map((row) => [row.nodeId, row.orderKey]),
+			);
+			return {
+				live: db
+					.select()
+					.from(schema.nodeContent)
+					.all()
+					.filter((row) => row.systemTo === FAR_FUTURE_DATE)
+					.map((row) => `${row.id}:${row.name}:${row.parentId}`)
+					.toSorted(),
+				dOrderKey: metadata.get("d"),
+				pending: pendingAspects(db, ["n", "c", "d"]),
+			};
+		}
+
+		const EXPECTED_LIVE = [
+			"a:Name a:null",
+			"b:Name b:a",
+			"c:Renamed:a",
+			"d:Name d:e",
+			"e:Name e:null",
+			"f:Name f:e",
+			"g:Name g:null",
+			"n:New:a",
+		];
+
+		const EXPECTED_PENDING = new Map([
+			["c", new Set(["name"])],
+			["d", new Set(["placement"])],
+			["n", new Set(["create", "placement"])],
+		]);
+
+		it("keeps a pending create absent from the export, a pending rename over the old name and a pending placement over a remote move", () =>
+		{
+			const db = createDb();
+			const upstream = writePending(db);
+			const before = merged(db);
+
+			const state = beginApiImport(
+				db,
+				{
+					timestamp: T1,
+				},
+			);
+			applyApiBatch(state, upstream.slice(0, 4));
+			applyApiBatch(state, upstream.slice(4));
+			const result = finishApiImport(state);
+
+			expect(
+				{
+					...merged(db),
+					nodesDeleted: result.nodesDeleted,
+				},
+			).toStrictEqual(
+				{
+					live: EXPECTED_LIVE,
+					dOrderKey: before.dOrderKey,
+					pending: EXPECTED_PENDING,
+					nodesDeleted: 0,
+				},
+			);
+		});
+
+		it("merges the one-shot import the same way", () =>
+		{
+			const db = createDb();
+			const upstream = writePending(db);
+			const before = merged(db);
+
+			importFromApi(
+				db,
+				upstream,
+				{
+					timestamp: T1,
+				},
+			);
+
+			expect(merged(db)).toStrictEqual(
+				{
+					live: EXPECTED_LIVE,
+					dOrderKey: before.dOrderKey,
+					pending: EXPECTED_PENDING,
+				},
+			);
 		});
 	});
 

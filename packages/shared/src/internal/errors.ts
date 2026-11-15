@@ -117,6 +117,21 @@ export class UnreplayableTransaction extends TreeResyncRequired
 	}
 }
 
+/**
+ * Workflowy deleted nodes that had local edits not yet sent to it. The remote delete won: the nodes ended and their
+ * pending outbox rows closed, so those edits are lost. Never retried; reported so the loss is never silent.
+ */
+export class PendingEditsDeletedUpstream extends Error
+{
+	constructor(readonly nodeIds: readonly string[])
+	{
+		super(
+			`Workflowy deleted ${nodeIds.length} node(s) that had local edits not yet sent to it; the remote delete won and those edits are lost: ${nodeIds.join(", ")}`,
+		);
+		this.name = "PendingEditsDeletedUpstream";
+	}
+}
+
 /** Connected to workflowy.com, which has no Inbox either: neither root metadata `inbox_id` nor a Home child named Inbox. */
 export class InboxMissing extends Error
 {

@@ -18,6 +18,8 @@ import {endStrandedBacklinkItems} from "./stranded-relationships.js";
 import type {UnitOfWork} from "./node-composite.js";
 import type {NormalizedNodeContentRow, NormalizedNodeMetadataRow} from "./normalized-rows.js";
 import {compareBinary, DEFAULT_ORDER_KEY, orderKeysFor} from "./order-key.js";
+import {pendingAspects} from "./outbox.js";
+import type {OutboxAspect} from "./outbox.js";
 import {startUnitOfWork} from "./system-time.js";
 import type {UnitOfWorkStart} from "./system-time.js";
 
@@ -68,7 +70,7 @@ interface ProcessedNode
 {
 	id: string;
 	shortId: string;
-	name: string;
+	name: string | null;
 	note: string | null;
 	parentId: string | null;
 	priority: number;
@@ -314,6 +316,53 @@ function writtenAfterSnapshot(tx: UnitOfWork["tx"], ids: string[], snapshotAt: s
 	return written;
 }
 
+/**
+ * Keep the local value of every field whose outbox aspect is pending, in place on `nodes`, taking upstream's for the
+ * rest. Returns the local order key of each node whose placement is pending: it keeps its parent and key, and takes no
+ * part in mapping upstream's sibling order.
+ */
+function keepPendingFields(
+	nodes: ProcessedNode[],
+	pending: ReadonlyMap<string, ReadonlySet<OutboxAspect>>,
+	existingContent: ReadonlyMap<string, NodeContentType>,
+	existingMetadata: ReadonlyMap<string, NodeMetadataType>,
+): Map<string, string | null>
+{
+	const pendingPlacement = new Map<string, string | null>();
+	for (const node of nodes)
+	{
+		const aspects = pending.get(node.id);
+		const content = existingContent.get(node.id);
+		const metadata = existingMetadata.get(node.id);
+		if (aspects === undefined || content === undefined || metadata === undefined)
+		{
+			continue;
+		}
+		if (aspects.has("name"))
+		{
+			node.name = content.name;
+		}
+		if (aspects.has("note"))
+		{
+			node.note = content.note;
+		}
+		if (aspects.has("completion"))
+		{
+			node.completedAt = metadata.completedAt === null ? null : Math.floor(metadata.completedAt.getTime() / 1000);
+		}
+		if (aspects.has("metadata"))
+		{
+			node.layoutMode = metadata.layoutMode;
+		}
+		if (aspects.has("placement"))
+		{
+			node.parentId = content.parentId;
+			pendingPlacement.set(node.id, metadata.orderKey);
+		}
+	}
+	return pendingPlacement;
+}
+
 function applyBatchIn(unitOfWork: UnitOfWork, state: ApiImportState, apiNodes: WorkflowyNode[]): void
 {
 	const {tx} = unitOfWork;
@@ -334,6 +383,26 @@ function applyBatchIn(unitOfWork: UnitOfWork, state: ApiImportState, apiNodes: W
 		state.nodesUnchanged += later.size;
 		nodes = nodes.filter((node) => !later.has(node.id));
 	}
+	// A node with a pending create or delete is wholly ahead of workflowy.com: left as it is and counted as seen.
+	const pending = pendingAspects(
+		tx,
+		nodes.map((node) => node.id),
+	);
+	const localWins = (id: string): boolean =>
+	{
+		const aspects = pending.get(id);
+		return aspects !== undefined && (aspects.has("create") || aspects.has("delete"));
+	};
+	for (const node of nodes)
+	{
+		if (localWins(node.id))
+		{
+			state.seenIds.add(node.id);
+			state.totalNodes++;
+			state.nodesUnchanged++;
+		}
+	}
+	nodes = nodes.filter((node) => !localWins(node.id));
 	const ids = nodes.map((node) => node.id);
 
 	// Classify against only this batch's current rows.
@@ -359,7 +428,17 @@ function applyBatchIn(unitOfWork: UnitOfWork, state: ApiImportState, apiNodes: W
 			existingMetadata.set(row.nodeId, row);
 		}
 	}
-	const orderKeys = assignOrderKeys(state, nodes, existingContent, existingMetadata);
+	const pendingPlacement = keepPendingFields(nodes, pending, existingContent, existingMetadata);
+	const orderKeys: Map<string, string | null> = assignOrderKeys(
+		state,
+		nodes.filter((node) => !pendingPlacement.has(node.id)),
+		existingContent,
+		existingMetadata,
+	);
+	for (const [id, orderKey] of pendingPlacement)
+	{
+		orderKeys.set(id, orderKey);
+	}
 	for (const node of nodes)
 	{
 		const content = existingContent.get(node.id);
@@ -465,6 +544,9 @@ function finishIn(unitOfWork: UnitOfWork, state: ApiImportState, treeItems?: Int
 		const later = writtenAfterSnapshot(tx, unseen, state.snapshotAt);
 		unseen = unseen.filter((id) => !later.has(id));
 	}
+	// A node with any pending outbox row is ahead of the export: not there yet, or still under its old parent.
+	const pending = pendingAspects(tx, unseen);
+	unseen = unseen.filter((id) => !pending.has(id));
 	endNodeComposites(unitOfWork, unseen);
 
 	if (treeItems !== undefined)
