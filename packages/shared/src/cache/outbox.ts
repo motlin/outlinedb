@@ -1,6 +1,6 @@
-import {and, asc, desc, isNotNull, lte, sql} from "drizzle-orm";
+import {and, asc, desc, eq, isNotNull, lte, sql} from "drizzle-orm";
 import type {SQL} from "drizzle-orm";
-import {outbox} from "../db/schema.js";
+import {nodeContent, outbox} from "../db/schema.js";
 import {accountOutboxStatus} from "./account-outbox.js";
 import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 import {currentVersion} from "./cache-temporal.js";
@@ -247,4 +247,32 @@ export function outboxStatus(tx: TemporalTransaction): OutboxStatus
 		oldestEnqueuedAt: oldest[0] ?? null,
 		lastError: accountFailedLater ? account.lastError : (failed?.lastError ?? null),
 	};
+}
+
+/** One pending outbox row with its node's current name (null once the node's content version has ended). */
+export interface PendingOutboxListing extends PendingOutboxRow
+{
+	name: string | null;
+}
+
+/** Every current outbox row with its node's current name, oldest first, for `outbox status`. */
+export function listPendingOutbox(tx: TemporalTransaction): PendingOutboxListing[]
+{
+	const rows = tx
+		.select(
+			{
+				nodeId: outbox.nodeId,
+				name: nodeContent.name,
+				aspect: outbox.aspect,
+				enqueuedAt: outbox.enqueuedAt,
+				lastError: outbox.lastError,
+			},
+		)
+		.from(outbox)
+		.leftJoin(nodeContent, and(eq(nodeContent.id, outbox.nodeId), currentVersion(nodeContent)))
+		.where(currentVersion(outbox))
+		.orderBy(asc(outbox.enqueuedAt), asc(outbox.nodeId), asc(outbox.aspect))
+		.all();
+	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the recorder writes only OutboxAspect values
+	return rows as PendingOutboxListing[];
 }

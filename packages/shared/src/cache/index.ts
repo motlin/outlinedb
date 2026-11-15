@@ -59,6 +59,7 @@ export
 {
 	closeOutboxRows,
 	failOutboxRows,
+	listPendingOutbox,
 	OUTBOX_ASPECTS,
 	type OutboxAspect,
 	type OutboxEntry,
@@ -66,6 +67,7 @@ export
 	type OutboxStatus,
 	outboxStatus,
 	pendingAspects,
+	type PendingOutboxListing,
 	type PendingOutboxRow,
 	readPendingOutbox,
 } from "./outbox.js";

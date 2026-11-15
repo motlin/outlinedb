@@ -113,6 +113,16 @@ function isOwnerDocumentUpdate(data: unknown): boolean
  * Run `job` so that a burst of requests gives one call in flight plus at
  * most one queued behind it; a failure is logged and never stops later calls.
  */
+/** An error's message followed by each `cause` message, so a wrapped transport failure keeps its real cause. */
+function causeChain(error: unknown): string
+{
+	if (!(error instanceof Error))
+	{
+		return String(error);
+	}
+	return error.cause === undefined ? error.message : `${error.message}: ${causeChain(error.cause)}`;
+}
+
 function coalesced(job: () => Promise<void>, log: (message: string) => void, failure: string): () => void
 {
 	let inFlight: Promise<void> | undefined;
@@ -122,7 +132,7 @@ function coalesced(job: () => Promise<void>, log: (message: string) => void, fai
 		inFlight = job()
 			.catch((error: unknown) =>
 			{
-				log(`${failure}: ${error instanceof Error ? error.message : String(error)}`);
+				log(`${failure}: ${causeChain(error)}`);
 			})
 			.finally(() =>
 			{
@@ -199,9 +209,7 @@ export function upstreamLane(drain: () => Promise<unknown>, log: (message: strin
 				}
 				catch (error)
 				{
-					log(
-						`outbox drain before catch-up failed: ${error instanceof Error ? error.message : String(error)}`,
-					);
+					log(`outbox drain before catch-up failed: ${causeChain(error)}`);
 				}
 				return job();
 			}),

@@ -4,10 +4,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type {MockInstance} from "vite-plus/test";
-import type {OutboxStatus} from "@outlinedb/shared/cache";
 import Update from "../../../src/commands/node/update.js";
 import Drain from "../../../src/commands/outbox/drain.js";
 import Status from "../../../src/commands/outbox/status.js";
+import type {OutboxStatusReport} from "../../../src/commands/outbox/status.js";
 import {cleanupTestDatabase, createTestDatabase, nodeFixtures, seedTestData} from "../../db/migration-helper.js";
 import type {TestDatabase} from "../../db/migration-helper.js";
 import {createTestNode} from "../../helpers/node-fixtures.js";
@@ -75,10 +75,14 @@ describe("outbox commands", () =>
 		{
 			await Update.run(["--id", "node-id", "--name", "New"]);
 		});
-		let failed: OutboxStatus | undefined;
+		let failed: OutboxStatusReport | undefined;
 		await captureOutput(async () =>
 		{
 			failed = await Status.run(["--json"]);
+		});
+		const failedText = await captureOutput(async () =>
+		{
+			await Status.run([]);
 		});
 
 		const upstream = fakeUpstream(fetchStub, testDatabase, tempDir);
@@ -97,7 +101,13 @@ describe("outbox commands", () =>
 				{
 					...failed,
 					oldestEnqueuedAt: typeof failed.oldestEnqueuedAt,
+					rows: failed.rows.map((row) => (
+					{
+						...row,
+						enqueuedAt: row.enqueuedAt === failed?.oldestEnqueuedAt,
+					})),
 				},
+				failedText: failedText.stdout.replaceAll(failed?.oldestEnqueuedAt ?? "", "<enqueued>"),
 				drain: drain.stdout,
 				drainError: drain.error,
 				drained: drained.stdout,
@@ -111,7 +121,24 @@ describe("outbox commands", () =>
 					pending: 1,
 					oldestEnqueuedAt: "string",
 					lastError: "Workflowy rejected the operations: upstream_rejected",
+					rows: [
+						{
+							nodeId: "node-id",
+							name: "New",
+							aspect: "name",
+							enqueuedAt: true,
+							lastError: "Workflowy rejected the operations: upstream_rejected",
+						},
+					],
 				},
+				failedText: [
+					"Pending: 1",
+					"Oldest: <enqueued>",
+					"Last error: Workflowy rejected the operations: upstream_rejected",
+					"node-id  name  <enqueued>  New",
+					"  last error: Workflowy rejected the operations: upstream_rejected",
+					"",
+				].join("\n"),
 				drain: "Outbox drained: nothing pending\n",
 				drainError: undefined,
 				drained: "Pending: 0\n",

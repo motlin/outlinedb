@@ -451,7 +451,7 @@ describe("upstreamLane", () =>
 		);
 	});
 
-	it("drains the outbox once before each catch-up, and still catches up after a failed drain", async () =>
+	it("drains the outbox once before each catch-up, still catches up after a failed drain, and logs a failure's cause chain", async () =>
 	{
 		const order: string[] = [];
 		const logged: string[] = [];
@@ -468,7 +468,19 @@ describe("upstreamLane", () =>
 				if (failNext)
 				{
 					failNext = false;
-					return Promise.reject(new Error("offline"));
+					return Promise.reject(
+						new Error(
+							"POST /push_and_poll failed",
+							{
+								cause: new TypeError(
+									"fetch failed",
+									{
+										cause: new Error("connect ECONNREFUSED"),
+									},
+								),
+							},
+						),
+					);
 				}
 				return Promise.resolve();
 			},
@@ -481,6 +493,9 @@ describe("upstreamLane", () =>
 		await lane.catchUp(caughtUp);
 		failNext = true;
 		await lane.catchUp(caughtUp);
+		failNext = true;
+		lane.requestDrain();
+		await vi.advanceTimersByTimeAsync(0);
 
 		expect(
 			{
@@ -489,8 +504,11 @@ describe("upstreamLane", () =>
 			},
 		).toStrictEqual(
 			{
-				order: ["drain", "catchUp", "drain", "catchUp"],
-				logged: ["outbox drain before catch-up failed: offline"],
+				order: ["drain", "catchUp", "drain", "catchUp", "drain"],
+				logged: [
+					"outbox drain before catch-up failed: POST /push_and_poll failed: fetch failed: connect ECONNREFUSED",
+					"outbox drain failed: POST /push_and_poll failed: fetch failed: connect ECONNREFUSED",
+				],
 			},
 		);
 	});
