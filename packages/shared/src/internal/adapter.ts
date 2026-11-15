@@ -61,7 +61,10 @@ import type {MetadataChange} from "./metadata-patch.js";
 import {bulkCreateOp, bulkMoveOp, deleteOp, editOp, moveOp, ROOT_PROJECT_ID, undeleteOp} from "./ops.js";
 import type {Location, NewTree} from "./ops.js";
 import {PushAndPoll} from "./push-and-poll.js";
-import type {InternalOp, PushAndPollOptions, PushResult} from "./push-and-poll.js";
+import type {InternalOp, PushAndPollOptions, PushInput, PushResult} from "./push-and-poll.js";
+import {drainOutbox} from "./outbox-drain.js";
+import type {OutboxDrainOptions, OutboxDrainResult} from "./outbox-drain.js";
+import type {UnitOfWork} from "../cache/node-composite.js";
 
 // oxlint-disable-next-line @typescript-eslint/no-explicit-any
 type AdapterDatabase = BaseSQLiteDatabase<"sync", any, any>;
@@ -615,6 +618,8 @@ export class WorkflowyInternalAdapter
 	private startedFrom: string | undefined;
 	/** Nodes a replayed remote delete ended while they had pending outbox edits, not yet reported by {@link catchUp}. */
 	private readonly deletedWithPendingEdits: string[] = [];
+	/** Hooks that run in the unit of work accepting the push of their input: the outbox drain's acknowledgement. */
+	private readonly acknowledgers = new WeakMap<PushInput, (unitOfWork: UnitOfWork, result: PushResult) => void>();
 
 	constructor(options: WorkflowyInternalAdapterOptions)
 	{
@@ -629,9 +634,9 @@ export class WorkflowyInternalAdapter
 				transactionLog:
 				{
 					start: () => this.startTxId(),
-					accept: (result) =>
+					accept: (result, input) =>
 					{
-						this.acceptTransactions(result);
+						this.acceptTransactions(result, this.acknowledgers.get(input));
 					},
 				},
 			},
@@ -689,7 +694,10 @@ export class WorkflowyInternalAdapter
 	 * come back among the remote ones, so a transaction id is applied once. Our own ops' content is
 	 * already written through, so of those only the moves replay into the nodes.
 	 */
-	private acceptTransactions(result: PushResult): void
+	private acceptTransactions(
+		result: PushResult,
+		acknowledge?: (unitOfWork: UnitOfWork, result: PushResult) => void,
+	): void
 	{
 		if (result.needsRefresh)
 		{
@@ -740,7 +748,36 @@ export class WorkflowyInternalAdapter
 			applyFileOps(unitOfWork, ops);
 			this.deletedWithPendingEdits.push(...applyNodeOps(unitOfWork, ops, ownOps));
 			advanceTreeTxId(unitOfWork, result.txId);
+			// After the replay: while a row is pending, the replay keeps its field's local value.
+			acknowledge?.(unitOfWork, result);
 		});
+	}
+
+	/**
+	 * One outbox drain pass (see {@link drainOutbox}): the pending rows' ops go out in one push, whose transactions
+	 * and acknowledgement land in one unit of work.
+	 */
+	async drainOutbox(options: Omit<OutboxDrainOptions, "now"> = {}): Promise<OutboxDrainResult>
+	{
+		return drainOutbox(
+			this.db,
+			{
+				session: async () => this.session(),
+				push: async (ops, accept) =>
+				{
+					const input: PushInput =
+					{
+						ops,
+					};
+					this.acknowledgers.set(input, accept);
+					await this.pusher.pushAndPoll(input);
+				},
+			},
+			{
+				...options,
+				now: this.now,
+			},
+		);
 	}
 
 	/** Create one node at an exact slot with a `bulk_create`; the id is chosen here, so none is read back. */

@@ -62,7 +62,20 @@ export
 	type LocalUpdateInput,
 	readHomeLayoutMode,
 } from "./local-tree-writer.js";
-export {OUTBOX_ASPECTS, type OutboxAspect, type OutboxEntry, OutboxRecorder, pendingAspects} from "./outbox.js";
+export
+{
+	closeOutboxRows,
+	failOutboxRows,
+	OUTBOX_ASPECTS,
+	type OutboxAspect,
+	type OutboxEntry,
+	OutboxRecorder,
+	type OutboxStatus,
+	outboxStatus,
+	pendingAspects,
+	type PendingOutboxRow,
+	readPendingOutbox,
+} from "./outbox.js";
 export {type ApplyRowsResult, applyNodeRowsBatch, applyRows, type NormalizedRowsByTable} from "./importer.js";
 export
 {

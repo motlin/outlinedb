@@ -53,6 +53,12 @@ interface SyncStatus
 		internalSyncError?: string;
 		durationMs?: number;
 	} | null;
+	outbox:
+	{
+		pending: number;
+		oldestEnqueuedAt: string | null;
+		lastError: string | null;
+	};
 }
 
 const bindings =
@@ -400,6 +406,13 @@ describe("sync from a fake upstream", () =>
 		);
 		await expect(liveIds(h)).resolves.toHaveLength(4999);
 		expect(third.nextAlarmAt).toBeGreaterThan(Date.now() + 25 * 60_000);
+		expect(third.outbox).toStrictEqual(
+			{
+				pending: 0,
+				oldestEnqueuedAt: null,
+				lastError: null,
+			},
+		);
 		// Each run finished inside one alarm, so each is one live version; its seen ids never outlived that alarm.
 		await expect(syncTables(h)).resolves.toStrictEqual(
 			{

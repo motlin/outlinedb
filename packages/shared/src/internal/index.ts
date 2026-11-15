@@ -1,5 +1,7 @@
 export * from "./adapter.js";
 export * from "./errors.js";
+export {drainOutbox, OUTBOX_BATCH_CAP} from "./outbox-drain.js";
+export type {OutboxDrainOptions, OutboxDrainResult, OutboxPusher, OutboxSession} from "./outbox-drain.js";
 export {editOp, moveOp} from "./ops.js";
 export type {NewTree} from "./ops.js";
 export {CALENDAR_ID_NAMESPACE, calendarNodeId, calendarRootId, uuidv5} from "./calendar-ids.js";

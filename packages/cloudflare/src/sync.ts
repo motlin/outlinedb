@@ -5,12 +5,13 @@ import
 	finishApiImport,
 	importInternalMetadata,
 	newSystemTimestamp,
+	outboxStatus,
 	readWorkflowyEpoch,
 	runUnitOfWork,
 	seedAccount,
 	unitOfWorkSignal,
 } from "@outlinedb/shared/cache";
-import type {ApiImportState, ImportApiResult, StoredAccount} from "@outlinedb/shared/cache";
+import type {ApiImportState, ImportApiResult, OutboxStatus, StoredAccount} from "@outlinedb/shared/cache";
 import type {TreeSnapshot} from "@outlinedb/shared/api";
 import type {AppDatabase} from "@outlinedb/shared/db";
 import {TreeResyncRequired} from "@outlinedb/shared/internal";
@@ -179,6 +180,8 @@ export interface SyncStatus
 	applied: number;
 	nextAlarmAt: number | null;
 	lastResult: SyncResult | null;
+	/** Mirror mode's local writes not yet on workflowy.com. */
+	outbox: OutboxStatus;
 }
 
 /** The streaming import, driven by Durable Object alarms with all progress in the object's own SQLite. */
@@ -342,6 +345,7 @@ export class SyncJob
 			applied: job?.applied ?? 0,
 			nextAlarmAt: await this.alarm.getAlarm(),
 			lastResult: this.readLastResult(),
+			outbox: outboxStatus(this.deps.db),
 		};
 	}
 

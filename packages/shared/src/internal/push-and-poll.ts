@@ -57,8 +57,8 @@ export interface TransactionLog
 {
 	/** The tree transaction id the next push starts from. */
 	start(): string;
-	/** Called with every accepted result, before the push resolves. */
-	accept(result: PushResult): void;
+	/** Called with every accepted result and the input it answers, before the push resolves. */
+	accept(result: PushResult, input: PushInput): void;
 }
 
 export interface PushAndPollOptions
@@ -395,7 +395,7 @@ export class PushAndPoll
 		};
 		this.currentTxId = pushResult.txId;
 		this.timezone = undefined;
-		this.transactionLog?.accept(pushResult);
+		this.transactionLog?.accept(pushResult, input);
 		return pushResult;
 	}
 

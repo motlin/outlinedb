@@ -141,3 +141,21 @@ export class InboxMissing extends Error
 		this.name = "InboxMissing";
 	}
 }
+
+/**
+ * Workflowy accepted a drain's push but its server run did not echo every op the drain sent, so the drain cannot tell
+ * what it applied. The rows stay pending with this as their `last_error` until the next drain trigger.
+ */
+export class OutboxNotAcknowledged extends Error
+{
+	constructor(
+		readonly sent: number,
+		readonly echoed: number,
+	)
+	{
+		super(
+			`Workflowy's server run echoed ${echoed} op(s) of the ${sent} the outbox drain pushed; the rows stay pending until the next drain`,
+		);
+		this.name = "OutboxNotAcknowledged";
+	}
+}
