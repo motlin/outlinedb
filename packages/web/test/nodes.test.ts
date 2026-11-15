@@ -2385,6 +2385,8 @@ describe("nodes standalone op", () =>
 							"a",
 							{
 								parent_id: "p",
+								// workflowy.com's undelete stamps the restored node.
+								modifiedAt: NOW + 1,
 							},
 						),
 					},

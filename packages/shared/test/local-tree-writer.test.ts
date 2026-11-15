@@ -635,6 +635,9 @@ describe("LocalTreeWriter", () =>
 		);
 		vi.setSystemTime(new Date("2026-03-01T00:00:01.000Z"));
 		writer.completeNode("m");
+		const deletedAt = new Date("2026-03-01T00:00:02.000Z");
+		vi.setSystemTime(deletedAt);
+		writer.deleteNode("m");
 
 		const later = new Date("2026-03-01T00:00:01.000Z");
 		expect(
@@ -667,7 +670,7 @@ describe("LocalTreeWriter", () =>
 						note: null,
 						parentId: "q",
 						systemFrom: SEEDED_AT,
-						systemTo: FAR_FUTURE_DATE,
+						systemTo: "2026-03-01 00:00:02.000",
 					},
 				],
 				metadata: [
@@ -682,8 +685,16 @@ describe("LocalTreeWriter", () =>
 						modifiedAt: later,
 						completedAt: later,
 						systemFrom: "2026-03-01 00:00:01.000",
+						systemTo: "2026-03-01 00:00:02.000",
 					},
-					seeded("m", 1),
+					// The drain drops m from c1's mirrorRootIds with an edit, which stamps c1 upstream.
+					{
+						...seeded("c1", 0),
+						modifiedAt: deletedAt,
+						completedAt: later,
+						systemFrom: "2026-03-01 00:00:02.000",
+					},
+					seeded("m", 1, "2026-03-01 00:00:02.000"),
 				],
 			},
 		);
@@ -1074,7 +1085,7 @@ describe("LocalTreeWriter", () =>
 				t4: UUID.test(t4),
 				siblings: siblings("p"),
 				children: siblings("t1"),
-				metadata: metadataVersions(["t1", "t2", "t3", t4]),
+				metadata: metadataVersions(["t1", "t2", "t3", t4, "x"]),
 				content: contentVersions(["t1", "t3"]),
 				mirrors: mirrorVersions(),
 				display: displayVersions(),
@@ -1127,18 +1138,26 @@ describe("LocalTreeWriter", () =>
 					},
 				],
 				metadata: [
-					created(
-						"t1",
-						"a0G",
-						{
-							completedAt: NOW_DATE,
-							layoutMode: "board",
-						},
-					),
-					created("t2", "a0"),
-					created("t3", "a1"),
-					created(t4, "a0V"),
-				].toSorted((left, right) => left.nodeId.localeCompare(right.nodeId)),
+					...[
+						created(
+							"t1",
+							"a0G",
+							{
+								completedAt: NOW_DATE,
+								layoutMode: "board",
+							},
+						),
+						created("t2", "a0"),
+						created("t3", "a1"),
+						created(t4, "a0V"),
+					].toSorted((left, right) => left.nodeId.localeCompare(right.nodeId)),
+					// The drain lists t3 in x's mirrorRootIds with an edit, which stamps x upstream.
+					seeded("x", 0, NOW),
+					{
+						...reversioned("x", 0),
+						modifiedAt: NOW_DATE,
+					},
+				],
 				content: [
 					{
 						id: "t1",
@@ -1353,9 +1372,10 @@ describe("LocalTreeWriter", () =>
 	{
 		const {writer, siblings, metadataVersions, contentVersions, mirrorVersions} = setup();
 		const LATER = "2026-03-02 00:00:00.000";
+		const LATER_DATE = new Date("2026-03-02T00:00:00.000Z");
 
 		writer.deleteNode("c");
-		vi.setSystemTime(new Date("2026-03-02T00:00:00.000Z"));
+		vi.setSystemTime(LATER_DATE);
 		const restored = writer.restoreNode(
 			{
 				id: "c",
@@ -1390,15 +1410,18 @@ describe("LocalTreeWriter", () =>
 						orderKey: "a2",
 					},
 				],
+				// workflowy.com's undelete stamps every restored node's modifiedAt and keeps its createdAt.
 				metadata: [
 					seeded("c", 2, NOW),
 					{
 						...seeded("c", 2),
+						modifiedAt: LATER_DATE,
 						systemFrom: LATER,
 					},
 					seeded("c1", 0, NOW),
 					{
 						...seeded("c1", 0),
+						modifiedAt: LATER_DATE,
 						systemFrom: LATER,
 					},
 				],

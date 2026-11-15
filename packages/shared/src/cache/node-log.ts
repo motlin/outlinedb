@@ -8,6 +8,9 @@
  * - `bulk_create` inserts its `project_trees` at `starting_priority`, children included.
  * - `complete` and `uncomplete` set and clear `completedAt`.
  * - `delete` ends the node's whole subtree, composites included.
+ * - Every other client's `edit` (metadata-only included), `complete` and `uncomplete` stamps the node's `modifiedAt`
+ *   with the op's time, and its `move` and `bulk_move` stamp each moved node and the destination parent, as
+ *   workflowy.com does (.llm/plans/2026-11-10-write-timestamps-audit.md). A stamp never moves `modifiedAt` back.
  *
  * Moves replay for every transaction. The content ops replay only for other clients' transactions: our own creates,
  * edits, completes and deletes are written through when they are pushed, so replaying them as well would version
@@ -211,6 +214,7 @@ interface NodeChange
 	name?: string | null;
 	note?: string | null;
 	completedAt?: Date | null;
+	modifiedAt?: Date;
 }
 
 /** A node the batch creates, written as fresh rows. */
@@ -221,6 +225,8 @@ interface CreatedNode
 	createdAt: Date;
 	completedAt: Date | null;
 	layoutMode: string | null;
+	/** Set when a later op in the batch edits the node; else its `createdAt`. */
+	modifiedAt?: Date;
 }
 
 const noteOrNull = (note: string | null | undefined): string | null =>
@@ -359,7 +365,8 @@ class TreeModel
 		}
 	}
 
-	move({ids, parentId, index}: Move): void
+	/** Apply a move; `modifiedAt`, absent for our own moves, stamps the moved nodes and the destination parent. */
+	move({ids, parentId, index}: Move, modifiedAt?: Date): void
 	{
 		const moving = ids.filter((id) => this.parentOf(id) !== undefined && !this.localWins(id, "placement"));
 		if (moving.length === 0)
@@ -375,6 +382,18 @@ class TreeModel
 		for (const id of moving)
 		{
 			this.parents.set(id, parentId);
+		}
+		if (modifiedAt !== undefined)
+		{
+			for (const id of parentId === null ? moving : [...moving, parentId])
+			{
+				this.change(
+					id,
+					{
+						modifiedAt,
+					},
+				);
+			}
 		}
 	}
 
@@ -403,6 +422,10 @@ class TreeModel
 		if (change.completedAt !== undefined && !this.localWins(id, "completion"))
 		{
 			kept.completedAt = change.completedAt;
+		}
+		if (change.modifiedAt !== undefined)
+		{
+			kept.modifiedAt = change.modifiedAt;
 		}
 		this.changes.set(
 			id,
@@ -554,7 +577,7 @@ function writeModel(unitOfWork: UnitOfWork, model: TreeModel): string[]
 					shortId: uuidToShortId(id),
 					orderKey: orderKeys.get(id) ?? null,
 					createdAt: node.createdAt,
-					modifiedAt: node.createdAt,
+					modifiedAt: node.modifiedAt ?? node.createdAt,
 					completedAt: node.completedAt,
 					layoutMode: node.layoutMode,
 					...current,
@@ -609,13 +632,23 @@ function writeModel(unitOfWork: UnitOfWork, model: TreeModel): string[]
 		{
 			continue;
 		}
-		const completedAt = model.changes.get(id)?.completedAt;
+		const change = model.changes.get(id);
+		const completedAt = change?.completedAt;
+		const stamped = change?.modifiedAt;
 		const next =
 		{
 			orderKey: orderKeys.get(id) ?? row.orderKey,
 			completedAt: completedAt === undefined ? row.completedAt : completedAt,
+			modifiedAt:
+				stamped === undefined || (row.modifiedAt !== null && row.modifiedAt >= stamped)
+					? row.modifiedAt
+					: stamped,
 		};
-		if (next.orderKey === row.orderKey && next.completedAt?.getTime() === row.completedAt?.getTime())
+		if (
+			next.orderKey === row.orderKey &&
+			next.completedAt?.getTime() === row.completedAt?.getTime() &&
+			next.modifiedAt?.getTime() === row.modifiedAt?.getTime()
+		)
 		{
 			continue;
 		}
@@ -660,6 +693,7 @@ function namedNodeIds(ops: readonly LoggedOp[]): string[]
 function applyOp(model: TreeModel, op: LoggedOp, opTime: number): void
 {
 	const projectId = ProjectIdSchema.safeParse(op.data);
+	const modifiedAt = new Date(opTime * 1000);
 	if (op.type === "edit")
 	{
 		const edit = EditSchema.safeParse(op.data);
@@ -669,6 +703,7 @@ function applyOp(model: TreeModel, op: LoggedOp, opTime: number): void
 			model.change(
 				projectid,
 				{
+					modifiedAt,
 					...(name === undefined
 						? {}
 						:
@@ -703,7 +738,8 @@ function applyOp(model: TreeModel, op: LoggedOp, opTime: number): void
 		model.change(
 			projectId.data.projectid,
 			{
-				completedAt: op.type === "complete" ? new Date(opTime * 1000) : null,
+				completedAt: op.type === "complete" ? modifiedAt : null,
+				modifiedAt,
 			},
 		);
 	}
@@ -745,7 +781,7 @@ export function applyNodeOps(
 		}
 		else
 		{
-			model.move(move);
+			model.move(move, ownOps.has(op) ? undefined : new Date(toUnixSec(op.client_timestamp) * 1000));
 		}
 	}
 	return writeModel(unitOfWork, model);

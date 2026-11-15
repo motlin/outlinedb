@@ -170,11 +170,15 @@ function contents(body: NodeChangesResponse)
 					name: node.name,
 					note: node.note,
 					completedAt: node.completedAt,
+					modifiedAt: node.modifiedAt,
 				},
 			]),
 		),
 	);
 }
+
+/** The `modifiedAt` every seeded node starts with. */
+const SEEDED_SEC = 200;
 
 /** The unit of work's system time, in seconds, at which the replayed catch-up runs. */
 const REPLAY_SEC = Math.floor((T0 + TRANSACTION_TIMEOUT_MS + 70_000) / 1000);
@@ -238,15 +242,60 @@ describe("remote transactions reach the nodes change feed", () =>
 		await adapter.catchUp();
 		const body = await changes(seeded.latest);
 
-		expect(shape(body)).toStrictEqual(
+		expect(
+			{
+				...shape(body),
+				contents: contents(body),
+			},
+		).toStrictEqual(
 			{
 				reset: false,
-				changedIds: new Set(["X"]),
+				changedIds: new Set(["X", "P2"]),
 				deletedIds: new Set(),
 				children:
 				{
+					home: ["P1", "P2"],
 					P1: ["Y"],
 					P2: ["Z", "X"],
+				},
+				// workflowy.com stamps the moved node and its new parent, never the old parent or a sibling.
+				contents:
+				{
+					P1:
+					{
+						name: "P1",
+						note: null,
+						completedAt: null,
+						modifiedAt: SEEDED_SEC,
+					},
+					P2:
+					{
+						name: "P2",
+						note: null,
+						completedAt: null,
+						modifiedAt: REPLAY_SEC,
+					},
+					X:
+					{
+						name: "X",
+						note: null,
+						completedAt: null,
+						modifiedAt: REPLAY_SEC,
+					},
+					Y:
+					{
+						name: "Y",
+						note: null,
+						completedAt: null,
+						modifiedAt: SEEDED_SEC,
+					},
+					Z:
+					{
+						name: "Z",
+						note: null,
+						completedAt: null,
+						modifiedAt: SEEDED_SEC,
+					},
 				},
 			},
 		);
@@ -348,12 +397,14 @@ describe("remote transactions reach the nodes change feed", () =>
 						name: "Renamed",
 						note: "A note",
 						completedAt: null,
+						modifiedAt: REPLAY_SEC,
 					},
 					Y:
 					{
 						name: "Y",
 						note: null,
 						completedAt: null,
+						modifiedAt: SEEDED_SEC,
 					},
 				},
 			},
@@ -424,24 +475,28 @@ describe("remote transactions reach the nodes change feed", () =>
 						name: "X",
 						note: null,
 						completedAt: null,
+						modifiedAt: SEEDED_SEC,
 					},
 					N:
 					{
 						name: "New",
 						note: "Its note",
 						completedAt: null,
+						modifiedAt: REPLAY_SEC,
 					},
 					Y:
 					{
 						name: "Y",
 						note: null,
 						completedAt: null,
+						modifiedAt: SEEDED_SEC,
 					},
 					C:
 					{
 						name: "Child",
 						note: null,
 						completedAt: null,
+						modifiedAt: REPLAY_SEC,
 					},
 				},
 			},
@@ -516,7 +571,8 @@ describe("remote transactions reach the nodes change feed", () =>
 		await adapter.catchUp();
 		const completed = await changes(seeded.latest);
 
-		vi.setSystemTime(T0 + 2 * TRANSACTION_TIMEOUT_MS + 140_000);
+		const uncompletedAt = T0 + 2 * TRANSACTION_TIMEOUT_MS + 140_000;
+		vi.setSystemTime(uncompletedAt);
 		respondWith(
 			api,
 			[
@@ -566,12 +622,14 @@ describe("remote transactions reach the nodes change feed", () =>
 							name: "X",
 							note: null,
 							completedAt: REPLAY_SEC,
+							modifiedAt: REPLAY_SEC,
 						},
 						Y:
 						{
 							name: "Y",
 							note: null,
 							completedAt: null,
+							modifiedAt: SEEDED_SEC,
 						},
 					},
 				},
@@ -591,12 +649,14 @@ describe("remote transactions reach the nodes change feed", () =>
 							name: "X",
 							note: null,
 							completedAt: null,
+							modifiedAt: Math.floor(uncompletedAt / 1000),
 						},
 						Y:
 						{
 							name: "Y",
 							note: null,
 							completedAt: null,
+							modifiedAt: SEEDED_SEC,
 						},
 					},
 				},

@@ -723,6 +723,21 @@ export class LocalTreeWriter
 		return new Date(Math.floor(this.now() / 1000) * 1000);
 	}
 
+	/**
+	 * Stamp the original whose mirror a write adds or removes: the drain lists the change in the original's
+	 * `mirrorRootIds` with an `edit`, which stamps the original on workflowy.com
+	 * (.llm/plans/2026-11-10-write-timestamps-audit.md). Metadata only, so it records no outbox aspect.
+	 */
+	private stampMirrorOriginal(pending: PendingWrites, originalId: string): void
+	{
+		pending.setMetadata(
+			originalId,
+			{
+				modifiedAt: this.nowDate(),
+			},
+		);
+	}
+
 	private write<T>(work: (pending: PendingWrites, unitOfWork: UnitOfWork) => T): T
 	{
 		return runUnitOfWork(this.database, (unitOfWork) =>
@@ -982,6 +997,7 @@ export class LocalTreeWriter
 			if (isRecord(mirror) && typeof mirror.originalId === "string" && mirror.isMirrorRoot === true)
 			{
 				pending.touch(id, "mirror");
+				this.stampMirrorOriginal(pending, mirror.originalId);
 				tx.insert(mirrors)
 					.values(
 						{
@@ -1213,6 +1229,8 @@ export class LocalTreeWriter
 					.values(
 						{
 							...metadata,
+							// workflowy.com's undelete stamps every restored node, keeping its createdAt.
+							modifiedAt: this.nowDate(),
 							systemFrom: systemTime,
 							systemTo: FAR_FUTURE_DATE,
 						},
@@ -1267,6 +1285,7 @@ export class LocalTreeWriter
 			if (live && open === undefined)
 			{
 				pending.touch(row.mirrorId, "mirror");
+				this.stampMirrorOriginal(pending, row.originalId);
 				tx.insert(mirrors)
 					.values(
 						{
@@ -1453,6 +1472,7 @@ export class LocalTreeWriter
 				if (!ending.has(originalId))
 				{
 					pending.touch(originalId, "mirror");
+					this.stampMirrorOriginal(pending, originalId);
 				}
 			}
 		}
