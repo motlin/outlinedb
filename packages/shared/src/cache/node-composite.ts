@@ -4,6 +4,7 @@ import type {SQLiteColumn, SQLiteTable} from "drizzle-orm/sqlite-core";
 import
 {
 	account,
+	accountOutbox,
 	accountSettings,
 	aiAssistants,
 	aiMetadata,
@@ -186,6 +187,7 @@ export const NON_NODE_TABLES: Readonly<Record<string, string>> =
 	[getTableName(whatsNewReads)]: "our own What's New entries the user has seen, keyed by entry id",
 	// node_id is a reference, not an owner: ending a node must not end its pending delete row, which still has to drain.
 	[getTableName(outbox)]: "mirror mode's pending upstream deliveries, which outlive the nodes they reference",
+	[getTableName(accountOutbox)]: "mirror mode's pending upstream deliveries of account-level state",
 	...Object.fromEntries(ACCOUNT_COMPOSITE_TABLES.map((table) => [getTableName(table), "the account composite"])),
 };
 

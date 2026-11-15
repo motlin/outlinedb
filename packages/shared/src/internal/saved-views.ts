@@ -158,3 +158,71 @@ export function toggleSavedView(
 		),
 	};
 }
+
+/** Each main-tree saved view of `json` by location key. */
+function mainTreeViews(json: string | undefined): Map<string, SavedView>
+{
+	return new Map(
+		parse(json)
+			.filter((location) => location.treeRoot === NONE)
+			.map((location) => [locationKey(location), location.view]),
+	);
+}
+
+/** The main-tree location keys whose presence differs between two saved views lists. */
+export function changedSavedViewKeys(before: string | undefined, after: string | undefined): string[]
+{
+	const was = mainTreeViews(before);
+	const is = mainTreeViews(after);
+	return [...new Set([...was.keys(), ...is.keys()])].filter((key) => was.has(key) !== is.has(key)).toSorted();
+}
+
+/**
+ * The `saved_views_json_delta` that brings upstream's saved views in line with `json` for the main-tree locations
+ * `keys`: each one present in `json` is added, each one absent is removed. `"{}"` when `keys` is empty.
+ */
+export function savedViewsDelta(json: string | undefined, keys: readonly string[]): string
+{
+	const views = mainTreeViews(json);
+	const added = keys.flatMap((key) => views.get(key) ?? []);
+	const removed = keys.filter((key) => !views.has(key)).map((key) => toView(parseLocationKey(key)));
+	return JSON.stringify(
+		{
+			...(added.length > 0
+				?
+					{
+						added,
+					}
+				: {}),
+			...(removed.length > 0
+				?
+					{
+						removed,
+					}
+				: {}),
+		},
+	);
+}
+
+/** Whether main-tree location `key` is among `json`'s saved views. */
+export function hasSavedView(json: string | undefined, key: string): boolean
+{
+	return mainTreeViews(json).has(key);
+}
+
+/**
+ * `fresh` saved views with the main-tree locations `keys` taken from `local`: each one is dropped from `fresh`, and
+ * appended again when `local` has it.
+ */
+export function overlaySavedViews(
+	fresh: string | undefined,
+	local: string | undefined,
+	keys: ReadonlySet<string>,
+): string
+{
+	const kept = parse(fresh)
+		.filter((location) => location.treeRoot !== NONE || !keys.has(locationKey(location)))
+		.map((location) => location.view);
+	const ours = [...mainTreeViews(local)].flatMap(([key, view]) => (keys.has(key) ? [view] : []));
+	return JSON.stringify([...kept, ...ours]);
+}

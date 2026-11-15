@@ -47,6 +47,7 @@ describe("round-trip test infrastructure", () =>
 			expect(tableNames).toStrictEqual([
 				"__drizzle_migrations",
 				"account",
+				"account_outbox",
 				"account_settings",
 				"ai_assistants",
 				"ai_metadata",
@@ -102,7 +103,7 @@ describe("round-trip test infrastructure", () =>
 				count: number;
 			}>(sql`SELECT COUNT(*) AS count FROM __drizzle_migrations`);
 
-			expect(result.count).toBe(9);
+			expect(result.count).toBe(10);
 
 			sqlite.close();
 		});

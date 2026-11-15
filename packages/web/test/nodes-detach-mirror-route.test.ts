@@ -4,7 +4,14 @@ import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {Hono} from "hono";
 import {join} from "node:path";
-import {CacheService, readPendingOutbox} from "@outlinedb/shared/cache";
+import
+{
+	CacheService,
+	readPendingAccountOutbox,
+	readPendingOutbox,
+	replaceExpansion,
+	runUnitOfWork,
+} from "@outlinedb/shared/cache";
 import * as schema from "@outlinedb/shared/db";
 import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
@@ -124,7 +131,16 @@ function setup(expanded: string[] = [])
 	const createTreesAt = vi.fn<WorkflowyInternalAdapter["createTreesAt"]>(async () =>
 		Promise.reject(new Error("workflowy.com is unreachable")),
 	);
-	const setExpanded = vi.fn<WorkflowyInternalAdapter["setExpanded"]>(async () => Promise.resolve());
+	// Expansion is account state: it lands in the seeded local store with account outbox rows, never pushed first.
+	const setExpanded = vi.fn<WorkflowyInternalAdapter["setExpanded"]>(async () =>
+		Promise.reject(new Error("workflowy.com is unreachable")),
+	);
+	runUnitOfWork(db, (unitOfWork) =>
+	{
+		replaceExpansion(unitOfWork, [], 0);
+	});
+	/** The expansion keys pending for the account outbox. */
+	const opened = () => readPendingAccountOutbox(db).map(({key}) => key);
 	const expansionTest = vi.fn<WorkflowyInternalAdapter["expansionTest"]>(() => (id: string) => expanded.includes(id));
 	const ctx =
 	{
@@ -174,6 +190,7 @@ function setup(expanded: string[] = [])
 	return {
 		createTreesAt,
 		setExpanded,
+		opened,
 		cacheService,
 		post,
 		outline,
@@ -282,18 +299,11 @@ describe("POST /api/v1/nodes/:id/detach-mirror", () =>
 
 	it("opens the copy like the detached row", async () =>
 	{
-		const {setExpanded, post} = setup(["M", "C"]);
+		const {opened, post} = setup(["M", "C"]);
 
 		await post("/M/detach-mirror");
 
-		expect(setExpanded.mock.calls).toStrictEqual([
-			[
-				{
-					copy1: true,
-					copy2: true,
-				},
-			],
-		]);
+		expect(opened()).toStrictEqual(["copy1", "copy2"]);
 	});
 
 	it("refuses a subtree of more than 2000 items without writing", async () =>

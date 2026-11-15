@@ -928,7 +928,7 @@ function opSubject(op: InternalOp): unknown
 }
 
 /** How many of `sent` the server run echoes, in order, matched by type and subject. */
-function echoedCount(sent: readonly InternalOp[], serverRun: readonly InternalOp[]): number
+export function echoedCount(sent: readonly InternalOp[], serverRun: readonly InternalOp[]): number
 {
 	let matched = 0;
 	for (const op of serverRun)

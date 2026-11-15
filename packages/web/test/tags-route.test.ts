@@ -1,7 +1,7 @@
 import {afterEach, describe, expect, it, vi} from "vite-plus/test";
-import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import type {ServerContext} from "../src/server/context.js";
 import {standaloneContext} from "./helpers/local-context.js";
+import {mirrorAccountContext} from "./helpers/mirror-account.js";
 import {httpAppFor} from "./http-app-for.js";
 
 function requester(ctx: ServerContext)
@@ -34,19 +34,19 @@ function requester(ctx: ServerContext)
 	};
 }
 
+/** A mirror whose root metadata holds `tagMeta` as `color.tags`, with workflowy.com down. */
 function setup(tagMeta: Record<string, unknown>)
 {
-	const adapter =
-	{
-		getRootMeta: vi.fn<WorkflowyInternalAdapter["getRootMeta"]>(async () => Promise.resolve(tagMeta)),
-		setRootMeta: vi.fn<WorkflowyInternalAdapter["setRootMeta"]>(async () => Promise.resolve()),
-	};
-	const ctx =
-	{
-		internalAdapter: () => adapter as unknown as WorkflowyInternalAdapter,
-	} as unknown as ServerContext;
+	const {ctx, local} = mirrorAccountContext(
+		{
+			color:
+			{
+				tags: tagMeta,
+			},
+		},
+	);
 	return {
-		adapter,
+		local,
 		request: requester(ctx),
 	};
 }
@@ -55,7 +55,7 @@ describe("GET /api/v1/tags", () =>
 {
 	it("maps root metadata color.tags indexes to color names, skipping unknown indexes", async () =>
 	{
-		const {adapter, request} = setup(
+		const {request} = setup(
 			{
 				"@alice": 0,
 				"#home": 7,
@@ -82,7 +82,6 @@ describe("GET /api/v1/tags", () =>
 				},
 			},
 		);
-		expect(adapter.getRootMeta.mock.calls).toStrictEqual([[["color", "tags"]]]);
 	});
 
 	it("answers an empty map when none are stored", async () =>
@@ -204,7 +203,7 @@ describe("PUT /api/v1/tags/:name", () =>
 {
 	it("stores the color index under the lowercased tag name", async () =>
 	{
-		const {adapter, request} = setup({});
+		const {local, request} = setup({});
 
 		await expect(
 			request(
@@ -224,12 +223,17 @@ describe("PUT /api/v1/tags/:name", () =>
 				},
 			},
 		);
-		expect(adapter.setRootMeta.mock.calls).toStrictEqual([[["color", "tags", "@alice"], 0]]);
+		expect(local.pendingRoot()).toStrictEqual([
+			{
+				path: ["color", "tags", "@alice"],
+				value: 0,
+			},
+		]);
 	});
 
 	it("lowercases a mixed-case hashtag before writing", async () =>
 	{
-		const {adapter, request} = setup({});
+		const {local, request} = setup({});
 
 		await request(
 			"PUT",
@@ -238,17 +242,37 @@ describe("PUT /api/v1/tags/:name", () =>
 				color: "green",
 			},
 		);
+		const pendingAfterSet = local.pendingRoot();
 		await request("DELETE", "/%23TaZebra");
-		expect(adapter.setRootMeta.mock.calls).toStrictEqual([
-			[["color", "tags", "#tazebra"], 3],
-			[["color", "tags", "#tazebra"], undefined],
-		]);
+		expect(
+			{
+				pendingAfterSet,
+				pendingAfterClear: local.pendingRoot(),
+			},
+		).toStrictEqual(
+			{
+				pendingAfterSet: [
+					{
+						path: ["color", "tags", "#tazebra"],
+						value: 3,
+					},
+				],
+				// The clear coalesces into the same pending row, which now delivers the removal.
+				pendingAfterClear: [
+					{
+						path: ["color", "tags", "#tazebra"],
+						value: undefined,
+					},
+				],
+			},
+		);
 	});
 
 	it("maps every palette color to its upstream index", async () =>
 	{
-		const {adapter, request} = setup({});
+		const {local, request} = setup({});
 		const colors = ["red", "orange", "yellow", "green", "blue", "purple", "gray", "teal", "sky", "pink"];
+		const indexes: unknown[] = [];
 		for (const color of colors)
 		{
 			await request(
@@ -258,13 +282,14 @@ describe("PUT /api/v1/tags/:name", () =>
 					color,
 				},
 			);
+			indexes.push(local.pendingRoot()[0]?.value);
 		}
-		expect(adapter.setRootMeta.mock.calls.map(([, index]) => index)).toStrictEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+		expect(indexes).toStrictEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
 	});
 
 	it("rejects colors outside the palette without writing", async () =>
 	{
-		const {adapter, request} = setup({});
+		const {local, request} = setup({});
 
 		await expect(
 			request(
@@ -292,7 +317,7 @@ describe("PUT /api/v1/tags/:name", () =>
 				},
 			},
 		);
-		expect(adapter.setRootMeta.mock.calls).toStrictEqual([]);
+		expect(local.pendingRoot()).toStrictEqual([]);
 	});
 });
 
@@ -300,7 +325,7 @@ describe("DELETE /api/v1/tags/:name", () =>
 {
 	it("removes the lowercased key", async () =>
 	{
-		const {adapter, request} = setup(
+		const {local, request} = setup(
 			{
 				"@alice": 0,
 			},
@@ -315,6 +340,21 @@ describe("DELETE /api/v1/tags/:name", () =>
 				},
 			},
 		);
-		expect(adapter.setRootMeta.mock.calls).toStrictEqual([[["color", "tags", "@alice"], undefined]]);
+		expect(
+			{
+				pending: local.pendingRoot(),
+				tags: local.rootMeta()?.color,
+			},
+		).toStrictEqual(
+			{
+				pending: [
+					{
+						path: ["color", "tags", "@alice"],
+						value: undefined,
+					},
+				],
+				tags: undefined,
+			},
+		);
 	});
 });

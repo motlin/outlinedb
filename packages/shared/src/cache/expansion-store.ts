@@ -2,6 +2,7 @@ import {and, eq, inArray, like} from "drizzle-orm";
 import {expandedNodes, mirrors as mirrorsTable, nodeContent} from "../db/schema.js";
 import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 import {upstreamExpansionKey as expansionKey, virtualId} from "../workflowy/virtual-id.js";
+import {pendingAccountKeys} from "./account-outbox.js";
 import {readImportTime, stampImportTime} from "./account-store.js";
 import type {UnitOfWork} from "./node-composite.js";
 import {closeCurrentVersions, temporalMerge} from "./temporal-merge.js";
@@ -96,9 +97,18 @@ function liveKeys(tx: TemporalTransaction):
 
 const byKey = (row: {shortKey: string}) => row.shortKey;
 
-/** Replace the stored keys and record the seed at `at` (Unix ms), as a whole-tree import does, in the caller's unit of work. */
+/**
+ * Replace the stored keys and record the seed at `at` (Unix ms), as a whole-tree import does, in the caller's unit of
+ * work. A key with a pending account outbox row keeps its local state: the drain has not delivered it yet.
+ */
 export function replaceExpansion(unitOfWork: UnitOfWork, keys: Iterable<string>, at: number): void
 {
+	const pending = pendingAccountKeys(unitOfWork.tx).get("expansion") ?? new Set<string>();
+	const live = liveKeys(unitOfWork.tx);
+	const incoming = [
+		...[...keys].filter((key) => !pending.has(key)),
+		...live.map(byKey).filter((key) => pending.has(key)),
+	];
 	temporalMerge(
 		unitOfWork.tx,
 		{
@@ -112,11 +122,11 @@ export function replaceExpansion(unitOfWork: UnitOfWork, keys: Iterable<string>,
 				shortKey: row.shortKey,
 			}),
 		},
-		[...new Set(keys)].map((shortKey) => (
+		[...new Set(incoming)].map((shortKey) => (
 		{
 			shortKey,
 		})),
-		liveKeys(unitOfWork.tx),
+		live,
 		unitOfWork.systemTime,
 	);
 	stampImportTime(unitOfWork, EXPANDED_NODES_IMPORT_NAME, at);

@@ -33,7 +33,7 @@ import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import type {RestoreInput, WorkflowyInternalAdapter, NewTree} from "@outlinedb/shared/internal";
 import type {Node} from "@outlinedb/shared/types";
 import {HOME_TARGET} from "@outlinedb/shared/types";
-import {internalLinkShortIds, isShortId, parseVirtualShortId} from "@outlinedb/shared/workflowy";
+import {internalLinkShortIds, isShortId, parseVirtualShortId, upstreamExpansionKey} from "@outlinedb/shared/workflowy";
 import {and, eq} from "drizzle-orm";
 import {childFlags, referencesRootLabel} from "../backlinks.js";
 import {loadCalendarInfo} from "../calendar-day.js";
@@ -42,6 +42,7 @@ import type {ServerContext} from "../context.js";
 import type {ServerMode} from "../config.js";
 import type {MirrorInstance} from "../../mirror-path.js";
 import {INTERNAL_API_NOT_CONFIGURED} from "../internal-api.js";
+import {applyMirrorExpansion} from "./expansion.js";
 import {TableMetadataSchema} from "./schemas.js";
 
 /**
@@ -660,7 +661,8 @@ export function countChildren(ctx: ServerContext, parentId: string | null): numb
 /** A client-generated node id: a lowercase UUID, as upstream's own clients mint. */
 
 /** Open each copy whose source row is expanded (upstream `syncWith`); `rootSource` overrides the top copy's source row. */
-export async function openCopies(
+export function openCopies(
+	ctx: ServerContext,
 	adapter: WorkflowyInternalAdapter,
 	sourceToNew: ReadonlyMap<string, string>,
 	rootSource?:
@@ -668,7 +670,7 @@ export async function openCopies(
 		original: string;
 		row: string;
 	},
-): Promise<void>
+): void
 {
 	const isExpanded = adapter.expansionTest();
 	const opened: Record<string, boolean> = {};
@@ -677,11 +679,11 @@ export async function openCopies(
 		const row = sourceId === rootSource?.original ? rootSource.row : sourceId;
 		if (isExpanded(row))
 		{
-			opened[copyId] = true;
+			opened[upstreamExpansionKey(copyId)] = true;
 		}
 	}
 	if (Object.keys(opened).length > 0)
 	{
-		await adapter.setExpanded(opened);
+		applyMirrorExpansion(ctx, opened);
 	}
 }

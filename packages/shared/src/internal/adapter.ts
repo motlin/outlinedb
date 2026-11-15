@@ -30,6 +30,7 @@ import type {AccountSnapshot, StoredAccount} from "../cache/account-store.js";
 import {applyNodeOps, isNodeReplayable} from "../cache/node-log.js";
 import {applyRelationshipOps, isReplayable} from "../cache/relationship-log.js";
 import {applyFileOps} from "../cache/file-log.js";
+import {withPendingAccountState} from "../cache/account-outbox.js";
 import {withRootMetaChanges, withSetting} from "../cache/local-account.js";
 import {applyExpansionDelta, expansionVersion, readExpansion, resolveExpandedIds} from "../cache/expansion-store.js";
 import {advanceTreeTxId, readTreeTxId} from "../cache/tree-transaction.js";
@@ -68,8 +69,9 @@ import {bulkCreateOp, bulkMoveOp, deleteOp, editOp, moveOp, ROOT_PROJECT_ID, und
 import type {Location, NewTree} from "./ops.js";
 import {PushAndPoll} from "./push-and-poll.js";
 import type {InternalOp, PushAndPollOptions, PushInput, PushResult} from "./push-and-poll.js";
+import {drainAccountOutbox} from "./account-outbox-drain.js";
 import {drainOutbox} from "./outbox-drain.js";
-import type {OutboxDrainOptions, OutboxDrainResult} from "./outbox-drain.js";
+import type {OutboxDrainOptions, OutboxDrainResult, OutboxPusher} from "./outbox-drain.js";
 import type {UnitOfWork} from "../cache/node-composite.js";
 
 // oxlint-disable-next-line @typescript-eslint/no-explicit-any
@@ -765,25 +767,64 @@ export class WorkflowyInternalAdapter
 	 */
 	async drainOutbox(options: Omit<OutboxDrainOptions, "now"> = {}): Promise<OutboxDrainResult>
 	{
-		return drainOutbox(
-			this.db,
+		const pusher: OutboxPusher =
+		{
+			session: async () => this.session(),
+			push: async (ops, accept) =>
 			{
-				session: async () => this.session(),
-				push: async (ops, accept) =>
+				const input: PushInput =
 				{
-					const input: PushInput =
-					{
-						ops,
-					};
-					this.acknowledgers.set(input, accept);
-					await this.pusher.pushAndPoll(input);
-				},
+					ops,
+				};
+				this.acknowledgers.set(input, accept);
+				await this.pusher.pushAndPoll(input);
 			},
+		};
+		const nodes = await drainOutbox(
+			this.db,
+			pusher,
 			{
 				...options,
 				now: this.now,
 			},
 		);
+		// After the nodes: a star or setting may name a node whose create was pending.
+		const account = await drainAccountOutbox(
+			this.db,
+			{
+				...pusher,
+				rootMetadata: async () => (await this.client.bootstrap()).rootMetadata,
+				changeSetting: async (name, value) =>
+				{
+					const session = await this.session();
+					await this.postOk(
+						"/change_settings",
+						new URLSearchParams(
+							{
+								[name]: value,
+								clientId: session.clientId,
+							},
+						),
+					);
+				},
+				pushExpansions: async (expansionsDelta) =>
+				{
+					await this.session();
+					await this.pusher.pushAndPoll(
+						{
+							expansionsDelta,
+						},
+					);
+				},
+			},
+			{
+				now: this.now,
+			},
+		);
+		return {
+			ops: nodes.ops + account.ops,
+			closed: nodes.closed + account.closed,
+		};
 	}
 
 	/** Create one node at an exact slot with a `bulk_create`; the id is chosen here, so none is read back. */
@@ -2827,6 +2868,15 @@ export class WorkflowyInternalAdapter
 		};
 	}
 
+	/**
+	 * Make sure the account tables hold the account state before a local read or write: a missing snapshot waits on a
+	 * bootstrap, and a stale one refreshes in the background (pending account outbox keys keep their local values).
+	 */
+	async loadAccountState(): Promise<void>
+	{
+		await this.snapshot();
+	}
+
 	/** The root (Home) metadata value at `path`; the whole object for an empty path. */
 	async getRootMeta(path: string[]): Promise<unknown>
 	{
@@ -3104,7 +3154,8 @@ export class WorkflowyInternalAdapter
 		const fetchedAt = this.now();
 		runUnitOfWork(this.db, (unitOfWork) =>
 		{
-			writeAccountSnapshot(unitOfWork, snapshot);
+			// A key the account outbox has not delivered yet keeps its local value.
+			writeAccountSnapshot(unitOfWork, withPendingAccountState(unitOfWork.tx, snapshot));
 			stampImportTime(unitOfWork, ACCOUNT_IMPORT_NAME, fetchedAt);
 		});
 	}

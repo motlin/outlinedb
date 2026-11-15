@@ -1,7 +1,9 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from "vite-plus/test";
 import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import type {ServerContext} from "../src/server/context.js";
+import {readExpansion, replaceExpansion, runUnitOfWork} from "@outlinedb/shared/cache";
 import {standaloneContext} from "./helpers/local-context.js";
+import {mirrorAccountContext} from "./helpers/mirror-account.js";
 import {httpAppFor} from "./http-app-for.js";
 import
 {
@@ -57,28 +59,47 @@ describe("expansion route", () =>
 		};
 	}
 
-	function setup()
+	/**
+	 * A mirror whose expansion store is seeded with `seeded` keys (unseeded when null), with workflowy.com down:
+	 * every expansion write must land locally with account outbox rows.
+	 */
+	function setup(seeded: string[] | null = [])
 	{
-		const adapter =
+		const reads =
 		{
 			getExpansionChanges: vi.fn<WorkflowyInternalAdapter["getExpansionChanges"]>(() => (
 			{
 				version: CURRENT,
 				expandedIds: [ALPHA],
 			})),
-			setExpanded: vi.fn<WorkflowyInternalAdapter["setExpanded"]>(async () => Promise.resolve()),
 			getLeftBarExpansionKeys: vi.fn<WorkflowyInternalAdapter["getLeftBarExpansionKeys"]>(() => [
 				"leftbar__home__None/x/__abcdefgh",
 			]),
-			setRawExpansionKeys: vi.fn<WorkflowyInternalAdapter["setRawExpansionKeys"]>(async () => Promise.resolve()),
 		};
-		const ctx =
+		const {ctx, adapter: writes, outboxWritten, local} = mirrorAccountContext({}, {}, reads);
+		const adapter =
 		{
-			internalAuth: {},
-			internalAdapter: () => adapter as unknown as WorkflowyInternalAdapter,
-		} as unknown as ServerContext;
+			...writes,
+			...reads,
+		};
+		if (seeded !== null)
+		{
+			runUnitOfWork(ctx.db, (unitOfWork) =>
+			{
+				replaceExpansion(unitOfWork, seeded, 0);
+			});
+			// The clock is fake: the next unit of work must not share the seed's system time.
+			vi.advanceTimersByTime(1);
+		}
+		const expansionWritten = vi.fn<() => void>();
+		ctx.expansionWritten = expansionWritten;
 		return {
 			adapter,
+			outboxWritten,
+			local,
+			expansionWritten,
+			// oxlint-disable-next-line unicorn/no-array-sort -- the test tsconfig lib has no toSorted
+			keys: () => [...(readExpansion(ctx.db) ?? [])].sort(),
 			request: requester(ctx),
 		};
 	}
@@ -218,9 +239,9 @@ describe("expansion route", () =>
 
 	describe("PATCH /api/v1/expansion", () =>
 	{
-		it("debounces PATCHes into one push 500ms after the last, the latest value per id winning", async () =>
+		it("applies each PATCH at once to the local store, each changed key pending for the outbox, with no push", async () =>
 		{
-			const {adapter, request} = setup();
+			const {adapter, outboxWritten, local, expansionWritten, keys, request} = setup(["5e6f7a8b"]);
 
 			const first = await request(
 				"PATCH",
@@ -232,7 +253,7 @@ describe("expansion route", () =>
 					},
 				},
 			);
-			await vi.advanceTimersByTimeAsync(200);
+			await vi.advanceTimersByTimeAsync(1);
 			const second = await request(
 				"PATCH",
 				{
@@ -242,16 +263,17 @@ describe("expansion route", () =>
 					},
 				},
 			);
-			await vi.advanceTimersByTimeAsync(499);
-			const callsBeforeFlush = adapter.setExpanded.mock.calls.length;
-			await vi.advanceTimersByTimeAsync(1);
+			await vi.advanceTimersByTimeAsync(1000);
 
 			expect(
 				{
 					first,
 					second,
-					callsBeforeFlush,
-					calls: adapter.setExpanded.mock.calls,
+					keys: keys(),
+					pending: local.pendingExpansion(),
+					announced: expansionWritten.mock.calls.length,
+					drainStarted: outboxWritten.mock.calls.length > 0,
+					pushes: adapter.setExpanded.mock.calls,
 				},
 			).toStrictEqual(
 				{
@@ -267,24 +289,21 @@ describe("expansion route", () =>
 						body: null,
 						etag: null,
 					},
-					callsBeforeFlush: 0,
-					calls: [
-						[
-							{
-								[ALPHA]: true,
-								[BRAVO]: false,
-							},
-						],
-					],
+					keys: ["1a2b3c4d"],
+					pending: ["1a2b3c4d", "5e6f7a8b"],
+					announced: 2,
+					drainStarted: true,
+					pushes: [],
 				},
 			);
 		});
 
-		it("starts a new batch after a flush", async () =>
+		it("answers a resync-required 503 on an unseeded store rather than writing a partial expanded set", async () =>
 		{
-			const {adapter, request} = setup();
+			const {local, request} = setup(null);
+			vi.spyOn(console, "error").mockImplementation(() => {});
 
-			await request(
+			const res = await request(
 				"PATCH",
 				{
 					changes:
@@ -293,30 +312,18 @@ describe("expansion route", () =>
 					},
 				},
 			);
-			await vi.advanceTimersByTimeAsync(500);
-			await request(
-				"PATCH",
+
+			expect(
 				{
-					changes:
-					{
-						[BRAVO]: false,
-					},
+					status: res.status,
+					pending: local.pendingExpansion(),
+				},
+			).toStrictEqual(
+				{
+					status: 503,
+					pending: [],
 				},
 			);
-			await vi.advanceTimersByTimeAsync(500);
-
-			expect(adapter.setExpanded.mock.calls).toStrictEqual([
-				[
-					{
-						[ALPHA]: true,
-					},
-				],
-				[
-					{
-						[BRAVO]: false,
-					},
-				],
-			]);
 		});
 
 		it.each([
@@ -336,15 +343,14 @@ describe("expansion route", () =>
 			],
 		])("rejects %j", async (body) =>
 		{
-			const {adapter, request} = setup();
+			const {local, request} = setup();
 
 			const res = await request("PATCH", body);
-			await vi.advanceTimersByTimeAsync(500);
 
 			expect(
 				{
 					res,
-					calls: adapter.setExpanded.mock.calls,
+					calls: local.pendingExpansion(),
 				},
 			).toStrictEqual(
 				{
@@ -358,130 +364,6 @@ describe("expansion route", () =>
 						etag: null,
 					},
 					calls: [],
-				},
-			);
-		});
-
-		it("retries a failed push with the failed changes merged under newer PATCHes", async () =>
-		{
-			const {adapter, request} = setup();
-			adapter.setExpanded.mockRejectedValueOnce(new Error("push failed"));
-			vi.spyOn(console, "error").mockImplementation(() => {});
-
-			await request(
-				"PATCH",
-				{
-					changes:
-					{
-						[ALPHA]: true,
-					},
-				},
-			);
-			await vi.advanceTimersByTimeAsync(500);
-			await request(
-				"PATCH",
-				{
-					changes:
-					{
-						[BRAVO]: false,
-					},
-				},
-			);
-			await vi.advanceTimersByTimeAsync(1000);
-
-			expect(adapter.setExpanded.mock.calls).toStrictEqual([
-				[
-					{
-						[ALPHA]: true,
-					},
-				],
-				[
-					{
-						[ALPHA]: true,
-						[BRAVO]: false,
-					},
-				],
-			]);
-		});
-
-		it("retries with the newer value when a later PATCH overrides a failed change", async () =>
-		{
-			const {adapter, request} = setup();
-			adapter.setExpanded.mockRejectedValueOnce(new Error("push failed"));
-			vi.spyOn(console, "error").mockImplementation(() => {});
-
-			await request(
-				"PATCH",
-				{
-					changes:
-					{
-						[ALPHA]: true,
-					},
-				},
-			);
-			await vi.advanceTimersByTimeAsync(500);
-			await request(
-				"PATCH",
-				{
-					changes:
-					{
-						[ALPHA]: false,
-					},
-				},
-			);
-			await vi.advanceTimersByTimeAsync(1000);
-
-			expect(adapter.setExpanded.mock.calls).toStrictEqual([
-				[
-					{
-						[ALPHA]: true,
-					},
-				],
-				[
-					{
-						[ALPHA]: false,
-					},
-				],
-			]);
-		});
-
-		it("retries on a 1s/2s/4s/8s backoff, gives up after 4 retries and logs", async () =>
-		{
-			const {adapter, request} = setup();
-			adapter.setExpanded.mockRejectedValue(new Error("push failed"));
-			const errors = vi.spyOn(console, "error").mockImplementation(() => {});
-
-			await request(
-				"PATCH",
-				{
-					changes:
-					{
-						[ALPHA]: true,
-					},
-				},
-			);
-			await vi.advanceTimersByTimeAsync(500);
-			const attemptTimes: number[] = [];
-			let elapsed = 0;
-			for (const step of [999, 1, 1999, 1, 3999, 1, 7999, 1, 30_000])
-			{
-				// oxlint-disable-next-line no-await-in-loop -- the clock advances sequentially by design.
-				await vi.advanceTimersByTimeAsync(step);
-				elapsed += step;
-				attemptTimes.push(adapter.setExpanded.mock.calls.length);
-			}
-
-			expect(
-				{
-					attemptTimes,
-					elapsed,
-					logged: errors.mock.calls.length > 0,
-				},
-			).toStrictEqual(
-				{
-					attemptTimes: [1, 2, 2, 3, 3, 4, 4, 5, 5],
-					elapsed: 45_000,
-					logged: true,
 				},
 			);
 		});
@@ -505,9 +387,9 @@ describe("expansion route", () =>
 			);
 		});
 
-		it("pushes raw keys once, 500ms after the last PATCH", async () =>
+		it("stores raw keys locally at once, pending for the outbox, with no push", async () =>
 		{
-			const {adapter, request} = setup();
+			const {adapter, local, keys, request} = setup();
 
 			const first = await request(
 				"PATCH",
@@ -520,15 +402,13 @@ describe("expansion route", () =>
 				"",
 				"/left-bar",
 			);
-			await vi.advanceTimersByTimeAsync(499);
-			const before = adapter.setRawExpansionKeys.mock.calls.length;
-			await vi.advanceTimersByTimeAsync(1);
 
 			expect(
 				{
 					first,
-					before,
-					calls: adapter.setRawExpansionKeys.mock.calls,
+					keys: keys(),
+					pending: local.pendingExpansion(),
+					pushes: adapter.setRawExpansionKeys.mock.calls,
 				},
 			).toStrictEqual(
 				{
@@ -538,21 +418,16 @@ describe("expansion route", () =>
 						body: null,
 						etag: null,
 					},
-					before: 0,
-					calls: [
-						[
-							{
-								"leftbar__home__None/x/__abcdefgh": true,
-							},
-						],
-					],
+					keys: ["leftbar__home__None/x/__abcdefgh"],
+					pending: ["leftbar__home__None/x/__abcdefgh"],
+					pushes: [],
 				},
 			);
 		});
 
 		it("rejects keys that are not left-bar keys", async () =>
 		{
-			const {adapter, request} = setup();
+			const {local, request} = setup();
 
 			const res = await request(
 				"PATCH",
@@ -565,12 +440,11 @@ describe("expansion route", () =>
 				"",
 				"/left-bar",
 			);
-			await vi.advanceTimersByTimeAsync(1000);
 
 			expect(
 				{
 					status: res.status,
-					calls: adapter.setRawExpansionKeys.mock.calls,
+					calls: local.pendingExpansion(),
 				},
 			).toStrictEqual(
 				{

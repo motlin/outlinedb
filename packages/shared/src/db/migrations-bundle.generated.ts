@@ -67,6 +67,13 @@ export const journal =
 			tag: "0008_outbox",
 			breakpoints: true,
 		},
+		{
+			idx: 9,
+			version: "6",
+			when: 1_794_770_922_420,
+			tag: "0009_account_outbox",
+			breakpoints: true,
+		},
 	],
 } as const;
 
@@ -81,4 +88,5 @@ export const migrations: Record<string, string> =
 	m0006: "-- LocalTreeWriter now writes order_key itself and leaves priority null, so the insert trigger derives order_key from\n-- priority only for rows inserted without one. A new version that copies its row keeps the copied key.\nDROP TRIGGER `node_metadata_order_key_insert`;--> statement-breakpoint\nCREATE TRIGGER `node_metadata_order_key_insert` AFTER INSERT ON `node_metadata`\nWHEN NEW.`order_key` IS NULL\nBEGIN\n\tUPDATE `node_metadata` SET `order_key` = (\n\tSELECT char(CASE WHEN n >= 0 THEN 96 + len ELSE 91 - len END) || substr(substr('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', (v / 916132832) % 62 + 1, 1) || substr('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', (v / 14776336) % 62 + 1, 1) || substr('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', (v / 238328) % 62 + 1, 1) || substr('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', (v / 3844) % 62 + 1, 1) || substr('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', (v / 62) % 62 + 1, 1) || substr('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', v % 62 + 1, 1), 7 - len)\n\tFROM (\n\t\tSELECT n, len, CASE WHEN n >= 0 THEN n ELSE (CASE len WHEN 1 THEN 62 WHEN 2 THEN 3844 WHEN 3 THEN 238328 WHEN 4 THEN 14776336 WHEN 5 THEN 916132832 WHEN 6 THEN 56800235584 END) + n END AS v\n\t\tFROM (\n\t\t\tSELECT n, CASE WHEN n >= 0 THEN CASE WHEN n < 62 THEN 1 WHEN n < 3844 THEN 2 WHEN n < 238328 THEN 3 WHEN n < 14776336 THEN 4 WHEN n < 916132832 THEN 5 ELSE 6 END ELSE CASE WHEN -n <= 62 THEN 1 WHEN -n <= 3844 THEN 2 WHEN -n <= 238328 THEN 3 WHEN -n <= 14776336 THEN 4 WHEN -n <= 916132832 THEN 5 ELSE 6 END END AS len\n\t\t\tFROM (SELECT coalesce(NEW.priority, 0) AS n)\n\t\t)\n\t)\n)\n\tWHERE `node_id` = NEW.`node_id` AND `system_from` = NEW.`system_from`;\nEND;\n",
 	m0007: "-- Every writer sets order_key itself now, and imports map upstream positions onto it, so priority and the triggers\n-- that derived order_key from it go.\nDROP TRIGGER `node_metadata_order_key_insert`;--> statement-breakpoint\nDROP TRIGGER `node_metadata_order_key_update`;--> statement-breakpoint\nALTER TABLE `node_metadata` DROP COLUMN `priority`;\n",
 	m0008: "CREATE TABLE `outbox` (\n\t`node_id` text NOT NULL,\n\t`aspect` text NOT NULL,\n\t`enqueued_at` text NOT NULL,\n\t`last_error` text,\n\t`system_from` text NOT NULL,\n\t`system_to` text NOT NULL,\n\tPRIMARY KEY(`node_id`, `aspect`, `system_from`)\n);\n--> statement-breakpoint\nCREATE UNIQUE INDEX `outbox_system_to_idx` ON `outbox` (`node_id`,`aspect`,`system_to`);--> statement-breakpoint\nCREATE INDEX `outbox_closed_at_idx` ON `outbox` (`system_to`) WHERE system_to < '9999-12-31 23:59:59';\n",
+	m0009: "CREATE TABLE `account_outbox` (\n\t`subject` text NOT NULL,\n\t`key` text NOT NULL,\n\t`enqueued_at` text NOT NULL,\n\t`last_error` text,\n\t`system_from` text NOT NULL,\n\t`system_to` text NOT NULL,\n\tPRIMARY KEY(`subject`, `key`, `system_from`)\n);\n--> statement-breakpoint\nCREATE UNIQUE INDEX `account_outbox_system_to_idx` ON `account_outbox` (`subject`,`key`,`system_to`);--> statement-breakpoint\nCREATE INDEX `account_outbox_closed_at_idx` ON `account_outbox` (`system_to`) WHERE system_to < '9999-12-31 23:59:59';\n",
 };

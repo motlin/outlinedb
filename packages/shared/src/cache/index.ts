@@ -76,6 +76,17 @@ export
 	type PendingOutboxRow,
 	readPendingOutbox,
 } from "./outbox.js";
+export
+{
+	ACCOUNT_OUTBOX_SUBJECTS,
+	type AccountOutboxEntry,
+	AccountOutboxRecorder,
+	type AccountOutboxSubject,
+	pendingAccountKeys,
+	type PendingAccountOutboxRow,
+	readPendingAccountOutbox,
+	rootMetadataKey,
+} from "./account-outbox.js";
 export {type ApplyRowsResult, applyNodeRowsBatch, applyRows, type NormalizedRowsByTable} from "./importer.js";
 export
 {
@@ -127,6 +138,7 @@ export
 } from "./account-store.js";
 export
 {
+	applyExpansionDelta,
 	applyLocalExpansionDelta,
 	EXPANDED_NODES_IMPORT_NAME,
 	expansionVersion,
@@ -135,7 +147,7 @@ export
 	resolveExpandedIds,
 } from "./expansion-store.js";
 export {LocalAccount, provisionLocalAccount, withRootMetaChanges, withSetting} from "./local-account.js";
-export type {LocalIdentity} from "./local-account.js";
+export type {LocalAccountOptions, LocalIdentity} from "./local-account.js";
 export {markWhatsNewRead, readWhatsNewReads} from "./whats-new-store.js";
 export {accountVersion, readAccountState, writeAccountState} from "./account-seed.js";
 export {effectiveCompletedAt} from "./effective-completion.js";

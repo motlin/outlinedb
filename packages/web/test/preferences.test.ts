@@ -3,7 +3,17 @@ import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
 import {afterEach, describe, expect, it, vi} from "vite-plus/test";
-import {CacheService, readPendingOutbox, storeInternalMetadata} from "@outlinedb/shared/cache";
+import
+{
+	CacheService,
+	LocalAccount,
+	readAccountSnapshot,
+	readPendingAccountOutbox,
+	readPendingOutbox,
+	runUnitOfWork,
+	storeInternalMetadata,
+	writeAccountSnapshot,
+} from "@outlinedb/shared/cache";
 import * as schema from "@outlinedb/shared/db";
 import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import type {ServerContext} from "../src/server/context.js";
@@ -19,52 +29,24 @@ describe("preferences route", () =>
 
 	const NOTES = "1a2b3c4d-0000-4000-8000-000000000001";
 
-	/** Apply root-metadata changes to a plain object, as the real adapter's cache does. */
-	function applyChanges(meta: Record<string, unknown>, changes: MetadataChange[]): void
-	{
-		for (const {path, value} of changes)
-		{
-			let target = meta;
-			for (const key of path.slice(0, -1))
-			{
-				target[key] ??= {};
-				target = target[key] as Record<string, unknown>;
-			}
-			const last = path.at(-1)!;
-			if (value === undefined)
-			{
-				Reflect.deleteProperty(target, last);
-			}
-			else
-			{
-				target[last] = value;
-			}
-		}
-	}
-
 	function isRecord(value: unknown): value is Record<string, unknown>
 	{
 		return typeof value === "object" && value !== null;
 	}
 
+	/**
+	 * A mirror whose account tables hold `meta` and `settings` (none, and no internal API, when `meta` is undefined).
+	 * workflowy.com is down: an account write that pushed first would fail, so every write must land locally with an
+	 * account outbox row.
+	 */
 	function setup(meta: Record<string, unknown> | undefined, settings: Record<string, unknown> = {})
 	{
+		const unreachable = async () => Promise.reject(new Error("workflowy.com is unreachable"));
 		const adapter =
 		{
-			getSetting: vi.fn<WorkflowyInternalAdapter["getSetting"]>(async (name) => Promise.resolve(settings[name])),
-			setSetting: vi.fn<WorkflowyInternalAdapter["setSetting"]>(async (name, value) =>
-			{
-				settings[name] = value;
-				return Promise.resolve();
-			}),
-			getRootMeta: vi.fn<WorkflowyInternalAdapter["getRootMeta"]>(async (path) =>
-				Promise.resolve(path.reduce<unknown>((value, key) => (isRecord(value) ? value[key] : undefined), meta)),
-			),
-			setRootMetaValues: vi.fn<WorkflowyInternalAdapter["setRootMetaValues"]>(async (changes) =>
-			{
-				applyChanges(meta!, changes);
-				return Promise.resolve();
-			}),
+			loadAccountState: vi.fn<WorkflowyInternalAdapter["loadAccountState"]>(async () => Promise.resolve()),
+			setSetting: vi.fn<WorkflowyInternalAdapter["setSetting"]>(unreachable),
+			setRootMetaValues: vi.fn<WorkflowyInternalAdapter["setRootMetaValues"]>(unreachable),
 			getAccount: vi.fn<WorkflowyInternalAdapter["getAccount"]>(async () =>
 				Promise.resolve(
 					{
@@ -88,6 +70,25 @@ describe("preferences route", () =>
 				migrationsFolder: join(import.meta.dirname, "../../shared/src/db/migrations"),
 			},
 		);
+		if (meta !== undefined)
+		{
+			runUnitOfWork(db, (unitOfWork) =>
+			{
+				writeAccountSnapshot(
+					unitOfWork,
+					{
+						account:
+						{
+							userId: "42",
+							dateJoinedSec: 1_500_000_000,
+						},
+						rootMetadata: meta,
+						settings,
+						visibleFeatures: [],
+					},
+				);
+			});
+		}
 		const ctx =
 		{
 			db,
@@ -98,6 +99,27 @@ describe("preferences route", () =>
 			} as ServerContext["config"],
 			internalAdapter: () => (meta ? (adapter as unknown as WorkflowyInternalAdapter) : undefined),
 		} as unknown as ServerContext;
+		const stored = () => readAccountSnapshot(db);
+		const pending = (subject: string) => readPendingAccountOutbox(db).filter((row) => row.subject === subject);
+		/** What the account outbox would deliver: each pending root metadata path and its local value. */
+		const local =
+		{
+			pendingRoot: () =>
+				pending("root_metadata").map(({key}) =>
+				{
+					const path = key.split("\u001F");
+					return {
+						path,
+						value: path.reduce<unknown>(
+							(value, segment) => (isRecord(value) ? value[segment] : undefined),
+							stored()?.rootMetadata,
+						),
+					};
+				}),
+			/** Each pending setting and its local value. */
+			pendingSettings: () => pending("setting").map(({key}) => [key, stored()?.settings[key]]),
+			rootMeta: () => stored()?.rootMetadata,
+		};
 		const app = httpAppFor(ctx);
 		const request = async (method: string, path: string, body?: unknown) =>
 		{
@@ -125,7 +147,7 @@ describe("preferences route", () =>
 			};
 		};
 		return {
-			adapter,
+			local,
 			request,
 		};
 	}
@@ -300,7 +322,7 @@ describe("preferences route", () =>
 
 		it("round-trips same_color_for_links as sameColorForLinks", async () =>
 		{
-			const {adapter, request} = setup(
+			const {local, request} = setup(
 				{},
 				{
 					same_color_for_links: "yes",
@@ -320,7 +342,7 @@ describe("preferences route", () =>
 				{
 					read,
 					written,
-					settings: adapter.setSetting.mock.calls,
+					settings: local.pendingSettings(),
 				},
 			).toStrictEqual(
 				{
@@ -368,7 +390,7 @@ describe("preferences route", () =>
 
 		it("round-trips the theme as a string", async () =>
 		{
-			const {adapter, request} = setup(
+			const {local, request} = setup(
 				{},
 				{
 					theme: "dark",
@@ -388,7 +410,7 @@ describe("preferences route", () =>
 				{
 					read,
 					written,
-					settings: adapter.setSetting.mock.calls,
+					settings: local.pendingSettings(),
 				},
 			).toStrictEqual(
 				{
@@ -417,7 +439,7 @@ describe("preferences route", () =>
 
 		it("round-trips the font as a string", async () =>
 		{
-			const {adapter, request} = setup(
+			const {local, request} = setup(
 				{},
 				{
 					font: "system",
@@ -437,7 +459,7 @@ describe("preferences route", () =>
 				{
 					read,
 					written,
-					settings: adapter.setSetting.mock.calls,
+					settings: local.pendingSettings(),
 				},
 			).toStrictEqual(
 				{
@@ -577,7 +599,7 @@ describe("preferences route", () =>
 				{
 					reads,
 					writeStatus: write.status,
-					settings: on.adapter.setSetting.mock.calls,
+					settings: on.local.pendingSettings(),
 				},
 			).toStrictEqual(
 				{
@@ -615,7 +637,7 @@ describe("preferences route", () =>
 			);
 		});
 
-		it("answers changelog.read as changelogRead, keeping only boolean flags, and null when the account has none", async () =>
+		it("answers changelog.read as changelogRead, and null when the account has none", async () =>
 		{
 			const read = setup(
 				{
@@ -625,7 +647,6 @@ describe("preferences route", () =>
 						{
 							may27_2025: true,
 							june11_2025: false,
-							bogus: "yes",
 						},
 						liked:
 						{
@@ -883,7 +904,7 @@ describe("preferences route", () =>
 	{
 		it("writes dateFormat once and answers the merged preferences", async () =>
 		{
-			const {adapter, request} = setup(
+			const {local, request} = setup(
 				{
 					timeFormat: "HH:mm",
 				},
@@ -900,7 +921,7 @@ describe("preferences route", () =>
 			expect(
 				{
 					response,
-					writes: adapter.setRootMetaValues.mock.calls,
+					writes: local.pendingRoot(),
 				},
 			).toStrictEqual(
 				{
@@ -915,14 +936,10 @@ describe("preferences route", () =>
 						},
 					},
 					writes: [
-						[
-							[
-								{
-									path: ["dateFormat"],
-									value: "YYYY-MM-DD ddd",
-								},
-							],
-						],
+						{
+							path: ["dateFormat"],
+							value: "YYYY-MM-DD ddd",
+						},
 					],
 				},
 			);
@@ -937,7 +954,7 @@ describe("preferences route", () =>
 					rootId: "cal",
 				},
 			};
-			const {adapter, request} = setup(meta);
+			const {local, request} = setup(meta);
 
 			const response = await request(
 				"PATCH",
@@ -950,8 +967,8 @@ describe("preferences route", () =>
 			expect(
 				{
 					response,
-					writes: adapter.setRootMetaValues.mock.calls,
-					meta,
+					writes: local.pendingRoot(),
+					meta: local.rootMeta(),
 				},
 			).toStrictEqual(
 				{
@@ -965,14 +982,10 @@ describe("preferences route", () =>
 						},
 					},
 					writes: [
-						[
-							[
-								{
-									path: ["calendar", "tooltip_seen"],
-									value: true,
-								},
-							],
-						],
+						{
+							path: ["calendar", "tooltip_seen"],
+							value: true,
+						},
 					],
 					meta:
 					{
@@ -989,7 +1002,7 @@ describe("preferences route", () =>
 		it("writes emojiSelected at emoji.options.selected", async () =>
 		{
 			const meta: Record<string, unknown> = {};
-			const {adapter, request} = setup(meta);
+			const {local, request} = setup(meta);
 
 			const response = await request(
 				"PATCH",
@@ -1002,8 +1015,8 @@ describe("preferences route", () =>
 			expect(
 				{
 					response,
-					writes: adapter.setRootMetaValues.mock.calls,
-					meta,
+					writes: local.pendingRoot(),
+					meta: local.rootMeta(),
 				},
 			).toStrictEqual(
 				{
@@ -1017,14 +1030,10 @@ describe("preferences route", () =>
 						},
 					},
 					writes: [
-						[
-							[
-								{
-									path: ["emoji", "options", "selected"],
-									value: "noto",
-								},
-							],
-						],
+						{
+							path: ["emoji", "options", "selected"],
+							value: "noto",
+						},
 					],
 					meta:
 					{
@@ -1049,7 +1058,7 @@ describe("preferences route", () =>
 					mailboxId: "mb",
 				},
 			};
-			const {adapter, request} = setup(meta);
+			const {local, request} = setup(meta);
 
 			const response = await request(
 				"PATCH",
@@ -1063,8 +1072,8 @@ describe("preferences route", () =>
 			expect(
 				{
 					response,
-					writes: adapter.setRootMetaValues.mock.calls,
-					meta,
+					writes: local.pendingRoot(),
+					meta: local.rootMeta(),
 				},
 			).toStrictEqual(
 				{
@@ -1079,18 +1088,14 @@ describe("preferences route", () =>
 						},
 					},
 					writes: [
-						[
-							[
-								{
-									path: ["ai", "embeddingStatus"],
-									value: "requested",
-								},
-								{
-									path: ["ai", "embedding_tooltip_dismissed"],
-									value: true,
-								},
-							],
-						],
+						{
+							path: ["ai", "embeddingStatus"],
+							value: "requested",
+						},
+						{
+							path: ["ai", "embedding_tooltip_dismissed"],
+							value: true,
+						},
 					],
 					meta:
 					{
@@ -1107,7 +1112,7 @@ describe("preferences route", () =>
 
 		it("writes slashDiscovered at slash.discovered", async () =>
 		{
-			const {adapter, request} = setup({});
+			const {local, request} = setup({});
 
 			const response = await request(
 				"PATCH",
@@ -1120,7 +1125,7 @@ describe("preferences route", () =>
 			expect(
 				{
 					response,
-					writes: adapter.setRootMetaValues.mock.calls,
+					writes: local.pendingRoot(),
 				},
 			).toStrictEqual(
 				{
@@ -1134,22 +1139,18 @@ describe("preferences route", () =>
 						},
 					},
 					writes: [
-						[
-							[
-								{
-									path: ["slash", "discovered"],
-									value: true,
-								},
-							],
-						],
+						{
+							path: ["slash", "discovered"],
+							value: true,
+						},
 					],
 				},
 			);
 		});
 
-		it("writes several fields in one push and removes a field set to null", async () =>
+		it("writes several fields and removes a field set to null, each pending for the outbox", async () =>
 		{
-			const {adapter, request} = setup(
+			const {local, request} = setup(
 				{
 					dateFormat: "MMM D",
 					notesRootId: NOTES,
@@ -1168,7 +1169,7 @@ describe("preferences route", () =>
 			expect(
 				{
 					response,
-					writes: adapter.setRootMetaValues.mock.calls,
+					writes: local.pendingRoot(),
 				},
 			).toStrictEqual(
 				{
@@ -1183,18 +1184,14 @@ describe("preferences route", () =>
 						},
 					},
 					writes: [
-						[
-							[
-								{
-									path: ["weekStartDay"],
-									value: 0,
-								},
-								{
-									path: ["notesRootId"],
-									value: undefined,
-								},
-							],
-						],
+						{
+							path: ["notesRootId"],
+							value: undefined,
+						},
+						{
+							path: ["weekStartDay"],
+							value: 0,
+						},
 					],
 				},
 			);
@@ -1202,7 +1199,7 @@ describe("preferences route", () =>
 
 		it("rejects a changelogRead patch without writing, since upstream's changelog.read is read-only here", async () =>
 		{
-			const {adapter, request} = setup(
+			const {local, request} = setup(
 				{
 					changelog:
 					{
@@ -1228,7 +1225,7 @@ describe("preferences route", () =>
 			expect(
 				{
 					status: response.status,
-					writes: adapter.setRootMetaValues.mock.calls,
+					writes: local.pendingRoot(),
 				},
 			).toStrictEqual(
 				{
@@ -1240,7 +1237,7 @@ describe("preferences route", () =>
 
 		it("reads and writes the Dropbox backup flag through the account settings", async () =>
 		{
-			const {adapter, request} = setup(
+			const {local, request} = setup(
 				{},
 				{
 					backup_to_dropbox: "yes",
@@ -1260,7 +1257,7 @@ describe("preferences route", () =>
 				{
 					read,
 					written,
-					settings: adapter.setSetting.mock.calls,
+					settings: local.pendingSettings(),
 				},
 			).toStrictEqual(
 				{
@@ -1285,7 +1282,7 @@ describe("preferences route", () =>
 
 		it("writes showCompleted through the account settings, not root metadata", async () =>
 		{
-			const {adapter, request} = setup(
+			const {local, request} = setup(
 				{},
 				{
 					show_completed: "yes",
@@ -1303,8 +1300,8 @@ describe("preferences route", () =>
 			expect(
 				{
 					response,
-					settings: adapter.setSetting.mock.calls,
-					metadata: adapter.setRootMetaValues.mock.calls,
+					settings: local.pendingSettings(),
+					metadata: local.pendingRoot(),
 				},
 			).toStrictEqual(
 				{
@@ -1321,7 +1318,7 @@ describe("preferences route", () =>
 
 		it("writes metadata and both account settings in one PATCH", async () =>
 		{
-			const {adapter, request} = setup({});
+			const {local, request} = setup({});
 
 			const response = await request(
 				"PATCH",
@@ -1336,8 +1333,8 @@ describe("preferences route", () =>
 			expect(
 				{
 					response,
-					settings: adapter.setSetting.mock.calls,
-					metadata: adapter.setRootMetaValues.mock.calls,
+					settings: local.pendingSettings(),
+					metadata: local.pendingRoot(),
 				},
 			).toStrictEqual(
 				{
@@ -1357,14 +1354,10 @@ describe("preferences route", () =>
 						["show_keyboard_shortcuts", true],
 					],
 					metadata: [
-						[
-							[
-								{
-									path: ["dateFormat"],
-									value: "MMM D",
-								},
-							],
-						],
+						{
+							path: ["dateFormat"],
+							value: "MMM D",
+						},
 					],
 				},
 			);
@@ -1372,7 +1365,7 @@ describe("preferences route", () =>
 
 		it("writes ignoreLoom through the account settings and weeklyReportOn at weekly-report.on", async () =>
 		{
-			const {adapter, request} = setup({});
+			const {local, request} = setup({});
 
 			const response = await request(
 				"PATCH",
@@ -1386,8 +1379,8 @@ describe("preferences route", () =>
 			expect(
 				{
 					response,
-					settings: adapter.setSetting.mock.calls,
-					metadata: adapter.setRootMetaValues.mock.calls,
+					settings: local.pendingSettings(),
+					metadata: local.pendingRoot(),
 				},
 			).toStrictEqual(
 				{
@@ -1403,14 +1396,10 @@ describe("preferences route", () =>
 					},
 					settings: [["ignore_loom", true]],
 					metadata: [
-						[
-							[
-								{
-									path: ["weekly-report", "on"],
-									value: true,
-								},
-							],
-						],
+						{
+							path: ["weekly-report", "on"],
+							value: true,
+						},
 					],
 				},
 			);
@@ -1418,7 +1407,7 @@ describe("preferences route", () =>
 
 		it("writes latestColor as upstream's {attribute, value} and removes it with null", async () =>
 		{
-			const {adapter, request} = setup({});
+			const {local, request} = setup({});
 
 			const written = await request(
 				"PATCH",
@@ -1431,6 +1420,7 @@ describe("preferences route", () =>
 					},
 				},
 			);
+			const pendingAfterWrite = local.pendingRoot();
 			const removed = await request(
 				"PATCH",
 				"/preferences",
@@ -1443,7 +1433,8 @@ describe("preferences route", () =>
 				{
 					written,
 					removed,
-					metadata: adapter.setRootMetaValues.mock.calls,
+					pendingAfterWrite,
+					pendingAfterRemove: local.pendingRoot(),
 				},
 			).toStrictEqual(
 				{
@@ -1465,27 +1456,22 @@ describe("preferences route", () =>
 						status: 200,
 						body: EMPTY,
 					},
-					metadata: [
-						[
-							[
-								{
-									path: ["latestColor"],
-									value:
-									{
-										attribute: 11,
-										value: 0,
-									},
-								},
-							],
-						],
-						[
-							[
-								{
-									path: ["latestColor"],
-									value: undefined,
-								},
-							],
-						],
+					pendingAfterWrite: [
+						{
+							path: ["latestColor"],
+							value:
+							{
+								attribute: 11,
+								value: 0,
+							},
+						},
+					],
+					// The removal coalesces into the same pending row, which now delivers the removal.
+					pendingAfterRemove: [
+						{
+							path: ["latestColor"],
+							value: undefined,
+						},
 					],
 				},
 			);
@@ -1493,7 +1479,7 @@ describe("preferences route", () =>
 
 		it("rejects a latestColor outside the palette", async () =>
 		{
-			const {adapter, request} = setup({});
+			const {local, request} = setup({});
 
 			const response = await request(
 				"PATCH",
@@ -1510,7 +1496,7 @@ describe("preferences route", () =>
 			expect(
 				{
 					status: response.status,
-					writes: adapter.setRootMetaValues.mock.calls,
+					writes: local.pendingRoot(),
 				},
 			).toStrictEqual(
 				{
@@ -1522,7 +1508,7 @@ describe("preferences route", () =>
 
 		it("writes searchForChangesAfter as seconds since the join date and removes it with null", async () =>
 		{
-			const {adapter, request} = setup({});
+			const {local, request} = setup({});
 
 			const written = await request(
 				"PATCH",
@@ -1531,6 +1517,7 @@ describe("preferences route", () =>
 					searchForChangesAfter: "2017-07-14T02:41:40.900Z",
 				},
 			);
+			const pendingAfterWrite = local.pendingRoot();
 			const removed = await request(
 				"PATCH",
 				"/preferences",
@@ -1543,7 +1530,8 @@ describe("preferences route", () =>
 				{
 					written,
 					removed,
-					metadata: adapter.setRootMetaValues.mock.calls,
+					pendingAfterWrite,
+					pendingAfterRemove: local.pendingRoot(),
 				},
 			).toStrictEqual(
 				{
@@ -1561,23 +1549,18 @@ describe("preferences route", () =>
 						status: 200,
 						body: EMPTY,
 					},
-					metadata: [
-						[
-							[
-								{
-									path: ["searchForChangesAfter"],
-									value: 100,
-								},
-							],
-						],
-						[
-							[
-								{
-									path: ["searchForChangesAfter"],
-									value: undefined,
-								},
-							],
-						],
+					pendingAfterWrite: [
+						{
+							path: ["searchForChangesAfter"],
+							value: 100,
+						},
+					],
+					// The removal coalesces into the same pending row, which now delivers the removal.
+					pendingAfterRemove: [
+						{
+							path: ["searchForChangesAfter"],
+							value: undefined,
+						},
 					],
 				},
 			);
@@ -1585,7 +1568,7 @@ describe("preferences route", () =>
 
 		it("rejects a searchForChangesAfter that is not an ISO date", async () =>
 		{
-			const {adapter, request} = setup({});
+			const {local, request} = setup({});
 
 			const response = await request(
 				"PATCH",
@@ -1598,7 +1581,7 @@ describe("preferences route", () =>
 			expect(
 				{
 					status: response.status,
-					writes: adapter.setRootMetaValues.mock.calls,
+					writes: local.pendingRoot(),
 				},
 			).toStrictEqual(
 				{
@@ -1625,7 +1608,7 @@ describe("preferences route", () =>
 
 		it("rejects unknown keys and mistyped values without writing", async () =>
 		{
-			const {adapter, request} = setup({});
+			const {local, request} = setup({});
 
 			const bogus = await request(
 				"PATCH",
@@ -1654,8 +1637,8 @@ describe("preferences route", () =>
 					bogus: bogus.status,
 					mistyped: mistyped.status,
 					nullFlag: nullFlag.status,
-					writes: adapter.setRootMetaValues.mock.calls,
-					settings: adapter.setSetting.mock.calls,
+					writes: local.pendingRoot(),
+					settings: local.pendingSettings(),
 				},
 			).toStrictEqual(
 				{
@@ -1849,25 +1832,27 @@ describe("preferences week layout", () =>
 					{
 						weekStartDay,
 					};
+		runUnitOfWork(db, (unitOfWork) =>
+		{
+			writeAccountSnapshot(
+				unitOfWork,
+				{
+					account:
+					{
+						userId: "42",
+						dateJoinedSec: 1_500_000_000,
+					},
+					rootMetadata: meta,
+					settings: {},
+					visibleFeatures: [],
+				},
+			);
+		});
 		const adapter =
 		{
-			getSetting: async () => Promise.resolve(undefined),
-			setSetting: async () => Promise.resolve(),
-			getRootMeta: async (path: string[]) => Promise.resolve(meta[path[0] ?? ""]),
-			setRootMetaValues: async (
-				changes:
-				{
-					path: string[];
-					value: unknown;
-				}[],
-			) =>
-			{
-				for (const {path, value} of changes)
-				{
-					meta[path[0] ?? ""] = value;
-				}
-				return Promise.resolve();
-			},
+			loadAccountState: async () => Promise.resolve(),
+			// The real adapter reads root metadata from the same local account tables the PATCH writes.
+			getRootMeta: async (path: string[]) => new LocalAccount(db).getRootMeta(path),
 			getEntropyKey: async () => Promise.resolve("k"),
 			// workflowy.com is down: a tree write that reached it would fail.
 			applyCalendarLayout: async () => Promise.reject(new Error("workflowy.com is unreachable")),

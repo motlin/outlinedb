@@ -290,11 +290,11 @@ export const nodesDuplicate = defineOp(
 					...slot,
 				},
 			);
-			// Expansion is upstream account state, still pushed first in mirror mode; a standalone copy starts collapsed.
+			// A mirror opens the copies of expanded rows, locally with account outbox rows; a standalone copy starts collapsed.
 			const adapter = writer.mode === "mirror" ? getAdapter(ctx) : undefined;
 			if (adapter)
 			{
-				await openCopies(adapter, sourceToNew);
+				openCopies(ctx, adapter, sourceToNew);
 			}
 			return ok(
 				created,

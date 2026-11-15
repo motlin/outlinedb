@@ -1,35 +1,30 @@
 /**
- * Expansion state, synced with workflowy.com through the internal API in a mirror (503 without one). A standalone
- * context reads and writes the same expansion store directly: each PATCH applies at once, with no push and no debounce.
+ * Expansion state, kept in our own expansion store in both modes (503 for a mirror without the internal API). A
+ * standalone context applies each PATCH to the store directly; a mirror also records each changed key in the account
+ * outbox in the same unit of work, and a drain delivers them to workflowy.com as one `project_expansions_delta`.
  *
  * `expansion.get` is a change feed over our own expansion store (seeded by whole-tree imports, updated by every local
  * change; nothing re-reads workflowy.com): `{version?}` -> `{version, expandedIds}`, where `version` is the keys'
  * content version and `expandedIds` is null when it equals the caller's `version` and the whole expanded set otherwise. `expansion.patch` with `{changes: {[nodeId]: boolean}}` ->
- * null (204). PATCHes are debounced like upstream: one push 500ms after the last PATCH, the latest value per id
- * winning. A failed push is retried on a backoff with its changes merged under newer PATCHes. The debounce state
- * lives per server context, i.e. per Durable Object or Node host.
+ * null (204).
  */
 
 import
 {
+	applyExpansionDelta,
 	applyLocalExpansionDelta,
 	expansionVersion,
 	readExpansion,
 	resolveExpandedIds,
 	runUnitOfWork,
 } from "@outlinedb/shared/cache";
-import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
+import {ExpansionNotSeeded} from "@outlinedb/shared/internal";
 import {upstreamExpansionKey} from "@outlinedb/shared/workflowy";
 import {z} from "zod";
 import type {ServerContext} from "../context.js";
-import {accountStateUnavailable} from "../account-state.js";
+import {accountStateUnavailable, mirrorAccountOutbox} from "../account-state.js";
 import {defineOp, ok} from "./define.js";
 import {ExpansionChangesResponseSchema, NoContentSchema} from "./schemas.js";
-
-const FLUSH_DELAY_MS = 500;
-
-/** Waits before each retry of a failed push; once exhausted the changes are dropped with a log. */
-const RETRY_DELAYS_MS = [1000, 2000, 4000, 8000];
 
 const ExpansionPatchSchema = z.object(
 	{
@@ -43,70 +38,30 @@ const LeftBarPatchSchema = z.object(
 	},
 );
 
-interface ExpansionState
+/**
+ * Apply a delta keyed by upstream keys to a mirror's expansion store and record its keys in the account outbox, in one
+ * unit of work, then announce the new version. An unseeded store fails loudly: a partial set would read as the whole
+ * account's.
+ */
+export function applyMirrorExpansion(ctx: ServerContext, delta: Record<string, boolean>): void
 {
-	pending: Record<string, boolean>;
-	timer: ReturnType<typeof setTimeout> | undefined;
-	failures: number;
-	pendingRaw: Record<string, boolean>;
-	rawTimer: ReturnType<typeof setTimeout> | undefined;
-}
-
-const states = new WeakMap<ServerContext, ExpansionState>();
-
-function stateOf(ctx: ServerContext): ExpansionState
-{
-	let state = states.get(ctx);
-	if (state === undefined)
+	const outbox = mirrorAccountOutbox(ctx);
+	runUnitOfWork(ctx.db, (unitOfWork) =>
 	{
-		state =
+		if (applyExpansionDelta(unitOfWork, delta) === undefined)
 		{
-			pending: {},
-			timer: undefined,
-			failures: 0,
-			pendingRaw: {},
-			rawTimer: undefined,
-		};
-		states.set(ctx, state);
-	}
-	return state;
-}
-
-function flush(ctx: ServerContext, state: ExpansionState, adapter: WorkflowyInternalAdapter)
-{
-	const changes = state.pending;
-	state.pending = {};
-	adapter.setExpanded(changes).then(
-		() =>
-		{
-			state.failures = 0;
-			ctx.expansionWritten?.();
-			return;
-		},
-		(error: unknown) =>
-		{
-			state.pending =
+			throw new ExpansionNotSeeded();
+		}
+		outbox.record(
+			unitOfWork,
+			Object.keys(delta).map((key) => (
 			{
-				...changes,
-				...state.pending,
-			};
-			const delay = RETRY_DELAYS_MS[state.failures];
-			state.failures += 1;
-			if (delay === undefined)
-			{
-				console.error("Failed to push expansion changes; giving up", error);
-				state.failures = 0;
-				state.pending = {};
-				return;
-			}
-			console.error(`Failed to push expansion changes; retrying in ${delay}ms`, error);
-			clearTimeout(state.timer);
-			state.timer = setTimeout(() =>
-			{
-				flush(ctx, state, adapter);
-			}, delay);
-		},
-	);
+				subject: "expansion",
+				key,
+			})),
+		);
+	});
+	ctx.expansionWritten?.();
 }
 
 /** A standalone context's stored keys; an unseeded store reads as nothing expanded. */
@@ -171,32 +126,19 @@ export const expansionPatch = defineOp(
 		output: NoContentSchema,
 		run(ctx, {changes})
 		{
+			const delta = Object.fromEntries(
+				Object.entries(changes).map(([id, expanded]) => [upstreamExpansionKey(id), expanded]),
+			);
 			if (ctx.mode === "standalone")
 			{
-				applyLocally(
-					ctx,
-					Object.fromEntries(
-						Object.entries(changes).map(([id, expanded]) => [upstreamExpansionKey(id), expanded]),
-					),
-				);
+				applyLocally(ctx, delta);
 				return ok(null);
 			}
-			const adapter = ctx.internalAdapter?.();
-			if (!adapter)
+			if (!ctx.internalAdapter?.())
 			{
 				return accountStateUnavailable();
 			}
-			const state = stateOf(ctx);
-			state.pending =
-			{
-				...state.pending,
-				...changes,
-			};
-			clearTimeout(state.timer);
-			state.timer = setTimeout(() =>
-			{
-				flush(ctx, state, adapter);
-			}, FLUSH_DELAY_MS);
+			applyMirrorExpansion(ctx, delta);
 			return ok(null);
 		},
 	},
@@ -245,34 +187,11 @@ export const expansionLeftBarPatch = defineOp(
 				applyLocally(ctx, changes);
 				return ok(null);
 			}
-			const adapter = ctx.internalAdapter?.();
-			if (!adapter)
+			if (!ctx.internalAdapter?.())
 			{
 				return accountStateUnavailable();
 			}
-			const state = stateOf(ctx);
-			state.pendingRaw =
-			{
-				...state.pendingRaw,
-				...changes,
-			};
-			clearTimeout(state.rawTimer);
-			state.rawTimer = setTimeout(() =>
-			{
-				const raw = state.pendingRaw;
-				state.pendingRaw = {};
-				adapter.setRawExpansionKeys(raw).then(
-					() =>
-					{
-						ctx.expansionWritten?.();
-						return;
-					},
-					(error: unknown) =>
-					{
-						console.error("Failed to push left-bar expansion changes", error);
-					},
-				);
-			}, FLUSH_DELAY_MS);
+			applyMirrorExpansion(ctx, changes);
 			return ok(null);
 		},
 	},

@@ -367,6 +367,42 @@ export const outbox = sqliteTable(
 	],
 );
 
+/**
+ * account_outbox: which piece of account-level state is ahead of workflowy.com in mirror mode, keyed by its business
+ * key. A current row is pending; the drain closes it once upstream acknowledged the change. The change itself is the
+ * current local value in the account tables or the expansion store.
+ */
+export const accountOutbox = sqliteTable(
+	"account_outbox",
+	{
+		/** root_metadata | setting | saved_view | expansion */
+		subject: text("subject").notNull(),
+		/**
+		 * The business key within the subject: a root metadata path (segments joined by U+001F), a setting name, a
+		 * saved view's location key, or an expansion key.
+		 */
+		key: text("key").notNull(),
+		/** System time of the first local write still pending for this key. */
+		enqueuedAt: text("enqueued_at").notNull(),
+		/** Null until a drain fails on this row. */
+		lastError: text("last_error"),
+
+		systemFrom: text("system_from").notNull(),
+		systemTo: text("system_to").notNull(),
+	},
+	(table) => [
+		primaryKey(
+			{
+				columns: [table.subject, table.key, table.systemFrom],
+			},
+		),
+		uniqueIndex("account_outbox_system_to_idx").on(table.subject, table.key, table.systemTo),
+		index("account_outbox_closed_at_idx")
+			.on(table.systemTo)
+			.where(sql`system_to < '9999-12-31 23:59:59'`),
+	],
+);
+
 export const backupImports = sqliteTable(
 	"backup_imports",
 	{

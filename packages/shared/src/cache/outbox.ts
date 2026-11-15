@@ -1,6 +1,7 @@
 import {and, asc, desc, isNotNull, lte, sql} from "drizzle-orm";
 import type {SQL} from "drizzle-orm";
 import {outbox} from "../db/schema.js";
+import {accountOutboxStatus} from "./account-outbox.js";
 import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 import {currentVersion} from "./cache-temporal.js";
 import {inIds} from "./in-ids.js";
@@ -202,7 +203,7 @@ export function failOutboxRows(unitOfWork: UnitOfWork, entries: readonly OutboxE
 	}
 }
 
-/** Mirror mode's outbox at a glance, for the sync status. */
+/** Mirror mode's outbox at a glance (node and account rows), for the sync status. */
 export interface OutboxStatus
 {
 	/** Current (pending) rows. */
@@ -229,6 +230,7 @@ export function outboxStatus(tx: TemporalTransaction): OutboxStatus
 		.select(
 			{
 				lastError: outbox.lastError,
+				systemFrom: outbox.systemFrom,
 			},
 		)
 		.from(outbox)
@@ -236,9 +238,13 @@ export function outboxStatus(tx: TemporalTransaction): OutboxStatus
 		.orderBy(desc(outbox.systemFrom))
 		.limit(1)
 		.get();
+	const account = accountOutboxStatus(tx);
+	const oldest = [summary?.oldestEnqueuedAt ?? null, account.oldestEnqueuedAt].filter((at) => at !== null).toSorted();
+	const accountFailedLater =
+		account.lastErrorAt !== null && (failed === undefined || account.lastErrorAt > failed.systemFrom);
 	return {
-		pending: summary?.pending ?? 0,
-		oldestEnqueuedAt: summary?.oldestEnqueuedAt ?? null,
-		lastError: failed?.lastError ?? null,
+		pending: (summary?.pending ?? 0) + account.pending,
+		oldestEnqueuedAt: oldest[0] ?? null,
+		lastError: accountFailedLater ? account.lastError : (failed?.lastError ?? null),
 	};
 }

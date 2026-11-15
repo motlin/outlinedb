@@ -6,6 +6,9 @@
 
 import {applyMetadataPatches, buildMetadataChanges} from "../internal/metadata-patch.js";
 import type {MetadataChange, MetadataPatchSet} from "../internal/metadata-patch.js";
+import {changedSavedViewKeys} from "../internal/saved-views.js";
+import {canonicalValue, metadataAt, rootMetadataKey} from "./account-outbox.js";
+import type {AccountOutboxEntry, AccountOutboxRecorder} from "./account-outbox.js";
 import
 {
 	AccountNotProvisionedError,
@@ -50,20 +53,6 @@ export function withSetting(snapshot: AccountSnapshot, name: string, value: unkn
 			[name]: value,
 		},
 	};
-}
-
-function getPath(value: unknown, path: readonly string[]): unknown
-{
-	let current = value;
-	for (const key of path)
-	{
-		if (typeof current !== "object" || current === null || !Object.hasOwn(current, key))
-		{
-			return undefined;
-		}
-		current = Reflect.get(current, key);
-	}
-	return current;
 }
 
 /** The snapshot of `rows`; throws {@link AccountNotProvisionedError} when no account row exists. */
@@ -112,21 +101,56 @@ export function provisionLocalAccount(db: TemporalTransaction, identity: LocalId
 	});
 }
 
+export interface LocalAccountOptions
+{
+	/**
+	 * A mirror's account outbox: each write also records the root metadata paths, settings and saved views it changed,
+	 * which a drain later delivers to workflowy.com. A standalone account passes none.
+	 */
+	outbox?: AccountOutboxRecorder;
+}
+
+/** Throws when `next`'s value at a changed root path or setting does not survive the account tables. */
+function assertStored(next: AccountSnapshot, rootChanges: MetadataChange[], settings: readonly string[]): void
+{
+	const stored = localSnapshot(accountRows(next));
+	for (const {path} of rootChanges)
+	{
+		if (
+			canonicalValue(metadataAt(stored.rootMetadata, path)) !==
+			canonicalValue(metadataAt(next.rootMetadata, path))
+		)
+		{
+			throw new Error(`root metadata ${path.join(".")} has no local column, so it cannot be written locally`);
+		}
+	}
+	for (const name of settings)
+	{
+		if (canonicalValue(stored.settings[name]) !== canonicalValue(next.settings[name]))
+		{
+			throw new Error(`account setting ${name} has no local column, so it cannot be written locally`);
+		}
+	}
+}
+
 /**
- * The account state of a context with no workflowy.com account, read from and written to the temporal account
- * tables with no push: the root-metadata and settings reads and writes the internal adapter offers. Each write is one
- * unit of work and leaves the `account` row as it was.
+ * The account state in the temporal account tables, read and written with no push: a standalone account's, or a
+ * mirror's, whose writes also record account outbox rows for the drain. Each write is one unit of work and leaves the
+ * `account` row as it was.
  */
 export class LocalAccount
 {
-	constructor(private readonly db: TemporalTransaction)
+	constructor(
+		private readonly db: TemporalTransaction,
+		private readonly options: LocalAccountOptions = {},
+	)
 	{
 	}
 
 	/** The root (Home) metadata value at `path`; the whole object for an empty path. */
 	async getRootMeta(path: string[]): Promise<unknown>
 	{
-		return Promise.resolve(getPath(this.snapshot().rootMetadata, path));
+		return Promise.resolve(metadataAt(this.snapshot().rootMetadata, path));
 	}
 
 	/** Set (or, with `undefined`, remove) one root metadata value. */
@@ -164,18 +188,53 @@ export class LocalAccount
 	 */
 	change(rootChanges: MetadataChange[], settings: readonly (readonly [string, unknown])[]): void
 	{
-		this.update((snapshot) =>
-			settings.reduce(
-				(next, [name, value]) => withSetting(next, name, value),
-				withRootMetaChanges(snapshot, rootChanges).snapshot,
-			),
+		this.update(
+			(snapshot) =>
+			{
+				const next = settings.reduce(
+					(changed, [name, value]) => withSetting(changed, name, value),
+					withRootMetaChanges(snapshot, rootChanges).snapshot,
+				);
+				if (this.options.outbox !== undefined)
+				{
+					assertStored(
+						next,
+						rootChanges,
+						settings.map(([name]) => name),
+					);
+				}
+				return next;
+			},
+			() => [
+				...rootChanges.map(({path}): AccountOutboxEntry => (
+				{
+					subject: "root_metadata",
+					key: rootMetadataKey(path),
+				})),
+				...settings.map(([name]): AccountOutboxEntry => (
+				{
+					subject: "setting",
+					key: name,
+				})),
+			],
 		);
 	}
 
-	/** Store `json` as `saved_views_json`; the delta only matters to workflowy.com. */
+	/** Store `json` as `saved_views_json`; a mirror's outbox records each location whose presence changed. */
 	async setSavedViews(json: string, _delta: string): Promise<void>
 	{
-		this.update((snapshot) => withSetting(snapshot, "saved_views_json", json));
+		this.update(
+			(snapshot) => withSetting(snapshot, "saved_views_json", json),
+			(before) =>
+				changedSavedViewKeys(
+					typeof before.settings.saved_views_json === "string" ? before.settings.saved_views_json : undefined,
+					json,
+				).map((key) => (
+				{
+					subject: "saved_view",
+					key,
+				})),
+		);
 		return Promise.resolve();
 	}
 
@@ -219,18 +278,24 @@ export class LocalAccount
 		return localSnapshot(readAccountRows(this.db));
 	}
 
-	private update(change: (snapshot: AccountSnapshot) => AccountSnapshot): void
+	/** Write `change`'s snapshot and, for a mirror, record `entries` (of the snapshot before it) in the same unit of work. */
+	private update(
+		change: (snapshot: AccountSnapshot) => AccountSnapshot,
+		entries: (before: AccountSnapshot) => AccountOutboxEntry[],
+	): void
 	{
 		runUnitOfWork(this.db, (unitOfWork) =>
 		{
 			const rows = readAccountRows(unitOfWork.tx);
+			const before = localSnapshot(rows);
 			writeAccountRows(
 				unitOfWork,
 				{
-					...accountRows(change(localSnapshot(rows))),
+					...accountRows(change(before)),
 					account: rows.account,
 				},
 			);
+			this.options.outbox?.record(unitOfWork, entries(before));
 		});
 	}
 }

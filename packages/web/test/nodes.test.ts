@@ -13,7 +13,9 @@ import
 	stampImportTime,
 	TRANSACTION_TIMEOUT_MS,
 	CacheService,
+	readPendingAccountOutbox,
 	readPendingOutbox,
+	replaceExpansion,
 } from "@outlinedb/shared/cache";
 import {eq} from "drizzle-orm";
 import * as schema from "@outlinedb/shared/db";
@@ -896,7 +898,16 @@ describe("nodes duplicate route", () =>
 				},
 			),
 		);
-		const setExpanded = vi.fn<WorkflowyInternalAdapter["setExpanded"]>(async () => Promise.resolve());
+		// Expansion is account state: it lands in the seeded local store with account outbox rows, never pushed first.
+		const setExpanded = vi.fn<WorkflowyInternalAdapter["setExpanded"]>(async () =>
+			Promise.reject(new Error("workflowy.com is unreachable")),
+		);
+		runUnitOfWork(db, (unitOfWork) =>
+		{
+			replaceExpansion(unitOfWork, [], 0);
+		});
+		/** The expansion keys pending for the account outbox. */
+		const opened = () => readPendingAccountOutbox(db).map(({key}) => key);
 		const expansionTest = vi.fn<WorkflowyInternalAdapter["expansionTest"]>(
 			() => (id: string) => expanded.includes(id),
 		);
@@ -941,6 +952,7 @@ describe("nodes duplicate route", () =>
 		return {
 			createTreesAt,
 			setExpanded,
+			opened,
 			post,
 			cacheService,
 			pending,
@@ -1038,7 +1050,7 @@ describe("nodes duplicate route", () =>
 
 		it("duplicates a mirror from its original and opens copies whose source rows are expanded", async () =>
 		{
-			const {setExpanded, post, cacheService} = setup(["M", "C"]);
+			const {opened, post, cacheService} = setup(["M", "C"]);
 
 			const res = await post(
 				{
@@ -1058,20 +1070,14 @@ describe("nodes duplicate route", () =>
 				{
 					name: copy.name,
 					first: copy.id === ids[0],
-					opened: setExpanded.mock.calls,
+					opened: opened(),
 				},
 			).toStrictEqual(
 				{
 					name: "o",
 					first: true,
-					opened: [
-						[
-							{
-								[copy.id]: true,
-								[childCopy.id]: true,
-							},
-						],
-					],
+					// oxlint-disable-next-line unicorn/no-array-sort -- the test tsconfig lib has no toSorted
+					opened: [copy.id.slice(0, 8), childCopy.id.slice(0, 8)].sort(),
 				},
 			);
 		});
@@ -1515,7 +1521,16 @@ describe("nodes mirror route", () =>
 			Promise.reject(UNREACHABLE),
 		);
 		const moveTo = vi.fn<WorkflowyInternalAdapter["moveTo"]>(async () => Promise.reject(UNREACHABLE));
-		const setExpanded = vi.fn<WorkflowyInternalAdapter["setExpanded"]>(async () => Promise.resolve());
+		// Expansion is account state: it lands in the seeded local store with account outbox rows, never pushed first.
+		const setExpanded = vi.fn<WorkflowyInternalAdapter["setExpanded"]>(async () =>
+			Promise.reject(new Error("workflowy.com is unreachable")),
+		);
+		runUnitOfWork(db, (unitOfWork) =>
+		{
+			replaceExpansion(unitOfWork, [], 0);
+		});
+		/** The expansion keys pending for the account outbox. */
+		const opened = () => readPendingAccountOutbox(db).map(({key}) => key);
 		const expansionTest = vi.fn<WorkflowyInternalAdapter["expansionTest"]>(
 			() => (id: string) => expanded.includes(id),
 		);
@@ -1570,6 +1585,7 @@ describe("nodes mirror route", () =>
 		return {
 			createMirrorsAt,
 			setExpanded,
+			opened,
 			moveTo,
 			cacheService,
 			sqlite,
@@ -1867,7 +1883,7 @@ describe("nodes mirror route", () =>
 
 		it("gives each new mirror its source row's expansion, a mirror source included", async () =>
 		{
-			const {setExpanded, post} = setup(true, ["O", "M"]);
+			const {opened, post} = setup(true, ["O", "M"]);
 
 			await post(
 				"/mirror",
@@ -1878,19 +1894,12 @@ describe("nodes mirror route", () =>
 				},
 			);
 
-			expect(setExpanded.mock.calls).toStrictEqual([
-				[
-					{
-						new1: true,
-						new3: true,
-					},
-				],
-			]);
+			expect(opened()).toStrictEqual(["new1", "new3"]);
 		});
 
 		it("leaves expansion alone when no source is expanded", async () =>
 		{
-			const {setExpanded, post} = setup();
+			const {opened, post} = setup();
 
 			await post(
 				"/mirror",
@@ -1901,7 +1910,7 @@ describe("nodes mirror route", () =>
 				},
 			);
 
-			expect(setExpanded.mock.calls).toStrictEqual([]);
+			expect(opened()).toStrictEqual([]);
 		});
 
 		it("needs the internal adapter", async () =>

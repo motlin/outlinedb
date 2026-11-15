@@ -1,4 +1,16 @@
+import DatabaseConstructor from "better-sqlite3";
+import {drizzle} from "drizzle-orm/better-sqlite3";
+import {migrate} from "drizzle-orm/better-sqlite3/migrator";
+import {join} from "node:path";
 import {afterEach, describe, expect, it, vi} from "vite-plus/test";
+import
+{
+	readAccountSnapshot,
+	readPendingAccountOutbox,
+	runUnitOfWork,
+	writeAccountSnapshot,
+} from "@outlinedb/shared/cache";
+import * as schema from "@outlinedb/shared/db";
 import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import {createHttpApp} from "../src/server/http/app.js";
 import {Ops} from "../src/server/ops/index.js";
@@ -38,17 +50,57 @@ async function readResponse(res: Response)
 	};
 }
 
+/**
+ * A mirror whose account tables hold `meta` and the saved views (none, and no internal API, when `meta` is undefined).
+ * workflowy.com is down: a star write that pushed first would fail, so every write must land locally with account
+ * outbox rows.
+ */
 function setup(meta: Record<string, unknown> | undefined, savedViews?: string)
 {
+	const unreachable = async () => Promise.reject(new Error("workflowy.com is unreachable"));
 	const adapter =
 	{
-		getRootMeta: vi.fn<WorkflowyInternalAdapter["getRootMeta"]>(async () => Promise.resolve(meta)),
-		setRootMetaValues: vi.fn<WorkflowyInternalAdapter["setRootMetaValues"]>(async () => Promise.resolve()),
-		getSetting: vi.fn<WorkflowyInternalAdapter["getSetting"]>(async (name) =>
-			Promise.resolve(name === "saved_views_json" ? savedViews : undefined),
-		),
-		setSavedViews: vi.fn<WorkflowyInternalAdapter["setSavedViews"]>(async () => Promise.resolve()),
+		loadAccountState: vi.fn<WorkflowyInternalAdapter["loadAccountState"]>(async () => Promise.resolve()),
+		setRootMetaValues: vi.fn<WorkflowyInternalAdapter["setRootMetaValues"]>(unreachable),
+		setSavedViews: vi.fn<WorkflowyInternalAdapter["setSavedViews"]>(unreachable),
 	};
+	const db = drizzle(
+		new DatabaseConstructor(":memory:"),
+		{
+			schema,
+		},
+	);
+	migrate(
+		db,
+		{
+			migrationsFolder: join(import.meta.dirname, "../../shared/src/db/migrations"),
+		},
+	);
+	if (meta !== undefined)
+	{
+		runUnitOfWork(db, (unitOfWork) =>
+		{
+			writeAccountSnapshot(
+				unitOfWork,
+				{
+					account:
+					{
+						userId: "42",
+						dateJoinedSec: 1_500_000_000,
+					},
+					rootMetadata: meta,
+					settings:
+						savedViews === undefined
+							? {}
+							:
+								{
+									saved_views_json: savedViews,
+								},
+					visibleFeatures: [],
+				},
+			);
+		});
+	}
 	const cacheService =
 	{
 		getNode: (id: string) =>
@@ -62,10 +114,33 @@ function setup(meta: Record<string, unknown> | undefined, savedViews?: string)
 	};
 	const ctx =
 	{
+		db,
 		cacheService,
 		internalAuth: meta ? {} : undefined,
 		internalAdapter: () => (meta ? (adapter as unknown as WorkflowyInternalAdapter) : undefined),
 	} as unknown as ServerContext;
+	const pending = (subject: string) => readPendingAccountOutbox(db).filter((row) => row.subject === subject);
+	/** What the account outbox would deliver, from the pending rows and the local account tables. */
+	const local =
+	{
+		/** Each pending root metadata path and its local value. */
+		pendingRoot: () =>
+			pending("root_metadata").map(({key}) =>
+			{
+				const path = key.split("\u001F");
+				return {
+					path,
+					value: path.reduce<unknown>(
+						(value, segment) =>
+							typeof value === "object" && value !== null ? Reflect.get(value, segment) : undefined,
+						readAccountSnapshot(db)?.rootMetadata,
+					),
+				};
+			}),
+		/** The pending saved-view location keys. */
+		pendingSavedViews: () => pending("saved_view").map(({key}) => key),
+		savedViewsJson: () => readAccountSnapshot(db)?.settings.saved_views_json,
+	};
 	const readNode = async (_ctx: ServerContext, id: string) =>
 		Promise.resolve(cacheService.getNode(id) as unknown as NodeResponse | undefined);
 	const app = createHttpApp(
@@ -107,7 +182,7 @@ function setup(meta: Record<string, unknown> | undefined, savedViews?: string)
 		};
 	};
 	return {
-		adapter,
+		local,
 		request,
 	};
 }
@@ -434,9 +509,9 @@ describe("stars in a standalone context", () =>
 
 describe("PUT /api/v1/stars/:key", () =>
 {
-	it("stars the location and appends it to the order in one push, answering the new star", async () =>
+	it("stars the location and appends it to the order locally, pending for the outbox, answering the new star", async () =>
 	{
-		const {adapter, request} = setup(
+		const {local, request} = setup(
 			{
 				starring:
 				{
@@ -450,34 +525,6 @@ describe("PUT /api/v1/stars/:key", () =>
 			},
 			JSON.stringify([view(P1, "")]),
 		);
-		adapter.getRootMeta
-			.mockResolvedValueOnce(
-				{
-					starring:
-					{
-						isSynced: true,
-						locations:
-						{
-							[P1]: "None",
-						},
-						order: `None/${P1}/`,
-					},
-				},
-			)
-			.mockResolvedValueOnce(
-				{
-					starring:
-					{
-						isSynced: true,
-						locations:
-						{
-							[P1]: "None",
-							[`${P2}_#todo`]: "None",
-						},
-						order: `None/${P1}/,None/${P2}/#todo`,
-					},
-				},
-			);
 
 		const response = await request(
 			"PUT",
@@ -491,8 +538,9 @@ describe("PUT /api/v1/stars/:key", () =>
 		expect(
 			{
 				response,
-				writes: adapter.setRootMetaValues.mock.calls,
-				savedViews: adapter.setSavedViews.mock.calls,
+				writes: local.pendingRoot(),
+				savedViews: local.pendingSavedViews(),
+				savedViewsJson: local.savedViewsJson(),
 			},
 		).toStrictEqual(
 			{
@@ -509,48 +557,24 @@ describe("PUT /api/v1/stars/:key", () =>
 					},
 				},
 				writes: [
-					[
-						[
-							{
-								path: ["starring", "locations", `${P2}_#todo`],
-								value: "None",
-							},
-							{
-								path: ["starring", "order"],
-								value: `None/${P1}/,None/${P2}/#todo`,
-							},
-						],
-					],
+					{
+						path: ["starring", "locations", `${P2}_#todo`],
+						value: "None",
+					},
+					{
+						path: ["starring", "order"],
+						value: `None/${P1}/,None/${P2}/#todo`,
+					},
 				],
-				savedViews: [
-					[
-						JSON.stringify([view(P1, ""), view(P2, "#todo")]),
-						JSON.stringify(
-							{
-								added: [view(P2, "#todo")],
-							},
-						),
-					],
-				],
+				savedViews: [`${P2}_#todo`],
+				savedViewsJson: JSON.stringify([view(P1, ""), view(P2, "#todo")]),
 			},
 		);
 	});
 
-	it("copies a fresh account's toggled saved views into its locations and marks it synced in the same push", async () =>
+	it("copies a fresh account's toggled saved views into its locations and marks it synced in the same write", async () =>
 	{
-		const {adapter, request} = setup({}, JSON.stringify([view(P2, "")]));
-		adapter.getRootMeta.mockResolvedValueOnce({}).mockResolvedValueOnce(
-			{
-				starring:
-				{
-					isSynced: true,
-					locations:
-					{
-						[P1]: "None",
-					},
-				},
-			},
-		);
+		const {local, request} = setup({}, JSON.stringify([view(P2, "")]));
 
 		const response = await request(
 			"PUT",
@@ -564,7 +588,8 @@ describe("PUT /api/v1/stars/:key", () =>
 		expect(
 			{
 				response,
-				writes: adapter.setRootMetaValues.mock.calls,
+				writes: local.pendingRoot(),
+				savedViews: local.pendingSavedViews(),
 			},
 		).toStrictEqual(
 			{
@@ -577,34 +602,32 @@ describe("PUT /api/v1/stars/:key", () =>
 						nodeId: P1,
 						query: null,
 						name: null,
-						position: 0,
+						// Unordered stars sort by name: Bravo (P2) before Zulu (P1).
+						position: 1,
 					},
 				},
 				writes: [
-					[
-						[
-							{
-								path: ["starring", "locations"],
-								value:
-								{
-									[P2]: "None",
-									[P1]: "None",
-								},
-							},
-							{
-								path: ["starring", "isSynced"],
-								value: true,
-							},
-						],
-					],
+					{
+						path: ["starring", "isSynced"],
+						value: true,
+					},
+					{
+						path: ["starring", "locations"],
+						value:
+						{
+							[P2]: "None",
+							[P1]: "None",
+						},
+					},
 				],
+				savedViews: [P1],
 			},
 		);
 	});
 
 	it("rejects a body that does not match the key, and a node missing from the cache", async () =>
 	{
-		const {adapter, request} = setup({});
+		const {local, request} = setup({});
 		const missing = "9c9c9c9c-0000-4000-8000-000000000009";
 
 		const mismatch = await request(
@@ -628,8 +651,8 @@ describe("PUT /api/v1/stars/:key", () =>
 			{
 				mismatch,
 				unknown,
-				writes: adapter.setRootMetaValues.mock.calls,
-				savedViews: adapter.setSavedViews.mock.calls,
+				writes: local.pendingRoot(),
+				savedViews: local.pendingSavedViews(),
 			},
 		).toStrictEqual(
 			{
@@ -655,9 +678,9 @@ describe("PUT /api/v1/stars/:key", () =>
 		);
 	});
 
-	it("posts no saved-views delta when the saved views already hold the location", async () =>
+	it("leaves no saved-views row pending when the saved views already hold the location", async () =>
 	{
-		const {adapter, request} = setup(ORDERED, JSON.stringify([view(P1, "")]));
+		const {local, request} = setup(ORDERED, JSON.stringify([view(P1, "")]));
 
 		await request(
 			"PUT",
@@ -668,7 +691,7 @@ describe("PUT /api/v1/stars/:key", () =>
 			},
 		);
 
-		expect(adapter.setSavedViews.mock.calls).toStrictEqual([]);
+		expect(local.pendingSavedViews()).toStrictEqual([]);
 	});
 });
 
@@ -676,15 +699,16 @@ describe("DELETE /api/v1/stars/:key", () =>
 {
 	it("removes the location and its order entry, keeping the rename", async () =>
 	{
-		const {adapter, request} = setup(ORDERED, JSON.stringify([view(P1, "#todo"), view(P1, "")]));
+		const {local, request} = setup(ORDERED, JSON.stringify([view(P1, "#todo"), view(P1, "")]));
 
 		const response = await request("DELETE", `/${P1}`);
 
 		expect(
 			{
 				response,
-				writes: adapter.setRootMetaValues.mock.calls,
-				savedViews: adapter.setSavedViews.mock.calls,
+				writes: local.pendingRoot(),
+				savedViews: local.pendingSavedViews(),
+				savedViewsJson: local.savedViewsJson(),
 			},
 		).toStrictEqual(
 			{
@@ -694,29 +718,17 @@ describe("DELETE /api/v1/stars/:key", () =>
 					body: null,
 				},
 				writes: [
-					[
-						[
-							{
-								path: ["starring", "locations", P1],
-								value: undefined,
-							},
-							{
-								path: ["starring", "order"],
-								value: `None/${P1}/#todo`,
-							},
-						],
-					],
+					{
+						path: ["starring", "locations", P1],
+						value: undefined,
+					},
+					{
+						path: ["starring", "order"],
+						value: `None/${P1}/#todo`,
+					},
 				],
-				savedViews: [
-					[
-						JSON.stringify([view(P1, "#todo")]),
-						JSON.stringify(
-							{
-								removed: [view(P1, "")],
-							},
-						),
-					],
-				],
+				savedViews: [P1],
+				savedViewsJson: JSON.stringify([view(P1, "#todo")]),
 			},
 		);
 	});
@@ -726,7 +738,7 @@ describe("PATCH /api/v1/stars/:key", () =>
 {
 	it("renames and clears a rename", async () =>
 	{
-		const {adapter, request} = setup(ORDERED);
+		const {local, request} = setup(ORDERED);
 
 		const renamed = await request(
 			"PATCH",
@@ -735,6 +747,7 @@ describe("PATCH /api/v1/stars/:key", () =>
 				name: "Inbox triage",
 			},
 		);
+		const pendingAfterRename = local.pendingRoot();
 		const cleared = await request(
 			"PATCH",
 			`/${P1}_%23todo`,
@@ -755,7 +768,8 @@ describe("PATCH /api/v1/stars/:key", () =>
 				renamed,
 				cleared,
 				invalid,
-				writes: adapter.setRootMetaValues.mock.calls,
+				pendingAfterRename,
+				pendingAfterClear: local.pendingRoot(),
 			},
 		).toStrictEqual(
 			{
@@ -777,23 +791,18 @@ describe("PATCH /api/v1/stars/:key", () =>
 						error: "body must be {name: string | null}",
 					},
 				},
-				writes: [
-					[
-						[
-							{
-								path: ["location", "renamed", `None/${P1}/#todo`],
-								value: "Inbox triage",
-							},
-						],
-					],
-					[
-						[
-							{
-								path: ["location", "renamed", `None/${P1}/#todo`],
-								value: undefined,
-							},
-						],
-					],
+				pendingAfterRename: [
+					{
+						path: ["location", "renamed", `None/${P1}/#todo`],
+						value: "Inbox triage",
+					},
+				],
+				// The clear coalesces into the same pending row, which now delivers the removal.
+				pendingAfterClear: [
+					{
+						path: ["location", "renamed", `None/${P1}/#todo`],
+						value: undefined,
+					},
 				],
 			},
 		);
@@ -804,7 +813,7 @@ describe("PUT /api/v1/stars/order", () =>
 {
 	it("stores the keys as the order", async () =>
 	{
-		const {adapter, request} = setup(ORDERED);
+		const {local, request} = setup(ORDERED);
 
 		const response = await request(
 			"PUT",
@@ -825,7 +834,7 @@ describe("PUT /api/v1/stars/order", () =>
 			{
 				response,
 				invalid,
-				writes: adapter.setRootMetaValues.mock.calls,
+				writes: local.pendingRoot(),
 			},
 		).toStrictEqual(
 			{
@@ -843,14 +852,10 @@ describe("PUT /api/v1/stars/order", () =>
 					},
 				},
 				writes: [
-					[
-						[
-							{
-								path: ["starring", "order"],
-								value: `None/${P1}/,None/${P1}/#todo`,
-							},
-						],
-					],
+					{
+						path: ["starring", "order"],
+						value: `None/${P1}/,None/${P1}/#todo`,
+					},
 				],
 			},
 		);

@@ -8,7 +8,6 @@
  */
 
 import {z} from "zod";
-import {LocalAccount} from "@outlinedb/shared/cache";
 import type {ServerSetting} from "@outlinedb/shared/internal";
 import {withAccountState} from "../account-state.js";
 import type {AccountState} from "../account-state.js";
@@ -413,22 +412,11 @@ export const preferencesPatch = defineOp(
 						? []
 						: [[STRING_SETTINGS.font, patch.font] as [ServerSetting, string]]),
 				];
-				if (adapter instanceof LocalAccount)
-				{
-					// One unit of work: separate writes would replace the settings row within its own millisecond.
-					adapter.change(changes, settings);
-					return ok(await readPreferences(adapter));
-				}
-				if (changes.length > 0)
-				{
-					await adapter.setRootMetaValues(changes);
-				}
-				for (const [name, value] of settings)
-				{
-					await adapter.setSetting(name, value);
-				}
-				// Re-lay out the calendar's weeks for the new week start, locally; the outbox delivers it.
+				// One unit of work: separate writes would replace the settings row within its own millisecond.
+				adapter.change(changes, settings);
+				// A mirror re-lays out the calendar's weeks for the new week start, locally; the outbox delivers it.
 				if (
+					ctx.mode !== "standalone" &&
 					patch.weekStartDay !== undefined &&
 					(patch.weekStartDay ?? undefined) !== (previousWeekStartDay ?? undefined)
 				)

@@ -1,11 +1,13 @@
 import {z} from "zod";
 import {ancestorChain} from "@outlinedb/shared/cache";
 import {HOME_TARGET} from "@outlinedb/shared/types";
+import {upstreamExpansionKey} from "@outlinedb/shared/workflowy";
 import {planSwapOrigin} from "../../swap-origin.js";
 import {MAX_COPY_ITEMS, copySubtree} from "../copy-tree.js";
 import {INTERNAL_API_NOT_CONFIGURED} from "../internal-api.js";
 import type {ServerContext} from "../context.js";
 import {defineOp, fail, ok, toJson} from "./define.js";
+import {applyMirrorExpansion} from "./expansion.js";
 import {DetachMirrorResponseSchema, NodeListSchema, SwapMirrorOriginResponseSchema} from "./schemas.js";
 import
 {
@@ -124,20 +126,20 @@ export const nodesMirror = defineOp(
 					index: body.index ?? countChildren(ctx, parentId),
 				},
 			);
-			// Expansion is upstream account state, still pushed first in mirror mode: a new mirror opens like its source
-			// row (upstream `mirrorProjectTree`: `expanded: source.isExpanded`). A standalone mirror starts collapsed.
+			// A mirror's new mirror opens like its source row (upstream `mirrorProjectTree`: `expanded:
+			// source.isExpanded`), locally with an account outbox row. A standalone mirror starts collapsed.
 			const adapter = writer.mode === "mirror" ? getAdapter(ctx) : undefined;
 			if (adapter)
 			{
 				const isExpanded = adapter.expansionTest();
 				const opened = Object.fromEntries(
 					mirrorIds.flatMap((mirrorId, offset) =>
-						isExpanded(sourceRows[offset] ?? "") ? [[mirrorId, true] as const] : [],
+						isExpanded(sourceRows[offset] ?? "") ? [[upstreamExpansionKey(mirrorId), true] as const] : [],
 					),
 				);
 				if (Object.keys(opened).length > 0)
 				{
-					await adapter.setExpanded(opened);
+					applyMirrorExpansion(ctx, opened);
 				}
 			}
 			return mirroredNodes(ctx, mirrorIds);
@@ -234,11 +236,12 @@ export const nodesDetachMirror = defineOp(
 				);
 			}
 			const copyId = writer.local.detachMirror(id, copied.tree, await localDeletePlan(ctx, id));
-			// Expansion is upstream account state, still pushed first in mirror mode; a standalone copy starts collapsed.
+			// A mirror opens the copies of expanded rows, locally with account outbox rows; a standalone copy starts collapsed.
 			const adapter = writer.mode === "mirror" ? getAdapter(ctx) : undefined;
 			if (adapter)
 			{
-				await openCopies(
+				openCopies(
+					ctx,
 					adapter,
 					copied.sourceToNew,
 					{
