@@ -22,7 +22,7 @@ import type {BacklinkItem, ItemRelationships, UpstreamRelationshipMetadata} from
 import {inIds} from "./in-ids.js";
 import {loadMirrorOriginals, notAMirror} from "./mirror-text.js";
 import {endNodeComposites, runUnitOfWork} from "./node-composite.js";
-import {NodeReader} from "./node-reader.js";
+import {currentSiblingIndexes, NodeReader} from "./node-reader.js";
 import {compareSiblingOrder} from "./order-key.js";
 import {newSystemTimestamp} from "./system-time.js";
 import {closeCurrentVersions} from "./temporal-merge.js";
@@ -655,6 +655,7 @@ export class CacheService
 			)
 			.sync();
 
+		const siblingIndexes = currentSiblingIndexes(this.database, results);
 		return results.map((result) => (
 		{
 			id: result.id,
@@ -662,6 +663,7 @@ export class CacheService
 			note: result.note,
 			parentId: result.parentId,
 			...metadataFields(metadataOf(result)),
+			priority: siblingIndexes.get(result.id) ?? null,
 			systemFrom: result.systemFrom,
 			systemTo: result.systemTo,
 			mirrorsAsOriginal: result.mirrorsAsOriginal,
@@ -950,6 +952,7 @@ export class CacheService
 						note: child.note,
 						parentId: child.parentId,
 						...metadataFields(metadataOf(child)),
+						priority: existingList.length,
 						systemFrom: child.systemFrom,
 						systemTo: child.systemTo,
 						mirrorsAsOriginal: child.mirrorsAsOriginal,

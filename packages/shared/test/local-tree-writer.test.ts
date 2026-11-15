@@ -100,14 +100,14 @@ function setup()
 
 	const writer = new LocalTreeWriter(database);
 
-	/** A parent's current children (Home's for null) in sort order, with their priority. */
+	/** A parent's current children (Home's for null) in sibling order, with their order key. */
 	const siblings = (parentId: string | null) =>
 		database
 			.select(
 				{
 					id: nodeContent.id,
 					name: nodeContent.name,
-					priority: nodeMetadata.priority,
+					orderKey: nodeMetadata.orderKey,
 				},
 			)
 			.from(nodeContent)
@@ -121,7 +121,7 @@ function setup()
 					eq(nodeContent.systemTo, FAR_FUTURE_DATE),
 				),
 			)
-			.orderBy(asc(nodeMetadata.priority))
+			.orderBy(asc(nodeMetadata.orderKey), asc(nodeMetadata.createdAt), asc(nodeContent.id))
 			.all();
 
 	/** Every node_metadata version, closed ones included, of `ids`. */
@@ -131,6 +131,7 @@ function setup()
 				{
 					nodeId: nodeMetadata.nodeId,
 					priority: nodeMetadata.priority,
+					orderKey: nodeMetadata.orderKey,
 					createdAt: nodeMetadata.createdAt,
 					modifiedAt: nodeMetadata.modifiedAt,
 					completedAt: nodeMetadata.completedAt,
@@ -187,12 +188,13 @@ function setup()
 	};
 }
 
-/** A metadata version a seeded node keeps, or the one it ends at `NOW`. */
+/** A metadata version a seeded node keeps, or the one it ends at `NOW`; the migration triggers key it by its priority. */
 function seeded(nodeId: string, priority: number, systemTo = FAR_FUTURE_DATE)
 {
 	return {
 		nodeId,
 		priority,
+		orderKey: `a${priority}`,
 		createdAt: SEEDED,
 		modifiedAt: SEEDED,
 		completedAt: null,
@@ -202,8 +204,8 @@ function seeded(nodeId: string, priority: number, systemTo = FAR_FUTURE_DATE)
 	};
 }
 
-/** The version a seeded node opens at `NOW` with only its priority changed. */
-function renumbered(nodeId: string, priority: number)
+/** The version a seeded node opens at `NOW`, before the changes a test spreads over it. */
+function reversioned(nodeId: string, priority: number)
 {
 	return {
 		...seeded(nodeId, priority),
@@ -228,7 +230,7 @@ describe("LocalTreeWriter", () =>
 		vi.useRealTimers();
 	});
 
-	it("creates a node at the top with the client's id, renumbering every sibling below it", () =>
+	it("creates a node at the top with the client's id and a key before its first sibling, writing no sibling", () =>
 	{
 		const {writer, siblings, metadataVersions, contentVersions} = setup();
 
@@ -259,34 +261,32 @@ describe("LocalTreeWriter", () =>
 					{
 						id: "n",
 						name: "new",
-						priority: 0,
+						orderKey: "Zz",
 					},
 					{
 						id: "a",
 						name: "a",
-						priority: 1,
+						orderKey: "a0",
 					},
 					{
 						id: "b",
 						name: "b",
-						priority: 2,
+						orderKey: "a1",
 					},
 					{
 						id: "c",
 						name: "c",
-						priority: 3,
+						orderKey: "a2",
 					},
 				],
 				metadata: [
-					seeded("a", 0, NOW),
-					renumbered("a", 1),
-					seeded("b", 1, NOW),
-					renumbered("b", 2),
-					seeded("c", 2, NOW),
-					renumbered("c", 3),
+					seeded("a", 0),
+					seeded("b", 1),
+					seeded("c", 2),
 					{
 						nodeId: "n",
-						priority: 0,
+						priority: null,
+						orderKey: "Zz",
 						createdAt: NOW_DATE,
 						modifiedAt: NOW_DATE,
 						completedAt: null,
@@ -309,7 +309,7 @@ describe("LocalTreeWriter", () =>
 		);
 	});
 
-	it("creates a node in the middle by index, renumbering only the siblings after it", () =>
+	it("creates a node in the middle by index with a key between its neighbours, writing no sibling", () =>
 	{
 		const {writer, siblings, metadataVersions} = setup();
 
@@ -333,30 +333,89 @@ describe("LocalTreeWriter", () =>
 					{
 						id: "a",
 						name: "a",
-						priority: 0,
+						orderKey: "a0",
 					},
 					{
 						id: "n",
 						name: "new",
-						priority: 1,
+						orderKey: "a0V",
 					},
 					{
 						id: "b",
 						name: "b",
-						priority: 2,
+						orderKey: "a1",
 					},
 					{
 						id: "c",
 						name: "c",
-						priority: 3,
+						orderKey: "a2",
+					},
+				],
+				metadata: [seeded("a", 0), seeded("b", 1), seeded("c", 2)],
+			},
+		);
+	});
+
+	it("creates a node between siblings with tied keys, rekeying only the tied sibling after the slot", () =>
+	{
+		const {database, writer, siblings, metadataVersions} = setup();
+		// b ties a's key, so created_at and then id put it after a.
+		database
+			.update(nodeMetadata)
+			.set(
+				{
+					priority: 0,
+				},
+			)
+			.where(eq(nodeMetadata.nodeId, "b"))
+			.run();
+
+		writer.createAt(
+			{
+				parentId: "p",
+				index: 1,
+				id: "n",
+				name: "new",
+			},
+		);
+
+		expect(
+			{
+				siblings: siblings("p"),
+				metadata: metadataVersions(["a", "b", "c"]),
+			},
+		).toStrictEqual(
+			{
+				siblings: [
+					{
+						id: "a",
+						name: "a",
+						orderKey: "a0",
+					},
+					{
+						id: "n",
+						name: "new",
+						orderKey: "a0V",
+					},
+					{
+						id: "b",
+						name: "b",
+						orderKey: "a1",
+					},
+					{
+						id: "c",
+						name: "c",
+						orderKey: "a2",
 					},
 				],
 				metadata: [
 					seeded("a", 0),
-					seeded("b", 1, NOW),
-					renumbered("b", 2),
-					seeded("c", 2, NOW),
-					renumbered("c", 3),
+					seeded("b", 0, NOW),
+					{
+						...reversioned("b", 0),
+						orderKey: "a1",
+					},
+					seeded("c", 2),
 				],
 			},
 		);
@@ -380,22 +439,22 @@ describe("LocalTreeWriter", () =>
 			{
 				id: "a",
 				name: "a",
-				priority: 0,
+				orderKey: "a0",
 			},
 			{
 				id: "b",
 				name: "b",
-				priority: 1,
+				orderKey: "a1",
 			},
 			{
 				id: "n",
 				name: "new",
-				priority: 2,
+				orderKey: "a1V",
 			},
 			{
 				id: "c",
 				name: "c",
-				priority: 3,
+				orderKey: "a2",
 			},
 		]);
 	});
@@ -424,17 +483,17 @@ describe("LocalTreeWriter", () =>
 					{
 						id: "p",
 						name: "p",
-						priority: 0,
+						orderKey: "a0",
 					},
 					{
 						id: "q",
 						name: "q",
-						priority: 1,
+						orderKey: "a1",
 					},
 					{
-						id,
+						id: id,
 						name: "new",
-						priority: 2,
+						orderKey: "a2",
 					},
 				],
 				metadata: [seeded("p", 0), seeded("q", 1)],
@@ -482,7 +541,7 @@ describe("LocalTreeWriter", () =>
 				metadata: [
 					seeded("a", 0, NOW),
 					{
-						...renumbered("a", 0),
+						...reversioned("a", 0),
 						modifiedAt: NOW_DATE,
 					},
 				],
@@ -540,7 +599,7 @@ describe("LocalTreeWriter", () =>
 				metadata: [
 					seeded("c1", 0, NOW),
 					{
-						...renumbered("c1", 0),
+						...reversioned("c1", 0),
 						modifiedAt: NOW_DATE,
 						systemTo: "2026-03-01 00:00:01.000",
 					},
@@ -568,7 +627,7 @@ describe("LocalTreeWriter", () =>
 		expect(metadataVersions(["a"])).toStrictEqual([
 			seeded("a", 0, NOW),
 			{
-				...renumbered("a", 0),
+				...reversioned("a", 0),
 				modifiedAt: NOW_DATE,
 				completedAt: NOW_DATE,
 				systemTo: "2026-03-02 00:00:00.000",
@@ -605,29 +664,28 @@ describe("LocalTreeWriter", () =>
 					{
 						id: "b",
 						name: "b",
-						priority: 0,
+						orderKey: "a1",
 					},
 					{
 						id: "c",
 						name: "c",
-						priority: 1,
+						orderKey: "a2",
 					},
 					{
 						id: "a",
 						name: "a",
-						priority: 2,
+						orderKey: "a3",
 					},
 				],
 				metadata: [
 					seeded("a", 0, NOW),
 					{
-						...renumbered("a", 2),
+						...reversioned("a", 0),
+						orderKey: "a3",
 						modifiedAt: NOW_DATE,
 					},
-					seeded("b", 1, NOW),
-					renumbered("b", 0),
-					seeded("c", 2, NOW),
-					renumbered("c", 1),
+					seeded("b", 1),
+					seeded("c", 2),
 				],
 				content: [
 					{
@@ -643,7 +701,7 @@ describe("LocalTreeWriter", () =>
 		);
 	});
 
-	it("moves a node across parents, renumbering both parents' children", () =>
+	it("moves a node across parents with a key before its new first sibling, writing no sibling in either parent", () =>
 	{
 		const {writer, siblings, metadataVersions, contentVersions} = setup();
 
@@ -668,43 +726,41 @@ describe("LocalTreeWriter", () =>
 					{
 						id: "a",
 						name: "a",
-						priority: 0,
+						orderKey: "a0",
 					},
 					{
 						id: "c",
 						name: "c",
-						priority: 1,
+						orderKey: "a2",
 					},
 				],
 				q: [
 					{
 						id: "b",
 						name: "b",
-						priority: 0,
+						orderKey: "Zz",
 					},
 					{
 						id: "x",
 						name: "x",
-						priority: 1,
+						orderKey: "a0",
 					},
 					{
 						id: "m",
 						name: null,
-						priority: 2,
+						orderKey: "a1",
 					},
 				],
 				metadata: [
 					seeded("b", 1, NOW),
 					{
-						...renumbered("b", 0),
+						...reversioned("b", 1),
+						orderKey: "Zz",
 						modifiedAt: NOW_DATE,
 					},
-					seeded("c", 2, NOW),
-					renumbered("c", 1),
-					seeded("m", 1, NOW),
-					renumbered("m", 2),
-					seeded("x", 0, NOW),
-					renumbered("x", 1),
+					seeded("c", 2),
+					seeded("m", 1),
+					seeded("x", 0),
 				],
 				content: [
 					{
@@ -754,29 +810,29 @@ describe("LocalTreeWriter", () =>
 					{
 						id: "b",
 						name: "b",
-						priority: 0,
+						orderKey: "a1",
 					},
 				],
 				q: [
 					{
 						id: "m",
 						name: null,
-						priority: 0,
+						orderKey: "a1",
 					},
 					{
 						id: "a",
 						name: "a",
-						priority: 1,
+						orderKey: "a2",
 					},
 					{
 						id: "c",
 						name: "c",
-						priority: 2,
+						orderKey: "a3",
 					},
 					{
 						id: "x",
 						name: "x",
-						priority: 3,
+						orderKey: "a4",
 					},
 				],
 			},
@@ -798,7 +854,7 @@ describe("LocalTreeWriter", () =>
 		}).toThrow("Cannot move p under its own subtree");
 	});
 
-	it("deletes a subtree, closing its rows and mirror rows, and renumbers the remaining siblings", () =>
+	it("deletes a subtree, closing its rows and mirror rows, and leaves the remaining siblings' keys alone", () =>
 	{
 		const {writer, siblings, metadataVersions, contentVersions, mirrorVersions} = setup();
 
@@ -819,16 +875,12 @@ describe("LocalTreeWriter", () =>
 					{
 						id: "a",
 						name: "a",
-						priority: 0,
+						orderKey: "a0",
 					},
 				],
 				metadata: [
 					seeded("b", 1, NOW),
-					seeded("c", 2, NOW),
-					{
-						...renumbered("c", 1),
-						systemTo: "2026-03-02 00:00:00.000",
-					},
+					seeded("c", 2, "2026-03-02 00:00:00.000"),
 					seeded("c1", 0, "2026-03-02 00:00:00.000"),
 				],
 				content: [
@@ -899,10 +951,11 @@ describe("LocalTreeWriter", () =>
 			},
 		);
 		const [, t4 = ""] = result.ids;
-		const created = (nodeId: string, priority: number, extra: object = {}) => (
+		const created = (nodeId: string, orderKey: string, extra: object = {}) => (
 		{
 			nodeId,
-			priority,
+			priority: null,
+			orderKey,
 			createdAt: NOW_DATE,
 			modifiedAt: NOW_DATE,
 			completedAt: null,
@@ -934,53 +987,53 @@ describe("LocalTreeWriter", () =>
 					{
 						id: "a",
 						name: "a",
-						priority: 0,
+						orderKey: "a0",
 					},
 					{
 						id: "t1",
 						name: "t1",
-						priority: 1,
+						orderKey: "a0G",
 					},
 					{
 						id: t4,
 						name: "t4",
-						priority: 2,
+						orderKey: "a0V",
 					},
 					{
 						id: "b",
 						name: "b",
-						priority: 3,
+						orderKey: "a1",
 					},
 					{
 						id: "c",
 						name: "c",
-						priority: 4,
+						orderKey: "a2",
 					},
 				],
 				children: [
 					{
 						id: "t2",
 						name: "t2",
-						priority: 0,
+						orderKey: "a0",
 					},
 					{
 						id: "t3",
 						name: "",
-						priority: 1,
+						orderKey: "a1",
 					},
 				],
 				metadata: [
 					created(
 						"t1",
-						1,
+						"a0G",
 						{
 							completedAt: NOW_DATE,
 							layoutMode: "board",
 						},
 					),
-					created("t2", 0),
-					created("t3", 1),
-					created(t4, 2),
+					created("t2", "a0"),
+					created("t3", "a1"),
+					created(t4, "a0V"),
 				].toSorted((left, right) => left.nodeId.localeCompare(right.nodeId)),
 				content: [
 					{
@@ -1084,13 +1137,13 @@ describe("LocalTreeWriter", () =>
 				metadata: [
 					seeded("a", 0, NOW),
 					{
-						...renumbered("a", 0),
+						...reversioned("a", 0),
 						modifiedAt: NOW_DATE,
 						layoutMode: "numbered",
 						systemTo: LATER,
 					},
 					{
-						...renumbered("a", 0),
+						...reversioned("a", 0),
 						modifiedAt: LATER_DATE,
 						layoutMode: "numbered",
 						systemFrom: LATER,
@@ -1208,28 +1261,30 @@ describe("LocalTreeWriter", () =>
 					{
 						id: "a",
 						name: "a",
-						priority: 0,
+						orderKey: "a0",
 					},
 					{
 						id: "b",
 						name: "b",
-						priority: 1,
+						orderKey: "a1",
 					},
 					{
 						id: "c",
 						name: "c",
-						priority: 2,
+						orderKey: "a2",
 					},
 				],
 				metadata: [
 					seeded("c", 2, NOW),
 					{
 						...seeded("c", 2),
+						priority: null,
 						systemFrom: LATER,
 					},
 					seeded("c1", 0, NOW),
 					{
 						...seeded("c1", 0),
+						priority: null,
 						systemFrom: LATER,
 					},
 				],
@@ -1302,29 +1357,29 @@ describe("LocalTreeWriter", () =>
 					{
 						id: "a",
 						name: "a",
-						priority: 0,
+						orderKey: "a0",
 					},
 					{
 						id: "c",
 						name: "c",
-						priority: 1,
+						orderKey: "a2",
 					},
 				],
 				q: [
 					{
 						id: "b",
 						name: "b",
-						priority: 0,
+						orderKey: "Zz",
 					},
 					{
 						id: "x",
 						name: "x",
-						priority: 1,
+						orderKey: "a0",
 					},
 					{
 						id: "m",
 						name: null,
-						priority: 2,
+						orderKey: "a1",
 					},
 				],
 			},

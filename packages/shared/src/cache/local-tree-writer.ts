@@ -1,4 +1,5 @@
 import {and, asc, desc, eq, isNull, lte, gt, ne, sql} from "drizzle-orm";
+import {generateNKeysBetween} from "fractional-indexing";
 import type {AnySQLiteColumn} from "drizzle-orm/sqlite-core";
 import
 {
@@ -21,7 +22,7 @@ import {internalLinkShortIds} from "../workflowy/internal-links.js";
 import {AccountNotProvisionedError} from "./account-store.js";
 import {currentVersion, normalizeLayoutMode} from "./cache-temporal.js";
 import {inIds} from "./in-ids.js";
-import {DEFAULT_ORDER_KEY} from "./order-key.js";
+import {compareBinary, compareSiblingOrder, DEFAULT_ORDER_KEY} from "./order-key.js";
 import {readNodeInternalMetadata, writeInternalMetadata} from "./internal-metadata.js";
 import type {InternalMetadata} from "./internal-metadata.js";
 import {currentBacklinkItems} from "./item-relationships.js";
@@ -169,7 +170,7 @@ export interface LocalTreeWriterOptions
 
 type MetadataRow = typeof nodeMetadata.$inferSelect;
 type ContentRow = typeof nodeContent.$inferSelect;
-type MetadataPatch = Partial<Pick<MetadataRow, "priority" | "modifiedAt" | "completedAt" | "layoutMode">>;
+type MetadataPatch = Partial<Pick<MetadataRow, "orderKey" | "modifiedAt" | "completedAt" | "layoutMode">>;
 type ContentPatch = Partial<Pick<ContentRow, "name" | "note" | "parentId">>;
 
 function toParent(parentId: Parent): string | null
@@ -268,6 +269,8 @@ class PendingWrites
 	private readonly orders = new Map<string | null, string[]>();
 	/** Nodes inserted in this unit: their rows are updated in place, since a version may not open and close in one unit. */
 	private readonly created = new Set<string>();
+	/** Nodes created or moved into a slot in this unit: each gets a new order key between its new neighbours. */
+	private readonly placed = new Set<string>();
 
 	constructor(private readonly tx: TemporalTransaction)
 	{
@@ -308,6 +311,11 @@ class PendingWrites
 		this.created.add(id);
 	}
 
+	markPlaced(id: string): void
+	{
+		this.placed.add(id);
+	}
+
 	setContent(id: string, patch: ContentPatch): void
 	{
 		this.content.set(
@@ -330,21 +338,54 @@ class PendingWrites
 		);
 	}
 
-	/** Renumber every touched parent's children 0..n-1, then write each changed row once. */
-	flush(systemTime: string): void
+	/**
+	 * Give each run of placed nodes keys between the kept siblings around it. A kept sibling whose key does not sort
+	 * after the run's lower bound (a tie, which created_at and id break) joins the run, so the keys stay strictly ordered.
+	 */
+	private assignOrderKeys(): void
 	{
 		for (const order of this.orders.values())
 		{
-			for (const [priority, id] of order.entries())
+			if (!order.some((id) => this.placed.has(id)))
 			{
-				this.setMetadata(
-					id,
-					{
-						priority,
-					},
-				);
+				continue;
 			}
+			const keys = currentOrderKeys(this.tx, order);
+			let lower: string | null = null;
+			let run: string[] = [];
+			const keyRun = (upper: string | null): void =>
+			{
+				for (const [at, orderKey] of generateNKeysBetween(lower, upper, run.length).entries())
+				{
+					this.setMetadata(
+						run[at] ?? "",
+						{
+							orderKey,
+						},
+					);
+				}
+				run = [];
+			};
+			for (const id of order)
+			{
+				const key = keys.get(id) ?? DEFAULT_ORDER_KEY;
+				const tied = run.length > 0 && lower !== null && compareBinary(key, lower) <= 0;
+				if (this.placed.has(id) || tied)
+				{
+					run.push(id);
+					continue;
+				}
+				keyRun(key);
+				lower = key;
+			}
+			keyRun(null);
 		}
+	}
+
+	/** Key the placed nodes, then write each changed row once. */
+	flush(systemTime: string): void
+	{
+		this.assignOrderKeys();
 		for (const [id, patch] of this.content)
 		{
 			const current = this.tx
@@ -414,6 +455,24 @@ class PendingWrites
 	}
 }
 
+/** The current order key of each of `ids` that has one. */
+function currentOrderKeys(tx: TemporalTransaction, ids: readonly string[]): Map<string, string | null>
+{
+	return new Map(
+		tx
+			.select(
+				{
+					nodeId: nodeMetadata.nodeId,
+					orderKey: nodeMetadata.orderKey,
+				},
+			)
+			.from(nodeMetadata)
+			.where(and(inIds(nodeMetadata.nodeId, ids), currentVersion(nodeMetadata)))
+			.all()
+			.map(({nodeId, orderKey}) => [nodeId, orderKey]),
+	);
+}
+
 /** A parent's current children ids (Home's for null) in sibling order: order key, then createdAt, then id. */
 export function currentChildIds(tx: TemporalTransaction, parentId: string | null): string[]
 {
@@ -438,6 +497,39 @@ export function currentChildIds(tx: TemporalTransaction, parentId: string | null
 		)
 		.all()
 		.map((row) => row.id);
+}
+
+/** The slot in `order` where a row with these sort fields sorts: before the first sibling that sorts after it. */
+function slotFor(tx: TemporalTransaction, order: readonly string[], row: MetadataRow | undefined): number
+{
+	if (row === undefined)
+	{
+		return order.length;
+	}
+	const siblings = new Map(
+		tx
+			.select()
+			.from(nodeMetadata)
+			.where(and(inIds(nodeMetadata.nodeId, order), currentVersion(nodeMetadata)))
+			.all()
+			.map((sibling) => [sibling.nodeId, sibling]),
+	);
+	const slot = order.findIndex(
+		(id) =>
+			compareSiblingOrder(
+				{
+					orderKey: siblings.get(id)?.orderKey,
+					createdAt: siblings.get(id)?.createdAt,
+					id,
+				},
+				{
+					orderKey: row.orderKey,
+					createdAt: row.createdAt,
+					id: row.nodeId,
+				},
+			) > 0,
+	);
+	return slot === -1 ? order.length : slot;
 }
 
 function currentContent(tx: TemporalTransaction, id: string): ContentRow | undefined
@@ -532,9 +624,9 @@ export function readHomeLayoutMode(tx: TemporalTransaction): string | null
 
 /**
  * Writes the outline of a standalone account, which has no workflowy.com behind it, straight into the temporal node
- * tables. Each write is one unit of work. Siblings are read in `node_metadata.order_key` order; after a write, every
- * touched parent's children get priorities 0..n-1, from which the migration 0005 triggers derive their order keys, and
- * only rows whose values changed get a new version.
+ * tables. Each write is one unit of work. Siblings are read in `node_metadata.order_key` order. A write gives only the
+ * nodes it creates or moves a key between their new neighbours, so no sibling is renumbered; this writer leaves
+ * `priority` null, and only rows whose values changed get a new version.
  */
 export class LocalTreeWriter
 {
@@ -587,11 +679,12 @@ export class LocalTreeWriter
 					name: input.name,
 					note: input.note,
 					parentId,
-					priority: index,
+					orderKey: null,
 					layoutMode: input.layoutMode,
 				},
 			);
 			order.splice(index, 0, id);
+			pending.markPlaced(id);
 			return {
 				id,
 			};
@@ -742,7 +835,8 @@ export class LocalTreeWriter
 			name: string;
 			note?: string | null;
 			parentId: string | null;
-			priority: number;
+			/** The key under a parent created in this unit; null for a node placed in a loaded order, keyed at flush. */
+			orderKey: string | null;
 			completed?: boolean;
 			layoutMode?: string | null;
 		},
@@ -770,7 +864,7 @@ export class LocalTreeWriter
 				{
 					nodeId: row.id,
 					shortId: uuidToShortId(row.id),
-					priority: row.priority,
+					orderKey: row.orderKey,
 					createdAt: now,
 					modifiedAt: now,
 					completedAt: row.completed === true ? now : null,
@@ -789,7 +883,7 @@ export class LocalTreeWriter
 		const parentId = toParent(input.parentId);
 		requireParent(tx, parentId);
 		const metadataById = new Map<string, InternalMetadata | undefined>();
-		const insert = (tree: NewTree, treeParent: string | null, priority: number): string =>
+		const insert = (tree: NewTree, treeParent: string | null, orderKey: string | null): string =>
 		{
 			const id = tree.id ?? this.generateId();
 			const metadata = tree.metadata ?? {};
@@ -801,7 +895,7 @@ export class LocalTreeWriter
 					name: tree.name,
 					note: tree.note,
 					parentId: treeParent,
-					priority,
+					orderKey,
 					completed: tree.completed === true,
 					layoutMode: typeof metadata.layoutMode === "string" ? metadata.layoutMode : null,
 				},
@@ -821,16 +915,25 @@ export class LocalTreeWriter
 					)
 					.run();
 			}
-			for (const [childPriority, child] of (tree.children ?? []).entries())
+			const children = tree.children ?? [];
+			for (const [at, childKey] of generateNKeysBetween(null, null, children.length).entries())
 			{
-				insert(child, id, childPriority);
+				const child = children[at];
+				if (child !== undefined)
+				{
+					insert(child, id, childKey);
+				}
 			}
 			return id;
 		};
 		const order = pending.order(parentId);
 		const index = anchoredSlot(order, input.afterId, input.index);
-		const ids = input.trees.map((tree, offset) => insert(tree, parentId, index + offset));
+		const ids = input.trees.map((tree) => insert(tree, parentId, null));
 		order.splice(index, 0, ...ids);
+		for (const id of ids)
+		{
+			pending.markPlaced(id);
+		}
 		writeInternalMetadata(unitOfWork, metadataById);
 		return ids;
 	}
@@ -999,12 +1102,12 @@ export class LocalTreeWriter
 		requireParent(tx, parentId);
 		const order = pending.order(parentId);
 		const index = clampIndex(
-			input.index ?? (input.parentId === undefined ? (root.metadata?.priority ?? order.length) : order.length),
+			input.index ?? (input.parentId === undefined ? slotFor(tx, order, root.metadata) : order.length),
 			order.length,
 		);
 		const subtree = readSubtreeAt(tx, input.id, asOf);
 		const restored: string[] = [];
-		const reopen = (id: string, nodeParent: string | null, priority: number): void =>
+		const reopen = (id: string, nodeParent: string | null): void =>
 		{
 			if (currentContent(tx, id) !== undefined)
 			{
@@ -1031,7 +1134,7 @@ export class LocalTreeWriter
 					.values(
 						{
 							...metadata,
-							priority,
+							priority: null,
 							systemFrom: systemTime,
 							systemTo: FAR_FUTURE_DATE,
 						},
@@ -1040,13 +1143,14 @@ export class LocalTreeWriter
 			}
 			restored.push(id);
 			pending.markCreated(id);
-			for (const [childPriority, childId] of (subtree.children.get(id) ?? []).entries())
+			for (const childId of subtree.children.get(id) ?? [])
 			{
-				reopen(childId, id, childPriority);
+				reopen(childId, id);
 			}
 		};
-		reopen(input.id, parentId, index);
+		reopen(input.id, parentId);
 		order.splice(index, 0, input.id);
+		pending.markPlaced(input.id);
 		writeInternalMetadata(unitOfWork, new Map(restored.map((id) => [id, subtree.metadata.get(id)])));
 		this.reopenMirrors(unitOfWork, restored, asOf);
 		return true;
@@ -1205,6 +1309,7 @@ export class LocalTreeWriter
 			const target = pending.parentOf(mirrorId);
 			const order = pending.order(target);
 			order.splice(order.indexOf(mirrorId), 1, originalId);
+			pending.markPlaced(originalId);
 			ended.push(...pending.subtree(mirrorId));
 			pending.setContent(
 				originalId,
@@ -1302,10 +1407,11 @@ export class LocalTreeWriter
 								id: rootId,
 								name: "",
 								parentId: targetId,
-								priority: children.length,
+								orderKey: null,
 							},
 						);
 						children.push(rootId);
+						pending.markPlaced(rootId);
 						tx.insert(referencesRoots)
 							.values(
 								{
@@ -1326,10 +1432,11 @@ export class LocalTreeWriter
 							id: itemId,
 							name: "",
 							parentId: rootId,
-							priority: 0,
+							orderKey: null,
 						},
 					);
 					pending.order(rootId).unshift(itemId);
+					pending.markPlaced(itemId);
 					tx.insert(mirrors)
 						.values(
 							{
@@ -1503,6 +1610,7 @@ export class LocalTreeWriter
 						modifiedAt: now,
 					},
 				);
+				pending.markPlaced(id);
 			}
 			order.splice(0, order.length, ...before, ...move.ids, ...after);
 		}

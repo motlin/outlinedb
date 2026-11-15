@@ -512,7 +512,7 @@ describe("API Sync with Cache", () =>
 					name: "Cached Name",
 					note: "Cached Note",
 					parentId: null,
-					priority: 100,
+					priority: 0,
 					createdAt: new Date(1_700_000_000 * 1000),
 					modifiedAt: new Date(1_700_001_000 * 1000),
 					completedAt: null,

@@ -400,6 +400,9 @@ importers:
       drizzle-orm:
         specifier: ^0.45.3
         version: 0.45.3(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(kysely@0.29.8)
+      fractional-indexing:
+        specifier: 4.0.0
+        version: 4.0.0
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -4470,6 +4473,10 @@ packages:
   forwarded@0.2.0:
     resolution: {integrity: sha512-buRG0fpBtRHSTCOASe6hD258tEubFoRLb4ZNA6NxMVHNw2gOcwHo9wyablzMzOA5z9xA9L1KNjk/Nt6MT9aYow==}
     engines: {node: '>= 0.6'}
+
+  fractional-indexing@4.0.0:
+    resolution: {integrity: sha512-Nr2P1Yyaj2sy1Qdt/wI3GcByxrUdbSKg5+cGvw8f18hT2SkQt6V72iOjBpk7IO3UkzBsdlGRs2a4z6dLrJprgw==}
+    engines: {node: ^14.13.1 || >=16.0.0}
 
   fresh@2.0.0:
     resolution: {integrity: sha512-Rx/WycZ60HOaqLKAi6cHRKKI7zxWbJ31MhntmtwMoaTeF7XFH9hhBp8vITaMidfljRQ6eYWCKkaTK+ykVJHP2A==}
@@ -9864,6 +9871,8 @@ snapshots:
   form-data-encoder@2.1.4: {}
 
   forwarded@0.2.0: {}
+
+  fractional-indexing@4.0.0: {}
 
   fresh@2.0.0: {}
 

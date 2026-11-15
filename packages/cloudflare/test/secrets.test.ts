@@ -67,7 +67,7 @@ describe("a Durable Object with no secrets", () =>
 			parent_id: null,
 			name: "changed",
 			note: null,
-			priority: 100,
+			priority: 0,
 			data:
 			{
 				layoutMode: null,

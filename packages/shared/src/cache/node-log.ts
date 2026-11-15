@@ -558,6 +558,13 @@ function writeModel(unitOfWork: UnitOfWork, model: TreeModel): void
 				{
 					...row,
 					...next,
+					// A null key lets the insert trigger derive the key from the new priority.
+					...(next.priority === row.priority
+						? {}
+						:
+							{
+								orderKey: null,
+							}),
 					...current,
 				},
 			)

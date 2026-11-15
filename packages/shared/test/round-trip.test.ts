@@ -101,7 +101,7 @@ describe("round-trip test infrastructure", () =>
 				count: number;
 			}>(sql`SELECT COUNT(*) AS count FROM __drizzle_migrations`);
 
-			expect(result.count).toBe(6);
+			expect(result.count).toBe(7);
 
 			sqlite.close();
 		});

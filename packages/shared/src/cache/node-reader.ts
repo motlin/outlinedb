@@ -2,10 +2,11 @@ import type * as schema from "../db/schema.js";
 import type {AppDatabase} from "../db/types.js";
 import {mirrors, nodeContent} from "../db/schema.js";
 import type {Node} from "../types/node.js";
-import {and, eq, isNull} from "drizzle-orm";
+import {and, eq, isNull, sql} from "drizzle-orm";
 import {currentVersion} from "./cache-temporal.js";
 import {inIds} from "./in-ids.js";
-import {compareSiblingOrder} from "./order-key.js";
+import {compareSiblingOrder, DEFAULT_ORDER_KEY} from "./order-key.js";
+import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 import {mirrorOriginalText, relationalRowId} from "./mirror-text.js";
 
 /**
@@ -66,6 +67,48 @@ function bySiblingOrder(a: ContentWithMetadata, b: ContentWithMetadata): number
 }
 
 /**
+ * Each node's 0-based index among its current siblings, in sibling order (order key, creation time, id): the
+ * `priority` API DTOs report, since `node_metadata.priority` is no longer kept by every writer.
+ */
+export function currentSiblingIndexes(
+	database: AppDatabase,
+	nodes: readonly
+	{
+		id: string;
+		parentId: string | null;
+	}[],
+): Map<string, number>
+{
+	if (nodes.length === 0)
+	{
+		return new Map();
+	}
+	const parentIds = [...new Set(nodes.flatMap(({parentId}) => (parentId === null ? [] : [parentId])))];
+	const rootLevel = nodes.some(({parentId}) => parentId === null);
+	const rows = database.all<
+	{
+		id: string;
+		siblingIndex: number;
+	}>(sql`
+		SELECT id, siblingIndex FROM (
+			SELECT
+				c.id AS id,
+				ROW_NUMBER() OVER (
+					PARTITION BY c.parent_id
+					ORDER BY coalesce(m.order_key, ${DEFAULT_ORDER_KEY}), coalesce(m.created_at, 0), c.id
+				) - 1 AS siblingIndex
+			FROM node_content c
+			LEFT JOIN node_metadata m ON m.node_id = c.id AND m.system_to = ${FAR_FUTURE_DATE}
+			WHERE c.system_to = ${FAR_FUTURE_DATE}
+				AND (c.parent_id IN (SELECT value FROM json_each(${JSON.stringify(parentIds)}))
+					OR (${rootLevel ? 1 : 0} = 1 AND c.parent_id IS NULL))
+		)
+		WHERE id IN (SELECT value FROM json_each(${JSON.stringify(nodes.map(({id}) => id))}))
+	`);
+	return new Map(rows.map(({id, siblingIndex}) => [id, siblingIndex]));
+}
+
+/**
  * Single read service for loading current nodes from the SQLite cache.
  *
  * `NodeReader` owns every "load current node(s) with relationships" query.
@@ -105,7 +148,7 @@ export class NodeReader
 		{
 			return null;
 		}
-		return this.toNodes([result])[0] ?? null;
+		return this.withSiblingIndexes(this.toNodes([result]))[0] ?? null;
 	}
 
 	/**
@@ -155,7 +198,18 @@ export class NodeReader
 			)
 			.sync();
 
-		return new Map(this.toNodes(results).map((node) => [node.id, node]));
+		return new Map(this.withSiblingIndexes(this.toNodes(results)).map((node) => [node.id, node]));
+	}
+
+	/** Each node with its 0-based index among its current siblings as its priority. */
+	private withSiblingIndexes(nodes: Node[]): Node[]
+	{
+		const indexes = currentSiblingIndexes(this.database, nodes);
+		return nodes.map((node) => (
+		{
+			...node,
+			priority: indexes.get(node.id) ?? node.priority,
+		}));
 	}
 
 	/**

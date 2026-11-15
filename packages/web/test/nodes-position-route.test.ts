@@ -109,7 +109,11 @@ function setup(configured: boolean)
 		createAt: vi.fn<WorkflowyInternalAdapter["createAt"]>(async (input) =>
 		{
 			const id = input.id ?? "new";
-			cacheService.insertNode(apiNode(id, input.parentId === "home" ? null : input.parentId, 1), null);
+			// Home's children as upstream reports them after the create, with the new node at index 1.
+			cacheService.storeApiResponse(
+				["a", id, "b", "c"].map((child, priority) => apiNode(child, null, priority)),
+				null,
+			);
 			return Promise.resolve(
 				{
 					id,
@@ -127,7 +131,13 @@ function setup(configured: boolean)
 		moveBlocks: vi.fn<WorkflowyInternalAdapter["moveBlocks"]>(async () => {}),
 		restore: vi.fn<WorkflowyInternalAdapter["restore"]>(async (input) =>
 		{
-			cacheService.insertNode(apiNode(input.id, null, 0), null);
+			// Home's children as upstream reports them after the restore, with the restored node first.
+			cacheService.storeApiResponse(
+				[input.id, ...["a", "b", "c"].filter((child) => child !== input.id)].map((child, priority) =>
+					apiNode(child, null, priority),
+				),
+				null,
+			);
 			return Promise.resolve();
 		}),
 	};
