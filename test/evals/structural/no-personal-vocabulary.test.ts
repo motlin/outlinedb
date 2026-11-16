@@ -65,6 +65,9 @@ describe("Structural Eval: No Personal Vocabulary", () =>
 		const prep = readFileSync(join(PROJECT_ROOT, "plugins/gtd/commands/refine-journal-prep.md"), "utf8");
 
 		expect(prep).toMatch(/religious or community event[^\n]*place[^\n]*journal-vocabulary\.md/iu);
+		expect(prep).toMatch(
+			/journal-vocab-emoji\.mts lookup[^\n]*no picker|no picker[^\n]*journal-vocab-emoji\.mts lookup/iu,
+		);
 	});
 
 	it("refine-journal-prep leads emoji options with the occasion rather than the means", () =>
@@ -79,5 +82,6 @@ describe("Structural Eval: No Personal Vocabulary", () =>
 		const apply = readFileSync(join(PROJECT_ROOT, "plugins/gtd/commands/refine-journal-apply.md"), "utf8");
 
 		expect(apply).toMatch(/emoji pick[^\n]*journal-vocabulary\.md/iu);
+		expect(apply).toMatch(/already has a row[^\n]*journal-vocab-emoji\.mts lookup/iu);
 	});
 });

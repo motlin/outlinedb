@@ -62,7 +62,7 @@ Follow **Remember explanations in the matching reference file** in `${CLAUDE_PLU
 
 ### Offer to record vocabulary emoji picks
 
-After the user answers a ⚠️ emoji picker for an entry that names a holiday, observance, religious or community event, class, ceremony, or place, offer once via `AskUserQuestion` to record the emoji pick in the emoji table of `.llm/gtd/journal-vocabulary.md` so the next matching entry gets it without a picker. Show the exact proposed row (term, emoji, today's date) in the question, with options to save it or skip saving. Skip the offer when the term already has a row. Keep every term and emoji in that gitignored file, never in `plugins/`. If the write fails, report the failure rather than claiming it was saved.
+After the user answers a ⚠️ emoji picker for an entry that names a holiday, observance, religious or community event, class, ceremony, or place, offer once via `AskUserQuestion` to record the emoji pick in the emoji table of `.llm/gtd/journal-vocabulary.md` so the next matching entry gets it without a picker. Show the exact proposed row (term, emoji, today's date) in the question, with options to save it or skip saving. Skip the offer when the term already has a row: run `node ${CLAUDE_PLUGIN_ROOT}/scripts/journal-vocab-emoji.mts lookup '<term>'` and skip when its `emoji` is non-null. Keep every term and emoji in that gitignored file, never in `plugins/`. If the write fails, report the failure rather than claiming it was saved.
 
 ### Record every Reject in the decline ledger
 
