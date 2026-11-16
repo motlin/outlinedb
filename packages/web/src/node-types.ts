@@ -138,7 +138,8 @@ export interface OpErrorBody
  */
 export interface AccountSync
 {
-	phase: "idle" | "fetching" | "importing";
+	/** `waiting`: a mirror account whose first sync from workflowy.com has not finished, with no run in progress. */
+	phase: "idle" | "waiting" | "fetching" | "importing";
 	applied: number;
 }
 

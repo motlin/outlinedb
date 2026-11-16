@@ -414,7 +414,10 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 		return this.sync.status();
 	}
 
-	/** The signed-in user's view of the sync: its phase and how many items the run applied; idle for a standalone. */
+	/**
+	 * The signed-in user's view of the sync: its phase and how many items the run applied; idle for a standalone, and
+	 * waiting for a mirror no run has imported yet.
+	 */
 	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
 	async accountSync(): Promise<AccountSync>
 	{
@@ -427,7 +430,7 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 		}
 		const {phase, applied} = await this.sync.status();
 		return {
-			phase,
+			phase: phase === "idle" && !this.sync.hasImported() ? "waiting" : phase,
 			applied,
 		};
 	}
@@ -556,7 +559,11 @@ const EVENT_SOCKET_TAGS: Partial<Record<string, string>> =
 export type StoreMode = "mirror" | "standalone";
 
 /** What `GET /api/v1/sync-status` tells the signed-in user about their account's import. */
-export type AccountSync = Pick<SyncStatus, "phase" | "applied">;
+export interface AccountSync
+{
+	phase: SyncStatus["phase"] | "waiting";
+	applied: number;
+}
 
 /** The user an object was provisioned for, and whether it mirrors workflowy.com. */
 export interface Profile

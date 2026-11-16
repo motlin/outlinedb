@@ -358,6 +358,12 @@ export class SyncJob
 		};
 	}
 
+	/** Whether any run has ever finished ok, so this object holds an import of the account; any version counts. */
+	hasImported(): boolean
+	{
+		return this.sql.exec("SELECT 1 FROM sync_runs WHERE status = 'ok' LIMIT 1").toArray().length > 0;
+	}
+
 	/** One alarm: start a run when idle, otherwise continue the one in progress. */
 	async tick(): Promise<void>
 	{

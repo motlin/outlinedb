@@ -895,6 +895,8 @@ describe("sync from a fake upstream", () =>
 			exportReached = resolve;
 		});
 		const h = await start(undefined, internalAuthBindings);
+		const accountSync = async () => readJson(await h.mf.dispatchFetch("http://localhost/api/v1/sync-status"));
+		const beforeFirstRun = await accountSync();
 		await h.mf.dispatchFetch(
 			"http://localhost/api/admin/sync",
 			{
@@ -903,7 +905,6 @@ describe("sync from a fake upstream", () =>
 		);
 		await reached;
 		await sleep(50);
-		const accountSync = async () => readJson(await h.mf.dispatchFetch("http://localhost/api/v1/sync-status"));
 		const whileFetching = await accountSync();
 		const seed = await h.mf.dispatchFetch(
 			"http://localhost/api/admin/seed",
@@ -931,14 +932,20 @@ describe("sync from a fake upstream", () =>
 				totalNodes: 100,
 			},
 		);
-		// The signed-in user's own view of the sync, which the empty outline shows while the first import runs.
+		// The signed-in user's own view of the sync, which the empty outline shows until the first import lands.
 		expect(
 			{
+				beforeFirstRun,
 				whileFetching,
 				afterwards: await accountSync(),
 			},
 		).toStrictEqual(
 			{
+				beforeFirstRun:
+				{
+					phase: "waiting",
+					applied: 0,
+				},
 				whileFetching:
 				{
 					phase: "fetching",

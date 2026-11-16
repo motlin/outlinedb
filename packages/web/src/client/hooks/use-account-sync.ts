@@ -1,6 +1,6 @@
 /**
- * The signed-in account's import state over `GET /api/v1/sync-status`: whether its first sync is still fetching or
- * importing, and how many items it has applied. Polled only while a run is in progress; each poll that sees more
+ * The signed-in account's import state over `GET /api/v1/sync-status`: whether its first sync is still waiting to start,
+ * fetching or importing, and how many items it has applied. Polled while it is not idle; each poll that sees more
  * items applied, and the run's end, invalidates every other query so the imported outline appears without a reload.
  */
 

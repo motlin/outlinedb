@@ -243,7 +243,7 @@ vi.mock("../src/client/components/node-context-menu.js", () => (
 let accountSync:
 	|
 	  {
-			phase: "idle" | "fetching" | "importing";
+			phase: "idle" | "waiting" | "fetching" | "importing";
 			applied: number;
 	  }
 	| undefined;
@@ -1133,6 +1133,24 @@ describe("OutlineTree empty account", () =>
 		expect(emptyOutlineText(render())).toStrictEqual([
 			"Importing your outline",
 			"Fetching your items. They appear here as soon as the import finishes.",
+		]);
+	});
+
+	it("shows a loading line, not the welcome, while the account's sync state is still loading", () =>
+	{
+		expect(emptyOutlineText(render())).toStrictEqual(["Loading your outline."]);
+	});
+
+	it("shows a waiting line, not the welcome, while a mirror account waits for its first sync to start", () =>
+	{
+		accountSync =
+		{
+			phase: "waiting",
+			applied: 0,
+		};
+		expect(emptyOutlineText(render())).toStrictEqual([
+			"Importing your outline",
+			"Waiting for the first sync to start. Your items appear here as soon as the import finishes.",
 		]);
 	});
 
