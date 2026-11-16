@@ -2,7 +2,7 @@ import type * as schema from "../db/schema.js";
 import type {AppDatabase} from "../db/types.js";
 import {mirrors, nodeContent, nodeMetadata, referencesRoots} from "../db/schema.js";
 import {stripHtmlTags} from "../html/strip-tags.js";
-import {FAR_FUTURE_DATE} from "../temporal/constants.js";
+import {FAR_FUTURE_DATE, parseTemporalTimestamp} from "../temporal/constants.js";
 import type {Node} from "../types/node.js";
 import {isSystemTarget} from "../types/targets.js";
 import type {WorkflowyNode} from "../types/workflowy.js";
@@ -16,7 +16,6 @@ import
 	keepSkewedTimestamps,
 	metadataMatches,
 	normalizeLayoutMode,
-	systemFromToDate,
 } from "./cache-temporal.js";
 import {notBacklinkItem, recordItemRelationships, upstreamRelationshipMetadata} from "./item-relationships.js";
 import type {BacklinkItem, ItemRelationships, UpstreamRelationshipMetadata} from "./item-relationships.js";
@@ -565,7 +564,7 @@ export class CacheService
 		return {
 			node,
 			source: "cache",
-			fetchedAt: systemFromToDate(node.systemFrom),
+			fetchedAt: parseTemporalTimestamp(node.systemFrom),
 		};
 	}
 

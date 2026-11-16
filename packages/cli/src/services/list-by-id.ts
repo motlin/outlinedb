@@ -1,5 +1,6 @@
 import type {WorkflowyApiClient} from "@outlinedb/shared/api";
-import {NodeTreeReader, systemFromToDate} from "@outlinedb/shared/cache";
+import {NodeTreeReader} from "@outlinedb/shared/cache";
+import {parseTemporalTimestamp} from "@outlinedb/shared/temporal";
 import type {NodeTree} from "@outlinedb/shared/cache";
 import type {CacheService} from "./cache.js";
 import {logger} from "./logger.js";
@@ -107,7 +108,7 @@ export class ListByIdService
 		}[],
 	): number
 	{
-		const fetchTimes = nodes.map((n) => systemFromToDate(n.systemFrom).getTime());
+		const fetchTimes = nodes.map((n) => parseTemporalTimestamp(n.systemFrom).getTime());
 		const oldestFetch = fetchTimes.length > 0 ? Math.min(...fetchTimes) : undefined;
 		return oldestFetch !== undefined && oldestFetch !== 0 ? Math.floor((Date.now() - oldestFetch) / 1000) : 0;
 	}

@@ -1,5 +1,5 @@
 import {backupImports, nodeContent, nodeMetadata} from "@outlinedb/shared/db";
-import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, parseTemporalTimestamp} from "@outlinedb/shared/temporal";
 import {and, count, desc, eq, isNotNull, isNull, max} from "drizzle-orm";
 import {z} from "zod";
 import {defineOp, ok} from "./define.js";
@@ -69,7 +69,7 @@ export const cacheStatus = defineOp(
 					rootNodes: roots?.count ?? 0,
 					completedNodes: completed?.count ?? 0,
 					// systemFrom is SQLite's UTC "YYYY-MM-DD HH:MM:SS[.fff]".
-					lastSync: lastChange === null ? null : new Date(`${lastChange.replace(" ", "T")}Z`).toISOString(),
+					lastSync: lastChange === null ? null : parseTemporalTimestamp(lastChange).toISOString(),
 					lastBackupImport: lastImport?.backupDate ?? null,
 				},
 			);

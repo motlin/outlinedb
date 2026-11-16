@@ -2,7 +2,7 @@ import {countStrandedRows} from "@outlinedb/shared/cache";
 import type {StrandedRowCounts} from "@outlinedb/shared/cache";
 import {backupImports, nodeContent, nodeMetadata} from "@outlinedb/shared/db";
 import type * as schema from "@outlinedb/shared/db";
-import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, parseTemporalTimestamp} from "@outlinedb/shared/temporal";
 import {and, count, desc, eq, isNotNull, isNull} from "drizzle-orm";
 import type {BetterSQLite3Database} from "drizzle-orm/better-sqlite3";
 import fs from "node:fs";
@@ -132,7 +132,7 @@ export class CacheStatusService
 			return null;
 		}
 
-		return new Date(`${result.systemFrom.replace(" ", "T")}Z`);
+		return parseTemporalTimestamp(result.systemFrom);
 	}
 
 	private getDatabaseSize(dbPath: string): string

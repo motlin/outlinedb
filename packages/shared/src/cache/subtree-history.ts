@@ -2,9 +2,7 @@ import {and, asc, eq, gt, inArray, lte, sql} from "drizzle-orm";
 import type {SQL} from "drizzle-orm";
 import type {AnySQLiteColumn} from "drizzle-orm/sqlite-core";
 import {nodeContent, nodeMetadata} from "../db/schema.js";
-import {formatTemporalTimestamp} from "../temporal/constants.js";
 import {FAR_FUTURE_DATE} from "../temporal/index.js";
-import {systemFromToDate} from "./cache-temporal.js";
 import {readInternalMetadata} from "./internal-metadata.js";
 import {DEFAULT_ORDER_KEY} from "./order-key.js";
 import type {InternalMetadata} from "./internal-metadata.js";
@@ -18,12 +16,6 @@ export interface SubtreeAt
 {
 	children: Map<string, string[]>;
 	metadata: Map<string, InternalMetadata>;
-}
-
-/** The system time one millisecond before `systemTime`: reading as of it sees the rows a unit at `systemTime` replaced. */
-export function systemTimeJustBefore(systemTime: string): string
-{
-	return formatTemporalTimestamp(new Date(systemFromToDate(systemTime).getTime() - 1));
 }
 
 function versionAt(

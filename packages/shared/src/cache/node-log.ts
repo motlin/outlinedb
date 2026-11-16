@@ -30,10 +30,10 @@
 import {and, asc, eq, isNull, sql} from "drizzle-orm";
 import {z} from "zod";
 import {nodeContent, nodeMetadata, outbox} from "../db/schema.js";
-import {FAR_FUTURE_DATE} from "../temporal/index.js";
+import {FAR_FUTURE_DATE, parseTemporalTimestamp} from "../temporal/index.js";
 import {uuidToShortId} from "../workflowy/constants.js";
 import {readWorkflowyEpoch} from "./account-store.js";
-import {normalizeLayoutMode, systemFromToDate} from "./cache-temporal.js";
+import {normalizeLayoutMode} from "./cache-temporal.js";
 import type {LoggedOp} from "./relationship-log.js";
 import type {UnitOfWork} from "./node-composite.js";
 import {inIds} from "./in-ids.js";
@@ -768,7 +768,7 @@ export function applyNodeOps(
 		return [];
 	}
 	const epoch = readWorkflowyEpoch(unitOfWork.tx);
-	const systemSec = Math.floor(systemFromToDate(unitOfWork.systemTime).getTime() / 1000);
+	const systemSec = Math.floor(parseTemporalTimestamp(unitOfWork.systemTime).getTime() / 1000);
 	const toUnixSec = (clientTimestamp: number | undefined): number =>
 		epoch === undefined || clientTimestamp === undefined ? systemSec : epoch + clientTimestamp;
 	const model = new TreeModel(unitOfWork, toUnixSec, pendingAspects(unitOfWork.tx, namedNodeIds(replayed)));

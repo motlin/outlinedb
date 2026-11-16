@@ -29,3 +29,15 @@ export function formatTemporalTimestamp(date: Date): string
 
 	return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${milliseconds}`;
 }
+
+/** Parses a stored `system_from`/`system_to` value (see {@link formatTemporalTimestamp}) as a UTC instant. */
+export function parseTemporalTimestamp(timestamp: string): Date
+{
+	return new Date(`${timestamp.replace(" ", "T")}Z`);
+}
+
+/** The system time one tick before `timestamp`: reading as of it sees the rows a unit at `timestamp` replaced. */
+export function temporalTimestampJustBefore(timestamp: string): string
+{
+	return formatTemporalTimestamp(new Date(parseTemporalTimestamp(timestamp).getTime() - 1));
+}

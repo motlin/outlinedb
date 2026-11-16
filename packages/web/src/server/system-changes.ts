@@ -6,7 +6,13 @@
  */
 
 import {bulkImportLeaseStart, TRANSACTION_TIMEOUT_MS} from "@outlinedb/shared/cache";
-import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@outlinedb/shared/temporal";
+import
+{
+	FAR_FUTURE_DATE,
+	formatTemporalTimestamp,
+	parseTemporalTimestamp,
+	temporalTimestampJustBefore,
+} from "@outlinedb/shared/temporal";
 import {sql} from "drizzle-orm";
 import type {SQL} from "drizzle-orm";
 import type {AppDatabase} from "@outlinedb/shared/db";
@@ -56,7 +62,7 @@ export function latestSystemTime(database: Database): string
  */
 export function changesSince(latest: string): string
 {
-	const ms = Date.parse(`${latest.replace(" ", "T")}Z`);
+	const ms = parseTemporalTimestamp(latest).getTime();
 	return Number.isNaN(ms) ? "" : formatTemporalTimestamp(new Date(ms - TRANSACTION_TIMEOUT_MS));
 }
 
@@ -132,7 +138,7 @@ export function changeWatermark(database: Database): string
 	{
 		return watermark;
 	}
-	const beforeLease = formatTemporalTimestamp(new Date(Date.parse(`${lease.replace(" ", "T")}Z`) - 1));
+	const beforeLease = temporalTimestampJustBefore(lease);
 	return beforeLease < watermark ? beforeLease : watermark;
 }
 

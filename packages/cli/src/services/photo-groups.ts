@@ -8,6 +8,8 @@
  * command.
  */
 
+import {parseTemporalTimestamp} from "@outlinedb/shared/temporal";
+
 /** A node row as read from the cache, with its attachment details joined in. */
 export interface CachedNodeRow
 {
@@ -248,7 +250,7 @@ export function describeStaleAttachmentData(newestRow: string | null, newestBack
 		return null;
 	}
 
-	const importedThrough = Date.parse(`${newestRow.replace(" ", "T")}Z`);
+	const importedThrough = parseTemporalTimestamp(newestRow).getTime();
 	if (Number.isNaN(importedThrough) || newestBackup.getTime() <= importedThrough)
 	{
 		return null;

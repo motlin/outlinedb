@@ -36,10 +36,9 @@ import type {UnitOfWork} from "../cache/node-composite.js";
 import {compareSiblingOrder} from "../cache/order-key.js";
 import {closeOutboxRows, failOutboxRows, readPendingOutbox} from "../cache/outbox.js";
 import type {OutboxAspect, OutboxEntry, PendingOutboxRow} from "../cache/outbox.js";
-import {systemTimeJustBefore} from "../cache/subtree-history.js";
 import type {TemporalTransaction} from "../cache/temporal-merge.js";
 import {mirrors, nodeContent, nodeMetadata, referencesRoots} from "../db/schema.js";
-import {FAR_FUTURE_DATE} from "../temporal/constants.js";
+import {FAR_FUTURE_DATE, temporalTimestampJustBefore} from "../temporal/constants.js";
 import {OutboxNotAcknowledged} from "./errors.js";
 import {buildMetadataChanges} from "./metadata-patch.js";
 import type {MetadataChange} from "./metadata-patch.js";
@@ -708,7 +707,7 @@ function planDrain(
 		new Map(
 			ids
 				.filter((id) => !has(id, "create") || revived.has(id))
-				.map((id) => [id, systemTimeJustBefore(oldest.get(id) ?? "")] as const),
+				.map((id) => [id, temporalTimestampJustBefore(oldest.get(id) ?? "")] as const),
 		),
 	);
 
@@ -1000,7 +999,7 @@ function planDrain(
 				return {
 					mirrorId: id,
 					originalId: originalOf(id),
-					asOf: systemTimeJustBefore(times.toSorted()[0] ?? ""),
+					asOf: temporalTimestampJustBefore(times.toSorted()[0] ?? ""),
 				};
 			}),
 	);
@@ -1050,7 +1049,7 @@ function planDrain(
 						states.has(id) &&
 						states.get(id)?.relationships.mirror?.originalId === undefined,
 				)
-				.map((id) => [id, systemTimeJustBefore(oldest.get(id) ?? "")] as const),
+				.map((id) => [id, temporalTimestampJustBefore(oldest.get(id) ?? "")] as const),
 		),
 	);
 	const originalIds = [...new Set([...added.keys(), ...removed.keys()])];

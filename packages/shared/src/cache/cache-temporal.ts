@@ -14,15 +14,6 @@ export function currentVersion(table: {systemTo: AnySQLiteColumn}): SQL
 }
 
 /**
- * Convert systemFrom ISO8601 string to Date.
- * systemFrom is stored as 'YYYY-MM-DD HH:MM:SS' (UTC).
- */
-export function systemFromToDate(systemFrom: string): Date
-{
-	return new Date(`${systemFrom.replace(" ", "T")}Z`);
-}
-
-/**
  * Normalize layoutMode values for consistent storage and comparison.
  * 'bullets' is the default, stored as null to save space.
  */

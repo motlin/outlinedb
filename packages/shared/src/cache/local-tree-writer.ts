@@ -15,7 +15,7 @@ import type {AppDatabase} from "../db/types.js";
 import type {LayoutWrite} from "../internal/calendar-layout-apply.js";
 import {applyMetadataPatches} from "../internal/metadata-patch.js";
 import type {NewTree} from "../internal/ops.js";
-import {FAR_FUTURE_DATE} from "../temporal/constants.js";
+import {FAR_FUTURE_DATE, temporalTimestampJustBefore} from "../temporal/constants.js";
 import {HOME_TARGET} from "../types/targets.js";
 import {uuidToShortId} from "../workflowy/constants.js";
 import {internalLinkShortIds} from "../workflowy/internal-links.js";
@@ -29,7 +29,7 @@ import {currentBacklinkItems} from "./item-relationships.js";
 import {endNodeComposites, runUnitOfWork} from "./node-composite.js";
 import type {UnitOfWork} from "./node-composite.js";
 import type {OutboxAspect, OutboxEntry, OutboxRecorder} from "./outbox.js";
-import {readSubtreeAt, systemTimeJustBefore} from "./subtree-history.js";
+import {readSubtreeAt} from "./subtree-history.js";
 import {closeCurrentVersions} from "./temporal-merge.js";
 import type {TemporalTransaction} from "./temporal-merge.js";
 
@@ -1172,7 +1172,7 @@ export class LocalTreeWriter
 		{
 			return false;
 		}
-		const asOf = systemTimeJustBefore(closed.systemTo);
+		const asOf = temporalTimestampJustBefore(closed.systemTo);
 		const at = (table: {systemFrom: AnySQLiteColumn; systemTo: AnySQLiteColumn}) =>
 			and(lte(table.systemFrom, asOf), gt(table.systemTo, asOf));
 		const rowAt = (id: string) => (

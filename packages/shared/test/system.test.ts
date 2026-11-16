@@ -9,7 +9,13 @@ import {CacheService} from "../src/cache/cache-service.js";
 import * as schema from "../src/db/schema.js";
 import {nodeContent} from "../src/db/schema.js";
 import type {WorkflowyNode} from "../src/types/workflowy.js";
-import {FAR_FUTURE_DATE} from "../src/temporal/constants.js";
+import
+{
+	FAR_FUTURE_DATE,
+	formatTemporalTimestamp,
+	parseTemporalTimestamp,
+	temporalTimestampJustBefore,
+} from "../src/temporal/constants.js";
 import {SameMillisecondOverwriteError} from "../src/cache/temporal-merge.js";
 
 describe("system target placeholder migration", () =>
@@ -130,6 +136,26 @@ describe("system time", () =>
 			modifiedAt: 1_767_225_600,
 		};
 	}
+
+	describe("system time codec", () =>
+	{
+		it("parses a stored system time as a UTC instant and steps one tick before it", () =>
+		{
+			expect(
+				{
+					parsed: parseTemporalTimestamp("2026-02-01 00:00:05.000").toISOString(),
+					justBefore: temporalTimestampJustBefore("2026-02-01 00:00:05.000"),
+					roundTrip: formatTemporalTimestamp(parseTemporalTimestamp("2026-02-01 00:00:05.123")),
+				},
+			).toStrictEqual(
+				{
+					parsed: "2026-02-01T00:00:05.000Z",
+					justBefore: "2026-02-01 00:00:04.999",
+					roundTrip: "2026-02-01 00:00:05.123",
+				},
+			);
+		});
+	});
 
 	describe("one application UTC system time per unit of work", () =>
 	{

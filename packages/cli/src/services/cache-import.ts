@@ -33,7 +33,7 @@ import type
 } from "@outlinedb/shared/cache";
 import {BackupFileSchema} from "@outlinedb/shared/schemas";
 import type {BackupNode} from "@outlinedb/shared/schemas";
-import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, formatTemporalTimestamp, parseTemporalTimestamp} from "@outlinedb/shared/temporal";
 import {backupToUnixTime, uuidToShortId} from "@outlinedb/shared/workflowy";
 import {and, eq, gt, max, ne} from "drizzle-orm";
 import type {BetterSQLite3Database} from "drizzle-orm/better-sqlite3";
@@ -185,7 +185,7 @@ function resolveBackupSystemTime(incomingWatermarkMs: number | null, backupDate:
 		BACKUP_FALLBACK_UTC_HOUR,
 	);
 	const candidate = incomingWatermarkMs ?? fallback;
-	const floorMs = floor === null ? null : Date.parse(`${floor.replace(" ", "T")}Z`);
+	const floorMs = floor === null ? null : parseTemporalTimestamp(floor).getTime();
 	return new Date(floorMs === null || candidate > floorMs ? candidate : floorMs + 1);
 }
 

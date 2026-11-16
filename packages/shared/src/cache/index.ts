@@ -37,7 +37,6 @@ export
 	metadataComparisonStats,
 	metadataMatches,
 	normalizeLayoutMode,
-	systemFromToDate,
 } from "./cache-temporal.js";
 export {findInbox, INBOX_NAME, type InboxLookup} from "./inbox-lookup.js";
 export

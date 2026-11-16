@@ -6,7 +6,7 @@
 
 import {and, eq} from "drizzle-orm";
 import {nodeContent} from "../db/schema.js";
-import {FAR_FUTURE_DATE} from "../temporal/constants.js";
+import {FAR_FUTURE_DATE, temporalTimestampJustBefore} from "../temporal/constants.js";
 import {calendarLayoutUndoWrites} from "../internal/calendar-layout-undo.js";
 import {calendarLayoutWrites} from "../internal/calendar-layout-apply.js";
 import {planCalendarLayout} from "../internal/calendar-layout.js";
@@ -31,7 +31,7 @@ import {readNodeInternalMetadata} from "./internal-metadata.js";
 import {LocalAccount} from "./local-account.js";
 import {LocalTreeWriter, currentChildIds} from "./local-tree-writer.js";
 import type {LocalTreeWriterOptions} from "./local-tree-writer.js";
-import {readSubtreeAt, systemTimeJustBefore} from "./subtree-history.js";
+import {readSubtreeAt} from "./subtree-history.js";
 import {newSystemTimestamp} from "./system-time.js";
 
 function isRecord(value: unknown): value is Record<string, unknown>
@@ -291,7 +291,7 @@ export class LocalCalendar
 		{
 			return Promise.resolve(undefined);
 		}
-		const before = readSubtreeAt(this.db, rootId, systemTimeJustBefore(appliedAt));
+		const before = readSubtreeAt(this.db, rootId, temporalTimestampJustBefore(appliedAt));
 		const now = readSubtreeAt(this.db, rootId);
 		const writes = calendarLayoutUndoWrites(rootId, before, now, (id) => this.isLive(id));
 		assertLayoutWritesUnder(this.db, rootId, writes);
