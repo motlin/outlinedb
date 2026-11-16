@@ -1853,6 +1853,7 @@ describe("preferences week layout", () =>
 			loadAccountState: async () => Promise.resolve(),
 			// The real adapter reads root metadata from the same local account tables the PATCH writes.
 			getRootMeta: async (path: string[]) => new LocalAccount(db).getRootMeta(path),
+			getSetting: async (name: string) => new LocalAccount(db).getSetting(name),
 			getEntropyKey: async () => Promise.resolve("k"),
 			// workflowy.com is down: a tree write that reached it would fail.
 			applyCalendarLayout: async () => Promise.reject(new Error("workflowy.com is unreachable")),

@@ -6,6 +6,7 @@
 
 import {z} from "zod";
 import {backfilledCalendarDateId, backfilledCalendarTimestamp} from "../internal/calendar-backfill.js";
+import {knownTimeZone} from "../internal/calendar-day.js";
 import type {MetadataChange} from "../internal/metadata-patch.js";
 import type {AppDatabase} from "../db/types.js";
 import {CacheService} from "./cache-service.js";
@@ -31,10 +32,14 @@ const CalendarMetadataSchema = z.object(
 
 type CalendarNodeMetadata = z.infer<typeof CalendarMetadataSchema>["calendar"];
 
-/** Where the backfill reads and writes root metadata: its `calendar.rootId` and the two migration flags. */
+/**
+ * Where the backfill reads and writes root metadata (its `calendar.rootId` and the two migration flags) and reads the
+ * `timezone` setting, whose midnight rebuilt timestamps are.
+ */
 export interface CalendarBackfillAccount
 {
 	getRootMeta(path: string[]): Promise<unknown>;
+	getSetting(name: string): Promise<unknown>;
 	setRootMetaValues(changes: MetadataChange[]): Promise<void>;
 }
 
@@ -146,6 +151,7 @@ export async function backfillCalendarMetadata(input: {
 	const {db, writer, account, force = false} = input;
 	const timestamps: string[] = [];
 	const dateIds: string[] = [];
+	const timeZone = knownTimeZone(await account.getSetting("timezone"));
 	if (force || (await account.getRootMeta(["calendar", "ts_added_v2"])) !== true)
 	{
 		const rootId = await taggedCalendarRootId(db, writer, account, true);
@@ -154,7 +160,8 @@ export async function backfillCalendarMetadata(input: {
 			const changes = new Map<string, LocalMetaChange[]>();
 			walkCalendar(db, rootId, (id, calendar, chain) =>
 			{
-				const timestamp = calendar.timestamp === undefined ? backfilledCalendarTimestamp(chain) : undefined;
+				const timestamp =
+					calendar.timestamp === undefined ? backfilledCalendarTimestamp(chain, timeZone) : undefined;
 				if (timestamp !== undefined)
 				{
 					changes.set(id, [
@@ -180,7 +187,7 @@ export async function backfillCalendarMetadata(input: {
 			{
 				const dateId =
 					calendar.dateId === undefined && typeof calendar.timestamp === "number"
-						? backfilledCalendarDateId(calendar.level, calendar.timestamp)
+						? backfilledCalendarDateId(calendar.level, calendar.timestamp, timeZone)
 						: undefined;
 				if (dateId !== undefined)
 				{

@@ -616,6 +616,7 @@ describe("calendar day", () =>
 			{
 				getEntropyKey: async () => Promise.resolve(entropyKey),
 				getRootMeta: async () => Promise.resolve(undefined),
+				getSetting: async () => Promise.resolve(undefined),
 			};
 			const ctx =
 			{
@@ -847,6 +848,7 @@ describe("calendar days route", () =>
 		const adapter =
 		{
 			getEntropyKey: async () => Promise.resolve(KEY),
+			getSetting: async () => Promise.resolve(undefined),
 		};
 		const ctx =
 		{
@@ -1434,6 +1436,11 @@ describe("calendar layout route", () =>
 				calls.push(`getRootMeta ${path.join(".")}`);
 				return Promise.resolve(path[0] === "dateFormat" ? "YYYY-MM-DD ddd" : undefined);
 			},
+			getSetting: async (name: string) =>
+			{
+				calls.push(`getSetting ${name}`);
+				return Promise.resolve(undefined);
+			},
 		};
 		const ctx =
 		{
@@ -1656,7 +1663,7 @@ describe("calendar layout route", () =>
 					},
 				},
 			);
-			expect(calls).toStrictEqual(["getRootMeta weekStartDay", "getRootMeta dateFormat"]);
+			expect(calls).toStrictEqual(["getRootMeta weekStartDay", "getSetting timezone", "getRootMeta dateFormat"]);
 		});
 
 		it("plans under an explicit root with random ids for new level nodes, not the account's deterministic ones", async () =>
@@ -1999,7 +2006,12 @@ describe("calendar layout route", () =>
 							error: "There is no calendar layout to undo",
 						},
 					},
-					calls: ["getRootMeta dateFormat", "getRootMeta dateFormat", "getRootMeta weekStartDay"],
+					calls: [
+						"getRootMeta dateFormat",
+						"getRootMeta dateFormat",
+						"getRootMeta weekStartDay",
+						"getSetting timezone",
+					],
 				},
 			);
 		});
@@ -2440,6 +2452,7 @@ describe("calendar route", () =>
 		{
 			getEntropyKey: async () => Promise.resolve("k"),
 			getRootMeta: async () => Promise.resolve(undefined),
+			getSetting: async () => Promise.resolve(undefined),
 			ensureCalendarDay: vi.fn<WorkflowyInternalAdapter["ensureCalendarDay"]>(async () =>
 				Promise.reject(new Error("workflowy.com is unreachable")),
 			),
@@ -3055,6 +3068,7 @@ describe("calendar settings route", () =>
 		const fake =
 		{
 			getEntropyKey: async () => Promise.resolve("k"),
+			getSetting: async () => Promise.resolve(undefined),
 			// workflowy.com is down: a tree write that reached it would fail.
 			setNodeMetaValues: async (id: string, changes: MetadataChange[]) =>
 			{

@@ -28,7 +28,7 @@ import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 import {HOME_TARGET} from "../types/targets.js";
 import {hasInternalLink, internalLinkShortIds} from "../workflowy/internal-links.js";
 import {upstreamExpansionKey} from "../workflowy/virtual-id.js";
-import {CalendarRootMissing, calendarInsertIndex, parseDateId} from "./calendar-day.js";
+import {CalendarRootMissing, calendarInsertIndex, knownTimeZone, parseDateId} from "./calendar-day.js";
 import type {CalendarLevel} from "./calendar-day.js";
 import {calendarChainSpecs} from "./calendar-chain.js";
 import {findTaggedCalendarRoot} from "../cache/calendar-lookup.js";
@@ -1006,6 +1006,7 @@ export class WorkflowyInternalAdapter
 				stopAt,
 				dateFormat: typeof dateFormat === "string" ? dateFormat : "",
 				weekStartDay: typeof weekStartDay === "number" ? weekStartDay : 0,
+				timeZone: knownTimeZone(await this.getSetting("timezone")),
 				entropyKey: session.entropyKey,
 			},
 		);

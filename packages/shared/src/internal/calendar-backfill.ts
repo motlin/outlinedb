@@ -1,4 +1,4 @@
-import {calendarLevelMetadata} from "./calendar-day.js";
+import {calendarDateAt, calendarLevelMetadata} from "./calendar-day.js";
 import type {CalendarDate} from "./calendar-day.js";
 
 /** One calendar node's `calendar.level` and `calendar.value`. */
@@ -23,9 +23,12 @@ function isDatedLevel(level: string | undefined): level is DatedLevel
  * is not a year, month or day. Unlike upstream, which stops at a week
  * ancestor and so dates a day under a week to January 1970, week ancestors
  * are walked past; a value that is not a number is skipped like upstream's
- * missing value.
+ * missing value. The timestamp is midnight in `timeZone` (the account's), else the host's zone.
  */
-export function backfilledCalendarTimestamp(chain: readonly CalendarLevelValue[]): number | undefined
+export function backfilledCalendarTimestamp(
+	chain: readonly CalendarLevelValue[],
+	timeZone?: string,
+): number | undefined
 {
 	const [own] = chain;
 	if (own === undefined || !isDatedLevel(own.level))
@@ -48,25 +51,29 @@ export function backfilledCalendarTimestamp(chain: readonly CalendarLevelValue[]
 		}
 		date[level] = number;
 	}
-	return calendarLevelMetadata(own.level, date).timestamp;
+	return calendarLevelMetadata(own.level, date, 0, timeZone).timestamp;
 }
 
 /**
- * Upstream `h10`: a level node's `dateId` from its `timestamp`, read at local
- * noon of that day so a DST shift cannot move it to the day before.
- * Undefined for an unknown level.
+ * Upstream `h10`: a level node's `dateId` from its `timestamp`, read at noon
+ * of that day in `timeZone` (the account's, else the host's) so a DST shift
+ * cannot move it to the day before. Undefined for an unknown level.
  */
-export function backfilledCalendarDateId(level: string | undefined, timestamp: number): number | undefined
+export function backfilledCalendarDateId(
+	level: string | undefined,
+	timestamp: number,
+	timeZone?: string,
+): number | undefined
 {
-	const noon = new Date(timestamp + 12 * 60 * 60 * 1000);
-	const year = noon.getFullYear() * 10_000;
-	const month = (noon.getMonth() + 1) * 100;
+	const noon = calendarDateAt(timestamp + 12 * 60 * 60 * 1000, timeZone);
+	const year = noon.year * 10_000;
+	const month = noon.month * 100;
 	const dateIds: Record<string, number> =
 	{
 		year,
 		month: year + month,
-		day: year + month + noon.getDate(),
-		week: year + month + noon.getDate(),
+		day: year + month + noon.day,
+		week: year + month + noon.day,
 	};
 	return level === undefined ? undefined : dateIds[level];
 }

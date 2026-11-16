@@ -40,6 +40,7 @@ export function calendarChainSpecs(
 		stopAt,
 		dateFormat,
 		weekStartDay = 0,
+		timeZone,
 		entropyKey,
 	}:
 	{
@@ -47,6 +48,8 @@ export function calendarChainSpecs(
 		stopAt: CalendarLevel;
 		dateFormat: string;
 		weekStartDay?: number;
+		/** The account's IANA timezone, whose midnight each level's timestamp is; the host's without one. */
+		timeZone?: string | undefined;
 		entropyKey: string | undefined;
 	},
 ): CalendarChainSpec[]
@@ -64,7 +67,7 @@ export function calendarChainSpecs(
 				metadata:
 				{
 					restorableUniqueNode: true,
-					calendar: calendarLevelMetadata(level, date, weekStartDay),
+					calendar: calendarLevelMetadata(level, date, weekStartDay, timeZone),
 				},
 			};
 		});

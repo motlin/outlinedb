@@ -1,8 +1,8 @@
 import {z} from "zod";
-import {LocalTreeWriter} from "@outlinedb/shared/cache";
+import {AccountNotProvisionedError, LocalAccount, LocalTreeWriter} from "@outlinedb/shared/cache";
 import type {LocalRestoreInput} from "@outlinedb/shared/cache";
 import {calendarParentContext} from "@outlinedb/shared/calendar-lookup";
-import {adoptAfterCreate, datesInName} from "@outlinedb/shared/internal";
+import {adoptAfterCreate, datesInName, knownTimeZone} from "@outlinedb/shared/internal";
 import {HOME_TARGET} from "@outlinedb/shared/types";
 import {hasInternalLink} from "@outlinedb/shared/workflowy";
 import type {UpdateNodeResponse} from "../../node-types.js";
@@ -58,6 +58,26 @@ const TableSetSchema = z.array(
 );
 
 /**
+ * The account's IANA timezone from the local account tables (which a mirror's account state also fills), so a create
+ * never waits on a workflowy.com bootstrap; undefined (the host's) when unset or not provisioned.
+ */
+async function localTimeZone(ctx: ServerContext): Promise<string | undefined>
+{
+	try
+	{
+		return knownTimeZone(await new LocalAccount(ctx.db).getSetting("timezone"));
+	}
+	catch (error)
+	{
+		if (error instanceof AccountNotProvisionedError)
+		{
+			return undefined;
+		}
+		throw error;
+	}
+}
+
+/**
  * Tag a dated row just created under a 📆 Calendar month as that day, as upstream's `mb1` hook does for web edits,
  * so workflowy.com uses it as the day. The tag is local metadata, which the drain delivers with the create.
  */
@@ -78,17 +98,25 @@ async function adoptUnderCalendar(
 	{
 		return;
 	}
+	const context = calendarParentContext(
+		{
+			db: ctx.db,
+			cache: ctx.cacheService,
+		},
+		parentId,
+	);
 	await adoptAfterCreate(
 		{
 			id,
 			name,
-			context: calendarParentContext(
-				{
-					db: ctx.db,
-					cache: ctx.cacheService,
-				},
-				parentId,
-			),
+			context:
+				context === undefined
+					? undefined
+					:
+						{
+							...context,
+							timeZone: await localTimeZone(ctx),
+						},
 			adapter:
 			{
 				setNodeMetaValues: async (nodeId, changes) =>

@@ -125,18 +125,112 @@ function levelValue(level: CalendarLevel, date: CalendarDate, weekStartDay: numb
 	return values[level]();
 }
 
-/** Upstream's `metadata(date)`: the unpadded value and local midnight of the level's first day. */
+/** `timeZone` when it is an IANA zone this runtime knows, else undefined. */
+export function knownTimeZone(timeZone: unknown): string | undefined
+{
+	if (typeof timeZone !== "string" || timeZone === "")
+	{
+		return undefined;
+	}
+	try
+	{
+		new Intl.DateTimeFormat(
+			"en-US",
+			{
+				timeZone,
+			},
+		).format(0);
+		return timeZone;
+	}
+	catch
+	{
+		return undefined;
+	}
+}
+
+/** How far `timeZone`'s wall clock is ahead of UTC at `timestamp`, in milliseconds. */
+function zoneOffset(timestamp: number, timeZone: string): number
+{
+	const parts = Object.fromEntries(
+		new Intl.DateTimeFormat(
+			"en-US",
+			{
+				timeZone,
+				hourCycle: "h23",
+				year: "numeric",
+				month: "numeric",
+				day: "numeric",
+				hour: "numeric",
+				minute: "numeric",
+				second: "numeric",
+			},
+		)
+			.formatToParts(timestamp)
+			.map(({type, value}) => [type, Number(value)]),
+	);
+	const wall = Date.UTC(
+		parts.year ?? 0,
+		(parts.month ?? 1) - 1,
+		parts.day ?? 1,
+		parts.hour ?? 0,
+		parts.minute ?? 0,
+		parts.second ?? 0,
+	);
+	return wall - (timestamp - (((timestamp % 1000) + 1000) % 1000));
+}
+
+/**
+ * Midnight starting `date` in `timeZone` (the account's zone, as upstream's browser writes it), or in the host's zone
+ * without one.
+ */
+export function calendarMidnight(date: CalendarDate, timeZone?: string): number
+{
+	if (timeZone === undefined)
+	{
+		return new Date(date.year, date.month - 1, date.day).getTime();
+	}
+	const wall = Date.UTC(date.year, date.month - 1, date.day);
+	// A second pass corrects a guess that landed across a DST change.
+	const guess = wall - zoneOffset(wall, timeZone);
+	return wall - zoneOffset(guess, timeZone);
+}
+
+/** The calendar day `timestamp` falls on in `timeZone`, or in the host's zone without one. */
+export function calendarDateAt(timestamp: number, timeZone?: string): CalendarDate
+{
+	if (timeZone === undefined)
+	{
+		const local = new Date(timestamp);
+		return {
+			year: local.getFullYear(),
+			month: local.getMonth() + 1,
+			day: local.getDate(),
+		};
+	}
+	const zoned = new Date(timestamp + zoneOffset(timestamp, timeZone));
+	return {
+		year: zoned.getUTCFullYear(),
+		month: zoned.getUTCMonth() + 1,
+		day: zoned.getUTCDate(),
+	};
+}
+
+/**
+ * Upstream's `metadata(date)`: the unpadded value and midnight of the level's first day, in `timeZone` (the account's)
+ * or else the host's zone.
+ */
 export function calendarLevelMetadata(
 	level: CalendarLevel,
 	date: CalendarDate,
 	weekStartDay = 0,
+	timeZone?: string,
 ): CalendarLevelMetadata
 {
 	const start = levelStart(level, date, weekStartDay);
 	return {
 		level,
 		value: String(levelValue(level, date, weekStartDay)),
-		timestamp: new Date(start.year, start.month - 1, start.day).getTime(),
+		timestamp: calendarMidnight(start, timeZone),
 		dateId: calendarDateId(level, date, weekStartDay),
 	};
 }

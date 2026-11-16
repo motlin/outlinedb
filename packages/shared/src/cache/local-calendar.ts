@@ -13,7 +13,7 @@ import {planCalendarLayout} from "../internal/calendar-layout.js";
 import type {CalendarLayoutLevels} from "../internal/calendar-layout.js";
 import {calendarChainSpecs} from "../internal/calendar-chain.js";
 import type {CalendarChainSpec} from "../internal/calendar-chain.js";
-import {CalendarRootMissing, calendarInsertIndex, parseDateId} from "../internal/calendar-day.js";
+import {CalendarRootMissing, calendarInsertIndex, knownTimeZone, parseDateId} from "../internal/calendar-day.js";
 import type {CalendarLevel} from "../internal/calendar-day.js";
 import {calendarRootId} from "../internal/calendar-ids.js";
 import type {AppliedCalendarLayout, CalendarLayoutSnapshot, EnsuredCalendarDay} from "../internal/adapter.js";
@@ -39,8 +39,8 @@ function isRecord(value: unknown): value is Record<string, unknown>
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** Where a calendar reads root metadata and the entropy key, and names a new calendar root. */
-export type CalendarAccount = Pick<LocalAccount, "getEntropyKey" | "getRootMeta" | "setRootMetaValues">;
+/** Where a calendar reads root metadata, the timezone setting and the entropy key, and names a new calendar root. */
+export type CalendarAccount = Pick<LocalAccount, "getEntropyKey" | "getRootMeta" | "getSetting" | "setRootMetaValues">;
 
 export interface LocalCalendarOptions extends LocalTreeWriterOptions
 {
@@ -102,6 +102,7 @@ export class LocalCalendar
 		const rootId = await this.ensureRoot(entropyKey);
 		const dateFormat = await this.account.getRootMeta(["dateFormat"]);
 		const weekStartDay = await this.account.getRootMeta(["weekStartDay"]);
+		const timeZone = knownTimeZone(await this.account.getSetting("timezone"));
 		const levels = this.calendarOf(rootId)?.levels;
 		const specs = calendarChainSpecs(
 			date,
@@ -110,6 +111,7 @@ export class LocalCalendar
 				stopAt,
 				dateFormat: typeof dateFormat === "string" ? dateFormat : "",
 				weekStartDay: typeof weekStartDay === "number" ? weekStartDay : 0,
+				timeZone,
 				entropyKey,
 			},
 		);
@@ -227,6 +229,7 @@ export class LocalCalendar
 		}
 		const dateFormat = await this.account.getRootMeta(["dateFormat"]);
 		const weekStartDay = await this.account.getRootMeta(["weekStartDay"]);
+		const timeZone = knownTimeZone(await this.account.getSetting("timezone"));
 		const entropyKey = this.calendarOf(rootId)?.root === true ? await this.account.getEntropyKey() : undefined;
 		const steps = planCalendarLayout(
 			snapshot.root,
@@ -245,6 +248,12 @@ export class LocalCalendar
 							weekStartDay,
 						}
 					: {}),
+				...(timeZone === undefined
+					? {}
+					:
+						{
+							timeZone,
+						}),
 				...(entropyKey === undefined
 					? {}
 					:

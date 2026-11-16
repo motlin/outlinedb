@@ -31,6 +31,8 @@ export interface AdoptOnInsertInput
 	dates: readonly CalendarDate[];
 	levels: Readonly<Record<CalendarLevel, boolean>>;
 	weekStartDay?: number;
+	/** The account's IANA timezone, whose midnight an adopted day's timestamp is; the host's without one. */
+	timeZone?: string | undefined;
 }
 
 /** Upstream `level.matches(item, date)`: the item is that level, and (with a date) in the same period. */
@@ -60,7 +62,7 @@ export function adoptOnInsert(input: AdoptOnInsertInput):
 	set: CalendarLevelMetadata;
 } | null
 {
-	const {parentChain, siblings, dates, levels, weekStartDay = 0} = input;
+	const {parentChain, siblings, dates, levels, weekStartDay = 0, timeZone} = input;
 	const parent = parentChain[0];
 	if (parent?.calendar === undefined || parent.calendar.root === true)
 	{
@@ -81,7 +83,7 @@ export function adoptOnInsert(input: AdoptOnInsertInput):
 		if (remaining.every((ancestorLevel, index) => matches(parentChain[index], ancestorLevel, date, weekStartDay)))
 		{
 			return {
-				set: calendarLevelMetadata("day", date, weekStartDay),
+				set: calendarLevelMetadata("day", date, weekStartDay, timeZone),
 			};
 		}
 	}
@@ -259,6 +261,7 @@ export interface CalendarParentContext
 	siblings: readonly CalendarTagged[];
 	levels: Readonly<Record<CalendarLevel, boolean>>;
 	weekStartDay?: number;
+	timeZone?: string | undefined;
 }
 
 /** The dates of each `<time>` element in a row's text, in order. */

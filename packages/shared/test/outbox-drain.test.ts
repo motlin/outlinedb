@@ -1563,7 +1563,7 @@ describe("drainOutbox", () =>
 		);
 	});
 
-	it("creates a calendar root and day chain with their deterministic ids and calendar metadata", async () =>
+	it("creates a calendar root and day chain with their deterministic ids and calendar metadata at midnight in the account timezone", async () =>
 	{
 		const {database, generateId, outboxRows, pushes, drain} = setup();
 		const rootMeta: unknown[] = [];
@@ -1576,6 +1576,7 @@ describe("drainOutbox", () =>
 				{
 					getEntropyKey: async () => Promise.resolve("entropy"),
 					getRootMeta: async () => Promise.resolve(undefined),
+					getSetting: async (name) => Promise.resolve(name === "timezone" ? "America/New_York" : undefined),
 					setRootMetaValues: async (changes) =>
 					{
 						rootMeta.push(...changes);
@@ -1656,7 +1657,7 @@ describe("drainOutbox", () =>
 										level: "year",
 										value: "2026",
 										dateId: 20_260_000,
-										timestamp: new Date(2026, 0, 1).getTime(),
+										timestamp: 1_767_243_600_000,
 									},
 									restorableUniqueNode: true,
 								},
@@ -1675,7 +1676,7 @@ describe("drainOutbox", () =>
 										level: "month",
 										value: "3",
 										dateId: 20_260_300,
-										timestamp: new Date(2026, 2, 1).getTime(),
+										timestamp: 1_772_341_200_000,
 									},
 									restorableUniqueNode: true,
 								},
@@ -1694,7 +1695,7 @@ describe("drainOutbox", () =>
 										level: "day",
 										value: "1",
 										dateId: 20_260_301,
-										timestamp: new Date(2026, 2, 1).getTime(),
+										timestamp: 1_772_341_200_000,
 									},
 									restorableUniqueNode: true,
 								},

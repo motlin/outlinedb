@@ -2635,7 +2635,7 @@ describe("internal adapter calendar", () =>
 			]);
 		});
 
-		it("gives a week (upstream DC1) its first day as dateId and timestamp and its week number as value", () =>
+		it("gives a week (upstream DC1) its first day as dateId and timestamp (midnight in the account timezone when given) and its week number as value", () =>
 		{
 			const thursday =
 			{
@@ -2657,6 +2657,7 @@ describe("internal adapter calendar", () =>
 				calendarLevelMetadata("week", thursday, 1),
 				calendarLevelMetadata("week", newYear),
 				calendarLevelMetadata("week", newYear, 1),
+				calendarLevelMetadata("week", thursday, 0, "America/New_York"),
 			]).toStrictEqual([
 				20_261_011,
 				20_261_012,
@@ -2684,6 +2685,13 @@ describe("internal adapter calendar", () =>
 					value: "53",
 					timestamp: new Date(2026, 11, 28).getTime(),
 					dateId: 20_261_228,
+				},
+				// EDT midnight, whatever the host's zone.
+				{
+					level: "week",
+					value: "42",
+					timestamp: 1_791_691_200_000,
+					dateId: 20_261_011,
 				},
 			]);
 		});

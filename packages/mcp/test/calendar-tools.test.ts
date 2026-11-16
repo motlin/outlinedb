@@ -138,6 +138,7 @@ describe("outlinedb_calendar_day", () =>
 	{
 		vi.spyOn(WorkflowyInternalAdapter.prototype, "getEntropyKey").mockResolvedValue("k");
 		vi.spyOn(WorkflowyInternalAdapter.prototype, "getRootMeta").mockResolvedValue(undefined);
+		vi.spyOn(WorkflowyInternalAdapter.prototype, "getSetting").mockResolvedValue(undefined);
 		vi.spyOn(crypto, "randomUUID").mockReturnValue("00000000-0000-4000-8000-0000000000c1");
 		const ensure = vi.spyOn(WorkflowyInternalAdapter.prototype, "ensureCalendarDay");
 		const month = calendarNodeId("k", "month", 20_261_000);

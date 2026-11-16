@@ -15,6 +15,7 @@ export
 	calendarDateId,
 	calendarLevelMetadata,
 	calendarLevelName,
+	knownTimeZone,
 	parseDateId,
 } from "./calendar-day.js";
 export {calendarLayoutCustomLevels, calendarLayoutNeedsConfirm, planCalendarLayout} from "./calendar-layout.js";

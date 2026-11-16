@@ -36,6 +36,7 @@ import
 	CalendarRootMissing,
 	calendarLayoutCustomLevels,
 	calendarLayoutNeedsConfirm,
+	knownTimeZone,
 	parseDateId,
 	planCalendarLayout,
 } from "@outlinedb/shared/internal";
@@ -198,8 +199,13 @@ const DEFAULT_LAYOUT_LEVELS =
 	day: true,
 };
 
-/** Where the account's root metadata and entropy key live: a standalone store's local tables, or the internal API. */
-function calendarAccount(ctx: ServerContext): Pick<LocalAccount, "getRootMeta" | "getEntropyKey"> | undefined
+/**
+ * Where the account's root metadata, settings and entropy key live: a standalone store's local tables, or the internal
+ * API.
+ */
+function calendarAccount(
+	ctx: ServerContext,
+): Pick<LocalAccount, "getRootMeta" | "getSetting" | "getEntropyKey"> | undefined
 {
 	return ctx.mode === "standalone" ? new LocalAccount(ctx.db) : ctx.internalAdapter?.();
 }
@@ -233,6 +239,23 @@ async function accountWeekStartDay(ctx: ServerContext): Promise<number | undefin
 {
 	const weekStartDay = await accountRootMeta(ctx, "weekStartDay");
 	return typeof weekStartDay === "number" ? weekStartDay : undefined;
+}
+
+/** The account's IANA timezone, whose midnight calendar timestamps are; undefined (the host's) when unset or unknown. */
+async function accountTimeZone(ctx: ServerContext): Promise<string | undefined>
+{
+	try
+	{
+		return knownTimeZone(await calendarAccount(ctx)?.getSetting("timezone"));
+	}
+	catch (error)
+	{
+		if (error instanceof AccountNotProvisionedError)
+		{
+			return undefined;
+		}
+		throw error;
+	}
 }
 
 /** The `?level=` query parameter (default day), else undefined. */
@@ -785,6 +808,7 @@ const calendarLayoutPreview = defineOp(
 							entropyKey: undefined,
 						};
 			const weekStartDay = await accountWeekStartDay(ctx);
+			const timeZone = await accountTimeZone(ctx);
 			const steps = planCalendarLayout(
 				snapshot.root,
 				body.levels,
@@ -801,6 +825,12 @@ const calendarLayoutPreview = defineOp(
 						:
 							{
 								weekStartDay,
+							}),
+					...(timeZone === undefined
+						? {}
+						:
+							{
+								timeZone,
 							}),
 					...(entropyKey === undefined
 						? {}

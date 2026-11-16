@@ -101,6 +101,8 @@ export interface CalendarLayoutOptions
 	dateFormat: string;
 	/** The account's `weekStartDay` (1 is Monday, else Sunday), which places and numbers weeks. */
 	weekStartDay?: number;
+	/** The account's IANA timezone, whose midnight each new level's timestamp is; the host's without one. */
+	timeZone?: string;
 	/** The account entropy key behind upstream's deterministic level ids; without it ids come from `generateId`. */
 	entropyKey?: string;
 	generateId?: () => string;
@@ -531,7 +533,7 @@ export function planCalendarLayout(
 							metadata:
 							{
 								restorableUniqueNode: true,
-								calendar: calendarLevelMetadata(level, date, weekStartDay),
+								calendar: calendarLevelMetadata(level, date, weekStartDay, options.timeZone),
 							},
 						},
 					);
@@ -576,7 +578,10 @@ export function planCalendarLayout(
 		}
 		if (findDay(dated.dateId) === undefined && !days.some((placed) => placed.dateId === dated.dateId))
 		{
-			sim.setCalendar(node.id, calendarLevelMetadata("day", toDate(dated.dateId)));
+			sim.setCalendar(
+				node.id,
+				calendarLevelMetadata("day", toDate(dated.dateId), weekStartDay, options.timeZone),
+			);
 			days.push(
 				{
 					id: node.id,
