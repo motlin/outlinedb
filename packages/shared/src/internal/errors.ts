@@ -144,18 +144,22 @@ export class InboxMissing extends Error
 }
 
 /**
- * Workflowy accepted a drain's push but its server run did not echo every op the drain sent, so the drain cannot tell
- * what it applied. The rows stay pending with this as their `last_error` until the next drain trigger.
+ * Workflowy accepted a drain's push but its server run did not echo every op the drain sent, and `missing` (when the
+ * drain checked) names the left-out ops whose effect workflowy.com does not hold, so the drain cannot tell what it
+ * applied. The rows stay pending with this as their `last_error` until the next drain trigger.
  */
 export class OutboxNotAcknowledged extends Error
 {
 	constructor(
 		readonly sent: number,
 		readonly echoed: number,
+		readonly missing: readonly string[] = [],
 	)
 	{
 		super(
-			`Workflowy's server run echoed ${echoed} op(s) of the ${sent} the outbox drain pushed; the rows stay pending until the next drain`,
+			`Workflowy's server run echoed ${echoed} op(s) of the ${sent} the outbox drain pushed${
+				missing.length === 0 ? "" : `, and workflowy.com does not hold the effect of: ${missing.join(", ")}`
+			}; the rows stay pending until the next drain`,
 		);
 		this.name = "OutboxNotAcknowledged";
 	}

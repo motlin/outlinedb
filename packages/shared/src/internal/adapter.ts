@@ -527,6 +527,16 @@ export class WorkflowyInternalAdapter
 		const pusher: OutboxPusher =
 		{
 			session: async () => this.session(),
+			upstreamNode: async (id) =>
+			{
+				const node = await this.tree().findNode(id);
+				return node === null
+					? null
+					:
+						{
+							parentId: node.parent_id ?? null,
+						};
+			},
 			push: async (ops, accept) =>
 			{
 				const input: PushInput =

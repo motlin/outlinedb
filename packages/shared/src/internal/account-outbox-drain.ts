@@ -34,7 +34,7 @@ import {hasSavedView, savedViewsDelta} from "./saved-views.js";
 type Metadata = Record<string, unknown>;
 
 /** Where an account drain sends; the internal adapter in production, a fake in tests. */
-export interface AccountOutboxPusher extends OutboxPusher
+export interface AccountOutboxPusher extends Omit<OutboxPusher, "upstreamNode">
 {
 	/** workflowy.com's current root metadata: the base the root edit's patches are built against. */
 	rootMetadata(): Promise<Metadata>;

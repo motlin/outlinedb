@@ -22,6 +22,12 @@ export class WorkflowyWriteThroughClient
 	{
 	}
 
+	/** A node as workflowy.com holds it now, or `null` when it is deleted or never existed; the cache is untouched. */
+	async findNode(nodeId: string): Promise<WorkflowyNode | null>
+	{
+		return this.apiClient.findNode(nodeId);
+	}
+
 	/**
 	 * Ensure the parent node exists in the cache before inserting a child.
 	 * If the parent is missing, fetch it from the API and insert it.

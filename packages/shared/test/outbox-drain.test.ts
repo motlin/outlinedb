@@ -14,7 +14,7 @@ import {mirrors, nodeContent, nodeMetadata, outbox} from "../src/db/schema.js";
 import {OutboxNotAcknowledged} from "../src/internal/errors.js";
 import {calendarNodeId, calendarRootId} from "../src/internal/calendar-ids.js";
 import {drainOutbox} from "../src/internal/outbox-drain.js";
-import type {OutboxPusher} from "../src/internal/outbox-drain.js";
+import type {OutboxPusher, UpstreamNode} from "../src/internal/outbox-drain.js";
 import type {InternalOp} from "../src/internal/push-and-poll.js";
 import {FAR_FUTURE_DATE, parseTemporalTimestamp, systemTimeAt} from "../src/temporal/constants.js";
 
@@ -125,17 +125,28 @@ function setup()
 		database.select().from(outbox).orderBy(asc(outbox.nodeId), asc(outbox.aspect), asc(outbox.systemFrom)).all();
 
 	const pushes: InternalOp[][] = [];
+	const upstreamReads: string[] = [];
 	/**
 	 * A pusher whose server run is `respond`'s ops (by default every op pushed), or which fails with its error.
-	 * `beforeAccept` runs between the push and its acknowledgement.
+	 * `beforeAccept` runs between the push and its acknowledgement. `upstream` is what workflowy.com holds for the ids
+	 * the drain reads back (null: absent); reading any other id fails.
 	 */
 	const pusher = (
 		respond: (ops: InternalOp[]) => InternalOp[] | Error = (ops) => ops,
 		beforeAccept: () => void = () =>
 		{
 		},
+		upstream: Record<string, UpstreamNode | null> = {},
 	): OutboxPusher => (
 	{
+		upstreamNode: async (id) =>
+		{
+			upstreamReads.push(id);
+			const node = upstream[id];
+			return node === undefined
+				? Promise.reject(new Error(`unexpected upstream read of ${id}`))
+				: Promise.resolve(node);
+		},
 		session: async () =>
 			Promise.resolve(
 				{
@@ -180,6 +191,7 @@ function setup()
 		generateId,
 		outboxRows,
 		pushes,
+		upstreamReads,
 		pusher,
 		drain,
 	};
@@ -851,10 +863,158 @@ describe("drainOutbox", () =>
 				{
 					systemFrom: DRAIN,
 					systemTo: FAR_FUTURE_DATE,
-					lastError: new OutboxNotAcknowledged(1, 0).message,
+					lastError: new OutboxNotAcknowledged(1, 0, ["edit a"]).message,
 				},
 			),
 		]);
+	});
+
+	it("closes every row when the server run leaves out ops whose effect workflowy.com already holds: creates of nodes it has, deletes of nodes it lacks", async () =>
+	{
+		const {writer, outboxRows, pushes, upstreamReads, pusher, drain} = setup();
+		setClock(at(0));
+		writer.createAt(
+			{
+				parentId: "p",
+				index: 0,
+				id: "n",
+				name: "n",
+			},
+		);
+		setClock(at(1));
+		writer.updateNode(
+			"a",
+			{
+				name: "A",
+			},
+		);
+		setClock(at(2));
+		writer.deleteNode("b");
+
+		const result = await drain(
+			pusher(
+				(ops) => ops.filter(({type}) => type === "edit"),
+				undefined,
+				{
+					n:
+					{
+						parentId: "p",
+					},
+					b: null,
+				},
+			),
+		);
+
+		expect(
+			{
+				result,
+				pushes,
+				upstreamReads,
+				outbox: outboxRows(),
+			},
+		).toStrictEqual(
+			{
+				result:
+				{
+					ops: 3,
+					closed: 4,
+				},
+				pushes: [
+					[
+						bulkCreate("n", "p", 0),
+						rename("a", "A", "a"),
+						{
+							type: "delete",
+							data:
+							{
+								projectid: "b",
+							},
+							client_timestamp: CT,
+							undo_data:
+							{
+								...NO_PREVIOUS,
+								parentid: "p",
+								priority: 3,
+							},
+						},
+					],
+				],
+				upstreamReads: ["n", "b"],
+				outbox: [
+					row("a", "name", at(1)),
+					row("b", "delete", at(2)),
+					row("n", "create", at(0)),
+					row("n", "placement", at(0)),
+				],
+			},
+		);
+	});
+
+	it("keeps every row pending, naming the ops, when a left-out op's effect is not on workflowy.com", async () =>
+	{
+		const {writer, outboxRows, upstreamReads, pusher, drain} = setup();
+		setClock(at(0));
+		writer.createAt(
+			{
+				parentId: "p",
+				index: 0,
+				id: "n",
+				name: "n",
+			},
+		);
+		setClock(at(1));
+		writer.updateNode(
+			"a",
+			{
+				name: "A",
+			},
+		);
+		setClock(at(2));
+		writer.deleteNode("b");
+		const unacknowledged = new OutboxNotAcknowledged(3, 1, ["bulk_create n", "delete b"]);
+
+		await expect(
+			drain(
+				pusher(
+					(ops) => ops.filter(({type}) => type === "edit"),
+					undefined,
+					{
+						n: null,
+						b:
+						{
+							parentId: "p",
+						},
+					},
+				),
+			),
+		).rejects.toThrow(unacknowledged.message);
+
+		const pending =
+		{
+			systemFrom: DRAIN,
+			systemTo: FAR_FUTURE_DATE,
+			lastError: unacknowledged.message,
+		};
+		expect(
+			{
+				upstreamReads,
+				outbox: outboxRows(),
+			},
+		).toStrictEqual(
+			{
+				upstreamReads: ["n", "b"],
+				outbox: [
+					row("a", "name", at(1)),
+					row("a", "name", at(1), pending),
+					row("b", "delete", at(2)),
+					row("b", "delete", at(2), pending),
+					row("n", "create", at(0)),
+					row("n", "create", at(0), pending),
+					row("n", "placement", at(0)),
+					row("n", "placement", at(0), pending),
+				],
+			},
+		);
 	});
 
 	it("keeps a row pending when its node changed again while the push was in flight", async () =>

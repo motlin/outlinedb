@@ -67,10 +67,18 @@ export interface OutboxSession
 	dateJoinedSec: number;
 }
 
+/** A node as workflowy.com holds it now. */
+export interface UpstreamNode
+{
+	parentId: string | null;
+}
+
 /** Where a drain pushes; the internal adapter in production, a fake in tests. */
 export interface OutboxPusher
 {
 	session(): Promise<OutboxSession>;
+	/** What workflowy.com holds for `id` now, or `null` when it lacks the node: how a drain checks left-out ops. */
+	upstreamNode(id: string): Promise<UpstreamNode | null>;
 	/**
 	 * Push `ops` in one `push_and_poll`. `accept` runs inside the unit of work that applies the push's transactions,
 	 * after them and before the push resolves.
@@ -1135,19 +1143,100 @@ function opSubject(op: InternalOp): unknown
 	return Array.isArray(trees) ? Reflect.get(Object(trees[0]), "id") : undefined;
 }
 
+/** The ops of `sent` the server run leaves out; the rest it echoes in order, matched by type and subject. */
+function unechoedOps(sent: readonly InternalOp[], serverRun: readonly InternalOp[]): InternalOp[]
+{
+	const unechoed: InternalOp[] = [];
+	let next = 0;
+	for (const op of sent)
+	{
+		const at = serverRun.findIndex(
+			(ran, index) => index >= next && ran.type === op.type && opSubject(ran) === opSubject(op),
+		);
+		if (at === -1)
+		{
+			unechoed.push(op);
+		}
+		else
+		{
+			next = at + 1;
+		}
+	}
+	return unechoed;
+}
+
 /** How many of `sent` the server run echoes, in order, matched by type and subject. */
 export function echoedCount(sent: readonly InternalOp[], serverRun: readonly InternalOp[]): number
 {
-	let matched = 0;
-	for (const op of serverRun)
+	return sent.length - unechoedOps(sent, serverRun).length;
+}
+
+/** A node an op names, and whether workflowy.com's copy of it (null: absent) shows the op's effect. */
+type UpstreamCheck = [id: string, holds: (node: UpstreamNode | null) => boolean];
+
+/** The ids of a `bulk_create`'s trees and all their descendants. */
+function createdIds(op: InternalOp): string[]
+{
+	const parsed: unknown =
+		typeof op.data.project_trees === "string" ? JSON.parse(op.data.project_trees) : op.data.project_trees;
+	const walk = (trees: unknown): string[] =>
+		Array.isArray(trees)
+			? trees.flatMap((tree: unknown) => [
+					String(Reflect.get(Object(tree), "id")),
+					...walk(Reflect.get(Object(tree), "ch")),
+				])
+			: [];
+	return walk(parsed);
+}
+
+/**
+ * What workflowy.com holds once `op` has taken effect: every created id exists, a deleted node is gone, a moved node
+ * sits under its target parent. Upstream leaves such an op out of its server run when the effect was already true,
+ * e.g. a push whose acknowledgement an earlier drain lost. `undefined` for ops the drain cannot check this way.
+ */
+function upstreamChecks(op: InternalOp): UpstreamCheck[] | undefined
+{
+	switch (op.type)
 	{
-		const next = sent[matched];
-		if (next !== undefined && op.type === next.type && opSubject(op) === opSubject(next))
+		case "bulk_create":
 		{
-			matched += 1;
+			return createdIds(op).map((id) => [id, (node) => node !== null]);
+		}
+		case "delete":
+		{
+			return [[String(op.data.projectid), (node) => node === null]];
+		}
+		case "move":
+		{
+			const parentId = op.data.parentid === ROOT_PROJECT_ID ? null : op.data.parentid;
+			return [[String(op.data.projectid), (node) => node !== null && node.parentId === parentId]];
+		}
+		default:
+		{
+			return undefined;
 		}
 	}
-	return matched;
+}
+
+/** The left-out ops whose effect workflowy.com does not hold, as `<type> <subject>`, reading each node they name. */
+async function effectsNotUpstream(pusher: OutboxPusher, unechoed: readonly InternalOp[]): Promise<string[]>
+{
+	const missing: string[] = [];
+	for (const op of unechoed)
+	{
+		const checks = upstreamChecks(op) ?? [];
+		let holds = checks.length > 0;
+		for (const [id, check] of checks)
+		{
+			// oxlint-disable-next-line no-await-in-loop -- a few reads, only when a server run leaves ops out
+			holds = check(await pusher.upstreamNode(id)) && holds;
+		}
+		if (!holds)
+		{
+			missing.push(`${op.type} ${String(opSubject(op))}`);
+		}
+	}
+	return missing;
 }
 
 /** Close the carried rows whose value is still the one the push sent, in the acknowledging unit of work. */
@@ -1167,10 +1256,11 @@ function errorMessage(error: unknown): string
 }
 
 /**
- * One drain pass over the oldest pending outbox rows: one push, or none when nothing needs sending. On acknowledgement
- * the carried rows close in the unit of work that applies the push's transactions. A failed or unacknowledged push
- * records its error as `last_error` on every row it carried, which stay pending, and throws; a failed session fetch
- * records its error on every row the pass read.
+ * One drain pass over the oldest pending outbox rows: one push, or none when nothing needs sending. When the server run
+ * echoes every op, the carried rows close in the unit of work that applies the push's transactions. When it leaves
+ * ops out, the drain reads the nodes they name from workflowy.com and closes the rows only if every left-out op's
+ * effect is already there. A failed or unacknowledged push records its error as `last_error` on every row it carried,
+ * which stay pending, and throws; a failed session fetch records its error on every row the pass read.
  */
 export async function drainOutbox(
 	database: TemporalTransaction,
@@ -1235,20 +1325,26 @@ export async function drainOutbox(
 		};
 	}
 	let closed = 0;
-	let unacknowledged: OutboxNotAcknowledged | undefined;
+	let unechoed: InternalOp[] = [];
 	try
 	{
 		await pusher.push(plan.ops, (unitOfWork, result) =>
 		{
-			const echoed = echoedCount(plan.ops, result.serverRun);
-			if (echoed === plan.ops.length)
+			unechoed = unechoedOps(plan.ops, result.serverRun);
+			if (unechoed.length === 0)
 			{
 				closed = closeDelivered(unitOfWork, plan);
-				return;
 			}
-			unacknowledged = new OutboxNotAcknowledged(plan.ops.length, echoed);
-			failOutboxRows(unitOfWork, plan.carried, unacknowledged.message);
 		});
+		if (unechoed.length > 0)
+		{
+			const missing = await effectsNotUpstream(pusher, unechoed);
+			if (missing.length > 0)
+			{
+				throw new OutboxNotAcknowledged(plan.ops.length, plan.ops.length - unechoed.length, missing);
+			}
+			closed = runUnitOfWork(database, (unitOfWork) => closeDelivered(unitOfWork, plan));
+		}
 	}
 	catch (error)
 	{
@@ -1257,10 +1353,6 @@ export async function drainOutbox(
 			failOutboxRows(unitOfWork, plan.carried, errorMessage(error));
 		});
 		throw error;
-	}
-	if (unacknowledged !== undefined)
-	{
-		throw unacknowledged;
 	}
 	return {
 		ops: plan.ops.length,
