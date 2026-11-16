@@ -43,7 +43,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/stage-refine-journal-page.mts stage --scope r
 node ${CLAUDE_PLUGIN_ROOT}/scripts/decision-page.mts url <slug>
 ```
 
-`stage` prints `{slug, ids}`. Each card shows the rewrite as a diff under a short title (`<date>: <change kinds>`), the change notes as body lines, and either Accept / Keep as written or the `ambiguity` options (the staged pick first, alternate emoji or people after it). Put the URL in the `AskUserQuestion` that tells the user to open the page, and wait until they say they submitted. Then resolve the answers:
+`stage` prints `{slug, ids}`. Each card shows the rewrite as a diff under a short title (`<date>: <change kinds>`), the change notes as body lines, and either Accept / Keep as written or the `ambiguity` options (the staged pick first, alternate emoji or people after it). Open the URL with a backgrounded `open <url>`, start the `AskUserQuestion` with `Opened <url>`, and wait until they say they submitted. Then resolve the answers:
 
 ```bash
 node ${CLAUDE_PLUGIN_ROOT}/scripts/stage-refine-journal-page.mts resolve --slug <slug>

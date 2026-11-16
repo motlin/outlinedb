@@ -35,10 +35,11 @@ The local web app's generic decision page is the long-walk surface. It renders a
     - `src` follows the same `.llm/photos/` rules as images, but only `.mp4`, `.mov`, `.m4v` and `.webm` are allowed. Any other `src`, or a `poster` that is not an allowed image path, fails the page load.
     - `poster` is optional; give it a still frame (extract one with `ffmpeg -ss 1 -i <video> -frames:v 1 <file>.jpg`) when the first frame is blank or misleading.
     - The server streams videos with byte ranges, so the user can seek without the whole file loading first.
-- Get the URL from `node plugins/gtd/scripts/decision-page.mts url <slug>` and put it inside the `AskUserQuestion` that tells the user to open the page and answer.
+- Get the URL from `node plugins/gtd/scripts/decision-page.mts url <slug>`, open it for the user, and put it inside the `AskUserQuestion` that tells the user to answer the page.
     - `url` health-checks before printing: it fetches the page and `/api/v1/decisions/<slug>` and exits 1 on a non-2xx status or a network error. Never hand the user a URL from a failed run, and never build the URL by hand to skip the check.
     - On failure, read the reason it prints. A bare 5xx (such as the proxy's 502) or a network error such as `ECONNREFUSED` means the web app died: restart it with `just web` per the `build:dev-server` skill, then run `url` again. A status that quotes the API's error (`No decision page staged as <slug>`, or an invalid-document message) means the staging is wrong; fix the staged file instead.
     - Ask the user only after `url` succeeds.
+    - Once `url` succeeds, open the page with a backgrounded `open <url>` before asking, so the page is already up when the question appears. Start the question with `Opened <url>` instead of asking the user to open it.
 - Wait until the user says they submitted. Do not poll.
 - Read the choices with `node plugins/gtd/scripts/decision-page.mts answers <slug>`. It prints `{"<itemId>": {"choice", "note", "answeredAt"}, "submittedAt"}` and exits non-zero when nothing was saved. `choice` is an option value or `null`; `note` is free text that may refine or override the choice.
 - Apply each decision exactly as the `AskUserQuestion` path would, including its persistence and verification. Ask about an unanswered item or an unclear note in a follow-up question rather than guessing. The page only records choices; every Workflowy write stays in the skill.
