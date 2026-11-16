@@ -29,6 +29,51 @@ Apply every tagger and composer prompt yourself, in this conversation. Do not la
 - Serialize the CLI: run one CLI call at a time. It holds the SQLite cache lock while it runs, so never issue CLI calls as parallel Bash tool calls, never background them with `&`, and never pipe one CLI call into another. Other refiners may be running beside you; if a call fails on a busy/locked database, wait briefly and retry it once.
 - Read-only `jq` over `.llm/gtd/metadata/` files needs no lock and can be batched freely.
 
+## Close-Out Table Check
+
+Before anything else, decide whether the item is a **close-out table**: a list of notes or todos the user already dealt with, each row marked with a status such as `Done`, `Filed` / `Filed today`, or `Jira` / `Tracked in Jira` (often with a ticket key or link). The rows may be the item's children, lines of its note, or an HTML table in its name. Titles like "notes and todos to close" are a strong hint, but the status markers are what count. Such an item is not a new task: each row names an existing open task on a `📌 Tasks (asap)` ladder that should be matched and completed.
+
+When it is one, skip the Already-Done check, Phase A, and Phase B, and instead:
+
+- Read both ladders from their real buckets, the way `${CLAUDE_PLUGIN_ROOT}/commands/review/daily/rebalance.md` does under **Read both ladders**, with depth deep enough to reach tasks inside project groups. Also read the `⏰` due-dates buckets, since a row's task may be dated.
+- For each row, find the open task it describes. Match on meaning, not exact text: the row is usually a paraphrase. Prefer a standalone task over a context child (`From:` lines, transcript `📝` notes) with the same text; when only a child matches, match its task. Record no match rather than a weak guess.
+- Stage `.llm/gtd/refine-inbox/close-out-<ITEM_ID>.json` (create the directory first):
+
+    ```json
+    {
+    	"itemId": "<full uuid of the inbox item>",
+    	"itemName": "<inbox item name>",
+    	"rows": [
+    		{
+    			"row": "<row text, verbatim>",
+    			"status": "Done | Filed today | Tracked in Jira | <marker as written>",
+    			"jira": {"key": "ABC-123", "summary": "<ticket title if given>", "url": "<ticket URL if given, else null>"},
+    			"match": {
+    				"taskId": "<full uuid>",
+    				"taskName": "<task name>",
+    				"path": "<full path from the root, target title last>",
+    				"confidence": "high | medium | low",
+    				"why": "<one line: what tied the row to this task>"
+    			}
+    		}
+    	]
+    }
+    ```
+
+    `jira` is null when the row carries no ticket; `match` is null when no open task fits.
+
+- Write the refinement with only these children, then run the usual verification:
+
+    ```text
+    🔍 Refinement
+    ├── 📜 Provenance: <scheme>://<id>      <- when known
+    ├── 🧾 Close-out: <N> rows, <M> matched to open tasks
+    └── 📍 Move to: Close-out table, match and complete
+        └── 📊 Confidence: high
+    ```
+
+Return `status: "refined"` with `destination.path` `Close-out table, match and complete`. `/gtd:inbox` reads the staged file and walks the rows on a decision page.
+
 ## Already-Done Check
 
 Before Phase A, decide whether the item describes a concrete change to a checkable local artifact: a config file (`~/.claude/settings.json`, a dotfile, `~/.config/...`), or a repo (a file, a script, a dependency, a git branch). If it does, inspect the artifact's current state read-only (`cat`, `jq`, `grep`, `git -C <repo> log`) and decide whether the change is already present.
@@ -179,6 +224,7 @@ Only include children that have actual values from Phase A/B results.
 | 7.5   | 🗣️ Agenda:           | agenda-detector (mirror offer)   |
 | 7.6   | 📤 Delegate:         | destination-guesser (optional)   |
 | 7.7   | ✅ Evidence:         | already-done check (optional)    |
+| 7.8   | 🧾 Close-out:        | close-out table check (only row) |
 | 8     | 📍 Move to:          | destination-guesser              |
 | 8.1   | └── 📊 Confidence:   | destination-guesser (sub-bullet) |
 | 8.5   | 🔀 Alternative:      | destination-guesser (optional)   |

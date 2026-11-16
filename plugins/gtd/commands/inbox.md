@@ -119,6 +119,7 @@ For each item, extract `refinementNodeId`, `destinationPath` (from `📍 Move to
 - `📍 Move to:` names `📋 Meeting agendas` (id: `meetingAgendasId` from `.llm/gtd/config.json`, asking once and saving it when missing) or a node under it -> an older refinement; replace it with the bottom tier of the Work `📌 Tasks (asap)` ladder (per `${CLAUDE_PLUGIN_ROOT}/skills/asap-tiers.md`) and mark the item `isAgenda`
 - `📍 Move to:` names `📄 Drafts` or a node under it -> an older refinement; replace it with the bottom tier of the matching `📌 Tasks (asap)` ladder (Work for a Work `📄 Drafts`, Personal for a Personal one, per `${CLAUDE_PLUGIN_ROOT}/skills/asap-tiers.md`) and append `#drafts` to `suggestedText` when it does not already carry it.
 - `🔀 Alternative:` names `📄 Drafts` or a node under it -> an older refinement; set `alternativePath` to null
+- `📍 Move to:` is `Close-out table, match and complete` -> a close-out table; take it out of the batch loop and walk it as **Close-out tables** below describes
 
 ### Never ask how to file the inbox
 
@@ -267,6 +268,16 @@ Options:
 - "Skip (leave in inbox)"
 - "Delete"
 ```
+
+**Close-out tables.** An item whose `destinationPath` is `Close-out table, match and complete` is a table of notes already marked Done, Filed, or Jira, and each row names an open ladder task to complete. Never file the table itself as a task. Walk each close-out item before item 1 of the batch loop, on its own decision page whatever its row count:
+
+- Read the matches the refiner staged in `.llm/gtd/refine-inbox/close-out-<itemId>.json` (schema in **Close-Out Table Check**, `${CLAUDE_PLUGIN_ROOT}/prompts/refinement/item-refiner.md`). When the file is missing, run that check yourself against the item to rebuild it.
+- Stage the page per **Decision page** in `${CLAUDE_PLUGIN_ROOT}/skills/review-proposal-staging.md`, slug `close-notes-<yyyy-mm-dd>`, one card per row, id `row-<n>`, titled with the row text. Body lines, one fact each: `Close as: <status>`, `Jira: <key> <summary>` when there is a ticket, `Match (<tier or path>, <confidence>): <task name>`, and `Why: <why>`. Link the matched task (`https://workflowy.com/#/<last 12 hex of taskId>`) and the Jira ticket when it has a URL.
+- A matched row's options are **Complete it** (`complete`, description naming the Jira key when there is one) and **Keep open** (`keep`), default `complete` for a `high` match and `keep` otherwise. An unmatched row says `No open task matched` in its body and offers **Nothing to close** (`none`); the user names the right task in the card's note.
+- Apply each answer:
+    - `complete`: when the row has a Jira ticket, first add it to the task as a child, `./bin/run.js node create --parent-id <taskId> --name '🎫 Jira: <a href="<url>"><key></a> <summary>' --position bottom` (plain `<key> <summary>` without a URL), so the link travels with the task into the journal. Then `./bin/run.js node complete --id <taskId>` and verify with `node get` that `completedAt` is set. A task already completed or deleted since refinement is a stale skip: report it, do not re-match it blind.
+    - `keep` or `none`: no change. A note that names a task (a link, short id, or title) replaces the match: resolve it, confirm it in a follow-up question, then apply `complete` to it.
+- Once every row is answered and applied, delete the `🔍 Refinement` node and then the inbox item with `./bin/run.js node delete --id <itemId>`, and remove the staged `close-out-<itemId>.json`. With rows still unanswered, leave the item in the inbox. Count each completed task as "done" in the running total.
 
 **Unknown people.** Show each `⚠️ Invalid @mention:` row, and any name the people-tagger could not resolve, inside the item's question. When the user answers with a real identity ("yes Carol Smith, Acme"), ask one follow-up `AskUserQuestion` offering to add that person to `Metadata > 👥 People`, per "Adding a newly named person" in `${CLAUDE_PLUGIN_ROOT}/skills/people-metadata.md`. Create the entry before the batch executes, then file the item with the canonical `@mention` in place of the invalid one; any filing detail in the same answer ("3rd tier") still overrides the suggested destination.
 

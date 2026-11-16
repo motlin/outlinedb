@@ -22,6 +22,12 @@ Track all progress through `.llm/` files, Workflowy nodes, and inline status upd
 
 (Note: launching **subagents** via the `Agent` tool / `subagent_type` is unrelated to the built-in task list and is expected.)
 
+## Close-out tables
+
+An inbox item that is a table of notes or todos already marked `Done`, `Filed`, or `Jira` is a **close-out table**, not a new task: each row names an open `📌 Tasks (asap)` task to complete. The item-refiner detects it (see **Close-Out Table Check** in `${CLAUDE_PLUGIN_ROOT}/prompts/refinement/item-refiner.md`), matches every row to its open task, stages the matches in `.llm/gtd/refine-inbox/close-out-<itemId>.json`, and writes a refinement whose `📍 Move to:` is `Close-out table, match and complete`.
+
+In either review below, present a close-out item as `'<item name>' → close-out table (<N> rows, <M> matched)` with only **Accept** and **Remove refinement**. Never offer **Change destination** for it and never suggest filing the table as a task. `/gtd:inbox` walks the rows.
+
 ## Mode 1: Single Item Refinement (with argument)
 
 When an item ID, shortid, or URL is provided, refine only that specific item.
