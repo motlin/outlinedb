@@ -87,6 +87,9 @@ function legacyDatabase()
 		INSERT INTO references_roots (node_id, system_from, system_to) VALUES
 			('r1', '2026-10-29 20:02:08.971', '2026-10-29 20:13:30.705'),
 			('r1', '2026-10-29 20:02:09.019', '2026-10-29 20:13:30.705');
+		INSERT INTO tag_colors (tag, color_index, system_from, system_to) VALUES
+			('t1', 3, '2026-10-29 20:00:00.000', '${TEXT_FAR_FUTURE}'),
+			('t1', 5, '1794788809134486.0', '9007199254740991.0');
 	`);
 	return sqlite;
 }
@@ -114,7 +117,7 @@ describe("unique system_to migration", () =>
 		expect(indexes(legacy)).toStrictEqual(indexes(fresh));
 	});
 
-	it("closes each overlapping version at the next one's system_from instead of failing on duplicates", () =>
+	it("closes each overlapping version at the next one's system_from and drops rows already holding numeric times instead of failing", () =>
 	{
 		const legacy = legacyDatabase();
 
@@ -129,6 +132,7 @@ describe("unique system_to migration", () =>
 			{
 				mirrors: legacy.prepare("SELECT * FROM mirrors ORDER BY mirror_id, system_from").all(),
 				referencesRoots: legacy.prepare("SELECT * FROM references_roots ORDER BY system_from").all(),
+				tagColors: legacy.prepare("SELECT * FROM tag_colors ORDER BY system_from").all(),
 			},
 		).toStrictEqual(
 			{
@@ -168,6 +172,14 @@ describe("unique system_to migration", () =>
 						node_id: "r1",
 						system_from: systemTimeAt("2026-10-29 20:02:09.019"),
 						system_to: systemTimeAt("2026-10-29 20:13:30.705"),
+					},
+				],
+				tagColors: [
+					{
+						tag: "t1",
+						color_index: 3,
+						system_from: systemTimeAt("2026-10-29 20:00:00.000"),
+						system_to: FAR_FUTURE_DATE,
 					},
 				],
 			},
