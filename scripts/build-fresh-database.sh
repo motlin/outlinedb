@@ -80,16 +80,16 @@ step() {
     echo "▶ $*"
 }
 
+# Callers run both refuse checks first; each lsof scan reads every process's open files, which takes seconds under load.
 swap_in() {
     step "Swapping $building into $target"
-    refuse_if_web_watcher
-    refuse_if_busy
     sqlite3 "$building" "pragma journal_mode=delete" >/dev/null
     rm -f "$target-wal" "$target-shm"
     mv "$building" "$target"
     rm -f "$building-wal" "$building-shm" "$building-journal"
 }
 
+# --swap-only swaps right after this, so these checks also cover its swap, before the target is moved aside.
 refuse_if_web_watcher
 refuse_if_busy
 
@@ -162,6 +162,8 @@ else
     step "Vacuuming"
     "$run" cache vacuum
 
+    refuse_if_web_watcher
+    refuse_if_busy
     swap_in
 fi
 

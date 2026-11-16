@@ -37,22 +37,31 @@ function chromiumPath(): string | undefined
 	{
 		return override;
 	}
+	// The headless shell first: full Chrome on macOS is an AppKit app whose main thread can block for good acquiring a
+	// RunningBoard app-nap assertion under heavy load, so its launch or close never answers; the shell has no AppKit.
 	const binaries = [
+		"chrome-headless-shell-mac-arm64/chrome-headless-shell",
+		"chrome-headless-shell-mac-x64/chrome-headless-shell",
+		"chrome-headless-shell-linux64/chrome-headless-shell",
 		"chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
 		"chrome-mac/Chromium.app/Contents/MacOS/Chromium",
 		"chrome-linux64/chrome",
 		"chrome-linux/chrome",
 	];
-	for (const cache of [join(homedir(), "Library/Caches/ms-playwright"), join(homedir(), ".cache/ms-playwright")])
+	const caches = [join(homedir(), "Library/Caches/ms-playwright"), join(homedir(), ".cache/ms-playwright")];
+	for (const revision of [/^chromium_headless_shell-\d+$/u, /^chromium-\d+$/u])
 	{
-		// Any installed revision lays the page out the same way.
-		const dirs = existsSync(cache) ? readdirSync(cache).filter((dir) => /^chromium-\d+$/u.test(dir)) : [];
-		for (const dir of dirs)
+		for (const cache of caches)
 		{
-			const found = binaries.map((binary) => join(cache, dir, binary)).find((path) => existsSync(path));
-			if (found !== undefined)
+			// Any installed revision lays the page out the same way.
+			const dirs = existsSync(cache) ? readdirSync(cache).filter((dir) => revision.test(dir)) : [];
+			for (const dir of dirs)
 			{
-				return found;
+				const found = binaries.map((binary) => join(cache, dir, binary)).find((path) => existsSync(path));
+				if (found !== undefined)
+				{
+					return found;
+				}
 			}
 		}
 	}
