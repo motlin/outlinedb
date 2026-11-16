@@ -313,6 +313,9 @@ export function useCommandRegistry(): CommandRegistry
 				return;
 			}
 			const {expandParentId, ...payload} = plan;
+			// The move remounts the row, and its new editor starts from the cached name: save the text typed since the
+			// last pause first, or the remounted editor drops it and its next save overwrites it.
+			flushEditing();
 			const editor = editorElement(payload.nodeId);
 			if (editor)
 			{

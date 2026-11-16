@@ -930,6 +930,28 @@ describe("outline tab renders", () =>
 						},
 					);
 				}
+				// A name save answers the row as saved, so its optimistic patch stays.
+				const saved = /\/api\/v1\/nodes\/(n\d+)$/u.exec(url);
+				if (init?.method === "POST" && saved !== null)
+				{
+					const node = rows.find((candidate) => candidate.id === saved[1]);
+					return Response.json(
+						{
+							node:
+							{
+								...node,
+								...(JSON.parse(
+									typeof init.body === "string" ? init.body : "{}",
+								) as Partial<NodeResponse>),
+							},
+							effects:
+							{
+								backlinkTargets: [],
+								dates: false,
+							},
+						},
+					);
+				}
 				if (url.endsWith("/api/v1/preferences"))
 				{
 					// Preferences unavailable: a settled answer, unlike a 404 that every new observer would refetch.
@@ -1091,6 +1113,79 @@ describe("outline tab renders", () =>
 					],
 				},
 			);
+		});
+
+		it("keeps text typed within the save debounce when Tab remounts the edited row under its previous sibling", async () =>
+		{
+			act(() =>
+			{
+				useOutlineStore.setState(
+					{
+						editingId: "n11",
+					},
+				);
+			});
+			await settle();
+			const editor = document.querySelector<HTMLElement>('.innerContentContainer.editing[data-node-id="n11"]');
+			act(() =>
+			{
+				if (editor !== null)
+				{
+					editor.focus();
+					editor.textContent = "Row 11 edited";
+					editor.dispatchEvent(
+						new Event(
+							"input",
+							{
+								bubbles: true,
+							},
+						),
+					);
+				}
+			});
+			act(() =>
+			{
+				editor?.dispatchEvent(
+					new KeyboardEvent(
+						"keydown",
+						{
+							key: "Tab",
+							code: "Tab",
+							// oxlint-disable-next-line typescript/no-deprecated -- the keymap reads `which`, which happy-dom fills from `keyCode`.
+							keyCode: 9,
+							bubbles: true,
+							cancelable: true,
+						},
+					),
+				);
+			});
+			// The optimistic splice lands a tick after the keydown; read the editor as soon as it remounts.
+			const moved = () =>
+				queryClient.getQueryData<NodeResponse[]>(nodeKeys.children("n9"))?.some((node) => node.id === "n11");
+			for (let tick = 0; tick < 20 && moved() !== true; tick++)
+			{
+				await act(async () =>
+				{
+					await Promise.resolve();
+				});
+			}
+			const remounted = document.querySelector<HTMLElement>('.innerContentContainer.editing[data-node-id="n11"]');
+			expect(
+				{
+					remounted: remounted !== editor,
+					underPrevious: queryClient
+						.getQueryData<NodeResponse[]>(nodeKeys.children("n9"))
+						?.map((node) => node.id),
+					text: remounted?.textContent,
+				},
+			).toStrictEqual(
+				{
+					remounted: true,
+					underPrevious: ["n10", "n11"],
+					text: "Row 11 edited",
+				},
+			);
+			await settle();
 		});
 	});
 });
