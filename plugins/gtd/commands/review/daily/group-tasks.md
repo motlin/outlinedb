@@ -70,7 +70,16 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/asap-tiers.mts group .llm/gtd/review/ladder-<
 
 `members` is the move order, each with `fromTier` (`null` when it is not on this ladder). `insertion` is the plan for filing a new group in the highest tier its members came from — or in `[tier]` when given — computed **after** the members have left their tiers: a member leaving a tier frees the slot the group takes. Filing the group never moves any other item, even into a full tier. Ignore `insertion` when the anchor already exists.
 
-**Dated tasks never move.** The due walk (`/gtd:review:daily:due`) reads only the direct children of each `⏰` bucket, so a dated task moved under a group on the ladder silently drops out of it. A `⏰` task that matches a cluster is listed in the question as `Related (stays in ⏰): …` so the user sees the whole theme, but it is never a member. Every member is therefore on the ladder, and a `fromTier: null` in `planGroup` output means an id was mistyped — stop and fix the member list.
+**Dated tasks never move.** The due walk (`/gtd:review:daily:due`) reads only the direct children of each `⏰` bucket, so a dated task moved under a group on the ladder silently drops out of it. A `⏰` task that matches a cluster is listed in the question as `Related (stays in ⏰): …` so the user sees the whole theme, but it is never a member. Every member is therefore on the ladder, and a `fromTier: null` in `planGroup` output means an id was mistyped — stop and fix the member list. The one exception is a past event's split (below), which empties the dated task rather than grouping under it.
+
+## Split past events
+
+An anchor task that is a dated event already in the past — its name carries a `<time>` date before today, or it names a one-off occasion whose date has gone by ("@Alice's party", "Spring recital") — usually holds two kinds of children: things tied to the event day itself (prep, the event, what happened there) and follow-ups still to do afterward (thank-you notes, returning borrowed gear, paying the caterer). Grouping more tasks under it keeps the finished part on the ladder. Default to proposing a **split** instead:
+
+- **Journal part** — the event-day children move into the event date's day node in the root's `📅 Calendar` (or `🗃️ Archive`), resolved and created exactly as `${CLAUDE_PLUGIN_ROOT}/commands/review/daily/cleanup-completed.md` does under **Apply: Journal**. When that day already holds an entry for the event (same distinctive noun phrase), they move under that entry instead. A completed child is un-completed before it moves, so the journal never holds a completed node.
+- **Follow-ups part** — the still-open follow-ups stay together on the ladder under the anchor, renamed `<event> follow-ups` with the past `<time>` element dropped. An anchor on the ladder keeps its tier. An anchor in a `⏰` bucket leaves it, since an undated node there is loose: plan its landing with `planRescue` and the anchor's tier when the user names one, else the bottom tier.
+
+Classify each child from its text and completion: a completed child, or one that names something done on or before the event date, is event-day; an open child that names work after the event is a follow-up. When a child fits neither cleanly, put it in the follow-ups part, since moving open work into the journal hides it. With no follow-ups, the split is the whole task into the journal, and the anchor is deleted once empty; with no event-day children, propose only the rename.
 
 ## Rescue off-ladder projects
 
@@ -102,7 +111,7 @@ Write `.llm/gtd/review/proposals/group-tasks.json` following `${CLAUDE_PLUGIN_RO
 	"generatedAt": "<ISO-8601 with offset>",
 	"status": "ready",
 	"presentation": "Group related tasks",
-	"summary": {"clusters": 2, "rescues": 1, "duplicates": 1},
+	"summary": {"clusters": 2, "splits": 1, "rescues": 1, "duplicates": 1},
 	"proposals": [
 		{
 			"kind": "group",
@@ -116,6 +125,14 @@ Write `.llm/gtd/review/proposals/group-tasks.json` following `${CLAUDE_PLUGIN_RO
 			],
 			"relatedDated": [{"nodeId": "<uuid>", "name": "Share the onboarding doc with @Alice", "due": "2026-09-25"}],
 			"reason": "all three name @Alice and onboarding"
+		},
+		{
+			"kind": "split",
+			"rootKey": "personal",
+			"event": {"nodeId": "<uuid>", "name": "@Alice's party", "date": "2026-09-19", "where": "📌 asap → 2nd"},
+			"journal": {"dayNodeId": "<uuid-or-null>", "entryId": "<uuid-or-null>", "children": [{"nodeId": "<uuid>", "name": "Pick up the cake", "completed": true}]},
+			"followUps": {"name": "@Alice's party follow-ups", "children": [{"nodeId": "<uuid>", "name": "Write thank-you notes"}], "insertion": null},
+			"reason": "event date 2026-09-19 has passed; 1 open follow-up"
 		},
 		{
 			"kind": "rescue",
@@ -135,7 +152,7 @@ Write `.llm/gtd/review/proposals/group-tasks.json` following `${CLAUDE_PLUGIN_RO
 }
 ```
 
-`anchor.type` is `new`, `project`, or `task`; `project` and `task` anchors carry `nodeId` instead of `tier` / `tierId`. `status` is `empty` when nothing clusters, nothing needs rescuing, and nothing duplicates, and `error` if prep failed.
+`anchor.type` is `new`, `project`, or `task`; `project` and `task` anchors carry `nodeId` instead of `tier` / `tierId`. A split's `journal.dayNodeId` is `null` when the day node must be created, and `followUps.insertion` is the `planRescue` output for a `⏰` anchor, `null` otherwise. `status` is `empty` when nothing clusters, splits, needs rescuing, or duplicates, and `error` if prep failed.
 
 ## Walk and apply
 
@@ -162,6 +179,20 @@ On **Group**, dispatch the ops as one background Bash job per the **Background D
 
 On **Keep separate**, append the cluster to the **Declined** section of `.llm/gtd/task-groups.md` so it is not proposed again. On **Group**, append or update the theme under **Themes** with its identifying words and the anchor's shortId, so the next run recognizes it. Append — never rewrite the file wholesale.
 
+For a **split** proposal, show the event, its date, and both parts with their full destinations:
+
+```markdown
+Split (Personal): @Alice's party (Sat, Sep 19) — the event has passed
+
+Journal → 📅 Calendar → Sat, Sep 19, 2026:
+- Pick up the cake (done)
+
+Stays as "@Alice's party follow-ups" in 📌 asap → 2nd:
+- Write thank-you notes
+```
+
+Options: **Split** (as proposed), **Move a child to the other part** (the user names it; re-ask with the change), **Group instead** (fall back to the ordinary group proposal for this anchor), **Keep as is**. On **Split**, dispatch as one chained background job: create the day node if missing, `node uncomplete` each completed journal child, `node move --node-id <childUuid> --parent-id <dayNodeId-or-entryId> -p bottom` for each journal child in order, then `node update --id <anchorUuid> --name '<event> follow-ups'` and, for a `⏰` anchor, any `createTiers` and `node move --node-id <anchorUuid> --parent-id <insertion.targetId> -p bottom`. With no follow-ups, `node delete --id <anchorUuid>` last, only after every child has moved. On **Keep as is**, append the split to **Declined**.
+
 For a **rescue** proposal, show the project, its open-task count, and where it lands:
 
 ```markdown
@@ -174,4 +205,4 @@ For a **duplicate** proposal, apply the chosen side's delete with `node delete -
 
 ## Finish
 
-Drain every background job and surface failures by group name. Print one line — e.g. `✓ 2 groups (1 new in 2nd, 1 under an existing project), 5 tasks moved, 1 project rescued to 5th, 1 agenda duplicate dropped, 1 kept separate` — or say nothing when `status` was `empty`. Leave over-cap tiers alone; the user fixes them in `/gtd:review:daily:rebalance`.
+Drain every background job and surface failures by group name. Print one line — e.g. `✓ 2 groups (1 new in 2nd, 1 under an existing project), 5 tasks moved, 1 past event split (2 to the journal, 1 follow-up kept), 1 project rescued to 5th, 1 agenda duplicate dropped, 1 kept separate` — or say nothing when `status` was `empty`. Leave over-cap tiers alone; the user fixes them in `/gtd:review:daily:rebalance`.
