@@ -15,7 +15,7 @@ import {bodyTokens} from "../decision-tokens.js";
 import "../decisions.css";
 import {hideLoadingScreenOnce} from "../loading-screen.js";
 import {readJson} from "../read-json.js";
-import {fetchThroughRestarts} from "../restart-retry.js";
+import {fetchText} from "../fetch-text.js";
 import {useOutlineStore} from "../stores/outline.js";
 import {ChecklistSheet} from "./checklist-sheet.js";
 
@@ -126,7 +126,7 @@ async function loadPage(
 {
 	try
 	{
-		const response = await fetchThroughRestarts(
+		const response = await fetchText(
 			url,
 			{
 				signal,
@@ -359,7 +359,7 @@ export function DecisionPageView({slug}: {slug: string})
 		let error: string;
 		try
 		{
-			const response = await fetchThroughRestarts(
+			const response = await fetchText(
 				`${base}/${encodeURIComponent(id)}`,
 				{
 					method: "PUT",
@@ -429,7 +429,7 @@ export function DecisionPageView({slug}: {slug: string})
 		);
 		try
 		{
-			const response = await fetchThroughRestarts(
+			const response = await fetchText(
 				`${base}/submit`,
 				{
 					method: "POST",

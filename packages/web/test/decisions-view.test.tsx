@@ -378,31 +378,22 @@ async function typeNote(textarea: HTMLTextAreaElement, values: string[]): Promis
 
 describe("DecisionPageView", () =>
 {
-	it("retries the page load through a dev API restart instead of showing a JSON parse error", async () =>
+	it("shows an empty answer from a restarting dev API as an error after one attempt instead of a JSON parse error", async () =>
 	{
 		let gets = 0;
 		vi.stubGlobal("fetch", async () =>
 		{
 			gets++;
 			return Promise.resolve(
-				gets === 1
-					? new Response(
-							"",
-							{
-								status: 200,
-							},
-						)
-					: Response.json(PAGE),
+				new Response(
+					"",
+					{
+						status: 200,
+					},
+				),
 			);
 		});
 		await mount();
-		await act(async () =>
-		{
-			await new Promise((resolve) =>
-			{
-				setTimeout(resolve, 400);
-			});
-		});
 		await flush();
 		expect(
 			{
@@ -412,9 +403,11 @@ describe("DecisionPageView", () =>
 			},
 		).toStrictEqual(
 			{
-				gets: 2,
-				title: ["Meeting follow-ups"],
-				errors: [],
+				gets: 1,
+				title: [],
+				errors: [
+					"The server answered HTTP 200 with an empty body; the API may be restarting. Reload to try again.",
+				],
 			},
 		);
 	});

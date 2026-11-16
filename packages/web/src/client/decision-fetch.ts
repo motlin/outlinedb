@@ -1,7 +1,7 @@
 /** Error text for the decision pages' fetches. */
 
 import {readJson} from "./read-json.js";
-import type {FetchedText} from "./restart-retry.js";
+import type {FetchedText} from "./fetch-text.js";
 
 /** The server's `{error}` message from a failed response, or its HTTP status. */
 export async function errorOf(response: FetchedText): Promise<string>

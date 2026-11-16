@@ -9,7 +9,7 @@ import type {DecisionPage, DecisionSubmitResult} from "../../server/decisions.js
 import "../checklist.css";
 import {errorOf, messageOf} from "../decision-fetch.js";
 import {readJson} from "../read-json.js";
-import {fetchThroughRestarts} from "../restart-retry.js";
+import {fetchText} from "../fetch-text.js";
 
 const CHECKED = "did";
 const UNCHECKED = "skip";
@@ -82,7 +82,7 @@ export function ChecklistSheet({page, base}: {page: DecisionPage; base: string})
 		let error: string;
 		try
 		{
-			const response = await fetchThroughRestarts(
+			const response = await fetchText(
 				`${base}/${encodeURIComponent(id)}`,
 				{
 					method: "PUT",
@@ -127,7 +127,7 @@ export function ChecklistSheet({page, base}: {page: DecisionPage; base: string})
 		);
 		try
 		{
-			const response = await fetchThroughRestarts(
+			const response = await fetchText(
 				`${base}/submit`,
 				{
 					method: "POST",
