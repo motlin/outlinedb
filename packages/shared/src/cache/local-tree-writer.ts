@@ -615,6 +615,16 @@ function currentContent(tx: TemporalTransaction, id: string): ContentRow | undef
 		.get();
 }
 
+/** A move whose target parent is the moved node itself or one of its descendants: refused, nothing is written. */
+export class MoveIntoOwnSubtreeError extends Error
+{
+	constructor(readonly nodeId: string)
+	{
+		super(`Cannot move ${nodeId} under its own subtree`);
+		this.name = "MoveIntoOwnSubtreeError";
+	}
+}
+
 function requireNode(tx: TemporalTransaction, id: string): ContentRow
 {
 	const node = currentContent(tx, id);
@@ -1748,7 +1758,7 @@ export class LocalTreeWriter
 				}
 				if (target !== null && this.isInSubtree(tx, parentOf, target, id))
 				{
-					throw new Error(`Cannot move ${id} under its own subtree`);
+					throw new MoveIntoOwnSubtreeError(id);
 				}
 			}
 			const order = pending.order(target);

@@ -409,6 +409,70 @@ describe("POST /api/v1/nodes/:id/move and /move in mirror mode", () =>
 		);
 	});
 
+	it("rejects a move onto the node itself or into its own subtree with 400 and writes nothing", async () =>
+	{
+		const {order, pending, post} = setup(true);
+		await post(
+			"/c/move",
+			{
+				parent_id: "a",
+			},
+		);
+		const before = pending();
+
+		const onto = await post(
+			"/a/move",
+			{
+				parent_id: "a",
+			},
+		);
+		const under = await post(
+			"/move",
+			{
+				ids: ["b", "a"],
+				parent_id: "c",
+			},
+		);
+
+		expect(
+			{
+				onto:
+				{
+					status: onto.status,
+					body: await onto.json(),
+				},
+				under:
+				{
+					status: under.status,
+					body: await under.json(),
+				},
+				order: [order(null), order("a"), order("c")],
+				pending: pending(),
+			},
+		).toStrictEqual(
+			{
+				onto:
+				{
+					status: 400,
+					body:
+					{
+						error: "Cannot move a under its own subtree",
+					},
+				},
+				under:
+				{
+					status: 400,
+					body:
+					{
+						error: "Cannot move a under its own subtree",
+					},
+				},
+				order: [["a", "b"], ["c"], []],
+				pending: before,
+			},
+		);
+	});
+
 	it("rejects a body without ids", async () =>
 	{
 		const {pending, post} = setup(true);

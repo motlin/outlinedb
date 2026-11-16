@@ -51,6 +51,7 @@ export
 	type LocalRestoreInput,
 	LocalTreeWriter,
 	type LocalTreeWriterOptions,
+	MoveIntoOwnSubtreeError,
 	type LocalUpdateInput,
 	readHomeLayoutMode,
 } from "./local-tree-writer.js";

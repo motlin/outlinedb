@@ -1,5 +1,6 @@
 import {z} from "zod";
 import type {NodeWriter} from "./nodes-shared.js";
+import {MoveIntoOwnSubtreeError} from "@outlinedb/shared/cache";
 import type {NewTree} from "@outlinedb/shared/internal";
 import {MAX_COPY_ITEMS, copySubtree} from "../copy-tree.js";
 import type {ServerContext} from "../context.js";
@@ -352,7 +353,23 @@ function moveNodes(
 	}
 	const oldParents = blocks.flatMap(({ids}) => ids.map((id) => ctx.cacheService.getNode(id)?.parentId ?? null));
 
-	writer.local.moveBlocks(blocks);
+	try
+	{
+		writer.local.moveBlocks(blocks);
+	}
+	catch (error)
+	{
+		if (error instanceof MoveIntoOwnSubtreeError)
+		{
+			return fail(
+				400,
+				{
+					error: error.message,
+				},
+			);
+		}
+		throw error;
+	}
 
 	return ok(
 		toJson(
