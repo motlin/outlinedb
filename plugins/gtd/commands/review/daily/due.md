@@ -198,6 +198,17 @@ Task **execution** stays foreground. If a task runs `cache import-api` / `just d
 - Related setup steps that only serve the walk (e.g. a NAS sync) belong with it: kick them off, skip them, or move them together.
 - Non-interactive `#llm-task` items keep the no-skip-prompt behavior above.
 
+### Unreachable hosts: diagnose before asking
+
+When an `#llm-task` needs a host (a NAS, a server, another Mac) and ssh, ping, or a mount fails, find out why before asking the user anything. The user usually knows only that the device is on, so asking them what to do gets nowhere. Run these checks, in parallel where you can, and keep what each one found:
+
+- **LAN scan.** Look for the host by MAC address and hostname: `arp -an`, a ping sweep of the local subnet, and `dns-sd -B _ssh._tcp` / `_smb._tcp`. A known MAC at a new IP means DHCP moved the host, so retry at that IP. No MAC anywhere means the host is not on this network segment.
+- **Tailnet last-seen.** Run `tailscale status` and read the host's row: online, idle, or offline with when it was last seen. Connect by its tailnet IP, not its MagicDNS name, which can fail on its own. If Tailscale on this Mac is stopped, `tailscale up` first.
+- **Mesh router clients and access points.** Check the router's client list for the host, and which access point or mesh node it joined. If every client behind one access point is missing, or that node is gone from the mesh, the access point is down, not the host.
+- **Retry with what you learned.** A new IP, a tailnet IP, or a different route often reaches the host without the user doing anything.
+
+Ask the user only when the checks narrow it to a physical step that only they can do, and name that step: "the mesh node in the office has no clients and is gone from the router's node list; is it powered on?" or "the NAS's MAC is not on the LAN and Tailscale last saw it 3 days ago; is its power light on?". List what you checked and what each check showed in the question body. Never ask a bare "What now?" or "The host is unreachable, how should I proceed?".
+
 ### Drafting instruction children
 
 Whenever you write a new instruction child for an `#llm-task` item (converting an item, or adding a rule the user asked for), draft it to these rules:
