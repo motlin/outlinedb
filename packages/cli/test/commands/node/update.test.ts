@@ -148,7 +148,12 @@ describe("node update command", () =>
 			});
 
 			expect(stdout).toBe(
-				'Would execute API call:\n  Method: POST\n  URL: https://workflowy.com/api/v1/nodes/orig-id\n  Headers:\n    Authorization: Bearer <WORKFLOWY_API_KEY>\n    Content-Type: application/json\n  Body:\n    {\n      "name": "Game night #games"\n    }\n\nNode: Game night\n',
+				"mirror-id is a mirror; updating its original orig-id\n" +
+					"Would update node: Game night\n" +
+					"Would save locally (outbox rows):\n" +
+					"  orig-id  name  Game night #games\n" +
+					"Would push to workflowy.com:\n" +
+					'  edit {"projectid":"orig-id","name":"Game night #games","metadataPatches":[],"metadataInversePatches":[]}\n',
 			);
 		});
 	});
@@ -384,7 +389,7 @@ describe("node update command", () =>
 
 	describe("dry run mode", () =>
 	{
-		it("shows API call without executing for name update", async () =>
+		it("previews the local write and the drain's ops without saving or sending anything", async () =>
 		{
 			seedTestData(
 				testDatabase,
@@ -404,11 +409,29 @@ describe("node update command", () =>
 				await Update.run(["--id", "node-id", "--name", "New Name", "--dry-run"]);
 			});
 
-			// Dry run outputs human-readable text, not JSON
 			expect(stdout).toBe(
-				'Would execute API call:\n  Method: POST\n  URL: https://workflowy.com/api/v1/nodes/node-id\n  Headers:\n    Authorization: Bearer <WORKFLOWY_API_KEY>\n    Content-Type: application/json\n  Body:\n    {\n      "name": "New Name"\n    }\n\nNode: Original Name\n',
+				"Would update node: Original Name\n" +
+					"Would save locally (outbox rows):\n" +
+					"  node-id  name  New Name\n" +
+					"Would push to workflowy.com:\n" +
+					'  edit {"projectid":"node-id","name":"New Name","metadataPatches":[],"metadataInversePatches":[]}\n',
 			);
 			expect(fetchStub.mock.calls).toStrictEqual([]);
+			expect(pendingOutbox(testDatabase)).toStrictEqual([]);
+			expect(
+				testDatabase.db
+					.select(
+						{
+							name: nodeContent.name,
+						},
+					)
+					.from(nodeContent)
+					.all(),
+			).toStrictEqual([
+				{
+					name: "Original Name",
+				},
+			]);
 		});
 
 		it("shows note in dry run output", async () =>
@@ -432,7 +455,11 @@ describe("node update command", () =>
 			});
 
 			expect(stdout).toBe(
-				'Would execute API call:\n  Method: POST\n  URL: https://workflowy.com/api/v1/nodes/node-id\n  Headers:\n    Authorization: Bearer <WORKFLOWY_API_KEY>\n    Content-Type: application/json\n  Body:\n    {\n      "note": "New note content"\n    }\n\nNode: Test\n',
+				"Would update node: Test\n" +
+					"Would save locally (outbox rows):\n" +
+					"  node-id  note  Test\n" +
+					"Would push to workflowy.com:\n" +
+					'  edit {"projectid":"node-id","description":"New note content","metadataPatches":[],"metadataInversePatches":[]}\n',
 			);
 		});
 
@@ -457,7 +484,11 @@ describe("node update command", () =>
 			});
 
 			expect(stdout).toBe(
-				'Would execute API call:\n  Method: POST\n  URL: https://workflowy.com/api/v1/nodes/node-id\n  Headers:\n    Authorization: Bearer <WORKFLOWY_API_KEY>\n    Content-Type: application/json\n  Body:\n    {\n      "layoutMode": "board"\n    }\n\nNode: Test\n',
+				"Would update node: Test\n" +
+					"Would save locally (outbox rows):\n" +
+					"  node-id  metadata  Test\n" +
+					"Would push to workflowy.com:\n" +
+					'  edit {"projectid":"node-id","metadataPatches":[{"op":"add","path":["layoutMode"],"value":"board"}],"metadataInversePatches":[{"op":"remove","path":["layoutMode"]}]}\n',
 			);
 		});
 
@@ -483,7 +514,11 @@ describe("node update command", () =>
 			});
 
 			expect(stdout).toBe(
-				'Would execute API call:\n  Method: POST\n  URL: https://workflowy.com/api/v1/nodes/node-id\n  Headers:\n    Authorization: Bearer <WORKFLOWY_API_KEY>\n    Content-Type: application/json\n  Body:\n    {\n      "note": ""\n    }\n\nNode: Test\n',
+				"Would update node: Test\n" +
+					"Would save locally (outbox rows):\n" +
+					"  node-id  note  Test\n" +
+					"Would push to workflowy.com:\n" +
+					'  edit {"projectid":"node-id","description":"","metadataPatches":[],"metadataInversePatches":[]}\n',
 			);
 		});
 	});

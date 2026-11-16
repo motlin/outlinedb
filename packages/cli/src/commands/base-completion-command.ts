@@ -4,7 +4,7 @@ import type {LocalTreeWriter} from "@outlinedb/shared/cache";
 import {Command, Flags} from "@oclif/core";
 import {createDatabase} from "../db/index.js";
 import {CacheService} from "../services/cache.js";
-import {drainAfterWrite, openLocalWrites} from "../services/local-writes.js";
+import {drainAfterWrite, logWritePreview, openLocalWrites, previewLocalWrite} from "../services/local-writes.js";
 import {logger} from "../services/logger.js";
 import {resolveNodeId} from "@outlinedb/shared/utils";
 
@@ -31,7 +31,8 @@ export abstract class BaseCompletionCommand extends Command
 		"dry-run": Flags.boolean(
 			{
 				char: "d",
-				description: "Show the API call that would be made without executing",
+				description:
+					"Show the local write and the ops the drain would push, without saving or sending anything",
 				default: false,
 			},
 		),
@@ -70,14 +71,14 @@ export abstract class BaseCompletionCommand extends Command
 
 		if (flags["dry-run"])
 		{
-			this.log("Would execute API call:");
-			this.log(`  Method: POST`);
-			this.log(`  URL: https://workflowy.com/api/v1/nodes/${nodeId}/${this.action}`);
-			this.log("  Headers:");
-			this.log("    Authorization: Bearer <WORKFLOWY_API_KEY>");
-			this.log("    Content-Type: application/json");
-			this.log("");
-			this.log(`Node: ${fullPath}`);
+			this.log(`${this.actionPresent} (dry run): ${fullPath}`);
+			logWritePreview(
+				this,
+				await previewLocalWrite(database, (local) =>
+				{
+					this.executeAction(local, nodeId);
+				}),
+			);
 		}
 		else
 		{

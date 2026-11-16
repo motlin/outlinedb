@@ -145,11 +145,16 @@ describe("node:move command", () =>
 				await Move.run(["--node-id", "source-id", "--parent-id", "target-id", "--dry-run"]);
 			});
 
-			// Dry run outputs human-readable text
 			expect(stdout).toBe(
-				"Would move:\n  From: Source Node\n  To:   Target Folder\n\nExecute with:\n  outlinedb node:move --node-id source-id --parent-id target-id\n",
+				"Would move:\n  From: Source Node\n  To:   Target Folder\n" +
+					"Would save locally (outbox rows):\n" +
+					"  source-id  placement  Source Node\n" +
+					"Would push to workflowy.com:\n" +
+					'  move {"projectid":"source-id","parentid":"target-id","priority":0}\n',
 			);
 			expect(fetchStub.mock.calls).toStrictEqual([]);
+			expect(pendingOutbox(testDatabase)).toStrictEqual([]);
+			expect(new CacheService(testDatabase.db).getNode("source-id")?.parentId).toBeNull();
 		});
 
 		it("shows position in dry run output", async () =>
@@ -188,7 +193,11 @@ describe("node:move command", () =>
 			});
 
 			expect(stdout).toBe(
-				"Would move:\n  From: Source\n  To:   Target\n  Position: bottom\n\nExecute with:\n  outlinedb node:move --node-id source-id --parent-id target-id --position bottom\n",
+				"Would move:\n  From: Source\n  To:   Target\n  Position: bottom\n" +
+					"Would save locally (outbox rows):\n" +
+					"  source-id  placement  Source\n" +
+					"Would push to workflowy.com:\n" +
+					'  move {"projectid":"source-id","parentid":"target-id","priority":0}\n',
 			);
 		});
 	});
@@ -504,7 +513,11 @@ describe("node:move command", () =>
 			});
 
 			expect(stdout).toBe(
-				"Would move:\n  From: Work > Source\n  To:   Home\n\nExecute with:\n  outlinedb node:move --node-id source-id --parent-id home\n",
+				"Would move:\n  From: Work > Source\n  To:   Home\n" +
+					"Would save locally (outbox rows):\n" +
+					"  source-id  placement  Source\n" +
+					"Would push to workflowy.com:\n" +
+					'  move {"projectid":"source-id","parentid":"None","priority":0}\n',
 			);
 			expect(fetchStub.mock.calls).toStrictEqual([]);
 		});

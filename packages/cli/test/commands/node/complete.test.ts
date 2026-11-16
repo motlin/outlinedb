@@ -78,7 +78,11 @@ describe("node complete and uncomplete commands", () =>
 		});
 
 		expect(stdout).toBe(
-			`Would execute API call:\n  Method: POST\n  URL: https://workflowy.com/api/v1/nodes/${FULL_ID}/complete\n  Headers:\n    Authorization: Bearer <WORKFLOWY_API_KEY>\n    Content-Type: application/json\n\nNode: Test Node\n`,
+			"Marking node as completed (dry run): Test Node\n" +
+				"Would save locally (outbox rows):\n" +
+				`  ${FULL_ID}  completion  Test Node\n` +
+				"Would push to workflowy.com:\n" +
+				`  complete {"projectid":"${FULL_ID}"}\n`,
 		);
 		expect(fetchStub.mock.calls).toStrictEqual([]);
 	});
@@ -104,7 +108,11 @@ describe("node complete and uncomplete commands", () =>
 		});
 
 		expect(stdout).toBe(
-			`Would execute API call:\n  Method: POST\n  URL: https://workflowy.com/api/v1/nodes/${FULL_ID}/uncomplete\n  Headers:\n    Authorization: Bearer <WORKFLOWY_API_KEY>\n    Content-Type: application/json\n\nNode: Test Node\n`,
+			"Marking node as not completed (dry run): Test Node\n" +
+				"Would save locally (outbox rows):\n" +
+				"  (nothing)\n" +
+				"Would push to workflowy.com:\n" +
+				"  (nothing)\n",
 		);
 		expect(fetchStub.mock.calls).toStrictEqual([]);
 	});

@@ -1256,6 +1256,23 @@ function errorMessage(error: unknown): string
 }
 
 /**
+ * The ops draining every pending row would push, planned from the current local state as a drain plans them, without
+ * pushing or closing anything: a dry run's preview. Rows a drain holds back (a mirror that lost its `mirrors` row) are
+ * left out.
+ */
+export function previewOutboxOps(tx: TemporalTransaction, session: OutboxSession, now: number): InternalOp[]
+{
+	const rows = readPendingOutbox(tx, Number.MAX_SAFE_INTEGER);
+	const held = new Set([...lostMirrors(tx, rows).values()].flatMap((lost) => lost.held));
+	return planDrain(
+		tx,
+		rows.filter((row) => !held.has(row)),
+		session,
+		now,
+	).ops;
+}
+
+/**
  * One drain pass over the oldest pending outbox rows: one push, or none when nothing needs sending. When the server run
  * echoes every op, the carried rows close in the unit of work that applies the push's transactions. When it leaves
  * ops out, the drain reads the nodes they name from workflowy.com and closes the rows only if every left-out op's

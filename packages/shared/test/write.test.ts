@@ -16,7 +16,6 @@ import {requestJson, requestBody} from "./helpers/request-body.js";
 import {z} from "zod";
 import type {WorkflowyNode} from "../src/types/workflowy.js";
 import {buildTestDb} from "./helpers/round-trip-helpers.js";
-import {deletePlanCalls} from "../src/cache/delete-plan.js";
 import type {DeletePlan} from "../src/cache/delete-plan.js";
 import type {UpdateNodeRequest} from "../src/api/workflowy-client.js";
 
@@ -1442,63 +1441,6 @@ describe("write through mirror delete", () =>
 					cache: before,
 				},
 			);
-		});
-
-		it("lists the API calls of a plan in the order they are made", () =>
-		{
-			expect(deletePlanCalls(PROJECTS_PLAN)).toStrictEqual([
-				{
-					method: "DELETE",
-					path: "/nodes/mirror-in/mirror",
-				},
-				{
-					method: "DELETE",
-					path: "/nodes/mirror-nested/mirror",
-				},
-				{
-					method: "DELETE",
-					path: "/nodes/mirror-b/mirror",
-				},
-				{
-					method: "DELETE",
-					path: "/nodes/mirror-out/mirror",
-				},
-				{
-					method: "POST",
-					path: "/nodes/task-a/move",
-					body:
-					{
-						parent_id: "agendas",
-						position: "top",
-					},
-				},
-				{
-					method: "POST",
-					path: "/nodes/agenda-1/move",
-					body:
-					{
-						parent_id: "agendas",
-						position: "top",
-					},
-				},
-				{
-					method: "DELETE",
-					path: "/nodes/mirror-y/mirror",
-				},
-				{
-					method: "POST",
-					path: "/nodes/task-y/move",
-					body:
-					{
-						parent_id: "task-a",
-						position: "bottom",
-					},
-				},
-				{
-					method: "DELETE",
-					path: "/nodes/projects",
-				},
-			]);
 		});
 
 		it("does not send the generic delete when removing an inner mirror fails, so no dead reference is left", async () =>

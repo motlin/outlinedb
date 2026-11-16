@@ -196,7 +196,7 @@ describe("node create command", () =>
 
 	describe("dry run mode", () =>
 	{
-		it("shows API call without executing for single node", async () =>
+		it("previews the local create and the drain's ops without saving or sending anything", async () =>
 		{
 			seedTestData(
 				testDatabase,
@@ -217,8 +217,16 @@ describe("node create command", () =>
 			});
 
 			expect(fetchStub.mock.calls).toStrictEqual([]);
+			expect(pendingOutbox(testDatabase)).toStrictEqual([]);
+			expect(new CacheService(testDatabase.db).getChildren("parent-id")).toStrictEqual([]);
 			expect(stdout).toBe(
-				'Would execute API call:\n  Method: POST\n  URL: https://workflowy.com/api/v1/nodes/\n  Headers:\n    Authorization: Bearer <WORKFLOWY_API_KEY>\n    Content-Type: application/json\n  Body:\n    {\n      "parent_id": "parent-id",\n      "name": "Test Node"\n    }\n\nParent: Parent\n',
+				"Would create node: Test Node\n" +
+					"Parent: Parent\n" +
+					"Would save locally (outbox rows):\n" +
+					"  00000000-0000-4000-8000-000000000001  create  Test Node\n" +
+					"  00000000-0000-4000-8000-000000000001  placement  Test Node\n" +
+					"Would push to workflowy.com:\n" +
+					'  bulk_create {"parentid":"parent-id","starting_priority":0,"project_trees":[{"id":"00000000-0000-4000-8000-000000000001","nm":"Test Node","ch":[]}],"isForSearch":false}\n',
 			);
 		});
 
@@ -244,7 +252,13 @@ describe("node create command", () =>
 
 			expect(fetchStub.mock.calls).toStrictEqual([]);
 			expect(stdout).toBe(
-				'Would execute API call:\n  Method: POST\n  URL: https://workflowy.com/api/v1/nodes/\n  Headers:\n    Authorization: Bearer <WORKFLOWY_API_KEY>\n    Content-Type: application/json\n  Body:\n    {\n      "parent_id": "parent-id",\n      "name": ""\n    }\n\nParent: Parent\n',
+				"Would create node: \n" +
+					"Parent: Parent\n" +
+					"Would save locally (outbox rows):\n" +
+					"  00000000-0000-4000-8000-000000000001  create\n" +
+					"  00000000-0000-4000-8000-000000000001  placement\n" +
+					"Would push to workflowy.com:\n" +
+					'  bulk_create {"parentid":"parent-id","starting_priority":0,"project_trees":[{"id":"00000000-0000-4000-8000-000000000001","nm":"","ch":[]}],"isForSearch":false}\n',
 			);
 		});
 
@@ -277,7 +291,13 @@ describe("node create command", () =>
 			});
 
 			expect(stdout).toBe(
-				'Would execute API call:\n  Method: POST\n  URL: https://workflowy.com/api/v1/nodes/\n  Headers:\n    Authorization: Bearer <WORKFLOWY_API_KEY>\n    Content-Type: application/json\n  Body:\n    {\n      "parent_id": "parent-id",\n      "name": "Test Node",\n      "note": "This is a note"\n    }\n\nParent: Parent\n',
+				"Would create node: Test Node\n" +
+					"Parent: Parent\n" +
+					"Would save locally (outbox rows):\n" +
+					"  00000000-0000-4000-8000-000000000001  create  Test Node\n" +
+					"  00000000-0000-4000-8000-000000000001  placement  Test Node\n" +
+					"Would push to workflowy.com:\n" +
+					'  bulk_create {"parentid":"parent-id","starting_priority":0,"project_trees":[{"id":"00000000-0000-4000-8000-000000000001","nm":"Test Node","no":"This is a note","ch":[]}],"isForSearch":false}\n',
 			);
 		});
 
@@ -310,7 +330,13 @@ describe("node create command", () =>
 			});
 
 			expect(stdout).toBe(
-				'Would execute API call:\n  Method: POST\n  URL: https://workflowy.com/api/v1/nodes/\n  Headers:\n    Authorization: Bearer <WORKFLOWY_API_KEY>\n    Content-Type: application/json\n  Body:\n    {\n      "parent_id": "parent-id",\n      "name": "Test Node",\n      "layoutMode": "document"\n    }\n\nParent: Parent\n',
+				"Would create node: Test Node\n" +
+					"Parent: Parent\n" +
+					"Would save locally (outbox rows):\n" +
+					"  00000000-0000-4000-8000-000000000001  create  Test Node\n" +
+					"  00000000-0000-4000-8000-000000000001  placement  Test Node\n" +
+					"Would push to workflowy.com:\n" +
+					'  bulk_create {"parentid":"parent-id","starting_priority":0,"project_trees":[{"id":"00000000-0000-4000-8000-000000000001","nm":"Test Node","metadata":{"layoutMode":"document"},"ch":[]}],"isForSearch":false}\n',
 			);
 		});
 	});
@@ -889,7 +915,7 @@ describe("node create command", () =>
 
 	describe("home (top level)", () =>
 	{
-		it("dry run omits parent_id and shows Home as the parent", async () =>
+		it("dry run shows Home as the parent and pushes under the root", async () =>
 		{
 			const {stdout} = await captureOutput(async () =>
 			{
@@ -897,7 +923,13 @@ describe("node create command", () =>
 			});
 
 			expect(stdout).toBe(
-				'Would execute API call:\n  Method: POST\n  URL: https://workflowy.com/api/v1/nodes/\n  Headers:\n    Authorization: Bearer <WORKFLOWY_API_KEY>\n    Content-Type: application/json\n  Body:\n    {\n      "name": "Area"\n    }\n\nParent: Home\n',
+				"Would create node: Area\n" +
+					"Parent: Home\n" +
+					"Would save locally (outbox rows):\n" +
+					"  00000000-0000-4000-8000-000000000001  create  Area\n" +
+					"  00000000-0000-4000-8000-000000000001  placement  Area\n" +
+					"Would push to workflowy.com:\n" +
+					'  bulk_create {"parentid":"None","starting_priority":0,"project_trees":[{"id":"00000000-0000-4000-8000-000000000001","nm":"Area","ch":[]}],"isForSearch":false}\n',
 			);
 		});
 
@@ -1122,7 +1154,16 @@ describe("node create command", () =>
 			});
 
 			expect(stdout).toBe(
-				"Would create the following node tree:\n\nParent: Parent\n\n- Project\n  - Task 1\n  - Task 2\n\nAPI calls that would be made:\n  3 POST requests to https://workflowy.com/api/v1/nodes/\n",
+				"Would create the following node tree:\nParent: Parent\n\n- Project\n  - Task 1\n  - Task 2\n\n" +
+					"Would save locally (outbox rows):\n" +
+					"  00000000-0000-4000-8000-000000000001  create  Project\n" +
+					"  00000000-0000-4000-8000-000000000001  placement  Project\n" +
+					"  00000000-0000-4000-8000-000000000002  create  Task 1\n" +
+					"  00000000-0000-4000-8000-000000000003  create  Task 2\n" +
+					"Would push to workflowy.com:\n" +
+					'  bulk_create {"parentid":"parent-id","starting_priority":0,"project_trees":[{"id":"00000000-0000-4000-8000-000000000001","nm":"Project","ch":[]}],"isForSearch":false}\n' +
+					'  bulk_create {"parentid":"00000000-0000-4000-8000-000000000001","starting_priority":0,"project_trees":[{"id":"00000000-0000-4000-8000-000000000002","nm":"Task 1","ch":[]}],"isForSearch":false}\n' +
+					'  bulk_create {"parentid":"00000000-0000-4000-8000-000000000001","starting_priority":1,"project_trees":[{"id":"00000000-0000-4000-8000-000000000003","nm":"Task 2","ch":[]}],"isForSearch":false}\n',
 			);
 			expect(fetchStub.mock.calls).toStrictEqual([]);
 		});

@@ -1254,7 +1254,7 @@ USAGE
   $ outlinedb node complete [-i <value> | -p <value>] [-d]
 
 FLAGS
-  -d, --dry-run       Show the API call that would be made without executing
+  -d, --dry-run       Show the local write and the ops the drain would push, without saving or sending anything
   -i, --id=<value>    ID of the node
   -p, --path=<value>  Comma-separated path to the node (e.g., "Work,Tasks,My Task")
 
@@ -1295,7 +1295,7 @@ USAGE
     --parent-path <value>] [--note <value>] [--layout-mode <value>] [--position top|bottom] [-d] [--create-path]
 
 FLAGS
-  -d, --dry-run              Show the API call that would be made without executing
+  -d, --dry-run              Show the local write and the ops the drain would push, without saving or sending anything
   -n, --name=<value>         Name of the new node (use "-" to read from stdin; an indented bullet outline becomes a
                              nested tree per top-level bullet)
       --create-path          Create missing parent path segments (like mkdir -p)
@@ -1386,7 +1386,7 @@ USAGE
   $ outlinedb node delete [-i <value> | -p <value>] [-d]
 
 FLAGS
-  -d, --dry-run       Show the API calls that would be made without executing
+  -d, --dry-run       Show the local write and the ops the drain would push, without saving or sending anything
   -i, --id=<value>    ID of the node to delete
   -p, --path=<value>  Comma-separated path to the node (e.g., "Work,Tasks,Old Task")
 
@@ -1406,7 +1406,7 @@ EXAMPLES
 
 
 
-  # Preview the API calls without deleting
+  # Preview the local delete and the ops it would push, without deleting
 
   $ outlinedb node delete --id abc123 --dry-run
 ```
@@ -1571,7 +1571,7 @@ USAGE
     [-d] [-p top|bottom]
 
 FLAGS
-  -d, --dry-run              Show the exact CLI command to execute the move without actually moving
+  -d, --dry-run              Show the local write and the ops the drain would push, without saving or sending anything
   -p, --position=<option>    Position within the destination parent (top or bottom)
                              <options: top|bottom>
       --node-id=<value>      ID of the node to move
@@ -1688,7 +1688,7 @@ USAGE
   $ outlinedb node uncomplete [-i <value> | -p <value>] [-d]
 
 FLAGS
-  -d, --dry-run       Show the API call that would be made without executing
+  -d, --dry-run       Show the local write and the ops the drain would push, without saving or sending anything
   -i, --id=<value>    ID of the node
   -p, --path=<value>  Comma-separated path to the node (e.g., "Work,Tasks,My Task")
 
@@ -1729,7 +1729,7 @@ USAGE
     [--layout-mode <value>] [--expect-name <value>] [-d]
 
 FLAGS
-  -d, --dry-run              Show the API call that would be made without executing
+  -d, --dry-run              Show the local write and the ops the drain would push, without saving or sending anything
   -i, --id=<value>           ID of the node to update
   -n, --name=<value>         New name for the node
   -p, --path=<value>         Comma-separated path to the node (e.g., "Work,Tasks,My Task")

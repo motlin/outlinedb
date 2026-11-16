@@ -1,11 +1,18 @@
 import {adoptUnderCalendar} from "../../services/calendar-adoption.js";
 import {WorkflowyApiClient} from "@outlinedb/shared/api";
 import {PathBuilder, WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
-import {HOME_TARGET} from "@outlinedb/shared/types";
+import type {LocalTreeWriter} from "@outlinedb/shared/cache";
 import {Command, Flags} from "@oclif/core";
 import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";
-import {drainAfterWrite, localParent, openLocalWrites} from "../../services/local-writes.js";
+import
+{
+	drainAfterWrite,
+	localParent,
+	logWritePreview,
+	openLocalWrites,
+	previewLocalWrite,
+} from "../../services/local-writes.js";
 import {logger} from "../../services/logger.js";
 import {resolveNodeId, resolveParent} from "@outlinedb/shared/utils";
 
@@ -66,7 +73,8 @@ export default class Move extends Command
 		"dry-run": Flags.boolean(
 			{
 				char: "d",
-				description: "Show the exact CLI command to execute the move without actually moving",
+				description:
+					"Show the local write and the ops the drain would push, without saving or sending anything",
 				default: false,
 			},
 		),
@@ -125,37 +133,11 @@ export default class Move extends Command
 		const sourcePath = pathBuilder.buildFullPath(nodeId);
 		const destinationPath = pathBuilder.buildFullPath(parentId);
 
-		if (flags["dry-run"])
+		// The local move, plus any 📆 Calendar adoption it triggers, with their outbox rows.
+		const write = async (local: LocalTreeWriter): Promise<void> =>
 		{
-			let command = `${this.config.bin} node:move --node-id ${nodeId} --parent-id ${parentId ?? HOME_TARGET}`;
-			if (flags.position)
-			{
-				command += ` --position ${flags.position}`;
-			}
-			this.log(`Would move:`);
-			this.log(`  From: ${sourcePath}`);
-			this.log(`  To:   ${destinationPath}`);
-			if (flags.position)
-			{
-				this.log(`  Position: ${flags.position}`);
-			}
-			this.log(``);
-			this.log(`Execute with:`);
-			this.log(`  ${command}`);
-		}
-		else
-		{
-			this.log(`Moving:`);
-			this.log(`  From: ${sourcePath}`);
-			this.log(`  To:   ${destinationPath}`);
-			if (flags.position)
-			{
-				this.log(`  Position: ${flags.position}`);
-			}
-
-			const writes = openLocalWrites(database, client);
 			const targetId = localParent(database, parentId);
-			writes.local.moveTo(
+			local.moveTo(
 				{
 					ids: [nodeId],
 					parentId: targetId,
@@ -179,9 +161,27 @@ export default class Move extends Command
 					parentId: targetId,
 					database,
 					cache: cacheService,
-					local: writes.local,
+					local,
 				},
 			);
+		};
+
+		this.log(flags["dry-run"] ? "Would move:" : "Moving:");
+		this.log(`  From: ${sourcePath}`);
+		this.log(`  To:   ${destinationPath}`);
+		if (flags.position)
+		{
+			this.log(`  Position: ${flags.position}`);
+		}
+
+		if (flags["dry-run"])
+		{
+			logWritePreview(this, await previewLocalWrite(database, write));
+		}
+		else
+		{
+			const writes = openLocalWrites(database, client);
+			await write(writes.local);
 			await drainAfterWrite(this, writes);
 
 			this.log(`Successfully moved node`);

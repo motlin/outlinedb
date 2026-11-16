@@ -1,10 +1,11 @@
 import {WorkflowyApiClient} from "@outlinedb/shared/api";
 import {PathBuilder, WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
+import type {LocalTreeWriter} from "@outlinedb/shared/cache";
 import {Command, Flags} from "@oclif/core";
 import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";
 import {logger} from "../../services/logger.js";
-import {drainAfterWrite, openLocalWrites} from "../../services/local-writes.js";
+import {drainAfterWrite, logWritePreview, openLocalWrites, previewLocalWrite} from "../../services/local-writes.js";
 import {resolveNodeId} from "@outlinedb/shared/utils";
 import {hasInternalLink} from "@outlinedb/shared/workflowy";
 
@@ -92,7 +93,8 @@ export default class Update extends Command
 		"dry-run": Flags.boolean(
 			{
 				char: "d",
-				description: "Show the API call that would be made without executing",
+				description:
+					"Show the local write and the ops the drain would push, without saving or sending anything",
 				default: false,
 			},
 		),
@@ -150,35 +152,32 @@ export default class Update extends Command
 
 		const fullPath = pathBuilder.buildFullPath(nodeId);
 
+		// The local write, and with it its outbox rows; a link added or removed can change backlinks.
+		const write = (local: LocalTreeWriter): void =>
+		{
+			const before = cacheService.getNode(nodeId);
+			local.updateNode(nodeId, update);
+			if (hasInternalLink([before?.name, before?.note, update.name, update.note].join(" ")))
+			{
+				local.syncBacklinks([nodeId]);
+			}
+		};
+
+		if (nodeId !== requestedId)
+		{
+			this.log(`${requestedId} is a mirror; updating its original ${nodeId}`);
+		}
 		if (flags["dry-run"])
 		{
-			this.log("Would execute API call:");
-			this.log(`  Method: POST`);
-			this.log(`  URL: https://workflowy.com/api/v1/nodes/${nodeId}`);
-			this.log("  Headers:");
-			this.log("    Authorization: Bearer <WORKFLOWY_API_KEY>");
-			this.log("    Content-Type: application/json");
-			this.log("  Body:");
-			this.log(`    ${JSON.stringify(update, null, 2).split("\n").join("\n    ")}`);
-			this.log("");
-			this.log(`Node: ${fullPath}`);
+			this.log(`Would update node: ${fullPath}`);
+			logWritePreview(this, await previewLocalWrite(database, write));
 		}
 		else
 		{
-			if (nodeId !== requestedId)
-			{
-				this.log(`${requestedId} is a mirror; updating its original ${nodeId}`);
-			}
 			this.log(`Updating node: ${fullPath}`);
 
 			const writes = openLocalWrites(database, client);
-			const before = cacheService.getNode(nodeId);
-			writes.local.updateNode(nodeId, update);
-			// Only a link added or removed can change backlinks.
-			if (hasInternalLink([before?.name, before?.note, update.name, update.note].join(" ")))
-			{
-				writes.local.syncBacklinks([nodeId]);
-			}
+			write(writes.local);
 			await drainAfterWrite(this, writes);
 
 			this.log("");

@@ -100,7 +100,7 @@ describe("node delete command", () =>
 
 	describe("dry run mode", () =>
 	{
-		it("shows API call without executing", async () =>
+		it("previews the local delete and the drain's ops without saving or sending anything", async () =>
 		{
 			seedTestData(
 				testDatabase,
@@ -121,7 +121,11 @@ describe("node delete command", () =>
 			});
 
 			expect(stdout).toBe(
-				"Would execute API calls:\n  DELETE https://workflowy.com/api/v1/nodes/node-id\n  Headers:\n    Authorization: Bearer <WORKFLOWY_API_KEY>\n\nNode: Test Node\n\nWARNING: This will permanently delete the node and all its children!\n",
+				"Deleting node (dry run): Test Node\n\nWARNING: This will permanently delete the node and all its children!\n\n" +
+					"Would save locally (outbox rows):\n" +
+					"  node-id  delete  Test Node\n" +
+					"Would push to workflowy.com:\n" +
+					'  delete {"projectid":"node-id"}\n',
 			);
 			expect(fetchStub.mock.calls).toStrictEqual([]);
 		});
@@ -154,7 +158,11 @@ describe("node delete command", () =>
 			});
 
 			expect(stdout).toBe(
-				"Would execute API calls:\n  DELETE https://workflowy.com/api/v1/nodes/tasks-id\n  Headers:\n    Authorization: Bearer <WORKFLOWY_API_KEY>\n\nNode: Work > Tasks\n\nWARNING: This will permanently delete the node and all its children!\n",
+				"Deleting node (dry run): Work > Tasks\n\nWARNING: This will permanently delete the node and all its children!\n\n" +
+					"Would save locally (outbox rows):\n" +
+					"  tasks-id  delete  Tasks\n" +
+					"Would push to workflowy.com:\n" +
+					'  delete {"projectid":"tasks-id"}\n',
 			);
 		});
 	});
@@ -576,7 +584,7 @@ describe("node delete command", () =>
 			};
 		}
 
-		it("dry run lists every call in order and says which originals are kept by moving them into a mirror slot", async () =>
+		it("dry run lists the outbox rows and the ops the drain would push in order, and says which originals are kept by moving them into a mirror slot", async () =>
 		{
 			const calls = recordCalls();
 
@@ -593,24 +601,31 @@ describe("node delete command", () =>
 			).toStrictEqual(
 				{
 					stdout: [
-						"Would execute API calls:",
-						"  DELETE https://workflowy.com/api/v1/nodes/mirror-in-id/mirror",
-						"  DELETE https://workflowy.com/api/v1/nodes/mirror-nested-id/mirror",
-						"  DELETE https://workflowy.com/api/v1/nodes/mirror-out-id/mirror",
-						'  POST https://workflowy.com/api/v1/nodes/task-a-id/move {"parent_id":"agendas-id","position":"top"}',
-						"  DELETE https://workflowy.com/api/v1/nodes/projects-id",
-						"  Headers:",
-						"    Authorization: Bearer <WORKFLOWY_API_KEY>",
+						"Deleting node (dry run): Projects",
 						"",
-						"Node: Projects",
-						"",
-						"Mirrors removed first through the mirror endpoint, so their originals drop the reference:",
+						"Mirrors removed first, so their originals drop the reference:",
 						"  Projects > Other Original",
 						"  Projects > Task B > Task A",
 						"",
 						"Keeping Projects > Task A by moving it to Agendas > Task A (as the web app does)",
 						"",
 						"WARNING: This will permanently delete the node and all its children, except the nodes kept above!",
+						"",
+						"Would save locally (outbox rows):",
+						"  mirror-in-id  delete  Other Original",
+						"  mirror-nested-id  delete  Task A",
+						"  mirror-out-id  delete  Task A",
+						"  other-original-id  mirror  Other Original",
+						"  projects-id  delete  Projects",
+						"  task-a-id  mirror  Task A",
+						"  task-a-id  placement  Task A",
+						"  task-b-id  delete  Task B",
+						"Would push to workflowy.com:",
+						'  move {"projectid":"task-a-id","parentid":"agendas-id","priority":0}',
+						'  edit {"projectid":"other-original-id","metadataPatches":[{"op":"remove","path":["mirror","mirrorRootIds","mirror-in-id"]}],"metadataInversePatches":[{"op":"add","path":["mirror","mirrorRootIds","mirror-in-id"],"value":true}]}',
+						'  edit {"projectid":"task-a-id","metadataPatches":[{"op":"remove","path":["mirror","mirrorRootIds","mirror-nested-id"]},{"op":"remove","path":["mirror","mirrorRootIds","mirror-out-id"]}],"metadataInversePatches":[{"op":"add","path":["mirror","mirrorRootIds","mirror-out-id"],"value":true},{"op":"add","path":["mirror","mirrorRootIds","mirror-nested-id"],"value":true}]}',
+						'  delete {"projectid":"mirror-out-id"}',
+						'  delete {"projectid":"projects-id"}',
 						"",
 					].join("\n"),
 					calls: [],
@@ -635,17 +650,20 @@ describe("node delete command", () =>
 			).toStrictEqual(
 				{
 					stdout: [
-						"Would execute API calls:",
-						"  DELETE https://workflowy.com/api/v1/nodes/mirror-nested-id/mirror",
-						'  POST https://workflowy.com/api/v1/nodes/task-a-id/move {"parent_id":"task-b-id","position":"top"}',
-						"  Headers:",
-						"    Authorization: Bearer <WORKFLOWY_API_KEY>",
-						"",
-						"Node: Projects > Task A",
+						"Deleting node (dry run): Projects > Task A",
 						"",
 						"Keeping Projects > Task A by moving it to Projects > Task B > Task A (as the web app does)",
 						"",
 						"NOTE: Nothing is deleted: the node has a mirror elsewhere, so it moves into that mirror's place.",
+						"",
+						"Would save locally (outbox rows):",
+						"  mirror-nested-id  delete  Task A",
+						"  task-a-id  mirror  Task A",
+						"  task-a-id  placement  Task A",
+						"Would push to workflowy.com:",
+						'  move {"projectid":"task-a-id","parentid":"task-b-id","priority":0}',
+						'  edit {"projectid":"task-a-id","metadataPatches":[{"op":"remove","path":["mirror","mirrorRootIds","mirror-nested-id"]}],"metadataInversePatches":[{"op":"add","path":["mirror","mirrorRootIds","mirror-nested-id"],"value":true}]}',
+						'  delete {"projectid":"mirror-nested-id"}',
 						"",
 					].join("\n"),
 					calls: [],
@@ -653,7 +671,7 @@ describe("node delete command", () =>
 			);
 		});
 
-		it("dry run on a mirror shows only the mirror endpoint call", async () =>
+		it("dry run on a mirror shows only the mirror delete and its original dropping the reference", async () =>
 		{
 			const calls = recordCalls();
 
@@ -670,14 +688,16 @@ describe("node delete command", () =>
 			).toStrictEqual(
 				{
 					stdout: [
-						"Would execute API calls:",
-						"  DELETE https://workflowy.com/api/v1/nodes/mirror-out-id/mirror",
-						"  Headers:",
-						"    Authorization: Bearer <WORKFLOWY_API_KEY>",
-						"",
-						"Node: Agendas > Task A",
+						"Removing mirror (dry run): Agendas > Task A",
 						"",
 						"WARNING: This removes only this mirror; its original and the original's children are kept.",
+						"",
+						"Would save locally (outbox rows):",
+						"  mirror-out-id  delete  Task A",
+						"  task-a-id  mirror  Task A",
+						"Would push to workflowy.com:",
+						'  edit {"projectid":"task-a-id","metadataPatches":[{"op":"remove","path":["mirror","mirrorRootIds","mirror-out-id"]}],"metadataInversePatches":[{"op":"add","path":["mirror","mirrorRootIds","mirror-out-id"],"value":true}]}',
+						'  delete {"projectid":"mirror-out-id"}',
 						"",
 					].join("\n"),
 					calls: [],
@@ -705,7 +725,7 @@ describe("node delete command", () =>
 					stdout: [
 						"Deleting node: Projects",
 						"",
-						"Mirrors removed first through the mirror endpoint, so their originals drop the reference:",
+						"Mirrors removed first, so their originals drop the reference:",
 						"  Projects > Other Original",
 						"  Projects > Task B > Task A",
 						"",
@@ -943,7 +963,7 @@ describe("node delete command", () =>
 				"# Delete node by path",
 				'<%= config.bin %> <%= command.id %> --path "Work,Tasks,Completed Task"',
 				"",
-				"# Preview the API calls without deleting",
+				"# Preview the local delete and the ops it would push, without deleting",
 				"<%= config.bin %> <%= command.id %> --id abc123 --dry-run",
 			]);
 		});

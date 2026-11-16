@@ -180,14 +180,7 @@ export
 	temporalMerge,
 	type TemporalTransaction,
 } from "./temporal-merge.js";
-export
-{
-	type DeletePlan,
-	type DeletePlanCall,
-	deletePlanCalls,
-	type MirrorPromotion,
-	planSubtreeDelete,
-} from "./delete-plan.js";
+export {type DeletePlan, type MirrorPromotion, planSubtreeDelete} from "./delete-plan.js";
 export {planBlockSlot, planSlot, type SlotPlan} from "./slot-plan.js";
 export
 {

@@ -47,61 +47,6 @@ export interface DeletePlan
 	nodeId: string | null;
 }
 
-/** One API call of a {@link DeletePlan}; `path` is relative to /api/v1. */
-export interface DeletePlanCall
-{
-	method: "DELETE" | "POST";
-	path: string;
-	body?:
-	{
-		parent_id: string | null;
-		position: "top" | "bottom";
-	};
-}
-
-/** Every mutating API call a plan makes, in order (the GETs that refresh the cache after a move are left out). */
-export function deletePlanCalls(plan: DeletePlan): DeletePlanCall[]
-{
-	const calls: DeletePlanCall[] = plan.mirrorIds.map((id) => (
-	{
-		method: "DELETE",
-		path: `/nodes/${id}/mirror`,
-	}));
-	for (const {mirrorId, originalId, parentId, position, siblingIds} of plan.promotions)
-	{
-		calls.push(
-			{
-				method: "DELETE",
-				path: `/nodes/${mirrorId}/mirror`,
-			},
-		);
-		for (const id of [originalId, ...siblingIds])
-		{
-			calls.push(
-				{
-					method: "POST",
-					path: `/nodes/${id}/move`,
-					body:
-					{
-						parent_id: parentId,
-						position,
-					},
-				},
-			);
-		}
-	}
-	if (plan.nodeId !== null)
-	{
-		calls.push(
-			{
-				method: "DELETE",
-				path: `/nodes/${plan.nodeId}`,
-			},
-		);
-	}
-	return calls;
-}
-
 /**
  * Plan the delete of non-mirror `nodeId` from its cached subtree, placing each
  * kept original by the sibling order `childOrder` gives for its mirror's parent.

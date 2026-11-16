@@ -1,9 +1,17 @@
 import {WorkflowyApiClient} from "@outlinedb/shared/api";
-import {deletePlanCalls, PathBuilder, WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
+import {PathBuilder, WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
+import type {LocalTreeWriter} from "@outlinedb/shared/cache";
 import {Command, Flags} from "@oclif/core";
 import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";
-import {drainAfterWrite, localDeletePlan, openLocalWrites} from "../../services/local-writes.js";
+import
+{
+	drainAfterWrite,
+	localDeletePlan,
+	logWritePreview,
+	openLocalWrites,
+	previewLocalWrite,
+} from "../../services/local-writes.js";
 import {logger} from "../../services/logger.js";
 import {resolveNodeId} from "@outlinedb/shared/utils";
 
@@ -18,7 +26,7 @@ export default class Delete extends Command
 		"# Delete node by path",
 		'<%= config.bin %> <%= command.id %> --path "Work,Tasks,Completed Task"',
 		"",
-		"# Preview the API calls without deleting",
+		"# Preview the local delete and the ops it would push, without deleting",
 		"<%= config.bin %> <%= command.id %> --id abc123 --dry-run",
 	];
 
@@ -41,7 +49,8 @@ export default class Delete extends Command
 		"dry-run": Flags.boolean(
 			{
 				char: "d",
-				description: "Show the API calls that would be made without executing",
+				description:
+					"Show the local write and the ops the drain would push, without saving or sending anything",
 				default: false,
 			},
 		),
@@ -88,27 +97,12 @@ export default class Delete extends Command
 					? "WARNING: This will permanently delete the node and all its children, except the nodes kept above!"
 					: "WARNING: This will permanently delete the node and all its children!";
 
-		if (flags["dry-run"])
-		{
-			this.log("Would execute API calls:");
-			for (const call of deletePlanCalls(plan))
-			{
-				const body = call.body === undefined ? "" : ` ${JSON.stringify(call.body)}`;
-				this.log(`  ${call.method} https://workflowy.com/api/v1${call.path}${body}`);
-			}
-			this.log("  Headers:");
-			this.log("    Authorization: Bearer <WORKFLOWY_API_KEY>");
-			this.log("");
-			this.log(`Node: ${fullPath}`);
-		}
-		else
-		{
-			this.log(`${removingMirror ? "Removing mirror" : "Deleting node"}: ${fullPath}`);
-		}
+		const heading = removingMirror ? "Removing mirror" : "Deleting node";
+		this.log(flags["dry-run"] ? `${heading} (dry run): ${fullPath}` : `${heading}: ${fullPath}`);
 		if (innerMirrorPaths.length > 0)
 		{
 			this.log("");
-			this.log("Mirrors removed first through the mirror endpoint, so their originals drop the reference:");
+			this.log("Mirrors removed first, so their originals drop the reference:");
 			for (const mirrorPath of innerMirrorPaths)
 			{
 				this.log(`  ${mirrorPath}`);
@@ -124,14 +118,21 @@ export default class Delete extends Command
 		}
 		this.log("");
 		this.log(warning);
+
+		// The local delete also deletes the backlink items of every source in the subtree, as upstream's client does.
+		const write = (local: LocalTreeWriter): void =>
+		{
+			local.deleteNode(nodeId, plan);
+		};
 		if (flags["dry-run"])
 		{
+			this.log("");
+			logWritePreview(this, await previewLocalWrite(database, write));
 			return;
 		}
 
-		// The local delete also deletes the backlink items of every source in the subtree, as upstream's client does.
 		const writes = openLocalWrites(database, client);
-		writes.local.deleteNode(nodeId, plan);
+		write(writes.local);
 		await drainAfterWrite(this, writes);
 
 		this.log("");

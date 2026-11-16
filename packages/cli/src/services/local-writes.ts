@@ -1,12 +1,28 @@
 import type {Command} from "@oclif/core";
-import {findInbox, LocalTreeWriter, OutboxRecorder, outboxStatus, planSubtreeDelete} from "@outlinedb/shared/cache";
-import type {DeletePlan, OutboxStatus, WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
+import
+{
+	findInbox,
+	listPendingOutbox,
+	LocalTreeWriter,
+	OutboxRecorder,
+	outboxStatus,
+	planSubtreeDelete,
+} from "@outlinedb/shared/cache";
+import type
+{
+	DeletePlan,
+	OutboxStatus,
+	PendingOutboxListing,
+	WorkflowyWriteThroughClient,
+} from "@outlinedb/shared/cache";
+import {previewOutboxOps} from "@outlinedb/shared/internal";
 import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
+import {stripHtmlTags} from "@outlinedb/shared/html";
 import {LocalCalendar} from "@outlinedb/shared/local-calendar";
 import {internalAdapter} from "@outlinedb/shared/node";
 import {isSystemTarget} from "@outlinedb/shared/types";
 import type {createDatabase} from "../db/index.js";
-import type {CacheService} from "./cache.js";
+import {CacheService} from "./cache.js";
 
 type Database = ReturnType<typeof createDatabase>;
 
@@ -113,6 +129,129 @@ export async function drainAfterWrite(command: Command, writes: LocalWrites): Pr
 			exit: 1,
 		},
 	);
+}
+
+/** What a dry run's write would leave: the pending outbox rows after it, and the ops the drain would push for them. */
+export interface WritePreview
+{
+	rows: PendingOutboxListing[];
+	ops:
+	{
+		type: string;
+		data: Record<string, unknown>;
+	}[];
+}
+
+/** Stands in for the account session a dry run never fetches; it only sets the timestamps the preview leaves out. */
+const PREVIEW_SESSION =
+{
+	userId: 0,
+	dateJoinedSec: 0,
+};
+
+/** The keys of a pushed tree that hold its creation timestamps and creator, which depend on the session. */
+const SESSION_KEYS = new Set(["ct", "cb", "cp"]);
+
+/** A pushed tree as the preview shows it: without the values that depend on the session. */
+function previewTree(tree: unknown): unknown
+{
+	if (typeof tree !== "object" || tree === null)
+	{
+		return tree;
+	}
+	return Object.fromEntries(
+		Object.entries(tree)
+			.filter(([key]) => !SESSION_KEYS.has(key))
+			.map(([key, value]: [string, unknown]) => [
+				key,
+				key === "ch" && Array.isArray(value) ? value.map(previewTree) : value,
+			]),
+	);
+}
+
+function previewData(data: Record<string, unknown>): Record<string, unknown>
+{
+	if (typeof data.project_trees !== "string")
+	{
+		return data;
+	}
+	const trees: unknown = JSON.parse(data.project_trees);
+	return {
+		...data,
+		project_trees: Array.isArray(trees) ? trees.map(previewTree) : trees,
+	};
+}
+
+/**
+ * Run `write` against the local tables inside a transaction that is always rolled back, and report the outbox it would
+ * leave and the ops the drain would push. Nothing is saved and nothing is sent, and no internal-API session is needed.
+ * The preview covers every pending row, since the real command's drain sends rows an earlier write left too. A row
+ * whose node the write deletes shows the node's name from before the write.
+ */
+export async function previewLocalWrite(
+	database: Database,
+	write: (local: LocalTreeWriter) => Promise<void> | void,
+): Promise<WritePreview>
+{
+	let preview: WritePreview;
+	database.$client.exec("BEGIN");
+	try
+	{
+		await write(
+			new LocalTreeWriter(
+				database,
+				{
+					outbox: new OutboxRecorder(),
+				},
+			),
+		);
+		preview =
+		{
+			rows: listPendingOutbox(database),
+			ops: previewOutboxOps(database, PREVIEW_SESSION, Date.now()).map(({type, data}) => (
+			{
+				type,
+				data: previewData(data),
+			})),
+		};
+	}
+	finally
+	{
+		database.$client.exec("ROLLBACK");
+	}
+	const cache = new CacheService(database);
+	const nameBefore = (id: string): string | null => cache.getNode(cache.getMirrorOriginal(id) ?? id)?.name ?? null;
+	return {
+		...preview,
+		rows: preview.rows.map((row) => (
+		{
+			...row,
+			name: row.name ?? nameBefore(row.nodeId),
+		})),
+	};
+}
+
+/** Print a dry run's preview: the outbox rows the write leaves, then the ops the drain would push. */
+export function logWritePreview(command: Command, {rows, ops}: WritePreview): void
+{
+	command.log("Would save locally (outbox rows):");
+	if (rows.length === 0)
+	{
+		command.log("  (nothing)");
+	}
+	for (const {nodeId, aspect, name} of rows)
+	{
+		command.log(`  ${nodeId}  ${aspect}  ${name === null ? "(no current name)" : stripHtmlTags(name)}`.trimEnd());
+	}
+	command.log("Would push to workflowy.com:");
+	if (ops.length === 0)
+	{
+		command.log("  (nothing)");
+	}
+	for (const {type, data} of ops)
+	{
+		command.log(`  ${type} ${JSON.stringify(data)}`);
+	}
 }
 
 /** A resolved parent as a local node id: a system target (`inbox`) becomes the node it names. */

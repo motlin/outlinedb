@@ -1,7 +1,7 @@
 import {text} from "node:stream/consumers";
 import {WorkflowyApiClient} from "@outlinedb/shared/api";
 import {NodeTreeSpecSchema, PathBuilder, WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
-import type {NodeTreeSpec} from "@outlinedb/shared/cache";
+import type {LocalTreeWriter, NodeTreeSpec} from "@outlinedb/shared/cache";
 import type {NewTree} from "@outlinedb/shared/internal";
 import {getWorkflowyUrl, hasInternalLink} from "@outlinedb/shared/workflowy";
 import {Command, Flags} from "@oclif/core";
@@ -14,7 +14,9 @@ import
 	drainAfterWrite,
 	localCalendar,
 	localParent,
+	logWritePreview,
 	openLocalWrites,
+	previewLocalWrite,
 	resolveOrCreateLocalPath,
 } from "../../services/local-writes.js";
 import type {LocalWrites} from "../../services/local-writes.js";
@@ -127,7 +129,8 @@ export default class Create extends Command
 		"dry-run": Flags.boolean(
 			{
 				char: "d",
-				description: "Show the API call that would be made without executing",
+				description:
+					"Show the local write and the ops the drain would push, without saving or sending anything",
 				default: false,
 			},
 		),
@@ -291,59 +294,12 @@ export default class Create extends Command
 	): Promise<void>
 	{
 		const {name} = flags;
-
-		if (writes === undefined)
+		const pathBuilder = new PathBuilder(database);
+		const parentPath = pathBuilder.buildFullPath(parentId);
+		const targetId = localParent(database, parentId);
+		const write = async (local: LocalTreeWriter): Promise<string> =>
 		{
-			// Home has no API key: a top-level create omits parent_id.
-			const requestBody:
-			{
-				parent_id?: string;
-				name: string;
-				note?: string;
-				layoutMode?: string;
-			} =
-				parentId === null
-					?
-						{
-							name,
-						}
-					:
-						{
-							parent_id: parentId,
-							name,
-						};
-			if (flags.note)
-			{
-				requestBody.note = flags.note;
-			}
-			if (flags["layout-mode"])
-			{
-				requestBody.layoutMode = flags["layout-mode"];
-			}
-
-			this.log("Would execute API call:");
-			this.log("  Method: POST");
-			this.log("  URL: https://workflowy.com/api/v1/nodes/");
-			this.log("  Headers:");
-			this.log("    Authorization: Bearer <WORKFLOWY_API_KEY>");
-			this.log("    Content-Type: application/json");
-			this.log("  Body:");
-			this.log(`    ${JSON.stringify(requestBody, null, 2).split("\n").join("\n    ")}`);
-
-			const pathBuilder = new PathBuilder(database);
-			const parentPath = pathBuilder.buildFullPath(parentId);
-			this.log("");
-			this.log(`Parent: ${parentPath}`);
-		}
-		else
-		{
-			this.log(`Creating node: ${name}`);
-			const pathBuilder = new PathBuilder(database);
-			const parentPath = pathBuilder.buildFullPath(parentId);
-			this.log(`Parent: ${parentPath}`);
-
-			const targetId = localParent(database, parentId);
-			const {id} = writes.local.createAt(
+			const {id} = local.createAt(
 				{
 					parentId: targetId,
 					name,
@@ -369,7 +325,7 @@ export default class Create extends Command
 			);
 			if (hasInternalLink(`${name} ${flags.note ?? ""}`))
 			{
-				writes.local.syncBacklinks([id]);
+				local.syncBacklinks([id]);
 			}
 			await adoptUnderCalendar(
 				{
@@ -382,9 +338,30 @@ export default class Create extends Command
 					parentId: targetId,
 					database,
 					cache: cacheService,
-					local: writes.local,
+					local,
 				},
 			);
+			return id;
+		};
+
+		if (writes === undefined)
+		{
+			this.log(`Would create node: ${name}`);
+			this.log(`Parent: ${parentPath}`);
+			logWritePreview(
+				this,
+				await previewLocalWrite(database, async (local) =>
+				{
+					await write(local);
+				}),
+			);
+		}
+		else
+		{
+			this.log(`Creating node: ${name}`);
+			this.log(`Parent: ${parentPath}`);
+
+			const id = await write(writes.local);
 			await drainAfterWrite(this, writes);
 
 			const createdAt = cacheService.getNode(id)?.createdAt ?? new Date();
@@ -460,53 +437,63 @@ export default class Create extends Command
 		writes: LocalWrites | undefined,
 	): Promise<void>
 	{
+		const pathBuilder = new PathBuilder(database);
+		const parentPath = pathBuilder.buildFullPath(parentId);
+		const created = specs.map((spec) => withIds(spec));
+		const targetId = localParent(database, parentId);
+		const write = async (local: LocalTreeWriter): Promise<void> =>
+		{
+			local.createTreesAt(
+				{
+					parentId: targetId,
+					...(flags.position === "top"
+						?
+							{
+								index: 0,
+							}
+						: {}),
+					trees: created.map(({tree}) => tree),
+				},
+			);
+			const linked = created.flatMap(({tree}) => linkedCreatedNodes(tree));
+			if (linked.length > 0)
+			{
+				local.syncBacklinks(linked);
+			}
+			await adoptUnderCalendar(
+				{
+					rows: created.map(({node}) => (
+					{
+						id: node.id,
+						name: node.name,
+					})),
+					parentId: targetId,
+					database,
+					cache: cacheService,
+					local,
+				},
+			);
+		};
+
 		if (writes === undefined)
 		{
+			this.log("Would create the following node tree:");
+			this.log(`Parent: ${parentPath}`);
+			this.log("");
 			for (const spec of specs)
 			{
-				this.dryRunJsonMode(spec, parentId, database);
+				this.printNodeTreePreview(spec, 0);
 			}
+			this.log("");
+			logWritePreview(this, await previewLocalWrite(database, write));
 			return;
 		}
 
 		this.log("Creating node tree...");
-		const pathBuilder = new PathBuilder(database);
-		const parentPath = pathBuilder.buildFullPath(parentId);
 		this.log(`Parent: ${parentPath}`);
 		this.log("");
 
-		const created = specs.map((spec) => withIds(spec));
-		const targetId = localParent(database, parentId);
-		writes.local.createTreesAt(
-			{
-				parentId: targetId,
-				...(flags.position === "top"
-					?
-						{
-							index: 0,
-						}
-					: {}),
-				trees: created.map(({tree}) => tree),
-			},
-		);
-		const linked = created.flatMap(({tree}) => linkedCreatedNodes(tree));
-		if (linked.length > 0)
-		{
-			writes.local.syncBacklinks(linked);
-		}
-		await adoptUnderCalendar(
-			{
-				rows: created.map(({node}) => (
-				{
-					id: node.id,
-					name: node.name,
-				})),
-				parentId: targetId,
-				database,
-				cache: cacheService,
-				local: writes.local,
-			},
-		);
+		await write(writes.local);
 		await drainAfterWrite(this, writes);
 
 		for (const {node} of created)
@@ -572,31 +559,6 @@ export default class Create extends Command
 	}
 
 	/**
-	 * Show dry-run output for JSON mode
-	 */
-	private dryRunJsonMode(
-		nodeTree: NodeTreeSpec,
-		parentId: string | null,
-		database: ReturnType<typeof createDatabase>,
-	): void
-	{
-		this.log("Would create the following node tree:");
-		this.log("");
-
-		const pathBuilder = new PathBuilder(database);
-		const parentPath = pathBuilder.buildFullPath(parentId);
-		this.log(`Parent: ${parentPath}`);
-		this.log("");
-
-		this.printNodeTreePreview(nodeTree, 0);
-
-		this.log("");
-		this.log("API calls that would be made:");
-		const nodeCount = this.countNodes(nodeTree);
-		this.log(`  ${nodeCount} POST requests to https://workflowy.com/api/v1/nodes/`);
-	}
-
-	/**
 	 * Print a preview of the node tree that would be created
 	 */
 	private printNodeTreePreview(node: NodeTreeSpec, depth: number): void
@@ -619,22 +581,6 @@ export default class Create extends Command
 				this.printNodeTreePreview(child, depth + 1);
 			}
 		}
-	}
-
-	/**
-	 * Count total nodes in a tree
-	 */
-	private countNodes(node: NodeTreeSpec): number
-	{
-		let count = 1;
-		if (node.children)
-		{
-			for (const child of node.children)
-			{
-				count += this.countNodes(child);
-			}
-		}
-		return count;
 	}
 }
 
