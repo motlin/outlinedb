@@ -171,7 +171,7 @@ Drain every background date write before a cache import, before leaving this pha
 
 ### Summarize
 
-Drain the writes and report applied, skipped, failed, and advanced counts. Fold auto briefing lines from `.llm/gtd/review/briefings/` into the same summary.
+Drain the writes and report applied, skipped, failed, and advanced counts. Fold auto briefing lines from `.llm/gtd/review/briefings/` into the same summary. A briefing with a `userCommand` (an irreversible deletion the worker staged instead of running; see `${CLAUDE_PLUGIN_ROOT}/skills/dag-llm-tasks.md`) goes to the user verbatim in an `AskUserQuestion` for them to run with `!`.
 
 ## Relink Orphaned Children
 

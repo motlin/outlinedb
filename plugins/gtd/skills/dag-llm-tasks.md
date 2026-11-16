@@ -92,6 +92,14 @@ The rule covers **every `op` subcommand, not just `op run`** — `op read` raise
 
 Each prep worker is autonomous, never prompts, and stages `.llm/gtd/review/proposals/<slug>.json`. Auto workers complete their autonomous work and stage `.llm/gtd/review/briefings/<slug>.json`.
 
+### Irreversible deletions go to the user as one `!` command
+
+Prep and auto workers never run irreversible deletions themselves: `tmutil thinlocalsnapshots`/`deletelocalsnapshots`, `docker system prune`, `rm -rf`, and recursive deletes over `ssh`. From a subagent these get blocked by the auto-mode classifier or the bash guards, so the step fails and the task stalls. The user runs them with `!` instead.
+
+The worker still does every read-only step: it measures free space, lists the snapshots, checks `docker info`, and picks out the paths. Then it joins the deletions into one ready-to-paste line, `! <cmd1> && <cmd2>`, with absolute paths and no placeholders. That line goes in the staged file's `userCommand` field, with one `lines` entry for each deletion saying what it removes and roughly how much space it frees. When nothing needs deleting, it omits `userCommand`. Moving files to the Trash is reversible, so the worker does that itself.
+
+The executor puts `userCommand` verbatim inside an `AskUserQuestion` (`Ran it` / `Skip`); it never goes only into console text. When the user picks `Ran it`, the executor re-measures and reports what was freed. The task's date advances either way, because the next run stages fresh commands.
+
 ## Presentation walk
 
 Begin presentation as soon as prep controllers are running. Walk the plan's presentation array in order and wait only for the current task's staged result. Later slow work must not delay an earlier ready task.
