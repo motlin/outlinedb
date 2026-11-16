@@ -38,6 +38,7 @@ const NO_BACKLINKS =
 // Home holds alice > bob, alice expanded.
 const view: OutlineViewResponse =
 {
+	expandedIds: ["alice"],
 	lists: [
 		{
 			parentId: null,

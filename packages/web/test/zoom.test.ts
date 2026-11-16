@@ -663,6 +663,7 @@ describe("zoom to view load", () =>
 	// alice > bob > carol > dave, bob and carol expanded.
 	const view: OutlineViewResponse =
 	{
+		expandedIds: [BOB, CAROL],
 		lists: [
 			{
 				parentId: ALICE,

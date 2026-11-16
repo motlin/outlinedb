@@ -99,12 +99,15 @@ describe("outline expand subtree", () =>
 	let queryClient: InstanceType<typeof QueryClient> | undefined;
 	let requests: string[] = [];
 	let viewBodies: unknown[] = [];
+	/** Expansion saves as they land and view requests as they arrive, in order. */
+	let arrivals: string[] = [];
 
 	beforeEach(() =>
 	{
 		globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 		requests = [];
 		viewBodies = [];
+		arrivals = [];
 		useOutlineStore.setState(useOutlineStore.getInitialState(), true);
 		useOutlineStore.setState(
 			{
@@ -124,6 +127,7 @@ describe("outline expand subtree", () =>
 						rootId: string | null;
 					};
 					viewBodies.push(body);
+					arrivals.push(`view ${body.rootId}`);
 					const view = body.rootId === null ? undefined : views[body.rootId];
 					await new Promise((resolve) =>
 					{
@@ -149,6 +153,15 @@ describe("outline expand subtree", () =>
 				}
 				if (url.endsWith("/api/v1/expansion"))
 				{
+					if (init?.method === "PATCH")
+					{
+						// The save lands after the expand renders, so a view sent without waiting for it arrives first.
+						await new Promise((resolve) =>
+						{
+							setTimeout(resolve, 30);
+						});
+						arrivals.push(`saved ${init.body as string}`);
+					}
 					return Response.json({});
 				}
 				if (url.endsWith("/backlinks"))
@@ -258,6 +271,7 @@ describe("outline expand subtree", () =>
 	{
 		requests = [];
 		viewBodies = [];
+		arrivals = [];
 		// Each mutation batch is one React commit.
 		const commits: string[][] = [shownRows(container)];
 		const observer = new MutationObserver(() =>
@@ -281,11 +295,10 @@ describe("outline expand subtree", () =>
 		return commits.slice(1);
 	}
 
-	function viewBody(rootId: string, expandedIds: string[])
+	function viewBody(rootId: string)
 	{
 		return {
 			rootId,
-			expandedIds,
 			limit: initialRowBudget(window.innerHeight),
 			showCompleted: useOutlineStore.getState().showCompleted,
 		};
@@ -315,12 +328,14 @@ describe("outline expand subtree", () =>
 					commits,
 					treeRequests: requests.filter((url) => url.includes("/children") || url.endsWith("/backlinks")),
 					viewBodies,
+					arrivals,
 				},
 			).toStrictEqual(
 				{
 					commits: [["alice", "bob", "carol", "dan", "erin", "fay", "zed"]],
 					treeRequests: [],
-					viewBodies: [viewBody("alice", ["bob", "carol", "erin", "yan", "alice"])],
+					viewBodies: [viewBody("alice")],
+					arrivals: ['saved {"changes":{"alice":true}}', "view alice"],
 				},
 			);
 		});
@@ -334,18 +349,19 @@ describe("outline expand subtree", () =>
 				useOutlineStore.getState().replaceExpanded(new Set(["bob", "carol", "erin", "yan", "alice", "zed"]));
 			});
 
-			const expanded = ["bob", "carol", "erin", "yan", "alice", "zed"];
 			expect(
 				{
 					commits,
 					treeRequests: requests.filter((url) => url.includes("/children") || url.endsWith("/backlinks")),
 					viewBodies,
+					arrivals,
 				},
 			).toStrictEqual(
 				{
 					commits: [["alice", "bob", "carol", "dan", "erin", "fay", "zed", "yan", "xia"]],
 					treeRequests: [],
-					viewBodies: [viewBody("alice", expanded), viewBody("zed", expanded)],
+					viewBodies: [viewBody("alice"), viewBody("zed")],
+					arrivals: ['saved {"changes":{"alice":true,"zed":true}}', "view alice", "view zed"],
 				},
 			);
 		});
@@ -1110,6 +1126,7 @@ describe("outline view load renders", () =>
 	// Home holds alice > bob > carol, alice and bob expanded.
 	const view: OutlineViewResponse =
 	{
+		expandedIds: ["alice", "bob"],
 		lists: [
 			{
 				parentId: null,
@@ -1322,7 +1339,6 @@ describe("outline view load renders", () =>
 					viewBodiesWhenExpansionSettled: [
 						{
 							rootId: null,
-							expandedIds: null,
 							limit: initialRowBudget(window.innerHeight),
 							showCompleted: useOutlineStore.getState().showCompleted,
 						},

@@ -462,7 +462,6 @@ describe("worker routes each Access email to its own Durable Object", () =>
 				body: JSON.stringify(
 					{
 						rootId: null,
-						expandedIds: null,
 						limit: 10,
 					},
 				),
@@ -471,7 +470,7 @@ describe("worker routes each Access email to its own Durable Object", () =>
 		expect(viewViaWorker.status).toBe(400);
 		await expect(viewViaWorker.json()).resolves.toStrictEqual(
 			{
-				error: "body must be {rootId, expandedIds, limit, showCompleted}",
+				error: "body must be {rootId, limit, showCompleted}",
 			},
 		);
 

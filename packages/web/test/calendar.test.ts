@@ -1177,7 +1177,6 @@ describe("calendar found", () =>
 									body: JSON.stringify(
 										{
 											rootId,
-											expandedIds: [],
 											limit: 50,
 											showCompleted: false,
 										},
@@ -1287,7 +1286,7 @@ describe("calendar found", () =>
 		{
 			const {view} = await setup().raw("alpha");
 
-			expect(Object.keys(view)).toStrictEqual(["lists"]);
+			expect(Object.keys(view)).toStrictEqual(["lists", "expandedIds"]);
 		});
 	});
 });

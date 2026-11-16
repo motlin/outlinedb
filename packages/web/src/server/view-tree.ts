@@ -32,27 +32,12 @@ import {addNamedCalendarDays, calendarInfoOfRow} from "./calendar-day.js";
 import type {ServerContext} from "./context.js";
 import {displayMetadataFields, nodeToRestDto} from "./ops/nodes-shared.js";
 
-/** Which rows are expanded: the request's ids, the account's stored keys, or none. */
-export type ViewExpansion =
-	|
-	  {
-			kind: "ids";
-			ids: readonly string[];
-	  }
-	|
-	  {
-			kind: "stored";
-	  }
-	|
-	  {
-			kind: "none";
-	  };
-
 export interface ViewTreeQuery
 {
 	/** The view root (resolved, possibly a mirror), or null for Home. */
 	rootId: string | null;
-	expansion: ViewExpansion;
+	/** Whether the account's stored expansion keys expand rows; without them (a mirror lacking the internal API) none is. */
+	expansionStored: boolean;
 	/** The visible-row budget. */
 	limit: number;
 	showCompleted: boolean;
@@ -78,26 +63,20 @@ const SORT_SLICE = sql`printf('%s %020d%s ', coalesce(m.order_key, ${sql.raw(`'$
 /** A walk row's effective completion: a mirror is completed exactly when its current original is. */
 const WALK_COMPLETED = sql`CASE WHEN o.original_id IS NULL THEN m.completed_at ELSE (SELECT om.completed_at FROM node_content oc JOIN node_metadata om ON om.node_id = oc.id AND om.system_to = ${LIVE} WHERE oc.id = o.original_id AND oc.system_to = ${LIVE}) END`;
 
-/** The expansion key of walk row `c` rendered in the instance (`root`, `path`), null outside any mirror. */
-function expansionKey(expansion: ViewExpansion, root: SQL, path: SQL): SQL
+/** The upstream expansion key of walk row `c` rendered in the instance (`root`, `path`), its short id outside any mirror. */
+function expansionKey(root: SQL, path: SQL): SQL
 {
-	return expansion.kind === "stored"
-		? sql`CASE WHEN ${root} IS NULL THEN substr(c.id, 1, 8) ELSE 'v_' || substr(c.id, 1, 4) || substr(${root}, 1, 4) || ${path} END`
-		: sql`CASE WHEN ${root} IS NULL THEN c.id ELSE 'virtual_' || c.id || '_' || ${root} || '_' || ${path} END`;
+	return sql`CASE WHEN ${root} IS NULL THEN substr(c.id, 1, 8) ELSE 'v_' || substr(c.id, 1, 4) || substr(${root}, 1, 4) || ${path} END`;
 }
 
 /**
- * Whether `key` is expanded. The request's ids are one JSON parameter, materialized once per statement into an
- * indexed list; the account's stored keys are probed through `expanded_nodes`' own `(short_key, system_to)` index.
+ * Whether walk row `c` is expanded: its key probed through `expanded_nodes`' own `(short_key, system_to)` index, or
+ * never without stored expansion.
  */
-function isExpandedSql(expansion: ViewExpansion, key: SQL): SQL
+function isExpandedSql(expansionStored: boolean, root: SQL, path: SQL): SQL
 {
-	if (expansion.kind === "ids")
-	{
-		return sql`${key} IN (SELECT k FROM expanded)`;
-	}
-	return expansion.kind === "stored"
-		? sql`EXISTS (SELECT 1 FROM expanded_nodes e WHERE e.short_key = ${key} AND e.system_to = ${LIVE})`
+	return expansionStored
+		? sql`EXISTS (SELECT 1 FROM expanded_nodes e WHERE e.short_key = ${expansionKey(root, path)} AND e.system_to = ${LIVE})`
 		: sql`0`;
 }
 
@@ -105,21 +84,16 @@ function isExpandedSql(expansion: ViewExpansion, key: SQL): SQL
  * The parents whose lists the view sends: the root's list parent (its original when a mirror; null for Home, whose
  * children the caller matches by `parent_id IS NULL`) and every expanded row the walk reaches within the budget.
  *
- * The walk starts from one constant row standing for the root, always expanded, so the request's expansion set is
+ * The walk starts from one constant row standing for the root, always expanded, so the stored expansion is
  * referenced (and indexed) once; that row takes one place in the `LIMIT`.
  */
-function listParents({rootId, expansion, limit, showCompleted}: ViewTreeQuery): SQL
+function listParents({rootId, expansionStored, limit, showCompleted}: ViewTreeQuery): SQL
 {
 	const rootParent =
 		rootId === null
 			? sql`NULL`
 			: sql`coalesce((SELECT mi.original_id FROM mirrors mi JOIN node_content rc ON rc.id = mi.mirror_id AND rc.system_to = ${LIVE} WHERE mi.mirror_id = ${rootId} AND mi.system_to = ${LIVE} LIMIT 1), ${rootId})`;
-	const expandedIds =
-		expansion.kind === "ids"
-			? sql`expanded(k) AS MATERIALIZED (SELECT value FROM json_each(${JSON.stringify(expansion.ids)})),`
-			: sql``;
 	return sql`WITH RECURSIVE
-		${expandedIds}
 		walk(kids_parent, kids_root, kids_path, sortkey, expanded) AS (
 			SELECT ${rootParent}, NULL, NULL, '', 1
 			UNION ALL
@@ -128,7 +102,7 @@ function listParents({rootId, expansion, limit, showCompleted}: ViewTreeQuery): 
 				CASE WHEN w.kids_root IS NOT NULL THEN w.kids_path || substr(c.id, 1, 4)
 					WHEN o.original_id IS NOT NULL THEN substr(c.id, 1, 4) END,
 				w.sortkey || ${SORT_SLICE},
-				${isExpandedSql(expansion, expansionKey(expansion, sql`w.kids_root`, sql`w.kids_path`))}
+				${isExpandedSql(expansionStored, sql`w.kids_root`, sql`w.kids_path`)}
 			FROM walk w
 			JOIN node_content c ON c.parent_id IS w.kids_parent AND c.system_to = ${LIVE}
 			LEFT JOIN node_metadata m ON m.node_id = c.id AND m.system_to = ${LIVE}

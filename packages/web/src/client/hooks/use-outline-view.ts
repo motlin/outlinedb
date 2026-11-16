@@ -29,8 +29,9 @@ export function outlineViewShape(
 }
 
 /**
- * While the page load's expansion GET is in flight, the main outline's view expands the account's rows on the server
- * instead of waiting on it, and adopts the ones it reached, so the first view still loads every level it expands.
+ * The server expands the account's stored rows. While the page load's expansion GET is in flight, the main outline's
+ * view adopts the expanded rows it reached instead of waiting on that GET, so the first view renders every level it
+ * loaded.
  */
 function viewQuery(queryClient: QueryClient, rootId: string | null, shape: () => OutlineViewShape)
 {

@@ -3,6 +3,7 @@ import type {LeftBarDropPos} from "../left-bar-drop.js";
 import {create} from "zustand";
 import type {PickerResult} from "../location-picker-model.js";
 import {MAIN_PANE_ID, canPlacePane, findPane, paneExpandedIds} from "../pane-ids.js";
+import {trackExpansionSave} from "../pending-expansion-saves.js";
 import type {ItemTreePane} from "../pane-ids.js";
 import {z} from "zod";
 import {THEME_STORAGE_KEY, applyTheme, storedTheme} from "../theme-apply.js";
@@ -1155,7 +1156,7 @@ function commitExpanded(next: Set<string>): void
 	};
 	if (expansionPersisted)
 	{
-		void patchExpansion(changes);
+		trackExpansionSave(patchExpansion(changes));
 	}
 }
 

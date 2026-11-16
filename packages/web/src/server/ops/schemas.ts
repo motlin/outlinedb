@@ -237,8 +237,8 @@ export const OutlineViewListSchema = z.strictObject(
 export const OutlineViewResponseSchema = z.strictObject(
 	{
 		lists: z.array(OutlineViewListSchema),
-		/** For a request with `expandedIds: null`: the listed rows the account has expanded, in list order. */
-		expandedIds: z.array(z.string()).optional(),
+		/** The listed rows the account has expanded, in list order. */
+		expandedIds: z.array(z.string()),
 		/** For a calendar day root: its Found Dates section, so it renders in the view's swap. */
 		foundDates: FoundDatesResponseSchema.optional(),
 	},

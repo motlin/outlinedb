@@ -3,6 +3,7 @@ import type {QueryClient} from "@tanstack/react-query";
 import type {BacklinksResponse, FoundDatesResponse, NodeResponse, OutlineViewResponse} from "../node-types.js";
 import {nodeKeys, readNode} from "./node-cache.js";
 import {pendingCreates} from "./pending-creates.js";
+import {expansionSaved} from "./pending-expansion-saves.js";
 import {pendingMoves} from "./pending-moves.js";
 import {viewParentIds} from "./render-window.js";
 
@@ -14,11 +15,10 @@ export interface OutlineViewShape
 	budget: number;
 }
 
-/** The body of `POST /api/v1/nodes/view`; `expandedIds: null` expands the account's expanded rows. */
+/** The body of `POST /api/v1/nodes/view`; the server expands the account's stored expanded rows. */
 export interface OutlineViewRequest
 {
 	rootId: string | null;
-	expandedIds: string[] | null;
 	limit: number;
 	showCompleted: boolean;
 }
@@ -74,8 +74,9 @@ function foundDatesCached(queryClient: QueryClient, dayId: string): boolean
  * trip, and a day page's Found Dates with them. Lists the cache already holds stay (they may carry optimistic
  * writes), as does a list a pending move touches; with the whole view cached, nothing is sent.
  *
- * With `accountExpansion`, the server expands the account's expanded rows in place of `shape.expandedIds` (which the
- * page load has yet to fill), and `accountExpansion` receives the listed rows it expanded before the lists are seeded.
+ * The server expands the rows the account has stored as expanded, so the load waits for the expansion saves sent before
+ * it. With `accountExpansion`, the load skips the cache check (`shape.expandedIds` is still being filled by the page
+ * load) and `accountExpansion` receives the listed rows the server expanded before the lists are seeded.
  */
 export async function loadOutlineView(
 	queryClient: QueryClient,
@@ -89,18 +90,17 @@ export async function loadOutlineView(
 	{
 		return;
 	}
-	await pendingMoves.settled(rootId);
+	await Promise.all([pendingMoves.settled(rootId), expansionSaved()]);
 	const {lists, expandedIds, foundDates} = await fetchView(
 		{
 			rootId,
-			expandedIds: accountExpansion === undefined ? [...shape.expandedIds] : null,
 			limit: shape.budget,
 			showCompleted: shape.showCompleted,
 		},
 	);
 	notifyManager.batch(() =>
 	{
-		accountExpansion?.(expandedIds ?? []);
+		accountExpansion?.(expandedIds);
 		seedOutlineView(
 			queryClient,
 			rootId,

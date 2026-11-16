@@ -873,6 +873,7 @@ describe("outline view load", () =>
 	// Home holds alice > bob > carol, every level expanded.
 	const response: OutlineViewResponse =
 	{
+		expandedIds: ["alice", "bob", "carol"],
 		lists: [
 			{
 				parentId: null,
@@ -935,7 +936,6 @@ describe("outline view load", () =>
 						[
 							{
 								rootId: null,
-								expandedIds: ["alice", "bob", "carol"],
 								limit: 50,
 								showCompleted: false,
 							},
@@ -992,6 +992,7 @@ describe("outline view load", () =>
 			};
 			const dayView: OutlineViewResponse =
 			{
+				expandedIds: [],
 				lists: [
 					{
 						parentId: "day",
@@ -1029,6 +1030,7 @@ describe("outline view load", () =>
 				Promise.resolve(
 					{
 						lists: [],
+						expandedIds: [],
 						foundDates:
 						{
 							items: [],

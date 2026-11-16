@@ -377,7 +377,6 @@ describe("a new standalone account types end to end through the Worker", () =>
 			"/nodes/view",
 			{
 				rootId: null,
-				expandedIds: null,
 				limit: 100,
 				showCompleted: true,
 			},

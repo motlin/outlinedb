@@ -3352,11 +3352,18 @@ describe("nodes tree read statement count", () =>
 			sqlite
 				.prepare("INSERT INTO mirrors (mirror_id, original_id, system_from, system_to) VALUES (?, ?, ?, ?)")
 				.run(`P${p}m`, "Original", "2000-01-01T00:00:00.000Z", FAR_FUTURE_DATE);
+			sqlite
+				.prepare("INSERT INTO expanded_nodes (short_key, system_from, system_to) VALUES (?, ?, ?)")
+				.run(upstreamExpansionKey(`P${p}`), "2000-01-01T00:00:00.000Z", FAR_FUTURE_DATE);
 		}
 		const ctx =
 		{
 			db,
 			cacheService,
+			internalAdapter: () => (
+			{
+				expansionTest: () => (id: string) => /^P\d+$/u.test(id),
+			}),
 		} as unknown as ServerContext;
 		const app = new Hono<AppEnv>();
 		app.use("*", async (c, next) =>
@@ -3439,15 +3446,14 @@ describe("nodes tree read statement count", () =>
 
 		it("POST /view over expanded rows", async () =>
 		{
-			const view = (n: number) => (
+			const view =
 			{
 				rootId: null,
-				expandedIds: parentIds(n),
 				limit: 1000,
 				showCompleted: true,
-			});
-			const few = await setup(2).post("/view", view(2));
-			const many = await setup(12).post("/view", view(12));
+			};
+			const few = await setup(2).post("/view", view);
+			const many = await setup(12).post("/view", view);
 
 			expect(
 				{
@@ -3711,12 +3717,11 @@ describe("nodes view route", () =>
 	{
 		it("lists the root's and every expanded rendered row's children depth-first, with their Backlinks", async () =>
 		{
-			const {post} = setup();
+			const {post} = setup(["Alpha", "A1", "A2", "Beta"]);
 
 			const {status, body} = await post(
 				{
 					rootId: null,
-					expandedIds: ["Alpha", "A1", "A2", "Beta"],
 					limit: 100,
 					showCompleted: false,
 				},
@@ -3742,12 +3747,11 @@ describe("nodes view route", () =>
 
 		it("descends into a completed expanded row when completed rows show", async () =>
 		{
-			const {post} = setup();
+			const {post} = setup(["A2"]);
 
 			const {body} = await post(
 				{
 					rootId: "Alpha",
-					expandedIds: ["A2"],
 					limit: 100,
 					showCompleted: true,
 				},
@@ -3761,12 +3765,11 @@ describe("nodes view route", () =>
 
 		it("stops descending once the row budget is spent", async () =>
 		{
-			const {post} = setup();
+			const {post} = setup(["Alpha", "A1", "Beta"]);
 
 			const {body} = await post(
 				{
 					rootId: null,
-					expandedIds: ["Alpha", "A1", "Beta"],
 					limit: 3,
 					showCompleted: false,
 				},
@@ -3781,13 +3784,12 @@ describe("nodes view route", () =>
 
 		it("lists an expanded mirror's original's children under the mirror's id", async () =>
 		{
-			const {post, mirror} = setup();
+			const {post, mirror} = setup(["M"]);
 			mirror("M", "Beta", "Alpha");
 
 			const {body} = await post(
 				{
 					rootId: "Beta",
-					expandedIds: ["M"],
 					limit: 100,
 					showCompleted: false,
 				},
@@ -3801,13 +3803,12 @@ describe("nodes view route", () =>
 
 		it("sends each list once and stops at a mirror inside its own original", async () =>
 		{
-			const {post, mirror} = setup();
+			const {post, mirror} = setup(["Alpha", "A1", "Mmmm"]);
 			mirror("Mmmm", "A1", "Alpha");
 
 			const {body} = await post(
 				{
 					rootId: null,
-					expandedIds: ["Alpha", "A1", "Mmmm"],
 					limit: 200,
 					showCompleted: false,
 				},
@@ -3823,7 +3824,7 @@ describe("nodes view route", () =>
 
 		it("orders siblings by order key then creation time and spends the budget in that order", async () =>
 		{
-			const {post, add} = setup();
+			const {post, add} = setup(["Huge", "B1"]);
 			add("Neg", "Beta", -5);
 			add("Huge", "Beta", 2 ** 40);
 			add("H1", "Huge", 0);
@@ -3839,7 +3840,6 @@ describe("nodes view route", () =>
 			const {body} = await post(
 				{
 					rootId: "Beta",
-					expandedIds: ["Huge", "B1"],
 					limit: 3,
 					showCompleted: false,
 				},
@@ -3870,7 +3870,7 @@ describe("nodes view route", () =>
 
 		it("neither counts nor expands a hidden completed row", async () =>
 		{
-			const {post, add} = setup();
+			const {post, add} = setup(["A0", "A1"]);
 			add(
 				"A0",
 				"Alpha",
@@ -3884,7 +3884,6 @@ describe("nodes view route", () =>
 			const {body} = await post(
 				{
 					rootId: "Alpha",
-					expandedIds: ["A0", "A1"],
 					limit: 1,
 					showCompleted: false,
 				},
@@ -3898,27 +3897,20 @@ describe("nodes view route", () =>
 
 		it("expands a row inside a mirror by its instance key, not its own id", async () =>
 		{
-			const {post, mirror} = setup();
-			mirror("M", "Beta", "Alpha");
+			const view = async (expanded: string[]) =>
+			{
+				const {post, mirror} = setup(expanded);
+				mirror("M", "Beta", "Alpha");
+				return post(
+					{
+						rootId: "Beta",
+						limit: 100,
+						showCompleted: false,
+					},
+				);
+			};
 
-			const [instance, plain] = await Promise.all([
-				post(
-					{
-						rootId: "Beta",
-						expandedIds: ["M", "virtual_A1_M_M"],
-						limit: 100,
-						showCompleted: false,
-					},
-				),
-				post(
-					{
-						rootId: "Beta",
-						expandedIds: ["M", "A1"],
-						limit: 100,
-						showCompleted: false,
-					},
-				),
-			]);
+			const [instance, plain] = await Promise.all([view(["M", "virtual_A1_M_M"]), view(["M", "A1"])]);
 
 			expect(
 				{
@@ -3940,14 +3932,13 @@ describe("nodes view route", () =>
 			);
 		});
 
-		it("expands the account's expanded rows for null expandedIds, returning those the view reached", async () =>
+		it("returns the listed rows the account has expanded", async () =>
 		{
 			const {post} = setup(["Alpha", "A1", "A2", "Beta", "Elsewhere"]);
 
 			const {body} = await post(
 				{
 					rootId: null,
-					expandedIds: null,
 					limit: 100,
 					showCompleted: false,
 				},
@@ -3971,14 +3962,13 @@ describe("nodes view route", () =>
 			);
 		});
 
-		it("expands nothing for null expandedIds without the internal API", async () =>
+		it("expands nothing without the internal API", async () =>
 		{
 			const {post} = setup();
 
 			const {body} = await post(
 				{
 					rootId: null,
-					expandedIds: null,
 					limit: 100,
 					showCompleted: false,
 				},
@@ -3999,7 +3989,7 @@ describe("nodes view route", () =>
 
 		it("sends each listed parent's whole Backlinks section", async () =>
 		{
-			const {post, mirror, add, referencesRoot} = setup();
+			const {post, mirror, add, referencesRoot} = setup(["Alpha", "A1", "Beta", "B1", "M"]);
 			add("D1", "B1", 0);
 			add("D2", "D1", 0);
 			add("D3", "D2", 0);
@@ -4029,7 +4019,6 @@ describe("nodes view route", () =>
 			const {body} = await post(
 				{
 					rootId: null,
-					expandedIds: ["Alpha", "A1", "Beta", "B1", "M"],
 					limit: 100,
 					showCompleted: true,
 				},
@@ -4112,7 +4101,7 @@ describe("nodes view route", () =>
 			]);
 		});
 
-		it("answers 404 for an unresolvable short root id and 400 for a malformed body", async () =>
+		it("answers 404 for an unresolvable short root id and 400 for a malformed body or one carrying expandedIds", async () =>
 		{
 			const {post} = setup();
 
@@ -4121,7 +4110,6 @@ describe("nodes view route", () =>
 					post(
 						{
 							rootId: "0123456789ab",
-							expandedIds: [],
 							limit: 10,
 							showCompleted: false,
 						},
@@ -4129,7 +4117,14 @@ describe("nodes view route", () =>
 					post(
 						{
 							rootId: null,
-							expandedIds: "Alpha",
+							limit: "10",
+							showCompleted: false,
+						},
+					),
+					post(
+						{
+							rootId: null,
+							expandedIds: ["Alpha"],
 							limit: 10,
 							showCompleted: false,
 						},
@@ -4147,7 +4142,14 @@ describe("nodes view route", () =>
 					status: 400,
 					body:
 					{
-						error: "body must be {rootId, expandedIds, limit, showCompleted}",
+						error: "body must be {rootId, limit, showCompleted}",
+					},
+				},
+				{
+					status: 400,
+					body:
+					{
+						error: "body must be {rootId, limit, showCompleted}",
 					},
 				},
 			]);
@@ -4219,6 +4221,13 @@ describe("nodes view route", () =>
 				parentId = id;
 			}
 		}
+		for (const id of expandedIds)
+		{
+			sqlite
+				.prepare("INSERT INTO expanded_nodes (short_key, system_from, system_to) VALUES (?, ?, ?)")
+				.run(upstreamExpansionKey(id), ...live);
+		}
+		const expanded = new Set(expandedIds.map(upstreamExpansionKey));
 		let statements = 0;
 		const prepare = sqlite.prepare.bind(sqlite);
 		sqlite.prepare = (source: string) =>
@@ -4235,9 +4244,10 @@ describe("nodes view route", () =>
 		{
 			db,
 			cacheService,
-			internalAdapter: () =>
+			internalAdapter: () => (
 			{
-			},
+				expansionTest: () => (id: string) => expanded.has(upstreamExpansionKey(id)),
+			}),
 		} as unknown as ServerContext;
 		const app = new Hono<AppEnv>();
 		app.use("*", async (c, next) =>
@@ -4261,7 +4271,6 @@ describe("nodes view route", () =>
 						body: JSON.stringify(
 							{
 								rootId: "Root",
-								expandedIds,
 								limit: 100_000,
 								showCompleted: false,
 							},

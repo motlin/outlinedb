@@ -65,7 +65,7 @@ export function nodesRoutes(resolveStore: ResolveStore): Hono
 			"nodes.view",
 			await body(c.req.raw),
 			{
-				error: "body must be {rootId, expandedIds, limit, showCompleted}",
+				error: "body must be {rootId, limit, showCompleted}",
 			},
 		),
 	);

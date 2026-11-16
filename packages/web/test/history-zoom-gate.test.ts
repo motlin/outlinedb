@@ -47,6 +47,7 @@ const NO_BACKLINKS =
 // Alice holds Bob, expanded, who holds Carol.
 const aliceView: OutlineViewResponse =
 {
+	expandedIds: [BOB],
 	lists: [
 		{
 			parentId: ALICE,

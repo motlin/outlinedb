@@ -218,14 +218,15 @@ describe("user store Durable Object behind the Worker", () =>
 
 	it("serves an expanded row's whole expanded subtree in one view request", async () =>
 	{
-		// subtree-a > {subtree-b > subtree-c > subtree-d, subtree-e > subtree-f}, with b and c expanded but not e.
+		// a-subtree > {b-subtree > c-subtree > d-subtree, e-subtree > f-subtree}, with b and c expanded but not e. Upstream
+		// keys expansion by an id's first 8 characters, so each id starts with its own letter.
 		const tree = [
-			["subtree-a", null, 200],
-			["subtree-b", "subtree-a", 0],
-			["subtree-e", "subtree-a", 1],
-			["subtree-c", "subtree-b", 0],
-			["subtree-d", "subtree-c", 0],
-			["subtree-f", "subtree-e", 0],
+			["a-subtree", null, 200],
+			["b-subtree", "a-subtree", 0],
+			["e-subtree", "a-subtree", 1],
+			["c-subtree", "b-subtree", 0],
+			["d-subtree", "c-subtree", 0],
+			["f-subtree", "e-subtree", 0],
 		] as const;
 		for (const [id, parent, priority] of tree)
 		{
@@ -245,6 +246,27 @@ describe("user store Durable Object behind the Worker", () =>
 			await probeStore(harness.mf, `/__seed?${params}`);
 		}
 
+		const saved = await harness.mf.dispatchFetch(
+			"http://localhost/api/v1/expansion",
+			{
+				method: "PATCH",
+				headers:
+				{
+					"content-type": "application/json",
+				},
+				body: JSON.stringify(
+					{
+						changes:
+						{
+							"b-subtree": true,
+							"c-subtree": true,
+						},
+					},
+				),
+			},
+		);
+		expect(saved.status).toBe(204);
+
 		const response = await harness.mf.dispatchFetch(
 			"http://localhost/api/v1/nodes/view",
 			{
@@ -255,8 +277,7 @@ describe("user store Durable Object behind the Worker", () =>
 				},
 				body: JSON.stringify(
 					{
-						rootId: "subtree-a",
-						expandedIds: ["subtree-a", "subtree-b", "subtree-c"],
+						rootId: "a-subtree",
 						limit: 100,
 						showCompleted: false,
 					},
@@ -290,24 +311,24 @@ describe("user store Durable Object behind the Worker", () =>
 				status: 200,
 				lists: [
 					[
-						"subtree-a",
-						["subtree-b", "subtree-e"],
+						"a-subtree",
+						["b-subtree", "e-subtree"],
 						{
 							rootId: null,
 							items: [],
 						},
 					],
 					[
-						"subtree-b",
-						["subtree-c"],
+						"b-subtree",
+						["c-subtree"],
 						{
 							rootId: null,
 							items: [],
 						},
 					],
 					[
-						"subtree-c",
-						["subtree-d"],
+						"c-subtree",
+						["d-subtree"],
 						{
 							rootId: null,
 							items: [],

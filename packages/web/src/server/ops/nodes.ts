@@ -35,7 +35,6 @@ import {childInstance, expansionId} from "../../mirror-path.js";
 import {INTERNAL_API_NOT_CONFIGURED} from "../internal-api.js";
 import {changeWatermark, changesAfter, liveParents, readConsistently} from "../system-changes.js";
 import {readBacklinkItems, readViewTree, viewListParents} from "../view-tree.js";
-import type {ViewExpansion} from "../view-tree.js";
 import {defineOp, fail, ok, toJson} from "./define.js";
 import
 {
@@ -285,13 +284,12 @@ export const nodesChanges = defineOp(
 // children and, depth-first in document order, those of every expanded row the row budget reaches, each with its
 // Backlinks section (Home has none). Spares the client one children request per depth level and one backlinks GET
 // per expanded row, so a zoom swaps in the whole expanded view at once; a day page's view carries its Found Dates too.
-// `expandedIds: null` expands the account's expanded rows (none without the internal API) and answers which of the
-// listed rows those are, so the page load's first view need not wait on the client fetching the account's whole
-// expanded set.
-const ViewSchema = z.object(
+// The server owns expansion: the walk expands the account's stored expanded rows (none for a mirror without the
+// internal API), so a client stores an expand before loading the view it opens. The answer names which listed rows
+// are expanded, so the page load's first view need not wait on the client fetching the account's whole expanded set.
+const ViewSchema = z.strictObject(
 	{
 		rootId: z.string().nullable(),
-		expandedIds: z.array(z.string()).nullable(),
 		limit: z.number().int().nonnegative(),
 		showCompleted: z.boolean(),
 	},
@@ -314,13 +312,13 @@ export const nodesView = defineOp(
 					},
 				);
 			}
-			const {expansion, isExpanded} = viewExpansion(ctx, body.expandedIds);
+			const {expansionStored, isExpanded} = viewExpansion(ctx);
 			// Every list the view sends, chosen and read by one statement; visit only assembles them, agreeing with the
 			// statement's walk about order, budget and expansion.
 			const query =
 			{
 				rootId: resolvedRoot,
-				expansion,
+				expansionStored,
 				limit,
 				showCompleted,
 			};
@@ -399,14 +397,7 @@ export const nodesView = defineOp(
 			const response: OutlineViewResponse =
 			{
 				lists: lists.map(({list}) => list),
-				...(body.expandedIds === null
-					?
-						{
-							expandedIds: lists.flatMap(({list}) =>
-								list.nodes.map((node) => node.id).filter(isExpanded),
-							),
-						}
-					: {}),
+				expandedIds: lists.flatMap(({list}) => list.nodes.map((node) => node.id).filter(isExpanded)),
 				...(foundDates === null
 					? {}
 					:
@@ -420,38 +411,20 @@ export const nodesView = defineOp(
 );
 
 /**
- * The view's expansion: the requested ids, or for null the account's stored expansion (a standalone store's own keys; a
- * mirror's through the internal API, nothing without it), as the walk's SQL source and the same test in JS.
+ * The view's expansion: the account's stored expansion (a standalone store's own keys; a mirror's through the internal
+ * API, nothing without it), as whether the walk's SQL reads it and the same test in JS.
  */
-function viewExpansion(
-	ctx: ServerContext,
-	expandedIds: string[] | null,
-):
+function viewExpansion(ctx: ServerContext):
 {
-	expansion: ViewExpansion;
+	expansionStored: boolean;
 	isExpanded: (id: string) => boolean;
 }
 {
-	if (expandedIds !== null)
-	{
-		const ids = new Set(expandedIds);
-		return {
-			expansion:
-			{
-				kind: "ids",
-				ids: [...ids],
-			},
-			isExpanded: (id) => ids.has(id),
-		};
-	}
 	if (ctx.mode === "standalone")
 	{
 		const keys = readExpansion(ctx.db) ?? new Set<string>();
 		return {
-			expansion:
-			{
-				kind: "stored",
-			},
+			expansionStored: true,
 			isExpanded: (id) => keys.has(upstreamExpansionKey(id)),
 		};
 	}
@@ -459,18 +432,12 @@ function viewExpansion(
 	return adapter === undefined
 		?
 			{
-				expansion:
-				{
-					kind: "none",
-				},
+				expansionStored: false,
 				isExpanded: () => false,
 			}
 		:
 			{
-				expansion:
-				{
-					kind: "stored",
-				},
+				expansionStored: true,
 				isExpanded: adapter.expansionTest(),
 			};
 }
