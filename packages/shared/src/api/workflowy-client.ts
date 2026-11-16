@@ -33,6 +33,46 @@ export interface RetryOptions
 }
 
 /**
+ * Each address undici reports in a connect failure's cause ("attempted
+ * address: 75.2.70.75:443" or "attempted addresses: 2600::1:443, 99.83.1.1:443"),
+ * labelled with its family. Empty when the cause names no address.
+ */
+function dialedAddresses(causeMessage: string): string[]
+{
+	const listed = /attempted address(?:es)?: (?<list>.*?)(?:, timeout: |\)|$)/u.exec(causeMessage)?.groups?.list;
+	if (!listed)
+	{
+		return [];
+	}
+	return listed.split(", ").map((address) =>
+	{
+		const host = address.replace(/:\d+$/u, "").replaceAll(/^\[|\]$/gu, "");
+		return `${address} (${host.includes(":") ? "IPv6" : "IPv4"})`;
+	});
+}
+
+/**
+ * Replace fetch's bare "fetch failed" with the request, the elapsed time, and
+ * the undici cause (its code, message, and the dialed addresses with their
+ * family), keeping the original as `cause`. A connect timeout curl cannot
+ * reproduce is only diagnosable from which address and family Node dialed.
+ */
+function describeFetchError(method: string, url: string, elapsedMs: number, error: unknown): Error
+{
+	const cause = error instanceof Error ? error.cause : undefined;
+	const detail = cause instanceof Error ? cause : error instanceof Error ? error : new Error(String(error));
+	const code = "code" in detail && typeof detail.code === "string" ? `${detail.code} ` : "";
+	const dialed = dialedAddresses(detail.message);
+	const suffix = dialed.length > 0 ? ` [dialed ${dialed.join(", ")}]` : "";
+	return new Error(
+		`${method} ${url} failed after ${Math.round(elapsedMs)}ms: ${code}${detail.message}${suffix}`,
+		{
+			cause: error,
+		},
+	);
+}
+
+/**
  * Cap on how much of an error response body is quoted back. Enough for
  * Workflowy's block notice, short of pasting an HTML error page into a stack
  * trace.
@@ -173,6 +213,20 @@ export class WorkflowyApiClient
 		return new Error(`${statusLine}\n${body.slice(0, MAX_ERROR_BODY_CHARS)}`);
 	}
 
+	/** A fetch whose network failures name the request, elapsed time, and dialed address. */
+	private async send(url: string, init?: RequestInit): Promise<Response>
+	{
+		const startTime = performance.now();
+		try
+		{
+			return await fetch(url, init);
+		}
+		catch (error)
+		{
+			throw describeFetchError(init?.method ?? "GET", url, performance.now() - startTime, error);
+		}
+	}
+
 	private getHeaders(): Record<string, string>
 	{
 		return {
@@ -209,7 +263,7 @@ export class WorkflowyApiClient
 		let attempt = 0;
 		for (;;)
 		{
-			const response = await fetch(url, init);
+			const response = await this.send(url, init);
 			if (response.status !== 429 || attempt >= this.maxRetries)
 			{
 				return response;
@@ -371,7 +425,7 @@ export class WorkflowyApiClient
 
 		try
 		{
-			const response = await fetch(
+			const response = await this.send(
 				url,
 				{
 					method: "POST",
@@ -436,7 +490,7 @@ export class WorkflowyApiClient
 
 		try
 		{
-			const response = await fetch(
+			const response = await this.send(
 				url,
 				{
 					method: "POST",
@@ -477,7 +531,7 @@ export class WorkflowyApiClient
 
 		try
 		{
-			const response = await fetch(
+			const response = await this.send(
 				url,
 				{
 					method: "DELETE",
@@ -514,7 +568,7 @@ export class WorkflowyApiClient
 
 		try
 		{
-			const response = await fetch(
+			const response = await this.send(
 				url,
 				{
 					method: "POST",
@@ -554,7 +608,7 @@ export class WorkflowyApiClient
 
 		try
 		{
-			const response = await fetch(
+			const response = await this.send(
 				url,
 				{
 					method: "POST",
@@ -612,7 +666,7 @@ export class WorkflowyApiClient
 
 		try
 		{
-			const response = await fetch(
+			const response = await this.send(
 				url,
 				{
 					method: "POST",

@@ -129,6 +129,63 @@ describe("client errors", () =>
 				),
 			).rejects.toThrow(/help@workflowy\.com/u);
 		});
+
+		/**
+		 * Node's fetch hides the connect failure behind "fetch failed"; the dialed
+		 * address only appears in the undici cause. A timeout that curl cannot
+		 * reproduce needs that address, its family, and the elapsed time to diagnose.
+		 */
+		function clientFailingToConnect(causeMessage: string)
+		{
+			const cause = Object.assign(
+				new Error(causeMessage),
+				{
+					name: "ConnectTimeoutError",
+					code: "UND_ERR_CONNECT_TIMEOUT",
+				},
+			);
+			vi.stubGlobal(
+				"fetch",
+				vi.fn<typeof fetch>().mockRejectedValue(
+					new TypeError(
+						"fetch failed",
+						{
+							cause,
+						},
+					),
+				),
+			);
+			return new WorkflowyApiClient("test-key", undefined, "https://workflowy.test");
+		}
+
+		it("names the dialed IPv4 address, family and elapsed time when connecting times out", async () =>
+		{
+			const client = clientFailingToConnect(
+				"Connect Timeout Error (attempted address: 75.2.70.75:443, timeout: 10000ms)",
+			);
+
+			await expect(
+				client.updateNode(
+					"10e2d6c2-d165-b390-9484-d4fdbf4c4afa",
+					{
+						name: "x",
+					},
+				),
+			).rejects.toThrow(
+				/^POST https:\/\/workflowy\.test\/api\/v1\/nodes\/10e2d6c2-d165-b390-9484-d4fdbf4c4afa failed after \d+ms: UND_ERR_CONNECT_TIMEOUT Connect Timeout Error \(attempted address: 75\.2\.70\.75:443, timeout: 10000ms\) \[dialed 75\.2\.70\.75:443 \(IPv4\)\]$/u,
+			);
+		});
+
+		it("labels every attempted address with its family when both families were dialed", async () =>
+		{
+			const client = clientFailingToConnect(
+				"Connect Timeout Error (attempted addresses: 2600:9000:a51c::1:443, 99.83.190.102:443, timeout: 250ms)",
+			);
+
+			await expect(
+				client.moveNode("10e2d6c2-d165-b390-9484-d4fdbf4c4afa", "a71aed23-b0cc-0000-0000-000000000000"),
+			).rejects.toThrow(/\[dialed 2600:9000:a51c::1:443 \(IPv6\), 99\.83\.190\.102:443 \(IPv4\)\]$/u);
+		});
 	});
 });
 
