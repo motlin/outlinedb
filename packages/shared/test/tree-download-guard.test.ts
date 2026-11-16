@@ -1,7 +1,10 @@
 import {globSync, readFileSync} from "node:fs";
+import {join, resolve} from "node:path";
 import {describe, expect, it} from "vite-plus/test";
 
-/** Every non-test source file, with its text. */
+const REPO_ROOT = resolve(import.meta.dirname, "../../..");
+
+/** Every non-test source file, with its text, keyed by its path from the repo root whatever the working directory. */
 function sources():
 {
 	file: string;
@@ -11,6 +14,7 @@ function sources():
 	return globSync(
 		"packages/*/src/**/*.{ts,tsx}",
 		{
+			cwd: REPO_ROOT,
 			exclude: (name) => name === "node_modules",
 		},
 	)
@@ -19,7 +23,7 @@ function sources():
 		.map((file) => (
 		{
 			file,
-			text: readFileSync(file, "utf8"),
+			text: readFileSync(join(REPO_ROOT, file), "utf8"),
 		}));
 }
 
