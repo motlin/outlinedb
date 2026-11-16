@@ -42,7 +42,7 @@ const WORKFLOWY_EPOCH = 1_324_752_242;
 unix_timestamp = backup_timestamp + WORKFLOWY_EPOCH;
 ```
 
-**Note**: This conversion is only for node data columns (`createdAt`, `modifiedAt`, `completedAt`). The temporal tracking columns (`system_from`, `system_to`) use ISO8601 TEXT format instead.
+**Note**: This conversion is only for node data columns (`createdAt`, `modifiedAt`, `completedAt`). The temporal tracking columns (`system_from`, `system_to`) are INTEGER microseconds since the Unix epoch instead, and CLI and MCP JSON render them as ISO 8601 text with microseconds.
 
 ### Data Structure Differences
 

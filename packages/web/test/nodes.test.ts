@@ -1421,7 +1421,7 @@ describe("nodes lookup op", () =>
 						totalNodes: 3,
 						rootNodes: 1,
 						completedNodes: 1,
-						lastSync: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u),
+						lastSync: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/u),
 						lastBackupImport: null,
 					},
 				},

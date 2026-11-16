@@ -2,6 +2,7 @@ import {NodeTreeReader} from "@outlinedb/shared/cache";
 import type {NodeTree} from "@outlinedb/shared/cache";
 import {isShortId} from "@outlinedb/shared/workflowy";
 import {Flags} from "@oclif/core";
+import {nodeJson} from "../../output/node-cli-row.js";
 import {logger} from "../../services/logger.js";
 import {htmlToAnsi} from "../../utils/html-to-ansi.js";
 import {BaseListCommand} from "../base-list-command.js";
@@ -196,7 +197,7 @@ export default class Get extends BaseListCommand
 					path: fullPath,
 				};
 			}
-			this.log(JSON.stringify(outputNode, null, 2));
+			this.log(nodeJson(outputNode));
 			return;
 		}
 

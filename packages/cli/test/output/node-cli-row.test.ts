@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vite-plus/test";
-import {nodeToCliRow} from "../../src/output/node-cli-row.js";
+import {nodeJson, nodeToCliRow} from "../../src/output/node-cli-row.js";
 import type {Node} from "@outlinedb/shared/types";
 import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 
@@ -141,5 +141,63 @@ describe("nodeToCliRow", () =>
 	{
 		const row = nodeToCliRow(makeNode());
 		expect(row).toStrictEqual(expectedRow());
+	});
+});
+
+describe("nodeJson", () =>
+{
+	it("renders system times as ISO text with microseconds, and a current version's systemTo as null", () =>
+	{
+		const tree =
+		{
+			...makeNode(
+				{
+					systemFrom: systemTimeAt("2026-01-01 00:00:00.123456"),
+				},
+			),
+			children: [
+				makeNode(
+					{
+						id: "child",
+						systemFrom: systemTimeAt("2026-01-02 03:04:05"),
+						systemTo: systemTimeAt("2026-01-03 00:00:00.000001"),
+					},
+				),
+			],
+		};
+		const jsonFields =
+		{
+			id: "11111111-1111-1111-1111-111111111111",
+			shortId: "abcdef012345",
+			parentId: "22222222-2222-2222-2222-222222222222",
+			name: "Buy milk",
+			note: "Whole milk",
+			priority: 3,
+			layoutMode: "todo",
+			createdAt: "2026-01-02T03:04:05.000Z",
+			modifiedAt: "2026-02-03T04:05:06.000Z",
+			completedAt: null,
+			collapsed: false,
+			mirror:
+			{
+				isMirror: false,
+				originalNodeId: null,
+			},
+		};
+		expect(JSON.parse(nodeJson(tree))).toStrictEqual(
+			{
+				...jsonFields,
+				systemFrom: "2026-01-01T00:00:00.123456Z",
+				systemTo: null,
+				children: [
+					{
+						...jsonFields,
+						id: "child",
+						systemFrom: "2026-01-02T03:04:05.000000Z",
+						systemTo: "2026-01-03T00:00:00.000001Z",
+					},
+				],
+			},
+		);
 	});
 });

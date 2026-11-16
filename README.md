@@ -569,7 +569,7 @@ FLAGS
       |expanded_nodes|changelog_reads|surveys|saved_views|ai_assistants|ai_prompt_buttons>
 
   --to=<value>
-      (required) Target timestamp to roll back to (e.g., "2026-01-23 00:00:00")
+      (required) Target UTC time to roll back to (e.g., "2026-01-23 00:00:00" or "2026-01-23T00:00:00.000000Z")
 
 DESCRIPTION
   Roll back all temporal tables to a previous point in time. This is a destructive operation for disaster recovery.

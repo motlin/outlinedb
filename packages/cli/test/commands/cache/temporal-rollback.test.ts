@@ -75,43 +75,47 @@ describe("cache:temporal-rollback command", () =>
 		expect(temporal.filter((name) => !(TEMPORAL_TABLES as readonly string[]).includes(name))).toStrictEqual([]);
 	});
 
-	it("restores a preference to its value as of the target time", async () =>
-	{
-		testDatabase.db
-			.insert(rootPreferences)
-			.values([
+	// Readable UTC text, and the ISO text `cache status` and node JSON print, so output pastes back as a target.
+	it.each(["2026-01-15 00:00:00", "2026-01-15T00:00:00.000000Z"])(
+		"restores a preference to its value as of the target time %s",
+		async (to) =>
+		{
+			testDatabase.db
+				.insert(rootPreferences)
+				.values([
+					{
+						userId: "1",
+						dateFormat: "YYYY",
+						systemFrom: systemTimeAt("2026-01-01 00:00:00.000"),
+						systemTo: systemTimeAt("2026-02-01 00:00:00.000"),
+					},
+					{
+						userId: "1",
+						dateFormat: "MMM D",
+						systemFrom: systemTimeAt("2026-02-01 00:00:00.000"),
+						systemTo: FAR_FUTURE_DATE,
+					},
+				])
+				.run();
+
+			await captureOutput(async () => TemporalRollback.run(["--to", to, "--yes"]));
+
+			expect(
+				testDatabase.db
+					.select(
+						{
+							dateFormat: rootPreferences.dateFormat,
+							systemTo: rootPreferences.systemTo,
+						},
+					)
+					.from(rootPreferences)
+					.all(),
+			).toStrictEqual([
 				{
-					userId: "1",
 					dateFormat: "YYYY",
-					systemFrom: systemTimeAt("2026-01-01 00:00:00.000"),
-					systemTo: systemTimeAt("2026-02-01 00:00:00.000"),
-				},
-				{
-					userId: "1",
-					dateFormat: "MMM D",
-					systemFrom: systemTimeAt("2026-02-01 00:00:00.000"),
 					systemTo: FAR_FUTURE_DATE,
 				},
-			])
-			.run();
-
-		await captureOutput(async () => TemporalRollback.run(["--to", "2026-01-15 00:00:00", "--yes"]));
-
-		expect(
-			testDatabase.db
-				.select(
-					{
-						dateFormat: rootPreferences.dateFormat,
-						systemTo: rootPreferences.systemTo,
-					},
-				)
-				.from(rootPreferences)
-				.all(),
-		).toStrictEqual([
-			{
-				dateFormat: "YYYY",
-				systemTo: FAR_FUTURE_DATE,
-			},
-		]);
-	});
+			]);
+		},
+	);
 });

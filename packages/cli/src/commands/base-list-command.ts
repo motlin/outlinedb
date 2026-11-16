@@ -5,6 +5,7 @@ import type {NodeTree} from "@outlinedb/shared/cache";
 import type {WorkflowyNode} from "@outlinedb/shared/types";
 import {Command, Flags} from "@oclif/core";
 import {createDatabase} from "../db/index.js";
+import {nodeJson} from "../output/node-cli-row.js";
 import {CacheService} from "../services/cache.js";
 import {logger} from "../services/logger.js";
 import {formatDuration} from "../utils/format-duration.js";
@@ -218,7 +219,7 @@ export abstract class BaseListCommand extends Command
 		{
 			const {fields} = flags;
 			const output = fields ? nodes.map((node) => this.filterNodeFields(node, this.parseFields(fields))) : nodes;
-			this.log(JSON.stringify(output, null, 2));
+			this.log(nodeJson(output));
 		}
 		else if (nodes.length === 0)
 		{

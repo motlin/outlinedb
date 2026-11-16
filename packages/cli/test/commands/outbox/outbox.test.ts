@@ -1,6 +1,5 @@
 import {it, vi, afterEach, expect, describe, beforeEach} from "vite-plus/test";
 import {captureOutput} from "@oclif/test";
-import {parseTemporalTimestamp} from "@outlinedb/shared/temporal";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -101,7 +100,9 @@ describe("outbox commands", () =>
 				failed: failed &&
 				{
 					...failed,
-					oldestEnqueuedAt: typeof failed.oldestEnqueuedAt,
+					oldestEnqueuedAt: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/u.test(
+						failed.oldestEnqueuedAt ?? "",
+					),
 					rows: failed.rows.map((row) => (
 					{
 						...row,
@@ -109,9 +110,7 @@ describe("outbox commands", () =>
 					})),
 				},
 				failedText: failedText.stdout.replaceAll(
-					failed?.oldestEnqueuedAt === null || failed === undefined
-						? "<none>"
-						: parseTemporalTimestamp(failed.oldestEnqueuedAt).toISOString(),
+					failed?.oldestEnqueuedAt === null || failed === undefined ? "<none>" : failed.oldestEnqueuedAt,
 					"<enqueued>",
 				),
 				drain: drain.stdout,
@@ -125,7 +124,7 @@ describe("outbox commands", () =>
 				failed:
 				{
 					pending: 1,
-					oldestEnqueuedAt: "number",
+					oldestEnqueuedAt: true,
 					lastError: "Workflowy rejected the operations: upstream_rejected",
 					rows: [
 						{

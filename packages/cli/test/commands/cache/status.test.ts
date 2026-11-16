@@ -186,7 +186,7 @@ describe("cache:status command", () =>
 				await Status.run([]);
 			});
 
-			const seededSync = new Date("2024-01-01T00:00:00Z").toLocaleString();
+			const seededSync = "2024-01-01T00:00:00.000000Z";
 
 			expect(stdout).toBe(
 				`📊 Cache Status\n\n📁 Cached Nodes: 3\n\n🔄 Last Sync:\n  Time: ${
@@ -201,7 +201,8 @@ describe("cache:status command", () =>
 		{
 			const now = new Date();
 			const tenSecondsAgo = new Date(now.getTime() - 10_000);
-			const systemFromStr = formatTemporalTimestamp(tenSecondsAgo);
+			// A microsecond part the millisecond Date cannot carry: the readable time must keep it.
+			const systemFrom = formatTemporalTimestamp(tenSecondsAgo) + 456;
 
 			testDatabase.db
 				.insert(nodeContent)
@@ -211,7 +212,7 @@ describe("cache:status command", () =>
 						name: "Recent Node",
 						note: null,
 						parentId: null,
-						systemFrom: systemFromStr,
+						systemFrom,
 						systemTo: FAR_FUTURE_DATE,
 					},
 				)
@@ -229,11 +230,26 @@ describe("cache:status command", () =>
 				await Status.run([]);
 			});
 
+			const lastSync = `${tenSecondsAgo.toISOString().slice(0, -1)}456Z`;
 			expect(stdout).toBe(
-				`📊 Cache Status\n\n📁 Cached Nodes: 4\n\n🔄 Last Sync:\n  Time: ${tenSecondsAgo.toLocaleString()}\n  Age: 10 seconds ago\n\n💾 Backup Import:\n  No backup data imported\n\n💿 Database:\n  File: ${
+				`📊 Cache Status\n\n📁 Cached Nodes: 4\n\n🔄 Last Sync:\n  Time: ${lastSync}\n  Age: 10 seconds ago\n\n💾 Backup Import:\n  No backup data imported\n\n💿 Database:\n  File: ${
 					testDbPath
 				}\n  Size: 3.00 KB\n`,
 			);
+
+			const {stdout: json} = await captureOutput(async () =>
+			{
+				await Status.run(["--json"]);
+			});
+			expect(
+				z
+					.object(
+						{
+							lastSync: z.unknown(),
+						},
+					)
+					.parse(JSON.parse(json)).lastSync,
+			).toBe(lastSync);
 		});
 
 		it("displays backup import information when backup imports exist", async () =>
@@ -262,7 +278,7 @@ describe("cache:status command", () =>
 				await Status.run([]);
 			});
 
-			const seededSync = new Date("2024-01-01T00:00:00Z").toLocaleString();
+			const seededSync = "2024-01-01T00:00:00.000000Z";
 
 			expect(stdout).toBe(
 				`📊 Cache Status\n\n📁 Cached Nodes: 3\n\n🔄 Last Sync:\n  Time: ${
@@ -336,7 +352,7 @@ describe("cache:status command", () =>
 				await Status.run([]);
 			});
 
-			const seededSync = new Date("2024-01-01T00:00:00Z").toLocaleString();
+			const seededSync = "2024-01-01T00:00:00.000000Z";
 			expect(stdout).toBe(
 				`📊 Cache Status\n\n📁 Cached Nodes: 3\n\n🔄 Last Sync:\n  Time: ${
 					seededSync
@@ -443,7 +459,7 @@ describe("cache:status command", () =>
 		{
 			const now = new Date();
 			const tenSecondsAgo = new Date(now.getTime() - 10_000);
-			const systemFromStr = formatTemporalTimestamp(tenSecondsAgo);
+			const systemFrom = formatTemporalTimestamp(tenSecondsAgo);
 
 			testDatabase.db
 				.insert(nodeContent)
@@ -453,7 +469,7 @@ describe("cache:status command", () =>
 						name: "Test",
 						note: null,
 						parentId: null,
-						systemFrom: systemFromStr,
+						systemFrom,
 						systemTo: FAR_FUTURE_DATE,
 					},
 				)
@@ -472,7 +488,7 @@ describe("cache:status command", () =>
 			});
 
 			expect(stdout).toBe(
-				`📊 Cache Status\n\n📁 Cached Nodes: 1\n\n🔄 Last Sync:\n  Time: ${tenSecondsAgo.toLocaleString()}\n  Age: 10 seconds ago\n\n💾 Backup Import:\n  No backup data imported\n\n💿 Database:\n  File: ${
+				`📊 Cache Status\n\n📁 Cached Nodes: 1\n\n🔄 Last Sync:\n  Time: ${tenSecondsAgo.toISOString().slice(0, -1)}000Z\n  Age: 10 seconds ago\n\n💾 Backup Import:\n  No backup data imported\n\n💿 Database:\n  File: ${
 					testDbPath
 				}\n  Size: 1.00 KB\n`,
 			);
@@ -482,7 +498,7 @@ describe("cache:status command", () =>
 		{
 			const now = new Date();
 			const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
-			const systemFromStr = formatTemporalTimestamp(fiveMinutesAgo);
+			const systemFrom = formatTemporalTimestamp(fiveMinutesAgo);
 
 			testDatabase.db
 				.insert(nodeContent)
@@ -492,7 +508,7 @@ describe("cache:status command", () =>
 						name: "Test",
 						note: null,
 						parentId: null,
-						systemFrom: systemFromStr,
+						systemFrom,
 						systemTo: FAR_FUTURE_DATE,
 					},
 				)
@@ -511,7 +527,7 @@ describe("cache:status command", () =>
 			});
 
 			expect(stdout).toBe(
-				`📊 Cache Status\n\n📁 Cached Nodes: 1\n\n🔄 Last Sync:\n  Time: ${fiveMinutesAgo.toLocaleString()}\n  Age: 5 minutes ago\n\n💾 Backup Import:\n  No backup data imported\n\n💿 Database:\n  File: ${
+				`📊 Cache Status\n\n📁 Cached Nodes: 1\n\n🔄 Last Sync:\n  Time: ${fiveMinutesAgo.toISOString().slice(0, -1)}000Z\n  Age: 5 minutes ago\n\n💾 Backup Import:\n  No backup data imported\n\n💿 Database:\n  File: ${
 					testDbPath
 				}\n  Size: 1.00 KB\n`,
 			);

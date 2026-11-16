@@ -1,4 +1,5 @@
 import {Command, Flags} from "@oclif/core";
+import type {Schema as JsonSchema} from "ts-json-schema-generator";
 import path from "node:path";
 import {schemaToInterface} from "../../utils/schema-to-interface.js";
 
@@ -121,7 +122,7 @@ export default class Schema extends Command
 				this.error(`Unknown command: ${cmd}`);
 			}
 
-			const jsonSchema = generator.createSchema(mapping.typeName);
+			const jsonSchema = systemTimesAsIso(generator.createSchema(mapping.typeName));
 			const interfaceText = schemaToInterface(jsonSchema, mapping.interfaceName);
 
 			this.log(`// Output type for: ${mapping.description}`);
@@ -129,4 +130,31 @@ export default class Schema extends Command
 			this.log(interfaceText);
 		}
 	}
+}
+
+/**
+ * The schema with every `systemFrom`/`systemTo` retyped from the stored microsecond number to the ISO text the
+ * commands print (`nodeJson`), where a current version's `systemTo` is null.
+ */
+function systemTimesAsIso(schema: JsonSchema): JsonSchema
+{
+	for (const definition of [schema, ...Object.values(schema.definitions ?? {})])
+	{
+		const properties = typeof definition === "boolean" ? undefined : definition.properties;
+		if (properties?.systemFrom !== undefined)
+		{
+			properties.systemFrom =
+			{
+				type: "string",
+			};
+		}
+		if (properties?.systemTo !== undefined)
+		{
+			properties.systemTo =
+			{
+				type: ["string", "null"],
+			};
+		}
+	}
+	return schema;
 }

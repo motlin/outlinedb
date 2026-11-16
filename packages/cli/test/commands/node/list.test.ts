@@ -13,7 +13,7 @@ import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 const ListOutputSchema = z.array(
 	z.looseObject(
 		{
-			systemFrom: z.number().optional(),
+			systemFrom: z.string().optional(),
 		},
 	),
 );
@@ -1254,7 +1254,7 @@ describe("node:list command", () =>
 						isMirror: false,
 						originalNodeId: null,
 					},
-					systemTo: FAR_FUTURE_DATE,
+					systemTo: null,
 					inChat: false,
 					hasReferencesRoot: false,
 				},
@@ -1275,7 +1275,7 @@ describe("node:list command", () =>
 						isMirror: false,
 						originalNodeId: null,
 					},
-					systemTo: FAR_FUTURE_DATE,
+					systemTo: null,
 					inChat: false,
 					hasReferencesRoot: false,
 				},
@@ -1346,7 +1346,7 @@ describe("node:list command", () =>
 						isMirror: false,
 						originalNodeId: null,
 					},
-					systemTo: FAR_FUTURE_DATE,
+					systemTo: null,
 					inChat: false,
 					hasReferencesRoot: false,
 				},
@@ -1417,7 +1417,7 @@ describe("node:list command", () =>
 						isMirror: false,
 						originalNodeId: null,
 					},
-					systemTo: FAR_FUTURE_DATE,
+					systemTo: null,
 					inChat: false,
 					hasReferencesRoot: false,
 				},

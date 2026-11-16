@@ -1,11 +1,11 @@
 import {backupImports, nodeContent, nodeMetadata} from "@outlinedb/shared/db";
-import {FAR_FUTURE_DATE, parseTemporalTimestamp} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, systemTimeToIso} from "@outlinedb/shared/temporal";
 import {and, count, desc, eq, isNotNull, isNull, max} from "drizzle-orm";
 import {z} from "zod";
 import {defineOp, ok} from "./define.js";
 
 /**
- * Live node counts, when the cache last took a change (ISO, or null when it holds no nodes) and the newest imported
+ * Live node counts, when the cache last took a change (ISO with microseconds, or null when it holds no nodes) and the newest imported
  * backup's date, as the CLI's `cache status` reports them.
  */
 export const cacheStatus = defineOp(
@@ -68,8 +68,7 @@ export const cacheStatus = defineOp(
 					totalNodes: nodes?.total ?? 0,
 					rootNodes: roots?.count ?? 0,
 					completedNodes: completed?.count ?? 0,
-					// systemFrom is microseconds since the epoch.
-					lastSync: lastChange === null ? null : parseTemporalTimestamp(lastChange).toISOString(),
+					lastSync: lastChange === null ? null : systemTimeToIso(lastChange),
 					lastBackupImport: lastImport?.backupDate ?? null,
 				},
 			);

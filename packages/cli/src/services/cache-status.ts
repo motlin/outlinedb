@@ -2,7 +2,7 @@ import {countStrandedRows} from "@outlinedb/shared/cache";
 import type {StrandedRowCounts} from "@outlinedb/shared/cache";
 import {backupImports, nodeContent, nodeMetadata} from "@outlinedb/shared/db";
 import type * as schema from "@outlinedb/shared/db";
-import {FAR_FUTURE_DATE, parseTemporalTimestamp} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, systemTimeToIso} from "@outlinedb/shared/temporal";
 import {and, count, desc, eq, isNotNull, isNull} from "drizzle-orm";
 import type {BetterSQLite3Database} from "drizzle-orm/better-sqlite3";
 import fs from "node:fs";
@@ -20,7 +20,8 @@ export interface CacheStatus
 		root: number;
 		completed: number;
 	};
-	lastSync: Date | null;
+	/** The newest live node version's system time as ISO text with microseconds, or null for an empty cache. */
+	lastSync: string | null;
 	lastBackupImport: string | null;
 	/** Relationship rows a delete or import left behind; all zero when the cache matches upstream. */
 	stranded: StrandedRowCounts;
@@ -112,7 +113,7 @@ export class CacheStatusService
 		};
 	}
 
-	private getLastSync(): Date | null
+	private getLastSync(): string | null
 	{
 		const result = this.database
 			.select(
@@ -132,7 +133,7 @@ export class CacheStatusService
 			return null;
 		}
 
-		return parseTemporalTimestamp(result.systemFrom);
+		return systemTimeToIso(result.systemFrom);
 	}
 
 	private getDatabaseSize(dbPath: string): string

@@ -319,8 +319,8 @@ describe("node get command", () =>
 						originalNodeId: null,
 					},
 					path: "JSON Node",
-					systemFrom: systemTimeAt("2000-01-01 00:00:00.000"),
-					systemTo: FAR_FUTURE_DATE,
+					systemFrom: "2000-01-01T00:00:00.000000Z",
+					systemTo: null,
 				},
 			);
 		});
@@ -869,7 +869,7 @@ describe("node get command", () =>
 						isMirror: false,
 						originalNodeId: null,
 					},
-					systemTo: FAR_FUTURE_DATE,
+					systemTo: null,
 					inChat: false,
 					hasReferencesRoot: false,
 				},

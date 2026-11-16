@@ -142,7 +142,7 @@ describe("transaction timeout", () =>
 	it("names the system time and the elapsed time in the error", () =>
 	{
 		expect(new TransactionTimeoutError(systemTimeAt("2026-02-01 00:00:00.000"), 60_001).message).toBe(
-			`Unit of work stamped ${systemTimeAt("2026-02-01 00:00:00.000")} would commit 60001ms after it started, past the 60000ms transaction timeout; rolled back`,
+			"Unit of work stamped 2026-02-01T00:00:00.000000Z would commit 60001ms after it started, past the 60000ms transaction timeout; rolled back",
 		);
 	});
 

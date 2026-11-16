@@ -29,8 +29,8 @@ export default class Status extends Command
 			this.log("🔄 Last Sync:");
 			if (status.lastSync)
 			{
-				this.log(`  Time: ${this.formatDate(status.lastSync)}`);
-				this.log(`  Age: ${this.getTimeAgo(status.lastSync)}`);
+				this.log(`  Time: ${status.lastSync}`);
+				this.log(`  Age: ${this.getTimeAgo(new Date(status.lastSync))}`);
 			}
 			else
 			{
@@ -65,11 +65,6 @@ export default class Status extends Command
 		}
 
 		return status;
-	}
-
-	private formatDate(date: Date): string
-	{
-		return date.toLocaleString();
 	}
 
 	private getTimeAgo(date: Date): string

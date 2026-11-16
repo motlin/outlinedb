@@ -2,7 +2,7 @@ import {getTableName, sql} from "drizzle-orm";
 import type {SQL} from "drizzle-orm";
 import {getTableConfig} from "drizzle-orm/sqlite-core";
 import type {BaseSQLiteDatabase, SQLiteColumn, SQLiteTable} from "drizzle-orm/sqlite-core";
-import {FAR_FUTURE_DATE} from "../temporal/index.js";
+import {FAR_FUTURE_DATE, systemTimeToIso} from "../temporal/index.js";
 
 /**
  * Batch size for bulk insert/phase-out operations.
@@ -125,7 +125,7 @@ export class SameMicrosecondOverwriteError extends Error
 	constructor(tableName: string, key: string, systemTime: number)
 	{
 		super(
-			`Unit of work at system time ${systemTime} would overwrite the ${tableName} version (${key}) it started in the same microsecond; rolled back instead of deleting history`,
+			`Unit of work at system time ${systemTimeToIso(systemTime)} would overwrite the ${tableName} version (${key}) it started in the same microsecond; rolled back instead of deleting history`,
 		);
 		this.name = "SameMicrosecondOverwriteError";
 	}

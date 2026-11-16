@@ -21,8 +21,8 @@ interface NodeGetOutput {
   completedAt: string | null;
   collapsed: boolean;
   mirror: { isMirror: boolean; originalNodeId: string | null };
-  systemFrom: number;
-  systemTo: number;
+  systemFrom: string;
+  systemTo: string | null;
 }
 
 
@@ -40,8 +40,8 @@ interface LinkTarget {
   completedAt: string | null;
   collapsed: boolean;
   mirror: { isMirror: boolean; originalNodeId: string | null };
-  systemFrom: number;
-  systemTo: number;
+  systemFrom: string;
+  systemTo: string | null;
 }
 
 
@@ -64,8 +64,8 @@ interface NodeListOutput {
   completedAt: string | null;
   collapsed: boolean;
   mirror: { isMirror: boolean; originalNodeId: string | null };
-  systemFrom: number;
-  systemTo: number;
+  systemFrom: string;
+  systemTo: string | null;
 }
 
 
@@ -83,8 +83,8 @@ interface LinkTarget {
   completedAt: string | null;
   collapsed: boolean;
   mirror: { isMirror: boolean; originalNodeId: string | null };
-  systemFrom: number;
-  systemTo: number;
+  systemFrom: string;
+  systemTo: string | null;
 }
 
 

@@ -2,15 +2,22 @@ import {Command} from "@oclif/core";
 import {listPendingOutbox, outboxStatus} from "@outlinedb/shared/cache";
 import type {OutboxStatus, PendingOutboxListing} from "@outlinedb/shared/cache";
 import {stripHtmlTags} from "@outlinedb/shared/html";
-import {parseTemporalTimestamp} from "@outlinedb/shared/temporal";
+import {systemTimeToIso} from "@outlinedb/shared/temporal";
 import {createDatabase} from "../../db/index.js";
 
 const SHORT_NAME_LENGTH = 40;
 
-/** The outbox summary plus each pending node row, with the node's name shortened to plain text. */
-export interface OutboxStatusReport extends OutboxStatus
+/**
+ * The outbox summary plus each pending node row, with the node's name shortened to plain text and each enqueue
+ * system time as ISO text with microseconds.
+ */
+export interface OutboxStatusReport extends Omit<OutboxStatus, "oldestEnqueuedAt">
 {
-	rows: PendingOutboxListing[];
+	oldestEnqueuedAt: string | null;
+	rows: (Omit<PendingOutboxListing, "enqueuedAt"> &
+	{
+		enqueuedAt: string;
+	})[];
 }
 
 function shortName(name: string | null): string | null
@@ -21,12 +28,6 @@ function shortName(name: string | null): string | null
 	}
 	const plain = stripHtmlTags(name);
 	return plain.length > SHORT_NAME_LENGTH ? `${plain.slice(0, SHORT_NAME_LENGTH - 3)}...` : plain;
-}
-
-/** A system time as ISO 8601 UTC. */
-function readable(systemTime: number): string
-{
-	return parseTemporalTimestamp(systemTime).toISOString();
 }
 
 export default class Status extends Command
@@ -48,11 +49,13 @@ export default class Status extends Command
 		{
 			...row,
 			name: shortName(row.name),
+			enqueuedAt: systemTimeToIso(row.enqueuedAt),
 		}));
+		const oldestEnqueuedAt = status.oldestEnqueuedAt === null ? null : systemTimeToIso(status.oldestEnqueuedAt);
 		this.log(`Pending: ${status.pending}`);
-		if (status.oldestEnqueuedAt !== null)
+		if (oldestEnqueuedAt !== null)
 		{
-			this.log(`Oldest: ${readable(status.oldestEnqueuedAt)}`);
+			this.log(`Oldest: ${oldestEnqueuedAt}`);
 		}
 		if (status.lastError !== null)
 		{
@@ -60,7 +63,7 @@ export default class Status extends Command
 		}
 		for (const row of rows)
 		{
-			this.log(`${row.nodeId}  ${row.aspect}  ${readable(row.enqueuedAt)}  ${row.name ?? "(no current name)"}`);
+			this.log(`${row.nodeId}  ${row.aspect}  ${row.enqueuedAt}  ${row.name ?? "(no current name)"}`);
 			if (row.lastError !== null)
 			{
 				this.log(`  last error: ${row.lastError}`);
@@ -68,6 +71,7 @@ export default class Status extends Command
 		}
 		return {
 			...status,
+			oldestEnqueuedAt,
 			rows,
 		};
 	}

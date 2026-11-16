@@ -1,3 +1,4 @@
+import {systemTimesAsIso} from "@outlinedb/shared/temporal";
 import type {Node} from "@outlinedb/shared/types";
 
 /**
@@ -67,4 +68,14 @@ export function nodeToCliRow(node: Node): NodeCliRow
 		isMirror: node.mirror.isMirror,
 		originalNodeId: node.mirror.originalNodeId,
 	};
+}
+
+/**
+ * The pretty-printed JSON `node get` and `node list` emit for nodes and trees, with every `systemFrom`/`systemTo`
+ * rendered as ISO text with microseconds (a current version's `systemTo` as null). `node schema` reports the same
+ * shapes.
+ */
+export function nodeJson(value: unknown): string
+{
+	return JSON.stringify(value, systemTimesAsIso, 2);
 }

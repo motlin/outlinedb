@@ -1,5 +1,5 @@
 import {backupImports} from "@outlinedb/shared/db";
-import {FAR_FUTURE_DATE, formatTemporalTimestamp, parseTemporalTimestamp} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, formatTemporalTimestamp, systemTimeToIso} from "@outlinedb/shared/temporal";
 import {Command, Flags} from "@oclif/core";
 import {and, desc, eq} from "drizzle-orm";
 import {logger} from "../../services/logger.js";
@@ -430,8 +430,8 @@ export default class ImportBackup extends Command
 	}
 }
 
-/** A system time as ISO 8601 UTC for a log line, or "none". */
+/** A system time as ISO 8601 UTC with microseconds for a log line, or "none". */
 function readableSystemTime(systemTime: number | null | undefined): string
 {
-	return systemTime === null || systemTime === undefined ? "none" : parseTemporalTimestamp(systemTime).toISOString();
+	return systemTime === null || systemTime === undefined ? "none" : systemTimeToIso(systemTime);
 }

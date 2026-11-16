@@ -11,9 +11,14 @@ databases:
     queries:
       current_nodes:
         title: Current node versions
-        description: Live tree rows only (system_to is the open-ended sentinel).
+        description: Live tree rows only (system_to is the open-ended sentinel), with each row's system_from (INTEGER microseconds since the epoch) as ISO text.
         sql: |-
-          SELECT id, name, note, parent_id
+          SELECT
+            id,
+            name,
+            note,
+            parent_id,
+            strftime('%Y-%m-%dT%H:%M:%S', system_from / 1000000, 'unixepoch') || printf('.%06dZ', system_from % 1000000) AS system_from
           FROM node_content
           WHERE system_to = 9007199254740991
           LIMIT 100

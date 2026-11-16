@@ -4,7 +4,7 @@
 databases:
   outlinedb:
     description: >-
-      Read-only, write-through cache of Workflowy. Bitemporal: most tables keep historical versions. A row is CURRENT when system_to = 9007199254740991; always filter on that to see the live tree unless you want history. Never write to this database.
+      Read-only, write-through cache of Workflowy. Bitemporal: most tables keep historical versions. A row is CURRENT when system_to = 9007199254740991; always filter on that to see the live tree unless you want history. system_from and system_to are INTEGER microseconds since the Unix epoch (UTC); show one to a person as ISO text with strftime('%Y-%m-%dT%H:%M:%S', system_from / 1000000, 'unixepoch') || printf('.%06dZ', system_from % 1000000). Never write to this database.
 
     tables:
       # Internal/shadow tables — ignore when querying:

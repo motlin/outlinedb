@@ -1,4 +1,4 @@
-import {formatTemporalTimestamp} from "../temporal/constants.js";
+import {formatTemporalTimestamp, systemTimeToIso} from "../temporal/constants.js";
 
 const IS_WORKERS = globalThis.navigator.userAgent === "Cloudflare-Workers";
 
@@ -59,7 +59,7 @@ export class TransactionTimeoutError extends Error
 	constructor(systemTime: number, elapsedMs: number, timeoutMs = TRANSACTION_TIMEOUT_MS)
 	{
 		super(
-			`Unit of work stamped ${systemTime} would commit ${elapsedMs}ms after it started, past the ${timeoutMs}ms transaction timeout; rolled back`,
+			`Unit of work stamped ${systemTimeToIso(systemTime)} would commit ${elapsedMs}ms after it started, past the ${timeoutMs}ms transaction timeout; rolled back`,
 		);
 		this.name = "TransactionTimeoutError";
 	}

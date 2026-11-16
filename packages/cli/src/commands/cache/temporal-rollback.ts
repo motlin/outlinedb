@@ -68,7 +68,8 @@ export default class TemporalRollback extends Command
 	{
 		to: Flags.string(
 			{
-				description: 'Target timestamp to roll back to (e.g., "2026-01-23 00:00:00")',
+				description:
+					'Target UTC time to roll back to (e.g., "2026-01-23 00:00:00" or "2026-01-23T00:00:00.000000Z")',
 				required: true,
 			},
 		),
@@ -98,11 +99,17 @@ export default class TemporalRollback extends Command
 	public async run(): Promise<void>
 	{
 		const {flags} = await this.parse(TemporalRollback);
-		if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,6})?$/u.test(flags.to))
+		let target: number;
+		try
 		{
-			this.error('Invalid timestamp format. Expected: "YYYY-MM-DD HH:MM:SS[.ffffff]" (UTC)');
+			target = systemTimeAt(flags.to);
 		}
-		const target = systemTimeAt(flags.to);
+		catch
+		{
+			this.error(
+				'Invalid timestamp format. Expected: "YYYY-MM-DD HH:MM:SS[.ffffff]" or "YYYY-MM-DDTHH:MM:SS[.ffffff]Z" (UTC)',
+			);
+		}
 
 		const excludeSet = new Set(flags.exclude);
 		const tables = TEMPORAL_TABLES.filter((t) => !excludeSet.has(t));
