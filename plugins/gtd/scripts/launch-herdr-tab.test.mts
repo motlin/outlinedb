@@ -10,11 +10,13 @@ import type {PaneIo} from "./launch-herdr-tab.mts";
 import
 {
 	commandIsStuckAtPrompt,
+	defaultLogPath,
 	insertIndexRightOf,
 	isShellPrompt,
 	parseArgs,
 	runWhenReady,
 	socketRequest,
+	wrapWithLog,
 } from "./launch-herdr-tab.mts";
 
 const tab = (
@@ -62,7 +64,34 @@ test("parseArgs splits the label, cwd, and command after --", () =>
 			cwd: "/projects",
 			focus: true,
 			command: ["/bin/sweep.sh", "arg"],
+			log: undefined,
 		},
+	);
+});
+
+test("parseArgs takes an explicit --log path", () =>
+{
+	assert.strictEqual(parseArgs(["--label", "x", "--log", "/tmp/x.log", "--", "echo"]).log, "/tmp/x.log");
+});
+
+test("the default log lands under the review root's logs directory, named by label and local date", () =>
+{
+	assert.strictEqual(
+		defaultLogPath("/repo", "time-machine", new Date(2026, 10, 9, 23, 30)),
+		"/repo/.llm/gtd/review/logs/time-machine-2026-11-09.log",
+	);
+});
+
+test("wrapWithLog tees combined output to the log and appends the command's own exit code", () =>
+{
+	assert.strictEqual(
+		wrapWithLog("just sync && echo it's done", "/repo/logs/a b.log"),
+		"( just sync && echo it's done ) 2>&1 | tee '/repo/logs/a b.log'; " +
+			"echo \"[exit ${pipestatus[1]:-${PIPESTATUS[0]}}]\" >> '/repo/logs/a b.log'",
+	);
+	assert.strictEqual(
+		wrapWithLog("true", "/it's.log"),
+		"( true ) 2>&1 | tee '/it'\\''s.log'; echo \"[exit ${pipestatus[1]:-${PIPESTATUS[0]}}]\" >> '/it'\\''s.log'",
 	);
 });
 

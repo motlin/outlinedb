@@ -1,11 +1,16 @@
 #!/usr/bin/env node
 // Open a labelled herdr tab immediately right of the caller's tab and run a command in it.
-// Usage: launch-herdr-tab.mts --label <label> [--cwd <dir>] [--no-focus] -- <command...>
+// Usage: launch-herdr-tab.mts --label <label> [--cwd <dir>] [--log <path>] [--no-focus] -- <command...>
+// The command's combined output and exit code are teed to --log, by default
+// <cwd of this script's caller>/.llm/gtd/review/logs/<label>-<YYYY-MM-DD>.log, so the result
+// survives the user closing the tab.
 // `herdr tab create` always appends the tab last and the CLI has no move command, so the
 // reposition goes through the socket API's `tab.move` request.
 import {execFileSync} from "node:child_process";
+import {mkdirSync} from "node:fs";
 import {createConnection} from "node:net";
 import {homedir} from "node:os";
+import {dirname, join} from "node:path";
 import {setTimeout as delay} from "node:timers/promises";
 import {errorMessage, expectObject, isObject, parseJson, stringField} from "./json.mts";
 import type {JsonObject} from "./json.mts";
@@ -17,6 +22,7 @@ export interface LaunchOptions
 	cwd: string;
 	focus: boolean;
 	command: string[];
+	log: string | undefined;
 }
 
 export interface HerdrTab
@@ -49,7 +55,30 @@ export function parseArgs(argv: string[]): LaunchOptions
 		cwd: value("--cwd") ?? `${homedir()}/projects`,
 		focus: !options.includes("--no-focus"),
 		command,
+		log: value("--log"),
 	};
+}
+
+const pad = (n: number): string => String(n).padStart(2, "0");
+
+/** The review's log for a launch: `<root>/.llm/gtd/review/logs/<label>-<local YYYY-MM-DD>.log`. */
+export function defaultLogPath(root: string, label: string, now: Date): string
+{
+	const date = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+	return join(root, ".llm", "gtd", "review", "logs", `${label}-${date}.log`);
+}
+
+const shellQuote = (text: string): string => `'${text.replaceAll("'", String.raw`'\''`)}'`;
+
+/**
+ * Wrap a shell command so its combined output is teed to the log and its own exit code is
+ * appended as `[exit N]`. `pipestatus` is zsh's name and `PIPESTATUS` bash's, so the line
+ * works in either pane shell.
+ */
+export function wrapWithLog(command: string, logPath: string): string
+{
+	const log = shellQuote(logPath);
+	return `( ${command} ) 2>&1 | tee ${log}; echo "[exit \${pipestatus[1]:-\${PIPESTATUS[0]}}]" >> ${log}`;
 }
 
 export function insertIndexRightOf(tabs: readonly HerdrTab[], workspaceId: string, callerTabId: string): number
@@ -250,7 +279,14 @@ export async function runWhenReady(
 
 async function main(): Promise<void>
 {
-	const {label, cwd, focus, command} = parseArgs(process.argv.slice(2));
+	const {label, cwd, focus, command, log} = parseArgs(process.argv.slice(2));
+	const logPath = log ?? defaultLogPath(process.cwd(), label, new Date());
+	mkdirSync(
+		dirname(logPath),
+		{
+			recursive: true,
+		},
+	);
 	const caller = expectObject(herdr("pane", "current").pane, "herdr pane");
 	const workspaceId = requireString(caller, "workspace_id");
 	const callerTabId = requireString(caller, "tab_id");
@@ -311,7 +347,7 @@ async function main(): Promise<void>
 			},
 			sleep: delay,
 		},
-		command.join(" "),
+		wrapWithLog(command.join(" "), logPath),
 	);
 	process.stdout.write(
 		`${JSON.stringify(
@@ -322,6 +358,7 @@ async function main(): Promise<void>
 				paneId,
 				workspaceId,
 				rightOfTabId: callerTabId,
+				logPath,
 			},
 			null,
 			"\t",
