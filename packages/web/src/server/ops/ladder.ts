@@ -6,8 +6,7 @@
  * {@link createLadderOps} so a test can drive them against a fake service with no database and no API key.
  */
 
-import {WorkflowyApiClient} from "@outlinedb/shared/api";
-import {NodeTreeReader, WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
+import {NodeTreeReader} from "@outlinedb/shared/cache";
 import type {NodeTree} from "@outlinedb/shared/cache";
 import {z} from "zod";
 import type {ServerContext} from "../context.js";
@@ -16,6 +15,8 @@ import type {LadderBuckets} from "../ladder-service.js";
 import {LadderEventSchema} from "../ladder-events.js";
 import type {RawNode} from "../ladder-model.js";
 import {defineOp, fail, ok, toJson} from "./define.js";
+import {getNodeWriter} from "./nodes-shared.js";
+import type {NodeWriter} from "./nodes-shared.js";
 
 /** Where each ladder lives. Both buckets sit four levels down, under their root. */
 const BUCKET_PATHS: Record<string, string[]> =
@@ -207,12 +208,11 @@ function toRawNode(tree: NodeTree): RawNode
 }
 
 /**
- * Build the real service: read the buckets out of the cache, write through the
- * Workflowy API, and announce every write on the process-wide bus.
+ * Build the real service: read the buckets out of the local tables, write there too (a mirror's writes queue outbox
+ * rows for the drain), and announce every write on the process-wide bus.
  */
 function defaultService(ctx: ServerContext): LadderService
 {
-	const adapter = ctx.apiKey ? ctx.internalAdapter?.() : undefined;
 	return new LadderService(
 		{
 			readBuckets: async () =>
@@ -240,42 +240,36 @@ function defaultService(ctx: ServerContext): LadderService
 				}
 				return buckets;
 			},
-			moveNode: async (nodeId, parentId, position) => writeClient(ctx).moveNode(nodeId, parentId, position),
-			// With the internal API a landing is one exact-index move; without it, the service rotates the suffix.
-			...(adapter &&
+			moveTo: async (nodeId, parentId, index) =>
 			{
-				moveTo: async (nodeId, parentId, index) =>
-					adapter.moveTo(
-						{
-							ids: [nodeId],
-							parentId,
-							index,
-						},
-					),
-			}),
-			// Reordering can renumber siblings, so store the tier's whole child list in its new order.
-			refreshTier: async (parentId) =>
-			{
-				ctx.cacheService.storeApiResponse(await apiClient(ctx).getChildNodes(parentId), parentId);
+				nodeWriter(ctx).local.moveTo(
+					{
+						ids: [nodeId],
+						parentId,
+						index,
+					},
+				);
+				return Promise.resolve();
 			},
-			completeNode: async (nodeId) => writeClient(ctx).completeNode(nodeId),
+			completeNode: async (nodeId) =>
+			{
+				nodeWriter(ctx).local.completeNode(nodeId);
+				return Promise.resolve();
+			},
 			events: ctx.ladderEvents,
 		},
 	);
 }
 
-function apiClient(ctx: ServerContext): WorkflowyApiClient
+/** The context's node writer; a mirror without the internal API has none, since its writes could never be delivered. */
+function nodeWriter(ctx: ServerContext): NodeWriter
 {
-	if (!ctx.apiKey)
+	const writer = getNodeWriter(ctx);
+	if (writer === undefined)
 	{
-		throw new Error("WORKFLOWY_API_KEY environment variable is required");
+		throw new Error("ladder writes need the internal API to deliver them to workflowy.com");
 	}
-	return new WorkflowyApiClient(ctx.apiKey, undefined, ctx.config.apiUrl);
-}
-
-function writeClient(ctx: ServerContext): WorkflowyWriteThroughClient
-{
-	return new WorkflowyWriteThroughClient(apiClient(ctx), ctx.cacheService);
+	return writer;
 }
 
 export const ladderOps = createLadderOps(defaultService);

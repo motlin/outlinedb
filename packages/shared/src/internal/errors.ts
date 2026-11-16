@@ -133,12 +133,12 @@ export class PendingEditsDeletedUpstream extends Error
 	}
 }
 
-/** Connected to workflowy.com, which has no Inbox either: neither root metadata `inbox_id` nor a Home child named Inbox. */
+/** The outline has no Inbox: neither root metadata `inbox_id` nor a Home child named Inbox names a live node. */
 export class InboxMissing extends Error
 {
 	constructor()
 	{
-		super("Workflowy has no Inbox: root metadata inbox_id names no live node and Home has no node named Inbox");
+		super("No Inbox: root metadata inbox_id names no live node and Home has no node named Inbox");
 		this.name = "InboxMissing";
 	}
 }

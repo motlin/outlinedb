@@ -7,7 +7,7 @@ import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
-import {CacheService} from "@outlinedb/shared/cache";
+import {CacheService, readPendingOutbox} from "@outlinedb/shared/cache";
 import * as schema from "@outlinedb/shared/db";
 import {nodeContent, nodeMetadata} from "@outlinedb/shared/db";
 import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
@@ -433,7 +433,7 @@ describe("ladder route events", () =>
 
 	describe("ladder route event bus", () =>
 	{
-		it("publishes a move on the bus injected through the context, once", async () =>
+		it("moves a mirror's row locally with pending outbox rows and publishes the move on the context's bus, once", async () =>
 		{
 			const db = drizzle(
 				new DatabaseConstructor(":memory:"),
@@ -470,7 +470,7 @@ describe("ladder route events", () =>
 			{
 				received.push(event);
 			});
-			const moveTo = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+			// The adapter only marks the internal API configured: a mirror's ladder write never calls it.
 			const ctx =
 			{
 				db,
@@ -478,10 +478,7 @@ describe("ladder route events", () =>
 				config: {},
 				apiKey: "key",
 				ladderEvents: events,
-				internalAdapter: () => (
-				{
-					moveTo,
-				}),
+				internalAdapter: () => ({}),
 			} as unknown as ServerContext;
 			const app = httpAppFor(ctx);
 
@@ -505,12 +502,17 @@ describe("ladder route events", () =>
 				),
 			);
 
-			expect(res.status).toBe(200);
-			expect(moveTo).toHaveBeenCalledWith(
+			expect(
 				{
-					ids: [row],
-					parentId: secondTier,
-					index: 0,
+					status: res.status,
+					parent: ctx.cacheService.getNode(row)?.parentId,
+					pending: readPendingOutbox(db, 100).map(({nodeId, aspect}) => [nodeId, aspect]),
+				},
+			).toStrictEqual(
+				{
+					status: 200,
+					parent: secondTier,
+					pending: [[row, "placement"]],
 				},
 			);
 			expect(received).toStrictEqual([
@@ -957,13 +959,13 @@ describe("ladder service", () =>
 				],
 			},
 		};
-		const moveNode = vi.fn<LadderServiceOptions["moveNode"]>(async () => {});
+		const moveTo = vi.fn<LadderServiceOptions["moveTo"]>(async () => {});
 		const completeNode = vi.fn<LadderServiceOptions["completeNode"]>(async () => {});
 		const events = new LadderEventBus();
 		const service = new LadderService(
 			{
 				readBuckets: async () => Promise.resolve(buckets),
-				moveNode,
+				moveTo,
 				completeNode,
 				events,
 				...overrides,
@@ -971,7 +973,7 @@ describe("ladder service", () =>
 		);
 		return {
 			service,
-			moveNode,
+			moveTo,
 			completeNode,
 			events,
 		};
@@ -991,9 +993,9 @@ describe("ladder service", () =>
 
 	describe("LadderService.move", () =>
 	{
-		it("writes the move to Workflowy with the destination tier as parent", async () =>
+		it("writes the move with the destination tier as parent, at its bottom", async () =>
 		{
-			const {service, moveNode} = makeService();
+			const {service, moveTo} = makeService();
 			await service.move(
 				{
 					root: "work",
@@ -1001,7 +1003,7 @@ describe("ladder service", () =>
 					toTier: "2nd",
 				},
 			);
-			expect(moveNode).toHaveBeenCalledWith("a", "w2", -1);
+			expect(moveTo.mock.calls).toStrictEqual([["a", "w2", 0]]);
 		});
 
 		it("publishes one event per write, so a watcher is woken per edit", async () =>
@@ -1035,8 +1037,8 @@ describe("ladder service", () =>
 		{
 			const {service, events} = makeService(
 				{
-					moveNode: vi.fn<LadderServiceOptions["moveNode"]>(async () =>
-						Promise.reject(new Error("upstream 500")),
+					moveTo: vi.fn<LadderServiceOptions["moveTo"]>(async () =>
+						Promise.reject(new Error("write failed")),
 					),
 				},
 			);
@@ -1053,87 +1055,29 @@ describe("ladder service", () =>
 						toTier: "2nd",
 					},
 				),
-			).rejects.toThrow("upstream 500");
+			).rejects.toThrow("write failed");
 			expect(seen).toStrictEqual([]);
 		});
 
-		it("answers once the move lands, without waiting for the tier refresh", async () =>
+		it("rejects a stale insertion target without moving anything", async () =>
 		{
-			const refreshTier = vi.fn<NonNullable<LadderServiceOptions["refreshTier"]>>(
-				async () => new Promise<void>(() => {}),
-			);
-			const {service} = makeService(
-				{
-					refreshTier,
-				},
-			);
-			const answered = await Promise.race([
-				service
-					.move(
-						{
-							root: "work",
-							nodeId: "a",
-							toTier: "2nd",
-						},
-					)
-					.then(() => "answered"),
-				new Promise((resolve) =>
-				{
-					setImmediate(() =>
-					{
-						resolve("blocked");
-					});
-				}),
-			]);
-			expect(
-				{
-					answered,
-					refreshed: refreshTier.mock.calls,
-				},
-			).toStrictEqual(
-				{
-					answered: "answered",
-					refreshed: [["w2"]],
-				},
-			);
-		});
-
-		it("keeps a landed move when the tier refresh fails", async () =>
-		{
-			const failure = vi.spyOn(console, "error").mockImplementation(() => {});
-			const {service} = makeService(
-				{
-					refreshTier: vi.fn<NonNullable<LadderServiceOptions["refreshTier"]>>(async () =>
-						Promise.reject(new Error("Test refresh throttled")),
-					),
-				},
-			);
+			const {service, moveTo} = makeService();
 			await expect(
 				service.move(
 					{
 						root: "work",
 						nodeId: "a",
 						toTier: "2nd",
+						beforeNodeId: "missing",
 					},
 				),
-			).resolves.toMatchObject(
-				{
-					nodeId: "a",
-				},
-			);
-			await new Promise((resolve) =>
-			{
-				setImmediate(resolve);
-			});
-			expect(failure.mock.calls.map(([message]): unknown => message)).toStrictEqual([
-				"ladder: could not refresh tier w2 after a move: Test refresh throttled",
-			]);
-			failure.mockRestore();
+			).rejects.toThrow(new Error("node missing is not a destination row"));
+			expect(moveTo.mock.calls).toStrictEqual([]);
 		});
 
 		it("rejects an unknown root instead of writing somewhere plausible", async () =>
 		{
-			const {service, moveNode} = makeService();
+			const {service, moveTo} = makeService();
 			await expect(
 				service.move(
 					{
@@ -1143,12 +1087,12 @@ describe("ladder service", () =>
 					},
 				),
 			).rejects.toThrow(/nope/u);
-			expect(moveNode).not.toHaveBeenCalled();
+			expect(moveTo).not.toHaveBeenCalled();
 		});
 
 		it("rejects a node from the other ladder rather than moving it across roots", async () =>
 		{
-			const {service, moveNode} = makeService();
+			const {service, moveTo} = makeService();
 			await expect(
 				service.move(
 					{
@@ -1158,7 +1102,7 @@ describe("ladder service", () =>
 					},
 				),
 			).rejects.toThrow(/x/u);
-			expect(moveNode).not.toHaveBeenCalled();
+			expect(moveTo).not.toHaveBeenCalled();
 		});
 	});
 
@@ -1190,105 +1134,7 @@ describe("ladder service", () =>
 		});
 	});
 
-	describe("exact placement using top/bottom writes", () =>
-	{
-		it("persists a middle insertion in order and broadcasts each successful write", async () =>
-		{
-			const buckets =
-			{
-				work:
-				{
-					id: "bucket",
-					children: [
-						tier("first", "1st", [
-							{
-								id: "alice",
-								name: "Alice",
-							},
-							{
-								id: "bob",
-								name: "Bob",
-							},
-							{
-								id: "charlie",
-								name: "Charlie",
-							},
-						]),
-					],
-				},
-			};
-			const {service, moveNode, events} = makeService(
-				{
-					readBuckets: async () => Promise.resolve(buckets),
-					now: () => new Date("2000-01-01T00:00:00.000Z"),
-				},
-			);
-			const seen: unknown[] = [];
-			events.subscribe((event) =>
-			{
-				seen.push(event);
-			});
-			await service.move(
-				{
-					root: "work",
-					nodeId: "alice",
-					toTier: "1st",
-					beforeNodeId: "charlie",
-				},
-			);
-			expect(moveNode.mock.calls).toStrictEqual([
-				["alice", "first", -1],
-				["bob", "first", -1],
-			]);
-			expect(seen).toStrictEqual([
-				{
-					verb: "move",
-					nodeId: "alice",
-					name: "Alice",
-					fromTier: "1st",
-					toTier: "1st",
-					beforeNodeId: "",
-					at: "2000-01-01T00:00:00.000Z",
-				},
-				{
-					verb: "move",
-					nodeId: "bob",
-					name: "Bob",
-					fromTier: "1st",
-					toTier: "1st",
-					beforeNodeId: "",
-					at: "2000-01-01T00:00:00.000Z",
-				},
-				{
-					verb: "move",
-					nodeId: "alice",
-					name: "Alice",
-					fromTier: "1st",
-					toTier: "1st",
-					beforeNodeId: "charlie",
-					at: "2000-01-01T00:00:00.000Z",
-				},
-			]);
-		});
-
-		it("rejects a stale insertion target without moving anything", async () =>
-		{
-			const {service, moveNode} = makeService();
-			await expect(
-				service.move(
-					{
-						root: "work",
-						nodeId: "a",
-						toTier: "2nd",
-						beforeNodeId: "missing",
-					},
-				),
-			).rejects.toThrow(new Error("node missing is not a destination row"));
-			expect(moveNode.mock.calls).toStrictEqual([]);
-		});
-	});
-
-	describe("exact placement using one internal-API move", () =>
+	describe("exact placement using one move", () =>
 	{
 		const node = (id: string, completedAt: string | null = null) => (
 		{
@@ -1326,7 +1172,7 @@ describe("ladder service", () =>
 
 		function exactService()
 		{
-			const moveTo = vi.fn<NonNullable<LadderServiceOptions["moveTo"]>>(async () => {});
+			const moveTo = vi.fn<LadderServiceOptions["moveTo"]>(async () => {});
 			const made = makeService(
 				{
 					readBuckets: async () => Promise.resolve(buckets),
@@ -1359,7 +1205,7 @@ describe("ladder service", () =>
 
 		it("lands a step-down mid-tier with one move indexed over every child, completed rows included", async () =>
 		{
-			const {service, moveTo, moveNode, seen} = exactService();
+			const {service, moveTo, seen} = exactService();
 			await service.move(
 				{
 					root: "work",
@@ -1371,13 +1217,11 @@ describe("ladder service", () =>
 			expect(
 				{
 					moveTo: moveTo.mock.calls,
-					moveNode: moveNode.mock.calls,
 					seen,
 				},
 			).toStrictEqual(
 				{
 					moveTo: [["zed", "second", 2]],
-					moveNode: [],
 					seen: [landed("zed", "1st", "bob")],
 				},
 			);
@@ -1385,7 +1229,7 @@ describe("ladder service", () =>
 
 		it("lands a step-down at the top of the tier just before its first open row", async () =>
 		{
-			const {service, moveTo, moveNode, seen} = exactService();
+			const {service, moveTo, seen} = exactService();
 			await service.move(
 				{
 					root: "work",
@@ -1397,13 +1241,11 @@ describe("ladder service", () =>
 			expect(
 				{
 					moveTo: moveTo.mock.calls,
-					moveNode: moveNode.mock.calls,
 					seen,
 				},
 			).toStrictEqual(
 				{
 					moveTo: [["zed", "second", 1]],
-					moveNode: [],
 					seen: [landed("zed", "1st", "alice")],
 				},
 			);
@@ -1411,7 +1253,7 @@ describe("ladder service", () =>
 
 		it("lands a row at the bottom of the tier after every child", async () =>
 		{
-			const {service, moveTo, moveNode, seen} = exactService();
+			const {service, moveTo, seen} = exactService();
 			await service.move(
 				{
 					root: "work",
@@ -1422,13 +1264,11 @@ describe("ladder service", () =>
 			expect(
 				{
 					moveTo: moveTo.mock.calls,
-					moveNode: moveNode.mock.calls,
 					seen,
 				},
 			).toStrictEqual(
 				{
 					moveTo: [["zed", "second", 4]],
-					moveNode: [],
 					seen: [landed("zed", "1st", "")],
 				},
 			);
@@ -1436,7 +1276,7 @@ describe("ladder service", () =>
 
 		it("reorders within a tier with one move and no writes to the other rows", async () =>
 		{
-			const {service, moveTo, moveNode, seen} = exactService();
+			const {service, moveTo, seen} = exactService();
 			await service.move(
 				{
 					root: "work",
@@ -1448,13 +1288,11 @@ describe("ladder service", () =>
 			expect(
 				{
 					moveTo: moveTo.mock.calls,
-					moveNode: moveNode.mock.calls,
 					seen,
 				},
 			).toStrictEqual(
 				{
 					moveTo: [["alice", "second", 3]],
-					moveNode: [],
 					seen: [landed("alice", "2nd", "charlie")],
 				},
 			);

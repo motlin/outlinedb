@@ -1046,16 +1046,42 @@ export class LocalTreeWriter
 				this.writeHomeLayoutMode(unitOfWork, changes);
 				return;
 			}
-			requireNode(unitOfWork.tx, requestedId);
-			const id = writeTarget(unitOfWork.tx, requestedId);
-			this.applyMetaChanges(pending, unitOfWork, id, changes);
-			pending.setMetadata(
-				id,
-				{
-					modifiedAt: this.nowDate(),
-				},
-			);
+			this.writeNodeMetaValues(pending, unitOfWork, requestedId, changes);
 		});
+	}
+
+	/** {@link setNodeMetaValues} for several nodes (Home excluded) in one unit of work. */
+	setNodesMetaValues(changesById: ReadonlyMap<string, readonly LocalMetaChange[]>): void
+	{
+		if (changesById.size === 0)
+		{
+			return;
+		}
+		this.write((pending, unitOfWork) =>
+		{
+			for (const [requestedId, changes] of changesById)
+			{
+				this.writeNodeMetaValues(pending, unitOfWork, requestedId, changes);
+			}
+		});
+	}
+
+	private writeNodeMetaValues(
+		pending: PendingWrites,
+		unitOfWork: UnitOfWork,
+		requestedId: string,
+		changes: readonly LocalMetaChange[],
+	): void
+	{
+		requireNode(unitOfWork.tx, requestedId);
+		const id = writeTarget(unitOfWork.tx, requestedId);
+		this.applyMetaChanges(pending, unitOfWork, id, changes);
+		pending.setMetadata(
+			id,
+			{
+				modifiedAt: this.nowDate(),
+			},
+		);
 	}
 
 	/**

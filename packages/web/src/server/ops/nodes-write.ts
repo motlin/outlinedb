@@ -7,7 +7,7 @@ import {HOME_TARGET} from "@outlinedb/shared/types";
 import {hasInternalLink} from "@outlinedb/shared/workflowy";
 import type {UpdateNodeResponse} from "../../node-types.js";
 import {backlinksNeedSync} from "../backlinks.js";
-import {INTERNAL_API_NOT_CONFIGURED} from "../internal-api.js";
+import {withAccountState} from "../account-state.js";
 import {defineOp, fail, ok, toJson} from "./define.js";
 import type {OpResult} from "./define.js";
 import type {ServerContext} from "../context.js";
@@ -21,7 +21,6 @@ import
 } from "./schemas.js";
 import
 {
-	getAdapter,
 	getNodeWriter,
 	localDeletePlan,
 	AfterIdSchema,
@@ -285,22 +284,16 @@ export const nodesSetHome = defineOp(
 					},
 				);
 			}
-			const adapter = getAdapter(ctx);
-			if (!adapter)
+			// Home's layout is root metadata: account state, which a mirror writes locally with account outbox rows.
+			return withAccountState(ctx, async (state) =>
 			{
-				return fail(
-					503,
+				await state.setRootMetaValues(changes);
+				return ok(
 					{
-						error: INTERNAL_API_NOT_CONFIGURED,
+						layoutMode,
 					},
 				);
-			}
-			await adapter.setNodeMetaValues(HOME_TARGET, changes);
-			return ok(
-				{
-					layoutMode,
-				},
-			);
+			});
 		},
 	},
 );

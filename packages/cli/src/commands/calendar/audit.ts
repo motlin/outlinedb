@@ -3,12 +3,13 @@ import {WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
 import {auditCalendar} from "@outlinedb/shared/calendar-lookup";
 import {calendarLevelMetadata, calendarLevelName, datesInName} from "@outlinedb/shared/internal";
 import type {CalendarAuditFinding} from "@outlinedb/shared/internal";
-import {internalAdapter} from "@outlinedb/shared/node";
 import {resolveIdOrShortId} from "@outlinedb/shared/utils";
 import {uuidToShortId} from "@outlinedb/shared/workflowy";
 import {Command, Flags} from "@oclif/core";
 import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";
+import {drainAfterWrite, openLocalWrites} from "../../services/local-writes.js";
+import type {LocalWrites} from "../../services/local-writes.js";
 import {logger} from "../../services/logger.js";
 
 const BRACKET_DAY = /^\[(\d{4})-(\d{2})-(\d{2})\]$/u;
@@ -73,6 +74,7 @@ export default class CalendarAudit extends Command
 		);
 
 		const fixed: string[] = [];
+		let writes: LocalWrites | undefined;
 		if (flags.fix)
 		{
 			const apiKey = process.env.WORKFLOWY_API_KEY;
@@ -80,17 +82,13 @@ export default class CalendarAudit extends Command
 			{
 				this.error("WORKFLOWY_API_KEY environment variable is required");
 			}
-			const writeThrough = new WorkflowyWriteThroughClient(
-				new WorkflowyApiClient(apiKey, logger, process.env.WORKFLOWY_API_URL),
-				cache,
+			writes = openLocalWrites(
+				database,
+				new WorkflowyWriteThroughClient(
+					new WorkflowyApiClient(apiKey, logger, process.env.WORKFLOWY_API_URL),
+					cache,
+				),
 			);
-			const adapter = internalAdapter(database, writeThrough);
-			if (adapter === undefined)
-			{
-				this.error(
-					"--fix needs the internal API: set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD in the environment (e.g. from .envrc)",
-				);
-			}
 			const reported = new Set(findings.filter(({kind}) => kind === "duplicate").map(({dateId}) => dateId));
 			for (const finding of findings)
 			{
@@ -119,14 +117,14 @@ export default class CalendarAudit extends Command
 				}
 				if (bracket !== null)
 				{
-					await writeThrough.updateNode(
+					writes.local.updateNode(
 						finding.id,
 						{
 							name: calendarLevelName("day", date, ""),
 						},
 					);
 				}
-				await adapter.setNodeMetaValues(finding.id, [
+				writes.local.setNodeMetaValues(finding.id, [
 					{
 						path: ["calendar"],
 						value: calendarLevelMetadata("day", date),
@@ -152,6 +150,11 @@ export default class CalendarAudit extends Command
 					`${kind} ${uuidToShortId(id)} ${dateId === 0 ? "" : dateId}${fixed.includes(id) ? " (adopted)" : ""}`.trimEnd(),
 				);
 			}
+		}
+		// After the report: a failed drain exits non-zero, and the adoptions stay saved locally with pending outbox rows.
+		if (writes !== undefined && fixed.length > 0)
+		{
+			await drainAfterWrite(this, writes);
 		}
 		return findings;
 	}

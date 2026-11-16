@@ -5,6 +5,7 @@ import {Command, Flags} from "@oclif/core";
 import {sql} from "drizzle-orm";
 import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";
+import {drainAfterWrite, openLocalWrites} from "../../services/local-writes.js";
 import {logger} from "../../services/logger.js";
 
 const MONTH_ABBREVS: Record<string, number> =
@@ -156,8 +157,8 @@ export default class MigrateDates extends Command
 		"# Execute migration for one year",
 		"<%= config.bin %> <%= command.id %> --year 2017",
 		"",
-		"# Execute full migration with custom delay",
-		"<%= config.bin %> <%= command.id %> --delay 300",
+		"# Execute the full migration",
+		"<%= config.bin %> <%= command.id %>",
 	];
 
 	static override flags =
@@ -165,7 +166,7 @@ export default class MigrateDates extends Command
 		"dry-run": Flags.boolean(
 			{
 				char: "d",
-				description: "Parse and log all changes without making API calls",
+				description: "Parse and log all changes without writing anything",
 				default: false,
 			},
 		),
@@ -180,13 +181,6 @@ export default class MigrateDates extends Command
 			{
 				char: "b",
 				description: "Number of nodes to process before stopping (default: all)",
-			},
-		),
-		delay: Flags.integer(
-			{
-				char: "D",
-				description: "Milliseconds between API calls",
-				default: 1000,
 			},
 		),
 		year: Flags.integer(
@@ -348,15 +342,18 @@ export default class MigrateDates extends Command
 			this.error("WORKFLOWY_API_KEY environment variable is required");
 		}
 
-		const apiClient = new WorkflowyApiClient(apiKey, logger, process.env.WORKFLOWY_API_URL);
-		const cacheService = new CacheService(database);
-		const client = new WorkflowyWriteThroughClient(apiClient, cacheService);
+		const writes = openLocalWrites(
+			database,
+			new WorkflowyWriteThroughClient(
+				new WorkflowyApiClient(apiKey, logger, process.env.WORKFLOWY_API_URL),
+				new CacheService(database),
+			),
+		);
 
 		const batchSize = flags["batch-size"];
-		const {delay} = flags;
 		const toProcess = batchSize !== undefined && batchSize !== 0 ? parsed.slice(0, batchSize) : parsed;
 
-		this.log(`\nUpdating ${toProcess.length} nodes (delay: ${delay}ms)...`);
+		this.log(`\nUpdating ${toProcess.length} nodes...`);
 
 		let updated = 0;
 		let errors = 0;
@@ -365,7 +362,7 @@ export default class MigrateDates extends Command
 		{
 			try
 			{
-				await client.updateNode(
+				writes.local.updateNode(
 					node.id,
 					{
 						name: formatted,
@@ -384,20 +381,16 @@ export default class MigrateDates extends Command
 					`Failed to update "${node.name}" (${node.id}): ${error instanceof Error ? error.message : String(error)}`,
 				);
 			}
-
-			if (delay > 0)
-			{
-				await new Promise((resolve) =>
-				{
-					setTimeout(resolve, delay);
-				});
-			}
 		}
 
 		this.log(`\nDone: ${updated} updated, ${errors} errors`);
 		if (batchSize !== undefined && batchSize !== 0 && parsed.length > batchSize)
 		{
 			this.log(`Remaining: ${parsed.length - batchSize} nodes`);
+		}
+		if (updated > 0)
+		{
+			await drainAfterWrite(this, writes);
 		}
 	}
 }

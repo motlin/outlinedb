@@ -1,16 +1,18 @@
 /**
  * `GET /api/v1/inbox/share?title=&text=&url=` -> 302 to the Inbox: the web manifest's
  * Share to Workflowy target (a Web Share Target). The shared fields, blanks and a url the
- * text already holds left out, become one item at the top of the Inbox, which the adapter
- * finds. 400 when nothing was shared, 409 when workflowy.com has no Inbox, 503 without the
- * internal API.
+ * text already holds left out, become one item at the top of the Inbox, written locally (a
+ * mirror's write also queues outbox rows for the drain). 400 when nothing was shared, 409 when
+ * the outline has no Inbox, 503 for a mirror without the internal API.
  */
 
+import {findInbox} from "@outlinedb/shared/cache";
 import {InboxMissing} from "@outlinedb/shared/internal";
 import {z} from "zod";
 import type {ServerContext} from "../context.js";
 import {INTERNAL_API_NOT_CONFIGURED} from "../internal-api-error.js";
 import {defineOp, fail, ok} from "./define.js";
+import {getNodeWriter} from "./nodes-shared.js";
 import {NoContentSchema} from "./schemas.js";
 
 const NOTHING_SHARED = "Share a title, text or url";
@@ -42,7 +44,7 @@ export const inboxShare = defineOp(
 		),
 		/** The value is always null: the Inbox URL travels in `meta.redirect`. */
 		output: NoContentSchema,
-		async run(ctx: ServerContext, input)
+		run(ctx: ServerContext, input)
 		{
 			const name = sharedItemName(input);
 			if (name === undefined)
@@ -54,9 +56,8 @@ export const inboxShare = defineOp(
 					},
 				);
 			}
-			// Tree writes refresh the cache through the public API, so they need its key too.
-			const adapter = ctx.apiKey ? ctx.internalAdapter?.() : undefined;
-			if (!adapter)
+			const writer = getNodeWriter(ctx);
+			if (writer === undefined)
 			{
 				return fail(
 					503,
@@ -65,33 +66,29 @@ export const inboxShare = defineOp(
 					},
 				);
 			}
-			try
+			const inbox = findInbox(ctx.db);
+			if (inbox === undefined)
 			{
-				const {inboxId} = await adapter.addToInbox(
+				return fail(
+					409,
 					{
-						name,
-					},
-				);
-				return ok(
-					null,
-					{
-						redirect: `/#/${inboxId.slice(-12)}`,
+						error: new InboxMissing().message,
 					},
 				);
 			}
-			catch (error)
-			{
-				if (error instanceof InboxMissing)
+			writer.local.createAt(
 				{
-					return fail(
-						409,
-						{
-							error: error.message,
-						},
-					);
-				}
-				throw error;
-			}
+					parentId: inbox.id,
+					index: 0,
+					name,
+				},
+			);
+			return ok(
+				null,
+				{
+					redirect: `/#/${inbox.id.slice(-12)}`,
+				},
+			);
 		},
 	},
 );

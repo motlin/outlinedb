@@ -2,9 +2,11 @@ import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
+import {vi} from "vite-plus/test";
 import {provisionLocalAccount} from "@outlinedb/shared/cache";
 import type {LocalIdentity} from "@outlinedb/shared/cache";
 import * as schema from "@outlinedb/shared/db";
+import {readNodeConfig} from "../../src/server/config.js";
 import type {ServerMode} from "../../src/server/config.js";
 import {buildServerContext} from "../../src/server/context.js";
 import type {ServerContext} from "../../src/server/context.js";
@@ -20,7 +22,7 @@ const TEST_IDENTITY: LocalIdentity =
 	joinedAt: new Date("2023-11-14T22:13:20.000Z"),
 };
 
-function contextIn(mode: ServerMode): ServerContext
+function memoryDatabase()
 {
 	const db = drizzle(
 		new DatabaseConstructor(":memory:"),
@@ -34,9 +36,14 @@ function contextIn(mode: ServerMode): ServerContext
 			migrationsFolder,
 		},
 	);
+	return db;
+}
+
+function contextIn(mode: ServerMode): ServerContext
+{
 	return buildServerContext(
 		{
-			db,
+			db: memoryDatabase(),
 			config:
 			{
 				mode,
@@ -73,4 +80,50 @@ export function standaloneContext(identity: LocalIdentity | null = TEST_IDENTITY
 export function mirrorWithoutInternalApi(): ServerContext
 {
 	return contextIn("mirror");
+}
+
+/**
+ * A mirror Node host over a fresh in-memory database: an API key and a saved internal session, so its writes go to the
+ * local tables with outbox rows. `outboxWritten` records each drain trigger; no request reaches workflowy.com unless a
+ * test drains.
+ */
+export function mirrorContext(): ServerContext &
+{
+	outboxWritten: ReturnType<typeof vi.fn<() => void>>;
+}
+{
+	const ctx = buildServerContext(
+		{
+			db: memoryDatabase(),
+			config: readNodeConfig(
+				{
+					OUTLINEDB_MODE: "mirror",
+					WORKFLOWY_API_KEY: "test-key",
+				},
+			),
+			ladderEvents: new LadderEventBus(),
+			internalAuth:
+			{
+				sessionStore:
+				{
+					read: () => "sessionid=test",
+					write: () =>
+					{
+						// No login happens in a test.
+					},
+					clear: () =>
+					{
+						// No login happens in a test.
+					},
+				},
+			},
+		},
+	);
+	const outboxWritten = vi.fn<() => void>();
+	return Object.assign(
+		ctx,
+		{
+			outboxWritten,
+		},
+	);
 }

@@ -8,6 +8,7 @@ import * as schema from "@outlinedb/shared/db";
 import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import type {WorkflowyNode} from "@outlinedb/shared/types";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
+import {mirrorAccountContext} from "./helpers/mirror-account.js";
 import {httpAppFor} from "./http-app-for.js";
 
 const
@@ -363,13 +364,43 @@ describe("DELETE /api/v1/nodes/:id backlinks in mirror mode", () =>
 
 describe("PATCH /api/v1/nodes/home", () =>
 {
-	it("sets Home's layout to board through the root metadata", async () =>
+	/** A mirror whose root metadata holds `rootMetadata`, with workflowy.com down; requests go to its HTTP app. */
+	function mirrorHome(rootMetadata: Record<string, unknown>)
 	{
-		const {adapter, request} = setup(true);
+		const {ctx, adapter, local} = mirrorAccountContext(rootMetadata);
+		const app = httpAppFor(ctx);
+		const patch = async (body: unknown) =>
+		{
+			const res = await app.fetch(
+				new Request(
+					"http://x/api/v1/nodes/home",
+					{
+						method: "PATCH",
+						headers:
+						{
+							"content-type": "application/json",
+						},
+						body: JSON.stringify(body),
+					},
+				),
+			);
+			return {
+				status: res.status,
+				body: (await res.json()) as unknown,
+			};
+		};
+		return {
+			adapter,
+			local,
+			patch,
+		};
+	}
 
-		const res = await request(
-			"PATCH",
-			"/nodes/home",
+	it("sets a mirror's Home layout to board locally and records the root metadata path for the drain", async () =>
+	{
+		const {adapter, local, patch} = mirrorHome({});
+
+		const res = await patch(
 			{
 				layoutMode: "board",
 			},
@@ -378,7 +409,8 @@ describe("PATCH /api/v1/nodes/home", () =>
 		expect(
 			{
 				res,
-				calls: adapter.setNodeMetaValues.mock.calls,
+				pending: local.pendingRoot(),
+				pushed: adapter.setRootMetaValues.mock.calls,
 			},
 		).toStrictEqual(
 			{
@@ -390,28 +422,26 @@ describe("PATCH /api/v1/nodes/home", () =>
 						layoutMode: "board",
 					},
 				},
-				calls: [
-					[
-						"home",
-						[
-							{
-								path: ["layoutMode"],
-								value: "board",
-							},
-						],
-					],
+				pending: [
+					{
+						path: ["layoutMode"],
+						value: "board",
+					},
 				],
+				pushed: [],
 			},
 		);
 	});
 
-	it("removes the layoutMode key for bullets", async () =>
+	it("removes a mirror's Home layoutMode key locally for bullets", async () =>
 	{
-		const {adapter, request} = setup(true);
+		const {local, patch} = mirrorHome(
+			{
+				layoutMode: "board",
+			},
+		);
 
-		const res = await request(
-			"PATCH",
-			"/nodes/home",
+		const res = await patch(
 			{
 				layoutMode: "bullets",
 			},
@@ -420,7 +450,8 @@ describe("PATCH /api/v1/nodes/home", () =>
 		expect(
 			{
 				res,
-				calls: adapter.setNodeMetaValues.mock.calls,
+				pending: local.pendingRoot(),
+				rootMeta: local.rootMeta(),
 			},
 		).toStrictEqual(
 			{
@@ -432,17 +463,13 @@ describe("PATCH /api/v1/nodes/home", () =>
 						layoutMode: "bullets",
 					},
 				},
-				calls: [
-					[
-						"home",
-						[
-							{
-								path: ["layoutMode"],
-								value: undefined,
-							},
-						],
-					],
+				pending: [
+					{
+						path: ["layoutMode"],
+						value: undefined,
+					},
 				],
+				rootMeta: {},
 			},
 		);
 	});

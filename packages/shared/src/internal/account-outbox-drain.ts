@@ -2,7 +2,7 @@
  * The mirror-mode account outbox drain: read the pending account rows and bring workflowy.com up to the current local
  * value of each key. Root metadata paths go out as one edit of the root project, patched against a fresh bootstrap's
  * root metadata; legacy saved views as one `saved_views_json_delta`; settings as one `change_settings` POST each; and
- * expansion keys as one `project_expansions_delta`. A row closes once its request succeeded (the root edit once the
+ * expansion keys as one `project_expansions_delta`, and feature flags as one enable or disable POST each. A row closes once its request succeeded (the root edit once the
  * server run echoes it), unless its local value changed meanwhile, which leaves it pending for the next drain.
  *
  * Failures are never retried here (Craig approved re-delivery only on the next drain trigger, 2026-11-15): a failed
@@ -13,6 +13,7 @@ import
 {
 	canonicalValue,
 	closeAccountOutboxRows,
+	featureOn,
 	failAccountOutboxRows,
 	metadataAt,
 	readPendingAccountOutbox,
@@ -42,6 +43,8 @@ export interface AccountOutboxPusher extends Omit<OutboxPusher, "upstreamNode">
 	changeSetting(name: string, value: string): Promise<void>;
 	/** Push one `project_expansions_delta`. */
 	pushExpansions(delta: Record<string, boolean>): Promise<void>;
+	/** POST `/features/<enable|disable>/<codename>`. */
+	setFeature(codename: string, on: boolean): Promise<void>;
 }
 
 /** A row's current local value, as compared before and after its request. */
@@ -69,6 +72,10 @@ function localValue(
 		case "expansion":
 		{
 			return String(readExpansion(tx)?.has(key) ?? false);
+		}
+		case "feature":
+		{
+			return String(featureOn(snapshot?.settings.features, key));
 		}
 		default:
 		{
@@ -120,7 +127,7 @@ async function send(database: TemporalTransaction, step: Step, request: () => Pr
 
 /**
  * One drain pass over every pending account outbox row, in this order: root metadata, saved views, settings,
- * expansion. The first failed request stops the pass and throws.
+ * features, expansion. The first failed request stops the pass and throws.
  */
 export async function drainAccountOutbox(
 	database: TemporalTransaction,
@@ -231,6 +238,20 @@ export async function drainAccountOutbox(
 			await send(database, step, async () => pusher.changeSetting(row.key, wire));
 			result.ops += 1;
 		}
+		result.closed += closeDelivered(database, step);
+	}
+
+	for (const row of stepOf("feature").rows)
+	{
+		const on = featureOn(snapshot?.settings.features, row.key);
+		const step: Step =
+		{
+			rows: [row],
+			sent: new Map([[row, String(on)]]),
+		};
+		// oxlint-disable-next-line no-await-in-loop -- one POST per flag, stopping at the first failure
+		await send(database, step, async () => pusher.setFeature(row.key, on));
+		result.ops += 1;
 		result.closed += closeDelivered(database, step);
 	}
 

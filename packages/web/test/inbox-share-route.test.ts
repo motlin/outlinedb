@@ -1,71 +1,86 @@
 import {readFileSync} from "node:fs";
-import {describe, expect, it, vi} from "vite-plus/test";
+import {afterEach, beforeEach, describe, expect, it, vi} from "vite-plus/test";
+import {readPendingOutbox} from "@outlinedb/shared/cache";
 import {InboxMissing} from "@outlinedb/shared/internal";
-import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import type {ServerContext} from "../src/server/context.js";
 import {httpAppFor} from "./http-app-for.js";
+import {mirrorContext, mirrorWithoutInternalApi, standaloneContext} from "./helpers/local-context.js";
 
 const NOT_CONFIGURED =
 	"Workflowy internal API is not configured (set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD, or run './bin/run.js internal login')";
 const INBOX = "00000000-0000-4000-8000-0123456789ab";
 
-function setup(
-	options:
-	{
-		configured?: boolean;
-		add?: WorkflowyInternalAdapter["addToInbox"];
-	} = {},
-)
+/** Seed Home > Inbox > one existing item. */
+function seedInbox(ctx: ServerContext): void
 {
-	const configured = options.configured ?? true;
-	const adapter =
+	for (const [id, name, parentId] of [
+		[INBOX, "Inbox", null],
+		["existing", "Older item", INBOX],
+	] as const)
 	{
-		addToInbox: vi.fn<WorkflowyInternalAdapter["addToInbox"]>(
-			options.add ??
-				(async () =>
-					Promise.resolve(
-						{
-							inboxId: INBOX,
-							id: "new-item",
-						},
-					)),
-		),
-	};
-	const ctx =
-	{
-		apiKey: configured ? "key" : undefined,
-		internalAdapter: () => (configured ? (adapter as unknown as WorkflowyInternalAdapter) : undefined),
-	} as unknown as ServerContext;
-	const app = httpAppFor(ctx);
-	const share = async (query: string) =>
-	{
-		const res = await app.fetch(new Request(`http://x/api/v1/inbox/share${query}`));
-		return {
-			status: res.status,
-			location: res.headers.get("Location"),
-			body: res.status === 302 ? null : ((await res.json()) as unknown),
-		};
-	};
+		ctx.cacheService.insertNode(
+			{
+				id,
+				name,
+				note: null,
+				priority: 0,
+				createdAt: 1_600_000_000,
+				modifiedAt: 1_600_000_000,
+				completedAt: null,
+			},
+			parentId,
+		);
+	}
+}
+
+async function share(ctx: ServerContext, query: string)
+{
+	const res = await httpAppFor(ctx).fetch(new Request(`http://x/api/v1/inbox/share${query}`));
 	return {
-		adapter,
-		share,
+		status: res.status,
+		location: res.headers.get("Location"),
+		body: res.status === 302 ? null : ((await res.json()) as unknown),
 	};
+}
+
+/** The Inbox's children's names, top first. */
+function inboxNames(ctx: ServerContext): (string | null)[]
+{
+	return ctx.cacheService.getChildren(INBOX).map(({name}) => name);
 }
 
 describe("GET /api/v1/inbox/share", () =>
 {
-	it("adds the shared title, text and url as one Inbox item, HTML-escaped, then opens the Inbox", async () =>
+	beforeEach(() =>
 	{
-		const {adapter, share} = setup();
+		// workflowy.com is down; a share must not wait on it.
+		vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("workflowy.com is unreachable"));
+	});
+
+	afterEach(() =>
+	{
+		vi.restoreAllMocks();
+	});
+
+	it("adds the shared item at the top of a mirror's Inbox locally, with pending outbox rows, then opens the Inbox", async () =>
+	{
+		const ctx = mirrorContext();
+		seedInbox(ctx);
 
 		const response = await share(
+			ctx,
 			`?title=${encodeURIComponent("Tom & Jerry <3")}&text=${encodeURIComponent("A cartoon")}&url=${encodeURIComponent("https://example.com/a?b=1&c=2")}`,
 		);
+		await Promise.resolve();
 
+		const [created] = ctx.cacheService.getChildren(INBOX);
 		expect(
 			{
 				response,
-				calls: adapter.addToInbox.mock.calls,
+				names: inboxNames(ctx),
+				pending: readPendingOutbox(ctx.db, 100).map(({nodeId, aspect}) => [nodeId, aspect]),
+				drains: ctx.outboxWritten.mock.calls.length,
+				fetches: vi.mocked(globalThis.fetch).mock.calls.length,
 			},
 		).toStrictEqual(
 			{
@@ -75,50 +90,40 @@ describe("GET /api/v1/inbox/share", () =>
 					location: "/#/0123456789ab",
 					body: null,
 				},
-				calls: [
-					[
-						{
-							name: "Tom &amp; Jerry &lt;3 A cartoon https://example.com/a?b=1&amp;c=2",
-						},
-					],
+				names: ["Tom &amp; Jerry &lt;3 A cartoon https://example.com/a?b=1&amp;c=2", "Older item"],
+				pending: [
+					[created.id, "create"],
+					[created.id, "placement"],
 				],
+				drains: 1,
+				fetches: 0,
 			},
 		);
 	});
 
 	it("skips blank fields and a url the text already contains", async () =>
 	{
-		const {adapter, share} = setup();
+		const ctx = standaloneContext();
+		seedInbox(ctx);
 
 		await share(
+			ctx,
 			`?title=&text=${encodeURIComponent("Look https://example.com")}&url=${encodeURIComponent("https://example.com")}`,
 		);
-		await share(`?url=${encodeURIComponent("https://example.com")}`);
+		await share(ctx, `?url=${encodeURIComponent("https://example.com")}`);
 
-		expect(adapter.addToInbox.mock.calls).toStrictEqual([
-			[
-				{
-					name: "Look https://example.com",
-				},
-			],
-			[
-				{
-					name: "https://example.com",
-				},
-			],
-		]);
+		expect(inboxNames(ctx)).toStrictEqual(["https://example.com", "Look https://example.com", "Older item"]);
 	});
 
-	it("answers 400 without calling the adapter when nothing was shared", async () =>
+	it("answers 400 without writing when nothing was shared", async () =>
 	{
-		const {adapter, share} = setup();
-
-		const response = await share("?title=%20&text=");
+		const ctx = standaloneContext();
+		seedInbox(ctx);
 
 		expect(
 			{
-				response,
-				calls: adapter.addToInbox.mock.calls,
+				response: await share(ctx, "?title=%20&text="),
+				names: inboxNames(ctx),
 			},
 		).toStrictEqual(
 			{
@@ -131,40 +136,39 @@ describe("GET /api/v1/inbox/share", () =>
 						error: "Share a title, text or url",
 					},
 				},
-				calls: [],
+				names: ["Older item"],
 			},
 		);
 	});
 
-	it("answers 409 when workflowy.com has no Inbox", async () =>
+	it("answers 409 when the outline has no Inbox", async () =>
 	{
-		const {share} = setup(
-			{
-				add: async () => Promise.reject(new InboxMissing()),
-			},
-		);
+		const ctx = mirrorContext();
 
-		await expect(share("?text=hi")).resolves.toStrictEqual(
+		expect(
 			{
-				status: 409,
-				location: null,
-				body:
+				response: await share(ctx, "?text=hi"),
+				pending: readPendingOutbox(ctx.db, 100),
+			},
+		).toStrictEqual(
+			{
+				response:
 				{
-					error: new InboxMissing().message,
+					status: 409,
+					location: null,
+					body:
+					{
+						error: new InboxMissing().message,
+					},
 				},
+				pending: [],
 			},
 		);
 	});
 
-	it("answers 503 without the internal API", async () =>
+	it("answers 503 for a mirror without the internal API", async () =>
 	{
-		const {share} = setup(
-			{
-				configured: false,
-			},
-		);
-
-		await expect(share("?text=hi")).resolves.toStrictEqual(
+		await expect(share(mirrorWithoutInternalApi(), "?text=hi")).resolves.toStrictEqual(
 			{
 				status: 503,
 				location: null,

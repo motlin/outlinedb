@@ -101,6 +101,7 @@ function setup(rootMetadata: Record<string, unknown>, settings: Record<string, u
 	const pushes: InternalOp[][] = [];
 	const settingPosts: [string, string][] = [];
 	const expansionPushes: Record<string, boolean>[] = [];
+	const featurePosts: [string, boolean][] = [];
 	/** A fake workflowy.com whose root metadata is `upstream`; `fail` makes every request reject with it. */
 	const pusher = (upstream: Record<string, unknown>, fail?: Error, echo = true): AccountOutboxPusher => (
 	{
@@ -139,6 +140,11 @@ function setup(rootMetadata: Record<string, unknown>, settings: Record<string, u
 			expansionPushes.push(delta);
 			return Promise.resolve();
 		},
+		setFeature: async (codename, on) =>
+		{
+			featurePosts.push([codename, on]);
+			return fail === undefined ? Promise.resolve() : Promise.reject(fail);
+		},
 	});
 	const drain = async (target: AccountOutboxPusher) =>
 	{
@@ -153,6 +159,7 @@ function setup(rootMetadata: Record<string, unknown>, settings: Record<string, u
 		pushes,
 		settingPosts,
 		expansionPushes,
+		featurePosts,
 		pusher,
 		drain,
 	};
@@ -375,6 +382,61 @@ describe("drainAccountOutbox", () =>
 		);
 	});
 
+	it("sends each pending feature flag as one enable or disable call with its local value, then closes its row", async () =>
+	{
+		const {account, pending, featurePosts, pusher, drain} = setup(
+			{},
+			{
+				features:
+				{
+					dates: true,
+				},
+			},
+		);
+		account.setFeature("dashboards", true);
+		tick();
+		account.setFeature("dates", false);
+		tick();
+		account.setFeature("dashboards", false);
+		const pendingBefore = pending();
+
+		const result = await drain(pusher({}));
+
+		expect(
+			{
+				pendingBefore,
+				result,
+				featurePosts,
+				pendingAfter: pending(),
+			},
+		).toStrictEqual(
+			{
+				pendingBefore: [
+					{
+						subject: "feature",
+						key: "dashboards",
+						lastError: null,
+					},
+					{
+						subject: "feature",
+						key: "dates",
+						lastError: null,
+					},
+				],
+				result:
+				{
+					ops: 2,
+					closed: 2,
+				},
+				featurePosts: [
+					["dashboards", false],
+					["dates", false],
+				],
+				pendingAfter: [],
+			},
+		);
+	});
+
 	it("records a failed request as last_error on its rows, keeps them pending, surfaces it in the status, and throws", async () =>
 	{
 		const {database, account, pending, pushes, pusher, drain} = setup({});
@@ -547,6 +609,46 @@ describe("refreshes keep pending account state", () =>
 				{
 					theme: "dark",
 					font: "etBook",
+				},
+			},
+		);
+	});
+
+	it("a fresh upstream snapshot keeps each pending feature flag at its local value", () =>
+	{
+		const {database, account} = setup(
+			{},
+			{
+				features:
+				{
+					dates: true,
+				},
+			},
+		);
+		account.setFeature("dashboards", true);
+		tick();
+
+		const merged = withPendingAccountState(
+			database,
+			snapshot(
+				{},
+				{
+					features:
+					{
+						dates: "yes",
+						table: true,
+					},
+				},
+			),
+		);
+
+		expect(merged.settings).toStrictEqual(
+			{
+				features:
+				{
+					dates: true,
+					table: true,
+					dashboards: true,
 				},
 			},
 		);

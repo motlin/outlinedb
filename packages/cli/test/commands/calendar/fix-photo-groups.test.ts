@@ -1,8 +1,6 @@
 import {beforeEach, vi, afterEach, expect, describe, it} from "vite-plus/test";
 import {captureOutput} from "@oclif/test";
-import {nodeContent} from "@outlinedb/shared/db";
 import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
-import {and, eq} from "drizzle-orm";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -11,14 +9,8 @@ import FixPhotoGroups from "../../../src/commands/calendar/fix-photo-groups.js";
 import {cleanupTestDatabase, createTestDatabase, nodeFixtures, seedTestData} from "../../db/migration-helper.js";
 import type {TestDatabase} from "../../db/migration-helper.js";
 import {createTestNode} from "../../helpers/node-fixtures.js";
-import {requestJson} from "../../helpers/request-body.js";
-
-interface RecordedRequest
-{
-	url: string;
-	method: string;
-	body: unknown;
-}
+import {fakeUpstream, pendingOutbox} from "../../helpers/upstream-outbox.js";
+import {CacheService} from "../../../src/services/cache.js";
 
 function s3File(nodeId: string, fileName: string, systemFrom = systemTimeAt("2026-01-01 00:00:00.000"))
 {
@@ -103,10 +95,42 @@ function seedWrappedGroup(testDatabase: TestDatabase)
 describe("calendar:fix-photo-groups command", () =>
 {
 	let originalEnv: typeof process.env;
-	let fetchStub: MockInstance;
+	let fetchStub: MockInstance<typeof fetch>;
 	let tempDir: string;
 	let testDatabase: TestDatabase;
-	let requests: RecordedRequest[];
+
+	/** Run the command against a workflowy.com that rejects every push, so its writes stay pending locally. */
+	async function runWithFailingUpstream(args: string[])
+	{
+		const upstream = fakeUpstream(
+			fetchStub,
+			testDatabase,
+			tempDir,
+			{
+				failPush: true,
+			},
+		);
+		const {error} = await captureOutput(async () =>
+		{
+			await FixPhotoGroups.run(args);
+		});
+		return {
+			exit: error?.oclif?.exit,
+			pushes: upstream.pushes,
+		};
+	}
+
+	/** A node's live children, in order. */
+	function childIds(parentId: string): string[]
+	{
+		return new CacheService(testDatabase.db).getChildren(parentId).map(({id}) => id);
+	}
+
+	/** The pending outbox rows as `[node, aspect]`, oldest first (one write's rows by node id). */
+	function pending(): string[][]
+	{
+		return pendingOutbox(testDatabase).map(({nodeId, aspect}) => [nodeId, aspect]);
+	}
 
 	beforeEach(() =>
 	{
@@ -125,91 +149,8 @@ describe("calendar:fix-photo-groups command", () =>
 		// developer's machine.
 		process.env.OUTLINEDB_BACKUPS_DIR = path.join(tempDir, "backups");
 
-		requests = [];
-		const movedToBottom: string[] = [];
-		fetchStub = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) =>
-		{
-			const urlString = url instanceof Request ? url.url : String(url);
-			const method = init?.method ?? "GET";
-			requests.push(
-				{
-					url: urlString,
-					method,
-					body: requestJson(init),
-				},
-			);
-
-			const {pathname, searchParams} = new URL(urlString);
-			const nodeId = pathname.split("/")[4]!;
-			if (method === "POST" && pathname.endsWith("/move"))
-			{
-				movedToBottom.push(nodeId);
-			}
-			// Every write here is a move to the bottom of "entry", so a moved node sits
-			// below the rest in move order.
-			const apiNode = (id: string, parentId: string) => (
-			{
-				id,
-				name: "",
-				parent_id: parentId,
-				priority: movedToBottom.includes(id) ? 1000 + movedToBottom.indexOf(id) * 100 : 0,
-				completed: false,
-				createdAt: 1_700_000_000_000,
-				modifiedAt: 1_700_000_000_000,
-				completedAt: null,
-				data: {},
-			});
-			const parentId = searchParams.get("parent_id");
-			if (method === "GET" && parentId !== null)
-			{
-				// Workflowy lists the cached children with every move applied: a moved node leaves its old parent for "entry".
-				const cached = testDatabase.db
-					.select(
-						{
-							id: nodeContent.id,
-						},
-					)
-					.from(nodeContent)
-					.where(and(eq(nodeContent.parentId, parentId), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
-					.all()
-					.map(({id}) => id)
-					.filter((id) => !movedToBottom.includes(id));
-				const ids = parentId === "entry" ? [...cached, ...movedToBottom] : cached;
-				const nodes = ids.map((id) => apiNode(id, parentId));
-				return Promise.resolve(
-					Response.json(
-						{
-							nodes,
-						},
-						{
-							status: 200,
-						},
-					),
-				);
-			}
-			if (method === "GET")
-			{
-				return Promise.resolve(
-					Response.json(
-						{
-							node: apiNode(nodeId, "entry"),
-						},
-						{
-							status: 200,
-						},
-					),
-				);
-			}
-
-			return Promise.resolve(
-				Response.json(
-					{},
-					{
-						status: 200,
-					},
-				),
-			);
-		});
+		// Nothing reaches workflowy.com unless a test fakes it; a write test fakes it rejecting every push.
+		fetchStub = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("unexpected request"));
 	});
 
 	afterEach(() =>
@@ -243,46 +184,33 @@ describe("calendar:fix-photo-groups command", () =>
 		expect(fetchStub.mock.calls).toStrictEqual([]);
 	});
 
-	it("unwraps and reverses a wrapped group, then deletes the wrapper", async () =>
+	it("unwraps and reverses a wrapped group, then deletes the wrapper, locally first", async () =>
 	{
 		seedWrappedGroup(testDatabase);
 
-		await captureOutput(async () =>
-		{
-			await FixPhotoGroups.run(["--delay", "0"]);
-		});
+		const result = await runWithFailingUpstream([]);
 
-		const writes = requests
-			.filter((request) => request.method === "POST" || request.method === "DELETE")
-			.map((request) => [request.method, request.url.replace(/^.*\/api\/v1/u, ""), request.body]);
-
-		expect(writes).toStrictEqual([
-			[
-				"POST",
-				"/nodes/photo-3/move",
-				{
-					parent_id: "entry",
-					position: "bottom",
-				},
-			],
-			[
-				"POST",
-				"/nodes/photo-2/move",
-				{
-					parent_id: "entry",
-					position: "bottom",
-				},
-			],
-			[
-				"POST",
-				"/nodes/photo-1/move",
-				{
-					parent_id: "entry",
-					position: "bottom",
-				},
-			],
-			["DELETE", "/nodes/wrapper", undefined],
-		]);
+		expect(
+			{
+				...result,
+				entry: childIds("entry"),
+				wrapper: new CacheService(testDatabase.db).getNode("wrapper"),
+				pending: pending(),
+			},
+		).toStrictEqual(
+			{
+				exit: 1,
+				pushes: [],
+				entry: ["photo-3", "photo-2", "photo-1"],
+				wrapper: undefined,
+				pending: [
+					["photo-1", "placement"],
+					["photo-2", "placement"],
+					["photo-3", "placement"],
+					["wrapper", "delete"],
+				],
+			},
+		);
 	});
 
 	it("reverses a loose group in place without deleting anything", async () =>
@@ -326,33 +254,25 @@ describe("calendar:fix-photo-groups command", () =>
 			},
 		);
 
-		await captureOutput(async () =>
-		{
-			await FixPhotoGroups.run(["--delay", "0"]);
-		});
+		const result = await runWithFailingUpstream([]);
 
-		const writes = requests
-			.filter((request) => request.method === "POST" || request.method === "DELETE")
-			.map((request) => [request.method, request.url.replace(/^.*\/api\/v1/u, ""), request.body]);
-
-		expect(writes).toStrictEqual([
-			[
-				"POST",
-				"/nodes/photo-2/move",
-				{
-					parent_id: "entry",
-					position: "bottom",
-				},
-			],
-			[
-				"POST",
-				"/nodes/photo-1/move",
-				{
-					parent_id: "entry",
-					position: "bottom",
-				},
-			],
-		]);
+		expect(
+			{
+				...result,
+				entry: childIds("entry"),
+				pending: pending(),
+			},
+		).toStrictEqual(
+			{
+				exit: 1,
+				pushes: [],
+				entry: ["photo-2", "photo-1"],
+				pending: [
+					["photo-1", "placement"],
+					["photo-2", "placement"],
+				],
+			},
+		);
 	});
 
 	it("leaves a loose group alone when its filenames give no ordering evidence", async () =>
@@ -398,7 +318,7 @@ describe("calendar:fix-photo-groups command", () =>
 
 		const {stdout} = await captureOutput(async () =>
 		{
-			await FixPhotoGroups.run(["--delay", "0"]);
+			await FixPhotoGroups.run([]);
 		});
 
 		expect(stdout).toBe(
@@ -450,7 +370,7 @@ describe("calendar:fix-photo-groups command", () =>
 
 		await captureOutput(async () =>
 		{
-			await FixPhotoGroups.run(["--delay", "0"]);
+			await FixPhotoGroups.run([]);
 		});
 
 		expect(fetchStub.mock.calls).toStrictEqual([]);
@@ -541,16 +461,25 @@ describe("calendar:fix-photo-groups command", () =>
 			},
 		);
 
-		await captureOutput(async () =>
-		{
-			await FixPhotoGroups.run(["--node-id", "eeeeeeeeeeee", "--delay", "0"]);
-		});
+		await runWithFailingUpstream(["--node-id", "eeeeeeeeeeee"]);
 
-		const movedIds = requests
-			.filter((request) => request.url.includes("/move"))
-			.map((request) => request.url.split("/nodes/")[1]?.replace("/move", ""));
-
-		expect(movedIds).toStrictEqual(["photo-2", "photo-1"]);
+		expect(
+			{
+				entry: childIds("entry"),
+				otherWrapper: childIds("other-wrapper"),
+				pending: pending(),
+			},
+		).toStrictEqual(
+			{
+				entry: ["photo-2", "photo-1"],
+				otherWrapper: ["photo-3", "photo-4"],
+				pending: [
+					["photo-1", "placement"],
+					["photo-2", "placement"],
+					[wrapperId, "delete"],
+				],
+			},
+		);
 	});
 
 	it("resolves a short ID for a dry run without an API key", async () =>
@@ -620,8 +549,6 @@ describe("calendar:fix-photo-groups command", () =>
 		delete process.env.WORKFLOWY_API_KEY;
 		seedWrappedGroup(testDatabase);
 
-		await expect(FixPhotoGroups.run(["--delay", "0"])).rejects.toThrow(
-			"WORKFLOWY_API_KEY environment variable is required",
-		);
+		await expect(FixPhotoGroups.run([])).rejects.toThrow("WORKFLOWY_API_KEY environment variable is required");
 	});
 });

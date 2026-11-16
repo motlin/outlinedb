@@ -2,7 +2,7 @@ import {z} from "zod";
 import {readEnabledFeatures, writeEnabledFeatures} from "@outlinedb/shared/cache";
 import type {TemporalTransaction} from "@outlinedb/shared/cache";
 import {DEFAULT_FEATURES, VISIBLE_FEATURES} from "../../feature-catalog.js";
-import {accountStateUnavailable} from "../account-state.js";
+import {withAccountState} from "../account-state.js";
 import {defineOp, ok, toJson} from "./define.js";
 
 const CODENAME = /^[a-z0-9_-]+$/u;
@@ -86,8 +86,8 @@ export const featuresGet = defineOp(
 );
 
 /**
- * Turns a feature on or off: through the account in a mirror (503 without the internal API, so it never diverges from
- * workflowy.com), or in the local `enabled_features` in a standalone context.
+ * Turns a feature on or off in the local `enabled_features`. A mirror's write also records an account outbox row, which
+ * the drain delivers as upstream's enable or disable POST (503 without the internal API, which could never deliver it).
  */
 export const featuresSet = defineOp(
 	{
@@ -104,14 +104,17 @@ export const featuresSet = defineOp(
 		{
 			if (ctx.mode !== "standalone")
 			{
-				const adapter = ctx.internalAdapter?.();
-				return adapter
-					? ok(
+				return withAccountState(ctx, async (state) =>
+				{
+					state.setFeature(codename, on);
+					return Promise.resolve(
+						ok(
 							{
-								enabled: await adapter.setFeature(codename, on),
+								enabled: state.enabledFeatures(),
 							},
-						)
-					: accountStateUnavailable();
+						),
+					);
+				});
 			}
 			const next =
 			{

@@ -13,7 +13,7 @@ import {mirrors as mirrorsTable, nodeContent, nodeMetadata} from "@outlinedb/sha
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import type {Node} from "@outlinedb/shared/types";
 import {HOME_TARGET} from "@outlinedb/shared/types";
-import {isShortId, parseVirtualShortId, upstreamExpansionKey} from "@outlinedb/shared/workflowy";
+import {parseVirtualShortId, upstreamExpansionKey} from "@outlinedb/shared/workflowy";
 import {and, eq, sql} from "drizzle-orm";
 import type
 {
@@ -55,7 +55,6 @@ import
 import
 {
 	getAdapter,
-	getWriteClient,
 	loadInternalMetadataFields,
 	nodeToRestDto,
 	readChildDtoLists,
@@ -442,25 +441,6 @@ function viewExpansion(ctx: ServerContext):
 			};
 }
 
-/** Fetch a node missing from the cache through the write-through client, cache it with its ancestors, and read it. */
-async function readUncachedNodeLive(ctx: ServerContext, id: string): Promise<NodeResponse | undefined>
-{
-	const client = getWriteClient(ctx);
-	if (client === undefined)
-	{
-		return undefined;
-	}
-	try
-	{
-		await client.cacheLiveNode(id);
-	}
-	catch
-	{
-		return undefined;
-	}
-	return readNodeDto(ctx, id);
-}
-
 // GET /api/v1/nodes/:id - Get single node (accepts UUID or short ID)
 export const nodesGet = defineOp(
 	{
@@ -479,13 +459,9 @@ export const nodesGet = defineOp(
 				);
 			}
 
-			let nodeResponse = await readNodeDto(ctx, id);
-			// A full uuid the cache lacks (a pasted link, a backlink to a node made elsewhere) is read live and cached with
-			// its parent chain. The API cannot resolve short ids, so those stay cache-only; a real 404 stays a 404.
-			if (nodeResponse === undefined && id === rawId && !isShortId(rawId))
-			{
-				nodeResponse = await readUncachedNodeLive(ctx, id);
-			}
+			// Our tables are the source of truth: a node they lack is a 404, never read live from workflowy.com, whose
+			// write into the tables would bypass the outbox merge. A node made on workflowy.com arrives with the catch-up.
+			const nodeResponse = await readNodeDto(ctx, id);
 			if (nodeResponse === undefined)
 			{
 				return fail(

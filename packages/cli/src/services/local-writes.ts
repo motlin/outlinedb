@@ -1,7 +1,9 @@
 import type {Command} from "@oclif/core";
 import
 {
+	AccountOutboxRecorder,
 	findInbox,
+	LocalAccount,
 	listPendingOutbox,
 	LocalTreeWriter,
 	OutboxRecorder,
@@ -76,6 +78,21 @@ export function localCalendar(writes: LocalWrites): LocalCalendar
 			outbox: new OutboxRecorder(),
 			account: writes.adapter,
 			createRoot: false,
+		},
+	);
+}
+
+/**
+ * The account state of `writes` in the local tables, loaded through the adapter first (a bootstrap when missing):
+ * its writes record account outbox rows, which the command's drain delivers with the node rows.
+ */
+export async function localAccount(writes: LocalWrites): Promise<LocalAccount>
+{
+	await writes.adapter.loadAccountState();
+	return new LocalAccount(
+		writes.database,
+		{
+			outbox: new AccountOutboxRecorder(),
 		},
 	);
 }

@@ -1,7 +1,6 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from "vite-plus/test";
 import {captureOutput} from "@oclif/test";
-import {storeInternalMetadata} from "@outlinedb/shared/cache";
-import {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
+import {readInternalMetadata, storeInternalMetadata} from "@outlinedb/shared/cache";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -9,6 +8,7 @@ import CalendarAudit from "../../../src/commands/calendar/audit.js";
 import {cleanupTestDatabase, createTestDatabase, nodeFixtures, seedTestData} from "../../db/migration-helper.js";
 import type {TestDatabase} from "../../db/migration-helper.js";
 import {createTestNode} from "../../helpers/node-fixtures.js";
+import {fakeUpstream, pendingOutbox} from "../../helpers/upstream-outbox.js";
 
 const JAN15 = '<time startYear="2026" startMonth="1" startDay="15">Thu, Jan 15, 2026</time>';
 const jan15Tag =
@@ -173,27 +173,41 @@ describe("calendar audit command", () =>
 		]);
 	});
 
-	it("--fix adopts the untagged day only", async () =>
+	it("--fix adopts the untagged day only, locally first, and keeps it pending when workflowy.com rejects the drain", async () =>
 	{
 		seedJan15Case();
-		const setMeta = vi.spyOn(WorkflowyInternalAdapter.prototype, "setNodeMetaValues").mockResolvedValue();
+		const upstream = fakeUpstream(
+			vi.spyOn(globalThis, "fetch"),
+			testDatabase,
+			tempDir,
+			{
+				failPush: true,
+			},
+		);
 
-		await captureOutput(async () =>
+		const {error} = await captureOutput(async () =>
 		{
 			await CalendarAudit.run(["--json", "--fix"]);
 		});
 
-		expect(setMeta.mock.calls).toStrictEqual([
-			[
-				"outer",
-				[
-					{
-						path: ["calendar"],
-						value: jan15Tag,
-					},
-				],
-			],
-		]);
+		expect(
+			{
+				exit: error?.oclif?.exit,
+				outer: readInternalMetadata(testDatabase.db, ["outer"]).get("outer"),
+				pushes: upstream.pushes,
+				pending: pendingOutbox(testDatabase).map(({nodeId, aspect}) => [nodeId, aspect]),
+			},
+		).toStrictEqual(
+			{
+				exit: 1,
+				outer:
+				{
+					calendar: jan15Tag,
+				},
+				pushes: [],
+				pending: [["outer", "metadata"]],
+			},
+		);
 	});
 
 	it("audits the root given by --root-id", async () =>

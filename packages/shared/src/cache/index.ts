@@ -140,6 +140,8 @@ export
 	replaceExpansion,
 	resolveExpandedIds,
 } from "./expansion-store.js";
+export {backfillCalendarMetadata} from "./calendar-metadata-backfill.js";
+export type {CalendarBackfillAccount, CalendarBackfillResult} from "./calendar-metadata-backfill.js";
 export {LocalAccount, provisionLocalAccount, withRootMetaChanges, withSetting} from "./local-account.js";
 export type {LocalAccountOptions, LocalIdentity} from "./local-account.js";
 export {markWhatsNewRead, readWhatsNewReads} from "./whats-new-store.js";

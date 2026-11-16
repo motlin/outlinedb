@@ -6,6 +6,7 @@ import {Command, Flags} from "@oclif/core";
 import {sql} from "drizzle-orm";
 import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";
+import {drainAfterWrite, localDeletePlan, openLocalWrites} from "../../services/local-writes.js";
 import {logger} from "../../services/logger.js";
 import
 {
@@ -16,9 +17,6 @@ import
 } from "../../services/photo-groups.js";
 import type {CachedNodeRow, PhotoGroup} from "../../services/photo-groups.js";
 import {listBackups, resolveBackupsDirectory} from "../../utils/backup-archive.js";
-
-/** Position argument for the move API: negative is top, zero or more is bottom. */
-const MOVE_TO_BOTTOM = 0;
 
 interface CandidateRow
 {
@@ -204,7 +202,7 @@ export default class FixPhotoGroups extends Command
 		"dry-run": Flags.boolean(
 			{
 				char: "d",
-				description: "Report the groups and planned order without making API calls",
+				description: "Report the groups and planned order without writing anything",
 				default: false,
 			},
 		),
@@ -217,13 +215,6 @@ export default class FixPhotoGroups extends Command
 			{
 				char: "b",
 				description: "Number of groups to fix before stopping (default: all)",
-			},
-		),
-		delay: Flags.integer(
-			{
-				char: "D",
-				description: "Milliseconds between API calls",
-				default: 1000,
 			},
 		),
 	};
@@ -316,9 +307,13 @@ export default class FixPhotoGroups extends Command
 			this.error("WORKFLOWY_API_KEY environment variable is required");
 		}
 
-		const apiClient = new WorkflowyApiClient(apiKey, logger, process.env.WORKFLOWY_API_URL);
-		const client = new WorkflowyWriteThroughClient(apiClient, cacheService);
-		const {delay} = flags;
+		const writes = openLocalWrites(
+			database,
+			new WorkflowyWriteThroughClient(
+				new WorkflowyApiClient(apiKey, logger, process.env.WORKFLOWY_API_URL),
+				cacheService,
+			),
+		);
 
 		let fixed = 0;
 		let errors = 0;
@@ -327,19 +322,14 @@ export default class FixPhotoGroups extends Command
 		{
 			try
 			{
-				// Appending to the bottom in target order lays the photos out in that
-				// order, whether they are leaving a wrapper or being reordered in place.
-				for (const id of plan.orderedIds)
-				{
-					await client.moveNode(id, group.entryId, MOVE_TO_BOTTOM);
-					if (delay > 0)
+				// Moving to the bottom in target order lays the photos out in that order, whether they are leaving a
+				// wrapper or being reordered in place.
+				writes.local.moveTo(
 					{
-						await new Promise((resolve) =>
-						{
-							setTimeout(resolve, delay);
-						});
-					}
-				}
+						ids: plan.orderedIds,
+						parentId: group.entryId,
+					},
+				);
 
 				if (group.wrapperId)
 				{
@@ -350,7 +340,7 @@ export default class FixPhotoGroups extends Command
 					}
 					else
 					{
-						await client.deleteNode(group.wrapperId);
+						writes.local.deleteNode(group.wrapperId, await localDeletePlan(cacheService, group.wrapperId));
 					}
 				}
 
@@ -367,5 +357,9 @@ export default class FixPhotoGroups extends Command
 		}
 
 		this.log(`\nDone: ${fixed} groups fixed, ${errors} errors`);
+		if (fixed > 0)
+		{
+			await drainAfterWrite(this, writes);
+		}
 	}
 }

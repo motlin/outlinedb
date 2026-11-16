@@ -1,16 +1,11 @@
 import {WorkflowyApiClient} from "@outlinedb/shared/api";
-import {WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
-import {internalAdapter} from "@outlinedb/shared/node";
+import {backfillCalendarMetadata, WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
+import type {CalendarBackfillResult} from "@outlinedb/shared/cache";
 import {Command, Flags} from "@oclif/core";
 import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";
+import {drainAfterWrite, localAccount, openLocalWrites} from "../../services/local-writes.js";
 import {logger} from "../../services/logger.js";
-
-export interface CalendarBackfillResult
-{
-	timestamps: string[];
-	dateIds: string[];
-}
 
 function nodes(count: number): string
 {
@@ -20,7 +15,7 @@ function nodes(count: number): string
 export default class CalendarBackfillMetadata extends Command
 {
 	static override description =
-		"Run workflowy.com's one-time calendar migrations: add calendar.timestamp, then calendar.dateId, to 📆 Calendar level nodes missing them, each only while root metadata lacks its calendar.ts_added_v2 / calendar.dateId_added_v1 flag, which is set after";
+		"Run workflowy.com's one-time calendar migrations locally, then deliver them: add calendar.timestamp, then calendar.dateId, to 📆 Calendar level nodes missing them, each only while root metadata lacks its calendar.ts_added_v2 / calendar.dateId_added_v1 flag, which is set after";
 
 	static override examples = [
 		"<%= config.bin %> <%= command.id %>",
@@ -53,19 +48,18 @@ export default class CalendarBackfillMetadata extends Command
 			this.error("WORKFLOWY_API_KEY environment variable is required");
 		}
 		const database = createDatabase();
-		const writeThrough = new WorkflowyWriteThroughClient(
-			new WorkflowyApiClient(apiKey, logger, process.env.WORKFLOWY_API_URL),
-			new CacheService(database),
+		const writes = openLocalWrites(
+			database,
+			new WorkflowyWriteThroughClient(
+				new WorkflowyApiClient(apiKey, logger, process.env.WORKFLOWY_API_URL),
+				new CacheService(database),
+			),
 		);
-		const adapter = internalAdapter(database, writeThrough);
-		if (adapter === undefined)
-		{
-			this.error(
-				"calendar backfill-metadata needs the internal API: set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD in the environment (e.g. from .envrc)",
-			);
-		}
-		const result = await adapter.backfillCalendarMetadata(
+		const result = await backfillCalendarMetadata(
 			{
+				db: database,
+				writer: writes.local,
+				account: await localAccount(writes),
 				force: flags.force,
 			},
 		);
@@ -79,6 +73,7 @@ export default class CalendarBackfillMetadata extends Command
 				`Added calendar.timestamp to ${nodes(result.timestamps.length)} and calendar.dateId to ${nodes(result.dateIds.length)}`,
 			);
 		}
+		await drainAfterWrite(this, writes);
 		return result;
 	}
 }

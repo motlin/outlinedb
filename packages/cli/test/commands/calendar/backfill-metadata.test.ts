@@ -3,10 +3,11 @@ import {captureOutput} from "@oclif/test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
+import {readAccountSnapshot, readPendingAccountOutbox} from "@outlinedb/shared/cache";
 import CalendarBackfillMetadata from "../../../src/commands/calendar/backfill-metadata.js";
 import {cleanupTestDatabase, createTestDatabase} from "../../db/migration-helper.js";
 import type {TestDatabase} from "../../db/migration-helper.js";
+import {fakeUpstream} from "../../helpers/upstream-outbox.js";
 
 describe("calendar backfill-metadata command", () =>
 {
@@ -44,83 +45,57 @@ describe("calendar backfill-metadata command", () =>
 		);
 	});
 
-	it("runs the flag-gated backfills and prints what gained a timestamp or dateId as JSON", async () =>
+	it("runs the flag-gated backfills locally, prints the result, and keeps the flags pending when workflowy.com rejects the drain", async () =>
 	{
-		const backfill = vi.spyOn(WorkflowyInternalAdapter.prototype, "backfillCalendarMetadata").mockResolvedValue(
+		const upstream = fakeUpstream(
+			vi.spyOn(globalThis, "fetch"),
+			testDatabase,
+			tempDir,
 			{
-				timestamps: ["d"],
-				dateIds: ["m", "d"],
+				failPush: true,
 			},
 		);
-		process.env.WORKFLOWY_USERNAME = "alice@example.com";
-		process.env.WORKFLOWY_PASSWORD = "secret";
 
-		const {stdout} = await captureOutput(async () =>
+		const {stdout, error} = await captureOutput(async () =>
 		{
 			await CalendarBackfillMetadata.run(["--json"]);
 		});
 
 		expect(
 			{
-				calls: backfill.mock.calls,
 				out: JSON.parse(stdout),
+				exit: error?.oclif?.exit,
+				pushes: upstream.pushes,
+				pending: readPendingAccountOutbox(testDatabase.db).map(({subject, key}) => [
+					subject,
+					key.replaceAll("\u001F", "."),
+				]),
+				calendar: readAccountSnapshot(testDatabase.db)?.rootMetadata.calendar,
 			},
 		).toStrictEqual(
 			{
-				calls: [
-					[
-						{
-							force: false,
-						},
-					],
-				],
 				out:
 				{
-					timestamps: ["d"],
-					dateIds: ["m", "d"],
+					timestamps: [],
+					dateIds: [],
 				},
-			},
-		);
-	});
-
-	it("passes --force through and prints counts in text mode", async () =>
-	{
-		const backfill = vi.spyOn(WorkflowyInternalAdapter.prototype, "backfillCalendarMetadata").mockResolvedValue(
-			{
-				timestamps: [],
-				dateIds: ["m"],
-			},
-		);
-		process.env.WORKFLOWY_USERNAME = "alice@example.com";
-		process.env.WORKFLOWY_PASSWORD = "secret";
-
-		const {stdout} = await captureOutput(async () =>
-		{
-			await CalendarBackfillMetadata.run(["--force"]);
-		});
-
-		expect(
-			{
-				calls: backfill.mock.calls,
-				stdout,
-			},
-		).toStrictEqual(
-			{
-				calls: [
-					[
-						{
-							force: true,
-						},
-					],
+				exit: 1,
+				pushes: [],
+				pending: [
+					["root_metadata", "calendar.ts_added_v2"],
+					["root_metadata", "calendar.dateId_added_v1"],
 				],
-				stdout: "Added calendar.timestamp to 0 nodes and calendar.dateId to 1 node\n",
+				calendar:
+				{
+					ts_added_v2: true,
+					dateId_added_v1: true,
+				},
 			},
 		);
 	});
 
 	it("errors before any write without internal auth", async () =>
 	{
-		const backfill = vi.spyOn(WorkflowyInternalAdapter.prototype, "backfillCalendarMetadata");
 		process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "no-session.json");
 
 		const {error} = await captureOutput(async () =>
@@ -131,13 +106,13 @@ describe("calendar backfill-metadata command", () =>
 		expect(
 			{
 				message: error?.message,
-				calls: backfill.mock.calls,
+				pending: readPendingAccountOutbox(testDatabase.db),
 			},
 		).toStrictEqual(
 			{
 				message:
-					"calendar backfill-metadata needs the internal API: set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD in the environment (e.g. from .envrc)",
-				calls: [],
+					"Writing needs the internal API to deliver the write to workflowy.com: set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD (e.g. from .envrc), or run 'internal login'.",
+				pending: [],
 			},
 		);
 	});

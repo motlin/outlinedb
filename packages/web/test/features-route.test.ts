@@ -3,11 +3,13 @@ import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
 import {describe, expect, it, vi} from "vite-plus/test";
+import {readEnabledFeatures, readPendingAccountOutbox} from "@outlinedb/shared/cache";
 import * as schema from "@outlinedb/shared/db";
 import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import type {ServerContext} from "../src/server/context.js";
 import {DEFAULT_FEATURES, VISIBLE_FEATURES} from "../src/feature-catalog.js";
 import upstreamFeatures from "./fixtures/upstream-settings-features.json" with {type: "json"};
+import {mirrorAccountContext} from "./helpers/mirror-account.js";
 import {httpAppFor} from "./http-app-for.js";
 import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 
@@ -53,14 +55,6 @@ function setup(withAdapter: boolean)
 			Promise.resolve(
 				{
 					dates: true,
-				},
-			),
-		),
-		setFeature: vi.fn<WorkflowyInternalAdapter["setFeature"]>(async () =>
-			Promise.resolve(
-				{
-					dates: true,
-					beta_redirect: true,
 				},
 			),
 		),
@@ -213,37 +207,98 @@ describe("/api/v1/features", () =>
 		);
 	});
 
-	it("POST toggles through the adapter and returns its dict", async () =>
+	it("POST toggles a mirror's flag locally and records it for the drain, with workflowy.com down", async () =>
 	{
-		const {request, adapter} = setup(true);
-
-		await expect(
-			request(
-				"POST",
-				"/beta_redirect",
-				{
-					on: true,
-				},
-			),
-		).resolves.toStrictEqual(
+		const {ctx, db} = mirrorAccountContext(
+			{},
 			{
-				status: 200,
-				body:
+				features:
 				{
-					enabled:
-					{
-						dates: true,
-						beta_redirect: true,
-					},
+					dates: true,
+					dashboards: true,
 				},
 			},
 		);
-		expect(adapter.setFeature.mock.calls).toStrictEqual([["beta_redirect", true]]);
+		const app = httpAppFor(ctx);
+		const toggle = async (codename: string, on: boolean) =>
+		{
+			const res = await app.fetch(
+				new Request(
+					`http://x/api/v1/features/${codename}`,
+					{
+						method: "POST",
+						headers:
+						{
+							"content-type": "application/json",
+						},
+						body: JSON.stringify(
+							{
+								on,
+							},
+						),
+					},
+				),
+			);
+			return {
+				status: res.status,
+				body: (await res.json()) as unknown,
+			};
+		};
+
+		const on = await toggle("beta_redirect", true);
+		const off = await toggle("dashboards", false);
+
+		expect(
+			{
+				on,
+				off,
+				pending: readPendingAccountOutbox(db).map(({subject, key}) => [subject, key]),
+				stored: readEnabledFeatures(db),
+			},
+		).toStrictEqual(
+			{
+				on:
+				{
+					status: 200,
+					body:
+					{
+						enabled:
+						{
+							dates: true,
+							dashboards: true,
+							beta_redirect: true,
+						},
+					},
+				},
+				off:
+				{
+					status: 200,
+					body:
+					{
+						enabled:
+						{
+							dates: true,
+							beta_redirect: true,
+						},
+					},
+				},
+				pending: [
+					["feature", "beta_redirect"],
+					["feature", "dashboards"],
+				],
+				stored:
+				{
+					dates: true,
+					dashboards: false,
+					beta_redirect: true,
+				},
+			},
+		);
 	});
 
 	it("POST rejects a bad body or codename with 400 and writes nothing", async () =>
 	{
-		const {request, adapter} = setup(true);
+		const {request, db} = setup(true);
 
 		expect(
 			(
@@ -279,7 +334,7 @@ describe("/api/v1/features", () =>
 				)
 			).status,
 		).toBe(400);
-		expect(adapter.setFeature).not.toHaveBeenCalled();
+		expect(readEnabledFeatures(db)).toStrictEqual({});
 	});
 
 	it("POST without the adapter persists the toggle locally on top of the defaults", async () =>

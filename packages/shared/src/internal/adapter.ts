@@ -31,14 +31,11 @@ import {upstreamExpansionKey} from "../workflowy/virtual-id.js";
 import {CalendarRootMissing, calendarInsertIndex, parseDateId} from "./calendar-day.js";
 import type {CalendarLevel} from "./calendar-day.js";
 import {calendarChainSpecs} from "./calendar-chain.js";
-import {backfilledCalendarDateId, backfilledCalendarTimestamp} from "./calendar-backfill.js";
 import {findTaggedCalendarRoot} from "../cache/calendar-lookup.js";
-import {findInbox} from "../cache/inbox-lookup.js";
 import type {CalendarLayoutLevels, LayoutNode} from "./calendar-layout.js";
 import
 {
 	ExpansionNotSeeded,
-	InboxMissing,
 	LoggedOut,
 	OperationRejected,
 	TransportError,
@@ -142,7 +139,6 @@ function enabledDict(value: unknown): Record<string, true>
 }
 
 type Metadata = z.infer<typeof MetadataSchema>;
-type CalendarNodeMetadata = z.infer<typeof CalendarMetadataSchema>["calendar"];
 
 /** Codenames go into `/features/<enable|disable>/<codename>`, so only slug characters pass. */
 const FEATURE_CODENAME = /^[a-z0-9_-]+$/u;
@@ -569,6 +565,22 @@ export class WorkflowyInternalAdapter
 						new URLSearchParams(
 							{
 								[name]: value,
+								clientId: session.clientId,
+							},
+						),
+					);
+				},
+				setFeature: async (codename, on) =>
+				{
+					if (!FEATURE_CODENAME.test(codename))
+					{
+						throw new TypeError(`invalid feature codename: ${codename}`);
+					}
+					const session = await this.session();
+					await this.postOk(
+						`/features/${on ? "enable" : "disable"}/${codename}`,
+						new URLSearchParams(
+							{
 								clientId: session.clientId,
 							},
 						),
@@ -1235,283 +1247,6 @@ export class WorkflowyInternalAdapter
 		return live.id;
 	}
 
-	/**
-	 * Upstream's `AppInbox.ensured`: the Inbox {@link findInbox} finds (the cached node root metadata
-	 * `inbox_id` names, else the Home child named `Inbox`). A miss re-syncs: a fresh bootstrap's
-	 * `inbox_id`, when Workflowy has that node, is cached and used, else Home is re-read for a node
-	 * named `Inbox`, else it fails loudly with {@link InboxMissing} rather than create a duplicate.
-	 */
-	async ensureInbox(): Promise<
-	{
-		id: string;
-	}>
-	{
-		// Stores the account snapshot first, so findInbox can read its `inbox_id`.
-		await this.snapshot();
-		return {
-			id: findInbox(this.db)?.id ?? (await this.resyncInbox()),
-		};
-	}
-
-	/** The Inbox workflowy.com's fresh `inbox_id` names, else Home's live child named Inbox, cached, or a loud miss. */
-	private async resyncInbox(): Promise<string>
-	{
-		const fresh = this.fromSession(await this.client.bootstrap());
-		this.store(fresh);
-		const pointer = getPath(fresh.rootMetadata, ["inbox_id"]);
-		const tree = this.tree();
-		const live = typeof pointer === "string" ? await tree.findLiveNode(pointer) : null;
-		await tree.refreshChildren([live === null ? null : (live.parent_id ?? null)]);
-		const found = live === null ? findInbox(this.db)?.id : live.id;
-		if (found === undefined)
-		{
-			throw loud(new InboxMissing());
-		}
-		return found;
-	}
-
-	/** Create one item at the top of the Inbox, ensuring the Inbox first. */
-	async addToInbox(input: {name: string}): Promise<
-	{
-		inboxId: string;
-		id: string;
-	}>
-	{
-		const inbox = await this.ensureInbox();
-		const {id} = await this.createAt(
-			{
-				parentId: inbox.id,
-				index: 0,
-				name: input.name,
-			},
-		);
-		return {
-			inboxId: inbox.id,
-			id,
-		};
-	}
-
-	/**
-	 * Upstream's two one-time boot migrations, each run unless root metadata
-	 * already holds its flag (or with `force`), then flagged: `calendar.ts_added_v2`
-	 * (`_S2`/`f10`) adds `calendar.timestamp` to every level node under the
-	 * `calendar.rootId` root that lacks one, rebuilt from the chain's values, and
-	 * first tags that root `{root: true}` when it has no calendar metadata;
-	 * `calendar.dateId_added_v1` (`IS2`/`h10`) then adds `calendar.dateId` from
-	 * each timestamp. The walks read the cache; each migration's edits go in one
-	 * push. Returns the ids that gained a timestamp and a dateId.
-	 */
-	async backfillCalendarMetadata({
-		force = false,
-	}:
-	{
-		force?: boolean;
-	} = {}): Promise<
-	{
-		timestamps: string[];
-		dateIds: string[];
-	}>
-	{
-		const timestamps: string[] = [];
-		const dateIds: string[] = [];
-		if (force || (await this.getRootMeta(["calendar", "ts_added_v2"])) !== true)
-		{
-			const rootId = await this.taggedCalendarRootId(
-				{
-					tagUntagged: true,
-				},
-			);
-			if (rootId !== undefined)
-			{
-				const metadataById = new Map<string, Metadata>();
-				this.walkCalendar(rootId, (id, calendar, chain) =>
-				{
-					if (calendar.timestamp !== undefined)
-					{
-						return;
-					}
-					const timestamp = backfilledCalendarTimestamp(chain);
-					if (timestamp !== undefined)
-					{
-						metadataById.set(
-							id,
-							{
-								...this.readNodeMetadata(id),
-								calendar:
-								{
-									...calendar,
-									timestamp,
-								},
-							},
-						);
-					}
-				});
-				await this.pushCalendarMetadata(metadataById, "timestamp");
-				timestamps.push(...metadataById.keys());
-			}
-			await this.setRootMetaValues([
-				{
-					path: ["calendar", "ts_added_v2"],
-					value: true,
-				},
-			]);
-		}
-		if (force || (await this.getRootMeta(["calendar", "dateId_added_v1"])) !== true)
-		{
-			const rootId = await this.taggedCalendarRootId(
-				{
-					tagUntagged: false,
-				},
-			);
-			if (rootId !== undefined)
-			{
-				const metadataById = new Map<string, Metadata>();
-				this.walkCalendar(rootId, (id, calendar) =>
-				{
-					if (calendar.dateId !== undefined || typeof calendar.timestamp !== "number")
-					{
-						return;
-					}
-					const dateId = backfilledCalendarDateId(calendar.level, calendar.timestamp);
-					if (dateId !== undefined)
-					{
-						metadataById.set(
-							id,
-							{
-								...this.readNodeMetadata(id),
-								calendar:
-								{
-									...calendar,
-									dateId,
-								},
-							},
-						);
-					}
-				});
-				await this.pushCalendarMetadata(metadataById, "dateId");
-				dateIds.push(...metadataById.keys());
-			}
-			await this.setRootMetaValues([
-				{
-					path: ["calendar", "dateId_added_v1"],
-					value: true,
-				},
-			]);
-		}
-		return {
-			timestamps,
-			dateIds,
-		};
-	}
-
-	/**
-	 * The cached node root metadata `calendar.rootId` names, when it is tagged
-	 * `calendar.root`. With `tagUntagged`, a named node without calendar
-	 * metadata is tagged `{root: true}` first, as upstream's timestamp migration does.
-	 */
-	private async taggedCalendarRootId({tagUntagged}: {tagUntagged: boolean}): Promise<string | undefined>
-	{
-		const rootId = await this.getRootMeta(["calendar", "rootId"]);
-		if (typeof rootId !== "string" || !this.isCached(rootId))
-		{
-			return undefined;
-		}
-		const metadata = this.readNodeMetadata(rootId);
-		if (tagUntagged && metadata.calendar === undefined)
-		{
-			await this.pushCalendarMetadata(
-				new Map([
-					[
-						rootId,
-						{
-							...metadata,
-							calendar:
-							{
-								root: true,
-							},
-						},
-					],
-				]),
-				undefined,
-			);
-			return rootId;
-		}
-		const parsed = CalendarMetadataSchema.safeParse(metadata);
-		return parsed.success && parsed.data.calendar.root === true ? rootId : undefined;
-	}
-
-	/**
-	 * Visit every cached descendant of `rootId` that has non-root calendar
-	 * metadata, depth first in sibling order, with its calendar chain (the node,
-	 * then each calendar ancestor below the root).
-	 */
-	private walkCalendar(
-		rootId: string,
-		visit: (id: string, calendar: CalendarNodeMetadata, chain: CalendarNodeMetadata[]) => void,
-	): void
-	{
-		const tree = this.tree();
-		const walk = (id: string, ancestors: CalendarNodeMetadata[]): void =>
-		{
-			const parsed = CalendarMetadataSchema.safeParse(this.readNodeMetadata(id));
-			const calendar = parsed.success && parsed.data.calendar.root !== true ? parsed.data.calendar : undefined;
-			const chain = calendar === undefined ? ancestors : [calendar, ...ancestors];
-			if (calendar !== undefined)
-			{
-				visit(id, calendar, chain);
-			}
-			for (const child of tree.cachedChildIds(id))
-			{
-				walk(child, chain);
-			}
-		};
-		for (const child of tree.cachedChildIds(rootId))
-		{
-			walk(child, []);
-		}
-	}
-
-	/**
-	 * Push each node's new metadata as one `edit` per node (patching
-	 * `calendar.<key>`, or the whole `calendar` without a key) in one push,
-	 * then cache it.
-	 */
-	private async pushCalendarMetadata(metadataById: Map<string, Metadata>, key: string | undefined): Promise<void>
-	{
-		if (metadataById.size === 0)
-		{
-			return;
-		}
-		const session = await this.session();
-		const ops = [...metadataById].map(([id, metadata]) =>
-		{
-			const path = key === undefined ? ["calendar"] : ["calendar", key];
-			const {patches, inverse} = buildMetadataChanges(this.readNodeMetadata(id), [
-				{
-					path,
-					value: getPath(metadata, path),
-				},
-			]);
-			return editOp(
-				{
-					id,
-					metadataPatches: patches,
-					metadataInversePatches: inverse,
-					now: this.now(),
-					dateJoinedSec: session.dateJoinedSec,
-				},
-			);
-		});
-		await this.pusher.pushAndPoll(
-			{
-				ops,
-			},
-		);
-		this.writeNodesMetadata(
-			new Map([...metadataById].map(([id, metadata]) => [id, keptInternalMetadata(metadata)])),
-		);
-	}
-
 	/** A node's cached calendar level and dateId, if it has both. */
 	private readCalendar(id: string):
 		|
@@ -2008,50 +1743,6 @@ export class WorkflowyInternalAdapter
 	async enabledFeatures(): Promise<Record<string, true>>
 	{
 		return enabledDict((await this.snapshot()).settings.features);
-	}
-
-	/**
-	 * Enable or disable one account feature like upstream's `WF.Features.toggle`: POST
-	 * `/features/<enable|disable>/<codename>`, then cache the new dict (a disabled flag drops
-	 * out) in `enabled_features`.
-	 * A failed POST changes nothing.
-	 */
-	async setFeature(codename: string, on: boolean): Promise<Record<string, true>>
-	{
-		if (!FEATURE_CODENAME.test(codename))
-		{
-			throw new TypeError(`invalid feature codename: ${codename}`);
-		}
-		const session = await this.session();
-		await this.postOk(
-			`/features/${on ? "enable" : "disable"}/${codename}`,
-			new URLSearchParams(
-				{
-					clientId: session.clientId,
-				},
-			),
-		);
-		const current = await this.snapshotToWrite();
-		const next: Record<string, true> = on
-			?
-				{
-					...enabledDict(current.settings.features),
-					[codename]: true,
-				}
-			: Object.fromEntries(
-					Object.entries(enabledDict(current.settings.features)).filter(([name]) => name !== codename),
-				);
-		this.store(
-			{
-				...current,
-				settings:
-				{
-					...current.settings,
-					features: next,
-				},
-			},
-		);
-		return next;
 	}
 
 	/** POST one server-saved setting; flags go over the wire as `"yes"`/`"no"`. */

@@ -37,18 +37,18 @@ USAGE
 
 The web server's Node host (`just web`, `just dev-node`) and the stdio MCP server read every setting once, in `readNodeConfig` (`packages/web/src/server/config.ts`), one env var each:
 
-| Variable                      | Default                     | Meaning                                                                                                                   |
-| ----------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `OUTLINEDB_MODE`              | required                    | `mirror` writes through to workflowy.com and persists the result locally; `standalone` writes only to the local database. |
-| `WORKFLOWY_API_KEY`           | unset                       | The Workflowy API key; required when `OUTLINEDB_MODE=mirror`.                                                             |
-| `WORKFLOWY_API_URL`           | workflowy.com               | Override for the Workflowy API base URL (tests, proxies).                                                                 |
-| `WORKFLOWY_USERNAME`          | empty                       | The account email shown by `GET /api/v1/account`.                                                                         |
-| `OUTLINEDB_DB_PATH`           | `outlinedb.sqlite` in `cwd` | The SQLite cache file; the default path also switches on WAL.                                                             |
-| `OUTLINEDB_SQL_QUERY_LOGGING` | `false`                     | `true` logs every SQL query.                                                                                              |
-| `CALENDAR_ENSURE_ENABLED`     | `true`                      | `false` stops `POST /api/v1/calendar/day/:dateId/ensure` from creating day nodes.                                         |
-| `CALENDAR_LAYOUT_ENABLED`     | `true`                      | `false` stops `PUT /api/v1/calendar/layout` from restructuring the calendar.                                              |
-| `TREE_SNAPSHOT`               | `true`                      | `false` serves search from SQL instead of an in-memory whole-tree snapshot.                                               |
-| `OUTLINEDB_EMBEDDINGS`        | `true`                      | `false` turns off related notes (the sqlite-vec index).                                                                   |
+| Variable                      | Default                     | Meaning                                                                                                                                                                   |
+| ----------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OUTLINEDB_MODE`              | required                    | `mirror` writes to the local database first and queues each write in the outbox, which a drain delivers to workflowy.com; `standalone` writes only to the local database. |
+| `WORKFLOWY_API_KEY`           | unset                       | The Workflowy API key; required when `OUTLINEDB_MODE=mirror`.                                                                                                             |
+| `WORKFLOWY_API_URL`           | workflowy.com               | Override for the Workflowy API base URL (tests, proxies).                                                                                                                 |
+| `WORKFLOWY_USERNAME`          | empty                       | The account email shown by `GET /api/v1/account`.                                                                                                                         |
+| `OUTLINEDB_DB_PATH`           | `outlinedb.sqlite` in `cwd` | The SQLite cache file; the default path also switches on WAL.                                                                                                             |
+| `OUTLINEDB_SQL_QUERY_LOGGING` | `false`                     | `true` logs every SQL query.                                                                                                                                              |
+| `CALENDAR_ENSURE_ENABLED`     | `true`                      | `false` stops `POST /api/v1/calendar/day/:dateId/ensure` from creating day nodes.                                                                                         |
+| `CALENDAR_LAYOUT_ENABLED`     | `true`                      | `false` stops `PUT /api/v1/calendar/layout` from restructuring the calendar.                                                                                              |
+| `TREE_SNAPSHOT`               | `true`                      | `false` serves search from SQL instead of an in-memory whole-tree snapshot.                                                                                               |
+| `OUTLINEDB_EMBEDDINGS`        | `true`                      | `false` turns off related notes (the sqlite-vec index).                                                                                                                   |
 
 The server fails at startup when `OUTLINEDB_MODE` is unset or unknown, or is `mirror` without `WORKFLOWY_API_KEY`. The Cloudflare Worker reads its own bindings (`packages/cloudflare/src/worker-config.ts`): a store is `mirror` when it is listed in `OUTLINEDB_ENV_OWNERS` (else `ALLOWED_EMAILS`), and `TREE_SNAPSHOT` is off unless `true`.
 
@@ -633,7 +633,7 @@ EXAMPLES
 
 ## `outlinedb calendar backfill-metadata`
 
-Run workflowy.com's one-time calendar migrations: add calendar.timestamp, then calendar.dateId, to 📆 Calendar level nodes missing them, each only while root metadata lacks its calendar.ts_added_v2 / calendar.dateId_added_v1 flag, which is set after
+Run workflowy.com's one-time calendar migrations locally, then deliver them: add calendar.timestamp, then calendar.dateId, to 📆 Calendar level nodes missing them, each only while root metadata lacks its calendar.ts_added_v2 / calendar.dateId_added_v1 flag, which is set after
 
 ```text
 USAGE
@@ -644,9 +644,9 @@ FLAGS
       --force  Run both backfills even when their flags are already set
 
 DESCRIPTION
-  Run workflowy.com's one-time calendar migrations: add calendar.timestamp, then calendar.dateId, to 📆 Calendar level
-  nodes missing them, each only while root metadata lacks its calendar.ts_added_v2 / calendar.dateId_added_v1 flag,
-  which is set after
+  Run workflowy.com's one-time calendar migrations locally, then deliver them: add calendar.timestamp, then
+  calendar.dateId, to 📆 Calendar level nodes missing them, each only while root metadata lacks its calendar.ts_added_v2
+  / calendar.dateId_added_v1 flag, which is set after
 
 EXAMPLES
   $ outlinedb calendar backfill-metadata
@@ -688,12 +688,11 @@ Unwrap blank photo-paste wrappers in the calendar and restore chronological phot
 
 ```text
 USAGE
-  $ outlinedb calendar fix-photo-groups [-d] [--node-id <value>] [-b <value>] [-D <value>]
+  $ outlinedb calendar fix-photo-groups [-d] [--node-id <value>] [-b <value>]
 
 FLAGS
-  -D, --delay=<value>       [default: 1000] Milliseconds between API calls
   -b, --batch-size=<value>  Number of groups to fix before stopping (default: all)
-  -d, --dry-run             Report the groups and planned order without making API calls
+  -d, --dry-run             Report the groups and planned order without writing anything
       --node-id=<value>     Limit processing by wrapper or entry UUID or 12-character short ID
 
 DESCRIPTION
@@ -723,13 +722,12 @@ Convert text dates to native Workflowy dates in calendar archive day nodes
 
 ```text
 USAGE
-  $ outlinedb calendar migrate-dates [-d] [-a <value>] [-b <value>] [-D <value>] [--year <value>]
+  $ outlinedb calendar migrate-dates [-d] [-a <value>] [-b <value>] [--year <value>]
 
 FLAGS
-  -D, --delay=<value>       [default: 1000] Milliseconds between API calls
   -a, --archive-id=<value>  [default: f6b557fbf770] ID of the archive root node
   -b, --batch-size=<value>  Number of nodes to process before stopping (default: all)
-  -d, --dry-run             Parse and log all changes without making API calls
+  -d, --dry-run             Parse and log all changes without writing anything
       --year=<value>        Limit processing to a specific year
 
 DESCRIPTION
@@ -754,9 +752,9 @@ EXAMPLES
 
 
 
-  # Execute full migration with custom delay
+  # Execute the full migration
 
-  $ outlinedb calendar migrate-dates --delay 300
+  $ outlinedb calendar migrate-dates
 ```
 
 ## `outlinedb dropbox auth`

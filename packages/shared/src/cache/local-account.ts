@@ -7,7 +7,7 @@
 import {applyMetadataPatches, buildMetadataChanges} from "../internal/metadata-patch.js";
 import type {MetadataChange, MetadataPatchSet} from "../internal/metadata-patch.js";
 import {changedSavedViewKeys} from "../internal/saved-views.js";
-import {canonicalValue, metadataAt, rootMetadataKey} from "./account-outbox.js";
+import {canonicalValue, featureFlags, metadataAt, rootMetadataKey} from "./account-outbox.js";
 import type {AccountOutboxEntry, AccountOutboxRecorder} from "./account-outbox.js";
 import
 {
@@ -236,6 +236,38 @@ export class LocalAccount
 				})),
 		);
 		return Promise.resolve();
+	}
+
+	/** Turn one account feature on or off; a mirror's outbox records the codename for the drain to enable or disable. */
+	setFeature(codename: string, on: boolean): void
+	{
+		this.update(
+			(snapshot) =>
+				withSetting(
+					snapshot,
+					"features",
+					{
+						...featureFlags(snapshot.settings.features),
+						[codename]: on,
+					},
+				),
+			() => [
+				{
+					subject: "feature",
+					key: codename,
+				},
+			],
+		);
+	}
+
+	/** The enabled feature codenames, each mapped to true. */
+	enabledFeatures(): Record<string, true>
+	{
+		return Object.fromEntries(
+			Object.entries(featureFlags(this.snapshot().settings.features)).flatMap(([codename, on]) =>
+				on ? [[codename, true as const]] : [],
+			),
+		);
 	}
 
 	/** The account's entropy key, or undefined for a store provisioned without one. */

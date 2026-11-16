@@ -1,5 +1,5 @@
 import type {UpstreamRelationshipMetadata} from "./item-relationships.js";
-import type {CreateNodeRequest, UpdateNodeRequest, WorkflowyApiClient} from "../api/workflowy-client.js";
+import type {CreateNodeRequest, WorkflowyApiClient} from "../api/workflowy-client.js";
 import {isSystemTarget} from "../types/targets.js";
 import type {WorkflowyNode} from "../types/workflowy.js";
 import type {BacklinkSyncRecord, CacheService} from "./cache-service.js";
@@ -113,25 +113,6 @@ export class WorkflowyWriteThroughClient
 	}
 
 	/**
-	 * Update an existing node and update the cache. Updates on a mirror are
-	 * redirected to its original (see {@link resolveUpdateTarget}).
-	 * @param requestedId The node ID to update
-	 * @param options Update options (name, note, layoutMode)
-	 * @returns The node that was updated (the original, for a mirror)
-	 */
-	async updateNode(requestedId: string, options: UpdateNodeRequest): Promise<WorkflowyNode>
-	{
-		const nodeId = this.resolveUpdateTarget(requestedId);
-		await this.apiClient.updateNode(nodeId, options);
-		// Fetch fresh node data from API to update cache correctly
-		const updatedNode = await this.apiClient.getNode(nodeId);
-		const parentId = this.cachedParentOr(nodeId, updatedNode);
-		await this.ensureParentInCache(parentId);
-		this.cacheService.insertNode(updatedNode, parentId);
-		return updatedNode;
-	}
-
-	/**
 	 * Work out the API calls {@link deleteNode} makes for `nodeId`, from the cache,
 	 * without changing anything. Where an original is kept, its mirror's siblings
 	 * are read from the API (GET only), since a stale cached order would put the
@@ -196,39 +177,6 @@ export class WorkflowyWriteThroughClient
 			})),
 		);
 		this.cacheService.storeApiResponses(batches);
-	}
-
-	/**
-	 * Read a node the cache lacks from the API and cache it with its siblings
-	 * and every uncached ancestor, each under its real parent. Ancestors are
-	 * fetched up to the first cached one (or Home) and stored top-down before
-	 * the parent's child list, so {@link refreshChain} never adds a blank
-	 * placeholder parent at Home.
-	 */
-	async cacheLiveNode(nodeId: string): Promise<void>
-	{
-		const node = await this.apiClient.getNode(nodeId);
-		const parentId = node.parent_id ?? null;
-		if (parentId === null)
-		{
-			this.cacheService.insertNode(node, null);
-			return;
-		}
-		const ancestors: WorkflowyNode[] = [];
-		const seen = new Set([nodeId]);
-		let ancestorId: string | null = parentId;
-		while (ancestorId !== null && !seen.has(ancestorId) && this.cacheService.getNode(ancestorId) === undefined)
-		{
-			seen.add(ancestorId);
-			const ancestor = await this.apiClient.getNode(ancestorId);
-			ancestors.push(ancestor);
-			ancestorId = ancestor.parent_id ?? null;
-		}
-		for (const ancestor of ancestors.toReversed())
-		{
-			this.cacheService.insertNode(ancestor, ancestor.parent_id ?? null);
-		}
-		await this.refreshChain([parentId]);
 	}
 
 	/** One node as Workflowy has it now, read from the API. */

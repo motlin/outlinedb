@@ -21,7 +21,6 @@ import
 	NodeReader,
 	OutboxRecorder,
 	NodeTreeReader,
-	WorkflowyWriteThroughClient,
 	inIds,
 	planSubtreeDelete,
 	readInternalMetadata,
@@ -311,23 +310,10 @@ export function displayMetadataFields(
 	};
 }
 
-/**
- * Build the write-through client from the context, or undefined when no API key
- * is configured (read-only mode).
- */
+/** The public API client, or undefined when no API key is configured. */
 export function getApiClient(ctx: ServerContext): WorkflowyApiClient | undefined
 {
 	return ctx.apiKey ? new WorkflowyApiClient(ctx.apiKey, undefined, ctx.config.apiUrl) : undefined;
-}
-
-export function getWriteClient(ctx: ServerContext): WorkflowyWriteThroughClient | undefined
-{
-	const apiClient = getApiClient(ctx);
-	if (!apiClient)
-	{
-		return undefined;
-	}
-	return new WorkflowyWriteThroughClient(apiClient, ctx.cacheService);
 }
 
 /**

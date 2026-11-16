@@ -1,12 +1,22 @@
 import {WorkflowyApiClient, WorkflowyInternalClient} from "@outlinedb/shared/api";
 import type {TreeSnapshot} from "@outlinedb/shared/api";
-import {importInternalMetadata, WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
+import
+{
+	backfillCalendarMetadata,
+	importInternalMetadata,
+	LocalTreeWriter,
+	OutboxRecorder,
+	outboxStatus,
+	WorkflowyWriteThroughClient,
+} from "@outlinedb/shared/cache";
 import {internalAdapter, readInternalAuth} from "@outlinedb/shared/node";
 import {Command, Flags} from "@oclif/core";
 import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";
 import {importFromApi} from "../../services/cache-import-api.js";
 import type {ImportApiResult} from "../../services/cache-import-api.js";
+import {localAccount} from "../../services/local-writes.js";
+import type {LocalWrites} from "../../services/local-writes.js";
 import {logger} from "../../services/logger.js";
 import {describeError} from "../../utils/describe-error.js";
 
@@ -107,7 +117,7 @@ export default class ImportApi extends Command
 			{
 				const {written, skipped} = importInternalMetadata(database, snapshot, Date.now());
 				this.log(`Item metadata: ${written.toLocaleString()} nodes (${skipped.toLocaleString()} not in cache)`);
-				await this.backfillCalendarMetadata(database, apiClient);
+				await this.runCalendarBackfill(database, apiClient);
 			}
 		}
 		catch (error)
@@ -126,7 +136,7 @@ export default class ImportApi extends Command
 	 * does on boot. Once both flags are set this only reads root metadata. A
 	 * failure is reported without failing the import, like upstream's Sentry catch.
 	 */
-	private async backfillCalendarMetadata(
+	private async runCalendarBackfill(
 		database: ReturnType<typeof createDatabase>,
 		apiClient: WorkflowyApiClient,
 	): Promise<void>
@@ -141,7 +151,31 @@ export default class ImportApi extends Command
 		}
 		try
 		{
-			const {timestamps, dateIds} = await adapter.backfillCalendarMetadata();
+			const writes: LocalWrites =
+			{
+				database,
+				local: new LocalTreeWriter(
+					database,
+					{
+						outbox: new OutboxRecorder(),
+					},
+				),
+				adapter,
+			};
+			const pendingBefore = outboxStatus(database).pending;
+			const {timestamps, dateIds} = await backfillCalendarMetadata(
+				{
+					db: database,
+					writer: writes.local,
+					account: await localAccount(writes),
+				},
+			);
+			// Written locally with outbox rows; this drain, run only after a write, delivers them, and a failed one leaves
+			// them pending for the next drain trigger.
+			if (outboxStatus(database).pending > pendingBefore)
+			{
+				await adapter.drainOutbox();
+			}
 			if (timestamps.length > 0 || dateIds.length > 0)
 			{
 				this.log(`Calendar backfill: +${timestamps.length} timestamps, +${dateIds.length} dateIds`);

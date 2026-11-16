@@ -1,6 +1,6 @@
 /**
  * The ladder's orchestration layer: read both buckets, turn a drop into a
- * Workflowy write, and announce the write on the event bus.
+ * local tree write, and announce the write on the event bus.
  *
  * The router stays a thin adapter over this so the interesting rules — which
  * tier a row came from, whether a write is even legal, when a watcher gets
@@ -8,7 +8,6 @@
  */
 
 import type {LadderEvent, LadderEventBus} from "./ladder-events.js";
-import {planSlot} from "@outlinedb/shared/cache";
 import {planTierMove, toLadder} from "./ladder-model.js";
 import type {Ladder, RawNode} from "./ladder-model.js";
 
@@ -17,19 +16,12 @@ export type LadderBuckets = Record<string, RawNode>;
 export interface LadderServiceOptions
 {
 	readBuckets: () => Promise<LadderBuckets>;
-	/** Negative position prepends; zero appends. The fallback when {@link moveTo} is absent. */
-	moveNode: (nodeId: string, parentId: string, position: number) => Promise<unknown>;
 	/**
-	 * Move to an exact slot (the internal API). `index` counts the tier's full
-	 * current child list, hidden completed rows and the moved node included.
+	 * Move to an exact slot. `index` counts the tier's full current child list,
+	 * hidden completed rows and the moved node included.
 	 */
-	moveTo?: (nodeId: string, parentId: string, index: number) => Promise<unknown>;
+	moveTo: (nodeId: string, parentId: string, index: number) => Promise<unknown>;
 	completeNode: (nodeId: string) => Promise<unknown>;
-	/**
-	 * Re-read a tier's sibling order after a move. It runs after the response,
-	 * because Workflowy throttling can stretch it past the page's connection.
-	 */
-	refreshTier?: (parentId: string) => Promise<unknown>;
 	events: LadderEventBus;
 	now?: () => Date;
 }
@@ -58,7 +50,7 @@ export class LadderService
 	 * Move one row to another tier of the same ladder.
 	 *
 	 * The event is published only after the write resolves. A watcher woken by a
-	 * move it can't see in Workflowy is worse than no notification at all.
+	 * move it can't see in the outline is worse than no notification at all.
 	 */
 	async move({
 		root,
@@ -80,9 +72,7 @@ export class LadderService
 		{
 			throw new Error(`tier ${plan.parentId} is not in ladder ${root}`);
 		}
-		const remaining = destination.items.filter((item) => item.id !== nodeId);
-		const index = beforeNodeId ? remaining.findIndex((item) => item.id === beforeNodeId) : remaining.length;
-		if (index < 0)
+		if (beforeNodeId && !destination.items.some((item) => item.id === beforeNodeId && item.id !== nodeId))
 		{
 			throw new Error(`node ${beforeNodeId} is not a destination row`);
 		}
@@ -94,87 +84,15 @@ export class LadderService
 			fromTier: plan.fromTier,
 			toTier,
 		};
-		const {moveTo} = this.#options;
-		if (moveTo !== undefined)
-		{
-			const children = buckets[root]?.children?.find((child) => child.id === plan.parentId)?.children ?? [];
-			const ids = children.map((child) => child.id);
-			await moveTo(nodeId, plan.parentId, beforeNodeId ? ids.indexOf(beforeNodeId) : ids.length);
-			return this.#landed(
-				plan.parentId,
-				{
-					...event,
-					beforeNodeId: beforeNodeId ?? "",
-				},
-			);
-		}
-		const slot = planSlot(
-			destination.items.map((item) => item.id),
-			nodeId,
-			index,
-		);
-		if (slot === null)
-		{
-			return this.#landed(
-				plan.parentId,
-				{
-					...event,
-					beforeNodeId: beforeNodeId ?? "",
-				},
-			);
-		}
-		const position = slot.position === "top" ? -1 : 0;
-		await this.#options.moveNode(nodeId, plan.parentId, position);
-		if (slot.siblingIds.length === 0)
-		{
-			return this.#landed(
-				plan.parentId,
-				{
-					...event,
-					beforeNodeId: slot.position === "top" ? (remaining[0]?.id ?? "") : "",
-				},
-			);
-		}
-		this.#publish(
-			{
-				...event,
-				beforeNodeId: "",
-			},
-		);
-		// Workflowy's API supports only top/bottom. Rotate the shorter side to preserve exact placement.
-		for (const siblingId of slot.siblingIds)
-		{
-			await this.#options.moveNode(siblingId, plan.parentId, position);
-			this.#publish(
-				{
-					verb: "move",
-					nodeId: siblingId,
-					name: remaining.find((item) => item.id === siblingId)?.name ?? null,
-					fromTier: toTier,
-					toTier,
-					beforeNodeId: "",
-				},
-			);
-		}
-		return this.#landed(
-			plan.parentId,
+		const children = buckets[root]?.children?.find((child) => child.id === plan.parentId)?.children ?? [];
+		const ids = children.map((child) => child.id);
+		await this.#options.moveTo(nodeId, plan.parentId, beforeNodeId ? ids.indexOf(beforeNodeId) : ids.length);
+		return this.#publish(
 			{
 				...event,
 				beforeNodeId: beforeNodeId ?? "",
 			},
 		);
-	}
-
-	/** Announce a landed move, then refresh its tier without holding the response. */
-	#landed(parentId: string, event: Omit<LadderEvent, "at">): LadderEvent
-	{
-		const published = this.#publish(event);
-		this.#options.refreshTier?.(parentId).catch((error: unknown) =>
-		{
-			const message = error instanceof Error ? error.message : String(error);
-			console.error(`ladder: could not refresh tier ${parentId} after a move: ${message}`);
-		});
-		return published;
 	}
 
 	async complete({root, nodeId}: {root: string; nodeId: string}): Promise<LadderEvent>

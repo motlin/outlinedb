@@ -1,6 +1,6 @@
 /**
  * Mirror mode's account outbox: which pieces of account-level state (root metadata paths, account settings, legacy
- * saved views, expansion keys) a local write left ahead of workflowy.com, keyed by their own business keys. Like the
+ * saved views, expansion keys, feature flags) a local write left ahead of workflowy.com, keyed by their own business keys. Like the
  * node outbox it holds no payload: the change is the current local value, which the drain reads when it sends.
  */
 
@@ -18,7 +18,7 @@ import {closeCurrentVersions} from "./temporal-merge.js";
 import type {TemporalTransaction} from "./temporal-merge.js";
 
 /** The kinds of account-level state a mirror-mode write can leave ahead of workflowy.com. */
-export const ACCOUNT_OUTBOX_SUBJECTS = ["root_metadata", "setting", "saved_view", "expansion"] as const;
+export const ACCOUNT_OUTBOX_SUBJECTS = ["root_metadata", "setting", "saved_view", "expansion", "feature"] as const;
 
 export type AccountOutboxSubject = (typeof ACCOUNT_OUTBOX_SUBJECTS)[number];
 
@@ -64,6 +64,24 @@ export function metadataAt(value: unknown, path: readonly string[]): unknown
 		current = Reflect.get(current, segment);
 	}
 	return current;
+}
+
+/** A `settings.features` value as codename -> on; upstream sends enabled flags as `true` or `"yes"`. */
+export function featureFlags(value: unknown): Record<string, boolean>
+{
+	if (typeof value !== "object" || value === null)
+	{
+		return {};
+	}
+	return Object.fromEntries(
+		Object.entries(value).map(([codename, flag]) => [codename, flag === true || flag === "yes"]),
+	);
+}
+
+/** Whether `settings.features` turns `codename` on. */
+export function featureOn(features: unknown, codename: string): boolean
+{
+	return featureFlags(features)[codename] === true;
 }
 
 /** JSON with object keys sorted, so two equal values compare equal whatever their key order. */
@@ -267,7 +285,8 @@ export function withPendingAccountState(tx: TemporalTransaction, fresh: AccountS
 	const rootKeys = [...(pending.get("root_metadata") ?? [])];
 	const settingKeys = [...(pending.get("setting") ?? [])];
 	const savedViewKeys = pending.get("saved_view") ?? new Set<string>();
-	if (rootKeys.length === 0 && settingKeys.length === 0 && savedViewKeys.size === 0)
+	const featureKeys = [...(pending.get("feature") ?? [])];
+	if (rootKeys.length === 0 && settingKeys.length === 0 && savedViewKeys.size === 0 && featureKeys.length === 0)
 	{
 		return fresh;
 	}
@@ -298,6 +317,16 @@ export function withPendingAccountState(tx: TemporalTransaction, fresh: AccountS
 			typeof local.settings.saved_views_json === "string" ? local.settings.saved_views_json : undefined,
 			savedViewKeys,
 		);
+	}
+	if (featureKeys.length > 0)
+	{
+		settings.features =
+		{
+			...featureFlags(fresh.settings.features),
+			...Object.fromEntries(
+				featureKeys.map((codename) => [codename, featureOn(local.settings.features, codename)]),
+			),
+		};
 	}
 	return {
 		...fresh,
