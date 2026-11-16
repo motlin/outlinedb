@@ -173,7 +173,7 @@ A recurring item's cadence **is** its section, so making it less frequent means 
 }
 ```
 
-When a row has `skipStreak >= 2` and a non-null `lengthen`, add an explicit outcome labelled with the target cadence — **Less often → 🗓️ Weekly Review** — and show the streak in the question body (`Skipped 3 runs in a row since 2026-08-11.`). Place it above Done/Skip and above Retire. Repeatedly skipping a daily item usually means it should not be daily, not that it should be deleted, so **Retire is never the promoted answer to a streak**.
+When a row has `skipStreak >= 2` and a non-null `lengthen`, add an explicit outcome labelled with the target cadence — **Less often → 🗓️ Weekly Review** — and show the streak in the question body (`Skipped 3 runs in a row since 2026-08-11.`). In an `AskUserQuestion`, place it above Done/Skip and above Retire; on a decision-page card, keep Done/Skip/Retire in slots 1-3, put it at slot 4, and make it the card's `default` (see **Fixed number-key slots** under **Decision-page cards**). Repeatedly skipping a daily item usually means it should not be daily, not that it should be deleted, so **Retire is never the promoted answer to a streak**.
 
 On that outcome, dispatch `lengthen.applyOp` **verbatim** — it advances the `<time>` by the new interval and moves the node into the new section in one chained command — and record the outcome as `lengthen`. Count it in the finish summary as a cadence change, not as a date advance.
 
@@ -346,6 +346,14 @@ A genuine external deadline still requires its deadline protections. A future re
 When a segment's walk goes to the decision page (see **Decision page** in `${CLAUDE_PLUGIN_ROOT}/skills/review-proposal-staging.md`), each card's title already names the item, so the body carries only the deciding facts, one per line. For an overdue row, those are `overdue Nd` and, when `skipStreak >= 2`, `skipped N runs`. Leave out the `Due <date>` line and the `since <date>` suffix on the streak; the overdue count already says how late it is. Context lines (child count, note, prior-run artifacts, recurring counterparts) follow, each on its own line.
 
 A row with `isLlmTask` or `missingLlmTag` set is never a card: Claude runs it per **LLM tasks (#llm-task)** above. The only exception is a walk that is already kicked off and needs the user's answer.
+
+**Fixed number-key slots.** The page binds keys 1-9 to option position, so the common outcomes must sit in the same slots on every card for the user's hands to learn them:
+
+- Recurring cards: **1 Done**, **2 Skip**, **3 Retire**.
+- Due-item cards: **1 Done**, **2 Skip**, **3 Drop** (Drop is the one-shot counterpart of Retire).
+- Card-specific extras follow from slot 4, in the order the option lists below give them: **Less often**, **Help me do it now**, **Set a reminder**, **Move to asap ladder**, **Move to Workflowy**, **Reschedule**, and so on.
+
+Express the recommendation with the item's `default`, never by moving an option up. Wherever this file says to promote an option or place it first or above Done (**Less often** on a streak, **Move to Workflowy** on a Reminders row, **Move to asap ladder**, a recurring-counterpart deletion), that means on the decision page: keep it in its extra slot and set it as `default`. Hard-deadline rows withhold Skip, so they are the one card without slot 2; give them **1 Done** and start their extras at slot 2, and say `Hard deadline` in the first body line so the shift is expected.
 
 ## Due item options
 
