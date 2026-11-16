@@ -65,6 +65,8 @@ jobs:
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
         run: |
           pnpm install --no-frozen-lockfile
+          # The other packages import @outlinedb/shared from its dist, so type-checking needs it built first (as `just check` does via build-shared).
+          pnpm exec vp run --filter @outlinedb/shared build
           CHECK_STATUS=0
           pnpm exec vp run check --fix || CHECK_STATUS=$?
           # vp check skips formatting (check.fmt: false), and `pnpm install` runs `vp config`, which rewrites CLAUDE.md's Vite+ section wrapped at 80 columns.
