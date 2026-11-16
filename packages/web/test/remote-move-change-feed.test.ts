@@ -445,6 +445,43 @@ describe("remote transactions reach the nodes change feed", () =>
 							isForSearch: false,
 						},
 					},
+					// Captured from workflowy.com: pressing Enter logs a nameless tree with empty metadata and `cb`.
+					{
+						type: "bulk_create",
+						data:
+						{
+							parentid: "P2",
+							starting_priority: 0,
+							project_trees: JSON.stringify([
+								{
+									metadata: {},
+									id: "U",
+									ct: 1000,
+									cb: 107_483,
+								},
+							]),
+							isForSearch: false,
+						},
+					},
+					// A node created through the public REST API logs a null note.
+					{
+						type: "bulk_create",
+						data:
+						{
+							parentid: "P2",
+							starting_priority: 2,
+							project_trees: JSON.stringify([
+								{
+									id: "R",
+									nm: "",
+									no: null,
+									ct: 1000,
+									metadata: {},
+								},
+							]),
+							isForSearch: false,
+						},
+					},
 				]),
 			],
 			"101",
@@ -461,12 +498,13 @@ describe("remote transactions reach the nodes change feed", () =>
 		).toStrictEqual(
 			{
 				reset: false,
-				changedIds: new Set(["N", "C"]),
+				changedIds: new Set(["N", "C", "U", "R"]),
 				deletedIds: new Set(),
 				children:
 				{
 					P1: ["X", "N", "Y"],
 					N: ["C"],
+					P2: ["U", "Z", "R"],
 				},
 				contents:
 				{
@@ -494,6 +532,27 @@ describe("remote transactions reach the nodes change feed", () =>
 					C:
 					{
 						name: "Child",
+						note: null,
+						completedAt: null,
+						modifiedAt: REPLAY_SEC,
+					},
+					U:
+					{
+						name: null,
+						note: null,
+						completedAt: null,
+						modifiedAt: REPLAY_SEC,
+					},
+					Z:
+					{
+						name: "Z",
+						note: null,
+						completedAt: null,
+						modifiedAt: SEEDED_SEC,
+					},
+					R:
+					{
+						name: "",
 						note: null,
 						completedAt: null,
 						modifiedAt: REPLAY_SEC,
