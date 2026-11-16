@@ -492,7 +492,52 @@ test("taskFiles rejects duplicate names, paths, and File nodes without a note", 
 		children: [],
 	});
 
-	assert.throws(() => taskFiles(withFiles(file("a.sh", "x"), file("a.sh", "y"))), /duplicate File "a.sh"/u);
-	assert.throws(() => taskFiles(withFiles(file("../a.sh", "x"))), /File "..\/a.sh" must be a plain file name/u);
-	assert.throws(() => taskFiles(withFiles(file("a.sh", null))), /File "a.sh" has no note/u);
+	assert.throws(
+		() => taskFiles(withFiles(file("a.sh", "x"), file("a.sh", "y"))),
+		/^Error: prep task "Daily task" has duplicate File "a.sh"$/u,
+	);
+	assert.throws(
+		() => taskFiles(withFiles(file("../a.sh", "x"))),
+		/^Error: prep task "Daily task" File "..\/a.sh" must be a plain file name$/u,
+	);
+	assert.throws(
+		() => taskFiles(withFiles(file("a.sh", null))),
+		/^Error: prep task "Daily task" File "a.sh" has no note$/u,
+	);
+});
+
+test("taskFiles rejects a script reference with no File node, naming the referencing task", () =>
+{
+	const tree = fixture();
+	const weekly = at(childrenOf(tree, "Prep"), 1).children?.[0];
+	assert.ok(weekly);
+	ownChildren(weekly).push(
+		{
+			name: "Run the scanner",
+			note: "node .llm/gtd/review/scripts/scan.mts --today",
+			children: [],
+		},
+	);
+	ownChildren(firstChildOf(tree, "Presentation")).push(
+		instruction("<code>.llm/gtd/review/scripts/scan.mts</code> is pure"),
+	);
+
+	assert.throws(
+		() => taskFiles(tree),
+		/^Error: prep task "Weekly task" references \.llm\/gtd\/review\/scripts\/scan\.mts, but no "File: scan\.mts" node defines it$/u,
+	);
+
+	ownChildren(firstChildOf(tree, "Prep")).push(
+		{
+			name: "File: scan.mts",
+			note: "console.log(1);",
+			children: [],
+		},
+	);
+	assert.deepStrictEqual(taskFiles(tree), [
+		{
+			name: "scan.mts",
+			content: "console.log(1);",
+		},
+	]);
 });

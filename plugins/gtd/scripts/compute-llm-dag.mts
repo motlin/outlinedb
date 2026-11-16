@@ -19,6 +19,8 @@ const PLAN_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
 const INTERVAL_PREFIX = "Interval: ";
 const FILE_PREFIX = "File: ";
 const FILE_NAME_PATTERN = /^[\w.-]+$/u;
+const SCRIPTS_DIRECTORY = ".llm/gtd/review/scripts";
+const SCRIPT_REFERENCE_PATTERN = /\.llm\/gtd\/review\/scripts\/([\w.-]*[\w-])/gu;
 const INTERVAL_PATTERN = /^(\d+)([dmy])$/u;
 const TASK_COMMAND_PATTERN = /^\/[a-z0-9-]+:([a-z0-9-]+)(?:\s|$)/u;
 
@@ -353,28 +355,68 @@ export interface TaskFile
 }
 
 /**
+ * The task a node belongs to, phrased like the planner's other errors: the first node below the
+ * Import, Prep, Presentation, and Serial group levels.
+ */
+function taskContext(path: TreeNode[]): string
+{
+	const [group, ...rest] = path;
+	if (group === undefined)
+	{
+		return "LLM Tasks";
+	}
+	if (group.name === "Import")
+	{
+		return "Import";
+	}
+	const task = rest[0]?.name.startsWith("Serial: ") ? rest[1] : rest[0];
+	const kind = group.name === "Presentation" ? "presentation" : "prep";
+	return task === undefined ? group.name : `${kind} task "${taskDisplayName(task.name)}"`;
+}
+
+/**
  * Every `File: <name>` node in the tree, in document order. Its note is the file's exact content,
- * so a task's scripts live in Workflowy and are written to disk before the tasks run.
+ * so a task's scripts live in Workflowy and are written to disk before the tasks run. A name or
+ * note that runs `.llm/gtd/review/scripts/<name>` with no matching File node fails the plan here,
+ * naming its task, rather than leaving the worker to find the script missing.
  */
 export function taskFiles(tree: TreeNode): TaskFile[]
 {
 	const files: TaskFile[] = [];
-	const visit = (node: TreeNode): void =>
+	const references:
 	{
+		name: string;
+		context: string;
+	}[] = [];
+	const visit = (node: TreeNode, path: TreeNode[]): void =>
+	{
+		const context = taskContext(path);
+		for (const text of [node.name, node.note ?? ""])
+		{
+			for (const match of text.matchAll(SCRIPT_REFERENCE_PATTERN))
+			{
+				references.push(
+					{
+						name: match[1] ?? "",
+						context,
+					},
+				);
+			}
+		}
 		if (node.name.startsWith(FILE_PREFIX))
 		{
 			const name = node.name.slice(FILE_PREFIX.length).trim();
 			if (!FILE_NAME_PATTERN.test(name) || name.startsWith("."))
 			{
-				throw new Error(`File "${name}" must be a plain file name`);
+				throw new Error(`${context} File "${name}" must be a plain file name`);
 			}
 			if (node.note == null || node.note === "")
 			{
-				throw new Error(`File "${name}" has no note`);
+				throw new Error(`${context} File "${name}" has no note`);
 			}
 			if (files.some((file) => file.name === name))
 			{
-				throw new Error(`duplicate File "${name}"`);
+				throw new Error(`${context} has duplicate File "${name}"`);
 			}
 			files.push(
 				{
@@ -385,10 +427,18 @@ export function taskFiles(tree: TreeNode): TaskFile[]
 		}
 		for (const child of node.children ?? [])
 		{
-			visit(child);
+			visit(child, [...path, child]);
 		}
 	};
-	visit(tree);
+	visit(tree, []);
+	const defined = new Set(files.map((file) => file.name));
+	const missing = references.find((reference) => !defined.has(reference.name));
+	if (missing)
+	{
+		throw new Error(
+			`${missing.context} references ${SCRIPTS_DIRECTORY}/${missing.name}, but no "${FILE_PREFIX}${missing.name}" node defines it`,
+		);
+	}
 	return files;
 }
 
