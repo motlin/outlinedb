@@ -1189,13 +1189,6 @@ describe("internal adapter backlinks", () =>
 		};
 	}
 
-	const SERVER_RUN = JSON.stringify(
-		{
-			ops: [],
-			client_timestamp: 300_000_000,
-		},
-	);
-
 	function pushedOps(request: RecordedRequest):
 	{
 		type: string;
@@ -1263,7 +1256,13 @@ describe("internal adapter backlinks", () =>
 					results: [
 						{
 							new_most_recent_operation_transaction_id: "4568",
-							server_run_operation_transaction_json: SERVER_RUN,
+							// Workflowy echoes the pushed ops back as the server run.
+							server_run_operation_transaction_json: JSON.stringify(
+								{
+									ops,
+									client_timestamp: 300_000_000,
+								},
+							),
 							concurrent_remote_operation_transactions: [],
 						},
 					],
@@ -1375,7 +1374,7 @@ describe("internal adapter backlinks", () =>
 			return result;
 		}
 
-		it("creates the target's references root and a backlink mirror under it in one push, then caches them in one unit of work", async () =>
+		it("creates the target's references root and a backlink mirror under it in one push, whose echoed replay records their edge rows before the read-back caches the nodes", async () =>
 		{
 			const {adapter, pushes, cacheService, rows} = await tracked([
 				[SOURCE, node(`see ${link(TARGET)}`, ROOT)],
@@ -1510,7 +1509,7 @@ describe("internal adapter backlinks", () =>
 					],
 					systemTimes: [
 						{
-							n: 1,
+							n: 2,
 						},
 					],
 				},

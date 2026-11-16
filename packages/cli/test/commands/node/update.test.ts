@@ -325,8 +325,9 @@ describe("node update command", () =>
 	describe("backlinks", () =>
 	{
 		const TARGET_LINK = '<a href="https://workflowy.com/#/0123456789ab">t</a>';
+		const OTHER_LINK = '<a href="https://workflowy.com/#/0123456789ac">o</a>';
 
-		it("creates the backlink item locally when the new text links to a node, and delivers it with the edit", async () =>
+		it("creates the backlink item locally when the new text links to a node, and delivers it with the edit; a second link added later gets its own", async () =>
 		{
 			seedTestData(
 				testDatabase,
@@ -345,6 +346,13 @@ describe("node update command", () =>
 							parentId: null,
 						},
 					),
+					createTestNode(
+						{
+							id: "01234567-0000-4000-8000-0123456789ac",
+							name: "Other",
+							parentId: null,
+						},
+					),
 				]),
 			);
 			const upstream = fakeUpstream(fetchStub, testDatabase, tempDir);
@@ -352,6 +360,7 @@ describe("node update command", () =>
 			const {error} = await captureOutput(async () =>
 			{
 				await Update.run(["--id", "source-id", "--name", `see ${TARGET_LINK}`]);
+				await Update.run(["--id", "source-id", "--name", `see ${TARGET_LINK} and ${OTHER_LINK}`]);
 			});
 
 			expect(
@@ -363,7 +372,10 @@ describe("node update command", () =>
 			).toStrictEqual(
 				{
 					error: undefined,
-					types: [["bulk_create", "bulk_create", "edit", "edit"]],
+					types: [
+						["bulk_create", "bulk_create", "edit", "edit"],
+						["bulk_create", "bulk_create", "edit", "edit"],
+					],
 					pending: [],
 				},
 			);

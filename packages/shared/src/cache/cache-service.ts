@@ -1,6 +1,6 @@
 import type * as schema from "../db/schema.js";
 import type {AppDatabase} from "../db/types.js";
-import {mirrors, nodeContent, nodeMetadata, referencesRoots} from "../db/schema.js";
+import {mirrors, nodeContent, nodeMetadata} from "../db/schema.js";
 import {stripHtmlTags} from "../html/strip-tags.js";
 import {FAR_FUTURE_DATE, parseTemporalTimestamp} from "../temporal/constants.js";
 import type {Node} from "../types/node.js";
@@ -791,7 +791,8 @@ export class CacheService
 	 * Record a backlink sync the server accepted, as one unit of work at one
 	 * system time: deleted backlink items end their whole composite, the
 	 * changed parents' children are replaced, and each created references root
-	 * and backlink item gets its `references_roots` or `mirrors` row.
+	 * and backlink item gets its `references_roots` or `mirrors` row unless it
+	 * already has a current one.
 	 */
 	recordBacklinkSync(record: BacklinkSyncRecord): void
 	{
@@ -803,34 +804,22 @@ export class CacheService
 			{
 				storeChildren(tx, nodes, parentId, systemTime);
 			}
-			const current =
-			{
-				systemFrom: systemTime,
-				systemTo: FAR_FUTURE_DATE,
-			};
-			for (const nodeId of record.referencesRoots)
-			{
-				tx.insert(referencesRoots)
-					.values(
-						{
-							nodeId,
-							...current,
-						},
-					)
-					.run();
-			}
-			for (const {nodeId, sourceId} of record.backlinks)
-			{
-				tx.insert(mirrors)
-					.values(
-						{
-							mirrorId: nodeId,
-							originalId: sourceId,
-							...current,
-						},
-					)
-					.run();
-			}
+			// The push's replay already recorded the rows its echoed ops create; add only the rest.
+			recordItemRelationships(
+				unitOfWork,
+				{
+					mirrors: record.backlinks.map(({nodeId, sourceId}) => (
+					{
+						mirrorId: nodeId,
+						originalId: sourceId,
+					})),
+					referencesRoots: record.referencesRoots.map((nodeId) => (
+					{
+						nodeId,
+					})),
+					aiMetadata: [],
+				},
+			);
 		});
 	}
 

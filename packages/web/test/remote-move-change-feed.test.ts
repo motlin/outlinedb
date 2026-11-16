@@ -463,7 +463,7 @@ describe("remote transactions reach the nodes change feed", () =>
 							isForSearch: false,
 						},
 					},
-					// A node created through the public REST API logs a null note.
+					// A node created through the public REST API logs a null note; its name may carry an @mention link.
 					{
 						type: "bulk_create",
 						data:
@@ -473,7 +473,7 @@ describe("remote transactions reach the nodes change feed", () =>
 							project_trees: JSON.stringify([
 								{
 									id: "R",
-									nm: "",
+									nm: '@Alice <a href="https://workflowy.com/#/0123456789ab">↗</a>',
 									no: null,
 									ct: 1000,
 									metadata: {},
@@ -552,7 +552,7 @@ describe("remote transactions reach the nodes change feed", () =>
 					},
 					R:
 					{
-						name: "",
+						name: '@Alice <a href="https://workflowy.com/#/0123456789ab">↗</a>',
 						note: null,
 						completedAt: null,
 						modifiedAt: REPLAY_SEC,
