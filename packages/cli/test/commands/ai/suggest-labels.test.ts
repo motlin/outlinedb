@@ -399,11 +399,12 @@ describe("ai suggest-labels command", () =>
 		);
 	});
 
-	it("scores each entry under a month's days, drops labels already on an entry, and skips fresh entries", async () =>
+	it("scores each entry under a month's days, drops labels already on an entry, and skips fresh entries without needing a token", async () =>
 	{
 		const first = await suggest("--parent-id", "m11");
 		const firstCalls = calls();
 		run.mockClear();
+		delete process.env.CLOUDFLARE_AI_TOKEN;
 		const second = await suggest("--parent-id", "m11");
 
 		const e2State =
@@ -452,6 +453,7 @@ describe("ai suggest-labels command", () =>
 				first: JSON.parse(first.stdout),
 				firstCalls,
 				second: JSON.parse(second.stdout),
+				secondError: second.error?.message,
 				secondCalls: calls(),
 			},
 		).toStrictEqual(
@@ -480,6 +482,7 @@ describe("ai suggest-labels command", () =>
 					},
 				],
 				second: expected,
+				secondError: undefined,
 				secondCalls: [],
 			},
 		);

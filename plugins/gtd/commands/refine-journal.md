@@ -18,4 +18,6 @@ Prep defaults to **recent mode** — the current and prior live calendar months 
 
 To backfill history, say so when invoking this command (`/gtd:refine-journal archive`, or name a month). Prep then also scans the next month backwards from `last_completed_month`, and apply gates that block behind its own confirmation before touching anything.
 
+Prep never calls `op`, and the daily import barrier pre-scores only the live window, so the archive month's Clef people hints need its token from you. Before running prep in archive mode, score that month in the foreground: `direnv exec . op run -- ./bin/run.js ai suggest-labels --parent-id <archive-month-id> --since <archive-yyyy-mm> --kind person --verifier clef --threshold 0.84 >/dev/null`. Skip it and prep tags the archive month without hints.
+
 The on-disk contract both halves share is documented in `${CLAUDE_PLUGIN_ROOT}/skills/review-proposal-staging.md`.

@@ -15,6 +15,7 @@ LLM Tasks:
     op run -- just daily
     ./bin/run.js cache sync-node --id <full-uuid> --recursive
     otter-api.sh warm-credentials
+    op run -- ./bin/run.js ai suggest-labels --parent-id <calendar-id> --since <prior-yyyy-mm> --kind person --verifier clef --threshold 0.84
   Prep
     Serial: Calendar journal
       Otter journal <time...>
@@ -84,7 +85,7 @@ Dispatch one background controller per due branch from the plan:
 - A `serial` branch runs its due tasks in tree order, waiting for each before starting the next.
 - Keep at most five prep controllers in flight.
 
-**A subagent cannot answer a credential prompt, so prep workers must not invoke `op` at all.** Every credential the fan-out needs is resolved by the foreground import barrier — `op run -- just daily` for the `.envrc` refs, `otter-api.sh warm-credentials` for the Otter login — and prep workers read the resulting caches. This is the fix for two distinct prompts a background `op` call raises: a Claude Code permission prompt (the wrapped `timeout 90 op run -- …` form does not match an `op run -- …` allowlist rule, because prefix matching sees `timeout` first) and a 1Password desktop authorization prompt the user never sees. Unbounded, the latter blocks — the Otter scanner hung 22 minutes on it in one run, reported nothing, and had to be killed.
+**A subagent cannot answer a credential prompt, so prep workers must not invoke `op` at all.** Every credential the fan-out needs is resolved by the foreground import barrier — `op run -- just daily` for the `.envrc` refs, `otter-api.sh warm-credentials` for the Otter login, `ai suggest-labels` under `op run` for the Clef people hints `refine-journal-prep` reads — and prep workers read the resulting caches. This is the fix for two distinct prompts a background `op` call raises: a Claude Code permission prompt (the wrapped `timeout 90 op run -- …` form does not match an `op run -- …` allowlist rule, because prefix matching sees `timeout` first) and a 1Password desktop authorization prompt the user never sees. Unbounded, the latter blocks — the Otter scanner hung 22 minutes on it in one run, reported nothing, and had to be killed.
 
 If a worker genuinely cannot avoid `op`, that is a gap in the barrier: fix the barrier to warm the credential rather than calling `op` from the subagent. Any such call that does remain must be wrapped in `timeout` (90s is enough once the barrier has warmed authorization); on timeout the worker returns a failure naming the credential, never retries silently, and the executor surfaces it rather than treating the branch as slow.
 

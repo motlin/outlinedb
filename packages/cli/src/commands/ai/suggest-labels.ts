@@ -25,7 +25,7 @@ const KINDS = ["person", "tag"] as const satisfies readonly LabelKind[];
 export default class SuggestLabels extends Command
 {
 	static override description =
-		"Score @mention and #tag suggestions for journal entries or inbox items with hosted Clef on Workers AI (a Clef-flash shortlist pass, then a verify pass), store them, and print the verify-pass suggestions at or above the threshold. Entries already scored against their current text are skipped unless --force";
+		"Score @mention and #tag suggestions for journal entries or inbox items with hosted Clef on Workers AI (a Clef-flash shortlist pass, then a verify pass), store them, and print the verify-pass suggestions at or above the threshold. Entries already scored against their current text are skipped unless --force, and a run with nothing to score needs no CLOUDFLARE_AI_TOKEN";
 
 	static override examples = [
 		"op run -- <%= config.bin %> <%= command.id %> --id 6b7118a90648 --json",
@@ -111,44 +111,49 @@ export default class SuggestLabels extends Command
 	public async run(): Promise<EntryHints[]>
 	{
 		const {flags} = await this.parse(SuggestLabels);
-		const client = clefClientFromEnv();
-		if ("error" in client)
-		{
-			this.error(
-				client.error,
-				{
-					exit: 1,
-				},
-			);
-		}
 		const {people, hobbies, tagFrequency} = readLabelRegistries(flags["metadata-dir"]);
 
 		const database = createDatabase();
 		const cache = new CacheService(database);
 		const nodeIds = this.scope(cache, flags);
-
-		for (const entry of entriesToScore(
+		const stale = entriesToScore(
 			database,
 			nodeIds,
 			{
 				force: flags.force,
 			},
-		))
+		);
+
+		// Fresh entries need no Clef call, so a run with nothing stale needs no token.
+		if (stale.length > 0)
 		{
-			const {state, labels} = entryState(cache, entry.nodeId);
-			const pool = buildLabelPool(
-				{
-					people,
-					hobbies,
-					tagFrequency,
-					entryLabels: labels,
-				},
-			).filter(({kind}) => flags.kind === undefined || kind === flags.kind);
-			const suggestions = await scoreEntry(client, pool, state, flags.verifier);
-			database.transaction((tx) =>
+			const client = clefClientFromEnv();
+			if ("error" in client)
 			{
-				saveLabelSuggestions(tx, entry, suggestions, newSystemTimestamp());
-			});
+				this.error(
+					client.error,
+					{
+						exit: 1,
+					},
+				);
+			}
+			for (const entry of stale)
+			{
+				const {state, labels} = entryState(cache, entry.nodeId);
+				const pool = buildLabelPool(
+					{
+						people,
+						hobbies,
+						tagFrequency,
+						entryLabels: labels,
+					},
+				).filter(({kind}) => flags.kind === undefined || kind === flags.kind);
+				const suggestions = await scoreEntry(client, pool, state, flags.verifier);
+				database.transaction((tx) =>
+				{
+					saveLabelSuggestions(tx, entry, suggestions, newSystemTimestamp());
+				});
+			}
 		}
 
 		const hints = liveHints(database, nodeIds, flags.threshold).map(({nodeId, suggestions}) => (

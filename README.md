@@ -275,7 +275,7 @@ EXAMPLES
 
 ## `outlinedb ai suggest-labels`
 
-Score @mention and #tag suggestions for journal entries or inbox items with hosted Clef on Workers AI (a Clef-flash shortlist pass, then a verify pass), store them, and print the verify-pass suggestions at or above the threshold. Entries already scored against their current text are skipped unless --force
+Score @mention and #tag suggestions for journal entries or inbox items with hosted Clef on Workers AI (a Clef-flash shortlist pass, then a verify pass), store them, and print the verify-pass suggestions at or above the threshold. Entries already scored against their current text are skipped unless --force, and a run with nothing to score needs no CLOUDFLARE_AI_TOKEN
 
 ```text
 USAGE
@@ -300,7 +300,8 @@ FLAGS
 DESCRIPTION
   Score @mention and #tag suggestions for journal entries or inbox items with hosted Clef on Workers AI (a Clef-flash
   shortlist pass, then a verify pass), store them, and print the verify-pass suggestions at or above the threshold.
-  Entries already scored against their current text are skipped unless --force
+  Entries already scored against their current text are skipped unless --force, and a run with nothing to score needs no
+  CLOUDFLARE_AI_TOKEN
 
 EXAMPLES
   op run -- outlinedb ai suggest-labels --id 6b7118a90648 --json

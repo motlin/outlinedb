@@ -49,6 +49,14 @@ direnv exec . "${CLAUDE_PLUGIN_ROOT}/scripts/otter-api.sh" warm-credentials
 
 The third line is what keeps prep subagents away from `op` entirely. `otter-api.sh` resolves its `op://` refs lazily on first login; without this, the first process to need them is a background Otter scanner, which then raises both a Claude Code permission prompt and a 1Password authorization prompt that nobody can see. Warming here resolves them once, in the foreground, into a cache the subagent just reads. It is idempotent — a warm cache makes it a no-op that never invokes `op`.
 
+Then pre-score the Clef people hints `refine-journal-prep` reads, so prep never needs `CLOUDFLARE_AI_TOKEN`:
+
+```bash
+direnv exec . op run -- ./bin/run.js ai suggest-labels --parent-id 6bf42551caa3 --since "$(date -v1d -v-1m +%Y-%m)" --kind person --verifier clef --threshold 0.84 >/dev/null
+```
+
+The token is an `op://` ref in `.envrc`, so it only resolves under `op run`. `ai suggest-labels` stores every score in the local `node_label_suggestions` table and asks for the token only when an entry is new or edited since it was last scored. Scoring the live window here leaves nothing stale, so prep's own call (same scope, no `op`) just reads the stored hints. `-v1d` before `-v-1m` keeps the prior month right on the 29th-31st. This step is not a halt condition: hints are advisory, and if it fails, say so and continue — prep's call then exits non-zero and prep tags without hints.
+
 `direnv exec .` is required, not optional. The `op://` references and the literal `WORKFLOWY_API_KEY` live in the gitignored `.envrc`, and direnv loads it through a **prompt hook** that only fires in interactive shells. Every Bash tool call is a fresh non-interactive shell, so the hook never runs and the whole `.envrc` is silently absent — `op run` then has no `op://` refs to resolve and the barrier dies on `Dropbox credentials not set` at `cache import-backups`. Running it bare works from the user's own terminal and fails only under automation, which is exactly the asymmetry that makes it easy to reintroduce.
 
 `direnv exec .` is idempotent — harmless when direnv already loaded the environment — so always prefix the barrier with it rather than testing whether the variables happen to be set.
