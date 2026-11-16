@@ -34,6 +34,28 @@ Each proposal carries a `scope` (`"recent"` or `"archive"`). In recent mode — 
 
 If the staged proposals carry no `scope` (older prep output), treat them all as `recent` for backward compatibility.
 
+### Long blocks go on a decision page
+
+When a block (recent or archive) holds more than 8 proposals, present it on the decision page instead of `AskUserQuestion` batches (see **Decision page** in `review-proposal-staging.md`). Never hand-build the page with inline `jq`; the checked-in generator stages it and maps the answers back:
+
+```bash
+node ${CLAUDE_PLUGIN_ROOT}/scripts/stage-refine-journal-page.mts stage --scope recent   # or --scope archive
+node ${CLAUDE_PLUGIN_ROOT}/scripts/decision-page.mts url <slug>
+```
+
+`stage` prints `{slug, ids}`. Each card shows the rewrite as a diff under a short title (`<date>: <change kinds>`), the change notes as body lines, and either Accept / Keep as written or the `ambiguity` options (the staged pick first, alternate emoji or people after it). Put the URL in the `AskUserQuestion` that tells the user to open the page, and wait until they say they submitted. Then resolve the answers:
+
+```bash
+node ${CLAUDE_PLUGIN_ROOT}/scripts/stage-refine-journal-page.mts resolve --slug <slug>
+```
+
+It prints `{apply, declined, followUp, unanswered}`:
+
+- **`apply`** — run each card's `ops` verbatim; a `--expect-name` refusal is a stale skip as usual.
+- **`declined`** — append these rows to the decline ledger as-is (they already carry `declinedAt`).
+- **`followUp`** — answers with a note, or options that stage no text. Settle each via `AskUserQuestion` (Accept with note, a vocabulary explanation, or the exact wording), building any op with `--expect-name '<before>'`.
+- **`unanswered`** — ask about each in a follow-up question; never guess.
+
 ### Offer vocabulary persistence for intentional terms
 
 Follow **Remember explanations in the matching reference file** in `${CLAUDE_PLUGIN_ROOT}/skills/refinement-text-rules.md` when a user explains a flagged phrase. For a non-people term, explicitly offer **Keep as written and add to journal-vocabulary.md** or **Keep as written without saving vocabulary**, showing the exact proposed entry and destination in the question. An explanation in "Other" needs this follow-up too. Save only the approved vocabulary entry; reserve `people-disambiguation.md` for people's names, homonyms, and name spellings. Both keep choices reject the rewrite and enter the rejection ledger below, without the explanation. If an approved vocabulary write fails, report the failure rather than claiming it was saved.
@@ -56,7 +78,7 @@ A stale skip (`--expect-name` mismatch) is **not** a rejection — do not record
 
 ### Presentation fidelity
 
-- **Never truncate.** Every confirmation must show the **complete** `before` and `after` text, not an edits-only diff or an abbreviated snippet — the user cannot judge a change out of context.
+- **Never truncate.** Every confirmation (a question or a decision-page diff) must show the **complete** `before` and `after` text, not an edits-only diff or an abbreviated snippet — the user cannot judge a change out of context.
 - **Media lookups.** For any watched-media (📺 / 🎬 / `#watched`) proposal, look up the show/movie's actual season number, episode number, and title via web search and present the full enriched `after` (`SxxEyy "Title"`, straight quotes) for confirmation — do this consistently, not only when the entry looks ambiguous.
 - **Decode HTML entities** (`&quot;`→`"`, `&amp;`→`&`, `&#39;`→`'`) and never introduce curly/smart quotes when composing or editing the `after`.
 
