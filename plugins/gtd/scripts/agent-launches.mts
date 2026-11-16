@@ -3,12 +3,14 @@
 // A launched agent finishes and its pane closes, so the review loses track of it unless the launch
 // is written down. The ledger (.llm/gtd/review/agent-launches.json) records each launch and where
 // the agent will write its final report, so a later step can skip a task already launched this
-// cycle and, before the run ends, read every report.
+// cycle and, before the run ends, read every report. Once a report has been shown, `ack` stamps
+// the launch so later runs' `pending` stops resurfacing it.
 //
 // Usage:
 //   agent-launches.mts record <slug> <pane> <cwd> [--date YYYY-MM-DD]   prints the report path
 //   agent-launches.mts check <slug> [--date YYYY-MM-DD]                 prints true|false
-//   agent-launches.mts pending                                          prints {ready, missing}
+//   agent-launches.mts pending                                          prints {ready, missing}, unacked only
+//   agent-launches.mts ack <slug> <launchedAt>                          marks a shown report acknowledged
 
 import {existsSync, mkdirSync, writeFileSync} from "node:fs";
 import {dirname, join} from "node:path";
@@ -25,6 +27,7 @@ export interface Launch
 	readonly cwd: string;
 	readonly launchedAt: string;
 	readonly reportPath: string;
+	readonly ackedAt?: string;
 }
 
 export interface Ledger
@@ -49,6 +52,26 @@ export function alreadyLaunched(ledger: Ledger, slug: string, date: string): boo
 	return ledger.launches.some((l) => l.slug === slug && l.launchedAt.slice(0, 10) === date);
 }
 
+export function acknowledgeLaunch(ledger: Ledger, slug: string, launchedAt: string, ackedAt: string): Ledger
+{
+	const matches = (l: Launch): boolean => l.slug === slug && l.launchedAt === launchedAt;
+	if (!ledger.launches.some(matches))
+	{
+		throw new Error(`no launch ${slug} at ${launchedAt}`);
+	}
+	return {
+		launches: ledger.launches.map((l) =>
+			matches(l)
+				?
+					{
+						...l,
+						ackedAt,
+					}
+				: l,
+		),
+	};
+}
+
 export function pendingReports(
 	ledger: Ledger,
 	root: string,
@@ -59,9 +82,10 @@ export function pendingReports(
 }
 {
 	const present = (l: Launch): boolean => existsSync(join(root, l.reportPath));
+	const open = ledger.launches.filter((l) => l.ackedAt === undefined);
 	return {
-		ready: ledger.launches.filter(present),
-		missing: ledger.launches.filter((l) => !present(l)),
+		ready: open.filter(present),
+		missing: open.filter((l) => !present(l)),
 	};
 }
 
@@ -73,7 +97,8 @@ function isLaunch(value: unknown): value is Launch
 		typeof value.pane === "string" &&
 		typeof value.cwd === "string" &&
 		typeof value.launchedAt === "string" &&
-		typeof value.reportPath === "string"
+		typeof value.reportPath === "string" &&
+		(value.ackedAt === undefined || typeof value.ackedAt === "string")
 	);
 }
 
@@ -95,6 +120,17 @@ function readLedger(path: string): Ledger
 function today(): string
 {
 	return new Date().toLocaleDateString("en-CA");
+}
+
+function writeLedger(ledger: Ledger): void
+{
+	mkdirSync(
+		dirname(LEDGER_PATH),
+		{
+			recursive: true,
+		},
+	);
+	writeFileSync(LEDGER_PATH, `${JSON.stringify(ledger, null, 2)}\n`);
 }
 
 function main(argv: readonly string[]): unknown
@@ -134,16 +170,18 @@ function main(argv: readonly string[]): unknown
 			launchedAt: new Date().toISOString(),
 			reportPath: report,
 		};
-		mkdirSync(
-			dirname(LEDGER_PATH),
-			{
-				recursive: true,
-			},
-		);
-		writeFileSync(LEDGER_PATH, `${JSON.stringify(recordLaunch(ledger, launch), null, 2)}\n`);
+		writeLedger(recordLaunch(ledger, launch));
 		return report;
 	}
-	throw new Error("usage: agent-launches.mts record <slug> <pane> <cwd> | check <slug> | pending [--date D]");
+	if (command === "ack")
+	{
+		const launchedAt = pane;
+		writeLedger(acknowledgeLaunch(ledger, slug, launchedAt, new Date().toISOString()));
+		return true;
+	}
+	throw new Error(
+		"usage: agent-launches.mts record <slug> <pane> <cwd> | check <slug> | pending | ack <slug> <launchedAt> [--date D]",
+	);
 }
 
 if (isMain(import.meta.url))

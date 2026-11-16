@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import {existsSync, mkdtempSync, writeFileSync, mkdirSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {alreadyLaunched, pendingReports, recordLaunch, reportPath} from "./agent-launches.mts";
+import {acknowledgeLaunch, alreadyLaunched, pendingReports, recordLaunch, reportPath} from "./agent-launches.mts";
 import type {Launch} from "./agent-launches.mts";
 
 const launch: Launch =
@@ -71,16 +71,60 @@ test("pendingReports splits launches by whether the report file exists", () =>
 		reportPath: "r/waiting.md",
 	};
 	assert.equal(existsSync(join(dir, "r", "done.md")), true);
+	const acked =
+	{
+		...done,
+		slug: "acked",
+		ackedAt: "2026-10-25T20:00:00.000Z",
+	};
 	assert.deepStrictEqual(
 		pendingReports(
 			{
-				launches: [done, waiting],
+				launches: [done, waiting, acked],
 			},
 			dir,
 		),
 		{
 			ready: [done],
 			missing: [waiting],
+		},
+	);
+});
+
+test("acknowledgeLaunch stamps only the launch matching slug and launchedAt", () =>
+{
+	const later =
+	{
+		...launch,
+		launchedAt: "2026-10-26T08:00:00.000Z",
+		reportPath: ".llm/gtd/review/agent-reports/sync-forks-2026-10-26.md",
+	};
+	const ledger =
+	{
+		launches: [launch, later],
+	};
+	assert.deepStrictEqual(
+		acknowledgeLaunch(ledger, "sync-forks", "2026-10-25T08:00:00.000Z", "2026-10-26T09:00:00.000Z"),
+		{
+			launches: [
+				{
+					...launch,
+					ackedAt: "2026-10-26T09:00:00.000Z",
+				},
+				later,
+			],
+		},
+	);
+	assert.deepStrictEqual(
+		ledger,
+		{
+			launches: [launch, later],
+		},
+	);
+	assert.throws(
+		() => acknowledgeLaunch(ledger, "sync-forks", "2026-10-27T08:00:00.000Z", "2026-10-27T09:00:00.000Z"),
+		{
+			message: "no launch sync-forks at 2026-10-27T08:00:00.000Z",
 		},
 	);
 });

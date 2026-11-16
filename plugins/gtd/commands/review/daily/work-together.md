@@ -98,9 +98,14 @@ Before the run ends, read the ledger of cross-project agents launched by this re
 node ${CLAUDE_PLUGIN_ROOT}/scripts/agent-launches.mts pending
 ```
 
-- For each launch in `ready`, read its report file and show it to the user as plain final text, never right before an `AskUserQuestion` (the dialog hides it). Then ask whether to advance the item's date with its staged `applyOp`; apply it only on yes.
+- For each launch in `ready`, read its report file and show it to the user as plain final text, never right before an `AskUserQuestion` (the dialog hides it). Then ask whether to advance the item's date with its staged `applyOp`; apply it only on yes. Whatever the answer, acknowledge the shown report so later runs' `pending` stops resurfacing it:
+
+    ```bash
+    node ${CLAUDE_PLUGIN_ROOT}/scripts/agent-launches.mts ack <slug> <launchedAt>
+    ```
+
 - For each launch in `missing`, say the agent has not written a report (its pane may still be running or it exited early) and leave the item's date alone.
-- Silent when the ledger holds no launches.
+- Silent when `pending` returns no launches (acknowledged ones are skipped).
 
 ## Finish
 
