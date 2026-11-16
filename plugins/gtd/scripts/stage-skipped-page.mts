@@ -52,6 +52,13 @@ export interface SkippedOverdueRow
 	applyOp: string | null;
 	isLlmTask?: boolean | undefined;
 	missingLlmTag?: boolean | undefined;
+	children?:
+		|
+		  {
+				title: string;
+				note: string | null;
+		  }[]
+		| undefined;
 }
 
 export interface SkippedDueRow
@@ -116,6 +123,20 @@ const SOURCE_LABELS: Record<string, string> =
 	things: "Things 3",
 	reminders: "Apple Reminders",
 };
+
+// Open-then-confirm (due.md): Claude opens a page, then the user does the final manual step there.
+const OPENS_PAGE_RE = /^open\b/iu;
+const USER_STEP_RE = /\buser (?:clicks|completes|performs|submits|redeems)\b|\byou do:/iu;
+
+/** Whether an #llm-task row only opens a page for a manual step the user still owes. */
+export function isOpenThenConfirm(row: SkippedOverdueRow): boolean
+{
+	const children = row.children ?? [];
+	return (
+		children.some((kid) => OPENS_PAGE_RE.test(kid.title)) &&
+		children.some((kid) => USER_STEP_RE.test(`${kid.title} ${kid.note ?? ""}`))
+	);
+}
 
 function lateness(days: number | null): string
 {
@@ -184,8 +205,13 @@ export function buildSkippedPage({
 })
 {
 	// Claude runs #llm-task rows (tagged or not yet tagged) itself; a skip there means it was blocked, not
-	// that the user owes it, so those rows never become a card for the user.
-	const claudeRuns = new Set(overdueRows.filter((row) => row.isLlmTask || row.missingLlmTag).map((row) => row.id));
+	// that the user owes it, so those rows never become a card for the user. An open-then-confirm row is
+	// the exception: its last step is the user's, so a skip there is still owed and keeps its card.
+	const claudeRuns = new Set(
+		overdueRows
+			.filter((row) => (row.isLlmTask || row.missingLlmTag) && !isOpenThenConfirm(row))
+			.map((row) => row.id),
+	);
 	const overdueByKey = new Map(overdueRows.filter((row) => row.id).map((row) => [row.id, row]));
 	const dueByKey = new Map(dueRows.flatMap((row) => dueKeys(row).map((key) => [key, row] as const)));
 

@@ -254,7 +254,7 @@ test("buildSkippedPage stages one Did it / Still skipped card per skipped item, 
 	);
 });
 
-test("buildSkippedPage omits empty groups and Claude's own #llm-task rows, staging no groups when nothing else was skipped", () =>
+test("buildSkippedPage omits empty groups and Claude's fully automatic #llm-task rows, keeping open-then-confirm ones the user finishes", () =>
 {
 	const llmRow =
 	{
@@ -274,12 +274,28 @@ test("buildSkippedPage omits empty groups and Claude's own #llm-task rows, stagi
 		isLlmTask: false,
 		missingLlmTag: true,
 	};
+	const redeemRow =
+	{
+		...llmRow,
+		id: "llm-3",
+		name: "Cash out rewards #llm-task",
+		children: [
+			{
+				title: "Open rewards.example.com with open in the default browser",
+				note: null,
+			},
+			{
+				title: "Start the redemption flow",
+				note: "I do: open the page. You do: click Submit from your account.",
+			},
+		],
+	};
 	assert.deepStrictEqual(
 		buildSkippedPage(
 			{
-				keys: ["llm-1", "llm-2"],
+				keys: ["llm-1", "llm-2", "llm-3"],
 				today: "2026-11-05",
-				overdueRows: [llmRow, untaggedRow],
+				overdueRows: [llmRow, untaggedRow, redeemRow],
 				dueRows: [],
 			},
 		),
@@ -290,9 +306,42 @@ test("buildSkippedPage omits empty groups and Claude's own #llm-task rows, stagi
 				title: "Skipped today",
 				intro: "Everything you skipped during the daily review. Check the ones you have since done.",
 				layout: "checklist",
-				groups: [],
+				groups: [
+					{
+						heading: "Recurring review",
+						items: [
+							{
+								id: "llm-3",
+								title: "Cash out rewards #llm-task",
+								body: ["🔄 Weekly Review · overdue 3d"],
+								links: [],
+								options: [
+									{
+										value: "did",
+										label: "Did it",
+										description: "Mark it done now, the same way Done does in the walk",
+									},
+									{
+										value: "skip",
+										label: "Still skipped",
+										description: "Leave it unchanged; it comes back next run",
+									},
+								],
+								default: "skip",
+							},
+						],
+					},
+				],
 			},
-			items: [],
+			items: [
+				{
+					id: "llm-3",
+					title: "Cash out rewards #llm-task",
+					segment: "recurring",
+					source: "workflowy",
+					done: "x",
+				},
+			],
 		},
 	);
 });
