@@ -2,20 +2,28 @@
 /* eslint-disable @typescript-eslint/no-floating-promises -- node:test test() calls are fire-and-forget by design */
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {spawnSync} from "node:child_process";
+import {spawn} from "node:child_process";
+import {createServer} from "node:http";
 import {mkdtempSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 
 const script = new URL("decision-page.mts", import.meta.url).pathname;
 
-function run(args: string[], env: Record<string, string> = {})
+interface RunResult
 {
-	const result = spawnSync(
+	status: number | null;
+	stdout: string;
+	stderr: string;
+}
+
+// Async, not spawnSync: the in-process web app stub must keep answering while the script runs.
+async function run(args: string[], env: Record<string, string> = {}): Promise<RunResult>
+{
+	const child = spawn(
 		process.execPath,
 		[script, ...args],
 		{
-			encoding: "utf8",
 			env:
 			{
 				...process.env,
@@ -24,19 +32,76 @@ function run(args: string[], env: Record<string, string> = {})
 			},
 		},
 	);
+	let stdout = "";
+	let stderr = "";
+	child.stdout.setEncoding("utf8").on("data", (chunk: string) =>
+	{
+		stdout += chunk;
+	});
+	child.stderr.setEncoding("utf8").on("data", (chunk: string) =>
+	{
+		stderr += chunk;
+	});
+	const status = await new Promise<number | null>((resolve) =>
+	{
+		child.on("close", resolve);
+	});
 	return {
-		status: result.status,
-		stdout: result.stdout,
-		stderr: result.stderr,
+		status,
+		stdout,
+		stderr,
 	};
 }
 
-function withDirectory(body: (directory: string) => void): void
+/** Serve `responses[path]` (a bare 404 otherwise) on a local port while `body` runs against its origin. */
+async function withWebApp(
+	responses: Record<
+		string,
+		| number
+		|
+		  {
+				status: number;
+				json: unknown;
+		  }
+	>,
+	body: (origin: string) => Promise<void> | void,
+): Promise<void>
+{
+	const server = createServer((request, response) =>
+	{
+		const answer = responses[request.url ?? ""] ?? 404;
+		if (typeof answer === "number")
+		{
+			response.statusCode = answer;
+			response.end();
+			return;
+		}
+		response.statusCode = answer.status;
+		response.setHeader("content-type", "application/json");
+		response.end(JSON.stringify(answer.json));
+	});
+	await new Promise<void>((resolve) =>
+	{
+		server.listen(0, "127.0.0.1", resolve);
+	});
+	try
+	{
+		const address = server.address();
+		assert.ok(typeof address === "object" && address !== null);
+		await body(`http://127.0.0.1:${address.port}`);
+	}
+	finally
+	{
+		server.close();
+	}
+}
+
+async function withDirectory(body: (directory: string) => Promise<void>): Promise<void>
 {
 	const directory = mkdtempSync(join(tmpdir(), "decision-page-test-"));
 	try
 	{
-		body(directory);
+		await body(directory);
 	}
 	finally
 	{
@@ -50,44 +115,141 @@ function withDirectory(body: (directory: string) => void): void
 	}
 }
 
-test("url prints the decision page under the web app base URL", () =>
+test("url prints the decision page URL once the page and its staged document both load", async () =>
 {
-	assert.deepStrictEqual(
-		run(["url", "meetings"]),
+	await withWebApp(
 		{
-			status: 0,
-			stdout: "https://example.test/decisions/meetings\n",
-			stderr: "",
+			"/decisions/meetings": 200,
+			"/api/v1/decisions/meetings": 200,
+		},
+		async (origin) =>
+		{
+			assert.deepStrictEqual(
+				await run(
+					["url", "meetings"],
+					{
+						REBALANCE_WEB_APP_URL: origin,
+					},
+				),
+				{
+					status: 0,
+					stdout: `${origin}/decisions/meetings\n`,
+					stderr: "",
+				},
+			);
 		},
 	);
 });
 
-test("url defaults to the ladder's web app host", () =>
+test("url fails naming the status when the page itself errors, as a dead Vite front end 502s", async () =>
 {
-	const {REBALANCE_WEB_APP_URL: _ignored, ...env} = process.env;
-	const result = spawnSync(
-		process.execPath,
-		[script, "url", "meetings"],
+	await withWebApp(
 		{
-			encoding: "utf8",
-			env,
+			"/decisions/meetings": 502,
+			"/api/v1/decisions/meetings": 200,
 		},
-	);
-	assert.deepStrictEqual(
+		async (origin) =>
 		{
-			status: result.status,
-			stdout: result.stdout,
-		},
-		{
-			status: 0,
-			stdout: "https://workflowy.m4.notlin.com/decisions/meetings\n",
+			assert.deepStrictEqual(
+				await run(
+					["url", "meetings"],
+					{
+						REBALANCE_WEB_APP_URL: origin,
+					},
+				),
+				{
+					status: 1,
+					stdout: "",
+					stderr: `Decision page ${origin}/decisions/meetings is not serving: HTTP 502. Restart the web app (just web) if it is down or fix the staged document, then run this again before giving the user the URL.\n`,
+				},
+			);
 		},
 	);
 });
 
-test("answers prints the saved answers JSON", () =>
+test("url fails when the page loads but its staged document does not", async () =>
 {
-	withDirectory((directory) =>
+	await withWebApp(
+		{
+			"/decisions/meetings": 200,
+		},
+		async (origin) =>
+		{
+			assert.deepStrictEqual(
+				await run(
+					["url", "meetings"],
+					{
+						REBALANCE_WEB_APP_URL: origin,
+					},
+				),
+				{
+					status: 1,
+					stdout: "",
+					stderr: `Decision page ${origin}/api/v1/decisions/meetings is not serving: HTTP 404. Restart the web app (just web) if it is down or fix the staged document, then run this again before giving the user the URL.\n`,
+				},
+			);
+		},
+	);
+});
+
+test("url fails quoting the API's error when the staged document is invalid", async () =>
+{
+	await withWebApp(
+		{
+			"/decisions/meetings": 200,
+			"/api/v1/decisions/meetings":
+			{
+				status: 500,
+				json:
+				{
+					error: "Item ids must be unique",
+				},
+			},
+		},
+		async (origin) =>
+		{
+			assert.deepStrictEqual(
+				await run(
+					["url", "meetings"],
+					{
+						REBALANCE_WEB_APP_URL: origin,
+					},
+				),
+				{
+					status: 1,
+					stdout: "",
+					stderr: `Decision page ${origin}/api/v1/decisions/meetings is not serving: HTTP 500 (Item ids must be unique). Restart the web app (just web) if it is down or fix the staged document, then run this again before giving the user the URL.\n`,
+				},
+			);
+		},
+	);
+});
+
+test("url fails naming the network error when nothing is listening", async () =>
+{
+	let origin = "";
+	await withWebApp({}, (served) =>
+	{
+		origin = served;
+	});
+	assert.deepStrictEqual(
+		await run(
+			["url", "meetings"],
+			{
+				REBALANCE_WEB_APP_URL: origin,
+			},
+		),
+		{
+			status: 1,
+			stdout: "",
+			stderr: `Decision page ${origin}/decisions/meetings is not serving: ECONNREFUSED. Restart the web app (just web) if it is down or fix the staged document, then run this again before giving the user the URL.\n`,
+		},
+	);
+});
+
+test("answers prints the saved answers JSON", async () =>
+{
+	await withDirectory(async (directory) =>
 	{
 		const answers =
 		{
@@ -101,7 +263,7 @@ test("answers prints the saved answers JSON", () =>
 		};
 		writeFileSync(join(directory, "meetings.answers.json"), JSON.stringify(answers));
 		assert.deepStrictEqual(
-			run(
+			await run(
 				["answers", "meetings"],
 				{
 					OUTLINEDB_DECISIONS_DIR: directory,
@@ -116,12 +278,12 @@ test("answers prints the saved answers JSON", () =>
 	});
 });
 
-test("answers exits non-zero naming the missing file when nothing was answered", () =>
+test("answers exits non-zero naming the missing file when nothing was answered", async () =>
 {
-	withDirectory((directory) =>
+	await withDirectory(async (directory) =>
 	{
 		assert.deepStrictEqual(
-			run(
+			await run(
 				["answers", "meetings"],
 				{
 					OUTLINEDB_DECISIONS_DIR: directory,
@@ -136,10 +298,10 @@ test("answers exits non-zero naming the missing file when nothing was answered",
 	});
 });
 
-test("a slug outside [a-z0-9-] is refused", () =>
+test("a slug outside [a-z0-9-] is refused", async () =>
 {
 	assert.deepStrictEqual(
-		run(["url", "../x"]),
+		await run(["url", "../x"]),
 		{
 			status: 2,
 			stdout: "",
@@ -148,10 +310,10 @@ test("a slug outside [a-z0-9-] is refused", () =>
 	);
 });
 
-test("an unknown subcommand prints usage", () =>
+test("an unknown subcommand prints usage", async () =>
 {
 	assert.deepStrictEqual(
-		run(["open", "meetings"]),
+		await run(["open", "meetings"]),
 		{
 			status: 2,
 			stdout: "",
