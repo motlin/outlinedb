@@ -47,6 +47,17 @@ Drop items that need the user's body or presence (a haircut, a phone call only t
 
 Read each surviving item's subtree (children, note, links) before proposing, per **Show the item, do not just name it** in `${CLAUDE_PLUGIN_ROOT}/skills/due-item-walk.md`. The offer has to rest on what the item actually says.
 
+### Check whether the work already exists
+
+Before offering to produce a deliverable (an outline, a draft, a doc, a list), look for it already existing. Check the item's subtree for children that hold it (a draft, an outline, a link to a doc, a saved partial result) and the last 14 days of the `📆 Calendar` journal for entries that record doing it. A user who opens with "did we start working on this" means the work exists somewhere, so search before answering.
+
+When evidence is found, the offer changes:
+
+- Quote the evidence in the context block: the child node or journal entry, with its workflowy.com link and date.
+- Order **Already done** first in the options, since it is the likeliest answer.
+- Add an **Update task text** option that rewrites the item's name to the step that remains (e.g. `Make the outline` becomes `Send the outline to @Alice for review`), leaving it open in place. Read it back after the rename.
+- **Work on it now** offers the remaining step, never the part that is already done.
+
 ## Offer each item
 
 Present the categories in order: due, then `1st` tier, then filed this run. Ask about one item per question through `AskUserQuestion`; one call may carry up to 4 questions, never two items in one question. Print the item's context block immediately before the call. Do **not** open with a question about how many items to cover or which category to start with. Go straight to the first item.
@@ -56,6 +67,7 @@ Each question names the item, its category and why it qualifies (`Due in 2 days`
 - **Work on it now** — the help, stated as the option label's description, e.g. `Draft the reply to @Alice's contract question`.
 - **Not now** — leave the item exactly where it is.
 - **Already done** — the user finished it outside the review. Complete it with the same per-source operation the due walk uses (a `complete` op from the row's `ops`, or `node complete --id <uuid>` for a ladder item), then read it back.
+- **Update task text** — only when **Check whether the work already exists** found evidence; that section sets the option order.
 
 ## Work accepted items one at a time
 
