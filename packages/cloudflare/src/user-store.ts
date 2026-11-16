@@ -35,11 +35,10 @@ import type
 import {WorkflowyInternalClient} from "@outlinedb/shared/api";
 import type {SessionCookieStore} from "@outlinedb/shared/api";
 import {drizzle} from "drizzle-orm/durable-sqlite";
-import {migrate} from "drizzle-orm/durable-sqlite/migrator";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {AlarmSchedule} from "./alarm-schedule";
 import {r2BlobStore} from "./blob-store-r2";
-import {doMigrationConfig} from "./do-migrations";
+import {migrateDurableObject} from "./do-migrations";
 import {EmbeddingJob} from "./embedding-job";
 import type {EmbeddingStatus} from "./embedding-job";
 import {vectorizeIndex, workersAiEmbedder} from "./embeddings";
@@ -131,7 +130,8 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 			);
 			this.db = db;
 			const before = countApplied(ctx);
-			await migrate(db, doMigrationConfig);
+			// Throws the failing migration, statement and SQLite message, which reach `wrangler tail` intact.
+			migrateDurableObject(ctx.storage);
 			ensureNodeTags(db);
 			this.appliedOnBoot = countApplied(ctx) - before;
 			await this.alarms.adoptLegacyAlarm();

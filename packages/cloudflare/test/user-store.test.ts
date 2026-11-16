@@ -1,5 +1,7 @@
 import {afterAll, beforeAll, describe, expect, it} from "vite-plus/test";
-import {rmSync} from "node:fs";
+import {copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
 import Database from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
 import {migrate} from "drizzle-orm/better-sqlite3/migrator";
@@ -375,4 +377,139 @@ describe("user store restart", () =>
 			);
 		}
 	}, 60_000);
+
+	it("migrates a Durable Object holding text system times from before migration 0010", async () =>
+	{
+		const first = await startHarness("./probe-entry.ts", "ProbeStore");
+		const persistDir = first.persistDir;
+		try
+		{
+			await probeStore(first.mf);
+			await first.dispose(true);
+			const file = readdirSync(
+				join(persistDir, "do"),
+				{
+					recursive: true,
+				},
+			).find((name) => typeof name === "string" && name.endsWith(".sqlite"));
+			if (file === undefined)
+			{
+				throw new Error("no Durable Object database was persisted");
+			}
+			seedBeforeMicroseconds(join(persistDir, "do", String(file)));
+			const second = await startHarness("./probe-entry.ts", "ProbeStore", persistDir);
+			try
+			{
+				await expect(probeStore(second.mf)).resolves.toMatchObject(
+					{
+						migrations: 11,
+						appliedOnBoot: 1,
+					},
+				);
+			}
+			finally
+			{
+				await second.dispose(true);
+			}
+			const migrated = new Database(
+				join(persistDir, "do", String(file)),
+				{
+					readonly: true,
+				},
+			);
+			const rows = migrated.prepare("SELECT user_id, system_from, system_to FROM account").all();
+			migrated.close();
+			expect(rows).toStrictEqual([
+				{
+					user_id: "1",
+					system_from: 1_794_705_300_123_000,
+					system_to: 9_007_199_254_740_991,
+				},
+			]);
+		}
+		finally
+		{
+			rmSync(
+				persistDir,
+				{
+					recursive: true,
+					force: true,
+				},
+			);
+		}
+	}, 60_000);
 });
+
+/**
+ * Rewind a persisted Durable Object database to how production was before migration 0010: drop every table the
+ * migrations made, keeping workerd's own `_cf_` tables, migrate through 0009, and add one account row with text times.
+ */
+function seedBeforeMicroseconds(path: string): void
+{
+	const folder = mkdtempSync(join(tmpdir(), "wf-mig-"));
+	const seeded = new Database(path);
+	try
+	{
+		const tables = () =>
+			seeded
+				.prepare(
+					String.raw`SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE '\_cf\_%' ESCAPE '\' AND name NOT LIKE 'sqlite\_%' ESCAPE '\'`,
+				)
+				.all() as
+			{
+				name: string;
+				sql: string;
+			}[];
+		for (const table of tables().filter((row) => row.sql.startsWith("CREATE VIRTUAL")))
+		{
+			seeded.exec(`DROP TABLE "${table.name}"`);
+		}
+		for (const table of tables())
+		{
+			seeded.exec(`DROP TABLE "${table.name}"`);
+		}
+		const journal = JSON.parse(readFileSync(join(migrationsFolder, "meta/_journal.json"), "utf8")) as
+		{
+			entries:
+			{
+				idx: number;
+				tag: string;
+			}[];
+		};
+		const entries = journal.entries.filter((entry) => entry.idx < 10);
+		mkdirSync(join(folder, "meta"));
+		writeFileSync(
+			join(folder, "meta/_journal.json"),
+			JSON.stringify(
+				{
+					...journal,
+					entries,
+				},
+			),
+		);
+		for (const entry of entries)
+		{
+			copyFileSync(join(migrationsFolder, `${entry.tag}.sql`), join(folder, `${entry.tag}.sql`));
+		}
+		migrate(
+			drizzle(seeded),
+			{
+				migrationsFolder: folder,
+			},
+		);
+		seeded
+			.prepare("INSERT INTO account (user_id, date_joined_sec, system_from, system_to) VALUES (?, ?, ?, ?)")
+			.run("1", 1_794_705_300, "2026-11-15 01:15:00.123", "9999-12-31 23:59:59");
+	}
+	finally
+	{
+		seeded.close();
+		rmSync(
+			folder,
+			{
+				recursive: true,
+				force: true,
+			},
+		);
+	}
+}
