@@ -760,6 +760,213 @@ describe("remote transactions reach the nodes change feed", () =>
 			},
 		);
 	});
+	it("a remote undelete restores the subtree at its slot, keeping createdAt and stamping every restored node", async () =>
+	{
+		const {sqlite, api, adapter, changes} = setup();
+		open.push(sqlite);
+		vi.setSystemTime(T0 + TRANSACTION_TIMEOUT_MS + 70_000);
+		respondWith(
+			api,
+			[
+				transaction(101, [
+					{
+						type: "delete",
+						data:
+						{
+							projectid: "P1",
+						},
+					},
+				]),
+			],
+			"101",
+		);
+		await adapter.catchUp();
+		const deleted = await changes(null);
+		const restoredAt = T0 + 2 * TRANSACTION_TIMEOUT_MS + 140_000;
+		vi.setSystemTime(restoredAt);
+		respondWith(
+			api,
+			[
+				transaction(102, [
+					{
+						type: "undelete",
+						data:
+						{
+							projectid: "P1",
+							parentid: "None",
+							priority: 1,
+						},
+					},
+				]),
+			],
+			"102",
+		);
+
+		await adapter.catchUp();
+		const body = await changes(deleted.latest);
+
+		const restoredSec = Math.floor(restoredAt / 1000);
+		expect(
+			{
+				...shape(body),
+				contents: contents(body),
+				createdAt: Object.fromEntries(
+					body.children.flatMap(({nodes}) => nodes.map((node) => [node.id, node.createdAt])),
+				),
+			},
+		).toStrictEqual(
+			{
+				reset: false,
+				changedIds: new Set(["P1", "X", "Y"]),
+				deletedIds: new Set(),
+				children:
+				{
+					home: ["P2", "P1"],
+					P1: ["X", "Y"],
+				},
+				// workflowy.com's undelete stamps every restored node and never the parent.
+				contents:
+				{
+					P1:
+					{
+						name: "P1",
+						note: null,
+						completedAt: null,
+						modifiedAt: restoredSec,
+					},
+					P2:
+					{
+						name: "P2",
+						note: null,
+						completedAt: null,
+						modifiedAt: SEEDED_SEC,
+					},
+					X:
+					{
+						name: "X",
+						note: null,
+						completedAt: null,
+						modifiedAt: restoredSec,
+					},
+					Y:
+					{
+						name: "Y",
+						note: null,
+						completedAt: null,
+						modifiedAt: restoredSec,
+					},
+				},
+				createdAt:
+				{
+					P1: 100,
+					P2: 100,
+					X: 100,
+					Y: 100,
+				},
+			},
+		);
+	});
+
+	it("a remote delete then undelete in one batch leaves the subtree live at the undelete's slot", async () =>
+	{
+		const {sqlite, api, adapter, changes} = setup();
+		open.push(sqlite);
+		const seeded = await changes(null);
+		vi.setSystemTime(T0 + TRANSACTION_TIMEOUT_MS + 70_000);
+		respondWith(
+			api,
+			[
+				transaction(101, [
+					{
+						type: "edit",
+						data:
+						{
+							projectid: "X",
+							name: "Renamed",
+						},
+					},
+					{
+						type: "delete",
+						data:
+						{
+							projectid: "P1",
+						},
+					},
+					{
+						type: "undelete",
+						data:
+						{
+							projectid: "P1",
+							parentid: "P2",
+							priority: 0,
+						},
+					},
+				]),
+			],
+			"101",
+		);
+
+		await adapter.catchUp();
+		const body = await changes(seeded.latest);
+
+		expect(
+			{
+				...shape(body),
+				contents: contents(body),
+			},
+		).toStrictEqual(
+			{
+				reset: false,
+				changedIds: new Set(["P1", "X", "Y"]),
+				deletedIds: new Set(),
+				children:
+				{
+					home: ["P2"],
+					P1: ["X", "Y"],
+					P2: ["P1", "Z"],
+				},
+				contents:
+				{
+					P1:
+					{
+						name: "P1",
+						note: null,
+						completedAt: null,
+						modifiedAt: REPLAY_SEC,
+					},
+					P2:
+					{
+						name: "P2",
+						note: null,
+						completedAt: null,
+						modifiedAt: SEEDED_SEC,
+					},
+					X:
+					{
+						name: "Renamed",
+						note: null,
+						completedAt: null,
+						modifiedAt: REPLAY_SEC,
+					},
+					Y:
+					{
+						name: "Y",
+						note: null,
+						completedAt: null,
+						modifiedAt: REPLAY_SEC,
+					},
+					Z:
+					{
+						name: "Z",
+						note: null,
+						completedAt: null,
+						modifiedAt: SEEDED_SEC,
+					},
+				},
+			},
+		);
+	});
+
 	describe("around pending outbox rows", () =>
 	{
 		/** A mirror-mode local write, recorded in the outbox, made before the catch-up's clock. */
@@ -871,6 +1078,74 @@ describe("remote transactions reach the nodes change feed", () =>
 				{
 					live: ["P1:P1:null:null", "P2:P2:null:null", "X:X:null:P2", "Y:Y:null:null", "Z:Z:null:P2"],
 					pending: new Map([["X", new Set(["placement"])]]),
+				},
+			);
+		});
+
+		it("a remote undelete leaves a node with a pending local delete deleted", async () =>
+		{
+			const {sqlite, db, api, adapter} = setup();
+			open.push(sqlite);
+			respondWith(
+				api,
+				[
+					transaction(101, [
+						{
+							type: "delete",
+							data:
+							{
+								projectid: "P1",
+							},
+						},
+					]),
+				],
+				"101",
+			);
+			await adapter.catchUp();
+			vi.setSystemTime(T0 + 2 * TRANSACTION_TIMEOUT_MS + 140_000);
+			new LocalTreeWriter(
+				db,
+				{
+					outbox: new OutboxRecorder(),
+				},
+			).deleteNode("P2");
+			vi.setSystemTime(T0 + 2 * TRANSACTION_TIMEOUT_MS + 150_000);
+			respondWith(
+				api,
+				[
+					transaction(102, [
+						{
+							type: "undelete",
+							data:
+							{
+								projectid: "P2",
+								parentid: "None",
+								priority: 0,
+							},
+						},
+						{
+							type: "undelete",
+							data:
+							{
+								projectid: "P1",
+								parentid: "P2",
+								priority: 0,
+							},
+						},
+					]),
+				],
+				"102",
+			);
+
+			await adapter.catchUp();
+
+			expect(state(db)).toStrictEqual(
+				{
+					live: [],
+					pending: new Map([
+						["P2", new Set(["delete"])],
+						["Z", new Set(["delete"])],
+					]),
 				},
 			);
 		});
