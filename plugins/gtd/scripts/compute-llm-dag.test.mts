@@ -213,6 +213,50 @@ test("computeLlmDag records the plan date that every next date is computed from"
 	assert.strictEqual(at(at(plan.prepBranches, 0).tasks, 0).advance.nextDate, "2000-01-02");
 });
 
+test("computeLlmDag keeps tasks prepped earlier in a review that crossed midnight off the new plan, advancing them from the new date", () =>
+{
+	// A review planned on 1999-12-31 ran past midnight, so the executor recomputes the plan for
+	// 2000-01-01. The daily task was already prepped this session and must not be prepped again.
+	const plan = computeLlmDag(fixture(), "2000-01-01", new Set(["daily"]));
+	const oldName = `Daily task ${time("2000-01-01", "Sat, Jan 1, 2000")}`;
+	const newName = `Daily task ${time("2000-01-02", "Sun, Jan 2, 2000")}`;
+
+	assert.deepStrictEqual(
+		plan.prepBranches.map((branch) => branch.tasks.map((item) => item.slug)),
+		[["weekly"]],
+	);
+	assert.deepStrictEqual(
+		plan.presentation.map((item) => item.slug),
+		["weekly"],
+	);
+	assert.deepStrictEqual(plan.skipped, [
+		{
+			slug: "daily",
+			reason: "prepped",
+			dueDate: "2000-01-01",
+			advance:
+			{
+				nextDate: "2000-01-02",
+				newName,
+				applyOp: `./bin/run.js node update --id daily --name '${newName}' --expect-name '${oldName}'`,
+			},
+		},
+		{
+			slug: "future",
+			reason: "future",
+			dueDate: "2000-01-02",
+		},
+	]);
+});
+
+test("computeLlmDag rejects a prepped slug that names no prep task", () =>
+{
+	assert.throws(
+		() => computeLlmDag(fixture(), "2000-01-01", new Set(["nope"])),
+		/prepped slug "nope" names no prep task/u,
+	);
+});
+
 test("computeLlmDag rejects a plan date that is not a padded ISO date", () =>
 {
 	// The executor compares planDate to the local date, so an unpadded or empty date never

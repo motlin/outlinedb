@@ -57,7 +57,9 @@ After verified success, the main executor runs the task's `advance.applyOp` from
 
 Next dates come from `planDate`, never from the wall clock at apply time. A review session can stay open for hours or resume the next day, and a date taken from the clock would then skip past work whose data was fetched earlier. Never recompute a next date by hand.
 
-Before running any `advance.applyOp`, compare the plan's `planDate` to the local date. When they differ, the session resumed on a later day and the fetched data is stale: re-run the import barrier, refetch the LLM Tasks tree, and recompute `phase0-plan.json` before advancing anything. Tasks already advanced drop out of the new plan as `future`; the remaining tasks get fresh prep against the new import.
+Before running any `advance.applyOp`, compare the plan's `planDate` to the local date. When they differ, the review crossed midnight or resumed on a later day and the fetched data is stale: re-run the import barrier, refetch the LLM Tasks tree, and recompute `phase0-plan.json` before advancing anything. Pass `--prepped <slug,...>` with every slug whose prep already ran this session, whether or not its date has advanced yet. Without it, a daily task advanced before midnight lands on the new date and comes due again, so the recomputed plan re-runs every prep task; on 2026-11-13 all 11 did.
+
+In the recomputed plan, each prepped task that is due again is left out of `prepBranches` and `presentation` and listed under `skipped` with reason `prepped` and an `advance` computed from the new `planDate`. Finish that task from its already staged result: once its apply succeeds or is empty (or already did before midnight), run the new plan's `advance.applyOp` for it, which moves it a full interval past the new date. Skipped or failed tasks keep their date as usual. Prepped tasks that are no longer due drop out as `future`. Everything else in the new plan gets fresh prep against the new import.
 
 This central ownership prevents prep and presentation dates from drifting and supports daily, weekly, monthly, and yearly prep/apply tasks with the same mechanism.
 

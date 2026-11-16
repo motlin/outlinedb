@@ -124,6 +124,7 @@ interface PrepTask
 	instructions: TreeNode[];
 	auto: boolean;
 	due: boolean;
+	prepped: boolean;
 	dueDate: string;
 	interval: Interval;
 	advance:
@@ -171,6 +172,7 @@ function parsePrepTask(node: TreeNode, today: string): PrepTask
 		instructions: taskInstructions,
 		auto: autoMarkers.length === 1,
 		due,
+		prepped: false,
 		dueDate,
 		interval,
 		advance:
@@ -257,7 +259,13 @@ function rootGroups(tree: TreeRoot): RootGroups
 	};
 }
 
-export function computeLlmDag(tree: TreeRoot, today: string)
+/**
+ * `prepped` names the slugs already prepped earlier in this review session. A review that runs
+ * past midnight recomputes its plan for the new local date, and without this every daily task,
+ * including the ones just prepped, would come due again. Prepped tasks stay off the new plan and
+ * are listed as skipped with an `advance` computed from the new date.
+ */
+export function computeLlmDag(tree: TreeRoot, today: string, prepped: ReadonlySet<string> = new Set())
 {
 	// planDate ships in the plan and the executor compares it to the local date before advancing
 	// any task. An unpadded date never matches, so it would restage the import barrier forever.
@@ -289,7 +297,22 @@ export function computeLlmDag(tree: TreeRoot, today: string)
 	const allPrepTasks = parsedBranches.flatMap((branch) => branch.tasks);
 	const allPresentationTasks = (presentationNode.children ?? []).map(parsePresentationTask);
 	const prepByName = uniqueBy(allPrepTasks, "name", "Prep");
-	uniqueBy(allPrepTasks, "slug", "Prep");
+	const prepBySlug = uniqueBy(allPrepTasks, "slug", "Prep");
+	for (const slug of prepped)
+	{
+		if (!prepBySlug.has(slug))
+		{
+			throw new Error(`prepped slug "${slug}" names no prep task`);
+		}
+	}
+	for (const prepTask of allPrepTasks)
+	{
+		if (prepTask.due && prepped.has(prepTask.slug))
+		{
+			prepTask.due = false;
+			prepTask.prepped = true;
+		}
+	}
 	const presentationByName = uniqueBy(allPresentationTasks, "name", "Presentation");
 
 	for (const prepTask of allPrepTasks)
@@ -328,12 +351,22 @@ export function computeLlmDag(tree: TreeRoot, today: string)
 		}));
 	const skipped = allPrepTasks
 		.filter((task) => !task.due)
-		.map((task) => (
-		{
-			slug: task.slug,
-			reason: task.dueDate > today ? "future" : "completed",
-			dueDate: task.dueDate,
-		}));
+		.map((task) =>
+			task.prepped
+				?
+					{
+						slug: task.slug,
+						reason: "prepped",
+						dueDate: task.dueDate,
+						advance: task.advance,
+					}
+				:
+					{
+						slug: task.slug,
+						reason: task.dueDate > today ? "future" : "completed",
+						dueDate: task.dueDate,
+					},
+		);
 
 	return {
 		planDate: today,
@@ -464,12 +497,23 @@ function main(arguments_: string[]): void
 	let inputPath = ".llm/gtd/review/phase0-llm-tasks.json";
 	let today = localTodayISO();
 	let filesDirectory: string | null = null;
+	const prepped = new Set<string>();
 	const argumentIterator = argumentsList[Symbol.iterator]();
 	for (const argument of argumentIterator)
 	{
 		if (argument === "--today")
 		{
 			today = takeValue(argumentIterator, argument);
+		}
+		else if (argument === "--prepped")
+		{
+			for (const slug of takeValue(argumentIterator, argument).split(","))
+			{
+				if (slug !== "")
+				{
+					prepped.add(slug);
+				}
+			}
 		}
 		else if (argument === "--files-dir")
 		{
@@ -485,7 +529,7 @@ function main(arguments_: string[]): void
 		}
 	}
 	const tree = readTreeFile(inputPath);
-	const plan = computeLlmDag(tree, today);
+	const plan = computeLlmDag(tree, today, prepped);
 	if (filesDirectory !== null)
 	{
 		writeTaskFiles(taskFiles(tree), filesDirectory);
