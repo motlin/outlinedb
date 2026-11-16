@@ -62,7 +62,7 @@ This central ownership prevents prep and presentation dates from drifting and su
 
 ## Import barrier
 
-Run every instruction under `Import` inline. Do not pipe the commands through `head` or `tail`. Confirm the API import reports its fetched and changed node counts and verify current data is present. Drain pending background writes before the import and before prep fan-out.
+Run every instruction under `Import` inline. Do not pipe the commands through `head` or `tail`. Confirm the API import reports its fetched and changed node counts, then run the cache sanity check from `/gtd:daily-import`: it fails when the cache holds under 1000 nodes or this year's 📆 Calendar node is missing. Drain pending background writes before the import and before prep fan-out.
 
 If freshness cannot be positively verified, halt.
 

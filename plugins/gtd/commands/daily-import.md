@@ -53,4 +53,21 @@ The third line is what keeps prep subagents away from `op` entirely. `otter-api.
 
 `direnv exec .` is idempotent — harmless when direnv already loaded the environment — so always prefix the barrier with it rather than testing whether the variables happen to be set.
 
-Verify that `cache import-api` reported fetched and changed node counts, the counts are sane, the subtree sync succeeded, and today's data is present. Return success only after positive verification. On error, timeout, missing summary, or stale data, return failure and halt the daily review.
+Verify that `cache import-api` reported fetched and changed node counts and that the subtree sync succeeded.
+
+Then run the cache sanity check, and halt the daily review if it exits non-zero:
+
+```bash
+set -o pipefail
+total=$(direnv exec . ./bin/run.js cache status --json | jq -er '.nodes.total') \
+  || { echo "cache status failed"; exit 1; }
+[ "$total" -ge 1000 ] \
+  || { echo "Cache holds only $total nodes (expected at least 1000)"; exit 1; }
+direnv exec . ./bin/run.js calendar day --level year --json >/dev/null \
+  || { echo "No 📆 Calendar year node for $(date +%Y) in the cache"; exit 1; }
+echo "Cache sane: $total nodes"
+```
+
+A healthy cache holds well over 100,000 nodes. A count under 1000 means the import wrote to an empty or wrong database (a DB rename once silently produced an empty cache, and the import still reported success). The calendar check is a strict `metadata.calendar` walk, so it fails when the 📆 Calendar tree did not land. It checks the year, not today's day: workflowy.com creates day nodes only when a day is opened or written to, so most days have none and a day-level check would fail healthy runs. Never add `--ensure` here; on a broken cache it would create duplicate calendar nodes on workflowy.com.
+
+Return success only after positive verification. On error, timeout, missing summary, stale data, or a failed sanity check, return failure and halt the daily review before prep fan-out.
