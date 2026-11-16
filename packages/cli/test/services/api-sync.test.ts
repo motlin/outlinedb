@@ -701,27 +701,6 @@ describe("API Sync with Cache", () =>
 
 	describe("Rate limit handling (429)", () =>
 	{
-		function successResponse(): Response
-		{
-			return Response.json(
-				{
-					nodes: [
-						{
-							id: "n1",
-							name: "N1",
-							note: null,
-							priority: 0,
-							completed: false,
-							createdAt: 1_700_000_000,
-							modifiedAt: 1_700_001_000,
-							completedAt: null,
-							data: {},
-						},
-					],
-				},
-			);
-		}
-
 		function tooManyRequests(retryAfter?: string, body: string | null = null): Response
 		{
 			return new Response(
@@ -741,170 +720,49 @@ describe("API Sync with Cache", () =>
 			);
 		}
 
-		it("retries on 429 and succeeds once a later attempt returns 200", async () =>
+		it("makes one attempt and names the Retry-After header's wait in the error", async () =>
 		{
-			const client = new WorkflowyApiClient(
-				"test-api-key",
-				undefined,
-				undefined,
-				{
-					maxRetries: 3,
-					baseDelayMs: 0,
-				},
-			);
+			const client = new WorkflowyApiClient("test-api-key");
 
-			fetchStub.mockResolvedValueOnce(tooManyRequests());
-			fetchStub.mockResolvedValueOnce(tooManyRequests());
-			fetchStub.mockResolvedValueOnce(successResponse());
-
-			const nodes = await client.getChildNodes("parent-id");
-
-			expect(nodes).toStrictEqual([
-				{
-					id: "n1",
-					name: "N1",
-					note: null,
-					priority: 0,
-					completed: false,
-					createdAt: 1_700_000_000,
-					modifiedAt: 1_700_001_000,
-					completedAt: null,
-					data: {},
-				},
-			]);
-			expect(fetchStub).toHaveBeenCalledTimes(3);
-		});
-
-		it("throws after exhausting retries when every attempt returns 429", async () =>
-		{
-			const client = new WorkflowyApiClient(
-				"test-api-key",
-				undefined,
-				undefined,
-				{
-					maxRetries: 2,
-					baseDelayMs: 0,
-				},
-			);
-
-			fetchStub.mockResolvedValue(tooManyRequests());
+			fetchStub.mockResolvedValue(tooManyRequests("9"));
 
 			await expect(client.getChildNodes("parent-id")).rejects.toThrow(
-				"API request failed: 429 Too Many Requests",
+				"Workflowy rate limit: GET https://workflowy.com/api/v1/nodes?parent_id=parent-id answered 429 Too Many Requests; wait 9s before trying again",
 			);
-			expect(fetchStub).toHaveBeenCalledTimes(3);
+			expect(fetchStub).toHaveBeenCalledOnce();
 		});
 
-		it("caps exponential backoff at maxDelayMs", async () =>
+		it("names the retry_after seconds from the 429 body when there is no Retry-After header", async () =>
 		{
-			// A huge baseDelayMs would stall the test for minutes if the cap were
-			// not applied; maxDelayMs of 0 forces the retry to happen immediately.
-			const client = new WorkflowyApiClient(
-				"test-api-key",
-				undefined,
-				undefined,
-				{
-					maxRetries: 3,
-					baseDelayMs: 10 * 60 * 1000,
-					maxDelayMs: 0,
-				},
-			);
+			const client = new WorkflowyApiClient("test-api-key");
 
-			fetchStub.mockResolvedValueOnce(tooManyRequests());
-			fetchStub.mockResolvedValueOnce(successResponse());
-
-			const nodes = await client.getChildNodes("parent-id");
-
-			expect(nodes).toStrictEqual([
-				{
-					id: "n1",
-					name: "N1",
-					note: null,
-					priority: 0,
-					completed: false,
-					createdAt: 1_700_000_000,
-					modifiedAt: 1_700_001_000,
-					completedAt: null,
-					data: {},
-				},
-			]);
-			expect(fetchStub).toHaveBeenCalledTimes(2);
-		});
-
-		it("honors the retry_after seconds in the 429 body when there is no Retry-After header", async () =>
-		{
-			const client = new WorkflowyApiClient(
-				"test-api-key",
-				undefined,
-				undefined,
-				{
-					maxRetries: 3,
-					baseDelayMs: 999_999,
-					maxDelayMs: 999_999,
-				},
-			);
-
-			fetchStub.mockResolvedValueOnce(
+			fetchStub.mockResolvedValue(
 				tooManyRequests(
 					undefined,
 					JSON.stringify(
 						{
-							retry_after: 0,
+							retry_after: 42,
 						},
 					),
 				),
 			);
-			fetchStub.mockResolvedValueOnce(successResponse());
 
-			const nodes = await client.getChildNodes("parent-id");
-
-			expect(nodes).toStrictEqual([
-				{
-					id: "n1",
-					name: "N1",
-					note: null,
-					priority: 0,
-					completed: false,
-					createdAt: 1_700_000_000,
-					modifiedAt: 1_700_001_000,
-					completedAt: null,
-					data: {},
-				},
-			]);
-			expect(fetchStub).toHaveBeenCalledTimes(2);
-		}, 5000);
-
-		it("honors the Retry-After header when present", async () =>
-		{
-			const client = new WorkflowyApiClient(
-				"test-api-key",
-				undefined,
-				undefined,
-				{
-					maxRetries: 3,
-					baseDelayMs: 999_999,
-				},
+			await expect(client.getChildNodes("parent-id")).rejects.toThrow(
+				"Workflowy rate limit: GET https://workflowy.com/api/v1/nodes?parent_id=parent-id answered 429 Too Many Requests; wait 42s before trying again",
 			);
+			expect(fetchStub).toHaveBeenCalledOnce();
+		});
 
-			fetchStub.mockResolvedValueOnce(tooManyRequests("0"));
-			fetchStub.mockResolvedValueOnce(successResponse());
+		it("says when the 429 names no wait time", async () =>
+		{
+			const client = new WorkflowyApiClient("test-api-key");
 
-			const nodes = await client.getChildNodes("parent-id");
+			fetchStub.mockResolvedValue(tooManyRequests());
 
-			expect(nodes).toStrictEqual([
-				{
-					id: "n1",
-					name: "N1",
-					note: null,
-					priority: 0,
-					completed: false,
-					createdAt: 1_700_000_000,
-					modifiedAt: 1_700_001_000,
-					completedAt: null,
-					data: {},
-				},
-			]);
-			expect(fetchStub).toHaveBeenCalledTimes(2);
+			await expect(client.exportAllNodes()).rejects.toThrow(
+				"Workflowy rate limit: GET https://workflowy.com/api/v1/nodes-export answered 429 Too Many Requests; it named no wait time",
+			);
+			expect(fetchStub).toHaveBeenCalledOnce();
 		});
 	});
 });

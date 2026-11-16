@@ -122,9 +122,9 @@ export default class ImportApi extends Command
 		}
 		catch (error)
 		{
-			if (error instanceof Error && error.message.includes("429"))
+			if (error instanceof Error && error.message.startsWith("Workflowy rate limit:"))
 			{
-				this.error("Rate limit exceeded. Please wait 1 minute before trying again.");
+				this.error(`${error.message} (nodes-export allows one request per minute)`);
 			}
 			this.error(`Failed to import from API: ${describeError(error)}`);
 		}

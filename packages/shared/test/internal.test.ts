@@ -1222,16 +1222,7 @@ describe("internal adapter backlinks", () =>
 				transientId: "6f1c1d1e-0000-4000-8000-000000000001",
 			},
 		);
-		const apiClient = new WorkflowyApiClient(
-			"test-key",
-			undefined,
-			"https://workflowy.test",
-			{
-				maxRetries: 0,
-				baseDelayMs: 0,
-				maxDelayMs: 0,
-			},
-		);
+		const apiClient = new WorkflowyApiClient("test-key", undefined, "https://workflowy.test");
 		const cacheService = new CacheService(db);
 		const writeThrough = new WorkflowyWriteThroughClient(apiClient, cacheService);
 		let next = 0;
@@ -5230,16 +5221,7 @@ describe("internal adapter tree", () =>
 				transientId: "6f1c1d1e-0000-4000-8000-000000000001",
 			},
 		);
-		const apiClient = new WorkflowyApiClient(
-			"test-key",
-			undefined,
-			"https://workflowy.test",
-			{
-				maxRetries: 0,
-				baseDelayMs: 0,
-				maxDelayMs: 0,
-			},
-		);
+		const apiClient = new WorkflowyApiClient("test-key", undefined, "https://workflowy.test");
 		const cacheService = new CacheService(db);
 		const writeThrough = new WorkflowyWriteThroughClient(apiClient, cacheService);
 		const adapter = new WorkflowyInternalAdapter(

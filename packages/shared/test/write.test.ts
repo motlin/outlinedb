@@ -234,16 +234,7 @@ describe("write through create", () =>
 				);
 			}),
 		);
-		const apiClient = new WorkflowyApiClient(
-			"test-key",
-			undefined,
-			"https://workflowy.test",
-			{
-				maxRetries: 0,
-				baseDelayMs: 0,
-				maxDelayMs: 0,
-			},
-		);
+		const apiClient = new WorkflowyApiClient("test-key", undefined, "https://workflowy.test");
 		const cacheService = new CacheService(database);
 		const client = new WorkflowyWriteThroughClient(apiClient, cacheService);
 
@@ -759,16 +750,7 @@ describe("write through mirror delete", () =>
 				);
 			}),
 		);
-		const apiClient = new WorkflowyApiClient(
-			"test-key",
-			undefined,
-			"https://workflowy.test",
-			{
-				maxRetries: 0,
-				baseDelayMs: 0,
-				maxDelayMs: 0,
-			},
-		);
+		const apiClient = new WorkflowyApiClient("test-key", undefined, "https://workflowy.test");
 		const client = new WorkflowyWriteThroughClient(apiClient, new CacheService(database));
 
 		/** Each cached parent's current children in sibling order (roots under `root`), and the current mirrors. */

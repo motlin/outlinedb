@@ -47,10 +47,10 @@ Endpoints in use:
 
 Authentication: `Authorization: Bearer <key>`. Setting `WORKFLOWY_API_URL` points the client at another base URL.
 
-Rate limits and retries:
+Rate limits:
 
 - `nodes-export` is limited to one request per minute (comment on `exportAllNodes`, and the user-facing error in `packages/cli/src/commands/cache/import-api.ts`).
-- Other endpoints are throttled with HTTP 429. `fetchWithRetry` retries up to 8 times with exponential backoff from 1 s to 30 s, honoring the `Retry-After` header or a `retry_after` seconds value in the JSON body. Tests: `packages/cli/test/services/api-sync.test.ts`, section "Rate limit handling (429)".
+- Other endpoints are throttled with HTTP 429. The client never retries: `fetchOnce` makes one attempt and a 429 throws `Workflowy rate limit: ... answered 429 ...` naming the wait from the `Retry-After` header or the JSON body's `retry_after` seconds. Bursts of per-node reads (`cache sync-node --recursive`, one `GET /nodes?parent_id=` per node) are the likeliest to hit it. Tests: `packages/cli/test/services/api-sync.test.ts`, section "Rate limit handling (429)".
 - An abuse-protection 403 carries its only explanation in the response body, so `describeFailure` quotes up to 500 characters of it.
 
 Payload shape (`WorkflowyNodeSchema`, a strict zod schema):
@@ -281,7 +281,7 @@ Workflowy is the source of truth for writes today. Every write goes to Workflowy
 
 | Kind of write | API | Why |
 | --- | --- | --- |
-| Create, update name or note, complete, uncomplete, delete, move to top or bottom | Public REST | Supported, stable, key-authenticated, retried on 429. Read back with `getNode` or `refreshChildren` |
+| Create, update name or note, complete, uncomplete, delete, move to top or bottom | Public REST | Supported, stable, key-authenticated; a 429 fails loudly with the wait time. Read back with `getNode` or `refreshChildren` |
 | Create mirror, delete mirror | Public REST (`/mirror`), then cache insert | The dedicated endpoint cleans up the original's mirror list, which the generic delete does not |
 | Delete (with mirror promotion) | Public REST plus cache promotion plan | REST does not promote a surviving mirror when the original is deleted, so `delete-plan.ts` plans it |
 | Exact-index create or move, restore, mirror at an exact slot, many-at-once creation | Internal `/push_and_poll` (`bulk_create`, `move`, `bulk_move`, `undelete`) | REST accepts only `top` or `bottom` and renormalises priorities. Internal ops take an exact index and client-chosen ids |

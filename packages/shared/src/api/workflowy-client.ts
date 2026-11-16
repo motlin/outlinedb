@@ -20,19 +20,6 @@ export interface ApiLogger
 }
 
 /**
- * Retry behavior for requests throttled with HTTP 429.
- */
-export interface RetryOptions
-{
-	/** Maximum number of retries after the initial attempt. */
-	maxRetries?: number;
-	/** Base delay for exponential backoff, in milliseconds. */
-	baseDelayMs?: number;
-	/** Upper bound for a single exponential-backoff delay, in milliseconds. */
-	maxDelayMs?: number;
-}
-
-/**
  * Each address undici reports in a connect failure's cause ("attempted
  * address: 75.2.70.75:443" or "attempted addresses: 2600::1:443, 99.83.1.1:443"),
  * labelled with its family. Empty when the cause names no address.
@@ -78,18 +65,6 @@ function describeFetchError(method: string, url: string, elapsedMs: number, erro
  * trace.
  */
 const MAX_ERROR_BODY_CHARS = 500;
-
-const DEFAULT_MAX_RETRIES = 8;
-const DEFAULT_BASE_DELAY_MS = 1000;
-const DEFAULT_MAX_DELAY_MS = 30_000;
-
-async function sleep(ms: number): Promise<void>
-{
-	return new Promise((resolve) =>
-	{
-		setTimeout(resolve, ms);
-	});
-}
 
 function retryAfterSeconds(value: unknown): number | undefined
 {
@@ -166,22 +141,15 @@ export class WorkflowyApiClient
 {
 	private readonly logger?: ApiLogger;
 	private readonly baseUrl: string;
-	private readonly maxRetries: number;
-	private readonly baseDelayMs: number;
-	private readonly maxDelayMs: number;
 
 	constructor(
 		private readonly apiKey: string,
 		logger?: ApiLogger,
 		baseUrl?: string,
-		retryOptions?: RetryOptions,
 	)
 	{
 		this.logger = logger;
 		this.baseUrl = baseUrl ?? "https://workflowy.com";
-		this.maxRetries = retryOptions?.maxRetries ?? DEFAULT_MAX_RETRIES;
-		this.baseDelayMs = retryOptions?.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;
-		this.maxDelayMs = retryOptions?.maxDelayMs ?? DEFAULT_MAX_DELAY_MS;
 	}
 
 	/**
@@ -236,42 +204,25 @@ export class WorkflowyApiClient
 	}
 
 	/**
-	 * Delay before the next retry: the server's own wait (the Retry-After header,
-	 * else the body's `retry_after` seconds, e.g. `{"retry_after": 9}`), otherwise
-	 * exponential backoff from baseDelayMs, capped at maxDelayMs.
+	 * Perform a fetch once. A 429 throws an error naming the wait Workflowy asked
+	 * for (the Retry-After header, else the body's `retry_after` seconds, e.g.
+	 * `{"retry_after": 9}`), so the caller sees the throttle instead of stalling
+	 * through hidden backoff. Other responses are returned as-is for the caller
+	 * to validate.
 	 */
-	private async retryDelayMs(response: Response, attempt: number): Promise<number>
+	private async fetchOnce(url: string, init?: RequestInit): Promise<Response>
 	{
+		const response = await this.send(url, init);
+		if (response.status !== 429)
+		{
+			return response;
+		}
 		const seconds =
 			retryAfterSeconds(response.headers.get("retry-after")) ?? (await bodyRetryAfterSeconds(response));
-		if (seconds !== undefined)
-		{
-			return seconds * 1000;
-		}
-		return Math.min(this.baseDelayMs * 2 ** attempt, this.maxDelayMs);
-	}
-
-	/**
-	 * Perform a fetch, retrying on HTTP 429 with exponential backoff.
-	 *
-	 * Workflowy throttles per-endpoint; a recursive traversal can otherwise abort
-	 * on the first 429. Non-429 responses are returned as-is for the caller to
-	 * validate.
-	 */
-	private async fetchWithRetry(url: string, init?: RequestInit): Promise<Response>
-	{
-		let attempt = 0;
-		for (;;)
-		{
-			const response = await this.send(url, init);
-			if (response.status !== 429 || attempt >= this.maxRetries)
-			{
-				return response;
-			}
-
-			await sleep(await this.retryDelayMs(response, attempt));
-			attempt += 1;
-		}
+		const wait = seconds === undefined ? "it named no wait time" : `wait ${seconds}s before trying again`;
+		throw new Error(
+			`Workflowy rate limit: ${init?.method ?? "GET"} ${url} answered ${response.status} ${response.statusText}; ${wait}`,
+		);
 	}
 
 	private async fetchNodes(url: string): Promise<WorkflowyNode[]>
@@ -281,7 +232,7 @@ export class WorkflowyApiClient
 
 		try
 		{
-			const response = await this.fetchWithRetry(
+			const response = await this.fetchOnce(
 				url,
 				{
 					headers: this.getHeaders(),
@@ -366,7 +317,7 @@ export class WorkflowyApiClient
 
 		try
 		{
-			const response = await this.fetchWithRetry(
+			const response = await this.fetchOnce(
 				url,
 				{
 					headers: this.getHeaders(),
@@ -713,7 +664,7 @@ export class WorkflowyApiClient
 
 		try
 		{
-			const response = await this.fetchWithRetry(
+			const response = await this.fetchOnce(
 				url,
 				{
 					method: "POST",
@@ -758,7 +709,7 @@ export class WorkflowyApiClient
 
 		try
 		{
-			const response = await this.fetchWithRetry(
+			const response = await this.fetchOnce(
 				url,
 				{
 					method: "DELETE",
@@ -799,7 +750,7 @@ export class WorkflowyApiClient
 
 		try
 		{
-			const response = await this.fetchWithRetry(
+			const response = await this.fetchOnce(
 				url,
 				{
 					headers: this.getHeaders(),
