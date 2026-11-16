@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {createDatabase} from "../../../db/index.js";
 import {CacheService} from "../../../services/cache.js";
-import {DEFAULT_DB_FILE} from "../../../db/default-db-file.js";
+import {findProjectRoot} from "../../../db/default-db-file.js";
 
 interface ProjectItem
 {
@@ -130,7 +130,7 @@ export default class Sync extends Command
 		// Parse flags (data-source flag reserved for future API mode)
 		await this.parse(Sync);
 
-		const projectRoot = this.findProjectRoot();
+		const projectRoot = findProjectRoot();
 		const outputFile = path.join(projectRoot, ".llm", "gtd", "metadata.json");
 
 		// Ensure .llm/gtd directory exists
@@ -533,21 +533,5 @@ export default class Sync extends Command
 		const emojiPattern = /\s*(?:\u{1F4C1}|\u{2611}\u{FE0F}?|\u{1F4E4}|\u{1F4C5}|\u{1F331}).*$/u;
 		const cleaned = text.replace(emojiPattern, "");
 		return cleaned.toLowerCase().trim();
-	}
-
-	private findProjectRoot(): string
-	{
-		let dir = process.cwd();
-
-		while (dir !== "/")
-		{
-			if (fs.existsSync(path.join(dir, DEFAULT_DB_FILE)) || fs.existsSync(path.join(dir, "package.json")))
-			{
-				return dir;
-			}
-			dir = path.dirname(dir);
-		}
-
-		return process.cwd();
 	}
 }

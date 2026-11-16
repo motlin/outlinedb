@@ -6,7 +6,7 @@ import {createDatabase} from "../../../db/index.js";
 import {CacheService} from "../../../services/cache.js";
 import {loadExistingEntries} from "../../../services/journal-existing-entries.js";
 import {parseStrictNumber} from "../../../utils/parse-strict-number.js";
-import {DEFAULT_DB_FILE} from "../../../db/default-db-file.js";
+import {DEFAULT_DB_FILE, findProjectRoot} from "../../../db/default-db-file.js";
 
 interface ScannedItem
 {
@@ -109,7 +109,7 @@ export default class Dedup extends Command
 		{
 			this.error(`Invalid --threshold value: "${flags.threshold}". Must be a number.`);
 		}
-		const projectRoot = this.findProjectRoot();
+		const projectRoot = findProjectRoot();
 		const scansDir = path.join(projectRoot, ".llm", "gtd", "journal", "scans");
 		const dbPath = path.join(projectRoot, DEFAULT_DB_FILE);
 		const outputPath = path.join(projectRoot, ".llm", "gtd", "journal", "dedup-analysis.json");
@@ -555,21 +555,5 @@ export default class Dedup extends Command
 			duplicates,
 			newItems,
 		};
-	}
-
-	private findProjectRoot(): string
-	{
-		let dir = process.cwd();
-
-		while (dir !== "/")
-		{
-			if (fs.existsSync(path.join(dir, DEFAULT_DB_FILE)) || fs.existsSync(path.join(dir, "package.json")))
-			{
-				return dir;
-			}
-			dir = path.dirname(dir);
-		}
-
-		return process.cwd();
 	}
 }

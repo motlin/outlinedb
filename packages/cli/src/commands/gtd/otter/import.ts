@@ -10,7 +10,7 @@ import {CacheService} from "../../../services/cache.js";
 import {drainAfterWrite, openLocalWrites} from "../../../services/local-writes.js";
 import type {LocalWrites} from "../../../services/local-writes.js";
 import {logger} from "../../../services/logger.js";
-import {DEFAULT_DB_FILE} from "../../../db/default-db-file.js";
+import {findProjectRoot} from "../../../db/default-db-file.js";
 
 const MeetingSchema = z.object(
 	{
@@ -165,7 +165,7 @@ export default class Import extends Command
 		this.log("");
 		this.log("Fetching meetings from Otter...");
 
-		const projectRoot = this.findProjectRoot();
+		const projectRoot = findProjectRoot();
 		const syncOutput = await this.runOtterSync(projectRoot);
 
 		if (syncOutput.speeches.length === 0)
@@ -393,21 +393,5 @@ export default class Import extends Command
 	private escapeHtml(text: string): string
 	{
 		return text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
-	}
-
-	private findProjectRoot(): string
-	{
-		let dir = process.cwd();
-
-		while (dir !== "/")
-		{
-			if (fs.existsSync(path.join(dir, DEFAULT_DB_FILE)) || fs.existsSync(path.join(dir, "package.json")))
-			{
-				return dir;
-			}
-			dir = path.dirname(dir);
-		}
-
-		return process.cwd();
 	}
 }

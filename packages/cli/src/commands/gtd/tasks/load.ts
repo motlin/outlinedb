@@ -6,7 +6,7 @@ import {z} from "zod";
 import {createDatabase} from "../../../db/index.js";
 import {CacheService} from "../../../services/cache.js";
 import {localLookbackCutoff} from "../../../utils/local-date.js";
-import {DEFAULT_DB_FILE} from "../../../db/default-db-file.js";
+import {findProjectRoot} from "../../../db/default-db-file.js";
 
 interface Task
 {
@@ -121,7 +121,7 @@ export default class Load extends Command
 	{
 		const {flags} = await this.parse(Load);
 
-		const projectRoot = this.findProjectRoot();
+		const projectRoot = findProjectRoot();
 		const metadataFile = path.join(projectRoot, ".llm", "gtd", "metadata.json");
 
 		// Check that metadata.json exists
@@ -493,21 +493,5 @@ export default class Load extends Command
 		}
 
 		return results;
-	}
-
-	private findProjectRoot(): string
-	{
-		let dir = process.cwd();
-
-		while (dir !== "/")
-		{
-			if (fs.existsSync(path.join(dir, DEFAULT_DB_FILE)) || fs.existsSync(path.join(dir, "package.json")))
-			{
-				return dir;
-			}
-			dir = path.dirname(dir);
-		}
-
-		return process.cwd();
 	}
 }
