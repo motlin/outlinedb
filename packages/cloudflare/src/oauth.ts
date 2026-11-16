@@ -20,36 +20,102 @@ type OAuthEnv = Env & AccessEnv & ProvisionEnv;
 
 const escapeHtml = (value: string): string => value.replaceAll(/[&<>"']/gu, (char) => `&#${char.codePointAt(0)};`);
 
+/** `value` when it is an https URL, which is all the page loads or links from client metadata. */
+function httpsUrl(value: string | undefined): string | undefined
+{
+	return value?.startsWith("https://") ? value : undefined;
+}
+
+// Matches the /login card (packages/web/src/client/auth/auth.css); this page is served by the Worker, not the SPA.
+const consentStyle = `*{box-sizing:border-box}
+body{margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:24px 16px;background:#f4f5f7;color:#2a3135;font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{width:100%;max-width:380px;padding:32px 28px;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgb(0 0 0/12%)}
+.brand{display:flex;align-items:center;gap:10px;margin-bottom:20px;font-size:22px;font-weight:700;letter-spacing:-.01em}
+.brand-logo,.client-logo{width:32px;height:32px;border-radius:8px}
+.client{display:flex;align-items:center;gap:10px}
+h1{margin:0 0 16px;font-size:17px;font-weight:600}
+p{margin:0 0 14px;font-size:14px}
+a{color:#3a8cc7}
+.muted{color:#6b757c}
+.warn{padding:10px 12px;border-radius:6px;background:#fff4e5;color:#7a4b00}
+form{display:flex;flex-direction:column;gap:10px;margin-top:20px}
+button{font:inherit;cursor:pointer}
+.allow{padding:10px;border:none;border-radius:6px;background:#2a3135;color:#fff;font-weight:600}
+.deny{padding:9px;border:1px solid #cfd4d9;border-radius:6px;background:transparent;color:inherit}
+.link{align-self:center;padding:0;border:none;background:none;color:#3a8cc7;font-size:14px}
+@media (prefers-color-scheme:dark){body{background:#1c1f22;color:#e4e6e8}main{background:#262a2e;box-shadow:none}.muted{color:#9aa3aa}.warn{background:#3a2e1a;color:#ffd08a}.allow{background:#e4e6e8;color:#1c1f22}.deny{border-color:#454b51}}`;
+
 function consentPage(details: ConsentDescription, handle: string, email: string): string
 {
 	const name = escapeHtml(details.clientName);
+	const homepage = httpsUrl(details.clientUri);
+	const linkedName = homepage ? `<a href="${escapeHtml(homepage)}" rel="noopener noreferrer">${name}</a>` : name;
+	const logo = httpsUrl(details.logoUri);
+	const clientLogo = logo ? `<img class="client-logo" src="${escapeHtml(logo)}" alt="">` : "";
 	const origin = details.clientDomain
-		? `Published by <strong>${escapeHtml(details.clientDomain)}</strong>.`
-		: "This app registered itself; its name is not verified.";
+		? `<p>Published by <strong>${escapeHtml(details.clientDomain)}</strong>.</p>`
+		: '<p class="warn">This app registered itself; its name is not verified.</p>';
 	const loopback = details.redirectIsLoopback
-		? "<p><strong>This sends access to an app on your computer.</strong> Continue only if you just started signing in from it.</p>"
+		? '<p class="warn"><strong>This sends access to an app on your computer.</strong> Continue only if you just started signing in from it.</p>'
 		: "";
 	const write = details.scope.includes(WRITE_SCOPE) || !details.scope.includes(READ_SCOPE);
+	const access = write
+		? '<button class="allow" name="access" value="write">Allow</button>'
+		: '<button class="allow" name="access" value="read">Allow</button>';
+	const other = write
+		? '<button class="link" name="access" value="read">Read only</button>'
+		: '<button class="link" name="access" value="write">Read and write</button>';
+	const summary = write ? "search, read, create, edit, move and delete nodes in" : "search and read";
 	return `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Authorize ${name}</title>
-<style>body{font:16px/1.5 system-ui,sans-serif;max-width:32rem;margin:3rem auto;padding:0 1rem}label{display:block;margin:.5rem 0}</style>
-<h1>Allow ${name} to access your OutlineDB outline?</h1>
-<p>${origin} Access will be sent to <strong>${escapeHtml(details.redirectHost)}</strong>, acting as ${escapeHtml(email)}.</p>
+<title>Connect ${name} to OutlineDB</title>
+<style>${consentStyle}</style>
+<main>
+<div class="brand"><img class="brand-logo" src="/favicon.png" alt=""> OutlineDB</div>
+<h1 class="client">${clientLogo}<span>${linkedName} wants to access your outline</span></h1>
+<p>It will be able to ${summary} your outline, acting as <strong>${escapeHtml(email)}</strong>.</p>
+${origin}
 ${loopback}
+<p class="muted">Access goes to ${escapeHtml(details.redirectHost)}.</p>
 <form method="post">
 <input type="hidden" name="handle" value="${escapeHtml(handle)}">
-<label><input type="radio" name="access" value="read"${write ? "" : " checked"}> Read only: search and read nodes</label>
-<label><input type="radio" name="access" value="write"${write ? " checked" : ""}> Read and write: also create, edit, move and delete nodes</label>
-<p><button name="decision" value="approve">Allow</button> <button name="decision" value="deny">Deny</button></p>
-</form>`;
+${access}
+<button class="deny" name="decision" value="deny">Cancel</button>
+${other}
+</form>
+</main>`;
 }
 
 /** The scopes a consent form grants: read-only, or read and write. */
 function grantedScopes(form: FormData): string[]
 {
 	return form.get("access") === "write" ? [READ_SCOPE, WRITE_SCOPE] : [READ_SCOPE];
+}
+
+/**
+ * The key that signs remembered approvals, derived from `BETTER_AUTH_SECRET` so it needs no secret of its own; undefined
+ * (consent is then asked every time) while that secret is unset.
+ */
+async function consentSecret(authSecret: string | undefined): Promise<string | undefined>
+{
+	if (!authSecret)
+	{
+		return undefined;
+	}
+	const encoder = new TextEncoder();
+	const key = await crypto.subtle.importKey(
+		"raw",
+		encoder.encode(authSecret),
+		{
+			name: "HMAC",
+			hash: "SHA-256",
+		},
+		false,
+		["sign"],
+	);
+	const mac = new Uint8Array(await crypto.subtle.sign("HMAC", key, encoder.encode("oauth-consent-approvals")));
+	return [...mac].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function textResponse(message: string, status: number): Response
@@ -74,11 +140,42 @@ async function authorizeSteps(
 		userId: string;
 		email: string;
 	},
+	secret: string | undefined,
 ): Promise<Response>
 {
+	const remember =
+		secret === undefined
+			? undefined
+			:
+				{
+					secret,
+					subject: user.userId,
+				};
 	if (request.method === "GET")
 	{
 		const authRequest = await oauth.parseAuthRequest(request);
+		// The page never grants offline_access (refresh tokens come anyway), so a remembered approval is checked without it.
+		const covered =
+		{
+			...authRequest,
+			scope: authRequest.scope.filter((scope) => scope !== OFFLINE_SCOPE),
+		};
+		if (remember && (await oauth.isConsentRemembered(request, covered, remember)))
+		{
+			const {redirectTo} = await oauth.completeAuthorization(
+				{
+					request: covered,
+					userId: user.userId,
+					metadata: {},
+					scope: covered.scope,
+					props:
+					{
+						userId: user.userId,
+					} satisfies McpProps,
+				},
+			);
+			return Response.redirect(redirectTo, 302);
+		}
 		const details = await oauth.describeConsent(authRequest);
 		const consent = await oauth.beginConsent(authRequest);
 		consent.headers.set("content-type", "text/html; charset=utf-8");
@@ -99,7 +196,7 @@ async function authorizeSteps(
 	{
 		return textResponse("Missing consent handle", 400);
 	}
-	if (form.get("decision") !== "approve")
+	if (form.get("decision") === "deny" || !form.has("access"))
 	{
 		const denied = await oauth.denyConsent(request, handle);
 		return new Response(
@@ -115,6 +212,7 @@ async function authorizeSteps(
 		handle,
 		{
 			scope: grantedScopes(form),
+			remember,
 		},
 	);
 	const {redirectTo} = await oauth.completeAuthorization(
@@ -159,13 +257,14 @@ function loginRedirect(request: Request): Response
 /**
  * The consent page at `/authorize`, for the signed-in OutlineDB user: a Better Auth session, or an Access identity
  * whose email has a verified user. With no sign-in it sends the browser to `/login` and back; the grant acts as that
- * user.
+ * user. An approval is remembered for 30 days, so reconnecting the same client with no more scopes skips the page.
  */
 export async function authorize(
 	request: Request,
 	env: OAuthEnv &
 	{
 		OAUTH_PROVIDER: OAuthHelpers;
+		BETTER_AUTH_SECRET?: string;
 	},
 	auth: () => SessionReader | undefined,
 ): Promise<Response>
@@ -195,6 +294,7 @@ export async function authorize(
 				userId: principal.userId,
 				email: principal.email,
 			},
+			await consentSecret(env.BETTER_AUTH_SECRET),
 		);
 	}
 	catch (error)

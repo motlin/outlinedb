@@ -34,8 +34,8 @@ async function readBody(response: {text(): Promise<string>}): Promise<unknown>
 	return body;
 }
 
-/** Register a public client the way claude.ai does when the server offers dynamic registration. */
-async function registerClient(mf: Miniflare): Promise<string>
+/** Register a public client the way claude.ai does when the server offers dynamic registration, plus any extra metadata. */
+export async function registerClient(mf: Miniflare, metadata: Record<string, string> = {}): Promise<string>
 {
 	const response = await mf.dispatchFetch(
 		`${origin}/oauth/register`,
@@ -52,6 +52,7 @@ async function registerClient(mf: Miniflare): Promise<string>
 					token_endpoint_auth_method: "none",
 					grant_types: ["authorization_code", "refresh_token"],
 					response_types: ["code"],
+					...metadata,
 				},
 			),
 		},
@@ -85,9 +86,10 @@ export async function openConsent(
 	mf: Miniflare,
 	session: string,
 	scope = "mcp:read mcp:write offline_access",
+	clientId?: string,
 ): Promise<ConsentPage>
 {
-	const clientId = await registerClient(mf);
+	const client = clientId ?? (await registerClient(mf));
 	const verifier = base64url(crypto.getRandomValues(new Uint8Array(32)));
 	const challenge = base64url(
 		new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))),
@@ -95,7 +97,7 @@ export async function openConsent(
 	const query = new URLSearchParams(
 		{
 			response_type: "code",
-			client_id: clientId,
+			client_id: client,
 			redirect_uri: callback,
 			scope,
 			state: "state-1",
@@ -128,7 +130,7 @@ export async function openConsent(
 		handle,
 		cookie,
 		verifier,
-		clientId,
+		clientId: client,
 	};
 }
 
@@ -140,6 +142,20 @@ export function consentCookies(page: ConsentPage): string
 
 /** Approve the consent page with `access` and return the redirect back to the client. */
 export async function approve(mf: Miniflare, page: ConsentPage, access: "read" | "write"): Promise<URL>
+{
+	return (await approveRemembering(mf, page, access)).redirect;
+}
+
+/** Approve the consent page with `access`; also return the remembered-approvals cookie the approval set. */
+export async function approveRemembering(
+	mf: Miniflare,
+	page: ConsentPage,
+	access: "read" | "write",
+): Promise<
+{
+	redirect: URL;
+	approvals: string;
+}>
 {
 	const response = await mf.dispatchFetch(
 		`${origin}/authorize`,
@@ -155,7 +171,6 @@ export async function approve(mf: Miniflare, page: ConsentPage, access: "read" |
 				{
 					handle: page.handle,
 					access,
-					decision: "approve",
 				},
 			).toString(),
 		},
@@ -164,7 +179,14 @@ export async function approve(mf: Miniflare, page: ConsentPage, access: "read" |
 	{
 		throw new Error(`approve: ${response.status} ${await response.text()}`);
 	}
-	return new URL(response.headers.get("location") ?? "");
+	const approvals = response.headers
+		.getSetCookie()
+		.map((header) => header.split(";")[0] ?? "")
+		.find((pair) => pair.startsWith("__Host-oauth-approvals="));
+	return {
+		redirect: new URL(response.headers.get("location") ?? ""),
+		approvals: approvals ?? "",
+	};
 }
 
 export interface TokenResponse

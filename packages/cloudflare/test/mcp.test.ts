@@ -3,7 +3,18 @@ import {origin, signUp, startAuthHarness, turnstile} from "./auth-harness";
 import type {AuthHarness, SignedUp} from "./auth-harness";
 import {authDb, startHarness} from "./harness";
 import type {Harness} from "./harness";
-import {accessToken, approve, callback, consentCookies, exchange, mcpRpc, openConsent} from "./oauth-flow";
+import
+{
+	accessToken,
+	approve,
+	approveRemembering,
+	callback,
+	consentCookies,
+	exchange,
+	mcpRpc,
+	openConsent,
+	registerClient,
+} from "./oauth-flow";
 import type {UserStore} from "../src/user-store";
 
 const READ_TOOLS = [
@@ -179,25 +190,65 @@ describe("OAuth consent", () =>
 		await h.dispose();
 	});
 
-	it("shows a consent page naming the client, where tokens go, and both access levels", async () =>
+	it("shows a branded consent page naming the client, where tokens go, and one Allow button for read and write", async () =>
 	{
 		const page = await openConsent(h.mf, alice.cookie);
 		expect(page.status).toBe(200);
 		expect(page.handle).not.toBe("");
 		expect(page.cookie).toMatch(/^__Host-oauth-consent-/u);
+		expect(page.html).toContain('<img class="brand-logo" src="/favicon.png" alt="">');
 		expect(page.html).toContain("Claude");
 		expect(page.html).toContain("OutlineDB");
 		expect(page.html).toContain("alice@example.com");
 		expect(page.html).toContain("claude.ai");
-		expect(page.html).toContain('name="access" value="read"');
-		expect(page.html).toContain('name="access" value="write" checked');
+		expect(page.html).toContain("This app registered itself; its name is not verified.");
+		expect(page.html).toContain('<button class="allow" name="access" value="write">Allow</button>');
+		expect(page.html).toContain('<button class="link" name="access" value="read">Read only</button>');
+		expect(page.html).toContain('<button class="deny" name="decision" value="deny">Cancel</button>');
 	});
 
-	it("pre-selects read-only when the client asks only for mcp:read", async () =>
+	it("makes read-only the Allow button when the client asks only for mcp:read", async () =>
 	{
 		const page = await openConsent(h.mf, alice.cookie, "mcp:read");
-		expect(page.html).toContain('name="access" value="read" checked');
-		expect(page.html).not.toContain('name="access" value="write" checked');
+		expect(page.html).toContain('<button class="allow" name="access" value="read">Allow</button>');
+		expect(page.html).toContain('<button class="link" name="access" value="write">Read and write</button>');
+	});
+
+	it("shows the client's https logo and links its name to its https homepage", async () =>
+	{
+		const clientId = await registerClient(
+			h.mf,
+			{
+				logo_uri: "https://example.com/logo.png",
+				client_uri: "https://example.com/",
+			},
+		);
+		const page = await openConsent(h.mf, alice.cookie, "mcp:read mcp:write", clientId);
+		expect(page.html).toContain('<img class="client-logo" src="https://example.com/logo.png" alt="">');
+		expect(page.html).toContain('<a href="https://example.com/" rel="noopener noreferrer">Claude</a>');
+	});
+
+	it("skips the consent page when the user already approved this client for these scopes", async () =>
+	{
+		const first = await openConsent(h.mf, alice.cookie);
+		const {approvals} = await approveRemembering(h.mf, first, "write");
+		expect(approvals).not.toBe("");
+		const again = await openConsent(h.mf, `${alice.cookie}; ${approvals}`, undefined, first.clientId);
+		expect(again.status).toBe(302);
+		const redirect = new URL(again.location ?? "");
+		expect(`${redirect.origin}${redirect.pathname}`).toBe(callback);
+		expect(redirect.searchParams.get("state")).toBe("state-1");
+		const token = await exchange(h.mf, again, redirect);
+		expect(token.scope).toBe("mcp:read mcp:write");
+	});
+
+	it("asks again when a remembered read-only approval meets a request for write", async () =>
+	{
+		const first = await openConsent(h.mf, alice.cookie);
+		const {approvals} = await approveRemembering(h.mf, first, "read");
+		const again = await openConsent(h.mf, `${alice.cookie}; ${approvals}`, undefined, first.clientId);
+		expect(again.status).toBe(200);
+		expect(again.handle).not.toBe("");
 	});
 
 	it("escapes the client's self-asserted name", async () =>
