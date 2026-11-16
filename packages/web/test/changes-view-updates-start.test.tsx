@@ -29,6 +29,7 @@ const EMPTY_CHANGES =
 		completed: 0,
 		uncompleted: 0,
 	},
+	truncated: false,
 	cutoffDate: START,
 };
 

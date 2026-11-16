@@ -346,6 +346,11 @@ export function ChangesView()
 				<>
 					<div className="changes-meta">Changes since {new Date(data.cutoffDate).toLocaleString()}</div>
 					<SummaryBar summary={data.summary} />
+					{data.truncated && (
+						<div className="changes-meta">
+							Showing the newest {data.changes.length} changes; narrow Since to see older ones.
+						</div>
+					)}
 					{data.tree.length === 0 ? (
 						<div className="changes-empty">No changes found.</div>
 					) : (

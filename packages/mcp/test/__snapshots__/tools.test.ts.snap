@@ -58,7 +58,7 @@ exports[`tools > MCP tools over a store > advertises every tool with its name, d
   {
     "_meta": undefined,
     "annotations": undefined,
-    "description": "Nodes added, deleted, edited, moved, completed or uncompleted since a cutoff: a flat change list, the changes as a tree with unchanged ancestors as context, and a summary",
+    "description": "Nodes added, deleted, edited, moved, completed or uncompleted since a cutoff: a flat change list, the changes as a tree with unchanged ancestors as context, and a summary. Lists the newest 200 changes; the summary counts them all, and truncated is true when older ones were left out (narrow since to see them)",
     "execution": {
       "taskSupport": "forbidden",
     },

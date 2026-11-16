@@ -111,7 +111,7 @@ describe("ChangeDetector on mirrors", () =>
 		};
 		expect(result).toStrictEqual(
 			{
-				changes: [origChange, movedChange],
+				changes: [movedChange, origChange],
 				tree: [
 					{
 						id: "q",
@@ -120,17 +120,17 @@ describe("ChangeDetector on mirrors", () =>
 						change: null,
 						children: [
 							{
-								id: "orig",
-								name: "New title",
-								isContext: false,
-								change: origChange,
-								children: [],
-							},
-							{
 								id: "mir-moved",
 								name: "New title",
 								isContext: false,
 								change: movedChange,
+								children: [],
+							},
+							{
+								id: "orig",
+								name: "New title",
+								isContext: false,
+								change: origChange,
 								children: [],
 							},
 						],
@@ -145,6 +145,7 @@ describe("ChangeDetector on mirrors", () =>
 					completed: 0,
 					uncompleted: 0,
 				},
+				truncated: false,
 				cutoffDate: CUTOFF,
 			},
 		);

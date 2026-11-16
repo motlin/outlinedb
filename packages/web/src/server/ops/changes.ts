@@ -50,11 +50,18 @@ export const ChangesSchema = z.strictObject(
 				uncompleted: z.number(),
 			},
 		),
+		truncated: z.boolean(),
 		cutoffDate: z.string(),
 	},
 );
 
-/** Changes since a relative or absolute cutoff (default one day), detected from the temporal tables. */
+/** The most changes one answer lists: a window covering a seed would otherwise list every node. */
+const CHANGE_LIST_LIMIT = 200;
+
+/**
+ * Changes since a relative or absolute cutoff (default one day), detected from the temporal tables:
+ * the newest {@link CHANGE_LIST_LIMIT} listed, all of them counted.
+ */
 export const changesList = defineOp(
 	{
 		input: z.object(
@@ -79,13 +86,19 @@ export const changesList = defineOp(
 					},
 				);
 			}
-			const result = new ChangeDetector(ctx.db).detectChanges(cutoffDate);
+			const result = new ChangeDetector(ctx.db).detectChanges(
+				cutoffDate,
+				{
+					limit: CHANGE_LIST_LIMIT,
+				},
+			);
 			return ok(
 				toJson(
 					{
 						changes: result.changes,
 						tree: result.tree,
 						summary: result.summary,
+						truncated: result.truncated,
 						cutoffDate: result.cutoffDate.toISOString(),
 					},
 				),

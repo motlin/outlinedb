@@ -27,12 +27,38 @@ const childIds = Array.from(
 );
 const mirrorIds = childIds.map((id) => `mirror-of-${id}`);
 
+/** `statement`, failing any run that binds a string longer than `maxLength`. */
+function capBoundStrings<T extends object>(statement: T, maxLength: number): T
+{
+	for (const method of ["all", "get", "run", "iterate"])
+	{
+		const run: unknown = Reflect.get(statement, method);
+		if (typeof run !== "function")
+		{
+			continue;
+		}
+		Reflect.set(statement, method, (...values: unknown[]): unknown =>
+		{
+			const tooLong = values.find((value) => typeof value === "string" && value.length > maxLength);
+			if (typeof tooLong === "string")
+			{
+				throw new TypeError(`string or blob too big: ${tooLong.length}`);
+			}
+			const result: unknown = Reflect.apply(run, statement, values);
+			return result;
+		});
+	}
+	return statement;
+}
+
 /**
  * A migrated in-memory cache seeded with `parent` holding {@link COUNT} children,
  * each mirrored once under `elsewhere`, whose statements fail past the Durable
- * Object's bound-parameter cap the way workerd does.
+ * Object's bound-parameter cap the way workerd does. With `maxBoundStringLength`,
+ * binding a longer string fails too: a test-sized stand-in for the Durable
+ * Object's 2 MB cap on one string, which a seed-sized id list passes.
  */
-function cappedDatabase()
+function cappedDatabase(maxBoundStringLength = Number.POSITIVE_INFINITY)
 {
 	const {database, sqlite} = buildTestDb();
 	const live =
@@ -99,7 +125,7 @@ function cappedDatabase()
 		{
 			throw new Error(`too many SQL variables: ${parameters}`);
 		}
-		return prepare(source);
+		return capBoundStrings(prepare(source), maxBoundStringLength);
 	};
 	return database;
 }
@@ -278,6 +304,42 @@ describe("id batches on a Durable Object's 100-bound-parameter cap", () =>
 				currentParentId: "elsewhere",
 				currentCompletedAt: null,
 				parentId: "elsewhere",
+			},
+		);
+	});
+
+	it("lists only the newest `limit` changes, counts them all, and binds no id list longer than the listed ones", () =>
+	{
+		const database = cappedDatabase(1024);
+
+		const result = new ChangeDetector(database).detectChanges(
+			new Date("2025-12-31T00:00:00.000Z"),
+			{
+				limit: 3,
+			},
+		);
+
+		expect(
+			{
+				ids: result.changes.map((change) => change.id),
+				tree: result.tree.map((node) => [node.id, node.children.map((child) => child.id)]),
+				summary: result.summary,
+				truncated: result.truncated,
+			},
+		).toStrictEqual(
+			{
+				ids: ["child-000", "child-001", "child-002"],
+				tree: [["parent", ["child-000", "child-001", "child-002"]]],
+				summary:
+				{
+					added: 2 + 2 * COUNT,
+					deleted: 0,
+					changed: 0,
+					moved: 0,
+					completed: 0,
+					uncompleted: 0,
+				},
+				truncated: true,
 			},
 		);
 	});

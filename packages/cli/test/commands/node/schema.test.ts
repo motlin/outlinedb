@@ -103,6 +103,7 @@ interface NodeChangesOutput {
   changes: NodeChange[];
   tree: ChangeTreeNode[];
   summary: ChangeSummary;
+  truncated: boolean;
   cutoffDate: string;
 }
 

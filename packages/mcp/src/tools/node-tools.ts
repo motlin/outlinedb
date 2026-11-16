@@ -190,7 +190,7 @@ export function registerNodeTools(server: McpServer, store: StoreClient): void
 		"outlinedb_node_changes",
 		{
 			description:
-				"Nodes added, deleted, edited, moved, completed or uncompleted since a cutoff: a flat change list, the changes as a tree with unchanged ancestors as context, and a summary",
+				"Nodes added, deleted, edited, moved, completed or uncompleted since a cutoff: a flat change list, the changes as a tree with unchanged ancestors as context, and a summary. Lists the newest 200 changes; the summary counts them all, and truncated is true when older ones were left out (narrow since to see them)",
 			inputSchema:
 			{
 				since: z

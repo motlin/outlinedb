@@ -1,4 +1,5 @@
-import {and, eq, gte, lte, ne} from "drizzle-orm";
+import {and, eq, gte, lte, ne, sql} from "drizzle-orm";
+import type {SQL} from "drizzle-orm";
 import {inIds} from "../cache/in-ids.js";
 import {mirrors, nodeContent, nodeMetadata} from "../db/schema.js";
 import type {AppDatabase} from "../db/types.js";
@@ -48,6 +49,8 @@ export interface ChangeDetectionResult
 	changes: NodeChange[];
 	tree: ChangeTreeNode[];
 	summary: ChangeSummary;
+	/** Whether `changes` (and `tree`) leave out older changes that `summary` still counts. */
+	truncated: boolean;
 	cutoffDate: Date;
 }
 
@@ -118,240 +121,279 @@ export function getChangeLabels(change: NodeChange): string[]
 	return labels;
 }
 
+/** One node's change as SQL classifies it; text and completion dates are loaded only for the changes listed. */
+interface Classified
+{
+	id: string;
+	isNew: boolean;
+	isDeleted: boolean;
+	hasOldContent: boolean;
+	nameChanged: boolean;
+	noteChanged: boolean;
+	parentChanged: boolean;
+	completionChanged: boolean;
+	oldParentId: string | null;
+}
+
+interface TextRow
+{
+	id: string;
+	name: string | null;
+	note: string | null;
+	parentId: string | null;
+}
+
+export interface DetectChangesOptions
+{
+	/** List at most this many changes, newest first; the summary still counts them all. */
+	limit?: number;
+}
+
 export class ChangeDetector
 {
 	constructor(private readonly db: AppDatabase)
 	{
 	}
 
-	detectChanges(cutoffDate: Date): ChangeDetectionResult
+	/**
+	 * Changes since `cutoffDate`, newest first. SQL classifies and counts every
+	 * change, and only the listed ones reach JavaScript with their text, so a
+	 * window covering a whole seed (every node "added") stays within a Durable
+	 * Object's 128 MB of memory and its 2 MB cap on one bound string.
+	 */
+	detectChanges(cutoffDate: Date, options: DetectChangesOptions = {}): ChangeDetectionResult
 	{
 		const cutoff = formatTemporalTimestamp(cutoffDate);
+		const classified = this.classified(cutoff);
 
-		const oldContent = this.queryOldContent(cutoff);
-		const newContent = this.queryNewContent(cutoff);
-		const oldMeta = this.queryOldMetadata(cutoff);
-		const newMeta = this.queryNewMetadata(cutoff);
-
-		const changes = this.classifyChanges(oldContent, newContent, oldMeta, newMeta, cutoff);
-		const tree = this.buildChangeTree(changes);
-		const summary = this.summarize(changes);
+		const {total, ...summary} = this.summarize(classified);
+		const listed = this.list(classified, options.limit);
+		const changes = this.hydrate(listed, cutoff);
 
 		return {
 			changes,
-			tree,
+			tree: this.buildChangeTree(changes),
 			summary,
+			truncated: listed.length < total,
 			cutoffDate,
 		};
 	}
 
-	private queryOldContent(cutoff: number)
+	/**
+	 * A query over every node changed since the cutoff, one row each, compared
+	 * across the version live at the cutoff (since closed) and the live one
+	 * (begun since). A node that was a mirror at any point since the cutoff has
+	 * no text of its own, so stale text stored on it never counts as an edit.
+	 */
+	private classified(cutoff: number): SQL
 	{
-		return this.db
-			.select(
-				{
-					id: nodeContent.id,
-					name: nodeContent.name,
-					note: nodeContent.note,
-					parentId: nodeContent.parentId,
-				},
-			)
-			.from(nodeContent)
-			.where(
-				and(
-					lte(nodeContent.systemFrom, cutoff),
-					gte(nodeContent.systemTo, cutoff),
-					ne(nodeContent.systemTo, FAR_FUTURE_DATE),
+		const far = FAR_FUTURE_DATE;
+		return sql`
+			WITH
+				old_content AS (
+					SELECT id, parent_id, name, note, system_to AS at FROM node_content
+					WHERE system_from <= ${cutoff} AND system_to >= ${cutoff} AND system_to <> ${far}
 				),
-			)
-			.all();
-	}
-
-	private queryNewContent(cutoff: number)
-	{
-		return this.db
-			.select(
-				{
-					id: nodeContent.id,
-					name: nodeContent.name,
-					note: nodeContent.note,
-					parentId: nodeContent.parentId,
-				},
-			)
-			.from(nodeContent)
-			.where(and(gte(nodeContent.systemFrom, cutoff), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
-			.all();
-	}
-
-	private queryOldMetadata(cutoff: number)
-	{
-		return this.db
-			.select(
-				{
-					nodeId: nodeMetadata.nodeId,
-					completedAt: nodeMetadata.completedAt,
-				},
-			)
-			.from(nodeMetadata)
-			.where(
-				and(
-					lte(nodeMetadata.systemFrom, cutoff),
-					gte(nodeMetadata.systemTo, cutoff),
-					ne(nodeMetadata.systemTo, FAR_FUTURE_DATE),
+				new_content AS (
+					SELECT id, parent_id, name, note, system_from AS at FROM node_content
+					WHERE system_from >= ${cutoff} AND system_to = ${far}
 				),
-			)
-			.all();
+				old_meta AS (
+					SELECT node_id AS id, completed_at, system_to AS at FROM node_metadata
+					WHERE system_from <= ${cutoff} AND system_to >= ${cutoff} AND system_to <> ${far}
+				),
+				new_meta AS (
+					SELECT node_id AS id, completed_at, system_from AS at FROM node_metadata
+					WHERE system_from >= ${cutoff} AND system_to = ${far}
+				),
+				mirror_ids AS (
+					SELECT DISTINCT mirror_id AS id FROM mirrors WHERE system_to >= ${cutoff}
+				),
+				ids AS (
+					SELECT id FROM old_content UNION SELECT id FROM new_content
+					UNION SELECT id FROM old_meta UNION SELECT id FROM new_meta
+				),
+				compared AS (
+					SELECT
+						ids.id AS id,
+						old_content.id IS NULL AND old_meta.id IS NULL AS is_new,
+						new_content.id IS NULL AND new_meta.id IS NULL AS is_deleted,
+						old_content.id IS NOT NULL AS has_old_content,
+						old_content.id IS NOT NULL AND new_content.id IS NOT NULL AND mirror_ids.id IS NULL
+							AND old_content.name IS NOT new_content.name AS name_changed,
+						old_content.id IS NOT NULL AND new_content.id IS NOT NULL AND mirror_ids.id IS NULL
+							AND old_content.note IS NOT new_content.note AS note_changed,
+						old_content.id IS NOT NULL AND new_content.id IS NOT NULL
+							AND old_content.parent_id IS NOT new_content.parent_id AS parent_changed,
+						old_meta.id IS NOT NULL AND new_meta.id IS NOT NULL
+							AND (old_meta.completed_at IS NULL) <> (new_meta.completed_at IS NULL) AS completion_changed,
+						new_meta.completed_at IS NOT NULL AS now_completed,
+						old_content.parent_id AS old_parent_id,
+						max(
+							coalesce(old_content.at, 0), coalesce(new_content.at, 0),
+							coalesce(old_meta.at, 0), coalesce(new_meta.at, 0)
+						) AS at
+					FROM ids
+					LEFT JOIN old_content ON old_content.id = ids.id
+					LEFT JOIN new_content ON new_content.id = ids.id
+					LEFT JOIN old_meta ON old_meta.id = ids.id
+					LEFT JOIN new_meta ON new_meta.id = ids.id
+					LEFT JOIN mirror_ids ON mirror_ids.id = ids.id
+				)
+			SELECT * FROM compared
+			WHERE is_new OR is_deleted OR name_changed OR note_changed OR parent_changed OR completion_changed
+		`;
 	}
 
-	private queryNewMetadata(cutoff: number)
+	private summarize(classified: SQL): ChangeSummary &
 	{
-		return this.db
-			.select(
-				{
-					nodeId: nodeMetadata.nodeId,
-					completedAt: nodeMetadata.completedAt,
-				},
-			)
-			.from(nodeMetadata)
-			.where(and(gte(nodeMetadata.systemFrom, cutoff), eq(nodeMetadata.systemTo, FAR_FUTURE_DATE)))
-			.all();
+		total: number;
+	}
+	{
+		const row = this.db.get<Record<string, number | null>>(
+			sql`
+				SELECT
+					count(*) AS total,
+					sum(is_new) AS added,
+					sum(is_deleted) AS deleted,
+					sum(NOT is_new AND NOT is_deleted AND (name_changed OR note_changed)) AS changed,
+					sum(NOT is_new AND NOT is_deleted AND parent_changed) AS moved,
+					sum(NOT is_new AND NOT is_deleted AND completion_changed AND now_completed) AS completed,
+					sum(NOT is_new AND NOT is_deleted AND completion_changed AND NOT now_completed) AS uncompleted
+				FROM (${classified})
+			`,
+		);
+		return {
+			added: row.added ?? 0,
+			deleted: row.deleted ?? 0,
+			changed: row.changed ?? 0,
+			moved: row.moved ?? 0,
+			completed: row.completed ?? 0,
+			uncompleted: row.uncompleted ?? 0,
+			total: row.total ?? 0,
+		};
 	}
 
-	private classifyChanges(
-		oldContent:
+	/** The newest `limit` changes (all of them without one), ties by id. */
+	private list(classified: SQL, limit: number | undefined): Classified[]
+	{
+		const rows = this.db.all<
 		{
 			id: string;
-			name: string | null;
-			note: string | null;
-			parentId: string | null;
-		}[],
-		newContent:
+			is_new: number;
+			is_deleted: number;
+			has_old_content: number;
+			name_changed: number;
+			note_changed: number;
+			parent_changed: number;
+			completion_changed: number;
+			old_parent_id: string | null;
+		}>(sql`SELECT * FROM (${classified}) ORDER BY at DESC, id LIMIT ${limit ?? -1}`);
+		return rows.map((row) => (
 		{
-			id: string;
-			name: string | null;
-			note: string | null;
-			parentId: string | null;
-		}[],
-		oldMeta:
-		{
-			nodeId: string;
-			completedAt: Date | null;
-		}[],
-		newMeta:
-		{
-			nodeId: string;
-			completedAt: Date | null;
-		}[],
-		cutoff: number,
-	): NodeChange[]
+			id: row.id,
+			isNew: row.is_new === 1,
+			isDeleted: row.is_deleted === 1,
+			hasOldContent: row.has_old_content === 1,
+			nameChanged: row.name_changed === 1,
+			noteChanged: row.note_changed === 1,
+			parentChanged: row.parent_changed === 1,
+			completionChanged: row.completion_changed === 1,
+			oldParentId: row.old_parent_id,
+		}));
+	}
+
+	/** The version that was live at the cutoff and has since closed. */
+	private closedAtCutoff(table: typeof nodeContent | typeof nodeMetadata, cutoff: number)
 	{
-		const oldContentMap = new Map(oldContent.map((r) => [r.id, r]));
-		const newContentMap = new Map(newContent.map((r) => [r.id, r]));
-		const oldMetaMap = new Map(oldMeta.map((r) => [r.nodeId, r]));
-		const newMetaMap = new Map(newMeta.map((r) => [r.nodeId, r]));
+		return and(lte(table.systemFrom, cutoff), gte(table.systemTo, cutoff), ne(table.systemTo, FAR_FUTURE_DATE));
+	}
 
-		const allIds = new Set([
-			...newContentMap.keys(),
-			...newMetaMap.keys(),
-			...oldContentMap.keys(),
-			...oldMetaMap.keys(),
-		]);
-		const mirrorOriginals = this.loadMirrorOriginals([...allIds], cutoff);
+	/** The live version, when it began after the cutoff. */
+	private liveSinceCutoff(table: typeof nodeContent | typeof nodeMetadata, cutoff: number)
+	{
+		return and(gte(table.systemFrom, cutoff), eq(table.systemTo, FAR_FUTURE_DATE));
+	}
 
-		const changes: NodeChange[] = [];
-
-		for (const id of allIds)
-		{
-			// A mirror has no text of its own: stale text stored on it never
-			// counts as a change, and it is labelled with its original's text.
-			const originalId = mirrorOriginals.get(id);
-			const isMirror = originalId !== undefined;
-			const currentOriginal = isMirror
-				? (newContentMap.get(originalId) ?? this.fetchCurrentContent(originalId) ?? NO_TEXT)
-				: undefined;
-			const oldOriginal = isMirror ? (oldContentMap.get(originalId) ?? currentOriginal) : undefined;
-			const oldC = withText(oldContentMap.get(id), oldOriginal);
-			const newC = withText(newContentMap.get(id), currentOriginal);
-			const oldM = oldMetaMap.get(id);
-			const newM = newMetaMap.get(id);
-
-			const hasContentChange = oldC !== undefined || newC !== undefined;
-			const hasMetaChange = oldM !== undefined || newM !== undefined;
-
-			if (!hasContentChange && !hasMetaChange)
-			{
-				continue;
-			}
-
-			const isNew = !oldC && !oldM && (Boolean(newC) || Boolean(newM));
-			const isDeleted = (Boolean(oldC) || Boolean(oldM)) && !newC && !newM;
-
-			let currentName: string | null = null;
-			let currentNote: string | null = null;
-			let currentParentId: string | null = null;
-
-			if (newC)
-			{
-				currentName = newC.name;
-				currentNote = newC.note;
-				currentParentId = newC.parentId;
-			}
-			else if (!isDeleted)
-			{
-				const current = withText(this.fetchCurrentContent(id), currentOriginal);
-				if (current)
-				{
-					currentName = current.name;
-					currentNote = current.note;
-					currentParentId = current.parentId;
-				}
-			}
-
-			const oldName = oldC?.name ?? null;
-			const oldNote = oldC?.note ?? null;
-			const oldParentId = oldC?.parentId ?? null;
-			const oldCompletedAt = oldM?.completedAt ?? null;
-			const currentCompletedAt = newM?.completedAt ?? null;
-
-			const nameChanged = oldC && newC && !isMirror ? oldC.name !== newC.name : false;
-			const noteChanged = oldC && newC && !isMirror ? oldC.note !== newC.note : false;
-			const parentChanged = oldC && newC ? oldC.parentId !== newC.parentId : false;
-
-			const completionChanged =
-				oldM !== undefined && newM !== undefined
-					? (oldM.completedAt === null) !== (newM.completedAt === null)
-					: false;
-
-			const contentChanged = nameChanged;
-
-			if (!isNew && !isDeleted && !contentChanged && !noteChanged && !parentChanged && !completionChanged)
-			{
-				continue;
-			}
-
-			changes.push(
-				{
-					id,
-					isNew,
-					isDeleted,
-					contentChanged: nameChanged,
-					parentChanged,
-					completionChanged,
-					noteChanged,
-					oldName,
-					oldNote,
-					oldParentId,
-					oldCompletedAt,
-					currentName,
-					currentNote,
-					currentParentId,
-					currentCompletedAt,
-					parentId: isDeleted ? oldParentId : currentParentId,
-				},
+	/** The completion dates of `ids` before (closed at the cutoff) and now (begun since). */
+	private queryCompletions(ids: string[], cutoff: number)
+	{
+		const read = (version: SQL | undefined) =>
+			new Map(
+				this.db
+					.select(
+						{
+							nodeId: nodeMetadata.nodeId,
+							completedAt: nodeMetadata.completedAt,
+						},
+					)
+					.from(nodeMetadata)
+					.where(and(inIds(nodeMetadata.nodeId, ids), version))
+					.all()
+					.map((row) => [row.nodeId, row.completedAt]),
 			);
-		}
+		return {
+			old: read(this.closedAtCutoff(nodeMetadata, cutoff)),
+			current: read(this.liveSinceCutoff(nodeMetadata, cutoff)),
+		};
+	}
 
-		return changes;
+	/** Load the text of the listed changes (a mirror's from its original) and build their full records. */
+	private hydrate(listed: Classified[], cutoff: number): NodeChange[]
+	{
+		const ids = listed.map((change) => change.id);
+		const mirrorOriginals = this.loadMirrorOriginals(ids, cutoff);
+		const textIds = [...new Set([...ids, ...mirrorOriginals.values()])];
+		const oldText = this.queryText(textIds, this.closedAtCutoff(nodeContent, cutoff));
+		const liveText = this.queryText(textIds, eq(nodeContent.systemTo, FAR_FUTURE_DATE));
+		const completions = this.queryCompletions(ids, cutoff);
+
+		return listed.map((change) =>
+		{
+			// A mirror has no text of its own: it is labelled with its original's text.
+			const originalId = mirrorOriginals.get(change.id);
+			const currentOriginal = originalId === undefined ? undefined : (liveText.get(originalId) ?? NO_TEXT);
+			const oldOriginal = originalId === undefined ? undefined : (oldText.get(originalId) ?? currentOriginal);
+			const oldC = change.hasOldContent ? withText(oldText.get(change.id), oldOriginal) : undefined;
+			const current = change.isDeleted ? undefined : withText(liveText.get(change.id), currentOriginal);
+			const currentParentId = current?.parentId ?? null;
+
+			return {
+				id: change.id,
+				isNew: change.isNew,
+				isDeleted: change.isDeleted,
+				contentChanged: change.nameChanged,
+				parentChanged: change.parentChanged,
+				completionChanged: change.completionChanged,
+				noteChanged: change.noteChanged,
+				oldName: oldC?.name ?? null,
+				oldNote: oldC?.note ?? null,
+				oldParentId: change.oldParentId,
+				oldCompletedAt: completions.old.get(change.id) ?? null,
+				currentName: current?.name ?? null,
+				currentNote: current?.note ?? null,
+				currentParentId,
+				currentCompletedAt: completions.current.get(change.id) ?? null,
+				parentId: change.isDeleted ? change.oldParentId : currentParentId,
+			};
+		});
+	}
+
+	private queryText(ids: string[], version: SQL | undefined): Map<string, TextRow>
+	{
+		const rows = this.db
+			.select(
+				{
+					id: nodeContent.id,
+					name: nodeContent.name,
+					note: nodeContent.note,
+					parentId: nodeContent.parentId,
+				},
+			)
+			.from(nodeContent)
+			.where(and(inIds(nodeContent.id, ids), version))
+			.all();
+		return new Map(rows.map((row) => [row.id, row]));
 	}
 
 	/**
@@ -377,21 +419,6 @@ export class ChangeDetector
 			originals.set(row.mirrorId, row.originalId);
 		}
 		return originals;
-	}
-
-	private fetchCurrentContent(id: string)
-	{
-		return this.db
-			.select(
-				{
-					name: nodeContent.name,
-					note: nodeContent.note,
-					parentId: nodeContent.parentId,
-				},
-			)
-			.from(nodeContent)
-			.where(and(eq(nodeContent.id, id), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
-			.get();
 	}
 
 	buildChangeTree(changes: NodeChange[]): ChangeTreeNode[]
@@ -510,54 +537,5 @@ export class ChangeDetector
 
 		const rootChildIds = childrenMap.get(null) ?? [];
 		return rootChildIds.map((childId) => buildNode(childId)).filter((n): n is ChangeTreeNode => n !== null);
-	}
-
-	private summarize(changes: NodeChange[]): ChangeSummary
-	{
-		const summary: ChangeSummary =
-		{
-			added: 0,
-			deleted: 0,
-			changed: 0,
-			moved: 0,
-			completed: 0,
-			uncompleted: 0,
-		};
-
-		for (const c of changes)
-		{
-			if (c.isNew)
-			{
-				summary.added++;
-			}
-			else if (c.isDeleted)
-			{
-				summary.deleted++;
-			}
-			else
-			{
-				if (c.contentChanged || c.noteChanged)
-				{
-					summary.changed++;
-				}
-				if (c.parentChanged)
-				{
-					summary.moved++;
-				}
-				if (c.completionChanged)
-				{
-					if (c.currentCompletedAt)
-					{
-						summary.completed++;
-					}
-					else
-					{
-						summary.uncompleted++;
-					}
-				}
-			}
-		}
-
-		return summary;
 	}
 }
