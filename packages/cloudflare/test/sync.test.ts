@@ -405,7 +405,9 @@ describe("sync from a fake upstream", () =>
 			},
 		);
 		await expect(liveIds(h)).resolves.toHaveLength(4999);
-		expect(third.nextAlarmAt).toBeGreaterThan(Date.now() + 25 * 60_000);
+		// The next scheduled run is the short catch-up, a minute out, not another export half an hour out.
+		expect(third.nextAlarmAt).toBeGreaterThan(Date.now());
+		expect(third.nextAlarmAt).toBeLessThanOrEqual(Date.now() + 60_000);
 		expect(third.outbox).toStrictEqual(
 			{
 				pending: 0,
@@ -656,7 +658,7 @@ describe("sync from a fake upstream", () =>
 		await stop(h);
 	}, 180_000);
 
-	it("reads get_tree_data only on an explicit seed, then catches up from the transaction log with no tree read", async () =>
+	it("reads get_tree_data only on an explicit seed, then a scheduled run catches up from the transaction log with no export or tree read", async () =>
 	{
 		current = makeNodes(100);
 		treeData = () =>
@@ -703,8 +705,16 @@ describe("sync from a fake upstream", () =>
 			);
 		internalCalls.length = 0;
 		pollStarts.length = 0;
-		const h = await start(undefined, internalAuthBindings);
+		// Three seconds, so the scheduled run lands inside the test.
+		const h = await start(
+			undefined,
+			{
+				...internalAuthBindings,
+				SYNC_INTERVAL_MINUTES: "0.05",
+			},
+		);
 		const seeded = await runToIdle(h, 0, "/api/admin/seed");
+		expect(seeded.nextAlarmAt).toBeLessThanOrEqual(Date.now() + 3000);
 		expect(seeded.lastResult).toMatchObject(
 			{
 				status: "ok",
@@ -769,25 +779,37 @@ describe("sync from a fake upstream", () =>
 			);
 		internalCalls.length = 0;
 		pollStarts.length = 0;
-		const synced = await runToIdle(h, 1);
-		expect(synced.lastResult).toMatchObject(
+		const exportsBefore = exportCalls;
+		let synced: SyncStatus | undefined;
+		for (let i = 0; i < 15_000 / POLL_MS; i++)
+		{
+			synced = await status(h);
+			if (synced.lastResult?.status === "caught_up")
 			{
-				status: "ok",
-				totalNodes: 100,
-				nodesUnchanged: 100,
+				break;
+			}
+			await sleep(POLL_MS);
+		}
+		expect(synced?.lastResult).toStrictEqual(
+			{
+				status: "caught_up",
+				finishedAt: expect.any(Number),
+				durationMs: expect.any(Number),
 			},
 		);
-		expect(synced.lastResult?.internalSyncError).toBeUndefined();
+		expect(synced?.nextAlarmAt).toBeLessThanOrEqual(Date.now() + 3000);
 		expect(
 			{
+				exports: exportCalls - exportsBefore,
 				treeReads: internalCalls.filter((path) => path === "/get_tree_data/").length,
-				pollStarts,
+				firstPollStart: pollStarts[0],
 				log: await treeLog(h),
 			},
 		).toStrictEqual(
 			{
+				exports: 0,
 				treeReads: 0,
-				pollStarts: ["1"],
+				firstPollStart: "1",
 				log:
 				{
 					txId: "5",

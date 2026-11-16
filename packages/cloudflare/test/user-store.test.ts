@@ -98,6 +98,11 @@ describe("user store Durable Object behind the Worker", () =>
 		);
 		expect(shape).toStrictEqual(
 			{
+				sync_export_requests:
+				{
+					temporal: true,
+					indexes: ["sync_export_requests_closed_at_idx", "sync_export_requests_system_to_idx"],
+				},
 				sync_runs:
 				{
 					temporal: true,

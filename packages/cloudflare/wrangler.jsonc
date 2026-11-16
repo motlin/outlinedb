@@ -46,7 +46,7 @@
 	// Access config (ACCESS_TEAM_DOMAIN, ACCESS_AUD, ALLOWED_EMAILS, ALLOWED_SERVICE_TOKENS) and OUTLINEDB_ENV_OWNERS must not be vars: deploy would reset them. Set them as secrets; use .dev.vars locally (also ACCESS_DEV_IDENTITY).
 	"vars":
 	{
-		"SYNC_INTERVAL_MINUTES": "30",
+		"SYNC_INTERVAL_MINUTES": "1",
 		"EMAIL_PROVIDER": "cloudflare",
 		"EMAIL_FROM": "no-reply@outlinedb.com",
 		// Better Auth's link origin and only trusted origin. /api/auth/* answers 503 until the BETTER_AUTH_SECRET secret is set.

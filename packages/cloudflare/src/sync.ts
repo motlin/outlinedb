@@ -21,7 +21,13 @@ import {nodeBatches} from "./export-stream";
 import {createWithMicrosecondSystemTimes} from "./text-system-times";
 
 const BATCH_SIZE = 2000;
-const DEFAULT_INTERVAL_MINUTES = 30;
+/**
+ * Minutes between scheduled runs. A scheduled run is only the transaction-log catch-up (one small /push_and_poll), so
+ * it runs often; the full nodes-export runs only on demand (POST /api/admin/sync or /api/admin/seed).
+ */
+const DEFAULT_INTERVAL_MINUTES = 1;
+/** The run id every catch-up run's versions share, so they phase each other out instead of piling up live rows. */
+const CATCH_UP_RUN_ID = "catch-up";
 const RATE_LIMIT_BACKOFF_MS = 60_000;
 const SEED_HINT = "On the Worker, POST /api/admin/seed instead.";
 /**
@@ -32,7 +38,8 @@ const RUN_BUDGET_MS = 30_000;
 
 /**
  * The sync job's own tables, temporal like every other table: a run's versions (one per alarm run), the ids the run in
- * progress has seen (scratch, deleted when the run ends) and the seed requests (closed when a run consumes one).
+ * progress has seen (scratch, deleted when the run ends), the seed requests (closed when a run consumes one) and the
+ * export requests (closed when a run starts for one).
  */
 const SYNC_TABLES = `
 CREATE TABLE IF NOT EXISTS sync_runs (
@@ -79,6 +86,14 @@ CREATE TABLE IF NOT EXISTS sync_seed_requests (
 CREATE UNIQUE INDEX IF NOT EXISTS sync_seed_requests_system_to_idx ON sync_seed_requests (system_to);
 CREATE INDEX IF NOT EXISTS sync_seed_requests_closed_at_idx ON sync_seed_requests (system_to)
 	WHERE system_to < ${String(FAR_FUTURE_DATE)};
+CREATE TABLE IF NOT EXISTS sync_export_requests (
+	system_from INTEGER NOT NULL,
+	system_to INTEGER NOT NULL,
+	PRIMARY KEY (system_from)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS sync_export_requests_system_to_idx ON sync_export_requests (system_to);
+CREATE INDEX IF NOT EXISTS sync_export_requests_closed_at_idx ON sync_export_requests (system_to)
+	WHERE system_to < ${String(FAR_FUTURE_DATE)};
 `;
 
 const SYSTEM_TIMES: ReadonlySet<string> = new Set(["system_from", "system_to"]);
@@ -89,7 +104,7 @@ export interface SyncEnv
 	SNAPSHOTS: R2Bucket;
 	WORKFLOWY_API_KEY?: string;
 	WORKFLOWY_API_URL?: string;
-	/** Minutes between runs once one has finished (default 30). */
+	/** Minutes between scheduled catch-up runs (default {@link DEFAULT_INTERVAL_MINUTES}). */
 	SYNC_INTERVAL_MINUTES?: string;
 	/** CPU budget knob: batches applied per alarm before yielding (default: all). */
 	SYNC_BATCHES_PER_TICK?: string;
@@ -172,6 +187,15 @@ export type SyncResult =
 			})
 	|
 	  {
+			/** A scheduled run: the transaction-log catch-up alone, with no export. */
+			status: "caught_up";
+			finishedAt: number;
+			durationMs: number;
+			/** Why the catch-up failed; never followed by an automatic export or reseed. */
+			internalSyncError?: string;
+	  }
+	|
+	  {
 			status: "rate_limited" | "error";
 			message: string;
 			at: number;
@@ -208,7 +232,7 @@ export class SyncJob
 		createWithMicrosecondSystemTimes(
 			sql,
 			SYNC_TABLES,
-			["sync_runs", "sync_seen", "sync_seed_requests"],
+			["sync_runs", "sync_seen", "sync_seed_requests", "sync_export_requests"],
 			SYSTEM_TIMES,
 		);
 		const runColumns = sql.exec("SELECT name FROM pragma_table_info('sync_runs')").toArray();
@@ -269,6 +293,7 @@ export class SyncJob
 		);
 		const {result} = job;
 		const ok = result?.status === "ok" ? result : undefined;
+		const caughtUp = result?.status === "caught_up" ? result : undefined;
 		this.sql.exec(
 			"INSERT OR REPLACE INTO sync_runs (run_id, phase, export_key, applied, started_at, total_nodes, nodes_added, " +
 				"nodes_updated, nodes_unchanged, nodes_deleted, nodes_phased_out, content_updated, metadata_updated, " +
@@ -289,10 +314,10 @@ export class SyncJob
 			ok?.metadataUpdated ?? job.totals.metadataUpdated,
 			ok?.priorityUpdated ?? 0,
 			result?.status ?? null,
-			result === null || result.status === "ok" ? null : result.message,
-			result === null ? null : result.status === "ok" ? result.finishedAt : result.at,
-			ok?.durationMs ?? null,
-			ok?.internalSyncError ?? null,
+			result === null || result.status === "ok" || result.status === "caught_up" ? null : result.message,
+			result === null ? null : "at" in result ? result.at : result.finishedAt,
+			(ok ?? caughtUp)?.durationMs ?? null,
+			(ok ?? caughtUp)?.internalSyncError ?? null,
 			job.snapshotAt ?? null,
 			this.systemTime,
 			FAR_FUTURE_DATE,
@@ -304,7 +329,7 @@ export class SyncJob
 	 * alarm run, or by a request that landed while the run awaited I/O) was never live before that time, so it goes
 	 * instead of closing with zero width or an inverted interval.
 	 */
-	private closeLive(table: "sync_seed_requests", where: string, ...bindings: string[]): void
+	private closeLive(table: "sync_seed_requests" | "sync_export_requests", where: string, ...bindings: string[]): void
 	{
 		this.sql.exec(`DELETE FROM ${table} WHERE ${where} AND system_from >= ?`, ...bindings, this.systemTime);
 		this.sql.exec(
@@ -322,11 +347,46 @@ export class SyncJob
 		);
 	}
 
-	/** Make a run start (or continue) as soon as possible. */
+	private exportRequested(): boolean
+	{
+		return (
+			this.sql.exec("SELECT 1 FROM sync_export_requests WHERE system_to = ?", FAR_FUTURE_DATE).toArray().length >
+			0
+		);
+	}
+
+	/** Start a full-export run (or continue the one in progress) as soon as possible; scheduled runs never export. */
 	async syncNow(): Promise<SyncStatus>
+	{
+		if (this.readJob() === null && !this.exportRequested())
+		{
+			this.sql.exec(
+				"INSERT INTO sync_export_requests (system_from, system_to) VALUES (?, ?)",
+				newSystemTimestamp(),
+				FAR_FUTURE_DATE,
+			);
+		}
+		return this.wake();
+	}
+
+	/** Run the next alarm now. */
+	private async wake(): Promise<SyncStatus>
 	{
 		await this.alarm.setAlarm(this.now());
 		return this.status();
+	}
+
+	private newJob(): Job
+	{
+		return {
+			runId: crypto.randomUUID(),
+			phase: "fetching",
+			exportKey: "",
+			applied: 0,
+			totals: NO_TOTALS,
+			startedAt: this.now(),
+			result: null,
+		};
 	}
 
 	/**
@@ -343,7 +403,7 @@ export class SyncJob
 				FAR_FUTURE_DATE,
 			);
 		}
-		return this.syncNow();
+		return this.wake();
 	}
 
 	async status(): Promise<SyncStatus>
@@ -364,23 +424,24 @@ export class SyncJob
 		return this.sql.exec("SELECT 1 FROM sync_runs WHERE status = 'ok' LIMIT 1").toArray().length > 0;
 	}
 
-	/** One alarm: start a run when idle, otherwise continue the one in progress. */
+	/**
+	 * One alarm: continue the export run in progress, start one for a seed request, and otherwise only catch up from
+	 * the transaction log.
+	 */
 	async tick(): Promise<void>
 	{
 		this.systemTime = newSystemTimestamp();
 		let job = this.readJob();
 		if (job === null)
 		{
-			job =
+			if (!this.seedRequested() && !this.exportRequested())
 			{
-				runId: crypto.randomUUID(),
-				phase: "fetching",
-				exportKey: "",
-				applied: 0,
-				totals: NO_TOTALS,
-				startedAt: this.now(),
-				result: null,
-			};
+				await this.catchUpRun();
+				return;
+			}
+			// The run in progress now stands for the export request; a seed request stays until its tree read lands.
+			this.closeLive("sync_export_requests", "1 = 1");
+			job = this.newJob();
 			this.writeJob(job);
 		}
 		try
@@ -408,6 +469,67 @@ export class SyncJob
 				},
 			);
 			await this.scheduleNextRun();
+		}
+	}
+
+	/**
+	 * A scheduled run: one /push_and_poll from the stored transaction id, with no export. A failure is reported as the
+	 * run's internalSyncError and never falls back to an export or a reseed. A version is written only when the outcome
+	 * differs from the last result, so a quiet minute-by-minute catch-up leaves no rows behind.
+	 */
+	private async catchUpRun(): Promise<void>
+	{
+		const startedAt = this.now();
+		let internalSyncError: string | undefined;
+		if (this.deps.catchUp === undefined)
+		{
+			internalSyncError = "A catch-up needs internal auth (WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD)";
+		}
+		else
+		{
+			internalSyncError = await this.catchUp();
+		}
+		const last = this.readLastResult();
+		if (!(last?.status === "caught_up" && last.internalSyncError === internalSyncError))
+		{
+			this.writeJob(
+				{
+					runId: CATCH_UP_RUN_ID,
+					phase: "idle",
+					exportKey: "",
+					applied: 0,
+					totals: NO_TOTALS,
+					startedAt,
+					result:
+					{
+						status: "caught_up",
+						finishedAt: this.now(),
+						durationMs: this.now() - startedAt,
+						...(internalSyncError === undefined
+							? {}
+							:
+								{
+									internalSyncError,
+								}),
+					},
+				},
+			);
+		}
+		await this.scheduleNextRun();
+	}
+
+	/** One catch-up from the transaction log, when internal auth exists; returns why it failed, if it did. */
+	private async catchUp(): Promise<string | undefined>
+	{
+		try
+		{
+			await this.deps.catchUp?.();
+			return undefined;
+		}
+		catch (error)
+		{
+			// Never reseeded automatically: a missing seed or a refresh request needs an explicit seed.
+			return error instanceof TreeResyncRequired ? `${error.message}. ${SEED_HINT}` : errorMessage(error);
 		}
 	}
 
@@ -660,16 +782,7 @@ export class SyncJob
 		}
 		if (!seeding)
 		{
-			try
-			{
-				await this.deps.catchUp?.();
-			}
-			catch (error)
-			{
-				// Never reseeded automatically: a missing seed or a refresh request needs an explicit seed.
-				internalSyncError =
-					error instanceof TreeResyncRequired ? `${error.message}. ${SEED_HINT}` : errorMessage(error);
-			}
+			internalSyncError = await this.catchUp();
 		}
 		const {importTimestamp: _timestamp, ...counts} = result;
 		this.finishRun(
@@ -726,6 +839,21 @@ function jobFromRow(row: Record<string, SqlStorageValue>): Job
 			nodesDeleted: count("nodes_deleted"),
 			nodesPhasedOut: count("nodes_phased_out"),
 			priorityUpdated: count("priority_updated"),
+			...(internalSyncError === undefined
+				? {}
+				:
+					{
+						internalSyncError,
+					}),
+		};
+	}
+	else if (status === "caught_up")
+	{
+		result =
+		{
+			status,
+			finishedAt: count("result_at"),
+			durationMs: count("duration_ms"),
 			...(internalSyncError === undefined
 				? {}
 				:

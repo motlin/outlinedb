@@ -394,7 +394,7 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 		}
 	}
 
-	/** Start a sync run, or continue the one in progress, on the next alarm. */
+	/** Start a full-export sync run, or continue the one in progress, on the next alarm; scheduled runs only catch up. */
 	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
 	async syncNow(): Promise<SyncStatus | SyncDisabled>
 	{

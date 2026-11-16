@@ -76,7 +76,7 @@ describe("wrangler.jsonc", () =>
 	{
 		expect(readWranglerConfig().vars).toStrictEqual(
 			{
-				SYNC_INTERVAL_MINUTES: "30",
+				SYNC_INTERVAL_MINUTES: "1",
 				EMAIL_PROVIDER: "cloudflare",
 				EMAIL_FROM: "no-reply@outlinedb.com",
 				APP_ORIGIN: "https://app.outlinedb.com",
