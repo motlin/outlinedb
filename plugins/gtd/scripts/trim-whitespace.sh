@@ -30,7 +30,7 @@ apply = os.environ.get("APPLY") == "1"
 con = sqlite3.connect(db)
 rows = con.execute(
     "SELECT id, name FROM node_content "
-    "WHERE system_to='9999-12-31 23:59:59' "
+    "WHERE system_to = 9007199254740991 "
     "AND name IS NOT NULL AND name <> trim(name)"
 ).fetchall()
 

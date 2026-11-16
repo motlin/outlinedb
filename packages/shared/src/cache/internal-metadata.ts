@@ -385,7 +385,7 @@ function liveRows<TTable extends SQLiteTable>(
 	ownerColumn: SQLiteColumn,
 	systemToColumn: SQLiteColumn,
 	ownerIds: readonly string[] | undefined,
-	asOf?: string,
+	asOf?: number,
 ): TTable["$inferSelect"][]
 {
 	const version: SQL =
@@ -702,7 +702,7 @@ function calendarOf(row: typeof calendarMetadata.$inferSelect, levels: typeof ca
 export function readInternalMetadata(
 	database: TemporalTransaction,
 	ids: readonly string[],
-	asOf?: string,
+	asOf?: number,
 ): Map<string, InternalMetadata>
 {
 	const result = new Map<string, InternalMetadata>();
@@ -774,8 +774,8 @@ export function readInternalMetadata(
 				timestamp: null,
 				foundDates: null,
 				dayPrefix: null,
-				systemFrom: "",
-				systemTo: "",
+				systemFrom: 0,
+				systemTo: 0,
 			},
 			levels,
 		);

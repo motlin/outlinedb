@@ -174,7 +174,7 @@ export
 {
 	closeCurrentVersions,
 	joinKey,
-	SameMillisecondOverwriteError,
+	SameMicrosecondOverwriteError,
 	type TemporalMergeConfig,
 	type TemporalMergeResult,
 	temporalMerge,
@@ -211,7 +211,6 @@ export
 {
 	assertWithinTransactionTimeout,
 	BULK_IMPORT_TIMEOUT_MS,
-	newSystemTime,
 	newSystemTimestamp,
 	startUnitOfWork,
 	TRANSACTION_TIMEOUT_MS,

@@ -104,7 +104,7 @@ export class ListByIdService
 	private calculateCacheAge(
 		nodes:
 		{
-			systemFrom: string;
+			systemFrom: number;
 		}[],
 	): number
 	{

@@ -1,12 +1,18 @@
 import {and, eq, getTableName, gt, max} from "drizzle-orm";
 import {apiImportTimestamp} from "../db/schema.js";
-import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "../temporal/constants.js";
+import {FAR_FUTURE_DATE, formatTemporalTimestamp, parseTemporalTimestamp} from "../temporal/constants.js";
 import {stampImportTime} from "./account-store.js";
 import type {UnitOfWork} from "./node-composite.js";
 import {runUnitOfWork} from "./node-composite.js";
 import {syncNodeTags} from "./node-tags.js";
-import {assertWithinTransactionTimeout, BULK_IMPORT_TIMEOUT_MS, startUnitOfWork} from "./system-time.js";
-import {closeCurrentVersions, SameMillisecondOverwriteError} from "./temporal-merge.js";
+import
+{
+	assertWithinTransactionTimeout,
+	BULK_IMPORT_TIMEOUT_MS,
+	newSystemTimestamp,
+	startUnitOfWork,
+} from "./system-time.js";
+import {closeCurrentVersions, SameMicrosecondOverwriteError} from "./temporal-merge.js";
 import type {TemporalTransaction} from "./temporal-merge.js";
 
 /** The `api_import_timestamp` name of an in-flight bulk import's lease; its timestamp is when the lease expires. */
@@ -35,7 +41,7 @@ export function runBulkUnitOfWork<T>(
 		database,
 		(unitOfWork) =>
 		{
-			// A lease that began, and so ended, in this millisecond: a second bulk import in it would overwrite that history.
+			// A lease that began, and so ended, in this microsecond: a second bulk import in it would overwrite that history.
 			const earlier = unitOfWork.tx
 				.select(
 					{
@@ -52,7 +58,7 @@ export function runBulkUnitOfWork<T>(
 				.get();
 			if (earlier !== undefined)
 			{
-				throw new SameMillisecondOverwriteError(
+				throw new SameMicrosecondOverwriteError(
 					getTableName(apiImportTimestamp),
 					`name=${BULK_IMPORT_LEASE_NAME}`,
 					unitOfWork.systemTime,
@@ -67,10 +73,11 @@ export function runBulkUnitOfWork<T>(
 		return database.transaction(
 			(tx) =>
 			{
-				const at = systemTime ?? new Date(Date.now());
+				const stamp = systemTime === undefined ? newSystemTimestamp() : formatTemporalTimestamp(systemTime);
+				const at = systemTime ?? parseTemporalTimestamp(stamp);
 				const start =
 				{
-					systemTime: formatTemporalTimestamp(at),
+					systemTime: stamp,
 					startedAt: lease.startedAt,
 				};
 				const result = work(
@@ -91,8 +98,8 @@ export function runBulkUnitOfWork<T>(
 	}
 	finally
 	{
-		// A lease ending in the millisecond it began would leave an empty interval, so it ends a millisecond later.
-		const end = startUnitOfWork(new Date(Math.max(Date.now(), lease.startedAt + 1)));
+		// A lease ending in the microsecond it began would leave an empty interval, so it ends a microsecond later.
+		const end = startUnitOfWork(Math.max(newSystemTimestamp(), lease.systemTime + 1));
 		runUnitOfWork(
 			database,
 			({tx, systemTime: at}) =>
@@ -108,7 +115,7 @@ export function runBulkUnitOfWork<T>(
  * The system time of the open, unexpired bulk-import lease, or undefined when no bulk import is in flight. Every row
  * the import writes is stamped at or after it.
  */
-export function bulkImportLeaseStart(database: TemporalTransaction): string | undefined
+export function bulkImportLeaseStart(database: TemporalTransaction): number | undefined
 {
 	const row = database
 		.select(

@@ -176,7 +176,7 @@ const BACKUP_FALLBACK_UTC_HOUR = 12;
  * deletes nodes keeps (or lowers) the watermark, and a unit must never close a
  * version stamped after itself.
  */
-function resolveBackupSystemTime(incomingWatermarkMs: number | null, backupDate: Date, floor: string | null): Date
+function resolveBackupSystemTime(incomingWatermarkMs: number | null, backupDate: Date, floor: number | null): Date
 {
 	const fallback = Date.UTC(
 		backupDate.getUTCFullYear(),
@@ -190,7 +190,7 @@ function resolveBackupSystemTime(incomingWatermarkMs: number | null, backupDate:
 }
 
 /** The newest system_from among current backup_imports rows, or null when none. */
-function latestBackupImportStamp(database: AppDatabase): string | null
+function latestBackupImportStamp(database: AppDatabase): number | null
 {
 	const row = database
 		.select(
@@ -205,7 +205,7 @@ function latestBackupImportStamp(database: AppDatabase): string | null
 }
 
 /** Ids with a node_content version closed after `systemTime`. */
-function closedSince(database: AppDatabase, systemTime: string): Set<string>
+function closedSince(database: AppDatabase, systemTime: number): Set<string>
 {
 	const rows = database
 		.selectDistinct(
@@ -282,8 +282,8 @@ export interface ImportBackupResult
 	nodesKeptDeleted: number;
 	skipped?: boolean;
 	skipReason?: string;
-	localWatermark?: string | null;
-	incomingWatermark?: string | null;
+	localWatermark?: number | null;
+	incomingWatermark?: number | null;
 }
 
 /**
@@ -475,7 +475,7 @@ export async function importBackup(
 		incomingMaxUnix = Math.max(incomingMaxUnix, newestUnix(n));
 	}
 	const incomingWatermarkMs = incomingMaxUnix === 0 ? null : incomingMaxUnix * 1000;
-	const incomingWatermark: string | null =
+	const incomingWatermark: number | null =
 		incomingWatermarkMs === null ? null : formatTemporalTimestamp(new Date(incomingWatermarkMs));
 
 	// The protected id set is filled once existingMetadataMap is loaded, below.
@@ -523,7 +523,7 @@ export async function importBackup(
 	{
 		localMaxUnix = Math.max(localMaxUnix, newestCachedUnix(metadata));
 	}
-	const localWatermark: string | null =
+	const localWatermark: number | null =
 		localMaxUnix === 0 ? null : formatTemporalTimestamp(new Date(localMaxUnix * 1000));
 
 	if (!force && incomingMaxUnix > 0)

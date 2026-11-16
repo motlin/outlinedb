@@ -18,6 +18,7 @@ import {TreeResyncRequired} from "@outlinedb/shared/internal";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import type {JobAlarm} from "./alarm-schedule";
 import {nodeBatches} from "./export-stream";
+import {createWithMicrosecondSystemTimes} from "./text-system-times";
 
 const BATCH_SIZE = 2000;
 const DEFAULT_INTERVAL_MINUTES = 30;
@@ -55,30 +56,32 @@ CREATE TABLE IF NOT EXISTS sync_runs (
 	duration_ms INTEGER,
 	internal_sync_error TEXT,
 	snapshot_at INTEGER,
-	system_from TEXT NOT NULL,
-	system_to TEXT NOT NULL,
+	system_from INTEGER NOT NULL,
+	system_to INTEGER NOT NULL,
 	PRIMARY KEY (run_id, system_from)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS sync_runs_system_to_idx ON sync_runs (run_id, system_to);
-CREATE INDEX IF NOT EXISTS sync_runs_closed_at_idx ON sync_runs (system_to) WHERE system_to < '${FAR_FUTURE_DATE}';
+CREATE INDEX IF NOT EXISTS sync_runs_closed_at_idx ON sync_runs (system_to) WHERE system_to < ${String(FAR_FUTURE_DATE)};
 CREATE TABLE IF NOT EXISTS sync_seen (
 	run_id TEXT NOT NULL,
 	id TEXT NOT NULL,
-	system_from TEXT NOT NULL,
-	system_to TEXT NOT NULL,
+	system_from INTEGER NOT NULL,
+	system_to INTEGER NOT NULL,
 	PRIMARY KEY (run_id, id, system_from)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS sync_seen_system_to_idx ON sync_seen (run_id, id, system_to);
-CREATE INDEX IF NOT EXISTS sync_seen_closed_at_idx ON sync_seen (system_to) WHERE system_to < '${FAR_FUTURE_DATE}';
+CREATE INDEX IF NOT EXISTS sync_seen_closed_at_idx ON sync_seen (system_to) WHERE system_to < ${String(FAR_FUTURE_DATE)};
 CREATE TABLE IF NOT EXISTS sync_seed_requests (
-	system_from TEXT NOT NULL,
-	system_to TEXT NOT NULL,
+	system_from INTEGER NOT NULL,
+	system_to INTEGER NOT NULL,
 	PRIMARY KEY (system_from)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS sync_seed_requests_system_to_idx ON sync_seed_requests (system_to);
 CREATE INDEX IF NOT EXISTS sync_seed_requests_closed_at_idx ON sync_seed_requests (system_to)
-	WHERE system_to < '${FAR_FUTURE_DATE}';
+	WHERE system_to < ${String(FAR_FUTURE_DATE)};
 `;
+
+const SYSTEM_TIMES: ReadonlySet<string> = new Set(["system_from", "system_to"]);
 
 /** Bindings the sync job reads; all but the bucket are optional. */
 export interface SyncEnv
@@ -201,7 +204,13 @@ export class SyncJob
 		{
 			sql.exec("DROP TABLE sync_seen");
 		}
-		sql.exec(`DROP TABLE IF EXISTS sync_state; ${SYNC_TABLES}`);
+		sql.exec("DROP TABLE IF EXISTS sync_state");
+		createWithMicrosecondSystemTimes(
+			sql,
+			SYNC_TABLES,
+			["sync_runs", "sync_seen", "sync_seed_requests"],
+			SYSTEM_TIMES,
+		);
 		const runColumns = sql.exec("SELECT name FROM pragma_table_info('sync_runs')").toArray();
 		if (!runColumns.some((row) => row.name === "snapshot_at"))
 		{

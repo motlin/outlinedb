@@ -12,7 +12,7 @@ import {closeCurrentVersions} from "./temporal-merge.js";
 import type {TemporalTransaction} from "./temporal-merge.js";
 
 /** When the layout waiting to be undone under `rootId` was applied, or undefined when there is none. */
-export function layoutAppliedAt(db: TemporalTransaction, rootId: string): string | undefined
+export function layoutAppliedAt(db: TemporalTransaction, rootId: string): number | undefined
 {
 	return db
 		.select(
@@ -26,7 +26,7 @@ export function layoutAppliedAt(db: TemporalTransaction, rootId: string): string
 }
 
 /** Record that a layout under `rootId` was applied at `appliedAt`, replacing any earlier one there. */
-export function recordLayoutApplied(db: TemporalTransaction, rootId: string, appliedAt: string): void
+export function recordLayoutApplied(db: TemporalTransaction, rootId: string, appliedAt: number): void
 {
 	runUnitOfWork(db, ({tx, systemTime}) =>
 	{

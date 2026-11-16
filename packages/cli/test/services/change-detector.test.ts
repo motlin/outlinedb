@@ -8,7 +8,7 @@ const BEFORE = systemTimeAt("2026-01-01 00:00:00.000");
 const CUTOFF = new Date("2026-01-02T00:00:00.000Z");
 const AFTER = systemTimeAt("2026-01-03 00:00:00.000");
 
-function content(id: string, name: string | null, parentId: string | null, systemFrom: string, systemTo: string)
+function content(id: string, name: string | null, parentId: string | null, systemFrom: number, systemTo: number)
 {
 	return {
 		id,

@@ -474,7 +474,7 @@ interface TreeSnapshot
 	dataVersion: string;
 	changes: number;
 	/** The newest system time the snapshot has read, from which the next patch looks for changes. */
-	latest: string;
+	latest: number;
 	build: "full" | "patch";
 	/** The searchable rows, ordered by depth then id like {@link loadTreeSearchRows}. */
 	rows: TreeSearchRow[];

@@ -3,7 +3,7 @@ import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 
 interface TemporalRecord
 {
-	systemTo: string;
+	systemTo: number;
 }
 
 export function expectActiveRecord(node: TemporalRecord): void
@@ -25,7 +25,7 @@ export function expectPhasedOut(node: TemporalRecord, expectedSystemTo?: string)
 export function withoutSystemFrom<
 	T extends
 	{
-		systemFrom: string;
+		systemFrom: number;
 	},
 >(row: T | undefined): Omit<T, "systemFrom"> | undefined
 {

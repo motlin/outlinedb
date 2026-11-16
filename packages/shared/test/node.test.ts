@@ -353,7 +353,7 @@ describe("node composite", () =>
 			entries:
 			{
 				owner: string;
-				systemTo: string;
+				systemTo: number;
 				node: boolean;
 				parts: boolean;
 			}[],
@@ -608,12 +608,12 @@ describe("node composite", () =>
 
 			const times = sqlite
 				.prepare(
-					`SELECT system_to AS t FROM node_content WHERE system_to <> '${FAR_FUTURE_DATE}'
-				 UNION SELECT system_from FROM node_content WHERE system_from <> '${SEEDED}'
-				 UNION SELECT system_to FROM node_metadata WHERE system_to <> '${FAR_FUTURE_DATE}'
-				 UNION SELECT system_to FROM mirrors WHERE system_to <> '${FAR_FUTURE_DATE}'
-				 UNION SELECT system_to FROM node_embeddings WHERE system_to <> '${FAR_FUTURE_DATE}'
-				 UNION SELECT system_to FROM references_roots WHERE system_to <> '${FAR_FUTURE_DATE}'`,
+					`SELECT system_to AS t FROM node_content WHERE system_to <> ${FAR_FUTURE_DATE}
+				 UNION SELECT system_from FROM node_content WHERE system_from <> ${SEEDED}
+				 UNION SELECT system_to FROM node_metadata WHERE system_to <> ${FAR_FUTURE_DATE}
+				 UNION SELECT system_to FROM mirrors WHERE system_to <> ${FAR_FUTURE_DATE}
+				 UNION SELECT system_to FROM node_embeddings WHERE system_to <> ${FAR_FUTURE_DATE}
+				 UNION SELECT system_to FROM references_roots WHERE system_to <> ${FAR_FUTURE_DATE}`,
 				)
 				.all();
 			expect(times).toStrictEqual([
@@ -704,16 +704,16 @@ describe("node dto", () =>
 			const seeded = systemTimeAt("2026-01-01 00:00:00.000");
 			sqlite.exec(`
 				INSERT INTO node_content (id, name, parent_id, system_from, system_to) VALUES
-					('parent', 'Parent', NULL, '${seeded}', '${FAR_FUTURE_DATE}'),
-					('first-by-priority', 'A', 'parent', '${seeded}', '${FAR_FUTURE_DATE}'),
-					('second-by-priority', 'B', 'parent', '${seeded}', '${FAR_FUTURE_DATE}'),
-					('tie-later', 'C', 'parent', '${seeded}', '${FAR_FUTURE_DATE}'),
-					('tie-earlier', 'D', 'parent', '${seeded}', '${FAR_FUTURE_DATE}');
+					('parent', 'Parent', NULL, ${seeded}, ${FAR_FUTURE_DATE}),
+					('first-by-priority', 'A', 'parent', ${seeded}, ${FAR_FUTURE_DATE}),
+					('second-by-priority', 'B', 'parent', ${seeded}, ${FAR_FUTURE_DATE}),
+					('tie-later', 'C', 'parent', ${seeded}, ${FAR_FUTURE_DATE}),
+					('tie-earlier', 'D', 'parent', ${seeded}, ${FAR_FUTURE_DATE});
 				INSERT INTO node_metadata (node_id, order_key, created_at, system_from, system_to) VALUES
-					('first-by-priority', 'a5', 100, '${seeded}', '${FAR_FUTURE_DATE}'),
-					('second-by-priority', 'a1', 100, '${seeded}', '${FAR_FUTURE_DATE}'),
-					('tie-later', 'a3', 300, '${seeded}', '${FAR_FUTURE_DATE}'),
-					('tie-earlier', 'a3', 200, '${seeded}', '${FAR_FUTURE_DATE}');
+					('first-by-priority', 'a5', 100, ${seeded}, ${FAR_FUTURE_DATE}),
+					('second-by-priority', 'a1', 100, ${seeded}, ${FAR_FUTURE_DATE}),
+					('tie-later', 'a3', 300, ${seeded}, ${FAR_FUTURE_DATE}),
+					('tie-earlier', 'a3', 200, ${seeded}, ${FAR_FUTURE_DATE});
 			`);
 
 			expect(
@@ -795,12 +795,13 @@ describe("node order key migration", () =>
 			);
 			const insert = (priorities: (number | null)[], prefix: string): void =>
 			{
+				// System times as the readable UTC text these pre-0010 migrations store; 0010 converts them to microseconds.
 				const statement = sqlite.prepare(
-					`INSERT INTO node_metadata (node_id, priority, system_from, system_to) VALUES (?, ?, '${systemTimeAt("2026-01-01 00:00:00.000")}', ?)`,
+					"INSERT INTO node_metadata (node_id, priority, system_from, system_to) VALUES (?, ?, '2026-01-01 00:00:00.000', '9999-12-31 23:59:59')",
 				);
 				for (const [index, priority] of priorities.entries())
 				{
-					statement.run(`${prefix}-${index}`, priority, FAR_FUTURE_DATE);
+					statement.run(`${prefix}-${index}`, priority);
 				}
 			};
 			insert([122_100, 3844, 3843, 62, 61, 1], "backfilled");
@@ -969,19 +970,19 @@ describe("node label suggestions migration", () =>
 							},
 							{
 								name: "content_from",
-								type: "TEXT",
+								type: "INTEGER",
 								notnull: 1,
 								pk: 0,
 							},
 							{
 								name: "system_from",
-								type: "TEXT",
+								type: "INTEGER",
 								notnull: 1,
 								pk: 4,
 							},
 							{
 								name: "system_to",
-								type: "TEXT",
+								type: "INTEGER",
 								notnull: 1,
 								pk: 0,
 							},
@@ -989,7 +990,7 @@ describe("node label suggestions migration", () =>
 						indexes: [
 							{
 								name: "node_label_suggestions_closed_at_idx",
-								sql: "CREATE INDEX `node_label_suggestions_closed_at_idx` ON `node_label_suggestions` (`system_to`) WHERE system_to < '9999-12-31 23:59:59'",
+								sql: "CREATE INDEX `node_label_suggestions_closed_at_idx` ON `node_label_suggestions` (`system_to`) WHERE system_to < 9007199254740991",
 							},
 							{
 								name: "node_label_suggestions_system_to_idx",

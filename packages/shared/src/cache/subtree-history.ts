@@ -24,7 +24,7 @@ function versionAt(
 		systemFrom: AnySQLiteColumn;
 		systemTo: AnySQLiteColumn;
 	},
-	asOf: string | undefined,
+	asOf: number | undefined,
 ): SQL
 {
 	if (asOf === undefined)
@@ -44,7 +44,7 @@ function versionAt(
  * the live rows by default, or the rows current at system time `asOf`.
  * Children are in sibling order (order key, creation time, id), like the cache's reads.
  */
-export function readSubtreeAt(database: TemporalTransaction, rootId: string, asOf?: string): SubtreeAt
+export function readSubtreeAt(database: TemporalTransaction, rootId: string, asOf?: number): SubtreeAt
 {
 	const children = new Map<string, string[]>([[rootId, []]]);
 	let level = [rootId];

@@ -788,7 +788,7 @@ describe("node calendar dto", () =>
 				.values(
 					{
 						...row,
-						systemFrom: "2026-01-01",
+						systemFrom: systemTimeAt("2026-01-01 00:00:00.000"),
 						systemTo: FAR_FUTURE_DATE,
 					},
 				)
@@ -1020,7 +1020,7 @@ describe("node calendar dto", () =>
 
 describe("node events socket", () =>
 {
-	const MARK = systemTimeAt("2026-11-05 12:00:00.000");
+	const MARK = String(systemTimeAt("2026-11-05 12:00:00.000"));
 
 	function connect(bus: TreeEventBus)
 	{
@@ -1261,7 +1261,7 @@ describe("node events socket", () =>
 				latest: string;
 			}[];
 			expect(frames.map(({type}) => type)).toStrictEqual(["tree.changed"]);
-			expect(frames[0].latest).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$/u);
+			expect(frames[0].latest).toMatch(/^\d{16}$/u);
 		});
 	});
 

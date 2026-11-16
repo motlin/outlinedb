@@ -144,7 +144,7 @@ describe("CacheService upstream relationship view", () =>
 		}
 		cacheService.recordRelationships(relationships);
 		const count = (table: string) =>
-			sqlite.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE system_to = '${FAR_FUTURE_DATE}'`).get();
+			sqlite.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE system_to = ${FAR_FUTURE_DATE}`).get();
 		return {
 			cacheService,
 			relationships,

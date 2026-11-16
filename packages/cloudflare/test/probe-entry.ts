@@ -116,7 +116,7 @@ export class ProbeStore extends UserStore
 		if (url.pathname === "/__sync-tables")
 		{
 			const sql = this.ctx.storage.sql;
-			const live = `CASE WHEN system_to = '${FAR_FUTURE_DATE}' THEN 1 ELSE 0 END`;
+			const live = `CASE WHEN system_to = ${FAR_FUTURE_DATE} THEN 1 ELSE 0 END`;
 			return Response.json(
 				{
 					runs: sql
@@ -139,7 +139,7 @@ export class ProbeStore extends UserStore
 		if (url.pathname === "/__live-ids")
 		{
 			const ids = this.ctx.storage.sql
-				.exec(`SELECT id FROM node_content WHERE system_to = '${FAR_FUTURE_DATE}'`)
+				.exec(`SELECT id FROM node_content WHERE system_to = ${FAR_FUTURE_DATE}`)
 				.toArray()
 				.flatMap((row) => (typeof row.id === "string" ? [row.id] : []));
 			return Response.json(ids);
@@ -149,7 +149,7 @@ export class ProbeStore extends UserStore
 			return Response.json(
 				this.ctx.storage.sql
 					.exec(
-						`SELECT node_id, numbered_start FROM node_display_metadata WHERE system_to = '${FAR_FUTURE_DATE}' ORDER BY node_id`,
+						`SELECT node_id, numbered_start FROM node_display_metadata WHERE system_to = ${FAR_FUTURE_DATE} ORDER BY node_id`,
 					)
 					.toArray(),
 			);
@@ -159,7 +159,7 @@ export class ProbeStore extends UserStore
 			return Response.json(
 				this.ctx.storage.sql
 					.exec(
-						`SELECT node_id, file_name FROM s3_files WHERE system_to = '${FAR_FUTURE_DATE}' ORDER BY node_id`,
+						`SELECT node_id, file_name FROM s3_files WHERE system_to = ${FAR_FUTURE_DATE} ORDER BY node_id`,
 					)
 					.toArray(),
 			);
@@ -168,13 +168,13 @@ export class ProbeStore extends UserStore
 		{
 			const txId = this.ctx.storage.sql
 				.exec(
-					`SELECT transaction_id FROM tree_transactions WHERE tree_id = 'main' AND system_to = '${FAR_FUTURE_DATE}'`,
+					`SELECT transaction_id FROM tree_transactions WHERE tree_id = 'main' AND system_to = ${FAR_FUTURE_DATE}`,
 				)
 				.toArray()
 				.map((row) => row.transaction_id);
 			const mirrors = this.ctx.storage.sql
 				.exec(
-					`SELECT mirror_id, original_id FROM mirrors WHERE system_to = '${FAR_FUTURE_DATE}' ORDER BY mirror_id`,
+					`SELECT mirror_id, original_id FROM mirrors WHERE system_to = ${FAR_FUTURE_DATE} ORDER BY mirror_id`,
 				)
 				.toArray();
 			return Response.json(
@@ -188,7 +188,7 @@ export class ProbeStore extends UserStore
 		{
 			return Response.json(
 				this.ctx.storage.sql
-					.exec(`SELECT user_id, date_joined_sec FROM account WHERE system_to = '${FAR_FUTURE_DATE}'`)
+					.exec(`SELECT user_id, date_joined_sec FROM account WHERE system_to = ${FAR_FUTURE_DATE}`)
 					.toArray(),
 			);
 		}

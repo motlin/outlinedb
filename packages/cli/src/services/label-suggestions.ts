@@ -35,7 +35,7 @@ export interface EntryHints
 export interface ScoredEntry
 {
 	readonly nodeId: string;
-	readonly contentFrom: string;
+	readonly contentFrom: number;
 }
 
 /** Keeps each statement under the 100 bound parameters Durable Object SQLite allows. */
@@ -69,7 +69,7 @@ export function entriesToScore(
 	},
 ): ScoredEntry[]
 {
-	const contentFrom = new Map<string, string>();
+	const contentFrom = new Map<string, number>();
 	const fresh = new Set<string>();
 	for (const ids of chunks(nodeIds, ID_CHUNK))
 	{
@@ -130,7 +130,7 @@ export function saveLabelSuggestions(
 	tx: TemporalTransaction,
 	entry: ScoredEntry,
 	suggestions: readonly LabelSuggestion[],
-	systemTime: string,
+	systemTime: number,
 ): void
 {
 	closeCurrentVersions(tx, nodeLabelSuggestions, systemTime, eq(nodeLabelSuggestions.nodeId, entry.nodeId));

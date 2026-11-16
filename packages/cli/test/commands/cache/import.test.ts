@@ -155,8 +155,8 @@ describe("import backup", () =>
 		function contentStamps():
 		{
 			id: string;
-			systemFrom: string;
-			systemTo: string;
+			systemFrom: number;
+			systemTo: number;
 		}[]
 		{
 			return testDatabase.db
@@ -176,8 +176,8 @@ describe("import backup", () =>
 		{
 			filename: string;
 			backupDate: string;
-			systemFrom: string;
-			systemTo: string;
+			systemFrom: number;
+			systemTo: number;
 		}[]
 		{
 			return testDatabase.db.select().from(backupImports).orderBy(asc(backupImports.systemFrom)).all();

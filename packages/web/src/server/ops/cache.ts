@@ -68,7 +68,7 @@ export const cacheStatus = defineOp(
 					totalNodes: nodes?.total ?? 0,
 					rootNodes: roots?.count ?? 0,
 					completedNodes: completed?.count ?? 0,
-					// systemFrom is SQLite's UTC "YYYY-MM-DD HH:MM:SS[.fff]".
+					// systemFrom is microseconds since the epoch.
 					lastSync: lastChange === null ? null : parseTemporalTimestamp(lastChange).toISOString(),
 					lastBackupImport: lastImport?.backupDate ?? null,
 				},

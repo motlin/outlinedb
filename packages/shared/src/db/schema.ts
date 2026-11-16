@@ -1,6 +1,10 @@
 import type {InferInsertModel, InferSelectModel} from "drizzle-orm";
 import {relations, sql} from "drizzle-orm";
 import {blob, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex} from "drizzle-orm/sqlite-core";
+import {FAR_FUTURE_DATE} from "../temporal/constants.js";
+
+/** The predicate of every partial closed-rows index: rows whose `system_to` is not the far-future sentinel. */
+const closedRows = sql.raw(`system_to < ${String(FAR_FUTURE_DATE)}`);
 
 /**
  * node_content: Fields that affect embeddings (name, note, parentId)
@@ -14,8 +18,8 @@ export const nodeContent = sqliteTable(
 		note: text("note"),
 		parentId: text("parent_id"),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -27,9 +31,7 @@ export const nodeContent = sqliteTable(
 		uniqueIndex("node_content_parent_idx").on(table.parentId, table.systemFrom, table.systemTo, table.id),
 		index("node_content_system_from_idx").on(table.systemFrom),
 		// Partial: a full system_to index would win every live-row lookup (system_to = far future).
-		index("node_content_closed_at_idx")
-			.on(table.systemTo)
-			.where(sql`system_to < '9999-12-31 23:59:59'`),
+		index("node_content_closed_at_idx").on(table.systemTo).where(closedRows),
 	],
 );
 
@@ -71,8 +73,8 @@ export const nodeMetadata = sqliteTable(
 
 		layoutMode: text("layout_mode"),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -84,9 +86,7 @@ export const nodeMetadata = sqliteTable(
 		index("node_metadata_short_id_idx").on(table.shortId, table.systemTo),
 		index("node_metadata_system_from_idx").on(table.systemFrom),
 		// Partial: a full system_to index would win every live-row lookup (system_to = far future).
-		index("node_metadata_closed_at_idx")
-			.on(table.systemTo)
-			.where(sql`system_to < '9999-12-31 23:59:59'`),
+		index("node_metadata_closed_at_idx").on(table.systemTo).where(closedRows),
 	],
 );
 
@@ -120,8 +120,8 @@ export const calendarMetadata = sqliteTable(
 		foundDates: integer("found_dates"),
 		dayPrefix: integer("day_prefix"),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -151,8 +151,8 @@ export const calendarLevels = sqliteTable(
 		month: integer("month"),
 		year: integer("year"),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -176,8 +176,8 @@ export const nodeEmbeddings = sqliteTable(
 			},
 		).notNull(),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -203,10 +203,10 @@ export const nodeLabelSuggestions = sqliteTable(
 		labelKind: text("label_kind").notNull(),
 		source: text("source").notNull(),
 		score: real("score").notNull(),
-		contentFrom: text("content_from").notNull(),
+		contentFrom: integer("content_from").notNull(),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -216,9 +216,7 @@ export const nodeLabelSuggestions = sqliteTable(
 		),
 		uniqueIndex("node_label_suggestions_system_to_idx").on(table.nodeId, table.label, table.source, table.systemTo),
 		// Partial: a full system_to index would win every live-row lookup (system_to = far future).
-		index("node_label_suggestions_closed_at_idx")
-			.on(table.systemTo)
-			.where(sql`system_to < '9999-12-31 23:59:59'`),
+		index("node_label_suggestions_closed_at_idx").on(table.systemTo).where(closedRows),
 	],
 );
 
@@ -235,8 +233,8 @@ export const mirrors = sqliteTable(
 		mirrorId: text("mirror_id").notNull(),
 		originalId: text("original_id").notNull(),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -257,8 +255,8 @@ export const aiMetadata = sqliteTable(
 
 		inChat: integer("in_chat").notNull(),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -284,8 +282,8 @@ export const s3Files = sqliteTable(
 		imageOriginalPixels: integer("image_original_pixels"),
 		isDeleted: integer("is_deleted"),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -304,8 +302,8 @@ export const changesMetadata = sqliteTable(
 
 		ctBy: integer("ct_by").notNull(),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -322,8 +320,8 @@ export const referencesRoots = sqliteTable(
 	{
 		nodeId: text("node_id").notNull(),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -347,12 +345,12 @@ export const outbox = sqliteTable(
 		/** create | name | note | placement | completion | metadata | mirror | delete */
 		aspect: text("aspect").notNull(),
 		/** System time of the first local write still pending for this aspect. */
-		enqueuedAt: text("enqueued_at").notNull(),
+		enqueuedAt: integer("enqueued_at").notNull(),
 		/** Null until a drain fails on this row. */
 		lastError: text("last_error"),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -361,9 +359,7 @@ export const outbox = sqliteTable(
 			},
 		),
 		uniqueIndex("outbox_system_to_idx").on(table.nodeId, table.aspect, table.systemTo),
-		index("outbox_closed_at_idx")
-			.on(table.systemTo)
-			.where(sql`system_to < '9999-12-31 23:59:59'`),
+		index("outbox_closed_at_idx").on(table.systemTo).where(closedRows),
 	],
 );
 
@@ -383,12 +379,12 @@ export const accountOutbox = sqliteTable(
 		 */
 		key: text("key").notNull(),
 		/** System time of the first local write still pending for this key. */
-		enqueuedAt: text("enqueued_at").notNull(),
+		enqueuedAt: integer("enqueued_at").notNull(),
 		/** Null until a drain fails on this row. */
 		lastError: text("last_error"),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -397,9 +393,7 @@ export const accountOutbox = sqliteTable(
 			},
 		),
 		uniqueIndex("account_outbox_system_to_idx").on(table.subject, table.key, table.systemTo),
-		index("account_outbox_closed_at_idx")
-			.on(table.systemTo)
-			.where(sql`system_to < '9999-12-31 23:59:59'`),
+		index("account_outbox_closed_at_idx").on(table.systemTo).where(closedRows),
 	],
 );
 
@@ -409,8 +403,8 @@ export const backupImports = sqliteTable(
 		filename: text("filename").notNull(),
 		backupDate: text("backup_date").notNull(),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -440,8 +434,8 @@ export const apiImportTimestamp = sqliteTable(
 			},
 		),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -450,9 +444,7 @@ export const apiImportTimestamp = sqliteTable(
 			},
 		),
 		uniqueIndex("api_import_timestamp_system_to_idx").on(table.name, table.systemTo),
-		index("api_import_timestamp_closed_at_idx")
-			.on(table.systemTo)
-			.where(sql`system_to < '9999-12-31 23:59:59'`),
+		index("api_import_timestamp_closed_at_idx").on(table.systemTo).where(closedRows),
 	],
 );
 
@@ -465,10 +457,10 @@ export const calendarLayoutApplies = sqliteTable(
 	"calendar_layout_applies",
 	{
 		rootId: text("root_id").notNull(),
-		appliedAtSystemTime: text("applied_at_system_time").notNull(),
+		appliedAtSystemTime: integer("applied_at_system_time").notNull(),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -477,9 +469,7 @@ export const calendarLayoutApplies = sqliteTable(
 			},
 		),
 		uniqueIndex("calendar_layout_applies_system_to_idx").on(table.rootId, table.systemTo),
-		index("calendar_layout_applies_closed_at_idx")
-			.on(table.systemTo)
-			.where(sql`system_to < '9999-12-31 23:59:59'`),
+		index("calendar_layout_applies_closed_at_idx").on(table.systemTo).where(closedRows),
 	],
 );
 
@@ -496,8 +486,8 @@ export const account = sqliteTable(
 		username: text("username"),
 		email: text("email"),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -506,9 +496,7 @@ export const account = sqliteTable(
 			},
 		),
 		uniqueIndex("account_system_to_idx").on(table.userId, table.systemTo),
-		index("account_closed_at_idx")
-			.on(table.systemTo)
-			.where(sql`system_to < '9999-12-31 23:59:59'`),
+		index("account_closed_at_idx").on(table.systemTo).where(closedRows),
 	],
 );
 
@@ -541,8 +529,8 @@ export const rootPreferences = sqliteTable(
 		emojiSelected: text("emoji_selected"),
 		inboxId: text("inbox_id"),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -551,9 +539,7 @@ export const rootPreferences = sqliteTable(
 			},
 		),
 		uniqueIndex("root_preferences_system_to_idx").on(table.userId, table.systemTo),
-		index("root_preferences_closed_at_idx")
-			.on(table.systemTo)
-			.where(sql`system_to < '9999-12-31 23:59:59'`),
+		index("root_preferences_closed_at_idx").on(table.systemTo).where(closedRows),
 	],
 );
 
@@ -582,8 +568,8 @@ export const accountSettings = sqliteTable(
 		aiDefaultAgentId: text("ai_default_agent_id"),
 		aiContextLimit: integer("ai_context_limit"),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -592,9 +578,7 @@ export const accountSettings = sqliteTable(
 			},
 		),
 		uniqueIndex("account_settings_system_to_idx").on(table.userId, table.systemTo),
-		index("account_settings_closed_at_idx")
-			.on(table.systemTo)
-			.where(sql`system_to < '9999-12-31 23:59:59'`),
+		index("account_settings_closed_at_idx").on(table.systemTo).where(closedRows),
 	],
 );
 
@@ -607,8 +591,8 @@ export const tagColors = sqliteTable(
 		tag: text("tag").notNull(),
 		colorIndex: integer("color_index").notNull(),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -617,9 +601,7 @@ export const tagColors = sqliteTable(
 			},
 		),
 		uniqueIndex("tag_colors_system_to_idx").on(table.tag, table.systemTo),
-		index("tag_colors_closed_at_idx")
-			.on(table.systemTo)
-			.where(sql`system_to < '9999-12-31 23:59:59'`),
+		index("tag_colors_closed_at_idx").on(table.systemTo).where(closedRows),
 	],
 );
 
@@ -632,8 +614,8 @@ export const stars = sqliteTable(
 		locationKey: text("location_key").notNull(),
 		treeRoot: text("tree_root").notNull(),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -642,9 +624,7 @@ export const stars = sqliteTable(
 			},
 		),
 		uniqueIndex("stars_system_to_idx").on(table.locationKey, table.systemTo),
-		index("stars_closed_at_idx")
-			.on(table.systemTo)
-			.where(sql`system_to < '9999-12-31 23:59:59'`),
+		index("stars_closed_at_idx").on(table.systemTo).where(closedRows),
 	],
 );
 
@@ -657,8 +637,8 @@ export const starOrder = sqliteTable(
 		position: integer("position").notNull(),
 		entry: text("entry").notNull(),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -667,9 +647,7 @@ export const starOrder = sqliteTable(
 			},
 		),
 		uniqueIndex("star_order_system_to_idx").on(table.position, table.systemTo),
-		index("star_order_closed_at_idx")
-			.on(table.systemTo)
-			.where(sql`system_to < '9999-12-31 23:59:59'`),
+		index("star_order_closed_at_idx").on(table.systemTo).where(closedRows),
 	],
 );
 
@@ -682,8 +660,8 @@ export const locationRenames = sqliteTable(
 		locationKey: text("location_key").notNull(),
 		name: text("name").notNull(),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -692,9 +670,7 @@ export const locationRenames = sqliteTable(
 			},
 		),
 		uniqueIndex("location_renames_system_to_idx").on(table.locationKey, table.systemTo),
-		index("location_renames_closed_at_idx")
-			.on(table.systemTo)
-			.where(sql`system_to < '9999-12-31 23:59:59'`),
+		index("location_renames_closed_at_idx").on(table.systemTo).where(closedRows),
 	],
 );
 
@@ -707,8 +683,8 @@ export const enabledFeatures = sqliteTable(
 		codename: text("codename").notNull(),
 		enabled: integer("enabled").notNull(),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -717,9 +693,7 @@ export const enabledFeatures = sqliteTable(
 			},
 		),
 		uniqueIndex("enabled_features_system_to_idx").on(table.codename, table.systemTo),
-		index("enabled_features_closed_at_idx")
-			.on(table.systemTo)
-			.where(sql`system_to < '9999-12-31 23:59:59'`),
+		index("enabled_features_closed_at_idx").on(table.systemTo).where(closedRows),
 	],
 );
 
@@ -735,8 +709,8 @@ export const visibleFeatures = sqliteTable(
 		description: text("description"),
 		position: integer("position").notNull(),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -745,9 +719,7 @@ export const visibleFeatures = sqliteTable(
 			},
 		),
 		uniqueIndex("visible_features_system_to_idx").on(table.codename, table.systemTo),
-		index("visible_features_closed_at_idx")
-			.on(table.systemTo)
-			.where(sql`system_to < '9999-12-31 23:59:59'`),
+		index("visible_features_closed_at_idx").on(table.systemTo).where(closedRows),
 	],
 );
 
@@ -759,8 +731,8 @@ export const expandedNodes = sqliteTable(
 	{
 		shortKey: text("short_key").notNull(),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -769,9 +741,7 @@ export const expandedNodes = sqliteTable(
 			},
 		),
 		uniqueIndex("expanded_nodes_system_to_idx").on(table.shortKey, table.systemTo),
-		index("expanded_nodes_closed_at_idx")
-			.on(table.systemTo)
-			.where(sql`system_to < '9999-12-31 23:59:59'`),
+		index("expanded_nodes_closed_at_idx").on(table.systemTo).where(closedRows),
 	],
 );
 
@@ -784,8 +754,8 @@ export const changelogReads = sqliteTable(
 		entry: text("entry").notNull(),
 		read: integer("read").notNull(),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -794,9 +764,7 @@ export const changelogReads = sqliteTable(
 			},
 		),
 		uniqueIndex("changelog_reads_system_to_idx").on(table.entry, table.systemTo),
-		index("changelog_reads_closed_at_idx")
-			.on(table.systemTo)
-			.where(sql`system_to < '9999-12-31 23:59:59'`),
+		index("changelog_reads_closed_at_idx").on(table.systemTo).where(closedRows),
 	],
 );
 
@@ -809,8 +777,8 @@ export const whatsNewReads = sqliteTable(
 	{
 		entry: text("entry").notNull(),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -819,9 +787,7 @@ export const whatsNewReads = sqliteTable(
 			},
 		),
 		uniqueIndex("whats_new_reads_system_to_idx").on(table.entry, table.systemTo),
-		index("whats_new_reads_closed_at_idx")
-			.on(table.systemTo)
-			.where(sql`system_to < '9999-12-31 23:59:59'`),
+		index("whats_new_reads_closed_at_idx").on(table.systemTo).where(closedRows),
 	],
 );
 
@@ -838,8 +804,8 @@ export const surveys = sqliteTable(
 		rating: integer("rating"),
 		at: integer("at"),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -848,9 +814,7 @@ export const surveys = sqliteTable(
 			},
 		),
 		uniqueIndex("surveys_system_to_idx").on(table.survey, table.systemTo),
-		index("surveys_closed_at_idx")
-			.on(table.systemTo)
-			.where(sql`system_to < '9999-12-31 23:59:59'`),
+		index("surveys_closed_at_idx").on(table.systemTo).where(closedRows),
 	],
 );
 
@@ -865,8 +829,8 @@ export const savedViews = sqliteTable(
 		auxiliaryRootProjectId: text("auxiliary_root_project_id"),
 		searchQuery: text("search_query"),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -875,9 +839,7 @@ export const savedViews = sqliteTable(
 			},
 		),
 		uniqueIndex("saved_views_system_to_idx").on(table.position, table.systemTo),
-		index("saved_views_closed_at_idx")
-			.on(table.systemTo)
-			.where(sql`system_to < '9999-12-31 23:59:59'`),
+		index("saved_views_closed_at_idx").on(table.systemTo).where(closedRows),
 	],
 );
 
@@ -893,8 +855,8 @@ export const aiAssistants = sqliteTable(
 		systemUserId: integer("system_user_id"),
 		position: integer("position").notNull(),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -903,9 +865,7 @@ export const aiAssistants = sqliteTable(
 			},
 		),
 		uniqueIndex("ai_assistants_system_to_idx").on(table.assistantId, table.systemTo),
-		index("ai_assistants_closed_at_idx")
-			.on(table.systemTo)
-			.where(sql`system_to < '9999-12-31 23:59:59'`),
+		index("ai_assistants_closed_at_idx").on(table.systemTo).where(closedRows),
 	],
 );
 
@@ -921,8 +881,8 @@ export const aiPromptButtons = sqliteTable(
 		name: text("name"),
 		icon: text("icon"),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -931,9 +891,7 @@ export const aiPromptButtons = sqliteTable(
 			},
 		),
 		uniqueIndex("ai_prompt_buttons_system_to_idx").on(table.kind, table.position, table.systemTo),
-		index("ai_prompt_buttons_closed_at_idx")
-			.on(table.systemTo)
-			.where(sql`system_to < '9999-12-31 23:59:59'`),
+		index("ai_prompt_buttons_closed_at_idx").on(table.systemTo).where(closedRows),
 	],
 );
 
@@ -946,8 +904,8 @@ export const treeTransactions = sqliteTable(
 		treeId: text("tree_id").notNull(),
 		transactionId: text("transaction_id").notNull(),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -956,9 +914,7 @@ export const treeTransactions = sqliteTable(
 			},
 		),
 		uniqueIndex("tree_transactions_system_to_idx").on(table.treeId, table.systemTo),
-		index("tree_transactions_closed_at_idx")
-			.on(table.systemTo)
-			.where(sql`system_to < '9999-12-31 23:59:59'`),
+		index("tree_transactions_closed_at_idx").on(table.systemTo).where(closedRows),
 	],
 );
 
@@ -981,8 +937,8 @@ export const fileBlobs = sqliteTable(
 		localPath: text("local_path"),
 		error: text("error"),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -991,9 +947,7 @@ export const fileBlobs = sqliteTable(
 			},
 		),
 		uniqueIndex("file_blobs_system_to_idx").on(table.nodeId, table.systemTo),
-		index("file_blobs_closed_at_idx")
-			.on(table.systemTo)
-			.where(sql`system_to < '9999-12-31 23:59:59'`),
+		index("file_blobs_closed_at_idx").on(table.systemTo).where(closedRows),
 	],
 );
 
@@ -1046,8 +1000,8 @@ export const nodeDisplayMetadata = sqliteTable(
 		tableBg: text("table_bg"),
 		priorityDefaultToBottom: integer("priority_default_to_bottom"),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -1056,9 +1010,7 @@ export const nodeDisplayMetadata = sqliteTable(
 			},
 		),
 		uniqueIndex("node_display_metadata_system_to_idx").on(table.nodeId, table.systemTo),
-		index("node_display_metadata_closed_at_idx")
-			.on(table.systemTo)
-			.where(sql`system_to < '9999-12-31 23:59:59'`),
+		index("node_display_metadata_closed_at_idx").on(table.systemTo).where(closedRows),
 	],
 );
 
@@ -1073,8 +1025,8 @@ export const nodeTableCellSizes = sqliteTable(
 		cellId: text("cell_id").notNull(),
 		size: real("size").notNull(),
 
-		systemFrom: text("system_from").notNull(),
-		systemTo: text("system_to").notNull(),
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
 	},
 	(table) => [
 		primaryKey(
@@ -1083,9 +1035,7 @@ export const nodeTableCellSizes = sqliteTable(
 			},
 		),
 		uniqueIndex("node_table_cell_sizes_system_to_idx").on(table.nodeId, table.cellId, table.systemTo),
-		index("node_table_cell_sizes_closed_at_idx")
-			.on(table.systemTo)
-			.where(sql`system_to < '9999-12-31 23:59:59'`),
+		index("node_table_cell_sizes_closed_at_idx").on(table.systemTo).where(closedRows),
 	],
 );
 

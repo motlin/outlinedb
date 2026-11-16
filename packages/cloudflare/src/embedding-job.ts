@@ -5,6 +5,7 @@ import type {Awaitable, EmbeddingIndex} from "@outlinedb/web/server-app";
 import {changeWatermark} from "@outlinedb/web/server-app";
 import type {JobAlarm} from "./alarm-schedule";
 import type {Embedder} from "./embeddings";
+import {createWithMicrosecondSystemTimes} from "./text-system-times";
 
 /** Texts per Workers AI call. */
 const EMBED_BATCH = 100;
@@ -26,21 +27,21 @@ const RETRY_DELAY_MS = 60_000;
 const EMBEDDING_TABLES = `
 CREATE TABLE IF NOT EXISTS embedding_queue (
 	node_id TEXT NOT NULL,
-	system_from TEXT NOT NULL,
-	system_to TEXT NOT NULL,
+	system_from INTEGER NOT NULL,
+	system_to INTEGER NOT NULL,
 	PRIMARY KEY (node_id, system_from)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS embedding_queue_system_to_idx ON embedding_queue (node_id, system_to);
-CREATE INDEX IF NOT EXISTS embedding_queue_closed_at_idx ON embedding_queue (system_to) WHERE system_to < '${FAR_FUTURE_DATE}';
+CREATE INDEX IF NOT EXISTS embedding_queue_closed_at_idx ON embedding_queue (system_to) WHERE system_to < ${String(FAR_FUTURE_DATE)};
 CREATE TABLE IF NOT EXISTS embedding_state (
 	phase TEXT NOT NULL,
-	scanned_to TEXT NOT NULL,
-	system_from TEXT NOT NULL,
-	system_to TEXT NOT NULL,
+	scanned_to INTEGER NOT NULL,
+	system_from INTEGER NOT NULL,
+	system_to INTEGER NOT NULL,
 	PRIMARY KEY (system_from)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS embedding_state_system_to_idx ON embedding_state (system_to);
-CREATE INDEX IF NOT EXISTS embedding_state_closed_at_idx ON embedding_state (system_to) WHERE system_to < '${FAR_FUTURE_DATE}';
+CREATE INDEX IF NOT EXISTS embedding_state_closed_at_idx ON embedding_state (system_to) WHERE system_to < ${String(FAR_FUTURE_DATE)};
 `;
 
 /** `backfilling` until every container is embedded once, then `ready`; `off` until Enable AI requests embeddings. */
@@ -49,7 +50,7 @@ type Phase = "off" | "backfilling" | "ready";
 interface State
 {
 	phase: Exclude<Phase, "off">;
-	scannedTo: string;
+	scannedTo: number;
 }
 
 export interface EmbeddingStatus
@@ -82,7 +83,12 @@ export class EmbeddingJob
 
 	constructor(private readonly deps: EmbeddingDeps)
 	{
-		deps.storage.sql.exec(EMBEDDING_TABLES);
+		createWithMicrosecondSystemTimes(
+			deps.storage.sql,
+			EMBEDDING_TABLES,
+			["embedding_queue", "embedding_state"],
+			new Set(["scanned_to", "system_from", "system_to"]),
+		);
 	}
 
 	private get sql(): SqlStorage
@@ -100,7 +106,7 @@ export class EmbeddingJob
 		const row = this.sql
 			.exec("SELECT phase, scanned_to FROM embedding_state WHERE system_to = ?", FAR_FUTURE_DATE)
 			.toArray()[0];
-		if (row === undefined || typeof row.scanned_to !== "string")
+		if (row === undefined || typeof row.scanned_to !== "number")
 		{
 			return undefined;
 		}
@@ -223,12 +229,12 @@ export class EmbeddingJob
 	 * Queue the nodes whose content rows opened or closed after `since`, with their old and new parents, skipping
 	 * those already queued or taken since the change. Returns whether any change was seen.
 	 */
-	private queueChangesSince(since: string): boolean
+	private queueChangesSince(since: number): boolean
 	{
-		const changedAt = new Map<string, string>();
+		const changedAt = new Map<string, number>();
 		const note = (id: unknown, at: unknown) =>
 		{
-			if (typeof id === "string" && typeof at === "string" && (changedAt.get(id) ?? "") < at)
+			if (typeof id === "string" && typeof at === "number" && (changedAt.get(id) ?? 0) < at)
 			{
 				changedAt.set(id, at);
 			}
@@ -238,7 +244,7 @@ export class EmbeddingJob
 			since,
 		);
 		const closed = this.sql.exec(
-			`SELECT id, parent_id, system_to AS at FROM node_content WHERE system_to < '${FAR_FUTURE_DATE}' AND system_to > ?`,
+			`SELECT id, parent_id, system_to AS at FROM node_content WHERE system_to < ${String(FAR_FUTURE_DATE)} AND system_to > ?`,
 			since,
 		);
 		for (const row of [...opened, ...closed])
@@ -250,7 +256,7 @@ export class EmbeddingJob
 		{
 			return false;
 		}
-		const handled = new Map<string, string>();
+		const handled = new Map<string, number>();
 		for (const row of this.sql.exec(
 			"SELECT node_id, max(system_to = ?) AS live, max(system_from) AS taken FROM embedding_queue " +
 				"WHERE node_id IN (SELECT value FROM json_each(?)) GROUP BY node_id",
@@ -258,7 +264,7 @@ export class EmbeddingJob
 			JSON.stringify([...changedAt.keys()]),
 		))
 		{
-			if (typeof row.node_id === "string" && typeof row.taken === "string")
+			if (typeof row.node_id === "string" && typeof row.taken === "number")
 			{
 				handled.set(row.node_id, row.live === 1 ? FAR_FUTURE_DATE : row.taken);
 			}
@@ -266,7 +272,7 @@ export class EmbeddingJob
 		const systemTime = newSystemTimestamp();
 		for (const [id, at] of changedAt)
 		{
-			if ((handled.get(id) ?? "") < at)
+			if ((handled.get(id) ?? 0) < at)
 			{
 				this.sql.exec(
 					"INSERT INTO embedding_queue (node_id, system_from, system_to) VALUES (?, ?, ?)",

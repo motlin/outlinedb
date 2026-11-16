@@ -128,7 +128,7 @@ export class SqliteVecIndex implements EmbeddingIndex
 	}
 
 	/** Close the current versions of `ids` at `systemTime`; a version opened at that same instant goes instead. */
-	private closeCurrent(database: Pick<AppDatabase, "delete" | "update">, ids: string[], systemTime: string): void
+	private closeCurrent(database: Pick<AppDatabase, "delete" | "update">, ids: string[], systemTime: number): void
 	{
 		const live = and(this.current(), inArray(nodeEmbeddings.nodeId, ids));
 		database

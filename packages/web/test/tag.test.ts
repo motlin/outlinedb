@@ -858,7 +858,7 @@ describe("tag index", () =>
 			id: string;
 			parentId: string | null;
 			name: string;
-			systemTo?: string;
+			systemTo?: number;
 		}[] = [
 			{
 				id: "root",

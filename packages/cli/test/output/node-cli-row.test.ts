@@ -1,6 +1,7 @@
 import {describe, expect, it} from "vite-plus/test";
 import {nodeToCliRow} from "../../src/output/node-cli-row.js";
 import type {Node} from "@outlinedb/shared/types";
+import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 
 function makeNode(overrides: Partial<Node> = {}): Node
 {
@@ -21,8 +22,8 @@ function makeNode(overrides: Partial<Node> = {}): Node
 			isMirror: false,
 			originalNodeId: null,
 		},
-		systemFrom: "2026-01-01T00:00:00.000Z",
-		systemTo: "9999-12-31T23:59:59.999Z",
+		systemFrom: systemTimeAt("2026-01-01 00:00:00.000"),
+		systemTo: FAR_FUTURE_DATE,
 		...overrides,
 	};
 }

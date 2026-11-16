@@ -4,7 +4,7 @@
 databases:
   outlinedb:
     description: >-
-      Read-only, write-through cache of Workflowy. Bitemporal: most tables keep historical versions. A row is CURRENT when system_to = '9999-12-31 23:59:59'; always filter on that to see the live tree unless you want history. Never write to this database.
+      Read-only, write-through cache of Workflowy. Bitemporal: most tables keep historical versions. A row is CURRENT when system_to = 9007199254740991; always filter on that to see the live tree unless you want history. Never write to this database.
 
     tables:
       # Internal/shadow tables — ignore when querying:
@@ -13,11 +13,11 @@ databases:
       #   __drizzle_migrations  (ORM migration bookkeeping)
       node_content:
         description: >-
-          Node text, versioned. Columns: id, name, note, parent_id, system_from, system_to. Current rows have system_to = '9999-12-31 23:59:59'. Build the tree by joining parent_id -> id (both current).
+          Node text, versioned. Columns: id, name, note, parent_id, system_from, system_to. Current rows have system_to = 9007199254740991. Build the tree by joining parent_id -> id (both current).
 
       node_metadata:
         description: >-
-          Per-node timestamps (created/modified/completed), priority, layout_mode, and shortId. Bitemporal; filter system_to = '9999-12-31 23:59:59' for current. Join to node_content on the node id.
+          Per-node timestamps (created/modified/completed), priority, layout_mode, and shortId. Bitemporal; filter system_to = 9007199254740991 for current. Join to node_content on the node id.
 
       mirrors:
         description: >-

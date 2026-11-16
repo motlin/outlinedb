@@ -17,7 +17,11 @@ import
 	systemTimeAt,
 	temporalTimestampJustBefore,
 } from "../src/temporal/constants.js";
-import {SameMillisecondOverwriteError} from "../src/cache/temporal-merge.js";
+import {SameMicrosecondOverwriteError} from "../src/cache/temporal-merge.js";
+import {readWallClockMicros, systemClock} from "../src/cache/system-time.js";
+
+/** The far-future `system_to` from before migration 0010, when system times were readable UTC text. */
+const TEXT_FAR_FUTURE = "9999-12-31 23:59:59";
 
 describe("system target placeholder migration", () =>
 {
@@ -67,13 +71,14 @@ describe("system target placeholder migration", () =>
 					migrationsFolder: beforeCleanupFolder(),
 				},
 			);
+			// Rows as the text-time schema before migration 0010 stored them, which 0010 converts to microseconds.
 			sqlite.exec(`
 			INSERT INTO node_content (id, name, note, parent_id, system_from, system_to) VALUES
-				('inbox', NULL, NULL, NULL, '${systemTimeAt("2026-11-02 20:43:19.861")}', '${FAR_FUTURE_DATE}'),
-				('c1e6ea1d-3a54-4206-9ea6-41bd95477fbc', 'Inbox', NULL, NULL, '${systemTimeAt("2026-10-01 00:00:00.000")}', '${FAR_FUTURE_DATE}');
+				('inbox', NULL, NULL, NULL, '2026-11-02 20:43:19.861', '${TEXT_FAR_FUTURE}'),
+				('c1e6ea1d-3a54-4206-9ea6-41bd95477fbc', 'Inbox', NULL, NULL, '2026-10-01 00:00:00.000', '${TEXT_FAR_FUTURE}');
 			INSERT INTO node_metadata (node_id, short_id, system_from, system_to) VALUES
-				('inbox', 'inbox', '${systemTimeAt("2026-11-02 20:43:19.861")}', '${FAR_FUTURE_DATE}'),
-				('c1e6ea1d-3a54-4206-9ea6-41bd95477fbc', '41bd95477fbc', '${systemTimeAt("2026-10-01 00:00:00.000")}', '${FAR_FUTURE_DATE}');
+				('inbox', 'inbox', '2026-11-02 20:43:19.861', '${TEXT_FAR_FUTURE}'),
+				('c1e6ea1d-3a54-4206-9ea6-41bd95477fbc', '41bd95477fbc', '2026-10-01 00:00:00.000', '${TEXT_FAR_FUTURE}');
 		`);
 
 			migrate(
@@ -139,21 +144,51 @@ describe("system time", () =>
 
 	describe("system time codec", () =>
 	{
-		it("parses a stored system time as a UTC instant and steps one tick before it, and builds one from readable UTC text", () =>
+		it("stores a system time as integer microseconds since the epoch, parses it as a UTC instant, steps one microsecond before it, and builds one from readable UTC text", () =>
 		{
 			expect(
 				{
-					parsed: parseTemporalTimestamp(systemTimeAt("2026-02-01 00:00:05.000")).toISOString(),
-					justBefore: temporalTimestampJustBefore(systemTimeAt("2026-02-01 00:00:05.000")),
-					roundTrip: formatTemporalTimestamp(parseTemporalTimestamp(systemTimeAt("2026-02-01 00:00:05.123"))),
-					fromText: systemTimeAt("2026-02-01 00:00:05.123"),
+					fromText: systemTimeAt("2026-02-01 00:00:05.123456"),
+					fromMillisecondText: systemTimeAt("2026-02-01 00:00:05.123"),
+					fromWholeSecondText: systemTimeAt("2026-02-01 00:00:05"),
+					parsed: parseTemporalTimestamp(systemTimeAt("2026-02-01 00:00:05.123456")).toISOString(),
+					justBefore: temporalTimestampJustBefore(systemTimeAt("2026-02-01 00:00:05.000000")),
+					fromDate: formatTemporalTimestamp(new Date("2026-02-01T00:00:05.123Z")),
+					farFuture: FAR_FUTURE_DATE,
 				},
 			).toStrictEqual(
 				{
-					parsed: "2026-02-01T00:00:05.000Z",
-					justBefore: systemTimeAt("2026-02-01 00:00:04.999"),
-					roundTrip: systemTimeAt("2026-02-01 00:00:05.123"),
-					fromText: formatTemporalTimestamp(new Date("2026-02-01T00:00:05.123Z")),
+					fromText: 1_769_904_005_123_456,
+					fromMillisecondText: 1_769_904_005_123_000,
+					fromWholeSecondText: 1_769_904_005_000_000,
+					parsed: "2026-02-01T00:00:05.123Z",
+					justBefore: 1_769_904_004_999_999,
+					fromDate: 1_769_904_005_123_000,
+					farFuture: Number.MAX_SAFE_INTEGER,
+				},
+			);
+		});
+
+		it("reads the Node wall clock in whole microseconds, finer than a millisecond", () =>
+		{
+			const reads = Array.from(
+				{
+					length: 10,
+				},
+				() => readWallClockMicros(),
+			);
+
+			expect(
+				{
+					wholeMicroseconds: reads.every((read) => Number.isSafeInteger(read)),
+					nearDateNow: reads.every((read) => Math.abs(read / 1000 - Date.now()) < 1000),
+					subMillisecond: reads.some((read) => read % 1000 !== 0),
+				},
+			).toStrictEqual(
+				{
+					wholeMicroseconds: true,
+					nearDateNow: true,
+					subMillisecond: true,
 				},
 			);
 		});
@@ -170,8 +205,11 @@ describe("system time", () =>
 			connections = [];
 		});
 
+		const testClock = systemClock.readMicros;
+
 		afterEach(() =>
 		{
+			systemClock.readMicros = testClock;
 			vi.useRealTimers();
 			for (const connection of connections)
 			{
@@ -288,42 +326,46 @@ describe("system time", () =>
 			]);
 		});
 
-		it("fails a unit closing a version stamped at its own millisecond, naming the table, key and system time, and rolls the unit back", () =>
+		it("fails a unit closing a version stamped at its own microsecond, naming the table, key and system time, and rolls the unit back, while units one microsecond apart both land", () =>
 		{
-			vi.useFakeTimers(
-				{
-					toFake: ["Date"],
-					now: new Date("2026-02-01T00:00:00.000Z"),
-				},
-			);
+			let micros = systemTimeAt("2026-02-01 00:00:05.000001");
+			systemClock.readMicros = () => micros;
 			const first = openDatabase();
 			const second = openDatabase();
 			new CacheService(first).insertNode(apiNode("node-1", "Original"), null);
-			vi.setSystemTime(new Date("2026-02-01T00:00:05.000Z"));
+			micros = systemTimeAt("2026-02-01 00:00:05.000002");
 			new CacheService(first).insertNode(apiNode("node-1", "Renamed"), null);
 
 			expect(() =>
 			{
 				new CacheService(second).insertNode(apiNode("node-1", "Renamed again"), null);
 			}).toThrow(
-				new SameMillisecondOverwriteError("node_content", "id=node-1", systemTimeAt("2026-02-01 00:00:05.000")),
+				new SameMicrosecondOverwriteError(
+					"node_content",
+					"id=node-1",
+					systemTimeAt("2026-02-01 00:00:05.000002"),
+				),
 			);
-			expect(first.select().from(nodeContent).all()).toStrictEqual([
+			expect(
+				connections[0]
+					?.prepare(
+						"SELECT name, system_from, typeof(system_from) AS fromType, system_to, typeof(system_to) AS toType FROM node_content ORDER BY system_from",
+					)
+					.all(),
+			).toStrictEqual([
 				{
-					id: "node-1",
 					name: "Original",
-					note: null,
-					parentId: null,
-					systemFrom: systemTimeAt("2026-02-01 00:00:00.000"),
-					systemTo: systemTimeAt("2026-02-01 00:00:05.000"),
+					system_from: 1_769_904_005_000_001,
+					fromType: "integer",
+					system_to: 1_769_904_005_000_002,
+					toType: "integer",
 				},
 				{
-					id: "node-1",
 					name: "Renamed",
-					note: null,
-					parentId: null,
-					systemFrom: systemTimeAt("2026-02-01 00:00:05.000"),
-					systemTo: FAR_FUTURE_DATE,
+					system_from: 1_769_904_005_000_002,
+					fromType: "integer",
+					system_to: Number.MAX_SAFE_INTEGER,
+					toType: "integer",
 				},
 			]);
 		});

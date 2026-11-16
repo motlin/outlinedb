@@ -221,7 +221,7 @@ function readNodeChanges(ctx: ServerContext, since: string | undefined): NodeCha
 {
 	return readConsistently(ctx.db, () =>
 	{
-		const latest = changeWatermark(ctx.db);
+		const latest = String(changeWatermark(ctx.db));
 		const none =
 		{
 			latest,

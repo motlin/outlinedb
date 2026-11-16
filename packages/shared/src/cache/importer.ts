@@ -138,7 +138,7 @@ function mergeNodeKeyedTable<TIncoming, TTable extends SQLiteTable>(
 	contentEquals: (current: TTable["$inferSelect"], incoming: TIncoming) => boolean,
 	// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 	buildInsertRow: (incoming: TIncoming, current: TTable["$inferSelect"] | undefined) => Record<string, any>,
-	importedAt: string,
+	importedAt: number,
 	preserveKeys?: ReadonlySet<string>,
 	onlyKeys?: readonly string[],
 ): TemporalMergeResult

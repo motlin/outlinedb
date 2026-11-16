@@ -3135,7 +3135,7 @@ describe("search tree route", () =>
 	let systemMs = Date.parse("2026-05-01T00:00:00Z");
 
 	/** A system time later than every one written before it, as the cache's system clock issues them. */
-	function nextSystemTime(): string
+	function nextSystemTime(): number
 	{
 		systemMs += 1;
 		return formatTemporalTimestamp(new Date(systemMs));

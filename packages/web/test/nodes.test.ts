@@ -56,9 +56,10 @@ describe("nodes changes route", () =>
 	const T0 = Date.parse("2026-10-29T12:00:00.000Z");
 
 	/** The temporal timestamp `ms` after {@link T0}. */
-	function stamp(ms: number): string
+	/** The changes-feed mark for `ms` milliseconds plus `micros` microseconds after {@link T0}. */
+	function stamp(ms: number, micros = 0): string
 	{
-		return new Date(T0 + ms).toISOString().replace("T", " ").replace("Z", "");
+		return String((T0 + ms) * 1000 + micros);
 	}
 
 	/**
@@ -370,7 +371,7 @@ describe("nodes changes route", () =>
 				{
 					during:
 					{
-						latest: stamp(TRANSACTION_TIMEOUT_MS + 60_000 - 1),
+						latest: stamp(TRANSACTION_TIMEOUT_MS + 60_000, -1),
 						reset: false,
 						changedIds: new Set(),
 						deletedIds: new Set(),
@@ -412,7 +413,7 @@ describe("nodes changes route", () =>
 			const seeded = await changes(null);
 
 			const resets = await Promise.all(
-				["42", stamp(60_001)].map(async (since) =>
+				["not-a-mark", stamp(60_001)].map(async (since) =>
 				{
 					const {body} = await changes(since);
 					return {
@@ -2751,7 +2752,7 @@ describe("nodes standalone op", () =>
 		{
 			return sqlite
 				.prepare<
-					[string, string],
+					[string, number],
 					{
 						id: string;
 					}

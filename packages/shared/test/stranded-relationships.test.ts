@@ -39,7 +39,7 @@ function setup()
 			migrationsFolder,
 		},
 	);
-	const nodes: [id: string, parentId: string | null, systemTo: string][] = [
+	const nodes: [id: string, parentId: string | null, systemTo: number][] = [
 		["target", null, FAR_FUTURE_DATE],
 		["refs", "target", FAR_FUTURE_DATE],
 		["item-live", "refs", FAR_FUTURE_DATE],

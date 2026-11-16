@@ -184,7 +184,7 @@ export class LocalAccount
 
 	/**
 	 * Apply root metadata changes and then settings, in order, in one unit of work: separate writes to the same
-	 * singleton row within one millisecond would fail.
+	 * singleton row within one microsecond would fail.
 	 */
 	change(rootChanges: MetadataChange[], settings: readonly (readonly [string, unknown])[]): void
 	{

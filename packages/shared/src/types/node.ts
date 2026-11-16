@@ -45,7 +45,7 @@ export interface Node
 		originalNodeId: string | null;
 	};
 	/** Temporal system-time lower bound (inclusive). */
-	systemFrom: string;
+	systemFrom: number;
 	/** Temporal system-time upper bound (exclusive). */
-	systemTo: string;
+	systemTo: number;
 }

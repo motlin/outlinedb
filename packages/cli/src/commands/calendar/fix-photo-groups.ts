@@ -154,7 +154,7 @@ function findStaleAttachmentData(database: ReturnType<typeof createDatabase>): s
 {
 	const row = database.all<
 	{
-		newest: string | null;
+		newest: number | null;
 	}>(sql`SELECT MAX(system_from) AS newest FROM s3_files`)[0];
 
 	let newestBackup: Date | null = null;

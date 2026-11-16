@@ -7,7 +7,7 @@ import {CacheService, provisionLocalAccount, readPendingOutbox, storeInternalMet
 import * as schema from "@outlinedb/shared/db";
 import {calendarNodeId, calendarRootId, CalendarRootMissing} from "@outlinedb/shared/internal";
 import type {WorkflowyInternalAdapter, CalendarLayoutSnapshot} from "@outlinedb/shared/internal";
-import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 import {findCalendarDay, findCalendarDays, findTaggedCalendarRoot} from "../src/server/calendar-day.js";
 import type {ServerContext, AppEnv} from "../src/server/context.js";
 import {httpAppFor} from "./http-app-for.js";
@@ -261,7 +261,7 @@ describe("calendar day", () =>
 						id,
 						name,
 						parentId,
-						systemFrom: "2026-01-01",
+						systemFrom: systemTimeAt("2026-01-01 00:00:00.000"),
 						systemTo: FAR_FUTURE_DATE,
 					},
 				)
@@ -273,14 +273,14 @@ describe("calendar day", () =>
 		}
 		for (const [id, priority, kind] of D1017_CHILDREN)
 		{
-			const systemTo = kind === "deleted" ? "2026-02-01" : FAR_FUTURE_DATE;
+			const systemTo = kind === "deleted" ? systemTimeAt("2026-02-01 00:00:00.000") : FAR_FUTURE_DATE;
 			db.insert(schema.nodeContent)
 				.values(
 					{
 						id,
 						name: id,
 						parentId: D1017,
-						systemFrom: "2026-01-01",
+						systemFrom: systemTimeAt("2026-01-01 00:00:00.000"),
 						systemTo,
 					},
 				)
@@ -290,7 +290,7 @@ describe("calendar day", () =>
 					{
 						nodeId: id,
 						orderKey: integerOrderKey(priority),
-						systemFrom: "2026-01-01",
+						systemFrom: systemTimeAt("2026-01-01 00:00:00.000"),
 						systemTo,
 					},
 				)
@@ -301,7 +301,7 @@ describe("calendar day", () =>
 					.values(
 						{
 							nodeId: id,
-							systemFrom: "2026-01-01",
+							systemFrom: systemTimeAt("2026-01-01 00:00:00.000"),
 							systemTo,
 						},
 					)
@@ -463,7 +463,7 @@ describe("calendar day", () =>
 							id,
 							name,
 							parentId,
-							systemFrom: "2026-01-01",
+							systemFrom: systemTimeAt("2026-01-01 00:00:00.000"),
 							systemTo: FAR_FUTURE_DATE,
 						},
 					)
@@ -479,7 +479,7 @@ describe("calendar day", () =>
 					{
 						userId: "1",
 						calendarRootId: pointer,
-						systemFrom: "2026-01-01",
+						systemFrom: systemTimeAt("2026-01-01 00:00:00.000"),
 						systemTo: FAR_FUTURE_DATE,
 					},
 				)
@@ -838,7 +838,7 @@ describe("calendar days route", () =>
 						name,
 						note: note ?? null,
 						parentId,
-						systemFrom: "2026-01-01",
+						systemFrom: systemTimeAt("2026-01-01 00:00:00.000"),
 						systemTo: FAR_FUTURE_DATE,
 					},
 				)
@@ -1413,7 +1413,7 @@ describe("calendar layout route", () =>
 						id,
 						name: names[id] ?? name,
 						parentId,
-						systemFrom: "2026-01-01",
+						systemFrom: systemTimeAt("2026-01-01 00:00:00.000"),
 						systemTo: FAR_FUTURE_DATE,
 					},
 				)
@@ -3008,7 +3008,7 @@ describe("calendar settings route", () =>
 						name,
 						note: note ?? null,
 						parentId,
-						systemFrom: "2026-01-01",
+						systemFrom: systemTimeAt("2026-01-01 00:00:00.000"),
 						systemTo: FAR_FUTURE_DATE,
 					},
 				)

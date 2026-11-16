@@ -1,5 +1,5 @@
 import {backupImports} from "@outlinedb/shared/db";
-import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, formatTemporalTimestamp, parseTemporalTimestamp} from "@outlinedb/shared/temporal";
 import {Command, Flags} from "@oclif/core";
 import {and, desc, eq} from "drizzle-orm";
 import {logger} from "../../services/logger.js";
@@ -234,7 +234,7 @@ export default class ImportBackup extends Command
 			if (importStats.nodesPreserved > 0)
 			{
 				this.log(
-					`\n🛡  Snapshot predates the cache (snapshot ${importStats.incomingWatermark}, cache ${importStats.localWatermark}); ` +
+					`\n🛡  Snapshot predates the cache (snapshot ${readableSystemTime(importStats.incomingWatermark)}, cache ${readableSystemTime(importStats.localWatermark)}); ` +
 						`kept ${importStats.nodesPreserved.toLocaleString()} node(s) the cache holds newer versions of.`,
 				);
 			}
@@ -428,4 +428,10 @@ export default class ImportBackup extends Command
 		}
 		return latest.path;
 	}
+}
+
+/** A system time as ISO 8601 UTC for a log line, or "none". */
+function readableSystemTime(systemTime: number | null | undefined): string
+{
+	return systemTime === null || systemTime === undefined ? "none" : parseTemporalTimestamp(systemTime).toISOString();
 }

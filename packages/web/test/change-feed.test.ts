@@ -28,6 +28,12 @@ function row(id: string, parentId: string | null, fields: Partial<NodeResponse> 
 	};
 }
 
+/** A changes-feed mark as the server sends it: the decimal microseconds of the readable UTC `text`. */
+function mark(text: string): string
+{
+	return String(systemTimeAt(text));
+}
+
 function changes(fields: Partial<NodeChangesResponse>): NodeChangesResponse
 {
 	return {
@@ -404,23 +410,23 @@ describe("ChangeFeed", () =>
 		const answers = [
 			changes(
 				{
-					latest: systemTimeAt("2026-10-29 12:00:09.000"),
+					latest: mark("2026-10-29 12:00:09.000"),
 				},
 			),
 			changes(
 				{
-					latest: systemTimeAt("2026-10-29 12:00:10.000"),
+					latest: mark("2026-10-29 12:00:10.000"),
 				},
 			),
 			changes(
 				{
-					latest: systemTimeAt("2026-10-29 12:00:03.000"),
+					latest: mark("2026-10-29 12:00:03.000"),
 					reset: true,
 				},
 			),
 			changes(
 				{
-					latest: systemTimeAt("2026-10-29 12:00:04.000"),
+					latest: mark("2026-10-29 12:00:04.000"),
 				},
 			),
 		];
@@ -439,9 +445,9 @@ describe("ChangeFeed", () =>
 		// even when lower.
 		expect(asked).toStrictEqual([
 			undefined,
-			systemTimeAt("2026-10-29 12:00:09.000"),
-			systemTimeAt("2026-10-29 12:00:10.000"),
-			systemTimeAt("2026-10-29 12:00:03.000"),
+			mark("2026-10-29 12:00:09.000"),
+			mark("2026-10-29 12:00:10.000"),
+			mark("2026-10-29 12:00:03.000"),
 		]);
 	});
 

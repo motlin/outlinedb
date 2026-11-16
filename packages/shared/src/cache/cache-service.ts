@@ -106,8 +106,8 @@ export interface NodeWithRelations
 	modifiedAt: Date | null;
 	completedAt: Date | null;
 	layoutMode: string | null;
-	systemFrom: string;
-	systemTo: string;
+	systemFrom: number;
+	systemTo: number;
 	// Mirrors where this node is the original (other nodes mirror this one)
 	mirrorsAsOriginal?:
 	{
@@ -184,7 +184,7 @@ function timestampToDate(timestamp: number | null | undefined): Date | null
 	return timestamp === null || timestamp === undefined ? null : new Date(timestamp * 1000);
 }
 
-function insertContent(db: TemporalTransaction, node: WorkflowyNode, parentId: string | null, systemFrom: string): void
+function insertContent(db: TemporalTransaction, node: WorkflowyNode, parentId: string | null, systemFrom: number): void
 {
 	db.insert(nodeContent)
 		.values(
@@ -208,7 +208,7 @@ function insertMetadata(
 	db: TemporalTransaction,
 	node: WorkflowyNode,
 	orderKey: string | null,
-	systemFrom: string,
+	systemFrom: number,
 	existing?: NodeMetadataRow,
 ): void
 {
@@ -246,7 +246,7 @@ function upsertNodeVersion(
 	node: WorkflowyNode,
 	parentId: string | null,
 	orderKey: string | null,
-	systemTime: string,
+	systemTime: number,
 ): void
 {
 	const existingContent = db
@@ -343,7 +343,7 @@ function upsertPlacedNode(
 	node: WorkflowyNode,
 	parentId: string | null,
 	position: "top" | "bottom",
-	systemTime: string,
+	systemTime: number,
 ): void
 {
 	const siblings = currentChildKeys(db, parentId);
@@ -375,7 +375,7 @@ function storeChildren(
 	tx: TemporalTransaction,
 	apiNodes: WorkflowyNode[],
 	parentId: string | null,
-	systemTime: string,
+	systemTime: number,
 	storedInUnit: ReadonlySet<string> = new Set(),
 ): void
 {

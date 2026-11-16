@@ -15,7 +15,7 @@ databases:
         sql: |-
           SELECT id, name, note, parent_id
           FROM node_content
-          WHERE system_to = '9999-12-31 23:59:59'
+          WHERE system_to = 9007199254740991
           LIMIT 100
 
       search:
@@ -41,8 +41,8 @@ databases:
           FROM node_content c
           JOIN node_metadata m
             ON m.node_id = c.id
-           AND m.system_to = '9999-12-31 23:59:59'
-          WHERE c.system_to = '9999-12-31 23:59:59'
+           AND m.system_to = 9007199254740991
+          WHERE c.system_to = 9007199254740991
             AND m.modified_at IS NOT NULL
           ORDER BY m.modified_at DESC
           LIMIT 100
@@ -54,6 +54,6 @@ databases:
           SELECT id, name, note
           FROM node_content
           WHERE parent_id = :parent_id
-            AND system_to = '9999-12-31 23:59:59'
+            AND system_to = 9007199254740991
           ORDER BY name
           LIMIT 500

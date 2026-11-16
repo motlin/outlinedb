@@ -17,7 +17,7 @@ exports[`node dto > canonical Node DTO snapshot > matches the snapshotted shape 
   "parentId": "11111111-1111-1111-1111-111111111111",
   "priority": 1,
   "shortId": "333333333333",
-  "systemFrom": "2026-05-22 10:00:00.000",
-  "systemTo": "9999-12-31 23:59:59",
+  "systemFrom": 1779444000000000,
+  "systemTo": 9007199254740991,
 }
 `;

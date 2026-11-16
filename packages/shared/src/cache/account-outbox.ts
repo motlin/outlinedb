@@ -31,7 +31,7 @@ export interface AccountOutboxEntry
 /** One current account outbox row. */
 export interface PendingAccountOutboxRow extends AccountOutboxEntry
 {
-	enqueuedAt: string;
+	enqueuedAt: number;
 	lastError: string | null;
 }
 
@@ -221,16 +221,16 @@ export function failAccountOutboxRows(
 export function accountOutboxStatus(tx: TemporalTransaction):
 {
 	pending: number;
-	oldestEnqueuedAt: string | null;
+	oldestEnqueuedAt: number | null;
 	lastError: string | null;
-	lastErrorAt: string | null;
+	lastErrorAt: number | null;
 }
 {
 	const summary = tx
 		.select(
 			{
 				pending: sql<number>`count(*)`,
-				oldestEnqueuedAt: sql<string | null>`min(${accountOutbox.enqueuedAt})`,
+				oldestEnqueuedAt: sql<number | null>`min(${accountOutbox.enqueuedAt})`,
 			},
 		)
 		.from(accountOutbox)

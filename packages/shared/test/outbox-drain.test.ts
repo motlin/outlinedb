@@ -42,12 +42,12 @@ const SEED: [id: string, parentId: string | null, key: string][] = [
 ];
 
 /** The system time `seconds` after 2026-03-01 00:00:00 UTC, when the test's writes start. */
-function at(seconds: number): string
+function at(seconds: number): number
 {
 	return systemTimeAt(`2026-03-01 00:00:${String(seconds).padStart(2, "0")}.000`);
 }
 
-function setClock(systemTime: string): void
+function setClock(systemTime: number): void
 {
 	vi.setSystemTime(parseTemporalTimestamp(systemTime));
 }
@@ -189,15 +189,15 @@ function setup()
 function row(
 	nodeId: string,
 	aspect: OutboxAspect,
-	enqueuedAt: string,
+	enqueuedAt: number,
 	{
 		systemFrom = enqueuedAt,
 		systemTo = DRAIN,
 		lastError = null,
 	}:
 	{
-		systemFrom?: string;
-		systemTo?: string;
+		systemFrom?: number;
+		systemTo?: number;
 		lastError?: string | null;
 	} = {},
 )

@@ -126,14 +126,14 @@ export class ChangeDetector
 
 	detectChanges(cutoffDate: Date): ChangeDetectionResult
 	{
-		const cutoffStr = formatTemporalTimestamp(cutoffDate);
+		const cutoff = formatTemporalTimestamp(cutoffDate);
 
-		const oldContent = this.queryOldContent(cutoffStr);
-		const newContent = this.queryNewContent(cutoffStr);
-		const oldMeta = this.queryOldMetadata(cutoffStr);
-		const newMeta = this.queryNewMetadata(cutoffStr);
+		const oldContent = this.queryOldContent(cutoff);
+		const newContent = this.queryNewContent(cutoff);
+		const oldMeta = this.queryOldMetadata(cutoff);
+		const newMeta = this.queryNewMetadata(cutoff);
 
-		const changes = this.classifyChanges(oldContent, newContent, oldMeta, newMeta, cutoffStr);
+		const changes = this.classifyChanges(oldContent, newContent, oldMeta, newMeta, cutoff);
 		const tree = this.buildChangeTree(changes);
 		const summary = this.summarize(changes);
 
@@ -145,7 +145,7 @@ export class ChangeDetector
 		};
 	}
 
-	private queryOldContent(cutoffStr: string)
+	private queryOldContent(cutoff: number)
 	{
 		return this.db
 			.select(
@@ -159,15 +159,15 @@ export class ChangeDetector
 			.from(nodeContent)
 			.where(
 				and(
-					lte(nodeContent.systemFrom, cutoffStr),
-					gte(nodeContent.systemTo, cutoffStr),
+					lte(nodeContent.systemFrom, cutoff),
+					gte(nodeContent.systemTo, cutoff),
 					ne(nodeContent.systemTo, FAR_FUTURE_DATE),
 				),
 			)
 			.all();
 	}
 
-	private queryNewContent(cutoffStr: string)
+	private queryNewContent(cutoff: number)
 	{
 		return this.db
 			.select(
@@ -179,11 +179,11 @@ export class ChangeDetector
 				},
 			)
 			.from(nodeContent)
-			.where(and(gte(nodeContent.systemFrom, cutoffStr), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
+			.where(and(gte(nodeContent.systemFrom, cutoff), eq(nodeContent.systemTo, FAR_FUTURE_DATE)))
 			.all();
 	}
 
-	private queryOldMetadata(cutoffStr: string)
+	private queryOldMetadata(cutoff: number)
 	{
 		return this.db
 			.select(
@@ -195,15 +195,15 @@ export class ChangeDetector
 			.from(nodeMetadata)
 			.where(
 				and(
-					lte(nodeMetadata.systemFrom, cutoffStr),
-					gte(nodeMetadata.systemTo, cutoffStr),
+					lte(nodeMetadata.systemFrom, cutoff),
+					gte(nodeMetadata.systemTo, cutoff),
 					ne(nodeMetadata.systemTo, FAR_FUTURE_DATE),
 				),
 			)
 			.all();
 	}
 
-	private queryNewMetadata(cutoffStr: string)
+	private queryNewMetadata(cutoff: number)
 	{
 		return this.db
 			.select(
@@ -213,7 +213,7 @@ export class ChangeDetector
 				},
 			)
 			.from(nodeMetadata)
-			.where(and(gte(nodeMetadata.systemFrom, cutoffStr), eq(nodeMetadata.systemTo, FAR_FUTURE_DATE)))
+			.where(and(gte(nodeMetadata.systemFrom, cutoff), eq(nodeMetadata.systemTo, FAR_FUTURE_DATE)))
 			.all();
 	}
 
@@ -242,7 +242,7 @@ export class ChangeDetector
 			nodeId: string;
 			completedAt: Date | null;
 		}[],
-		cutoffStr: string,
+		cutoff: number,
 	): NodeChange[]
 	{
 		const oldContentMap = new Map(oldContent.map((r) => [r.id, r]));
@@ -256,7 +256,7 @@ export class ChangeDetector
 			...oldContentMap.keys(),
 			...oldMetaMap.keys(),
 		]);
-		const mirrorOriginals = this.loadMirrorOriginals([...allIds], cutoffStr);
+		const mirrorOriginals = this.loadMirrorOriginals([...allIds], cutoff);
 
 		const changes: NodeChange[] = [];
 
@@ -358,7 +358,7 @@ export class ChangeDetector
 	 * Map each of `nodeIds` that was a mirror at any point since the cutoff to
 	 * its original's id, preferring the current relationship.
 	 */
-	private loadMirrorOriginals(nodeIds: string[], cutoffStr: string): Map<string, string>
+	private loadMirrorOriginals(nodeIds: string[], cutoff: number): Map<string, string>
 	{
 		const rows = this.db
 			.select(
@@ -368,7 +368,7 @@ export class ChangeDetector
 				},
 			)
 			.from(mirrors)
-			.where(and(inIds(mirrors.mirrorId, nodeIds), gte(mirrors.systemTo, cutoffStr)))
+			.where(and(inIds(mirrors.mirrorId, nodeIds), gte(mirrors.systemTo, cutoff)))
 			.orderBy(mirrors.systemTo)
 			.all();
 		const originals = new Map<string, string>();

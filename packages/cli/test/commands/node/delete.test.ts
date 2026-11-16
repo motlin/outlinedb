@@ -1,7 +1,7 @@
 import {it, vi, afterEach, expect, describe, beforeEach} from "vite-plus/test";
 import {captureOutput} from "@oclif/test";
 import {mirrors, nodeContent} from "@outlinedb/shared/db";
-import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 import {eq} from "drizzle-orm";
 import fs from "node:fs";
 import os from "node:os";
@@ -429,19 +429,19 @@ describe("node delete command", () =>
 						{
 							originalId: "other-original-id",
 							mirrorId: "mirror-in-id",
-							systemFrom: "2026-01-01",
+							systemFrom: systemTimeAt("2026-01-01 00:00:00.000"),
 							systemTo: FAR_FUTURE_DATE,
 						},
 						{
 							originalId: "task-a-id",
 							mirrorId: "mirror-nested-id",
-							systemFrom: "2026-01-01",
+							systemFrom: systemTimeAt("2026-01-01 00:00:00.000"),
 							systemTo: FAR_FUTURE_DATE,
 						},
 						{
 							originalId: "task-a-id",
 							mirrorId: "mirror-out-id",
-							systemFrom: "2026-01-01",
+							systemFrom: systemTimeAt("2026-01-01 00:00:00.000"),
 							systemTo: FAR_FUTURE_DATE,
 						},
 					],

@@ -1116,7 +1116,7 @@ describe("shared API import", () =>
 				.from(schema.nodeMetadata)
 				.all()
 				.filter((row) => row.nodeId === SKEW_NODE)
-				.toSorted((x, y) => x.systemFrom.localeCompare(y.systemFrom))
+				.toSorted((x, y) => x.systemFrom - y.systemFrom)
 				.map((row) => (
 				{
 					orderKey: row.orderKey,

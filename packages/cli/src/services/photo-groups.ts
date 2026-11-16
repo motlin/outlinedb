@@ -239,11 +239,11 @@ export function countGroupsWithoutEvidence(rows: CachedNodeRow[]): number
  * Only backup imports populate `s3_files`, so photos pasted after the last
  * import carry no filename or MIME type and drop out of the sweep entirely.
  *
- * @param newestRow Newest `s3_files.system_from`, in `YYYY-MM-DD HH:MM:SS.sss` UTC.
+ * @param newestRow Newest `s3_files.system_from`, in microseconds since the epoch.
  * @param newestBackup Backup date of the newest backup file on disk.
  * @returns The warning text, or null when the cache is current enough.
  */
-export function describeStaleAttachmentData(newestRow: string | null, newestBackup: Date | null): string | null
+export function describeStaleAttachmentData(newestRow: number | null, newestBackup: Date | null): string | null
 {
 	if (newestRow === null || newestBackup === null)
 	{
@@ -251,13 +251,13 @@ export function describeStaleAttachmentData(newestRow: string | null, newestBack
 	}
 
 	const importedThrough = parseTemporalTimestamp(newestRow).getTime();
-	if (Number.isNaN(importedThrough) || newestBackup.getTime() <= importedThrough)
+	if (newestBackup.getTime() <= importedThrough)
 	{
 		return null;
 	}
 
 	return (
-		`attachment data is stale: newest s3_files row is ${newestRow.slice(0, 10)}, ` +
+		`attachment data is stale: newest s3_files row is ${new Date(importedThrough).toISOString().slice(0, 10)}, ` +
 		`but a ${newestBackup.toISOString().slice(0, 10)} backup is on disk. ` +
 		`Run 'cache import-backups' first or recent photos stay invisible.`
 	);

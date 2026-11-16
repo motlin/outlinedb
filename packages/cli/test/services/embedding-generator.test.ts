@@ -12,7 +12,7 @@ const EARLIER = systemTimeAt("2025-12-01 00:00:00.000");
 const SYSTEM_FROM = systemTimeAt("2026-01-01 00:00:00.000");
 const EMBEDDING = Buffer.from(new Float32Array([1, 2]).buffer);
 
-function embedding(nodeId: string, model: string, systemFrom: string, systemTo: string)
+function embedding(nodeId: string, model: string, systemFrom: number, systemTo: number)
 {
 	return {
 		nodeId,

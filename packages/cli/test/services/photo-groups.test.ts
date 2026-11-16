@@ -815,9 +815,4 @@ describe("describeStaleAttachmentData", () =>
 		expect(describeStaleAttachmentData(null, new Date("2026-07-26T00:00:00Z"))).toBeNull();
 		expect(describeStaleAttachmentData(systemTimeAt("2026-07-14 14:37:25.424"), null)).toBeNull();
 	});
-
-	it("stays quiet rather than warning on an unparsable timestamp", () =>
-	{
-		expect(describeStaleAttachmentData("not-a-timestamp", new Date("2026-07-26T00:00:00Z"))).toBeNull();
-	});
 });

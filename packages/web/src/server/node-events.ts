@@ -119,7 +119,7 @@ export async function withTreeChangePublish<T>(
 	database: AppDatabase,
 	bus: TreeEventBus,
 	run: () => Promise<T>,
-	now: () => string = () => changeWatermark(database),
+	now: () => string = () => String(changeWatermark(database)),
 ): Promise<T>
 {
 	const before = totalChanges(database);

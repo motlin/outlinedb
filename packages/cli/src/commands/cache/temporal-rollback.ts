@@ -1,5 +1,5 @@
 import {rebuildNodeTags} from "@outlinedb/shared/cache";
-import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 import {Command, Flags} from "@oclif/core";
 import {sql} from "drizzle-orm";
 import * as readline from "node:readline/promises";
@@ -98,13 +98,11 @@ export default class TemporalRollback extends Command
 	public async run(): Promise<void>
 	{
 		const {flags} = await this.parse(TemporalRollback);
-		const target = flags.to;
-
-		// Validate timestamp format
-		if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/u.test(target))
+		if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,6})?$/u.test(flags.to))
 		{
-			this.error('Invalid timestamp format. Expected: "YYYY-MM-DD HH:MM:SS"');
+			this.error('Invalid timestamp format. Expected: "YYYY-MM-DD HH:MM:SS[.ffffff]" (UTC)');
 		}
+		const target = systemTimeAt(flags.to);
 
 		const excludeSet = new Set(flags.exclude);
 		const tables = TEMPORAL_TABLES.filter((t) => !excludeSet.has(t));
@@ -136,13 +134,13 @@ export default class TemporalRollback extends Command
 			const purgeResult = db.get<
 			{
 				count: number;
-			}>(sql.raw(`SELECT COUNT(*) as count FROM ${table} WHERE system_from > '${target}'`));
+			}>(sql.raw(`SELECT COUNT(*) as count FROM ${table} WHERE system_from > ${target}`));
 			const restoreResult = db.get<
 			{
 				count: number;
 			}>(
 				sql.raw(
-					`SELECT COUNT(*) as count FROM ${table} WHERE system_from <= '${target}' AND system_to > '${target}' AND system_to != '${FAR_FUTURE_DATE}'`,
+					`SELECT COUNT(*) as count FROM ${table} WHERE system_from <= ${target} AND system_to > ${target} AND system_to != ${FAR_FUTURE_DATE}`,
 				),
 			);
 
@@ -156,7 +154,7 @@ export default class TemporalRollback extends Command
 		}
 
 		// Display summary
-		this.log(`\nTemporal rollback to: ${target}`);
+		this.log(`\nTemporal rollback to: ${flags.to}`);
 		if (flags.exclude.length > 0)
 		{
 			this.log(`Excluding: ${flags.exclude.join(", ")}`);
@@ -214,10 +212,10 @@ export default class TemporalRollback extends Command
 		{
 			for (const table of rollbackTables)
 			{
-				tx.run(sql.raw(`DELETE FROM ${table} WHERE system_from > '${target}'`));
+				tx.run(sql.raw(`DELETE FROM ${table} WHERE system_from > ${target}`));
 				tx.run(
 					sql.raw(
-						`UPDATE ${table} SET system_to = '${FAR_FUTURE_DATE}' WHERE system_from <= '${target}' AND system_to > '${target}'`,
+						`UPDATE ${table} SET system_to = ${FAR_FUTURE_DATE} WHERE system_from <= ${target} AND system_to > ${target}`,
 					),
 				);
 			}

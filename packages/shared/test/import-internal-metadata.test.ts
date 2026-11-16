@@ -696,7 +696,7 @@ describe("importInternalMetadata", () =>
 			.select()
 			.from(schema.nodeDisplayMetadata)
 			.all()
-			.toSorted((a, b) => a.systemFrom.localeCompare(b.systemFrom));
+			.toSorted((a, b) => a.systemFrom - b.systemFrom);
 		const [first, second] = versions;
 		expect(
 			{

@@ -19,7 +19,7 @@ import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import type {ServerContext} from "../src/server/context.js";
 import {standaloneContext} from "./helpers/local-context.js";
 import {httpAppFor} from "./http-app-for.js";
-import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 
 describe("preferences route", () =>
 {
@@ -1768,7 +1768,7 @@ describe("preferences week layout", () =>
 						id,
 						name,
 						parentId,
-						systemFrom: "2026-01-01",
+						systemFrom: systemTimeAt("2026-01-01 00:00:00.000"),
 						systemTo: FAR_FUTURE_DATE,
 					},
 				)

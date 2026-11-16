@@ -118,16 +118,16 @@ export type TemporalTransaction = BaseSQLiteDatabase<"sync", any, any, any>;
  * the new version's key, and deleting it (Reladomo's "changed too fast") would
  * erase history and strand derived rows, so the unit fails and rolls back. Two
  * writes to one row in one unit should be merged before writing; two units in
- * one millisecond should retry.
+ * one microsecond should retry.
  */
-export class SameMillisecondOverwriteError extends Error
+export class SameMicrosecondOverwriteError extends Error
 {
-	constructor(tableName: string, key: string, systemTime: string)
+	constructor(tableName: string, key: string, systemTime: number)
 	{
 		super(
-			`Unit of work at system time ${systemTime} would overwrite the ${tableName} version (${key}) it started in the same millisecond; rolled back instead of deleting history`,
+			`Unit of work at system time ${systemTime} would overwrite the ${tableName} version (${key}) it started in the same microsecond; rolled back instead of deleting history`,
 		);
-		this.name = "SameMillisecondOverwriteError";
+		this.name = "SameMicrosecondOverwriteError";
 	}
 }
 
@@ -142,8 +142,8 @@ function historyKeyColumnNames(table: SQLiteTable): string[]
 /**
  * Close the current versions of `table` matching `where` at `systemTime`, the
  * unit of work's system time. A current version that already starts at
- * `systemTime` throws {@link SameMillisecondOverwriteError}: it was written
- * earlier in this unit, or by another unit in the same millisecond, and closing
+ * `systemTime` throws {@link SameMicrosecondOverwriteError}: it was written
+ * earlier in this unit, or by another unit in the same microsecond, and closing
  * it would leave an empty interval. A current version starting after
  * `systemTime`, left by a unit that read the clock later but landed first, is
  * closed like any other, so its interval ends before it starts and no as-of
@@ -152,7 +152,7 @@ function historyKeyColumnNames(table: SQLiteTable): string[]
 export function closeCurrentVersions(
 	tx: TemporalTransaction,
 	table: SQLiteTable,
-	systemTime: string,
+	systemTime: number,
 	where: SQL | undefined,
 ): void
 {
@@ -169,7 +169,7 @@ export function closeCurrentVersions(
 	if (collision !== undefined)
 	{
 		const key = keyColumnNames.map((name) => `${name}=${String(collision[name])}`).join(", ");
-		throw new SameMillisecondOverwriteError(getTableName(table), key, systemTime);
+		throw new SameMicrosecondOverwriteError(getTableName(table), key, systemTime);
 	}
 	tx.run(
 		sql`UPDATE ${table} SET ${systemTo} = ${systemTime} WHERE ${systemTo} = ${FAR_FUTURE_DATE} AND (${matching})`,
@@ -204,7 +204,7 @@ export function temporalMerge<TIncoming, TCurrent>(
 	config: TemporalMergeConfig<TIncoming, TCurrent>,
 	incoming: TIncoming[],
 	currentRows: TCurrent[],
-	importedAt: string,
+	importedAt: number,
 ): TemporalMergeResult
 {
 	const {table, keyColumn, keyColumns, incomingKey, currentKey, contentMatches, buildInsertRow, preserveKeys} =

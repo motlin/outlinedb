@@ -990,10 +990,10 @@ describe("internal adapter backlinks", () =>
 	/** The current backlink items, derived as the app derives them: live mirrors under a live references root. */
 	const BACKLINKS = `(SELECT m.mirror_id AS node_id, m.original_id AS source_id, p.parent_id AS target_id, m.system_to
 	FROM mirrors m
-	JOIN node_content c ON c.id = m.mirror_id AND c.system_to = '${FAR_FUTURE_DATE}'
-	JOIN references_roots r ON r.node_id = c.parent_id AND r.system_to = '${FAR_FUTURE_DATE}'
-	JOIN node_content p ON p.id = c.parent_id AND p.system_to = '${FAR_FUTURE_DATE}'
-	WHERE m.system_to = '${FAR_FUTURE_DATE}')`;
+	JOIN node_content c ON c.id = m.mirror_id AND c.system_to = ${FAR_FUTURE_DATE}
+	JOIN references_roots r ON r.node_id = c.parent_id AND r.system_to = ${FAR_FUTURE_DATE}
+	JOIN node_content p ON p.id = c.parent_id AND p.system_to = ${FAR_FUTURE_DATE}
+	WHERE m.system_to = ${FAR_FUTURE_DATE})`;
 
 	const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
 	const START_MS = 1_800_000_000_000;
@@ -1384,7 +1384,7 @@ describe("internal adapter backlinks", () =>
 
 			const result = await adapter.syncBacklinks([SOURCE]);
 
-			const current = `system_to = '${FAR_FUTURE_DATE}'`;
+			const current = `system_to = ${FAR_FUTURE_DATE}`;
 			expect(
 				{
 					result,
@@ -1588,7 +1588,7 @@ describe("internal adapter backlinks", () =>
 					edit: pushes.flat().find((op) => op.type === "edit")?.data.metadataPatches,
 					current: rows(`SELECT node_id, source_id, target_id FROM ${BACKLINKS} ORDER BY node_id`),
 					oldItemCurrent: rows(
-						`SELECT id FROM node_content WHERE id = '${OLD_ITEM}' AND system_to = '${FAR_FUTURE_DATE}' UNION ALL SELECT mirror_id FROM mirrors WHERE mirror_id = '${OLD_ITEM}' AND system_to = '${FAR_FUTURE_DATE}'`,
+						`SELECT id FROM node_content WHERE id = '${OLD_ITEM}' AND system_to = ${FAR_FUTURE_DATE} UNION ALL SELECT mirror_id FROM mirrors WHERE mirror_id = '${OLD_ITEM}' AND system_to = ${FAR_FUTURE_DATE}`,
 					),
 					reads: treeDataReads(api),
 				},
@@ -1660,10 +1660,10 @@ describe("internal adapter backlinks", () =>
 			// An earlier import cached the item, under the target's references root, while it still existed.
 			sqlite.exec(`
 			INSERT INTO node_content (id, name, parent_id, system_from, system_to) VALUES
-				('${TARGET}', 'target', NULL, '${SEEDED}', '${FAR_FUTURE_DATE}'),
-				('${OLD_ROOT}', '', '${TARGET}', '${SEEDED}', '${FAR_FUTURE_DATE}'),
-				('${OLD_ITEM}', '', '${OLD_ROOT}', '${SEEDED}', '${FAR_FUTURE_DATE}');
-			INSERT INTO references_roots VALUES ('${OLD_ROOT}', '${SEEDED}', '${FAR_FUTURE_DATE}');
+				('${TARGET}', 'target', NULL, ${SEEDED}, ${FAR_FUTURE_DATE}),
+				('${OLD_ROOT}', '', '${TARGET}', ${SEEDED}, ${FAR_FUTURE_DATE}),
+				('${OLD_ITEM}', '', '${OLD_ROOT}', ${SEEDED}, ${FAR_FUTURE_DATE});
+			INSERT INTO references_roots VALUES ('${OLD_ROOT}', ${SEEDED}, ${FAR_FUTURE_DATE});
 		`);
 
 			const result = await adapter.syncBacklinks([SOURCE]);
@@ -2430,7 +2430,7 @@ describe("internal adapter calendar", () =>
 							id,
 							name: id,
 							parentId: parent === "home" ? null : parent,
-							systemFrom: "2026-01-01",
+							systemFrom: systemTimeAt("2026-01-01 00:00:00.000"),
 							systemTo: FAR_FUTURE_DATE,
 						},
 					)
@@ -4573,7 +4573,7 @@ describe("internal adapter inbox", () =>
 						id: node.id,
 						name: node.name,
 						parentId: parent === "home" ? null : parent,
-						systemFrom: "2026-01-01",
+						systemFrom: systemTimeAt("2026-01-01 00:00:00.000"),
 						systemTo: FAR_FUTURE_DATE,
 					},
 				)
@@ -5665,7 +5665,7 @@ describe("internal adapter transaction log", () =>
 							id,
 							name: id,
 							parentId,
-							systemFrom: "2026-01-01",
+							systemFrom: systemTimeAt("2026-01-01 00:00:00.000"),
 							systemTo: FAR_FUTURE_DATE,
 						},
 					)

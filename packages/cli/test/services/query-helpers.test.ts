@@ -86,7 +86,7 @@ describe("QueryHelpers", () =>
 			);
 
 			// Verify systemFrom is a valid timestamp
-			expect(actualSystemFrom).toBeTypeOf("string");
+			expect(actualSystemFrom).toBeTypeOf("number");
 		});
 
 		it("returns undefined for non-existent ID", () =>

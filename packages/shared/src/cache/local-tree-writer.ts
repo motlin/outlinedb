@@ -436,7 +436,7 @@ class PendingWrites
 	}
 
 	/** Key the placed nodes, then write each changed row once. */
-	flush(systemTime: string): void
+	flush(systemTime: number): void
 	{
 		this.assignOrderKeys();
 		for (const [id, patch] of this.content)
@@ -1257,7 +1257,7 @@ export class LocalTreeWriter
 		pending: PendingWrites,
 		{tx, systemTime}: UnitOfWork,
 		restored: readonly string[],
-		asOf: string,
+		asOf: number,
 	): void
 	{
 		const ids = new Set(restored);

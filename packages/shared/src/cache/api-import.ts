@@ -96,7 +96,7 @@ export interface ApiImportState
 	/** The import's system time and start; the transaction timeout counts from it. */
 	readonly start: UnitOfWorkStart;
 	/** {@link ImportFromApiOptions.snapshotTakenAt} as a system timestamp; undefined applies the snapshot verbatim. */
-	readonly snapshotAt: string | undefined;
+	readonly snapshotAt: number | undefined;
 	readonly seenIds: Set<string>;
 	/** Ids of nodes that failed validation: kept as they are, never ended as deleted. */
 	readonly invalidIds: Set<string>;
@@ -268,7 +268,7 @@ function assignOrderKeys(
  * a live content or metadata version opened after it, or a content version
  * closed after it.
  */
-function writtenAfterSnapshot(tx: UnitOfWork["tx"], ids: string[], snapshotAt: string): Set<string>
+function writtenAfterSnapshot(tx: UnitOfWork["tx"], ids: string[], snapshotAt: number): Set<string>
 {
 	const written = new Set<string>();
 	for (let start = 0; start < ids.length; start += LOOKUP_CHUNK_SIZE)

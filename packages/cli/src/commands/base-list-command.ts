@@ -203,7 +203,7 @@ export abstract class BaseListCommand extends Command
 	private calculateCacheAge(
 		nodes:
 		{
-			systemFrom: string;
+			systemFrom: number;
 		}[],
 	): number
 	{

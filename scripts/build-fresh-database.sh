@@ -175,7 +175,7 @@ table_stats() {
         local total live dups keys
         total=$("${q[@]}" "select count(*) from \"$table\"")
         if [ "$("${q[@]}" "select count(*) from pragma_table_info('$table') where name='system_to'")" = 1 ]; then
-            live=$("${q[@]}" "select count(*) from \"$table\" where system_to='9999-12-31 23:59:59'")
+            live=$("${q[@]}" "select count(*) from \"$table\" where system_to = 9007199254740991")
             keys=$("${q[@]}" "select group_concat(name, ', ') from (select name from pragma_table_info('$table') where pk > 0 and name not in ('system_from', 'system_to') order by pk)")
             if [ -n "$keys" ]; then
                 dups=$("${q[@]}" "select count(*) from (select 1 from \"$table\" group by $keys, system_to having count(*) > 1)")

@@ -55,7 +55,13 @@ function indexes(sqlite: DatabaseConstructor.Database)
 	}[];
 }
 
-/** A database shaped like one that ran the old 0000-0050 chain: non-unique system_to indexes and overlapping rows. */
+/** The far-future `system_to` from before migration 0010, when system times were readable UTC text. */
+const TEXT_FAR_FUTURE = "9999-12-31 23:59:59";
+
+/**
+ * A database shaped like one that ran the old 0000-0050 chain: non-unique system_to indexes and overlapping rows, with
+ * system times as the readable UTC text that migration 0010 converts to microseconds.
+ */
 function legacyDatabase()
 {
 	const sqlite = new DatabaseConstructor(":memory:");
@@ -74,13 +80,13 @@ function legacyDatabase()
 		DROP INDEX calendar_metadata_system_to_idx;
 		CREATE INDEX calendar_metadata_new_system_to_idx ON calendar_metadata (node_id, system_to);
 		INSERT INTO mirrors (mirror_id, original_id, system_from, system_to) VALUES
-			('m1', 'o1', '${systemTimeAt("2026-10-29 20:02:08.971")}', '${systemTimeAt("2026-10-29 20:05:35.365")}'),
-			('m1', 'o1', '${systemTimeAt("2026-10-29 20:02:09.019")}', '${systemTimeAt("2026-10-29 20:05:35.365")}'),
-			('m1', 'o1', '${systemTimeAt("2026-10-29 20:03:00.000")}', '${systemTimeAt("2026-10-29 20:05:35.365")}'),
-			('m2', 'o2', '${systemTimeAt("2026-10-29 20:00:00.000")}', '${FAR_FUTURE_DATE}');
+			('m1', 'o1', '2026-10-29 20:02:08.971', '2026-10-29 20:05:35.365'),
+			('m1', 'o1', '2026-10-29 20:02:09.019', '2026-10-29 20:05:35.365'),
+			('m1', 'o1', '2026-10-29 20:03:00.000', '2026-10-29 20:05:35.365'),
+			('m2', 'o2', '2026-10-29 20:00:00.000', '${TEXT_FAR_FUTURE}');
 		INSERT INTO references_roots (node_id, system_from, system_to) VALUES
-			('r1', '${systemTimeAt("2026-10-29 20:02:08.971")}', '${systemTimeAt("2026-10-29 20:13:30.705")}'),
-			('r1', '${systemTimeAt("2026-10-29 20:02:09.019")}', '${systemTimeAt("2026-10-29 20:13:30.705")}');
+			('r1', '2026-10-29 20:02:08.971', '2026-10-29 20:13:30.705'),
+			('r1', '2026-10-29 20:02:09.019', '2026-10-29 20:13:30.705');
 	`);
 	return sqlite;
 }

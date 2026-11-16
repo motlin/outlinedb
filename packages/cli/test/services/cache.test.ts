@@ -18,7 +18,7 @@ import
 {
 	countStrandedRows,
 	currentBacklinkItems,
-	SameMillisecondOverwriteError,
+	SameMicrosecondOverwriteError,
 	BULK_IMPORT_LEASE_NAME,
 	BULK_IMPORT_TIMEOUT_MS,
 	TRANSACTION_TIMEOUT_MS,
@@ -1486,7 +1486,7 @@ describe("cache import api", () =>
 				vi.useRealTimers();
 			});
 
-			it("fails the later of two imports within one millisecond and keeps the earlier's version", () =>
+			it("fails the later of two imports within one microsecond and keeps the earlier's version", () =>
 			{
 				vi.useFakeTimers(
 					{
@@ -1516,7 +1516,7 @@ describe("cache import api", () =>
 						),
 					]),
 				).toThrow(
-					new SameMillisecondOverwriteError(
+					new SameMicrosecondOverwriteError(
 						"api_import_timestamp",
 						"name=bulk_import",
 						systemTimeAt("2026-02-01 00:00:00.000"),

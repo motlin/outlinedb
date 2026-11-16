@@ -136,7 +136,7 @@ describe("API Sync with Cache", () =>
 					systemTo: FAR_FUTURE_DATE,
 				},
 			);
-			expect(content1SystemFrom).toBeTypeOf("string");
+			expect(content1SystemFrom).toBeTypeOf("number");
 
 			const storedMetadata = testDatabase.db.select().from(nodeMetadata).all();
 			const metadata1 = storedMetadata.find((m) => m.nodeId === "api-root-1");
@@ -521,7 +521,7 @@ describe("API Sync with Cache", () =>
 					systemTo: FAR_FUTURE_DATE,
 				},
 			);
-			expect(actualSystemFrom).toBeTypeOf("string");
+			expect(actualSystemFrom).toBeTypeOf("number");
 
 			expect(fetchStub.mock.calls).toStrictEqual([]);
 		});

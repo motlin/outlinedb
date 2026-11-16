@@ -340,7 +340,7 @@ export function insertMirrorRows(
 		originalId: string;
 		mirrorId: string;
 	}[],
-	importedAt: string,
+	importedAt: number,
 ): void
 {
 	for (const row of rows)

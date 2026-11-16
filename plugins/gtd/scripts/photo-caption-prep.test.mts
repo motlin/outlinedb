@@ -164,7 +164,7 @@ test("journalQuery selects the entries under each date-only day node for the giv
 {
 	assert.strictEqual(
 		journalQuery(["2026-09-21", "2026-09-05"]),
-		'SELECT D.name AS day, E.name AS entry FROM node_content D JOIN node_content E ON E.parent_id=D.id AND E.system_to=\'9999-12-31 23:59:59\' WHERE D.system_to=\'9999-12-31 23:59:59\' AND (D.name LIKE \'<time startYear="2026" startMonth="9" startDay="21">%\' OR D.name LIKE \'<time startYear="2026" startMonth="9" startDay="5">%\');',
+		'SELECT D.name AS day, E.name AS entry FROM node_content D JOIN node_content E ON E.parent_id=D.id AND E.system_to=9007199254740991 WHERE D.system_to=9007199254740991 AND (D.name LIKE \'<time startYear="2026" startMonth="9" startDay="21">%\' OR D.name LIKE \'<time startYear="2026" startMonth="9" startDay="5">%\');',
 	);
 });
 
@@ -382,7 +382,7 @@ test("journaledQuery finds current nodes carrying a minute-precision <time> at a
 				created: "2026-09-05 08:04:00",
 			},
 		]),
-		'SELECT name FROM node_content WHERE system_to=\'9999-12-31 23:59:59\' AND (name LIKE \'%<time startYear="2026" startMonth="10" startDay="6" startHour="19" startMinute="37">%\' OR name LIKE \'%<time startYear="2026" startMonth="9" startDay="5" startHour="8" startMinute="4">%\');',
+		'SELECT name FROM node_content WHERE system_to=9007199254740991 AND (name LIKE \'%<time startYear="2026" startMonth="10" startDay="6" startHour="19" startMinute="37">%\' OR name LIKE \'%<time startYear="2026" startMonth="9" startDay="5" startHour="8" startMinute="4">%\');',
 	);
 });
 
@@ -535,8 +535,8 @@ test("withDatabaseCopy deletes the Photos DB copy even when the callback throws"
 test("cacheIsStale compares the newest cached node version (UTC) with the allowed age", () =>
 {
 	const now = Date.parse("2026-10-26T10:00:00Z");
-	assert.strictEqual(cacheIsStale("2026-10-26 09:30:00.000", now, 60), false);
-	assert.strictEqual(cacheIsStale("2026-10-26 08:59:00.000", now, 60), true);
+	assert.strictEqual(cacheIsStale(Date.parse("2026-10-26T09:30:00Z") * 1000, now, 60), false);
+	assert.strictEqual(cacheIsStale(Date.parse("2026-10-26T08:59:00Z") * 1000, now, 60), true);
 	assert.strictEqual(cacheIsStale(null, now, 60), true);
 });
 

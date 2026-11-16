@@ -206,7 +206,7 @@ export const NON_NODE_ID_COLUMNS: Readonly<Record<string, string>> =
 export interface UnitOfWork
 {
 	tx: TemporalTransaction;
-	systemTime: string;
+	systemTime: number;
 }
 
 /**

@@ -54,7 +54,7 @@ describe("transaction timeout", () =>
 		return db;
 	}
 
-	function insertNode(tx: Parameters<Parameters<typeof runUnitOfWork>[1]>[0]["tx"], id: string, systemTime: string)
+	function insertNode(tx: Parameters<Parameters<typeof runUnitOfWork>[1]>[0]["tx"], id: string, systemTime: number)
 	{
 		tx.insert(nodeContent)
 			.values(

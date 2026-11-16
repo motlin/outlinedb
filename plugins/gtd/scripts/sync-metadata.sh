@@ -124,7 +124,7 @@ db, out = sys.argv[1], sys.argv[2]
 con = sqlite3.connect(db)
 rows = con.execute(
     "SELECT name FROM node_content "
-    "WHERE system_to='9999-12-31 23:59:59' AND name LIKE '%#%'"
+    "WHERE system_to = 9007199254740991 AND name LIKE '%#%'"
 ).fetchall()
 tagre = re.compile(r'(?<![\w&])#([A-Za-z][A-Za-z0-9_-]*)')
 htmlre = re.compile(r'<[^>]+>')

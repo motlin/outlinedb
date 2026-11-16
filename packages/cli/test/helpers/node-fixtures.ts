@@ -16,8 +16,8 @@ export interface TestNode
 	modifiedAt: Date | null;
 	completedAt: Date | null;
 	layoutMode: string | null;
-	systemFrom: string;
-	systemTo: string;
+	systemFrom: number;
+	systemTo: number;
 }
 
 /** The order key of a 0-based sibling index: the fractional-indexing integer key, so index order is key order. */
@@ -100,8 +100,8 @@ export function createNodeFromContent(
 		name: string | null;
 		note: string | null;
 		parentId: string | null;
-		systemFrom: string;
-		systemTo: string;
+		systemFrom: number;
+		systemTo: number;
 	}>,
 ): TestNode
 {
@@ -110,8 +110,8 @@ export function createNodeFromContent(
 		name: content.name ?? null,
 		note: content.note ?? null,
 		parentId: content.parentId ?? null,
-		systemFrom: content.systemFrom ?? "",
-		systemTo: content.systemTo ?? "",
+		systemFrom: content.systemFrom ?? 0,
+		systemTo: content.systemTo ?? 0,
 		shortId: null,
 		priority: null,
 		createdAt: null,

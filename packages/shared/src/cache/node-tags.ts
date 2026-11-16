@@ -12,7 +12,7 @@ import type {TemporalTransaction} from "./temporal-merge.js";
  * Closed rows, as a literal so the partial `*_closed_at_idx` indexes (whose WHERE is this same term) apply;
  * SQLite matches a partial index's WHERE only against literal terms, never bound parameters.
  */
-const CLOSED = sql.raw(`system_to < '${FAR_FUTURE_DATE}'`);
+const CLOSED = sql.raw(`system_to < ${String(FAR_FUTURE_DATE)}`);
 
 /** Ids per statement: each batch travels as one JSON parameter, as a Durable Object caps bound parameters. */
 const BATCH_SIZE = 500;
@@ -72,7 +72,7 @@ function rewriteTags(tx: TemporalTransaction, ids: readonly string[]): void
  * that unit's transaction. One query per table and column: a Durable Object's SQLite rejects compound selects with
  * more than a few terms.
  */
-export function syncNodeTags(tx: TemporalTransaction, systemTime: string): void
+export function syncNodeTags(tx: TemporalTransaction, systemTime: number): void
 {
 	const ids = new Set<string>();
 	for (const [table, column] of [

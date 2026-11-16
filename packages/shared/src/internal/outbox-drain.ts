@@ -133,7 +133,7 @@ const entryKey = ({nodeId, aspect}: OutboxEntry): string => `${nodeId}\u001F${as
 
 const internalParent = (parentId: string | null): string => parentId ?? ROOT_PROJECT_ID;
 
-function versionAt(table: typeof nodeContent | typeof nodeMetadata, asOf: string | undefined): SQL | undefined
+function versionAt(table: typeof nodeContent | typeof nodeMetadata, asOf: number | undefined): SQL | undefined
 {
 	return asOf === undefined ? currentVersion(table) : and(lte(table.systemFrom, asOf), gt(table.systemTo, asOf));
 }
@@ -181,7 +181,7 @@ function readStates(tx: TemporalTransaction, ids: readonly string[]): Map<string
 function siblingsAt(
 	tx: TemporalTransaction,
 	parents: readonly (string | null)[],
-	asOf?: string,
+	asOf?: number,
 ): Map<string | null, string[]>
 {
 	const result = new Map<string | null, string[]>(parents.map((parent) => [parent, []]));
@@ -216,10 +216,10 @@ function siblingsAt(
 }
 
 /** What workflowy.com holds of each node: its local state at its `asOf`, grouped into one read set per time. */
-function readUpstreamStates(tx: TemporalTransaction, asOfById: ReadonlyMap<string, string>): Map<string, UpstreamState>
+function readUpstreamStates(tx: TemporalTransaction, asOfById: ReadonlyMap<string, number>): Map<string, UpstreamState>
 {
 	const result = new Map<string, UpstreamState>();
-	const byTime = new Map<string, string[]>();
+	const byTime = new Map<number, string[]>();
 	for (const [id, asOf] of asOfById)
 	{
 		byTime.set(asOf, [...(byTime.get(asOf) ?? []), id]);
@@ -396,10 +396,10 @@ interface RemovedMirror
  * The mirrors each original had at its `asOf` (what workflowy.com lists on it) that are gone locally now, grouped
  * into one read set per time.
  */
-function removedMirrors(tx: TemporalTransaction, asOfById: ReadonlyMap<string, string>): Map<string, RemovedMirror[]>
+function removedMirrors(tx: TemporalTransaction, asOfById: ReadonlyMap<string, number>): Map<string, RemovedMirror[]>
 {
 	const result = new Map<string, RemovedMirror[]>();
-	const byTime = new Map<string, string[]>();
+	const byTime = new Map<number, string[]>();
 	for (const [id, asOf] of asOfById)
 	{
 		byTime.set(asOf, [...(byTime.get(asOf) ?? []), id]);
@@ -505,7 +505,7 @@ function restoredNodes(tx: TemporalTransaction, creates: readonly PendingOutboxR
 			.select(
 				{
 					id: nodeContent.id,
-					since: sql<string>`min(${nodeContent.systemFrom})`,
+					since: sql<number>`min(${nodeContent.systemFrom})`,
 				},
 			)
 			.from(nodeContent)
@@ -536,7 +536,7 @@ function upstreamLinks(
 	{
 		mirrorId: string;
 		originalId: string;
-		asOf: string;
+		asOf: number;
 	}[],
 ): Set<string>
 {
@@ -673,7 +673,7 @@ function planDrain(
 		dateJoinedSec: session.dateJoinedSec,
 	};
 	const aspectsOf = new Map<string, Set<OutboxAspect>>();
-	const oldest = new Map<string, string>();
+	const oldest = new Map<string, number>();
 	for (const row of rows)
 	{
 		let aspects = aspectsOf.get(row.nodeId);
@@ -707,7 +707,7 @@ function planDrain(
 		new Map(
 			ids
 				.filter((id) => !has(id, "create") || revived.has(id))
-				.map((id) => [id, temporalTimestampJustBefore(oldest.get(id) ?? "")] as const),
+				.map((id) => [id, temporalTimestampJustBefore(oldest.get(id) ?? 0)] as const),
 		),
 	);
 
@@ -999,7 +999,7 @@ function planDrain(
 				return {
 					mirrorId: id,
 					originalId: originalOf(id),
-					asOf: temporalTimestampJustBefore(times.toSorted()[0] ?? ""),
+					asOf: temporalTimestampJustBefore(Math.min(...times)),
 				};
 			}),
 	);
@@ -1049,7 +1049,7 @@ function planDrain(
 						states.has(id) &&
 						states.get(id)?.relationships.mirror?.originalId === undefined,
 				)
-				.map((id) => [id, temporalTimestampJustBefore(oldest.get(id) ?? "")] as const),
+				.map((id) => [id, temporalTimestampJustBefore(oldest.get(id) ?? 0)] as const),
 		),
 	);
 	const originalIds = [...new Set([...added.keys(), ...removed.keys()])];

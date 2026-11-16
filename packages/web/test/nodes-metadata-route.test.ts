@@ -92,7 +92,7 @@ interface FakeAdapter
 
 /**
  * Home holds `n1`, seeded with `n1` overrides so a test never rewrites it before the request: a second
- * write of one row in the seed's millisecond is a SameMillisecondOverwriteError. The fake adapter writes
+ * write of one row in the seed's millisecond is a SameMicrosecondOverwriteError. The fake adapter writes
  * metadata changes to the cache as the real one does.
  */
 function setup(

@@ -1,23 +1,39 @@
 import {formatTemporalTimestamp} from "../temporal/constants.js";
 
+const IS_WORKERS = globalThis.navigator.userAgent === "Cloudflare-Workers";
+
 /**
- * The system time for one unit of work: the application's UTC clock, read once.
- * Following Reladomo's per-transaction processing time, every `system_from` and
- * `system_to` a unit writes takes this one value, even when the unit spans
- * several transactions. Two units may share a millisecond and need not be
- * monotonic: a unit that lands after another but read the clock earlier is
- * normal. A unit closing a version stamped at its own millisecond fails with
- * `SameMillisecondOverwriteError` and rolls back.
+ * The wall clock in whole microseconds since the epoch. Node reads its highest-resolution wall clock. Workers'
+ * clock is millisecond-resolution and frozen for the whole request (a Spectre mitigation), so there every read
+ * within one request is the same `Date.now() * 1000`.
  */
-export function newSystemTime(): Date
+export function readWallClockMicros(): number
 {
-	return new Date(Date.now());
+	if (IS_WORKERS)
+	{
+		return Date.now() * 1000;
+	}
+	return Math.floor((performance.timeOrigin + performance.now()) * 1000);
 }
 
-/** {@link newSystemTime} formatted for a `system_from`/`system_to` column. */
-export function newSystemTimestamp(): string
+/** The clock system times are read from. Tests swap `readMicros` to follow a faked `Date`; production never does. */
+export const systemClock =
 {
-	return formatTemporalTimestamp(newSystemTime());
+	readMicros: readWallClockMicros,
+};
+
+/**
+ * The system time for one unit of work: the application's UTC clock in microseconds, read once.
+ * Following Reladomo's per-transaction processing time, every `system_from` and
+ * `system_to` a unit writes takes this one value, even when the unit spans
+ * several transactions. Two units may share a microsecond and need not be
+ * monotonic: a unit that lands after another but read the clock earlier is
+ * normal. A unit closing a version stamped at its own microsecond fails with
+ * `SameMicrosecondOverwriteError` and rolls back.
+ */
+export function newSystemTimestamp(): number
+{
+	return systemClock.readMicros();
 }
 
 /**
@@ -40,7 +56,7 @@ export const BULK_IMPORT_TIMEOUT_MS = 15 * 60_000;
 /** A unit of work that would commit after its timeout, {@link TRANSACTION_TIMEOUT_MS} unless it is a bulk import. */
 export class TransactionTimeoutError extends Error
 {
-	constructor(systemTime: string, elapsedMs: number, timeoutMs = TRANSACTION_TIMEOUT_MS)
+	constructor(systemTime: number, elapsedMs: number, timeoutMs = TRANSACTION_TIMEOUT_MS)
 	{
 		super(
 			`Unit of work stamped ${systemTime} would commit ${elapsedMs}ms after it started, past the ${timeoutMs}ms transaction timeout; rolled back`,
@@ -52,7 +68,8 @@ export class TransactionTimeoutError extends Error
 /** A unit of work's system time with the wall-clock instant it was read, which its timeout counts from. */
 export interface UnitOfWorkStart
 {
-	systemTime: string;
+	systemTime: number;
+	/** `Date.now()` milliseconds: the timeout counts in wall-clock milliseconds, not system-time microseconds. */
 	startedAt: number;
 }
 
@@ -60,13 +77,18 @@ export interface UnitOfWorkStart
  * Start a unit of work: read the clock once for its system time and its start.
  * `systemTime` overrides the stamp (tests, replays) without moving the start.
  */
-export function startUnitOfWork(systemTime?: Date): UnitOfWorkStart
+export function startUnitOfWork(systemTime?: Date | number): UnitOfWorkStart
 {
 	const startedAt = Date.now();
 	return {
-		systemTime: formatTemporalTimestamp(systemTime ?? new Date(startedAt)),
+		systemTime: systemTime === undefined ? newSystemTimestamp() : toSystemTime(systemTime),
 		startedAt,
 	};
+}
+
+function toSystemTime(time: Date | number): number
+{
+	return typeof time === "number" ? time : formatTemporalTimestamp(time);
 }
 
 function elapsedSince(start: UnitOfWorkStart): number

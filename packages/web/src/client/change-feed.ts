@@ -288,9 +288,10 @@ export class ChangeFeed
 		this.#advance(changes.latest);
 	}
 
+	/** Marks are decimal microsecond system times, so they compare as numbers. */
 	#advance(latest: string): void
 	{
-		if (this.#mark === undefined || latest > this.#mark)
+		if (this.#mark === undefined || Number(latest) > Number(this.#mark))
 		{
 			this.#mark = latest;
 		}

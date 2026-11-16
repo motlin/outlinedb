@@ -13,7 +13,7 @@ import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 const ListOutputSchema = z.array(
 	z.looseObject(
 		{
-			systemFrom: z.string().optional(),
+			systemFrom: z.number().optional(),
 		},
 	),
 );

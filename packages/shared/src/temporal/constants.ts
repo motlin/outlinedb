@@ -1,52 +1,50 @@
 /**
- * The far future date used to indicate current/active records in temporal tables.
- * Records with systemTo set to this value are considered "current".
+ * The `system_to` of a current row in a temporal table. System times are integer microseconds since the epoch;
+ * 9999-12-31 in microseconds exceeds 2^53, so the sentinel is the largest integer a JavaScript number holds exactly
+ * (9007199254740991 µs, 2255-06-05).
  */
-export const FAR_FUTURE_DATE = "9999-12-31 23:59:59";
+export const FAR_FUTURE_DATE = Number.MAX_SAFE_INTEGER;
 
 /**
  * Checks if a record is current based on its systemTo timestamp.
  * Current records have systemTo set to FAR_FUTURE_DATE.
  */
-export function isCurrentRecord(systemTo: string): boolean
+export function isCurrentRecord(systemTo: number): boolean
 {
 	return systemTo === FAR_FUTURE_DATE;
 }
 
-/**
- * The stored `system_from`/`system_to` value for the UTC instant written as `YYYY-MM-DD HH:MM:SS[.sss]`.
- * Tests build every system time through this, so changing the storage encoding changes this one function.
- */
-export function systemTimeAt(text: string): string
-{
-	return text;
-}
+const READABLE_UTC = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?$/u;
 
 /**
- * Formats a Date object as a temporal timestamp string with millisecond precision.
- * Format: 'YYYY-MM-DD HH:MM:SS.sss' (ISO8601 without timezone)
+ * The stored `system_from`/`system_to` value for the UTC instant written as `YYYY-MM-DD HH:MM:SS[.ffffff]`.
+ * Tests build every system time through this, and `cache temporal-rollback` parses its target with it.
  */
-export function formatTemporalTimestamp(date: Date): string
+export function systemTimeAt(text: string): number
 {
-	const year = date.getUTCFullYear();
-	const month = String(date.getUTCMonth() + 1).padStart(2, "0");
-	const day = String(date.getUTCDate()).padStart(2, "0");
-	const hours = String(date.getUTCHours()).padStart(2, "0");
-	const minutes = String(date.getUTCMinutes()).padStart(2, "0");
-	const seconds = String(date.getUTCSeconds()).padStart(2, "0");
-	const milliseconds = String(date.getUTCMilliseconds()).padStart(3, "0");
-
-	return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${milliseconds}`;
+	const match = READABLE_UTC.exec(text);
+	if (match === null)
+	{
+		throw new Error(`Not a UTC system time: ${text}`);
+	}
+	const [, seconds = "", fraction = ""] = match;
+	return Date.parse(`${seconds.replace(" ", "T")}Z`) * 1000 + Number(fraction.padEnd(6, "0"));
 }
 
-/** Parses a stored `system_from`/`system_to` value (see {@link formatTemporalTimestamp}) as a UTC instant. */
-export function parseTemporalTimestamp(timestamp: string): Date
+/** The stored system time of a Date: its milliseconds as microseconds since the epoch. */
+export function formatTemporalTimestamp(date: Date): number
 {
-	return new Date(`${timestamp.replace(" ", "T")}Z`);
+	return date.getTime() * 1000;
 }
 
-/** The system time one tick before `timestamp`: reading as of it sees the rows a unit at `timestamp` replaced. */
-export function temporalTimestampJustBefore(timestamp: string): string
+/** Parses a stored `system_from`/`system_to` value (microseconds since the epoch) as a UTC instant, floored to the millisecond. */
+export function parseTemporalTimestamp(timestamp: number): Date
 {
-	return formatTemporalTimestamp(new Date(parseTemporalTimestamp(timestamp).getTime() - 1));
+	return new Date(Math.floor(timestamp / 1000));
+}
+
+/** The system time one tick (one microsecond) before `timestamp`: reading as of it sees the rows a unit at `timestamp` replaced. */
+export function temporalTimestampJustBefore(timestamp: number): number
+{
+	return timestamp - 1;
 }

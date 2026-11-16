@@ -152,7 +152,7 @@ Colors use `<span>` with CSS classes:
 ```sql
 SELECT id, name FROM node_content
 WHERE name LIKE '%<a href="https://workflowy.com%'
-AND system_to = '9999-12-31 23:59:59';
+AND system_to = 9007199254740991;
 ```
 
 **Find nodes with dates:**
@@ -160,7 +160,7 @@ AND system_to = '9999-12-31 23:59:59';
 ```sql
 SELECT id, name FROM node_content
 WHERE name LIKE '%<time %'
-AND system_to = '9999-12-31 23:59:59';
+AND system_to = 9007199254740991;
 ```
 
 **Find nodes with specific color:**
@@ -168,7 +168,7 @@ AND system_to = '9999-12-31 23:59:59';
 ```sql
 SELECT id, name FROM node_content
 WHERE name LIKE '%c-red%'
-AND system_to = '9999-12-31 23:59:59';
+AND system_to = 9007199254740991;
 ```
 
 ## Regex Patterns (TypeScript)

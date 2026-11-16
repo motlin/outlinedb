@@ -5,14 +5,8 @@
  * exactly those with `system_from` or a closing `system_to` after the cache's last system time.
  */
 
-import {bulkImportLeaseStart, TRANSACTION_TIMEOUT_MS} from "@outlinedb/shared/cache";
-import
-{
-	FAR_FUTURE_DATE,
-	formatTemporalTimestamp,
-	parseTemporalTimestamp,
-	temporalTimestampJustBefore,
-} from "@outlinedb/shared/temporal";
+import {bulkImportLeaseStart, newSystemTimestamp, TRANSACTION_TIMEOUT_MS} from "@outlinedb/shared/cache";
+import {FAR_FUTURE_DATE, temporalTimestampJustBefore} from "@outlinedb/shared/temporal";
 import {sql} from "drizzle-orm";
 import type {SQL} from "drizzle-orm";
 import type {AppDatabase} from "@outlinedb/shared/db";
@@ -23,22 +17,22 @@ type Database = AppDatabase;
  * Closed rows, as a literal so the partial `*_closed_at_idx` indexes (whose WHERE is this same term) apply;
  * SQLite matches a partial index's WHERE only against literal terms, never bound parameters.
  */
-const CLOSED = sql.raw(`system_to < '${FAR_FUTURE_DATE}'`);
+const CLOSED = sql.raw(`system_to < ${String(FAR_FUTURE_DATE)}`);
 
 /**
  * The newest system time any node, metadata, mirror, references-root or AI-metadata row was opened or closed at.
  * One query per table and column: a Durable Object's SQLite rejects compound selects with more than a few terms.
  */
-export function latestSystemTime(database: Database): string
+export function latestSystemTime(database: Database): number
 {
-	let latest = "";
+	let latest = 0;
 	for (const table of ["node_content", "node_metadata", "mirrors", "references_roots", "ai_metadata"])
 	{
 		const name = sql.identifier(table);
 		const {opened, closed} = database.get<
 		{
-			opened: string | null;
-			closed: string | null;
+			opened: number | null;
+			closed: number | null;
 		}>(sql`
 			SELECT
 				(SELECT max(system_from) FROM ${name}) AS opened,
@@ -60,17 +54,16 @@ export function latestSystemTime(database: Database): string
  * {@link TRANSACTION_TIMEOUT_MS} before it commits, so a cache built between the two would otherwise miss that write.
  * Re-reading that window is cheap and patching a row twice is harmless.
  */
-export function changesSince(latest: string): string
+export function changesSince(latest: number): number
 {
-	const ms = parseTemporalTimestamp(latest).getTime();
-	return Number.isNaN(ms) ? "" : formatTemporalTimestamp(new Date(ms - TRANSACTION_TIMEOUT_MS));
+	return latest - TRANSACTION_TIMEOUT_MS * 1000;
 }
 
 /**
  * The ids of `table` rows opened or closed after `since`, possibly repeated. UNION ALL keeps each leg a range
  * seek on its system-time index; a deduplicating UNION lets newer SQLite plan a merge over a full key scan.
  */
-function changedIn(table: string, column: string, since: string): SQL
+function changedIn(table: string, column: string, since: number): SQL
 {
 	const name = sql.identifier(table);
 	const id = sql.identifier(column);
@@ -86,7 +79,7 @@ function changedIn(table: string, column: string, since: string): SQL
  * (a mirror shows its original's text). Each leg is its own query, because a Durable Object's SQLite rejects
  * compound selects with more than a few terms.
  */
-export function changedNodeIds(database: Database, since: string, limit: number): Set<string> | undefined
+export function changedNodeIds(database: Database, since: number, limit: number): Set<string> | undefined
 {
 	const ids = new Set<string>();
 	const collect = (query: SQL): boolean =>
@@ -127,12 +120,12 @@ export function readConsistently<T>(database: Database, read: () => T): T
  * {@link TRANSACTION_TIMEOUT_MS}. A unit of work that would commit later than that after reading its system time rolls
  * back, so every row stamped at or before the watermark has already committed or never will; a reader that next asks
  * for rows opened or closed after it cannot miss a late commit. The price is re-reading the last timeout window.
- * A bulk import may run longer, so while its lease is open the watermark stays a millisecond before the lease, and
+ * A bulk import may run longer, so while its lease is open the watermark stays a microsecond before the lease, and
  * the import's rows, all stamped at or after the lease, land after it.
  */
-export function changeWatermark(database: Database): string
+export function changeWatermark(database: Database): number
 {
-	const watermark = formatTemporalTimestamp(new Date(Date.now() - TRANSACTION_TIMEOUT_MS));
+	const watermark = newSystemTimestamp() - TRANSACTION_TIMEOUT_MS * 1000;
 	const lease = bulkImportLeaseStart(database);
 	if (lease === undefined)
 	{
@@ -142,8 +135,8 @@ export function changeWatermark(database: Database): string
 	return beforeLease < watermark ? beforeLease : watermark;
 }
 
-/** A temporal timestamp as {@link changeWatermark} formats it. */
-const WATERMARK = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$/u;
+/** A {@link changeWatermark} as clients send it back: its microseconds in decimal. */
+const WATERMARK = /^\d{1,16}$/u;
 
 /** What changed after a {@link changeWatermark}. */
 export interface ChangesAfter
@@ -155,13 +148,14 @@ export interface ChangesAfter
 }
 
 /**
- * {@link ChangesAfter} the watermark `after`, or undefined when the client must refetch everything instead: the
- * watermark is not one this server issued (not a timestamp, or past the current watermark), or more than `limit`
+ * {@link ChangesAfter} the watermark `mark`, or undefined when the client must refetch everything instead: the
+ * watermark is not one this server issued (not a decimal system time, or past the current watermark), or more than `limit`
  * nodes changed. Rows re-read from the last timeout window repeat across polls; the id set reports each node once.
  */
-export function changesAfter(database: Database, after: string, limit: number): ChangesAfter | undefined
+export function changesAfter(database: Database, mark: string, limit: number): ChangesAfter | undefined
 {
-	if (!WATERMARK.test(after) || after > changeWatermark(database))
+	const after = Number(mark);
+	if (!WATERMARK.test(mark) || after > changeWatermark(database))
 	{
 		return undefined;
 	}

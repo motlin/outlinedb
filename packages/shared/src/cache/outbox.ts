@@ -102,7 +102,7 @@ export function pendingAspects(tx: TemporalTransaction, nodeIds: readonly string
 /** One current outbox row. */
 export interface PendingOutboxRow extends OutboxEntry
 {
-	enqueuedAt: string;
+	enqueuedAt: number;
 	lastError: string | null;
 }
 
@@ -210,7 +210,7 @@ export interface OutboxStatus
 	/** Current (pending) rows. */
 	pending: number;
 	/** The oldest pending row's `enqueued_at`, or null when nothing is pending. */
-	oldestEnqueuedAt: string | null;
+	oldestEnqueuedAt: number | null;
 	/** The newest failure still on a pending row, or null. */
 	lastError: string | null;
 }
@@ -221,7 +221,7 @@ export function outboxStatus(tx: TemporalTransaction): OutboxStatus
 		.select(
 			{
 				pending: sql<number>`count(*)`,
-				oldestEnqueuedAt: sql<string | null>`min(${outbox.enqueuedAt})`,
+				oldestEnqueuedAt: sql<number | null>`min(${outbox.enqueuedAt})`,
 			},
 		)
 		.from(outbox)
@@ -240,7 +240,9 @@ export function outboxStatus(tx: TemporalTransaction): OutboxStatus
 		.limit(1)
 		.get();
 	const account = accountOutboxStatus(tx);
-	const oldest = [summary?.oldestEnqueuedAt ?? null, account.oldestEnqueuedAt].filter((at) => at !== null).toSorted();
+	const oldest = [summary?.oldestEnqueuedAt ?? null, account.oldestEnqueuedAt]
+		.filter((at) => at !== null)
+		.toSorted((a, b) => a - b);
 	const accountFailedLater =
 		account.lastErrorAt !== null && (failed === undefined || account.lastErrorAt > failed.systemFrom);
 	return {

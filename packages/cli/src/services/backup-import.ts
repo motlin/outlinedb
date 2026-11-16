@@ -22,8 +22,8 @@ export interface BackupImportStats
 	nodesKeptDeleted: number;
 	skipped?: boolean;
 	skipReason?: string;
-	localWatermark?: string | null;
-	incomingWatermark?: string | null;
+	localWatermark?: number | null;
+	incomingWatermark?: number | null;
 }
 
 export interface BackupFileNode

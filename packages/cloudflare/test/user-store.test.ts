@@ -34,7 +34,7 @@ describe("user store Durable Object behind the Worker", () =>
 
 		// The probe path is not routed by the Worker, so reach the DO directly.
 		const {names, migrations} = await probeStore(harness.mf);
-		expect(migrations).toBe(10);
+		expect(migrations).toBe(11);
 		const wanted = [
 			"account",
 			"calendar_layout_applies",
@@ -87,7 +87,7 @@ describe("user store Durable Object behind the Worker", () =>
 			tables.map((table) => [
 				table.name,
 				{
-					temporal: /system_from TEXT NOT NULL.*system_to TEXT NOT NULL/su.test(table.sql),
+					temporal: /system_from INTEGER NOT NULL.*system_to INTEGER NOT NULL/su.test(table.sql),
 					indexes: syncRows
 						.filter((row) => row.type === "index" && row.sql.includes(`ON ${table.name} `))
 						.map((row) => row.name),
@@ -344,8 +344,8 @@ describe("user store restart", () =>
 		{
 			await expect(probe(first)).resolves.toMatchObject(
 				{
-					migrations: 10,
-					appliedOnBoot: 10,
+					migrations: 11,
+					appliedOnBoot: 11,
 				},
 			);
 			await first.dispose(true);
@@ -354,7 +354,7 @@ describe("user store restart", () =>
 			{
 				await expect(probe(second)).resolves.toMatchObject(
 					{
-						migrations: 10,
+						migrations: 11,
 						appliedOnBoot: 0,
 					},
 				);

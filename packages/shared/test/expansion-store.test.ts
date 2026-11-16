@@ -43,9 +43,9 @@ describe("expansion store", () =>
 	}
 	type Db = ReturnType<typeof database>;
 
-	function at(db: Db, time: string, work: Parameters<typeof runUnitOfWork>[1])
+	function at(db: Db, time: number, work: Parameters<typeof runUnitOfWork>[1])
 	{
-		return runUnitOfWork(db, work, startUnitOfWork(new Date(`${time}Z`)));
+		return runUnitOfWork(db, work, startUnitOfWork(time));
 	}
 
 	function rows(db: Db)

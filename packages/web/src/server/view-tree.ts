@@ -59,7 +59,7 @@ export interface ViewTreeQuery
 }
 
 /** The current-version marker inlined as a literal, so the walk binds only the request's own values. */
-const LIVE = sql.raw(`'${FAR_FUTURE_DATE}'`);
+const LIVE = sql.raw(String(FAR_FUTURE_DATE));
 
 const REFERENCES_ROOTS = sql`(SELECT node_id FROM references_roots WHERE system_to = ${LIVE})`;
 const IN_CHAT = sql`(SELECT node_id FROM ai_metadata WHERE in_chat = 1 AND system_to = ${LIVE})`;

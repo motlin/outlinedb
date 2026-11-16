@@ -28,7 +28,7 @@ import {spawnSync} from "node:child_process";
 import {constants, copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync} from "node:fs";
 import {homedir} from "node:os";
 import {join, resolve} from "node:path";
-import {expectArray, expectObject, parseJson, stringField} from "./json.mts";
+import {expectArray, expectObject, numberField, parseJson, stringField} from "./json.mts";
 import type {JsonObject} from "./json.mts";
 import {isMain} from "./is-main.mts";
 
@@ -105,7 +105,7 @@ const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/u;
 const TIMESTAMP_RE = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/u;
 const MINUTE_TIME_RE =
 	/<time startYear="(\d+)" startMonth="(\d+)" startDay="(\d+)" startHour="(\d+)" startMinute="(\d+)">/gu;
-const CURRENT = "system_to='9999-12-31 23:59:59'";
+const CURRENT = "system_to=9007199254740991";
 const EMOJI_RE = /\p{Extended_Pictographic}|\p{Regional_Indicator}|[\u{1F3FB}-\u{1F3FF}]|\uFE0F|\u200D/gu;
 const ENTITIES: Record<string, string> =
 {
@@ -247,20 +247,20 @@ export function groupJournal(rows: JournalRow[]): Record<string, string[]>
 // The journal seeds and journaled check read the Workflowy cache, so a cache
 // older than maxAgeMinutes means entries written since (e.g. in the app) are
 // invisible and captions would start from an old version of the notes.
-export function cacheIsStale(latestSystemFrom: string | null, nowMs: number, maxAgeMinutes: number): boolean
+// System times are integer microseconds since the epoch.
+export function cacheIsStale(latestSystemFrom: number | null, nowMs: number, maxAgeMinutes: number): boolean
 {
-	if (!latestSystemFrom)
+	if (latestSystemFrom === null)
 	{
 		return true;
 	}
-	const latest = Date.parse(`${latestSystemFrom.replace(" ", "T")}Z`);
-	return Number.isNaN(latest) || nowMs - latest > maxAgeMinutes * 60_000;
+	return nowMs - latestSystemFrom / 1000 > maxAgeMinutes * 60_000;
 }
 
 function refreshStaleCache(workflowyDb: string): void
 {
 	const [row] = sqliteJson(workflowyDb, "SELECT max(system_from) AS latest FROM node_content;");
-	const latest = row ? (stringField(row, "latest") ?? null) : null;
+	const latest = row ? (numberField(row, "latest") ?? null) : null;
 	if (!cacheIsStale(latest, Date.now(), 60))
 	{
 		return;
