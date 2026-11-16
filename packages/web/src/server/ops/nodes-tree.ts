@@ -343,6 +343,15 @@ function moveNodes(
 				},
 			);
 		}
+		if (parent.parentId !== null && !ctx.cacheService.getNode(parent.parentId))
+		{
+			return fail(
+				404,
+				{
+					error: "Parent node not found",
+				},
+			);
+		}
 		blocks.push(
 			{
 				ids,

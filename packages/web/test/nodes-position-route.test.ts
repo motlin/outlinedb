@@ -473,6 +473,65 @@ describe("POST /api/v1/nodes/:id/move and /move in mirror mode", () =>
 		);
 	});
 
+	it("rejects a move into a deleted or unknown parent with 404 and writes nothing", async () =>
+	{
+		const {cacheService, order, pending, post} = setup(true);
+		// Deleted upstream and already caught up: no pending delete.
+		cacheService.deleteNode("c");
+
+		const single = await post(
+			"/a/move",
+			{
+				parent_id: "c",
+			},
+		);
+		const block = await post(
+			"/move",
+			{
+				ids: ["a", "b"],
+				parent_id: NEW_ID,
+			},
+		);
+
+		expect(
+			{
+				single:
+				{
+					status: single.status,
+					body: await single.json(),
+				},
+				block:
+				{
+					status: block.status,
+					body: await block.json(),
+				},
+				order: order(null),
+				pending: pending(),
+			},
+		).toStrictEqual(
+			{
+				single:
+				{
+					status: 404,
+					body:
+					{
+						error: "Parent node not found",
+					},
+				},
+				block:
+				{
+					status: 404,
+					body:
+					{
+						error: "Parent node not found",
+					},
+				},
+				order: ["a", "b"],
+				pending: [],
+			},
+		);
+	});
+
 	it("rejects a body without ids", async () =>
 	{
 		const {pending, post} = setup(true);
