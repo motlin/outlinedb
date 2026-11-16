@@ -16,16 +16,16 @@ import {calendarNodeId, calendarRootId} from "../src/internal/calendar-ids.js";
 import {drainOutbox} from "../src/internal/outbox-drain.js";
 import type {OutboxPusher} from "../src/internal/outbox-drain.js";
 import type {InternalOp} from "../src/internal/push-and-poll.js";
-import {FAR_FUTURE_DATE} from "../src/temporal/constants.js";
+import {FAR_FUTURE_DATE, parseTemporalTimestamp, systemTimeAt} from "../src/temporal/constants.js";
 
 const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
-const SEEDED_AT = "2026-01-01 00:00:00.000";
+const SEEDED_AT = systemTimeAt("2026-01-01 00:00:00.000");
 const SEEDED = new Date("2026-01-01T00:00:00.000Z");
 /** The account's join date: 2026-01-01T00:00:00Z. */
 const JOINED_SEC = 1_767_225_600;
 const USER_ID = 42;
 /** When each test's drain runs. */
-const DRAIN = "2026-03-02 00:00:00.000";
+const DRAIN = systemTimeAt("2026-03-02 00:00:00.000");
 /** The drain's client timestamp: 60 days after the join date. */
 const CT = 60 * 86_400;
 
@@ -44,12 +44,12 @@ const SEED: [id: string, parentId: string | null, key: string][] = [
 /** The system time `seconds` after 2026-03-01 00:00:00 UTC, when the test's writes start. */
 function at(seconds: number): string
 {
-	return `2026-03-01 00:00:${String(seconds).padStart(2, "0")}.000`;
+	return systemTimeAt(`2026-03-01 00:00:${String(seconds).padStart(2, "0")}.000`);
 }
 
 function setClock(systemTime: string): void
 {
-	vi.setSystemTime(new Date(`${systemTime.replace(" ", "T")}Z`));
+	vi.setSystemTime(parseTemporalTimestamp(systemTime));
 }
 
 function setup()
@@ -879,7 +879,7 @@ describe("drainOutbox", () =>
 				(ops) => ops,
 				() =>
 				{
-					setClock("2026-03-02 00:00:01.000");
+					setClock(systemTimeAt("2026-03-02 00:00:01.000"));
 					writer.updateNode(
 						"a",
 						{
@@ -916,7 +916,7 @@ describe("drainOutbox", () =>
 						"name",
 						at(0),
 						{
-							systemTo: "2026-03-02 00:00:01.000",
+							systemTo: systemTimeAt("2026-03-02 00:00:01.000"),
 						},
 					),
 				],
@@ -1184,7 +1184,7 @@ describe("drainOutbox", () =>
 		writer.syncBacklinks(["a"]);
 		setClock(DRAIN);
 		const linked = await drainOutbox(database, pusher());
-		const UNLINKED = "2026-03-02 00:00:10.000";
+		const UNLINKED = systemTimeAt("2026-03-02 00:00:10.000");
 		setClock(UNLINKED);
 		writer.updateNode(
 			"a",
@@ -1192,10 +1192,10 @@ describe("drainOutbox", () =>
 				name: "a",
 			},
 		);
-		const UNSYNCED = "2026-03-02 00:00:11.000";
+		const UNSYNCED = systemTimeAt("2026-03-02 00:00:11.000");
 		setClock(UNSYNCED);
 		writer.syncBacklinks(["a"]);
-		const SECOND_DRAIN = "2026-03-02 00:01:00.000";
+		const SECOND_DRAIN = systemTimeAt("2026-03-02 00:01:00.000");
 		setClock(SECOND_DRAIN);
 		const unlinked = await drainOutbox(database, pusher());
 		const secondCt = CT + 60;
@@ -1662,14 +1662,14 @@ describe("drainOutbox", () =>
 		setClock(at(0));
 		writer.deleteNode("b");
 		await drain();
-		const RESTORED = "2026-03-02 00:00:10.000";
+		const RESTORED = systemTimeAt("2026-03-02 00:00:10.000");
 		setClock(RESTORED);
 		writer.restoreNode(
 			{
 				id: "b",
 			},
 		);
-		const SECOND_DRAIN = "2026-03-02 00:01:00.000";
+		const SECOND_DRAIN = systemTimeAt("2026-03-02 00:01:00.000");
 		setClock(SECOND_DRAIN);
 		const result = await drainOutbox(database, pusher());
 

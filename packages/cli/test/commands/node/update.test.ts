@@ -1,7 +1,7 @@
 import {it, vi, afterEach, expect, describe, beforeEach} from "vite-plus/test";
 import {captureOutput} from "@oclif/test";
 import {nodeContent} from "@outlinedb/shared/db";
-import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 import {and, eq} from "drizzle-orm";
 import fs from "node:fs";
 import os from "node:os";
@@ -135,7 +135,7 @@ describe("node update command", () =>
 						{
 							originalId: "orig-id",
 							mirrorId: "mirror-id",
-							systemFrom: "2026-01-01 00:00:00",
+							systemFrom: systemTimeAt("2026-01-01 00:00:00"),
 							systemTo: FAR_FUTURE_DATE,
 						},
 					],

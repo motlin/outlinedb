@@ -9,6 +9,7 @@ import path from "node:path";
 import TemporalRollback, {TEMPORAL_TABLES} from "../../../src/commands/cache/temporal-rollback.js";
 import {cleanupTestDatabase, createTestDatabase} from "../../db/migration-helper.js";
 import type {TestDatabase} from "../../db/migration-helper.js";
+import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 
 describe("cache:temporal-rollback command", () =>
 {
@@ -82,14 +83,14 @@ describe("cache:temporal-rollback command", () =>
 				{
 					userId: "1",
 					dateFormat: "YYYY",
-					systemFrom: "2026-01-01 00:00:00.000",
-					systemTo: "2026-02-01 00:00:00.000",
+					systemFrom: systemTimeAt("2026-01-01 00:00:00.000"),
+					systemTo: systemTimeAt("2026-02-01 00:00:00.000"),
 				},
 				{
 					userId: "1",
 					dateFormat: "MMM D",
-					systemFrom: "2026-02-01 00:00:00.000",
-					systemTo: "9999-12-31 23:59:59",
+					systemFrom: systemTimeAt("2026-02-01 00:00:00.000"),
+					systemTo: FAR_FUTURE_DATE,
 				},
 			])
 			.run();
@@ -109,7 +110,7 @@ describe("cache:temporal-rollback command", () =>
 		).toStrictEqual([
 			{
 				dateFormat: "YYYY",
-				systemTo: "9999-12-31 23:59:59",
+				systemTo: FAR_FUTURE_DATE,
 			},
 		]);
 	});

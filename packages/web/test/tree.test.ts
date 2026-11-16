@@ -5,7 +5,7 @@ import {join} from "node:path";
 import {afterEach, describe, expect, it} from "vite-plus/test";
 import * as schema from "@outlinedb/shared/db";
 import {nodeContent, nodeMetadata, mirrors} from "@outlinedb/shared/db";
-import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 import
 {
 	bindTreeHost,
@@ -61,7 +61,7 @@ import {integerOrderKey} from "./helpers/integer-order-key.js";
 describe("tree host", () =>
 {
 	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
-	const SEEDED_AT = "2026-01-01 00:00:00.000";
+	const SEEDED_AT = systemTimeAt("2026-01-01 00:00:00.000");
 
 	const open: DatabaseConstructor.Database[] = [];
 
@@ -4311,7 +4311,7 @@ describe("tree position", () =>
 describe("tree snapshot flag", () =>
 {
 	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
-	const SEEDED_AT = "2026-01-01 00:00:00.000";
+	const SEEDED_AT = systemTimeAt("2026-01-01 00:00:00.000");
 
 	const TREE: [id: string, parentId: string | null, name: string][] = [
 		["root", null, "Root #project"],

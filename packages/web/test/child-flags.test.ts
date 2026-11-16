@@ -5,7 +5,7 @@ import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
 import * as schema from "@outlinedb/shared/db";
 import type {WorkflowyNode} from "@outlinedb/shared/types";
-import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 import type {ServerContext} from "../src/server/context.js";
 import {childFlags, childFlagsFromRows} from "../src/server/backlinks.js";
 import {CacheService} from "@outlinedb/shared/cache";
@@ -137,7 +137,7 @@ describe("child flags", () =>
 		const SOURCE = "00000000-0000-4000-8000-0000000000bb";
 		const ROOT = "00000000-0000-4000-8000-0000000000cc";
 		const ITEM = "00000000-0000-4000-8000-0000000000dd";
-		const SEEDED_AT = "2026-01-01 00:00:00.000";
+		const SEEDED_AT = systemTimeAt("2026-01-01 00:00:00.000");
 
 		function fixture({withItem, sourceCompleted}: {withItem: boolean; sourceCompleted: boolean})
 		{

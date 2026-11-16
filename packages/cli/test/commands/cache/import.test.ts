@@ -8,7 +8,7 @@ import ImportAccount from "../../../src/commands/cache/import-account.js";
 import {cleanupTestDatabase, createTestDatabase} from "../../db/migration-helper.js";
 import type {TestDatabase} from "../../db/migration-helper.js";
 import {backupImports, nodeContent, apiImportTimestamp, fileBlobs, tagColors} from "@outlinedb/shared/db";
-import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 import {asc} from "drizzle-orm";
 import ImportBackup from "../../../src/commands/cache/import-backup.js";
 import ImportBackups from "../../../src/commands/cache/import-backups.js";
@@ -206,12 +206,12 @@ describe("import backup", () =>
 			expect(contentStamps()).toStrictEqual([
 				{
 					id: "node-1",
-					systemFrom: "2024-01-02 01:00:00.000",
+					systemFrom: systemTimeAt("2024-01-02 01:00:00.000"),
 					systemTo: FAR_FUTURE_DATE,
 				},
 				{
 					id: "node-2",
-					systemFrom: "2024-01-02 01:00:00.000",
+					systemFrom: systemTimeAt("2024-01-02 01:00:00.000"),
 					systemTo: FAR_FUTURE_DATE,
 				},
 			]);
@@ -219,7 +219,7 @@ describe("import backup", () =>
 				{
 					filename: "(alice@example.com).2024-01-02.workflowy.backup",
 					backupDate: "2024-01-02",
-					systemFrom: "2024-01-02 01:00:00.000",
+					systemFrom: systemTimeAt("2024-01-02 01:00:00.000"),
 					systemTo: FAR_FUTURE_DATE,
 				},
 			]);
@@ -252,7 +252,7 @@ describe("import backup", () =>
 			expect(contentStamps()).toStrictEqual([
 				{
 					id: "node-1",
-					systemFrom: "2024-01-01 02:00:00.000",
+					systemFrom: systemTimeAt("2024-01-01 02:00:00.000"),
 					systemTo: FAR_FUTURE_DATE,
 				},
 			]);
@@ -272,7 +272,7 @@ describe("import backup", () =>
 			expect(contentStamps()).toStrictEqual([
 				{
 					id: "node-1",
-					systemFrom: "2024-01-05 12:00:00.000",
+					systemFrom: systemTimeAt("2024-01-05 12:00:00.000"),
 					systemTo: FAR_FUTURE_DATE,
 				},
 			]);
@@ -280,7 +280,7 @@ describe("import backup", () =>
 				{
 					filename: "(alice@example.com).2024-01-05.workflowy.backup",
 					backupDate: "2024-01-05",
-					systemFrom: "2024-01-05 12:00:00.000",
+					systemFrom: systemTimeAt("2024-01-05 12:00:00.000"),
 					systemTo: FAR_FUTURE_DATE,
 				},
 			]);
@@ -319,26 +319,26 @@ describe("import backup", () =>
 			expect(contentStamps()).toStrictEqual([
 				{
 					id: "node-1",
-					systemFrom: "2024-01-01 02:00:00.000",
+					systemFrom: systemTimeAt("2024-01-01 02:00:00.000"),
 					systemTo: FAR_FUTURE_DATE,
 				},
 				{
 					id: "node-2",
-					systemFrom: "2024-01-01 02:00:00.000",
-					systemTo: "2024-01-01 02:00:00.001",
+					systemFrom: systemTimeAt("2024-01-01 02:00:00.000"),
+					systemTo: systemTimeAt("2024-01-01 02:00:00.001"),
 				},
 			]);
 			expect(importStamps()).toStrictEqual([
 				{
 					filename: "(alice@example.com).2024-01-02.workflowy.backup",
 					backupDate: "2024-01-02",
-					systemFrom: "2024-01-01 02:00:00.000",
+					systemFrom: systemTimeAt("2024-01-01 02:00:00.000"),
 					systemTo: FAR_FUTURE_DATE,
 				},
 				{
 					filename: "(alice@example.com).2024-01-03.workflowy.backup",
 					backupDate: "2024-01-03",
-					systemFrom: "2024-01-01 02:00:00.001",
+					systemFrom: systemTimeAt("2024-01-01 02:00:00.001"),
 					systemTo: FAR_FUTURE_DATE,
 				},
 			]);
@@ -382,13 +382,13 @@ describe("import backup", () =>
 			expect(contentStamps()).toStrictEqual([
 				{
 					id: "node-1",
-					systemFrom: "2024-01-01 02:00:00.000",
+					systemFrom: systemTimeAt("2024-01-01 02:00:00.000"),
 					systemTo: FAR_FUTURE_DATE,
 				},
 				{
 					id: "node-2",
-					systemFrom: "2024-01-01 02:00:00.000",
-					systemTo: "2024-01-01 02:00:00.001",
+					systemFrom: systemTimeAt("2024-01-01 02:00:00.000"),
+					systemTo: systemTimeAt("2024-01-01 02:00:00.001"),
 				},
 			]);
 		});
@@ -441,13 +441,13 @@ describe("import local state", () =>
 		{
 			const closed =
 			{
-				systemFrom: "2026-01-01 00:00:00.000",
-				systemTo: "2026-02-01 00:00:00.000",
+				systemFrom: systemTimeAt("2026-01-01 00:00:00.000"),
+				systemTo: systemTimeAt("2026-02-01 00:00:00.000"),
 			};
 			const live =
 			{
-				systemFrom: "2026-02-01 00:00:00.000",
-				systemTo: "9999-12-31 23:59:59",
+				systemFrom: systemTimeAt("2026-02-01 00:00:00.000"),
+				systemTo: FAR_FUTURE_DATE,
 			};
 			source.db
 				.insert(tagColors)
@@ -550,8 +550,8 @@ describe("import local state", () =>
 		{
 			const live =
 			{
-				systemFrom: "2026-02-01 00:00:00.000",
-				systemTo: "9999-12-31 23:59:59",
+				systemFrom: systemTimeAt("2026-02-01 00:00:00.000"),
+				systemTo: FAR_FUTURE_DATE,
 			};
 			source.db
 				.insert(tagColors)

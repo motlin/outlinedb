@@ -6,7 +6,7 @@ import {Hono} from "hono";
 import {join} from "node:path";
 import {CacheService, storeInternalMetadata} from "@outlinedb/shared/cache";
 import * as schema from "@outlinedb/shared/db";
-import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 import type {WorkflowyNode} from "@outlinedb/shared/types";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
 import {httpAppFor} from "./http-app-for.js";
@@ -1020,7 +1020,7 @@ describe("node calendar dto", () =>
 
 describe("node events socket", () =>
 {
-	const MARK = "2026-11-05 12:00:00.000";
+	const MARK = systemTimeAt("2026-11-05 12:00:00.000");
 
 	function connect(bus: TreeEventBus)
 	{

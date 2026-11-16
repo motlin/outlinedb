@@ -1,6 +1,6 @@
 import {beforeEach, vi, afterEach, describe, expect, it} from "vite-plus/test";
 import {nodeEmbeddings} from "@outlinedb/shared/db";
-import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 import {loadEmbeddableNodes} from "@outlinedb/shared/cache";
 import {EmbeddingGeneratorService} from "../../src/services/embedding-generator.js";
 import {embeddingService} from "../../src/services/embeddings.js";
@@ -8,8 +8,8 @@ import {cleanupTestDatabase, createInMemoryTestDatabase, nodeFixtures, seedTestD
 import type {TestDatabase} from "../db/migration-helper.js";
 import {createTestNode} from "../helpers/node-fixtures.js";
 
-const EARLIER = "2025-12-01 00:00:00.000";
-const SYSTEM_FROM = "2026-01-01 00:00:00.000";
+const EARLIER = systemTimeAt("2025-12-01 00:00:00.000");
+const SYSTEM_FROM = systemTimeAt("2026-01-01 00:00:00.000");
 const EMBEDDING = Buffer.from(new Float32Array([1, 2]).buffer);
 
 function embedding(nodeId: string, model: string, systemFrom: string, systemTo: string)

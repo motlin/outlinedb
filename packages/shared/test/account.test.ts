@@ -20,6 +20,7 @@ import {readAccountState, writeAccountState, accountVersion} from "../src/cache/
 import {replaceExpansion} from "../src/cache/expansion-store.js";
 import {runUnitOfWork} from "../src/cache/node-composite.js";
 import * as schema from "../src/db/schema.js";
+import {FAR_FUTURE_DATE} from "../src/temporal/constants.js";
 
 describe("account store surveys", () =>
 {
@@ -354,7 +355,7 @@ describe("account store", () =>
 				.from(schema.tagColors)
 				.orderBy(schema.tagColors.tag, schema.tagColors.systemFrom)
 				.all()
-				.map((row) => [row.tag, row.colorIndex, row.systemTo === "9999-12-31 23:59:59"]);
+				.map((row) => [row.tag, row.colorIndex, row.systemTo === FAR_FUTURE_DATE]);
 			expect(
 				{
 					tags,

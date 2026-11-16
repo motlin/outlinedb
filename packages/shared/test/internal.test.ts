@@ -53,7 +53,7 @@ import
 } from "../src/internal/calendar-day.js";
 import {calendarNodeId} from "../src/internal/calendar-ids.js";
 import {PushAndPoll} from "../src/internal/push-and-poll.js";
-import {FAR_FUTURE_DATE} from "../src/temporal/constants.js";
+import {FAR_FUTURE_DATE, systemTimeAt} from "../src/temporal/constants.js";
 import {expansionVersion, replaceExpansion} from "../src/cache/expansion-store.js";
 import type {WorkflowyNode} from "../src/types/index.js";
 import {eq} from "drizzle-orm";
@@ -602,7 +602,7 @@ describe("internal adapter account", () =>
 				.from(schema.accountSettings)
 				.orderBy(schema.accountSettings.systemFrom)
 				.all();
-			expect(versions.map((row) => [row.theme, row.systemTo === "9999-12-31 23:59:59"])).toStrictEqual([
+			expect(versions.map((row) => [row.theme, row.systemTo === FAR_FUTURE_DATE])).toStrictEqual([
 				["dark", false],
 				["light", false],
 				["solarized", true],
@@ -990,15 +990,15 @@ describe("internal adapter backlinks", () =>
 	/** The current backlink items, derived as the app derives them: live mirrors under a live references root. */
 	const BACKLINKS = `(SELECT m.mirror_id AS node_id, m.original_id AS source_id, p.parent_id AS target_id, m.system_to
 	FROM mirrors m
-	JOIN node_content c ON c.id = m.mirror_id AND c.system_to = '9999-12-31 23:59:59'
-	JOIN references_roots r ON r.node_id = c.parent_id AND r.system_to = '9999-12-31 23:59:59'
-	JOIN node_content p ON p.id = c.parent_id AND p.system_to = '9999-12-31 23:59:59'
-	WHERE m.system_to = '9999-12-31 23:59:59')`;
+	JOIN node_content c ON c.id = m.mirror_id AND c.system_to = '${FAR_FUTURE_DATE}'
+	JOIN references_roots r ON r.node_id = c.parent_id AND r.system_to = '${FAR_FUTURE_DATE}'
+	JOIN node_content p ON p.id = c.parent_id AND p.system_to = '${FAR_FUTURE_DATE}'
+	WHERE m.system_to = '${FAR_FUTURE_DATE}')`;
 
 	const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
 	const START_MS = 1_800_000_000_000;
 	const ROOT = "None";
-	const SEEDED = "2026-01-01 00:00:00";
+	const SEEDED = systemTimeAt("2026-01-01 00:00:00");
 
 	const SOURCE = "11111111-1111-4111-8111-111111111111";
 	const TARGET = "22222222-2222-4222-8222-222222222222";
@@ -1384,7 +1384,7 @@ describe("internal adapter backlinks", () =>
 
 			const result = await adapter.syncBacklinks([SOURCE]);
 
-			const current = "system_to = '9999-12-31 23:59:59'";
+			const current = `system_to = '${FAR_FUTURE_DATE}'`;
 			expect(
 				{
 					result,
@@ -1588,7 +1588,7 @@ describe("internal adapter backlinks", () =>
 					edit: pushes.flat().find((op) => op.type === "edit")?.data.metadataPatches,
 					current: rows(`SELECT node_id, source_id, target_id FROM ${BACKLINKS} ORDER BY node_id`),
 					oldItemCurrent: rows(
-						`SELECT id FROM node_content WHERE id = '${OLD_ITEM}' AND system_to = '9999-12-31 23:59:59' UNION ALL SELECT mirror_id FROM mirrors WHERE mirror_id = '${OLD_ITEM}' AND system_to = '9999-12-31 23:59:59'`,
+						`SELECT id FROM node_content WHERE id = '${OLD_ITEM}' AND system_to = '${FAR_FUTURE_DATE}' UNION ALL SELECT mirror_id FROM mirrors WHERE mirror_id = '${OLD_ITEM}' AND system_to = '${FAR_FUTURE_DATE}'`,
 					),
 					reads: treeDataReads(api),
 				},
@@ -1660,10 +1660,10 @@ describe("internal adapter backlinks", () =>
 			// An earlier import cached the item, under the target's references root, while it still existed.
 			sqlite.exec(`
 			INSERT INTO node_content (id, name, parent_id, system_from, system_to) VALUES
-				('${TARGET}', 'target', NULL, '${SEEDED}', '9999-12-31 23:59:59'),
-				('${OLD_ROOT}', '', '${TARGET}', '${SEEDED}', '9999-12-31 23:59:59'),
-				('${OLD_ITEM}', '', '${OLD_ROOT}', '${SEEDED}', '9999-12-31 23:59:59');
-			INSERT INTO references_roots VALUES ('${OLD_ROOT}', '${SEEDED}', '9999-12-31 23:59:59');
+				('${TARGET}', 'target', NULL, '${SEEDED}', '${FAR_FUTURE_DATE}'),
+				('${OLD_ROOT}', '', '${TARGET}', '${SEEDED}', '${FAR_FUTURE_DATE}'),
+				('${OLD_ITEM}', '', '${OLD_ROOT}', '${SEEDED}', '${FAR_FUTURE_DATE}');
+			INSERT INTO references_roots VALUES ('${OLD_ROOT}', '${SEEDED}', '${FAR_FUTURE_DATE}');
 		`);
 
 			const result = await adapter.syncBacklinks([SOURCE]);
@@ -7074,7 +7074,7 @@ describe("internal adapter tree", () =>
 					.map((row) => (
 					{
 						...z.record(z.string(), z.unknown()).parse(row),
-						system_to: Reflect.get(Object(row), "system_to") === "9999-12-31 23:59:59" ? "live" : "closed",
+						system_to: Reflect.get(Object(row), "system_to") === FAR_FUTURE_DATE ? "live" : "closed",
 					}));
 
 			await adapter.setNodeMeta("a", ["numbered_start"], 5);

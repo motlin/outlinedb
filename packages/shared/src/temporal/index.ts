@@ -4,5 +4,6 @@ export
 	formatTemporalTimestamp,
 	isCurrentRecord,
 	parseTemporalTimestamp,
+	systemTimeAt,
 	temporalTimestampJustBefore,
 } from "./constants.js";

@@ -1,5 +1,5 @@
 import {beforeEach, vi, afterEach, describe, expect, it} from "vite-plus/test";
-import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, formatTemporalTimestamp, systemTimeAt} from "@outlinedb/shared/temporal";
 import {captureOutput} from "@oclif/test";
 import fs from "node:fs";
 import os from "node:os";
@@ -286,7 +286,7 @@ describe("node get command", () =>
 							parentId: null,
 							createdAt: new Date("2000-01-01T00:00:00.000Z"),
 							modifiedAt: new Date("2000-01-02T00:00:00.000Z"),
-							systemFrom: "2000-01-01 00:00:00.000",
+							systemFrom: systemTimeAt("2000-01-01 00:00:00.000"),
 						},
 					),
 				]),
@@ -319,8 +319,8 @@ describe("node get command", () =>
 						originalNodeId: null,
 					},
 					path: "JSON Node",
-					systemFrom: "2000-01-01 00:00:00.000",
-					systemTo: "9999-12-31 23:59:59",
+					systemFrom: systemTimeAt("2000-01-01 00:00:00.000"),
+					systemTo: FAR_FUTURE_DATE,
 				},
 			);
 		});

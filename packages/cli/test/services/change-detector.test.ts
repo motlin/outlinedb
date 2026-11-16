@@ -1,12 +1,12 @@
 import {beforeEach, afterEach, describe, expect, it} from "vite-plus/test";
 import {ChangeDetector} from "@outlinedb/shared/changes";
-import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 import {cleanupTestDatabase, createInMemoryTestDatabase, seedTestData} from "../db/migration-helper.js";
 import type {TestDatabase} from "../db/migration-helper.js";
 
-const BEFORE = "2026-01-01 00:00:00.000";
+const BEFORE = systemTimeAt("2026-01-01 00:00:00.000");
 const CUTOFF = new Date("2026-01-02T00:00:00.000Z");
-const AFTER = "2026-01-03 00:00:00.000";
+const AFTER = systemTimeAt("2026-01-03 00:00:00.000");
 
 function content(id: string, name: string | null, parentId: string | null, systemFrom: string, systemTo: string)
 {

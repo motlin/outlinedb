@@ -11,7 +11,7 @@ import {WorkflowyWriteThroughClient} from "../src/cache/workflowy-write-through-
 import * as schema from "../src/db/schema.js";
 import {nodeContent, nodeMetadata, mirrors, nodeEmbeddings, referencesRoots} from "../src/db/schema.js";
 import {compareBinary} from "../src/cache/order-key.js";
-import {FAR_FUTURE_DATE} from "../src/temporal/constants.js";
+import {FAR_FUTURE_DATE, systemTimeAt} from "../src/temporal/constants.js";
 import {requestJson, requestBody} from "./helpers/request-body.js";
 import {z} from "zod";
 import type {WorkflowyNode} from "../src/types/workflowy.js";
@@ -40,7 +40,7 @@ describe("write through create", () =>
 	);
 
 	const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
-	const SEEDED_AT = "2026-01-01 00:00:00.000";
+	const SEEDED_AT = systemTimeAt("2026-01-01 00:00:00.000");
 
 	type Seed = [id: string, parentId: string | null, priority: number][];
 
@@ -650,7 +650,7 @@ describe("write through mirror delete", () =>
 	);
 
 	const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
-	const SEEDED_AT = "2026-01-01 00:00:00.000";
+	const SEEDED_AT = systemTimeAt("2026-01-01 00:00:00.000");
 
 	/*
 	 * Siblings are listed in priority order, and mirrors in the order they were created.

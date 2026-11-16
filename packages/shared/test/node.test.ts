@@ -19,7 +19,7 @@ import
 } from "../src/cache/node-composite.js";
 import type {UnitOfWork} from "../src/cache/node-composite.js";
 import * as schema from "../src/db/schema.js";
-import {FAR_FUTURE_DATE} from "../src/temporal/constants.js";
+import {FAR_FUTURE_DATE, systemTimeAt} from "../src/temporal/constants.js";
 import {NodeReader, CacheService, ensureNodeTags} from "@outlinedb/shared/cache";
 import {buildTestDb, bulkImportWithWatermarkGuard, loadFixtureBackup} from "./helpers/round-trip-helpers.js";
 import {nodeContent} from "@outlinedb/shared/db";
@@ -28,8 +28,8 @@ describe("node composite", () =>
 {
 	const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
 
-	const SEEDED = "2026-01-01 00:00:00.000";
-	const UOW_TIME = "2026-06-01 12:00:00.000";
+	const SEEDED = systemTimeAt("2026-01-01 00:00:00.000");
+	const UOW_TIME = systemTimeAt("2026-06-01 12:00:00.000");
 
 	function sqlTables(): SQLiteTable[]
 	{
@@ -701,7 +701,7 @@ describe("node dto", () =>
 		it("orders children by order key, then creation time, then id, and reports each one's sibling index as its priority", () =>
 		{
 			const {database, sqlite} = buildTestDb();
-			const seeded = "2026-01-01 00:00:00.000";
+			const seeded = systemTimeAt("2026-01-01 00:00:00.000");
 			sqlite.exec(`
 				INSERT INTO node_content (id, name, parent_id, system_from, system_to) VALUES
 					('parent', 'Parent', NULL, '${seeded}', '${FAR_FUTURE_DATE}'),
@@ -796,7 +796,7 @@ describe("node order key migration", () =>
 			const insert = (priorities: (number | null)[], prefix: string): void =>
 			{
 				const statement = sqlite.prepare(
-					"INSERT INTO node_metadata (node_id, priority, system_from, system_to) VALUES (?, ?, '2026-01-01 00:00:00.000', ?)",
+					`INSERT INTO node_metadata (node_id, priority, system_from, system_to) VALUES (?, ?, '${systemTimeAt("2026-01-01 00:00:00.000")}', ?)`,
 				);
 				for (const [index, priority] of priorities.entries())
 				{
@@ -1106,7 +1106,7 @@ describe("node tags", () =>
 		it("backfills an empty node_tags from the live tree, leaving closed versions out", () =>
 		{
 			const {database, sqlite} = buildTestDb();
-			const at = "2026-01-01 00:00:00.000";
+			const at = systemTimeAt("2026-01-01 00:00:00.000");
 			database
 				.insert(nodeContent)
 				.values([

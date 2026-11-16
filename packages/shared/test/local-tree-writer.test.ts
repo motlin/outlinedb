@@ -20,12 +20,12 @@ import
 	outbox,
 	rootPreferences,
 } from "../src/db/schema.js";
-import {FAR_FUTURE_DATE} from "../src/temporal/constants.js";
+import {FAR_FUTURE_DATE, systemTimeAt} from "../src/temporal/constants.js";
 
 const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
-const SEEDED_AT = "2026-01-01 00:00:00.000";
+const SEEDED_AT = systemTimeAt("2026-01-01 00:00:00.000");
 const SEEDED = new Date("2026-01-01T00:00:00.000Z");
-const NOW = "2026-03-01 00:00:00.000";
+const NOW = systemTimeAt("2026-03-01 00:00:00.000");
 const NOW_DATE = new Date("2026-03-01T00:00:00.000Z");
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
@@ -670,7 +670,7 @@ describe("LocalTreeWriter", () =>
 						note: null,
 						parentId: "q",
 						systemFrom: SEEDED_AT,
-						systemTo: "2026-03-01 00:00:02.000",
+						systemTo: systemTimeAt("2026-03-01 00:00:02.000"),
 					},
 				],
 				metadata: [
@@ -678,23 +678,23 @@ describe("LocalTreeWriter", () =>
 					{
 						...reversioned("c1", 0),
 						modifiedAt: NOW_DATE,
-						systemTo: "2026-03-01 00:00:01.000",
+						systemTo: systemTimeAt("2026-03-01 00:00:01.000"),
 					},
 					{
 						...seeded("c1", 0),
 						modifiedAt: later,
 						completedAt: later,
-						systemFrom: "2026-03-01 00:00:01.000",
-						systemTo: "2026-03-01 00:00:02.000",
+						systemFrom: systemTimeAt("2026-03-01 00:00:01.000"),
+						systemTo: systemTimeAt("2026-03-01 00:00:02.000"),
 					},
 					// The drain drops m from c1's mirrorRootIds with an edit, which stamps c1 upstream.
 					{
 						...seeded("c1", 0),
 						modifiedAt: deletedAt,
 						completedAt: later,
-						systemFrom: "2026-03-01 00:00:02.000",
+						systemFrom: systemTimeAt("2026-03-01 00:00:02.000"),
 					},
-					seeded("m", 1, "2026-03-01 00:00:02.000"),
+					seeded("m", 1, systemTimeAt("2026-03-01 00:00:02.000")),
 				],
 			},
 		);
@@ -722,12 +722,12 @@ describe("LocalTreeWriter", () =>
 						...reversioned("a", 0),
 						modifiedAt: NOW_DATE,
 						completedAt: NOW_DATE,
-						systemTo: "2026-03-02 00:00:00.000",
+						systemTo: systemTimeAt("2026-03-02 00:00:00.000"),
 					},
 					{
 						...seeded("a", 0),
 						modifiedAt: later,
-						systemFrom: "2026-03-02 00:00:00.000",
+						systemFrom: systemTimeAt("2026-03-02 00:00:00.000"),
 					},
 				],
 				outbox: [pending("a", "completion")],
@@ -989,8 +989,8 @@ describe("LocalTreeWriter", () =>
 				],
 				metadata: [
 					seeded("b", 1, NOW),
-					seeded("c", 2, "2026-03-02 00:00:00.000"),
-					seeded("c1", 0, "2026-03-02 00:00:00.000"),
+					seeded("c", 2, systemTimeAt("2026-03-02 00:00:00.000")),
+					seeded("c1", 0, systemTimeAt("2026-03-02 00:00:00.000")),
 				],
 				content: [
 					{
@@ -999,7 +999,7 @@ describe("LocalTreeWriter", () =>
 						note: null,
 						parentId: "c",
 						systemFrom: SEEDED_AT,
-						systemTo: "2026-03-02 00:00:00.000",
+						systemTo: systemTimeAt("2026-03-02 00:00:00.000"),
 					},
 				],
 				mirrors: [
@@ -1007,13 +1007,13 @@ describe("LocalTreeWriter", () =>
 						mirrorId: "m",
 						originalId: "c1",
 						systemFrom: SEEDED_AT,
-						systemTo: "2026-03-02 00:00:00.000",
+						systemTo: systemTimeAt("2026-03-02 00:00:00.000"),
 					},
 				],
 				outbox: [
 					pending("b", "delete"),
-					pending("c", "delete", "2026-03-02 00:00:00.000"),
-					pending("c1", "delete", "2026-03-02 00:00:00.000"),
+					pending("c", "delete", systemTimeAt("2026-03-02 00:00:00.000")),
+					pending("c1", "delete", systemTimeAt("2026-03-02 00:00:00.000")),
 				],
 			},
 		);
@@ -1220,7 +1220,7 @@ describe("LocalTreeWriter", () =>
 	it("sets a node's metadata values in the typed tables and removes a key for an undefined value", () =>
 	{
 		const {writer, metadataVersions, displayVersions, cellSizeVersions, outboxRows} = setup();
-		const LATER = "2026-03-02 00:00:00.000";
+		const LATER = systemTimeAt("2026-03-02 00:00:00.000");
 		const LATER_DATE = new Date("2026-03-02T00:00:00.000Z");
 
 		writer.setNodeMetaValues("a", [
@@ -1313,7 +1313,7 @@ describe("LocalTreeWriter", () =>
 	it("sets Home's layout in the root preferences", () =>
 	{
 		const {database, writer, homeLayoutVersions} = setup();
-		const LATER = "2026-03-02 00:00:00.000";
+		const LATER = systemTimeAt("2026-03-02 00:00:00.000");
 		provisionLocalAccount(
 			database,
 			{
@@ -1371,7 +1371,7 @@ describe("LocalTreeWriter", () =>
 	it("restores a deleted subtree where it was, from its last closed versions under the original ids", () =>
 	{
 		const {writer, siblings, metadataVersions, contentVersions, mirrorVersions} = setup();
-		const LATER = "2026-03-02 00:00:00.000";
+		const LATER = systemTimeAt("2026-03-02 00:00:00.000");
 		const LATER_DATE = new Date("2026-03-02T00:00:00.000Z");
 
 		writer.deleteNode("c");

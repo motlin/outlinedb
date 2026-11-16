@@ -10,7 +10,7 @@ import {LocalTreeWriter} from "../src/cache/local-tree-writer.js";
 import {OutboxRecorder, pendingAspects} from "../src/cache/outbox.js";
 import {BULK_IMPORT_TIMEOUT_MS, TRANSACTION_TIMEOUT_MS, TransactionTimeoutError} from "../src/cache/system-time.js";
 import * as schema from "../src/db/schema.js";
-import {FAR_FUTURE_DATE} from "../src/temporal/index.js";
+import {FAR_FUTURE_DATE, systemTimeAt} from "../src/temporal/index.js";
 import type {WorkflowyNode} from "../src/types/index.js";
 
 const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
@@ -190,7 +190,7 @@ describe("shared API import", () =>
 					importTimestamp: T0,
 					stamps: [
 						{
-							systemFrom: "2026-03-01 00:00:00.000",
+							systemFrom: systemTimeAt("2026-03-01 00:00:00.000"),
 							rows: FIXTURE.length,
 						},
 					],
@@ -214,7 +214,7 @@ describe("shared API import", () =>
 
 			expect(() => importFromApi(db, FIXTURE)).toThrow(
 				new TransactionTimeoutError(
-					"2026-03-01 00:00:00.000",
+					systemTimeAt("2026-03-01 00:00:00.000"),
 					FIXTURE.length * (BULK_IMPORT_TIMEOUT_MS / 2),
 					BULK_IMPORT_TIMEOUT_MS,
 				),

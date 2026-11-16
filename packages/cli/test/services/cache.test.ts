@@ -26,7 +26,7 @@ import
 	CacheService,
 	compareBinary,
 } from "@outlinedb/shared/cache";
-import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, formatTemporalTimestamp, systemTimeAt} from "@outlinedb/shared/temporal";
 import type {WorkflowyNode} from "@outlinedb/shared/types";
 import {eq, and} from "drizzle-orm";
 import fs from "node:fs";
@@ -764,13 +764,13 @@ describe("cache import api", () =>
 						{
 							originalId: "original",
 							mirrorId: "mirror-a",
-							systemFrom: "2024-01-01 00:00:00.000",
+							systemFrom: systemTimeAt("2024-01-01 00:00:00.000"),
 							systemTo: FAR_FUTURE_DATE,
 						},
 						{
 							originalId: "original",
 							mirrorId: "mirror-b",
-							systemFrom: "2024-01-01 00:00:00.000",
+							systemFrom: systemTimeAt("2024-01-01 00:00:00.000"),
 							systemTo: FAR_FUTURE_DATE,
 						},
 					])
@@ -805,14 +805,14 @@ describe("cache import api", () =>
 					{
 						originalId: "original",
 						mirrorId: "mirror-a",
-						systemFrom: "2024-01-01 00:00:00.000",
-						systemTo: "2024-01-01 00:01:00.000",
+						systemFrom: systemTimeAt("2024-01-01 00:00:00.000"),
+						systemTo: systemTimeAt("2024-01-01 00:01:00.000"),
 					},
 					{
 						originalId: "original",
 						mirrorId: "mirror-b",
-						systemFrom: "2024-01-01 00:00:00.000",
-						systemTo: "2024-01-01 00:01:00.000",
+						systemFrom: systemTimeAt("2024-01-01 00:00:00.000"),
+						systemTo: systemTimeAt("2024-01-01 00:01:00.000"),
 					},
 				]);
 			});
@@ -845,13 +845,13 @@ describe("cache import api", () =>
 					{
 						originalId: "original",
 						mirrorId: "mirror-a",
-						systemFrom: "2024-01-01 00:00:00.000",
-						systemTo: "2024-01-01 00:01:00.000",
+						systemFrom: systemTimeAt("2024-01-01 00:00:00.000"),
+						systemTo: systemTimeAt("2024-01-01 00:01:00.000"),
 					},
 					{
 						originalId: "original",
 						mirrorId: "mirror-b",
-						systemFrom: "2024-01-01 00:00:00.000",
+						systemFrom: systemTimeAt("2024-01-01 00:00:00.000"),
 						systemTo: FAR_FUTURE_DATE,
 					},
 				]);
@@ -862,7 +862,7 @@ describe("cache import api", () =>
 		{
 			const T0 = new Date("2024-01-01T00:00:00Z");
 			const T1 = new Date("2024-01-01T00:01:00Z");
-			const SEEDED = "2024-01-01 00:00:00.000";
+			const SEEDED = systemTimeAt("2024-01-01 00:00:00.000");
 
 			function seed(): void
 			{
@@ -984,7 +984,7 @@ describe("cache import api", () =>
 					T1,
 				);
 
-				const ended = "2024-01-01 00:01:00.000";
+				const ended = systemTimeAt("2024-01-01 00:01:00.000");
 				expect(ownedRows()).toStrictEqual(
 					{
 						mirrors: [
@@ -1051,8 +1051,8 @@ describe("cache import api", () =>
 		{
 			const T0 = new Date("2024-01-01T00:00:00Z");
 			const T1 = new Date("2024-01-01T00:01:00Z");
-			const AT_T0 = "2024-01-01 00:00:00.000";
-			const AT_T1 = "2024-01-01 00:01:00.000";
+			const AT_T0 = systemTimeAt("2024-01-01 00:00:00.000");
+			const AT_T1 = systemTimeAt("2024-01-01 00:01:00.000");
 
 			const apiNodes: WorkflowyNode[] = [
 				createApiNode(
@@ -1519,7 +1519,7 @@ describe("cache import api", () =>
 					new SameMillisecondOverwriteError(
 						"api_import_timestamp",
 						"name=bulk_import",
-						"2026-02-01 00:00:00.000",
+						systemTimeAt("2026-02-01 00:00:00.000"),
 					),
 				);
 				expect(
@@ -1536,7 +1536,7 @@ describe("cache import api", () =>
 				).toStrictEqual([
 					{
 						name: "Original Name",
-						systemFrom: "2026-02-01 00:00:00.000",
+						systemFrom: systemTimeAt("2026-02-01 00:00:00.000"),
 						systemTo: FAR_FUTURE_DATE,
 					},
 				]);
@@ -2291,7 +2291,7 @@ describe("cache import", () =>
 				await importBackup(testDatabase.db, filePath, "backup.json", false, T0);
 
 				const node = testDatabase.db.select().from(nodeContent).where(eq(nodeContent.id, "node-1")).get()!;
-				expect(node.systemFrom).toBe("2024-01-01 00:00:00.000");
+				expect(node.systemFrom).toBe(systemTimeAt("2024-01-01 00:00:00.000"));
 			});
 
 			it("sets systemTo to FAR_FUTURE_DATE for active records", async () =>
@@ -3747,8 +3747,8 @@ describe("cache import", () =>
 				const result = await importBackup(testDatabase.db, newerPath, "backup.json", false, WRITE_2);
 
 				expect(result.skipped).toBe(false);
-				expect(result.localWatermark).toBe("2026-04-01 00:00:00.000");
-				expect(result.incomingWatermark).toBe("2026-04-05 00:00:00.000");
+				expect(result.localWatermark).toBe(systemTimeAt("2026-04-01 00:00:00.000"));
+				expect(result.incomingWatermark).toBe(systemTimeAt("2026-04-05 00:00:00.000"));
 				expect(result.nodesPreserved).toBe(0);
 				expect(result.nodesAdded).toBe(1);
 
@@ -3785,8 +3785,8 @@ describe("cache import", () =>
 				const result = await importBackup(testDatabase.db, stalePath, "backup.json", false, DATE_LATER);
 
 				expect(result.skipped).toBe(false);
-				expect(result.localWatermark).toBe("2026-04-10 00:00:00.000");
-				expect(result.incomingWatermark).toBe("2026-04-01 00:00:00.000");
+				expect(result.localWatermark).toBe(systemTimeAt("2026-04-10 00:00:00.000"));
+				expect(result.incomingWatermark).toBe(systemTimeAt("2026-04-01 00:00:00.000"));
 				expect(result.nodesAdded).toBe(1);
 				expect(result.nodesPreserved).toBe(1);
 				expect(result.nodesDeleted).toBe(0);
@@ -3844,8 +3844,8 @@ describe("cache import", () =>
 						nodesPreserved: 0,
 						nodesKeptDeleted: 0,
 						skipped: false,
-						localWatermark: "2026-04-01 00:00:00.000",
-						incomingWatermark: "2026-04-10 00:00:00.000",
+						localWatermark: systemTimeAt("2026-04-01 00:00:00.000"),
+						incomingWatermark: systemTimeAt("2026-04-10 00:00:00.000"),
 					},
 				);
 			});
@@ -3911,8 +3911,8 @@ describe("cache import", () =>
 						nodesPreserved: 0,
 						nodesKeptDeleted: 1,
 						skipped: false,
-						localWatermark: "2026-04-01 00:00:00.000",
-						incomingWatermark: "2026-04-05 00:00:00.000",
+						localWatermark: systemTimeAt("2026-04-01 00:00:00.000"),
+						incomingWatermark: systemTimeAt("2026-04-05 00:00:00.000"),
 					},
 				);
 				const activeIds = testDatabase.db
@@ -4149,8 +4149,8 @@ describe("cache import", () =>
 						nodesPreserved: 0,
 						nodesKeptDeleted: 0,
 						skipped: false,
-						localWatermark: "2026-04-10 00:00:00.000",
-						incomingWatermark: "2026-04-10 00:00:00.000",
+						localWatermark: systemTimeAt("2026-04-10 00:00:00.000"),
+						incomingWatermark: systemTimeAt("2026-04-10 00:00:00.000"),
 					},
 				);
 			});
@@ -4183,7 +4183,7 @@ describe("cache import", () =>
 						nodesKeptDeleted: 0,
 						skipped: false,
 						localWatermark: null,
-						incomingWatermark: "2026-04-01 00:00:00.000",
+						incomingWatermark: systemTimeAt("2026-04-01 00:00:00.000"),
 					},
 				);
 			});
@@ -4226,8 +4226,8 @@ describe("cache import", () =>
 						nodesPreserved: 0,
 						nodesKeptDeleted: 0,
 						skipped: false,
-						localWatermark: "2026-04-10 00:00:00.000",
-						incomingWatermark: "2026-04-01 00:00:00.000",
+						localWatermark: systemTimeAt("2026-04-10 00:00:00.000"),
+						incomingWatermark: systemTimeAt("2026-04-01 00:00:00.000"),
 					},
 				);
 				const node2 = testDatabase.db.select().from(nodeContent).where(eq(nodeContent.id, "node-2")).get()!;
@@ -4321,7 +4321,7 @@ describe("cache import", () =>
 					{
 						stamps: [
 							{
-								systemFrom: "2024-01-01 00:00:00.000",
+								systemFrom: systemTimeAt("2024-01-01 00:00:00.000"),
 								rows: nodeCount,
 							},
 						],
@@ -4359,7 +4359,7 @@ describe("cache import", () =>
 
 				await expect(importBackup(testDatabase.db, filePath, "backup.json")).rejects.toThrow(
 					new TransactionTimeoutError(
-						"2024-01-01 00:00:00.000",
+						systemTimeAt("2024-01-01 00:00:00.000"),
 						nodeCount * (BULK_IMPORT_TIMEOUT_MS / 100),
 						BULK_IMPORT_TIMEOUT_MS,
 					),

@@ -47,7 +47,7 @@ import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {join} from "node:path";
 import * as schema from "@outlinedb/shared/db";
 import {nodeContent, nodeMetadata, aiMetadata, mirrors, referencesRoots} from "@outlinedb/shared/db";
-import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, formatTemporalTimestamp, systemTimeAt} from "@outlinedb/shared/temporal";
 import {SO_ROWS} from "../../shared/test/helpers/search-so-fixture.js";
 import {collectHelperTags} from "../src/server/helper-tags.js";
 import {loadHelperTags} from "../src/server/ops/search.js";
@@ -1586,7 +1586,7 @@ describe("search helpers route", () =>
 	});
 
 	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
-	const SEEDED_AT = "2026-01-01 00:00:00.000";
+	const SEEDED_AT = systemTimeAt("2026-01-01 00:00:00.000");
 
 	/*
 	 * root #rootTag
@@ -2240,7 +2240,7 @@ describe("search text op", () =>
 	const searchText = Ops["search.text"];
 
 	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
-	const SEEDED_AT = "2026-01-01 00:00:00.000";
+	const SEEDED_AT = systemTimeAt("2026-01-01 00:00:00.000");
 
 	const open: DatabaseConstructor.Database[] = [];
 	afterEach(() =>
@@ -2402,7 +2402,7 @@ describe("search text op", () =>
 describe("search tree route", () =>
 {
 	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
-	const SEEDED_AT = "2026-01-01 00:00:00.000";
+	const SEEDED_AT = systemTimeAt("2026-01-01 00:00:00.000");
 	const CREATED = new Date("2026-02-01T00:00:00Z");
 	const MODIFIED = new Date("2026-03-01T00:00:00Z");
 	const COMPLETED = new Date("2026-04-01T00:00:00Z");

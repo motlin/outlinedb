@@ -1,7 +1,7 @@
 import {beforeEach, vi, afterEach, expect, describe, it} from "vite-plus/test";
 import {captureOutput} from "@oclif/test";
 import {nodeContent} from "@outlinedb/shared/db";
-import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 import {and, eq} from "drizzle-orm";
 import fs from "node:fs";
 import os from "node:os";
@@ -20,7 +20,7 @@ interface RecordedRequest
 	body: unknown;
 }
 
-function s3File(nodeId: string, fileName: string, systemFrom = "2026-01-01 00:00:00.000")
+function s3File(nodeId: string, fileName: string, systemFrom = systemTimeAt("2026-01-01 00:00:00.000"))
 {
 	return {
 		nodeId,

@@ -1,7 +1,7 @@
 import {applyRows, NodeReader, runUnitOfWork} from "@outlinedb/shared/cache";
 import {eq, sql} from "drizzle-orm";
 import {nodeContent, nodeMetadata} from "@outlinedb/shared/db";
-import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 import {describe, expect, it} from "vite-plus/test";
 import
 {
@@ -273,7 +273,7 @@ describe("round-trip equivalence", () =>
 				database,
 				(unitOfWork) => applyRows(unitOfWork, reimportRows),
 				{
-					systemTime: "2026-05-22 11:00:00",
+					systemTime: systemTimeAt("2026-05-22 11:00:00"),
 					startedAt: Date.now(),
 				},
 			);
@@ -416,7 +416,7 @@ describe("round-trip equivalence", () =>
 			const backup = loadFixtureBackup("mirror-backup");
 			const result = bulkImportWithWatermarkGuard(database, backup, importedAt);
 			expect(result.skipped).toBe(false);
-			insertMirrorRows(database, collectBackupMirrorRows(backup), "2026-05-22 10:00:00");
+			insertMirrorRows(database, collectBackupMirrorRows(backup), systemTimeAt("2026-05-22 10:00:00"));
 
 			const reader = new NodeReader(database);
 			const mirrorId = "ffffffff-ffff-ffff-ffff-ffffffffffff";
@@ -441,8 +441,8 @@ describe("round-trip equivalence", () =>
 						isMirror: true,
 						originalNodeId: originalId,
 					},
-					systemFrom: "2026-05-22 10:00:00.000",
-					systemTo: "9999-12-31 23:59:59",
+					systemFrom: systemTimeAt("2026-05-22 10:00:00.000"),
+					systemTo: FAR_FUTURE_DATE,
 				},
 			);
 
@@ -465,8 +465,8 @@ describe("round-trip equivalence", () =>
 						isMirror: false,
 						originalNodeId: null,
 					},
-					systemFrom: "2026-05-22 10:00:00.000",
-					systemTo: "9999-12-31 23:59:59",
+					systemFrom: systemTimeAt("2026-05-22 10:00:00.000"),
+					systemTo: FAR_FUTURE_DATE,
 				},
 			);
 

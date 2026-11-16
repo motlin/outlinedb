@@ -28,7 +28,7 @@ import path from "node:path";
 import {findCalendarDays, findTaggedCalendarRoot} from "../src/cache/calendar-lookup.js";
 import {CacheService} from "../src/cache/index.js";
 import * as schema from "../src/db/schema.js";
-import {FAR_FUTURE_DATE} from "../src/temporal/index.js";
+import {FAR_FUTURE_DATE, systemTimeAt} from "../src/temporal/index.js";
 
 describe("calendar ids", () =>
 {
@@ -1468,7 +1468,7 @@ describe("calendar metadata indexes", () =>
 				.prepare(
 					"INSERT INTO node_content (id, name, parent_id, system_from, system_to) VALUES (?, ?, NULL, ?, ?)",
 				)
-				.run("cal", "📆 Calendar", "2026-10-01 00:00:00.000", FAR_FUTURE_DATE);
+				.run("cal", "📆 Calendar", systemTimeAt("2026-10-01 00:00:00.000"), FAR_FUTURE_DATE);
 
 			findCalendarDays(
 				{

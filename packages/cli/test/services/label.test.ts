@@ -11,7 +11,7 @@ import type {EvalCase} from "../../src/services/label-eval.js";
 import {buildLabelPool, WORKFLOW_TAGS} from "../../src/services/label-pool.js";
 import type {RegistryNode} from "../../src/services/label-pool.js";
 import {nodeContent, nodeLabelSuggestions} from "@outlinedb/shared/db";
-import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 import {asc} from "drizzle-orm";
 import {entriesToScore, saveLabelSuggestions} from "../../src/services/label-suggestions.js";
 import {cleanupTestDatabase, createInMemoryTestDatabase} from "../db/migration-helper.js";
@@ -740,9 +740,9 @@ describe("label suggestions", () =>
 {
 	const ENTRY = "entry-1";
 	const OTHER = "entry-2";
-	const EDITED_AT = "2026-11-03 21:14:02.000";
-	const FIRST_RUN = "2026-11-04 06:00:11.000";
-	const SECOND_RUN = "2026-11-05 06:00:11.000";
+	const EDITED_AT = systemTimeAt("2026-11-03 21:14:02.000");
+	const FIRST_RUN = systemTimeAt("2026-11-04 06:00:11.000");
+	const SECOND_RUN = systemTimeAt("2026-11-05 06:00:11.000");
 
 	describe("label suggestions persistence", () =>
 	{
@@ -996,7 +996,7 @@ describe("label suggestions", () =>
 				],
 				FIRST_RUN,
 			);
-			const reEditedAt = "2026-11-04 20:00:00.000";
+			const reEditedAt = systemTimeAt("2026-11-04 20:00:00.000");
 			testDatabase.sqlite
 				.prepare("UPDATE node_content SET system_to = ? WHERE id = ? AND system_to = ?")
 				.run(reEditedAt, ENTRY, FAR_FUTURE_DATE);

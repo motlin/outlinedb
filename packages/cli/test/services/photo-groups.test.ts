@@ -8,6 +8,7 @@ import
 	planPhotoGroup,
 } from "../../src/services/photo-groups.js";
 import type {CachedNodeRow, PhotoGroupMember} from "../../src/services/photo-groups.js";
+import {systemTimeAt} from "@outlinedb/shared/temporal";
 
 const CREATED_AT = 1_700_000_000;
 
@@ -792,7 +793,10 @@ describe("describeStaleAttachmentData", () =>
 {
 	it("warns when a backup on disk is newer than the newest imported attachment row", () =>
 	{
-		const warning = describeStaleAttachmentData("2026-07-14 14:37:25.424", new Date("2026-07-26T00:00:00Z"));
+		const warning = describeStaleAttachmentData(
+			systemTimeAt("2026-07-14 14:37:25.424"),
+			new Date("2026-07-26T00:00:00Z"),
+		);
 
 		expect(warning).toBe(
 			"attachment data is stale: newest s3_files row is 2026-07-14, but a 2026-07-26 backup is on disk. Run 'cache import-backups' first or recent photos stay invisible.",
@@ -801,13 +805,15 @@ describe("describeStaleAttachmentData", () =>
 
 	it("stays quiet when the newest backup is already imported", () =>
 	{
-		expect(describeStaleAttachmentData("2026-07-26 18:30:28.251", new Date("2026-07-26T00:00:00Z"))).toBeNull();
+		expect(
+			describeStaleAttachmentData(systemTimeAt("2026-07-26 18:30:28.251"), new Date("2026-07-26T00:00:00Z")),
+		).toBeNull();
 	});
 
 	it("stays quiet when either side is unknown", () =>
 	{
 		expect(describeStaleAttachmentData(null, new Date("2026-07-26T00:00:00Z"))).toBeNull();
-		expect(describeStaleAttachmentData("2026-07-14 14:37:25.424", null)).toBeNull();
+		expect(describeStaleAttachmentData(systemTimeAt("2026-07-14 14:37:25.424"), null)).toBeNull();
 	});
 
 	it("stays quiet rather than warning on an unparsable timestamp", () =>

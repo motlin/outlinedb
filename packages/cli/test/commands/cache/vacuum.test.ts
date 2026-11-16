@@ -10,6 +10,7 @@ import Vacuum from "../../../src/commands/cache/vacuum.js";
 import type {VacuumResult} from "../../../src/services/cache-vacuum.js";
 import {cleanupTestDatabase, createTestDatabase} from "../../db/migration-helper.js";
 import type {TestDatabase} from "../../db/migration-helper.js";
+import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 
 describe("cache:vacuum command", () =>
 {
@@ -64,8 +65,8 @@ describe("cache:vacuum command", () =>
 					name: `Node ${index} `.repeat(50),
 					note: "x".repeat(2000),
 					parentId: null,
-					systemFrom: "2024-01-01 00:00:00",
-					systemTo: "9999-12-31 23:59:59",
+					systemFrom: systemTimeAt("2024-01-01 00:00:00"),
+					systemTo: FAR_FUTURE_DATE,
 				},
 			);
 		}

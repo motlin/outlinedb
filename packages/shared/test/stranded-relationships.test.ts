@@ -8,11 +8,11 @@ import {runUnitOfWork} from "../src/cache/node-composite.js";
 import {countStrandedRows, endStrandedBacklinkItems} from "../src/cache/stranded-relationships.js";
 import * as schema from "../src/db/schema.js";
 import {mirrors, nodeContent, nodeMetadata, referencesRoots} from "../src/db/schema.js";
-import {FAR_FUTURE_DATE} from "../src/temporal/constants.js";
+import {FAR_FUTURE_DATE, systemTimeAt} from "../src/temporal/constants.js";
 
 const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
-const SEEDED = "2026-01-01 00:00:00.000";
-const DELETED = "2026-03-01 00:00:00.000";
+const SEEDED = systemTimeAt("2026-01-01 00:00:00.000");
+const DELETED = systemTimeAt("2026-03-01 00:00:00.000");
 
 /*
  * target
@@ -131,7 +131,7 @@ describe("stranded relationship rows", () =>
 	it("ends each stranded backlink item's composite, leaving none", () =>
 	{
 		const db = setup();
-		const UOW_TIME = "2026-06-01 12:00:00.000";
+		const UOW_TIME = systemTimeAt("2026-06-01 12:00:00.000");
 
 		const ended = runUnitOfWork(
 			db,
@@ -198,7 +198,7 @@ describe("stranded relationship rows", () =>
 	it("withdraws a stranded backlink item the same unit of work inserted, since it never existed", () =>
 	{
 		const db = setup();
-		const UOW_TIME = "2026-06-01 12:00:00.000";
+		const UOW_TIME = systemTimeAt("2026-06-01 12:00:00.000");
 
 		const ended = runUnitOfWork(
 			db,

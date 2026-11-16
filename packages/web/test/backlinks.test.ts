@@ -8,7 +8,7 @@ import {join} from "node:path";
 import {CacheService} from "@outlinedb/shared/cache";
 import * as schema from "@outlinedb/shared/db";
 import {mirrors, nodeContent, nodeMetadata, referencesRoots} from "@outlinedb/shared/db";
-import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
 import {notReferencesContent, backlinkTargetsOfSource, backlinksNeedSync} from "../src/server/backlinks.js";
 import {httpAppFor} from "./http-app-for.js";
@@ -17,7 +17,7 @@ import {integerOrderKey} from "./helpers/integer-order-key.js";
 describe("backlinks route", () =>
 {
 	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
-	const SEEDED_AT = "2026-01-01 00:00:00.000";
+	const SEEDED_AT = systemTimeAt("2026-01-01 00:00:00.000");
 	const COMPLETED_AT = new Date("2026-02-01T00:00:00Z");
 
 	/*
@@ -437,7 +437,7 @@ describe("backlinks route", () =>
 describe("backlinks sync need", () =>
 {
 	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
-	const SEEDED_AT = "2026-01-01 00:00:00.000";
+	const SEEDED_AT = systemTimeAt("2026-01-01 00:00:00.000");
 
 	const TARGET = "00000000-0000-4000-8000-0000000000aa";
 	const SOURCE = "00000000-0000-4000-8000-0000000000bb";

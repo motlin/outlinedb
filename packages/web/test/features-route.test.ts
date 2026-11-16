@@ -9,6 +9,7 @@ import type {ServerContext} from "../src/server/context.js";
 import {DEFAULT_FEATURES, VISIBLE_FEATURES} from "../src/feature-catalog.js";
 import upstreamFeatures from "./fixtures/upstream-settings-features.json" with {type: "json"};
 import {httpAppFor} from "./http-app-for.js";
+import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 
 const VISIBLE = [
 	{
@@ -155,8 +156,8 @@ describe("/api/v1/features", () =>
 		const {request, db} = setup(false);
 		const live =
 		{
-			systemFrom: "2026-01-01 00:00:00.000",
-			systemTo: "9999-12-31 23:59:59",
+			systemFrom: systemTimeAt("2026-01-01 00:00:00.000"),
+			systemTo: FAR_FUTURE_DATE,
 		};
 		db.insert(schema.enabledFeatures)
 			.values([
@@ -173,7 +174,7 @@ describe("/api/v1/features", () =>
 				{
 					codename: "old",
 					enabled: 1,
-					systemFrom: "2025-01-01 00:00:00.000",
+					systemFrom: systemTimeAt("2025-01-01 00:00:00.000"),
 					systemTo: live.systemFrom,
 				},
 			])

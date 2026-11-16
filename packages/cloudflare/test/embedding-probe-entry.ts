@@ -5,8 +5,7 @@ import {drizzle} from "drizzle-orm/durable-sqlite";
 import type {Embedder} from "../src/embeddings";
 import {UserStore} from "../src/user-store";
 import worker from "../src/worker";
-
-const LIVE = "9999-12-31 23:59:59";
+import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 
 /** A deterministic vector per text: letter counts, plus one so no vector is all zeros. */
 function letterVector(text: string): number[]
@@ -58,7 +57,7 @@ export class EmbeddingProbeStore extends UserStore
 	{
 		this.ctx.storage.sql.exec(
 			"UPDATE root_preferences SET ai_embedding_status = 'finished' WHERE system_to = ?",
-			LIVE,
+			FAR_FUTURE_DATE,
 		);
 	}
 
@@ -99,8 +98,8 @@ export class EmbeddingProbeStore extends UserStore
 			sql.exec(
 				"INSERT INTO root_preferences (user_id, ai_embedding_status, system_from, system_to) VALUES (1, ?, ?, ?)",
 				url.searchParams.get("value"),
-				"2026-01-01 00:00:00.000",
-				LIVE,
+				systemTimeAt("2026-01-01 00:00:00.000"),
+				FAR_FUTURE_DATE,
 			);
 			return Response.json(
 				{
@@ -114,7 +113,10 @@ export class EmbeddingProbeStore extends UserStore
 				{
 					status:
 						sql
-							.exec("SELECT ai_embedding_status AS s FROM root_preferences WHERE system_to = ?", LIVE)
+							.exec(
+								"SELECT ai_embedding_status AS s FROM root_preferences WHERE system_to = ?",
+								FAR_FUTURE_DATE,
+							)
 							.toArray()[0]?.s ?? null,
 					indexed: [...this.memoryIndex.vectors.keys()].toSorted(),
 					batches: this.embedded.map((texts) => texts.length),

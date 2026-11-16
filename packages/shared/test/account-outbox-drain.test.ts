@@ -15,6 +15,7 @@ import {drainAccountOutbox} from "../src/internal/account-outbox-drain.js";
 import type {AccountOutboxPusher} from "../src/internal/account-outbox-drain.js";
 import {OutboxNotAcknowledged} from "../src/internal/errors.js";
 import type {InternalOp} from "../src/internal/push-and-poll.js";
+import {systemTimeAt} from "../src/temporal/constants.js";
 
 const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
 /** The account's join date: 2026-01-01T00:00:00Z. */
@@ -410,7 +411,7 @@ describe("drainAccountOutbox", () =>
 				status:
 				{
 					pending: 1,
-					oldestEnqueuedAt: "2026-03-01 00:00:01.000",
+					oldestEnqueuedAt: systemTimeAt("2026-03-01 00:00:01.000"),
 					lastError: "workflowy.com is unreachable",
 				},
 			},

@@ -8,6 +8,7 @@ import {applyExpansionDelta, expansionVersion, readExpansion, replaceExpansion} 
 import {runUnitOfWork} from "../src/cache/node-composite.js";
 import {startUnitOfWork} from "../src/cache/system-time.js";
 import * as schema from "../src/db/schema.js";
+import {FAR_FUTURE_DATE, systemTimeAt} from "../src/temporal/constants.js";
 
 const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
 
@@ -71,7 +72,7 @@ describe("expansion store", () =>
 	{
 		const db = database();
 
-		at(db, "2026-01-01 00:00:00.000", (unitOfWork) =>
+		at(db, systemTimeAt("2026-01-01 00:00:00.000"), (unitOfWork) =>
 		{
 			replaceExpansion(unitOfWork, ["b", "a", "a"], 1_000_000);
 		});
@@ -89,13 +90,13 @@ describe("expansion store", () =>
 				rows: [
 					{
 						shortKey: "a",
-						systemFrom: "2026-01-01 00:00:00.000",
-						systemTo: "9999-12-31 23:59:59",
+						systemFrom: systemTimeAt("2026-01-01 00:00:00.000"),
+						systemTo: FAR_FUTURE_DATE,
 					},
 					{
 						shortKey: "b",
-						systemFrom: "2026-01-01 00:00:00.000",
-						systemTo: "9999-12-31 23:59:59",
+						systemFrom: systemTimeAt("2026-01-01 00:00:00.000"),
+						systemTo: FAR_FUTURE_DATE,
 					},
 				],
 			},
@@ -106,7 +107,7 @@ describe("expansion store", () =>
 	{
 		const db = database();
 
-		at(db, "2026-01-01 00:00:00.000", (unitOfWork) =>
+		at(db, systemTimeAt("2026-01-01 00:00:00.000"), (unitOfWork) =>
 		{
 			replaceExpansion(unitOfWork, [], 1000);
 		});
@@ -117,12 +118,12 @@ describe("expansion store", () =>
 	it("applies a delta touching only its keys, closing removed rows and keeping the others' versions", () =>
 	{
 		const db = database();
-		at(db, "2026-01-01 00:00:00.000", (unitOfWork) =>
+		at(db, systemTimeAt("2026-01-01 00:00:00.000"), (unitOfWork) =>
 		{
 			replaceExpansion(unitOfWork, ["a", "b"], 1000);
 		});
 
-		const applied = at(db, "2026-01-02 00:00:00.000", (unitOfWork) =>
+		const applied = at(db, systemTimeAt("2026-01-02 00:00:00.000"), (unitOfWork) =>
 			applyExpansionDelta(
 				unitOfWork,
 				{
@@ -146,18 +147,18 @@ describe("expansion store", () =>
 				rows: [
 					{
 						shortKey: "a",
-						systemFrom: "2026-01-01 00:00:00.000",
-						systemTo: "2026-01-02 00:00:00.000",
+						systemFrom: systemTimeAt("2026-01-01 00:00:00.000"),
+						systemTo: systemTimeAt("2026-01-02 00:00:00.000"),
 					},
 					{
 						shortKey: "b",
-						systemFrom: "2026-01-01 00:00:00.000",
-						systemTo: "9999-12-31 23:59:59",
+						systemFrom: systemTimeAt("2026-01-01 00:00:00.000"),
+						systemTo: FAR_FUTURE_DATE,
 					},
 					{
 						shortKey: "c",
-						systemFrom: "2026-01-02 00:00:00.000",
-						systemTo: "9999-12-31 23:59:59",
+						systemFrom: systemTimeAt("2026-01-02 00:00:00.000"),
+						systemTo: FAR_FUTURE_DATE,
 					},
 				],
 			},
@@ -167,12 +168,12 @@ describe("expansion store", () =>
 	it("re-seeds by merging: unchanged keys keep their versions", () =>
 	{
 		const db = database();
-		at(db, "2026-01-01 00:00:00.000", (unitOfWork) =>
+		at(db, systemTimeAt("2026-01-01 00:00:00.000"), (unitOfWork) =>
 		{
 			replaceExpansion(unitOfWork, ["a", "b"], 1000);
 		});
 
-		at(db, "2026-01-02 00:00:00.000", (unitOfWork) =>
+		at(db, systemTimeAt("2026-01-02 00:00:00.000"), (unitOfWork) =>
 		{
 			replaceExpansion(unitOfWork, ["b", "c"], 2000);
 		});
@@ -187,18 +188,18 @@ describe("expansion store", () =>
 				rows: [
 					{
 						shortKey: "a",
-						systemFrom: "2026-01-01 00:00:00.000",
-						systemTo: "2026-01-02 00:00:00.000",
+						systemFrom: systemTimeAt("2026-01-01 00:00:00.000"),
+						systemTo: systemTimeAt("2026-01-02 00:00:00.000"),
 					},
 					{
 						shortKey: "b",
-						systemFrom: "2026-01-01 00:00:00.000",
-						systemTo: "9999-12-31 23:59:59",
+						systemFrom: systemTimeAt("2026-01-01 00:00:00.000"),
+						systemTo: FAR_FUTURE_DATE,
 					},
 					{
 						shortKey: "c",
-						systemFrom: "2026-01-02 00:00:00.000",
-						systemTo: "9999-12-31 23:59:59",
+						systemFrom: systemTimeAt("2026-01-02 00:00:00.000"),
+						systemTo: FAR_FUTURE_DATE,
 					},
 				],
 				seededAt: 2000,

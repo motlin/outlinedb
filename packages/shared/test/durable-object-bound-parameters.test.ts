@@ -8,7 +8,7 @@ import {PathBuilder} from "../src/cache/path-builder.js";
 import {ChangeDetector} from "../src/changes/change-detector.js";
 import type {NodeChange} from "../src/changes/change-detector.js";
 import {mirrors, nodeContent} from "../src/db/schema.js";
-import {FAR_FUTURE_DATE} from "../src/temporal/constants.js";
+import {FAR_FUTURE_DATE, systemTimeAt} from "../src/temporal/constants.js";
 import {buildTestDb} from "./helpers/round-trip-helpers.js";
 
 /** Durable Object SQLite rejects a statement with more than 100 bound parameters. */
@@ -17,7 +17,7 @@ const DURABLE_OBJECT_PARAMETER_CAP = 100;
 /** More ids than one statement may bind on a Durable Object. */
 const COUNT = 150;
 
-const SEEDED = "2026-01-01 00:00:00.000";
+const SEEDED = systemTimeAt("2026-01-01 00:00:00.000");
 
 const childIds = Array.from(
 	{

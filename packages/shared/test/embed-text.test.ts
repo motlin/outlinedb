@@ -5,10 +5,10 @@ import {join} from "node:path";
 import {afterEach, describe, expect, it} from "vite-plus/test";
 import {buildEmbedTexts, filterEmbeddable, loadEmbeddableNodes} from "../src/cache/embed-text.js";
 import * as schema from "../src/db/schema.js";
-import {FAR_FUTURE_DATE} from "../src/temporal/index.js";
+import {FAR_FUTURE_DATE, systemTimeAt} from "../src/temporal/index.js";
 
 const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
-const SYSTEM_FROM = "2026-01-01 00:00:00.000";
+const SYSTEM_FROM = systemTimeAt("2026-01-01 00:00:00.000");
 
 describe("embed text", () =>
 {

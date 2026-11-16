@@ -6,7 +6,7 @@ import * as sqliteVec from "sqlite-vec";
 import {afterEach, describe, expect, it} from "vite-plus/test";
 import * as schema from "@outlinedb/shared/db";
 import {mirrors, nodeContent, nodeEmbeddings} from "@outlinedb/shared/db";
-import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 import {MemoryEmbeddingIndex, SqliteVecIndex} from "../src/server/embedding-index.js";
 import type {EmbeddingIndex} from "../src/server/embedding-index.js";
 import {nodeTreeHost} from "../src/server/node-host.js";
@@ -18,7 +18,7 @@ import type {ServerContext} from "../src/server/context.js";
 const relatedFind = Ops["related.find"];
 
 const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
-const SEEDED_AT = "2026-01-01 00:00:00.000";
+const SEEDED_AT = systemTimeAt("2026-01-01 00:00:00.000");
 
 const open: DatabaseConstructor.Database[] = [];
 afterEach(() =>

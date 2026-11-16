@@ -14,6 +14,15 @@ export function isCurrentRecord(systemTo: string): boolean
 }
 
 /**
+ * The stored `system_from`/`system_to` value for the UTC instant written as `YYYY-MM-DD HH:MM:SS[.sss]`.
+ * Tests build every system time through this, so changing the storage encoding changes this one function.
+ */
+export function systemTimeAt(text: string): string
+{
+	return text;
+}
+
+/**
  * Formats a Date object as a temporal timestamp string with millisecond precision.
  * Format: 'YYYY-MM-DD HH:MM:SS.sss' (ISO8601 without timezone)
  */

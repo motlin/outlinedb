@@ -11,7 +11,7 @@ import * as schema from "@outlinedb/shared/db";
 import {mirrors, nodeContent} from "@outlinedb/shared/db";
 import {applyRows, normalizeLayoutMode, runUnitOfWork, startUnitOfWork} from "@outlinedb/shared/cache";
 import type {ApplyRowsResult, NormalizedRowsByTable} from "@outlinedb/shared/cache";
-import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, parseTemporalTimestamp} from "@outlinedb/shared/temporal";
 import type {Node, WorkflowyNode} from "@outlinedb/shared/types";
 import {ApiResponseSchema} from "@outlinedb/shared/types";
 import {uuidToShortId} from "@outlinedb/shared/workflowy";
@@ -397,7 +397,7 @@ export function bulkImportWithWatermarkGuard(
 		.all();
 	const localWatermarkMs = localRow.reduce<number | null>((newest, row) =>
 	{
-		const ms = Date.parse(`${row.systemFrom.replace(" ", "T")}Z`);
+		const ms = parseTemporalTimestamp(row.systemFrom).getTime();
 		return newest === null || ms > newest ? ms : newest;
 	}, null);
 

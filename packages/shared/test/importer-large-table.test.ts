@@ -1,5 +1,5 @@
 import {applyRows, runUnitOfWork} from "@outlinedb/shared/cache";
-import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 import {describe, expect, it} from "vite-plus/test";
 import {buildTestDb} from "./helpers/round-trip-helpers.js";
 
@@ -28,7 +28,7 @@ describe("applyRows on a large table", () =>
 		{
 			for (const row of rows)
 			{
-				insert.run(row.id, row.name, "2026-10-01 00:00:00", FAR_FUTURE_DATE);
+				insert.run(row.id, row.name, systemTimeAt("2026-10-01 00:00:00"), FAR_FUTURE_DATE);
 			}
 		})();
 
@@ -47,7 +47,7 @@ describe("applyRows on a large table", () =>
 					},
 				),
 			{
-				systemTime: "2026-10-28 00:00:00",
+				systemTime: systemTimeAt("2026-10-28 00:00:00"),
 				startedAt: Date.now(),
 			},
 		);

@@ -1,6 +1,6 @@
 import {assert, beforeEach, vi, afterEach, describe, expect, it} from "vite-plus/test";
 import {CacheService, NodeTreeReader} from "@outlinedb/shared/cache";
-import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, formatTemporalTimestamp, systemTimeAt} from "@outlinedb/shared/temporal";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -108,7 +108,7 @@ describe("NodeTreeReader", () =>
 					isMirror: false,
 					originalNodeId: null,
 				},
-				systemFrom: "2026-01-01 12:00:00.000",
+				systemFrom: systemTimeAt("2026-01-01 12:00:00.000"),
 				systemTo: FAR_FUTURE_DATE,
 				inChat: false,
 				hasReferencesRoot: false,
@@ -130,7 +130,7 @@ describe("NodeTreeReader", () =>
 							isMirror: false,
 							originalNodeId: null,
 						},
-						systemFrom: "2026-01-01 12:00:00.000",
+						systemFrom: systemTimeAt("2026-01-01 12:00:00.000"),
 						systemTo: FAR_FUTURE_DATE,
 						inChat: false,
 						hasReferencesRoot: false,
@@ -154,7 +154,7 @@ describe("NodeTreeReader", () =>
 					isMirror: false,
 					originalNodeId: null,
 				},
-				systemFrom: "2026-01-01 12:00:00.000",
+				systemFrom: systemTimeAt("2026-01-01 12:00:00.000"),
 				systemTo: FAR_FUTURE_DATE,
 				inChat: false,
 				hasReferencesRoot: false,
@@ -209,7 +209,7 @@ describe("NodeTreeReader", () =>
 					isMirror: false,
 					originalNodeId: null,
 				},
-				systemFrom: "2026-01-01 12:00:00.000",
+				systemFrom: systemTimeAt("2026-01-01 12:00:00.000"),
 				systemTo: FAR_FUTURE_DATE,
 				inChat: false,
 				hasReferencesRoot: false,

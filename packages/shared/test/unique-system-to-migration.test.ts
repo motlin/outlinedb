@@ -5,6 +5,7 @@ import {copyFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync} from 
 import {tmpdir} from "node:os";
 import path from "node:path";
 import {describe, expect, it} from "vite-plus/test";
+import {FAR_FUTURE_DATE, systemTimeAt} from "../src/temporal/constants.js";
 
 const migrationsFolder = path.join(import.meta.dirname, "../src/db/migrations");
 
@@ -73,13 +74,13 @@ function legacyDatabase()
 		DROP INDEX calendar_metadata_system_to_idx;
 		CREATE INDEX calendar_metadata_new_system_to_idx ON calendar_metadata (node_id, system_to);
 		INSERT INTO mirrors (mirror_id, original_id, system_from, system_to) VALUES
-			('m1', 'o1', '2026-10-29 20:02:08.971', '2026-10-29 20:05:35.365'),
-			('m1', 'o1', '2026-10-29 20:02:09.019', '2026-10-29 20:05:35.365'),
-			('m1', 'o1', '2026-10-29 20:03:00.000', '2026-10-29 20:05:35.365'),
-			('m2', 'o2', '2026-10-29 20:00:00.000', '9999-12-31 23:59:59');
+			('m1', 'o1', '${systemTimeAt("2026-10-29 20:02:08.971")}', '${systemTimeAt("2026-10-29 20:05:35.365")}'),
+			('m1', 'o1', '${systemTimeAt("2026-10-29 20:02:09.019")}', '${systemTimeAt("2026-10-29 20:05:35.365")}'),
+			('m1', 'o1', '${systemTimeAt("2026-10-29 20:03:00.000")}', '${systemTimeAt("2026-10-29 20:05:35.365")}'),
+			('m2', 'o2', '${systemTimeAt("2026-10-29 20:00:00.000")}', '${FAR_FUTURE_DATE}');
 		INSERT INTO references_roots (node_id, system_from, system_to) VALUES
-			('r1', '2026-10-29 20:02:08.971', '2026-10-29 20:13:30.705'),
-			('r1', '2026-10-29 20:02:09.019', '2026-10-29 20:13:30.705');
+			('r1', '${systemTimeAt("2026-10-29 20:02:08.971")}', '${systemTimeAt("2026-10-29 20:13:30.705")}'),
+			('r1', '${systemTimeAt("2026-10-29 20:02:09.019")}', '${systemTimeAt("2026-10-29 20:13:30.705")}');
 	`);
 	return sqlite;
 }
@@ -129,38 +130,38 @@ describe("unique system_to migration", () =>
 					{
 						mirror_id: "m1",
 						original_id: "o1",
-						system_from: "2026-10-29 20:02:08.971",
-						system_to: "2026-10-29 20:02:09.019",
+						system_from: systemTimeAt("2026-10-29 20:02:08.971"),
+						system_to: systemTimeAt("2026-10-29 20:02:09.019"),
 					},
 					{
 						mirror_id: "m1",
 						original_id: "o1",
-						system_from: "2026-10-29 20:02:09.019",
-						system_to: "2026-10-29 20:03:00.000",
+						system_from: systemTimeAt("2026-10-29 20:02:09.019"),
+						system_to: systemTimeAt("2026-10-29 20:03:00.000"),
 					},
 					{
 						mirror_id: "m1",
 						original_id: "o1",
-						system_from: "2026-10-29 20:03:00.000",
-						system_to: "2026-10-29 20:05:35.365",
+						system_from: systemTimeAt("2026-10-29 20:03:00.000"),
+						system_to: systemTimeAt("2026-10-29 20:05:35.365"),
 					},
 					{
 						mirror_id: "m2",
 						original_id: "o2",
-						system_from: "2026-10-29 20:00:00.000",
-						system_to: "9999-12-31 23:59:59",
+						system_from: systemTimeAt("2026-10-29 20:00:00.000"),
+						system_to: FAR_FUTURE_DATE,
 					},
 				],
 				referencesRoots: [
 					{
 						node_id: "r1",
-						system_from: "2026-10-29 20:02:08.971",
-						system_to: "2026-10-29 20:02:09.019",
+						system_from: systemTimeAt("2026-10-29 20:02:08.971"),
+						system_to: systemTimeAt("2026-10-29 20:02:09.019"),
 					},
 					{
 						node_id: "r1",
-						system_from: "2026-10-29 20:02:09.019",
-						system_to: "2026-10-29 20:13:30.705",
+						system_from: systemTimeAt("2026-10-29 20:02:09.019"),
+						system_to: systemTimeAt("2026-10-29 20:13:30.705"),
 					},
 				],
 			},

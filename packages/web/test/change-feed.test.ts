@@ -4,6 +4,7 @@ import {describe, expect, it} from "vite-plus/test";
 import {ChangeFeed, applyNodeChanges} from "../src/client/change-feed.js";
 import {nodeKeys} from "../src/client/node-cache.js";
 import type {BacklinksResponse, NodeChangesResponse, NodeResponse} from "../src/node-types.js";
+import {systemTimeAt} from "@outlinedb/shared/temporal";
 
 function row(id: string, parentId: string | null, fields: Partial<NodeResponse> = {}): NodeResponse
 {
@@ -403,23 +404,23 @@ describe("ChangeFeed", () =>
 		const answers = [
 			changes(
 				{
-					latest: "2026-10-29 12:00:09.000",
+					latest: systemTimeAt("2026-10-29 12:00:09.000"),
 				},
 			),
 			changes(
 				{
-					latest: "2026-10-29 12:00:10.000",
+					latest: systemTimeAt("2026-10-29 12:00:10.000"),
 				},
 			),
 			changes(
 				{
-					latest: "2026-10-29 12:00:03.000",
+					latest: systemTimeAt("2026-10-29 12:00:03.000"),
 					reset: true,
 				},
 			),
 			changes(
 				{
-					latest: "2026-10-29 12:00:04.000",
+					latest: systemTimeAt("2026-10-29 12:00:04.000"),
 				},
 			),
 		];
@@ -438,9 +439,9 @@ describe("ChangeFeed", () =>
 		// even when lower.
 		expect(asked).toStrictEqual([
 			undefined,
-			"2026-10-29 12:00:09.000",
-			"2026-10-29 12:00:10.000",
-			"2026-10-29 12:00:03.000",
+			systemTimeAt("2026-10-29 12:00:09.000"),
+			systemTimeAt("2026-10-29 12:00:10.000"),
+			systemTimeAt("2026-10-29 12:00:03.000"),
 		]);
 	});
 

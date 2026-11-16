@@ -8,6 +8,7 @@ import List from "../../../src/commands/node/list.js";
 import {cleanupTestDatabase, createTestDatabase} from "../../db/migration-helper.js";
 import type {TestDatabase} from "../../db/migration-helper.js";
 import {z} from "zod";
+import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 
 const ListOutputSchema = z.array(
 	z.looseObject(
@@ -153,11 +154,11 @@ describe("node:list command", () =>
 
 		it("resolves --parent-id inbox to the account's Inbox node, without caching an 'inbox' row", async () =>
 		{
-			const now = "2026-01-01 00:00:00.000";
+			const now = systemTimeAt("2026-01-01 00:00:00.000");
 			const current =
 			{
 				systemFrom: now,
-				systemTo: "9999-12-31 23:59:59",
+				systemTo: FAR_FUTURE_DATE,
 			};
 			testDatabase.db
 				.insert(nodeContent)
@@ -1253,7 +1254,7 @@ describe("node:list command", () =>
 						isMirror: false,
 						originalNodeId: null,
 					},
-					systemTo: "9999-12-31 23:59:59",
+					systemTo: FAR_FUTURE_DATE,
 					inChat: false,
 					hasReferencesRoot: false,
 				},
@@ -1274,7 +1275,7 @@ describe("node:list command", () =>
 						isMirror: false,
 						originalNodeId: null,
 					},
-					systemTo: "9999-12-31 23:59:59",
+					systemTo: FAR_FUTURE_DATE,
 					inChat: false,
 					hasReferencesRoot: false,
 				},
@@ -1345,7 +1346,7 @@ describe("node:list command", () =>
 						isMirror: false,
 						originalNodeId: null,
 					},
-					systemTo: "9999-12-31 23:59:59",
+					systemTo: FAR_FUTURE_DATE,
 					inChat: false,
 					hasReferencesRoot: false,
 				},
@@ -1416,7 +1417,7 @@ describe("node:list command", () =>
 						isMirror: false,
 						originalNodeId: null,
 					},
-					systemTo: "9999-12-31 23:59:59",
+					systemTo: FAR_FUTURE_DATE,
 					inChat: false,
 					hasReferencesRoot: false,
 				},

@@ -6,7 +6,7 @@ import {join} from "node:path";
 import {CacheService} from "@outlinedb/shared/cache";
 import * as schema from "@outlinedb/shared/db";
 import {nodeContent, nodeMetadata} from "@outlinedb/shared/db";
-import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 import type {ServerContext} from "../src/server/context.js";
 import {httpAppFor} from "./http-app-for.js";
 import {collectCustomSections, findCustomRoot} from "../src/server/custom-tree.js";
@@ -95,7 +95,7 @@ describe("findCustomRoot", () =>
 
 describe("GET /api/v1/custom-tree", () =>
 {
-	const AT = "2026-01-01 00:00:00.000";
+	const AT = systemTimeAt("2026-01-01 00:00:00.000");
 	it("returns the sections under the Custom root and the ids whose change can change them", async () =>
 	{
 		const sqlite = new DatabaseConstructor(":memory:");

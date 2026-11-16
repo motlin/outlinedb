@@ -1,7 +1,7 @@
 import {beforeEach, vi, afterEach, describe, expect, it} from "vite-plus/test";
 import {backupImports, mirrors, nodeContent, nodeMetadata, referencesRoots} from "@outlinedb/shared/db";
 import {z} from "zod";
-import {formatTemporalTimestamp} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, formatTemporalTimestamp, systemTimeAt} from "@outlinedb/shared/temporal";
 import type {NewNodeContent, NewNodeMetadata} from "@outlinedb/shared/db";
 import {captureOutput} from "@oclif/test";
 import fs from "node:fs";
@@ -111,24 +111,24 @@ describe("cache:status command", () =>
 					name: "Root Node 1",
 					note: null,
 					parentId: null,
-					systemFrom: "2024-01-01 00:00:00",
-					systemTo: "9999-12-31 23:59:59",
+					systemFrom: systemTimeAt("2024-01-01 00:00:00"),
+					systemTo: FAR_FUTURE_DATE,
 				},
 				{
 					id: "child-1",
 					name: "Child Node 1",
 					note: null,
 					parentId: "root-1",
-					systemFrom: "2024-01-01 00:00:00",
-					systemTo: "9999-12-31 23:59:59",
+					systemFrom: systemTimeAt("2024-01-01 00:00:00"),
+					systemTo: FAR_FUTURE_DATE,
 				},
 				{
 					id: "child-2",
 					name: "Child Node 2",
 					note: null,
 					parentId: "root-1",
-					systemFrom: "2024-01-01 00:00:00",
-					systemTo: "9999-12-31 23:59:59",
+					systemFrom: systemTimeAt("2024-01-01 00:00:00"),
+					systemTo: FAR_FUTURE_DATE,
 				},
 			];
 
@@ -139,8 +139,8 @@ describe("cache:status command", () =>
 					modifiedAt: new Date(1_700_000_100 * 1000),
 					completedAt: null,
 					layoutMode: "bullets",
-					systemFrom: "2024-01-01 00:00:00",
-					systemTo: "9999-12-31 23:59:59",
+					systemFrom: systemTimeAt("2024-01-01 00:00:00"),
+					systemTo: FAR_FUTURE_DATE,
 				},
 				{
 					nodeId: "child-1",
@@ -148,8 +148,8 @@ describe("cache:status command", () =>
 					modifiedAt: new Date(1_700_000_300 * 1000),
 					completedAt: new Date(1_700_000_400 * 1000),
 					layoutMode: "todo",
-					systemFrom: "2024-01-01 00:00:00",
-					systemTo: "9999-12-31 23:59:59",
+					systemFrom: systemTimeAt("2024-01-01 00:00:00"),
+					systemTo: FAR_FUTURE_DATE,
 				},
 				{
 					nodeId: "child-2",
@@ -157,8 +157,8 @@ describe("cache:status command", () =>
 					modifiedAt: new Date(1_700_000_600 * 1000),
 					completedAt: null,
 					layoutMode: "bullets",
-					systemFrom: "2024-01-01 00:00:00",
-					systemTo: "9999-12-31 23:59:59",
+					systemFrom: systemTimeAt("2024-01-01 00:00:00"),
+					systemTo: FAR_FUTURE_DATE,
 				},
 			];
 
@@ -212,7 +212,7 @@ describe("cache:status command", () =>
 						note: null,
 						parentId: null,
 						systemFrom: systemFromStr,
-						systemTo: "9999-12-31 23:59:59",
+						systemTo: FAR_FUTURE_DATE,
 					},
 				)
 				.run();
@@ -244,8 +244,8 @@ describe("cache:status command", () =>
 					{
 						backupDate: "2024-01-15",
 						filename: "test-backup.json",
-						systemFrom: "2024-01-15 10:00:00",
-						systemTo: "9999-12-31 23:59:59",
+						systemFrom: systemTimeAt("2024-01-15 10:00:00"),
+						systemTo: FAR_FUTURE_DATE,
 					},
 				)
 				.run();
@@ -280,8 +280,8 @@ describe("cache:status command", () =>
 		{
 			const seeded =
 			{
-				systemFrom: "2024-01-01 00:00:00",
-				systemTo: "9999-12-31 23:59:59",
+				systemFrom: systemTimeAt("2024-01-01 00:00:00"),
+				systemTo: FAR_FUTURE_DATE,
 			};
 			for (const [id, parentId] of [
 				["target", null],
@@ -454,7 +454,7 @@ describe("cache:status command", () =>
 						note: null,
 						parentId: null,
 						systemFrom: systemFromStr,
-						systemTo: "9999-12-31 23:59:59",
+						systemTo: FAR_FUTURE_DATE,
 					},
 				)
 				.run();
@@ -493,7 +493,7 @@ describe("cache:status command", () =>
 						note: null,
 						parentId: null,
 						systemFrom: systemFromStr,
-						systemTo: "9999-12-31 23:59:59",
+						systemTo: FAR_FUTURE_DATE,
 					},
 				)
 				.run();

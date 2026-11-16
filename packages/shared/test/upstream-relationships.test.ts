@@ -6,7 +6,7 @@ import {afterEach, describe, expect, it} from "vite-plus/test";
 import {CacheService} from "../src/cache/cache-service.js";
 import {collectItemRelationships, emptyItemRelationships} from "../src/cache/item-relationships.js";
 import * as schema from "../src/db/schema.js";
-import {FAR_FUTURE_DATE} from "../src/temporal/index.js";
+import {FAR_FUTURE_DATE, systemTimeAt} from "../src/temporal/index.js";
 
 const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
 
@@ -130,7 +130,7 @@ describe("CacheService upstream relationship view", () =>
 						id,
 						name: "",
 						parentId,
-						systemFrom: "2026-01-01 00:00:00.000",
+						systemFrom: systemTimeAt("2026-01-01 00:00:00.000"),
 						systemTo: FAR_FUTURE_DATE,
 					},
 				)
@@ -144,7 +144,7 @@ describe("CacheService upstream relationship view", () =>
 		}
 		cacheService.recordRelationships(relationships);
 		const count = (table: string) =>
-			sqlite.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE system_to = '9999-12-31 23:59:59'`).get();
+			sqlite.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE system_to = '${FAR_FUTURE_DATE}'`).get();
 		return {
 			cacheService,
 			relationships,

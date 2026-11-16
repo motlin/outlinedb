@@ -14,6 +14,7 @@ import
 	FAR_FUTURE_DATE,
 	formatTemporalTimestamp,
 	parseTemporalTimestamp,
+	systemTimeAt,
 	temporalTimestampJustBefore,
 } from "../src/temporal/constants.js";
 import {SameMillisecondOverwriteError} from "../src/cache/temporal-merge.js";
@@ -21,7 +22,6 @@ import {SameMillisecondOverwriteError} from "../src/cache/temporal-merge.js";
 describe("system target placeholder migration", () =>
 {
 	const migrationsFolder = path.join(import.meta.dirname, "../src/db/migrations");
-	const FAR_FUTURE = "9999-12-31 23:59:59";
 
 	/** A folder holding every migration before the placeholder cleanup, so a database can be migrated to that point. */
 	function beforeCleanupFolder(): string
@@ -69,11 +69,11 @@ describe("system target placeholder migration", () =>
 			);
 			sqlite.exec(`
 			INSERT INTO node_content (id, name, note, parent_id, system_from, system_to) VALUES
-				('inbox', NULL, NULL, NULL, '2026-11-02 20:43:19.861', '${FAR_FUTURE}'),
-				('c1e6ea1d-3a54-4206-9ea6-41bd95477fbc', 'Inbox', NULL, NULL, '2026-10-01 00:00:00.000', '${FAR_FUTURE}');
+				('inbox', NULL, NULL, NULL, '${systemTimeAt("2026-11-02 20:43:19.861")}', '${FAR_FUTURE_DATE}'),
+				('c1e6ea1d-3a54-4206-9ea6-41bd95477fbc', 'Inbox', NULL, NULL, '${systemTimeAt("2026-10-01 00:00:00.000")}', '${FAR_FUTURE_DATE}');
 			INSERT INTO node_metadata (node_id, short_id, system_from, system_to) VALUES
-				('inbox', 'inbox', '2026-11-02 20:43:19.861', '${FAR_FUTURE}'),
-				('c1e6ea1d-3a54-4206-9ea6-41bd95477fbc', '41bd95477fbc', '2026-10-01 00:00:00.000', '${FAR_FUTURE}');
+				('inbox', 'inbox', '${systemTimeAt("2026-11-02 20:43:19.861")}', '${FAR_FUTURE_DATE}'),
+				('c1e6ea1d-3a54-4206-9ea6-41bd95477fbc', '41bd95477fbc', '${systemTimeAt("2026-10-01 00:00:00.000")}', '${FAR_FUTURE_DATE}');
 		`);
 
 			migrate(
@@ -95,25 +95,25 @@ describe("system target placeholder migration", () =>
 					content: [
 						{
 							id: "c1e6ea1d-3a54-4206-9ea6-41bd95477fbc",
-							system_from: "2026-10-01 00:00:00.000",
-							system_to: FAR_FUTURE,
+							system_from: systemTimeAt("2026-10-01 00:00:00.000"),
+							system_to: FAR_FUTURE_DATE,
 						},
 						{
 							id: "inbox",
-							system_from: "2026-11-02 20:43:19.861",
-							system_to: "2026-11-02 20:43:19.861",
+							system_from: systemTimeAt("2026-11-02 20:43:19.861"),
+							system_to: systemTimeAt("2026-11-02 20:43:19.861"),
 						},
 					],
 					metadata: [
 						{
 							node_id: "c1e6ea1d-3a54-4206-9ea6-41bd95477fbc",
-							system_from: "2026-10-01 00:00:00.000",
-							system_to: FAR_FUTURE,
+							system_from: systemTimeAt("2026-10-01 00:00:00.000"),
+							system_to: FAR_FUTURE_DATE,
 						},
 						{
 							node_id: "inbox",
-							system_from: "2026-11-02 20:43:19.861",
-							system_to: "2026-11-02 20:43:19.861",
+							system_from: systemTimeAt("2026-11-02 20:43:19.861"),
+							system_to: systemTimeAt("2026-11-02 20:43:19.861"),
 						},
 					],
 				},
@@ -139,19 +139,21 @@ describe("system time", () =>
 
 	describe("system time codec", () =>
 	{
-		it("parses a stored system time as a UTC instant and steps one tick before it", () =>
+		it("parses a stored system time as a UTC instant and steps one tick before it, and builds one from readable UTC text", () =>
 		{
 			expect(
 				{
-					parsed: parseTemporalTimestamp("2026-02-01 00:00:05.000").toISOString(),
-					justBefore: temporalTimestampJustBefore("2026-02-01 00:00:05.000"),
-					roundTrip: formatTemporalTimestamp(parseTemporalTimestamp("2026-02-01 00:00:05.123")),
+					parsed: parseTemporalTimestamp(systemTimeAt("2026-02-01 00:00:05.000")).toISOString(),
+					justBefore: temporalTimestampJustBefore(systemTimeAt("2026-02-01 00:00:05.000")),
+					roundTrip: formatTemporalTimestamp(parseTemporalTimestamp(systemTimeAt("2026-02-01 00:00:05.123"))),
+					fromText: systemTimeAt("2026-02-01 00:00:05.123"),
 				},
 			).toStrictEqual(
 				{
 					parsed: "2026-02-01T00:00:05.000Z",
-					justBefore: "2026-02-01 00:00:04.999",
-					roundTrip: "2026-02-01 00:00:05.123",
+					justBefore: systemTimeAt("2026-02-01 00:00:04.999"),
+					roundTrip: systemTimeAt("2026-02-01 00:00:05.123"),
+					fromText: formatTemporalTimestamp(new Date("2026-02-01T00:00:05.123Z")),
 				},
 			);
 		});
@@ -231,7 +233,7 @@ describe("system time", () =>
 					name: "First",
 					note: null,
 					parentId: null,
-					systemFrom: "2026-02-01 00:00:00.000",
+					systemFrom: systemTimeAt("2026-02-01 00:00:00.000"),
 					systemTo: FAR_FUTURE_DATE,
 				},
 				{
@@ -239,7 +241,7 @@ describe("system time", () =>
 					name: "Second",
 					note: null,
 					parentId: "node-1",
-					systemFrom: "2026-02-01 00:00:00.000",
+					systemFrom: systemTimeAt("2026-02-01 00:00:00.000"),
 					systemTo: FAR_FUTURE_DATE,
 				},
 			]);
@@ -272,7 +274,7 @@ describe("system time", () =>
 					name: "Child",
 					note: null,
 					parentId: "node-1",
-					systemFrom: "2026-02-01 00:00:00.000",
+					systemFrom: systemTimeAt("2026-02-01 00:00:00.000"),
 					systemTo: FAR_FUTURE_DATE,
 				},
 				{
@@ -280,7 +282,7 @@ describe("system time", () =>
 					name: "Parent",
 					note: null,
 					parentId: null,
-					systemFrom: "2026-02-01 00:00:00.000",
+					systemFrom: systemTimeAt("2026-02-01 00:00:00.000"),
 					systemTo: FAR_FUTURE_DATE,
 				},
 			]);
@@ -303,22 +305,24 @@ describe("system time", () =>
 			expect(() =>
 			{
 				new CacheService(second).insertNode(apiNode("node-1", "Renamed again"), null);
-			}).toThrow(new SameMillisecondOverwriteError("node_content", "id=node-1", "2026-02-01 00:00:05.000"));
+			}).toThrow(
+				new SameMillisecondOverwriteError("node_content", "id=node-1", systemTimeAt("2026-02-01 00:00:05.000")),
+			);
 			expect(first.select().from(nodeContent).all()).toStrictEqual([
 				{
 					id: "node-1",
 					name: "Original",
 					note: null,
 					parentId: null,
-					systemFrom: "2026-02-01 00:00:00.000",
-					systemTo: "2026-02-01 00:00:05.000",
+					systemFrom: systemTimeAt("2026-02-01 00:00:00.000"),
+					systemTo: systemTimeAt("2026-02-01 00:00:05.000"),
 				},
 				{
 					id: "node-1",
 					name: "Renamed",
 					note: null,
 					parentId: null,
-					systemFrom: "2026-02-01 00:00:05.000",
+					systemFrom: systemTimeAt("2026-02-01 00:00:05.000"),
 					systemTo: FAR_FUTURE_DATE,
 				},
 			]);
@@ -344,15 +348,15 @@ describe("system time", () =>
 					name: "Original",
 					note: null,
 					parentId: null,
-					systemFrom: "2026-02-01 00:00:05.000",
-					systemTo: "2026-02-01 00:00:04.000",
+					systemFrom: systemTimeAt("2026-02-01 00:00:05.000"),
+					systemTo: systemTimeAt("2026-02-01 00:00:04.000"),
 				},
 				{
 					id: "node-1",
 					name: "Renamed",
 					note: null,
 					parentId: null,
-					systemFrom: "2026-02-01 00:00:04.000",
+					systemFrom: systemTimeAt("2026-02-01 00:00:04.000"),
 					systemTo: FAR_FUTURE_DATE,
 				},
 			]);

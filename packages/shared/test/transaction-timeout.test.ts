@@ -14,7 +14,7 @@ import
 } from "../src/cache/system-time.js";
 import * as schema from "../src/db/schema.js";
 import {nodeContent} from "../src/db/schema.js";
-import {FAR_FUTURE_DATE} from "../src/temporal/constants.js";
+import {FAR_FUTURE_DATE, systemTimeAt} from "../src/temporal/constants.js";
 import type {WorkflowyNode} from "../src/types/workflowy.js";
 
 const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
@@ -113,7 +113,7 @@ describe("transaction timeout", () =>
 		).toStrictEqual([
 			{
 				id: "node-1",
-				systemFrom: "2026-02-01 00:00:00.000",
+				systemFrom: systemTimeAt("2026-02-01 00:00:00.000"),
 			},
 		]);
 	});
@@ -135,14 +135,14 @@ describe("transaction timeout", () =>
 				insertNode(tx, "node-1", systemTime);
 				vi.setSystemTime(START.getTime() + TRANSACTION_TIMEOUT_MS + 1);
 			});
-		}).toThrow(new TransactionTimeoutError("2026-02-01 00:00:00.000", TRANSACTION_TIMEOUT_MS + 1));
+		}).toThrow(new TransactionTimeoutError(systemTimeAt("2026-02-01 00:00:00.000"), TRANSACTION_TIMEOUT_MS + 1));
 		expect(db.select().from(nodeContent).all()).toStrictEqual([]);
 	});
 
 	it("names the system time and the elapsed time in the error", () =>
 	{
-		expect(new TransactionTimeoutError("2026-02-01 00:00:00.000", 60_001).message).toBe(
-			"Unit of work stamped 2026-02-01 00:00:00.000 would commit 60001ms after it started, past the 60000ms transaction timeout; rolled back",
+		expect(new TransactionTimeoutError(systemTimeAt("2026-02-01 00:00:00.000"), 60_001).message).toBe(
+			`Unit of work stamped ${systemTimeAt("2026-02-01 00:00:00.000")} would commit 60001ms after it started, past the 60000ms transaction timeout; rolled back`,
 		);
 	});
 
@@ -179,7 +179,7 @@ describe("transaction timeout", () =>
 		).toStrictEqual([
 			{
 				id: "node-1",
-				systemFrom: "2024-01-01 00:00:00.000",
+				systemFrom: systemTimeAt("2024-01-01 00:00:00.000"),
 			},
 		]);
 	});
@@ -200,7 +200,7 @@ describe("transaction timeout", () =>
 		expect(() =>
 		{
 			applyApiBatch(state, [apiNode("b")]);
-		}).toThrow(new TransactionTimeoutError("2026-02-01 00:00:00.000", TRANSACTION_TIMEOUT_MS + 1));
+		}).toThrow(new TransactionTimeoutError(systemTimeAt("2026-02-01 00:00:00.000"), TRANSACTION_TIMEOUT_MS + 1));
 		expect(() => finishApiImport(state)).toThrow(TransactionTimeoutError);
 		expect(
 			db
@@ -246,7 +246,7 @@ describe("transaction timeout", () =>
 			{
 				beforeDeadline: false,
 				afterDeadline: true,
-				reason: new TransactionTimeoutError("2026-02-01 00:00:00.000", TRANSACTION_TIMEOUT_MS),
+				reason: new TransactionTimeoutError(systemTimeAt("2026-02-01 00:00:00.000"), TRANSACTION_TIMEOUT_MS),
 			},
 		);
 	});

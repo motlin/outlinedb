@@ -2,14 +2,14 @@ import {expect, describe, beforeEach, beforeAll, vi, it, afterEach, afterAll} fr
 import {CacheService, NodeTreeReader, PathBuilder} from "@outlinedb/shared/cache";
 import {nodeContent} from "@outlinedb/shared/db";
 import {buildSearchConditions, parseSearchQuery} from "@outlinedb/shared/search";
-import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 import {and} from "drizzle-orm";
 import {cleanupTestDatabase, createInMemoryTestDatabase, nodeFixtures, seedTestData} from "../db/migration-helper.js";
 import type {TestDatabase} from "../db/migration-helper.js";
 import {createTestNode} from "../helpers/node-fixtures.js";
 
 const NOW = new Date("2026-01-01T12:00:00.000Z");
-const SYSTEM_FROM = "2026-01-01 12:00:00.000";
+const SYSTEM_FROM = systemTimeAt("2026-01-01 12:00:00.000");
 
 /**
  * A mirror never has text of its own: Workflowy renders it with its original's

@@ -7,6 +7,7 @@ import {describe, expect, it} from "vite-plus/test";
 import * as schema from "@outlinedb/shared/db";
 import type {ServerContext} from "../src/server/context.js";
 import {httpAppFor} from "./http-app-for.js";
+import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 
 /** No internal adapter: our What's New read state lives only in our own database, never in upstream's root metadata. */
 function setup()
@@ -61,9 +62,7 @@ function setup()
 		{
 			entry: string;
 			open: number;
-		}>(
-			sql`SELECT entry, system_to = '9999-12-31 23:59:59' AS open FROM whats_new_reads ORDER BY entry, system_from`,
-		);
+		}>(sql`SELECT entry, system_to = ${FAR_FUTURE_DATE} AS open FROM whats_new_reads ORDER BY entry, system_from`);
 	return {
 		request,
 		rows,

@@ -6,7 +6,7 @@ import {afterEach, describe, expect, it} from "vite-plus/test";
 import {Hono} from "hono";
 import * as schema from "@outlinedb/shared/db";
 import {nodeContent} from "@outlinedb/shared/db";
-import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 import {nodeTreeHost} from "../src/server/node-host.js";
 import {bindTreeHost} from "../src/server/tree-snapshot.js";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
@@ -14,7 +14,7 @@ import {MemoryEmbeddingIndex} from "../src/server/embedding-index.js";
 import {httpAppFor} from "./http-app-for.js";
 
 const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
-const SEEDED_AT = "2026-01-01 00:00:00.000";
+const SEEDED_AT = systemTimeAt("2026-01-01 00:00:00.000");
 
 const open: DatabaseConstructor.Database[] = [];
 afterEach(() =>

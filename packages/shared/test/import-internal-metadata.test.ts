@@ -10,7 +10,7 @@ import {readTreeTxId} from "../src/cache/tree-transaction.js";
 import {readImportTime} from "../src/cache/account-store.js";
 import {readExpansion} from "../src/cache/expansion-store.js";
 import * as schema from "../src/db/schema.js";
-import {FAR_FUTURE_DATE} from "../src/temporal/index.js";
+import {FAR_FUTURE_DATE, systemTimeAt} from "../src/temporal/index.js";
 import {createFakeInternalApi, json} from "./helpers/fake-internal-api.js";
 
 const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
@@ -62,7 +62,7 @@ function setup(cachedIds: string[])
 					name: id,
 					note: null,
 					parentId: null,
-					systemFrom: "2026-01-01 00:00:00",
+					systemFrom: systemTimeAt("2026-01-01 00:00:00"),
 					systemTo: FAR_FUTURE_DATE,
 				},
 			)
@@ -71,7 +71,7 @@ function setup(cachedIds: string[])
 			.values(
 				{
 					nodeId: id,
-					systemFrom: "2026-01-01 00:00:00",
+					systemFrom: systemTimeAt("2026-01-01 00:00:00"),
 					systemTo: FAR_FUTURE_DATE,
 				},
 			)

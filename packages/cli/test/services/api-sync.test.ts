@@ -1,6 +1,6 @@
 import {WorkflowyApiClient} from "@outlinedb/shared/api";
 import {mirrors, nodeContent, nodeMetadata} from "@outlinedb/shared/db";
-import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 import {and, eq} from "drizzle-orm";
 import {randomUUID} from "node:crypto";
 import os from "node:os";
@@ -318,7 +318,7 @@ describe("API Sync with Cache", () =>
 						modifiedAt: new Date(1_600_001_000 * 1000),
 						completedAt: null,
 						layoutMode: "bullets",
-						systemFrom: "2020-01-01 00:00:00.000",
+						systemFrom: systemTimeAt("2020-01-01 00:00:00.000"),
 					},
 				),
 			]);
@@ -397,7 +397,7 @@ describe("API Sync with Cache", () =>
 		{
 			const mirrorNodeId = "mirror-node";
 			const originalNodeId = "original-node";
-			const liveSystemFrom = "2026-01-01 00:00:00.000";
+			const liveSystemFrom = systemTimeAt("2026-01-01 00:00:00.000");
 
 			insertTestNodes(testDatabase.db, [
 				createTestNode(

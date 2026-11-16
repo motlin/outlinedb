@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import {setTimeout as sleep} from "node:timers/promises";
 import {fileBlobs, s3Files} from "@outlinedb/shared/db";
-import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 import {eq} from "drizzle-orm";
 import {afterEach, beforeEach, describe, expect, it} from "vite-plus/test";
 import {defaultStoreDir} from "@outlinedb/shared/node";
@@ -15,13 +15,13 @@ import type {TestDatabase} from "../db/migration-helper.js";
 
 const OPEN =
 {
-	systemFrom: "2026-10-01 00:00:00",
+	systemFrom: systemTimeAt("2026-10-01 00:00:00"),
 	systemTo: FAR_FUTURE_DATE,
 };
 const FETCHED_AT = new Date(1_790_000_000_000);
-const FETCHED_AT_SYSTEM_TIME = "2026-09-21 14:13:20.000";
+const FETCHED_AT_SYSTEM_TIME = systemTimeAt("2026-09-21 14:13:20.000");
 const RETRIED_AT = new Date(1_790_000_060_000);
-const RETRIED_AT_SYSTEM_TIME = "2026-09-21 14:14:20.000";
+const RETRIED_AT_SYSTEM_TIME = systemTimeAt("2026-09-21 14:14:20.000");
 
 const BYTES: Record<string, string> =
 {
@@ -165,8 +165,8 @@ describe("mirrorFiles", () =>
 					nodeId: "node-closed",
 					fileName: "old.jpeg",
 					fileType: "image/jpeg",
-					systemFrom: "2026-09-01 00:00:00",
-					systemTo: "2026-09-02 00:00:00",
+					systemFrom: systemTimeAt("2026-09-01 00:00:00"),
+					systemTo: systemTimeAt("2026-09-02 00:00:00"),
 				},
 			])
 			.run();

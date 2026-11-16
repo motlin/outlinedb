@@ -26,7 +26,7 @@ import {nodeContent, nodeMetadata} from "@outlinedb/shared/db";
 import {itemTags} from "@outlinedb/shared/tags";
 import type {TaggedText} from "@outlinedb/shared/tags";
 import {eq, sql} from "drizzle-orm";
-import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 import type {ServerContext} from "../src/server/context.js";
 import {mergeFallback, rankCounts} from "../src/server/ops/tag-index.js";
 import type {TagCount} from "../src/server/ops/tag-index.js";
@@ -852,7 +852,7 @@ describe("tag index", () =>
 				migrationsFolder: join(import.meta.dirname, "../../shared/src/db/migrations"),
 			},
 		);
-		const seededAt = "2026-01-01 00:00:00.000";
+		const seededAt = systemTimeAt("2026-01-01 00:00:00.000");
 		const rows:
 		{
 			id: string;
@@ -880,7 +880,7 @@ describe("tag index", () =>
 				id: "deleted",
 				parentId: "root",
 				name: "Deleted #taGone",
-				systemTo: "2026-02-01 00:00:00.000",
+				systemTo: systemTimeAt("2026-02-01 00:00:00.000"),
 			},
 		];
 		for (const {id, parentId, name, systemTo = FAR_FUTURE_DATE} of rows)
@@ -965,7 +965,7 @@ describe("tag index", () =>
 		it("counts no tag from a code-block row, in the subtree or the whole tree", async () =>
 		{
 			const db = setupDb();
-			const at = "2026-01-02 00:00:00.000";
+			const at = systemTimeAt("2026-01-02 00:00:00.000");
 			db.insert(nodeContent)
 				.values(
 					{
@@ -1064,7 +1064,7 @@ describe("tag index", () =>
 		it("matches the JS counts at Home and zoomed, with code-block and #use-template tags", async () =>
 		{
 			const db = setupDb();
-			const at = "2026-01-02 00:00:00.000";
+			const at = systemTimeAt("2026-01-02 00:00:00.000");
 			const extra = [
 				{
 					id: "code",
