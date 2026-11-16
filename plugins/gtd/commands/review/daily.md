@@ -104,7 +104,11 @@ mkdir -p .llm/gtd/review
 date -u +%Y-%m-%dT%H:%M:%SZ > .llm/gtd/review/run-started.txt
 ./bin/run.js node get --path "Personal,🔄 Review,🔄 Daily Review,LLM Tasks:" --depth 10 --json --fields name,note,shortId,id,children,completedAt > .llm/gtd/review/phase0-llm-tasks.json
 node ${CLAUDE_PLUGIN_ROOT}/scripts/compute-llm-dag.mts .llm/gtd/review/phase0-llm-tasks.json --files-dir .llm/gtd/review/scripts > .llm/gtd/review/phase0-plan.json
+jq -e '.planDate' .llm/gtd/review/phase0-plan.json >/dev/null \
+  || { echo "compute-llm-dag.mts wrote no plan"; exit 1; }
 ```
+
+An empty or planless `phase0-plan.json` is a failure even when the planner exited 0: it means the planner's entry point never ran, which is what a stale installed plugin cache produced on 2026-11-13. Halt, run `node ${CLAUDE_PLUGIN_ROOT}/scripts/plugin-cache-fresh.mts gtd@workflowy-gtd workflowy@workflowy-gtd`, and when it reinstalls anything, tell the user to run `/reload-plugins` and re-run the review. Never fan out on an empty plan.
 
 The planner validates this plain structure before anything fans out:
 

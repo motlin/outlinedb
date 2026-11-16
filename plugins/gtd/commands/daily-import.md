@@ -37,6 +37,18 @@ A server connected mid-session via `/mcp` has been observed to reach subagents (
 
 Do not fan out on a partial credential set. A halted barrier costs one re-run; a fan-out on missing credentials costs the whole review and silently degrades Apple-calendar deduplication and the email-calendar scan.
 
+## Preflight: refresh a stale plugin cache
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/plugin-cache-fresh.mts" gtd@workflowy-gtd workflowy@workflowy-gtd
+```
+
+The review runs this plugin from Claude Code's cache, and `claude plugin update` compares only the version, which this repo never bumps. A pushed fix is therefore reported "already at latest" and never reaches the cache: on 2026-11-13 a stale `compute-llm-dag.mts` printed nothing, exited 0, and the review planned no tasks. The script refreshes the marketplace clone, diffs each plugin's cache file by file against its source there, and uninstalls and reinstalls (keeping plugin data) whichever differs.
+
+- Exit 0 → every cache is fresh; continue.
+- Exit 2 → a cache was reinstalled. This session still holds the old commands and skills, so halt and tell the user, in a plain-text response that ends the turn, to run `/reload-plugins` (or restart the session) and re-run the review.
+- Exit 1 → the check or reinstall failed; halt with its error.
+
 ## Import
 
 Run the barrier without piping or masking either exit status:
