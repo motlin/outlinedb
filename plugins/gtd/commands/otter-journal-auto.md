@@ -65,7 +65,19 @@ An unsummarized recording (2 minutes or longer, no summary after 24 hours) is fl
 
 ## Resolve a title flag
 
-The auto run never resolves a flag on its own. The daily review does it with the user, one flag per `AskUserQuestion`, when it surfaces this task's error. Put the title, date, Otter URL, and the reason inside the question. Options: keep the title as recorded, retitle it, or skip the recording.
+The auto run never resolves a flag on its own. The daily review does it with the user, one flag per `AskUserQuestion`, when it surfaces this task's error. Put the title, date, Otter URL, and the reason inside the question. Options: the slot's usual title (below) when one exists, keep the title as recorded, retitle it, or skip the recording.
+
+Before asking, look up what the journal already calls this recurring slot. Many flags are a recurring meeting (a team's daily sync, a weekly 1:1) whose calendar title Otter got wrong, and the user should not have to recall its name:
+
+```bash
+./bin/run.js node search --query "#meeting" --limit 5000 --json
+```
+
+- Keep results whose `path` starts with `📆 Calendar` and whose `name` has a `<time>` tag. Read the weekday from the tag's text (`Mon, Mar 24, 2025 at 9:54am`) and the time from `startHour`/`startMinute`.
+- Match the flagged recording's weekday and a start time within 15 minutes of its own. For a slot that runs every weekday, also match the other weekdays at that time.
+- Take the linked title text inside `<a>`, and count each distinct title. Prefer entries from the last 90 days so a renamed meeting wins under its current name.
+- When one title clearly dominates, make it the first option, labeled `(Recommended)`, with its count and latest date in the description, for example "Used 14 times at this slot, latest Nov 10". When two titles are close, offer both. When nothing matches, leave the option out.
+- Picking it records that title, the same as a retitle.
 
 The main thread records each answer and creates nothing itself. Creation stays in the scanner. Merge each decision into `.llm/gtd/review/otter-confirmed-titles.json`, keyed by otid. Keep existing keys and overwrite only the otid just answered:
 
@@ -76,7 +88,7 @@ The main thread records each answer and creates nothing itself. Creation stays i
 }
 ```
 
-- Keep or retitle: write `title` as the plain approved title text. The scanner wraps it in the `<time>` tag, Otter link, and `#meeting`.
+- Slot title, keep, or retitle: write `title` as the plain approved title text. The scanner wraps it in the `<time>` tag, Otter link, and `#meeting`.
 - Skip: write `"skip": true` and no title. The scanner then passes over that recording without creating an entry.
 
 Once every flag on the held page has a decision, rerun this command right away. If the user wants to wait, the next daily review's Auto run picks the decisions up instead. The scanner reads the file during title preflight, so a decided otid no longer holds the page. It creates the approved entries, skips the skipped ones, and advances the cursor. URL dedup still prevents duplicates. A recording with no decision still flags as before.
@@ -125,7 +137,7 @@ mkdir -p .llm/gtd/review/briefings
 
 - `status`: `ready` (one or more created) | `empty` (caught up — nothing newer survived dedup) | `error` (scan failed, first-run scope needed, or titles need review).
 - `lines`: folded verbatim into the daily-review summary — one line per created meeting, or `"📅 No new Otter meetings"` when empty.
-- When titles need review, include one `⚠️ Otter title needs review` line per flag with its original title, date, URL/otid, and reason. State that no entry was created for the held page and its cursor was not advanced. Include any earlier pages' actual creates; never report a flag as created or caught up.
+- When titles need review, include one `⚠️ Otter title needs review` line per flag with its original title, date and start time, URL/otid, and reason. State that no entry was created for the held page and its cursor was not advanced. Include any earlier pages' actual creates; never report a flag as created or caught up.
 - `autoApplied`: what the auto run did (entries created, new cursor otid), for transparency.
 
 ## Summary
