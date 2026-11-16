@@ -3,6 +3,7 @@ import {useEffect, useState} from "react";
 import type {ReactNode, SubmitEvent} from "react";
 import {BrowserRouter, Link, Route, Routes, useNavigate, useSearchParams} from "react-router-dom";
 import {Turnstile} from "../components/turnstile.js";
+import {hideLoadingScreenOnce} from "../loading-screen.js";
 import {authClient, captchaHeaders} from "./auth-client.js";
 import {useAuthConfig} from "./auth-config.js";
 import {safeNext} from "./login-redirect.js";
@@ -61,6 +62,11 @@ function useCaptcha(siteKey: string | null)
 
 function AuthCard({title, children}: {title: string; children: ReactNode})
 {
+	// index.html's boot screen sits over the card until something hides it; the outline view never mounts here.
+	useEffect(() =>
+	{
+		hideLoadingScreenOnce();
+	}, []);
 	return (
 		<main className="auth-page">
 			<div className="auth-card">

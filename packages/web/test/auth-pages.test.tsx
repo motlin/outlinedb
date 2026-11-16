@@ -8,6 +8,15 @@ declare global
 	var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
+const {hideLoadingScreenOnce} = vi.hoisted(() => (
+{
+	hideLoadingScreenOnce: vi.fn<() => void>(),
+}));
+vi.mock("../src/client/loading-screen.js", () => (
+{
+	hideLoadingScreenOnce,
+}));
+
 const {act, createElement} = await import("react");
 const {createRoot} = await import("react-dom/client");
 const {AuthApp} = await import("../src/client/auth/auth-pages.js");
@@ -263,6 +272,17 @@ describe("login", () =>
 
 describe("signup", () =>
 {
+	it("dismisses the boot loading screen once the form renders, so the logo never covers the fields", async () =>
+	{
+		hideLoadingScreenOnce.mockClear();
+		await open("/signup");
+
+		expect([
+			document.querySelector("form input[name=email]") !== null,
+			hideLoadingScreenOnce.mock.calls,
+		]).toStrictEqual([true, [[]]]);
+	});
+
 	it("posts the signup with the Turnstile token and shows the check-your-email screen", async () =>
 	{
 		replies["/api/auth/sign-up/email"] = Response.json(
