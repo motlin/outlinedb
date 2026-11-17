@@ -451,7 +451,8 @@ export class WorkflowyInternalAdapter
 
 	/**
 	 * Apply an accepted push's transactions to the cached tree's nodes and edge
-	 * rows, oldest first, and store its id, in one unit of work. Our own server-run transaction can also
+	 * rows, oldest first, and store its id, in one unit of work. A `need_refreshed_project_tree` answer applies
+	 * nothing and fails, but still acknowledges our own ops its server run echoes, which workflowy.com has applied. Our own server-run transaction can also
 	 * come back among the remote ones, so a transaction id is applied once. Our own ops' content is
 	 * already written through, so of those only the moves replay into the nodes.
 	 */
@@ -462,6 +463,14 @@ export class WorkflowyInternalAdapter
 	{
 		if (result.needsRefresh)
 		{
+			// Workflowy.com ran our ops before answering, so a drain's echoed rows close even though nothing replays.
+			if (acknowledge !== undefined)
+			{
+				runUnitOfWork(this.db, (unitOfWork) =>
+				{
+					acknowledge(unitOfWork, result);
+				});
+			}
 			throw loud(new TreeRefreshRequired(this.startedFrom ?? "unknown"));
 		}
 		const seen = new Set<string>();

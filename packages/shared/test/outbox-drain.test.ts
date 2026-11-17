@@ -934,7 +934,8 @@ describe("drainOutbox", () =>
 							{
 								...NO_PREVIOUS,
 								parentid: "p",
-								priority: 3,
+								// b's index once n is in place upstream ahead of it: n, a, b, c.
+								priority: 2,
 							},
 						},
 					],

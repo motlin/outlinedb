@@ -118,8 +118,8 @@ interface NodeState
 interface UpstreamState
 {
 	parentId: string | null;
-	/** Its index among all its siblings then. */
-	index: number;
+	/** The siblings before it then, some of which may not be upstream yet. */
+	precededBy: string[];
 	name: string | null;
 	note: string | null;
 	completedAt: Date | null;
@@ -252,11 +252,12 @@ function readUpstreamStates(tx: TemporalTransaction, asOfById: ReadonlyMap<strin
 		const siblings = siblingsAt(tx, [...new Set(rows.map(({parentId}) => parentId))], asOf);
 		for (const row of rows)
 		{
+			const order = siblings.get(row.parentId) ?? [];
 			result.set(
 				row.id,
 				{
 					parentId: row.parentId,
-					index: siblings.get(row.parentId)?.indexOf(row.id) ?? 0,
+					precededBy: order.slice(0, Math.max(order.indexOf(row.id), 0)),
 					name: row.name,
 					note: row.note,
 					completedAt: row.completedAt,
@@ -728,6 +729,21 @@ function planDrain(
 	/** Nodes this push has yet to put in place upstream. */
 	const notUpstream = new Set([...created, ...placed, ...undeleted]);
 	const parentOf = (id: string): string | null => states.get(id)?.parentId ?? null;
+	/**
+	 * The node's index among the children upstream holds of its upstream parent: its local siblings before it then
+	 * that are there, which leaves out local creates, undeletes and moves in that this push has yet to send.
+	 */
+	const upstreamIndex = (id: string): number =>
+	{
+		const before = upstream.get(id);
+		return before === undefined
+			? 0
+			: before.precededBy.filter(
+					(sibling) =>
+						!notUpstream.has(sibling) ||
+						(upstream.has(sibling) && upstreamParentOf(sibling) === before.parentId),
+				).length;
+	};
 	const parentOrder = [...new Set([...created, ...placed, ...undeleted].map(parentOf))];
 	const siblings = siblingsAt(tx, [...new Set([...parentOrder, ...created, ...leaving.map(upstreamParentOf)])]);
 	const childrenOf = (parent: string | null): string[] => siblings.get(parent) ?? [];
@@ -738,10 +754,10 @@ function planDrain(
 		const children = childrenOf(parent).filter((child) => !notUpstream.has(child));
 		const stayed = leaving
 			.filter((id) => upstreamParentOf(id) === parent)
-			.toSorted((left, right) => (upstream.get(left)?.index ?? 0) - (upstream.get(right)?.index ?? 0));
+			.toSorted((left, right) => upstreamIndex(left) - upstreamIndex(right));
 		for (const id of stayed)
 		{
-			children.splice(Math.min(upstream.get(id)?.index ?? 0, children.length), 0, id);
+			children.splice(Math.min(upstreamIndex(id), children.length), 0, id);
 		}
 		held.set(parent, children);
 	}
@@ -895,7 +911,7 @@ function planDrain(
 			const from =
 			{
 				parentId: internalParent(before === undefined ? parent : before.parentId),
-				index: fromIndex === -1 ? (before?.index ?? index) : fromIndex,
+				index: fromIndex === -1 ? (before === undefined ? index : upstreamIndex(id)) : fromIndex,
 			};
 			arrive(id, index);
 			if (before?.parentId === parent && from.index === index)
@@ -1115,7 +1131,7 @@ function planDrain(
 					from:
 					{
 						parentId: internalParent(before.parentId),
-						index: index === -1 ? before.index : index,
+						index: index === -1 ? upstreamIndex(id) : index,
 					},
 				},
 			),

@@ -8,6 +8,8 @@ import {storeTreeTxId, readTreeTxId} from "../src/cache/tree-transaction.js";
 import {AccountOutboxRecorder, readPendingAccountOutbox} from "../src/cache/account-outbox.js";
 import {readAccountRows, readImportTime} from "../src/cache/account-store.js";
 import {LocalAccount} from "../src/cache/local-account.js";
+import {LocalTreeWriter} from "../src/cache/local-tree-writer.js";
+import {OutboxRecorder} from "../src/cache/outbox.js";
 import {ACCOUNT_COMPOSITE_TABLES, runUnitOfWork} from "../src/cache/node-composite.js";
 import * as schema from "../src/db/schema.js";
 import {WorkflowyInternalAdapter} from "../src/internal/adapter.js";
@@ -4699,6 +4701,77 @@ describe("internal adapter transaction log", () =>
 					mirrors: [],
 					pushes: ["100"],
 					logged: [[error]],
+				},
+			);
+		});
+
+		it("closes the outbox rows of a drain whose ops workflowy.com ran before answering need_refreshed_project_tree, still failing loudly", async () =>
+		{
+			const {db, api, adapter} = tracked();
+			storeTreeTxId(db, "100");
+			vi.spyOn(console, "error").mockImplementation(() => {});
+			new LocalTreeWriter(
+				db,
+				{
+					outbox: new OutboxRecorder(),
+				},
+			).createAt(
+				{
+					parentId: null,
+					index: 0,
+					id: "n",
+					name: "n",
+				},
+			);
+			api.respondOnce(
+				"/push_and_poll",
+				poll(
+					"160",
+					[],
+					{
+						need_refreshed_project_tree: true,
+						server_run_operation_transaction_json: transaction(160, [
+							{
+								type: "bulk_create",
+								data:
+								{
+									parentid: "None",
+									starting_priority: 0,
+									project_trees: JSON.stringify([
+										{
+											id: "n",
+											nm: "n",
+										},
+									]),
+								},
+							},
+						]),
+					},
+				),
+			);
+
+			const error = await caughtBy(adapter.drainOutbox());
+
+			expect(
+				{
+					error,
+					txId: readTreeTxId(db),
+					pending: db
+						.select(
+							{
+								nodeId: schema.outbox.nodeId,
+								aspect: schema.outbox.aspect,
+							},
+						)
+						.from(schema.outbox)
+						.where(eq(schema.outbox.systemTo, FAR_FUTURE_DATE))
+						.all(),
+				},
+			).toStrictEqual(
+				{
+					error: expect.any(TreeRefreshRequired),
+					txId: "100",
+					pending: [],
 				},
 			);
 		});
