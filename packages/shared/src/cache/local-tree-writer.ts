@@ -189,6 +189,11 @@ function clampIndex(index: number, length: number): number
 	return Math.min(Math.max(Math.trunc(index), 0), length);
 }
 
+/**
+ * The stored note: an empty note is null, as in the importers (cache-service, node-log), which turn workflowy.com's
+ * `""` into null. Keeping `""` here (workflowy.com does on create) would make a drained `""` import back as a null
+ * edit, and every empty-row create from the web client sends `note: ""`.
+ */
 function noteOrNull(note: string | null | undefined): string | null
 {
 	return note === undefined || note === null || note === "" ? null : note;
