@@ -16,6 +16,7 @@ import
 	parseArgs,
 	runWhenReady,
 	socketRequest,
+	toShellCommand,
 	wrapWithLog,
 } from "./launch-herdr-tab.mts";
 
@@ -79,6 +80,22 @@ test("the default log lands under the review root's logs directory, named by lab
 	assert.strictEqual(
 		defaultLogPath("/repo", "time-machine", new Date(2026, 10, 9, 23, 30)),
 		"/repo/.llm/gtd/review/logs/time-machine-2026-11-09.log",
+	);
+});
+
+test("toShellCommand runs a lone argument as shell text and quotes separate arguments", () =>
+{
+	assert.deepStrictEqual(
+		[
+			toShellCommand(['openrewrite-sync --only a,b; echo "[done $?]"']),
+			toShellCommand(["bash", "-lc", 'cd ~/projects/repo && claude "/git:git-rebase"']),
+			toShellCommand(["/bin/sweep.sh", "it's"]),
+		],
+		[
+			'openrewrite-sync --only a,b; echo "[done $?]"',
+			"'bash' '-lc' 'cd ~/projects/repo && claude \"/git:git-rebase\"'",
+			String.raw`'/bin/sweep.sh' 'it'\''s'`,
+		],
 	);
 });
 

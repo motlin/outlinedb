@@ -71,6 +71,17 @@ export function defaultLogPath(root: string, label: string, now: Date): string
 const shellQuote = (text: string): string => `'${text.replaceAll("'", String.raw`'\''`)}'`;
 
 /**
+ * Turn the arguments after `--` into one shell command. A lone argument is shell text the
+ * caller already quoted, so it runs as-is; separate arguments are each quoted, so
+ * `-- bash -lc 'cd repo && claude'` keeps its `-c` script as one word.
+ */
+export function toShellCommand(command: readonly string[]): string
+{
+	const [only, ...rest] = command;
+	return only !== undefined && rest.length === 0 ? only : command.map(shellQuote).join(" ");
+}
+
+/**
  * Wrap a shell command so its combined output is teed to the log and its own exit code is
  * appended as `[exit N]`. `pipestatus` is zsh's name and `PIPESTATUS` bash's, so the line
  * works in either pane shell.
@@ -347,7 +358,7 @@ async function main(): Promise<void>
 			},
 			sleep: delay,
 		},
-		wrapWithLog(command.join(" "), logPath),
+		wrapWithLog(toShellCommand(command), logPath),
 	);
 	process.stdout.write(
 		`${JSON.stringify(
