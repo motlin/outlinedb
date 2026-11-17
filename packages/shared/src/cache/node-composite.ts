@@ -30,6 +30,7 @@ import
 	nodeTableCellSizes,
 	nodeTags,
 	outbox,
+	paneExpandedNodes,
 	referencesRoots,
 	rootPreferences,
 	s3Files,
@@ -188,6 +189,7 @@ export const NON_NODE_TABLES: Readonly<Record<string, string>> =
 	// node_id is a reference, not an owner: ending a node must not end its pending delete row, which still has to drain.
 	[getTableName(outbox)]: "mirror mode's pending upstream deliveries, which outlive the nodes they reference",
 	[getTableName(accountOutbox)]: "mirror mode's pending upstream deliveries of account-level state",
+	[getTableName(paneExpandedNodes)]: "each open pane's own expanded keys, kept apart from the account's",
 	...Object.fromEntries(ACCOUNT_COMPOSITE_TABLES.map((table) => [getTableName(table), "the account composite"])),
 };
 

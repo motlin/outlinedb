@@ -13,20 +13,29 @@ export interface OutlineViewShape
 	expandedIds: ReadonlySet<string>;
 	showCompleted: boolean;
 	budget: number;
+	/** The open secondary pane rendering the view, whose own stored expansion the server walks; absent for the main outline. */
+	paneId?: string;
 }
 
-/** The body of `POST /api/v1/nodes/view`; the server expands the account's stored expanded rows. */
+/**
+ * The body of `POST /api/v1/nodes/view`; the server expands the account's stored expanded rows, or with `paneId` that
+ * open pane's own.
+ */
 export interface OutlineViewRequest
 {
 	rootId: string | null;
 	limit: number;
 	showCompleted: boolean;
+	paneId?: string;
 }
 
-/** The query an outline view's load runs under; outside `nodes`, so a tree write's invalidation does not rerun it. */
-export function outlineViewKey(rootId: string | null)
+/**
+ * The query an outline view's load runs under; outside `nodes`, so a tree write's invalidation does not rerun it. Each
+ * pane loads its own, since each expands apart.
+ */
+export function outlineViewKey(rootId: string | null, paneId: string)
 {
-	return ["outline-view", rootId] as const;
+	return ["outline-view", paneId, rootId] as const;
 }
 
 /**
@@ -74,8 +83,8 @@ function foundDatesCached(queryClient: QueryClient, dayId: string): boolean
  * trip, and a day page's Found Dates with them. Lists the cache already holds stay (they may carry optimistic
  * writes), as does a list a pending move touches; with the whole view cached, nothing is sent.
  *
- * The server expands the rows the account has stored as expanded, so the load waits for the expansion saves sent before
- * it. With `accountExpansion`, the load skips the cache check (`shape.expandedIds` is still being filled by the page
+ * The server expands the rows the account (or the shape's pane) has stored as expanded, so the load waits for the
+ * expansion saves sent before it. With `accountExpansion`, the load skips the cache check (`shape.expandedIds` is still being filled by the page
  * load) and `accountExpansion` receives the listed rows the server expanded before the lists are seeded.
  */
 export async function loadOutlineView(
@@ -96,6 +105,12 @@ export async function loadOutlineView(
 			rootId,
 			limit: shape.budget,
 			showCompleted: shape.showCompleted,
+			...(shape.paneId === undefined
+				? {}
+				:
+					{
+						paneId: shape.paneId,
+					}),
 		},
 	);
 	notifyManager.batch(() =>

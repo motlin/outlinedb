@@ -19,7 +19,8 @@ export interface ItemTreePane
 	query: string;
 	/**
 	 * Upstream's payload `expansionState`: the pane renders a temporary mirror root, so its rows expand apart from the
-	 * other panes'. Seeded from the pane it opens from; kept in memory, never saved to the server.
+	 * other panes'. Seeded from the pane it opens from. Upstream keeps it in memory only; ours is also saved as the pane's
+	 * own on the server (never the account's), so the pane's view loads walk the rows it expands.
 	 */
 	expandedIds: Set<string>;
 }

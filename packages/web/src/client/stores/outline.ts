@@ -1080,8 +1080,11 @@ function expansionDelta(previous: ReadonlySet<string>, next: ReadonlySet<string>
 	return changes;
 }
 
-/** PATCH one expansion delta immediately; the server coalesces pushes, so the client does not debounce. */
-async function patchExpansion(changes: Record<string, boolean>): Promise<void>
+/**
+ * PATCH one expansion delta immediately; the server coalesces pushes, so the client does not debounce. A body naming
+ * a pane changes that pane's own stored expansion instead of the account's.
+ */
+async function patchExpansion(body: {paneId?: string; changes: Record<string, boolean>; replace?: true}): Promise<void>
 {
 	try
 	{
@@ -1093,11 +1096,7 @@ async function patchExpansion(changes: Record<string, boolean>): Promise<void>
 				{
 					"Content-Type": "application/json",
 				},
-				body: JSON.stringify(
-					{
-						changes,
-					},
-				),
+				body: JSON.stringify(body),
 			},
 		);
 		if (response.status === 503)
@@ -1116,8 +1115,8 @@ async function patchExpansion(changes: Record<string, boolean>): Promise<void>
 }
 
 /**
- * Store `next` as the active pane's expanded set. The main outline's change is saved to the server; a pane's stays
- * in memory, like upstream's temporary mirror root.
+ * Store `next` as the active pane's expanded set. The main outline's change is saved as the account's expansion; a
+ * pane's as that pane's own (see `savePaneExpansions`), which upstream keeps only in memory.
  */
 function commitExpanded(next: Set<string>): void
 {
@@ -1156,7 +1155,69 @@ function commitExpanded(next: Set<string>): void
 	};
 	if (expansionPersisted)
 	{
-		trackExpansionSave(patchExpansion(changes));
+		trackExpansionSave(
+			patchExpansion(
+				{
+					changes,
+				},
+			),
+		);
+	}
+}
+
+/** Save `expandedIds` as pane `paneId`'s whole stored expansion. */
+function replacePaneExpansion(paneId: string, expandedIds: ReadonlySet<string>): void
+{
+	trackExpansionSave(
+		patchExpansion(
+			{
+				paneId,
+				changes: Object.fromEntries([...expandedIds].map((id) => [id, true])),
+				replace: true,
+			},
+		),
+	);
+}
+
+/**
+ * Save each open pane's expansion as that pane's own on the server, so a view load naming the pane walks the rows it
+ * expands: a pane that opens (or takes a new id) stores its whole set, a pane's change stores its delta, and a pane
+ * that closes stores an empty set. Saves are tracked, so the view loads they enable wait for them.
+ */
+function savePaneExpansions(previous: readonly ItemTreePane[], next: readonly ItemTreePane[]): void
+{
+	if (!expansionPersisted || previous === next)
+	{
+		return;
+	}
+	for (const pane of next)
+	{
+		const before = findPane(previous, pane.id);
+		if (before === undefined)
+		{
+			replacePaneExpansion(pane.id, pane.expandedIds);
+			continue;
+		}
+		const changes =
+			before.expandedIds === pane.expandedIds ? {} : expansionDelta(before.expandedIds, pane.expandedIds);
+		if (Object.keys(changes).length > 0)
+		{
+			trackExpansionSave(
+				patchExpansion(
+					{
+						paneId: pane.id,
+						changes,
+					},
+				),
+			);
+		}
+	}
+	for (const pane of previous)
+	{
+		if (findPane(next, pane.id) === undefined)
+		{
+			replacePaneExpansion(pane.id, new Set());
+		}
 	}
 }
 
@@ -3068,6 +3129,11 @@ export const useOutlineStore = create<OutlineStore>((set, get) => (
 		resolve?.(result);
 	},
 }));
+
+useOutlineStore.subscribe((state, previous) =>
+{
+	savePaneExpansions(previous.panes, state.panes);
+});
 
 // Apply initial theme on load and set up event listeners
 if (typeof globalThis !== "undefined")

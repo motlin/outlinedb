@@ -746,6 +746,31 @@ export const expandedNodes = sqliteTable(
 );
 
 /**
+ * pane_expanded_nodes: each open secondary pane's own expanded keys (as in `expanded_nodes`), keyed by the pane's
+ * upstream id. Upstream never saves a pane's expansion; ours lives here only so a pane's view loads walk the rows that
+ * pane expands. Never delivered to workflowy.com; see `cache/expansion-store.ts`.
+ */
+export const paneExpandedNodes = sqliteTable(
+	"pane_expanded_nodes",
+	{
+		paneId: text("pane_id").notNull(),
+		shortKey: text("short_key").notNull(),
+
+		systemFrom: integer("system_from").notNull(),
+		systemTo: integer("system_to").notNull(),
+	},
+	(table) => [
+		primaryKey(
+			{
+				columns: [table.paneId, table.shortKey, table.systemFrom],
+			},
+		),
+		uniqueIndex("pane_expanded_nodes_system_to_idx").on(table.paneId, table.shortKey, table.systemTo),
+		index("pane_expanded_nodes_closed_at_idx").on(table.systemTo).where(closedRows),
+	],
+);
+
+/**
  * changelog_reads: root metadata `changelog.read`: each changelog entry's read flag, 0/1.
  */
 export const changelogReads = sqliteTable(

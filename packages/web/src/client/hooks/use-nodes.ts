@@ -65,6 +65,7 @@ import {readJson} from "../read-json.js";
 import {pendingCreates} from "../pending-creates.js";
 import {expansionSaved} from "../pending-expansion-saves.js";
 import {pendingMoves} from "../pending-moves.js";
+import {MAIN_PANE_ID} from "../pane-ids.js";
 import {toUndoOps} from "../tree-ops.js";
 import {serializeWrite} from "../write-order.js";
 import type {BlockMove, UndoableMutation} from "../tree-ops.js";
@@ -513,21 +514,23 @@ export function useFoundDates(dayId: string | null)
 }
 
 /**
- * A parent's children. With `subtree` (an expanded row outside a search and a mirror instance), the first load brings
- * the row's whole expanded subtree (the list and Backlinks section of every descendant the account has stored as
- * expanded, within the row budget) in one view request seeded in one batch, so an expand renders every level in one
- * commit instead of one children request, backlinks GET and commit per depth level. A row expanded only in a pane's
- * in-memory set loads as its own subtree root. Once the list is cached (a write's refetch), it is a plain load.
+ * A parent's children. With `subtreePaneId` (the pane rendering an expanded row outside a search and a mirror
+ * instance), the first load brings the row's whole expanded subtree (the list and Backlinks section of every
+ * descendant that pane has stored as expanded, within the row budget) in one view request seeded in one batch, so an
+ * expand renders every level in one commit instead of one children request, backlinks GET and commit per depth level.
+ * Once the list is cached (a write's refetch), it is a plain load.
  */
-export function useChildren(parentId: string | null, enabled = true, subtree = false)
+export function useChildren(parentId: string | null, enabled = true, subtreePaneId: string | null = null)
 {
 	const queryClient = useQueryClient();
 	return useQuery(
 		{
 			queryKey: nodeKeys.children(parentId),
 			queryFn: async () =>
-				subtree && parentId !== null && queryClient.getQueryData(nodeKeys.children(parentId)) === undefined
-					? loadRowSubtree(queryClient, parentId)
+				subtreePaneId !== null &&
+				parentId !== null &&
+				queryClient.getQueryData(nodeKeys.children(parentId)) === undefined
+					? loadRowSubtree(queryClient, parentId, subtreePaneId)
 					: fetchChildren(parentId),
 			enabled,
 		},
@@ -551,7 +554,7 @@ let subtreeQueue: SubtreeLoad[] = [];
  * tick: their views load in parallel and seed the cache in one batch, so they render in one commit rather than one per
  * reply. A failed view leaves its row to a plain children load.
  */
-async function loadRowSubtree(queryClient: QueryClient, rowId: string): Promise<NodeResponse[]>
+async function loadRowSubtree(queryClient: QueryClient, rowId: string, paneId: string): Promise<NodeResponse[]>
 {
 	await Promise.all([pendingMoves.settled(rowId), expansionSaved()]);
 	const state = useOutlineStore.getState();
@@ -560,6 +563,12 @@ async function loadRowSubtree(queryClient: QueryClient, rowId: string): Promise<
 		rootId: rowId,
 		limit: initialRowBudget(typeof window === "undefined" ? 0 : window.innerHeight),
 		showCompleted: state.showCompleted,
+		...(paneId === MAIN_PANE_ID
+			? {}
+			:
+				{
+					paneId,
+				}),
 	};
 	const nodes = await new Promise<NodeResponse[] | undefined>((resolve) =>
 	{

@@ -951,7 +951,8 @@ export function OutlineChildren({
 	const search = useOutlineSearchFilter();
 	const instance = useContext(MirrorInstanceContext);
 	// The root's view loads in one request already; an expanded row's first load brings its whole expanded subtree.
-	const {data: nodes} = useChildren(parentId, true, !isRoot && search === null && instance === null);
+	const paneId = usePaneId();
+	const {data: nodes} = useChildren(parentId, true, !isRoot && search === null && instance === null ? paneId : null);
 	const dashboard = parentId !== null && ownerDashboard;
 	// A search leaves the Backlinks section out, so its rows skip the fetch; the rest wait for the children load,
 	// which a subtree load seeds the section with.

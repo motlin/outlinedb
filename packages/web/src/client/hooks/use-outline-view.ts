@@ -12,19 +12,26 @@ import {adoptViewExpansion, initialExpansionPending} from "./use-expansion-sync.
 import {fetchOutlineView, prefetchZoomView} from "./use-nodes.js";
 
 /**
- * The view a pane with `expandedIds` shows now: the first row budget a new view reaches after its first paint, down
- * to `scrollY` below the top when Back/Forward will restore the view scrolled there.
+ * The view pane `paneId` with `expandedIds` shows now: the first row budget a new view reaches after its first paint,
+ * down to `scrollY` below the top when Back/Forward will restore the view scrolled there.
  */
 export function outlineViewShape(
 	expandedIds: ReadonlySet<string>,
 	showCompleted: boolean,
 	scrollY = 0,
+	paneId = MAIN_PANE_ID,
 ): OutlineViewShape
 {
 	return {
 		expandedIds,
 		showCompleted,
 		budget: initialRowBudget((typeof window === "undefined" ? 0 : window.innerHeight) + scrollY),
+		...(paneId === MAIN_PANE_ID
+			? {}
+			:
+				{
+					paneId,
+				}),
 	};
 }
 
@@ -33,10 +40,10 @@ export function outlineViewShape(
  * view adopts the expanded rows it reached instead of waiting on that GET, so the first view renders every level it
  * loaded.
  */
-function viewQuery(queryClient: QueryClient, rootId: string | null, shape: () => OutlineViewShape)
+function viewQuery(queryClient: QueryClient, rootId: string | null, paneId: string, shape: () => OutlineViewShape)
 {
 	return {
-		queryKey: outlineViewKey(rootId),
+		queryKey: outlineViewKey(rootId, paneId),
 		// A failed load leaves each level to its own children query.
 		queryFn: async () =>
 		{
@@ -68,7 +75,7 @@ export async function queryOutlineView(
 	shape: OutlineViewShape,
 ): Promise<void>
 {
-	await queryClient.query(viewQuery(queryClient, rootId, () => shape));
+	await queryClient.query(viewQuery(queryClient, rootId, shape.paneId ?? MAIN_PANE_ID, () => shape));
 }
 
 /**
@@ -81,15 +88,15 @@ export function useOutlineViewPending(rootId: string | null): boolean
 	const paneId = usePaneId();
 	const expandedIds = usePaneExpandedIds();
 	const showCompleted = useOutlineStore((state) => state.showCompleted);
-	const shape = outlineViewShape(expandedIds, showCompleted, poppedScrollY(rootId));
+	const shape = outlineViewShape(expandedIds, showCompleted, poppedScrollY(rootId), paneId);
 	const currentShape = () =>
 	{
 		const state = useOutlineStore.getState();
-		return outlineViewShape(paneExpandedIds(state, paneId), state.showCompleted, poppedScrollY(rootId));
+		return outlineViewShape(paneExpandedIds(state, paneId), state.showCompleted, poppedScrollY(rootId), paneId);
 	};
 	return useQuery(
 		{
-			...viewQuery(queryClient, rootId, currentShape),
+			...viewQuery(queryClient, rootId, paneId, currentShape),
 			initialData: () => (outlineViewCached(queryClient, rootId, shape) ? true : undefined),
 		},
 	).isPending;

@@ -28,6 +28,8 @@ export const TEMPORAL_TABLES = [
 	// Mirror mode's pending upstream deliveries roll back with the local writes that enqueued them.
 	"outbox",
 	"account_outbox",
+	// Each open pane's own expansion rolls back with the account's.
+	"pane_expanded_nodes",
 	// The account composite (ACCOUNT_COMPOSITE_TABLES): a rollback reverts settings with the tree.
 	"account",
 	"root_preferences",

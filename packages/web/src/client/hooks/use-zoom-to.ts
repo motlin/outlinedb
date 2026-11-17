@@ -67,7 +67,11 @@ async function zoomTo(
 	const treeLoaded =
 		viewTarget === zoomedNodeId
 			? undefined
-			: queryOutlineView(queryClient, viewTarget, outlineViewShape(activePaneView().expandedIds, showCompleted));
+			: queryOutlineView(
+					queryClient,
+					viewTarget,
+					outlineViewShape(activePaneView().expandedIds, showCompleted, 0, state.activePaneId),
+				);
 	if (zoomingInto)
 	{
 		await treeLoaded;

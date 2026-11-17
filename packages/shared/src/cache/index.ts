@@ -135,9 +135,11 @@ export
 {
 	applyExpansionDelta,
 	applyLocalExpansionDelta,
+	applyPaneExpansion,
 	EXPANDED_NODES_IMPORT_NAME,
 	expansionVersion,
 	readExpansion,
+	readPaneExpansion,
 	replaceExpansion,
 	resolveExpandedIds,
 } from "./expansion-store.js";

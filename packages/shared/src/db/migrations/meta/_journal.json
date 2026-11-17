@@ -78,6 +78,13 @@
 			"when": 1794788576306,
 			"tag": "0010_microsecond_system_times",
 			"breakpoints": true
+		},
+		{
+			"idx": 11,
+			"version": "6",
+			"when": 1794878037308,
+			"tag": "0011_pane_expanded_nodes",
+			"breakpoints": true
 		}
 	]
 }

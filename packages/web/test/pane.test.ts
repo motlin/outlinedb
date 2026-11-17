@@ -1937,7 +1937,7 @@ describe("pane store", () =>
 			]);
 		});
 
-		it("toggles a row only in the active pane and never saves a pane's expansion to the server", async () =>
+		it("toggles a row only in the active pane and saves each pane's expansion as that pane's own, never the account's", async () =>
 		{
 			const bodies = stubFetch();
 			const store = await loadStore();
@@ -1961,9 +1961,85 @@ describe("pane store", () =>
 					main: new Set(["alice"]),
 					a: new Set(["alice", "carol"]),
 					b: new Set(["bob"]),
-					bodies: [],
+					bodies: [
+						JSON.stringify(
+							{
+								paneId: a,
+								changes:
+								{
+									alice: true,
+								},
+								replace: true,
+							},
+						),
+						JSON.stringify(
+							{
+								paneId: b,
+								changes:
+								{
+									alice: true,
+								},
+								replace: true,
+							},
+						),
+						JSON.stringify(
+							{
+								paneId: b,
+								changes:
+								{
+									alice: false,
+								},
+							},
+						),
+						JSON.stringify(
+							{
+								paneId: b,
+								changes:
+								{
+									bob: true,
+								},
+							},
+						),
+						JSON.stringify(
+							{
+								paneId: a,
+								changes:
+								{
+									carol: true,
+								},
+							},
+						),
+					],
 				},
 			);
+		});
+
+		it("clears a closed pane's stored expansion", async () =>
+		{
+			const bodies = stubFetch();
+			const store = await loadStore();
+			store.getState().setExpanded(new Set(["alice"]));
+			const a = store.getState().openPane(null);
+			store.getState().closePane(a);
+			expect(bodies).toStrictEqual([
+				JSON.stringify(
+					{
+						paneId: a,
+						changes:
+						{
+							alice: true,
+						},
+						replace: true,
+					},
+				),
+				JSON.stringify(
+					{
+						paneId: a,
+						changes: {},
+						replace: true,
+					},
+				),
+			]);
 		});
 
 		it("toggles a row only in the main outline while it is active", async () =>

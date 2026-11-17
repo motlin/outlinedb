@@ -6,13 +6,15 @@
  * `expansion.get` is a change feed over our own expansion store (seeded by whole-tree imports, updated by every local
  * change; nothing re-reads workflowy.com): `{version?}` -> `{version, expandedIds}`, where `version` is the keys'
  * content version and `expandedIds` is null when it equals the caller's `version` and the whole expanded set otherwise. `expansion.patch` with `{changes: {[nodeId]: boolean}}` ->
- * null (204).
+ * null (204). With `paneId`, the delta applies to that open pane's own stored expansion (`replace` makes its `true` ids
+ * the pane's whole set), which an outline view naming the pane walks; it never reaches workflowy.com.
  */
 
 import
 {
 	applyExpansionDelta,
 	applyLocalExpansionDelta,
+	applyPaneExpansion,
 	expansionVersion,
 	readExpansion,
 	resolveExpandedIds,
@@ -26,11 +28,22 @@ import {accountStateUnavailable, mirrorAccountOutbox} from "../account-state.js"
 import {defineOp, ok} from "./define.js";
 import {ExpansionChangesResponseSchema, NoContentSchema} from "./schemas.js";
 
-const ExpansionPatchSchema = z.object(
-	{
-		changes: z.record(z.string(), z.boolean()),
-	},
-);
+const ExpansionPatchSchema = z
+	.object(
+		{
+			changes: z.record(z.string(), z.boolean()),
+			/** An open secondary pane's id: the delta applies to that pane's own stored expansion, not the account's. */
+			paneId: z.string().min(1).optional(),
+			/** With `paneId`: the delta's `true` ids become the pane's whole expanded set. */
+			replace: z.boolean().optional(),
+		},
+	)
+	.refine(
+		(patch) => patch.replace !== true || patch.paneId !== undefined,
+		{
+			message: "replace needs a paneId",
+		},
+	);
 
 const LeftBarPatchSchema = z.object(
 	{
@@ -124,11 +137,20 @@ export const expansionPatch = defineOp(
 	{
 		input: ExpansionPatchSchema,
 		output: NoContentSchema,
-		run(ctx, {changes})
+		run(ctx, {changes, paneId, replace = false})
 		{
 			const delta = Object.fromEntries(
 				Object.entries(changes).map(([id, expanded]) => [upstreamExpansionKey(id), expanded]),
 			);
+			// A pane's expansion is ours alone in both modes: upstream never saves it, so nothing reaches the outbox.
+			if (paneId !== undefined)
+			{
+				runUnitOfWork(ctx.db, (unitOfWork) =>
+				{
+					applyPaneExpansion(unitOfWork, paneId, delta, replace);
+				});
+				return ok(null);
+			}
 			if (ctx.mode === "standalone")
 			{
 				applyLocally(ctx, delta);

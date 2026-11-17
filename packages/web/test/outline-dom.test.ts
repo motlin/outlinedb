@@ -365,6 +365,63 @@ describe("outline expand subtree", () =>
 				},
 			);
 		});
+
+		it("loads a row expanded only in a pane through one view of that pane's stored expansion", async () =>
+		{
+			const container = await mountHome();
+			let paneId = "";
+			const openArrivals = await (async () =>
+			{
+				arrivals = [];
+				act(() =>
+				{
+					paneId = useOutlineStore.getState().openPane(null);
+				});
+				await settle();
+				return arrivals;
+			})();
+			const pane = container.querySelector(`[data-pane-id="${paneId}"]`);
+			const arrow = pane
+				?.querySelector('[data-node-id="alice"]')
+				?.closest(".name")
+				?.querySelector('button[aria-expanded="false"]');
+			if (!(pane instanceof HTMLElement) || !(arrow instanceof HTMLElement))
+			{
+				throw new TypeError("the pane's alice expand arrow did not render");
+			}
+
+			const commits = await commitsAfter(pane, () =>
+			{
+				arrow.click();
+			});
+
+			expect(
+				{
+					openArrivals,
+					commits,
+					treeRequests: requests.filter((url) => url.includes("/children") || url.endsWith("/backlinks")),
+					viewBodies,
+					arrivals,
+					mainExpanded: [...useOutlineStore.getState().expandedIds],
+				},
+			).toStrictEqual(
+				{
+					openArrivals: [
+						`saved {"paneId":"${paneId}","changes":{"bob":true,"carol":true,"erin":true,"yan":true},"replace":true}`,
+					],
+					commits: [["alice", "bob", "carol", "dan", "erin", "fay", "zed"]],
+					treeRequests: [],
+					viewBodies: [
+						{
+							...viewBody("alice"),
+							paneId,
+						},
+					],
+					arrivals: [`saved {"paneId":"${paneId}","changes":{"alice":true}}`, "view alice"],
+					mainExpanded: ["bob", "carol", "erin", "yan"],
+				},
+			);
+		});
 	});
 });
 

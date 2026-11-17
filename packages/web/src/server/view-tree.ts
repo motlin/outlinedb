@@ -36,12 +36,24 @@ export interface ViewTreeQuery
 {
 	/** The view root (resolved, possibly a mirror), or null for Home. */
 	rootId: string | null;
-	/** Whether the account's stored expansion keys expand rows; without them (a mirror lacking the internal API) none is. */
-	expansionStored: boolean;
+	/**
+	 * Whose stored expansion keys expand rows: the account's, an open pane's own (named by its pane id), or none (a mirror
+	 * lacking the internal API).
+	 */
+	expansion: ViewExpansionSource;
 	/** The visible-row budget. */
 	limit: number;
 	showCompleted: boolean;
 }
+
+/** Whose stored expansion an outline view walks; see {@link ViewTreeQuery.expansion}. */
+export type ViewExpansionSource =
+	| "account"
+	| "none"
+	|
+	  {
+			paneId: string;
+	  };
 
 /** The current-version marker inlined as a literal, so the walk binds only the request's own values. */
 const LIVE = sql.raw(String(FAR_FUTURE_DATE));
@@ -70,14 +82,18 @@ function expansionKey(root: SQL, path: SQL): SQL
 }
 
 /**
- * Whether walk row `c` is expanded: its key probed through `expanded_nodes`' own `(short_key, system_to)` index, or
- * never without stored expansion.
+ * Whether walk row `c` is expanded: its key probed through `expanded_nodes`' own `(short_key, system_to)` index (a
+ * pane's through `pane_expanded_nodes`' `(pane_id, short_key, system_to)` one), or never without stored expansion.
  */
-function isExpandedSql(expansionStored: boolean, root: SQL, path: SQL): SQL
+function isExpandedSql(expansion: ViewExpansionSource, root: SQL, path: SQL): SQL
 {
-	return expansionStored
+	if (expansion === "none")
+	{
+		return sql`0`;
+	}
+	return expansion === "account"
 		? sql`EXISTS (SELECT 1 FROM expanded_nodes e WHERE e.short_key = ${expansionKey(root, path)} AND e.system_to = ${LIVE})`
-		: sql`0`;
+		: sql`EXISTS (SELECT 1 FROM pane_expanded_nodes e WHERE e.pane_id = ${expansion.paneId} AND e.short_key = ${expansionKey(root, path)} AND e.system_to = ${LIVE})`;
 }
 
 /**
@@ -87,7 +103,7 @@ function isExpandedSql(expansionStored: boolean, root: SQL, path: SQL): SQL
  * The walk starts from one constant row standing for the root, always expanded, so the stored expansion is
  * referenced (and indexed) once; that row takes one place in the `LIMIT`.
  */
-function listParents({rootId, expansionStored, limit, showCompleted}: ViewTreeQuery): SQL
+function listParents({rootId, expansion, limit, showCompleted}: ViewTreeQuery): SQL
 {
 	const rootParent =
 		rootId === null
@@ -102,7 +118,7 @@ function listParents({rootId, expansionStored, limit, showCompleted}: ViewTreeQu
 				CASE WHEN w.kids_root IS NOT NULL THEN w.kids_path || substr(c.id, 1, 4)
 					WHEN o.original_id IS NOT NULL THEN substr(c.id, 1, 4) END,
 				w.sortkey || ${SORT_SLICE},
-				${isExpandedSql(expansionStored, sql`w.kids_root`, sql`w.kids_path`)}
+				${isExpandedSql(expansion, sql`w.kids_root`, sql`w.kids_path`)}
 			FROM walk w
 			JOIN node_content c ON c.parent_id IS w.kids_parent AND c.system_to = ${LIVE}
 			LEFT JOIN node_metadata m ON m.node_id = c.id AND m.system_to = ${LIVE}

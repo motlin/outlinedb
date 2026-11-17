@@ -11,6 +11,7 @@ import {MemoryRouter} from "react-router-dom";
 import type {NodeResponse, OutlineViewResponse} from "../src/node-types.js";
 import {nodeKeys} from "../src/client/node-cache.js";
 import {outlineViewKey} from "../src/client/outline-view.js";
+import {MAIN_PANE_ID} from "../src/client/pane-ids.js";
 import {StableNavigateProvider} from "../src/client/hooks/use-stable-navigate.js";
 import {useZoomTo} from "../src/client/hooks/use-zoom-to.js";
 import {prefetchZoomView, useAncestors, useNode} from "../src/client/hooks/use-nodes.js";
@@ -583,7 +584,7 @@ describe("zoom to prefetch", () =>
 					expect(
 						queryClient.isFetching(
 							{
-								queryKey: outlineViewKey(ALICE),
+								queryKey: outlineViewKey(ALICE, MAIN_PANE_ID),
 							},
 						),
 					).toBe(1);

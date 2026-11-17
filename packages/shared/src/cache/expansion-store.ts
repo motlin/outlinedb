@@ -1,5 +1,5 @@
 import {and, eq, inArray, like} from "drizzle-orm";
-import {expandedNodes, mirrors as mirrorsTable, nodeContent} from "../db/schema.js";
+import {expandedNodes, mirrors as mirrorsTable, nodeContent, paneExpandedNodes} from "../db/schema.js";
 import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 import {upstreamExpansionKey as expansionKey, virtualId} from "../workflowy/virtual-id.js";
 import {pendingAccountKeys} from "./account-outbox.js";
@@ -192,6 +192,70 @@ export function applyLocalExpansionDelta(unitOfWork: UnitOfWork, delta: Record<s
 		replaceExpansion(unitOfWork, [], Date.now());
 	}
 	applyExpansionDelta(unitOfWork, delta);
+}
+
+/** Pane `paneId`'s stored expanded keys; a pane with none stored expands nothing. */
+export function readPaneExpansion(tx: TemporalTransaction, paneId: string): Set<string>
+{
+	return new Set(
+		tx
+			.select(
+				{
+					shortKey: paneExpandedNodes.shortKey,
+				},
+			)
+			.from(paneExpandedNodes)
+			.where(and(eq(paneExpandedNodes.paneId, paneId), eq(paneExpandedNodes.systemTo, FAR_FUTURE_DATE)))
+			.all()
+			.map((row) => row.shortKey),
+	);
+}
+
+/**
+ * Apply an expansion delta (`true` adds a key, `false` removes it) to pane `paneId`'s own stored keys; with `replace`,
+ * the delta's `true` keys become the pane's whole set (a pane opening with its source pane's expansion, or closing
+ * with none). Only the keys that change get a new version.
+ */
+export function applyPaneExpansion(
+	unitOfWork: UnitOfWork,
+	paneId: string,
+	delta: Record<string, boolean>,
+	replace: boolean,
+): void
+{
+	const {tx, systemTime} = unitOfWork;
+	const stored = readPaneExpansion(tx, paneId);
+	const wanted = replace
+		? new Set(Object.entries(delta).flatMap(([key, expanded]) => (expanded ? [key] : [])))
+		: new Set([...stored, ...Object.keys(delta)].filter((key) => delta[key] ?? stored.has(key)));
+	const added = [...wanted].filter((key) => !stored.has(key));
+	const removed = [...stored].filter((key) => !wanted.has(key));
+	for (let start = 0; start < removed.length; start += KEY_CHUNK)
+	{
+		closeCurrentVersions(
+			tx,
+			paneExpandedNodes,
+			systemTime,
+			and(
+				eq(paneExpandedNodes.paneId, paneId),
+				inArray(paneExpandedNodes.shortKey, removed.slice(start, start + KEY_CHUNK)),
+			),
+		);
+	}
+	for (let start = 0; start < added.length; start += KEY_CHUNK)
+	{
+		tx.insert(paneExpandedNodes)
+			.values(
+				added.slice(start, start + KEY_CHUNK).map((shortKey) => (
+				{
+					paneId,
+					shortKey,
+					systemFrom: systemTime,
+					systemTo: FAR_FUTURE_DATE,
+				})),
+			)
+			.run();
+	}
 }
 
 /**

@@ -7,6 +7,7 @@ import
 	ancestorChain,
 	effectiveCompletedAt,
 	readExpansion,
+	readPaneExpansion,
 	readHomeLayoutMode,
 } from "@outlinedb/shared/cache";
 import {mirrors as mirrorsTable, nodeContent, nodeMetadata} from "@outlinedb/shared/db";
@@ -35,6 +36,7 @@ import {childInstance, expansionId} from "../../mirror-path.js";
 import {INTERNAL_API_NOT_CONFIGURED} from "../internal-api.js";
 import {changeWatermark, changesAfter, liveParents, readConsistently} from "../system-changes.js";
 import {readBacklinkItems, readViewTree, viewListParents} from "../view-tree.js";
+import type {ViewExpansionSource} from "../view-tree.js";
 import {defineOp, fail, ok, toJson} from "./define.js";
 import
 {
@@ -291,6 +293,8 @@ const ViewSchema = z.strictObject(
 		rootId: z.string().nullable(),
 		limit: z.number().int().nonnegative(),
 		showCompleted: z.boolean(),
+		/** An open secondary pane's id: the walk expands that pane's own stored expansion instead of the account's. */
+		paneId: z.string().min(1).optional(),
 	},
 );
 
@@ -300,7 +304,7 @@ export const nodesView = defineOp(
 		output: OutlineViewResponseSchema,
 		async run(ctx, body)
 		{
-			const {rootId, limit, showCompleted} = body;
+			const {rootId, limit, showCompleted, paneId} = body;
 			const resolvedRoot = rootId === null ? null : resolveNodeId(ctx, rootId);
 			if (rootId !== null && resolvedRoot === null)
 			{
@@ -311,13 +315,13 @@ export const nodesView = defineOp(
 					},
 				);
 			}
-			const {expansionStored, isExpanded} = viewExpansion(ctx);
+			const {expansion, isExpanded} = viewExpansion(ctx, paneId);
 			// Every list the view sends, chosen and read by one statement; visit only assembles them, agreeing with the
 			// statement's walk about order, budget and expansion.
 			const query =
 			{
 				rootId: resolvedRoot,
-				expansionStored,
+				expansion,
 				limit,
 				showCompleted,
 			};
@@ -410,20 +414,35 @@ export const nodesView = defineOp(
 );
 
 /**
- * The view's expansion: the account's stored expansion (a standalone store's own keys; a mirror's through the internal
- * API, nothing without it), as whether the walk's SQL reads it and the same test in JS.
+ * The view's expansion: pane `paneId`'s own stored expansion when the view names a pane, else the account's stored
+ * expansion (a standalone store's own keys; a mirror's through the internal API, nothing without it), as whose stored
+ * keys the walk's SQL reads and the same test in JS.
  */
-function viewExpansion(ctx: ServerContext):
+function viewExpansion(
+	ctx: ServerContext,
+	paneId: string | undefined,
+):
 {
-	expansionStored: boolean;
+	expansion: ViewExpansionSource;
 	isExpanded: (id: string) => boolean;
 }
 {
+	if (paneId !== undefined)
+	{
+		const keys = readPaneExpansion(ctx.db, paneId);
+		return {
+			expansion:
+			{
+				paneId,
+			},
+			isExpanded: (id) => keys.has(upstreamExpansionKey(id)),
+		};
+	}
 	if (ctx.mode === "standalone")
 	{
 		const keys = readExpansion(ctx.db) ?? new Set<string>();
 		return {
-			expansionStored: true,
+			expansion: "account",
 			isExpanded: (id) => keys.has(upstreamExpansionKey(id)),
 		};
 	}
@@ -431,12 +450,12 @@ function viewExpansion(ctx: ServerContext):
 	return adapter === undefined
 		?
 			{
-				expansionStored: false,
+				expansion: "none",
 				isExpanded: () => false,
 			}
 		:
 			{
-				expansionStored: true,
+				expansion: "account",
 				isExpanded: adapter.expansionTest(),
 			};
 }

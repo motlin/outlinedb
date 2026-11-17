@@ -78,6 +78,7 @@ describe("round-trip test infrastructure", () =>
 				"node_table_cell_sizes",
 				"node_tags",
 				"outbox",
+				"pane_expanded_nodes",
 				"references_roots",
 				"root_preferences",
 				"s3_files",
@@ -103,7 +104,7 @@ describe("round-trip test infrastructure", () =>
 				count: number;
 			}>(sql`SELECT COUNT(*) AS count FROM __drizzle_migrations`);
 
-			expect(result.count).toBe(11);
+			expect(result.count).toBe(12);
 
 			sqlite.close();
 		});

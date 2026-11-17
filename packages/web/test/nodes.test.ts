@@ -3577,6 +3577,24 @@ describe("nodes view route", () =>
 				.prepare("UPDATE node_metadata SET order_key = ? WHERE node_id = ?")
 				.run(integerOrderKey(priority), id);
 		};
+		/** PATCH `/api/v1/expansion`, returning the status. */
+		const patchExpansion = async (body: unknown) =>
+		{
+			const res = await app.fetch(
+				new Request(
+					"http://x/api/v1/expansion",
+					{
+						method: "PATCH",
+						headers:
+						{
+							"Content-Type": "application/json",
+						},
+						body: JSON.stringify(body),
+					},
+				),
+			);
+			return res.status;
+		};
 		/** Make `mirrorId` (a new child of `parentId`) a mirror of `originalId`. */
 		const mirror = (mirrorId: string, parentId: string, originalId: string) =>
 		{
@@ -3616,6 +3634,7 @@ describe("nodes view route", () =>
 		};
 		return {
 			post,
+			patchExpansion,
 			mirror,
 			add,
 			referencesRoot,
@@ -3741,6 +3760,91 @@ describe("nodes view route", () =>
 						["A1", ["A1a"], NO_BACKLINKS],
 						["Beta", ["B1"], NO_BACKLINKS],
 					],
+				},
+			);
+		});
+
+		it("expands a pane's own stored expansion when the view names the pane, and the account's otherwise", async () =>
+		{
+			const {post, patchExpansion} = setup(["Alpha"]);
+			const statuses = [
+				await patchExpansion(
+					{
+						paneId: "pane1",
+						changes:
+						{
+							Alpha: true,
+							Beta: true,
+						},
+						replace: true,
+					},
+				),
+				await patchExpansion(
+					{
+						paneId: "pane1",
+						changes:
+						{
+							Alpha: false,
+						},
+					},
+				),
+				await patchExpansion(
+					{
+						paneId: "pane2",
+						changes:
+						{
+							A1: true,
+						},
+						replace: true,
+					},
+				),
+			];
+			const view = async (paneId?: string) =>
+			{
+				const {body} = await post(
+					{
+						rootId: null,
+						limit: 100,
+						showCompleted: false,
+						...(paneId === undefined
+							? {}
+							:
+								{
+									paneId,
+								}),
+					},
+				);
+				return {
+					lists: lists(body),
+					expandedIds: body.expandedIds,
+				};
+			};
+
+			expect(
+				{
+					statuses,
+					pane1: await view("pane1"),
+					account: await view(),
+				},
+			).toStrictEqual(
+				{
+					statuses: [204, 204, 204],
+					pane1:
+					{
+						lists: [
+							[null, ["Alpha", "Beta"], null],
+							["Beta", ["B1"], NO_BACKLINKS],
+						],
+						expandedIds: ["Beta"],
+					},
+					account:
+					{
+						lists: [
+							[null, ["Alpha", "Beta"], null],
+							["Alpha", ["A1", "A2"], NO_BACKLINKS],
+						],
+						expandedIds: ["Alpha"],
+					},
 				},
 			);
 		});
