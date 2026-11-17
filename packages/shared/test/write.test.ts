@@ -1,10 +1,7 @@
 import {vi, afterEach, describe, expect, it} from "vite-plus/test";
-import DatabaseConstructor from "better-sqlite3";
 import {generateNKeysBetween} from "fractional-indexing";
 import {and, eq} from "drizzle-orm";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
-import {join} from "node:path";
 import {WorkflowyApiClient} from "../src/api/workflowy-client.js";
 import {CacheService} from "../src/cache/cache-service.js";
 import {WorkflowyWriteThroughClient} from "../src/cache/workflowy-write-through-client.js";
@@ -18,6 +15,7 @@ import type {WorkflowyNode} from "../src/types/workflowy.js";
 import {buildTestDb} from "./helpers/round-trip-helpers.js";
 import type {DeletePlan} from "../src/cache/delete-plan.js";
 import type {UpdateNodeRequest} from "../src/api/workflowy-client.js";
+import {migratedMemoryDatabase} from "./helpers/migrated-memory-database.js";
 
 /** The fractional-indexing integer key of `n`, so seeded keys sort like the seeded priorities. */
 const integerOrderKey = (n: number): string => generateNKeysBetween(null, null, n + 1).at(-1) ?? "a0";
@@ -38,7 +36,6 @@ describe("write through create", () =>
 		},
 	);
 
-	const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
 	const SEEDED_AT = systemTimeAt("2026-01-01 00:00:00.000");
 
 	type Seed = [id: string, parentId: string | null, priority: number][];
@@ -57,17 +54,11 @@ describe("write through create", () =>
 		],
 	)
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		const database = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			database,
-			{
-				migrationsFolder,
 			},
 		);
 		database
@@ -488,7 +479,6 @@ describe("write through mirror delete", () =>
 		},
 	);
 
-	const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
 	const SEEDED_AT = systemTimeAt("2026-01-01 00:00:00.000");
 
 	/*
@@ -577,17 +567,11 @@ describe("write through mirror delete", () =>
 		referencesRootIds?: string[];
 	} = {})
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		const database = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			database,
-			{
-				migrationsFolder,
 			},
 		);
 		const seededLists = childLists();

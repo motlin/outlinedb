@@ -1,7 +1,5 @@
-import DatabaseConstructor from "better-sqlite3";
+import type DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
-import {join} from "node:path";
 import {afterEach, describe, expect, it, vi} from "vite-plus/test";
 import {applyApiBatch, beginApiImport, finishApiImport} from "../src/cache/api-import.js";
 import {runUnitOfWork} from "../src/cache/node-composite.js";
@@ -16,8 +14,8 @@ import * as schema from "../src/db/schema.js";
 import {nodeContent} from "../src/db/schema.js";
 import {FAR_FUTURE_DATE, systemTimeAt} from "../src/temporal/constants.js";
 import type {WorkflowyNode} from "../src/types/workflowy.js";
+import {migratedMemoryDatabase} from "./helpers/migrated-memory-database.js";
 
-const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
 const START = new Date("2026-02-01T00:00:00.000Z");
 
 function apiNode(id: string): WorkflowyNode
@@ -37,18 +35,12 @@ describe("transaction timeout", () =>
 
 	function createDb()
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		open.push(sqlite);
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		return db;

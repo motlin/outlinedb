@@ -1,9 +1,6 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from "vite-plus/test";
-import DatabaseConstructor from "better-sqlite3";
 import {and, asc, eq} from "drizzle-orm";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
-import {join} from "node:path";
 import {LocalCalendar} from "../src/cache/local-calendar.js";
 import {LocalTreeWriter} from "../src/cache/local-tree-writer.js";
 import {runUnitOfWork} from "../src/cache/node-composite.js";
@@ -17,8 +14,8 @@ import {drainOutbox} from "../src/internal/outbox-drain.js";
 import type {OutboxPusher, UpstreamNode} from "../src/internal/outbox-drain.js";
 import type {InternalOp} from "../src/internal/push-and-poll.js";
 import {FAR_FUTURE_DATE, parseTemporalTimestamp, systemTimeAt} from "../src/temporal/constants.js";
+import {migratedMemoryDatabase} from "./helpers/migrated-memory-database.js";
 
-const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
 const SEEDED_AT = systemTimeAt("2026-01-01 00:00:00.000");
 const SEEDED = new Date("2026-01-01T00:00:00.000Z");
 /** The account's join date: 2026-01-01T00:00:00Z. */
@@ -54,17 +51,11 @@ function setClock(systemTime: number): void
 
 function setup()
 {
-	const sqlite = new DatabaseConstructor(":memory:");
+	const sqlite = migratedMemoryDatabase();
 	const database = drizzle(
 		sqlite,
 		{
 			schema,
-		},
-	);
-	migrate(
-		database,
-		{
-			migrationsFolder,
 		},
 	);
 	database

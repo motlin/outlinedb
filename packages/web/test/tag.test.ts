@@ -14,12 +14,9 @@ import {fileURLToPath} from "node:url";
 import {buildTagColorCss, normalizeTagColors} from "../src/client/tag-color-styles.js";
 import {cssBlock} from "./helpers/css-block.js";
 import {invertOp, tagColorOp} from "../src/client/undo-history.js";
-import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
 import {nodeTreeHost} from "../src/server/node-host.js";
 import {bindTreeHost} from "../src/server/tree-snapshot.js";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
-import {join} from "node:path";
 import {CacheService, ensureNodeTags} from "@outlinedb/shared/cache";
 import * as schema from "@outlinedb/shared/db";
 import {nodeContent, nodeMetadata} from "@outlinedb/shared/db";
@@ -43,6 +40,7 @@ import
 	teaserPosition,
 	toggleTagInQuery,
 } from "../src/client/tag-render.js";
+import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
 
 describe("tag autocomplete", () =>
 {
@@ -838,7 +836,7 @@ describe("tag index", () =>
 	 */
 	function setupDb()
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		const db = drizzle(
 			sqlite,
 			{
@@ -846,12 +844,6 @@ describe("tag index", () =>
 			},
 		);
 		bindTreeHost(db, nodeTreeHost(sqlite));
-		migrate(
-			db,
-			{
-				migrationsFolder: join(import.meta.dirname, "../../shared/src/db/migrations"),
-			},
-		);
 		const seededAt = systemTimeAt("2026-01-01 00:00:00.000");
 		const rows:
 		{

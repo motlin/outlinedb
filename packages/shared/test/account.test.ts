@@ -12,15 +12,14 @@ import
 	writeAccountSnapshot,
 } from "../src/cache/account-store.js";
 import type {AccountSnapshot, AccountRows} from "../src/cache/account-store.js";
-import DatabaseConstructor from "better-sqlite3";
+import type DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
-import {join} from "node:path";
 import {readAccountState, writeAccountState, accountVersion} from "../src/cache/account-seed.js";
 import {replaceExpansion} from "../src/cache/expansion-store.js";
 import {runUnitOfWork} from "../src/cache/node-composite.js";
 import * as schema from "../src/db/schema.js";
 import {FAR_FUTURE_DATE} from "../src/temporal/constants.js";
+import {migratedMemoryDatabase} from "./helpers/migrated-memory-database.js";
 
 describe("account store surveys", () =>
 {
@@ -91,8 +90,6 @@ describe("account store surveys", () =>
 
 describe("account store", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
-
 	function snapshot(rootMetadata: Record<string, unknown>, settings: Record<string, unknown> = {}): AccountSnapshot
 	{
 		return {
@@ -120,18 +117,12 @@ describe("account store", () =>
 		});
 		function database()
 		{
-			const sqlite = new DatabaseConstructor(":memory:");
+			const sqlite = migratedMemoryDatabase();
 			open.push(sqlite);
 			const db = drizzle(
 				sqlite,
 				{
 					schema,
-				},
-			);
-			migrate(
-				db,
-				{
-					migrationsFolder,
 				},
 			);
 			return db;

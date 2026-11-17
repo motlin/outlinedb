@@ -1,7 +1,5 @@
-import DatabaseConstructor from "better-sqlite3";
+import type DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
-import {join} from "node:path";
 import {afterEach, describe, expect, it} from "vite-plus/test";
 import {WorkflowyInternalClient} from "../src/api/workflowy-internal-client.js";
 import type {InternalTreeItem} from "../src/api/workflowy-internal-client.js";
@@ -12,8 +10,8 @@ import {readExpansion} from "../src/cache/expansion-store.js";
 import * as schema from "../src/db/schema.js";
 import {FAR_FUTURE_DATE, systemTimeAt} from "../src/temporal/index.js";
 import {createFakeInternalApi, json} from "./helpers/fake-internal-api.js";
+import {migratedMemoryDatabase} from "./helpers/migrated-memory-database.js";
 
-const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
 const FETCHED_AT = 1_800_000_000_000;
 
 /** A whole-tree snapshot holding `items`, as `getTreeSnapshot` returns it. */
@@ -40,17 +38,11 @@ const CALENDAR =
 
 function setup(cachedIds: string[])
 {
-	const sqlite = new DatabaseConstructor(":memory:");
+	const sqlite = migratedMemoryDatabase();
 	const db = drizzle(
 		sqlite,
 		{
 			schema,
-		},
-	);
-	migrate(
-		db,
-		{
-			migrationsFolder,
 		},
 	);
 	for (const id of cachedIds)

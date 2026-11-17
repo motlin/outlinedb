@@ -1,27 +1,19 @@
-import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {sql} from "drizzle-orm";
-import {join} from "node:path";
 import {describe, expect, it} from "vite-plus/test";
 import * as schema from "@outlinedb/shared/db";
 import type {ServerContext} from "../src/server/context.js";
 import {httpAppFor} from "./http-app-for.js";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
 
 /** No internal adapter: our What's New read state lives only in our own database, never in upstream's root metadata. */
 function setup()
 {
 	const db = drizzle(
-		new DatabaseConstructor(":memory:"),
+		migratedMemoryDatabase(),
 		{
 			schema,
-		},
-	);
-	migrate(
-		db,
-		{
-			migrationsFolder: join(import.meta.dirname, "../../shared/src/db/migrations"),
 		},
 	);
 	const ctx =

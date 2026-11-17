@@ -23,6 +23,7 @@ import {FAR_FUTURE_DATE, systemTimeAt} from "../src/temporal/constants.js";
 import {NodeReader, CacheService, ensureNodeTags} from "@outlinedb/shared/cache";
 import {buildTestDb, bulkImportWithWatermarkGuard, loadFixtureBackup} from "./helpers/round-trip-helpers.js";
 import {nodeContent} from "@outlinedb/shared/db";
+import {migratedMemoryDatabase} from "./helpers/migrated-memory-database.js";
 
 describe("node composite", () =>
 {
@@ -140,17 +141,11 @@ describe("node composite", () =>
 
 		beforeEach(() =>
 		{
-			sqlite = new DatabaseConstructor(":memory:");
+			sqlite = migratedMemoryDatabase();
 			database = drizzle(
 				sqlite,
 				{
 					schema,
-				},
-			);
-			migrate(
-				database,
-				{
-					migrationsFolder,
 				},
 			);
 		});
@@ -906,22 +901,13 @@ describe("node order key migration", () =>
 
 describe("node label suggestions migration", () =>
 {
-	const migrationsFolder = path.join(import.meta.dirname, "../src/db/migrations");
-
 	describe("node_label_suggestions migration", () =>
 	{
 		it("creates the temporal label-suggestion table with its key, live-row unique index, and closed-row partial index", () =>
 		{
-			const sqlite = new DatabaseConstructor(":memory:");
+			const sqlite = migratedMemoryDatabase();
 			try
 			{
-				migrate(
-					drizzle(sqlite),
-					{
-						migrationsFolder,
-					},
-				);
-
 				expect(
 					{
 						columns: sqlite

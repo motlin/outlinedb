@@ -1,10 +1,8 @@
-import DatabaseConstructor from "better-sqlite3";
 import type {Database} from "better-sqlite3";
 import {eq} from "drizzle-orm";
 import {generateNKeysBetween} from "fractional-indexing";
 import {drizzle} from "drizzle-orm/better-sqlite3";
 import type {BetterSQLite3Database} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {readFileSync} from "node:fs";
 import {join} from "node:path";
 import * as schema from "@outlinedb/shared/db";
@@ -17,6 +15,7 @@ import {ApiResponseSchema} from "@outlinedb/shared/types";
 import {uuidToShortId} from "@outlinedb/shared/workflowy";
 import {BackupFileSchema} from "@outlinedb/shared/schemas";
 import type {BackupNode} from "@outlinedb/shared/schemas";
+import {migratedMemoryDatabase} from "./migrated-memory-database.js";
 
 const currentDirectory = import.meta.dirname;
 
@@ -25,7 +24,6 @@ function indexOrderKey(index: number): string
 {
 	return generateNKeysBetween(null, null, index + 1).at(-1) ?? "a0";
 }
-const migrationsFolder = join(currentDirectory, "../../src/db/migrations");
 const fixturesFolder = join(currentDirectory, "../fixtures");
 
 export interface TestDatabase
@@ -43,17 +41,11 @@ export interface TestDatabase
  */
 export function buildTestDb(): TestDatabase
 {
-	const sqlite = new DatabaseConstructor(":memory:");
+	const sqlite = migratedMemoryDatabase();
 	const database = drizzle(
 		sqlite,
 		{
 			schema,
-		},
-	);
-	migrate(
-		database,
-		{
-			migrationsFolder,
 		},
 	);
 	sqlite.pragma("foreign_keys = ON");

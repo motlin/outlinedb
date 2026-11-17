@@ -1,7 +1,4 @@
-import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
-import {join} from "node:path";
 import {afterEach, describe, expect, it, vi} from "vite-plus/test";
 import
 {
@@ -20,6 +17,7 @@ import type {ServerContext} from "../src/server/context.js";
 import type {NodeResponse} from "../src/node-types.js";
 import {standaloneContext} from "./helpers/local-context.js";
 import {httpAppFor} from "./http-app-for.js";
+import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
 const P1 = "1a2b3c4d-0000-4000-8000-000000000001";
 const P2 = "5e6f7a8b-0000-4000-8000-000000000002";
 
@@ -64,15 +62,9 @@ function setup(meta: Record<string, unknown> | undefined, savedViews?: string)
 		setRootMetaValues: vi.fn<WorkflowyInternalAdapter["setRootMetaValues"]>(unreachable),
 	};
 	const db = drizzle(
-		new DatabaseConstructor(":memory:"),
+		migratedMemoryDatabase(),
 		{
 			schema,
-		},
-	);
-	migrate(
-		db,
-		{
-			migrationsFolder: join(import.meta.dirname, "../../shared/src/db/migrations"),
 		},
 	);
 	if (meta !== undefined)

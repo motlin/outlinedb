@@ -1,10 +1,7 @@
 import {QueryClient, QueryClientProvider, QueryObserver} from "@tanstack/react-query";
 import type {QueryKey} from "@tanstack/react-query";
-import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {Hono} from "hono";
-import {join} from "node:path";
 import {createElement} from "react";
 import {renderToStaticMarkup} from "react-dom/server";
 import {afterEach, beforeEach, describe, expect, it, vi} from "vite-plus/test";
@@ -30,6 +27,7 @@ import {previewUndoOps} from "../src/client/undo-cache.js";
 import {undoHistory} from "../src/client/undo-history.js";
 import {fakeAdapter, resetFakeWorkflowy} from "./helpers/fake-workflowy.js";
 import {httpAppFor} from "./http-app-for.js";
+import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
 
 const outlineState =
 {
@@ -114,8 +112,6 @@ const
 	useUpdateNode,
 } = await import("../src/client/hooks/use-nodes.js");
 
-const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
-
 function apiNode(id: string, parentId: string | null, priority: number, completedAt?: number): WorkflowyNode
 {
 	return {
@@ -147,17 +143,11 @@ function apiNode(id: string, parentId: string | null, priority: number, complete
  */
 function server(): Hono<AppEnv>
 {
-	const sqlite = new DatabaseConstructor(":memory:");
+	const sqlite = migratedMemoryDatabase();
 	const db = drizzle(
 		sqlite,
 		{
 			schema,
-		},
-	);
-	migrate(
-		db,
-		{
-			migrationsFolder,
 		},
 	);
 	const cacheService = new CacheService(db);

@@ -1,8 +1,6 @@
 import {describe, expect, it} from "vite-plus/test";
 import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
-import {join} from "node:path";
 import * as schema from "@outlinedb/shared/db";
 import type {WorkflowyNode} from "@outlinedb/shared/types";
 import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
@@ -11,11 +9,10 @@ import {childFlags, childFlagsFromRows} from "../src/server/backlinks.js";
 import {CacheService} from "@outlinedb/shared/cache";
 import {mirrors, nodeContent, nodeMetadata, referencesRoots} from "@outlinedb/shared/db";
 import {integerOrderKey} from "./helpers/integer-order-key.js";
+import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
 
 describe("child flags mirror", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
-
 	function apiNode(id: string, parentId: string | null, priority: number, completedAt?: number): WorkflowyNode
 	{
 		return {
@@ -39,17 +36,11 @@ describe("child flags mirror", () =>
 	/** Parents P1 (mirror of a done original), P2 (mirror with a stale own completion of an open original), P3 (plain done child). */
 	function setup()
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		const cacheService = new CacheService(db);
@@ -142,15 +133,9 @@ describe("child flags", () =>
 		function fixture({withItem, sourceCompleted}: {withItem: boolean; sourceCompleted: boolean})
 		{
 			const db = drizzle(
-				new DatabaseConstructor(":memory:"),
+				migratedMemoryDatabase(),
 				{
 					schema,
-				},
-			);
-			migrate(
-				db,
-				{
-					migrationsFolder: join(import.meta.dirname, "../../shared/src/db/migrations"),
 				},
 			);
 			const rows: [string, string | null][] = [

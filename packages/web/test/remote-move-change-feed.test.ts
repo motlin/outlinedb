@@ -1,9 +1,7 @@
 import {afterEach, describe, expect, it, vi} from "vite-plus/test";
-import DatabaseConstructor from "better-sqlite3";
+import type DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {Hono} from "hono";
-import {join} from "node:path";
 import {WorkflowyInternalClient} from "@outlinedb/shared/api";
 import
 {
@@ -22,8 +20,8 @@ import {createFakeInternalApi, json} from "../../shared/test/helpers/fake-intern
 import type {AppEnv, ServerContext} from "../src/server/context.js";
 import type {NodeChangesResponse} from "../src/node-types.js";
 import {httpAppFor} from "./http-app-for.js";
+import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
 
-const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 const T0 = Date.parse("2026-11-05T12:00:00.000Z");
 
 function apiNode(id: string, parentId: string | null, priority: number): WorkflowyNode
@@ -71,17 +69,11 @@ function setup()
 			now: T0,
 		},
 	);
-	const sqlite = new DatabaseConstructor(":memory:");
+	const sqlite = migratedMemoryDatabase();
 	const db = drizzle(
 		sqlite,
 		{
 			schema,
-		},
-	);
-	migrate(
-		db,
-		{
-			migrationsFolder,
 		},
 	);
 	const cacheService = new CacheService(db);

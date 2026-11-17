@@ -1,17 +1,14 @@
 import {describe, expect, it} from "vite-plus/test";
-import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {Hono} from "hono";
-import {join} from "node:path";
 import {CacheService, readPendingOutbox} from "@outlinedb/shared/cache";
 import * as schema from "@outlinedb/shared/db";
 import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import type {WorkflowyNode} from "@outlinedb/shared/types";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
 import {httpAppFor} from "./http-app-for.js";
+import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
 
-const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 const WRITE_CLIENT_REQUIRED = "WORKFLOWY_API_KEY environment variable is required";
 const NEW_ID = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
 
@@ -42,17 +39,11 @@ const untouchableAdapter = new Proxy(
 /** A mirror Node host whose Home holds `a`, `b`, `c` (priorities 0..2); `configured` gives it the internal API. */
 function setup(configured: boolean)
 {
-	const sqlite = new DatabaseConstructor(":memory:");
+	const sqlite = migratedMemoryDatabase();
 	const db = drizzle(
 		sqlite,
 		{
 			schema,
-		},
-	);
-	migrate(
-		db,
-		{
-			migrationsFolder,
 		},
 	);
 	const cacheService = new CacheService(db);

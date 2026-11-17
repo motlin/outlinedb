@@ -1,7 +1,5 @@
-import DatabaseConstructor from "better-sqlite3";
+import type DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
-import {join} from "node:path";
 import {afterEach, describe, expect, it} from "vite-plus/test";
 import {readImportTime} from "../src/cache/account-store.js";
 import {applyExpansionDelta, expansionVersion, readExpansion, replaceExpansion} from "../src/cache/expansion-store.js";
@@ -9,8 +7,7 @@ import {runUnitOfWork} from "../src/cache/node-composite.js";
 import {startUnitOfWork} from "../src/cache/system-time.js";
 import * as schema from "../src/db/schema.js";
 import {FAR_FUTURE_DATE, systemTimeAt} from "../src/temporal/constants.js";
-
-const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
+import {migratedMemoryDatabase} from "./helpers/migrated-memory-database.js";
 
 describe("expansion store", () =>
 {
@@ -25,18 +22,12 @@ describe("expansion store", () =>
 	});
 	function database()
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		open.push(sqlite);
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		return db;

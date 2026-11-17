@@ -1,7 +1,5 @@
-import DatabaseConstructor from "better-sqlite3";
+import type DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
-import {join} from "node:path";
 import {afterEach, describe, expect, it} from "vite-plus/test";
 import * as schema from "@outlinedb/shared/db";
 import {nodeContent, nodeMetadata, mirrors} from "@outlinedb/shared/db";
@@ -57,10 +55,10 @@ import {nodeTreeHost} from "../src/server/node-host.js";
 import type {ServerContext} from "../src/server/context.js";
 import {httpAppFor} from "./http-app-for.js";
 import {integerOrderKey} from "./helpers/integer-order-key.js";
+import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
 
 describe("tree host", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 	const SEEDED_AT = systemTimeAt("2026-01-01 00:00:00.000");
 
 	const open: DatabaseConstructor.Database[] = [];
@@ -142,18 +140,12 @@ describe("tree host", () =>
 
 	function setup()
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		open.push(sqlite);
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		insertNode(db, "a", "Alpha", 0);
@@ -4310,7 +4302,6 @@ describe("tree position", () =>
 
 describe("tree snapshot flag", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 	const SEEDED_AT = systemTimeAt("2026-01-01 00:00:00.000");
 
 	const TREE: [id: string, parentId: string | null, name: string][] = [
@@ -4333,7 +4324,7 @@ describe("tree snapshot flag", () =>
 
 	function seededDb(withHost: boolean)
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		open.push(sqlite);
 		const db = drizzle(
 			sqlite,
@@ -4345,12 +4336,6 @@ describe("tree snapshot flag", () =>
 		{
 			bindTreeHost(db, nodeTreeHost(sqlite));
 		}
-		migrate(
-			db,
-			{
-				migrationsFolder,
-			},
-		);
 		TREE.forEach(([id, parentId, name], priority) =>
 		{
 			db.insert(nodeContent)

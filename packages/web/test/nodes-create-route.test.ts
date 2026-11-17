@@ -1,8 +1,6 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from "vite-plus/test";
-import DatabaseConstructor from "better-sqlite3";
+import type DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
-import {join} from "node:path";
 import {readPendingOutbox} from "@outlinedb/shared/cache";
 import * as schema from "@outlinedb/shared/db";
 import type {ServerContext} from "../src/server/context.js";
@@ -10,8 +8,8 @@ import {readNodeConfig} from "../src/server/config.js";
 import {buildServerContext} from "../src/server/context.js";
 import {LadderEventBus} from "../src/server/ladder-events.js";
 import {httpAppFor} from "./http-app-for.js";
+import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
 
-const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 const SEEDED = 1_600_000_000;
 const NOW = 1_700_000_000;
 const NEW_ID = "0b6f3c1e-2d4a-4b8c-9e7f-1a2b3c4d5e6f";
@@ -28,17 +26,11 @@ beforeEach(() =>
 		},
 	);
 	vi.setSystemTime(SEEDED * 1000);
-	sqlite = new DatabaseConstructor(":memory:");
+	sqlite = migratedMemoryDatabase();
 	const db = drizzle(
 		sqlite,
 		{
 			schema,
-		},
-	);
-	migrate(
-		db,
-		{
-			migrationsFolder,
 		},
 	);
 	// A mirror Node host: an API key and a saved internal session.

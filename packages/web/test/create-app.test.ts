@@ -1,15 +1,11 @@
-import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
-import {join} from "node:path";
 import {describe, expect, it} from "vite-plus/test";
 import * as schema from "@outlinedb/shared/db";
 import * as serverApp from "../src/server/app.js";
 import type {ServerConfig} from "../src/server/config.js";
 import {buildServerContext} from "../src/server/context.js";
 import {LadderEventBus} from "../src/server/ladder-events.js";
-
-const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
+import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
 
 const baseConfig: ServerConfig =
 {
@@ -28,15 +24,9 @@ const baseConfig: ServerConfig =
 function memoryDb()
 {
 	const db = drizzle(
-		new DatabaseConstructor(":memory:"),
+		migratedMemoryDatabase(),
 		{
 			schema,
-		},
-	);
-	migrate(
-		db,
-		{
-			migrationsFolder,
 		},
 	);
 	return db;

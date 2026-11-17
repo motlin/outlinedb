@@ -1,7 +1,5 @@
-import DatabaseConstructor from "better-sqlite3";
+import type DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
-import {join} from "node:path";
 import {afterEach, describe, expect, it} from "vite-plus/test";
 import {Hono} from "hono";
 import * as schema from "@outlinedb/shared/db";
@@ -12,8 +10,8 @@ import {bindTreeHost} from "../src/server/tree-snapshot.js";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
 import {MemoryEmbeddingIndex} from "../src/server/embedding-index.js";
 import {httpAppFor} from "./http-app-for.js";
+import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
 
-const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 const SEEDED_AT = systemTimeAt("2026-01-01 00:00:00.000");
 
 const open: DatabaseConstructor.Database[] = [];
@@ -27,7 +25,7 @@ afterEach(() =>
 
 function memoryDb()
 {
-	const sqlite = new DatabaseConstructor(":memory:");
+	const sqlite = migratedMemoryDatabase();
 	open.push(sqlite);
 	const db = drizzle(
 		sqlite,
@@ -36,12 +34,6 @@ function memoryDb()
 		},
 	);
 	bindTreeHost(db, nodeTreeHost(sqlite));
-	migrate(
-		db,
-		{
-			migrationsFolder,
-		},
-	);
 	db.insert(nodeContent)
 		.values(
 			{

@@ -1,13 +1,11 @@
-import DatabaseConstructor from "better-sqlite3";
+import type DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
-import {join} from "node:path";
 import {afterEach, describe, expect, it} from "vite-plus/test";
 import {buildEmbedTexts, filterEmbeddable, loadEmbeddableNodes} from "../src/cache/embed-text.js";
 import * as schema from "../src/db/schema.js";
 import {FAR_FUTURE_DATE, systemTimeAt} from "../src/temporal/index.js";
+import {migratedMemoryDatabase} from "./helpers/migrated-memory-database.js";
 
-const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
 const SYSTEM_FROM = systemTimeAt("2026-01-01 00:00:00.000");
 
 describe("embed text", () =>
@@ -24,18 +22,12 @@ describe("embed text", () =>
 
 	function database()
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		open.push(sqlite);
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		const node = (id: string, name: string, parentId: string | null, note: string | null = null) => (

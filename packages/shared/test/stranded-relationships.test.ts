@@ -1,16 +1,13 @@
-import DatabaseConstructor from "better-sqlite3";
 import {and, eq} from "drizzle-orm";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
-import {join} from "node:path";
 import {describe, expect, it} from "vite-plus/test";
 import {runUnitOfWork} from "../src/cache/node-composite.js";
 import {countStrandedRows, endStrandedBacklinkItems} from "../src/cache/stranded-relationships.js";
 import * as schema from "../src/db/schema.js";
 import {mirrors, nodeContent, nodeMetadata, referencesRoots} from "../src/db/schema.js";
 import {FAR_FUTURE_DATE, systemTimeAt} from "../src/temporal/constants.js";
+import {migratedMemoryDatabase} from "./helpers/migrated-memory-database.js";
 
-const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
 const SEEDED = systemTimeAt("2026-01-01 00:00:00.000");
 const DELETED = systemTimeAt("2026-03-01 00:00:00.000");
 
@@ -26,17 +23,11 @@ const DELETED = systemTimeAt("2026-03-01 00:00:00.000");
  */
 function setup()
 {
-	const sqlite = new DatabaseConstructor(":memory:");
+	const sqlite = migratedMemoryDatabase();
 	const db = drizzle(
 		sqlite,
 		{
 			schema,
-		},
-	);
-	migrate(
-		db,
-		{
-			migrationsFolder,
 		},
 	);
 	const nodes: [id: string, parentId: string | null, systemTo: number][] = [

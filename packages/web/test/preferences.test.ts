@@ -1,7 +1,5 @@
-import DatabaseConstructor from "better-sqlite3";
+import type DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
-import {join} from "node:path";
 import {afterEach, describe, expect, it, vi} from "vite-plus/test";
 import
 {
@@ -20,6 +18,7 @@ import type {ServerContext} from "../src/server/context.js";
 import {standaloneContext} from "./helpers/local-context.js";
 import {httpAppFor} from "./http-app-for.js";
 import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
+import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
 
 describe("preferences route", () =>
 {
@@ -59,15 +58,9 @@ describe("preferences route", () =>
 		};
 		// A week-start change looks for a calendar root to re-layout, so the context needs a (calendar-less) cache.
 		const db = drizzle(
-			new DatabaseConstructor(":memory:"),
+			migratedMemoryDatabase(),
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder: join(import.meta.dirname, "../../shared/src/db/migrations"),
 			},
 		);
 		if (meta !== undefined)
@@ -1717,8 +1710,6 @@ describe("preferences route", () =>
 
 describe("preferences week layout", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
-
 	const open: DatabaseConstructor.Database[] = [];
 	afterEach(() =>
 	{
@@ -1740,18 +1731,12 @@ describe("preferences week layout", () =>
 		} = {},
 	)
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		open.push(sqlite);
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		// September 10, 2026 under its year and month, but in no week node yet.

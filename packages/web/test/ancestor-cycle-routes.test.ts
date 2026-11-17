@@ -1,16 +1,13 @@
 import {describe, expect, it} from "vite-plus/test";
-import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {Hono} from "hono";
-import {join} from "node:path";
 import * as schema from "@outlinedb/shared/db";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
 import {httpAppFor} from "./http-app-for.js";
+import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
 
 const {CacheService} = await import("@outlinedb/shared/cache");
 
-const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 const A = "aaaa1111-0000-4000-8000-a0a0a0a0a0a0";
 const B = "bbbb2222-0000-4000-8000-b0b0b0b0b0b0";
 const LEAF = "cccc3333-0000-4000-8000-c0c0c0c0c0c0";
@@ -18,17 +15,11 @@ const LEAF = "cccc3333-0000-4000-8000-c0c0c0c0c0c0";
 /** A stale cache that holds A under B and B under A, with LEAF under A. */
 function cyclicApp(): Hono<AppEnv>
 {
-	const sqlite = new DatabaseConstructor(":memory:");
+	const sqlite = migratedMemoryDatabase();
 	const db = drizzle(
 		sqlite,
 		{
 			schema,
-		},
-	);
-	migrate(
-		db,
-		{
-			migrationsFolder,
 		},
 	);
 	const cacheService = new CacheService(db);

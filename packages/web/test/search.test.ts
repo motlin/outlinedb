@@ -75,6 +75,7 @@ import {and, eq} from "drizzle-orm";
 import {computeTreeSearch, computeTreeSearchPaged} from "../src/server/tree-search.js";
 import {compactSwitcherSkeleton, peekSwitcherText} from "../src/server/switcher-search.js";
 import {integerOrderKey} from "./helpers/integer-order-key.js";
+import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
 
 describe("search autocomplete values", () =>
 {
@@ -1585,7 +1586,6 @@ describe("search helpers route", () =>
 		});
 	});
 
-	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 	const SEEDED_AT = systemTimeAt("2026-01-01 00:00:00.000");
 
 	/*
@@ -1613,7 +1613,7 @@ describe("search helpers route", () =>
 
 	function setup()
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		open.push(sqlite);
 		const db = drizzle(
 			sqlite,
@@ -1622,12 +1622,6 @@ describe("search helpers route", () =>
 			},
 		);
 		bindTreeHost(db, nodeTreeHost(sqlite));
-		migrate(
-			db,
-			{
-				migrationsFolder,
-			},
-		);
 		for (const [id, parentId, name] of TREE)
 		{
 			db.insert(nodeContent)
@@ -2239,7 +2233,6 @@ describe("search text op", () =>
 	// From the registry, which the web setup wraps to check each op output against its schema.
 	const searchText = Ops["search.text"];
 
-	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 	const SEEDED_AT = systemTimeAt("2026-01-01 00:00:00.000");
 
 	const open: DatabaseConstructor.Database[] = [];
@@ -2253,18 +2246,12 @@ describe("search text op", () =>
 
 	function seededContext(): ServerContext
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		open.push(sqlite);
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		const live =

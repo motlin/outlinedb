@@ -1,9 +1,6 @@
 import {afterEach, describe, expect, it, vi} from "vite-plus/test";
-import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {Hono} from "hono";
-import {join} from "node:path";
 import
 {
 	CacheService,
@@ -18,8 +15,7 @@ import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import type {WorkflowyNode} from "@outlinedb/shared/types";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
 import {httpAppFor} from "./http-app-for.js";
-
-const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
+import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
 
 function apiNode(
 	id: string,
@@ -52,17 +48,11 @@ function setup(expanded: string[] = [])
 		},
 	);
 	vi.setSystemTime(1_600_000_000_000);
-	const sqlite = new DatabaseConstructor(":memory:");
+	const sqlite = migratedMemoryDatabase();
 	const db = drizzle(
 		sqlite,
 		{
 			schema,
-		},
-	);
-	migrate(
-		db,
-		{
-			migrationsFolder,
 		},
 	);
 	const cacheService = new CacheService(db);
@@ -296,10 +286,15 @@ describe("POST /api/v1/nodes/:id/detach-mirror", () =>
 	it("refuses a subtree of more than 2000 items without writing", async () =>
 	{
 		const {cacheService, post, pending} = setup();
-		for (let i = 0; i < 2000; i += 1)
-		{
-			cacheService.insertNode(apiNode(`bulk${i}`, "G", i), "G");
-		}
+		cacheService.storeApiResponse(
+			Array.from(
+				{
+					length: 2000,
+				},
+				(_, i) => apiNode(`bulk${i}`, "G", i),
+			),
+			"G",
+		);
 
 		const res = await post("/M/detach-mirror");
 

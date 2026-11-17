@@ -1,9 +1,7 @@
 import {describe, expect, it, afterEach, vi} from "vite-plus/test";
-import DatabaseConstructor from "better-sqlite3";
+import type DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {Hono} from "hono";
-import {join} from "node:path";
 import {CacheService, storeInternalMetadata} from "@outlinedb/shared/cache";
 import * as schema from "@outlinedb/shared/db";
 import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
@@ -40,11 +38,10 @@ import
 import {nodeEventsSocketHandlers} from "../src/server/node-events-socket.js";
 import {defineOp, ok} from "../src/server/ops/define.js";
 import {inProcessStore} from "../src/server/store.js";
+import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
 
 describe("node attachment route", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
-
 	function apiNode(id: string): WorkflowyNode
 	{
 		return {
@@ -60,17 +57,11 @@ describe("node attachment route", () =>
 
 	function setup()
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		const cacheService = new CacheService(db);
@@ -654,8 +645,6 @@ describe("node cache", () =>
 
 describe("node calendar dto", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
-
 	function time(year: number, month: number, day: number): string
 	{
 		return `<time startYear="${year}" startMonth="${month}" startDay="${day}">${month}/${day}/${year}</time>`;
@@ -744,18 +733,12 @@ describe("node calendar dto", () =>
 		taggedRoot?: boolean;
 	} = {})
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		open.push(sqlite);
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		const cacheService = new CacheService(db);
@@ -1047,19 +1030,13 @@ describe("node events socket", () =>
 
 	function scratchDb(): AppDatabase
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		// The tree.changed watermark reads the bulk-import lease from the migrated schema.
+		const sqlite = migratedMemoryDatabase();
 		open.push(sqlite);
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		// The tree.changed watermark reads the bulk-import lease from the migrated schema.
-		migrate(
-			db,
-			{
-				migrationsFolder: join(import.meta.dirname, "../../shared/src/db/migrations"),
 			},
 		);
 		db.run(sql`CREATE TABLE scratch (x INTEGER)`);

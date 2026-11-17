@@ -1,9 +1,6 @@
 import {describe, expect, it} from "vite-plus/test";
-import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {Hono} from "hono";
-import {join} from "node:path";
 import {CacheService} from "@outlinedb/shared/cache";
 import * as schema from "@outlinedb/shared/db";
 import {aiMetadata, nodeContent, nodeMetadata} from "@outlinedb/shared/db";
@@ -11,8 +8,8 @@ import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
 import {httpAppFor} from "./http-app-for.js";
 import {integerOrderKey} from "./helpers/integer-order-key.js";
+import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
 
-const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 const SEEDED_AT = systemTimeAt("2026-01-01 00:00:00.000");
 
 /*
@@ -33,17 +30,11 @@ const TREE: [id: string, parentId: string | null, name: string][] = [
 
 function setup()
 {
-	const sqlite = new DatabaseConstructor(":memory:");
+	const sqlite = migratedMemoryDatabase();
 	const db = drizzle(
 		sqlite,
 		{
 			schema,
-		},
-	);
-	migrate(
-		db,
-		{
-			migrationsFolder,
 		},
 	);
 	const priorities = new Map<string | null, number>();

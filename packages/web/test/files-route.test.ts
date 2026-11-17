@@ -1,7 +1,5 @@
 import {afterEach, describe, expect, it, vi} from "vite-plus/test";
-import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {createHash} from "node:crypto";
 import {mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
@@ -14,8 +12,8 @@ import type {WorkflowyNode} from "@outlinedb/shared/types";
 import type {ServerContext} from "../src/server/context.js";
 import {diskBlobStore} from "../src/server/blob-store-disk.js";
 import {httpAppFor} from "./http-app-for.js";
+import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
 
-const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 const ID = "11111111-2222-3333-4444-555555555555";
 
 interface Seed
@@ -36,17 +34,11 @@ function setup(
 )
 {
 	const {configured = true, seed = {}} = options;
-	const sqlite = new DatabaseConstructor(":memory:");
+	const sqlite = migratedMemoryDatabase();
 	const db = drizzle(
 		sqlite,
 		{
 			schema,
-		},
-	);
-	migrate(
-		db,
-		{
-			migrationsFolder,
 		},
 	);
 	const cacheService = new CacheService(db);
@@ -288,17 +280,11 @@ describe("POST /api/v1/files then GET /api/v1/files/:nodeId", () =>
 
 	function standalone(mode: "standalone" | "mirror" = "standalone")
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		storeDir = mkdtempSync(join(tmpdir(), "outlinedb-files-"));

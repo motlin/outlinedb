@@ -1,7 +1,4 @@
-import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
-import {join} from "node:path";
 import {vi} from "vite-plus/test";
 import {provisionLocalAccount} from "@outlinedb/shared/cache";
 import type {LocalIdentity} from "@outlinedb/shared/cache";
@@ -11,8 +8,7 @@ import type {ServerMode} from "../../src/server/config.js";
 import {buildServerContext} from "../../src/server/context.js";
 import type {ServerContext} from "../../src/server/context.js";
 import {LadderEventBus} from "../../src/server/ladder-events.js";
-
-const migrationsFolder = join(import.meta.dirname, "../../../shared/src/db/migrations");
+import {migratedMemoryDatabase} from "../../../shared/test/helpers/migrated-memory-database.js";
 
 /** The identity {@link standaloneContext} provisions by default. */
 const TEST_IDENTITY: LocalIdentity =
@@ -25,15 +21,9 @@ const TEST_IDENTITY: LocalIdentity =
 function memoryDatabase()
 {
 	const db = drizzle(
-		new DatabaseConstructor(":memory:"),
+		migratedMemoryDatabase(),
 		{
 			schema,
-		},
-	);
-	migrate(
-		db,
-		{
-			migrationsFolder,
 		},
 	);
 	return db;

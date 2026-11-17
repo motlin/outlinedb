@@ -21,14 +21,13 @@ import
 	prevOf,
 	stripModel,
 } from "../src/dates/calendar-levels.js";
-import DatabaseConstructor from "better-sqlite3";
+import type DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
-import path from "node:path";
 import {findCalendarDays, findTaggedCalendarRoot} from "../src/cache/calendar-lookup.js";
 import {CacheService} from "../src/cache/index.js";
 import * as schema from "../src/db/schema.js";
 import {FAR_FUTURE_DATE, systemTimeAt} from "../src/temporal/index.js";
+import {migratedMemoryDatabase} from "./helpers/migrated-memory-database.js";
 
 describe("calendar ids", () =>
 {
@@ -1379,8 +1378,6 @@ describe("calendar levels", () =>
 
 describe("calendar metadata indexes", () =>
 {
-	const migrationsFolder = path.join(import.meta.dirname, "../src/db/migrations");
-
 	/** A migrated database that records every statement it runs against calendar_metadata. */
 	function recordingDb()
 	{
@@ -1389,7 +1386,7 @@ describe("calendar metadata indexes", () =>
 			sql: string;
 			params: unknown[];
 		}[] = [];
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		const database = drizzle(
 			sqlite,
 			{
@@ -1409,12 +1406,6 @@ describe("calendar metadata indexes", () =>
 						}
 					},
 				},
-			},
-		);
-		migrate(
-			database,
-			{
-				migrationsFolder,
 			},
 		);
 		return {

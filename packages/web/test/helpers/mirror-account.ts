@@ -1,8 +1,5 @@
 /* oxlint-disable typescript/no-unsafe-type-assertion -- a partial context and adapter fake: the routes under test use only these */
-import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
-import {join} from "node:path";
 import {vi} from "vite-plus/test";
 import
 {
@@ -15,8 +12,7 @@ import
 import * as schema from "@outlinedb/shared/db";
 import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import type {ServerContext} from "../../src/server/context.js";
-
-const migrationsFolder = join(import.meta.dirname, "../../../shared/src/db/migrations");
+import {migratedMemoryDatabase} from "../../../shared/test/helpers/migrated-memory-database.js";
 
 /** An account write that pushed to workflowy.com first, which is down. */
 async function unreachable(): Promise<never>
@@ -28,15 +24,9 @@ async function unreachable(): Promise<never>
 function memoryDatabase()
 {
 	const db = drizzle(
-		new DatabaseConstructor(":memory:"),
+		migratedMemoryDatabase(),
 		{
 			schema,
-		},
-	);
-	migrate(
-		db,
-		{
-			migrationsFolder,
 		},
 	);
 	return db;

@@ -1,7 +1,6 @@
-import DatabaseConstructor from "better-sqlite3";
+import type DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
-import path, {join} from "node:path";
+import path from "node:path";
 import {afterEach, describe, expect, it, vi} from "vite-plus/test";
 import {WorkflowyInternalClient, SessionRejectedError} from "../src/api/workflowy-internal-client.js";
 import {storeTreeTxId, readTreeTxId} from "../src/cache/tree-transaction.js";
@@ -76,10 +75,10 @@ import
 	uncompleteOp,
 	undeleteOp,
 } from "../src/internal/ops.js";
+import {migratedMemoryDatabase} from "./helpers/migrated-memory-database.js";
 
 describe("internal adapter account", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
 	const START_MS = 1_800_000_000_000;
 
 	const SERVER_RUN = JSON.stringify(
@@ -114,17 +113,11 @@ describe("internal adapter account", () =>
 
 	function setup()
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		// A whole-tree import seeded the transaction-log position at the fake init's id.
@@ -938,7 +931,6 @@ describe("internal adapter backlinks", () =>
 	JOIN node_content p ON p.id = c.parent_id AND p.system_to = ${FAR_FUTURE_DATE}
 	WHERE m.system_to = ${FAR_FUTURE_DATE})`;
 
-	const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
 	const START_MS = 1_800_000_000_000;
 	const ROOT = "None";
 	const SEEDED = systemTimeAt("2026-01-01 00:00:00");
@@ -1157,17 +1149,11 @@ describe("internal adapter backlinks", () =>
 	 */
 	async function setup(initial: [string, ServerNode][], trashed: [string, ServerNode][] = [])
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		// A whole-tree import seeded the transaction-log position at the fake init's id.
@@ -2268,7 +2254,6 @@ describe("internal adapter calendar layout", () =>
 
 describe("internal adapter calendar", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
 	const ENTROPY = "e".repeat(64);
 	const CAL = "cal-root";
 	const Y2026 = calendarNodeId(ENTROPY, "year", 20_260_000);
@@ -2336,17 +2321,11 @@ describe("internal adapter calendar", () =>
 		freshSession?: InternalSession;
 	})
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		// A whole-tree import seeded the transaction-log position at the fake init's id.
@@ -3572,7 +3551,6 @@ describe("internal adapter calendar", () =>
 
 describe("internal adapter expansion", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
 	const START_MS = 1_800_000_000_000;
 
 	const ALPHA = "1a2b3c4d-0000-4000-8000-000000000001";
@@ -3596,17 +3574,11 @@ describe("internal adapter expansion", () =>
 
 	function setup()
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		// A whole-tree import seeded the transaction-log position at the fake init's id.
@@ -3891,22 +3863,15 @@ describe("internal adapter expansion", () =>
 
 describe("internal adapter transaction log", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
 	const START_MS = 1_800_000_000_000;
 
 	function setup()
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		const api = createFakeInternalApi();
@@ -4868,7 +4833,6 @@ describe("internal adapter transaction log", () =>
 
 describe("internal adapter tree", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
 	const START_MS = 1_800_000_000_000;
 	/** The fake server's key for Home's children, matching upstream's root project id. */
 	const ROOT = "None";
@@ -5210,17 +5174,11 @@ describe("internal adapter tree", () =>
 
 	function setup(generateId: () => string = () => "new")
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		// A whole-tree import seeded the transaction-log position at the fake init's id.

@@ -1,7 +1,4 @@
-import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
-import {join} from "node:path";
 import {describe, expect, it} from "vite-plus/test";
 import {AccountOutboxRecorder, readPendingAccountOutbox} from "../src/cache/account-outbox.js";
 import {readAccountSnapshot, writeAccountSnapshot} from "../src/cache/account-store.js";
@@ -13,8 +10,8 @@ import {LocalTreeWriter} from "../src/cache/local-tree-writer.js";
 import {runUnitOfWork} from "../src/cache/node-composite.js";
 import {OutboxRecorder, readPendingOutbox} from "../src/cache/outbox.js";
 import * as schema from "../src/db/schema.js";
+import {migratedMemoryDatabase} from "./helpers/migrated-memory-database.js";
 
-const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
 const CAL = "cal";
 const ROOT_META =
 {
@@ -37,15 +34,9 @@ function setup(
 )
 {
 	const db = drizzle(
-		new DatabaseConstructor(":memory:"),
+		migratedMemoryDatabase(),
 		{
 			schema,
-		},
-	);
-	migrate(
-		db,
-		{
-			migrationsFolder,
 		},
 	);
 	runUnitOfWork(db, (unitOfWork) =>

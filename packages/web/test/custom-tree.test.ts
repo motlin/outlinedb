@@ -1,8 +1,5 @@
 import {describe, expect, it} from "vite-plus/test";
-import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
-import {join} from "node:path";
 import {CacheService} from "@outlinedb/shared/cache";
 import * as schema from "@outlinedb/shared/db";
 import {nodeContent, nodeMetadata} from "@outlinedb/shared/db";
@@ -12,6 +9,7 @@ import {httpAppFor} from "./http-app-for.js";
 import {collectCustomSections, findCustomRoot} from "../src/server/custom-tree.js";
 import type {CustomNode} from "../src/server/custom-tree.js";
 import {integerOrderKey} from "./helpers/integer-order-key.js";
+import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
 
 const grammars = new Set(["Hotkeys", "Themes"]);
 const node = (name: string, children: CustomNode[] = [], completed = false): CustomNode => (
@@ -98,17 +96,11 @@ describe("GET /api/v1/custom-tree", () =>
 	const AT = systemTimeAt("2026-01-01 00:00:00.000");
 	it("returns the sections under the Custom root and the ids whose change can change them", async () =>
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder: join(import.meta.dirname, "../../shared/src/db/migrations"),
 			},
 		);
 		const rows: [string, string | null, string, number][] = [

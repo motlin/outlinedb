@@ -1,15 +1,13 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from "vite-plus/test";
-import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {Hono} from "hono";
-import {join} from "node:path";
 import * as schema from "@outlinedb/shared/db";
 import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import type {WorkflowyNode} from "@outlinedb/shared/types";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
 import {mirrorAccountContext} from "./helpers/mirror-account.js";
 import {httpAppFor} from "./http-app-for.js";
+import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
 
 const
 {
@@ -21,7 +19,6 @@ const
 	storeInternalMetadata,
 } = await import("@outlinedb/shared/cache");
 
-const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 const NOT_CONFIGURED =
 	"Workflowy internal API is not configured (set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD, or run './bin/run.js internal login')";
 const WRITE_CLIENT_REQUIRED = "WORKFLOWY_API_KEY environment variable is required";
@@ -103,17 +100,11 @@ function setup(
 	n1: Partial<WorkflowyNode> = {},
 )
 {
-	const sqlite = new DatabaseConstructor(":memory:");
+	const sqlite = migratedMemoryDatabase();
 	const db = drizzle(
 		sqlite,
 		{
 			schema,
-		},
-	);
-	migrate(
-		db,
-		{
-			migrationsFolder,
 		},
 	);
 	if (mode === "standalone")

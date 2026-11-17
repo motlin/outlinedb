@@ -3,10 +3,7 @@ import {LadderEventBus, parseLadderEvent} from "../src/server/ladder-events.js";
 import type {LadderEvent, LadderListener} from "../src/server/ladder-events.js";
 import {tierCapacity, toLadder, planTierMove} from "../src/server/ladder-model.js";
 import type {RawNode, Ladder} from "../src/server/ladder-model.js";
-import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
-import {join} from "node:path";
 import {CacheService, readPendingOutbox} from "@outlinedb/shared/cache";
 import * as schema from "@outlinedb/shared/db";
 import {nodeContent, nodeMetadata} from "@outlinedb/shared/db";
@@ -33,6 +30,7 @@ import
 	stepBeforeId,
 	tierOf,
 } from "../src/client/ladder-state.js";
+import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
 
 describe("ladder events", () =>
 {
@@ -397,7 +395,6 @@ describe("ladder model", () =>
 
 describe("ladder route events", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 	const SEEDED_AT = systemTimeAt("2026-01-01 00:00:00.000");
 
 	let counter = 0;
@@ -436,15 +433,9 @@ describe("ladder route events", () =>
 		it("moves a mirror's row locally with pending outbox rows and publishes the move on the context's bus, once", async () =>
 		{
 			const db = drizzle(
-				new DatabaseConstructor(":memory:"),
+				migratedMemoryDatabase(),
 				{
 					schema,
-				},
-			);
-			migrate(
-				db,
-				{
-					migrationsFolder,
 				},
 			);
 			let row = "";

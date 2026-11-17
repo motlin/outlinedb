@@ -1,10 +1,7 @@
 import {describe, expect, it} from "vite-plus/test";
-import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {and, eq} from "drizzle-orm";
 import {Hono} from "hono";
-import {join} from "node:path";
 import {CacheService} from "@outlinedb/shared/cache";
 import * as schema from "@outlinedb/shared/db";
 import {mirrors, nodeContent, nodeMetadata, referencesRoots} from "@outlinedb/shared/db";
@@ -13,10 +10,10 @@ import type {AppEnv, ServerContext} from "../src/server/context.js";
 import {notReferencesContent, backlinkTargetsOfSource, backlinksNeedSync} from "../src/server/backlinks.js";
 import {httpAppFor} from "./http-app-for.js";
 import {integerOrderKey} from "./helpers/integer-order-key.js";
+import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
 
 describe("backlinks route", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 	const SEEDED_AT = systemTimeAt("2026-01-01 00:00:00.000");
 	const COMPLETED_AT = new Date("2026-02-01T00:00:00Z");
 
@@ -53,17 +50,11 @@ describe("backlinks route", () =>
 
 	function setup()
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		const priorities = new Map<string | null, number>();
@@ -436,7 +427,6 @@ describe("backlinks route", () =>
 
 describe("backlinks sync need", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 	const SEEDED_AT = systemTimeAt("2026-01-01 00:00:00.000");
 
 	const TARGET = "00000000-0000-4000-8000-0000000000aa";
@@ -448,17 +438,11 @@ describe("backlinks sync need", () =>
 
 	function setup({withBacklink}: {withBacklink: boolean})
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		const rows: [string, string | null][] = [

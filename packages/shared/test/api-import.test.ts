@@ -1,7 +1,5 @@
-import DatabaseConstructor from "better-sqlite3";
+import type DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
-import {join} from "node:path";
 import {afterEach, assert, describe, expect, it, vi} from "vite-plus/test";
 import {applyApiBatch, beginApiImport, finishApiImport, importFromApi} from "../src/cache/api-import.js";
 import {BULK_IMPORT_LEASE_NAME} from "../src/cache/bulk-import.js";
@@ -12,8 +10,8 @@ import {BULK_IMPORT_TIMEOUT_MS, TRANSACTION_TIMEOUT_MS, TransactionTimeoutError}
 import * as schema from "../src/db/schema.js";
 import {FAR_FUTURE_DATE, systemTimeAt} from "../src/temporal/index.js";
 import type {WorkflowyNode} from "../src/types/index.js";
+import {migratedMemoryDatabase} from "./helpers/migrated-memory-database.js";
 
-const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
 const T0 = new Date("2026-03-01T00:00:00.000Z");
 const T1 = new Date("2026-03-02T00:00:00.000Z");
 
@@ -94,18 +92,12 @@ describe("shared API import", () =>
 
 	function createDb()
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		open.push(sqlite);
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		return db;

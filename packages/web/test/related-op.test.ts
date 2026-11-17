@@ -1,7 +1,5 @@
-import DatabaseConstructor from "better-sqlite3";
+import type DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
-import {join} from "node:path";
 import * as sqliteVec from "sqlite-vec";
 import {afterEach, describe, expect, it} from "vite-plus/test";
 import * as schema from "@outlinedb/shared/db";
@@ -13,11 +11,11 @@ import {nodeTreeHost} from "../src/server/node-host.js";
 import {Ops} from "../src/server/ops/index.js";
 import {bindTreeHost} from "../src/server/tree-snapshot.js";
 import type {ServerContext} from "../src/server/context.js";
+import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
 
 // From the registry, which the web setup wraps to check each op output against its schema.
 const relatedFind = Ops["related.find"];
 
-const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 const SEEDED_AT = systemTimeAt("2026-01-01 00:00:00.000");
 
 const open: DatabaseConstructor.Database[] = [];
@@ -36,7 +34,7 @@ afterEach(() =>
  */
 function memoryDb()
 {
-	const sqlite = new DatabaseConstructor(":memory:");
+	const sqlite = migratedMemoryDatabase();
 	sqliteVec.load(sqlite);
 	open.push(sqlite);
 	const db = drizzle(
@@ -46,12 +44,6 @@ function memoryDb()
 		},
 	);
 	bindTreeHost(db, nodeTreeHost(sqlite));
-	migrate(
-		db,
-		{
-			migrationsFolder,
-		},
-	);
 	const node = (id: string, name: string | null, parentId: string | null, note: string | null = null) => (
 	{
 		id,

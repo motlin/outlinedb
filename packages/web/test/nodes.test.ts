@@ -1,9 +1,7 @@
 import {afterEach, describe, expect, it, vi, beforeEach} from "vite-plus/test";
-import DatabaseConstructor from "better-sqlite3";
+import type DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {Hono} from "hono";
-import {join} from "node:path";
 import
 {
 	BULK_IMPORT_LEASE_NAME,
@@ -33,11 +31,10 @@ import {inProcessStore} from "../src/server/store.js";
 import type {StoreClient} from "../src/server/store.js";
 import {upstreamExpansionKey} from "@outlinedb/shared/workflowy";
 import {integerOrderKey} from "./helpers/integer-order-key.js";
+import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
 
 describe("nodes changes route", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
-
 	function apiNode(id: string, parentId: string | null, priority: number): WorkflowyNode
 	{
 		return {
@@ -74,7 +71,7 @@ describe("nodes changes route", () =>
 				now: T0,
 			},
 		);
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		let statements = 0;
 		const db = drizzle(
 			sqlite,
@@ -87,12 +84,6 @@ describe("nodes changes route", () =>
 						statements += 1;
 					},
 				},
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		const cacheService = new CacheService(db);
@@ -472,8 +463,6 @@ describe("nodes changes route", () =>
 
 describe("nodes children batch route", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
-
 	function apiNode(id: string, parentId: string | null, priority: number, completedAt?: number): WorkflowyNode
 	{
 		return {
@@ -497,17 +486,11 @@ describe("nodes children batch route", () =>
 	/** Home holds Alpha>{A1>{A1a}, A2 (completed)} and Beta>{B1}. */
 	function setup()
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		const cacheService = new CacheService(db);
@@ -667,8 +650,6 @@ describe("nodes complete mirror route", () =>
 		nodes: Row[];
 	}
 
-	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
-
 	function apiNode(id: string, parentId: string | null, priority: number, completedAt?: number): WorkflowyNode
 	{
 		return {
@@ -692,17 +673,11 @@ describe("nodes complete mirror route", () =>
 	/** Home holds P and Q. O (original) sits under Q; P holds mirror M of O. */
 	function setup()
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		const cacheService = new CacheService(db);
@@ -829,8 +804,6 @@ describe("nodes complete mirror route", () =>
 
 describe("nodes duplicate route", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
-
 	function apiNode(
 		id: string,
 		parentId: string | null,
@@ -853,17 +826,11 @@ describe("nodes duplicate route", () =>
 	/** Home holds P and O; O (completed, note "n") holds C (with G) and E, a mirror of X; X holds Y. */
 	function setup(expanded: string[] = [], mode: "mirror" | "standalone" = "mirror")
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		const cacheService = new CacheService(db);
@@ -1173,25 +1140,17 @@ describe("nodes duplicate route", () =>
 
 describe("nodes lookup op", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
-
 	let sqlite: DatabaseConstructor.Database;
 	let ctx: ServerContext;
 	let store: StoreClient;
 
 	beforeEach(() =>
 	{
-		sqlite = new DatabaseConstructor(":memory:");
+		sqlite = migratedMemoryDatabase();
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		ctx = buildServerContext(
@@ -1432,8 +1391,6 @@ describe("nodes lookup op", () =>
 
 describe("nodes mirror route", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
-
 	function apiNode(id: string, parentId: string | null, priority: number): WorkflowyNode
 	{
 		return {
@@ -1467,17 +1424,11 @@ describe("nodes mirror route", () =>
 			},
 		);
 		vi.setSystemTime(1_600_000_000_000);
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		const cacheService = new CacheService(db);
@@ -1980,7 +1931,6 @@ describe("nodes mirror route", () =>
 
 describe("nodes standalone op", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 	const SEEDED = 1_600_000_000;
 	const NOW = 1_700_000_000;
 	const NEW_ID = "0b6f3c1e-2d4a-4b8c-9e7f-1a2b3c4d5e6f";
@@ -2026,17 +1976,11 @@ describe("nodes standalone op", () =>
 			},
 		);
 		vi.setSystemTime(SEEDED * 1000);
-		sqlite = new DatabaseConstructor(":memory:");
+		sqlite = migratedMemoryDatabase();
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		// A standalone Node host.
@@ -3003,8 +2947,6 @@ describe("nodes standalone op", () =>
 
 describe("nodes subtree ids route", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
-
 	function apiNode(id: string, parentId: string | null, priority: number, completedAt?: number): WorkflowyNode
 	{
 		return {
@@ -3028,17 +2970,11 @@ describe("nodes subtree ids route", () =>
 	/** Home holds Alpha>{A1>{A1a}, A2 (completed)} and Beta>{B1}. */
 	function setup()
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		const cacheService = new CacheService(db);
@@ -3299,8 +3235,6 @@ describe("nodes subtree ids route", () =>
 
 describe("nodes tree read statement count", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
-
 	function apiNode(id: string, parentId: string | null, priority: number): WorkflowyNode
 	{
 		return {
@@ -3318,7 +3252,7 @@ describe("nodes tree read statement count", () =>
 	/** Home holds `parents` expanded parents P0.., each with three children, one of them a mirror of Original. */
 	function setup(parents: number)
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		let statements = 0;
 		const db = drizzle(
 			sqlite,
@@ -3331,12 +3265,6 @@ describe("nodes tree read statement count", () =>
 						statements += 1;
 					},
 				},
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		const cacheService = new CacheService(db);
@@ -3475,8 +3403,6 @@ describe("nodes tree read statement count", () =>
 
 describe("nodes view route", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
-
 	function apiNode(id: string, parentId: string | null, priority: number, completedAt?: number): WorkflowyNode
 	{
 		return {
@@ -3501,17 +3427,11 @@ describe("nodes view route", () =>
 	/** `accountExpanded`: the account's expanded ids the internal API holds; undefined leaves it unconfigured. */
 	function setup(accountExpanded?: readonly string[])
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		const cacheService = new CacheService(db);
@@ -4271,17 +4191,11 @@ describe("nodes view route", () =>
 	 */
 	function wideSetup(width: number, depth: number, {backlinks = false, sourceDepth = 2} = {})
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		const cacheService = new CacheService(db);
@@ -4513,7 +4427,6 @@ describe("nodes view route", () =>
 
 describe("nodes virtual id route", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 	const CHILD = "7b1c2d3e-aaaa-4bbb-8ccc-c910f3eac9b3";
 	const MIRROR = "0e9f8d7c-1111-4222-8333-d4f14a54f384";
 
@@ -4521,17 +4434,11 @@ describe("nodes virtual id route", () =>
 	{
 		it("resolves v_<child12>_<mirror12> to the original child it shows", async () =>
 		{
-			const sqlite = new DatabaseConstructor(":memory:");
+			const sqlite = migratedMemoryDatabase();
 			const db = drizzle(
 				sqlite,
 				{
 					schema,
-				},
-			);
-			migrate(
-				db,
-				{
-					migrationsFolder,
 				},
 			);
 			const cacheService = new CacheService(db);
@@ -4588,17 +4495,11 @@ describe("nodes virtual id route", () =>
 	{
 		it("lists the mirror's ancestors and the mirror, then the rows below its original down to the row", async () =>
 		{
-			const sqlite = new DatabaseConstructor(":memory:");
+			const sqlite = migratedMemoryDatabase();
 			const db = drizzle(
 				sqlite,
 				{
 					schema,
-				},
-			);
-			migrate(
-				db,
-				{
-					migrationsFolder,
 				},
 			);
 			const cacheService = new CacheService(db);

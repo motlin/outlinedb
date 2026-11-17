@@ -1,7 +1,5 @@
-import DatabaseConstructor from "better-sqlite3";
+import type DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
-import {join} from "node:path";
 import {afterEach, describe, expect, it, vi} from "vite-plus/test";
 import {CacheService, provisionLocalAccount, readPendingOutbox, storeInternalMetadata} from "@outlinedb/shared/cache";
 import * as schema from "@outlinedb/shared/db";
@@ -43,10 +41,10 @@ import type {BlockMove} from "../src/client/tree-ops.js";
 import {CalendarStripView} from "../src/client/components/calendar-strip-view.js";
 import type {CalendarStripViewProps} from "../src/client/components/calendar-strip-view.js";
 import {integerOrderKey} from "./helpers/integer-order-key.js";
+import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
 
 describe("calendar day", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 	const KEY = "k";
 	const D1017 = calendarNodeId(KEY, "day", 20_261_017);
 	const D1005_ELSEWHERE = calendarNodeId(KEY, "day", 20_261_005);
@@ -231,8 +229,7 @@ describe("calendar day", () =>
 		} = {},
 	)
 	{
-		const sqlite = new DatabaseConstructor(
-			":memory:",
+		const sqlite = migratedMemoryDatabase(
 			{
 				verbose: (sql) =>
 				{
@@ -245,12 +242,6 @@ describe("calendar day", () =>
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		for (const [id, parentId, name, metadata] of TREE)
@@ -764,7 +755,6 @@ describe("calendar day", () =>
 
 describe("calendar days route", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 	const KEY = "k";
 	const D0928 = calendarNodeId(KEY, "day", 20_260_928);
 
@@ -808,8 +798,7 @@ describe("calendar days route", () =>
 		},
 	)
 	{
-		const sqlite = new DatabaseConstructor(
-			":memory:",
+		const sqlite = migratedMemoryDatabase(
 			{
 				verbose: (sql) =>
 				{
@@ -822,12 +811,6 @@ describe("calendar days route", () =>
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		for (const [id, parentId, name, note] of TREE)
@@ -1034,8 +1017,6 @@ describe("calendar days route", () =>
 
 describe("calendar found", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
-
 	function time(year: number, month: number, day: number): string
 	{
 		return `<time startYear="${year}" startMonth="${month}" startDay="${day}">${month}/${day}/${year}</time>`;
@@ -1082,18 +1063,12 @@ describe("calendar found", () =>
 
 	function setup(rootMetadata?: Record<string, unknown>)
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		open.push(sqlite);
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		const cacheService = new CacheService(db);
@@ -1295,8 +1270,6 @@ describe("calendar found", () =>
 
 describe("calendar layout route", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
-
 	function time(year: number, month: number, day: number): string
 	{
 		return `<time startYear="${year}" startMonth="${month}" startDay="${day}">x</time>`;
@@ -1392,18 +1365,12 @@ describe("calendar layout route", () =>
 		);
 		let clock = Date.parse("2026-10-01T00:00:00.000Z");
 		vi.setSystemTime(clock);
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		open.push(sqlite);
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		for (const [id, parentId, name] of [...TREE, ...extra])
@@ -2363,7 +2330,6 @@ describe("calendar route", () =>
 {
 	const NOT_CONFIGURED =
 		"Workflowy internal API is not configured (set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD, or run './bin/run.js internal login')";
-	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 	const open: DatabaseConstructor.Database[] = [];
 
 	afterEach(() =>
@@ -2398,18 +2364,12 @@ describe("calendar route", () =>
 		let clock = Date.parse("2026-10-01T00:00:00.000Z");
 		vi.setSystemTime(clock);
 		const configured = options.configured ?? true;
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		open.push(sqlite);
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		const cacheService = new CacheService(db);
@@ -2692,7 +2652,6 @@ describe("calendar route", () =>
 
 describe("calendar in a standalone context", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
 	const PROVISIONED = 1_600_000_000_000;
 	const DAY_NAME = '<time startYear="2026" startMonth="10" startDay="17">Sat, Oct 17, 2026</time>';
 
@@ -2716,17 +2675,11 @@ describe("calendar in a standalone context", () =>
 		);
 		clock = PROVISIONED;
 		vi.setSystemTime(clock);
-		sqlite = new DatabaseConstructor(":memory:");
+		sqlite = migratedMemoryDatabase();
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		provisionLocalAccount(
@@ -2938,8 +2891,6 @@ describe("calendar settings route", () =>
 		value: unknown;
 	}
 
-	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
-
 	function time(year: number, month: number, day: number, end?: [number, number, number]): string
 	{
 		const endAttrs = end === undefined ? "" : ` endYear="${end[0]}" endMonth="${end[1]}" endDay="${end[2]}"`;
@@ -2997,18 +2948,12 @@ describe("calendar settings route", () =>
 
 	function app({rootMetadata = ROOT_METADATA, adapter = true}: SetupOptions = {})
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		open.push(sqlite);
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		for (const [id, parentId, name, note] of TREE)

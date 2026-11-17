@@ -4,17 +4,15 @@ import {describe, expect, it, vi} from "vite-plus/test";
 import {cssBlock, hasSelector} from "./helpers/css-block.js";
 import {filterBySearch, openMenuExport, selectionExportRequest} from "../src/client/export-entry.js";
 import type {ExportRequest} from "../src/client/export-entry.js";
-import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
 import {Hono} from "hono";
-import {join} from "node:path";
 import * as schema from "@outlinedb/shared/db";
 import type {WorkflowyNode} from "@outlinedb/shared/types";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
 import {httpAppFor} from "./http-app-for.js";
 import {CacheService, storeInternalMetadata} from "@outlinedb/shared/cache";
+import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
 
 describe("export dialog css", () =>
 {
@@ -202,8 +200,6 @@ describe("export entry", () =>
 
 describe("export tree route", () =>
 {
-	const migrationsFolder = join(import.meta.dirname, "../../shared/src/db/migrations");
-
 	function apiNode(
 		id: string,
 		parentId: string | null,
@@ -229,17 +225,11 @@ describe("export tree route", () =>
 
 	function setup()
 	{
-		const sqlite = new DatabaseConstructor(":memory:");
+		const sqlite = migratedMemoryDatabase();
 		const db = drizzle(
 			sqlite,
 			{
 				schema,
-			},
-		);
-		migrate(
-			db,
-			{
-				migrationsFolder,
 			},
 		);
 		const cacheService = new CacheService(db);

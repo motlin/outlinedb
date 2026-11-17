@@ -1,7 +1,4 @@
-import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
-import {join} from "node:path";
 import {describe, expect, it, vi} from "vite-plus/test";
 import {readEnabledFeatures, readPendingAccountOutbox} from "@outlinedb/shared/cache";
 import * as schema from "@outlinedb/shared/db";
@@ -12,6 +9,7 @@ import upstreamFeatures from "./fixtures/upstream-settings-features.json" with {
 import {mirrorAccountContext} from "./helpers/mirror-account.js";
 import {httpAppFor} from "./http-app-for.js";
 import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
+import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
 
 const VISIBLE = [
 	{
@@ -37,15 +35,9 @@ const VISIBLE = [
 function setup(withAdapter: boolean)
 {
 	const db = drizzle(
-		new DatabaseConstructor(":memory:"),
+		migratedMemoryDatabase(),
 		{
 			schema,
-		},
-	);
-	migrate(
-		db,
-		{
-			migrationsFolder: join(import.meta.dirname, "../../shared/src/db/migrations"),
 		},
 	);
 	const adapter =

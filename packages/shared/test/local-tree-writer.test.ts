@@ -1,9 +1,6 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from "vite-plus/test";
-import DatabaseConstructor from "better-sqlite3";
 import {and, asc, eq, inArray, isNull} from "drizzle-orm";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
-import {join} from "node:path";
 import {AccountNotProvisionedError} from "../src/cache/account-store.js";
 import {provisionLocalAccount} from "../src/cache/local-account.js";
 import {LocalTreeWriter} from "../src/cache/local-tree-writer.js";
@@ -21,8 +18,8 @@ import
 	rootPreferences,
 } from "../src/db/schema.js";
 import {FAR_FUTURE_DATE, systemTimeAt} from "../src/temporal/constants.js";
+import {migratedMemoryDatabase} from "./helpers/migrated-memory-database.js";
 
-const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
 const SEEDED_AT = systemTimeAt("2026-01-01 00:00:00.000");
 const SEEDED = new Date("2026-01-01T00:00:00.000Z");
 const NOW = systemTimeAt("2026-03-01 00:00:00.000");
@@ -48,17 +45,11 @@ const SEED: Seed = [
 
 function setup()
 {
-	const sqlite = new DatabaseConstructor(":memory:");
+	const sqlite = migratedMemoryDatabase();
 	const database = drizzle(
 		sqlite,
 		{
 			schema,
-		},
-	);
-	migrate(
-		database,
-		{
-			migrationsFolder,
 		},
 	);
 	database

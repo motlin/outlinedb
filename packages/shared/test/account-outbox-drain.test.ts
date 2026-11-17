@@ -1,8 +1,5 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from "vite-plus/test";
-import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {migrate} from "drizzle-orm/better-sqlite3/migrator";
-import {join} from "node:path";
 import {AccountOutboxRecorder, readPendingAccountOutbox, withPendingAccountState} from "../src/cache/account-outbox.js";
 import {readAccountSnapshot, writeAccountSnapshot} from "../src/cache/account-store.js";
 import type {AccountSnapshot} from "../src/cache/account-store.js";
@@ -16,8 +13,8 @@ import type {AccountOutboxPusher} from "../src/internal/account-outbox-drain.js"
 import {OutboxNotAcknowledged} from "../src/internal/errors.js";
 import type {InternalOp} from "../src/internal/push-and-poll.js";
 import {systemTimeAt} from "../src/temporal/constants.js";
+import {migratedMemoryDatabase} from "./helpers/migrated-memory-database.js";
 
-const migrationsFolder = join(import.meta.dirname, "../src/db/migrations");
 /** The account's join date: 2026-01-01T00:00:00Z. */
 const JOINED_SEC = 1_767_225_600;
 /** The drain's client timestamp: 60 days after the join date. */
@@ -51,15 +48,9 @@ function tick(): void
 function setup(rootMetadata: Record<string, unknown>, settings: Record<string, unknown> = {}, expanded: string[] = [])
 {
 	const database = drizzle(
-		new DatabaseConstructor(":memory:"),
+		migratedMemoryDatabase(),
 		{
 			schema,
-		},
-	);
-	migrate(
-		database,
-		{
-			migrationsFolder,
 		},
 	);
 	runUnitOfWork(database, (unitOfWork) =>
