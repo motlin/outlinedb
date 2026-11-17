@@ -230,6 +230,7 @@ describe("sync from a fake upstream", () =>
 	let current = makeNodes(5000);
 	let exportCalls = 0;
 	let rateLimit = false;
+	let exportFails = false;
 	let treeData: (() => Response) | undefined;
 	let pushAndPoll: () => Response = () => pollResult("1");
 	let exportGate: Promise<void> | undefined;
@@ -271,6 +272,15 @@ describe("sync from a fake upstream", () =>
 						auths.push(request.headers.get("authorization"));
 						exportReached?.();
 						await exportGate;
+						if (exportFails)
+						{
+							return new Response(
+								"export broke",
+								{
+									status: 500,
+								},
+							);
+						}
 						if (rateLimit)
 						{
 							return new Response(
@@ -488,6 +498,32 @@ describe("sync from a fake upstream", () =>
 		rateLimit = false;
 		await stop(h);
 	}, 120_000);
+
+	it("reports a failed first export to the signed-in user instead of waiting for it forever", async () =>
+	{
+		const h = await start();
+		exportFails = true;
+		const done = await runToIdle(h);
+		exportFails = false;
+		expect(
+			{
+				result: done.lastResult?.status,
+				accountSync: await readJson(await h.mf.dispatchFetch("http://localhost/api/v1/sync-status")),
+			},
+		).toStrictEqual(
+			{
+				result: "error",
+				accountSync:
+				{
+					phase: "failed",
+					applied: 0,
+					error: "nodes-export failed with 500",
+					retriesOnSchedule: false,
+				},
+			},
+		);
+		await stop(h);
+	}, 60_000);
 
 	it("resumes after the object restarts between batches, stamping each alarm run with its own system time", async () =>
 	{

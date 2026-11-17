@@ -18,8 +18,9 @@ function importLine(sync: AccountSync): string
 
 /**
  * The unzoomed outline with no items: a loading line until the sync state is known, the first import's progress while
- * a mirror account waits for or runs it, else one line pointing at the add button. A new standalone account's
- * onboarding is its seeded welcome outline, so the welcome is only the fallback for an outline the user emptied.
+ * a mirror account waits for or runs it, its error and how it is retried when it failed, else one line pointing at the
+ * add button. A new standalone account's onboarding is its seeded welcome outline, so the welcome is only the fallback
+ * for an outline the user emptied.
  */
 function EmptyOutline({sync}: {sync: AccountSync | undefined})
 {
@@ -29,6 +30,20 @@ function EmptyOutline({sync}: {sync: AccountSync | undefined})
 			<section className={`${PANEL_CLASS} empty-outline--loading`} aria-live="polite">
 				<LoadingSpinner size="small" />
 				<p>Loading your outline.</p>
+			</section>
+		);
+	}
+	if (sync.phase === "failed")
+	{
+		return (
+			<section className={`${PANEL_CLASS} empty-outline--failed`} role="alert">
+				<h2 className="font-semibold">Your first import failed</h2>
+				<p>{sync.error}</p>
+				<p>
+					{sync.retriesOnSchedule
+						? "The next scheduled sync tries again, or an admin seed retries the import now."
+						: "An admin seed retries the import."}
+				</p>
 			</section>
 		);
 	}

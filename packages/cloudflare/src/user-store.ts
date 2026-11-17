@@ -47,7 +47,7 @@ import {kvSessionStore} from "./session-store";
 import type {KvLike} from "./session-store";
 import {SyncJob} from "./sync";
 import {seedWelcomeContent} from "./welcome-content";
-import type {SyncEnv, SyncStatus} from "./sync";
+import type {SyncEnv, SyncResult, SyncStatus} from "./sync";
 import {isStoreOwner, readWorkerConfig, readWorkerInternalAuth} from "./worker-config";
 import type {WorkerSecrets} from "./worker-config";
 
@@ -416,7 +416,7 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 
 	/**
 	 * The signed-in user's view of the sync: its phase and how many items the run applied; idle for a standalone, and
-	 * waiting for a mirror no run has imported yet.
+	 * for a mirror no run has imported yet, failed with the last run's error, else waiting.
 	 */
 	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
 	async accountSync(): Promise<AccountSync>
@@ -428,11 +428,21 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 				applied: 0,
 			};
 		}
-		const {phase, applied} = await this.sync.status();
-		return {
-			phase: phase === "idle" && !this.sync.hasImported() ? "waiting" : phase,
-			applied,
-		};
+		const {phase, applied, lastResult} = await this.sync.status();
+		if (phase !== "idle" || this.sync.hasImported())
+		{
+			return {
+				phase,
+				applied,
+			};
+		}
+		return (
+			firstSyncFailure(lastResult, applied) ??
+			{
+				phase: "waiting",
+				applied,
+			}
+		);
 	}
 
 	/** Database size, live node count, the last sync result and whether the in-memory tree snapshot is held. */
@@ -559,10 +569,46 @@ const EVENT_SOCKET_TAGS: Partial<Record<string, string>> =
 export type StoreMode = "mirror" | "standalone";
 
 /** What `GET /api/v1/sync-status` tells the signed-in user about their account's import. */
-export interface AccountSync
+export type AccountSync =
+	|
+	  {
+			phase: SyncStatus["phase"] | "waiting";
+			applied: number;
+	  }
+	| FailedAccountSync;
+
+/** A mirror account no run has imported yet, whose last run failed. */
+interface FailedAccountSync
 {
-	phase: SyncStatus["phase"] | "waiting";
+	phase: "failed";
 	applied: number;
+	error: string;
+	/** Whether the next scheduled run retries what failed (a catch-up); an export only reruns on an admin request. */
+	retriesOnSchedule: boolean;
+}
+
+/** The never-imported account's view of its last run's failure, if it failed. */
+function firstSyncFailure(lastResult: SyncResult | null, applied: number): FailedAccountSync | undefined
+{
+	if (lastResult?.status === "error" || lastResult?.status === "rate_limited")
+	{
+		return {
+			phase: "failed",
+			applied,
+			error: lastResult.message,
+			retriesOnSchedule: false,
+		};
+	}
+	if (lastResult?.status === "caught_up" && lastResult.internalSyncError !== undefined)
+	{
+		return {
+			phase: "failed",
+			applied,
+			error: lastResult.internalSyncError,
+			retriesOnSchedule: true,
+		};
+	}
+	return undefined;
 }
 
 /** The user an object was provisioned for, and whether it mirrors workflowy.com. */

@@ -5,7 +5,7 @@ import {createElement} from "react";
 import {renderToStaticMarkup} from "react-dom/server";
 import {QueryClient, QueryClientProvider} from "@tanstack/react-query";
 import type * as ReactQuery from "@tanstack/react-query";
-import type {NodeResponse} from "../src/node-types.js";
+import type {AccountSync, NodeResponse} from "../src/node-types.js";
 import type {TreeSearchResult} from "../src/server/tree-search.js";
 import {nodeKeys} from "../src/client/node-cache.js";
 import {searchFilter} from "../src/client/search-filter.js";
@@ -240,13 +240,7 @@ vi.mock("../src/client/components/node-context-menu.js", () => (
 {
 	ItemMenuTrigger: () => null,
 }));
-let accountSync:
-	|
-	  {
-			phase: "idle" | "waiting" | "fetching" | "importing";
-			applied: number;
-	  }
-	| undefined;
+let accountSync: AccountSync | undefined;
 vi.mock("../src/client/hooks/use-account-sync.js", () => (
 {
 	useAccountSync: () => accountSync,
@@ -1151,6 +1145,38 @@ describe("OutlineTree empty account", () =>
 		expect(emptyOutlineText(render())).toStrictEqual([
 			"Importing your outline",
 			"Waiting for the first sync to start. Your items appear here as soon as the import finishes.",
+		]);
+	});
+
+	it("shows a failed first export with an admin seed as its retry, not the waiting line", () =>
+	{
+		accountSync =
+		{
+			phase: "failed",
+			applied: 0,
+			error: "nodes-export failed with 500",
+			retriesOnSchedule: false,
+		};
+		expect(emptyOutlineText(render())).toStrictEqual([
+			"Your first import failed",
+			"nodes-export failed with 500",
+			"An admin seed retries the import.",
+		]);
+	});
+
+	it("shows a failed first catch-up with the next scheduled sync as its retry", () =>
+	{
+		accountSync =
+		{
+			phase: "failed",
+			applied: 0,
+			error: "A catch-up needs internal auth (WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD)",
+			retriesOnSchedule: true,
+		};
+		expect(emptyOutlineText(render())).toStrictEqual([
+			"Your first import failed",
+			"A catch-up needs internal auth (WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD)",
+			"The next scheduled sync tries again, or an admin seed retries the import now.",
 		]);
 	});
 

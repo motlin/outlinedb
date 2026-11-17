@@ -1,7 +1,8 @@
 /**
  * The signed-in account's import state over `GET /api/v1/sync-status`: whether its first sync is still waiting to start,
- * fetching or importing, and how many items it has applied. Polled while it is not idle; each poll that sees more
- * items applied, and the run's end, invalidates every other query so the imported outline appears without a reload.
+ * fetching, importing or has failed, and how many items it has applied. Polled while a run is pending or under way, not
+ * once it is idle or failed (the client never retries a sync); each poll that sees more items applied, and the run's
+ * end, invalidates every other query so the imported outline appears without a reload.
  */
 
 import {useQuery, useQueryClient} from "@tanstack/react-query";
@@ -44,7 +45,11 @@ export function useAccountSync(): AccountSync | undefined
 			queryKey: accountSyncKeys.all,
 			queryFn: fetchAccountSync,
 			refetchInterval: (query) =>
-				query.state.data === undefined || query.state.data.phase === "idle" ? false : POLL_MS,
+				query.state.data === undefined ||
+				query.state.data.phase === "idle" ||
+				query.state.data.phase === "failed"
+					? false
+					: POLL_MS,
 		},
 	);
 	// What the outline last re-read at: a finished run, or more items applied, refetches everything else.

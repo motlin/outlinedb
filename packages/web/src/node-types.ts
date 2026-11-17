@@ -134,14 +134,25 @@ export interface OpErrorBody
 
 /**
  * `GET /api/v1/sync-status`, answered by the Cloudflare Worker itself rather than an op (its `UserStore.accountSync`):
- * whether the signed-in account's sync is fetching or importing, and how many items the run has applied.
+ * whether the signed-in account's sync is fetching, importing or failed before any import, and how many items the run
+ * has applied.
  */
-export interface AccountSync
-{
-	/** `waiting`: a mirror account whose first sync from workflowy.com has not finished, with no run in progress. */
-	phase: "idle" | "waiting" | "fetching" | "importing";
-	applied: number;
-}
+export type AccountSync =
+	|
+	  {
+			/** `waiting`: a mirror account whose first sync from workflowy.com has not finished, with no run in progress. */
+			phase: "idle" | "waiting" | "fetching" | "importing";
+			applied: number;
+	  }
+	|
+	  {
+			/** A mirror account no run has imported yet, whose last run failed. */
+			phase: "failed";
+			applied: number;
+			error: string;
+			/** Whether the next scheduled sync retries what failed; otherwise only an admin seed does. */
+			retriesOnSchedule: boolean;
+	  };
 
 /** One tree of a `POST /api/v1/nodes/trees` body. */
 export interface BulkTree
