@@ -44,7 +44,7 @@
 		"@outlinedb/shared": "workspace:*",
 		"@rehookify/datepicker": "^6.6.8",
 		"@tanstack/react-query": "^5.106.1",
-		"better-auth": "1.7.18",
+		"better-auth": "1.7.19",
 		"better-sqlite3": "^13.0.3",
 		"diff": "^9.0.0",
 		"drizzle-orm": "^0.45.3",
