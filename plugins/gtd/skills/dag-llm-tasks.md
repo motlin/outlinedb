@@ -13,7 +13,6 @@ The daily review executes `Personal > 🔄 Review > 🔄 Daily Review > LLM Task
 LLM Tasks:
   Import
     op run -- just daily
-    ./bin/run.js cache sync-node --id <full-uuid> --recursive
     otter-api.sh warm-credentials
     op run -- ./bin/run.js ai suggest-labels --parent-id <calendar-id> --since <prior-yyyy-mm> --kind person --verifier clef --threshold 0.84
   Prep

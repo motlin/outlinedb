@@ -55,11 +55,12 @@ Run the barrier without piping or masking either exit status:
 
 ```bash
 direnv exec . op run -- just daily
-direnv exec . ./bin/run.js cache sync-node --path "Personal,🔄 Review" --recursive
 direnv exec . "${CLAUDE_PLUGIN_ROOT}/scripts/otter-api.sh" warm-credentials
 ```
 
-The third line is what keeps prep subagents away from `op` entirely. `otter-api.sh` resolves its `op://` refs lazily on first login; without this, the first process to need them is a background Otter scanner, which then raises both a Claude Code permission prompt and a 1Password authorization prompt that nobody can see. Warming here resolves them once, in the foreground, into a cache the subagent just reads. It is idempotent — a warm cache makes it a no-op that never invokes `op`.
+`just daily` runs `cache import-api`, which fetches the whole tree in one export, so the review subtree is already fresh. Do not add a recursive `cache sync-node` here: it sends one GET per node in sequence, and over the review subtree it hits Workflowy's 429 rate limit (2026-11-17).
+
+The second line is what keeps prep subagents away from `op` entirely. `otter-api.sh` resolves its `op://` refs lazily on first login; without this, the first process to need them is a background Otter scanner, which then raises both a Claude Code permission prompt and a 1Password authorization prompt that nobody can see. Warming here resolves them once, in the foreground, into a cache the subagent just reads. It is idempotent — a warm cache makes it a no-op that never invokes `op`.
 
 Then pre-score the Clef people hints `refine-journal-prep` reads, so prep never needs `CLOUDFLARE_AI_TOKEN`:
 
@@ -73,7 +74,7 @@ The token is an `op://` ref in `.envrc`, so it only resolves under `op run`. `ai
 
 `direnv exec .` is idempotent — harmless when direnv already loaded the environment — so always prefix the barrier with it rather than testing whether the variables happen to be set.
 
-Verify that `cache import-api` reported fetched and changed node counts and that the subtree sync succeeded.
+Verify that `cache import-api` reported fetched and changed node counts.
 
 Then run the cache sanity check, and halt the daily review if it exits non-zero:
 
