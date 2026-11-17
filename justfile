@@ -32,9 +32,9 @@ ensure-sqlite-native:
         node -e 'const Database = require(process.argv[1]); new Database(":memory:").close();' "$package_dir"
     done
 
-# Run dev server, node host (shared code live from source; see `web`)
+# Run dev server, node host (shared code live from source; see `web`); OUTLINEDB_MODE defaults to mirror, which needs WORKFLOWY_API_KEY
 dev-node *args: build-shared
-    OUTLINEDB_DB_PATH={{ justfile_directory() }}/outlinedb.sqlite vp run --filter @outlinedb/web dev {{ args }}
+    OUTLINEDB_MODE="${OUTLINEDB_MODE:-mirror}" OUTLINEDB_DB_PATH={{ justfile_directory() }}/outlinedb.sqlite vp run --filter @outlinedb/web dev {{ args }}
 
 # Run linter
 [group('lint')]

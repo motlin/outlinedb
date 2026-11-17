@@ -1,9 +1,13 @@
 /** Error text for the decision pages' fetches. */
 
 import {readJson} from "./read-json.js";
+import {RESTARTING} from "./fetch-text.js";
 import type {FetchedText} from "./fetch-text.js";
 
-/** The server's `{error}` message from a failed response, or its HTTP status. */
+/**
+ * The server's `{error}` message from a failed response, or its HTTP status. A 5xx without one
+ * comes from the dev proxy when the API behind it is down, so it says so.
+ */
 export async function errorOf(response: FetchedText): Promise<string>
 {
 	try
@@ -17,7 +21,7 @@ export async function errorOf(response: FetchedText): Promise<string>
 	}
 	catch
 	{
-		return `HTTP ${response.status}`;
+		return response.status >= 500 ? `HTTP ${response.status}; ${RESTARTING}` : `HTTP ${response.status}`;
 	}
 }
 

@@ -1347,7 +1347,7 @@ describe("DecisionPageView", () =>
 						url: "/api/v1/decisions/meetings/a-1",
 						body:
 						{
-							choice: null,
+							choice: "inbox",
 							note: "ask Bob",
 						},
 					},
@@ -1375,12 +1375,42 @@ describe("DecisionPageView", () =>
 		expect(
 			{
 				cards: shownCards(),
-				status: text(".decisions-status", card("a-1")),
+				alerts: text("[role=alert]", card("a-1")),
+				status: card("a-1").dataset.status,
 			},
 		).toStrictEqual(
 			{
 				cards: ["a-1"],
-				status: ['Not saved: Choice "inbox" is not an option for item "a-1"'],
+				alerts: ['Not saved: Choice "inbox" is not an option for item "a-1"'],
+				status: "error",
+			},
+		);
+	});
+
+	it("alerts on the card when the dev proxy answers 502 because the API is down", async () =>
+	{
+		stubFetch(
+			() =>
+				new Response(
+					"Bad Gateway",
+					{
+						status: 502,
+					},
+				),
+		);
+		await mount();
+		await click(card("a-1").querySelector<HTMLInputElement>("input[value=skip]"));
+		expect(
+			{
+				cards: shownCards(),
+				alerts: text("[role=alert]", card("a-1")),
+				footer: text(".decisions-last-save"),
+			},
+		).toStrictEqual(
+			{
+				cards: ["a-1"],
+				alerts: ["Not saved: HTTP 502; the API may be restarting. Reload to try again."],
+				footer: ["Card 1 not saved: HTTP 502; the API may be restarting. Reload to try again."],
 			},
 		);
 	});

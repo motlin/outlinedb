@@ -15,7 +15,8 @@ export interface FetchedText
 	text: string;
 }
 
-const RESTARTING = "the API may be restarting. Reload to try again.";
+/** The hint for an answer that only a restarting or stopped dev API gives. */
+export const RESTARTING = "the API may be restarting. Reload to try again.";
 
 export async function fetchText(
 	url: string,

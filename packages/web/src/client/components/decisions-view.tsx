@@ -344,12 +344,17 @@ export function DecisionPageView({slug}: {slug: string})
 		return cards.findIndex((card) => card.item.id === id) + 1;
 	}
 
-	/** Saves the item's current choice and note; resolves whether the server kept them. */
+	/**
+	 * Saves the item's current choice and note; resolves whether the server kept them. A note typed
+	 * before any option is picked saves with the card's suggested option, so it never lands as no choice.
+	 */
 	async function save(id: string): Promise<boolean>
 	{
+		const suggested = cards.find((card) => card.item.id === id)?.item.default ?? null;
 		const {choice, note} = update(
 			id,
 			{
+				choice: itemsRef.current[id]?.choice ?? suggested,
 				status:
 				{
 					kind: "saving",
@@ -883,9 +888,15 @@ function DecisionCard({group, item, state, onChoose, onNote, children}: Decision
 					rows={2}
 					value={state.note}
 				/>
-				<span aria-live="polite" className="decisions-status">
-					{statusText(state.status)}
-				</span>
+				{state.status.kind === "error" ? (
+					<p className="decisions-status decisions-save-error" role="alert">
+						{statusText(state.status)}
+					</p>
+				) : (
+					<span aria-live="polite" className="decisions-status">
+						{statusText(state.status)}
+					</span>
+				)}
 				{children}
 			</div>
 		</article>

@@ -696,6 +696,17 @@ img.decisions-link-icon
 	padding: 28px 16px;
 }
 
+/* A failed save stays on its card until the next save, loud enough to notice mid-walk. */
+.decisions-save-error
+{
+	padding: 8px 10px;
+	border: 1px solid var(--destructive);
+	border-radius: 6px;
+	background: color-mix(in srgb, var(--destructive) 10%, transparent);
+	font-size: 13px;
+	font-weight: 500;
+}
+
 /* Buttons */
 
 .decisions-nav
