@@ -61,6 +61,9 @@ interface SyncStatus
 	};
 }
 
+/** The batch size the tests run the import with. */
+const BATCH = 20;
+
 const bindings =
 {
 	ACCESS_DEV_IDENTITY: "dev",
@@ -110,6 +113,15 @@ async function liveIds(h: Harness): Promise<string[]>
 	const response = await ns.get(ns.idFromName("dev")).fetch("http://localhost/__live-ids");
 	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- test reads its own endpoint
 	return response.json();
+}
+
+/** Bring the scheduled sync's due time forward to now, so the Durable Object's alarm fires it without the wait. */
+async function runScheduledSyncNow(h: Harness): Promise<void>
+{
+	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
+	const ns = (await h.mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace;
+	const response = await ns.get(ns.idFromName("dev")).fetch("http://localhost/__sync-due-now");
+	expect(response.status).toBe(204);
 }
 
 /** How many node_content rows share each system time, in system-time order. */
@@ -227,7 +239,7 @@ const internalAuthBindings =
 
 describe("sync from a fake upstream", () =>
 {
-	let current = makeNodes(5000);
+	let current = makeNodes(50);
 	let exportCalls = 0;
 	let rateLimit = false;
 	let exportFails = false;
@@ -254,6 +266,8 @@ describe("sync from a fake upstream", () =>
 			persistDir,
 			{
 				...bindings,
+				// Batches of 20 instead of production's 2000, so a 50-node export spans three batches.
+				SYNC_BATCH_SIZE: String(BATCH),
 				...extra,
 			},
 			{
@@ -368,21 +382,21 @@ describe("sync from a fake upstream", () =>
 		await Promise.all([...open].map(async (h) => stop(h)));
 	});
 
-	it("imports a 5k-node export, keeps a raw copy in R2, then reports no changes and phases out a removed node", async () =>
+	it("imports a 50-node export, keeps a raw copy in R2, then reports no changes and phases out a removed node", async () =>
 	{
 		const h = await start();
 		const first = await runToIdle(h);
 		expect(first.lastResult).toMatchObject(
 			{
 				status: "ok",
-				totalNodes: 5000,
-				nodesAdded: 5000,
+				totalNodes: 50,
+				nodesAdded: 50,
 				nodesUnchanged: 0,
 				nodesPhasedOut: 0,
 			},
 		);
 		expect(auths).toStrictEqual(["Bearer fake-key-value"]);
-		await expect(liveIds(h)).resolves.toHaveLength(5000);
+		await expect(liveIds(h)).resolves.toHaveLength(50);
 
 		const exportKey = first.lastResult?.exportKey ?? "";
 		expect(exportKey).toMatch(/^exports\/.+\.json$/u);
@@ -401,11 +415,11 @@ describe("sync from a fake upstream", () =>
 				status: "ok",
 				nodesAdded: 0,
 				nodesUpdated: 0,
-				nodesUnchanged: 5000,
+				nodesUnchanged: 50,
 			},
 		);
 
-		current = makeNodes(5000, new Map([[20, "renamed"]])).slice(0, 4999);
+		current = makeNodes(50, new Map([[20, "renamed"]])).slice(0, 49);
 		const third = await runToIdle(h, 2);
 		expect(third.lastResult).toMatchObject(
 			{
@@ -414,7 +428,7 @@ describe("sync from a fake upstream", () =>
 				nodesPhasedOut: 1,
 			},
 		);
-		await expect(liveIds(h)).resolves.toHaveLength(4999);
+		await expect(liveIds(h)).resolves.toHaveLength(49);
 		// The next scheduled run is the short catch-up, a minute out, not another export half an hour out.
 		expect(third.nextAlarmAt).toBeGreaterThan(Date.now());
 		expect(third.nextAlarmAt).toBeLessThanOrEqual(Date.now() + 60_000);
@@ -431,19 +445,19 @@ describe("sync from a fake upstream", () =>
 				runs: [
 					{
 						phase: "idle",
-						applied: 5000,
+						applied: 50,
 						status: "ok",
 						live: 1,
 					},
 					{
 						phase: "idle",
-						applied: 5000,
+						applied: 50,
 						status: "ok",
 						live: 1,
 					},
 					{
 						phase: "idle",
-						applied: 4999,
+						applied: 49,
 						status: "ok",
 						live: 1,
 					},
@@ -527,7 +541,7 @@ describe("sync from a fake upstream", () =>
 
 	it("resumes after the object restarts between batches, stamping each alarm run with its own system time", async () =>
 	{
-		current = makeNodes(5000);
+		current = makeNodes(50);
 		const first = await start(
 			undefined,
 			{
@@ -555,7 +569,7 @@ describe("sync from a fake upstream", () =>
 		expect(parked).toMatchObject(
 			{
 				phase: "importing",
-				applied: 2000,
+				applied: 20,
 			},
 		);
 		const callsBefore = exportCalls;
@@ -587,34 +601,34 @@ describe("sync from a fake upstream", () =>
 		expect(done?.lastResult).toMatchObject(
 			{
 				status: "ok",
-				totalNodes: 5000,
-				nodesAdded: 5000,
+				totalNodes: 50,
+				nodesAdded: 50,
 				nodesPhasedOut: 0,
 			},
 		);
 		expect(exportCalls).toBe(callsBefore);
-		await expect(liveIds(second)).resolves.toHaveLength(5000);
+		await expect(liveIds(second)).resolves.toHaveLength(50);
 		// Each alarm run is its own unit of work with a fresh system time, so no stamp outlives one run.
-		await expect(rowsPerSystemTime(second)).resolves.toStrictEqual([2000, 2000, 1000]);
+		await expect(rowsPerSystemTime(second)).resolves.toStrictEqual([20, 20, 10]);
 		// One run version per alarm run; the seen ids are scratch for the run in progress, so none outlive the run.
 		await expect(syncTables(second)).resolves.toStrictEqual(
 			{
 				runs: [
 					{
 						phase: "importing",
-						applied: 2000,
+						applied: 20,
 						status: null,
 						live: 0,
 					},
 					{
 						phase: "importing",
-						applied: 4000,
+						applied: 40,
 						status: null,
 						live: 0,
 					},
 					{
 						phase: "idle",
-						applied: 5000,
+						applied: 50,
 						status: "ok",
 						live: 1,
 					},
@@ -636,7 +650,7 @@ describe("sync from a fake upstream", () =>
 
 	it("keeps a node written while a run is in flight instead of ending it as absent from the older export", async () =>
 	{
-		current = makeNodes(3000);
+		current = makeNodes(30);
 		const h = await start(
 			undefined,
 			{
@@ -663,7 +677,7 @@ describe("sync from a fake upstream", () =>
 		expect(parked).toMatchObject(
 			{
 				phase: "importing",
-				applied: 2000,
+				applied: 20,
 			},
 		);
 
@@ -675,7 +689,7 @@ describe("sync from a fake upstream", () =>
 		expect(done.lastResult).toMatchObject(
 			{
 				status: "ok",
-				totalNodes: 3000,
+				totalNodes: 30,
 				nodesPhasedOut: 0,
 			},
 		);
@@ -687,7 +701,7 @@ describe("sync from a fake upstream", () =>
 			},
 		).toStrictEqual(
 			{
-				count: 3001,
+				count: 31,
 				kept: true,
 			},
 		);
@@ -741,16 +755,17 @@ describe("sync from a fake upstream", () =>
 			);
 		internalCalls.length = 0;
 		pollStarts.length = 0;
-		// Three seconds, so the scheduled run lands inside the test.
+		// Ten minutes, so the scheduled run never fires on its own; the test brings it forward once upstream is set up.
 		const h = await start(
 			undefined,
 			{
 				...internalAuthBindings,
-				SYNC_INTERVAL_MINUTES: "0.05",
+				SYNC_INTERVAL_MINUTES: "10",
 			},
 		);
 		const seeded = await runToIdle(h, 0, "/api/admin/seed");
-		expect(seeded.nextAlarmAt).toBeLessThanOrEqual(Date.now() + 3000);
+		expect(seeded.nextAlarmAt).toBeGreaterThan(Date.now() + 540_000);
+		expect(seeded.nextAlarmAt).toBeLessThanOrEqual(Date.now() + 600_000);
 		expect(seeded.lastResult).toMatchObject(
 			{
 				status: "ok",
@@ -816,6 +831,7 @@ describe("sync from a fake upstream", () =>
 		internalCalls.length = 0;
 		pollStarts.length = 0;
 		const exportsBefore = exportCalls;
+		await runScheduledSyncNow(h);
 		let synced: SyncStatus | undefined;
 		for (let i = 0; i < 15_000 / POLL_MS; i++)
 		{
@@ -833,7 +849,8 @@ describe("sync from a fake upstream", () =>
 				durationMs: expect.any(Number),
 			},
 		);
-		expect(synced?.nextAlarmAt).toBeLessThanOrEqual(Date.now() + 3000);
+		expect(synced?.nextAlarmAt).toBeGreaterThan(Date.now() + 540_000);
+		expect(synced?.nextAlarmAt).toBeLessThanOrEqual(Date.now() + 600_000);
 		expect(
 			{
 				exports: exportCalls - exportsBefore,

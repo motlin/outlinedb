@@ -106,6 +106,8 @@ export interface SyncEnv
 	WORKFLOWY_API_URL?: string;
 	/** Minutes between scheduled catch-up runs (default {@link DEFAULT_INTERVAL_MINUTES}). */
 	SYNC_INTERVAL_MINUTES?: string;
+	/** Nodes applied per batch (default {@link BATCH_SIZE}). */
+	SYNC_BATCH_SIZE?: string;
 	/** CPU budget knob: batches applied per alarm before yielding (default: all). */
 	SYNC_BATCHES_PER_TICK?: string;
 	/** Delay before the next alarm when a run yields mid-import (default 0). */
@@ -689,6 +691,7 @@ export class SyncJob
 		const state = this.importState(job);
 		const perTick = Number(env.SYNC_BATCHES_PER_TICK);
 		const limit = Number.isFinite(perTick) && perTick > 0 ? perTick : Infinity;
+		const batchSize = Number(env.SYNC_BATCH_SIZE);
 		let batches = 0;
 		let yielded = false;
 		const overBudget = () => Date.now() - state.start.startedAt >= RUN_BUDGET_MS;
@@ -696,7 +699,7 @@ export class SyncJob
 			// oxlint-disable-next-line typescript/no-unsafe-argument -- the workers types declare R2ObjectBody.body as ReadableStream<any>
 			object.body,
 			{
-				size: BATCH_SIZE,
+				size: Number.isInteger(batchSize) && batchSize > 0 ? batchSize : BATCH_SIZE,
 				skip: job.applied,
 			},
 		))

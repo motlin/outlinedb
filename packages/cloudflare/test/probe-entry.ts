@@ -3,6 +3,7 @@ import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import * as dbSchema from "@outlinedb/shared/db";
 import {drizzle} from "drizzle-orm/durable-sqlite";
 import type {OpInput, OpName, OpOutput, OpResult} from "@outlinedb/web/server-app";
+import {AlarmSchedule} from "../src/alarm-schedule";
 import {UserStore} from "../src/user-store";
 import type {ProvisionInput, ProvisionResult} from "../src/user-store";
 import worker from "../src/worker";
@@ -55,6 +56,27 @@ export class ProbeStore extends UserStore
 					schema,
 					migrations,
 					appliedOnBoot: this.appliedOnBoot,
+				},
+			);
+		}
+		if (url.pathname === "/__sync-due-now")
+		{
+			// A scheduled sync's due time moves to now, as when its time arrives; the real alarm then runs it.
+			const schedule = new AlarmSchedule(this.ctx.storage);
+			if (schedule.due("sync") === null)
+			{
+				return new Response(
+					"no sync is scheduled",
+					{
+						status: 409,
+					},
+				);
+			}
+			void schedule.set("sync", Date.now());
+			return new Response(
+				null,
+				{
+					status: 204,
 				},
 			);
 		}

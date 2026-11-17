@@ -1,5 +1,14 @@
 import {systemClock} from "../../src/cache/system-time.js";
 
+declare global
+{
+	interface DateConstructor
+	{
+		/** The real Date.now, kept by the first file in a worker. */
+		outlinedbSystemNow?: () => number;
+	}
+}
+
 /**
  * Every Date.now() read in a test returns a later millisecond than the read
  * before it, and the microsecond system clock reads Date.now() * 1000, so it
@@ -12,7 +21,9 @@ import {systemClock} from "../../src/cache/system-time.js";
  * clock follows whatever Date is installed, so tests that freeze time keep
  * their exact stamps.
  */
-const realNow = Date.now.bind(Date);
+// Files that share a worker each run this setup against the same Date, so wrap the system clock, never the last file's wrapper.
+Date.outlinedbSystemNow ??= Date.now.bind(Date);
+const realNow = Date.outlinedbSystemNow;
 let last = 0;
 Date.now = (): number =>
 {
