@@ -3,8 +3,9 @@
 // `url` health-checks before printing: it fetches the page and its staged document from the web app and
 // exits 1 on a non-2xx status or a network error, so a dead dev server never reaches the user as a 502.
 //
-// The review stages `.llm/gtd/review/decisions/<slug>.json`; the web app saves each answer to
-// `<slug>.answers.json` beside it. OUTLINEDB_DECISIONS_DIR overrides the directory, as it does for the server.
+// The review stages `.llm/gtd/review/decisions/<slug>.json` under the repo it runs in (the caller's cwd,
+// not this script's directory, which is the plugin cache once installed); the web app saves each answer
+// to `<slug>.answers.json` beside it. OUTLINEDB_DECISIONS_DIR overrides the directory, as it does for the server.
 
 import {existsSync, readFileSync} from "node:fs";
 import {join} from "node:path";
@@ -16,7 +17,7 @@ const SLUG = /^[a-z0-9-]+$/u;
 
 function decisionsDirectory(): string
 {
-	return process.env.OUTLINEDB_DECISIONS_DIR ?? join(import.meta.dirname, "../../../.llm/gtd/review/decisions");
+	return process.env.OUTLINEDB_DECISIONS_DIR ?? join(process.cwd(), ".llm/gtd/review/decisions");
 }
 
 function fail(status: number, message: string): never

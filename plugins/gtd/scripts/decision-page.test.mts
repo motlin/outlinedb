@@ -4,7 +4,7 @@ import {test} from "node:test";
 import assert from "node:assert/strict";
 import {spawn} from "node:child_process";
 import {createServer} from "node:http";
-import {mkdtempSync, rmSync, writeFileSync} from "node:fs";
+import {mkdtempSync, realpathSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 
@@ -18,12 +18,13 @@ interface RunResult
 }
 
 // Async, not spawnSync: the in-process web app stub must keep answering while the script runs.
-async function run(args: string[], env: Record<string, string> = {}): Promise<RunResult>
+async function run(args: string[], env: Record<string, string> = {}, cwd?: string): Promise<RunResult>
 {
 	const child = spawn(
 		process.execPath,
 		[script, ...args],
 		{
+			cwd,
 			env:
 			{
 				...process.env,
@@ -278,21 +279,17 @@ test("answers prints the saved answers JSON", async () =>
 	});
 });
 
-test("answers exits non-zero naming the missing file when nothing was answered", async () =>
+test("answers looks in the caller's .llm decisions directory, not beside the installed script, and names the missing file", async () =>
 {
 	await withDirectory(async (directory) =>
 	{
+		const repo = realpathSync(directory);
 		assert.deepStrictEqual(
-			await run(
-				["answers", "meetings"],
-				{
-					OUTLINEDB_DECISIONS_DIR: directory,
-				},
-			),
+			await run(["answers", "meetings"], {}, repo),
 			{
 				status: 1,
 				stdout: "",
-				stderr: `No answers saved for decision page meetings (${join(directory, "meetings.answers.json")})\n`,
+				stderr: `No answers saved for decision page meetings (${join(repo, ".llm/gtd/review/decisions/meetings.answers.json")})\n`,
 			},
 		);
 	});
