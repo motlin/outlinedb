@@ -62,7 +62,7 @@
 		"drizzle-kit": "^0.31.11",
 		"eslint-plugin-storybook": "^10.6.7",
 		"fallow": "^3.42.0",
-		"markdownlint-cli2": "^0.24.0",
+		"markdownlint-cli2": "^0.24.1",
 		"oclif": "^6",
 		"shx": "^0.4.0",
 		"tsx": "^4.23.15",
