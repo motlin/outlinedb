@@ -59,7 +59,7 @@
 	},
 	"devDependencies":
 	{
-		"@cloudflare/vite-plugin": "1.68.0",
+		"@cloudflare/vite-plugin": "1.69.1",
 		"@storybook/addon-a11y": "^10.6.7",
 		"@storybook/addon-docs": "^10.6.7",
 		"@storybook/react-vite": "^10.6.7",
