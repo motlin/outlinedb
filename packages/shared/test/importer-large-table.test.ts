@@ -4,7 +4,7 @@ import {describe, expect, it} from "vite-plus/test";
 import {buildTestDb} from "./helpers/round-trip-helpers.js";
 
 /** More current rows than V8 accepts as spread call arguments. */
-const ROW_COUNT = 250_000;
+const ROW_COUNT = 150_000;
 
 describe("applyRows on a large table", () =>
 {

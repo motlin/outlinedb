@@ -7,9 +7,10 @@ import type {TestSpecification} from "vite-plus/test/node";
 const sourceFirst = (conditions: string[]): string[] => ["source", ...conditions];
 
 /**
- * Isolated projects first, longest files first as usual, then the shared-process projects: Miniflare and DOM files are
- * the long ones, and the shared projects' many short files then fill the tail. A shared worker is only reused while the
- * queue's next file belongs to its project, so each project's files stay together.
+ * Isolated projects first, longest files first as usual, then the shared-process projects, the one with fewer files
+ * first: the DOM project's files are few but long, so they start while the Node project's many short files are still
+ * queued to fill the tail. A shared worker is only reused while the queue's next file belongs to its project, so each
+ * project's files stay together.
  */
 class IsolatedFirstSequencer extends BaseSequencer
 {
@@ -17,10 +18,16 @@ class IsolatedFirstSequencer extends BaseSequencer
 	{
 		// oxlint-disable-next-line unicorn/no-array-sort -- BaseSequencer#sort returns a new array
 		const sorted = await super.sort(files);
-		return [
-			...sorted.filter((file) => file.project.config.isolate),
-			...sorted.filter((file) => !file.project.config.isolate),
-		];
+		const shared = new Map<string, TestSpecification[]>();
+		for (const file of sorted.filter((spec) => !spec.project.config.isolate))
+		{
+			const project = shared.get(file.project.name) ?? [];
+			project.push(file);
+			shared.set(file.project.name, project);
+		}
+		// oxlint-disable-next-line unicorn/no-array-sort -- sorts the fresh array from the spread
+		const projects = [...shared.values()].sort((a, b) => a.length - b.length);
+		return [...sorted.filter((file) => file.project.config.isolate), ...projects.flat()];
 	}
 }
 
@@ -83,38 +90,31 @@ export default defineConfig(
 			},
 			disableConsoleIntercept: true,
 			// strictly-increasing-clock: a fake API answers in microseconds, so back-to-back units of work would share a millisecond and fail as a same-millisecond overwrite.
-			// Setup files are re-imported per test file: only the packages that run oclif commands or copy the migrated database pay for @oclif/core and the template.
+			// Every Node-environment file shares one project, so a worker keeps its loaded dependencies across the CLI, shared and web files instead of restarting at each project boundary.
 			projects: [
 				{
 					extends: true,
 					test:
 					{
-						name: "cli",
-						include: ["packages/cli/test/**/*.test.ts", "packages/mcp/test/**/*.test.ts"],
-						isolate: sharedProcess.isolate,
-						setupFiles: [...sharedProcess.setupFiles, "packages/cli/test/setup/oclif-root.ts"],
-						globalSetup: ["packages/cli/test/setup/migrated-template.ts"],
-					},
-				},
-				{
-					extends: true,
-					test:
-					{
-						name: "unit",
-						include: ["packages/shared/test/**/*.test.ts", "scripts/**/*.test.mjs"],
-						...sharedProcess,
-					},
-				},
-				{
-					extends: true,
-					test:
-					{
-						name: "web",
-						include: ["packages/web/test/**/*.test.{ts,tsx}"],
+						name: "node",
+						include: [
+							"packages/cli/test/**/*.test.ts",
+							"packages/mcp/test/**/*.test.ts",
+							"packages/shared/test/**/*.test.ts",
+							"scripts/**/*.test.mjs",
+							"packages/web/test/**/*.test.{ts,tsx}",
+						],
 						exclude: domTests,
 						isolate: sharedProcess.isolate,
-						// Parses every op's value against its output schema; production never does.
-						setupFiles: [...sharedProcess.setupFiles, "packages/web/test/setup/check-op-outputs.ts"],
+						// check-op-outputs parses every op's value against its output schema; production never does.
+						// Listed in full rather than spread from sharedProcess, so Fallow sees the shared setup files as used.
+						setupFiles: [
+							"packages/shared/test/setup/fresh-modules.ts",
+							"packages/shared/test/setup/strictly-increasing-clock.ts",
+							"packages/cli/test/setup/oclif-root.ts",
+							"packages/web/test/setup/check-op-outputs.ts",
+						],
+						globalSetup: ["packages/cli/test/setup/migrated-template.ts"],
 					},
 				},
 				{
@@ -147,7 +147,10 @@ export default defineConfig(
 					{
 						name: "cloudflare",
 						include: ["packages/cloudflare/test/**/*.test.ts"],
-						globalSetup: ["packages/cloudflare/test/setup/build-client.ts"],
+						globalSetup: [
+							"packages/cloudflare/test/setup/build-client.ts",
+							"packages/cloudflare/test/setup/bundle-workers.ts",
+						],
 					},
 				},
 			],

@@ -13,7 +13,9 @@ describe("web client build for the Worker tests", () =>
 				? [entry.test.globalSetup]
 				: [],
 		);
-		expect(globalSetups).toStrictEqual([["packages/cloudflare/test/setup/build-client.ts"]]);
+		expect(globalSetups).toStrictEqual([
+			["packages/cloudflare/test/setup/build-client.ts", "packages/cloudflare/test/setup/bundle-workers.ts"],
+		]);
 	});
 
 	it("never runs from the per-file harness", () =>

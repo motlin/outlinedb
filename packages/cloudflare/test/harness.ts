@@ -1,42 +1,30 @@
 import {mkdtempSync, readFileSync, readdirSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {build} from "esbuild";
 import {Miniflare} from "miniflare";
+import {inject} from "vite-plus/test";
 import type {MiniflareOptions} from "miniflare";
 
 const clientDir = new URL("../../web/dist/client", import.meta.url).pathname;
 
-const bundles = new Map<string, Promise<string>>();
+const bundles = new Map<string, string>();
 
-/** Bundle each Worker entry once per test file; every harness started from it reuses the bundle. */
-async function bundleWorkerOnce(entry: string): Promise<string>
+/** The entry's bundle, which the bundle-workers global setup built once for the run; read once per test file. */
+function workerBundle(entry: string): string
 {
-	let bundle = bundles.get(entry);
+	const path = new URL(entry, import.meta.url).pathname;
+	let bundle = bundles.get(path);
 	if (bundle === undefined)
 	{
-		bundle = bundleWorker(entry);
-		bundles.set(entry, bundle);
+		const file = inject("workerBundles")[path];
+		if (file === undefined)
+		{
+			throw new Error(`No Worker bundle for ${path}: bundle-workers bundles src/worker.ts and test/*-entry.ts`);
+		}
+		bundle = readFileSync(file, "utf8");
+		bundles.set(path, bundle);
 	}
 	return bundle;
-}
-
-/** Bundle a Worker entry for workerd, resolving workspace packages through their `source` export. */
-async function bundleWorker(entry: string): Promise<string>
-{
-	const result = await build(
-		{
-			entryPoints: [new URL(entry, import.meta.url).pathname],
-			bundle: true,
-			format: "esm",
-			write: false,
-			platform: "neutral",
-			conditions: ["source", "workerd", "worker", "browser"],
-			mainFields: ["module", "main"],
-			external: ["cloudflare:workers", "node:*"],
-		},
-	);
-	return result.outputFiles[0]?.text ?? "";
 }
 
 export interface Harness
@@ -66,7 +54,7 @@ export async function startHarness(
 	} = {},
 ): Promise<Harness>
 {
-	const script = await bundleWorkerOnce(entry);
+	const script = workerBundle(entry);
 	const persistDir = existingPersistDir ?? mkdtempSync(join(tmpdir(), "wf-cf-"));
 	const mf = new Miniflare(
 		{

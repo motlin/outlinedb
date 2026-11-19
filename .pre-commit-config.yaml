@@ -62,6 +62,9 @@ repos:
         name: markdownlint-cli2
         entry: pnpm exec vp exec markdownlint-cli2
         language: system
+        # The globs in .markdownlint-cli2.jsonc already lint every Markdown file, so one run covers them; passing
+        # filenames split them across one run per CPU, and each of those linted the whole tree again.
+        pass_filenames: false
         types: [markdown]
         # Keep in sync with ignores in .markdownlint-cli2.jsonc.
         # CLAUDE.md contains the vp-generated Vite+ block, which markdownlint rules would flag.

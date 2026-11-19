@@ -93,29 +93,16 @@ describe("cache import api", () =>
 
 	describe("cache-import-api service", () =>
 	{
-		let tempDir: string;
 		let testDatabase: TestDatabase;
 
 		beforeEach(() =>
 		{
-			tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-api-import-test-"));
-			const testDbPath = path.join(tempDir, "test.sqlite");
-			testDatabase = createTestDatabase(testDbPath);
+			testDatabase = createTestDatabase();
 		});
 
 		afterEach(() =>
 		{
 			cleanupTestDatabase(testDatabase);
-			if (fs.existsSync(tempDir))
-			{
-				fs.rmSync(
-					tempDir,
-					{
-						recursive: true,
-						force: true,
-					},
-				);
-			}
 		});
 
 		describe("import into empty database", () =>
@@ -1707,8 +1694,7 @@ describe("cache import", () =>
 			process.env.WORKFLOWY_EPOCH = "0";
 
 			tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-import-test-"));
-			const testDbPath = path.join(tempDir, "test.sqlite");
-			testDatabase = createTestDatabase(testDbPath);
+			testDatabase = createTestDatabase();
 		});
 
 		afterEach(() =>
@@ -4387,31 +4373,18 @@ describe("cache service", () =>
 
 	describe("CacheService (shared)", () =>
 	{
-		let tempDir: string;
 		let testDatabase: TestDatabase;
 		let cacheService: CacheService;
 
 		beforeEach(() =>
 		{
-			tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-cache-test-"));
-			const testDbPath = path.join(tempDir, "test.sqlite");
-			testDatabase = createTestDatabase(testDbPath);
+			testDatabase = createTestDatabase();
 			cacheService = new CacheService(testDatabase.db);
 		});
 
 		afterEach(() =>
 		{
 			cleanupTestDatabase(testDatabase);
-			if (fs.existsSync(tempDir))
-			{
-				fs.rmSync(
-					tempDir,
-					{
-						recursive: true,
-						force: true,
-					},
-				);
-			}
 		});
 
 		describe("getNode", () =>
