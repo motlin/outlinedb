@@ -17,10 +17,11 @@
 			"groupName": "pnpm"
 		},
 		{
-			"description": "Gap 2: vite-plus, its npm: alias (shows up as `vite`) and the vite-plus-core override move together.",
+			"description": "Gap 2: vite-plus, its npm: alias (shows up as `vite`) and the vite-plus-core override move together. separateMajorMinor is off because vite-plus-core is 8.x while vite-plus is 1.x, and splitting major from minor shipped each half alone.",
 			"matchPackageNames": ["vite-plus", "@voidzero-dev/vite-plus-core", "vite"],
 			"enabled": true,
-			"groupName": "vite-plus monorepo"
+			"groupName": "vite-plus monorepo",
+			"separateMajorMinor": false
 		}
 	]
 }

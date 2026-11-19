@@ -200,7 +200,8 @@ export function menuFocusStep(
 ): MenuFocusStep
 {
 	const rows = items.flatMap((item, index) => (item.menuItem ? [index] : []));
-	const selectedAt = selected >= 0 ? rows[selected] : undefined;
+	// selected is -1 for none, and rows[-1] is undefined.
+	const selectedAt = rows[selected];
 	const current = selectedAt ?? (focused >= 0 ? focused : undefined);
 	if (key === "Tab" || key === "ShiftTab")
 	{
