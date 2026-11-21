@@ -32,7 +32,6 @@
 		"dev:server": "tsx watch --conditions=source src/server/index.ts",
 		"dev:client": "vp dev",
 		"build": "tsc && vp build",
-		"build:types": "tsc",
 		"typecheck": "tsc --noEmit",
 		"storybook": "storybook dev --port 6006",
 		"build-storybook": "storybook build"

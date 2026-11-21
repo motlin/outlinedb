@@ -5,6 +5,8 @@
 		{"path": "./packages/shared/test"},
 		{"path": "./packages/cli"},
 		{"path": "./packages/cli/test"},
+		{"path": "./packages/web"},
+		{"path": "./packages/mcp"},
 		{"path": "./packages/mcp/test"},
 		{"path": "./test"}
 	],

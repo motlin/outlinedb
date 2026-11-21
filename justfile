@@ -105,12 +105,10 @@ test-plugins:
     node --test plugins/gtd/scripts/*.test.mts
 
 # No --cache on tsc: vp's cache tracking cannot see the native tsc 7 binary's reads or writes, so every run was a hit that never rebuilt
-# Type-check the project, including the web package, which the root solution does not reference (its types read shared dist)
+# Type-check every project once: the root `tsc -b` builds the solution (every package and test project but cloudflare) incrementally, so `build` after it finds nothing to redo; cloudflare is noEmit and outside the solution
 [group('build')]
 typecheck: build-shared
     vp run typecheck
-    vp run --filter @outlinedb/web typecheck
-    vp run --filter @outlinedb/web build:types
     vp run --filter @outlinedb/cloudflare typecheck
 
 # Remove all dist dirs and tsbuildinfo to prevent stale artifacts (used by git-test)

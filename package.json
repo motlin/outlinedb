@@ -33,7 +33,7 @@
 		"fmt:ci": "oxfmt-next-line --check",
 		"fallow": "fallow fix --yes --no-create-config",
 		"fallow:ci": "fallow dead-code",
-		"typecheck": "tsc --noEmit",
+		"typecheck": "tsc -b",
 		"postpack": "shx rm -f oclif.manifest.json",
 		"prepack": "oclif manifest",
 		"test": "node node_modules/vitest/dist/cli.js",
