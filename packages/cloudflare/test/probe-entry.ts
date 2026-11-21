@@ -38,6 +38,18 @@ export class ProbeStore extends UserStore
 				},
 			);
 		}
+		if (url.pathname === "/__alarm-due")
+		{
+			const job = url.searchParams.get("job");
+			return Response.json(
+				{
+					due:
+						job === "outbox" || job === "sync" || job === "embeddings"
+							? new AlarmSchedule(this.ctx.storage).due(job)
+							: null,
+				},
+			);
+		}
 		if (url.pathname === "/__provisions")
 		{
 			return Response.json(

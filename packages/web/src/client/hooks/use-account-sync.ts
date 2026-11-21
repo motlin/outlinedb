@@ -1,7 +1,7 @@
 /**
  * The signed-in account's import state over `GET /api/v1/sync-status`: whether its first sync is still waiting to start,
- * fetching, importing or has failed, and how many items it has applied. Polled while a run is pending or under way, not
- * once it is idle or failed (the client never retries a sync); each poll that sees more items applied, and the run's
+ * fetching, importing, has failed or stopped until an admin seed, and how many items it has applied. Polled while a run
+ * is pending or under way, not once it is idle, failed or stopped (the client never retries a sync); each poll that sees more items applied, and the run's
  * end, invalidates every other query so the imported outline appears without a reload.
  */
 
@@ -47,7 +47,8 @@ export function useAccountSync(): AccountSync | undefined
 			refetchInterval: (query) =>
 				query.state.data === undefined ||
 				query.state.data.phase === "idle" ||
-				query.state.data.phase === "failed"
+				query.state.data.phase === "failed" ||
+				query.state.data.phase === "needs_seed"
 					? false
 					: POLL_MS,
 		},

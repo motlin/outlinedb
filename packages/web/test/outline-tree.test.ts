@@ -1170,13 +1170,28 @@ describe("OutlineTree empty account", () =>
 		{
 			phase: "failed",
 			applied: 0,
-			error: "A catch-up needs internal auth (WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD)",
+			error: "push_and_poll failed with 502",
 			retriesOnSchedule: true,
 		};
 		expect(emptyOutlineText(render())).toStrictEqual([
 			"Your first import failed",
-			"A catch-up needs internal auth (WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD)",
+			"push_and_poll failed with 502",
 			"The next scheduled sync tries again, or an admin seed retries the import now.",
+		]);
+	});
+
+	it("shows a sync stopped until an admin seed, since nothing retries it on a schedule", () =>
+	{
+		accountSync =
+		{
+			phase: "needs_seed",
+			applied: 0,
+			error: "A catch-up needs internal auth (WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD)",
+		};
+		expect(emptyOutlineText(render())).toStrictEqual([
+			"Sync stopped",
+			"A catch-up needs internal auth (WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD)",
+			"Nothing retries it on a schedule; an admin seed restarts the sync.",
 		]);
 	});
 

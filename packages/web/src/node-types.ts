@@ -134,8 +134,8 @@ export interface OpErrorBody
 
 /**
  * `GET /api/v1/sync-status`, answered by the Cloudflare Worker itself rather than an op (its `UserStore.accountSync`):
- * whether the signed-in account's sync is fetching, importing or failed before any import, and how many items the run
- * has applied.
+ * whether the signed-in account's sync is fetching, importing, failed before any import or stopped until an admin seed,
+ * and how many items the run has applied.
  */
 export type AccountSync =
 	|
@@ -152,6 +152,13 @@ export type AccountSync =
 			error: string;
 			/** Whether the next scheduled sync retries what failed; otherwise only an admin seed does. */
 			retriesOnSchedule: boolean;
+	  }
+	|
+	  {
+			/** A mirror account whose sync stopped because only an admin seed can fix what failed; nothing retries it. */
+			phase: "needs_seed";
+			applied: number;
+			error: string;
 	  };
 
 /** One tree of a `POST /api/v1/nodes/trees` body. */

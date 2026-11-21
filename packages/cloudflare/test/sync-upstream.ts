@@ -53,6 +53,8 @@ export interface SyncStatus
 		durationMs?: number;
 		finishedAt?: number;
 		rowsWritten?: number;
+		message?: string;
+		at?: number;
 	} | null;
 	outbox:
 	{

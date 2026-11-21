@@ -162,6 +162,12 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 				},
 			);
 			this.configure();
+			if (!this.isOwner)
+			{
+				// An object that stopped being an owner (an old email-named one once the owners list names the user id)
+				// drops the sync and drain it had scheduled, instead of waking for them.
+				await this.alarms.cancel(["sync", "outbox"]);
+			}
 		});
 	}
 
@@ -433,6 +439,14 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 			};
 		}
 		const {phase, applied, lastResult} = await this.sync.status();
+		if (phase === "idle" && lastResult?.status === "needs_seed")
+		{
+			return {
+				phase: "needs_seed",
+				applied,
+				error: lastResult.message,
+			};
+		}
 		if (phase !== "idle" || this.sync.hasImported())
 		{
 			return {
@@ -506,7 +520,13 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 			// (approved 2026-11-15), and a drain with nothing pending sends nothing. A non-owner's outbox and sync slots are
 			// cleared without a run: it never enqueues, and has nothing to sync from.
 			const due = this.alarms.takeDue(Date.now());
-			if ((due.includes("outbox") || due.includes("sync")) && this.isOwner && this.drainOutbox !== undefined)
+			// A sync that needs a seed cannot drain either, so the outbox waits for the seed instead of failing each write.
+			if (
+				(due.includes("outbox") || due.includes("sync")) &&
+				this.isOwner &&
+				this.drainOutbox !== undefined &&
+				!this.sync.needsSeed()
+			)
 			{
 				try
 				{
@@ -579,7 +599,14 @@ export type AccountSync =
 			phase: SyncStatus["phase"] | "waiting";
 			applied: number;
 	  }
-	| FailedAccountSync;
+	| FailedAccountSync
+	|
+	  {
+			/** The sync stopped because only an admin seed can fix what failed; nothing retries it on a schedule. */
+			phase: "needs_seed";
+			applied: number;
+			error: string;
+	  };
 
 /** A mirror account no run has imported yet, whose last run failed. */
 interface FailedAccountSync

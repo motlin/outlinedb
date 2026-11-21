@@ -9,6 +9,7 @@ import
 	makeNodes,
 	POLL_MS,
 	pollResult,
+	rowsWritten,
 	runScheduledSyncNow,
 	runToIdle,
 	sleep,
@@ -188,6 +189,32 @@ describe("sync seeds from get_tree_data only on request", () =>
 						},
 					],
 				},
+			},
+		);
+
+		// A quiet minute: the catch-up finds nothing new, and writes no more than the alarm's own bookkeeping.
+		up.pushAndPoll = () => pollResult("5");
+		const beforeQuiet = await rowsWritten(h);
+		await runScheduledSyncNow(h);
+		let quiet: SyncStatus | undefined;
+		for (let i = 0; i < 15_000 / POLL_MS; i++)
+		{
+			quiet = await status(h);
+			if ((quiet.nextAlarmAt ?? 0) > Date.now() + 540_000)
+			{
+				break;
+			}
+			await sleep(POLL_MS);
+		}
+		expect(
+			{
+				polls: up.pollStarts,
+				rowsWritten: (await rowsWritten(h)) - beforeQuiet,
+			},
+		).toStrictEqual(
+			{
+				polls: ["1", "5"],
+				rowsWritten: 0,
 			},
 		);
 		up.pushAndPoll = () => pollResult("1");

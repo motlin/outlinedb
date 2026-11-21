@@ -31,6 +31,7 @@ const DEFAULT_INTERVAL_MINUTES = 1;
 const CATCH_UP_RUN_ID = "catch-up";
 const RATE_LIMIT_BACKOFF_MS = 60_000;
 const SEED_HINT = "On the Worker, POST /api/admin/seed instead.";
+const NO_INTERNAL_AUTH = "A catch-up needs internal auth (WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD)";
 /**
  * An alarm run stops applying batches, and leaves the finish to a fresh run, once this much time is spent. It stays
  * well inside the transaction timeout and keeps each alarm short on the Worker.
@@ -197,7 +198,12 @@ export type SyncResult =
 	  }
 	|
 	  {
-			status: "rate_limited" | "error";
+			/**
+			 * `needs_seed`: the catch-up can never succeed until an admin seed (the tree's log no longer holds the stored
+			 * transaction id, nothing seeded one, or there is no internal auth), so no catch-up is scheduled until a seed
+			 * or sync request arrives.
+			 */
+			status: "rate_limited" | "error" | "needs_seed";
 			message: string;
 			at: number;
 	  };
@@ -425,6 +431,12 @@ export class SyncJob
 		};
 	}
 
+	/** Whether the catch-up stopped for good and waits for an admin seed, with no run in progress. */
+	needsSeed(): boolean
+	{
+		return this.readJob() === null && this.readLastResult()?.status === "needs_seed";
+	}
+
 	/** Whether any run has ever finished ok, so this object holds an import of the account; any version counts. */
 	hasImported(): boolean
 	{
@@ -482,22 +494,48 @@ export class SyncJob
 
 	/**
 	 * A scheduled run: one /push_and_poll from the stored transaction id, with no export. A failure is reported as the
-	 * run's internalSyncError and never falls back to an export or a reseed. A version is written only when the outcome
-	 * differs from the last result, so a quiet minute-by-minute catch-up leaves no rows behind.
+	 * run's internalSyncError and never falls back to an export or a reseed. A failure no retry can fix stops the
+	 * schedule as `needs_seed` until a seed or sync request arrives. A version is written only when the outcome differs
+	 * from the last result, so a quiet minute-by-minute catch-up leaves no rows behind.
 	 */
 	private async catchUpRun(): Promise<void>
 	{
 		const startedAt = this.now();
-		let internalSyncError: string | undefined;
-		if (this.deps.catchUp === undefined)
-		{
-			internalSyncError = "A catch-up needs internal auth (WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD)";
-		}
-		else
-		{
-			internalSyncError = await this.catchUp();
-		}
+		const failure =
+			this.deps.catchUp === undefined
+				?
+					{
+						message: NO_INTERNAL_AUTH,
+						permanent: true,
+					}
+				: await this.catchUp();
 		const last = this.readLastResult();
+		if (failure?.permanent === true)
+		{
+			if (!(last?.status === "needs_seed" && last.message === failure.message))
+			{
+				this.writeJob(
+					{
+						runId: CATCH_UP_RUN_ID,
+						phase: "idle",
+						exportKey: "",
+						applied: 0,
+						totals: NO_TOTALS,
+						startedAt,
+						rowsWritten: 0,
+						result:
+						{
+							status: "needs_seed",
+							message: failure.message,
+							at: this.now(),
+						},
+					},
+				);
+			}
+			// Not rescheduled: retrying every minute only repeats the failure. syncNow and seed wake the job again.
+			return;
+		}
+		const internalSyncError = failure?.message;
 		if (!(last?.status === "caught_up" && last.internalSyncError === internalSyncError))
 		{
 			this.writeJob(
@@ -527,8 +565,18 @@ export class SyncJob
 		await this.scheduleNextRun();
 	}
 
-	/** One catch-up from the transaction log, when internal auth exists; returns why it failed, if it did. */
-	private async catchUp(): Promise<string | undefined>
+	/**
+	 * One catch-up from the transaction log, when internal auth exists; returns why it failed, if it did, and whether
+	 * only a seed can fix it.
+	 */
+	private async catchUp(): Promise<
+		|
+		  {
+				message: string;
+				permanent: boolean;
+		  }
+		| undefined
+	>
 	{
 		try
 		{
@@ -538,7 +586,17 @@ export class SyncJob
 		catch (error)
 		{
 			// Never reseeded automatically: a missing seed or a refresh request needs an explicit seed.
-			return error instanceof TreeResyncRequired ? `${error.message}. ${SEED_HINT}` : errorMessage(error);
+			return error instanceof TreeResyncRequired
+				?
+					{
+						message: `${error.message}. ${SEED_HINT}`,
+						permanent: true,
+					}
+				:
+					{
+						message: errorMessage(error),
+						permanent: false,
+					};
 		}
 	}
 
@@ -778,7 +836,7 @@ export class SyncJob
 		}
 		if (!seeding)
 		{
-			internalSyncError = await this.catchUp();
+			internalSyncError = (await this.catchUp())?.message;
 		}
 		const {importTimestamp: _timestamp, ...counts} = result;
 		this.finishRun(
@@ -859,7 +917,7 @@ function jobFromRow(row: Record<string, SqlStorageValue>): Job
 					}),
 		};
 	}
-	else if (status === "rate_limited" || status === "error")
+	else if (status === "rate_limited" || status === "error" || status === "needs_seed")
 	{
 		result =
 		{

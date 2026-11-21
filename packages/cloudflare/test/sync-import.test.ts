@@ -106,6 +106,17 @@ describe("sync imports a fake upstream's export", () =>
 				seedRequests: [],
 			},
 		);
+
+		// Once the owners list no longer names this object, it drops the scheduled catch-up instead of ticking on.
+		await up.stop(h, true);
+		const demoted = await up.start(
+			h.persistDir,
+			{
+				OUTLINEDB_ENV_OWNERS: "someone-else",
+			},
+		);
+		await expect(status(demoted).then((current) => current.nextAlarmAt)).resolves.toBeNull();
+		await up.stop(demoted);
 	}, 180_000);
 
 	it("backs off on a 429 without losing state", async () =>

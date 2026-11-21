@@ -69,6 +69,21 @@ export class AlarmSchedule
 		await this.arm();
 	}
 
+	/** Drop the due times of `jobs`, rearming the alarm for the rest. */
+	async cancel(jobs: readonly AlarmJob[]): Promise<void>
+	{
+		const scheduled = jobs.filter((job) => this.due(job) !== null);
+		if (scheduled.length === 0)
+		{
+			return;
+		}
+		for (const job of scheduled)
+		{
+			this.storage.kv.delete(this.key(job));
+		}
+		await this.arm();
+	}
+
 	/** Arm the alarm at the earliest due time, or clear it when no job is due. */
 	async arm(): Promise<void>
 	{

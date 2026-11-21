@@ -1,6 +1,24 @@
 import {describe, expect, it} from "vite-plus/test";
 import {readJson} from "./harness";
-import {fakeUpstream, internalAuthBindings, makeNodes, pollResult, runToIdle, treeLog, uuid} from "./sync-upstream";
+import
+{
+	fakeUpstream,
+	internalAuthBindings,
+	makeNodes,
+	POLL_MS,
+	pollResult,
+	rowsWritten,
+	runScheduledSyncNow,
+	runToIdle,
+	sleep,
+	status,
+	treeLog,
+	uuid,
+} from "./sync-upstream";
+import type {SyncStatus} from "./sync-upstream";
+
+const NEED_REFRESHED =
+	"Workflowy answered need_refreshed_project_tree: the cache's transaction id 1 is no longer in the tree's log; run './bin/run.js cache import-api' to reseed it. On the Worker, POST /api/admin/seed instead.";
 
 describe("sync reports internal-API failures", () =>
 {
@@ -47,6 +65,120 @@ describe("sync reports internal-API failures", () =>
 					txId: "1",
 					mirrors: [],
 				},
+			},
+		);
+
+		// The next scheduled catch-up can never succeed without a seed: it says so and stops instead of retrying every minute.
+		const beforeStop = await rowsWritten(h);
+		await runScheduledSyncNow(h);
+		let stopped: SyncStatus | undefined;
+		for (let i = 0; i < 15_000 / POLL_MS; i++)
+		{
+			stopped = await status(h);
+			if (stopped.lastResult?.status !== "ok")
+			{
+				break;
+			}
+			await sleep(POLL_MS);
+		}
+		const admin = (await readJson(await h.mf.dispatchFetch("http://localhost/api/admin/status"))) as
+		{
+			lastSync: unknown;
+		};
+		const needsSeed =
+		{
+			status: "needs_seed",
+			message: NEED_REFRESHED,
+			at: expect.any(Number),
+		};
+		expect(
+			{
+				status: stopped,
+				adminLastSync: admin.lastSync,
+				accountSync: await readJson(await h.mf.dispatchFetch("http://localhost/api/v1/sync-status")),
+				rowsWritten: (await rowsWritten(h)) - beforeStop,
+			},
+		).toStrictEqual(
+			{
+				status:
+				{
+					phase: "idle",
+					applied: 0,
+					// No catch-up is scheduled: only a seed or sync request wakes the job again.
+					nextAlarmAt: null,
+					lastResult: needsSeed,
+					outbox:
+					{
+						pending: 0,
+						oldestEnqueuedAt: null,
+						lastError: null,
+					},
+				},
+				adminLastSync: needsSeed,
+				accountSync:
+				{
+					phase: "needs_seed",
+					applied: 0,
+					error: NEED_REFRESHED,
+				},
+				// The one run version that records the stop.
+				rowsWritten: 3,
+			},
+		);
+
+		// A write meanwhile stays pending: a drain from the stale transaction id could only fail, so none runs until a seed.
+		up.internalCalls.length = 0;
+		const created = await h.mf.dispatchFetch(
+			"http://localhost/api/v1/nodes",
+			{
+				method: "POST",
+				headers:
+				{
+					"content-type": "application/json",
+				},
+				body: JSON.stringify(
+					{
+						parent_id: "None",
+						name: "written while stopped",
+					},
+				),
+			},
+		);
+		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
+		const ns = (await h.mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace;
+		const outboxDue = async () =>
+			(
+				await (
+					await ns.get(ns.idFromName("dev")).fetch("http://localhost/__alarm-due?job=outbox")
+				).json<
+				{
+					due: number | null;
+				}>()
+			).due;
+		for (let i = 0; i < 15_000 / POLL_MS && (await outboxDue()) !== null; i++)
+		{
+			await sleep(POLL_MS);
+		}
+		expect(
+			{
+				created: created.status,
+				outboxDue: await outboxDue(),
+				outbox: (await status(h)).outbox,
+				internalCalls: up.internalCalls,
+			},
+		).toStrictEqual(
+			{
+				created: 201,
+				// The alarm took the drain job without running it.
+				outboxDue: null,
+				outbox:
+				{
+					// The create and its placement, waiting for the seed with no error recorded.
+					pending: 2,
+					oldestEnqueuedAt: expect.any(Number),
+					lastError: null,
+				},
+				internalCalls: [],
 			},
 		);
 		up.pushAndPoll = () => pollResult("1");
