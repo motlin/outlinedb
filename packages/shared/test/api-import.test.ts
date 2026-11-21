@@ -1,4 +1,5 @@
 import type DatabaseConstructor from "better-sqlite3";
+import {sql} from "drizzle-orm";
 import {drizzle} from "drizzle-orm/better-sqlite3";
 import {afterEach, assert, describe, expect, it, vi} from "vite-plus/test";
 import {applyApiBatch, beginApiImport, finishApiImport, importFromApi} from "../src/cache/api-import.js";
@@ -224,30 +225,59 @@ describe("shared API import", () =>
 		});
 	});
 
-	it("importing a 3-batch split gives the same rows as the one-shot import", () =>
+	it("importing a 3-batch split gives the same rows as the one-shot import, each batch writing only its own nodes' rows", () =>
 	{
+		const tagged = FIXTURE.map((node) => (
+		{
+			...node,
+			name: `${node.name} #tag`,
+		}));
 		const oneShot = createDb();
 		importFromApi(
 			oneShot,
-			FIXTURE,
+			tagged,
 			{
 				timestamp: T0,
 			},
 		);
 
 		const batched = createDb();
+		const changes = (): number =>
+			batched.get<
+			{
+				n: number;
+			}>(sql`SELECT total_changes() AS n`).n;
 		const state = beginApiImport(
 			batched,
 			{
 				timestamp: T0,
 			},
 		);
-		applyApiBatch(state, FIXTURE.slice(0, 3));
-		applyApiBatch(state, FIXTURE.slice(3, 5));
-		applyApiBatch(state, FIXTURE.slice(5));
+		const written: number[] = [];
+		for (const batch of [tagged.slice(0, 3), tagged.slice(3, 5), tagged.slice(5)])
+		{
+			const before = changes();
+			applyApiBatch(state, batch);
+			written.push(changes() - before);
+		}
+		const beforeFinish = changes();
 		const result = finishApiImport(state);
+		written.push(changes() - beforeFinish);
 
-		expect(snapshot(batched)).toStrictEqual(snapshot(oneShot));
+		expect(
+			{
+				...snapshot(batched),
+				tags: batched.select().from(schema.nodeTags).orderBy(schema.nodeTags.nodeId).all(),
+			},
+		).toStrictEqual(
+			{
+				...snapshot(oneShot),
+				tags: oneShot.select().from(schema.nodeTags).orderBy(schema.nodeTags.nodeId).all(),
+			},
+		);
+		// A content row, a metadata row and a tag row per node of the batch, none for an earlier batch's nodes, and none at
+		// the finish, whose rescan finds every tag already current.
+		expect(written).toStrictEqual([9, 6, 6, 0]);
 		expect(
 			{
 				totalNodes: result.totalNodes,

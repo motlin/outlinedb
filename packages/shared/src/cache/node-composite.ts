@@ -215,7 +215,8 @@ export interface UnitOfWork
  * Run `work` as one unit of work: one transaction, one system time read once
  * from the application's UTC clock (or `start` when given, for a unit split
  * across several transactions). Before committing it rewrites the derived
- * `node_tags` of every node it touched. A throw rolls back every composite the work
+ * `node_tags` of every node it touched, or of only the touched nodes among
+ * `tagScope` when one transaction of a split unit knows the only nodes it writes. A throw rolls back every composite the work
  * touched, and so does finishing past {@link TRANSACTION_TIMEOUT_MS} after the
  * start, which throws {@link TransactionTimeoutError}.
  */
@@ -223,6 +224,7 @@ export function runUnitOfWork<T>(
 	database: TemporalTransaction,
 	work: (unitOfWork: UnitOfWork) => T,
 	start: UnitOfWorkStart = startUnitOfWork(),
+	tagScope?: readonly string[],
 ): T
 {
 	return database.transaction((tx) =>
@@ -233,7 +235,7 @@ export function runUnitOfWork<T>(
 				systemTime: start.systemTime,
 			},
 		);
-		syncNodeTags(tx, start.systemTime);
+		syncNodeTags(tx, start.systemTime, tagScope);
 		assertWithinTransactionTimeout(start);
 		return result;
 	});

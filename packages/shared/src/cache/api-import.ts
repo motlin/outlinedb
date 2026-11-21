@@ -532,6 +532,8 @@ export function applyApiBatch(state: ApiImportState, apiNodes: WorkflowyNode[]):
 			applyBatchIn(unitOfWork, state, apiNodes);
 		},
 		state.start,
+		// Every batch shares the import's system time, so only this batch's nodes are rescanned for tags.
+		apiNodes.map((node) => node.id),
 	);
 }
 
