@@ -85,6 +85,13 @@
 			"when": 1794878037308,
 			"tag": "0011_pane_expanded_nodes",
 			"breakpoints": true
+		},
+		{
+			"idx": 12,
+			"version": "6",
+			"when": 1795303430640,
+			"tag": "0012_outbox_pending_idx",
+			"breakpoints": true
 		}
 	]
 }

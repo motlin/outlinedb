@@ -1,4 +1,4 @@
-import {eq} from "drizzle-orm";
+import {eq, sql} from "drizzle-orm";
 import type {SQL} from "drizzle-orm";
 import type {AnySQLiteColumn} from "drizzle-orm/sqlite-core";
 import {FAR_FUTURE_DATE} from "../temporal/constants.js";
@@ -11,6 +11,15 @@ import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 export function currentVersion(table: {systemTo: AnySQLiteColumn}): SQL
 {
 	return eq(table.systemTo, FAR_FUTURE_DATE);
+}
+
+/**
+ * {@link currentVersion} with the sentinel written as a literal, so SQLite can use a partial index whose WHERE is
+ * `system_to = <sentinel>`: it matches a partial index only against literal terms, never bound parameters.
+ */
+export function currentVersionLiteral(table: {systemTo: AnySQLiteColumn}): SQL
+{
+	return sql`${table.systemTo} = ${sql.raw(String(FAR_FUTURE_DATE))}`;
 }
 
 /**

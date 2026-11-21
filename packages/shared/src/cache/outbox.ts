@@ -4,7 +4,7 @@ import type {SQL} from "drizzle-orm";
 import {mirrors, nodeContent, outbox} from "../db/schema.js";
 import {accountOutboxStatus} from "./account-outbox.js";
 import {FAR_FUTURE_DATE} from "../temporal/constants.js";
-import {currentVersion} from "./cache-temporal.js";
+import {currentVersion, currentVersionLiteral} from "./cache-temporal.js";
 import {inIds} from "./in-ids.js";
 import type {UnitOfWork} from "./node-composite.js";
 import {closeCurrentVersions} from "./temporal-merge.js";
@@ -107,7 +107,13 @@ export interface PendingOutboxRow extends OutboxEntry
 }
 
 /** Where `(node_id, aspect)` is one of `entries`, bound as one JSON parameter. */
-function entriesWhere(entries: readonly OutboxEntry[]): SQL
+function entriesWhere(
+	entries: readonly
+	{
+		nodeId: string;
+		aspect: string;
+	}[],
+): SQL
 {
 	const keys = entries.map(({nodeId, aspect}) => `${nodeId}\u001F${aspect}`);
 	return sql`(${outbox.nodeId} || char(31) || ${outbox.aspect}) IN (SELECT value FROM json_each(${JSON.stringify(keys)}))`;
@@ -126,7 +132,7 @@ export function readPendingOutbox(tx: TemporalTransaction, cap: number): Pending
 			},
 		)
 		.from(outbox)
-		.where(currentVersion(outbox))
+		.where(currentVersionLiteral(outbox))
 		.orderBy(asc(outbox.enqueuedAt))
 		.limit(1)
 		.offset(Math.max(cap - 1, 0))
@@ -142,7 +148,10 @@ export function readPendingOutbox(tx: TemporalTransaction, cap: number): Pending
 		)
 		.from(outbox)
 		.where(
-			and(currentVersion(outbox), cutoff === undefined ? undefined : lte(outbox.enqueuedAt, cutoff.enqueuedAt)),
+			and(
+				currentVersionLiteral(outbox),
+				cutoff === undefined ? undefined : lte(outbox.enqueuedAt, cutoff.enqueuedAt),
+			),
 		)
 		.orderBy(asc(outbox.enqueuedAt), asc(outbox.nodeId), asc(outbox.aspect))
 		.all();
@@ -160,9 +169,10 @@ export function closeOutboxRows({tx, systemTime}: UnitOfWork, entries: readonly 
 }
 
 /**
- * Record a failed drain on those of `entries` still pending: each current row closes and a new version opens with the
- * same `enqueued_at` and `error` as `last_error`, so each failure is one version and the rows stay pending. A row that
- * closed meanwhile (a remote delete won) stays closed.
+ * Record a failed drain on those of `entries` still pending: each current row whose `last_error` differs closes and a
+ * new version opens with the same `enqueued_at` and `error` as `last_error`, so the rows stay pending. A row already
+ * carrying this error is left as it is, so a drain failing the same way on every attempt writes nothing more. A row
+ * that closed meanwhile (a remote delete won) stays closed.
  */
 export function failOutboxRows(unitOfWork: UnitOfWork, entries: readonly OutboxEntry[], error: string): void
 {
@@ -179,13 +189,13 @@ export function failOutboxRows(unitOfWork: UnitOfWork, entries: readonly OutboxE
 			},
 		)
 		.from(outbox)
-		.where(and(currentVersion(outbox), entriesWhere(entries)))
+		.where(and(currentVersion(outbox), entriesWhere(entries), sql`${outbox.lastError} IS NOT ${error}`))
 		.all();
 	if (current.length === 0)
 	{
 		return;
 	}
-	closeCurrentVersions(unitOfWork.tx, outbox, unitOfWork.systemTime, entriesWhere(entries));
+	closeCurrentVersions(unitOfWork.tx, outbox, unitOfWork.systemTime, entriesWhere(current));
 	const versions = current.map(({nodeId, aspect, enqueuedAt}) => (
 	{
 		nodeId,
@@ -225,7 +235,7 @@ export function outboxStatus(tx: TemporalTransaction): OutboxStatus
 			},
 		)
 		.from(outbox)
-		.where(currentVersion(outbox))
+		.where(currentVersionLiteral(outbox))
 		.get();
 	const failed = tx
 		.select(
@@ -235,7 +245,7 @@ export function outboxStatus(tx: TemporalTransaction): OutboxStatus
 			},
 		)
 		.from(outbox)
-		.where(and(currentVersion(outbox), isNotNull(outbox.lastError)))
+		.where(and(currentVersionLiteral(outbox), isNotNull(outbox.lastError)))
 		.orderBy(desc(outbox.systemFrom))
 		.limit(1)
 		.get();

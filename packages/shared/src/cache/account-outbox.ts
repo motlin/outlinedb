@@ -12,7 +12,7 @@ import {overlaySavedViews} from "../internal/saved-views.js";
 import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 import {readAccountSnapshot} from "./account-store.js";
 import type {AccountSnapshot} from "./account-store.js";
-import {currentVersion} from "./cache-temporal.js";
+import {currentVersion, currentVersionLiteral} from "./cache-temporal.js";
 import type {UnitOfWork} from "./node-composite.js";
 import {closeCurrentVersions} from "./temporal-merge.js";
 import type {TemporalTransaction} from "./temporal-merge.js";
@@ -98,10 +98,16 @@ export function canonicalValue(value: unknown): string
 	);
 }
 
-const entryKey = ({subject, key}: AccountOutboxEntry): string => `${subject}${PATH_SEPARATOR}${key}`;
+const entryKey = ({subject, key}: {subject: string; key: string}): string => `${subject}${PATH_SEPARATOR}${key}`;
 
 /** Where `(subject, key)` is one of `entries`, bound as one JSON parameter. */
-function entriesWhere(entries: readonly AccountOutboxEntry[]): SQL
+function entriesWhere(
+	entries: readonly
+	{
+		subject: string;
+		key: string;
+	}[],
+): SQL
 {
 	return sql`(${accountOutbox.subject} || char(31) || ${accountOutbox.key}) IN (SELECT value FROM json_each(${JSON.stringify(entries.map(entryKey))}))`;
 }
@@ -136,7 +142,7 @@ export function readPendingAccountOutbox(tx: TemporalTransaction): PendingAccoun
 			},
 		)
 		.from(accountOutbox)
-		.where(currentVersion(accountOutbox))
+		.where(currentVersionLiteral(accountOutbox))
 		.orderBy(asc(accountOutbox.enqueuedAt), asc(accountOutbox.subject), asc(accountOutbox.key))
 		.all();
 	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the recorder writes only AccountOutboxSubject values
@@ -192,8 +198,9 @@ export function closeAccountOutboxRows({tx, systemTime}: UnitOfWork, entries: re
 }
 
 /**
- * Record a failed drain on those of `entries` still pending: each current row closes and a new version opens with the
- * same `enqueued_at` and `error` as `last_error`, so the rows stay pending.
+ * Record a failed drain on those of `entries` still pending: each current row whose `last_error` differs closes and a
+ * new version opens with the same `enqueued_at` and `error` as `last_error`, so the rows stay pending. A row already
+ * carrying this error is left as it is, so a drain failing the same way on every attempt writes nothing more.
  */
 export function failAccountOutboxRows(
 	{tx, systemTime}: UnitOfWork,
@@ -214,13 +221,15 @@ export function failAccountOutboxRows(
 			},
 		)
 		.from(accountOutbox)
-		.where(and(currentVersion(accountOutbox), entriesWhere(entries)))
+		.where(
+			and(currentVersion(accountOutbox), entriesWhere(entries), sql`${accountOutbox.lastError} IS NOT ${error}`),
+		)
 		.all();
 	if (current.length === 0)
 	{
 		return;
 	}
-	closeCurrentVersions(tx, accountOutbox, systemTime, entriesWhere(entries));
+	closeCurrentVersions(tx, accountOutbox, systemTime, entriesWhere(current));
 	insertRows(
 		tx,
 		current.map(({subject, key, enqueuedAt}) => (
@@ -252,7 +261,7 @@ export function accountOutboxStatus(tx: TemporalTransaction):
 			},
 		)
 		.from(accountOutbox)
-		.where(currentVersion(accountOutbox))
+		.where(currentVersionLiteral(accountOutbox))
 		.get();
 	const failed = tx
 		.select(
@@ -262,7 +271,7 @@ export function accountOutboxStatus(tx: TemporalTransaction):
 			},
 		)
 		.from(accountOutbox)
-		.where(and(currentVersion(accountOutbox), isNotNull(accountOutbox.lastError)))
+		.where(and(currentVersionLiteral(accountOutbox), isNotNull(accountOutbox.lastError)))
 		.orderBy(desc(accountOutbox.systemFrom))
 		.limit(1)
 		.get();

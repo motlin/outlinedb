@@ -7,6 +7,12 @@ import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 const closedRows = sql.raw(`system_to < ${String(FAR_FUTURE_DATE)}`);
 
 /**
+ * The predicate of a partial current-rows index: rows whose `system_to` is the far-future sentinel. A query uses such an
+ * index only when it writes the same literal term (see `currentVersionLiteral`), never a bound parameter.
+ */
+const currentRows = sql.raw(`system_to = ${String(FAR_FUTURE_DATE)}`);
+
+/**
  * node_content: Fields that affect embeddings (name, note, parentId)
  */
 export const nodeContent = sqliteTable(
@@ -360,6 +366,8 @@ export const outbox = sqliteTable(
 		),
 		uniqueIndex("outbox_system_to_idx").on(table.nodeId, table.aspect, table.systemTo),
 		index("outbox_closed_at_idx").on(table.systemTo).where(closedRows),
+		// The pending rows in drain order, so reading them never scans the closed versions every drain leaves behind.
+		index("outbox_pending_idx").on(table.enqueuedAt, table.nodeId, table.aspect).where(currentRows),
 	],
 );
 
@@ -394,6 +402,8 @@ export const accountOutbox = sqliteTable(
 		),
 		uniqueIndex("account_outbox_system_to_idx").on(table.subject, table.key, table.systemTo),
 		index("account_outbox_closed_at_idx").on(table.systemTo).where(closedRows),
+		// The pending rows in drain order, so reading them never scans the closed versions every drain leaves behind.
+		index("account_outbox_pending_idx").on(table.enqueuedAt, table.subject, table.key).where(currentRows),
 	],
 );
 

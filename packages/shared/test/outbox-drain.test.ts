@@ -4,7 +4,8 @@ import {drizzle} from "drizzle-orm/better-sqlite3";
 import {LocalCalendar} from "../src/cache/local-calendar.js";
 import {LocalTreeWriter} from "../src/cache/local-tree-writer.js";
 import {runUnitOfWork} from "../src/cache/node-composite.js";
-import {listPendingOutbox, OutboxRecorder, outboxStatus} from "../src/cache/outbox.js";
+import {readPendingAccountOutbox} from "../src/cache/account-outbox.js";
+import {listPendingOutbox, OutboxRecorder, outboxStatus, readPendingOutbox} from "../src/cache/outbox.js";
 import type {OutboxAspect} from "../src/cache/outbox.js";
 import * as schema from "../src/db/schema.js";
 import {mirrors, nodeContent, nodeMetadata, outbox} from "../src/db/schema.js";
@@ -747,6 +748,14 @@ describe("drainOutbox", () =>
 		);
 
 		await expect(drain(pusher(() => new Error("offline")))).rejects.toThrow("offline");
+		// The same failure again leaves the rows as they are: a repeat writes no new version.
+		setClock(systemTimeAt("2026-03-02 00:01:00.000"));
+		await expect(
+			drainOutbox(
+				database,
+				pusher(() => new Error("offline")),
+			),
+		).rejects.toThrow("offline");
 
 		expect(
 			{
@@ -756,7 +765,7 @@ describe("drainOutbox", () =>
 			},
 		).toStrictEqual(
 			{
-				pushes: 1,
+				pushes: 2,
 				outbox: [
 					row("a", "name", at(0)),
 					row(
@@ -1855,5 +1864,55 @@ describe("drainOutbox", () =>
 				pending: [],
 			},
 		);
+	});
+
+	it("reads the pending rows and the status through the pending-row indexes, never scanning closed versions", () =>
+	{
+		const queries:
+		{
+			sql: string;
+			params: unknown[];
+		}[] = [];
+		const sqlite = migratedMemoryDatabase();
+		const database = drizzle(
+			sqlite,
+			{
+				schema,
+				logger:
+				{
+					logQuery(sql, params)
+					{
+						queries.push(
+							{
+								sql,
+								params,
+							},
+						);
+					},
+				},
+			},
+		);
+		readPendingOutbox(database, 50);
+		readPendingAccountOutbox(database);
+		outboxStatus(database);
+		const plans = queries.map(({sql, params}) =>
+			(
+				sqlite.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...params) as
+				{
+					detail: string;
+				}[]
+			).map(({detail}) => detail),
+		);
+		sqlite.close();
+		// Each walks only the pending rows of a partial index, never the closed versions that pile up behind them.
+		expect(plans).toStrictEqual([
+			["SCAN outbox USING COVERING INDEX outbox_pending_idx"],
+			["SCAN outbox USING INDEX outbox_pending_idx"],
+			["SCAN account_outbox USING INDEX account_outbox_pending_idx"],
+			["SCAN outbox USING COVERING INDEX outbox_pending_idx"],
+			["SCAN outbox USING INDEX outbox_pending_idx", "USE TEMP B-TREE FOR ORDER BY"],
+			["SCAN account_outbox USING COVERING INDEX account_outbox_pending_idx"],
+			["SCAN account_outbox USING INDEX account_outbox_pending_idx", "USE TEMP B-TREE FOR ORDER BY"],
+		]);
 	});
 });

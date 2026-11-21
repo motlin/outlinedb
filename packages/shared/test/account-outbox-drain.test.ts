@@ -444,16 +444,23 @@ describe("drainAccountOutbox", () =>
 		await expect(drain(pusher({}, new Error("workflowy.com is unreachable")))).rejects.toThrow(
 			"workflowy.com is unreachable",
 		);
+		// The same failure again leaves the row as it is: a repeat writes no new version.
+		vi.setSystemTime(new Date("2026-03-02T00:01:00.000Z"));
+		await expect(
+			drainAccountOutbox(database, pusher({}, new Error("workflowy.com is unreachable"))),
+		).rejects.toThrow("workflowy.com is unreachable");
 
 		expect(
 			{
 				pushes,
 				pending: pending(),
+				versions: database.select().from(schema.accountOutbox).all().length,
 				status: outboxStatus(database),
 			},
 		).toStrictEqual(
 			{
 				pushes: [],
+				versions: 2,
 				pending: [
 					{
 						subject: "root_metadata",
