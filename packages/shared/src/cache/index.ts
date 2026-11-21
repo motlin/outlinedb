@@ -20,6 +20,7 @@ export
 	type ImportApiResult,
 	type ImportFromApiOptions,
 	type ImportLogger,
+	markApplied,
 } from "./api-import.js";
 export
 {

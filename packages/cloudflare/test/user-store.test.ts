@@ -113,11 +113,6 @@ describe("user store Durable Object behind the Worker", () =>
 					temporal: true,
 					indexes: ["sync_seed_requests_closed_at_idx", "sync_seed_requests_system_to_idx"],
 				},
-				sync_seen:
-				{
-					temporal: true,
-					indexes: ["sync_seen_closed_at_idx", "sync_seen_system_to_idx"],
-				},
 			},
 		);
 	});

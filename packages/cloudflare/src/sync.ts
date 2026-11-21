@@ -4,6 +4,7 @@ import
 	beginApiImport,
 	finishApiImport,
 	importInternalMetadata,
+	markApplied,
 	newSystemTimestamp,
 	outboxStatus,
 	readWorkflowyEpoch,
@@ -37,9 +38,9 @@ const SEED_HINT = "On the Worker, POST /api/admin/seed instead.";
 const RUN_BUDGET_MS = 30_000;
 
 /**
- * The sync job's own tables, temporal like every other table: a run's versions (one per alarm run), the ids the run in
- * progress has seen (scratch, deleted when the run ends), the seed requests (closed when a run consumes one) and the
- * export requests (closed when a run starts for one).
+ * The sync job's own tables, temporal like every other table: a run's versions (one per alarm run), the seed requests
+ * (closed when a run consumes one) and the export requests (closed when a run starts for one). The ids a run has seen
+ * are never stored: a resumed run reads them back from the export's already-applied prefix in R2.
  */
 const SYNC_TABLES = `
 CREATE TABLE IF NOT EXISTS sync_runs (
@@ -63,21 +64,13 @@ CREATE TABLE IF NOT EXISTS sync_runs (
 	duration_ms INTEGER,
 	internal_sync_error TEXT,
 	snapshot_at INTEGER,
+	rows_written INTEGER,
 	system_from INTEGER NOT NULL,
 	system_to INTEGER NOT NULL,
 	PRIMARY KEY (run_id, system_from)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS sync_runs_system_to_idx ON sync_runs (run_id, system_to);
 CREATE INDEX IF NOT EXISTS sync_runs_closed_at_idx ON sync_runs (system_to) WHERE system_to < ${String(FAR_FUTURE_DATE)};
-CREATE TABLE IF NOT EXISTS sync_seen (
-	run_id TEXT NOT NULL,
-	id TEXT NOT NULL,
-	system_from INTEGER NOT NULL,
-	system_to INTEGER NOT NULL,
-	PRIMARY KEY (run_id, id, system_from)
-);
-CREATE UNIQUE INDEX IF NOT EXISTS sync_seen_system_to_idx ON sync_seen (run_id, id, system_to);
-CREATE INDEX IF NOT EXISTS sync_seen_closed_at_idx ON sync_seen (system_to) WHERE system_to < ${String(FAR_FUTURE_DATE)};
 CREATE TABLE IF NOT EXISTS sync_seed_requests (
 	system_from INTEGER NOT NULL,
 	system_to INTEGER NOT NULL,
@@ -136,6 +129,8 @@ export interface SyncDeps
 	readAccount?: (signal: AbortSignal) => Promise<StoredAccount> | undefined;
 	/** Where the next run is scheduled; the object's own alarm unless the alarm is shared with other jobs. */
 	alarm?: JobAlarm;
+	/** Rows the object's SQLite has written so far, index rows included; a run reports how many it wrote. */
+	rowsWritten?: () => number;
 	now?: () => number;
 }
 
@@ -160,6 +155,8 @@ interface Job
 	snapshotAt?: number;
 	/** The run's result so far: a rate limit while it still fetches, or how it finished. */
 	result: SyncResult | null;
+	/** Rows the run's earlier alarm runs wrote, index rows included. */
+	rowsWritten: number;
 }
 
 const NO_TOTALS: Job["totals"] =
@@ -186,6 +183,8 @@ export type SyncResult =
 				 * the public import still completed, the edge tables did not.
 				 */
 				internalSyncError?: string;
+				/** Rows the run wrote, index rows included, up to its final record; set once the run is stored. */
+				rowsWritten?: number;
 			})
 	|
 	  {
@@ -218,29 +217,28 @@ export class SyncJob
 {
 	/** The system time of the alarm run in progress: every sync-table version it writes takes this one value. */
 	private systemTime = newSystemTimestamp();
+	/** The meter's reading when the alarm run in progress began. */
+	private rowsAtTick = 0;
 
 	constructor(private readonly deps: SyncDeps)
 	{
 		const {sql} = deps.storage;
-		// The pre-temporal key/value table and seen set go; a run they held restarts from scratch.
-		const seenSql = sql
-			.exec("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'sync_seen'")
-			.toArray()[0]?.sql;
-		if (typeof seenSql === "string" && !seenSql.includes("system_from"))
-		{
-			sql.exec("DROP TABLE sync_seen");
-		}
+		// The pre-temporal key/value table goes, and so does the seen-id scratch, which wrote four rows per exported node.
 		sql.exec("DROP TABLE IF EXISTS sync_state");
+		sql.exec("DROP TABLE IF EXISTS sync_seen");
 		createWithMicrosecondSystemTimes(
 			sql,
 			SYNC_TABLES,
-			["sync_runs", "sync_seen", "sync_seed_requests", "sync_export_requests"],
+			["sync_runs", "sync_seed_requests", "sync_export_requests"],
 			SYSTEM_TIMES,
 		);
 		const runColumns = sql.exec("SELECT name FROM pragma_table_info('sync_runs')").toArray();
-		if (!runColumns.some((row) => row.name === "snapshot_at"))
+		for (const column of ["snapshot_at", "rows_written"])
 		{
-			sql.exec("ALTER TABLE sync_runs ADD COLUMN snapshot_at INTEGER");
+			if (!runColumns.some((row) => row.name === column))
+			{
+				sql.exec(`ALTER TABLE sync_runs ADD COLUMN ${column} INTEGER`);
+			}
 		}
 	}
 
@@ -257,6 +255,11 @@ export class SyncJob
 	private now(): number
 	{
 		return (this.deps.now ?? Date.now)();
+	}
+
+	private rowsWritten(): number
+	{
+		return this.deps.rowsWritten?.() ?? 0;
 	}
 
 	/** The live version of the run in progress, or null when idle. */
@@ -299,8 +302,8 @@ export class SyncJob
 		this.sql.exec(
 			"INSERT OR REPLACE INTO sync_runs (run_id, phase, export_key, applied, started_at, total_nodes, nodes_added, " +
 				"nodes_updated, nodes_unchanged, nodes_deleted, nodes_phased_out, content_updated, metadata_updated, " +
-				"priority_updated, status, message, result_at, duration_ms, internal_sync_error, snapshot_at, system_from, system_to) " +
-				"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+				"priority_updated, status, message, result_at, duration_ms, internal_sync_error, snapshot_at, rows_written, " +
+				"system_from, system_to) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 			job.runId,
 			job.phase,
 			job.exportKey,
@@ -321,6 +324,7 @@ export class SyncJob
 			(ok ?? caughtUp)?.durationMs ?? null,
 			(ok ?? caughtUp)?.internalSyncError ?? null,
 			job.snapshotAt ?? null,
+			job.rowsWritten + this.rowsWritten() - this.rowsAtTick,
 			this.systemTime,
 			FAR_FUTURE_DATE,
 		);
@@ -388,6 +392,7 @@ export class SyncJob
 			totals: NO_TOTALS,
 			startedAt: this.now(),
 			result: null,
+			rowsWritten: 0,
 		};
 	}
 
@@ -433,6 +438,7 @@ export class SyncJob
 	async tick(): Promise<void>
 	{
 		this.systemTime = newSystemTimestamp();
+		this.rowsAtTick = this.rowsWritten();
 		let job = this.readJob();
 		if (job === null)
 		{
@@ -502,6 +508,7 @@ export class SyncJob
 					applied: 0,
 					totals: NO_TOTALS,
 					startedAt,
+					rowsWritten: 0,
 					result:
 					{
 						status: "caught_up",
@@ -568,8 +575,6 @@ export class SyncJob
 				result,
 			},
 		);
-		// Only the run in progress reads its seen ids, so they go with it, along with any left by an abandoned run.
-		this.sql.exec("DELETE FROM sync_seen");
 	}
 
 	private async scheduleNextRun(): Promise<void>
@@ -655,7 +660,10 @@ export class SyncJob
 		return next;
 	}
 
-	/** This alarm run's import: a fresh system time, so the run is its own unit of work, resuming the run's totals. */
+	/**
+	 * This alarm run's import: a fresh system time, so the run is its own unit of work, resuming the run's totals. The
+	 * ids earlier alarm runs saw are marked as the stream passes over the applied prefix.
+	 */
 	private importState(job: Job): ApiImportState
 	{
 		const state = beginApiImport(
@@ -665,18 +673,6 @@ export class SyncJob
 			},
 		);
 		Object.assign(state, job.totals);
-		const seen = this.sql.exec(
-			"SELECT id FROM sync_seen WHERE run_id = ? AND system_to = ?",
-			job.runId,
-			FAR_FUTURE_DATE,
-		);
-		for (const row of seen.toArray())
-		{
-			if (typeof row.id === "string")
-			{
-				state.seenIds.add(row.id);
-			}
-		}
 		return state;
 	}
 
@@ -701,6 +697,10 @@ export class SyncJob
 			{
 				size: Number.isInteger(batchSize) && batchSize > 0 ? batchSize : BATCH_SIZE,
 				skip: job.applied,
+				onSkipped: (node) =>
+				{
+					markApplied(state, node);
+				},
 			},
 		))
 		{
@@ -709,23 +709,12 @@ export class SyncJob
 				yielded = true;
 				break;
 			}
-			// One transaction, so the cursor never runs ahead of or behind the rows it counts.
+			// One transaction, so the stored cursor never runs ahead of the rows it counts. A batch that changed nothing
+			// leaves the stored cursor behind: a restart reapplies it, which again changes nothing and counts the same.
 			storage.transactionSync(() =>
 			{
+				const changesBefore = state.nodesAdded + state.nodesUpdated;
 				applyApiBatch(state, batch);
-				for (const node of batch)
-				{
-					if (state.seenIds.has(node.id))
-					{
-						this.sql.exec(
-							"INSERT OR IGNORE INTO sync_seen (run_id, id, system_from, system_to) VALUES (?, ?, ?, ?)",
-							job.runId,
-							node.id,
-							this.systemTime,
-							FAR_FUTURE_DATE,
-						);
-					}
-				}
 				job =
 				{
 					...job,
@@ -740,12 +729,16 @@ export class SyncJob
 						metadataUpdated: state.metadataUpdated,
 					},
 				};
-				this.writeJob(job);
+				if (state.nodesAdded + state.nodesUpdated !== changesBefore)
+				{
+					this.writeJob(job);
+				}
 			});
 			batches++;
 		}
 		if (yielded || (batches > 0 && overBudget()))
 		{
+			this.writeJob(job);
 			const delay = Number(env.SYNC_TICK_DELAY_MS);
 			await this.alarm.setAlarm(this.now() + (Number.isFinite(delay) && delay > 0 ? delay : 0));
 			return;
@@ -842,6 +835,7 @@ function jobFromRow(row: Record<string, SqlStorageValue>): Job
 			nodesDeleted: count("nodes_deleted"),
 			nodesPhasedOut: count("nodes_phased_out"),
 			priorityUpdated: count("priority_updated"),
+			rowsWritten: count("rows_written"),
 			...(internalSyncError === undefined
 				? {}
 				:
@@ -883,6 +877,7 @@ function jobFromRow(row: Record<string, SqlStorageValue>): Job
 		applied: count("applied"),
 		totals,
 		startedAt: count("started_at"),
+		rowsWritten: count("rows_written"),
 		...(typeof snapshotAt === "number"
 			?
 				{

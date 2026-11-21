@@ -7,6 +7,7 @@ import
 	liveIds,
 	makeNodes,
 	POLL_MS,
+	rowsWritten,
 	runToIdle,
 	sleep,
 	status,
@@ -45,7 +46,10 @@ describe("sync imports a fake upstream's export", () =>
 			},
 		);
 
+		const beforeSecond = await rowsWritten(h);
 		const second = await runToIdle(h, 1);
+		// An identical export writes only the run's own bookkeeping, a constant that never grows with the node count.
+		expect((await rowsWritten(h)) - beforeSecond).toBe(14);
 		expect(second.lastResult).toMatchObject(
 			{
 				status: "ok",
@@ -75,7 +79,7 @@ describe("sync imports a fake upstream's export", () =>
 				lastError: null,
 			},
 		);
-		// Each run finished inside one alarm, so each is one live version; its seen ids never outlived that alarm.
+		// Each run finished inside one alarm, so each is one live version.
 		await expect(syncTables(h)).resolves.toStrictEqual(
 			{
 				runs: [
@@ -99,7 +103,6 @@ describe("sync imports a fake upstream's export", () =>
 					},
 				],
 				runSystemFroms: 3,
-				seen: [],
 				seedRequests: [],
 			},
 		);
@@ -141,7 +144,6 @@ describe("sync imports a fake upstream's export", () =>
 					},
 				],
 				runSystemFroms: 1,
-				seen: [],
 				seedRequests: [],
 			},
 		);

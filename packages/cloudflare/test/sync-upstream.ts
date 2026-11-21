@@ -51,6 +51,8 @@ export interface SyncStatus
 		exportKey?: string;
 		internalSyncError?: string;
 		durationMs?: number;
+		finishedAt?: number;
+		rowsWritten?: number;
 	} | null;
 	outbox:
 	{
@@ -142,11 +144,6 @@ interface SyncTables
 		live: number;
 	}[];
 	runSystemFroms: number;
-	seen:
-	{
-		live: number;
-		n: number;
-	}[];
 	seedRequests:
 	{
 		live: number;
@@ -154,13 +151,26 @@ interface SyncTables
 	}[];
 }
 
-/** The sync job's own temporal tables: every run version, the seen-id scratch and the seed requests. */
+/** The sync job's own temporal tables: every run version and the seed requests. */
 export async function syncTables(h: Harness): Promise<SyncTables>
 {
 	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
 	const ns = (await h.mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace;
 	const response = await ns.get(ns.idFromName("dev")).fetch("http://localhost/__sync-tables");
 	return response.json();
+}
+
+/** Rows the Durable Object's SQLite has written since it started, index rows included, as Cloudflare bills them. */
+export async function rowsWritten(h: Harness): Promise<number>
+{
+	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
+	const ns = (await h.mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace;
+	const response = await ns.get(ns.idFromName("dev")).fetch("http://localhost/__rows-written");
+	const body = await response.json<
+	{
+		rowsWritten: number;
+	}>();
+	return body.rowsWritten;
 }
 
 export async function accountRows(h: Harness): Promise<unknown>

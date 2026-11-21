@@ -363,6 +363,22 @@ function keepPendingFields(
 	return pendingPlacement;
 }
 
+/**
+ * Mark nodes an earlier unit of work of the same import already applied, so the finish never ends them as absent:
+ * a valid node counts as seen and an invalid one stays kept, as {@link applyApiBatch} left them. Writes nothing.
+ */
+export function markApplied(state: ApiImportState, node: WorkflowyNode): void
+{
+	if (WorkflowyNodeSchema.safeParse(node).success)
+	{
+		state.seenIds.add(node.id);
+	}
+	else if (typeof node.id === "string")
+	{
+		state.invalidIds.add(node.id);
+	}
+}
+
 function applyBatchIn(unitOfWork: UnitOfWork, state: ApiImportState, apiNodes: WorkflowyNode[]): void
 {
 	const {tx} = unitOfWork;

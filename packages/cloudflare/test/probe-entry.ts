@@ -30,6 +30,14 @@ export class ProbeStore extends UserStore
 	override fetch(request: Request): Response
 	{
 		const url = new URL(request.url);
+		if (url.pathname === "/__rows-written")
+		{
+			return Response.json(
+				{
+					rowsWritten: this.rowMeter.rowsWritten(),
+				},
+			);
+		}
 		if (url.pathname === "/__provisions")
 		{
 			return Response.json(
@@ -147,9 +155,6 @@ export class ProbeStore extends UserStore
 						)
 						.toArray(),
 					runSystemFroms: Number(sql.exec("SELECT count(DISTINCT system_from) AS n FROM sync_runs").one().n),
-					seen: sql
-						.exec(`SELECT ${live} AS live, count(*) AS n FROM sync_seen GROUP BY live ORDER BY live`)
-						.toArray(),
 					seedRequests: sql
 						.exec(
 							`SELECT ${live} AS live, CASE WHEN system_from <= system_to THEN 1 ELSE 0 END AS ordered FROM sync_seed_requests ORDER BY system_from`,

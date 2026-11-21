@@ -8,6 +8,7 @@ import
 	makeNodes,
 	POLL_MS,
 	rowsPerSystemTime,
+	rowsWritten,
 	runToIdle,
 	sleep,
 	status,
@@ -90,7 +91,7 @@ describe("sync resumes and keeps local writes across runs", () =>
 		await expect(liveIds(second)).resolves.toHaveLength(50);
 		// Each alarm run is its own unit of work with a fresh system time, so no stamp outlives one run.
 		await expect(rowsPerSystemTime(second)).resolves.toStrictEqual([20, 20, 10]);
-		// One run version per alarm run; the seen ids are scratch for the run in progress, so none outlive the run.
+		// One run version per alarm run.
 		await expect(syncTables(second)).resolves.toStrictEqual(
 			{
 				runs: [
@@ -114,8 +115,47 @@ describe("sync resumes and keeps local writes across runs", () =>
 					},
 				],
 				runSystemFroms: 3,
-				seen: [],
 				seedRequests: [],
+			},
+		);
+
+		// An identical export spanning three alarm runs changes nothing, so the nodes an earlier alarm run passed over
+		// count as seen only from the export's applied prefix; otherwise the finish would phase them out.
+		const beforeAgain = await rowsWritten(second);
+		const again = await runToIdle(second, 1);
+		const
+		{
+			exportKey: _exportKey,
+			finishedAt: _finishedAt,
+			durationMs: _durationMs,
+			...againResult
+		} = again.lastResult ?? {};
+		expect(
+			{
+				result: againResult,
+				live: (await liveIds(second)).length,
+				rowsWritten: (await rowsWritten(second)) - beforeAgain,
+			},
+		).toStrictEqual(
+			{
+				result:
+				{
+					status: "ok",
+					totalNodes: 50,
+					nodesAdded: 0,
+					nodesUpdated: 0,
+					nodesUnchanged: 50,
+					nodesDeleted: 0,
+					nodesPhasedOut: 0,
+					contentUpdated: 0,
+					metadataUpdated: 0,
+					priorityUpdated: 0,
+					// Up to the run's final record, which the meter reading below includes.
+					rowsWritten: 15,
+				},
+				live: 50,
+				// A version of the run per alarm run, and no row per node.
+				rowsWritten: 26,
 			},
 		);
 		await up.stop(second);

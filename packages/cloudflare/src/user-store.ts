@@ -43,6 +43,7 @@ import {EmbeddingJob} from "./embedding-job";
 import type {EmbeddingStatus} from "./embedding-job";
 import {vectorizeIndex, workersAiEmbedder} from "./embeddings";
 import type {Embedder} from "./embeddings";
+import {meterRowsWritten} from "./row-meter";
 import {kvSessionStore} from "./session-store";
 import type {KvLike} from "./session-store";
 import {SyncJob} from "./sync";
@@ -59,6 +60,8 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 {
 	/** How many migrations this boot applied; zero when the database was already current. */
 	protected appliedOnBoot = 0;
+	/** Counts every row this object's SQLite writes, index rows included, as Cloudflare bills them. */
+	protected readonly rowMeter = meterRowsWritten(this.ctx.storage.sql);
 	/**
 	 * Whether this object mirrors workflowy.com: its name is in `OUTLINEDB_ENV_OWNERS`, or its profile was provisioned
 	 * as a mirror. Only such an object gets the Workflowy secrets and the sync, so another user's object can never read
@@ -259,6 +262,7 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 					}),
 				catchUp: internalAuth && (async () => serverContext.internalAdapter?.()?.catchUp()),
 				alarm: this.alarms.for("sync"),
+				rowsWritten: () => this.rowMeter.rowsWritten(),
 			},
 		);
 	}

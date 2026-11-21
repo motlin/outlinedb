@@ -4,8 +4,10 @@ export interface NodeBatchOptions
 {
 	/** Nodes per batch. */
 	size: number;
-	/** Leading nodes to pass over without parsing, for resuming a partly applied export. */
+	/** Leading nodes to pass over, for resuming a partly applied export; parsed only when {@link onSkipped} is given. */
 	skip?: number;
+	/** Called with each skipped node, so a resumed run learns which nodes an earlier run already applied. */
+	onSkipped?: (node: WorkflowyNode) => void;
 }
 
 /**
@@ -69,7 +71,7 @@ export async function* nodeBatches(
 					depth++;
 					if (code === 123 && depth === 3)
 					{
-						capturing = skip === 0;
+						capturing = skip === 0 || options.onSkipped !== undefined;
 						segmentStart = i;
 						pending = "";
 					}
@@ -79,21 +81,29 @@ export async function* nodeBatches(
 					depth--;
 					if (code === 125 && depth === 2)
 					{
+						if (capturing)
+						{
+							// oxlint-disable-next-line typescript/no-unsafe-assignment -- applyApiBatch validates every node with its schema
+							const node: WorkflowyNode = JSON.parse(pending + chunk.slice(segmentStart, i + 1));
+							capturing = false;
+							pending = "";
+							if (skip > 0)
+							{
+								options.onSkipped?.(node);
+							}
+							else
+							{
+								batch.push(node);
+								if (batch.length === options.size)
+								{
+									yield batch;
+									batch = [];
+								}
+							}
+						}
 						if (skip > 0)
 						{
 							skip--;
-						}
-						else if (capturing)
-						{
-							// oxlint-disable-next-line typescript/no-unsafe-argument -- applyApiBatch validates every node with its schema
-							batch.push(JSON.parse(pending + chunk.slice(segmentStart, i + 1)));
-							capturing = false;
-							pending = "";
-							if (batch.length === options.size)
-							{
-								yield batch;
-								batch = [];
-							}
 						}
 					}
 				}

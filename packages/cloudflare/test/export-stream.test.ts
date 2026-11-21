@@ -74,9 +74,36 @@ describe("nodeBatches", () =>
 		}
 	});
 
-	it("skips the first nodes without parsing them", async () =>
+	it("skips the first nodes, handing each skipped node to onSkipped when given", async () =>
 	{
 		await expect(collect(streamOf(text, 5), 2, 2)).resolves.toStrictEqual([[nodes[2]]]);
+		const skipped: unknown[] = [];
+		const batches: unknown[][] = [];
+		for await (const batch of nodeBatches(
+			streamOf(text, 5),
+			{
+				size: 2,
+				skip: 2,
+				onSkipped: (node) =>
+				{
+					skipped.push(node);
+				},
+			},
+		))
+		{
+			batches.push(batch);
+		}
+		expect(
+			{
+				skipped,
+				batches,
+			},
+		).toStrictEqual(
+			{
+				skipped: [nodes[0], nodes[1]],
+				batches: [[nodes[2]]],
+			},
+		);
 	});
 
 	it("yields nothing for an empty or missing nodes array", async () =>
