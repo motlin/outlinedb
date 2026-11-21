@@ -155,12 +155,14 @@ For multiple photos from the same day/event:
 
 When a photo walk decides the user must delete or find a photo by hand, select it in Photos right then, at decision time, not as an end-of-run reminder. Never say Claude cannot help find it. Selecting is read-only UI: never delete, edit, or modify anything in the Photos library.
 
+Select by the photo's uuid (`ZASSET.ZUUID` from a copy of the Photos library database, the same copy used to list photos). It references the item directly and returns in seconds to about a minute:
+
 ```bash
-node plugins/gtd/scripts/select-photo.mts --filename "IMG_3513.HEIC" --date 2026-10-25
+node plugins/gtd/scripts/select-photo.mts --uuid "F21E6284-ADA6-4053-AC27-1779E618CA38"
 ```
 
-- Pass the exact filename including its extension plus the photo's date: several library items can share a filename
-- The script runs `spotlight` and `activate` through `osascript` and prints `selected`, or `matches=<n>` when the filename plus date is not exactly one item
+- It prints `selected <filename>`; check the filename is the photo you meant
+- Fall back to `--filename "IMG_3513.HEIC" --date 2026-10-25` only when no uuid is at hand. It scans the whole library with `whose`, which can take many minutes, and prints `selected`, or `matches=<n>` when the filename plus date is not exactly one item. Pass the exact filename including its extension plus the photo's date: several library items can share a filename
 - On `selected`, tell the user the photo is selected in Photos; on `matches=<n>`, say so and ask for the time or a neighbouring photo to disambiguate
 
 ## Notes
