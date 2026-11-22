@@ -3,7 +3,7 @@ import {isStoreOwner} from "../worker-config";
 import type {WorkerSecrets} from "../worker-config";
 
 /** Bindings provisioning needs: D1 for the once-only flag, the Durable Objects, and the owner list. */
-export interface ProvisionEnv extends Pick<WorkerSecrets, "OUTLINEDB_ENV_OWNERS" | "ALLOWED_EMAILS">
+export interface ProvisionEnv extends Pick<WorkerSecrets, "OUTLINEDB_ENV_OWNERS">
 {
 	AUTH_DB: D1Database;
 	USER_STORE: DurableObjectNamespace<UserStore>;
@@ -11,7 +11,7 @@ export interface ProvisionEnv extends Pick<WorkerSecrets, "OUTLINEDB_ENV_OWNERS"
 
 /**
  * Give a verified user their Durable Object (named by their id) unless D1 says it already has one: store its profile,
- * in mirror mode when the email is an owner's (`OUTLINEDB_ENV_OWNERS`, else `ALLOWED_EMAILS`) and standalone
+ * in mirror mode when `OUTLINEDB_ENV_OWNERS` lists the email and standalone
  * otherwise, then set `user.provisioned_at`. Safe to repeat: the object keeps its first profile.
  */
 export async function provisionUser(

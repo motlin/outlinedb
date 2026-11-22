@@ -69,6 +69,7 @@ describe("worker routes each Access email to its own Durable Object", () =>
 				ACCESS_TEAM_DOMAIN: teamDomain,
 				ACCESS_AUD: audience,
 				ALLOWED_EMAILS: "Alice@example.com, bob@example.com",
+				OUTLINEDB_ENV_OWNERS: "Alice@example.com",
 			},
 			{
 				outboundService: (request: Request): Response =>
@@ -282,7 +283,7 @@ describe("worker routes each Access email to its own Durable Object", () =>
 		);
 
 		expect(viaDo).toStrictEqual([404, 404, 404, 404, 404, 404, 404, 404, 404, 404]);
-		// Alice is in ALLOWED_EMAILS, so her object is a mirror: with no internal API, tags, stars, preferences and
+		// OUTLINEDB_ENV_OWNERS lists Alice, so her object is a mirror: with no internal API, tags, stars, preferences and
 		// expansion answer 503 instead of writing locally and diverging from workflowy.com. Files has the R2 blob store, so
 		// an attachment the object does not have is a 404.
 		expect(viaWorker.map(({status}) => status)).toStrictEqual([200, 200, 200, 200, 503, 503, 503, 503, 404]);
@@ -551,7 +552,7 @@ describe("worker routes each Access email to its own Durable Object", () =>
 				),
 			},
 		);
-		// Alice owns her object through ALLOWED_EMAILS, so it is a mirror; with no API key bound it fails loudly
+		// Alice owns her object through OUTLINEDB_ENV_OWNERS, so it is a mirror; with no API key bound it fails loudly
 		// instead of writing a local-only node that the next sync would phase out.
 		expect(createViaWorker.status).toBe(500);
 		await expect(createViaWorker.json()).resolves.toStrictEqual(
@@ -749,6 +750,7 @@ describe("worker resolves a principal from Access or a Better Auth session", () 
 				ACCESS_TEAM_DOMAIN: teamDomain,
 				ACCESS_AUD: audience,
 				ALLOWED_EMAILS: "alice@example.com, bob@example.com",
+				OUTLINEDB_ENV_OWNERS: "alice@example.com",
 				BETTER_AUTH_SECRET: secret,
 				SIGNUP_MODE: "invite",
 				SIGNUP_INVITES:
@@ -840,8 +842,8 @@ describe("worker resolves a principal from Access or a Better Auth session", () 
 		const status = await carolStore.adminStatus();
 		expect(status.storeName).toBe(carol.userId);
 
-		// Dave is not in ALLOWED_EMAILS, so his object is standalone: account state lives in its local tables, and the
-		// account answers the row provisioning wrote.
+		// OUTLINEDB_ENV_OWNERS does not list Dave, so his object is standalone: account state lives in its local tables, and
+		// the account answers the row provisioning wrote.
 		const call = async (method: string, path: string, body?: unknown) =>
 		{
 			const response = await h.mf.dispatchFetch(

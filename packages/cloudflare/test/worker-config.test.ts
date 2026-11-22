@@ -280,11 +280,12 @@ describe("isStoreOwner", () =>
 		).toStrictEqual([true, true, false, false, false]);
 	});
 
-	it("falls back to ALLOWED_EMAILS when OUTLINEDB_ENV_OWNERS is unset or empty", () =>
+	it("owns nothing when OUTLINEDB_ENV_OWNERS is unset or empty, whatever ALLOWED_EMAILS lists", () =>
 	{
 		const allowed = "Alice@example.com, bob@example.com";
 		expect(
 			[
+				{},
 				{
 					ALLOWED_EMAILS: allowed,
 				},
@@ -292,15 +293,16 @@ describe("isStoreOwner", () =>
 					ALLOWED_EMAILS: allowed,
 					OUTLINEDB_ENV_OWNERS: "",
 				},
-			].map((env) => [isStoreOwner("alice@example.com", env), isStoreOwner("user-123", env)]),
+				{
+					ALLOWED_EMAILS: allowed,
+					OUTLINEDB_ENV_OWNERS: " , ",
+				},
+			].map((env) => [isStoreOwner("alice@example.com", env), isStoreOwner("dev", env)]),
 		).toStrictEqual([
-			[true, false],
-			[true, false],
+			[false, false],
+			[false, false],
+			[false, false],
+			[false, false],
 		]);
-	});
-
-	it("owns nothing when neither list is set", () =>
-	{
-		expect(isStoreOwner("dev", {})).toBe(false);
 	});
 });

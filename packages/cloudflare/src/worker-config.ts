@@ -20,21 +20,24 @@ export interface WorkerSecrets
 	/** The Vectorize index holding node vectors; with AI it turns related notes on. */
 	RELATED_INDEX?: unknown;
 	/**
-	 * Comma-separated Durable Object names that mirror workflowy.com and so get the secrets above; falls back to
-	 * ALLOWED_EMAILS when unset, so the Access-named owner object keeps working with no new secret.
+	 * Comma-separated Durable Object names (or owners' emails) that mirror workflowy.com and so get the secrets above.
+	 * Unset or empty, no object is an owner: ALLOWED_EMAILS only gates Access, never ownership.
 	 */
 	OUTLINEDB_ENV_OWNERS?: string;
 	ALLOWED_EMAILS?: string;
 }
 
-/** Whether the Durable Object named `storeName` is an owner: the one that mirrors workflowy.com with the env secrets. */
+/**
+ * Whether the Durable Object named `storeName` is an owner: the one that mirrors workflowy.com with the env secrets.
+ * Fails closed: only a name OUTLINEDB_ENV_OWNERS lists is one.
+ */
 export function isStoreOwner(storeName: string | undefined, env: WorkerSecrets): boolean
 {
 	if (storeName === undefined)
 	{
 		return false;
 	}
-	const owners = (nonEmpty(env.OUTLINEDB_ENV_OWNERS) ?? env.ALLOWED_EMAILS ?? "")
+	const owners = (env.OUTLINEDB_ENV_OWNERS ?? "")
 		.split(",")
 		.map((entry) => entry.trim().toLowerCase())
 		.filter((entry) => entry !== "");

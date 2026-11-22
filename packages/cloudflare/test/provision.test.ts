@@ -723,17 +723,31 @@ describe("UserStore.provision", () =>
 		);
 	});
 
-	it("switches a fresh object to mirror mode when provisioned as one", async () =>
+	it("switches a fresh object to mirror mode when provisioned as one for an owner's email, and only then", async () =>
 	{
-		const stub = await stubNamed(h, "user-m");
-		const before = (await stub.adminStatus()).mode;
-		await stub.provision(
+		const owner = await stubNamed(h, "user-m");
+		const before = (await owner.adminStatus()).mode;
+		await owner.provision(
 			{
 				userId: "user-m",
-				email: "m@example.com",
+				email: "OWNER@example.com",
 				mode: "mirror",
 			},
 		);
-		expect([before, (await stub.adminStatus()).mode]).toStrictEqual(["standalone", "mirror"]);
+		// A mirror profile whose email OUTLINEDB_ENV_OWNERS does not list (provisioned under an older owners list, or
+		// under the old ALLOWED_EMAILS fallback) never makes its object an owner that syncs workflowy.com.
+		const unlisted = await stubNamed(h, "user-u");
+		await unlisted.provision(
+			{
+				userId: "user-u",
+				email: "u@example.com",
+				mode: "mirror",
+			},
+		);
+		expect([before, (await owner.adminStatus()).mode, (await unlisted.adminStatus()).mode]).toStrictEqual([
+			"standalone",
+			"mirror",
+			"standalone",
+		]);
 	});
 });

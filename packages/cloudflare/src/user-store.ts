@@ -63,9 +63,10 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 	/** Counts every row this object's SQLite reads and writes, index rows included, as Cloudflare bills them. */
 	protected readonly rowMeter = meterRows(this.ctx.storage.sql);
 	/**
-	 * Whether this object mirrors workflowy.com: its name is in `OUTLINEDB_ENV_OWNERS`, or its profile was provisioned
-	 * as a mirror. Only such an object gets the Workflowy secrets and the sync, so another user's object can never read
-	 * or write the owner's account.
+	 * Whether this object mirrors workflowy.com: `OUTLINEDB_ENV_OWNERS` lists its name, or its profile was provisioned
+	 * as a mirror and the list still names that profile's email. Only such an object gets the Workflowy secrets and the
+	 * sync, so another user's object can never read or write the owner's account, and an object the list stops naming
+	 * stops syncing.
 	 */
 	private isOwner = false;
 	/** Persists the Workflowy session cookie in this object's storage; only the owner is seeded from the binding. */
@@ -178,7 +179,9 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 	private configure(): void
 	{
 		const {ctx, env, db} = this;
-		this.isOwner = isStoreOwner(ctx.id.name, env) || readProfile(ctx.storage.kv)?.mode === "mirror";
+		const profile = readProfile(ctx.storage.kv);
+		this.isOwner =
+			isStoreOwner(ctx.id.name, env) || (profile?.mode === "mirror" && isStoreOwner(profile.email, env));
 		// A non-owner never seeds, so a later switch to mirror can still copy the binding's cookie in.
 		this.sessionStore = this.isOwner
 			? kvSessionStore(ctx.storage.kv, env.WORKFLOWY_SESSION_COOKIE)

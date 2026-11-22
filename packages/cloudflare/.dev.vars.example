@@ -5,8 +5,9 @@ WORKFLOWY_PASSWORD=
 WORKFLOWY_SESSION_COOKIE=
 # WORKFLOWY_API_URL=
 # ACCESS_DEV_IDENTITY=dev
-# Comma-separated Durable Object names (Access emails, or dev) that get the Workflowy secrets above and the sync;
-# falls back to ALLOWED_EMAILS when unset. Every other object runs standalone.
+# Comma-separated Durable Object names (user ids, Access emails, or dev) that get the Workflowy secrets above and the
+# sync. Unset, no object syncs (ALLOWED_EMAILS never makes an owner); every object not listed runs standalone. Set it
+# to dev, the object ACCESS_DEV_IDENTITY reaches, for wrangler dev; just dev already defaults it to dev.
 # OUTLINEDB_ENV_OWNERS=dev
 # Better Auth: /api/auth/* answers 503 until this is set (openssl rand -base64 32).
 BETTER_AUTH_SECRET=
