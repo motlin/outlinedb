@@ -1,5 +1,8 @@
-import type DatabaseConstructor from "better-sqlite3";
+import DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
+import {mkdtempSync, rmSync, writeFileSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
 import {afterEach, describe, expect, it, vi} from "vite-plus/test";
 import {applyApiBatch, beginApiImport, finishApiImport} from "../src/cache/api-import.js";
 import {runUnitOfWork} from "../src/cache/node-composite.js";
@@ -129,6 +132,88 @@ describe("transaction timeout", () =>
 			});
 		}).toThrow(new TransactionTimeoutError(systemTimeAt("2026-02-01 00:00:00.000"), TRANSACTION_TIMEOUT_MS + 1));
 		expect(db.select().from(nodeContent).all()).toStrictEqual([]);
+	});
+
+	it("takes the write lock at BEGIN, so another connection's commit cannot stale its snapshot", () =>
+	{
+		const dir = mkdtempSync(join(tmpdir(), "unit-of-work-lock-"));
+		const file = join(dir, "db.sqlite");
+		const template = migratedMemoryDatabase();
+		writeFileSync(file, template.serialize());
+		template.close();
+		const ours = new DatabaseConstructor(file);
+		const theirs = new DatabaseConstructor(
+			file,
+			{
+				timeout: 0,
+			},
+		);
+		open.push(ours, theirs);
+		ours.pragma("journal_mode = WAL");
+		const db = drizzle(
+			ours,
+			{
+				schema,
+			},
+		);
+		let theirWrite = "committed";
+
+		try
+		{
+			runUnitOfWork(db, ({tx, systemTime}) =>
+			{
+				tx.select().from(nodeContent).all();
+				try
+				{
+					theirs
+						.prepare("INSERT INTO node_content (id, name, system_from, system_to) VALUES (?, ?, ?, ?)")
+						.run("theirs", "theirs", systemTime, FAR_FUTURE_DATE);
+				}
+				catch (error)
+				{
+					theirWrite = (
+						error as
+						{
+							code: string;
+						}
+					).code;
+				}
+				insertNode(tx, "ours", systemTime);
+			});
+
+			expect(
+				{
+					theirWrite,
+					ids: db
+						.select(
+							{
+								id: nodeContent.id,
+							},
+						)
+						.from(nodeContent)
+						.all(),
+				},
+			).toStrictEqual(
+				{
+					theirWrite: "SQLITE_BUSY",
+					ids: [
+						{
+							id: "ours",
+						},
+					],
+				},
+			);
+		}
+		finally
+		{
+			rmSync(
+				dir,
+				{
+					recursive: true,
+					force: true,
+				},
+			);
+		}
 	});
 
 	it("names the system time and the elapsed time in the error", () =>

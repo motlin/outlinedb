@@ -1,4 +1,4 @@
-import {newSystemTimestamp} from "@outlinedb/shared/cache";
+import {newSystemTimestamp, WRITE_TRANSACTION} from "@outlinedb/shared/cache";
 import {nodeEmbeddings} from "@outlinedb/shared/db";
 import type {AppDatabase} from "@outlinedb/shared/db";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
@@ -116,7 +116,7 @@ export class SqliteVecIndex implements EmbeddingIndex
 					})),
 				)
 				.run();
-		});
+		}, WRITE_TRANSACTION);
 	}
 
 	delete(ids: string[]): void

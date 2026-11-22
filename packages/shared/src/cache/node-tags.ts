@@ -6,6 +6,7 @@
 import {sql} from "drizzle-orm";
 import {itemTags} from "../tags/item-tags.js";
 import {FAR_FUTURE_DATE} from "../temporal/constants.js";
+import {WRITE_TRANSACTION} from "./temporal-merge.js";
 import type {TemporalTransaction} from "./temporal-merge.js";
 
 /**
@@ -182,6 +183,6 @@ export function ensureNodeTags(database: TemporalTransaction): void
 		database.transaction((tx) =>
 		{
 			rebuildNodeTags(tx);
-		});
+		}, WRITE_TRANSACTION);
 	}
 }

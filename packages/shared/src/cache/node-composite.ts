@@ -47,7 +47,7 @@ import {assertWithinTransactionTimeout, startUnitOfWork} from "./system-time.js"
 import type {UnitOfWorkStart} from "./system-time.js";
 import {syncNodeTags} from "./node-tags.js";
 import {inIds} from "./in-ids.js";
-import {closeCurrentVersions} from "./temporal-merge.js";
+import {closeCurrentVersions, WRITE_TRANSACTION} from "./temporal-merge.js";
 import type {TemporalTransaction} from "./temporal-merge.js";
 
 /**
@@ -238,7 +238,7 @@ export function runUnitOfWork<T>(
 		syncNodeTags(tx, start.systemTime, tagScope);
 		assertWithinTransactionTimeout(start);
 		return result;
-	});
+	}, WRITE_TRANSACTION);
 }
 
 const ROOT_AND_PARTS: readonly CompositePart[] = [NODE_COMPOSITE_ROOT, ...NODE_COMPOSITE_PARTS];

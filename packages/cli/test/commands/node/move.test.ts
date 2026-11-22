@@ -341,7 +341,7 @@ describe("node:move command", () =>
 				},
 			).toStrictEqual(
 				{
-					error: "Saved locally, but delivering it to workflowy.com failed: Workflowy rejected the operations: upstream_rejected\n1 outbox row pending; they go out on the next write or with 'outbox drain'.",
+					error: "Saved locally (moved node source-id), but delivering it to workflowy.com failed: Workflowy rejected the operations: upstream_rejected\n1 outbox row pending; they go out on the next write or with 'outbox drain'.",
 					exit: 1,
 					target: ["source-id", "existing-id"],
 					pending: [

@@ -119,10 +119,10 @@ async function drainPending({database, adapter}: LocalWrites): Promise<OutboxSta
 }
 
 /**
- * Deliver the pending outbox: one drain. A failed drain keeps the local writes and their pending rows, prints how many
- * are pending and why, and exits non-zero.
+ * Deliver the pending outbox: one drain. A failed drain keeps the local writes and their pending rows, prints what
+ * landed (`saved`, such as the created node's id), how many rows are pending and why, and exits non-zero.
  */
-export async function drainAfterWrite(command: Command, writes: LocalWrites): Promise<void>
+export async function drainAfterWrite(command: Command, writes: LocalWrites, saved?: string): Promise<void>
 {
 	let failure: string;
 	try
@@ -140,7 +140,7 @@ export async function drainAfterWrite(command: Command, writes: LocalWrites): Pr
 	}
 	const {pending} = outboxStatus(writes.database);
 	command.error(
-		`Saved locally, but delivering it to workflowy.com failed: ${failure}\n` +
+		`Saved locally${saved === undefined ? "" : ` (${saved})`}, but delivering it to workflowy.com failed: ${failure}\n` +
 			`${pending} outbox row${pending === 1 ? "" : "s"} pending; they go out on the next write or with 'outbox drain'.`,
 		{
 			exit: 1,

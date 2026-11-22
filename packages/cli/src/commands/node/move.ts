@@ -182,7 +182,7 @@ export default class Move extends Command
 		{
 			const writes = openLocalWrites(database, client);
 			await write(writes.local);
-			await drainAfterWrite(this, writes);
+			await drainAfterWrite(this, writes, `moved node ${nodeId}`);
 
 			this.log(`Successfully moved node`);
 		}

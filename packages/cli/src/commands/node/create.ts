@@ -362,7 +362,7 @@ export default class Create extends Command
 			this.log(`Parent: ${parentPath}`);
 
 			const id = await write(writes.local);
-			await drainAfterWrite(this, writes);
+			await drainAfterWrite(this, writes, `created node ${id}`);
 
 			const createdAt = cacheService.getNode(id)?.createdAt ?? new Date();
 			this.log("");
@@ -494,7 +494,7 @@ export default class Create extends Command
 		this.log("");
 
 		await write(writes.local);
-		await drainAfterWrite(this, writes);
+		await drainAfterWrite(this, writes, `created nodes ${created.map(({node}) => node.id).join(", ")}`);
 
 		for (const {node} of created)
 		{

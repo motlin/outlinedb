@@ -439,7 +439,7 @@ describe("node create command", () =>
 			).toStrictEqual(
 				{
 					stdout: "Creating node: Test Node\nParent: Parent\n",
-					error: "Saved locally, but delivering it to workflowy.com failed: Workflowy rejected the operations: upstream_rejected\n2 outbox rows pending; they go out on the next write or with 'outbox drain'.",
+					error: `Saved locally (created node ${uuid(2)}), but delivering it to workflowy.com failed: Workflowy rejected the operations: upstream_rejected\n2 outbox rows pending; they go out on the next write or with 'outbox drain'.`,
 					exit: 1,
 					local: [
 						{

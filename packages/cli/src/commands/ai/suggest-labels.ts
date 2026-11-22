@@ -1,4 +1,4 @@
-import {newSystemTimestamp} from "@outlinedb/shared/cache";
+import {newSystemTimestamp, WRITE_TRANSACTION} from "@outlinedb/shared/cache";
 import {resolveIdOrShortId} from "@outlinedb/shared/utils";
 import {Command, Flags} from "@oclif/core";
 import path from "node:path";
@@ -152,7 +152,7 @@ export default class SuggestLabels extends Command
 				database.transaction((tx) =>
 				{
 					saveLabelSuggestions(tx, entry, suggestions, newSystemTimestamp());
-				});
+				}, WRITE_TRANSACTION);
 			}
 		}
 

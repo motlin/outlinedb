@@ -1,4 +1,4 @@
-import {rebuildNodeTags} from "@outlinedb/shared/cache";
+import {rebuildNodeTags, WRITE_TRANSACTION} from "@outlinedb/shared/cache";
 import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
 import {Command, Flags} from "@oclif/core";
 import {sql} from "drizzle-orm";
@@ -230,7 +230,7 @@ export default class TemporalRollback extends Command
 			}
 			// node_tags is derived from the live content this just rewound, outside any unit of work.
 			rebuildNodeTags(tx);
-		});
+		}, WRITE_TRANSACTION);
 
 		this.log(
 			`\nRollback complete. ${totalPurged.toLocaleString()} rows purged, ${totalRestored.toLocaleString()} rows restored.`,

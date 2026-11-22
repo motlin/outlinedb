@@ -12,7 +12,7 @@ import
 	newSystemTimestamp,
 	startUnitOfWork,
 } from "./system-time.js";
-import {closeCurrentVersions, SameMicrosecondOverwriteError} from "./temporal-merge.js";
+import {closeCurrentVersions, SameMicrosecondOverwriteError, WRITE_TRANSACTION} from "./temporal-merge.js";
 import type {TemporalTransaction} from "./temporal-merge.js";
 
 /** The `api_import_timestamp` name of an in-flight bulk import's lease; its timestamp is when the lease expires. */
@@ -70,31 +70,26 @@ export function runBulkUnitOfWork<T>(
 	);
 	try
 	{
-		return database.transaction(
-			(tx) =>
+		return database.transaction((tx) =>
+		{
+			const stamp = systemTime === undefined ? newSystemTimestamp() : formatTemporalTimestamp(systemTime);
+			const at = systemTime ?? parseTemporalTimestamp(stamp);
+			const start =
 			{
-				const stamp = systemTime === undefined ? newSystemTimestamp() : formatTemporalTimestamp(systemTime);
-				const at = systemTime ?? parseTemporalTimestamp(stamp);
-				const start =
+				systemTime: stamp,
+				startedAt: lease.startedAt,
+			};
+			const result = work(
 				{
-					systemTime: stamp,
-					startedAt: lease.startedAt,
-				};
-				const result = work(
-					{
-						tx,
-						systemTime: start.systemTime,
-					},
-					at,
-				);
-				syncNodeTags(tx, start.systemTime);
-				assertWithinTransactionTimeout(start, BULK_IMPORT_TIMEOUT_MS);
-				return result;
-			},
-			{
-				behavior: "immediate",
-			},
-		);
+					tx,
+					systemTime: start.systemTime,
+				},
+				at,
+			);
+			syncNodeTags(tx, start.systemTime);
+			assertWithinTransactionTimeout(start, BULK_IMPORT_TIMEOUT_MS);
+			return result;
+		}, WRITE_TRANSACTION);
 	}
 	finally
 	{

@@ -185,6 +185,7 @@ export
 	type TemporalMergeResult,
 	temporalMerge,
 	type TemporalTransaction,
+	WRITE_TRANSACTION,
 } from "./temporal-merge.js";
 export {type DeletePlan, type MirrorPromotion, planSubtreeDelete} from "./delete-plan.js";
 export {planBlockSlot, planSlot, type SlotPlan} from "./slot-plan.js";

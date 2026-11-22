@@ -113,6 +113,17 @@ export interface TemporalMergeConfig<TIncoming, TCurrent>
 export type TemporalTransaction = BaseSQLiteDatabase<"sync", any, any, any>;
 
 /**
+ * How a writing transaction begins: `BEGIN IMMEDIATE` takes the write lock up front, so the busy timeout covers waiting
+ * for another process's writer. A deferred transaction reads first and upgrades at its first write; if another
+ * connection committed in between (the dev server's catch-up importing the echo of a CLI push), WAL refuses the
+ * upgrade with SQLITE_BUSY_SNAPSHOT, which no busy timeout retries. Durable Object SQLite ignores it.
+ */
+export const WRITE_TRANSACTION =
+{
+	behavior: "immediate",
+} as const;
+
+/**
  * A unit of work tried to close a current version whose `system_from` is the
  * unit's own system time. Closing it would leave an empty interval and block
  * the new version's key, and deleting it (Reladomo's "changed too fast") would
