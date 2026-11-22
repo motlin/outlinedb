@@ -13,6 +13,7 @@ import
 	defaultLogPath,
 	insertIndexRightOf,
 	isShellPrompt,
+	paneCommand,
 	parseArgs,
 	runWhenReady,
 	socketRequest,
@@ -66,6 +67,7 @@ test("parseArgs splits the label, cwd, and command after --", () =>
 			focus: true,
 			command: ["/bin/sweep.sh", "arg"],
 			log: undefined,
+			noLog: false,
 		},
 	);
 });
@@ -112,9 +114,30 @@ test("wrapWithLog tees combined output to the log and appends the command's own 
 	);
 });
 
-test("parseArgs honours --no-focus", () =>
+test("parseArgs honours --no-focus and --no-log", () =>
 {
-	assert.strictEqual(parseArgs(["--label", "x", "--no-focus", "--", "echo"]).focus, false);
+	assert.deepStrictEqual(
+		parseArgs(["--label", "x", "--no-focus", "--no-log", "--", "claude"]),
+		{
+			label: "x",
+			cwd: parseArgs(["--label", "x", "--", "claude"]).cwd,
+			focus: false,
+			command: ["claude"],
+			log: undefined,
+			noLog: true,
+		},
+	);
+});
+
+test("paneCommand tees to the log, or runs the command bare so an interactive session keeps its TTY", () =>
+{
+	assert.deepStrictEqual(
+		[paneCommand(["just", "sync"], "/l.log"), paneCommand(["claude", "/fix it"], undefined)],
+		[
+			"( 'just' 'sync' ) 2>&1 | tee '/l.log'; echo \"[exit ${pipestatus[1]:-${PIPESTATUS[0]}}]\" >> '/l.log'",
+			"'claude' '/fix it'",
+		],
+	);
 });
 
 test("parseArgs requires a label and a command", () =>

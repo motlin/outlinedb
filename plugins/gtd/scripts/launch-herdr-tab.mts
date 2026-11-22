@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 // Open a labelled herdr tab immediately right of the caller's tab and run a command in it.
-// Usage: launch-herdr-tab.mts --label <label> [--cwd <dir>] [--log <path>] [--no-focus] -- <command...>
+// Usage: launch-herdr-tab.mts --label <label> [--cwd <dir>] [--log <path> | --no-log] [--no-focus] -- <command...>
 // The command's combined output and exit code are teed to --log, by default
 // <cwd of this script's caller>/.llm/gtd/review/logs/<label>-<YYYY-MM-DD>.log, so the result
-// survives the user closing the tab.
+// survives the user closing the tab. --no-log runs the command bare instead: the tee pipe
+// gives the command a non-TTY stdout, so an interactive program such as claude answers once
+// and exits.
 // `herdr tab create` always appends the tab last and the CLI has no move command, so the
 // reposition goes through the socket API's `tab.move` request.
 import {execFileSync} from "node:child_process";
@@ -23,6 +25,7 @@ export interface LaunchOptions
 	focus: boolean;
 	command: string[];
 	log: string | undefined;
+	noLog: boolean;
 }
 
 export interface HerdrTab
@@ -56,6 +59,7 @@ export function parseArgs(argv: string[]): LaunchOptions
 		focus: !options.includes("--no-focus"),
 		command,
 		log: value("--log"),
+		noLog: options.includes("--no-log"),
 	};
 }
 
@@ -90,6 +94,13 @@ export function wrapWithLog(command: string, logPath: string): string
 {
 	const log = shellQuote(logPath);
 	return `( ${command} ) 2>&1 | tee ${log}; echo "[exit \${pipestatus[1]:-\${PIPESTATUS[0]}}]" >> ${log}`;
+}
+
+/** The text typed into the pane: the command teed to `logPath`, or bare when there is no log. */
+export function paneCommand(command: readonly string[], logPath: string | undefined): string
+{
+	const shellCommand = toShellCommand(command);
+	return logPath === undefined ? shellCommand : wrapWithLog(shellCommand, logPath);
 }
 
 export function insertIndexRightOf(tabs: readonly HerdrTab[], workspaceId: string, callerTabId: string): number
@@ -290,14 +301,17 @@ export async function runWhenReady(
 
 async function main(): Promise<void>
 {
-	const {label, cwd, focus, command, log} = parseArgs(process.argv.slice(2));
-	const logPath = log ?? defaultLogPath(process.cwd(), label, new Date());
-	mkdirSync(
-		dirname(logPath),
-		{
-			recursive: true,
-		},
-	);
+	const {label, cwd, focus, command, log, noLog} = parseArgs(process.argv.slice(2));
+	const logPath = noLog ? undefined : (log ?? defaultLogPath(process.cwd(), label, new Date()));
+	if (logPath !== undefined)
+	{
+		mkdirSync(
+			dirname(logPath),
+			{
+				recursive: true,
+			},
+		);
+	}
 	const caller = expectObject(herdr("pane", "current").pane, "herdr pane");
 	const workspaceId = requireString(caller, "workspace_id");
 	const callerTabId = requireString(caller, "tab_id");
@@ -358,7 +372,7 @@ async function main(): Promise<void>
 			},
 			sleep: delay,
 		},
-		wrapWithLog(toShellCommand(command), logPath),
+		paneCommand(command, logPath),
 	);
 	process.stdout.write(
 		`${JSON.stringify(
@@ -369,7 +383,7 @@ async function main(): Promise<void>
 				paneId,
 				workspaceId,
 				rightOfTabId: callerTabId,
-				logPath,
+				logPath: logPath ?? null,
 			},
 			null,
 			"\t",
