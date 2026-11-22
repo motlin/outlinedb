@@ -145,6 +145,13 @@ const responses: Partial<Record<string, () => Response>> =
 				sections: {},
 			},
 		),
+	"/api/v1/sync-status": () =>
+		Response.json(
+			{
+				phase: "idle",
+				applied: 0,
+			},
+		),
 	"/api/v1/stars": () =>
 		Response.json(
 			{

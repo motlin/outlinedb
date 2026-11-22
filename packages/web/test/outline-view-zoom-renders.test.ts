@@ -290,6 +290,8 @@ describe("55-row OutlineView renders", () =>
 				...LEFT_BAR,
 				FilesListBranch: ROWS,
 				...TREE_FRAME,
+				// Once to mount and once when the sync status answers.
+				SyncStoppedNotice: 2,
 				OutlineRow: ROWS,
 				NodeName: ROWS,
 				RestingText: ROWS,

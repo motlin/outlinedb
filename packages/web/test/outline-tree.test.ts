@@ -1083,6 +1083,38 @@ describe("OutlineTree empty account", () =>
 		);
 	}
 
+	/** The sync-stopped banner's text, one entry per block, or null when none renders. */
+	function syncStoppedText(html: string): string[] | null
+	{
+		const start = html.indexOf('<section class="sync-stopped-notice');
+		if (start === -1)
+		{
+			return null;
+		}
+		const banner = html.slice(start, html.indexOf("</section>", start));
+		return [...banner.matchAll(/<p>(.*?)<\/p>/gu)].map(([, text]) => text.replaceAll(/<[^>]+>/gu, ""));
+	}
+
+	/** The main pane's page shell over the unzoomed outline. */
+	function renderPage(): string
+	{
+		return renderToStaticMarkup(
+			createElement(
+				QueryClientProvider,
+				{
+					client: new QueryClient(),
+				},
+				createElement(
+					OutlineTree,
+					{
+						parentId: null,
+						shell: "page",
+					},
+				),
+			),
+		);
+	}
+
 	it("points a signed-in user whose outline is empty at the add-child button, with no tips of its own", () =>
 	{
 		accountSync =
@@ -1180,7 +1212,7 @@ describe("OutlineTree empty account", () =>
 		]);
 	});
 
-	it("shows a sync stopped until an admin seed, since nothing retries it on a schedule", () =>
+	it("shows a sync stopped until an admin seed in the main page's banner, not the empty panel or a side pane, whatever the outline holds", () =>
 	{
 		accountSync =
 		{
@@ -1188,10 +1220,48 @@ describe("OutlineTree empty account", () =>
 			applied: 0,
 			error: "A catch-up needs internal auth (WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD)",
 		};
-		expect(emptyOutlineText(render())).toStrictEqual([
-			"Sync stopped",
-			"A catch-up needs internal auth (WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD)",
+		const banner = [
+			"Sync stopped. A catch-up needs internal auth (WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD)",
 			"Nothing retries it on a schedule; an admin seed restarts the sync.",
+		];
+		const empty = renderPage();
+		childrenByParent.set(null, [
+			makeNode(
+				{
+					hasChildren: true,
+				},
+			),
+		]);
+		const nonEmpty = renderPage();
+		const sidePane = render();
+		accountSync =
+		{
+			phase: "idle",
+			applied: 0,
+		};
+		expect(
+			[empty, nonEmpty, sidePane, renderPage()].map((html) => (
+			{
+				panel: emptyOutlineText(html),
+				banner: syncStoppedText(html),
+			})),
+		).toStrictEqual([
+			{
+				panel: null,
+				banner,
+			},
+			{
+				panel: null,
+				banner,
+			},
+			{
+				panel: null,
+				banner: null,
+			},
+			{
+				panel: null,
+				banner: null,
+			},
 		]);
 	});
 
