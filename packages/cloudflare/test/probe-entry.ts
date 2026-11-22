@@ -1,17 +1,101 @@
+import {AsyncLocalStorage} from "node:async_hooks";
 import {CacheService} from "@outlinedb/shared/cache";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import * as dbSchema from "@outlinedb/shared/db";
 import {drizzle} from "drizzle-orm/durable-sqlite";
 import type {OpInput, OpName, OpOutput, OpResult} from "@outlinedb/web/server-app";
 import {AlarmSchedule} from "../src/alarm-schedule";
+import type {RowCounts} from "../src/row-meter";
+import type {SyncStatus} from "../src/sync";
 import {UserStore} from "../src/user-store";
-import type {ProvisionInput, ProvisionResult} from "../src/user-store";
+import type {AccountSync, AdminStatus, ProvisionInput, ProvisionResult} from "../src/user-store";
 import worker from "../src/worker";
+
+type Cursor = SqlStorageCursor<Record<string, SqlStorageValue>>;
+
+/**
+ * How the statements of the async context in progress are metered: "unmetered" bypasses the object's row meter (the
+ * tests' own reads, such as status polls, are no cost of what they measure), and an array collects each cursor so a
+ * measured call counts only its own rows, however other work interleaves with it.
+ */
+const metering = new AsyncLocalStorage<"unmetered" | Cursor[]>();
 
 /** Test-only subclass exposing the DO's raw SQLite state. */
 export class ProbeStore extends UserStore
 {
 	private calls = 0;
+
+	constructor(ctx: DurableObjectState, env: ConstructorParameters<typeof UserStore>[1])
+	{
+		super(ctx, env);
+		const {sql} = ctx.storage;
+		const metered = sql.exec.bind(sql);
+		// The prototype's exec, which the row meter shadows with its own property.
+		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the prototype is SqlStorage's
+		const unmetered = (Object.getPrototypeOf(sql) as SqlStorage).exec.bind(sql);
+		Object.defineProperty(
+			sql,
+			"exec",
+			{
+				value: <T extends Record<string, SqlStorageValue>>(query: string, ...bindings: unknown[]) =>
+				{
+					const scope = metering.getStore();
+					if (scope === "unmetered")
+					{
+						return unmetered<T>(query, ...bindings);
+					}
+					const cursor = metered<T>(query, ...bindings);
+					scope?.push(cursor);
+					return cursor;
+				},
+				configurable: true,
+			},
+		);
+	}
+
+	override async syncStatus(): Promise<SyncStatus>
+	{
+		return metering.run("unmetered", async () => super.syncStatus());
+	}
+
+	override async accountSync(): Promise<AccountSync>
+	{
+		return metering.run("unmetered", async () => super.accountSync());
+	}
+
+	override async adminStatus(): Promise<AdminStatus>
+	{
+		return metering.run("unmetered", async () => super.adminStatus());
+	}
+
+	/** Drain the outbox as the alarm does, counting only the rows the drain read and wrote, and why it failed. */
+	// fallow-ignore-next-line unused-class-member -- tests invoke it over RPC
+	async measuredDrain(): Promise<
+		RowCounts &
+		{
+			error: string | null;
+		}
+	>
+	{
+		const cursors: Cursor[] = [];
+		const error = await metering.run(cursors, async () =>
+		{
+			try
+			{
+				await this.drainOutbox?.();
+				return null;
+			}
+			catch (thrown)
+			{
+				return thrown instanceof Error ? thrown.message : String(thrown);
+			}
+		});
+		return {
+			rowsRead: cursors.reduce((sum, cursor) => sum + cursor.rowsRead, 0),
+			rowsWritten: cursors.reduce((sum, cursor) => sum + cursor.rowsWritten, 0),
+			error,
+		};
+	}
 
 	/** Counts every op so tests can assert the one-call-per-request rule. */
 	override async call<K extends OpName>(op: K, input: OpInput<K>): Promise<OpResult<OpOutput<K>>>
@@ -30,14 +114,15 @@ export class ProbeStore extends UserStore
 	override fetch(request: Request): Response
 	{
 		const url = new URL(request.url);
-		if (url.pathname === "/__rows-written")
+		if (url.pathname === "/__rows")
 		{
-			return Response.json(
-				{
-					rowsWritten: this.rowMeter.rowsWritten(),
-				},
-			);
+			return Response.json(this.rowMeter.rows());
 		}
+		return metering.run("unmetered", () => this.probe(request, url));
+	}
+
+	private probe(request: Request, url: URL): Response
+	{
 		if (url.pathname === "/__alarm-due")
 		{
 			const job = url.searchParams.get("job");
@@ -163,7 +248,8 @@ export class ProbeStore extends UserStore
 				{
 					runs: sql
 						.exec(
-							`SELECT phase, applied, status, ${live} AS live FROM sync_runs ORDER BY system_from, run_id`,
+							`SELECT phase, applied, status, rows_read AS rowsRead, rows_written AS rowsWritten, ${live} AS live ` +
+								"FROM sync_runs ORDER BY system_from, run_id",
 						)
 						.toArray(),
 					runSystemFroms: Number(sql.exec("SELECT count(DISTINCT system_from) AS n FROM sync_runs").one().n),

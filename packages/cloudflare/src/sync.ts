@@ -19,6 +19,7 @@ import {TreeResyncRequired} from "@outlinedb/shared/internal";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import type {JobAlarm} from "./alarm-schedule";
 import {nodeBatches} from "./export-stream";
+import type {RowCounts} from "./row-meter";
 import {createWithMicrosecondSystemTimes} from "./text-system-times";
 
 const BATCH_SIZE = 2000;
@@ -66,6 +67,7 @@ CREATE TABLE IF NOT EXISTS sync_runs (
 	internal_sync_error TEXT,
 	snapshot_at INTEGER,
 	rows_written INTEGER,
+	rows_read INTEGER,
 	system_from INTEGER NOT NULL,
 	system_to INTEGER NOT NULL,
 	PRIMARY KEY (run_id, system_from)
@@ -130,8 +132,8 @@ export interface SyncDeps
 	readAccount?: (signal: AbortSignal) => Promise<StoredAccount> | undefined;
 	/** Where the next run is scheduled; the object's own alarm unless the alarm is shared with other jobs. */
 	alarm?: JobAlarm;
-	/** Rows the object's SQLite has written so far, index rows included; a run reports how many it wrote. */
-	rowsWritten?: () => number;
+	/** Rows the object's SQLite has read and written so far, index rows included; a run reports how many it used. */
+	rows?: () => RowCounts;
 	now?: () => number;
 }
 
@@ -156,9 +158,16 @@ interface Job
 	snapshotAt?: number;
 	/** The run's result so far: a rate limit while it still fetches, or how it finished. */
 	result: SyncResult | null;
-	/** Rows the run's earlier alarm runs wrote, index rows included. */
+	/** Rows the run's earlier alarm runs read and wrote, index rows included. */
+	rowsRead: number;
 	rowsWritten: number;
 }
+
+const NO_ROWS: RowCounts =
+{
+	rowsRead: 0,
+	rowsWritten: 0,
+};
 
 const NO_TOTALS: Job["totals"] =
 {
@@ -184,6 +193,8 @@ export type SyncResult =
 				 * the public import still completed, the edge tables did not.
 				 */
 				internalSyncError?: string;
+				/** Rows the run read, index rows included, up to its final record; set once the run is stored. */
+				rowsRead?: number;
 				/** Rows the run wrote, index rows included, up to its final record; set once the run is stored. */
 				rowsWritten?: number;
 			})
@@ -224,7 +235,7 @@ export class SyncJob
 	/** The system time of the alarm run in progress: every sync-table version it writes takes this one value. */
 	private systemTime = newSystemTimestamp();
 	/** The meter's reading when the alarm run in progress began. */
-	private rowsAtTick = 0;
+	private rowsAtTick: RowCounts = NO_ROWS;
 
 	constructor(private readonly deps: SyncDeps)
 	{
@@ -239,7 +250,7 @@ export class SyncJob
 			SYSTEM_TIMES,
 		);
 		const runColumns = sql.exec("SELECT name FROM pragma_table_info('sync_runs')").toArray();
-		for (const column of ["snapshot_at", "rows_written"])
+		for (const column of ["snapshot_at", "rows_written", "rows_read"])
 		{
 			if (!runColumns.some((row) => row.name === column))
 			{
@@ -263,9 +274,9 @@ export class SyncJob
 		return (this.deps.now ?? Date.now)();
 	}
 
-	private rowsWritten(): number
+	private rows(): RowCounts
 	{
-		return this.deps.rowsWritten?.() ?? 0;
+		return this.deps.rows?.() ?? NO_ROWS;
 	}
 
 	/** The live version of the run in progress, or null when idle. */
@@ -309,7 +320,7 @@ export class SyncJob
 			"INSERT OR REPLACE INTO sync_runs (run_id, phase, export_key, applied, started_at, total_nodes, nodes_added, " +
 				"nodes_updated, nodes_unchanged, nodes_deleted, nodes_phased_out, content_updated, metadata_updated, " +
 				"priority_updated, status, message, result_at, duration_ms, internal_sync_error, snapshot_at, rows_written, " +
-				"system_from, system_to) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+				"rows_read, system_from, system_to) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 			job.runId,
 			job.phase,
 			job.exportKey,
@@ -330,7 +341,8 @@ export class SyncJob
 			(ok ?? caughtUp)?.durationMs ?? null,
 			(ok ?? caughtUp)?.internalSyncError ?? null,
 			job.snapshotAt ?? null,
-			job.rowsWritten + this.rowsWritten() - this.rowsAtTick,
+			job.rowsWritten + this.rows().rowsWritten - this.rowsAtTick.rowsWritten,
+			job.rowsRead + this.rows().rowsRead - this.rowsAtTick.rowsRead,
 			this.systemTime,
 			FAR_FUTURE_DATE,
 		);
@@ -398,6 +410,7 @@ export class SyncJob
 			totals: NO_TOTALS,
 			startedAt: this.now(),
 			result: null,
+			rowsRead: 0,
 			rowsWritten: 0,
 		};
 	}
@@ -450,7 +463,7 @@ export class SyncJob
 	async tick(): Promise<void>
 	{
 		this.systemTime = newSystemTimestamp();
-		this.rowsAtTick = this.rowsWritten();
+		this.rowsAtTick = this.rows();
 		let job = this.readJob();
 		if (job === null)
 		{
@@ -522,6 +535,7 @@ export class SyncJob
 						applied: 0,
 						totals: NO_TOTALS,
 						startedAt,
+						rowsRead: 0,
 						rowsWritten: 0,
 						result:
 						{
@@ -546,6 +560,7 @@ export class SyncJob
 					applied: 0,
 					totals: NO_TOTALS,
 					startedAt,
+					rowsRead: 0,
 					rowsWritten: 0,
 					result:
 					{
@@ -893,6 +908,7 @@ function jobFromRow(row: Record<string, SqlStorageValue>): Job
 			nodesDeleted: count("nodes_deleted"),
 			nodesPhasedOut: count("nodes_phased_out"),
 			priorityUpdated: count("priority_updated"),
+			rowsRead: count("rows_read"),
 			rowsWritten: count("rows_written"),
 			...(internalSyncError === undefined
 				? {}
@@ -935,6 +951,7 @@ function jobFromRow(row: Record<string, SqlStorageValue>): Job
 		applied: count("applied"),
 		totals,
 		startedAt: count("started_at"),
+		rowsRead: count("rows_read"),
 		rowsWritten: count("rows_written"),
 		...(typeof snapshotAt === "number"
 			?

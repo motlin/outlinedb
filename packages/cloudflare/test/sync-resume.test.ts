@@ -8,7 +8,8 @@ import
 	makeNodes,
 	POLL_MS,
 	rowsPerSystemTime,
-	rowsWritten,
+	rows,
+	rowsSince,
 	runToIdle,
 	sleep,
 	status,
@@ -22,7 +23,18 @@ describe("sync resumes and keeps local writes across runs", () =>
 
 	it("resumes after the object restarts between batches, stamping each alarm run with its own system time", async () =>
 	{
-		up.current = makeNodes(50);
+		// Every node carries a tag, so each batch's node_tags rewrite is part of what the run versions below meter.
+		up.current = makeNodes(
+			50,
+			new Map(
+				Array.from(
+					{
+						length: 50,
+					},
+					(_, i) => [i, `node ${i} #tag`],
+				),
+			),
+		);
 		const first = await up.start(
 			undefined,
 			{
@@ -91,7 +103,9 @@ describe("sync resumes and keeps local writes across runs", () =>
 		await expect(liveIds(second)).resolves.toHaveLength(50);
 		// Each alarm run is its own unit of work with a fresh system time, so no stamp outlives one run.
 		await expect(rowsPerSystemTime(second)).resolves.toStrictEqual([20, 20, 10]);
-		// One run version per alarm run.
+		// One run version per alarm run, each carrying the rows the run has read and written so far. Cost budget: a batch
+		// rewrites its own nodes' content, metadata and tag rows, never an earlier batch's, so each alarm run adds a share
+		// proportional to its batch. If these change, justify the new numbers in the commit.
 		await expect(syncTables(second)).resolves.toStrictEqual(
 			{
 				runs: [
@@ -99,18 +113,24 @@ describe("sync resumes and keeps local writes across runs", () =>
 						phase: "importing",
 						applied: 20,
 						status: null,
+						rowsRead: 549,
+						rowsWritten: 272,
 						live: 0,
 					},
 					{
 						phase: "importing",
 						applied: 40,
 						status: null,
+						rowsRead: 1092,
+						rowsWritten: 538,
 						live: 0,
 					},
 					{
 						phase: "idle",
 						applied: 50,
 						status: "ok",
+						rowsRead: 1770,
+						rowsWritten: 674,
 						live: 1,
 					},
 				],
@@ -121,7 +141,7 @@ describe("sync resumes and keeps local writes across runs", () =>
 
 		// An identical export spanning three alarm runs changes nothing, so the nodes an earlier alarm run passed over
 		// count as seen only from the export's applied prefix; otherwise the finish would phase them out.
-		const beforeAgain = await rowsWritten(second);
+		const beforeAgain = await rows(second);
 		const again = await runToIdle(second, 1);
 		const
 		{
@@ -134,7 +154,7 @@ describe("sync resumes and keeps local writes across runs", () =>
 			{
 				result: againResult,
 				live: (await liveIds(second)).length,
-				rowsWritten: (await rowsWritten(second)) - beforeAgain,
+				rows: await rowsSince(second, beforeAgain),
 			},
 		).toStrictEqual(
 			{
@@ -151,11 +171,17 @@ describe("sync resumes and keeps local writes across runs", () =>
 					metadataUpdated: 0,
 					priorityUpdated: 0,
 					// Up to the run's final record, which the meter reading below includes.
+					rowsRead: 1554,
 					rowsWritten: 15,
 				},
 				live: 50,
-				// A version of the run per alarm run, and no row per node.
-				rowsWritten: 26,
+				// Cost budget: a version of the run per alarm run, and no row written per node. If these change, justify the
+				// new numbers in the commit.
+				rows:
+				{
+					rowsRead: 1614,
+					rowsWritten: 26,
+				},
 			},
 		);
 		await up.stop(second);

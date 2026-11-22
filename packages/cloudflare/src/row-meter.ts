@@ -1,30 +1,37 @@
-/** Rows a Durable Object's SQLite has written since the meter was installed, index rows included. */
+/** Rows a Durable Object's SQLite has read and written, index rows included, as Cloudflare bills them. */
+export interface RowCounts
+{
+	rowsRead: number;
+	rowsWritten: number;
+}
+
+/** Rows a Durable Object's SQLite has read and written since the meter was installed. */
 export interface RowMeter
 {
-	rowsWritten(): number;
+	rows(): RowCounts;
 }
 
 /**
- * Count the rows every `sql.exec` writes, index rows included, as Cloudflare bills them. Installed once on the
- * object's `SqlStorage`, so drizzle and the jobs' raw SQL are all counted. A statement's count is final once it has
- * run, so each cursor is folded in when the next statement starts.
+ * Count the rows every `sql.exec` reads and writes, index rows included, as Cloudflare bills them. Installed once on
+ * the object's `SqlStorage`, so drizzle and the jobs' raw SQL are all counted. A statement's counts are final once it
+ * has run, so each cursor is folded in when the next statement starts.
  */
-export function meterRowsWritten(sql: SqlStorage): RowMeter
+export function meterRows(sql: SqlStorage): RowMeter
 {
 	const exec = sql.exec.bind(sql);
-	let settled = 0;
-	let last:
-		|
-		  {
-				readonly rowsWritten: number;
-		  }
-		| undefined;
+	const settled: RowCounts =
+	{
+		rowsRead: 0,
+		rowsWritten: 0,
+	};
+	let last: RowCounts | undefined;
 	const metered = <T extends Record<string, SqlStorageValue>>(
 		query: string,
 		...bindings: unknown[]
 	): SqlStorageCursor<T> =>
 	{
-		settled += last?.rowsWritten ?? 0;
+		settled.rowsRead += last?.rowsRead ?? 0;
+		settled.rowsWritten += last?.rowsWritten ?? 0;
 		const cursor = exec<T>(query, ...bindings);
 		last = cursor;
 		return cursor;
@@ -38,6 +45,10 @@ export function meterRowsWritten(sql: SqlStorage): RowMeter
 		},
 	);
 	return {
-		rowsWritten: () => settled + (last?.rowsWritten ?? 0),
+		rows: () => (
+		{
+			rowsRead: settled.rowsRead + (last?.rowsRead ?? 0),
+			rowsWritten: settled.rowsWritten + (last?.rowsWritten ?? 0),
+		}),
 	};
 }

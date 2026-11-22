@@ -52,6 +52,7 @@ export interface SyncStatus
 		internalSyncError?: string;
 		durationMs?: number;
 		finishedAt?: number;
+		rowsRead?: number;
 		rowsWritten?: number;
 		message?: string;
 		at?: number;
@@ -143,6 +144,8 @@ interface SyncTables
 		phase: string;
 		applied: number;
 		status: string | null;
+		rowsRead: number | null;
+		rowsWritten: number | null;
 		live: number;
 	}[];
 	runSystemFroms: number;
@@ -162,17 +165,32 @@ export async function syncTables(h: Harness): Promise<SyncTables>
 	return response.json();
 }
 
-/** Rows the Durable Object's SQLite has written since it started, index rows included, as Cloudflare bills them. */
-export async function rowsWritten(h: Harness): Promise<number>
+export interface RowCounts
+{
+	rowsRead: number;
+	rowsWritten: number;
+}
+
+/**
+ * Rows the Durable Object's SQLite has read and written since it started, index rows included, as Cloudflare bills
+ * them. The tests' own probes and status polls are not metered, so a difference counts only the work under test.
+ */
+export async function rows(h: Harness): Promise<RowCounts>
 {
 	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
 	const ns = (await h.mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace;
-	const response = await ns.get(ns.idFromName("dev")).fetch("http://localhost/__rows-written");
-	const body = await response.json<
-	{
-		rowsWritten: number;
-	}>();
-	return body.rowsWritten;
+	const response = await ns.get(ns.idFromName("dev")).fetch("http://localhost/__rows");
+	return response.json<RowCounts>();
+}
+
+/** The rows read and written since the `before` reading of {@link rows}. */
+export async function rowsSince(h: Harness, before: RowCounts): Promise<RowCounts>
+{
+	const now = await rows(h);
+	return {
+		rowsRead: now.rowsRead - before.rowsRead,
+		rowsWritten: now.rowsWritten - before.rowsWritten,
+	};
 }
 
 export async function accountRows(h: Harness): Promise<unknown>

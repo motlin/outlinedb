@@ -7,7 +7,8 @@ import
 	makeNodes,
 	POLL_MS,
 	pollResult,
-	rowsWritten,
+	rows,
+	rowsSince,
 	runScheduledSyncNow,
 	runToIdle,
 	sleep,
@@ -69,7 +70,7 @@ describe("sync reports internal-API failures", () =>
 		);
 
 		// The next scheduled catch-up can never succeed without a seed: it says so and stops instead of retrying every minute.
-		const beforeStop = await rowsWritten(h);
+		const beforeStop = await rows(h);
 		await runScheduledSyncNow(h);
 		let stopped: SyncStatus | undefined;
 		for (let i = 0; i < 15_000 / POLL_MS; i++)
@@ -96,7 +97,7 @@ describe("sync reports internal-API failures", () =>
 				status: stopped,
 				adminLastSync: admin.lastSync,
 				accountSync: await readJson(await h.mf.dispatchFetch("http://localhost/api/v1/sync-status")),
-				rowsWritten: (await rowsWritten(h)) - beforeStop,
+				rows: await rowsSince(h, beforeStop),
 			},
 		).toStrictEqual(
 			{
@@ -121,8 +122,12 @@ describe("sync reports internal-API failures", () =>
 					applied: 0,
 					error: NEED_REFRESHED,
 				},
-				// The one run version that records the stop.
-				rowsWritten: 3,
+				// Cost budget: the one run version that records the stop. If these change, justify the new numbers in the commit.
+				rows:
+				{
+					rowsRead: 30,
+					rowsWritten: 3,
+				},
 			},
 		);
 

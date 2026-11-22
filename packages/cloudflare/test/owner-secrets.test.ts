@@ -3,6 +3,7 @@ import {readJson, startHarness} from "./harness";
 import type {Harness} from "./harness";
 import {storeClient} from "../src/store-client";
 import type {UserStore} from "../src/user-store";
+import type {ProbeStore} from "./probe-entry";
 
 /** A copy in this realm: objects from Miniflare's RPC carry another realm's prototypes, which strict equality rejects. */
 function plain(value: unknown): unknown
@@ -139,6 +140,9 @@ describe("Workflowy secrets reach only the owner's Durable Object", () =>
 				setTimeout(resolve, 10);
 			});
 		}
+		// The same failure again, from the same drain the alarm runs.
+		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the harness runs ProbeStore
+		const retry = plain(await (owner as unknown as DurableObjectStub<ProbeStore>).measuredDrain());
 		const {outbox} = await owner.syncStatus();
 		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- nodes.list answers the node DTOs
 		const listed = plain(await storeClient(owner).call("nodes.list", {})) as
@@ -159,6 +163,7 @@ describe("Workflowy secrets reach only the owner's Durable Object", () =>
 				lastError: outbox.lastError,
 				drainedUpstream: calls.some(({path}) => path === "/get_initialization_data"),
 				publicApiWrites: calls.filter(({path}) => path.startsWith("/api/v1/")),
+				retry,
 			},
 		).toStrictEqual(
 			{
@@ -170,6 +175,14 @@ describe("Workflowy secrets reach only the owner's Durable Object", () =>
 					"Failed to GET /get_initialization_data?client_version=21&client_version_v2=28&no_root_children=1: 500 ",
 				drainedUpstream: true,
 				publicApiWrites: [],
+				retry:
+				{
+					// Cost budget: a repeat of the same failure finds every pending row already carrying its error, so it
+					// writes nothing. If these change, justify the new numbers in the commit.
+					rowsRead: 12,
+					rowsWritten: 0,
+					error: "Failed to GET /get_initialization_data?client_version=21&client_version_v2=28&no_root_children=1: 500 ",
+				},
 			},
 		);
 	});

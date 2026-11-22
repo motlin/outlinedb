@@ -7,7 +7,8 @@ import
 	liveIds,
 	makeNodes,
 	POLL_MS,
-	rowsWritten,
+	rows,
+	rowsSince,
 	runToIdle,
 	sleep,
 	status,
@@ -46,16 +47,45 @@ describe("sync imports a fake upstream's export", () =>
 			},
 		);
 
-		const beforeSecond = await rowsWritten(h);
+		const beforeSecond = await rows(h);
 		const second = await runToIdle(h, 1);
-		// An identical export writes only the run's own bookkeeping, a constant that never grows with the node count.
-		expect((await rowsWritten(h)) - beforeSecond).toBe(14);
-		expect(second.lastResult).toMatchObject(
+		const
+		{
+			exportKey: _exportKey,
+			finishedAt: _finishedAt,
+			durationMs: _durationMs,
+			...secondResult
+		} = second.lastResult ?? {};
+		expect(
 			{
-				status: "ok",
-				nodesAdded: 0,
-				nodesUpdated: 0,
-				nodesUnchanged: 50,
+				result: secondResult,
+				rows: await rowsSince(h, beforeSecond),
+			},
+		).toStrictEqual(
+			{
+				result:
+				{
+					status: "ok",
+					totalNodes: 50,
+					nodesAdded: 0,
+					nodesUpdated: 0,
+					nodesUnchanged: 50,
+					nodesDeleted: 0,
+					nodesPhasedOut: 0,
+					contentUpdated: 0,
+					metadataUpdated: 0,
+					priorityUpdated: 0,
+					// Up to the run's final record, which the meter reading below includes.
+					rowsRead: 1442,
+					rowsWritten: 9,
+				},
+				// Cost budget: an identical export writes only the run's own bookkeeping and reads the stored rows it compares,
+				// never a row per node more than that. If these change, justify the new numbers in the commit.
+				rows:
+				{
+					rowsRead: 1468,
+					rowsWritten: 14,
+				},
 			},
 		);
 
@@ -79,7 +109,9 @@ describe("sync imports a fake upstream's export", () =>
 				lastError: null,
 			},
 		);
-		// Each run finished inside one alarm, so each is one live version.
+		// Each run finished inside one alarm, so each is one live version. Cost budget: the first import writes every node's
+		// rows, the identical one only its bookkeeping, and the one-rename-one-removal run a handful more. If these change,
+		// justify the new numbers in the commit.
 		await expect(syncTables(h)).resolves.toStrictEqual(
 			{
 				runs: [
@@ -87,18 +119,24 @@ describe("sync imports a fake upstream's export", () =>
 						phase: "idle",
 						applied: 50,
 						status: "ok",
+						rowsRead: 1999,
+						rowsWritten: 518,
 						live: 1,
 					},
 					{
 						phase: "idle",
 						applied: 50,
 						status: "ok",
+						rowsRead: 1442,
+						rowsWritten: 9,
 						live: 1,
 					},
 					{
 						phase: "idle",
 						applied: 49,
 						status: "ok",
+						rowsRead: 1525,
+						rowsWritten: 29,
 						live: 1,
 					},
 				],
@@ -151,6 +189,9 @@ describe("sync imports a fake upstream's export", () =>
 						phase: "fetching",
 						applied: 0,
 						status: "rate_limited",
+						// Cost budget: a rate-limited fetch writes only its run version. Justify any change in the commit.
+						rowsRead: 5,
+						rowsWritten: 6,
 						live: 1,
 					},
 				],

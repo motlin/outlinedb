@@ -9,7 +9,8 @@ import
 	makeNodes,
 	POLL_MS,
 	pollResult,
-	rowsWritten,
+	rows,
+	rowsSince,
 	runScheduledSyncNow,
 	runToIdle,
 	sleep,
@@ -18,7 +19,24 @@ import
 	treeLog,
 	uuid,
 } from "./sync-upstream";
+import type {Harness} from "./harness";
 import type {SyncStatus} from "./sync-upstream";
+
+/** Bring the scheduled catch-up forward to now and wait until it has run and scheduled the next one ten minutes out. */
+async function catchUpNow(h: Harness): Promise<SyncStatus>
+{
+	await runScheduledSyncNow(h);
+	for (let i = 0; i < 15_000 / POLL_MS; i++)
+	{
+		const current = await status(h);
+		if ((current.nextAlarmAt ?? 0) > Date.now() + 540_000)
+		{
+			return current;
+		}
+		await sleep(POLL_MS);
+	}
+	throw new Error("the catch-up did not finish");
+}
 
 describe("sync seeds from get_tree_data only on request", () =>
 {
@@ -115,6 +133,31 @@ describe("sync seeds from get_tree_data only on request", () =>
 			},
 		]);
 
+		// The first catch-up after the seed finds nothing new: it records its caught_up result once, and nothing else.
+		const beforeFirst = await rows(h);
+		const first = await catchUpNow(h);
+		expect(
+			{
+				result: first.lastResult,
+				rows: await rowsSince(h, beforeFirst),
+			},
+		).toStrictEqual(
+			{
+				result:
+				{
+					status: "caught_up",
+					finishedAt: expect.any(Number),
+					durationMs: expect.any(Number),
+				},
+				// Cost budget: one run version for the new result. If these change, justify the new numbers in the commit.
+				rows:
+				{
+					rowsRead: 25,
+					rowsWritten: 3,
+				},
+			},
+		);
+
 		const mirrored = JSON.stringify(
 			{
 				id: 4,
@@ -147,26 +190,31 @@ describe("sync seeds from get_tree_data only on request", () =>
 		up.internalCalls.length = 0;
 		up.pollStarts.length = 0;
 		const exportsBefore = up.exportCalls;
-		await runScheduledSyncNow(h);
-		let synced: SyncStatus | undefined;
-		for (let i = 0; i < 15_000 / POLL_MS; i++)
-		{
-			synced = await status(h);
-			if (synced.lastResult?.status === "caught_up")
+		const beforeMirrored = await rows(h);
+		const synced = await catchUpNow(h);
+		expect(
 			{
-				break;
-			}
-			await sleep(POLL_MS);
-		}
-		expect(synced?.lastResult).toStrictEqual(
+				result: synced.lastResult,
+				rows: await rowsSince(h, beforeMirrored),
+			},
+		).toStrictEqual(
 			{
-				status: "caught_up",
-				finishedAt: expect.any(Number),
-				durationMs: expect.any(Number),
+				result:
+				{
+					status: "caught_up",
+					finishedAt: expect.any(Number),
+					durationMs: expect.any(Number),
+				},
+				// Cost budget: the one mirror the transaction adds and the new transaction id, with the result unchanged, so
+				// no run version. If these change, justify the new numbers in the commit.
+				rows:
+				{
+					rowsRead: 50,
+					rowsWritten: 20,
+				},
 			},
 		);
-		expect(synced?.nextAlarmAt).toBeGreaterThan(Date.now() + 540_000);
-		expect(synced?.nextAlarmAt).toBeLessThanOrEqual(Date.now() + 600_000);
+		expect(synced.nextAlarmAt).toBeLessThanOrEqual(Date.now() + 600_000);
 		expect(
 			{
 				exports: up.exportCalls - exportsBefore,
@@ -194,27 +242,23 @@ describe("sync seeds from get_tree_data only on request", () =>
 
 		// A quiet minute: the catch-up finds nothing new, and writes no more than the alarm's own bookkeeping.
 		up.pushAndPoll = () => pollResult("5");
-		const beforeQuiet = await rowsWritten(h);
-		await runScheduledSyncNow(h);
-		let quiet: SyncStatus | undefined;
-		for (let i = 0; i < 15_000 / POLL_MS; i++)
-		{
-			quiet = await status(h);
-			if ((quiet.nextAlarmAt ?? 0) > Date.now() + 540_000)
-			{
-				break;
-			}
-			await sleep(POLL_MS);
-		}
+		const beforeQuiet = await rows(h);
+		await catchUpNow(h);
 		expect(
 			{
 				polls: up.pollStarts,
-				rowsWritten: (await rowsWritten(h)) - beforeQuiet,
+				rows: await rowsSince(h, beforeQuiet),
 			},
 		).toStrictEqual(
 			{
 				polls: ["1", "5"],
-				rowsWritten: 0,
+				// Cost budget: a quiet catch-up writes nothing, and reads only what it needs to find nothing changed. If these
+				// change, justify the new numbers in the commit.
+				rows:
+				{
+					rowsRead: 31,
+					rowsWritten: 0,
+				},
 			},
 		);
 		up.pushAndPoll = () => pollResult("1");
