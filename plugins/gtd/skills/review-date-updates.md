@@ -136,7 +136,7 @@ After every ~5 items, reap the finished background jobs with `BashOutput`:
 - A clean job exits 0.
 - The CLI signals failure with a non-zero exit (`this.error` in `packages/cli/src/commands/base-completion-command.ts`).
 
-On any failure, surface it inline with the item name so the user can re-handle it. Never silently advance past a failed write.
+On any failure, surface it inline with the item name. A `Saved locally ...` failure saved the date and only its delivery is pending (see **Concurrency**); any other failure means the date did not change, so the user re-handles the item. Never silently advance past a failed write.
 
 ### Drain before finishing
 
@@ -150,8 +150,17 @@ If any failed, list them with their item names instead of reporting success.
 
 ### Concurrency
 
-Per-item reaping (the ~5-item cadence above) bounds the number of in-flight jobs, which keeps the count of spawned Node processes reasonable. The API client already retries on HTTP 429 (`packages/shared/src/api/workflowy-client.ts`), so a small burst of concurrent writes is safe. Keep the ~5 cadence to avoid spawning excessive processes.
+Each date write saves to the local DB first and then drains its outbox rows to workflowy.com (`drainAfterWrite` in `packages/cli/src/services/local-writes.ts`). Nothing retries: the API client makes one attempt per request, and a 429 fails with an error naming the wait (`packages/shared/src/api/workflowy-client.ts`). Pace the writes this way:
+
+- Keep at most ~5 writes in flight: dispatch one per "done" answer, which the serial walk already spaces out, and reap at the ~5-item cadence above. Do not fan out a batch of writes at once.
+- A job that exits non-zero with `Saved locally ..., but delivering it to workflowy.com failed` did save the new date. Do not re-run its `node update` / `node create`; its outbox rows stay pending and go out with the next write's drain.
+- At **Drain before finishing**, check the outbox. If rows are still pending, wait out the time the 429 error named, then drain once. If that drain still fails, report the pending count and the error instead of draining again.
+
+```bash
+./bin/run.js outbox status
+./bin/run.js outbox drain
+```
 
 ### CRITICAL — drain before any cache reimport
 
-Any step that runs `cache import-api` / `just daily` overwrites local SQLite from the API (write-through model). Drain all pending background date-writes before running such a step — otherwise the import clobbers items whose API write has not yet landed, and already-handled items reappear as overdue. This protects the **Re-fetch the Workflowy sources after any data import** rule in `due.md`.
+Any step that runs `cache import-api` / `just daily` merges the API's tree into local SQLite. Wait for all background date-writes to finish and check `outbox status` before running such a step — a job still running can land its local write mid-import, and an import that runs before its rows reach workflowy.com risks bringing back the old date, so already-handled items reappear as overdue. This protects the **Re-fetch the Workflowy sources after any data import** rule in `due.md`.
