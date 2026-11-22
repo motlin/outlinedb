@@ -1,6 +1,7 @@
 import {describe, expect, it, afterEach, beforeEach} from "vite-plus/test";
 import
 {
+	judgedTruth,
 	precisionRecallAt,
 	sampleStratified,
 	shortlistRecall,
@@ -423,6 +424,62 @@ describe("label eval", () =>
 			];
 
 			expect(thresholdForPrecision(noisy, "person", 0.9)).toBeUndefined();
+		});
+	});
+
+	describe("judgedTruth", () =>
+	{
+		const truth = [
+			{
+				label: "@Bob",
+				kind: "person",
+			},
+			{
+				label: "#pickleball",
+				kind: "tag",
+			},
+			{
+				label: "#6weeks",
+				kind: "tag",
+			},
+		] as const;
+
+		it("drops true labels judged unacceptable and adds predicted labels judged acceptable, case-insensitively", () =>
+		{
+			expect(
+				judgedTruth(
+					truth,
+					{
+						"#6WEEKS": false,
+						"#exercise": true,
+						"#Pickleball": true,
+						"#tennis": false,
+						"@AliceChen": true,
+					},
+				),
+			).toStrictEqual([
+				{
+					label: "@Bob",
+					kind: "person",
+				},
+				{
+					label: "#pickleball",
+					kind: "tag",
+				},
+				{
+					label: "#exercise",
+					kind: "tag",
+				},
+				{
+					label: "@AliceChen",
+					kind: "person",
+				},
+			]);
+		});
+
+		it("keeps the truth as is for an entry with no judgments", () =>
+		{
+			expect(judgedTruth(truth, undefined)).toStrictEqual([...truth]);
 		});
 	});
 });

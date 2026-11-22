@@ -145,7 +145,8 @@ Measure Clef label suggestions on held-out tagged journal entries: strip each sa
 USAGE
   $ outlinedb ai eval-labels [--sample <value>] [--since <value>] [--arms flash|clef...] [--thresholds <value>]
     [--target-precision <value>] [--seed <value>] [--tag-strip drop|word] [--kind person|tag] [--people-context
-    aliases|siblings...] [--disambiguation-file <value>] [--calendar-id <value>] [--metadata-dir <value>] [-j]
+    aliases|siblings...] [--disambiguation-file <value>] [--calendar-id <value>] [--metadata-dir <value>] [--from-cases
+    <value> | --cases-out <value>] [--judgments <value>] [-j]
 
 FLAGS
   -j, --json                         Output the report as JSON
@@ -153,8 +154,14 @@ FLAGS
                                      Clef
                                      <options: flash|clef>
       --calendar-id=<value>          Calendar root (full or short id); defaults to 📆 Calendar
+      --cases-out=<value>            Save each sampled entry's stripped state, truth, shortlist and verify scores to
+                                     this JSON file, for judging and offline rescoring
       --disambiguation-file=<value>  [default: .llm/gtd/people-disambiguation.md] People-disambiguation markdown read by
                                      --people-context aliases
+      --from-cases=<value>           Rescore a --cases-out file offline instead of sampling and calling Clef; its
+                                     sampling settings and arms replace the flags
+      --judgments=<value>            JSON file of node id to {label: acceptable}: true labels judged false leave the
+                                     truth, predicted labels judged true join it, and the report says relevance judged
       --kind=<option>                Evaluate one label kind: keep the sampled entries that carry it, only their labels
                                      of that kind, and a pool of that kind
                                      <options: person|tag>

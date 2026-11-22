@@ -1,8 +1,10 @@
 import {findCalendarRoot} from "@outlinedb/shared/calendar-lookup";
 import {resolveIdOrShortId} from "@outlinedb/shared/utils";
 import {Command, Flags} from "@oclif/core";
+import type {Interfaces} from "@oclif/core";
 import fs from "node:fs";
 import path from "node:path";
+import {z} from "zod";
 import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";
 import {clefClientFromEnv, readLabelRegistries} from "../../services/clef-setup.js";
@@ -13,10 +15,13 @@ import
 	PEOPLE_CONTEXTS,
 	TAG_STRIP_MODES,
 	buildEvalReport,
+	judgedTruth,
 	sampleStratified,
 	stripLabels,
 } from "../../services/label-eval.js";
-import type {EvalReport, EvalRun} from "../../services/label-eval.js";
+import type {EvalArm, EvalReport, EvalRun, PeopleContext, TagStripMode} from "../../services/label-eval.js";
+import type {ClefState} from "../../services/clef-requests.js";
+import type {LabelKind} from "../../services/label-pool.js";
 import {buildLabelPool} from "../../services/label-pool.js";
 import {parsePeopleHints} from "../../services/people-hints.js";
 import
@@ -33,6 +38,105 @@ import
 const HINTED_PERSON_WORDS = 40;
 /** Same-day entries added to state with `--people-context siblings`. */
 const MAX_SIBLINGS = 20;
+
+/** One sampled entry's eval run, saved by `--cases-out` with the entry it ran on. */
+interface CaseRecord extends EvalRun
+{
+	readonly nodeId: string;
+	readonly state: ClefState;
+}
+
+/** The `--cases-out` file: the sampling settings and every entry's run, enough to rescore offline. */
+interface CasesFile
+{
+	readonly since: string;
+	readonly seed: number;
+	readonly tagStrip: TagStripMode;
+	readonly kind: LabelKind | null;
+	readonly peopleContext: readonly PeopleContext[];
+	readonly arms: readonly EvalArm[];
+	readonly runs: readonly CaseRecord[];
+}
+
+const KindSchema = z.enum(["person", "tag"]);
+const KindedLabelSchema = z.object(
+	{
+		label: z.string(),
+		kind: KindSchema,
+	},
+);
+const passSchema = <T extends z.ZodType>(value: T) =>
+	z.object(
+		{
+			result: z.object(
+				{
+					value,
+					requests: z.number(),
+					inputTokens: z.number(),
+				},
+			),
+			ms: z.number(),
+		},
+	);
+const CasesFileSchema: z.ZodType<CasesFile> = z.object(
+	{
+		since: z.string(),
+		seed: z.number(),
+		tagStrip: z.enum(TAG_STRIP_MODES),
+		kind: KindSchema.nullable(),
+		peopleContext: z.array(z.enum(PEOPLE_CONTEXTS)),
+		arms: z.array(z.enum(EVAL_ARMS)),
+		runs: z.array(
+			z.object(
+				{
+					nodeId: z.string(),
+					state: z.object(
+						{
+							date: z.string(),
+							parent: z.string(),
+							entry: z.string(),
+							siblings: z.array(z.string()).optional(),
+						},
+					),
+					truth: z.array(KindedLabelSchema),
+					shortlist: passSchema(
+						z.array(
+							z.object(
+								{
+									label: KindedLabelSchema.extend(
+										{
+											optionId: z.string(),
+											description: z.string(),
+										},
+									),
+									score: z.number(),
+								},
+							),
+						),
+					),
+					verify: z.partialRecord(
+						z.enum(EVAL_ARMS),
+						passSchema(
+							z.array(
+								KindedLabelSchema.extend(
+									{
+										score: z.number(),
+									},
+								),
+							),
+						),
+					),
+				},
+			),
+		),
+	},
+);
+const JudgmentsSchema = z.record(z.string(), z.record(z.string(), z.boolean()));
+
+function readJson<T>(file: string, schema: z.ZodType<T>): T
+{
+	return schema.parse(JSON.parse(fs.readFileSync(file, "utf8")));
+}
 
 export default class EvalLabels extends Command
 {
@@ -129,6 +233,25 @@ export default class EvalLabels extends Command
 				default: path.join(".llm", "gtd", "metadata"),
 			},
 		),
+		"cases-out": Flags.string(
+			{
+				description:
+					"Save each sampled entry's stripped state, truth, shortlist and verify scores to this JSON file, for judging and offline rescoring",
+			},
+		),
+		"from-cases": Flags.string(
+			{
+				description:
+					"Rescore a --cases-out file offline instead of sampling and calling Clef; its sampling settings and arms replace the flags",
+				exclusive: ["cases-out"],
+			},
+		),
+		judgments: Flags.string(
+			{
+				description:
+					"JSON file of node id to {label: acceptable}: true labels judged false leave the truth, predicted labels judged true join it, and the report says relevance judged",
+			},
+		),
 		json: Flags.boolean(
 			{
 				char: "j",
@@ -141,6 +264,57 @@ export default class EvalLabels extends Command
 	public async run(): Promise<EvalReport>
 	{
 		const {flags} = await this.parse(EvalLabels);
+		const thresholds = await Promise.all(
+			flags.thresholds.split(",").map(async (value) => probability(value.trim(), "--thresholds")),
+		);
+		const cases: CasesFile =
+			flags["from-cases"] === undefined
+				? await this.sampleAndScore(flags)
+				: readJson(flags["from-cases"], CasesFileSchema);
+		if (flags["cases-out"] !== undefined)
+		{
+			fs.writeFileSync(flags["cases-out"], `${JSON.stringify(cases, null, 2)}\n`);
+		}
+		const judgments = flags.judgments === undefined ? undefined : readJson(flags.judgments, JudgmentsSchema);
+		const runs: EvalRun[] = cases.runs.map((record) => (
+		{
+			...record,
+			truth: judgedTruth(record.truth, judgments?.[record.nodeId]),
+		}));
+		const arms = cases.arms.map((arm) => (
+		{
+			arm,
+			model: ARM_MODELS[arm],
+		}));
+
+		const report = buildEvalReport(
+			runs,
+			{
+				since: cases.since,
+				seed: cases.seed,
+				tagStrip: cases.tagStrip,
+				kind: cases.kind,
+				peopleContext: cases.peopleContext,
+				targetPrecision: flags["target-precision"],
+				relevance: judgments === undefined ? "truth" : "judged",
+				thresholds,
+				arms,
+			},
+		);
+		if (flags.json)
+		{
+			this.log(JSON.stringify(report, null, 2));
+		}
+		else
+		{
+			this.logSummary(report);
+		}
+		return report;
+	}
+
+	/** Samples held-out entries, strips their labels and runs the Clef passes on each. */
+	private async sampleAndScore(flags: Interfaces.InferredFlags<typeof EvalLabels.flags>): Promise<CasesFile>
+	{
 		const client = clefClientFromEnv();
 		if ("error" in client)
 		{
@@ -151,9 +325,6 @@ export default class EvalLabels extends Command
 				},
 			);
 		}
-		const thresholds = await Promise.all(
-			flags.thresholds.split(",").map(async (value) => probability(value.trim(), "--thresholds")),
-		);
 		const since = await parseYearMonth(flags.since, "--since");
 
 		const peopleContext = flags["people-context"];
@@ -242,6 +413,7 @@ export default class EvalLabels extends Command
 				: {};
 			return [
 				{
+					nodeId,
 					state:
 					{
 						...state,
@@ -252,51 +424,36 @@ export default class EvalLabels extends Command
 			];
 		});
 
-		const arms = flags.arms.map((arm) => (
-		{
-			arm,
-			model: ARM_MODELS[arm],
-		}));
-		const runs: EvalRun[] = [];
-		for (const {state, truth} of sample)
+		const runs: CaseRecord[] = [];
+		for (const {nodeId, state, truth} of sample)
 		{
 			const shortlist = await timed(async () => runShortlist(client, pool, state));
 			const verify: EvalRun["verify"] = {};
-			for (const {arm, model} of arms)
+			for (const arm of flags.arms)
 			{
-				verify[arm] = await timed(async () => runVerify(client, shortlist.result.value, state, model));
+				verify[arm] = await timed(async () =>
+					runVerify(client, shortlist.result.value, state, ARM_MODELS[arm]),
+				);
 			}
 			runs.push(
 				{
+					nodeId,
+					state,
 					truth,
 					shortlist,
 					verify,
 				},
 			);
 		}
-
-		const report = buildEvalReport(
+		return {
+			since: flags.since,
+			seed: flags.seed,
+			tagStrip: flags["tag-strip"],
+			kind: flags.kind ?? null,
+			peopleContext,
+			arms: flags.arms,
 			runs,
-			{
-				since: flags.since,
-				seed: flags.seed,
-				tagStrip: flags["tag-strip"],
-				kind: flags.kind ?? null,
-				peopleContext,
-				targetPrecision: flags["target-precision"],
-				thresholds,
-				arms,
-			},
-		);
-		if (flags.json)
-		{
-			this.log(JSON.stringify(report, null, 2));
-		}
-		else
-		{
-			this.logSummary(report);
-		}
-		return report;
+		};
 	}
 
 	private logSummary(report: EvalReport): void

@@ -374,6 +374,7 @@ describe("ai eval-labels command", () =>
 					kind: null,
 					peopleContext: [],
 					targetPrecision: 0.9,
+					relevance: "truth",
 					shortlist:
 					{
 						model: "clef-flash",
@@ -800,6 +801,208 @@ describe("ai eval-labels command", () =>
 			"clef-flash Lunch with Bob",
 			"clef-flash Lunch with Bob",
 		]);
+	});
+
+	it("saves each entry's run with --cases-out, then rescores it offline with --from-cases under --judgments relevance", async () =>
+	{
+		const casesFile = path.join(tempDir, "cases.json");
+		const judgmentsFile = path.join(tempDir, "judgments.json");
+		await evaluate("--sample", "10", "--since", "2025-01", "--cases-out", casesFile);
+		const saved = JSON.parse(fs.readFileSync(casesFile, "utf8"));
+		fs.writeFileSync(
+			judgmentsFile,
+			JSON.stringify(
+				{
+					e1:
+					{
+						"@AliceChen": true,
+					},
+					e3:
+					{
+						"#pickleball": false,
+					},
+				},
+			),
+		);
+		run.mockClear();
+		delete process.env.CLOUDFLARE_AI_TOKEN;
+
+		const {stdout, error} = await evaluate(
+			"--from-cases",
+			casesFile,
+			"--judgments",
+			judgmentsFile,
+			"--thresholds",
+			"0.8,0.9",
+		);
+
+		const out = JSON.parse(stdout);
+		expect(
+			{
+				error: error?.message,
+				saved:
+				{
+					since: saved.since,
+					seed: saved.seed,
+					tagStrip: saved.tagStrip,
+					kind: saved.kind,
+					peopleContext: saved.peopleContext,
+					arms: saved.arms,
+					runs: saved.runs.map(
+						({
+							nodeId,
+							state,
+							truth,
+							verify,
+						}: {
+							nodeId: string;
+							state:
+							{
+								entry: string;
+							};
+							truth: unknown;
+							verify: Record<string, unknown>;
+						}) => (
+						{
+							nodeId,
+							entry: state.entry,
+							truth,
+							arms: Object.keys(verify),
+						}),
+					),
+				},
+				calls: run.mock.calls.length,
+				report:
+				{
+					entries: out.entries,
+					tagStrip: out.tagStrip,
+					relevance: out.relevance,
+					shortlist:
+					{
+						person: out.shortlist.person,
+						tag: out.shortlist.tag,
+						requests: out.shortlist.usage.requests,
+					},
+					flash:
+					{
+						person: out.arms[0].person.thresholds,
+						tag: out.arms[0].tag.thresholds,
+					},
+				},
+			},
+		).toStrictEqual(
+			{
+				error: undefined,
+				saved:
+				{
+					since: "2025-01",
+					seed: 1,
+					tagStrip: "drop",
+					kind: null,
+					peopleContext: [],
+					arms: ["flash"],
+					runs: [
+						{
+							nodeId: "e2",
+							entry: "Lunch with Bob",
+							truth: [
+								{
+									label: "@Bob",
+									kind: "person",
+								},
+							],
+							arms: ["flash"],
+						},
+						{
+							nodeId: "e1",
+							entry: "Played with Alice",
+							truth: [
+								{
+									label: "#pickleball",
+									kind: "tag",
+								},
+								{
+									label: "@AliceBrown",
+									kind: "person",
+								},
+							],
+							arms: ["flash"],
+						},
+						{
+							nodeId: "e3",
+							entry: "Paddles at the park",
+							truth: [
+								{
+									label: "#pickleball",
+									kind: "tag",
+								},
+							],
+							arms: ["flash"],
+						},
+					],
+				},
+				calls: 0,
+				report:
+				{
+					entries: 3,
+					tagStrip: "drop",
+					relevance: "judged",
+					shortlist:
+					{
+						person:
+						{
+							recall: 1,
+							meanSize: 3,
+						},
+						tag:
+						{
+							recall: 1,
+							meanSize: 1,
+						},
+						requests: 3,
+					},
+					flash:
+					{
+						person: [
+							{
+								threshold: 0.8,
+								truePositives: 3,
+								predicted: 3,
+								actual: 3,
+								precision: 1,
+								recall: 1,
+							},
+							{
+								threshold: 0.9,
+								truePositives: 2,
+								predicted: 2,
+								actual: 3,
+								precision: 1,
+								recall: 2 / 3,
+							},
+						],
+						tag: [
+							{
+								threshold: 0.8,
+								truePositives: 1,
+								predicted: 1,
+								actual: 1,
+								precision: 1,
+								recall: 1,
+							},
+							{
+								threshold: 0.9,
+								truePositives: 0,
+								predicted: 0,
+								actual: 1,
+								precision: 1,
+								recall: 0,
+							},
+						],
+					},
+				},
+			},
+		);
 	});
 
 	it("exits 1 with a clear error and no Clef calls when the token is missing", async () =>

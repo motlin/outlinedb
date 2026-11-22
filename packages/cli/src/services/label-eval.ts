@@ -164,6 +164,36 @@ function shuffle<T>(items: readonly T[], random: () => number): T[]
 		.map(({item}) => item);
 }
 
+/**
+ * Judged relevance for one entry: label (`@Name` or `#tag`, any case) to whether a refiner would accept it from the
+ * stripped text. Keyed by node id in a judgments file.
+ */
+export type EntryJudgments = Readonly<Record<string, boolean>>;
+
+/**
+ * An entry's ground truth under judged relevance: true labels judged unacceptable (not inferable from the stripped
+ * text) are dropped, and predicted labels judged acceptable (correct but never tagged) are added. Labels compare
+ * case-insensitively; unjudged labels keep their truth status. Pure.
+ */
+export function judgedTruth(truth: readonly KindedLabel[], judgments: EntryJudgments | undefined): KindedLabel[]
+{
+	if (judgments === undefined)
+	{
+		return [...truth];
+	}
+	const verdicts = new Map(Object.entries(judgments).map(([label, ok]) => [label.toLowerCase(), ok]));
+	const kept = truth.filter(({label}) => verdicts.get(label.toLowerCase()) !== false);
+	const keys = new Set(truth.map(({label}) => label.toLowerCase()));
+	const added = Object.entries(judgments)
+		.filter(([label, ok]) => ok && !keys.has(label.toLowerCase()))
+		.map(([label]): KindedLabel => (
+		{
+			label,
+			kind: label.startsWith("@") ? "person" : "tag",
+		}));
+	return [...kept, ...added];
+}
+
 /** Share of `kind` true labels that reach the pass 1 shortlist, and the mean number of `kind` shortlist labels. */
 export function shortlistRecall(
 	cases: readonly EvalCase[],
@@ -305,6 +335,8 @@ export interface KindReport
 	readonly atTargetPrecision: PrecisionRecall | null;
 }
 
+export type Relevance = "truth" | "judged";
+
 export interface EvalReport
 {
 	readonly entries: number;
@@ -315,6 +347,8 @@ export interface EvalReport
 	readonly kind: LabelKind | null;
 	readonly peopleContext: readonly PeopleContext[];
 	readonly targetPrecision: number;
+	/** `truth`: the labels on the entry; `judged`: truth adjusted by refiner-acceptability judgments. */
+	readonly relevance: Relevance;
 	readonly shortlist:
 	{
 		readonly model: ClefModel;
@@ -355,6 +389,7 @@ export function buildEvalReport(
 		kind: LabelKind | null;
 		peopleContext: readonly PeopleContext[];
 		targetPrecision: number;
+		relevance: Relevance;
 		thresholds: readonly number[];
 		arms: readonly
 		{
@@ -388,6 +423,7 @@ export function buildEvalReport(
 		kind: options.kind,
 		peopleContext: options.peopleContext,
 		targetPrecision: options.targetPrecision,
+		relevance: options.relevance,
 		shortlist:
 		{
 			model: "clef-flash",
