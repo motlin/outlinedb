@@ -59,6 +59,8 @@ This is the same ban as [Never offer to pause or wrap up](#never-offer-to-pause-
 
 A phase's summary, briefing, or opened page is not a stopping point. After it, start the next phase in the same turn. The user does not notice console output unless something else stops the turn, so a turn that ends on a summary stalls the review with nothing asking for their input. The turn ends only on an `AskUserQuestion`, a halt the rules here call for, or the final summary.
 
+The same goes for a phase's read-only gathering (loading the inbox, exporting ladders, reading metadata). Run it in the foreground: an inline CLI command, or an `Agent` call that returns its result in this turn. Never launch it as a background agent and end the turn to wait for the completion notification; nothing on screen asks the user for anything, so the review looks stalled. When gathering finishes, go straight on to the phase's questions in the same turn.
+
 ## Every question that acts on nodes links them
 
 Any `AskUserQuestion` in any phase that proposes deleting, moving, merging, completing, or editing specific Workflowy nodes lists each affected node's `https://workflowy.com/#/<shortId>` link, so the user can open it before answering. For duplicates and merges, link every copy, including the one being kept, and say which one survives. Put the links inside the question, not in surrounding text.

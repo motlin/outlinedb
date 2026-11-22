@@ -35,7 +35,7 @@ Build every input from a fresh read.
 
     Each row carries `name`, absolute `path`, `todoPath`, `todoExists`, `notGitToplevel`, the project's Workflowy tasks link (`tasksShortId`, `tasksName`), its `tags`, and `openPanes`. A row with `notGitToplevel: true` has a path that is missing or not a git toplevel (the work may live in a sibling or parent repo). Before the walk, list those projects and warn that their tasks may belong in another directory; ask which path to use rather than writing to them silently. Check the exit code of each command unpiped; a failure halts the phase. If `herdr` is not running, report it and continue with `openPanes` treated as unknown: distribute, but do not open tabs.
 
-- **Inbox.** Load the inbox the way `${CLAUDE_PLUGIN_ROOT}/commands/inbox.md` does under **Load Inbox Data** (the inbox-loader agent writing `.llm/gtd-inboxes.json`). A `Broken inbox registration` error halts the phase.
+- **Inbox.** Run `./bin/run.js gtd inboxes load --depth 3` inline in the foreground, following the rules in `${CLAUDE_PLUGIN_ROOT}/prompts/refinement/inbox-loader.md` (it writes `.llm/gtd-inboxes.json`, and its summary's `unregisteredInboxes` are surfaced as warnings). Do not launch the inbox-loader as a background agent: the turn must continue from the loaded snapshot into the match and the questions, never end waiting on a completion notification. A `Broken inbox registration` error halts the phase.
 
 - **Ladders.** Export each root's `📌 Tasks (asap)` bucket exactly as `${CLAUDE_PLUGIN_ROOT}/commands/review/daily/rebalance.md` does under **Read both ladders**, to `.llm/gtd/review/ladder-<work|personal>.json`. **Never read a ladder off a mirror**: confirm `mirror.isMirror` is false on each bucket.
 
