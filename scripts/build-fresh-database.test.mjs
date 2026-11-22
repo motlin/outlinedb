@@ -1,10 +1,28 @@
 import {afterEach, describe, expect, test} from "vite-plus/test";
 import {execFileSync, spawn, spawnSync} from "node:child_process";
-import {copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync} from "node:fs";
+import
+{
+	chmodSync,
+	copyFileSync,
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	realpathSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 
 const script = join(import.meta.dirname, "build-fresh-database.sh");
+const realLsof = execFileSync(
+	"sh",
+	["-c", "command -v lsof"],
+	{
+		encoding: "utf8",
+	},
+).trim();
 
 // A copy of the script in a scratch repo, so its repo-relative watcher check and default database never touch the real ones.
 /** @returns {string} */
@@ -20,6 +38,12 @@ function scratchRepo()
 		},
 	);
 	copyFileSync(script, join(repo, "scripts", "build-fresh-database.sh"));
+	// The holder scan (`lsof -t`) reads every process's open files, which took a minute while a NAS copy loaded the machine;
+	// nothing holds a scratch database, so it answers empty, while the per-pid watcher cwd lookup still runs the real lsof.
+	mkdirSync(join(repo, "bin"));
+	const lsof = join(repo, "bin", "lsof");
+	writeFileSync(lsof, `#!/bin/sh\ncase " $* " in *" -t "*) exit 0 ;; esac\nexec ${realLsof} "$@"\n`);
+	chmodSync(lsof, 0o755);
 	return repo;
 }
 
@@ -38,6 +62,7 @@ function runScript(repo, args)
 			env:
 			{
 				...env,
+				PATH: `${join(repo, "bin")}:${env.PATH}`,
 				WORKFLOWY_EPOCH: "2020-01-01",
 			},
 		},
