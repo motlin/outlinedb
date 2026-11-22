@@ -15,7 +15,7 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/otter-api.sh transcript <otid> > .llm/otter/transc
 - Cache under `.llm/otter/transcripts/` (gitignored) and reuse cached files. Transcripts do not change once a meeting ends.
 - Fetch several meetings in one shell loop rather than one tool call each.
 - `speech <otid>` returns the raw JSON (speakers, outline, word alignment) when you need more than text.
-- `speaker-blocks <otid> [count]` lists each non-self speaker's longest blocks with `mm:ss` times, so the user can tag a speaker in Otter from 1-2 obvious blocks per person (never all blocks; skip mixed or unattributed blocks; no tag when in doubt, since a wrong tag corrupts voice recognition). Resolving a flagged attendee is covered in `commands/otter-journal-auto.md` under `Resolve a title flag`.
+- `speaker-blocks <otid> [count]` lists each non-self speaker's longest blocks with `mm:ss` times, so the user can tag a speaker in Otter from 1-2 obvious blocks per person (never all blocks; skip mixed or unattributed blocks; no tag when in doubt, since a wrong tag corrupts voice recognition). A speaker Otter already named as the wrong person is the exception: relabel all of its blocks. Resolving a flagged attendee is covered in `commands/otter-journal-auto.md` under `Resolve a title flag`.
 
 ## Credentials
 
