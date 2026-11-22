@@ -11,6 +11,7 @@ import type {SyncStatus} from "../src/sync";
 import {UserStore} from "../src/user-store";
 import type {AccountSync, AdminStatus, ProvisionInput, ProvisionResult} from "../src/user-store";
 import worker from "../src/worker";
+import type {WorkflowyImportView} from "../src/workflowy-import";
 
 type Cursor = SqlStorageCursor<Record<string, SqlStorageValue>>;
 
@@ -67,6 +68,11 @@ export class ProbeStore extends UserStore
 	override async adminStatus(): Promise<AdminStatus>
 	{
 		return metering.run("unmetered", async () => super.adminStatus());
+	}
+
+	override workflowyImportStatus(): WorkflowyImportView
+	{
+		return metering.run("unmetered", () => super.workflowyImportStatus());
 	}
 
 	/** Drain the outbox as the alarm does, counting only the rows the drain read and wrote, and why it failed. */
@@ -347,6 +353,19 @@ export class ProbeStore extends UserStore
 					txId: txId[0] ?? null,
 					mirrors,
 				},
+			);
+		}
+		if (url.pathname === "/__nodes")
+		{
+			// Every live node's parent, name and completion time (Unix seconds), so an import's tree reads in one probe.
+			return Response.json(
+				this.ctx.storage.sql
+					.exec(
+						"SELECT c.id, c.parent_id AS parentId, c.name, m.completed_at AS completedAt FROM node_content c " +
+							"JOIN node_metadata m ON m.node_id = c.id AND m.system_to = c.system_to " +
+							`WHERE c.system_to = ${FAR_FUTURE_DATE} ORDER BY c.id`,
+					)
+					.toArray(),
 			);
 		}
 		if (url.pathname === "/__account")

@@ -1,8 +1,11 @@
 /** The jobs sharing the Durable Object's one alarm. */
-type AlarmJob = "outbox" | "sync" | "embeddings";
+type AlarmJob = "outbox" | "sync" | "import" | "embeddings";
 
-/** Run order within one alarm: the outbox drains before the sync, so a catch-up starts from a drained outbox. */
-const JOBS: readonly AlarmJob[] = ["outbox", "sync", "embeddings"];
+/**
+ * Run order within one alarm: the outbox drains before the sync, so a catch-up starts from a drained outbox, and the
+ * per-account import runs before the embedding job, so the job sees what the import wrote.
+ */
+const JOBS: readonly AlarmJob[] = ["outbox", "sync", "import", "embeddings"];
 
 /** One job's view of the alarm, shaped like the storage calls a job used before the alarm was shared. */
 export interface JobAlarm

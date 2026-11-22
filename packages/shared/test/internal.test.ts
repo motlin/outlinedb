@@ -2,7 +2,12 @@ import type DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
 import path from "node:path";
 import {afterEach, describe, expect, it, vi} from "vite-plus/test";
-import {WorkflowyInternalClient, SessionRejectedError} from "../src/api/workflowy-internal-client.js";
+import
+{
+	MissingCredentialsError,
+	WorkflowyInternalClient,
+	SessionRejectedError,
+} from "../src/api/workflowy-internal-client.js";
 import {storeTreeTxId, readTreeTxId} from "../src/cache/tree-transaction.js";
 import {AccountOutboxRecorder, readPendingAccountOutbox} from "../src/cache/account-outbox.js";
 import {readAccountRows, readImportTime} from "../src/cache/account-store.js";
@@ -6736,6 +6741,81 @@ describe("internal client session store", () =>
 			expect(store.writes).toStrictEqual([`sessionid=${FAKE_SESSION_ID}`]);
 		});
 
+		it("keeps each item's node fields for an import when asked, dropping malformed ones", async () =>
+		{
+			const api = createFakeInternalApi();
+			api.respond("/get_tree_data/", () =>
+				json(
+					{
+						items: [
+							{
+								id: "a",
+								nm: "Alpha",
+								no: "a note",
+								prnt: null,
+								pr: 3,
+								ct: 10,
+								cp: 20,
+								lm: 30,
+								lmb: 99,
+								metadata:
+								{
+									layoutMode: "board",
+								},
+							},
+							{
+								id: "b",
+								nm: 7,
+								prnt: "a",
+							},
+						],
+						most_recent_operation_transaction_id: "42",
+						server_expanded_projects_list: ["k1"],
+					},
+				),
+			);
+			const client = new WorkflowyInternalClient(
+				{
+					sessionStore: memoryStore(SAVED_COOKIE),
+					fetch: api.fetch,
+					baseUrl: BASE_URL,
+				},
+			);
+
+			await expect(
+				client.getTreeSnapshot(
+					{
+						nodeFields: true,
+					},
+				),
+			).resolves.toStrictEqual(
+				{
+					items: [
+						{
+							id: "a",
+							nm: "Alpha",
+							no: "a note",
+							prnt: null,
+							pr: 3,
+							ct: 10,
+							cp: 20,
+							lm: 30,
+							metadata:
+							{
+								layoutMode: "board",
+							},
+						},
+						{
+							id: "b",
+							prnt: "a",
+						},
+					],
+					txId: "42",
+					expandedKeys: ["k1"],
+				},
+			);
+		});
+
 		it("fails clearly when the cookie expired and no credentials are available", async () =>
 		{
 			const api = createFakeInternalApi();
@@ -6754,11 +6834,14 @@ describe("internal client session store", () =>
 				},
 			);
 
-			await expect(client.bootstrap()).rejects.toThrow(
+			const failure = client.bootstrap();
+			await expect(failure).rejects.toThrow(
 				new Error(
 					"Workflowy session cookie is missing or expired and WORKFLOWY_USERNAME/WORKFLOWY_PASSWORD are not set; set them in the environment (e.g. from .envrc), or run './bin/run.js internal login' with them set",
 				),
 			);
+			// Typed, so a host holding only a stored session can tell an expired one from any other failure.
+			await expect(failure).rejects.toBeInstanceOf(MissingCredentialsError);
 			expect(api.requests.map((r) => [r.method, r.path])).toStrictEqual([["GET", "/get_initialization_data"]]);
 		});
 

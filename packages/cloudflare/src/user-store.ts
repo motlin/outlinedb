@@ -37,7 +37,7 @@ import type {SessionCookieStore} from "@outlinedb/shared/api";
 import {drizzle} from "drizzle-orm/durable-sqlite";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {AlarmSchedule} from "./alarm-schedule";
-import {deriveCredentialsKey, sealSecret} from "./credentials-crypto";
+import {deriveCredentialsKey, openSecret, sealSecret} from "./credentials-crypto";
 import {r2BlobStore} from "./blob-store-r2";
 import {migrateDurableObject} from "./do-migrations";
 import {EmbeddingJob} from "./embedding-job";
@@ -54,6 +54,8 @@ import {isStoreOwner, readWorkerConfig, readWorkerInternalAuth} from "./worker-c
 import type {WorkerSecrets} from "./worker-config";
 import {WorkflowyConnection} from "./workflowy-connection";
 import type {WorkflowyConnectionView} from "./workflowy-connection";
+import {WorkflowyImportJob} from "./workflowy-import";
+import type {WorkflowyImportView} from "./workflowy-import";
 
 /**
  * One user's outline: a SQLite-backed Durable Object answering RPC over its own database, plus the ladder and nodes
@@ -86,6 +88,8 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 	private readonly alarms = new AlarmSchedule(this.ctx.storage);
 	/** This account's own workflowy.com connection, set by the connect flow; independent of the env-secret owner path. */
 	protected readonly workflowyConnection = new WorkflowyConnection(this.ctx.storage.sql);
+	/** This account's one-time import from workflowy.com over its own stored session; runs in the shared alarm. */
+	private workflowyImport!: WorkflowyImportJob;
 	/** Delivers mirror-mode writes' outbox rows to workflowy.com; undefined without the internal API. */
 	protected drainOutbox: (() => Promise<unknown>) | undefined;
 	private sync!: SyncJob;
@@ -279,6 +283,55 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 				rows: () => this.rowMeter.rows(),
 			},
 		);
+		this.workflowyImport = new WorkflowyImportJob(
+			{
+				storage: ctx.storage,
+				db,
+				bucket: env.SNAPSHOTS,
+				keyPrefix: ctx.id.toString(),
+				openClient: async () => this.storedSessionClient(),
+				expireSession: () =>
+				{
+					this.workflowyConnection.expire();
+				},
+				alarm: this.alarms.for("import"),
+				rows: () => this.rowMeter.rows(),
+				env,
+			},
+		);
+	}
+
+	/**
+	 * A workflowy.com client on this account's stored session, opened with this object's key, and no password to fall
+	 * back on: a refused session surfaces instead of logging in again. Undefined when not connected.
+	 */
+	private async storedSessionClient(): Promise<WorkflowyInternalClient | undefined>
+	{
+		const sealed = this.workflowyConnection.session();
+		const secret = this.env.OUTLINEDB_CREDENTIALS_KEY;
+		if (sealed === undefined || !secret)
+		{
+			return undefined;
+		}
+		const cookie = await openSecret(await deriveCredentialsKey(secret, this.ctx.id.toString()), sealed);
+		const apiUrl = this.env.WORKFLOWY_API_URL;
+		return new WorkflowyInternalClient(
+			{
+				sessionStore:
+				{
+					read: () => cookie,
+					write()
+					{
+						// Without a password nothing logs in, so no new cookie ever arrives.
+					},
+					clear()
+					{
+						// The connection, not this client, decides when the stored cookie goes.
+					},
+				},
+				baseUrl: apiUrl === "" ? undefined : apiUrl,
+			},
+		);
 	}
 
 	/**
@@ -402,6 +455,52 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 					status: 409,
 					error: "workflowy-not-connected",
 				};
+	}
+
+	/**
+	 * Import the whole account from workflowy.com over its stored session on the next alarm (or keep the import in
+	 * progress): the tree with its metadata, mirrors, backlinks and completion, and the account tables and expansion.
+	 * The imported outline replaces the current one, the tutorial included, with no confirm.
+	 */
+	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
+	async startWorkflowyImport(): Promise<StartWorkflowyImportResult>
+	{
+		if (!this.env.OUTLINEDB_CREDENTIALS_KEY)
+		{
+			return {
+				ok: false,
+				status: 503,
+				error: "credentials-key-not-configured",
+			};
+		}
+		const connection = this.workflowyConnection.view();
+		if (!connection.connected)
+		{
+			return {
+				ok: false,
+				status: 409,
+				error: "workflowy-not-connected",
+			};
+		}
+		if (connection.status === "expired")
+		{
+			return {
+				ok: false,
+				status: 409,
+				error: "workflowy-session-expired",
+			};
+		}
+		return {
+			ok: true,
+			import: await this.workflowyImport.start(),
+		};
+	}
+
+	/** The newest workflowy.com import run: its phase, per-kind counts and failures. */
+	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
+	workflowyImportStatus(): WorkflowyImportView
+	{
+		return this.workflowyImport.view();
 	}
 
 	/** Phase the connection out and wipe every stored copy of the session cookie. */
@@ -621,6 +720,10 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 			{
 				await this.sync.tick();
 			}
+			if (due.includes("import"))
+			{
+				await this.workflowyImport.tick();
+			}
 			await this.noticeEmbeddings();
 			if (
 				this.embeddings !== undefined &&
@@ -792,6 +895,25 @@ export type ConnectWorkflowyResult =
 			status: 401;
 			error: "workflowy-login-failed";
 			message: string;
+	  };
+
+export type StartWorkflowyImportResult =
+	|
+	  {
+			ok: true;
+			import: WorkflowyImportView;
+	  }
+	|
+	  {
+			ok: false;
+			status: 503;
+			error: "credentials-key-not-configured";
+	  }
+	|
+	  {
+			ok: false;
+			status: 409;
+			error: "workflowy-not-connected" | "workflowy-session-expired";
 	  };
 
 export type SetWorkflowyMirrorResult =

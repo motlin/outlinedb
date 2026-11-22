@@ -226,6 +226,16 @@ app.patch(WORKFLOWY_CONNECTION, async (c) =>
 });
 app.delete(WORKFLOWY_CONNECTION, async (c) => c.json(await c.var.stub.disconnectWorkflowy()));
 
+// The signed-in user's import from their connected workflowy.com account: POST starts it (or keeps the one in progress),
+// GET reads the newest run's phase, per-kind counts and failures.
+const WORKFLOWY_IMPORT = "/api/v1/workflowy-import";
+app.get(WORKFLOWY_IMPORT, async (c) => c.json(await c.var.stub.workflowyImportStatus()));
+app.post(WORKFLOWY_IMPORT, async (c) =>
+{
+	const result = await c.var.stub.startWorkflowyImport();
+	return result.ok ? c.json(result.import, 202) : c.json(result, result.status);
+});
+
 // Migrated routes are answered here over RPC.
 app.route(
 	"/",

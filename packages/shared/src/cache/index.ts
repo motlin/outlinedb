@@ -99,6 +99,7 @@ export
 	type UpstreamS3File,
 	writeInternalMetadata,
 } from "./internal-metadata.js";
+export {treeDataNodes} from "./tree-data-nodes.js";
 export
 {
 	type BacklinkItem,
@@ -115,6 +116,7 @@ export
 {
 	ACCOUNT_IMPORT_NAME,
 	AccountNotProvisionedError,
+	accountRows,
 	accountRowTotal,
 	type AccountRows,
 	type AccountSnapshot,

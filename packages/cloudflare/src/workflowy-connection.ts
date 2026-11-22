@@ -111,6 +111,25 @@ export class WorkflowyConnection
 		return true;
 	}
 
+	/**
+	 * Mark the connection expired once workflowy.com refused its session, dropping the dead cookie; the account keeps
+	 * its email and keep-syncing choice until the user signs in again.
+	 */
+	expire(): void
+	{
+		const live = this.live();
+		if (live !== undefined)
+		{
+			this.write(
+				{
+					...live,
+					status: "expired",
+					session: undefined,
+				},
+			);
+		}
+	}
+
 	/** Phase the connection out; no version, live or closed, keeps a cookie afterwards. */
 	disconnect(): void
 	{

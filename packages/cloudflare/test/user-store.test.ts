@@ -118,6 +118,11 @@ describe("user store Durable Object behind the Worker", () =>
 					temporal: true,
 					indexes: ["workflowy_connection_closed_at_idx", "workflowy_connection_system_to_idx"],
 				},
+				workflowy_imports:
+				{
+					temporal: true,
+					indexes: ["workflowy_imports_closed_at_idx", "workflowy_imports_system_to_idx"],
+				},
 			},
 		);
 	});
@@ -543,5 +548,5 @@ function seedBeforeMicroseconds(path: string): void
 /** Tables the Durable Object creates itself, outside the shared migration chain. */
 function isDurableObjectOnly(name: string): boolean
 {
-	return name.startsWith("sync_") || name.startsWith("workflowy_connection");
+	return name.startsWith("sync_") || name.startsWith("workflowy_connection") || name.startsWith("workflowy_imports");
 }

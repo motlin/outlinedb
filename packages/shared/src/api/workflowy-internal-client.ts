@@ -130,10 +130,26 @@ export interface InternalTreeItem
 	metadata?: Record<string, unknown>;
 }
 
-/** One whole-tree `/get_tree_data/` read: its items, the transaction id they are current to, and the expanded keys. */
-export interface TreeSnapshot
+/**
+ * One `/get_tree_data/` item with its node fields, for an import that builds the tree from it. Timestamps (`ct`, `lm`,
+ * `cp`) are seconds since the account's join date; `prnt` is the parent's id (null at the top) and `pr` orders siblings.
+ * A field upstream sent with the wrong type is left out.
+ */
+export interface TreeDataItem extends InternalTreeItem
 {
-	items: InternalTreeItem[];
+	nm?: string;
+	no?: string | null;
+	prnt?: string | null;
+	pr?: number;
+	ct?: number;
+	cp?: number | null;
+	lm?: number;
+}
+
+/** One whole-tree `/get_tree_data/` read: its items, the transaction id they are current to, and the expanded keys. */
+export interface TreeSnapshot<Item extends InternalTreeItem = InternalTreeItem>
+{
+	items: Item[];
 	txId: string;
 	expandedKeys: string[];
 }
@@ -197,6 +213,15 @@ export interface InternalAuth
 {
 	credentials?: WorkflowyCredentials;
 	sessionStore: SessionCookieStore;
+}
+
+/** No usable session cookie and no password to log in with: a host holding only a stored session must sign in again. */
+export class MissingCredentialsError extends Error
+{
+	constructor()
+	{
+		super(MISSING_AUTH_MESSAGE);
+	}
 }
 
 export const MISSING_AUTH_MESSAGE =
@@ -316,7 +341,7 @@ export class WorkflowyInternalClient
 	{
 		if (!this.credentials)
 		{
-			throw new Error(MISSING_AUTH_MESSAGE);
+			throw new MissingCredentialsError();
 		}
 		const url = `${this.baseUrl}/ajax_login`;
 
@@ -476,26 +501,33 @@ export class WorkflowyInternalClient
 	/**
 	 * The whole main tree from one `/get_tree_data/` (about 54 MB live): every
 	 * item's id and, when it has any, its metadata, plus the transaction id and
-	 * expanded keys of that same read. Only batch imports and the explicit
-	 * Cloudflare seed call it (guarded by `tree-download-guard.test.ts`).
+	 * expanded keys of that same read. With `nodeFields`, each item also keeps
+	 * its name, note, parent, priority and timestamps, for an import that builds
+	 * the tree from this read alone. Only batch imports, the explicit Cloudflare
+	 * seed and the per-account import call it (guarded by `tree-download-guard.test.ts`).
 	 */
-	async getTreeSnapshot(): Promise<TreeSnapshot>
+	async getTreeSnapshot(): Promise<TreeSnapshot>;
+	async getTreeSnapshot(options: {nodeFields: true}): Promise<TreeSnapshot<TreeDataItem>>;
+	async getTreeSnapshot(options?: {nodeFields: true}): Promise<TreeSnapshot<TreeDataItem>>
 	{
 		const {body} = await this.withSession(async () => this.getJson("/get_tree_data/"));
 		const snapshot = TreeSnapshotSchema.parse(body);
 		return {
-			items: snapshot.items.map(({id, metadata}) =>
-				metadata === undefined
-					?
-						{
-							id,
-						}
-					:
-						{
-							id,
-							metadata,
-						},
-			),
+			items: snapshot.items.map((item) =>
+			{
+				const kept: TreeDataItem =
+					options?.nodeFields === true
+						? treeDataFields(item)
+						:
+							{
+								id: item.id,
+							};
+				if (item.metadata !== undefined)
+				{
+					kept.metadata = item.metadata;
+				}
+				return kept;
+			}),
 			txId: snapshot.most_recent_operation_transaction_id,
 			expandedKeys: snapshot.server_expanded_projects_list ?? [],
 		};
@@ -587,4 +619,51 @@ export class WorkflowyInternalClient
 			},
 		);
 	}
+}
+
+const text = (value: unknown): value is string => typeof value === "string";
+const count = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
+
+/** An item's id and the node fields of the type {@link TreeDataItem} expects; a mistyped field is left out. */
+function treeDataFields(
+	item: Record<string, unknown> &
+	{
+		id: string;
+	},
+): TreeDataItem
+{
+	const kept: TreeDataItem =
+	{
+		id: item.id,
+	};
+	const {nm, no, prnt, pr, ct, cp, lm} = item;
+	if (text(nm))
+	{
+		kept.nm = nm;
+	}
+	if (text(no) || no === null)
+	{
+		kept.no = no;
+	}
+	if (text(prnt) || prnt === null)
+	{
+		kept.prnt = prnt;
+	}
+	if (count(pr))
+	{
+		kept.pr = pr;
+	}
+	if (count(ct))
+	{
+		kept.ct = ct;
+	}
+	if (count(cp) || cp === null)
+	{
+		kept.cp = cp;
+	}
+	if (count(lm))
+	{
+		kept.lm = lm;
+	}
+	return kept;
 }

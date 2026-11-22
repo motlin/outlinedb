@@ -37,7 +37,7 @@ function filesMatching(pattern: RegExp): string[]
 
 describe("whole-tree downloads (get_tree_data, about 54 MB live)", () =>
 {
-	it("are read only by the batch imports, the explicit Cloudflare seed and the manual probe", () =>
+	it("are read only by the batch imports, the explicit Cloudflare seed, the per-account import and the manual probe", () =>
 	{
 		expect(filesMatching(/getTreeSnapshot\(/u)).toStrictEqual([
 			// CLI `cache import-api`: an explicit batch import.
@@ -48,6 +48,8 @@ describe("whole-tree downloads (get_tree_data, about 54 MB live)", () =>
 			"packages/cli/src/commands/internal/probe.ts",
 			// The Cloudflare reseed, reached only through POST /api/admin/seed.
 			"packages/cloudflare/src/user-store.ts",
+			// The per-account import, started only by the account's own POST /api/v1/workflowy-import.
+			"packages/cloudflare/src/workflowy-import.ts",
 			// The definition.
 			"packages/shared/src/api/workflowy-internal-client.ts",
 		]);
