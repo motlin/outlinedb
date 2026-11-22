@@ -10,6 +10,23 @@
 // Usage:
 //   node plugins/gtd/scripts/photo-caption-prep.mts [--days 14] [--out .llm/gtd/photo-captions] [--workflowy-db outlinedb.sqlite]
 //   node plugins/gtd/scripts/photo-caption-prep.mts --count-only [--days 14]
+//   node plugins/gtd/scripts/photo-caption-prep.mts --since YYYY-MM-DD [--sample 3] [--out .llm/gtd/status-photos]
+//   node plugins/gtd/scripts/photo-caption-prep.mts --since YYYY-MM-DD --count-only
+//   node plugins/gtd/scripts/photo-caption-prep.mts --since YYYY-MM-DD --write-captions captions.json
+//
+// --since is the "Add photos to Status" mode: every photo taken since local
+// midnight of the date, grouped by Photos moment (the app's event groups). One
+// caption is chosen per group and written to every photo in it, and only the
+// group's favorites are later posted to Workflowy, so more gets captioned than
+// posted. It writes <out>/groups.json; each group lists all uuids, its
+// favorites, existing captions (good seeds), that day's journalSeeds, and view
+// JPEGs for every favorite plus --sample evenly spaced other photos. Favorites
+// also get a full-size postPath JPEG for the Workflowy upload. Prints
+//   groups=<n> uncaptioned=<n> favorites=<n> viewable=<n> unviewable=<n> manifest=<path>
+// --count-only prints groups=<n> uncaptioned=<n> favorites=<n>.
+// --write-captions reads [{"id": "<group id>", "caption": "..."}] and the
+// groups.json from <out>, writes the caption to every photo of each group
+// through Photos with read-back, and prints written=<n> failed=<n>.
 //
 // Each manifest photo carries journalSeeds: that day's journal entries from the
 // Workflowy cache with emoji, @ signs, and trailing tags stripped, so proposed
@@ -28,7 +45,7 @@ import {spawnSync} from "node:child_process";
 import {constants, copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync} from "node:fs";
 import {homedir} from "node:os";
 import {join, resolve} from "node:path";
-import {expectArray, expectObject, numberField, parseJson, stringField} from "./json.mts";
+import {arrayField, expectArray, expectObject, numberField, parseJson, readJsonFile, stringField} from "./json.mts";
 import type {JsonObject} from "./json.mts";
 import {isMain} from "./is-main.mts";
 
@@ -92,12 +109,74 @@ export interface Manifest
 	photos: ManifestEntry[];
 }
 
+export interface EventPhotoRow extends Favorite
+{
+	favorite: boolean;
+	caption: string;
+	moment: string;
+	place: string;
+}
+
+export interface EventGroup
+{
+	id: string;
+	place: string;
+	date: string;
+	start: string;
+	end: string;
+	photos: EventPhotoRow[];
+	favorites: string[];
+	captions: string[];
+	uncaptioned: number;
+}
+
+export interface GroupView
+{
+	uuid: string;
+	favorite: boolean;
+	viewPath: string | null;
+	postPath: string | null;
+	faces: PhotoFaces;
+	facesSummary: string;
+}
+
+export interface GroupManifestEntry
+{
+	id: string;
+	place: string;
+	date: string;
+	start: string;
+	end: string;
+	photoCount: number;
+	uuids: string[];
+	favorites: string[];
+	captions: string[];
+	uncaptioned: number;
+	journalSeeds: string[];
+	views: GroupView[];
+}
+
+export interface CaptionChoice
+{
+	id: string;
+	caption: string;
+}
+
+export interface CaptionTarget
+{
+	caption: string;
+	uuids: string[];
+}
+
 interface Args
 {
 	days: number;
-	out: string;
+	out: string | null;
 	countOnly: boolean;
 	workflowyDb: string;
+	since: string | null;
+	sample: number;
+	writeCaptions: string | null;
 }
 
 const UUID_RE = /^[0-9A-Fa-f-]+$/u;
@@ -130,6 +209,147 @@ export function favoritesQuery(days: unknown): string
 		" AND COALESCE(B.ZTITLE,'')='' AND COALESCE(B.ZACCESSIBILITYDESCRIPTION,'')=''" +
 		" ORDER BY A.ZDATECREATED DESC;"
 	);
+}
+
+// Local midnight of `since` to UTC seconds, then to the Apple epoch.
+export function eventPhotosQuery(since: string): string
+{
+	if (!DATE_RE.test(since))
+	{
+		throw new Error(`Invalid date: ${since}`);
+	}
+	return (
+		"SELECT A.ZUUID AS uuid, datetime(A.ZDATECREATED+978307200,'unixepoch','localtime') AS created, A.ZDIRECTORY AS directory, A.ZFILENAME AS filename, COALESCE(B.ZORIGINALFILENAME,'') AS originalFilename, A.ZFAVORITE AS favorite, COALESCE(B.ZTITLE,'') AS caption, COALESCE(M.ZUUID,'') AS moment, COALESCE(M.ZTITLE,'') AS place" +
+		" FROM ZASSET A LEFT JOIN ZADDITIONALASSETATTRIBUTES B ON A.Z_PK=B.ZASSET LEFT JOIN ZMOMENT M ON A.ZMOMENT=M.Z_PK" +
+		" WHERE A.ZTRASHEDSTATE=0 AND A.ZHIDDEN=0 AND A.ZKIND=0" +
+		` AND A.ZDATECREATED >= strftime('%s','${since}','utc')-978307200` +
+		" ORDER BY A.ZDATECREATED;"
+	);
+}
+
+// Photos assigns each asset to a moment (its event group). A photo Photos has
+// not processed yet has no moment, so it stands alone rather than merging with
+// other unassigned photos from different events.
+export function groupEvents(rows: EventPhotoRow[]): EventGroup[]
+{
+	const groups = new Map<string, EventGroup>();
+	for (const row of rows)
+	{
+		const id = row.moment || row.uuid;
+		let group = groups.get(id);
+		if (!group)
+		{
+			group =
+			{
+				id,
+				place: row.place,
+				date: row.created.slice(0, 10),
+				start: row.created,
+				end: row.created,
+				photos: [],
+				favorites: [],
+				captions: [],
+				uncaptioned: 0,
+			};
+			groups.set(id, group);
+		}
+		group.photos.push(row);
+		group.start = row.created < group.start ? row.created : group.start;
+		group.end = row.created > group.end ? row.created : group.end;
+		group.date = group.start.slice(0, 10);
+		if (row.favorite)
+		{
+			group.favorites.push(row.uuid);
+		}
+		if (!row.caption)
+		{
+			group.uncaptioned += 1;
+		}
+		else if (!group.captions.includes(row.caption))
+		{
+			group.captions.push(row.caption);
+		}
+	}
+	return [...groups.values()].toSorted((a, b) => a.start.localeCompare(b.start));
+}
+
+// iCloud exports take ~10s each, so a 90-photo event shows its favorites plus
+// a few evenly spaced others: enough to caption the event, not every frame.
+export function pickViewPhotos(group: EventGroup, sample: number): string[]
+{
+	const others = group.photos.filter((photo) => !photo.favorite);
+	const count = Math.min(sample, others.length);
+	const picked: string[] = [];
+	for (let i = 0; i < count; i++)
+	{
+		const other = others[Math.floor(((i + 0.5) * others.length) / count)];
+		if (other)
+		{
+			picked.push(other.uuid);
+		}
+	}
+	return [...group.favorites, ...picked];
+}
+
+export function captionTargets(
+	groups:
+	{
+		id: string;
+		photos:
+		{
+			uuid: string;
+		}[];
+	}[],
+	choices: CaptionChoice[],
+): CaptionTarget[]
+{
+	const byId = new Map(groups.map((group) => [group.id, group]));
+	return choices.map(({id, caption}) =>
+	{
+		const group = byId.get(id);
+		if (!group)
+		{
+			throw new Error(`Unknown event group: ${id}`);
+		}
+		const trimmed = caption.trim();
+		if (!trimmed)
+		{
+			throw new Error(`Blank caption for event group ${id}`);
+		}
+		return {
+			caption: trimmed,
+			uuids: group.photos.map((photo) => photo.uuid),
+		};
+	});
+}
+
+// The caption and uuids arrive as osascript arguments, so quotes or
+// backslashes in a caption can never break or inject into the script.
+export function buildCaptionAppleScript(): string[]
+{
+	return [
+		"on run argv",
+		"set cap to item 1 of argv",
+		"set okCount to 0",
+		'tell application "Photos"',
+		"repeat with i from 2 to (count of argv)",
+		"set u to (item i of argv)",
+		"try",
+		'set m to media item id (u & "/L0/001")',
+		"set name of m to cap",
+		"if (name of m) is cap then",
+		"set okCount to okCount + 1",
+		"else",
+		'log ("mismatch " & u)',
+		"end if",
+		"on error e",
+		'log ("failed " & u & ": " & e)',
+		"end try",
+		"end repeat",
+		"end tell",
+		"return okCount",
+		"end run",
+	];
 }
 
 export function facesQuery(uuids: string[]): string
@@ -447,9 +667,12 @@ function parseArgs(argv: string[]): Args
 	const args: Args =
 	{
 		days: 14,
-		out: ".llm/gtd/photo-captions",
+		out: null,
 		countOnly: false,
 		workflowyDb: "outlinedb.sqlite",
+		since: null,
+		sample: 3,
+		writeCaptions: null,
 	};
 	for (let i = 0; i < argv.length; i++)
 	{
@@ -464,6 +687,18 @@ function parseArgs(argv: string[]): Args
 		else if (argv[i] === "--out")
 		{
 			args.out = argv[++i] ?? args.out;
+		}
+		else if (argv[i] === "--since")
+		{
+			args.since = argv[++i] ?? null;
+		}
+		else if (argv[i] === "--sample")
+		{
+			args.sample = Number(argv[++i]);
+		}
+		else if (argv[i] === "--write-captions")
+		{
+			args.writeCaptions = argv[++i] ?? null;
 		}
 		else if (argv[i] === "--count-only")
 		{
@@ -487,6 +722,15 @@ function toFavorite(row: JsonObject): Favorite
 		originalFilename: stringField(row, "originalFilename") ?? "",
 	};
 }
+
+const toEventPhotoRow = (row: JsonObject): EventPhotoRow => (
+{
+	...toFavorite(row),
+	favorite: numberField(row, "favorite") === 1,
+	caption: stringField(row, "caption") ?? "",
+	moment: stringField(row, "moment") ?? "",
+	place: stringField(row, "place") ?? "",
+});
 
 const toFaceRow = (row: JsonObject): FaceRow => (
 {
@@ -577,11 +821,16 @@ export function viewJpegArgs(source: string, viewPath: string): string[]
 	return ["-s", "format", "jpeg", "-Z", "900", source, "--out", viewPath];
 }
 
-function toViewJpeg(source: string, viewPath: string): boolean
+export function postJpegArgs(source: string, postPath: string): string[]
+{
+	return ["-s", "format", "jpeg", source, "--out", postPath];
+}
+
+function toViewJpeg(source: string, viewPath: string, argsFor = viewJpegArgs): boolean
 {
 	const result = spawnSync(
 		"sips",
-		viewJpegArgs(source, viewPath),
+		argsFor(source, viewPath),
 		{
 			encoding: "utf8",
 		},
@@ -593,14 +842,126 @@ function main(): void
 {
 	const args = parseArgs(process.argv.slice(2));
 	const libraryPath = join(homedir(), "Pictures", "Photos Library.photoslibrary");
-	const outDir = resolve(args.out);
+	const outDir = resolve(args.out ?? (args.since === null ? ".llm/gtd/photo-captions" : ".llm/gtd/status-photos"));
 	mkdirSync(
 		outDir,
 		{
 			recursive: true,
 		},
 	);
-	withDatabaseCopy(libraryPath, outDir, (dbPath) => run(args, libraryPath, outDir, dbPath));
+	if (args.since !== null && args.writeCaptions !== null)
+	{
+		writeCaptions(args.writeCaptions, outDir);
+		return;
+	}
+	withDatabaseCopy(libraryPath, outDir, (dbPath) =>
+		args.since === null
+			? run(args, libraryPath, outDir, dbPath)
+			: runEvents(args, args.since, libraryPath, outDir, dbPath),
+	);
+}
+
+function resetDir(dir: string): void
+{
+	rmSync(
+		dir,
+		{
+			recursive: true,
+			force: true,
+		},
+	);
+	mkdirSync(
+		dir,
+		{
+			recursive: true,
+		},
+	);
+}
+
+// Converts local originals straight to view JPEGs and exports iCloud-only
+// photos through Photos first. Photos in postUuids also get a full-size JPEG.
+function stagePhotos(
+	photos: Favorite[],
+	libraryPath: string,
+	outDir: string,
+	postUuids: Set<string>,
+):
+{
+	local: LocalFavorite[];
+	icloud: Favorite[];
+	views: Record<string, string>;
+	posts: Record<string, string>;
+}
+{
+	const viewDir = join(outDir, "view");
+	const postDir = join(outDir, "post");
+	const exportDir = join(outDir, "export");
+	resetDir(viewDir);
+	resetDir(exportDir);
+	if (postUuids.size > 0)
+	{
+		resetDir(postDir);
+	}
+	const views: Record<string, string> = {};
+	const posts: Record<string, string> = {};
+	const convert = (uuid: string, source: string): void =>
+	{
+		const viewPath = join(viewDir, `${uuid}.jpg`);
+		if (toViewJpeg(source, viewPath))
+		{
+			views[uuid] = viewPath;
+		}
+		const postPath = join(postDir, `${uuid}.jpg`);
+		if (postUuids.has(uuid) && toViewJpeg(source, postPath, postJpegArgs))
+		{
+			posts[uuid] = postPath;
+		}
+	};
+
+	const {local, icloud} = planSources(photos, libraryPath, existsSync);
+	for (const photo of local)
+	{
+		convert(photo.uuid, photo.originalPath);
+	}
+
+	if (icloud.length > 0)
+	{
+		for (const photo of icloud)
+		{
+			mkdirSync(
+				join(exportDir, photo.uuid),
+				{
+					recursive: true,
+				},
+			);
+		}
+		const script = buildExportAppleScript(icloud.map((f) => f.uuid)).flatMap((line) => ["-e", line]);
+		const result = spawnSync(
+			"osascript",
+			[...script, exportDir],
+			{
+				encoding: "utf8",
+			},
+		);
+		writeFileSync(
+			join(outDir, "export.log"),
+			`${result.stderr}exit=${result.status} exported=${result.stdout.trim()}\n`,
+		);
+		for (const photo of icloud)
+		{
+			const [file] = readdirSync(join(exportDir, photo.uuid));
+			if (file)
+			{
+				convert(photo.uuid, join(exportDir, photo.uuid, file));
+			}
+		}
+	}
+	return {
+		local,
+		icloud,
+		views,
+		posts,
+	};
 }
 
 function run(args: Args, libraryPath: string, outDir: string, dbPath: string): void
@@ -631,75 +992,7 @@ function run(args: Args, libraryPath: string, outDir: string, dbPath: string): v
 		return;
 	}
 
-	const viewDir = join(outDir, "view");
-	const exportDir = join(outDir, "export");
-	rmSync(
-		viewDir,
-		{
-			recursive: true,
-			force: true,
-		},
-	);
-	rmSync(
-		exportDir,
-		{
-			recursive: true,
-			force: true,
-		},
-	);
-	mkdirSync(
-		viewDir,
-		{
-			recursive: true,
-		},
-	);
-
-	const {local, icloud} = planSources(favorites, libraryPath, existsSync);
-	const views: Record<string, string> = {};
-	for (const favorite of local)
-	{
-		const viewPath = join(viewDir, `${favorite.uuid}.jpg`);
-		if (toViewJpeg(favorite.originalPath, viewPath))
-		{
-			views[favorite.uuid] = viewPath;
-		}
-	}
-
-	if (icloud.length > 0)
-	{
-		for (const favorite of icloud)
-		{
-			mkdirSync(
-				join(exportDir, favorite.uuid),
-				{
-					recursive: true,
-				},
-			);
-		}
-		const script = buildExportAppleScript(icloud.map((f) => f.uuid)).flatMap((line) => ["-e", line]);
-		const result = spawnSync(
-			"osascript",
-			[...script, exportDir],
-			{
-				encoding: "utf8",
-			},
-		);
-		writeFileSync(
-			join(outDir, "export.log"),
-			`${result.stderr}exit=${result.status} exported=${result.stdout.trim()}\n`,
-		);
-		for (const favorite of icloud)
-		{
-			const folder = join(exportDir, favorite.uuid);
-			const [file] = readdirSync(folder);
-			const viewPath = join(viewDir, `${favorite.uuid}.jpg`);
-			if (file && toViewJpeg(join(folder, file), viewPath))
-			{
-				views[favorite.uuid] = viewPath;
-			}
-		}
-	}
-
+	const {local, icloud, views} = stagePhotos(favorites, libraryPath, outDir, new Set());
 	const faces =
 		favorites.length > 0
 			? groupFaces(sqliteJson(dbPath, facesQuery(favorites.map((f) => f.uuid))).map(toFaceRow))
@@ -721,6 +1014,116 @@ function run(args: Args, libraryPath: string, outDir: string, dbPath: string): v
 	process.stdout.write(
 		`total=${manifest.total} viewable=${manifest.viewable} unviewable=${manifest.unviewable} journaled=${journaled.length} manifest=${manifestPath}\n`,
 	);
+}
+
+function runEvents(args: Args, since: string, libraryPath: string, outDir: string, dbPath: string): void
+{
+	if (!Number.isInteger(args.sample) || args.sample < 0)
+	{
+		throw new Error(`--sample must be a non-negative integer, got ${String(args.sample)}`);
+	}
+	const groups = groupEvents(sqliteJson(dbPath, eventPhotosQuery(since)).map(toEventPhotoRow));
+	const uncaptioned = groups.filter((group) => group.uncaptioned > 0).length;
+	const favoriteCount = groups.reduce((sum, group) => sum + group.favorites.length, 0);
+	if (args.countOnly)
+	{
+		process.stdout.write(`groups=${groups.length} uncaptioned=${uncaptioned} favorites=${favoriteCount}\n`);
+		return;
+	}
+
+	const workflowyDb = resolve(args.workflowyDb);
+	if (!existsSync(workflowyDb))
+	{
+		throw new Error(`Workflowy cache not found: ${workflowyDb}`);
+	}
+	refreshStaleCache(workflowyDb);
+	const picks = new Map(groups.map((group) => [group.id, pickViewPhotos(group, args.sample)]));
+	const pickedUuids = new Set([...picks.values()].flat());
+	const toStage = groups.flatMap((group) => group.photos).filter((photo) => pickedUuids.has(photo.uuid));
+	const favorites = new Set(groups.flatMap((group) => group.favorites));
+	const {views, posts} = stagePhotos(toStage, libraryPath, outDir, favorites);
+	const faces =
+		pickedUuids.size > 0 ? groupFaces(sqliteJson(dbPath, facesQuery([...pickedUuids])).map(toFaceRow)) : {};
+	const dates = [...new Set(groups.map((group) => group.date))];
+	const journal =
+		dates.length > 0 ? groupJournal(sqliteJson(workflowyDb, journalQuery(dates)).map(toJournalRow)) : {};
+	const entries: GroupManifestEntry[] = groups.map((group) => (
+	{
+		id: group.id,
+		place: group.place,
+		date: group.date,
+		start: group.start,
+		end: group.end,
+		photoCount: group.photos.length,
+		uuids: group.photos.map((photo) => photo.uuid),
+		favorites: group.favorites,
+		captions: group.captions,
+		uncaptioned: group.uncaptioned,
+		journalSeeds: journal[group.date] ?? [],
+		views: (picks.get(group.id) ?? []).map((uuid) =>
+		{
+			const photoFaces = faces[uuid] ??
+			{
+				named: [],
+				unnamed: 0,
+			};
+			return {
+				uuid,
+				favorite: favorites.has(uuid),
+				viewPath: views[uuid] ?? null,
+				postPath: posts[uuid] ?? null,
+				faces: photoFaces,
+				facesSummary: facesSummary(photoFaces),
+			};
+		}),
+	}));
+	const viewable = Object.keys(views).length;
+	const manifestPath = join(outDir, "groups.json");
+	writeFileSync(manifestPath, `${JSON.stringify(entries, null, "\t")}\n`);
+	process.stdout.write(
+		`groups=${groups.length} uncaptioned=${uncaptioned} favorites=${favoriteCount} viewable=${viewable} unviewable=${pickedUuids.size - viewable} manifest=${manifestPath}\n`,
+	);
+}
+
+function writeCaptions(choicesPath: string, outDir: string): void
+{
+	const groups = expectArray(readJsonFile(join(outDir, "groups.json")), "groups.json").map((value) =>
+	{
+		const group = expectObject(value, "group");
+		return {
+			id: stringField(group, "id") ?? "",
+			photos: arrayField(group, "uuids").map((uuid) => (
+			{
+				uuid: String(uuid),
+			})),
+		};
+	});
+	const choices = expectArray(readJsonFile(choicesPath), "captions").map((value) =>
+	{
+		const choice = expectObject(value, "caption choice");
+		return {
+			id: stringField(choice, "id") ?? "",
+			caption: stringField(choice, "caption") ?? "",
+		};
+	});
+	const script = buildCaptionAppleScript().flatMap((line) => ["-e", line]);
+	let written = 0;
+	let failed = 0;
+	for (const {caption, uuids} of captionTargets(groups, choices))
+	{
+		const result = spawnSync(
+			"osascript",
+			[...script, caption, ...uuids],
+			{
+				encoding: "utf8",
+			},
+		);
+		process.stderr.write(result.stderr);
+		const ok = result.status === 0 ? Number(result.stdout.trim()) : 0;
+		written += ok;
+		failed += uuids.length - ok;
+	}
+	process.stdout.write(`written=${written} failed=${failed}\n`);
 }
 
 if (isMain(import.meta.url))

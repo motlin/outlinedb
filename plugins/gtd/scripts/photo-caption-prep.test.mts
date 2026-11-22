@@ -7,18 +7,24 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import
 {
+	buildCaptionAppleScript,
 	buildExportAppleScript,
 	buildManifest,
 	cacheIsStale,
 	captionSeed,
+	captionTargets,
+	eventPhotosQuery,
 	facesQuery,
 	facesSummary,
 	favoritesQuery,
+	groupEvents,
 	groupFaces,
 	groupJournal,
 	journaledQuery,
 	journalQuery,
+	pickViewPhotos,
 	planSources,
+	postJpegArgs,
 	splitJournaled,
 	viewJpegArgs,
 	withDatabaseCopy,
@@ -552,4 +558,249 @@ test("viewJpegArgs keeps the EXIF orientation flag instead of rotating, since si
 		"--out",
 		"out.jpg",
 	]);
+});
+
+test("eventPhotosQuery selects every visible photo since local midnight of the date, with its favorite flag, caption, and Photos moment", () =>
+{
+	assert.strictEqual(
+		eventPhotosQuery("2026-11-16"),
+		"SELECT A.ZUUID AS uuid, datetime(A.ZDATECREATED+978307200,'unixepoch','localtime') AS created, A.ZDIRECTORY AS directory, A.ZFILENAME AS filename, COALESCE(B.ZORIGINALFILENAME,'') AS originalFilename, A.ZFAVORITE AS favorite, COALESCE(B.ZTITLE,'') AS caption, COALESCE(M.ZUUID,'') AS moment, COALESCE(M.ZTITLE,'') AS place FROM ZASSET A LEFT JOIN ZADDITIONALASSETATTRIBUTES B ON A.Z_PK=B.ZASSET LEFT JOIN ZMOMENT M ON A.ZMOMENT=M.Z_PK WHERE A.ZTRASHEDSTATE=0 AND A.ZHIDDEN=0 AND A.ZKIND=0 AND A.ZDATECREATED >= strftime('%s','2026-11-16','utc')-978307200 ORDER BY A.ZDATECREATED;",
+	);
+	assert.throws(() => eventPhotosQuery("2026-11-16' OR 1=1 --"), /Invalid date/u);
+});
+
+const eventRow = (
+	uuid: string,
+	created: string,
+	moment: string,
+	extra:
+	{
+		favorite?: boolean;
+		caption?: string;
+		place?: string;
+	} = {},
+) => (
+{
+	uuid,
+	created,
+	directory: "A",
+	filename: `${uuid}.heic`,
+	originalFilename: `IMG_${uuid}.HEIC`,
+	favorite: extra.favorite ?? false,
+	caption: extra.caption ?? "",
+	moment,
+	place: extra.place ?? "",
+});
+
+test("groupEvents groups photos by Photos moment, keeps unassigned photos alone, and lists favorites, distinct captions, and the uncaptioned count", () =>
+{
+	assert.deepStrictEqual(
+		groupEvents([
+			eventRow(
+				"AAA",
+				"2026-11-14 14:52:18",
+				"M1",
+				{
+					place: "Home",
+				},
+			),
+			eventRow(
+				"BBB",
+				"2026-11-14 15:01:00",
+				"M1",
+				{
+					favorite: true,
+					caption: "Leaf pile with Alice",
+					place: "Home",
+				},
+			),
+			eventRow(
+				"CCC",
+				"2026-11-14 15:31:05",
+				"M1",
+				{
+					favorite: true,
+					caption: "Leaf pile with Alice",
+					place: "Home",
+				},
+			),
+			eventRow("DDD", "2026-11-15 10:17:17", ""),
+			eventRow("EEE", "2026-11-15 11:58:20", ""),
+		]),
+		[
+			{
+				id: "M1",
+				place: "Home",
+				date: "2026-11-14",
+				start: "2026-11-14 14:52:18",
+				end: "2026-11-14 15:31:05",
+				photos: [
+					eventRow(
+						"AAA",
+						"2026-11-14 14:52:18",
+						"M1",
+						{
+							place: "Home",
+						},
+					),
+					eventRow(
+						"BBB",
+						"2026-11-14 15:01:00",
+						"M1",
+						{
+							favorite: true,
+							caption: "Leaf pile with Alice",
+							place: "Home",
+						},
+					),
+					eventRow(
+						"CCC",
+						"2026-11-14 15:31:05",
+						"M1",
+						{
+							favorite: true,
+							caption: "Leaf pile with Alice",
+							place: "Home",
+						},
+					),
+				],
+				favorites: ["BBB", "CCC"],
+				captions: ["Leaf pile with Alice"],
+				uncaptioned: 1,
+			},
+			{
+				id: "DDD",
+				place: "",
+				date: "2026-11-15",
+				start: "2026-11-15 10:17:17",
+				end: "2026-11-15 10:17:17",
+				photos: [eventRow("DDD", "2026-11-15 10:17:17", "")],
+				favorites: [],
+				captions: [],
+				uncaptioned: 1,
+			},
+			{
+				id: "EEE",
+				place: "",
+				date: "2026-11-15",
+				start: "2026-11-15 11:58:20",
+				end: "2026-11-15 11:58:20",
+				photos: [eventRow("EEE", "2026-11-15 11:58:20", "")],
+				favorites: [],
+				captions: [],
+				uncaptioned: 1,
+			},
+		],
+	);
+});
+
+test("pickViewPhotos shows every favorite plus evenly spaced samples of the rest, so a big event costs a handful of exports", () =>
+{
+	const rows = ["P0", "P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8", "P9"].map((uuid, i) =>
+		eventRow(
+			uuid,
+			`2026-11-12 18:${String(10 + i)}:00`,
+			"M1",
+			{
+				favorite: uuid === "P5",
+			},
+		),
+	);
+	const [group] = groupEvents(rows);
+	assert.ok(group);
+	assert.deepStrictEqual(pickViewPhotos(group, 3), ["P5", "P1", "P4", "P8"]);
+	assert.deepStrictEqual(pickViewPhotos(group, 0), ["P5"]);
+	const [small] = groupEvents(rows.slice(0, 2));
+	assert.ok(small);
+	assert.deepStrictEqual(pickViewPhotos(small, 3), ["P0", "P1"]);
+});
+
+test("captionTargets resolves each captioned group id to all of its photo uuids and rejects unknown ids or blank captions", () =>
+{
+	const groups = groupEvents([
+		eventRow("AAA", "2026-11-14 14:52:18", "M1"),
+		eventRow(
+			"BBB",
+			"2026-11-14 15:01:00",
+			"M1",
+			{
+				favorite: true,
+			},
+		),
+		eventRow("CCC", "2026-11-15 10:17:17", ""),
+	]);
+	assert.deepStrictEqual(
+		captionTargets(groups, [
+			{
+				id: "M1",
+				caption: " Leaf pile with Alice ",
+			},
+			{
+				id: "CCC",
+				caption: "Pancakes",
+			},
+		]),
+		[
+			{
+				caption: "Leaf pile with Alice",
+				uuids: ["AAA", "BBB"],
+			},
+			{
+				caption: "Pancakes",
+				uuids: ["CCC"],
+			},
+		],
+	);
+	assert.throws(
+		() =>
+			captionTargets(groups, [
+				{
+					id: "NOPE",
+					caption: "x",
+				},
+			]),
+		/Unknown event group: NOPE/u,
+	);
+	assert.throws(
+		() =>
+			captionTargets(groups, [
+				{
+					id: "M1",
+					caption: "  ",
+				},
+			]),
+		/Blank caption for event group M1/u,
+	);
+});
+
+test("buildCaptionAppleScript takes the caption and uuids as arguments, so no caption text is ever spliced into the script, and verifies each write by reading it back", () =>
+{
+	assert.deepStrictEqual(buildCaptionAppleScript(), [
+		"on run argv",
+		"set cap to item 1 of argv",
+		"set okCount to 0",
+		'tell application "Photos"',
+		"repeat with i from 2 to (count of argv)",
+		"set u to (item i of argv)",
+		"try",
+		'set m to media item id (u & "/L0/001")',
+		"set name of m to cap",
+		"if (name of m) is cap then",
+		"set okCount to okCount + 1",
+		"else",
+		'log ("mismatch " & u)',
+		"end if",
+		"on error e",
+		'log ("failed " & u & ": " & e)',
+		"end try",
+		"end repeat",
+		"end tell",
+		"return okCount",
+		"end run",
+	]);
+});
+
+test("postJpegArgs converts at full size for the Workflowy upload", () =>
+{
+	assert.deepStrictEqual(postJpegArgs("in.heic", "out.jpg"), ["-s", "format", "jpeg", "in.heic", "--out", "out.jpg"]);
 });
