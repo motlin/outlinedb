@@ -11,6 +11,7 @@ import
 import type {Interval, TreeNode, TreeRoot} from "./compute-overdue.mts";
 import {takeValue} from "./cli-args.mts";
 import {isMain} from "./is-main.mts";
+import {DISKS_PREFIX, missingDisks, requiredDisks} from "./disk-marker.mts";
 import {chmodSync, mkdirSync, writeFileSync} from "node:fs";
 import {join} from "node:path";
 
@@ -69,7 +70,12 @@ function parseInterval(node: TreeNode, context: string): Interval
 function isMarker(child: TreeNode): boolean
 {
 	const name = child.name;
-	return name.startsWith(INTERVAL_PREFIX) || name.startsWith(FILE_PREFIX) || name === "Auto";
+	return (
+		name.startsWith(INTERVAL_PREFIX) ||
+		name.startsWith(FILE_PREFIX) ||
+		name.startsWith(DISKS_PREFIX) ||
+		name === "Auto"
+	);
 }
 
 function instructions(node: TreeNode, context: string): TreeNode[]
@@ -125,6 +131,8 @@ interface PrepTask
 	auto: boolean;
 	due: boolean;
 	prepped: boolean;
+	disks: string[];
+	missingDisks: string[];
 	dueDate: string;
 	interval: Interval;
 	advance:
@@ -173,6 +181,8 @@ function parsePrepTask(node: TreeNode, today: string): PrepTask
 		auto: autoMarkers.length === 1,
 		due,
 		prepped: false,
+		disks: requiredDisks(node),
+		missingDisks: [],
 		dueDate,
 		interval,
 		advance:
@@ -264,8 +274,17 @@ function rootGroups(tree: TreeRoot): RootGroups
  * past midnight recomputes its plan for the new local date, and without this every daily task,
  * including the ones just prepped, would come due again. Prepped tasks stay off the new plan and
  * are listed as skipped with an `advance` computed from the new date.
+ *
+ * `disks` names the disks disk-check.mts found available. A due task whose `Disks:` marker names
+ * one that is missing is listed as skipped with reason `disks`, so it keeps its date. Null gates
+ * nothing.
  */
-export function computeLlmDag(tree: TreeRoot, today: string, prepped: ReadonlySet<string> = new Set())
+export function computeLlmDag(
+	tree: TreeRoot,
+	today: string,
+	prepped: ReadonlySet<string> = new Set(),
+	disks: ReadonlySet<string> | null = null,
+)
 {
 	// planDate ships in the plan and the executor compares it to the local date before advancing
 	// any task. An unpadded date never matches, so it would restage the import barrier forever.
@@ -312,6 +331,11 @@ export function computeLlmDag(tree: TreeRoot, today: string, prepped: ReadonlySe
 			prepTask.due = false;
 			prepTask.prepped = true;
 		}
+		if (prepTask.due && disks !== null)
+		{
+			prepTask.missingDisks = missingDisks(prepTask.disks, disks);
+			prepTask.due = prepTask.missingDisks.length === 0;
+		}
 	}
 	const presentationByName = uniqueBy(allPresentationTasks, "name", "Presentation");
 
@@ -352,21 +376,31 @@ export function computeLlmDag(tree: TreeRoot, today: string, prepped: ReadonlySe
 	const skipped = allPrepTasks
 		.filter((task) => !task.due)
 		.map((task) =>
-			task.prepped
-				?
-					{
-						slug: task.slug,
-						reason: "prepped",
-						dueDate: task.dueDate,
-						advance: task.advance,
-					}
-				:
-					{
-						slug: task.slug,
-						reason: task.dueDate > today ? "future" : "completed",
-						dueDate: task.dueDate,
-					},
-		);
+		{
+			if (task.prepped)
+			{
+				return {
+					slug: task.slug,
+					reason: "prepped",
+					dueDate: task.dueDate,
+					advance: task.advance,
+				};
+			}
+			if (task.missingDisks.length > 0)
+			{
+				return {
+					slug: task.slug,
+					reason: "disks",
+					dueDate: task.dueDate,
+					missingDisks: task.missingDisks,
+				};
+			}
+			return {
+				slug: task.slug,
+				reason: task.dueDate > today ? "future" : "completed",
+				dueDate: task.dueDate,
+			};
+		});
 
 	return {
 		planDate: today,
@@ -498,6 +532,7 @@ function main(arguments_: string[]): void
 	let today = localTodayISO();
 	let filesDirectory: string | null = null;
 	const prepped = new Set<string>();
+	let disks: Set<string> | null = null;
 	const argumentIterator = argumentsList[Symbol.iterator]();
 	for (const argument of argumentIterator)
 	{
@@ -515,6 +550,14 @@ function main(arguments_: string[]): void
 				}
 			}
 		}
+		else if (argument === "--disks")
+		{
+			disks = new Set(
+				takeValue(argumentIterator, argument)
+					.split(",")
+					.filter((name) => name !== ""),
+			);
+		}
 		else if (argument === "--files-dir")
 		{
 			filesDirectory = takeValue(argumentIterator, argument);
@@ -529,7 +572,7 @@ function main(arguments_: string[]): void
 		}
 	}
 	const tree = readTreeFile(inputPath);
-	const plan = computeLlmDag(tree, today, prepped);
+	const plan = computeLlmDag(tree, today, prepped, disks);
 	if (filesDirectory !== null)
 	{
 		writeTaskFiles(taskFiles(tree), filesDirectory);

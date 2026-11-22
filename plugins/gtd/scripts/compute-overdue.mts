@@ -30,6 +30,7 @@ import type {JsonObject} from "./json.mts";
 import {takeValue} from "./cli-args.mts";
 import {parseIsoDate} from "./iso-date.mts";
 import {isMain} from "./is-main.mts";
+import {missingDisks, requiredDisks} from "./disk-marker.mts";
 
 export type IntervalUnit = "d" | "m" | "y";
 
@@ -821,10 +822,14 @@ export function computeOverdue(
 	{
 		skipStreaks = new Map<string, SkipStreak>(),
 		answeredKeys = new Set<string>(),
+		disks = null,
 	}:
 	{
 		skipStreaks?: Map<string, SkipStreak>;
 		answeredKeys?: ReadonlySet<string>;
+		// From disk-check.mts: an item whose Disks: marker names a missing disk is left out
+		// quietly and keeps its date. Null gates nothing.
+		disks?: ReadonlySet<string> | null;
 	} = {},
 ): OverdueRow[]
 {
@@ -876,7 +881,14 @@ export function computeOverdue(
 							},
 						)
 					: date;
-				if (due && due <= todayISO && !isCompleted && !(child.id !== undefined && answeredKeys.has(child.id)))
+				const waitsOnDisks = disks !== null && missingDisks(requiredDisks(child), disks).length > 0;
+				if (
+					due &&
+					due <= todayISO &&
+					!isCompleted &&
+					!waitsOnDisks &&
+					!(child.id !== undefined && answeredKeys.has(child.id))
+				)
 				{
 					const needsInterval = interval === null;
 					const nextStoredDate =
@@ -966,6 +978,7 @@ function main(argv: string[]): void
 	let runStarted: string | null = null;
 	let recordKey: string | null = null;
 	let outcome: string | null = null;
+	let disks: Set<string> | null = null;
 	const argIterator = args[Symbol.iterator]();
 	for (const arg of argIterator)
 	{
@@ -992,6 +1005,14 @@ function main(argv: string[]): void
 		else if (arg === "--outcome")
 		{
 			outcome = takeValue(argIterator, arg);
+		}
+		else if (arg === "--disks")
+		{
+			disks = new Set(
+				takeValue(argIterator, arg)
+					.split(",")
+					.filter((name) => name !== ""),
+			);
 		}
 		else if (!arg.startsWith("--"))
 		{
@@ -1024,6 +1045,7 @@ function main(argv: string[]): void
 		{
 			skipStreaks: loadSkipStreaks(skipLogPath),
 			answeredKeys: runStarted ? loadAnsweredKeys(runStarted, skipLogPath) : new Set<string>(),
+			disks,
 		},
 	);
 

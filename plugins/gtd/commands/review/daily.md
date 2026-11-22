@@ -95,7 +95,25 @@ The `Import` barrier exists so the whole fan-out reads today's data. Before any 
 
 ## Automated Tasks
 
-Run the mandatory import barrier, then execute due tasks from `Personal > 🔄 Review > 🔄 Daily Review > LLM Tasks:`. The tree is a dependency DAG: prep work fans out, serial groups preserve write ordering, and presentation follows a fixed order.
+Run the mandatory import barrier, check which disks are plugged in, then execute due tasks from `Personal > 🔄 Review > 🔄 Daily Review > LLM Tasks:`. The tree is a dependency DAG: prep work fans out, serial groups preserve write ordering, and presentation follows a fixed order.
+
+### Check disks
+
+Disk tasks (Factorio backups, iMazing photo export, the drive inventory) can only run on the external disks that are plugged in, and sometimes none are. So right after the import barrier, before the plan is computed, find out what is mounted, and when the user is at home, ask them to plug in more:
+
+```bash
+./bin/run.js node get --path "Personal,📚 Reference,🛡️ Personal Info & Security,🔒 Digital,💾 External Hard Drives" --depth 3 --json --fields name,children > .llm/gtd/review/disk-inventory.json
+node ${CLAUDE_PLUGIN_ROOT}/scripts/disk-check.mts --inventory .llm/gtd/review/disk-inventory.json > .llm/gtd/review/disks.json
+```
+
+`disk-check.mts` matches `/Volumes` against the inventory's drives, checks for the NAS share, and decides `home.atHome`: the default gateway's MAC must be in `homeGatewayMacs` in `.llm/gtd/config.json` and the Mac must be on AC power. Tethered to a phone means not at home. macOS redacts the Wi-Fi SSID, so the gateway MAC stands in for it.
+
+- **At home, with `suggest` non-empty or `askMountNas` true:** ask one `AskUserQuestion` naming each suggested drive with its Last Synced date (`suggest` is the most overdue drives for the free slots; two fit at once), and the NAS share when `askMountNas` is true. Options: `Plugged in` and `Not today`. After `Plugged in`, wait for the mounts to appear, re-run `disk-check.mts`, and say what is now available.
+- **Away from home, or nothing to ask:** ask nothing.
+
+`available` in `disks.json` is the input for the rest of the run. Pass it to the planner as `--disks` (below), and the Recurring Review passes it to `compute-overdue.mts`. A task with a `Disks: <name>, <name>` marker child runs only when every named disk is available (`NAS` is the NAS share, `any` is any inventory drive); otherwise the planner lists it under `skipped` with reason `disks` and it keeps its date. Skip these quietly: no question, just one `Waiting on disks:` line in the phase summary. A disk task whose instructions say "if mounted" for an optional disk does those steps only for the mounted ones.
+
+A task that needs a disk must carry the marker, so it is gated rather than run, failing, or reporting "not mounted" as an empty result that advances its date.
 
 ### Fetch and validate the plan
 
@@ -103,7 +121,7 @@ Run the mandatory import barrier, then execute due tasks from `Personal > 🔄 R
 mkdir -p .llm/gtd/review
 date -u +%Y-%m-%dT%H:%M:%SZ > .llm/gtd/review/run-started.txt
 ./bin/run.js node get --path "Personal,🔄 Review,🔄 Daily Review,LLM Tasks:" --depth 10 --json --fields name,note,shortId,id,children,completedAt > .llm/gtd/review/phase0-llm-tasks.json
-node ${CLAUDE_PLUGIN_ROOT}/scripts/compute-llm-dag.mts .llm/gtd/review/phase0-llm-tasks.json --files-dir .llm/gtd/review/scripts > .llm/gtd/review/phase0-plan.json
+node ${CLAUDE_PLUGIN_ROOT}/scripts/compute-llm-dag.mts .llm/gtd/review/phase0-llm-tasks.json --files-dir .llm/gtd/review/scripts --disks "$(jq -r '.available | join(",")' .llm/gtd/review/disks.json)" > .llm/gtd/review/phase0-plan.json
 jq -e '.planDate' .llm/gtd/review/phase0-plan.json >/dev/null \
   || { echo "compute-llm-dag.mts wrote no plan"; exit 1; }
 ```
@@ -159,11 +177,11 @@ Follow `${CLAUDE_PLUGIN_ROOT}/skills/dag-llm-tasks.md` and `${CLAUDE_PLUGIN_ROOT
 - After a paired apply succeeds, run that task's `advance.applyOp` from `phase0-plan.json` verbatim in the background.
 - After an auto task succeeds, run its `advance.applyOp` the same way.
 - On skip, failure, or unverified work, leave the date unchanged.
-- Next dates come from the plan's `planDate` (the import day), not the time the apply runs. If `planDate` no longer matches the local date, re-run the import barrier and recompute the plan with `--prepped <slug,...>` naming every task already prepped this session before advancing anything, so a review that crosses midnight does not re-run its prep (see `${CLAUDE_PLUGIN_ROOT}/skills/dag-llm-tasks.md`).
+- Next dates come from the plan's `planDate` (the import day), not the time the apply runs. If `planDate` no longer matches the local date, re-run the import barrier and the disk check, and recompute the plan with `--disks` and `--prepped <slug,...>` naming every task already prepped this session before advancing anything, so a review that crosses midnight does not re-run its prep (see `${CLAUDE_PLUGIN_ROOT}/skills/dag-llm-tasks.md`).
 
 The executor owns date advancement. Prep, apply, and auto commands never update their own schedule. This keeps one date on the prep node and makes arbitrary intervals deterministic.
 
-Interpret non-marker children as commands or instructions. `/gtd:...` invokes a plugin command; shell commands run in Bash; nested children add detail. `Interval`, `Auto`, and `File:` are markers, not instructions.
+Interpret non-marker children as commands or instructions. `/gtd:...` invokes a plugin command; shell commands run in Bash; nested children add detail. `Interval`, `Auto`, `Disks:`, and `File:` are markers, not instructions.
 
 Do not create Claude Code built-in tasks (`TaskCreate`, `TaskUpdate`, or `TodoWrite`).
 
@@ -177,7 +195,7 @@ Drain every background date write before a cache import, before leaving this pha
 
 ### Summarize
 
-Drain the writes and report applied, skipped, failed, and advanced counts. Fold auto briefing lines from `.llm/gtd/review/briefings/` into the same summary. A briefing with a `userCommand` (an irreversible deletion the worker staged instead of running; see `${CLAUDE_PLUGIN_ROOT}/skills/dag-llm-tasks.md`) goes to the user verbatim in an `AskUserQuestion` for them to run with `!`.
+Drain the writes and report applied, skipped, failed, and advanced counts, plus one `Waiting on disks:` line naming each `disks`-skipped task and its missing disks. Fold auto briefing lines from `.llm/gtd/review/briefings/` into the same summary. A briefing with a `userCommand` (an irreversible deletion the worker staged instead of running; see `${CLAUDE_PLUGIN_ROOT}/skills/dag-llm-tasks.md`) goes to the user verbatim in an `AskUserQuestion` for them to run with `!`.
 
 ## Relink Orphaned Children
 

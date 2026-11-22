@@ -93,8 +93,12 @@ Finding nothing is a real answer and ends the search; say so in one line and bui
 Run the date math in a script — never re-derive it by hand. `compute-overdue.mts` parses each leaf item's `<time>`, finds the items due on or before today, orders them, and stages the exact `node update` that advances each one to today + its section's interval:
 
 ```bash
-node ${CLAUDE_PLUGIN_ROOT}/scripts/compute-overdue.mts .llm/gtd/review/tree.json > .llm/gtd/review/overdue.json
+disks=()
+[ -f .llm/gtd/review/disks.json ] && disks=(--disks "$(jq -r '.available | join(",")' .llm/gtd/review/disks.json)")
+node ${CLAUDE_PLUGIN_ROOT}/scripts/compute-overdue.mts .llm/gtd/review/tree.json "${disks[@]}" > .llm/gtd/review/overdue.json
 ```
+
+`disks.json` comes from the daily review's up-front disk check. With it, an item whose `Disks:` marker child names a disk that is not plugged in is left out quietly and keeps its date; the walk never asks about it.
 
 The fetch must include `completedAt`: a finished recurring item keeps its stale `<time>`, and without that field the walk asks the user about work they already did (10 of 51 rows in one run). `compute-overdue.mts` drops completed items, but only if the field reaches it.
 

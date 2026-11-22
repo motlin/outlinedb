@@ -249,6 +249,53 @@ test("computeLlmDag keeps tasks prepped earlier in a review that crossed midnigh
 	]);
 });
 
+test("computeLlmDag skips a due task whose Disks marker names a disk that is not available, and gates nothing without --disks", () =>
+{
+	const tree = fixture();
+	ownChildren(firstChildOf(tree, "Prep")).push(instruction("Disks: Alpha, NAS"));
+
+	assert.deepStrictEqual(
+		[
+			computeLlmDag(tree, "2000-01-01", new Set(), new Set(["NAS"])),
+			computeLlmDag(tree, "2000-01-01", new Set(), new Set(["alpha", "NAS"])),
+			computeLlmDag(tree, "2000-01-01"),
+		].map((plan) => (
+		{
+			prep: plan.prepBranches.map((branch) => branch.tasks.map((item) => item.slug)),
+			presentation: plan.presentation.map((item) => item.slug),
+			skipped: plan.skipped.map((item) => [
+				item.slug,
+				item.reason,
+				"missingDisks" in item ? item.missingDisks : null,
+			]),
+		})),
+		[
+			{
+				prep: [["weekly"]],
+				presentation: ["weekly"],
+				skipped: [
+					["daily", "disks", ["Alpha"]],
+					["future", "future", null],
+				],
+			},
+			{
+				prep: [["daily"], ["weekly"]],
+				presentation: ["weekly", "daily"],
+				skipped: [["future", "future", null]],
+			},
+			{
+				prep: [["daily"], ["weekly"]],
+				presentation: ["weekly", "daily"],
+				skipped: [["future", "future", null]],
+			},
+		],
+	);
+	assert.deepStrictEqual(
+		at(at(computeLlmDag(tree, "2000-01-01").prepBranches, 0).tasks, 0).instructions.map((item) => item.name),
+		["/gtd:daily-prep"],
+	);
+});
+
 test("computeLlmDag rejects a prepped slug that names no prep task", () =>
 {
 	assert.throws(

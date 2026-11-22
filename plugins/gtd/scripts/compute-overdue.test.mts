@@ -266,6 +266,37 @@ test("computeOverdue finds only on-or-before-today dated items, skipping the arc
 	assert.deepStrictEqual(ids, ["id-reminders", "id-factorio"]);
 });
 
+test("computeOverdue drops a due item whose Disks marker names a disk that is not available", () =>
+{
+	const tree = structuredClone(FIXTURE);
+	firstItem(tree).children = [
+		{
+			name: "Disks: Alpha",
+		},
+	];
+
+	assert.deepStrictEqual(
+		[
+			computeOverdue(
+				tree,
+				"2026-06-26",
+				{
+					disks: new Set(["NAS"]),
+				},
+			).map((r) => r.id),
+			computeOverdue(
+				tree,
+				"2026-06-26",
+				{
+					disks: new Set(["Alpha"]),
+				},
+			).map((r) => r.id),
+			computeOverdue(tree, "2026-06-26").map((r) => r.id),
+		],
+		[["id-factorio"], ["id-reminders", "id-factorio"], ["id-reminders", "id-factorio"]],
+	);
+});
+
 test("computeOverdue skips the Phase 0 LLM Tasks: container and its subtree", () =>
 {
 	const tree =
