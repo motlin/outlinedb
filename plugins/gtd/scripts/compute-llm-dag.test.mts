@@ -554,6 +554,11 @@ test("taskFiles collects every File node's note from prep and presentation tasks
 			note: "echo <hi>",
 			children: [],
 		},
+		{
+			name: "Test: run.test.sh",
+			note: '"$REVIEW_SCRIPTS_DIR/run.sh"',
+			children: [],
+		},
 	);
 
 	assert.deepStrictEqual(taskFiles(tree), [
@@ -565,10 +570,14 @@ test("taskFiles collects every File node's note from prep and presentation tasks
 			name: "run.sh",
 			content: "echo <hi>",
 		},
+		{
+			name: "tests/run.test.sh",
+			content: '"$REVIEW_SCRIPTS_DIR/run.sh"',
+		},
 	]);
 });
 
-test("taskFiles rejects duplicate names, paths, and File nodes without a note", () =>
+test("taskFiles rejects duplicate names, paths, File and Test nodes without a note, and a Test with no File beside it", () =>
 {
 	const withFiles = (...files: TreeNode[]): TreeNode =>
 	{
@@ -594,6 +603,28 @@ test("taskFiles rejects duplicate names, paths, and File nodes without a note", 
 	assert.throws(
 		() => taskFiles(withFiles(file("a.sh", null))),
 		/^Error: prep task "Daily task" File "a.sh" has no note$/u,
+	);
+	const testNode = (name: string, note: string | null): TreeNode => (
+	{
+		name: `Test: ${name}`,
+		note,
+		children: [],
+	});
+	assert.throws(
+		() => taskFiles(withFiles(file("a.sh", "x"), testNode("a.test.sh", "1"), testNode("a.test.sh", "2"))),
+		/^Error: prep task "Daily task" has duplicate Test "a.test.sh"$/u,
+	);
+	assert.throws(
+		() => taskFiles(withFiles(file("a.sh", "x"), testNode("../a.test.sh", "1"))),
+		/^Error: prep task "Daily task" Test "..\/a.test.sh" must be a plain file name$/u,
+	);
+	assert.throws(
+		() => taskFiles(withFiles(file("a.sh", "x"), testNode("a.test.sh", ""))),
+		/^Error: prep task "Daily task" Test "a.test.sh" has no note$/u,
+	);
+	assert.throws(
+		() => taskFiles(withFiles(testNode("a.test.sh", "1"))),
+		/^Error: prep task "Daily task" Test "a.test.sh" has no File sibling to test$/u,
 	);
 });
 

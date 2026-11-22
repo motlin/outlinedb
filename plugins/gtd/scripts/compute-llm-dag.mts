@@ -12,13 +12,16 @@ import type {Interval, TreeNode, TreeRoot} from "./compute-overdue.mts";
 import {takeValue} from "./cli-args.mts";
 import {isMain} from "./is-main.mts";
 import {DISKS_PREFIX, missingDisks, requiredDisks} from "./disk-marker.mts";
-import {chmodSync, mkdirSync, writeFileSync} from "node:fs";
-import {join} from "node:path";
+import {chmodSync, mkdirSync, rmSync, writeFileSync} from "node:fs";
+import {dirname, join} from "node:path";
 
 const ROOT_NAMES = new Set(["Import", "Prep", "Presentation"]);
 const PLAN_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
 const INTERVAL_PREFIX = "Interval: ";
 const FILE_PREFIX = "File: ";
+const TEST_PREFIX = "Test: ";
+/** Where test files land, relative to the scripts directory; the planner owns and rewrites it. */
+export const TESTS_SUBDIRECTORY = "tests";
 const FILE_NAME_PATTERN = /^[\w.-]+$/u;
 const SCRIPTS_DIRECTORY = ".llm/gtd/review/scripts";
 const SCRIPT_REFERENCE_PATTERN = /\.llm\/gtd\/review\/scripts\/([\w.-]*[\w-])/gu;
@@ -446,6 +449,9 @@ function taskContext(path: TreeNode[]): string
  * so a task's scripts live in Workflowy and are written to disk before the tasks run. A name or
  * note that runs `.llm/gtd/review/scripts/<name>` with no matching File node fails the plan here,
  * naming its task, rather than leaving the worker to find the script missing.
+ *
+ * A `Test: <name>` node beside a File node holds that script's test, returned as
+ * `tests/<name>`; run-review-script-tests.mts runs them all.
  */
 export function taskFiles(tree: TreeNode): TaskFile[]
 {
@@ -470,24 +476,32 @@ export function taskFiles(tree: TreeNode): TaskFile[]
 				);
 			}
 		}
-		if (node.name.startsWith(FILE_PREFIX))
+		const prefix = [FILE_PREFIX, TEST_PREFIX].find((candidate) => node.name.startsWith(candidate));
+		if (prefix !== undefined)
 		{
-			const name = node.name.slice(FILE_PREFIX.length).trim();
+			const kind = prefix.slice(0, -2);
+			const name = node.name.slice(prefix.length).trim();
 			if (!FILE_NAME_PATTERN.test(name) || name.startsWith("."))
 			{
-				throw new Error(`${context} File "${name}" must be a plain file name`);
+				throw new Error(`${context} ${kind} "${name}" must be a plain file name`);
 			}
 			if (node.note == null || node.note === "")
 			{
-				throw new Error(`${context} File "${name}" has no note`);
+				throw new Error(`${context} ${kind} "${name}" has no note`);
 			}
-			if (files.some((file) => file.name === name))
+			const outputName = prefix === TEST_PREFIX ? `${TESTS_SUBDIRECTORY}/${name}` : name;
+			if (files.some((file) => file.name === outputName))
 			{
-				throw new Error(`${context} has duplicate File "${name}"`);
+				throw new Error(`${context} has duplicate ${kind} "${name}"`);
+			}
+			const siblings = path.at(-2)?.children ?? tree.children ?? [];
+			if (prefix === TEST_PREFIX && !siblings.some((sibling) => sibling.name.startsWith(FILE_PREFIX)))
+			{
+				throw new Error(`${context} Test "${name}" has no File sibling to test`);
 			}
 			files.push(
 				{
-					name,
+					name: outputName,
 					content: node.note,
 				},
 			);
@@ -509,17 +523,25 @@ export function taskFiles(tree: TreeNode): TaskFile[]
 	return files;
 }
 
+/** Writes each file under the directory, first clearing tests/ so a deleted Test node stops running. */
 function writeTaskFiles(files: TaskFile[], directory: string): void
 {
-	mkdirSync(
-		directory,
+	rmSync(
+		join(directory, TESTS_SUBDIRECTORY),
 		{
 			recursive: true,
+			force: true,
 		},
 	);
 	for (const {name, content} of files)
 	{
 		const path = join(directory, name);
+		mkdirSync(
+			dirname(path),
+			{
+				recursive: true,
+			},
+		);
 		writeFileSync(path, content);
 		chmodSync(path, 0o755);
 	}
