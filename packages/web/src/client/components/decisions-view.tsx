@@ -572,7 +572,10 @@ export function DecisionPageView({slug}: {slug: string})
 				goTo(index + (event.key === "ArrowLeft" ? -1 : 1));
 				return;
 			}
-			const option = /^[1-9]$/u.test(event.key) ? current.item.options[Number(event.key) - 1] : undefined;
+			const letter = event.key.toLowerCase();
+			const option = /^[1-9]$/u.test(event.key)
+				? current.item.options[Number(event.key) - 1]
+				: current.item.options.find((candidate) => candidate.key === letter);
 			if (option !== undefined)
 			{
 				event.preventDefault();
@@ -864,6 +867,11 @@ function DecisionCard({group, item, state, onChoose, onNote, children}: Decision
 										{index + 1}
 									</kbd>
 								) : null}
+								{option.key === undefined ? null : (
+									<kbd aria-hidden="true" className="decisions-option-letter">
+										{option.key.toUpperCase()}
+									</kbd>
+								)}
 								<span className="decisions-option-label">{option.label}</span>
 								{item.default === option.value ? (
 									<span className="decisions-suggested">suggested</span>

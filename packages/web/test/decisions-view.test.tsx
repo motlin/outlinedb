@@ -52,10 +52,12 @@ const PAGE: DecisionPage =
 							value: "inbox",
 							label: "Add to inbox",
 							description: "File it",
+							key: "i",
 						},
 						{
 							value: "skip",
 							label: "Skip",
+							key: "s",
 						},
 					],
 					default: "inbox",
@@ -94,10 +96,12 @@ const PAGE: DecisionPage =
 						{
 							value: "inbox",
 							label: "Add to inbox",
+							key: "i",
 						},
 						{
 							value: "skip",
 							label: "Skip",
+							key: "s",
 						},
 					],
 					default: null,
@@ -455,6 +459,7 @@ describe("DecisionPageView", () =>
 				radios: radios("a-1"),
 				optionLabels: text(".decisions-option-label", first),
 				optionKeys: text(".decisions-option-key", first),
+				optionLetters: text(".decisions-option-letter", first),
 				optionDescriptions: text(".decisions-option-description", first),
 				suggested: text(".decisions-suggested", first),
 				position: text(".decisions-position"),
@@ -503,6 +508,7 @@ describe("DecisionPageView", () =>
 				],
 				optionLabels: ["Add to inbox", "Skip"],
 				optionKeys: ["1", "2"],
+				optionLetters: ["I", "S"],
 				optionDescriptions: ["File it"],
 				suggested: ["suggested"],
 				position: ["Card 1 of 3"],
@@ -1246,7 +1252,7 @@ describe("DecisionPageView", () =>
 		);
 	});
 
-	it("answers with number keys and navigates with arrow keys, but not while typing a note", async () =>
+	it("answers with number and letter keys and navigates with arrow keys, but not while typing a note", async () =>
 	{
 		stubFetch();
 		await mount();
@@ -1256,6 +1262,8 @@ describe("DecisionPageView", () =>
 		await key(card("a-1").querySelector("textarea")!, "2");
 		const whileTyping = calls.length;
 		await key(document.body, "2");
+		await key(document.body, "x");
+		await key(document.body, "I");
 		expect(
 			{
 				afterRight,
@@ -1277,8 +1285,22 @@ describe("DecisionPageView", () =>
 							note: "",
 						},
 					},
+					{
+						method: "PUT",
+						url: "/api/v1/decisions/meetings/b-1",
+						body:
+						{
+							choice: "inbox",
+							note: "",
+						},
+					},
+					{
+						method: "POST",
+						url: "/api/v1/decisions/meetings/submit",
+						body: undefined,
+					},
 				],
-				cards: ["b-1"],
+				cards: [],
 			},
 		);
 	});

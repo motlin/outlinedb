@@ -177,6 +177,11 @@ const OptionSchema = z.strictObject(
 		value: z.string().min(1),
 		label: z.string(),
 		description: z.string().optional(),
+		/** A mnemonic letter that answers with this option, beside its number slot. */
+		key: z
+			.string()
+			.regex(/^[a-z]$/u, "Option key must be one lowercase letter")
+			.optional(),
 	},
 );
 
@@ -326,6 +331,19 @@ export function parseDecisionDocument(slug: string, text: string): DecisionDocum
 			throw new DecisionFileError(`${fileName} repeats item id "${item.id}"`);
 		}
 		seen.add(item.id);
+		const keys = new Set<string>();
+		for (const {key} of item.options)
+		{
+			if (key === undefined)
+			{
+				continue;
+			}
+			if (keys.has(key))
+			{
+				throw new DecisionFileError(`${fileName} item "${item.id}" gives key "${key}" to more than one option`);
+			}
+			keys.add(key);
+		}
 		if (item.default !== null && !item.options.some((option) => option.value === item.default))
 		{
 			throw new DecisionFileError(

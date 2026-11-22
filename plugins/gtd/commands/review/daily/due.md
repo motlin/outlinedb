@@ -351,6 +351,7 @@ A row with `isLlmTask` or `missingLlmTag` set is never a card: Claude runs it pe
 
 - Recurring cards: **1 Done**, **2 Skip**, **3 Retire**.
 - Due-item cards: **1 Done**, **2 Skip**, **3 Drop** (Drop is the one-shot counterpart of Retire).
+- Give the fixed outcomes the mnemonic letter keys too: `d` Done, `s` Skip, `x` Retire or Drop, and `r` on **Set a reminder** (see `review-proposal-staging.md` for the option `key` field).
 - Card-specific extras follow from slot 4, in the order the option lists below give them: **Less often**, **Help me do it now**, **Set a reminder**, **Move to asap ladder**, **Move to Workflowy**, **Reschedule**, and so on.
 
 Express the recommendation with the item's `default`, never by moving an option up. Wherever this file says to promote an option or place it first or above Done (**Less often** on a streak, **Move to Workflowy** on a Reminders row, **Move to asap ladder**, a recurring-counterpart deletion), that means on the decision page: keep it in its extra slot and set it as `default`. Hard-deadline rows withhold Skip, so they are the one card without slot 2; give them **1 Done** and start their extras at slot 2, and say `Hard deadline` in the first body line so the shift is expected.

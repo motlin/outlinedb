@@ -590,7 +590,8 @@ img.decisions-link-icon
 	min-width: 0;
 }
 
-.decisions-option-key
+.decisions-option-key,
+.decisions-option-letter
 {
 	order: 3;
 	margin-left: auto;
@@ -606,6 +607,17 @@ img.decisions-link-icon
 	background: var(--muted);
 	border: 1px solid var(--border);
 	border-radius: 4px;
+}
+
+/* The mnemonic letter sits just right of the number slot. */
+.decisions-option-letter
+{
+	order: 4;
+}
+
+.decisions-option-key + .decisions-option-letter
+{
+	margin-left: 0;
 }
 
 .decisions-option-label

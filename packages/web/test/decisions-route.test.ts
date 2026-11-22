@@ -366,6 +366,50 @@ describe("GET /api/v1/decisions/:slug", () =>
 		);
 	});
 
+	it("rejects two options on one item that share a letter key", async () =>
+	{
+		const item =
+		{
+			...DOCUMENT.groups[0].items[0],
+			options: [
+				{
+					value: "inbox",
+					label: "Add to inbox",
+					key: "s",
+				},
+				{
+					value: "skip",
+					label: "Skip",
+					key: "s",
+				},
+			],
+		};
+		const request = setup(
+			{
+				"meetings.json": JSON.stringify(
+					{
+						...DOCUMENT,
+						groups: [
+							{
+								heading: "x",
+								items: [item],
+							},
+						],
+					},
+				),
+			},
+		);
+		await expect(request("GET", "/meetings")).resolves.toStrictEqual(
+			{
+				status: 500,
+				body:
+				{
+					error: 'meetings.json item "a-1" gives key "s" to more than one option',
+				},
+			},
+		);
+	});
+
 	it("passes an item's images through to the page", async () =>
 	{
 		const images = [
