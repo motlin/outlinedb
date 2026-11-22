@@ -1287,22 +1287,24 @@ test("generated Queue keeps the range anchor and autosaves ordered group drag, n
 	assert.equal(page.writes.length, 3);
 });
 
-test("CLI defaults to the local web app without exporting task data", () =>
+test("CLI prints the ladder page and its Monitor WebSocket on one origin without exporting task data", () =>
 {
 	const script = new URL("rebalance-ui.mts", import.meta.url).pathname;
-	assert.equal(
+	const run = (args: string[]) =>
 		execFileSync(
 			process.execPath,
-			[script],
+			[script, ...args],
 			{
 				encoding: "utf8",
 				env:
 				{
 					...process.env,
-					REBALANCE_WEB_APP_URL: "http://localhost:5175",
+					REBALANCE_WEB_APP_URL: "https://ladder.example.test",
 				},
 			},
-		),
-		"http://localhost:5175/ladder\n",
+		);
+	assert.deepStrictEqual(
+		[run([]), run(["--events"])],
+		["https://ladder.example.test/ladder\n", "wss://ladder.example.test/api/v1/ladder/events\n"],
 	);
 });

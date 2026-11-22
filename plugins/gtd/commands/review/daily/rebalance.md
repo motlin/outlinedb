@@ -61,13 +61,13 @@ Follow **Choose the presentation surface** in `${CLAUDE_PLUGIN_ROOT}/skills/revi
 node ${CLAUDE_PLUGIN_ROOT}/scripts/rebalance-ui.mts
 ```
 
-Open the printed `/ladder` URL. `REBALANCE_WEB_APP_URL=http://localhost:5175` selects a local dev server; `--output .llm/gtd/review/rebalance.html` generates a small launcher without exporting task names. The route is built from checked-in React source with `vp run --filter @outlinedb/web build`. Preserve its root tabs, range selection, touch handles, tier buttons, per-row Done and immediate persistence.
+Open the printed `/ladder` URL. It defaults to `http://localhost:5175` because the browser runs on this Mac; set `REBALANCE_WEB_APP_URL` to the tailnet hostname only when the page must open on another device. `--output .llm/gtd/review/rebalance.html` generates a small launcher without exporting task names. The route is built from checked-in React source with `vp run --filter @outlinedb/web build`. Preserve its root tabs, range selection, touch handles, tier buttons, per-row Done and immediate persistence.
 
 The app applies the user's gestures through local API endpoints immediately. Never replay those writes with the CLI. Observe `/api/v1/ladder/events` and refresh `/api/v1/ladder` plus the live bucket exports to verify outcomes. A disconnected event stream or successful click is not verification. Record only verified changes; report failed requests by item and let the user retry. Adding a tier uses the existing node-create endpoint and refreshes the ladder before it becomes a move target. No task data is uploaded to claude.ai.
 
 ### Watch writes with Monitor
 
-Start Monitor with `ws: <ladder-origin>/api/v1/ladder/events`, using `ws://` for HTTP or `wss://` for HTTPS. For the local development server, the source is `ws: ws://localhost:5175/api/v1/ladder/events`. Each successful move or completion produces one JSON frame with `nodeId`, `name`, `fromTier`, `toTier`, `verb`, and `at`; Monitor turns each frame into a notification. Watch this channel during the review instead of polling. The notification reports an edit already applied by the server; never apply it again.
+Start Monitor with `ws: <url>`, where `<url>` is what `node ${CLAUDE_PLUGIN_ROOT}/scripts/rebalance-ui.mts --events` prints (by default `ws://localhost:5175/api/v1/ladder/events`). It comes from the same origin as the page, so never hand-build it or mix a tailnet page with a loopback socket. Each successful move or completion produces one JSON frame with `nodeId`, `name`, `fromTier`, `toTier`, `verb`, and `at`; Monitor turns each frame into a notification. Watch this channel during the review instead of polling. The notification reports an edit already applied by the server; never apply it again.
 
 If the app or Monitor is unavailable, report the actual startup, connection, or tool failure. Start the local web app before continuing ranking. Do not switch to an Artifact submission, save document, or polling loop. Artifact CSP blocks fetch/XHR/WebSocket to the local app and external workers, so an Artifact page cannot act as a hybrid client.
 

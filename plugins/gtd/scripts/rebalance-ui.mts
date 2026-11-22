@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 import {join, resolve} from "node:path";
 import {readLadder, tierLabel} from "./asap-tiers.mts";
 import {isObject, parseJson} from "./json.mts";
-import {webAppUrl} from "./web-app-url.mts";
+import {webAppUrl, webAppWsUrl} from "./web-app-url.mts";
 import {isMain} from "./is-main.mts";
 
 export interface ModelItem
@@ -798,6 +798,11 @@ export function renderWebAppLauncher(url: URL | string): string
 function main(): void
 {
 	const args = process.argv.slice(2);
+	if (args.length === 1 && args[0] === "--events")
+	{
+		process.stdout.write(`${webAppWsUrl("/api/v1/ladder/events").href}\n`);
+		return;
+	}
 	const htmlIndex = args.indexOf("--html");
 	const html = htmlIndex !== -1;
 	if (html)
