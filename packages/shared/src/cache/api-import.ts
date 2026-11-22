@@ -80,6 +80,12 @@ interface ProcessedNode
 	layoutMode: string | null;
 }
 
+interface UpdatedParts
+{
+	content: boolean;
+	metadata: boolean;
+}
+
 interface PlacedSibling
 {
 	id: string;
@@ -102,6 +108,9 @@ export interface ApiImportState
 	readonly invalidIds: Set<string>;
 	/** Per parent, the siblings earlier batches placed, with their upstream priority and final order key. */
 	readonly placed: Map<string | null, PlacedSibling[]>;
+	/** Ids counted as added, and as updated with which parts changed, so the finish can recount the ones it ends. */
+	readonly addedIds: Set<string>;
+	readonly updatedIds: Map<string, UpdatedParts>;
 	totalNodes: number;
 	nodesAdded: number;
 	nodesUpdated: number;
@@ -189,6 +198,8 @@ export function beginApiImport(
 		seenIds: new Set(),
 		invalidIds: new Set(),
 		placed: new Map(),
+		addedIds: new Set(),
+		updatedIds: new Map(),
 		totalNodes: 0,
 		nodesAdded: 0,
 		nodesUpdated: 0,
@@ -472,10 +483,18 @@ function applyBatchIn(unitOfWork: UnitOfWork, state: ApiImportState, apiNodes: W
 		if (!content)
 		{
 			state.nodesAdded++;
+			state.addedIds.add(node.id);
 		}
 		else if (contentChanged || metadataChanged)
 		{
 			state.nodesUpdated++;
+			state.updatedIds.set(
+				node.id,
+				{
+					content: Boolean(contentChanged),
+					metadata: Boolean(metadataChanged),
+				},
+			);
 			if (contentChanged)
 			{
 				state.contentUpdated++;
@@ -537,6 +556,42 @@ export function applyApiBatch(state: ApiImportState, apiNodes: WorkflowyNode[]):
 	);
 }
 
+/**
+ * Recount the export's nodes that the finish ended as stranded backlink items. workflowy.com keeps exporting a
+ * backlink item after deleting its source, so such a node is withdrawn on every import: one this import added never
+ * lands and counts as unchanged, and one that was live counts as deleted. Returns how many were live.
+ */
+function recountStranded(state: ApiImportState, strandedIds: readonly string[]): number
+{
+	let deleted = 0;
+	for (const id of strandedIds)
+	{
+		if (!state.seenIds.has(id))
+		{
+			continue;
+		}
+		if (state.addedIds.has(id))
+		{
+			state.nodesAdded--;
+			state.nodesUnchanged++;
+			continue;
+		}
+		const updated = state.updatedIds.get(id);
+		if (updated === undefined)
+		{
+			state.nodesUnchanged--;
+		}
+		else
+		{
+			state.nodesUpdated--;
+			state.contentUpdated -= Number(updated.content);
+			state.metadataUpdated -= Number(updated.metadata);
+		}
+		deleted++;
+	}
+	return deleted;
+}
+
 function finishIn(unitOfWork: UnitOfWork, state: ApiImportState, treeItems?: InternalTreeItem[]): ImportApiResult
 {
 	const {tx} = unitOfWork;
@@ -583,10 +638,11 @@ function finishIn(unitOfWork: UnitOfWork, state: ApiImportState, treeItems?: Int
 		mergeItemRelationships(unitOfWork, relationships, state.seenIds);
 	}
 	endOrphanedParts(unitOfWork);
+	let strandedDeleted = 0;
 	if (treeItems !== undefined)
 	{
 		// Only the tree data carries backlinks, so only then can an item be judged stranded.
-		endStrandedBacklinkItems(unitOfWork);
+		strandedDeleted = recountStranded(state, endStrandedBacklinkItems(unitOfWork));
 	}
 
 	state.logger?.debug(`[IMPORT-API] Finished in ${Date.now() - state.startTime}ms`);
@@ -595,8 +651,8 @@ function finishIn(unitOfWork: UnitOfWork, state: ApiImportState, treeItems?: Int
 		nodesAdded: state.nodesAdded,
 		nodesUpdated: state.nodesUpdated,
 		nodesUnchanged: state.nodesUnchanged,
-		nodesDeleted: unseen.length,
-		nodesPhasedOut: unseen.length,
+		nodesDeleted: unseen.length + strandedDeleted,
+		nodesPhasedOut: unseen.length + strandedDeleted,
 		contentUpdated: state.contentUpdated,
 		metadataUpdated: state.metadataUpdated,
 		priorityUpdated: 0,

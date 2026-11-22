@@ -840,6 +840,111 @@ describe("shared API import", () =>
 		expect(snapshot(db).content).toHaveLength(7);
 	});
 
+	it("counts a stranded backlink item the export keeps as deleted once and unchanged after, never as added", () =>
+	{
+		const db = createDb();
+		const nodes = [
+			...FIXTURE,
+			apiNode(
+				"r",
+				{
+					parent_id: "g",
+					priority: 7,
+				},
+			),
+			apiNode(
+				"s",
+				{
+					parent_id: "r",
+					priority: 8,
+					name: "",
+				},
+			),
+		];
+		const treeItems = [
+			{
+				id: "r",
+				metadata:
+				{
+					isReferencesRoot: true,
+				},
+			},
+			{
+				id: "s",
+				metadata:
+				{
+					backlink:
+					{
+						sourceID: "deleted-source",
+					},
+				},
+			},
+		];
+		const counts = (result: ReturnType<typeof importFromApi>) => (
+		{
+			totalNodes: result.totalNodes,
+			nodesAdded: result.nodesAdded,
+			nodesUpdated: result.nodesUpdated,
+			nodesUnchanged: result.nodesUnchanged,
+			nodesDeleted: result.nodesDeleted,
+		});
+		importFromApi(
+			db,
+			nodes,
+			{
+				timestamp: T0,
+			},
+		);
+
+		const state = beginApiImport(
+			db,
+			{
+				timestamp: T1,
+			},
+		);
+		applyApiBatch(state, nodes.slice(0, 4));
+		applyApiBatch(state, nodes.slice(4));
+		const strandedRun = finishApiImport(state, treeItems);
+		const rerun = importFromApi(
+			db,
+			nodes,
+			{
+				timestamp: new Date("2026-03-03T00:00:00.000Z"),
+				treeItems,
+			},
+		);
+
+		expect(
+			{
+				strandedRun: counts(strandedRun),
+				rerun: counts(rerun),
+				live: snapshot(db)
+					.content.filter((row) => row.systemTo === FAR_FUTURE_DATE)
+					.map((row) => row.id),
+			},
+		).toStrictEqual(
+			{
+				strandedRun:
+				{
+					totalNodes: 9,
+					nodesAdded: 0,
+					nodesUpdated: 0,
+					nodesUnchanged: 8,
+					nodesDeleted: 1,
+				},
+				rerun:
+				{
+					totalNodes: 9,
+					nodesAdded: 0,
+					nodesUpdated: 0,
+					nodesUnchanged: 9,
+					nodesDeleted: 0,
+				},
+				live: ["a", "b", "c", "d", "e", "f", "g", "r"],
+			},
+		);
+	});
+
 	describe("sibling order keys", () =>
 	{
 		// Backup imports number siblings 0,100,200 while REST numbers them 0,1,2 for the
