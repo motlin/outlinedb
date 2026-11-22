@@ -73,4 +73,10 @@ For each person carrying an estimated year, search the journal for their name al
 
 ## Output
 
-Write `.llm/gtd/review/proposals/birthdays.json` per `${CLAUDE_PLUGIN_ROOT}/skills/review-proposal-staging.md`, carrying `generatedFor`, `today`, `imminent`, `upcoming`, `autoApplied`, and `proposals[]`. Stage `empty` only when nothing matches today, nothing is imminent, nothing needed rolling, and no unhandled dates remain. Return verified success or empty; return failure on unreadable or malformed source data. Never update the task's own schedule date — the DAG executor owns that.
+Write `.llm/gtd/review/proposals/birthdays.json` per `${CLAUDE_PLUGIN_ROOT}/skills/review-proposal-staging.md`, carrying `generatedFor`, `today`, `imminent`, `upcoming`, `autoApplied`, and `proposals[]`. Then enforce the handled-file rule mechanically, before returning — it was missed once when applied by reading alone:
+
+```bash
+node ${CLAUDE_PLUGIN_ROOT}/scripts/filter-handled-relationship-dates.mts .llm/gtd/review/proposals/birthdays.json
+```
+
+It drops every proposal whose `<person>:<field>:<occurrence>` key is already in `.llm/gtd/review/relationship-dates-handled.json` under any decision (`still-owed` counts), rewrites the file in place, and prints each dropped key. If it empties `proposals[]` and nothing else remains, restage as `empty`. Stage `empty` only when nothing matches today, nothing is imminent, nothing needed rolling, and no unhandled dates remain. Return verified success or empty; return failure on unreadable or malformed source data. Never update the task's own schedule date — the DAG executor owns that.
