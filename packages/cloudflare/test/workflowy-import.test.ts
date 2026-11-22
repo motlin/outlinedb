@@ -15,6 +15,12 @@ const MIRROR = uuid(4);
 const TARGET = uuid(5);
 const REFERENCES = uuid(6);
 const BACKLINK = uuid(7);
+const PHOTO = uuid(8);
+const SCAN = uuid(9);
+const DELETED_FILE = uuid(10);
+/** The photo's bytes on workflowy.com's S3, behind the signed URL the session mints. */
+const PHOTO_BYTES = "photo bytes from S3";
+const SCAN_BYTES = "scanned page";
 /** The expanded keys workflowy.com keeps for the account. */
 const EXPANDED = ["1a2b3c4d", "5e6f7a8b"];
 
@@ -104,6 +110,57 @@ const TREE_ITEMS = [
 			},
 		},
 	},
+	{
+		id: PHOTO,
+		nm: "",
+		prnt: PROJECTS,
+		pr: 2,
+		ct: 17,
+		metadata:
+		{
+			s3File:
+			{
+				isFile: true,
+				fileName: "photo.jpg",
+				fileType: "image/jpeg",
+				objectFolder: "folder-a",
+			},
+		},
+	},
+	{
+		id: SCAN,
+		nm: "",
+		prnt: PROJECTS,
+		pr: 3,
+		ct: 18,
+		metadata:
+		{
+			s3File:
+			{
+				isFile: true,
+				fileName: "scan.pdf",
+				fileType: "application/pdf",
+				objectFolder: "folder-b",
+			},
+		},
+	},
+	{
+		id: DELETED_FILE,
+		nm: "",
+		prnt: PROJECTS,
+		pr: 4,
+		ct: 19,
+		metadata:
+		{
+			s3File:
+			{
+				isFile: true,
+				fileName: "gone.png",
+				fileType: "image/png",
+				isDeleted: true,
+			},
+		},
+	},
 ];
 
 describe("importing an account from workflowy.com over its stored session", () =>
@@ -112,6 +169,8 @@ describe("importing an account from workflowy.com over its stored session", () =
 	let logins = 0;
 	/** Set to refuse every stored session, as workflowy.com does once one expires. */
 	let sessionsExpired = false;
+	/** Cleared to make S3 refuse the scan's bytes, as it does for a file it no longer holds. */
+	let scanAvailable = false;
 	const upstreamCalls: string[] = [];
 
 	beforeAll(async () =>
@@ -127,12 +186,30 @@ describe("importing an account from workflowy.com over its stored session", () =
 				// Batches of two, one per alarm run, so the seven-node tree spans several alarm runs and each resumes.
 				SYNC_BATCH_SIZE: "2",
 				SYNC_BATCHES_PER_TICK: "1",
+				// One attachment per alarm run, so copying the files resumes across alarm runs too.
+				IMPORT_FILES_PER_TICK: "1",
 			},
 			{
 				outboundService: (request: Request): Response =>
 				{
 					const url = new URL(request.url);
-					upstreamCalls.push(url.pathname);
+					upstreamCalls.push(url.host === "s3.test" ? `s3:${url.pathname}` : url.pathname);
+					if (url.host === "s3.test")
+					{
+						if (url.pathname === `/${PHOTO}`)
+						{
+							return new Response(PHOTO_BYTES);
+						}
+						return scanAvailable && url.pathname === `/${SCAN}`
+							? new Response(SCAN_BYTES)
+							: new Response(
+									"denied",
+									{
+										status: 403,
+										statusText: "Forbidden",
+									},
+								);
+					}
 					if (url.pathname === "/ajax_login")
 					{
 						logins++;
@@ -212,6 +289,15 @@ describe("importing an account from workflowy.com over its stored session", () =
 									]),
 								},
 								features: [],
+							},
+						);
+					}
+					const signed = /^\/file-proxy\/signed-original\/123\/([^/]+)\/$/u.exec(url.pathname);
+					if (signed !== null)
+					{
+						return Response.json(
+							{
+								url: `http://s3.test/${signed[1] ?? ""}`,
 							},
 						);
 					}
@@ -369,6 +455,7 @@ describe("importing an account from workflowy.com over its stored session", () =
 		const run = await importFinished();
 		const stub = await store();
 		const state = await stub.getAccountState();
+		const photo = await harness.mf.dispatchFetch(`http://localhost/api/v1/files/${PHOTO}/original`);
 		expect(
 			{
 				started:
@@ -410,6 +497,12 @@ describe("importing an account from workflowy.com over its stored session", () =
 				},
 				parked: await parkedObjects(),
 				connection: (await send("workflowy-connection", "GET")).body,
+				photo:
+				{
+					status: photo.status,
+					type: photo.headers.get("content-type"),
+					body: await photo.text(),
+				},
 			},
 		).toStrictEqual(
 			{
@@ -425,10 +518,10 @@ describe("importing an account from workflowy.com over its stored session", () =
 					message: null,
 					startedAt: "number",
 					finishedAt: "number",
-					applied: 7,
+					applied: 10,
 					found:
 					{
-						nodes: 7,
+						nodes: 10,
 						completed: 1,
 						mirrors: 1,
 						backlinks: 1,
@@ -441,23 +534,47 @@ describe("importing an account from workflowy.com over its stored session", () =
 					},
 					nodes:
 					{
-						added: 7,
+						added: 10,
 						updated: 0,
 						unchanged: 0,
 						phasedOut: tutorialNodes,
-						metadataWritten: 1,
+						metadataWritten: 4,
 					},
 					failures:
 					{
 						invalidNodes: 0,
 						metadataSkipped: 0,
 					},
+					// The live attachments' bytes, copied into R2 one alarm run each; the deleted one is left behind.
+					files:
+					{
+						found: 2,
+						copied: 1,
+						alreadyCopied: 0,
+						failed: 1,
+						bytes: PHOTO_BYTES.length,
+						failures: [
+							{
+								nodeId: SCAN,
+								fileName: "scan.pdf",
+								error: "HTTP 403 Forbidden",
+							},
+						],
+					},
 					// Every row the run read and wrote, index rows included, from the start request to the finish.
-					rowsRead: 3758,
-					rowsWritten: 494,
+					rowsRead: 3880,
+					rowsWritten: 551,
 				},
-				// One account read and one tree read over the stored session; no login, so the password is never needed.
-				upstreamCalls: ["/get_initialization_data", "/get_tree_data/"],
+				// One account read and one tree read over the stored session, then a signed URL and a download per live
+				// attachment; no login, so the password is never needed.
+				upstreamCalls: [
+					"/get_initialization_data",
+					"/get_tree_data/",
+					`/file-proxy/signed-original/123/${PHOTO}/`,
+					`s3:/${PHOTO}`,
+					`/file-proxy/signed-original/123/${SCAN}/`,
+					`s3:/${SCAN}`,
+				],
 				// Only the imported tree is live: the tutorial is gone, with no confirm.
 				nodes: [
 					{
@@ -500,6 +617,24 @@ describe("importing an account from workflowy.com over its stored session", () =
 						id: BACKLINK,
 						parentId: REFERENCES,
 						name: "Projects",
+						completedAt: null,
+					},
+					{
+						id: PHOTO,
+						parentId: PROJECTS,
+						name: "",
+						completedAt: null,
+					},
+					{
+						id: SCAN,
+						parentId: PROJECTS,
+						name: "",
+						completedAt: null,
+					},
+					{
+						id: DELETED_FILE,
+						parentId: PROJECTS,
+						name: "",
 						completedAt: null,
 					},
 				],
@@ -576,6 +711,58 @@ describe("importing an account from workflowy.com over its stored session", () =
 					status: "connected",
 					email: "alice@example.com",
 					mirror: false,
+				},
+				// The node points at our copy, so its bytes come from R2.
+				photo:
+				{
+					status: 200,
+					type: "image/jpeg",
+					body: PHOTO_BYTES,
+				},
+			},
+		);
+	}, 60_000);
+
+	it("re-imports without copying an attachment again, and copies the one that failed before", async () =>
+	{
+		scanAvailable = true;
+		upstreamCalls.length = 0;
+		await send("workflowy-import", "POST");
+		const run = await importFinished();
+		const scan = await harness.mf.dispatchFetch(`http://localhost/api/v1/files/${SCAN}/original`);
+		expect(
+			{
+				status: run.status,
+				files: run.files,
+				upstreamCalls,
+				scan:
+				{
+					status: scan.status,
+					body: await scan.text(),
+				},
+			},
+		).toStrictEqual(
+			{
+				status: "ok",
+				files:
+				{
+					found: 2,
+					copied: 1,
+					alreadyCopied: 1,
+					failed: 0,
+					bytes: SCAN_BYTES.length,
+					failures: [],
+				},
+				upstreamCalls: [
+					"/get_initialization_data",
+					"/get_tree_data/",
+					`/file-proxy/signed-original/123/${SCAN}/`,
+					`s3:/${SCAN}`,
+				],
+				scan:
+				{
+					status: 200,
+					body: SCAN_BYTES,
 				},
 			},
 		);

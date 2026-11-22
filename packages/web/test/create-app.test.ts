@@ -34,7 +34,7 @@ function memoryDb()
 
 describe("server-app exports", () =>
 {
-	it("are the ops, store, http and context pieces only, with no Hono app of their own", () =>
+	it("are the ops, store, http, context and blob-store pieces only, with no Hono app of their own", () =>
 	{
 		// oxlint-disable-next-line unicorn/no-array-sort -- the test tsconfig lib has no toSorted
 		expect(Object.keys(serverApp).sort()).toStrictEqual([
@@ -43,11 +43,13 @@ describe("server-app exports", () =>
 			"TreeEventBus",
 			"accountChangePublisher",
 			"bindTreeHost",
+			"blobKey",
 			"buildServerContext",
 			"changeWatermark",
 			"createHttpApp",
 			"inProcessStore",
 			"peekTreeSnapshotRows",
+			"sha256Hex",
 		]);
 	});
 });

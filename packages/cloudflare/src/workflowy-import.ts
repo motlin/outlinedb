@@ -4,6 +4,7 @@ import
 	accountRows,
 	applyApiBatch,
 	beginApiImport,
+	closeCurrentVersions,
 	finishApiImport,
 	importInternalMetadata,
 	markApplied,
@@ -16,8 +17,12 @@ import
 import type {AccountSnapshot, ApiImportState} from "@outlinedb/shared/cache";
 import {MissingCredentialsError, SessionRejectedError} from "@outlinedb/shared/api";
 import type {InternalSession, TreeDataItem, TreeSnapshot, WorkflowyInternalClient} from "@outlinedb/shared/api";
+import {fileBlobs, s3Files} from "@outlinedb/shared/db";
 import type {AppDatabase} from "@outlinedb/shared/db";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {blobKey, sha256Hex} from "@outlinedb/web/server-app";
+import type {BlobStore} from "@outlinedb/web/server-app";
+import {and, asc, eq, gt, isNull, or} from "drizzle-orm";
 import type {JobAlarm} from "./alarm-schedule";
 import {nodeBatches} from "./export-stream";
 import type {RowCounts} from "./row-meter";
@@ -25,11 +30,15 @@ import type {RowCounts} from "./row-meter";
 const BATCH_SIZE = 2000;
 /** An alarm run stops applying batches, and leaves the rest to a fresh run, once this much time is spent. */
 const RUN_BUDGET_MS = 30_000;
+/** The attachment the files phase starts after: every node id sorts after the empty string. */
+const FIRST_FILE = "";
 
 /**
  * Each per-account import run, temporal like every other table: one version per alarm run, the newest live. A run
- * keeps what it found upstream per kind, what the node merge changed, and what it could not import, all as typed
- * columns. The fetched tree waits in R2 between alarm runs; nothing of it is stored here.
+ * keeps what it found upstream per kind, what the node merge changed, what it could not import, and how copying the
+ * attachments' bytes went, all as typed columns. `files_cursor` is the last attachment node id the files phase tried,
+ * so a resumed alarm run never tries one twice. The fetched tree waits in R2 between alarm runs; nothing of it is
+ * stored here.
  */
 const IMPORT_TABLE = `
 CREATE TABLE IF NOT EXISTS workflowy_imports (
@@ -38,6 +47,7 @@ CREATE TABLE IF NOT EXISTS workflowy_imports (
 	applied INTEGER NOT NULL,
 	started_at INTEGER NOT NULL,
 	snapshot_at INTEGER,
+	owner_id INTEGER,
 	status TEXT NOT NULL,
 	message TEXT,
 	finished_at INTEGER,
@@ -58,6 +68,12 @@ CREATE TABLE IF NOT EXISTS workflowy_imports (
 	metadata_written INTEGER NOT NULL,
 	invalid_nodes INTEGER NOT NULL,
 	metadata_skipped INTEGER NOT NULL,
+	files_found INTEGER NOT NULL,
+	files_copied INTEGER NOT NULL,
+	files_already_copied INTEGER NOT NULL,
+	files_failed INTEGER NOT NULL,
+	files_bytes INTEGER NOT NULL,
+	files_cursor TEXT NOT NULL,
 	rows_read INTEGER NOT NULL,
 	rows_written INTEGER NOT NULL,
 	system_from INTEGER NOT NULL,
@@ -69,7 +85,7 @@ CREATE INDEX IF NOT EXISTS workflowy_imports_closed_at_idx ON workflowy_imports 
 	WHERE system_to < ${String(FAR_FUTURE_DATE)};
 `;
 
-type Phase = "idle" | "fetching" | "importing";
+type Phase = "idle" | "fetching" | "importing" | "files";
 
 /** `expired`: workflowy.com refused the stored session, so the connection waits for the user to sign in again. */
 type ImportStatus = "running" | "ok" | "error" | "expired";
@@ -108,6 +124,30 @@ export interface ImportFailures
 	metadataSkipped: number;
 }
 
+/** One attachment whose bytes the import could not copy, with why. */
+export interface ImportFileFailure
+{
+	nodeId: string;
+	fileName: string;
+	error: string;
+}
+
+/**
+ * Copying each live attachment's bytes from workflowy.com into R2. A re-import skips the ones already copied and
+ * tries the ones that failed before once more; nothing is retried within a run.
+ */
+export interface ImportFiles
+{
+	/** Live (not deleted) attachments in the imported tree. */
+	found: number;
+	copied: number;
+	/** Attachments an earlier import already copied; left as they are. */
+	alreadyCopied: number;
+	failed: number;
+	/** Bytes this run copied. */
+	bytes: number;
+}
+
 /** One import run, as the account sees it. */
 export interface WorkflowyImportRun
 {
@@ -121,14 +161,26 @@ export interface WorkflowyImportRun
 	found: ImportFound;
 	nodes: ImportNodeChanges;
 	failures: ImportFailures;
+	files: ImportFiles;
 	rowsRead: number;
 	rowsWritten: number;
 }
 
 export interface WorkflowyImportView
 {
-	/** The newest run, or null before the first import. */
-	run: WorkflowyImportRun | null;
+	/**
+	 * The newest run, or null before the first import; `files.failures` lists each live attachment whose newest copy
+	 * attempt failed.
+	 */
+	run:
+		| (Omit<WorkflowyImportRun, "files"> &
+		  {
+				files: ImportFiles &
+				{
+					failures: ImportFileFailure[];
+				};
+		  })
+		| null;
 }
 
 /** What the import job needs from its Durable Object. */
@@ -138,6 +190,10 @@ export interface WorkflowyImportDeps
 	db: AppDatabase;
 	/** Holds the fetched tree between alarm runs, under {@link keyPrefix}. */
 	bucket: R2Bucket;
+	/** Where the attachments' bytes land: the object's own blob store, which serves them from then on. */
+	blobs: BlobStore;
+	/** Downloads an attachment's bytes from the signed URL workflowy.com mints (default: the global fetch). */
+	fetch?: typeof fetch;
 	/** Namespaces this object's R2 keys, so one account never reads another's fetched tree. */
 	keyPrefix: string;
 	/** A client on the account's stored session, with no password to fall back on; undefined when not connected. */
@@ -155,6 +211,8 @@ export interface WorkflowyImportDeps
 		SYNC_BATCHES_PER_TICK?: string;
 		/** Delay before the next alarm run when one yields mid-import (default 0). */
 		SYNC_TICK_DELAY_MS?: string;
+		/** Attachments copied per alarm run before yielding (default: all within the run budget). */
+		IMPORT_FILES_PER_TICK?: string;
 	};
 	now?: () => number;
 }
@@ -163,6 +221,17 @@ interface Job extends WorkflowyImportRun
 {
 	runId: string;
 	snapshotAt: number | null;
+	/** The workflowy.com tree owner the signed file URLs name; set by the fetch. */
+	ownerId: number | null;
+	filesCursor: string;
+}
+
+/** One live attachment the files phase copies. */
+interface LiveFile
+{
+	nodeId: string;
+	fileName: string;
+	fileType: string;
 }
 
 const NO_ROWS: RowCounts =
@@ -200,18 +269,35 @@ const NO_FAILURES: ImportFailures =
 	metadataSkipped: 0,
 };
 
+const NO_FILES: ImportFiles =
+{
+	found: 0,
+	copied: 0,
+	alreadyCopied: 0,
+	failed: 0,
+	bytes: 0,
+};
+
+/** workflowy.com refused the stored session mid-run: the run ends expired, not failed. */
+class SessionExpired extends Error
+{
+}
+
 /**
  * The account's one-time import from workflowy.com over its own stored session: one alarm run fetches the account and
  * the whole tree into R2, later ones apply the tree in batches through the export import path, and the last one ends
  * every node the tree does not hold (the tutorial outline among them, with no confirm), merges mirrors, backlinks and
- * item metadata, and replaces the account tables and expansion. All progress lives in this object's SQLite, so a
- * restart resumes the run. Nothing is retried: a failed run stays failed until the user starts another.
+ * item metadata, and replaces the account tables and expansion. Then it copies each live attachment's bytes into the
+ * object's blob store, recording a `file_blobs` version that points the node at our copy. All progress lives in this
+ * object's SQLite, so a restart resumes the run. Nothing is retried: a failed run stays failed until the user starts
+ * another, and a file that failed is tried again only by the next import.
  */
 export class WorkflowyImportJob
 {
 	/** The system time of the alarm run in progress: every version it writes takes this one value. */
 	private systemTime = newSystemTimestamp();
 	private rowsAtTick: RowCounts = NO_ROWS;
+	private tickStartedAt = Date.now();
 
 	constructor(private readonly deps: WorkflowyImportDeps)
 	{
@@ -264,9 +350,17 @@ export class WorkflowyImportJob
 				run: null,
 			};
 		}
-		const {runId: _runId, snapshotAt: _snapshotAt, ...run} = job;
+		const {runId: _runId, snapshotAt: _snapshotAt, ownerId: _ownerId, filesCursor: _filesCursor, ...run} = job;
 		return {
-			run,
+			run:
+			{
+				...run,
+				files:
+				{
+					...run.files,
+					failures: this.fileFailures(),
+				},
+			},
 		};
 	}
 
@@ -285,10 +379,13 @@ export class WorkflowyImportJob
 					startedAt: this.now(),
 					finishedAt: null,
 					snapshotAt: null,
+					ownerId: null,
+					filesCursor: FIRST_FILE,
 					applied: 0,
 					found: NONE_FOUND,
 					nodes: NO_CHANGES,
 					failures: NO_FAILURES,
+					files: NO_FILES,
 					rowsRead: 0,
 					rowsWritten: 0,
 				},
@@ -302,9 +399,10 @@ export class WorkflowyImportJob
 	{
 		this.systemTime = newSystemTimestamp();
 		this.rowsAtTick = this.rows();
+		this.tickStartedAt = Date.now();
 	}
 
-	/** One alarm run: fetch the tree, or apply the next batches of it, or finish the import. */
+	/** One alarm run: fetch the tree, or apply the next batches of it, or copy the next attachments, or finish. */
 	async tick(): Promise<void>
 	{
 		this.beginTick();
@@ -324,10 +422,25 @@ export class WorkflowyImportJob
 				}
 				job = fetched;
 			}
-			await this.importTree(job);
+			if (job.phase === "importing")
+			{
+				const imported = await this.importTree(job);
+				if (imported === undefined)
+				{
+					return;
+				}
+				job = imported;
+			}
+			await this.copyFiles(job);
 		}
 		catch (error)
 		{
+			if (error instanceof SessionExpired)
+			{
+				this.deps.expireSession();
+				await this.finish(this.runningJob() ?? job, "expired", "workflowy-session-expired");
+				return;
+			}
 			// The live version holds the progress the failed alarm run committed.
 			await this.finish(this.runningJob() ?? job, "error", errorMessage(error));
 		}
@@ -395,6 +508,7 @@ export class WorkflowyImportJob
 			...job,
 			phase: "importing",
 			snapshotAt,
+			ownerId: session.ownerId,
 			found: found(nodes.length, tree, account),
 		};
 		this.writeJob(next);
@@ -418,7 +532,8 @@ export class WorkflowyImportJob
 		return state;
 	}
 
-	private async importTree(job: Job): Promise<void>
+	/** Apply the next batches of the fetched tree. Returns the job in its files phase once the whole tree is in. */
+	private async importTree(job: Job): Promise<Job | undefined>
 	{
 		const {bucket, env, storage} = this.deps;
 		const object = await bucket.get(this.key(job, "nodes"));
@@ -430,7 +545,7 @@ export class WorkflowyImportJob
 		const perTick = Number(env.SYNC_BATCHES_PER_TICK);
 		const limit = Number.isFinite(perTick) && perTick > 0 ? perTick : Infinity;
 		const batchSize = Number(env.SYNC_BATCH_SIZE);
-		const overBudget = () => Date.now() - state.start.startedAt >= RUN_BUDGET_MS;
+		const overBudget = () => this.overBudget();
 		let batches = 0;
 		let yielded = false;
 		for await (const batch of nodeBatches(
@@ -480,7 +595,7 @@ export class WorkflowyImportJob
 		{
 			const delay = Number(env.SYNC_TICK_DELAY_MS);
 			await this.deps.alarm.setAlarm(this.now() + (Number.isFinite(delay) && delay > 0 ? delay : 0));
-			return;
+			return undefined;
 		}
 
 		const tree = await this.readJson<TreeSnapshot>(job, "tree");
@@ -492,26 +607,240 @@ export class WorkflowyImportJob
 			writeAccountSnapshot(unitOfWork, account);
 			stampImportTime(unitOfWork, ACCOUNT_IMPORT_NAME, this.now());
 		});
-		await this.finish(
+		const next: Job =
+		{
+			...job,
+			phase: "files",
+			nodes:
 			{
-				...job,
-				nodes:
-				{
-					added: result.nodesAdded,
-					updated: result.nodesUpdated,
-					unchanged: result.nodesUnchanged,
-					phasedOut: result.nodesPhasedOut,
-					metadataWritten: metadata.written,
-				},
-				failures:
-				{
-					invalidNodes: state.validationErrors,
-					metadataSkipped: metadata.skipped,
-				},
+				added: result.nodesAdded,
+				updated: result.nodesUpdated,
+				unchanged: result.nodesUnchanged,
+				phasedOut: result.nodesPhasedOut,
+				metadataWritten: metadata.written,
 			},
-			"ok",
-			null,
+			failures:
+			{
+				invalidNodes: state.validationErrors,
+				metadataSkipped: metadata.skipped,
+			},
+			files:
+			{
+				...NO_FILES,
+				found: this.liveFiles(FIRST_FILE).length,
+			},
+		};
+		this.writeJob(next);
+		return next;
+	}
+
+	private overBudget(): boolean
+	{
+		return Date.now() - this.tickStartedAt >= RUN_BUDGET_MS;
+	}
+
+	/**
+	 * Copy the live attachments after the run's cursor into the blob store, in node id order, then finish the run.
+	 * One already copied (a live "ok" `file_blobs` version) is skipped; each other one is tried once, its outcome
+	 * recorded as a new `file_blobs` version in the same transaction that advances the cursor.
+	 */
+	private async copyFiles(job: Job): Promise<void>
+	{
+		const pending = this.liveFiles(job.filesCursor);
+		const copied = this.copiedNodeIds();
+		const perTick = Number(this.deps.env.IMPORT_FILES_PER_TICK);
+		const limit = Number.isFinite(perTick) && perTick > 0 ? perTick : Infinity;
+		let client: WorkflowyInternalClient | undefined;
+		let tried = 0;
+		/** Skips not yet written: they ride along with the next tried file, the yield or the finish. */
+		let unwritten = false;
+		for (const file of pending)
+		{
+			if (copied.has(file.nodeId))
+			{
+				job =
+				{
+					...job,
+					filesCursor: file.nodeId,
+					files:
+					{
+						...job.files,
+						alreadyCopied: job.files.alreadyCopied + 1,
+					},
+				};
+				unwritten = true;
+				continue;
+			}
+			if (tried >= limit || (tried > 0 && this.overBudget()))
+			{
+				if (unwritten)
+				{
+					this.writeJob(job);
+				}
+				const delay = Number(this.deps.env.SYNC_TICK_DELAY_MS);
+				await this.deps.alarm.setAlarm(this.now() + (Number.isFinite(delay) && delay > 0 ? delay : 0));
+				return;
+			}
+			client ??= await this.deps.openClient();
+			if (client === undefined)
+			{
+				await this.finish(job, "error", "workflowy-not-connected");
+				return;
+			}
+			tried++;
+			job = await this.copyFile(client, job, file);
+			unwritten = false;
+		}
+		await this.finish(job, "ok", null);
+	}
+
+	/** Try one attachment once: sign its original's URL over the session, download it, and store it under its hash. */
+	private async copyFile(client: WorkflowyInternalClient, job: Job, file: LiveFile): Promise<Job>
+	{
+		let blob: typeof fileBlobs.$inferInsert;
+		try
+		{
+			const url = await client.signedFileUrl(
+				`/file-proxy/signed-original/${String(job.ownerId)}/${file.nodeId}/?attempt=1`,
+			);
+			const response = await (this.deps.fetch ?? fetch)(url);
+			if (!response.ok)
+			{
+				throw new Error(`HTTP ${String(response.status)} ${response.statusText}`);
+			}
+			const bytes = new Uint8Array(await response.arrayBuffer());
+			const sha256 = await sha256Hex(bytes);
+			const localPath = blobKey(sha256);
+			await this.deps.blobs.put(localPath, bytes);
+			blob =
+			{
+				nodeId: file.nodeId,
+				status: "ok",
+				sha256,
+				size: bytes.byteLength,
+				contentType: file.fileType,
+				localPath,
+				error: null,
+				systemFrom: 0,
+				systemTo: FAR_FUTURE_DATE,
+			};
+		}
+		catch (error)
+		{
+			if (error instanceof MissingCredentialsError || error instanceof SessionRejectedError)
+			{
+				throw new SessionExpired("workflowy-session-expired");
+			}
+			blob =
+			{
+				nodeId: file.nodeId,
+				status: "error",
+				sha256: null,
+				size: null,
+				contentType: null,
+				localPath: null,
+				error: errorMessage(error),
+				systemFrom: 0,
+				systemTo: FAR_FUTURE_DATE,
+			};
+		}
+		const ok = blob.status === "ok";
+		const next: Job =
+		{
+			...job,
+			filesCursor: file.nodeId,
+			files:
+			{
+				...job.files,
+				copied: job.files.copied + (ok ? 1 : 0),
+				failed: job.files.failed + (ok ? 0 : 1),
+				bytes: job.files.bytes + (blob.size ?? 0),
+			},
+		};
+		runUnitOfWork(this.deps.db, ({tx, systemTime}) =>
+		{
+			closeCurrentVersions(tx, fileBlobs, systemTime, eq(fileBlobs.nodeId, file.nodeId));
+			tx.insert(fileBlobs)
+				.values(
+					{
+						...blob,
+						systemFrom: systemTime,
+					},
+				)
+				.run();
+			this.writeJob(next);
+		});
+		return next;
+	}
+
+	/** The live, not deleted attachments after `cursor`, in node id order. */
+	private liveFiles(cursor: string): LiveFile[]
+	{
+		return this.deps.db
+			.select(
+				{
+					nodeId: s3Files.nodeId,
+					fileName: s3Files.fileName,
+					fileType: s3Files.fileType,
+				},
+			)
+			.from(s3Files)
+			.where(
+				and(
+					eq(s3Files.systemTo, FAR_FUTURE_DATE),
+					or(isNull(s3Files.isDeleted), eq(s3Files.isDeleted, 0)),
+					gt(s3Files.nodeId, cursor),
+				),
+			)
+			.orderBy(asc(s3Files.nodeId))
+			.all();
+	}
+
+	/** Attachments whose live `file_blobs` version is a stored copy. */
+	private copiedNodeIds(): Set<string>
+	{
+		return new Set(
+			this.deps.db
+				.select(
+					{
+						nodeId: fileBlobs.nodeId,
+					},
+				)
+				.from(fileBlobs)
+				.where(and(eq(fileBlobs.status, "ok"), eq(fileBlobs.systemTo, FAR_FUTURE_DATE)))
+				.all()
+				.map(({nodeId}) => nodeId),
 		);
+	}
+
+	/** Each live attachment whose newest copy attempt failed. */
+	private fileFailures(): ImportFileFailure[]
+	{
+		return this.deps.db
+			.select(
+				{
+					nodeId: fileBlobs.nodeId,
+					fileName: s3Files.fileName,
+					error: fileBlobs.error,
+				},
+			)
+			.from(fileBlobs)
+			.innerJoin(s3Files, and(eq(s3Files.nodeId, fileBlobs.nodeId), eq(s3Files.systemTo, FAR_FUTURE_DATE)))
+			.where(
+				and(
+					eq(fileBlobs.status, "error"),
+					eq(fileBlobs.systemTo, FAR_FUTURE_DATE),
+					or(isNull(s3Files.isDeleted), eq(s3Files.isDeleted, 0)),
+				),
+			)
+			.orderBy(asc(fileBlobs.nodeId))
+			.all()
+			.map(({nodeId, fileName, error}) => (
+			{
+				nodeId,
+				fileName,
+				error: error ?? "",
+			}));
 	}
 
 	private async readJson<T>(job: Job, name: "tree" | "account"): Promise<T>
@@ -554,16 +883,18 @@ export class WorkflowyImportJob
 		);
 		const rows = this.rows();
 		this.sql.exec(
-			"INSERT OR REPLACE INTO workflowy_imports (run_id, phase, applied, started_at, snapshot_at, status, message, " +
+			"INSERT OR REPLACE INTO workflowy_imports (run_id, phase, applied, started_at, snapshot_at, owner_id, status, message, " +
 				"finished_at, found_nodes, found_completed, found_mirrors, found_backlinks, found_expanded_keys, found_stars, " +
 				"found_star_order, found_tag_colors, found_saved_views, found_settings, nodes_added, nodes_updated, " +
-				"nodes_unchanged, nodes_phased_out, metadata_written, invalid_nodes, metadata_skipped, rows_read, rows_written, " +
-				"system_from, system_to) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+				"nodes_unchanged, nodes_phased_out, metadata_written, invalid_nodes, metadata_skipped, files_found, files_copied, " +
+				"files_already_copied, files_failed, files_bytes, files_cursor, rows_read, rows_written, system_from, system_to) " +
+				"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 			job.runId,
 			job.phase,
 			job.applied,
 			job.startedAt,
 			job.snapshotAt,
+			job.ownerId,
 			job.status,
 			job.message,
 			job.finishedAt,
@@ -584,6 +915,12 @@ export class WorkflowyImportJob
 			job.nodes.metadataWritten,
 			job.failures.invalidNodes,
 			job.failures.metadataSkipped,
+			job.files.found,
+			job.files.copied,
+			job.files.alreadyCopied,
+			job.files.failed,
+			job.files.bytes,
+			job.filesCursor,
 			job.rowsRead + rows.rowsRead - this.rowsAtTick.rowsRead,
 			job.rowsWritten + rows.rowsWritten - this.rowsAtTick.rowsWritten,
 			this.systemTime,
@@ -675,14 +1012,17 @@ function jobFromRow(row: Record<string, SqlStorageValue>): Job
 	const status = text("status");
 	const finishedAt = row.finished_at;
 	const snapshotAt = row.snapshot_at;
+	const ownerId = row.owner_id;
 	return {
 		runId: text("run_id") ?? "",
-		phase: phase === "fetching" || phase === "importing" ? phase : "idle",
+		phase: phase === "fetching" || phase === "importing" || phase === "files" ? phase : "idle",
 		status: status === "running" || status === "ok" || status === "expired" ? status : "error",
 		message: text("message"),
 		startedAt: count("started_at"),
 		finishedAt: typeof finishedAt === "number" ? finishedAt : null,
 		snapshotAt: typeof snapshotAt === "number" ? snapshotAt : null,
+		ownerId: typeof ownerId === "number" ? ownerId : null,
+		filesCursor: text("files_cursor") ?? FIRST_FILE,
 		applied: count("applied"),
 		found:
 		{
@@ -709,6 +1049,14 @@ function jobFromRow(row: Record<string, SqlStorageValue>): Job
 		{
 			invalidNodes: count("invalid_nodes"),
 			metadataSkipped: count("metadata_skipped"),
+		},
+		files:
+		{
+			found: count("files_found"),
+			copied: count("files_copied"),
+			alreadyCopied: count("files_already_copied"),
+			failed: count("files_failed"),
+			bytes: count("files_bytes"),
 		},
 		rowsRead: count("rows_read"),
 		rowsWritten: count("rows_written"),

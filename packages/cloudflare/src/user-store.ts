@@ -205,6 +205,8 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 		this.treeSnapshotEnabled = config.features.treeSnapshot;
 		const embedding = config.features.embeddings ? this.embeddingBindings() : undefined;
 		const internalAuth = readWorkerInternalAuth(env, this.sessionStore, this.isOwner);
+		// Namespaced by object id like the related-notes index, so one user can never read another's bytes.
+		const blobs = r2BlobStore(env.FILES, ctx.id.toString());
 		const serverContext = buildServerContext(
 			{
 				db,
@@ -212,8 +214,7 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 				ladderEvents: this.ladderEvents,
 				internalAuth,
 				embeddingIndex: embedding && (() => embedding.index),
-				// Namespaced by object id like the related-notes index, so one user can never read another's bytes.
-				blobs: r2BlobStore(env.FILES, ctx.id.toString()),
+				blobs,
 			},
 		);
 		this.drainOutbox = internalAuth && (async () => serverContext.internalAdapter?.()?.drainOutbox());
@@ -288,6 +289,7 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 				storage: ctx.storage,
 				db,
 				bucket: env.SNAPSHOTS,
+				blobs,
 				keyPrefix: ctx.id.toString(),
 				openClient: async () => this.storedSessionClient(),
 				expireSession: () =>
