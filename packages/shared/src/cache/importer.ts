@@ -26,7 +26,7 @@ import
 	referencesRoots,
 	s3Files,
 } from "../db/schema.js";
-import type {CalendarLevels, CalendarMetadata, S3File} from "../db/schema.js";
+import type {CalendarLevels, CalendarMetadata, NodeContentType, NodeMetadataType, S3File} from "../db/schema.js";
 import {FAR_FUTURE_DATE} from "../temporal/index.js";
 import {contentMatches, keepSkewedTimestamps, metadataMatches} from "./cache-temporal.js";
 import type
@@ -123,9 +123,9 @@ function calendarLevelsMatches(current: CalendarLevels, incoming: NormalizedCale
 const LOOKUP_CHUNK_SIZE = 90;
 
 /**
- * Merge one node-keyed temporal table. Loads the table's current rows, runs the
- * temporal merge, and returns the result. The `nodeId` accessor and a
- * `contentMatches` predicate are the only per-table specifics.
+ * Merge one node-keyed temporal table. Loads the table's current rows (those of `onlyKeys` when given, or takes the
+ * caller's `loaded` rows without reading them again), runs the temporal merge, and returns the result. The `nodeId`
+ * accessor and a `contentMatches` predicate are the only per-table specifics.
  */
 function mergeNodeKeyedTable<TIncoming, TTable extends SQLiteTable>(
 	tx: TemporalTransaction,
@@ -141,10 +141,15 @@ function mergeNodeKeyedTable<TIncoming, TTable extends SQLiteTable>(
 	importedAt: number,
 	preserveKeys?: ReadonlySet<string>,
 	onlyKeys?: readonly string[],
+	loaded?: TTable["$inferSelect"][],
 ): TemporalMergeResult
 {
 	let currentRows: TTable["$inferSelect"][] = [];
-	if (onlyKeys === undefined)
+	if (loaded !== undefined)
+	{
+		currentRows = loaded;
+	}
+	else if (onlyKeys === undefined)
 	{
 		// Assigned, not spread into push(): a full table has more rows than one call's argument list allows.
 		currentRows = tx.select().from(table).where(eq(systemToColumn, FAR_FUTURE_DATE)).all();
@@ -418,8 +423,8 @@ function toUnix(date: Date | null | undefined): number | null
 /**
  * Merge one batch of node rows without ending anything absent from it.
  *
- * Unlike {@link applyRows}, this looks up only the batch's own ids and never
- * phases out other nodes; the caller ends nodes unseen by every batch itself.
+ * Unlike {@link applyRows}, this never phases out other nodes; the caller ends nodes unseen by every batch itself. The
+ * caller passes the batch's current rows it already read, every current row of the batch's ids, so none is read twice.
  */
 export function applyNodeRowsBatch(
 	unitOfWork: UnitOfWork,
@@ -428,6 +433,11 @@ export function applyNodeRowsBatch(
 		nodeContent: NormalizedNodeContentRow[];
 		nodeMetadata: NormalizedNodeMetadataRow[];
 	},
+	currentRows:
+	{
+		nodeContent: NodeContentType[];
+		nodeMetadata: NodeMetadataType[];
+	},
 ):
 {
 	nodeContent: TemporalMergeResult;
@@ -435,8 +445,6 @@ export function applyNodeRowsBatch(
 }
 {
 	const {tx, systemTime: importedAt} = unitOfWork;
-	const contentIds = rows.nodeContent.map((row) => row.id);
-	const metadataIds = rows.nodeMetadata.map((row) => row.nodeId);
 	const content = mergeNodeKeyedTable(
 		tx,
 		nodeContent,
@@ -460,7 +468,8 @@ export function applyNodeRowsBatch(
 		}),
 		importedAt,
 		undefined,
-		contentIds,
+		undefined,
+		currentRows.nodeContent,
 	);
 	const metadata = mergeNodeKeyedTable(
 		tx,
@@ -490,7 +499,8 @@ export function applyNodeRowsBatch(
 					},
 		importedAt,
 		undefined,
-		metadataIds,
+		undefined,
+		currentRows.nodeMetadata,
 	);
 	return {
 		nodeContent: content,

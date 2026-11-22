@@ -390,18 +390,88 @@ export function markApplied(state: ApiImportState, node: WorkflowyNode): void
 	}
 }
 
-function applyBatchIn(unitOfWork: UnitOfWork, state: ApiImportState, apiNodes: WorkflowyNode[]): void
+/**
+ * The ids among `ids`, none of which has a current content row, whose content version the cache closed after the
+ * snapshot was taken: deleted locally since.
+ */
+function closedAfterSnapshot(tx: UnitOfWork["tx"], ids: string[], snapshotAt: number): Set<string>
+{
+	const closed = new Set<string>();
+	for (let start = 0; start < ids.length; start += LOOKUP_CHUNK_SIZE)
+	{
+		for (const row of tx
+			.select(
+				{
+					id: nodeContent.id,
+				},
+			)
+			.from(nodeContent)
+			.where(
+				and(
+					inArray(nodeContent.id, ids.slice(start, start + LOOKUP_CHUNK_SIZE)),
+					ne(nodeContent.systemTo, FAR_FUTURE_DATE),
+					gt(nodeContent.systemTo, snapshotAt),
+				),
+			)
+			.all())
+		{
+			closed.add(row.id);
+		}
+	}
+	return closed;
+}
+
+/**
+ * Merge one batch into the unit of work. Returns the ids of the nodes it wrote, the only ones whose tags can change.
+ * Each node's current rows are read once, and serve the snapshot check, the classification and the merge alike.
+ */
+function applyBatchIn(unitOfWork: UnitOfWork, state: ApiImportState, apiNodes: WorkflowyNode[]): string[]
 {
 	const {tx} = unitOfWork;
 	let nodes = processNodes(state, apiNodes);
-	if (state.snapshotAt !== undefined)
+	const existingContent = new Map<string, NodeContentType>();
+	const existingMetadata = new Map<string, NodeMetadataType>();
+	const allIds = nodes.map((node) => node.id);
+	for (let start = 0; start < allIds.length; start += LOOKUP_CHUNK_SIZE)
 	{
-		// The cache's later write wins: the node is left as it is and counts as seen.
-		const later = writtenAfterSnapshot(
+		const chunk = allIds.slice(start, start + LOOKUP_CHUNK_SIZE);
+		for (const row of tx
+			.select()
+			.from(nodeContent)
+			.where(and(eq(nodeContent.systemTo, FAR_FUTURE_DATE), inArray(nodeContent.id, chunk)))
+			.all())
+		{
+			existingContent.set(row.id, row);
+		}
+		for (const row of tx
+			.select()
+			.from(nodeMetadata)
+			.where(and(eq(nodeMetadata.systemTo, FAR_FUTURE_DATE), inArray(nodeMetadata.nodeId, chunk)))
+			.all())
+		{
+			existingMetadata.set(row.nodeId, row);
+		}
+	}
+	const {snapshotAt} = state;
+	if (snapshotAt !== undefined)
+	{
+		// The cache's later write wins: the node is left as it is and counts as seen. A current row opened after the
+		// snapshot shows it in memory; only a node with no current content row needs a read, for a version closed since.
+		const later = closedAfterSnapshot(
 			tx,
-			nodes.map((node) => node.id),
-			state.snapshotAt,
+			allIds.filter((id) => !existingContent.has(id)),
+			snapshotAt,
 		);
+		for (const id of allIds)
+		{
+			if (
+				(existingContent.get(id)?.systemFrom ?? 0) > snapshotAt ||
+				(existingMetadata.get(id)?.systemFrom ?? 0) > snapshotAt
+			)
+			{
+				later.add(id);
+			}
+		}
 		for (const id of later)
 		{
 			state.seenIds.add(id);
@@ -430,31 +500,7 @@ function applyBatchIn(unitOfWork: UnitOfWork, state: ApiImportState, apiNodes: W
 		}
 	}
 	nodes = nodes.filter((node) => !localWins(node.id));
-	const ids = nodes.map((node) => node.id);
 
-	// Classify against only this batch's current rows.
-	const existingContent = new Map<string, NodeContentType>();
-	const existingMetadata = new Map<string, NodeMetadataType>();
-	for (let start = 0; start < ids.length; start += LOOKUP_CHUNK_SIZE)
-	{
-		const chunk = ids.slice(start, start + LOOKUP_CHUNK_SIZE);
-		for (const row of tx
-			.select()
-			.from(nodeContent)
-			.where(and(eq(nodeContent.systemTo, FAR_FUTURE_DATE), inArray(nodeContent.id, chunk)))
-			.all())
-		{
-			existingContent.set(row.id, row);
-		}
-		for (const row of tx
-			.select()
-			.from(nodeMetadata)
-			.where(and(eq(nodeMetadata.systemTo, FAR_FUTURE_DATE), inArray(nodeMetadata.nodeId, chunk)))
-			.all())
-		{
-			existingMetadata.set(row.nodeId, row);
-		}
-	}
 	const pendingPlacement = keepPendingFields(nodes, pending, existingContent, existingMetadata);
 	const orderKeys: Map<string, string | null> = assignOrderKeys(
 		state,
@@ -466,6 +512,7 @@ function applyBatchIn(unitOfWork: UnitOfWork, state: ApiImportState, apiNodes: W
 	{
 		orderKeys.set(id, orderKey);
 	}
+	const written: string[] = [];
 	for (const node of nodes)
 	{
 		const content = existingContent.get(node.id);
@@ -508,6 +555,10 @@ function applyBatchIn(unitOfWork: UnitOfWork, state: ApiImportState, apiNodes: W
 		{
 			state.nodesUnchanged++;
 		}
+		if (!content || !metadata || contentChanged || metadataChanged)
+		{
+			written.push(node.id);
+		}
 		state.seenIds.add(node.id);
 	}
 	state.totalNodes += nodes.length;
@@ -529,13 +580,19 @@ function applyBatchIn(unitOfWork: UnitOfWork, state: ApiImportState, apiNodes: W
 		completedAt: timestampToDate(node.completedAt),
 		layoutMode: node.layoutMode,
 	}));
+	const kept = new Set(nodes.map((node) => node.id));
 	applyNodeRowsBatch(
 		unitOfWork,
 		{
 			nodeContent: contentRows,
 			nodeMetadata: metadataRows,
 		},
+		{
+			nodeContent: [...existingContent.values()].filter((row) => kept.has(row.id)),
+			nodeMetadata: [...existingMetadata.values()].filter((row) => kept.has(row.nodeId)),
+		},
 	);
+	return written;
 }
 
 /**
@@ -544,15 +601,17 @@ function applyBatchIn(unitOfWork: UnitOfWork, state: ApiImportState, apiNodes: W
  */
 export function applyApiBatch(state: ApiImportState, apiNodes: WorkflowyNode[]): void
 {
+	// Every batch shares the import's system time, so only the nodes this batch wrote are rescanned for tags: none, for
+	// an unchanged batch. The work fills the scope before the unit of work's tag sync reads it.
+	const written: string[] = [];
 	runUnitOfWork(
 		state.database,
 		(unitOfWork) =>
 		{
-			applyBatchIn(unitOfWork, state, apiNodes);
+			written.push(...applyBatchIn(unitOfWork, state, apiNodes));
 		},
 		state.start,
-		// Every batch shares the import's system time, so only this batch's nodes are rescanned for tags.
-		apiNodes.map((node) => node.id),
+		written,
 	);
 }
 

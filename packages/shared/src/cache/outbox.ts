@@ -75,6 +75,21 @@ export function pendingAspects(tx: TemporalTransaction, nodeIds: readonly string
 	{
 		return pending;
 	}
+	// Usually nothing is pending: one row of the partial pending index says so, where probing every id reads two each.
+	const anyPending = tx
+		.select(
+			{
+				one: sql`1`,
+			},
+		)
+		.from(outbox)
+		.where(currentVersionLiteral(outbox))
+		.limit(1)
+		.get();
+	if (anyPending === undefined)
+	{
+		return pending;
+	}
 	const rows = tx
 		.select(
 			{

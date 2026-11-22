@@ -113,7 +113,7 @@ describe("sync resumes and keeps local writes across runs", () =>
 						phase: "importing",
 						applied: 20,
 						status: null,
-						rowsRead: 549,
+						rowsRead: 430,
 						rowsWritten: 272,
 						live: 0,
 					},
@@ -121,7 +121,7 @@ describe("sync resumes and keeps local writes across runs", () =>
 						phase: "importing",
 						applied: 40,
 						status: null,
-						rowsRead: 1092,
+						rowsRead: 854,
 						rowsWritten: 538,
 						live: 0,
 					},
@@ -129,7 +129,7 @@ describe("sync resumes and keeps local writes across runs", () =>
 						phase: "idle",
 						applied: 50,
 						status: "ok",
-						rowsRead: 1770,
+						rowsRead: 1473,
 						rowsWritten: 674,
 						live: 1,
 					},
@@ -171,7 +171,7 @@ describe("sync resumes and keeps local writes across runs", () =>
 					metadataUpdated: 0,
 					priorityUpdated: 0,
 					// Up to the run's final record, which the meter reading below includes.
-					rowsRead: 1554,
+					rowsRead: 508,
 					rowsWritten: 15,
 				},
 				live: 50,
@@ -179,7 +179,7 @@ describe("sync resumes and keeps local writes across runs", () =>
 				// new numbers in the commit.
 				rows:
 				{
-					rowsRead: 1614,
+					rowsRead: 568,
 					rowsWritten: 26,
 				},
 			},

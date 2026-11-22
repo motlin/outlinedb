@@ -76,14 +76,14 @@ describe("sync imports a fake upstream's export", () =>
 					metadataUpdated: 0,
 					priorityUpdated: 0,
 					// Up to the run's final record, which the meter reading below includes.
-					rowsRead: 1442,
+					rowsRead: 396,
 					rowsWritten: 9,
 				},
 				// Cost budget: an identical export writes only the run's own bookkeeping and reads the stored rows it compares,
 				// never a row per node more than that. If these change, justify the new numbers in the commit.
 				rows:
 				{
-					rowsRead: 1468,
+					rowsRead: 422,
 					rowsWritten: 14,
 				},
 			},
@@ -119,7 +119,7 @@ describe("sync imports a fake upstream's export", () =>
 						phase: "idle",
 						applied: 50,
 						status: "ok",
-						rowsRead: 1999,
+						rowsRead: 1702,
 						rowsWritten: 518,
 						live: 1,
 					},
@@ -127,7 +127,7 @@ describe("sync imports a fake upstream's export", () =>
 						phase: "idle",
 						applied: 50,
 						status: "ok",
-						rowsRead: 1442,
+						rowsRead: 396,
 						rowsWritten: 9,
 						live: 1,
 					},
@@ -135,7 +135,7 @@ describe("sync imports a fake upstream's export", () =>
 						phase: "idle",
 						applied: 49,
 						status: "ok",
-						rowsRead: 1525,
+						rowsRead: 506,
 						rowsWritten: 29,
 						live: 1,
 					},

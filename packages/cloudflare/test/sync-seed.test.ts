@@ -209,7 +209,7 @@ describe("sync seeds from get_tree_data only on request", () =>
 				// no run version. If these change, justify the new numbers in the commit.
 				rows:
 				{
-					rowsRead: 50,
+					rowsRead: 49,
 					rowsWritten: 20,
 				},
 			},
