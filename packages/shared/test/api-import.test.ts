@@ -5,6 +5,7 @@ import {afterEach, assert, describe, expect, it, vi} from "vite-plus/test";
 import {applyApiBatch, beginApiImport, finishApiImport, importFromApi} from "../src/cache/api-import.js";
 import {BULK_IMPORT_LEASE_NAME} from "../src/cache/bulk-import.js";
 import {CacheService} from "../src/cache/cache-service.js";
+import {importInternalMetadata} from "../src/cache/internal-metadata.js";
 import {LocalTreeWriter} from "../src/cache/local-tree-writer.js";
 import {OutboxRecorder, pendingAspects} from "../src/cache/outbox.js";
 import {BULK_IMPORT_TIMEOUT_MS, TRANSACTION_TIMEOUT_MS, TransactionTimeoutError} from "../src/cache/system-time.js";
@@ -801,16 +802,66 @@ describe("shared API import", () =>
 		expect(ids).toStrictEqual(["a", "b", "c", "d"]);
 	});
 
-	it("reports no changes when re-run with no changes", () =>
+	it("reports no changes when re-run with no changes, even for a mirror the export gives its original's layoutMode", () =>
 	{
 		const db = createDb();
+		// The export gives a mirror its original's layoutMode; the mirror's own item metadata carries none.
+		const nodes = [
+			...FIXTURE.map((node) =>
+				node.id === "b"
+					?
+						{
+							...node,
+							data:
+							{
+								layoutMode: "bullet",
+							},
+						}
+					: node,
+			),
+			apiNode(
+				"m",
+				{
+					parent_id: "g",
+					priority: 7,
+					data:
+					{
+						layoutMode: "bullet",
+					},
+				},
+			),
+		];
+		const treeItems = [
+			{
+				id: "m",
+				metadata:
+				{
+					mirror:
+					{
+						originalId: "b",
+						isMirrorRoot: true,
+					},
+				},
+			},
+		];
 		importFromApi(
 			db,
-			FIXTURE,
+			nodes,
 			{
 				timestamp: T0,
+				treeItems,
 			},
 		);
+		importInternalMetadata(
+			db,
+			{
+				items: treeItems,
+				txId: "tx",
+				expandedKeys: [],
+			},
+			T0.getTime(),
+		);
+		const before = snapshot(db);
 
 		const state = beginApiImport(
 			db,
@@ -818,9 +869,18 @@ describe("shared API import", () =>
 				timestamp: T1,
 			},
 		);
-		applyApiBatch(state, FIXTURE.slice(0, 3));
-		applyApiBatch(state, FIXTURE.slice(3));
-		const result = finishApiImport(state);
+		applyApiBatch(state, nodes.slice(0, 3));
+		applyApiBatch(state, nodes.slice(3));
+		const result = finishApiImport(state, treeItems);
+		importInternalMetadata(
+			db,
+			{
+				items: treeItems,
+				txId: "tx",
+				expandedKeys: [],
+			},
+			T1.getTime(),
+		);
 
 		expect(
 			{
@@ -828,16 +888,17 @@ describe("shared API import", () =>
 				nodesUpdated: result.nodesUpdated,
 				nodesDeleted: result.nodesDeleted,
 				nodesUnchanged: result.nodesUnchanged,
+				rows: snapshot(db),
 			},
 		).toStrictEqual(
 			{
 				nodesAdded: 0,
 				nodesUpdated: 0,
 				nodesDeleted: 0,
-				nodesUnchanged: 7,
+				nodesUnchanged: 8,
+				rows: before,
 			},
 		);
-		expect(snapshot(db).content).toHaveLength(7);
 	});
 
 	it("counts a stranded backlink item the export keeps as deleted once and unchanged after, never as added", () =>

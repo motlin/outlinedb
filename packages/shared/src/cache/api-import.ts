@@ -1,6 +1,6 @@
 import {and, eq, gt, inArray, ne, or} from "drizzle-orm";
 import type {InternalTreeItem} from "../api/workflowy-internal-client.js";
-import {nodeContent, nodeMetadata} from "../db/schema.js";
+import {mirrors, nodeContent, nodeMetadata} from "../db/schema.js";
 import type {NodeContentType, NodeMetadataType} from "../db/schema.js";
 import type {AppDatabase} from "../db/types.js";
 import {FAR_FUTURE_DATE, formatTemporalTimestamp} from "../temporal/index.js";
@@ -328,6 +328,56 @@ function writtenAfterSnapshot(tx: UnitOfWork["tx"], ids: string[], snapshotAt: n
 }
 
 /**
+ * Keep the stored layoutMode of every current mirror, in place on `nodes`. The export gives a mirror its original's
+ * layoutMode, while the mirror's own item metadata, which the internal import stores, usually carries none; taking the
+ * export's would flip the row back and forth on every import.
+ */
+function keepMirrorLayoutModes(
+	tx: UnitOfWork["tx"],
+	nodes: ProcessedNode[],
+	existingMetadata: ReadonlyMap<string, NodeMetadataType>,
+): void
+{
+	// Only a node whose layoutMode differs from its stored row can need it kept, so an unchanged batch reads nothing.
+	const stored = nodes.filter((node) =>
+	{
+		const metadata = existingMetadata.get(node.id);
+		return metadata !== undefined && metadata.layoutMode !== node.layoutMode;
+	});
+	const mirrorIds = new Set<string>();
+	for (let start = 0; start < stored.length; start += LOOKUP_CHUNK_SIZE)
+	{
+		for (const row of tx
+			.select(
+				{
+					id: mirrors.mirrorId,
+				},
+			)
+			.from(mirrors)
+			.where(
+				and(
+					eq(mirrors.systemTo, FAR_FUTURE_DATE),
+					inArray(
+						mirrors.mirrorId,
+						stored.slice(start, start + LOOKUP_CHUNK_SIZE).map((node) => node.id),
+					),
+				),
+			)
+			.all())
+		{
+			mirrorIds.add(row.id);
+		}
+	}
+	for (const node of stored)
+	{
+		if (mirrorIds.has(node.id))
+		{
+			node.layoutMode = existingMetadata.get(node.id)?.layoutMode ?? null;
+		}
+	}
+}
+
+/**
  * Keep the local value of every field whose outbox aspect is pending, in place on `nodes`, taking upstream's for the
  * rest. Returns the local order key of each node whose placement is pending: it keeps its parent and key, and takes no
  * part in mapping upstream's sibling order.
@@ -501,6 +551,7 @@ function applyBatchIn(unitOfWork: UnitOfWork, state: ApiImportState, apiNodes: W
 	}
 	nodes = nodes.filter((node) => !localWins(node.id));
 
+	keepMirrorLayoutModes(tx, nodes, existingMetadata);
 	const pendingPlacement = keepPendingFields(nodes, pending, existingContent, existingMetadata);
 	const orderKeys: Map<string, string | null> = assignOrderKeys(
 		state,
