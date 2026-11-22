@@ -383,6 +383,10 @@ function storeChildren(
 	{
 		throw new Error(`Cannot cache children under system target "${parentId}"; resolve it to a node id first`);
 	}
+	if (parentId === "")
+	{
+		throw new Error("Cannot cache children under an empty parent id; pass null for the root");
+	}
 	if (parentId !== null && !storedInUnit.has(parentId))
 	{
 		const parentExists = tx

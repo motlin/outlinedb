@@ -5100,26 +5100,52 @@ describe("cache service", () =>
 
 		describe("storeApiResponse", () =>
 		{
-			it("refuses a system target as the parent, instead of inventing a blank Home node for it", () =>
+			it("refuses a system target or an empty id as the parent, instead of inventing a blank Home node for it", () =>
 			{
+				// An empty --parent-id (an unset shell variable) once re-parented every root under a phantom "" node.
+				seedTestData(
+					testDatabase,
+					nodeFixtures([
+						createTestNode(
+							{
+								id: "root",
+								name: "Root",
+								parentId: null,
+							},
+						),
+					]),
+				);
+				const thrown = (parentId: string) =>
+				{
+					try
+					{
+						cacheService.storeApiResponse(
+							[
+								createApiNode(
+									{
+										id: "root",
+										name: "Root",
+									},
+								),
+							],
+							parentId,
+						);
+						return null;
+					}
+					catch (error)
+					{
+						return String(error);
+					}
+				};
 				expect(
 					{
-						thrown: (() =>
-						{
-							try
-							{
-								cacheService.storeApiResponse([], "inbox");
-								return null;
-							}
-							catch (error)
-							{
-								return String(error);
-							}
-						})(),
+						inbox: thrown("inbox"),
+						empty: thrown(""),
 						rows: testDatabase.db
 							.select(
 								{
 									id: nodeContent.id,
+									parentId: nodeContent.parentId,
 								},
 							)
 							.from(nodeContent)
@@ -5127,8 +5153,14 @@ describe("cache service", () =>
 					},
 				).toStrictEqual(
 					{
-						thrown: 'Error: Cannot cache children under system target "inbox"; resolve it to a node id first',
-						rows: [],
+						inbox: 'Error: Cannot cache children under system target "inbox"; resolve it to a node id first',
+						empty: "Error: Cannot cache children under an empty parent id; pass null for the root",
+						rows: [
+							{
+								id: "root",
+								parentId: null,
+							},
+						],
 					},
 				);
 			});

@@ -48,6 +48,11 @@ export default class List extends BaseListCommand
 	{
 		const {flags} = await this.parse(List);
 
+		if (flags["parent-id"] === "")
+		{
+			this.error("--parent-id is empty; omit it to list the root nodes");
+		}
+
 		this.initializeApiClient();
 
 		const service = new ListByIdService(this.cacheService, this.apiClient);

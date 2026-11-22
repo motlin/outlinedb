@@ -228,6 +228,33 @@ describe("node:list command", () =>
 			);
 		});
 
+		it("rejects an empty --parent-id, as an unset shell variable gives, without calling the API", async () =>
+		{
+			const capturedUrls: string[] = [];
+			globalThis.fetch = async (url: RequestInfo | URL) =>
+			{
+				capturedUrls.push(url instanceof Request ? url.url : String(url));
+				return Promise.resolve(Response.json([]));
+			};
+
+			const {error} = await captureOutput(async () =>
+			{
+				await List.run(["--parent-id", ""]);
+			});
+
+			expect(
+				{
+					error: error?.message,
+					capturedUrls,
+				},
+			).toStrictEqual(
+				{
+					error: "--parent-id is empty; omit it to list the root nodes",
+					capturedUrls: [],
+				},
+			);
+		});
+
 		it("makes request to correct URL with parent-id flag", async () =>
 		{
 			let capturedUrl: string | undefined;
