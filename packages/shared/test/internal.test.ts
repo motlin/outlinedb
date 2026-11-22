@@ -6559,6 +6559,30 @@ describe("internal client bootstrap", () =>
 				["GET", "/get_initialization_data"],
 			]);
 		});
+
+		it("rejects a login whose body lists errors, even when the response sets a session cookie", async () =>
+		{
+			const {api, client} = clientWith();
+			api.respond("/ajax_login", () =>
+				Response.json(
+					{
+						success: false,
+						errors:
+						{
+							__all__: ["Wrong email or password"],
+						},
+					},
+					{
+						headers:
+						{
+							"set-cookie": "sessionid=anonymous; Path=/; HttpOnly",
+						},
+					},
+				),
+			);
+
+			await expect(client.login()).rejects.toThrow(new Error("Login failed: Wrong email or password"));
+		});
 	});
 });
 

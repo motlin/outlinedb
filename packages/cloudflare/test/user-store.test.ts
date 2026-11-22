@@ -56,8 +56,8 @@ describe("user store Durable Object behind the Worker", () =>
 			rows
 				.filter((row) => !row.name.startsWith("_cf_") && !row.name.startsWith("sqlite_"))
 				.filter((row) => row.name !== "__drizzle_migrations")
-				// DO-only bookkeeping for the sync job, created outside the shared schema.
-				.filter((row) => !row.name.startsWith("sync_"))
+				// DO-only tables (the sync job's bookkeeping, the Workflowy connection), created outside the shared schema.
+				.filter((row) => !isDurableObjectOnly(row.name))
 				.map((row) => (
 				{
 					type: row.type,
@@ -80,10 +80,10 @@ describe("user store Durable Object behind the Worker", () =>
 		expect(normalize(schema)).toStrictEqual(normalize(nodeSchema));
 	});
 
-	it("creates the sync job's own tables temporal, each with a live unique index and a closed-at index", async () =>
+	it("creates the DO-only tables temporal, each with a live unique index and a closed-at index", async () =>
 	{
 		const {schema} = await probeStore(harness.mf);
-		const syncRows = schema.filter((row) => row.name.startsWith("sync_"));
+		const syncRows = schema.filter((row) => isDurableObjectOnly(row.name));
 		const tables = syncRows.filter((row) => row.type === "table");
 		const shape = Object.fromEntries(
 			tables.map((table) => [
@@ -112,6 +112,11 @@ describe("user store Durable Object behind the Worker", () =>
 				{
 					temporal: true,
 					indexes: ["sync_seed_requests_closed_at_idx", "sync_seed_requests_system_to_idx"],
+				},
+				workflowy_connection:
+				{
+					temporal: true,
+					indexes: ["workflowy_connection_closed_at_idx", "workflowy_connection_system_to_idx"],
 				},
 			},
 		);
@@ -533,4 +538,10 @@ function seedBeforeMicroseconds(path: string): void
 			},
 		);
 	}
+}
+
+/** Tables the Durable Object creates itself, outside the shared migration chain. */
+function isDurableObjectOnly(name: string): boolean
+{
+	return name.startsWith("sync_") || name.startsWith("workflowy_connection");
 }

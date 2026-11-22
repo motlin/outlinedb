@@ -5,6 +5,7 @@ import * as dbSchema from "@outlinedb/shared/db";
 import {drizzle} from "drizzle-orm/durable-sqlite";
 import type {OpInput, OpName, OpOutput, OpResult} from "@outlinedb/web/server-app";
 import {AlarmSchedule} from "../src/alarm-schedule";
+import {deriveCredentialsKey, openSecret} from "../src/credentials-crypto";
 import type {RowCounts} from "../src/row-meter";
 import type {SyncStatus} from "../src/sync";
 import {UserStore} from "../src/user-store";
@@ -95,6 +96,45 @@ export class ProbeStore extends UserStore
 			rowsWritten: cursors.reduce((sum, cursor) => sum + cursor.rowsWritten, 0),
 			error,
 		};
+	}
+
+	/** The live stored Workflowy session cookie, opened with this object's key; null when none is stored. */
+	// fallow-ignore-next-line unused-class-member -- tests invoke it over RPC
+	async openedWorkflowySession(): Promise<string | null>
+	{
+		const sealed = this.workflowyConnection.session();
+		const secret = this.env.OUTLINEDB_CREDENTIALS_KEY;
+		if (sealed === undefined || secret === undefined)
+		{
+			return null;
+		}
+		return openSecret(await deriveCredentialsKey(secret, this.ctx.id.toString()), sealed);
+	}
+
+	/** Every row of every table, prefixed with its table's name (each BLOB as `blob:<hex>`) and every key-value entry: all an attacker holding the database sees. */
+	// fallow-ignore-next-line unused-class-member -- tests invoke it over RPC
+	storageDump(): string
+	{
+		const {sql, kv} = this.ctx.storage;
+		const tables = sql
+			.exec("SELECT name FROM sqlite_master WHERE type = 'table'")
+			.toArray()
+			.flatMap((row) => (typeof row.name === "string" ? [row.name] : []));
+		const rows = tables.flatMap((table) =>
+			sql
+				.exec(`SELECT * FROM "${table}"`)
+				.toArray()
+				.map((row) =>
+					[
+						table,
+						...Object.values(row).map((value) =>
+							value instanceof ArrayBuffer ? `blob:${Buffer.from(value).toString("hex")}` : String(value),
+						),
+					].join("|"),
+				),
+		);
+		const entries = [...kv.list()].map(([key, value]) => `${key}=${String(value)}`);
+		return [...rows, ...entries].join("\n");
 	}
 
 	/** Counts every op so tests can assert the one-call-per-request rule. */

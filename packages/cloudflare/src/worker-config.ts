@@ -25,6 +25,11 @@ export interface WorkerSecrets
 	 */
 	OUTLINEDB_ENV_OWNERS?: string;
 	ALLOWED_EMAILS?: string;
+	/**
+	 * Secret; with each Durable Object's id it derives the AES-GCM key that seals that object's workflowy.com session.
+	 * Unset, connecting a Workflowy account answers 503.
+	 */
+	OUTLINEDB_CREDENTIALS_KEY?: string;
 }
 
 /**

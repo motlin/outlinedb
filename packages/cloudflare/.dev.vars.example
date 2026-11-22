@@ -9,6 +9,9 @@ WORKFLOWY_SESSION_COOKIE=
 # sync. Unset, no object syncs (ALLOWED_EMAILS never makes an owner); every object not listed runs standalone. Set it
 # to dev, the object ACCESS_DEV_IDENTITY reaches, for wrangler dev; just dev already defaults it to dev.
 # OUTLINEDB_ENV_OWNERS=dev
+# Seals each account's workflowy.com session cookie (AES-GCM, keyed per Durable Object); connecting a Workflowy
+# account answers 503 until it is set (openssl rand -base64 32).
+OUTLINEDB_CREDENTIALS_KEY=
 # Better Auth: /api/auth/* answers 503 until this is set (openssl rand -base64 32).
 BETTER_AUTH_SECRET=
 # Comma-separated emails allowed to sign up when SIGNUP_MODE=invite.

@@ -183,6 +183,49 @@ for (const path of ["/api/v1/ladder/events", "/api/v1/nodes/events"])
 // Any signed-in user's own import progress, which the empty outline shows while the first sync runs.
 app.get("/api/v1/sync-status", async (c) => c.json(await c.var.stub.accountSync()));
 
+// The signed-in user's own workflowy.com connection: GET reads it, POST {email, password} logs in once and keeps only
+// the sealed session cookie, PATCH {mirror} turns keep-syncing on or off, DELETE disconnects and wipes the cookie.
+const WORKFLOWY_CONNECTION = "/api/v1/workflowy-connection";
+app.get(WORKFLOWY_CONNECTION, async (c) => c.json(await c.var.stub.getWorkflowyConnection()));
+app.post(WORKFLOWY_CONNECTION, async (c) =>
+{
+	const body: unknown = await c.req.json().catch(() => null);
+	const email = field(body, "email");
+	const password = field(body, "password");
+	if (typeof email !== "string" || email.trim() === "" || typeof password !== "string" || password === "")
+	{
+		return c.json(
+			{
+				error: "Expected a JSON {email, password} body",
+			},
+			400,
+		);
+	}
+	const result = await c.var.stub.connectWorkflowy(
+		{
+			email: email.trim(),
+			password,
+		},
+	);
+	return result.ok ? c.json(result.connection) : c.json(result, result.status);
+});
+app.patch(WORKFLOWY_CONNECTION, async (c) =>
+{
+	const mirror = field(await c.req.json().catch(() => null), "mirror");
+	if (typeof mirror !== "boolean")
+	{
+		return c.json(
+			{
+				error: "Expected a JSON {mirror: boolean} body",
+			},
+			400,
+		);
+	}
+	const result = await c.var.stub.setWorkflowyMirror(mirror);
+	return result.ok ? c.json(result.connection) : c.json(result, result.status);
+});
+app.delete(WORKFLOWY_CONNECTION, async (c) => c.json(await c.var.stub.disconnectWorkflowy()));
+
 // Migrated routes are answered here over RPC.
 app.route(
 	"/",
@@ -262,3 +305,10 @@ export default
 		return oauthProviderFor(new URL(request.url).origin, app).fetch(request, env, ctx);
 	},
 } satisfies ExportedHandler<WorkerEnv>;
+
+/** `body[name]` when `body` is an object, else undefined. */
+function field(body: unknown, name: string): unknown
+{
+	const value: unknown = typeof body === "object" && body !== null ? Reflect.get(body, name) : undefined;
+	return value;
+}

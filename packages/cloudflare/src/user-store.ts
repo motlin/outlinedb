@@ -37,6 +37,7 @@ import type {SessionCookieStore} from "@outlinedb/shared/api";
 import {drizzle} from "drizzle-orm/durable-sqlite";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {AlarmSchedule} from "./alarm-schedule";
+import {deriveCredentialsKey, sealSecret} from "./credentials-crypto";
 import {r2BlobStore} from "./blob-store-r2";
 import {migrateDurableObject} from "./do-migrations";
 import {EmbeddingJob} from "./embedding-job";
@@ -51,6 +52,8 @@ import {seedWelcomeContent} from "./welcome-content";
 import type {SyncEnv, SyncResult, SyncStatus} from "./sync";
 import {isStoreOwner, readWorkerConfig, readWorkerInternalAuth} from "./worker-config";
 import type {WorkerSecrets} from "./worker-config";
+import {WorkflowyConnection} from "./workflowy-connection";
+import type {WorkflowyConnectionView} from "./workflowy-connection";
 
 /**
  * One user's outline: a SQLite-backed Durable Object answering RPC over its own database, plus the ladder and nodes
@@ -81,6 +84,8 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 	};
 	/** The one alarm, shared by the outbox drain, the sync and the embedding job. */
 	private readonly alarms = new AlarmSchedule(this.ctx.storage);
+	/** This account's own workflowy.com connection, set by the connect flow; independent of the env-secret owner path. */
+	protected readonly workflowyConnection = new WorkflowyConnection(this.ctx.storage.sql);
 	/** Delivers mirror-mode writes' outbox rows to workflowy.com; undefined without the internal API. */
 	protected drainOutbox: (() => Promise<unknown>) | undefined;
 	private sync!: SyncJob;
@@ -334,6 +339,77 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 			created: true,
 			profile,
 		};
+	}
+
+	/** This account's workflowy.com connection, without the session cookie. */
+	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
+	getWorkflowyConnection(): WorkflowyConnectionView
+	{
+		return this.workflowyConnection.view();
+	}
+
+	/**
+	 * Log in to workflowy.com once with the account's email and password, and keep only the session cookie, sealed
+	 * with this object's key; the password is dropped when the login returns. A reconnect replaces the stored cookie.
+	 */
+	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
+	async connectWorkflowy(input: ConnectWorkflowyInput): Promise<ConnectWorkflowyResult>
+	{
+		const secret = this.env.OUTLINEDB_CREDENTIALS_KEY;
+		if (!secret)
+		{
+			return {
+				ok: false,
+				status: 503,
+				error: "credentials-key-not-configured",
+			};
+		}
+		let cookie: string;
+		try
+		{
+			cookie = await loginForCookie(input, this.env.WORKFLOWY_API_URL);
+		}
+		catch (error)
+		{
+			return {
+				ok: false,
+				status: 401,
+				error: "workflowy-login-failed",
+				message: error instanceof Error ? error.message : String(error),
+			};
+		}
+		const key = await deriveCredentialsKey(secret, this.ctx.id.toString());
+		this.workflowyConnection.connect(input.email, await sealSecret(key, cookie));
+		return {
+			ok: true,
+			connection: this.workflowyConnection.view(),
+		};
+	}
+
+	/** Turn the account's keep-syncing (two-way mirror) flag on or off; 409 when not connected. */
+	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
+	setWorkflowyMirror(mirror: boolean): SetWorkflowyMirrorResult
+	{
+		return this.workflowyConnection.setMirror(mirror)
+			?
+				{
+					ok: true,
+					connection: this.workflowyConnection.view(),
+				}
+			:
+				{
+					ok: false,
+					status: 409,
+					error: "workflowy-not-connected",
+				};
+	}
+
+	/** Phase the connection out and wipe every stored copy of the session cookie. */
+	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
+	disconnectWorkflowy(): WorkflowyConnectionView
+	{
+		this.workflowyConnection.disconnect();
+		return this.workflowyConnection.view();
 	}
 
 	override webSocketClose(socket: WebSocket, code: number): void
@@ -691,6 +767,46 @@ function readProfile(kv: KvLike): Profile | null
 	};
 }
 
+/** The workflowy.com login a connect uses once; only the session cookie it yields is kept. */
+export interface ConnectWorkflowyInput
+{
+	email: string;
+	password: string;
+}
+
+export type ConnectWorkflowyResult =
+	|
+	  {
+			ok: true;
+			connection: WorkflowyConnectionView;
+	  }
+	|
+	  {
+			ok: false;
+			status: 503;
+			error: "credentials-key-not-configured";
+	  }
+	|
+	  {
+			ok: false;
+			status: 401;
+			error: "workflowy-login-failed";
+			message: string;
+	  };
+
+export type SetWorkflowyMirrorResult =
+	|
+	  {
+			ok: true;
+			connection: WorkflowyConnectionView;
+	  }
+	|
+	  {
+			ok: false;
+			status: 409;
+			error: "workflowy-not-connected";
+	  };
+
 /** What the sync entry points answer on an object that does not mirror workflowy.com. */
 export interface SyncDisabled
 {
@@ -732,6 +848,43 @@ function countApplied(ctx: DurableObjectState): number
 		return 0;
 	}
 	return Number(ctx.storage.sql.exec("SELECT count(*) AS n FROM __drizzle_migrations").one().n);
+}
+
+/**
+ * Log in to workflowy.com once and return the session cookie the login set; nothing is persisted, so the password
+ * lives only for this call.
+ */
+async function loginForCookie(login: ConnectWorkflowyInput, apiUrl: string | undefined): Promise<string>
+{
+	const cookies: string[] = [];
+	await new WorkflowyInternalClient(
+		{
+			credentials:
+			{
+				username: login.email,
+				password: login.password,
+			},
+			sessionStore:
+			{
+				read: () => cookies.at(-1),
+				write(cookie)
+				{
+					cookies.push(cookie);
+				},
+				clear()
+				{
+					cookies.length = 0;
+				},
+			},
+			baseUrl: apiUrl === "" ? undefined : apiUrl,
+		},
+	).login();
+	const cookie = cookies.at(-1);
+	if (cookie === undefined)
+	{
+		throw new Error("Login failed: No session cookie received");
+	}
+	return cookie;
 }
 
 /** A fetch whose every request aborts with `signal`. */

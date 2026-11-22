@@ -31,6 +31,8 @@ const UPSTREAM_PATTERNS: readonly RegExp[] = [
 	// Slash commands and skills of the workflowy plugin, which edits workflowy.com.
 	/\/workflowy:[\w-]+/gu,
 	/\bplugins\/workflowy\b/gu,
+	// An account's connection to upstream workflowy.com: its table, columns, route, module and errors.
+	/\bworkflowy[_-](?:connection|email|login-failed|not-connected)(?:_\w+)?\b/gu,
 	// The file holding the upstream workflowy.com session cookie.
 	/\bworkflowy-session(?:-cookie|-seeded)?\b/gu,
 	// A draft bug report for upstream.

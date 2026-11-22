@@ -245,6 +245,19 @@ export interface InternalSession
 const DEFAULT_CLIENT_VERSION = "21";
 const CLIENT_VERSION_V2 = "28";
 
+/** A body parsed as JSON, or undefined when it is not JSON (a success redirect's body need not be). */
+function parseJsonOrUndefined(text: string): unknown
+{
+	try
+	{
+		return JSON.parse(text);
+	}
+	catch
+	{
+		return undefined;
+	}
+}
+
 function initializationPath(clientVersion: string): string
 {
 	const query = new URLSearchParams(
@@ -340,23 +353,11 @@ export class WorkflowyInternalClient
 		// Check response for errors
 		if (response.ok || response.status === 302)
 		{
-			const text = await response.text();
-			if (text)
+			const errors = LoginResponseSchema.safeParse(parseJsonOrUndefined(await response.text())).data?.errors;
+			if (errors)
 			{
-				try
-				{
-					const data: unknown = JSON.parse(text);
-					const parsed = LoginResponseSchema.safeParse(data);
-					if (parsed.success && parsed.data.errors)
-					{
-						const errorMessages = Object.values(parsed.data.errors).flat().join(", ");
-						throw new Error(`Login failed: ${errorMessages}`);
-					}
-				}
-				catch
-				{
-					// Response might not be JSON on success redirect
-				}
+				this.sessionCookie = null;
+				throw new Error(`Login failed: ${Object.values(errors).flat().join(", ")}`);
 			}
 		}
 

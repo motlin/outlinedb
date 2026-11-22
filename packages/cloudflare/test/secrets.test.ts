@@ -34,6 +34,42 @@ describe("a Durable Object with no secrets", () =>
 		);
 	});
 
+	it("answers 503 on a Workflowy connect without OUTLINEDB_CREDENTIALS_KEY", async () =>
+	{
+		const response = await harness.mf.dispatchFetch(
+			"http://localhost/api/v1/workflowy-connection",
+			{
+				method: "POST",
+				headers:
+				{
+					"content-type": "application/json",
+				},
+				body: JSON.stringify(
+					{
+						email: "alice@example.com",
+						password: "hunter2",
+					},
+				),
+			},
+		);
+		expect(
+			{
+				status: response.status,
+				body: await readJson(response),
+			},
+		).toStrictEqual(
+			{
+				status: 503,
+				body:
+				{
+					ok: false,
+					status: 503,
+					error: "credentials-key-not-configured",
+				},
+			},
+		);
+	});
+
 	it("updates a node locally because it is standalone", async () =>
 	{
 		await seedNode(harness.mf);
