@@ -52,7 +52,7 @@
 		"@oclif/core": "^5.1.12",
 		"@oclif/plugin-help": "^7",
 		"@outlinedb/shared": "workspace:*",
-		"better-sqlite3": "13.1.1",
+		"better-sqlite3": "13.2.0",
 		"drizzle-orm": "^0.45.3"
 	},
 	"devDependencies":
