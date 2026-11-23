@@ -13,7 +13,6 @@ const bindings =
 		"owner@example.com, sam@example.com, uma@example.com, rita@example.com, lou@example.com, tia@example.com",
 	TURNSTILE_SECRET_KEY: turnstile.passSecret,
 	TURNSTILE_SITE_KEY: turnstile.siteKey,
-	OUTLINEDB_ENV_OWNERS: "Owner@example.com",
 };
 const password = "correct horse battery staple";
 
@@ -132,7 +131,7 @@ describe("a verified email provisions its user's Durable Object exactly once", (
 		]);
 	});
 
-	it("provisions on verification, an owner email in mirror mode and any other standalone, and keeps it across a restart", async () =>
+	it("provisions every verified email standalone, the owner's too, and keeps it across a restart", async () =>
 	{
 		const owner = await signUpUnverified(h, "owner@example.com");
 		const sam = await signUpUnverified(h, "sam@example.com");
@@ -170,12 +169,11 @@ describe("a verified email provisions its user's Durable Object exactly once", (
 		expect(statuses).toStrictEqual([
 			{
 				storeName: owner.userId,
-				mode: "mirror",
+				mode: "standalone",
 				profile:
 				{
 					userId: owner.userId,
 					email: "owner@example.com",
-					mode: "mirror",
 				},
 			},
 			{
@@ -185,7 +183,6 @@ describe("a verified email provisions its user's Durable Object exactly once", (
 				{
 					userId: sam.userId,
 					email: "sam@example.com",
-					mode: "standalone",
 				},
 			},
 		]);
@@ -466,7 +463,6 @@ describe("UserStore.provision", () =>
 		{
 			userId: "user-a",
 			email: "a@example.com",
-			mode: "standalone",
 		} as const;
 		const results = [
 			await stub.provision(input),
@@ -474,14 +470,12 @@ describe("UserStore.provision", () =>
 				{
 					...input,
 					email: "changed@example.com",
-					mode: "mirror",
 				},
 			),
 			await stub.provision(
 				{
 					userId: "user-b",
 					email: "b@example.com",
-					mode: "standalone",
 				},
 			),
 		];
@@ -489,7 +483,6 @@ describe("UserStore.provision", () =>
 		{
 			userId: "user-a",
 			email: "a@example.com",
-			mode: "standalone",
 		};
 		expect(plain(results)).toStrictEqual([
 			{
@@ -511,7 +504,7 @@ describe("UserStore.provision", () =>
 		expect(plain((await stub.adminStatus()).mode)).toBe("standalone");
 	});
 
-	it("seeds a new standalone account with an Inbox and a collapsed welcome tutorial, once, and a mirror with nothing", async () =>
+	it("seeds a new standalone account with an Inbox and a collapsed welcome tutorial, once", async () =>
 	{
 		interface Seeded
 		{
@@ -557,14 +550,12 @@ describe("UserStore.provision", () =>
 			{
 				userId: "user-s",
 				email: "s@example.com",
-				mode: "standalone",
 			},
 		);
 		await standalone.provision(
 			{
 				userId: "user-s",
 				email: "s@example.com",
-				mode: "standalone",
 			},
 		);
 		const seeded = await tree(standalone);
@@ -573,15 +564,6 @@ describe("UserStore.provision", () =>
 		{
 			throw new Error(JSON.stringify(expansion.body));
 		}
-
-		const mirror = await stubNamed(h, "user-n");
-		await mirror.provision(
-			{
-				userId: "user-n",
-				email: "n@example.com",
-				mode: "mirror",
-			},
-		);
 
 		const leaves = (...leafNames: string[]): Seeded[] =>
 			leafNames.map((name) => (
@@ -592,7 +574,6 @@ describe("UserStore.provision", () =>
 			{
 				seeded,
 				expanded: expansion.value.expandedIds?.map((id) => names.get(id)),
-				mirror: await tree(mirror),
 			},
 		).toStrictEqual(
 			{
@@ -718,36 +699,7 @@ describe("UserStore.provision", () =>
 					},
 				],
 				expanded: ["Welcome to OutlineDB"],
-				mirror: [],
 			},
 		);
-	});
-
-	it("switches a fresh object to mirror mode when provisioned as one for an owner's email, and only then", async () =>
-	{
-		const owner = await stubNamed(h, "user-m");
-		const before = (await owner.adminStatus()).mode;
-		await owner.provision(
-			{
-				userId: "user-m",
-				email: "OWNER@example.com",
-				mode: "mirror",
-			},
-		);
-		// A mirror profile whose email OUTLINEDB_ENV_OWNERS does not list (provisioned under an older owners list, or
-		// under the old ALLOWED_EMAILS fallback) never makes its object an owner that syncs workflowy.com.
-		const unlisted = await stubNamed(h, "user-u");
-		await unlisted.provision(
-			{
-				userId: "user-u",
-				email: "u@example.com",
-				mode: "mirror",
-			},
-		);
-		expect([before, (await owner.adminStatus()).mode, (await unlisted.adminStatus()).mode]).toStrictEqual([
-			"standalone",
-			"mirror",
-			"standalone",
-		]);
 	});
 });

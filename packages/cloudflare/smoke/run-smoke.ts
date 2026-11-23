@@ -1,4 +1,4 @@
-// Browser smoke against a local `vp dev -c vite.worker.config.ts` (Cloudflare Vite plugin) with a fake upstream. Outside verify: it needs a Chromium install, spawns workerd,
+// Browser smoke against a local `vp dev -c vite.worker.config.ts` (Cloudflare Vite plugin), never contacting workflowy.com. Outside verify: it needs a Chromium install, spawns workerd,
 // and reaches Cloudflare's Turnstile with its published always-pass test keys.
 import {spawn, spawnSync} from "node:child_process";
 import {randomBytes} from "node:crypto";
@@ -7,7 +7,6 @@ import {homedir, tmpdir} from "node:os";
 import {join} from "node:path";
 import {chromium} from "playwright-core";
 import type {Browser, BrowserContext, Page} from "playwright-core";
-import {startFakeUpstream} from "./fake-upstream.ts";
 
 const webDir = new URL("../../web", import.meta.url).pathname;
 const port = process.env.SMOKE_PORT ?? "8798";
@@ -94,7 +93,25 @@ const preferences =
 	account: null,
 };
 
-const upstream = await startFakeUpstream();
+const homeId = "00000000-0000-4000-8000-000000000001";
+/** The dev outline the smoke seeds over the API: a home node with two children. */
+const seedNodes = [
+	{
+		id: homeId,
+		parent_id: null,
+		name: "Smoke home",
+	},
+	{
+		id: "00000000-0000-4000-8000-000000000002",
+		parent_id: homeId,
+		name: "Alpha task",
+	},
+	{
+		id: "00000000-0000-4000-8000-000000000003",
+		parent_id: homeId,
+		name: "Beta task",
+	},
+];
 const persist = mkdtempSync(join(tmpdir(), "wf-cf-smoke-"));
 const migrate = spawnSync(
 	"vp",
@@ -132,9 +149,6 @@ const wrangler = spawn(
 			...process.env,
 			WORKER_PERSIST_DIR: persist,
 			ACCESS_DEV_IDENTITY: "dev",
-			WORKFLOWY_API_URL: upstream.url,
-			WORKFLOWY_API_KEY: "fake-smoke-key",
-			OUTLINEDB_ENV_OWNERS: "dev",
 			...authVars,
 		},
 		stdio: ["ignore", "pipe", "inherit"],
@@ -150,7 +164,7 @@ wrangler.stdout.on("data", (chunk: Buffer) =>
 	devOutput += chunk.toString();
 });
 
-/** These three routes read workflowy.com's session-based internal API, which the fake upstream does not model and the smoke must never reach. */
+/** These three routes read account state the never-provisioned dev object does not hold, so the smoke answers them itself. */
 async function stubInternalApi(target: Page | BrowserContext): Promise<void>
 {
 	await target.route("**/api/v1/home", async (route) =>
@@ -272,22 +286,24 @@ let failure: unknown;
 try
 {
 	await waitFor(async () => (await fetch(`${base}/health`)).ok, "the worker dev server");
-	await fetch(
-		`${base}/api/admin/sync`,
-		{
-			method: "POST",
-		},
-	);
-	await waitFor(async () =>
+	for (const node of seedNodes)
 	{
-		const status: unknown = await (await fetch(`${base}/api/admin/status`)).json();
-		return (
-			typeof status === "object" &&
-			status !== null &&
-			"nodeCount" in status &&
-			status.nodeCount === upstream.nodes.size
+		const created = await fetch(
+			`${base}/api/v1/nodes`,
+			{
+				method: "POST",
+				headers:
+				{
+					"content-type": "application/json",
+				},
+				body: JSON.stringify(node),
+			},
 		);
-	}, "the initial sync");
+		if (created.status !== 201)
+		{
+			throw new Error(`seeding ${node.name} answered ${created.status}: ${await created.text()}`);
+		}
+	}
 
 	browser = await chromium.launch(
 		{
@@ -319,18 +335,27 @@ try
 			timeout: 15_000,
 		},
 	);
-	await waitFor(
-		() => [...upstream.nodes.values()].some((n) => n.name === editedName),
-		"the edit to reach the fake upstream",
-	);
-	console.log("smoke ok: home page loaded, edit shown and written through to the fake upstream");
+	await waitFor(async () =>
+	{
+		const read: unknown = await (await fetch(`${base}/api/v1/nodes/${homeId}`)).json();
+		return (
+			typeof read === "object" &&
+			read !== null &&
+			"node" in read &&
+			typeof read.node === "object" &&
+			read.node !== null &&
+			"name" in read.node &&
+			read.node.name === editedName
+		);
+	}, "the edit to persist in the Durable Object");
+	console.log("smoke ok: home page loaded, edit shown and persisted in the Durable Object");
 	await signupVerifyAndLand(browser);
 	console.log("smoke ok: signed up, verified through the log sender and landed on the outline");
 }
 catch (error)
 {
 	failure = error;
-	console.error(upstream.requests.slice(-10), page?.url());
+	console.error(page?.url());
 	const shot = process.env.SMOKE_SHOT;
 	if (shot !== undefined)
 	{
@@ -354,7 +379,6 @@ finally
 			resolve();
 		});
 	});
-	await upstream.close();
 	rmSync(
 		persist,
 		{

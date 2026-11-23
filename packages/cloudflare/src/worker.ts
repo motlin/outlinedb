@@ -265,13 +265,8 @@ const methodNotAllowed = () =>
 app.get("/api/admin/status", async (c) => c.json(await c.var.stub.adminStatus()));
 app.all("/api/admin/status", methodNotAllowed);
 
-app.post("/api/admin/sync", async (c) => c.json(await c.var.stub.syncNow(), 202));
 app.get("/api/admin/sync", async (c) => c.json(await c.var.stub.syncStatus()));
 app.all("/api/admin/sync", methodNotAllowed);
-
-// The one way to read the whole tree (about 54 MB): an explicit reseed when the sync reports a missing seed or a refresh.
-app.post("/api/admin/seed", async (c) => c.json(await c.var.stub.seedTree(), 202));
-app.all("/api/admin/seed", methodNotAllowed);
 
 app.get("/api/admin/account-state", async (c) => c.json(await c.var.stub.getAccountState()));
 // PUT merges a JSON `{rows, expandedKeys}` account state (see `parseAccountState`) into the account tables.

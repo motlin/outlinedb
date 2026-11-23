@@ -33,7 +33,7 @@ import type
 	StoreClient,
 } from "@outlinedb/web/server-app";
 import {MissingCredentialsError, SessionRejectedError, WorkflowyInternalClient} from "@outlinedb/shared/api";
-import type {InternalAuth, SessionCookieStore} from "@outlinedb/shared/api";
+import type {InternalAuth} from "@outlinedb/shared/api";
 import {LoggedOut} from "@outlinedb/shared/internal";
 import {drizzle} from "drizzle-orm/durable-sqlite";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
@@ -46,47 +46,36 @@ import type {EmbeddingStatus} from "./embedding-job";
 import {vectorizeIndex, workersAiEmbedder} from "./embeddings";
 import type {Embedder} from "./embeddings";
 import {meterRows} from "./row-meter";
-import {kvSessionStore} from "./session-store";
-import type {KvLike} from "./session-store";
 import {SyncJob} from "./sync";
 import {seedWelcomeContent} from "./welcome-content";
-import type {SyncEnv, SyncResult, SyncStatus} from "./sync";
-import {isStoreOwner, readWorkerConfig, readWorkerInternalAuth} from "./worker-config";
+import type {SyncEnv, SyncStatus} from "./sync";
+import {readWorkerConfig} from "./worker-config";
 import type {WorkerSecrets} from "./worker-config";
 import {WorkflowyConnection} from "./workflowy-connection";
 import type {WorkflowyConnectionStatus} from "./workflowy-connection";
 import {WorkflowyImportJob} from "./workflowy-import";
-import type {WorkflowyImportView} from "./workflowy-import";
+import type {WorkflowyImportEnv, WorkflowyImportView} from "./workflowy-import";
 
 /**
  * One user's outline: a SQLite-backed Durable Object answering RPC over its own database, plus the ladder and nodes
  * events WebSocket upgrades.
  */
-export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
+export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & WorkflowyImportEnv>
 {
 	/** How many migrations this boot applied; zero when the database was already current. */
 	protected appliedOnBoot = 0;
 	/** Counts every row this object's SQLite reads and writes, index rows included, as Cloudflare bills them. */
 	protected readonly rowMeter = meterRows(this.ctx.storage.sql);
 	/**
-	 * Whether this object mirrors workflowy.com: `OUTLINEDB_ENV_OWNERS` lists its name, or its profile was provisioned
-	 * as a mirror and the list still names that profile's email. Only such an object gets the Workflowy secrets and the
-	 * sync, so another user's object can never read or write the owner's account, and an object the list stops naming
-	 * stops syncing.
-	 */
-	private isOwner = false;
-	/**
 	 * Whether this account mirrors workflowy.com through its own connection: keep-syncing is on and an import has
-	 * landed the tree and transaction id to sync from. Writes then record outbox rows, as the owner's do; while the
-	 * session is expired they keep queueing until the user signs in again.
+	 * landed the tree and transaction id to sync from. Writes then record outbox rows; while the session is expired
+	 * they keep queueing until the user signs in again. The only way an account becomes a mirror.
 	 */
 	private connectionMirror = false;
 	/** The connection's opened session cookie, held only in memory while the account keeps syncing. */
 	private mirrorCookie: string | undefined;
 	/** Set when workflowy.com refused the stored session during this alarm; the alarm pauses sync as it ends. */
 	private sessionRefused = false;
-	/** Persists the Workflowy session cookie in this object's storage; only the owner is seeded from the binding. */
-	protected sessionStore!: SessionCookieStore;
 	/** Announces ladder writes; every accepted ladder socket receives each event. */
 	protected readonly ladderEvents = new LadderEventBus();
 	/** Announces `account.changed` to every accepted nodes events socket after a sync or seed rewrote the account tables. */
@@ -97,7 +86,7 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 	};
 	/** The one alarm, shared by the outbox drain, the sync and the embedding job. */
 	private readonly alarms = new AlarmSchedule(this.ctx.storage);
-	/** This account's own workflowy.com connection, set by the connect flow; independent of the env-secret owner path. */
+	/** This account's own workflowy.com connection, set by the connect flow. */
 	protected readonly workflowyConnection = new WorkflowyConnection(this.ctx.storage.sql);
 	/** This account's one-time import from workflowy.com over its own stored session; runs in the shared alarm. */
 	private workflowyImport!: WorkflowyImportJob;
@@ -110,7 +99,7 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 	private treeSnapshotEnabled = true;
 	private store!: StoreClient;
 
-	constructor(ctx: DurableObjectState, env: Env & WorkerSecrets & SyncEnv)
+	constructor(ctx: DurableObjectState, env: Env & WorkerSecrets & SyncEnv & WorkflowyImportEnv)
 	{
 		super(ctx, env);
 		// Rebuilt on every wake, so sockets that survived hibernation are fed again.
@@ -186,33 +175,20 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 			this.configure();
 			if (!this.syncs())
 			{
-				// An object that stopped syncing (an old email-named one once the owners list names the user id, or an
-				// account whose session expired) drops the sync and drain it had scheduled, instead of waking for them.
+				// An account that stopped syncing (its session expired, or it never kept syncing) drops the sync and drain it
+				// had scheduled, instead of waking for them.
 				await this.alarms.cancel(["sync", "outbox"]);
 			}
 		});
 	}
 
 	/**
-	 * Build everything that depends on whether this object is the owner: the session store, the server context and
-	 * its store, the sync and the embedding job. Runs at boot, and again when `provision` makes this object a mirror.
+	 * Build everything that depends on whether this account mirrors workflowy.com: the server context and its store,
+	 * the sync and the embedding job. Runs at boot, and again whenever the connection or an import changes that.
 	 */
 	private configure(): void
 	{
 		const {ctx, env, db} = this;
-		const profile = readProfile(ctx.storage.kv);
-		this.isOwner =
-			isStoreOwner(ctx.id.name, env) || (profile?.mode === "mirror" && isStoreOwner(profile.email, env));
-		// A non-owner never seeds, so a later switch to mirror can still copy the binding's cookie in.
-		this.sessionStore = this.isOwner
-			? kvSessionStore(ctx.storage.kv, env.WORKFLOWY_SESSION_COOKIE)
-			: kvSessionStore(
-					ctx.storage.kv,
-					undefined,
-					{
-						seed: false,
-					},
-				);
 		// Namespaced by object id like the related-notes index, so one user can never read another's bytes.
 		const blobs = r2BlobStore(env.FILES, ctx.id.toString());
 		this.workflowyImport = new WorkflowyImportJob(
@@ -234,16 +210,16 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 		);
 		const connection = this.workflowyConnection.view();
 		const mirrorEmail = connection.connected && connection.mirror ? connection.email : undefined;
-		this.connectionMirror = !this.isOwner && mirrorEmail !== undefined && this.workflowyImport.hasImported();
-		const ownerConfig = readWorkerConfig(env, this.isOwner);
-		const config: typeof ownerConfig = this.connectionMirror
+		this.connectionMirror = mirrorEmail !== undefined && this.workflowyImport.hasImported();
+		const standalone = readWorkerConfig(env);
+		const config: typeof standalone = this.connectionMirror
 			?
 				{
-					...ownerConfig,
+					...standalone,
 					mode: "mirror",
 					accountEmail: mirrorEmail ?? "",
 				}
-			: ownerConfig;
+			: standalone;
 		this.treeSnapshotEnabled = config.features.treeSnapshot;
 		const embedding = config.features.embeddings ? this.embeddingBindings() : undefined;
 		const internalAuth: InternalAuth | undefined = this.connectionMirror
@@ -263,7 +239,7 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 						},
 					},
 				}
-			: readWorkerInternalAuth(env, this.sessionStore, this.isOwner);
+			: undefined;
 		const serverContext = buildServerContext(
 			{
 				db,
@@ -309,54 +285,22 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 			{
 				storage: ctx.storage,
 				db,
-				env:
-				{
-					...env,
-					WORKFLOWY_API_KEY: config.apiKey,
-				},
-				readTreeSnapshot:
-					internalAuth &&
-					(async (signal) =>
-						new WorkflowyInternalClient(
-							{
-								...internalAuth,
-								fetch: signalled(signal),
-							},
-						).getTreeSnapshot()),
-				readAccount:
-					internalAuth &&
-					(async (signal) =>
-					{
-						const session = await new WorkflowyInternalClient(
-							{
-								...internalAuth,
-								fetch: signalled(signal),
-							},
-						).bootstrap();
-						return {
-							userId: String(session.userId),
-							dateJoinedSec: session.dateJoinedSec,
-						};
-					}),
+				env,
 				catchUp:
 					internalAuth &&
 					(async () => this.watchSession(async () => serverContext.internalAdapter?.()?.catchUp())),
 				alarm: this.alarms.for("sync"),
-				rows: () => this.rowMeter.rows(),
 			},
 		);
 	}
 
 	/**
-	 * Whether the outbox drain and the transaction-log catch-up run: always for the owner, and for a connection mirror
-	 * while its session is usable and no import is rewriting the tree under them.
+	 * Whether the outbox drain and the transaction-log catch-up run: for a connection mirror while its session is
+	 * usable and no import is rewriting the tree under them.
 	 */
 	private syncs(): boolean
 	{
-		return (
-			this.isOwner ||
-			(this.connectionMirror && this.mirrorCookie !== undefined && !this.workflowyImport.running())
-		);
+		return this.connectionMirror && this.mirrorCookie !== undefined && !this.workflowyImport.running();
 	}
 
 	/** Run a drain or catch-up over the stored session, marking the connection expired when workflowy.com refuses it. */
@@ -379,14 +323,10 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 
 	/**
 	 * Rebuild after the connection or an import changed whether this account mirrors workflowy.com: start the sync at
-	 * once when it now runs, else drop its scheduled drain and catch-up. The owner's env-secret mirror never changes here.
+	 * once when it now runs, else drop its scheduled drain and catch-up.
 	 */
 	private async reconfigureSync(): Promise<void>
 	{
-		if (this.isOwner)
-		{
-			return;
-		}
 		this.mirrorCookie = await this.openMirrorSession();
 		this.configure();
 		if (!this.syncs())
@@ -452,9 +392,8 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 	}
 
 	/**
-	 * Record which user this object belongs to and its mode, once. A repeat for the same user is a no-op that keeps
-	 * the first profile; another user gets 409. Provisioning as a mirror switches this object to mirror at once;
-	 * provisioning standalone seeds an empty outline with an Inbox and a welcome.
+	 * Record which user this object belongs to, once, and seed its standalone account with an Inbox and the tutorial. A
+	 * repeat for the same user is a no-op that keeps the first profile; another user gets 409.
 	 */
 	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
 	provision(input: ProvisionInput): ProvisionResult
@@ -481,29 +420,19 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 		{
 			userId: input.userId,
 			email: input.email,
-			mode: input.mode,
 		};
 		kv.put(PROFILE_KEYS.email, profile.email);
-		kv.put(PROFILE_KEYS.mode, profile.mode);
 		// Written last: a profile is present only once its user id is.
 		kv.put(PROFILE_KEYS.userId, profile.userId);
-		if (profile.mode === "mirror" && !this.isOwner)
-		{
-			this.configure();
-		}
-		// A mirror's account and nodes come only from workflowy.com, so only a standalone account starts with local ones.
-		if (profile.mode === "standalone" && !this.isOwner)
-		{
-			provisionLocalAccount(
-				this.db,
-				{
-					userId: profile.userId,
-					email: profile.email,
-					joinedAt: new Date(),
-				},
-			);
-			seedWelcomeContent(this.db);
-		}
+		provisionLocalAccount(
+			this.db,
+			{
+				userId: profile.userId,
+				email: profile.email,
+				joinedAt: new Date(),
+			},
+		);
+		seedWelcomeContent(this.db);
 		return {
 			ok: true,
 			created: true,
@@ -726,20 +655,6 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 		}
 	}
 
-	/** Start a full-export sync run, or continue the one in progress, on the next alarm; scheduled runs only catch up. */
-	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
-	async syncNow(): Promise<SyncStatus | SyncDisabled>
-	{
-		return this.isOwner ? this.sync.syncNow() : SYNC_DISABLED;
-	}
-
-	/** Reseed the edge tables from one whole-tree read at the end of the next sync run; the only get_tree_data path. */
-	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
-	async seedTree(): Promise<SyncStatus | SyncDisabled>
-	{
-		return this.isOwner ? this.sync.seed() : SYNC_DISABLED;
-	}
-
 	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
 	async syncStatus(): Promise<SyncStatus>
 	{
@@ -747,42 +662,25 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 	}
 
 	/**
-	 * The signed-in user's view of the sync: its phase and how many items the run applied; idle for a standalone, and
-	 * for a mirror no run has imported yet, failed with the last run's error, else waiting.
+	 * The signed-in user's view of the sync: `needs_seed` with its error once a connection mirror's catch-up stopped for
+	 * good, else idle.
 	 */
 	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
 	async accountSync(): Promise<AccountSync>
 	{
-		if (!this.isOwner)
-		{
-			return {
-				phase: "idle",
-				applied: 0,
-			};
-		}
-		const {phase, applied, lastResult} = await this.sync.status();
-		if (phase === "idle" && lastResult?.status === "needs_seed")
-		{
-			return {
-				phase: "needs_seed",
-				applied,
-				error: lastResult.message,
-			};
-		}
-		if (phase !== "idle" || this.sync.hasImported())
-		{
-			return {
-				phase,
-				applied,
-			};
-		}
-		return (
-			firstSyncFailure(lastResult, applied) ??
-			{
-				phase: "waiting",
-				applied,
-			}
-		);
+		const lastResult = this.connectionMirror ? (await this.sync.status()).lastResult : null;
+		return lastResult?.status === "needs_seed"
+			?
+				{
+					phase: "needs_seed",
+					applied: 0,
+					error: lastResult.message,
+				}
+			:
+				{
+					phase: "idle",
+					applied: 0,
+				};
 	}
 
 	/** Database size, live node count, the last sync result and whether the in-memory tree snapshot is held. */
@@ -794,7 +692,7 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 			.one().n;
 		return {
 			storeName: this.ctx.id.name ?? null,
-			mode: this.isOwner || this.connectionMirror ? "mirror" : "standalone",
+			mode: this.connectionMirror ? "mirror" : "standalone",
 			profile: readProfile(this.ctx.storage.kv),
 			databaseSize: this.ctx.storage.sql.databaseSize,
 			nodeCount: Number(count),
@@ -927,62 +825,26 @@ const EVENT_SOCKET_TAGS: Partial<Record<string, string>> =
 
 export type StoreMode = "mirror" | "standalone";
 
-/** What `GET /api/v1/sync-status` tells the signed-in user about their account's import. */
+/** What `GET /api/v1/sync-status` tells the signed-in user about their account's sync. */
 export type AccountSync =
 	|
 	  {
-			phase: SyncStatus["phase"] | "waiting";
+			phase: "idle";
 			applied: number;
 	  }
-	| FailedAccountSync
 	|
 	  {
-			/** The sync stopped because only an admin seed can fix what failed; nothing retries it on a schedule. */
+			/** The catch-up stopped because only a new import can fix what failed; nothing retries it on a schedule. */
 			phase: "needs_seed";
 			applied: number;
 			error: string;
 	  };
 
-/** A mirror account no run has imported yet, whose last run failed. */
-interface FailedAccountSync
-{
-	phase: "failed";
-	applied: number;
-	error: string;
-	/** Whether the next scheduled run retries what failed (a catch-up); an export only reruns on an admin request. */
-	retriesOnSchedule: boolean;
-}
-
-/** The never-imported account's view of its last run's failure, if it failed. */
-function firstSyncFailure(lastResult: SyncResult | null, applied: number): FailedAccountSync | undefined
-{
-	if (lastResult?.status === "error" || lastResult?.status === "rate_limited")
-	{
-		return {
-			phase: "failed",
-			applied,
-			error: lastResult.message,
-			retriesOnSchedule: false,
-		};
-	}
-	if (lastResult?.status === "caught_up" && lastResult.internalSyncError !== undefined)
-	{
-		return {
-			phase: "failed",
-			applied,
-			error: lastResult.internalSyncError,
-			retriesOnSchedule: true,
-		};
-	}
-	return undefined;
-}
-
-/** The user an object was provisioned for, and whether it mirrors workflowy.com. */
+/** The user an object was provisioned for. */
 export interface Profile
 {
 	userId: string;
 	email: string;
-	mode: StoreMode;
 }
 
 export type ProvisionInput = Profile;
@@ -1006,8 +868,13 @@ const PROFILE_KEYS =
 {
 	userId: "profile:userId",
 	email: "profile:email",
-	mode: "profile:mode",
 } as const;
+
+/** The synchronous key-value surface of `DurableObjectStorage.kv`. */
+interface KvLike
+{
+	get(key: string): string | undefined;
+}
 
 function readProfile(kv: KvLike): Profile | null
 {
@@ -1019,7 +886,6 @@ function readProfile(kv: KvLike): Profile | null
 	return {
 		userId,
 		email: kv.get(PROFILE_KEYS.email) ?? "",
-		mode: kv.get(PROFILE_KEYS.mode) === "mirror" ? "mirror" : "standalone",
 	};
 }
 
@@ -1082,22 +948,11 @@ export type SetWorkflowyMirrorResult =
 			error: "workflowy-not-connected";
 	  };
 
-/** What the sync entry points answer on an object that does not mirror workflowy.com. */
-export interface SyncDisabled
-{
-	state: "disabled";
-}
-
-const SYNC_DISABLED: SyncDisabled =
-{
-	state: "disabled",
-};
-
 export interface AdminStatus
 {
 	/** This object's name, or null when workerd did not give it one. */
 	storeName: string | null;
-	/** "mirror" for the owner's object, which syncs from and writes through to workflowy.com; "standalone" otherwise. */
+	/** "mirror" while the account's own connection keeps syncing with workflowy.com; "standalone" otherwise. */
 	mode: StoreMode;
 	/** Whom `provision` gave this object to, or null before it was provisioned. */
 	profile: Profile | null;
@@ -1180,17 +1035,4 @@ function isSessionRefused(error: unknown): boolean
 		}
 	}
 	return false;
-}
-
-/** A fetch whose every request aborts with `signal`. */
-function signalled(signal: AbortSignal): typeof fetch
-{
-	return async (input, init) =>
-		fetch(
-			input,
-			{
-				...init,
-				signal,
-			},
-		);
 }

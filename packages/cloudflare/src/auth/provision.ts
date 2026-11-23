@@ -1,9 +1,7 @@
 import type {UserStore} from "../user-store";
-import {isStoreOwner} from "../worker-config";
-import type {WorkerSecrets} from "../worker-config";
 
-/** Bindings provisioning needs: D1 for the once-only flag, the Durable Objects, and the owner list. */
-export interface ProvisionEnv extends Pick<WorkerSecrets, "OUTLINEDB_ENV_OWNERS">
+/** Bindings provisioning needs: D1 for the once-only flag and the Durable Objects. */
+export interface ProvisionEnv
 {
 	AUTH_DB: D1Database;
 	USER_STORE: DurableObjectNamespace<UserStore>;
@@ -11,8 +9,8 @@ export interface ProvisionEnv extends Pick<WorkerSecrets, "OUTLINEDB_ENV_OWNERS"
 
 /**
  * Give a verified user their Durable Object (named by their id) unless D1 says it already has one: store its profile,
- * in mirror mode when `OUTLINEDB_ENV_OWNERS` lists the email and standalone
- * otherwise, then set `user.provisioned_at`. Safe to repeat: the object keeps its first profile.
+ * which seeds the standalone account and the tutorial, then set `user.provisioned_at`. Every account starts the same
+ * way; only its own Workflowy connection later makes it a mirror. Safe to repeat: the object keeps its first profile.
  */
 export async function provisionUser(
 	env: ProvisionEnv,
@@ -31,12 +29,10 @@ export async function provisionUser(
 	{
 		return;
 	}
-	const mode = isStoreOwner(user.email, env) ? "mirror" : "standalone";
 	const result = await env.USER_STORE.getByName(user.id).provision(
 		{
 			userId: user.id,
 			email: user.email,
-			mode,
 		},
 	);
 	if (!result.ok)

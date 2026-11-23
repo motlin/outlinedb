@@ -1,13 +1,8 @@
-import type {InternalAuth, SessionCookieStore} from "@outlinedb/shared/api";
 import type {ServerConfig} from "@outlinedb/web/server-app";
 
 /** Optional secret bindings and vars; set as Wrangler secrets (locally in `.dev.vars`). */
 export interface WorkerSecrets
 {
-	WORKFLOWY_API_KEY?: string;
-	WORKFLOWY_USERNAME?: string;
-	WORKFLOWY_PASSWORD?: string;
-	WORKFLOWY_SESSION_COOKIE?: string;
 	/** Var; tests point it at a fake upstream. */
 	WORKFLOWY_API_URL?: string;
 	/**
@@ -19,11 +14,6 @@ export interface WorkerSecrets
 	AI?: unknown;
 	/** The Vectorize index holding node vectors; with AI it turns related notes on. */
 	RELATED_INDEX?: unknown;
-	/**
-	 * Comma-separated Durable Object names (or owners' emails) that mirror workflowy.com and so get the secrets above.
-	 * Unset or empty, no object is an owner: ALLOWED_EMAILS only gates Access, never ownership.
-	 */
-	OUTLINEDB_ENV_OWNERS?: string;
 	ALLOWED_EMAILS?: string;
 	/**
 	 * Secret; with each Durable Object's id it derives the AES-GCM key that seals that object's workflowy.com session.
@@ -33,33 +23,17 @@ export interface WorkerSecrets
 }
 
 /**
- * Whether the Durable Object named `storeName` is an owner: the one that mirrors workflowy.com with the env secrets.
- * Fails closed: only a name OUTLINEDB_ENV_OWNERS lists is one.
+ * Parse {@link ServerConfig} from Worker bindings; an empty binding counts as unset. Every account starts standalone:
+ * the Worker holds no Workflowy credentials of its own, and only an account's own connection, once it keeps syncing,
+ * turns it into a mirror.
  */
-export function isStoreOwner(storeName: string | undefined, env: WorkerSecrets): boolean
-{
-	if (storeName === undefined)
-	{
-		return false;
-	}
-	const owners = (env.OUTLINEDB_ENV_OWNERS ?? "")
-		.split(",")
-		.map((entry) => entry.trim().toLowerCase())
-		.filter((entry) => entry !== "");
-	return owners.includes(storeName.toLowerCase());
-}
-
-/**
- * Parse {@link ServerConfig} from Worker bindings; an empty binding counts as unset. A non-owner gets no API key and
- * no account email, so it can never write to the owner's workflowy.com account; it is standalone and writes locally.
- */
-export function readWorkerConfig(env: WorkerSecrets, isOwner: boolean): ServerConfig
+export function readWorkerConfig(env: WorkerSecrets): ServerConfig
 {
 	return {
-		mode: isOwner ? "mirror" : "standalone",
-		apiKey: isOwner ? nonEmpty(env.WORKFLOWY_API_KEY) : undefined,
+		mode: "standalone",
+		apiKey: undefined,
 		apiUrl: nonEmpty(env.WORKFLOWY_API_URL),
-		accountEmail: isOwner ? (env.WORKFLOWY_USERNAME ?? "") : "",
+		accountEmail: "",
 		sqlQueryLogging: false,
 		calendarEnsureEnabled: true,
 		calendarLayoutEnabled: true,
@@ -69,41 +43,6 @@ export function readWorkerConfig(env: WorkerSecrets, isOwner: boolean): ServerCo
 			treeSnapshot: env.TREE_SNAPSHOT === "true",
 		},
 	};
-}
-
-/**
- * Internal-API auth from bindings: credentials, a stored cookie, or both; undefined when neither exists, and always
- * undefined for a non-owner.
- */
-export function readWorkerInternalAuth(
-	env: WorkerSecrets,
-	sessionStore: SessionCookieStore,
-	isOwner: boolean,
-): InternalAuth | undefined
-{
-	if (!isOwner)
-	{
-		return undefined;
-	}
-	const username = env.WORKFLOWY_USERNAME;
-	const password = env.WORKFLOWY_PASSWORD;
-	if (username && password)
-	{
-		return {
-			credentials:
-			{
-				username,
-				password,
-			},
-			sessionStore,
-		};
-	}
-	return sessionStore.read() === undefined
-		? undefined
-		:
-			{
-				sessionStore,
-			};
 }
 
 function nonEmpty(value: string | undefined): string | undefined

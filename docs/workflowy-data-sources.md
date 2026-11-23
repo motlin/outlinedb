@@ -249,7 +249,7 @@ Code: `packages/shared/src/internal/adapter.ts`, `packages/shared/src/cache/acco
 
 ### Cloudflare sync
 
-Code: `packages/cloudflare/src/sync.ts`, `export-stream.ts`. A scheduled alarm run (every `SYNC_INTERVAL_MINUTES`, default 1) is only the transaction-log catch-up: one `/push_and_poll` from the stored transaction id, which replays remote edits into the nodes and edge tables. A catch-up failure (no seed, `need_refreshed_project_tree`, an unreplayable transaction) shows as the run's `internalSyncError` and never falls back to an export. The full import runs only on demand: `POST /api/admin/sync` streams `nodes-export` into `applyApiBatch` in batches across alarm ticks and then catches up, and `POST /api/admin/seed` does the same but finishes with `/get_tree_data/` and `importInternalMetadata` instead of the catch-up. It uses the same shared importer as the CLI, so the precedence rules below are identical.
+Code: `packages/cloudflare/src/sync.ts`, `workflowy-import.ts`. The Worker holds no Workflowy credentials of its own: an account connects with its own workflowy.com login, and only the session cookie is kept, sealed in its Durable Object. The one-time import (`workflowy-import.ts`) reads the whole tree and account state over that session. When the account turns on keep-syncing, a scheduled alarm run (every `SYNC_INTERVAL_MINUTES`, default 1) is the transaction-log catch-up: one `/push_and_poll` from the stored transaction id, which replays remote edits into the nodes and edge tables. A catch-up failure shows as the run's `internalSyncError` and is retried on schedule; one no retry can fix (`need_refreshed_project_tree`, no transaction id) stops the sync until the account imports again.
 
 ### Temporal history
 

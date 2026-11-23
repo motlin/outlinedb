@@ -131,7 +131,7 @@ describe("built wrangler.json", () =>
 					"ACCESS_AUD",
 					"ALLOWED_EMAILS",
 					"ALLOWED_SERVICE_TOKENS",
-					"OUTLINEDB_ENV_OWNERS",
+					"OUTLINEDB_CREDENTIALS_KEY",
 				].includes(name),
 			),
 		).toStrictEqual([]);

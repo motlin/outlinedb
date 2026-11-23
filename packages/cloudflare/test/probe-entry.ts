@@ -160,10 +160,6 @@ export class ProbeStore extends UserStore
 	override fetch(request: Request): Response
 	{
 		const url = new URL(request.url);
-		if (url.pathname === "/__rows")
-		{
-			return Response.json(this.rowMeter.rows());
-		}
 		return metering.run("unmetered", () => this.probe(request, url));
 	}
 
@@ -244,19 +240,6 @@ export class ProbeStore extends UserStore
 				},
 			);
 		}
-		if (url.pathname === "/__session")
-		{
-			const write = url.searchParams.get("write");
-			if (write !== null)
-			{
-				this.sessionStore.write(write);
-			}
-			return Response.json(
-				{
-					cookie: this.sessionStore.read() ?? null,
-				},
-			);
-		}
 		if (url.pathname === "/__publish")
 		{
 			this.ladderEvents.publish(
@@ -275,62 +258,12 @@ export class ProbeStore extends UserStore
 				},
 			);
 		}
-		if (url.pathname === "/__system-froms")
-		{
-			return Response.json(
-				this.ctx.storage.sql
-					.exec(
-						"SELECT system_from, count(*) AS n FROM node_content GROUP BY system_from ORDER BY system_from",
-					)
-					.toArray()
-					.map((row) => row.n),
-			);
-		}
-		if (url.pathname === "/__sync-tables")
-		{
-			const sql = this.ctx.storage.sql;
-			const live = `CASE WHEN system_to = ${FAR_FUTURE_DATE} THEN 1 ELSE 0 END`;
-			return Response.json(
-				{
-					runs: sql
-						.exec(
-							`SELECT phase, applied, status, rows_read AS rowsRead, rows_written AS rowsWritten, ${live} AS live ` +
-								"FROM sync_runs ORDER BY system_from, run_id",
-						)
-						.toArray(),
-					runSystemFroms: Number(sql.exec("SELECT count(DISTINCT system_from) AS n FROM sync_runs").one().n),
-					seedRequests: sql
-						.exec(
-							`SELECT ${live} AS live, CASE WHEN system_from <= system_to THEN 1 ELSE 0 END AS ordered FROM sync_seed_requests ORDER BY system_from`,
-						)
-						.toArray(),
-				},
-			);
-		}
-		if (url.pathname === "/__live-ids")
-		{
-			const ids = this.ctx.storage.sql
-				.exec(`SELECT id FROM node_content WHERE system_to = ${FAR_FUTURE_DATE}`)
-				.toArray()
-				.flatMap((row) => (typeof row.id === "string" ? [row.id] : []));
-			return Response.json(ids);
-		}
 		if (url.pathname === "/__internal-metadata")
 		{
 			return Response.json(
 				this.ctx.storage.sql
 					.exec(
 						`SELECT node_id, numbered_start FROM node_display_metadata WHERE system_to = ${FAR_FUTURE_DATE} ORDER BY node_id`,
-					)
-					.toArray(),
-			);
-		}
-		if (url.pathname === "/__files")
-		{
-			return Response.json(
-				this.ctx.storage.sql
-					.exec(
-						`SELECT node_id, file_name FROM s3_files WHERE system_to = ${FAR_FUTURE_DATE} ORDER BY node_id`,
 					)
 					.toArray(),
 			);
@@ -365,14 +298,6 @@ export class ProbeStore extends UserStore
 							"JOIN node_metadata m ON m.node_id = c.id AND m.system_to = c.system_to " +
 							`WHERE c.system_to = ${FAR_FUTURE_DATE} ORDER BY c.id`,
 					)
-					.toArray(),
-			);
-		}
-		if (url.pathname === "/__account")
-		{
-			return Response.json(
-				this.ctx.storage.sql
-					.exec(`SELECT user_id, date_joined_sec FROM account WHERE system_to = ${FAR_FUTURE_DATE}`)
 					.toArray(),
 			);
 		}

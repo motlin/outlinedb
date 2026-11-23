@@ -180,6 +180,8 @@ describe("importing an account from workflowy.com over its stored session", () =
 	}[] = [];
 	/** The tree's newest transaction id on the fake workflowy.com; each push and poll moves it on by one. */
 	let upstreamTxId = 701;
+	/** Set to answer every `/push_and_poll` with need_refreshed_project_tree, as once the log drops the stored id. */
+	let refreshNeeded = false;
 
 	/** Answer one `/push_and_poll` form as workflowy.com does, echoing pushed ops back as the server's run of them. */
 	function pushAndPoll(body: string): Response
@@ -336,6 +338,15 @@ describe("importing an account from workflowy.com over its stored session", () =
 							},
 						);
 					}
+					if (url.pathname === "/push_and_poll" && refreshNeeded)
+					{
+						return pollResult(
+							String(upstreamTxId),
+							{
+								need_refreshed_project_tree: true,
+							},
+						);
+					}
 					if (url.pathname === "/push_and_poll")
 					{
 						return pushAndPoll(await request.text());
@@ -374,7 +385,6 @@ describe("importing an account from workflowy.com over its stored session", () =
 			{
 				userId: "dev",
 				email: "alice@example.com",
-				mode: "standalone",
 			},
 		);
 	}, 60_000);
@@ -926,6 +936,74 @@ describe("importing an account from workflowy.com over its stored session", () =
 		);
 	}, 60_000);
 
+	it("stops syncing and tells the user to import again once the transaction log no longer holds the stored id", async () =>
+	{
+		const before = await send("sync-status", "GET");
+		refreshNeeded = true;
+		const due = await (await store()).fetch("http://localhost/__sync-due-now");
+		await until(
+			async () => Reflect.get((await send("sync-status", "GET")).body as object, "phase") === "needs_seed",
+		);
+		const stopped =
+		{
+			syncStatus: await send("sync-status", "GET"),
+			syncDue: await alarmDue("sync"),
+		};
+		refreshNeeded = false;
+		// Turning keep-syncing off and on again restarts the catch-up, which clears the stop.
+		await send(
+			"workflowy-connection",
+			"PATCH",
+			{
+				mirror: false,
+			},
+		);
+		await send(
+			"workflowy-connection",
+			"PATCH",
+			{
+				mirror: true,
+			},
+		);
+		await until(async () => Reflect.get((await send("sync-status", "GET")).body as object, "phase") === "idle");
+		expect(
+			{
+				before,
+				due: due.status,
+				stopped,
+				restarted: typeof (await alarmDue("sync")),
+			},
+		).toStrictEqual(
+			{
+				before:
+				{
+					status: 200,
+					body:
+					{
+						phase: "idle",
+						applied: 0,
+					},
+				},
+				due: 204,
+				stopped:
+				{
+					syncStatus:
+					{
+						status: 200,
+						body:
+						{
+							phase: "needs_seed",
+							applied: 0,
+							error: "Workflowy answered need_refreshed_project_tree: the cache's transaction id 703 is no longer in the tree's log; run './bin/run.js cache import-api' to reseed it. Import again from Settings > Workflowy to resume syncing.",
+						},
+					},
+					syncDue: null,
+				},
+				restarted: "number",
+			},
+		);
+	}, 60_000);
+
 	it("pauses syncing when workflowy.com refuses the session, keeps writes queued, and resumes once signed in again", async () =>
 	{
 		sessionsExpired = true;
@@ -1027,11 +1105,11 @@ describe("importing an account from workflowy.com over its stored session", () =
 					// The queued write drains first, then the catch-up polls on from its transaction.
 					pushes: [
 						{
-							from: "703",
+							from: "704",
 							ops: ["bulk_create"],
 						},
 						{
-							from: "704",
+							from: "705",
 							ops: [],
 						},
 					],

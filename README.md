@@ -50,7 +50,7 @@ The web server's Node host (`just web`, `just dev-node`) and the stdio MCP serve
 | `TREE_SNAPSHOT`               | `true`                      | `false` serves search from SQL instead of an in-memory whole-tree snapshot.                                                                                               |
 | `OUTLINEDB_EMBEDDINGS`        | `true`                      | `false` turns off related notes (the sqlite-vec index).                                                                                                                   |
 
-The server fails at startup when `OUTLINEDB_MODE` is unset or unknown, or is `mirror` without `WORKFLOWY_API_KEY`. The Cloudflare Worker reads its own bindings (`packages/cloudflare/src/worker-config.ts`): a store is `mirror` only when `OUTLINEDB_ENV_OWNERS` lists its name (or, for a store provisioned as a mirror, its email); unset, no store is, and `TREE_SNAPSHOT` is off unless `true`.
+The server fails at startup when `OUTLINEDB_MODE` is unset or unknown, or is `mirror` without `WORKFLOWY_API_KEY`. The Cloudflare Worker reads its own bindings (`packages/cloudflare/src/worker-config.ts`): it holds no Workflowy credentials, every account starts standalone and becomes `mirror` only through its own Settings > Workflowy connection with keep-syncing on, and `TREE_SNAPSHOT` is off unless `true`.
 
 # Commands
 

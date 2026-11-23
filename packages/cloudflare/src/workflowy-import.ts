@@ -203,18 +203,21 @@ export interface WorkflowyImportDeps
 	alarm: JobAlarm;
 	/** Rows the object's SQLite has read and written so far, index rows included. */
 	rows?: () => RowCounts;
-	env:
-	{
-		/** Nodes applied per batch (default {@link BATCH_SIZE}). */
-		SYNC_BATCH_SIZE?: string;
-		/** Batches applied per alarm run before yielding (default: all within the run budget). */
-		SYNC_BATCHES_PER_TICK?: string;
-		/** Delay before the next alarm run when one yields mid-import (default 0). */
-		SYNC_TICK_DELAY_MS?: string;
-		/** Attachments copied per alarm run before yielding (default: all within the run budget). */
-		IMPORT_FILES_PER_TICK?: string;
-	};
+	env: WorkflowyImportEnv;
 	now?: () => number;
+}
+
+/** Tuning knobs the import reads from the Worker's bindings; all optional. */
+export interface WorkflowyImportEnv
+{
+	/** Nodes applied per batch (default {@link BATCH_SIZE}). */
+	SYNC_BATCH_SIZE?: string;
+	/** Batches applied per alarm run before yielding (default: all within the run budget). */
+	SYNC_BATCHES_PER_TICK?: string;
+	/** Delay before the next alarm run when one yields mid-import (default 0). */
+	SYNC_TICK_DELAY_MS?: string;
+	/** Attachments copied per alarm run before yielding (default: all within the run budget). */
+	IMPORT_FILES_PER_TICK?: string;
 }
 
 interface Job extends WorkflowyImportRun
