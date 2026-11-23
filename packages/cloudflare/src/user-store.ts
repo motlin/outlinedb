@@ -54,7 +54,7 @@ import type {SyncEnv, SyncResult, SyncStatus} from "./sync";
 import {isStoreOwner, readWorkerConfig, readWorkerInternalAuth} from "./worker-config";
 import type {WorkerSecrets} from "./worker-config";
 import {WorkflowyConnection} from "./workflowy-connection";
-import type {WorkflowyConnectionView} from "./workflowy-connection";
+import type {WorkflowyConnectionStatus} from "./workflowy-connection";
 import {WorkflowyImportJob} from "./workflowy-import";
 import type {WorkflowyImportView} from "./workflowy-import";
 
@@ -513,9 +513,29 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 
 	/** This account's workflowy.com connection, without the session cookie. */
 	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
-	getWorkflowyConnection(): WorkflowyConnectionView
+	async getWorkflowyConnection(): Promise<WorkflowyConnectionStatus>
 	{
-		return this.workflowyConnection.view();
+		return this.workflowyConnectionStatus();
+	}
+
+	/** The connection with when it last synced: the newest successful import or keep-syncing catch-up. */
+	private async workflowyConnectionStatus(): Promise<WorkflowyConnectionStatus>
+	{
+		const view = this.workflowyConnection.view();
+		if (!view.connected)
+		{
+			return view;
+		}
+		const run = this.workflowyImport.view().run;
+		const lastResult = (await this.sync.status()).lastResult;
+		const finished = [
+			run?.status === "ok" ? run.finishedAt : null,
+			lastResult !== null && "finishedAt" in lastResult ? lastResult.finishedAt : null,
+		].filter((at) => at !== null);
+		return {
+			...view,
+			lastSyncAt: finished.length === 0 ? null : Math.max(...finished),
+		};
 	}
 
 	/**
@@ -541,9 +561,10 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 		}
 		catch (error)
 		{
+			// 422, never 401: the page treats a 401 as signed out of OutlineDB and goes to its login.
 			return {
 				ok: false,
-				status: 401,
+				status: 422,
 				error: "workflowy-login-failed",
 				message: error instanceof Error ? error.message : String(error),
 			};
@@ -553,7 +574,7 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 		await this.reconfigureSync();
 		return {
 			ok: true,
-			connection: this.workflowyConnection.view(),
+			connection: await this.workflowyConnectionStatus(),
 		};
 	}
 
@@ -575,7 +596,7 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 		await this.reconfigureSync();
 		return {
 			ok: true,
-			connection: this.workflowyConnection.view(),
+			connection: await this.workflowyConnectionStatus(),
 		};
 	}
 
@@ -627,11 +648,11 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 
 	/** Phase the connection out and wipe every stored copy of the session cookie. */
 	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
-	async disconnectWorkflowy(): Promise<WorkflowyConnectionView>
+	async disconnectWorkflowy(): Promise<WorkflowyConnectionStatus>
 	{
 		this.workflowyConnection.disconnect();
 		await this.reconfigureSync();
-		return this.workflowyConnection.view();
+		return this.workflowyConnectionStatus();
 	}
 
 	override webSocketClose(socket: WebSocket, code: number): void
@@ -1013,7 +1034,7 @@ export type ConnectWorkflowyResult =
 	|
 	  {
 			ok: true;
-			connection: WorkflowyConnectionView;
+			connection: WorkflowyConnectionStatus;
 	  }
 	|
 	  {
@@ -1024,7 +1045,7 @@ export type ConnectWorkflowyResult =
 	|
 	  {
 			ok: false;
-			status: 401;
+			status: 422;
 			error: "workflowy-login-failed";
 			message: string;
 	  };
@@ -1052,7 +1073,7 @@ export type SetWorkflowyMirrorResult =
 	|
 	  {
 			ok: true;
-			connection: WorkflowyConnectionView;
+			connection: WorkflowyConnectionStatus;
 	  }
 	|
 	  {

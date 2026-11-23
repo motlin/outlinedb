@@ -126,6 +126,26 @@ async function open(preferences: Partial<Preferences> = {}, opened: string | nul
 		{
 			return Promise.resolve(Response.json(authConfigBody));
 		}
+		if (path === "/api/v1/workflowy-connection")
+		{
+			return Promise.resolve(
+				Response.json(
+					{
+						connected: false,
+					},
+				),
+			);
+		}
+		if (path === "/api/v1/workflowy-import")
+		{
+			return Promise.resolve(
+				Response.json(
+					{
+						run: null,
+					},
+				),
+			);
+		}
 		if (path === "/api/auth/sign-out")
 		{
 			return Promise.resolve(
@@ -430,7 +450,7 @@ describe("Settings dialog", () =>
 
 		expect(
 			{
-				first: titles[0],
+				titles,
 				signOuts: fetchStub.mock.calls
 					.map(([input, init]) => [new URL(urlOf(input), globalThis.location.origin).pathname, init?.method])
 					.filter(([path]) => path === "/api/auth/sign-out"),
@@ -438,7 +458,16 @@ describe("Settings dialog", () =>
 			},
 		).toStrictEqual(
 			{
-				first: "Account",
+				titles: [
+					"Account",
+					"Workflowy",
+					"Personalization",
+					"Dates",
+					"Media & Previews",
+					"Backup",
+					"Notifications",
+					"Features",
+				],
 				signOuts: [["/api/auth/sign-out", "POST"]],
 				assigned: ["/login"],
 			},

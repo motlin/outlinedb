@@ -171,11 +171,11 @@ describe("connecting an account to workflowy.com", () =>
 				},
 				wrong:
 				{
-					status: 401,
+					status: 422,
 					body:
 					{
 						ok: false,
-						status: 401,
+						status: 422,
 						error: "workflowy-login-failed",
 						message: "Login failed: Wrong email or password",
 					},
@@ -242,6 +242,7 @@ describe("connecting an account to workflowy.com", () =>
 						status: "connected",
 						email: "alice@example.com",
 						mirror: false,
+						lastSyncAt: null,
 					},
 				},
 				afterConnect:
@@ -260,6 +261,7 @@ describe("connecting an account to workflowy.com", () =>
 						status: "connected",
 						email: "alice@example.com",
 						mirror: true,
+						lastSyncAt: null,
 					},
 				},
 				// A reconnect replaces the cookie but keeps the keep-syncing choice.
@@ -272,6 +274,7 @@ describe("connecting an account to workflowy.com", () =>
 						status: "connected",
 						email: "alice@example.com",
 						mirror: true,
+						lastSyncAt: null,
 					},
 				},
 				// Only the live version holds a sealed cookie (its nonce and ciphertext); closed versions were stripped.

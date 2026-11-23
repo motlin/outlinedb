@@ -1,6 +1,14 @@
 // @vitest-environment happy-dom
 import {afterEach, describe, expect, it, vi} from "vite-plus/test";
-import {isAuthPath, loginUrl, redirectToLogin, safeNext} from "../src/client/auth/login-redirect.js";
+import
+{
+	isAuthPath,
+	loginUrl,
+	openSettingsFromUrl,
+	redirectToLogin,
+	safeNext,
+	withSettingsOpen,
+} from "../src/client/auth/login-redirect.js";
 import {readJson} from "../src/client/read-json.js";
 import {RequestStatusError, toRequestStatusError} from "../src/client/request-error.js";
 import {redirectOnAuthError} from "../src/client/query-retry.js";
@@ -44,6 +52,50 @@ describe("loginUrl", () =>
 	});
 });
 
+describe("opening Settings from the URL", () =>
+{
+	it("adds the section to a next path, then opens it once and drops the parameter, keeping the zoom", () =>
+	{
+		const opened: string[] = [];
+		const replaced: string[] = [];
+		const history =
+		{
+			state: null,
+			replaceState: (_state: unknown, _unused: string, url?: string | URL | null) =>
+			{
+				replaced.push(String(url));
+			},
+		};
+		const link = withSettingsOpen("/?q=x#/abc", "Workflowy");
+		openSettingsFromUrl(
+			{
+				href: `http://origin${link}`,
+			},
+			history,
+			(section) =>
+			{
+				opened.push(section);
+			},
+		);
+		openSettingsFromUrl(
+			{
+				href: "http://origin/#/abc",
+			},
+			history,
+			(section) =>
+			{
+				opened.push(section);
+			},
+		);
+
+		expect([link, opened, replaced]).toStrictEqual([
+			"/?q=x&settings=Workflowy#/abc",
+			["Workflowy"],
+			["/?q=x#/abc"],
+		]);
+	});
+});
+
 describe("safeNext", () =>
 {
 	it("keeps a same-origin path and refuses anything else", () =>
@@ -55,17 +107,20 @@ describe("safeNext", () =>
 			safeNext("//evil.example/"),
 			safeNext(String.raw`/\evil.example`),
 			safeNext("/login?next=%2F"),
-		]).toStrictEqual(["/#/abc", "/", "/", "/", "/", "/"]);
+			safeNext("/welcome?next=%2F"),
+		]).toStrictEqual(["/#/abc", "/", "/", "/", "/", "/", "/"]);
 	});
 });
 
 describe("isAuthPath", () =>
 {
-	it("matches the four auth screens only", () =>
+	it("matches the four auth screens and the welcome step only", () =>
 	{
 		expect(
-			["/login", "/signup", "/verify-email", "/reset-password", "/", "/changes", "/login/x"].map(isAuthPath),
-		).toStrictEqual([true, true, true, true, false, false, false]);
+			["/login", "/signup", "/verify-email", "/reset-password", "/welcome", "/", "/changes", "/login/x"].map(
+				isAuthPath,
+			),
+		).toStrictEqual([true, true, true, true, true, false, false, false]);
 	});
 });
 

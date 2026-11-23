@@ -171,3 +171,85 @@ export interface BulkTree
 	numberedStart?: number | undefined;
 	children?: BulkTree[] | undefined;
 }
+
+/** `/api/v1/workflowy-connection`: the account's link to workflowy.com, served by the Worker only. */
+export type WorkflowyConnection =
+	|
+	  {
+			connected: false;
+	  }
+	|
+	  {
+			connected: true;
+			/** `expired` once workflowy.com refused the stored session: sync pauses until the user signs in again. */
+			status: "connected" | "expired";
+			email: string;
+			/** Keep syncing (two-way mirror) after the import; off means a one-time import. */
+			mirror: boolean;
+			lastSyncAt: number | null;
+	  };
+
+export interface WorkflowyImportFound
+{
+	nodes: number;
+	completed: number;
+	mirrors: number;
+	backlinks: number;
+	expandedKeys: number;
+	stars: number;
+	starOrder: number;
+	tagColors: number;
+	savedViews: number;
+	settings: number;
+}
+
+/** One import run, as `/api/v1/workflowy-import` reports it (the Worker's `WorkflowyImportView`). */
+export interface WorkflowyImportRun
+{
+	phase: "idle" | "fetching" | "importing" | "files";
+	status: "running" | "ok" | "error" | "expired";
+	message: string | null;
+	startedAt: number;
+	finishedAt: number | null;
+	applied: number;
+	found: WorkflowyImportFound;
+	nodes:
+	{
+		added: number;
+		updated: number;
+		unchanged: number;
+		phasedOut: number;
+		metadataWritten: number;
+	};
+	failures:
+	{
+		invalidNodes: number;
+		metadataSkipped: number;
+	};
+	files:
+	{
+		found: number;
+		copied: number;
+		alreadyCopied: number;
+		failed: number;
+		bytes: number;
+		failures:
+		{
+			nodeId: string;
+			fileName: string;
+			error: string;
+		}[];
+	};
+}
+
+export interface WorkflowyImport
+{
+	run: WorkflowyImportRun | null;
+}
+
+/** A refused `/api/v1/workflowy-connection` or `/api/v1/workflowy-import` write: the Worker's error code and message. */
+export interface WorkflowyRefusal
+{
+	error?: string;
+	message?: string;
+}

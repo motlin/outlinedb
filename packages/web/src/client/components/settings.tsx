@@ -20,6 +20,7 @@ import {Dropdown, DropdownOption} from "./flyout/dropdown.js";
 import {ActionBlock, ControlRow, ReadOnlyField, SectionBody, SettingsButton} from "./settings-rows.js";
 import {SettingsSection, SettingsSectionRegistry} from "./settings-section.js";
 import {Toggle} from "./toggle.js";
+import {WORKFLOWY_SECTION, WorkflowySection} from "./workflowy-connection-settings.js";
 
 const MOMENT_FORMAT_DOCS = "https://momentjscom.readthedocs.io/en/latest/moment/04-displaying/01-format/";
 
@@ -239,6 +240,7 @@ export function DatesSection({now: nowProp}: {now?: Date})
 /** Upstream's `Account`, `Personalization`, ... in order; the cloud-only sections are not cloned. */
 const SETTINGS_SECTION_TITLES = [
 	"Account",
+	WORKFLOWY_SECTION,
 	"Personalization",
 	"Dates",
 	"Media & Previews",
@@ -713,6 +715,7 @@ function SettingsBody({initialSection, onClose}: {initialSection: string | null;
 {
 	const {preferences, setPreferences} = usePreferences();
 	const datesOn = useFeatureOn("dates");
+	const hosted = useAuthConfig().data?.hosted === true;
 	const rootRef = useRef<HTMLDivElement>(null);
 	const [titles, setTitles] = useState<string[]>([]);
 	const [jump, setJump] = useState(initialSection ?? "");
@@ -764,6 +767,8 @@ function SettingsBody({initialSection, onClose}: {initialSection: string | null;
 	};
 	const sections: ReactNode[] = [
 		<AccountSection key="Account" {...sectionProps} />,
+		// Only the hosted app has per-account workflowy.com connections.
+		hosted && <WorkflowySection key={WORKFLOWY_SECTION} />,
 		<PersonalizationSection key="Personalization" {...sectionProps} />,
 		// Upstream renders the Dates section only while the `dates` flag is on.
 		datesOn && (

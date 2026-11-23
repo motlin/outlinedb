@@ -90,7 +90,7 @@ import {useRowHoverController} from "./hooks/use-row-hover.js";
 import {installSaveTracking} from "./hooks/use-saving.js";
 import {queryClientDefaults, redirectOnAuthError} from "./query-retry.js";
 import {AuthApp} from "./auth/auth-pages.js";
-import {isAuthPath} from "./auth/login-redirect.js";
+import {isAuthPath, openSettingsFromUrl} from "./auth/login-redirect.js";
 import "./reset.css";
 import "./wf-tailwind.css";
 import "./styles.css";
@@ -489,6 +489,17 @@ function OutlineLiveSync()
 	return null;
 }
 
+/** Opens Settings at the section a `?settings=` link names, as the signup wizard's "connect workflowy.com" does. */
+function SettingsFromUrl()
+{
+	const openSettings = useOutlineStore((state) => state.openSettings);
+	useEffect(() =>
+	{
+		openSettingsFromUrl(globalThis.location, globalThis.history, openSettings);
+	}, [openSettings]);
+	return null;
+}
+
 /** Dims item-selection tints while the window is blurred (`body.wf-dom-window-blurred`). */
 function WindowBlurredClass()
 {
@@ -515,6 +526,7 @@ export function App()
 				<TagColorStyles />
 				<LinkColorStyles />
 				<WindowBlurredClass />
+				<SettingsFromUrl />
 				<ShowCompletedSync />
 				<LatestColorSync />
 				<SearchForChangesAfterSync />

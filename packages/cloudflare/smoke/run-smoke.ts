@@ -182,7 +182,10 @@ async function stubInternalApi(target: Page | BrowserContext): Promise<void>
 	);
 }
 
-/** Signs up a new user in a fresh context, opens the verify link the log sender printed, and lands on the outline. */
+/**
+ * Signs up a new user in a fresh context, opens the verify link the log sender printed, says yes on the wizard step, and
+ * lands on the outline with Settings > Workflowy open.
+ */
 async function signupVerifyAndLand(active: Browser): Promise<void>
 {
 	const context = await active.newContext();
@@ -212,6 +215,21 @@ async function signupVerifyAndLand(active: Browser): Promise<void>
 		return verifyUrl !== undefined;
 	}, "the verification email in the log sender's output");
 	await signup.goto(verifyUrl ?? "");
+	// The verify link lands on the signup wizard step; "yes" opens the outline with Settings > Workflowy's connect form.
+	await signup.waitForURL(
+		(url) => url.pathname === "/welcome",
+		{
+			timeout: 15_000,
+		},
+	);
+	await signup
+		.getByRole(
+			"button",
+			{
+				name: "Yes, connect workflowy.com",
+			},
+		)
+		.click();
 	await signup.waitForURL(
 		(url) => url.pathname === "/",
 		{
@@ -223,6 +241,15 @@ async function signupVerifyAndLand(active: Browser): Promise<void>
 			timeout: 30_000,
 		},
 	);
+	await signup.locator("[data-section-title=Workflowy] input[name=workflowy-email]").waitFor(
+		{
+			timeout: 15_000,
+		},
+	);
+	if (new URL(signup.url()).searchParams.has("settings"))
+	{
+		throw new Error(`expected the settings parameter dropped once Settings opened, got ${signup.url()}`);
+	}
 	const session: unknown = await (await signup.request.get(`${base}/api/auth/get-session`)).json();
 	const signedIn =
 		typeof session === "object" &&

@@ -13,10 +13,14 @@ const UPSTREAM_REFERENCES = [
 	/@outlinedb\/shared\/workflowy\b/gu,
 	/\b[a-z]\w*Workflowy\w*/gu,
 	/\bWorkflowy[A-Z]\w*/gu,
+	// An account's connection to and import from upstream workflowy.com: its routes, modules, fields and errors.
+	/\bworkflowy[_-](?:connection|email|login-failed|session-expired|imports?)(?:[_-]\w+)*\b/gu,
 ];
 
 /** Remaining mentions that name upstream, as "file: trimmed line": upstream menu keys, the workflowy.com link icon and system mention. */
 const ALLOWED = [
+	// The signup wizard step and the Settings section that connect an account to upstream, named as upstream is.
+	'src/client/auth/auth-pages.tsx: <AuthCard title="Bring your Workflowy outline?">',
 	'src/client/components/decisions-view.tsx: data-icon="workflowy"',
 	'src/client/components/main-menu-model.ts: "workflowy.help",',
 	'src/client/components/main-menu-model.ts: "workflowy.community",',
@@ -24,6 +28,7 @@ const ALLOWED = [
 	'src/client/components/main-menu-model.ts: "workflowy.help":',
 	'src/client/components/main-menu-model.ts: "workflowy.community":',
 	'src/client/components/main-menu-model.ts: "workflowy.blog":',
+	'src/client/components/workflowy-connection-settings.tsx: export const WORKFLOWY_SECTION = "Workflowy";',
 	// Upstream's built-in "-2" system mention, rendered as upstream names it.
 	'src/client/mention-pills.ts: return "Workflowy";',
 ];

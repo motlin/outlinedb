@@ -3,10 +3,11 @@ import {useEffect, useState} from "react";
 import type {ReactNode, SubmitEvent} from "react";
 import {BrowserRouter, Link, Route, Routes, useNavigate, useSearchParams} from "react-router-dom";
 import {Turnstile} from "../components/turnstile.js";
+import {WORKFLOWY_SECTION} from "../components/workflowy-connection-settings.js";
 import {hideLoadingScreenOnce} from "../loading-screen.js";
 import {authClient, captchaHeaders} from "./auth-client.js";
 import {useAuthConfig} from "./auth-config.js";
-import {safeNext} from "./login-redirect.js";
+import {safeNext, withSettingsOpen} from "./login-redirect.js";
 import "./auth.css";
 
 /** A Better Auth client error: its JSON body (`code` and `message`, or our Worker's `{error}`) plus the status. */
@@ -264,7 +265,12 @@ function SignupPage({siteKey}: {siteKey: string | null})
 				email,
 				password,
 				name: email.split("@")[0] ?? email,
-				callbackURL: safeNext(params.get("next")),
+				// The verify-email link signs in and lands on the wizard step, which then goes on to next.
+				callbackURL: `/welcome?${new URLSearchParams(
+					{
+						next: safeNext(params.get("next")),
+					},
+				).toString()}`,
 			},
 			captchaHeaders(captcha.token),
 		);
@@ -322,6 +328,46 @@ function VerifyEmailPage()
 			<p className="auth-links">
 				<Link to="/login">Back to log in</Link>
 			</p>
+		</AuthCard>
+	);
+}
+
+/**
+ * The signup wizard step after the email is verified: signup always seeds the tutorial, and this offers to replace it
+ * with the user's workflowy.com outline. Skip goes on to the tutorial; yes opens Settings > Workflowy to connect.
+ */
+function WelcomePage()
+{
+	const [params] = useSearchParams();
+	const next = safeNext(params.get("next"));
+	return (
+		<AuthCard title="Bring your Workflowy outline?">
+			<p className="auth-text">
+				Your OutlineDB outline starts with a short tutorial. If you use workflowy.com, you can import your whole
+				outline instead, and keep the two in sync if you like.
+			</p>
+			<div className="auth-form">
+				<button
+					className="auth-submit"
+					onClick={() =>
+					{
+						globalThis.location.assign(withSettingsOpen(next, WORKFLOWY_SECTION));
+					}}
+					type="button"
+				>
+					Yes, connect workflowy.com
+				</button>
+				<button
+					className="auth-link-button"
+					onClick={() =>
+					{
+						globalThis.location.assign(next);
+					}}
+					type="button"
+				>
+					Skip, show me the tutorial
+				</button>
+			</div>
 		</AuthCard>
 	);
 }
@@ -462,12 +508,13 @@ function AuthRoutes()
 			<Route element={<LoginPage siteKey={siteKey} />} path="/login" />
 			<Route element={<SignupPage siteKey={siteKey} />} path="/signup" />
 			<Route element={<VerifyEmailPage />} path="/verify-email" />
+			<Route element={<WelcomePage />} path="/welcome" />
 			<Route element={<ResetPasswordPage siteKey={siteKey} />} path="/reset-password" />
 		</Routes>
 	);
 }
 
-/** The OutlineDB login, signup, verify-email and reset-password screens, mounted instead of the outline. */
+/** The OutlineDB login, signup, verify-email, welcome and reset-password screens, mounted instead of the outline. */
 export function AuthApp()
 {
 	const [client] = useState(

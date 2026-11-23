@@ -415,7 +415,7 @@ describe("importing an account from workflowy.com over its stored session", () =
 		);
 		return {
 			status: response.status,
-			body: await readJson(response),
+			body: typedSyncTime(await readJson(response)),
 		};
 	}
 
@@ -759,6 +759,7 @@ describe("importing an account from workflowy.com over its stored session", () =
 					status: "connected",
 					email: "alice@example.com",
 					mirror: false,
+					lastSyncAt: "number",
 				},
 				// The node points at our copy, so its bytes come from R2.
 				photo:
@@ -897,6 +898,7 @@ describe("importing an account from workflowy.com over its stored session", () =
 						status: "connected",
 						email: "alice@example.com",
 						mirror: true,
+						lastSyncAt: "number",
 					},
 				},
 				created: 201,
@@ -1000,6 +1002,7 @@ describe("importing an account from workflowy.com over its stored session", () =
 						status: "expired",
 						email: "alice@example.com",
 						mirror: true,
+						lastSyncAt: "number",
 					},
 					// One refused catch-up, and no password to log in again with.
 					upstreamCalls: ["/push_and_poll"],
@@ -1019,6 +1022,7 @@ describe("importing an account from workflowy.com over its stored session", () =
 						status: "connected",
 						email: "alice@example.com",
 						mirror: true,
+						lastSyncAt: "number",
 					},
 					// The queued write drains first, then the catch-up polls on from its transaction.
 					pushes: [
@@ -1046,6 +1050,7 @@ describe("importing an account from workflowy.com over its stored session", () =
 						status: "connected",
 						email: "alice@example.com",
 						mirror: false,
+						lastSyncAt: "number",
 					},
 					syncDue: null,
 					outboxDue: null,
@@ -1090,6 +1095,7 @@ describe("importing an account from workflowy.com over its stored session", () =
 					status: "expired",
 					email: "alice@example.com",
 					mirror: false,
+					lastSyncAt: "number",
 				},
 				restart:
 				{
@@ -1107,3 +1113,16 @@ describe("importing an account from workflowy.com over its stored session", () =
 		);
 	}, 60_000);
 });
+
+/** A connection body with its `lastSyncAt` timestamp replaced by its type, so expectations stay exact. */
+function typedSyncTime(body: unknown): unknown
+{
+	if (typeof body !== "object" || body === null || typeof Reflect.get(body, "lastSyncAt") !== "number")
+	{
+		return body;
+	}
+	return {
+		...body,
+		lastSyncAt: "number",
+	};
+}

@@ -42,6 +42,25 @@ export type WorkflowyConnectionView =
 			mirror: boolean;
 	  };
 
+/** What the account's Settings > Workflowy page reads: the connection plus when it last synced with workflowy.com. */
+export type WorkflowyConnectionStatus =
+	| Extract<
+			WorkflowyConnectionView,
+			{
+				connected: false;
+			}
+	  >
+	| (Extract<
+			WorkflowyConnectionView,
+			{
+				connected: true;
+			}
+	  > &
+	  {
+			/** When an import or a keep-syncing catch-up last finished without error; null before either did. */
+			lastSyncAt: number | null;
+	  });
+
 interface LiveConnection
 {
 	status: ConnectionStatus;

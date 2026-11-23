@@ -313,7 +313,7 @@ describe("signup", () =>
 						email: "bob@example.com",
 						password: "correct horse",
 						name: "bob",
-						callbackURL: "/",
+						callbackURL: "/welcome?next=%2F",
 					},
 					captcha: "token-for-site-key",
 				},
@@ -340,6 +340,31 @@ describe("signup", () =>
 		await submit();
 
 		expect(document.querySelector("[role=alert]")?.textContent).toBe("OutlineDB isn't open for signups yet.");
+	});
+});
+
+describe("welcome", () =>
+{
+	it("offers the workflowy.com import after verifying: yes opens Settings > Workflowy, skip goes on to the tutorial", async () =>
+	{
+		const click = async (label: string) =>
+		{
+			await act(async () =>
+			{
+				[...document.querySelectorAll("button")].find((button) => button.textContent === label)?.click();
+				await Promise.resolve();
+			});
+		};
+		await open("/welcome?next=%2F%23%2Fabc");
+		const title = document.querySelector("h1")?.textContent;
+
+		await click("Yes, connect workflowy.com");
+		await click("Skip, show me the tutorial");
+
+		expect([title, assigned]).toStrictEqual([
+			"Bring your Workflowy outline?",
+			["/?settings=Workflowy#/abc", "/#/abc"],
+		]);
 	});
 });
 
