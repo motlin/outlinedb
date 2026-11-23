@@ -529,18 +529,21 @@ export class WorkflowyInternalAdapter
 	 */
 	async drainOutbox(options: Omit<OutboxDrainOptions, "now"> = {}): Promise<OutboxDrainResult>
 	{
+		// Read only when a server run leaves ops out, and at most once per pass, over the same session as the push.
+		let upstreamParents: Promise<Map<string, string | null>> | undefined;
 		const pusher: OutboxPusher =
 		{
 			session: async () => this.session(),
 			upstreamNode: async (id) =>
 			{
-				const node = await this.tree().findNode(id);
-				return node === null
-					? null
-					:
+				upstreamParents ??= this.upstreamParents();
+				const parents = await upstreamParents;
+				return parents.has(id)
+					?
 						{
-							parentId: node.parent_id ?? null,
-						};
+							parentId: parents.get(id) ?? null,
+						}
+					: null;
 			},
 			push: async (ops, accept) =>
 			{
@@ -1514,6 +1517,20 @@ export class WorkflowyInternalAdapter
 	private writeNodesMetadata(metadataById: ReadonlyMap<string, Metadata | undefined>): void
 	{
 		storeInternalMetadata(this.db, metadataById);
+	}
+
+	/**
+	 * Every node workflowy.com holds now, by id, with its parent (null at the top): one whole-tree read over the
+	 * session, since the internal API has no single-node read and a per-account connection holds no REST API key.
+	 */
+	private async upstreamParents(): Promise<Map<string, string | null>>
+	{
+		const {items} = await this.client.getTreeSnapshot(
+			{
+				nodeFields: true,
+			},
+		);
+		return new Map(items.map((item) => [item.id, item.prnt ?? null]));
 	}
 
 	private tree(): WorkflowyWriteThroughClient

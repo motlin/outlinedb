@@ -37,7 +37,7 @@ function filesMatching(pattern: RegExp): string[]
 
 describe("whole-tree downloads (get_tree_data, about 54 MB live)", () =>
 {
-	it("are read only by the batch imports, the per-account import and the manual probe", () =>
+	it("are read only by the batch imports, the per-account import, the outbox drain's read-back and the manual probe", () =>
 	{
 		expect(filesMatching(/getTreeSnapshot\(/u)).toStrictEqual([
 			// CLI `cache import-api`: an explicit batch import.
@@ -50,6 +50,8 @@ describe("whole-tree downloads (get_tree_data, about 54 MB live)", () =>
 			"packages/cloudflare/src/workflowy-import.ts",
 			// The definition.
 			"packages/shared/src/api/workflowy-internal-client.ts",
+			// The outbox drain's read-back, only when a push's server run leaves ops out, at most once per drain pass.
+			"packages/shared/src/internal/adapter.ts",
 		]);
 	});
 

@@ -182,6 +182,18 @@ describe("importing an account from workflowy.com over its stored session", () =
 	let upstreamTxId = 701;
 	/** Set to answer every `/push_and_poll` with need_refreshed_project_tree, as once the log drops the stored id. */
 	let refreshNeeded = false;
+	/**
+	 * Set to apply pushed ops but leave them out of the reply's server run, as workflowy.com does for an op whose effect
+	 * already held; the nodes those pushes created then show up in `/get_tree_data/`.
+	 */
+	let serverRunDropped = false;
+	/** The nodes pushes with {@link serverRunDropped} created, as `/get_tree_data/` items. */
+	const unechoedItems:
+	{
+		id: string;
+		nm: string;
+		prnt: string | null;
+	}[] = [];
 
 	/** Answer one `/push_and_poll` form as workflowy.com does, echoing pushed ops back as the server's run of them. */
 	function pushAndPoll(body: string): Response
@@ -203,6 +215,37 @@ describe("importing an account from workflowy.com over its stored session", () =
 		);
 		upstreamTxId++;
 		const txId = String(upstreamTxId);
+		if (serverRunDropped)
+		{
+			for (const op of ops)
+			{
+				const opData: unknown = typeof op === "object" && op !== null ? Reflect.get(op, "data") : undefined;
+				const raw: unknown = Reflect.get(Object(opData), "project_trees");
+				const trees: unknown = typeof raw === "string" ? JSON.parse(raw) : raw;
+				const parent = String(Reflect.get(Object(opData), "parentid"));
+				for (const created of Array.isArray(trees) ? trees : [])
+				{
+					unechoedItems.push(
+						{
+							id: String(Reflect.get(Object(created), "id")),
+							nm: String(Reflect.get(Object(created), "nm")),
+							prnt: parent === "None" ? null : parent,
+						},
+					);
+				}
+			}
+			return pollResult(
+				txId,
+				{
+					server_run_operation_transaction_json: JSON.stringify(
+						{
+							id: txId,
+							ops: [],
+						},
+					),
+				},
+			);
+		}
 		return pollResult(
 			txId,
 			ops.length === 0
@@ -364,7 +407,7 @@ describe("importing an account from workflowy.com over its stored session", () =
 					{
 						return Response.json(
 							{
-								items: TREE_ITEMS,
+								items: [...TREE_ITEMS, ...unechoedItems],
 								shared_projects: {},
 								most_recent_operation_transaction_id: "701",
 								server_expanded_projects_list: EXPANDED,
@@ -934,6 +977,44 @@ describe("importing an account from workflowy.com over its stored session", () =
 				syncScheduled: "number",
 			},
 		);
+
+		// A push whose reply leaves the create out of its server run: the drain reads workflowy.com back over the same
+		// stored session, finds the node there, and closes the row.
+		upstreamCalls.length = 0;
+		serverRunDropped = true;
+		const unechoed = await send(
+			"nodes",
+			"POST",
+			{
+				parent_id: "None",
+				name: "Pushed but left out of the server run",
+			},
+		);
+		await until(
+			async () => pushes.length > 2 && ((await outbox()).pending === 0 || (await outbox()).lastError !== null),
+		);
+		serverRunDropped = false;
+		expect(
+			{
+				created: unechoed.status,
+				upstreamCalls,
+				outbox: await outbox(),
+				unechoedItems: unechoedItems.map(({nm, prnt}) => [nm, prnt]),
+				logins,
+			},
+		).toStrictEqual(
+			{
+				created: 201,
+				upstreamCalls: ["/push_and_poll", "/get_tree_data/"],
+				outbox:
+				{
+					pending: 0,
+					lastError: null,
+				},
+				unechoedItems: [["Pushed but left out of the server run", null]],
+				logins: 1,
+			},
+		);
 	}, 60_000);
 
 	it("stops syncing and tells the user to import again once the transaction log no longer holds the stored id", async () =>
@@ -994,7 +1075,7 @@ describe("importing an account from workflowy.com over its stored session", () =
 						{
 							phase: "needs_seed",
 							applied: 0,
-							error: "Workflowy answered need_refreshed_project_tree: the cache's transaction id 703 is no longer in the tree's log; run './bin/run.js cache import-api' to reseed it. Import again from Settings > Workflowy to resume syncing.",
+							error: "Workflowy answered need_refreshed_project_tree: the cache's transaction id 704 is no longer in the tree's log; run './bin/run.js cache import-api' to reseed it. Import again from Settings > Workflowy to resume syncing.",
 						},
 					},
 					syncDue: null,
@@ -1105,11 +1186,11 @@ describe("importing an account from workflowy.com over its stored session", () =
 					// The queued write drains first, then the catch-up polls on from its transaction.
 					pushes: [
 						{
-							from: "704",
+							from: "705",
 							ops: ["bulk_create"],
 						},
 						{
-							from: "705",
+							from: "706",
 							ops: [],
 						},
 					],
