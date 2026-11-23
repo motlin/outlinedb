@@ -29,7 +29,7 @@ State lives under `Metadata > ⚙️ Scanner State > otter-journal-scanner` as a
 ```
 
 - **State exists with `last_synced_otid`** → incremental scan: create only meetings newer than that otid.
-- **First run (no state)** → choosing how far back to sync needs the user (an unbounded scan of hundreds of meetings is not safe to auto-run). Auto cannot prompt, so create nothing, stage a briefing with `status: "error"` and a line explaining a first-run scope choice is required, and stop — the user seeds state by running the Otter scanner manually in `create` mode. (In practice state already exists, so this is a guard, not a normal path.)
+- **First run (no state)** → choosing how far back to sync needs the user (an unbounded scan of hundreds of meetings is not safe to auto-run). Auto cannot prompt, so create nothing, stage a briefing with `status: "error"` and a line explaining a first-run scope choice is required, and stop — the user seeds state by running the Otter scanner manually (`/gtd:journal`). (In practice state already exists, so this is a guard, not a normal path.)
 
 ## Refresh the dedup cache
 

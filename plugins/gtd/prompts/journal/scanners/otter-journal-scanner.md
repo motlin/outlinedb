@@ -11,14 +11,9 @@ Follow the workflowy plugin's `calendar-dates` and `workflowy-html` skill docs f
 
 Uses the Otter API directly via `${CLAUDE_PLUGIN_ROOT}/scripts/otter-api.sh`. Incremental runs fetch only meetings newer than `last_synced_otid`, so cost scales with new meetings, not history.
 
-## Modes
+## Invocation
 
-This agent runs in one of two modes; the invoking command sets it, and the default is `create`.
-
-- **`create` (default)** — manual `/gtd:journal` runs and the daily-review `/gtd:otter-journal-auto` (`🤖 Auto`) task. Scan, create entries under `📆 Calendar` inline, and advance the live scanner state after each page (see **Save State**). The rest of this doc describes this mode unless a step names `stage`.
-- **`stage`** — _(currently unused)_ a read-only staging mode: compute exactly what `create` mode would create, but make **zero** Workflowy writes — stage the entries as proposal `applyOps` and emit the next scanner state as a top-level `scannerState` block, then stop. It exists for a future confirm-before-create flow. See **Staging Mode** below.
-
-**Load State** through **Process Meetings** run identically in both modes (load state read-only, refresh the dedup cache, scan, dedup). The modes diverge only at the **Create node** and **Save State** steps.
+This agent creates entries directly under `📆 Calendar`. Manual `/gtd:journal` runs and the daily-review `/gtd:otter-journal-auto` (`🤖 Auto`) task both scan, create entries inline, and advance the live scanner state after each page (see **Save State**).
 
 ## API Script
 
@@ -87,8 +82,6 @@ If path doesn't exist (first run), state is empty. Parse JSON from first child's
 - Convert their answer to a Unix timestamp for the `modified_after` parameter
 - This prevents unbounded scans of potentially hundreds of meetings
 
-**In `stage` mode, never call `AskUserQuestion`.** A first run (no state) has no autonomous scope to pick, so stage `status: "needs-interactive"` and stop. (Stage mode is currently unused; the daily review's Otter ingestion runs in `create` mode via the `🤖 Auto` `/gtd:otter-journal-auto` task, and a manual `/gtd:journal` run can seed state interactively in `create` mode.)
-
 ## Initialize Session
 
 Set `session_start` to current Unix timestamp: `$(date +%s)` This becomes the constant `modified_after` value for all pages in this sync session.
@@ -150,7 +143,7 @@ Otter's speaker names are guesses from its voice model. When the only conflict i
 
 If any candidate mismatches or remains uncertain, stop before creating any entries on that page. Return review flags containing the original title, date and local start time, Otter URL/otid, and a concise evidence-based reason. The start time lets the daily review match the recording to its recurring slot. **Never create the flagged entry untitled or automatically retitle it.** Keep full transcript content out of logs and the review summary. Preserve any verified creates and saved state from earlier pages, but make no state update for this held page: do not move its cursor, session start, or last-synced boundary past unresolved recordings. On a rerun, the held page must be reconsidered rather than silently treated as synced.
 
-In Auto, return the flags to `otter-journal-auto` for an error briefing; do not prompt. In manual mode, report that review is required before proceeding. In `stage` mode, emit `status: "error"` with the flags, no create operations for the held page, and no `scannerState` while a flag remains unresolved. Do not log a flagged candidate as created or add it to the created-this-session guard. Existing entries remain untouched.
+In Auto, return the flags to `otter-journal-auto` for an error briefing; do not prompt. In manual mode, report that review is required before proceeding. Do not log a flagged candidate as created or add it to the created-this-session guard. Existing entries remain untouched.
 
 ## Process Meetings
 
@@ -235,8 +228,6 @@ Write the entry JSON to `.llm/gtd/journal/entries/<otid>.json` with the Write to
 - No loops, `&&`/`;` chains, pipes, or output redirects around it
 - Read the command's stdout directly; don't capture it into a file
 
-**In `stage` mode, do not create the node.** Instead append a proposal object to the staged `proposals[]` array (see **Staging Mode**) whose single `applyOps` entry is the `node create` command above with `--json '<ENTRY_JSON>'` (the entry JSON inlined) in place of `--json-file`. The in-session guard file and the create-error handling below apply only to `create` mode.
-
 **Handle create errors — never blindly retry.** Workflowy can rate-limit (HTTP 429) and return an error _after the node was already created server-side_. A naive retry then produces a duplicate (exactly the failure mode this scanner exists to prevent). So on any create error: refresh the cache, re-check whether the meeting now exists, and only retry if it genuinely does not.
 
 ```bash
@@ -272,8 +263,6 @@ After processing each page that passed title preflight, update state. A page hel
 
 After an incremental `sync-since` run, set `last_synced_otid` to the newest returned otid (`speeches[0].otid`) and keep the existing `cursor` and `session_start`. When it returned no meetings, leave state untouched.
 
-**In `stage` mode, skip the live state write entirely.** Make no `node update` / `node create` on the state node. Compute the same state object and emit it as the top-level `scannerState` field of the staged proposal (see **Staging Mode**), so whatever applies the proposal persists it only after the entries are created.
-
 **Important: the state JSON must be single-line**, because Workflowy interprets newlines as separate child nodes.
 
 Take the state node id from the first child returned by **Load State**, then write the single-line state JSON as a literal argument in one standalone Bash call (same bare-command rule as the create step: no variables, `$(...)`, or `if` block around it):
@@ -287,37 +276,6 @@ First run only (no state child yet), create it instead (`--create-path` creates 
 ```bash
 ./bin/run.js node create --parent-path "Metadata,⚙️ Scanner State,otter-journal-scanner" --name '{"cursor":"123","session_start":1768518232,"last_synced_otid":"abc","reached_beginning":false}' --create-path
 ```
-
-## Staging Mode
-
-When invoked in `stage` mode by a staging workflow, produce a single staged proposal file instead of writing to Workflowy. Follow the on-disk schema in `${CLAUDE_PLUGIN_ROOT}/skills/review-proposal-staging.md`.
-
-Create the directory and write `.llm/gtd/review/proposals/otter-journal.json`:
-
-```bash
-mkdir -p .llm/gtd/review/proposals
-```
-
-The file uses key `otter-journal`:
-
-- `task`: `"otter-journal"`
-- `taskNodeId`: full UUID of the prep node (passed in by the command)
-- `generatedAt`: ISO-8601 timestamp with offset
-- `status`: `ready` (meetings staged) | `empty` (all caught up) | `needs-interactive` (first run, no state) | `error`
-- `presentation`: `"Sync Otter meetings"`
-- `summary`: `{ "meetingsScanned": N, "proposalsStaged": M }`
-- `proposals[]`: one object per new meeting:
-    - `nodeId`: `null` — the node does not exist yet (this is a create, not an update)
-    - `header`: short date label, e.g. `"Jan 6"`
-    - `before`: `""` (nothing exists yet)
-    - `after`: the entry `name` (the `<time>` tag + linked title + `#meeting` line)
-    - `changes`: `[{ "type": "create", "icon": "🏷️", "detail": "new meeting entry" }]`
-    - `applyOps`: a single-element array holding the exact `node create --parent-path "📆 Calendar" --json '<ENTRY_JSON>' --position bottom` command, with the full entry JSON (overview, action items, outline children) inlined and shell-escaped
-- `scannerState`: **top-level** (not per-proposal) — the exact next state to persist on accept: `{ "cursor": "<newest cursor>", "session_start": <session_start>, "last_synced_otid": "<newest scanned otid>", "reached_beginning": <bool> }`. This is the same object `create` mode would have written in **Save State**; here it rides along for a staging workflow to persist only after the entries are created.
-
-Make no Workflowy writes (refreshing the local SQLite dedup cache via `cache sync-node` is a read and is allowed). Do not touch the session-guard file or the live scanner-state node. After writing the file, stop and report a one-line summary.
-
-If no new meetings are found, still write the file with `status: "empty"`, an empty `proposals[]`, and **no** `scannerState` — the cursor must not advance when nothing was staged.
 
 ## Check End Conditions
 

@@ -249,7 +249,7 @@ NEXT_STATE=$(jq -c '.scannerState' .llm/gtd/review/proposals/<slug>.json)
 ./bin/run.js node update --id "$CHILD_ID" --name "$NEXT_STATE"
 ```
 
-The `otter-journal-scanner` state (`{cursor, session_start, last_synced_otid, reached_beginning}`) is the shape this mechanism was modeled on. `otter-journal` is Auto and advances its cursor directly in create mode. This generic step remains for interactive apply tasks that stage top-level `scannerState`.
+The shape mirrors the `otter-journal-scanner` state (`{cursor, session_start, last_synced_otid, reached_beginning}`), though that scanner is Auto and advances its cursor directly. This generic step is for interactive apply tasks that stage top-level `scannerState`.
 
 ### Return the apply result
 
