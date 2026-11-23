@@ -278,6 +278,28 @@ describe("link render", () =>
 			).toBe(
 				'a bad <b>x</b> b <a class="contentLink" target="_blank" rel="noreferrer" href="https://x.test/">y</a>',
 			);
+			// The URL parser strips tabs, newlines and leading controls, and the attribute decodes entities.
+			expect(
+				{
+					tab: renderLinks('<a href="java\tscript:alert(1)">t</a>'),
+					newline: renderLinks('<a href="java\nscript:alert(1)">n</a>'),
+					control: renderLinks('<a href="\u0001javascript:alert(1)">c</a>'),
+					decimal: renderLinks('<a href="&#106;avascript:alert(1)">d</a>'),
+					hex: renderLinks('<a href="&#x6A;avascript:alert(1)">h</a>'),
+					noSemicolon: renderLinks('<a href="&#106avascript:alert(1)">s</a>'),
+					entityTab: renderLinks('<a href="java&#9;script:alert(1)">e</a>'),
+				},
+			).toStrictEqual(
+				{
+					tab: "t",
+					newline: "n",
+					control: "c",
+					decimal: "d",
+					hex: "h",
+					noSemicolon: "s",
+					entityTab: "e",
+				},
+			);
 		});
 
 		it("leaves text without anchors untouched", () =>

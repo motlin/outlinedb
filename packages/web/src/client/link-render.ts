@@ -4,7 +4,31 @@ import {decodeSegment} from "./tag-render.js";
 const ANCHOR_OPEN_PATTERN = /<a(?=[\s>/])[^>]*>/giu;
 const ANCHOR_CLOSE_PATTERN = /<\/a\s*>/iu;
 const HREF_PATTERN = /\shref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/iu;
-const JAVASCRIPT_HREF_PATTERN = /^\s*javascript:/iu;
+const JAVASCRIPT_HREF_PATTERN = /^javascript:/iu;
+const NUMERIC_ENTITY_PATTERN = /&#(?:x([0-9a-f]+)|(\d+));?/giu;
+// oxlint-disable-next-line no-control-regex -- the URL parser strips exactly these leading characters.
+const URL_LEADING_CONTROLS_PATTERN = /^[\u0000-\u0020]+/u;
+const URL_STRIPPED_PATTERN = /[\t\n\r]/gu;
+
+/**
+ * Whether `href` is a `javascript:` URL once the browser reads it: the attribute decodes entities (numeric ones even
+ * without a semicolon), and the URL parser drops leading controls and spaces and every tab and newline.
+ */
+function isJavaScriptHref(href: string): boolean
+{
+	const numeric = href.replaceAll(
+		NUMERIC_ENTITY_PATTERN,
+		(entity, hex: string | undefined, decimal: string | undefined) =>
+		{
+			const codePoint = hex === undefined ? Number(decimal) : Number.parseInt(hex, 16);
+			return codePoint <= 0x10_ff_ff ? String.fromCodePoint(codePoint) : entity;
+		},
+	);
+	const decoded = decodeSegment(numeric).plain;
+	return JAVASCRIPT_HREF_PATTERN.test(
+		decoded.replace(URL_LEADING_CONTROLS_PATTERN, "").replaceAll(URL_STRIPPED_PATTERN, ""),
+	);
+}
 
 function escapeAttribute(value: string): string
 {
@@ -91,7 +115,7 @@ export function decorateStoredLinks(html: string): string
 		const isContact = MAILTO_PATTERN.test(href) || TEL_PATTERN.test(href);
 		const contact =
 			isContact && close ? contactHref(href, anchorText(html.slice(cursor, cursor + close.index))) : null;
-		if (JAVASCRIPT_HREF_PATTERN.test(href) || (isContact && contact === null))
+		if (isJavaScriptHref(href) || (isContact && contact === null))
 		{
 			droppedClose = close
 				?
