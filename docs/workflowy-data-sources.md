@@ -10,7 +10,7 @@ The consequences shape the whole codebase.
 
 - No source is complete, so no importer may treat its own absence-of-data as deletion of data it cannot see. This is the lesson behind most of the importer guards described below.
 - Each field has a "best source". The importers are field-routed: each one writes only the tables it can speak for.
-- Reads are served from SQLite. Writes go to Workflowy first and are mirrored into the cache afterwards. The rule in `CLAUDE.local.md` is that SQLite is a write-through cache and is never mutated directly.
+- Reads are served from SQLite, and SQLite is the source of truth. A write lands in our DB first. In mirror mode (`WORKFLOWY_API_KEY` set) the same unit of work enqueues outbox rows, and `outbox drain` later sends them to workflowy.com (`outbox status` shows what is pending). Standalone mode (no key) writes only to our DB. Never mutate SQLite outside the CLI or the app: a direct write skips its outbox rows, so workflowy.com never sees it.
 - The standalone and Cloudflare work ("break-away") needs the union of all sources captured locally, because after break-away nothing can re-fetch what the cache lacks. See `.llm/plans/2026-10-25-standalone-dual-write.md`.
 
 ## The four sources
@@ -277,28 +277,28 @@ Every table is bitemporal on `system_from` and `system_to`, INTEGER microseconds
 - Fields upstream adds later. The strict backup schema fails loudly on new metadata keys; the internal reader passes unknown keys through and the importer ignores them. Both are silent gaps until someone looks.
 - Account-level data in backups. Stars, tag colors, settings and expansion exist only through the internal API, so a session-less restore from backups alone loses them. The standalone plan adds durable copies for exactly this reason.
 
-## Write-through: which API each write uses and why
+## Outbox drain: which upstream API each kind of write uses and why
 
-Workflowy is the source of truth for writes today. Every write goes to Workflowy first, then the confirmed result is read back and stored. This keeps ids, priorities and timestamps identical to upstream. Code: `packages/shared/src/cache/workflowy-write-through-client.ts` (REST) and `packages/shared/src/internal/adapter.ts` (internal).
+Our DB is the source of truth for writes. A command or the web app writes the local tables first, through `LocalTreeWriter` (`packages/shared/src/cache/local-tree-writer.ts`), `LocalCalendar` and `LocalAccount`; `node update`, for example, calls `local.updateNode` (`packages/cli/src/commands/node/update.ts`). In mirror mode the same unit of work records which parts of which nodes are now ahead of workflowy.com: node rows in `outbox` keyed by node and aspect (`OUTBOX_ASPECTS` in `packages/shared/src/cache/outbox.ts`: create, name, note, placement, completion, metadata, mirror, delete), and account rows in `account_outbox` keyed by subject and key (`ACCOUNT_OUTBOX_SUBJECTS` in `packages/shared/src/cache/account-outbox.ts`: root metadata, setting, saved view, expansion, feature). Rows hold no payload; the drain reads the current local value when it sends, so a burst of edits coalesces into one row.
 
-| Kind of write | API | Why |
+The drain runs after each CLI write (`drainAfterWrite` in `packages/cli/src/services/local-writes.ts`) and on demand with `outbox drain`. It needs the internal-API session (`WORKFLOWY_USERNAME` and `WORKFLOWY_PASSWORD`), because every node write goes out as internal ops: the internal API takes an exact index and client-chosen ids, so the ids and order chosen locally survive the trip. A failed or unacknowledged push records `last_error` on the rows it carried and leaves them pending for the next drain; nothing is retried in a loop. Imports respect pending rows: `api-import.ts` keeps the local value of every field whose aspect is pending, and does not end a node that still has pending rows.
+
+| Kind of write | Upstream API the drain uses | Why |
 | --- | --- | --- |
-| Create, update name or note, complete, uncomplete, delete, move to top or bottom | Public REST | Supported, stable, key-authenticated; a 429 fails loudly with the wait time. Read back with `getNode` or `refreshChildren` |
-| Create mirror, delete mirror | Public REST (`/mirror`), then cache insert | The dedicated endpoint cleans up the original's mirror list, which the generic delete does not |
-| Delete (with mirror promotion) | Public REST plus cache promotion plan | REST does not promote a surviving mirror when the original is deleted, so `delete-plan.ts` plans it |
-| Exact-index create or move, restore, mirror at an exact slot, many-at-once creation | Internal `/push_and_poll` (`bulk_create`, `move`, `bulk_move`, `undelete`) | REST accepts only `top` or `bottom` and renormalises priorities. Internal ops take an exact index and client-chosen ids |
-| Restore a deleted node to its place | `POST /trash/restore/<id>/` | Restores to the original location without parent or priority arguments |
-| `numbered_start`, `priority.defaultToBottom`, layout on any node, calendar metadata and deterministic calendar ids | Internal `edit` ops with metadata patches | No public field exists. Day ids come from a uuid5 seeded with the account `entropyKey` (`calendar-ids.ts`), so only a client that picks its own ids can reproduce them |
-| Backlinks and references roots | Internal ops, then `recordBacklinkSync` | The generated children and metadata exist only in the internal data model. They are derivable from node text containing `workflowy.com/#/<short id>` links |
-| Stars, saved searches, tag colors, date format, week start, notes root | Internal `edit` on the root project (`projectid` `"None"`), then the account tables | These live in root-item metadata, not in any REST resource |
-| Account settings and feature flags | `POST /change_settings` | The only route for server-stored settings. Saved searches go through `saved_views_json_delta` |
+| Node create, placement, name, note, completion, metadata, mirror link, delete, restore | Internal `/push_and_poll` ops in one push (`bulk_create`, `move`, `edit`, `complete`, `uncomplete`, `delete`, `undelete`), built by `packages/shared/src/internal/outbox-drain.ts` | Exact indexes and client-chosen ids keep upstream identical to the local tree. A row closes only once the server run echoes its op |
+| `numbered_start`, `priority.defaultToBottom`, layout on any node, calendar metadata and deterministic calendar ids | Internal `edit` ops with metadata patches (`metadata-patch.ts`) | No public field exists. Day ids come from a uuid5 seeded with the account `entropyKey` (`calendar-ids.ts`), so only a client that picks its own ids can reproduce them |
+| Mirrors and backlinks | Internal ops: a new mirror's link, and an edit of each original listing the mirrors and backlink items it gained or lost | These links live only in the internal data model's metadata |
+| Stars, tag colors, date format, week start, notes root (root metadata) | One internal `edit` on the root project (`projectid` `"None"`), patched against a fresh bootstrap's root metadata (`account-outbox-drain.ts`) | These live in root-item metadata, not in any REST resource |
+| Legacy saved views | `POST /change_settings` with one `saved_views_json_delta` | Saved views are a server-stored setting, sent as a delta of the views that changed |
+| Account settings | `POST /change_settings`, one per setting | The only route for server-stored settings |
+| Feature flags | `POST /features/enable/<codename>` or `/features/disable/<codename>` | The only route for feature flags |
 | Expansion | `project_expansions_delta` field of `/push_and_poll` | Expansion has no operation type, it is a side-channel of the push |
 
-Each internal write is followed by a read-back or a cache refresh. Account-level writes land in the account tables as new versions, so those tables (with their history) are the seed of the standalone copy; `cache seed-account-state` sends them to a Cloudflare deployment.
+Node rows drain before account rows, since a star or setting may name a node whose create was pending (`WorkflowyInternalAdapter.drainOutbox` in `packages/shared/src/internal/adapter.ts`). The public REST client (`packages/shared/src/cache/workflowy-write-through-client.ts`) remains for reads and refreshes, not for delivering writes. Account-level writes land in the account tables as new versions, so those tables (with their history) are the seed of the standalone copy; `cache seed-account-state` sends them to a Cloudflare deployment.
 
 ## Standalone copy
 
-The standalone plan (`.llm/plans/2026-10-25-standalone-dual-write.md`) flips the model path by path: local write first, an outbox draining to Workflowy, and imports that merge rather than overwrite. Decisions recorded there: mirror mode (two-way copy) stays the long-lived default, order keys are local and fractional, and the plan runs after the upstream-parity roadmap. The biggest dependency on this document is the "still unavailable" list above: everything on it has to be copied out, or accepted as lost, before the paid account lapses.
+The flip in the standalone plan (`.llm/plans/2026-10-25-standalone-dual-write.md`) has landed: writes go to our DB first, mirror mode drains an outbox to Workflowy, and imports merge around pending rows rather than overwrite them (see the outbox section above). Standalone mode (no `WORKFLOWY_API_KEY`) writes only to our DB. Decisions recorded there: mirror mode (two-way copy) stays the long-lived default, order keys are local and fractional, and the plan runs after the upstream-parity roadmap. The biggest dependency on this document is the "still unavailable" list above: everything on it has to be copied out, or accepted as lost, before the paid account lapses.
 
 ## Test and tool reference
 
