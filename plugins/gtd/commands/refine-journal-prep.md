@@ -228,7 +228,7 @@ Read `.llm/gtd/journal-vocabulary.md` when it exists (gitignored; holds the hous
 - Match person names (first, last, or full) against the `👥 People` metadata tree
 - Check `.llm/gtd/people-disambiguation.md` for known nickname/typo mappings
 - Use the entry's Clef people hints (see Load advisory people hints) as a checklist of people to look for, not as answers. Tag a hinted person only when the entry text actually names or clearly refers to them (a first name, nickname, or relational reference that resolves to that person). Never insert a hinted `@Name` the text does not support, and never let a hint override `.llm/gtd/people-disambiguation.md`, a homonym ⚠️ `ambiguity`, or the decline ledger. A person the text names but no hint covers is still tagged as usual.
-- Hint noise to reject (seen in the first live run): the journal's own author, hinted on first-person words (`I`, `me`, `we`), since the journal never tags its author; fictional characters or public figures who share a registry first name (a TV character, an author being discussed); and a hint for a reference the entry already tags under another `@Name`.
+- Hint noise to reject: the journal's own author, hinted on first-person words (`I`, `me`, `we`), since the journal never tags its author; fictional characters or public figures who share a registry first name (a TV character, an author being discussed); and a hint for a reference the entry already tags under another `@Name`.
 - Generic references like "my parents", "Mom", "Dad" — tag as the specific individuals **only when it is a genuine relational reference**, never when the word is part of an event or place name (e.g. a "Parents Night Out" event)
 - Re-tagging is a judgment call, not a script — follow `${CLAUDE_PLUGIN_ROOT}/skills/refinement-text-rules.md`
 
@@ -259,7 +259,7 @@ Skip the replacement if a tag already follows the reference, and leave possessiv
 
 - Two people with the same name — guess based on context, but stage a ⚠️ `ambiguity` block with the candidate options rather than committing.
 - Nicknames or abbreviations — check the disambiguation file first; if still unresolved, stage ⚠️.
-- Unknown people mentioned frequently — stage ⚠️ noting they may need a `gtd:create-person` entry (do not create it in prep).
+- Unknown people mentioned frequently — stage ⚠️ noting they may need a person node under `Metadata > 👥 People` (see the `gtd:people-metadata` skill; do not create it in prep).
 
 #### Possessives after @tags
 
@@ -297,7 +297,7 @@ When a hobby name appears multiple times in one entry, only tag the first occurr
 
 #### Unknown hobbies
 
-If an activity appears frequently but isn't in the registry, stage a ⚠️ noting it may need a `gtd:create-hobby` entry (do not create it in prep).
+If an activity appears frequently but isn't in the registry, stage a ⚠️ noting it may need a `🎮 Hobbies Registry` entry (do not create it in prep).
 
 ### Category tag rules
 
@@ -375,7 +375,7 @@ After:  📺 Watched half of Fallout S01E02 with @Bob in our Airbnb. #watched
 - Missing or doubled words (e.g., "went went" → "went")
 - Obvious punctuation errors (e.g., missing period, double spaces)
 - **Non-breaking spaces are invisible and load-bearing.** Dictated entries routinely contain U+00A0 (`\xa0`) where a normal space looks like it should be — most often before a trailing space or around a word the recognizer paused on. Two rules follow, and skipping either one silently breaks the write:
-    - **`before` and `--expect-name` carry the raw node text byte-for-byte**, U+00A0 included. Never normalize whitespace on the way in. A `before` whose NBSPs were flattened to ASCII spaces produces an `--expect-name` that can never match, so the CLI refuses every such write and the proposal fails at apply time for a reason the user cannot see. This is not hypothetical: it silently killed 4 of 47 proposals in one run.
+    - **`before` and `--expect-name` carry the raw node text byte-for-byte**, U+00A0 included. Never normalize whitespace on the way in. A `before` whose NBSPs were flattened to ASCII spaces produces an `--expect-name` that can never match, so the CLI refuses every such write and the proposal fails at apply time for a reason the user cannot see.
     - **`after` normalizes U+00A0 to a normal space**, counted as a `✏️ typo` change. The character has no business in journal prose.
 - **Whitespace: always strip leading and trailing whitespace** from any entry you compose an `after` for. A stray leading or trailing space is itself a fixable typo — an entry whose _only_ flaw is leading/trailing whitespace **still generates its own proposal**, even if it already begins with an emoji and needs no other change (this is the one whitespace-only exception to "already starts with emoji → skip"). The `--expect-name` guard still carries the exact original (spaces included) as `before`.
 - **Decode HTML entities to their literal characters** in the visible text: `&quot;` → `"`, `&amp;` → `&`, `&#39;`/`&apos;` → `'`, `&lt;`/`&gt;` → `<`/`>`. Workflowy renders these entities, but the raw stored text should hold the literal character. An entry whose only flaw is an undecoded entity still generates its own proposal. Never introduce curly/smart quotes — always straight `"` and `'`.
@@ -401,7 +401,7 @@ If you're unsure whether something is a typo or intentional, stage it as a ⚠�
 For each `#tag` already written in an entry, classify it against the known-tag set (registries ∪ tags with count ≥ 10) and its frequency count:
 
 - **Casing/typo variant** — the tag is unregistered but a near-miss of a known tag: a casing variant (`#Jira`→`#jira`, `#avalon`→`#Avalon` — prefer the _more frequent_ casing), a small edit-distance slip, or an obvious singular/plural/hyphen variant. Emit a `#️⃣` change that rewrites the tag inline to the canonical spelling (a normal proposal with `applyOps`, exactly like a typo fix). This is where the bulk of real cleanup lives — casing dups scattered across journal entries.
-- **Unregistered but legit** — used on ≥ 3 nodes, no near-miss. Stage a **⚠️** noting it may need a registry entry (`gtd:create-hobby` for an activity, or a `🏷️ Context Tags` entry for a location/mode), naming the guessed registry. Do not register it in prep, and do not alter the entry text.
+- **Unregistered but legit** — used on ≥ 3 nodes, no near-miss. Stage a **⚠️** noting it may need a registry entry (a `🎮 Hobbies Registry` entry for an activity, or a `🏷️ Context Tags` entry for a location/mode), naming the guessed registry. Do not register it in prep, and do not alter the entry text.
 - **One-off junk** — count ≤ 1, resolves nowhere, not a plausible new tag (e.g. a sentence-fragment tag). Stage a **⚠️** proposing removal from the entry, with the text-with-tag-removed as the candidate `after`. Let the user decide — never silently strip a tag.
 
 Only surface tags that clearly fall into one of these buckets; when frequency data is missing or a tag is ambiguous, leave it untouched. Never invent or add a tag that the entry does not already contain.
