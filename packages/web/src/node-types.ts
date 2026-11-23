@@ -228,7 +228,8 @@ export interface WorkflowyImportFound
 /** One import run, as `/api/v1/workflowy-import` reports it (the Worker's `WorkflowyImportView`). */
 export interface WorkflowyImportRun
 {
-	phase: "idle" | "fetching" | "importing" | "files";
+	/** `queued`: waiting for its first alarm run; `fetching`: downloading the tree from workflowy.com. */
+	phase: "idle" | "queued" | "fetching" | "importing" | "files";
 	status: "running" | "ok" | "error" | "expired";
 	message: string | null;
 	startedAt: number;

@@ -11,20 +11,27 @@ import
 	newSystemTimestamp,
 	runUnitOfWork,
 	stampImportTime,
-	treeDataNodes,
+	treeDataNode,
 	writeAccountSnapshot,
 } from "@outlinedb/shared/cache";
 import type {AccountSnapshot, ApiImportState} from "@outlinedb/shared/cache";
 import {MissingCredentialsError, SessionRejectedError} from "@outlinedb/shared/api";
-import type {InternalSession, TreeDataItem, TreeSnapshot, WorkflowyInternalClient} from "@outlinedb/shared/api";
+import type
+{
+	InternalSession,
+	InternalTreeItem,
+	TreeDataItem,
+	TreeDataTail,
+	WorkflowyInternalClient,
+} from "@outlinedb/shared/api";
 import {fileBlobs, s3Files} from "@outlinedb/shared/db";
 import type {AppDatabase} from "@outlinedb/shared/db";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import type {WorkflowyNode} from "@outlinedb/shared/types";
 import {blobKey, sha256Hex} from "@outlinedb/web/server-app";
 import type {BlobStore} from "@outlinedb/web/server-app";
 import {and, asc, eq, gt, isNull, or} from "drizzle-orm";
-import type {JobAlarm} from "./alarm-schedule";
-import {nodeBatches} from "./export-stream";
+import type {ScheduledJobAlarm} from "./alarm-schedule";
 import type {RowCounts} from "./row-meter";
 
 const BATCH_SIZE = 2000;
@@ -32,13 +39,15 @@ const BATCH_SIZE = 2000;
 const RUN_BUDGET_MS = 30_000;
 /** The attachment the files phase starts after: every node id sorts after the empty string. */
 const FIRST_FILE = "";
+/** Why a run whose tree download died with an earlier instance of its object failed. */
+const DOWNLOAD_INTERRUPTED = "the tree download ran out of memory or was interrupted; not retried";
 
 /**
  * Each per-account import run, temporal like every other table: one version per alarm run, the newest live. A run
  * keeps what it found upstream per kind, what the node merge changed, what it could not import, and how copying the
  * attachments' bytes went, all as typed columns. `files_cursor` is the last attachment node id the files phase tried,
- * so a resumed alarm run never tries one twice. The fetched tree waits in R2 between alarm runs; nothing of it is
- * stored here.
+ * so a resumed alarm run never tries one twice. The fetched tree waits in R2 between alarm runs, in chunks of one
+ * batch each; nothing of it is stored here.
  */
 const IMPORT_TABLE = `
 CREATE TABLE IF NOT EXISTS workflowy_imports (
@@ -85,7 +94,11 @@ CREATE INDEX IF NOT EXISTS workflowy_imports_closed_at_idx ON workflowy_imports 
 	WHERE system_to < ${String(FAR_FUTURE_DATE)};
 `;
 
-type Phase = "idle" | "fetching" | "importing" | "files";
+/**
+ * `queued`: waiting for its first alarm run. `fetching`: an alarm run is downloading the tree; set before the download
+ * starts, so a run found fetching by an object instance that is not downloading it died mid-download.
+ */
+type Phase = "idle" | "queued" | "fetching" | "importing" | "files";
 
 /** `expired`: workflowy.com refused the stored session, so the connection waits for the user to sign in again. */
 type ImportStatus = "running" | "ok" | "error" | "expired";
@@ -190,6 +203,11 @@ export interface WorkflowyImportDeps
 	db: AppDatabase;
 	/** Holds the fetched tree between alarm runs, under {@link keyPrefix}. */
 	bucket: R2Bucket;
+	/**
+	 * The runs whose tree download this instance of the object has under way. Owned by the object instance, so an
+	 * instance that restarted (out of memory, a deploy) holds none, whatever import jobs it rebuilds.
+	 */
+	downloading: Set<string>;
 	/** Where the attachments' bytes land: the object's own blob store, which serves them from then on. */
 	blobs: BlobStore;
 	/** Downloads an attachment's bytes from the signed URL workflowy.com mints (default: the global fetch). */
@@ -200,7 +218,7 @@ export interface WorkflowyImportDeps
 	openClient: () => Promise<WorkflowyInternalClient | undefined>;
 	/** Mark the connection expired once workflowy.com refused its session. */
 	expireSession: () => void;
-	alarm: JobAlarm;
+	alarm: ScheduledJobAlarm;
 	/** Rows the object's SQLite has read and written so far, index rows included. */
 	rows?: () => RowCounts;
 	env: WorkflowyImportEnv;
@@ -227,6 +245,29 @@ interface Job extends WorkflowyImportRun
 	/** The workflowy.com tree owner the signed file URLs name; set by the fetch. */
 	ownerId: number | null;
 	filesCursor: string;
+}
+
+/** One batch of the fetched tree, as parked in R2: its export nodes, and each item's id and metadata. */
+interface ParkedChunk
+{
+	nodes: WorkflowyNode[];
+	items: InternalTreeItem[];
+}
+
+/** The fetched tree's transaction id and expanded keys, and how it was cut into chunks, as parked in R2. */
+interface ParkedTree extends TreeDataTail
+{
+	chunkSize: number;
+	chunks: number;
+}
+
+/** What the download counts of the items it reads, by kind. */
+interface ItemCounts
+{
+	nodes: number;
+	completed: number;
+	mirrors: number;
+	backlinks: number;
 }
 
 /** One live attachment the files phase copies. */
@@ -287,13 +328,15 @@ class SessionExpired extends Error
 }
 
 /**
- * The account's one-time import from workflowy.com over its own stored session: one alarm run fetches the account and
- * the whole tree into R2, later ones apply the tree in batches through the export import path, and the last one ends
+ * The account's one-time import from workflowy.com over its own stored session: one alarm run streams the account and
+ * the whole tree into R2 in chunks of one batch, never holding the tree whole, later ones apply the chunks through the
+ * export import path, and the last one ends
  * every node the tree does not hold (the tutorial outline among them, with no confirm), merges mirrors, backlinks and
  * item metadata, and replaces the account tables and expansion. Then it copies each live attachment's bytes into the
  * object's blob store, recording a `file_blobs` version that points the node at our copy. All progress lives in this
- * object's SQLite, so a restart resumes the run. Nothing is retried: a failed run stays failed until the user starts
- * another, and a file that failed is tried again only by the next import.
+ * object's SQLite, so a restart resumes the run, except mid-download: a download that died with its object instance
+ * fails the run rather than start again. Nothing is retried: a failed run stays failed until the user starts another,
+ * and a file that failed is tried again only by the next import.
  */
 export class WorkflowyImportJob
 {
@@ -322,9 +365,20 @@ export class WorkflowyImportJob
 		return this.deps.rows?.() ?? NO_ROWS;
 	}
 
-	private key(job: Job, name: "nodes" | "tree" | "account"): string
+	/** Where the run parks what it fetched: every key under it is the run's, and the finish drops them all. */
+	private prefix(runId: string): string
 	{
-		return `imports/${this.deps.keyPrefix}/${job.runId}/${name}.json`;
+		return `imports/${this.deps.keyPrefix}/${runId}/`;
+	}
+
+	private key(job: Job, name: "tree" | "account"): string
+	{
+		return `${this.prefix(job.runId)}${name}.json`;
+	}
+
+	private chunkKey(job: Job, index: number): string
+	{
+		return `${this.prefix(job.runId)}chunks/${String(index)}.json`;
 	}
 
 	private newestJob(): Job | null
@@ -344,6 +398,46 @@ export class WorkflowyImportJob
 		return job?.status === "running" ? job : null;
 	}
 
+	/**
+	 * The newest run, once a run whose download died with an earlier instance of this object is marked failed: it is
+	 * never fetched again, since another download would most likely die the same way.
+	 */
+	private currentJob(): Job | null
+	{
+		const job = this.newestJob();
+		if (job?.status !== "running" || job.phase !== "fetching" || this.deps.downloading.has(job.runId))
+		{
+			return job;
+		}
+		this.beginTick();
+		const failed: Job =
+		{
+			...job,
+			phase: "idle",
+			status: "error",
+			message: DOWNLOAD_INTERRUPTED,
+			finishedAt: this.now(),
+		};
+		this.writeJob(failed);
+		// The schedule drops the due time at once, before any new run can set it; R2 is cleaned up after.
+		this.abandoning = Promise.all([this.deps.alarm.cancel(), this.dropParked(job.runId)]);
+		return failed;
+	}
+
+	/** Unscheduling and dropping what a run whose download died parked in R2, once {@link currentJob} failed it. */
+	private abandoning: Promise<unknown> | undefined;
+
+	/** Wait for {@link abandoning}, if any; a failure only logs, since the run already failed. */
+	private async abandoned(): Promise<void>
+	{
+		const abandoning = this.abandoning;
+		this.abandoning = undefined;
+		await abandoning?.catch((error: unknown) =>
+		{
+			console.error("cleaning up an interrupted import failed", error);
+		});
+	}
+
 	/** Whether a run is in progress. */
 	running(): boolean
 	{
@@ -358,7 +452,9 @@ export class WorkflowyImportJob
 
 	view(): WorkflowyImportView
 	{
-		const job = this.newestJob();
+		const job = this.currentJob();
+		// A read never waits on R2; the cleanup finishes on its own.
+		void this.abandoned();
 		if (job === null)
 		{
 			return {
@@ -382,13 +478,15 @@ export class WorkflowyImportJob
 	/** Start an import on the next alarm, or keep the one in progress. */
 	async start(): Promise<WorkflowyImportView>
 	{
-		if (this.runningJob() === null)
+		const current = this.currentJob();
+		await this.abandoned();
+		if (current?.status !== "running")
 		{
 			this.beginTick();
 			this.writeJob(
 				{
 					runId: crypto.randomUUID(),
-					phase: "fetching",
+					phase: "queued",
 					status: "running",
 					message: null,
 					startedAt: this.now(),
@@ -421,14 +519,16 @@ export class WorkflowyImportJob
 	async tick(): Promise<void>
 	{
 		this.beginTick();
-		let job = this.runningJob();
-		if (job === null)
+		const current = this.currentJob();
+		await this.abandoned();
+		if (current?.status !== "running" || current.phase === "fetching")
 		{
 			return;
 		}
+		let job = current;
 		try
 		{
-			if (job.phase === "fetching")
+			if (job.phase === "queued")
 			{
 				const fetched = await this.fetch(job);
 				if (fetched === undefined)
@@ -462,72 +562,143 @@ export class WorkflowyImportJob
 	}
 
 	/**
-	 * Read the account and the whole tree over the stored session and park them in R2. Returns undefined when the run
-	 * ended instead: not connected, or workflowy.com refused the session.
+	 * Read the account and stream the whole tree over the stored session into R2, one chunk per batch. Returns undefined
+	 * when the run ended instead: not connected, or workflowy.com refused the session.
 	 */
-	private async fetch(job: Job): Promise<Job | undefined>
+	private async fetch(queued: Job): Promise<Job | undefined>
 	{
 		const client = await this.deps.openClient();
 		if (client === undefined)
 		{
-			await this.finish(job, "error", "workflowy-not-connected");
+			await this.finish(queued, "error", "workflowy-not-connected");
 			return undefined;
 		}
-		// Read before the request goes out: a node written after it is not the tree's to end.
-		const snapshotAt = Date.now();
-		let session: InternalSession;
-		let tree: TreeSnapshot<TreeDataItem>;
+		const {downloading} = this.deps;
+		const job: Job =
+		{
+			...queued,
+			phase: "fetching",
+			// Read before the request goes out: a node written after it is not the tree's to end.
+			snapshotAt: Date.now(),
+		};
+		downloading.add(job.runId);
 		try
 		{
-			session = await client.bootstrap();
-			tree = await client.getTreeSnapshot(
-				{
-					nodeFields: true,
-				},
-			);
-		}
-		catch (error)
-		{
-			if (error instanceof MissingCredentialsError || error instanceof SessionRejectedError)
+			this.writeJob(job);
+			// Should this instance die mid-download, this wakes the next one, which finds the run fetching and fails it.
+			await this.deps.alarm.setAlarm(this.now());
+			let session: InternalSession;
+			let parked: ParkedTree & ItemCounts;
+			try
 			{
-				this.deps.expireSession();
-				await this.finish(job, "expired", "workflowy-session-expired");
-				return undefined;
+				session = await client.bootstrap();
+				parked = await this.download(job, client, session.dateJoinedSec);
 			}
-			throw error;
-		}
-		const account = accountSnapshot(session);
-		const nodes = treeDataNodes(tree.items, session.dateJoinedSec);
-		const {bucket} = this.deps;
-		await bucket.put(
-			this.key(job, "nodes"),
-			new Blob(['{"nodes":[', ...nodes.map((node, i) => (i === 0 ? "" : ",") + JSON.stringify(node)), "]}"]),
-		);
-		await bucket.put(
-			this.key(job, "tree"),
-			JSON.stringify(
+			catch (error)
+			{
+				if (error instanceof MissingCredentialsError || error instanceof SessionRejectedError)
 				{
-					items: tree.items.map(({id, metadata}) => (
-					{
-						id,
-						metadata,
-					})),
-					txId: tree.txId,
-					expandedKeys: tree.expandedKeys,
-				} satisfies TreeSnapshot,
-			),
-		);
-		await bucket.put(this.key(job, "account"), JSON.stringify(account));
-		const next: Job =
+					this.deps.expireSession();
+					await this.finish(job, "expired", "workflowy-session-expired");
+					return undefined;
+				}
+				throw error;
+			}
+			const account = accountSnapshot(session);
+			await this.deps.bucket.put(this.key(job, "account"), JSON.stringify(account));
+			const next: Job =
+			{
+				...job,
+				phase: "importing",
+				ownerId: session.ownerId,
+				found: found(parked, parked.expandedKeys.length, account),
+			};
+			this.writeJob(next);
+			return next;
+		}
+		finally
 		{
-			...job,
-			phase: "importing",
-			snapshotAt,
-			ownerId: session.ownerId,
-			found: found(nodes.length, tree, account),
+			downloading.delete(job.runId);
+		}
+	}
+
+	/**
+	 * Stream the tree into R2 as it arrives, one chunk of {@link batchSize} items at a time, so memory holds one chunk
+	 * and never the tree; then park its transaction id and expanded keys. Returns them with what it counted.
+	 */
+	private async download(
+		job: Job,
+		client: WorkflowyInternalClient,
+		dateJoinedSec: number,
+	): Promise<ParkedTree & ItemCounts>
+	{
+		const {bucket} = this.deps;
+		const chunkSize = this.batchSize();
+		const counts: ItemCounts =
+		{
+			nodes: 0,
+			completed: 0,
+			mirrors: 0,
+			backlinks: 0,
 		};
-		this.writeJob(next);
-		return next;
+		let chunks = 0;
+		let chunk: ParkedChunk =
+		{
+			nodes: [],
+			items: [],
+		};
+		const flush = async () =>
+		{
+			await bucket.put(this.chunkKey(job, chunks), JSON.stringify(chunk));
+			chunks++;
+			chunk =
+			{
+				nodes: [],
+				items: [],
+			};
+		};
+		const tail = await client.streamTreeData(async (item) =>
+		{
+			countItem(counts, item);
+			chunk.nodes.push(treeDataNode(item, dateJoinedSec));
+			chunk.items.push(
+				item.metadata === undefined
+					?
+						{
+							id: item.id,
+						}
+					:
+						{
+							id: item.id,
+							metadata: item.metadata,
+						},
+			);
+			if (chunk.nodes.length === chunkSize)
+			{
+				await flush();
+			}
+		});
+		if (chunk.nodes.length > 0)
+		{
+			await flush();
+		}
+		const tree: ParkedTree =
+		{
+			...tail,
+			chunkSize,
+			chunks,
+		};
+		await bucket.put(this.key(job, "tree"), JSON.stringify(tree));
+		return {
+			...tree,
+			...counts,
+		};
+	}
+
+	private batchSize(): number
+	{
+		const size = Number(this.deps.env.SYNC_BATCH_SIZE);
+		return Number.isInteger(size) && size > 0 ? size : BATCH_SIZE;
 	}
 
 	/** This alarm run's share of the node merge: a fresh system time, resuming the run's totals. */
@@ -547,40 +718,24 @@ export class WorkflowyImportJob
 		return state;
 	}
 
-	/** Apply the next batches of the fetched tree. Returns the job in its files phase once the whole tree is in. */
+	/** Apply the next chunks of the fetched tree. Returns the job in its files phase once the whole tree is in. */
 	private async importTree(job: Job): Promise<Job | undefined>
 	{
-		const {bucket, env, storage} = this.deps;
-		const object = await bucket.get(this.key(job, "nodes"));
-		if (object === null)
-		{
-			throw new Error(`the fetched tree ${this.key(job, "nodes")} is missing from R2`);
-		}
+		const {env, storage} = this.deps;
+		const tree = await this.readJson<ParkedTree>(this.key(job, "tree"));
 		const state = this.importState(job);
 		const perTick = Number(env.SYNC_BATCHES_PER_TICK);
 		const limit = Number.isFinite(perTick) && perTick > 0 ? perTick : Infinity;
-		const batchSize = Number(env.SYNC_BATCH_SIZE);
-		const overBudget = () => this.overBudget();
 		let batches = 0;
-		let yielded = false;
-		for await (const batch of nodeBatches(
-			// oxlint-disable-next-line typescript/no-unsafe-argument -- the workers types declare R2ObjectBody.body as ReadableStream<any>
-			object.body,
-			{
-				size: Number.isInteger(batchSize) && batchSize > 0 ? batchSize : BATCH_SIZE,
-				skip: job.applied,
-				onSkipped: (node) =>
-				{
-					markApplied(state, node);
-				},
-			},
-		))
+		for (let index = Math.floor(job.applied / tree.chunkSize); index < tree.chunks; index++)
 		{
-			if (batches >= limit || (batches > 0 && overBudget()))
+			if (batches >= limit || (batches > 0 && this.overBudget()))
 			{
-				yielded = true;
-				break;
+				await this.yieldTick();
+				return undefined;
 			}
+			// oxlint-disable-next-line no-await-in-loop -- one chunk in memory at a time
+			const batch = (await this.readChunk(job, index)).nodes.slice(job.applied - index * tree.chunkSize);
 			// One transaction, so the stored cursor never runs ahead of the rows it counts.
 			storage.transactionSync(() =>
 			{
@@ -606,17 +761,38 @@ export class WorkflowyImportJob
 			});
 			batches++;
 		}
-		if (yielded || (batches > 0 && overBudget()))
+		if (batches > 0 && this.overBudget())
 		{
-			const delay = Number(env.SYNC_TICK_DELAY_MS);
-			await this.deps.alarm.setAlarm(this.now() + (Number.isFinite(delay) && delay > 0 ? delay : 0));
+			await this.yieldTick();
 			return undefined;
 		}
 
-		const tree = await this.readJson<TreeSnapshot>(job, "tree");
-		const account = await this.readJson<AccountSnapshot>(job, "account");
-		const result = finishApiImport(state, tree.items);
-		const metadata = importInternalMetadata(this.deps.db, tree, this.now());
+		// The finish needs every node the tree holds marked seen, and every item's metadata: one chunk read at a time.
+		const items: InternalTreeItem[] = [];
+		for (let index = 0; index < tree.chunks; index++)
+		{
+			// oxlint-disable-next-line no-await-in-loop -- one chunk in memory at a time
+			const parked = await this.readChunk(job, index);
+			for (const node of parked.nodes)
+			{
+				markApplied(state, node);
+			}
+			for (const item of parked.items)
+			{
+				items.push(item);
+			}
+		}
+		const account = await this.readJson<AccountSnapshot>(this.key(job, "account"));
+		const result = finishApiImport(state, items);
+		const metadata = importInternalMetadata(
+			this.deps.db,
+			{
+				items,
+				txId: tree.txId,
+				expandedKeys: tree.expandedKeys,
+			},
+			this.now(),
+		);
 		runUnitOfWork(this.deps.db, (unitOfWork) =>
 		{
 			writeAccountSnapshot(unitOfWork, account);
@@ -647,6 +823,13 @@ export class WorkflowyImportJob
 		};
 		this.writeJob(next);
 		return next;
+	}
+
+	/** Leave the rest of the run to a fresh alarm run. */
+	private async yieldTick(): Promise<void>
+	{
+		const delay = Number(this.deps.env.SYNC_TICK_DELAY_MS);
+		await this.deps.alarm.setAlarm(this.now() + (Number.isFinite(delay) && delay > 0 ? delay : 0));
 	}
 
 	private overBudget(): boolean
@@ -692,8 +875,7 @@ export class WorkflowyImportJob
 				{
 					this.writeJob(job);
 				}
-				const delay = Number(this.deps.env.SYNC_TICK_DELAY_MS);
-				await this.deps.alarm.setAlarm(this.now() + (Number.isFinite(delay) && delay > 0 ? delay : 0));
+				await this.yieldTick();
 				return;
 			}
 			client ??= await this.deps.openClient();
@@ -858,17 +1040,25 @@ export class WorkflowyImportJob
 			}));
 	}
 
-	private async readJson<T>(job: Job, name: "tree" | "account"): Promise<T>
+	private async readJson<T>(key: string): Promise<T>
 	{
-		const object = await this.deps.bucket.get(this.key(job, name));
+		const object = await this.deps.bucket.get(key);
 		if (object === null)
 		{
-			throw new Error(`the fetched ${name} ${this.key(job, name)} is missing from R2`);
+			throw new Error(`the fetched ${key} is missing from R2`);
 		}
 		return object.json<T>();
 	}
 
-	/** End the run and drop what it parked in R2: the account's outline is never kept outside its own object. */
+	private async readChunk(job: Job, index: number): Promise<ParkedChunk>
+	{
+		return this.readJson<ParkedChunk>(this.chunkKey(job, index));
+	}
+
+	/**
+	 * End the run, run its alarm no more, and drop what it parked in R2: the account's outline is never kept outside
+	 * its own object.
+	 */
 	private async finish(job: Job, status: Exclude<ImportStatus, "running">, message: string | null): Promise<void>
 	{
 		this.writeJob(
@@ -880,7 +1070,37 @@ export class WorkflowyImportJob
 				finishedAt: this.now(),
 			},
 		);
-		await this.deps.bucket.delete([this.key(job, "nodes"), this.key(job, "tree"), this.key(job, "account")]);
+		await this.deps.alarm.cancel();
+		await this.dropParked(job.runId);
+	}
+
+	/** Delete every object the run parked in R2, however far its download got. */
+	private async dropParked(runId: string): Promise<void>
+	{
+		const {bucket} = this.deps;
+		let cursor: string | undefined;
+		do
+		{
+			// oxlint-disable-next-line no-await-in-loop -- one listing page at a time
+			const listed = await bucket.list(
+				{
+					prefix: this.prefix(runId),
+					...(cursor === undefined
+						? {}
+						:
+							{
+								cursor,
+							}),
+				},
+			);
+			if (listed.objects.length > 0)
+			{
+				// oxlint-disable-next-line no-await-in-loop -- one listing page at a time
+				await bucket.delete(listed.objects.map((object) => object.key));
+			}
+			cursor = listed.truncated ? listed.cursor : undefined;
+		}
+		while (cursor !== undefined);
 	}
 
 	/**
@@ -971,36 +1191,36 @@ function accountSnapshot(session: InternalSession): AccountSnapshot
 	};
 }
 
+/** Count one item the download read, by kind. */
+function countItem(counts: ItemCounts, item: TreeDataItem): void
+{
+	counts.nodes++;
+	if (item.cp !== undefined && item.cp !== null)
+	{
+		counts.completed++;
+	}
+	const mirror: unknown = item.metadata?.mirror;
+	if (isRecord(mirror) && typeof mirror.originalId === "string" && mirror.originalId !== "")
+	{
+		counts.mirrors++;
+	}
+	const backlink: unknown = item.metadata?.backlink;
+	if (isRecord(backlink) && typeof backlink.sourceID === "string" && backlink.sourceID !== "")
+	{
+		counts.backlinks++;
+	}
+}
+
 /** What one fetch found upstream, by kind. */
-function found(nodes: number, tree: TreeSnapshot<TreeDataItem>, account: AccountSnapshot): ImportFound
+function found(counts: ItemCounts, expandedKeys: number, account: AccountSnapshot): ImportFound
 {
 	const rows = accountRows(account);
-	let completed = 0;
-	let mirrors = 0;
-	let backlinks = 0;
-	for (const item of tree.items)
-	{
-		if (item.cp !== undefined && item.cp !== null)
-		{
-			completed++;
-		}
-		const mirror: unknown = item.metadata?.mirror;
-		if (isRecord(mirror) && typeof mirror.originalId === "string" && mirror.originalId !== "")
-		{
-			mirrors++;
-		}
-		const backlink: unknown = item.metadata?.backlink;
-		if (isRecord(backlink) && typeof backlink.sourceID === "string" && backlink.sourceID !== "")
-		{
-			backlinks++;
-		}
-	}
 	return {
-		nodes,
-		completed,
-		mirrors,
-		backlinks,
-		expandedKeys: tree.expandedKeys.length,
+		nodes: counts.nodes,
+		completed: counts.completed,
+		mirrors: counts.mirrors,
+		backlinks: counts.backlinks,
+		expandedKeys,
 		stars: rows.stars.length,
 		starOrder: rows.starOrder.length,
 		tagColors: rows.tagColors.length,
@@ -1030,7 +1250,8 @@ function jobFromRow(row: Record<string, SqlStorageValue>): Job
 	const ownerId = row.owner_id;
 	return {
 		runId: text("run_id") ?? "",
-		phase: phase === "fetching" || phase === "importing" || phase === "files" ? phase : "idle",
+		phase:
+			phase === "queued" || phase === "fetching" || phase === "importing" || phase === "files" ? phase : "idle",
 		status: status === "running" || status === "ok" || status === "expired" ? status : "error",
 		message: text("message"),
 		startedAt: count("started_at"),

@@ -14,6 +14,13 @@ export interface JobAlarm
 	getAlarm(): number | null | Promise<number | null>;
 }
 
+/** A job's view of the shared alarm, which can also drop the job's due time. */
+export interface ScheduledJobAlarm extends JobAlarm
+{
+	/** Drop the job's due time, so no alarm runs it until it is set again. */
+	cancel(): Promise<void>;
+}
+
 /**
  * Several jobs sharing the Durable Object's one alarm. Each job's due time is kept in the object's key-value storage
  * and the alarm is armed at the earliest, so an embedding batch never makes the sync start a run before it is due.
@@ -98,11 +105,12 @@ export class AlarmSchedule
 		await (times.length === 0 ? this.storage.deleteAlarm() : this.storage.setAlarm(Math.min(...times)));
 	}
 
-	for(job: AlarmJob): JobAlarm
+	for(job: AlarmJob): ScheduledJobAlarm
 	{
 		return {
 			setAlarm: async (at) => this.set(job, at),
 			getAlarm: () => this.due(job),
+			cancel: async () => this.cancel([job]),
 		};
 	}
 }

@@ -37,7 +37,7 @@ function filesMatching(pattern: RegExp): string[]
 
 describe("whole-tree downloads (get_tree_data, about 54 MB live)", () =>
 {
-	it("are read only by the batch imports, the per-account import, the outbox drain's read-back and the manual probe", () =>
+	it("are read whole only by the CLI's batch imports and manual probe, never in the Worker", () =>
 	{
 		expect(filesMatching(/getTreeSnapshot\(/u)).toStrictEqual([
 			// CLI `cache import-api`: an explicit batch import.
@@ -46,16 +46,22 @@ describe("whole-tree downloads (get_tree_data, about 54 MB live)", () =>
 			"packages/cli/src/commands/cache/sync-node.ts",
 			// CLI `internal probe`: a manual, sandbox-only diagnostic.
 			"packages/cli/src/commands/internal/probe.ts",
-			// The per-account import, started only by the account's own POST /api/v1/workflowy-import.
-			"packages/cloudflare/src/workflowy-import.ts",
 			// The definition.
 			"packages/shared/src/api/workflowy-internal-client.ts",
-			// The outbox drain's read-back, only when a push's server run leaves ops out, at most once per drain pass.
-			"packages/shared/src/internal/adapter.ts",
 		]);
 	});
 
-	it("are requested from /get_tree_data/ only by getTreeSnapshot", () =>
+	it("are streamed item by item only by the per-account import, the one download the Worker makes", () =>
+	{
+		expect(filesMatching(/streamTreeData\(/u)).toStrictEqual([
+			// The per-account import, started only by the account's own POST /api/v1/workflowy-import.
+			"packages/cloudflare/src/workflowy-import.ts",
+			// The definition, which getTreeSnapshot also reads through.
+			"packages/shared/src/api/workflowy-internal-client.ts",
+		]);
+	});
+
+	it("are requested from /get_tree_data/ only by streamTreeData", () =>
 	{
 		const requests = sources().flatMap(({file, text}) =>
 			text.split("\n").flatMap((line, index, lines) =>
@@ -72,7 +78,7 @@ describe("whole-tree downloads (get_tree_data, about 54 MB live)", () =>
 				return [`${file} ${method}`];
 			}),
 		);
-		expect(requests).toStrictEqual(["packages/shared/src/api/workflowy-internal-client.ts getTreeSnapshot"]);
+		expect(requests).toStrictEqual(["packages/shared/src/api/workflowy-internal-client.ts streamTreeData"]);
 	});
 
 	it("have no expanded-keys-only reader left", () =>

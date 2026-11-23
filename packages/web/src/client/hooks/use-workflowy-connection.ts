@@ -6,7 +6,14 @@
 
 import {useQuery, useQueryClient} from "@tanstack/react-query";
 import {useEffect, useRef} from "react";
-import type {WorkflowyConnection, WorkflowyImport, WorkflowyLoginStep, WorkflowyRefusal} from "../../node-types.js";
+import type
+{
+	WorkflowyConnection,
+	WorkflowyImport,
+	WorkflowyImportRun,
+	WorkflowyLoginStep,
+	WorkflowyRefusal,
+} from "../../node-types.js";
 import {readJson} from "../read-json.js";
 
 /** A refused connection request: the Worker's `{error, message?, detail?}` body and its status. */
@@ -67,6 +74,54 @@ async function send<T>(path: string, method: string, body?: unknown): Promise<T>
 		);
 	}
 	return readJson<T>(response);
+}
+
+/** A run just asked for, before the Worker answers: queued, with nothing found or done yet. */
+function queuedRun(startedAt: number): WorkflowyImportRun
+{
+	return {
+		phase: "queued",
+		status: "running",
+		message: null,
+		startedAt,
+		finishedAt: null,
+		applied: 0,
+		found:
+		{
+			nodes: 0,
+			completed: 0,
+			mirrors: 0,
+			backlinks: 0,
+			expandedKeys: 0,
+			stars: 0,
+			starOrder: 0,
+			tagColors: 0,
+			savedViews: 0,
+			settings: 0,
+		},
+		nodes:
+		{
+			added: 0,
+			updated: 0,
+			unchanged: 0,
+			phasedOut: 0,
+			metadataWritten: 0,
+		},
+		failures:
+		{
+			invalidNodes: 0,
+			metadataSkipped: 0,
+		},
+		files:
+		{
+			found: 0,
+			copied: 0,
+			alreadyCopied: 0,
+			failed: 0,
+			bytes: 0,
+			failures: [],
+		},
+	};
 }
 
 export function useWorkflowyConnection()
@@ -157,12 +212,39 @@ export function useWorkflowyConnection()
 				),
 			);
 		},
+		/**
+		 * Start an import. The run shows as queued at once, never the previous run's report, until the Worker's answer
+		 * replaces it; a refused start reads the newest run back, so a run that failed meanwhile shows its failure.
+		 */
 		startImport: async () =>
 		{
-			queryClient.setQueryData(
-				connectionKeys.import,
-				await send<WorkflowyImport>("/api/v1/workflowy-import", "POST"),
+			await queryClient.cancelQueries(
+				{
+					queryKey: connectionKeys.import,
+				},
 			);
+			queryClient.setQueryData<WorkflowyImport>(
+				connectionKeys.import,
+				{
+					run: queuedRun(Date.now()),
+				},
+			);
+			try
+			{
+				queryClient.setQueryData(
+					connectionKeys.import,
+					await send<WorkflowyImport>("/api/v1/workflowy-import", "POST"),
+				);
+			}
+			catch (error)
+			{
+				await queryClient.invalidateQueries(
+					{
+						queryKey: connectionKeys.import,
+					},
+				);
+				throw error;
+			}
 		},
 		disconnect: async () =>
 		{

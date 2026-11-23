@@ -187,6 +187,12 @@ describe("importing an account from workflowy.com over its stored session", () =
 	 * already held; the nodes those pushes created then show up in `/get_tree_data/`.
 	 */
 	let serverRunDropped = false;
+	/**
+	 * Set to send `/get_tree_data/` up to its third item and then stall, as a download in progress when its object dies;
+	 * the stream it stalls on, so the test can end it.
+	 */
+	let treeStalls = false;
+	let stalledTree: ReadableStreamDefaultController<Uint8Array> | undefined;
 	/** The nodes pushes with {@link serverRunDropped} created, as `/get_tree_data/` items. */
 	const unechoedItems:
 	{
@@ -422,12 +428,45 @@ describe("importing an account from workflowy.com over its stored session", () =
 					}
 					if (url.pathname === "/get_tree_data/")
 					{
-						return Response.json(
+						const items = [...TREE_ITEMS, ...unechoedItems];
+						const text = treeStalls
+							? `{"shared_projects":{},"items":[${items
+									.slice(0, 3)
+									.map((item) => JSON.stringify(item))
+									.join(",")},`
+							: JSON.stringify(
+									{
+										shared_projects: {},
+										items,
+										most_recent_operation_transaction_id: "701",
+										server_expanded_projects_list: EXPANDED,
+									},
+								);
+						const encoded = new TextEncoder().encode(text);
+						// Sent in small pieces that split items, strings and characters, as a 55 MB body arrives.
+						return new Response(
+							new ReadableStream<Uint8Array>(
+								{
+									start(controller)
+									{
+										for (let at = 0; at < encoded.length; at += 97)
+										{
+											controller.enqueue(encoded.slice(at, at + 97));
+										}
+										if (treeStalls)
+										{
+											stalledTree = controller;
+											return;
+										}
+										controller.close();
+									},
+								},
+							),
 							{
-								items: [...TREE_ITEMS, ...unechoedItems],
-								shared_projects: {},
-								most_recent_operation_transaction_id: "701",
-								server_expanded_projects_list: EXPANDED,
+								headers:
+								{
+									"content-type": "application/json",
+								},
 							},
 						);
 					}
@@ -644,10 +683,11 @@ describe("importing an account from workflowy.com over its stored session", () =
 			},
 		).toStrictEqual(
 			{
+				// Queued until its first alarm run, which marks it fetching before the download starts.
 				started:
 				{
 					status: 202,
-					phase: "fetching",
+					phase: "queued",
 				},
 				run:
 				{
@@ -699,9 +739,10 @@ describe("importing an account from workflowy.com over its stored session", () =
 							},
 						],
 					},
-					// Every row the run read and wrote, index rows included, from the start request to the finish.
-					rowsRead: 3880,
-					rowsWritten: 551,
+					// Every row the run read and wrote, index rows included, from the start request to the finish; the
+					// fetching marker written before the download is two reads and three writes of it.
+					rowsRead: 3882,
+					rowsWritten: 554,
 				},
 				// One account read and one tree read over the stored session, then a signed URL and a download per live
 				// attachment; no login, so the password is never needed.
@@ -921,7 +962,7 @@ describe("importing an account from workflowy.com over its stored session", () =
 		throw new Error("timed out waiting");
 	}
 
-	async function alarmDue(job: "outbox" | "sync"): Promise<unknown>
+	async function alarmDue(job: "outbox" | "sync" | "import"): Promise<unknown>
 	{
 		return Reflect.get((await probe(`/__alarm-due?job=${job}`)) as object, "due");
 	}
@@ -1015,8 +1056,9 @@ describe("importing an account from workflowy.com over its stored session", () =
 			},
 		);
 
-		// A push whose reply leaves the create out of its server run: the drain reads workflowy.com back over the same
-		// stored session, finds the node there, and closes the row.
+		// A push whose reply leaves the create out of its server run: with no API key to read the node back, and the whole
+		// tree too big to read in the object, the drain closes the row on the push's acceptance; the catch-up brings in
+		// whatever workflowy.com holds.
 		upstreamCalls.length = 0;
 		serverRunDropped = true;
 		const unechoed = await send(
@@ -1042,7 +1084,7 @@ describe("importing an account from workflowy.com over its stored session", () =
 		).toStrictEqual(
 			{
 				created: 201,
-				upstreamCalls: ["/push_and_poll", "/get_tree_data/"],
+				upstreamCalls: ["/push_and_poll"],
 				outbox:
 				{
 					pending: 0,
@@ -1244,6 +1286,55 @@ describe("importing an account from workflowy.com over its stored session", () =
 					syncDue: null,
 					outboxDue: null,
 				},
+			},
+		);
+	}, 60_000);
+
+	it("fails a run whose tree download died with its object instance, without downloading again or running its alarm on", async () =>
+	{
+		treeStalls = true;
+		upstreamCalls.length = 0;
+		const started = await send("workflowy-import", "POST");
+		// The first chunk lands in R2 while the body is still arriving: the tree is never held whole.
+		await until(async () => (await parkedObjects()).some((key) => key.endsWith("/chunks/0.json")));
+		const parkedMidDownload = (await parkedObjects()).map((key) => key.replace(/^imports\/[^/]+\/[^/]+\//u, ""));
+		await (await store()).fetch("http://localhost/__abort").catch(() => null);
+		// Only the alarm the download armed before it started wakes the new instance; no status read helps it along.
+		await until(async () => (await alarmDue("import")) === null);
+		treeStalls = false;
+		stalledTree?.close();
+		const run = (await send("workflowy-import", "GET")).body as
+		{
+			run: Record<string, unknown>;
+		};
+		expect(
+			{
+				started: Reflect.get(started.body as object, "run") !== null,
+				parkedMidDownload,
+				run:
+				{
+					phase: run.run.phase,
+					status: run.run.status,
+					message: run.run.message,
+				},
+				upstreamCalls,
+				parked: await parkedObjects(),
+				importDue: await alarmDue("import"),
+			},
+		).toStrictEqual(
+			{
+				started: true,
+				parkedMidDownload: ["chunks/0.json"],
+				run:
+				{
+					phase: "idle",
+					status: "error",
+					message: "the tree download ran out of memory or was interrupted; not retried",
+				},
+				// One download, never a second.
+				upstreamCalls: ["/get_initialization_data", "/get_tree_data/"],
+				parked: [],
+				importDue: null,
 			},
 		);
 	}, 60_000);

@@ -30,7 +30,7 @@ let connection: WorkflowyConnection =
 	connected: false,
 };
 let run: WorkflowyImportRun | null = null;
-let writes: Partial<Record<string, (body: unknown) => Response>> = {};
+let writes: Partial<Record<string, (body: unknown) => Response | Promise<Response>>> = {};
 
 const FINISHED = Date.UTC(2026, 10, 22, 12, 0);
 const PASSWORD_FIELD =
@@ -517,7 +517,7 @@ describe("Settings > Workflowy", () =>
 						body: null,
 					},
 				],
-				progress: ["Fetching your outline from workflowy.com"],
+				progress: ["Downloading your outline from workflowy.com"],
 				keepSyncing: true,
 				// No re-import while a run is under way.
 				reimport: undefined,
@@ -697,7 +697,43 @@ describe("Settings > Workflowy", () =>
 		};
 
 		await click(document.querySelector<HTMLElement>(".workflowy-connection-mirror"));
+		// The Worker is slow to answer the re-import, then fails it; meanwhile the run it started failed on its own.
+		let answer: (response: Response) => void = () =>
+		{
+		};
+		writes["POST /api/v1/workflowy-import"] = async () =>
+			new Promise<Response>((resolve) =>
+			{
+				answer = resolve;
+			});
 		await click(button("Re-import"));
+		const whileStarting =
+		{
+			progress: text("[data-workflowy-import] output"),
+			results: text("[data-workflowy-import-results] li"),
+		};
+		run = importRun(
+			{
+				status: "error",
+				message: "the tree download ran out of memory or was interrupted; not retried",
+			},
+		);
+		await act(async () =>
+		{
+			answer(
+				Response.json(
+					{
+						error: "internal",
+					},
+					{
+						status: 500,
+					},
+				),
+			);
+			await Promise.resolve();
+		});
+		await settle();
+		const afterFailure = text("[data-workflowy-import] [role=alert]");
 		writes["DELETE /api/v1/workflowy-connection"] = () =>
 			Response.json(
 				{
@@ -709,11 +745,23 @@ describe("Settings > Workflowy", () =>
 		expect(
 			{
 				report,
+				whileStarting,
+				afterFailure,
 				calls: calls.map(({method, path, body}) => [method, path, body]),
 				afterDisconnect: button("Connect")?.type,
 			},
 		).toStrictEqual(
 			{
+				// The new run shows as soon as Re-import is clicked, not the previous run's report.
+				whileStarting:
+				{
+					progress: ["Waiting to start the import"],
+					results: [],
+				},
+				// The failed request reads the run back: its failure, not the previous run's report.
+				afterFailure: [
+					"The import failed: the tree download ran out of memory or was interrupted; not retried",
+				],
 				report:
 				{
 					status: ["Connected as alice@example.com", `Last sync: ${new Date(FINISHED).toLocaleString()}`],

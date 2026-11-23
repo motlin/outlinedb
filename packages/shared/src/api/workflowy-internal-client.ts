@@ -1,5 +1,6 @@
 import {z} from "zod";
 import {InternalApiError} from "../internal/errors.js";
+import {readTreeDataBody} from "./tree-data-stream.js";
 
 /**
  * Workflowy internal API client for session-based authentication.
@@ -113,15 +114,7 @@ const TreeItemSchema = z
 	)
 	.loose();
 
-const TreeSnapshotSchema = z
-	.object(
-		{
-			items: z.array(TreeItemSchema),
-			most_recent_operation_transaction_id: TransactionIdSchema,
-			server_expanded_projects_list: z.array(z.string()).optional(),
-		},
-	)
-	.loose();
+const ExpandedKeysSchema = z.array(z.string()).optional();
 
 /** One `/get_tree_data/` item, reduced to what the cache imports. */
 export interface InternalTreeItem
@@ -146,12 +139,17 @@ export interface TreeDataItem extends InternalTreeItem
 	lm?: number;
 }
 
-/** One whole-tree `/get_tree_data/` read: its items, the transaction id they are current to, and the expanded keys. */
-export interface TreeSnapshot<Item extends InternalTreeItem = InternalTreeItem>
+/** What one whole-tree `/get_tree_data/` read holds besides its items: the transaction id they are current to, and the expanded keys. */
+export interface TreeDataTail
 {
-	items: Item[];
 	txId: string;
 	expandedKeys: string[];
+}
+
+/** One whole-tree `/get_tree_data/` read: its items, the transaction id they are current to, and the expanded keys. */
+export interface TreeSnapshot<Item extends InternalTreeItem = InternalTreeItem> extends TreeDataTail
+{
+	items: Item[];
 }
 
 const SignedFileSchema = z
@@ -583,38 +581,73 @@ export class WorkflowyInternalClient
 	}
 
 	/**
-	 * The whole main tree from one `/get_tree_data/` (about 54 MB live): every
-	 * item's id and, when it has any, its metadata, plus the transaction id and
-	 * expanded keys of that same read. With `nodeFields`, each item also keeps
-	 * its name, note, parent, priority and timestamps, for an import that builds
-	 * the tree from this read alone. Only batch imports, the explicit Cloudflare
-	 * seed and the per-account import call it (guarded by `tree-download-guard.test.ts`).
+	 * The whole main tree from one `/get_tree_data/` (about 54 MB live), held in memory: every item's id and, when it
+	 * has any, its metadata, plus the transaction id and expanded keys of that same read. With `nodeFields`, each item
+	 * also keeps its name, note, parent, priority and timestamps, for an import that builds the tree from this read
+	 * alone. Only the CLI's batch imports and manual probe call it; the Worker streams instead (guarded by
+	 * `tree-download-guard.test.ts`).
 	 */
 	async getTreeSnapshot(): Promise<TreeSnapshot>;
 	async getTreeSnapshot(options: {nodeFields: true}): Promise<TreeSnapshot<TreeDataItem>>;
 	async getTreeSnapshot(options?: {nodeFields: true}): Promise<TreeSnapshot<TreeDataItem>>
 	{
-		const {body} = await this.withSession(async () => this.getJson("/get_tree_data/"));
-		const snapshot = TreeSnapshotSchema.parse(body);
+		const items: TreeDataItem[] = [];
+		const tail = await this.streamTreeData((item) =>
+		{
+			items.push(
+				options?.nodeFields === true
+					? item
+					:
+						{
+							id: item.id,
+							...(item.metadata === undefined
+								? {}
+								:
+									{
+										metadata: item.metadata,
+									}),
+						},
+			);
+		});
 		return {
-			items: snapshot.items.map((item) =>
+			items,
+			...tail,
+		};
+	}
+
+	/**
+	 * The whole main tree from one `/get_tree_data/`, read as it arrives (logging in per {@link withSession}): each
+	 * item, with its node fields and metadata, goes to `onItem`, which is awaited before the next is read, so the body
+	 * is never held whole. Resolves with the read's transaction id and expanded keys once the body ends.
+	 */
+	async streamTreeData(onItem: (item: TreeDataItem) => void | Promise<void>): Promise<TreeDataTail>
+	{
+		return this.withSession(async () =>
+		{
+			const response = await this.get("/get_tree_data/");
+			if (response.body === null)
 			{
-				const kept: TreeDataItem =
-					options?.nodeFields === true
-						? treeDataFields(item)
-						:
-							{
-								id: item.id,
-							};
+				throw new InternalApiError("get_tree_data answered with no body");
+			}
+			const rest = await readTreeDataBody(response.body, async (raw) =>
+			{
+				const item = TreeItemSchema.parse(raw);
+				const kept = treeDataFields(item);
 				if (item.metadata !== undefined)
 				{
 					kept.metadata = item.metadata;
 				}
-				return kept;
-			}),
-			txId: snapshot.most_recent_operation_transaction_id,
-			expandedKeys: snapshot.server_expanded_projects_list ?? [],
-		};
+				await onItem(kept);
+			});
+			if (rest.loggedOut === true)
+			{
+				throw new SessionRejectedError("logged_out");
+			}
+			return {
+				txId: TransactionIdSchema.parse(rest.txId),
+				expandedKeys: ExpandedKeysSchema.parse(rest.expandedKeys) ?? [],
+			};
+		});
 	}
 
 	/**
@@ -629,17 +662,10 @@ export class WorkflowyInternalClient
 	}
 
 	/**
-	 * An authenticated GET; throws `SessionRejectedError` on a login redirect, a `logged_out` body or, unless
+	 * An authenticated GET, its body unread; throws `SessionRejectedError` on a login redirect or, unless
 	 * `notFoundRefuses` is false, workflowy.com's HTML 404 page.
 	 */
-	private async getJson(
-		pathAndQuery: string,
-		notFoundRefuses = true,
-	): Promise<
-	{
-		response: Response;
-		body: unknown;
-	}>
+	private async get(pathAndQuery: string, notFoundRefuses = true): Promise<Response>
 	{
 		if (!this.sessionCookie)
 		{
@@ -670,6 +696,20 @@ export class WorkflowyInternalClient
 		{
 			throw new Error(`Failed to GET ${pathAndQuery}: ${response.status} ${response.statusText}`);
 		}
+		return response;
+	}
+
+	/** An authenticated GET of a JSON reply, as {@link get}; a `logged_out` body also throws `SessionRejectedError`. */
+	private async getJson(
+		pathAndQuery: string,
+		notFoundRefuses = true,
+	): Promise<
+	{
+		response: Response;
+		body: unknown;
+	}>
+	{
+		const response = await this.get(pathAndQuery, notFoundRefuses);
 		const body: unknown = await response.json();
 		if (isLoggedOutReply(body))
 		{

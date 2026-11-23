@@ -101,6 +101,8 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 	protected readonly workflowyLoginAttempt = new WorkflowyLoginAttempt(this.ctx.storage.sql);
 	/** This account's one-time import from workflowy.com over its own stored session; runs in the shared alarm. */
 	private workflowyImport!: WorkflowyImportJob;
+	/** The import runs whose tree download this instance has under way; a restarted instance starts with none. */
+	private readonly importDownloads = new Set<string>();
 	/** Delivers mirror-mode writes' outbox rows to workflowy.com; undefined without the internal API. */
 	protected drainOutbox: (() => Promise<unknown>) | undefined;
 	private sync!: SyncJob;
@@ -207,6 +209,7 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 				storage: ctx.storage,
 				db,
 				bucket: env.SNAPSHOTS,
+				downloading: this.importDownloads,
 				blobs,
 				keyPrefix: ctx.id.toString(),
 				openClient: async () => this.storedSessionClient(),

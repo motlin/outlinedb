@@ -105,7 +105,11 @@ function progressLabel(run: WorkflowyImportRun): string
 		const done = run.files.copied + run.files.alreadyCopied + run.files.failed;
 		return `Copying attachments: ${done.toLocaleString()} of ${run.files.found.toLocaleString()}`;
 	}
-	return "Fetching your outline from workflowy.com";
+	if (run.phase === "queued")
+	{
+		return "Waiting to start the import";
+	}
+	return "Downloading your outline from workflowy.com";
 }
 
 function formatTime(at: number): string
@@ -365,7 +369,9 @@ function RunReport({run}: {run: WorkflowyImportRun})
 {
 	// A refused session stops a run before it reads the outline, so it found nothing worth saying.
 	const found =
-		run.phase === "fetching" || run.status === "expired" ? null : foundSummary(run.found, run.files.found);
+		run.phase === "queued" || run.phase === "fetching" || run.status === "expired"
+			? null
+			: foundSummary(run.found, run.files.found);
 	const {nodes, failures, files} = run;
 	return (
 		<div className="flex flex-col gap-s" data-workflowy-import={run.status}>

@@ -807,7 +807,158 @@ describe("WorkflowyInternalClient.getTreeSnapshot", () =>
 			},
 		);
 	});
+
+	it("streams a large /get_tree_data/ item by item as it arrives, never buffering the body", async () =>
+	{
+		const ITEMS = 50_000;
+		const PER_CHUNK = 500;
+		const CHUNKS = ITEMS / PER_CHUNK;
+		const encoder = new TextEncoder();
+		/** An item whose strings carry escaped quotes, braces, brackets and multibyte characters, as notes do. */
+		const item = (index: number): string =>
+			JSON.stringify(
+				{
+					id: `n${String(index)}`,
+					nm: `Café ✓ {${String(index)}}`,
+					no: 'a "quoted" ] note }',
+					prnt: index === 0 ? null : "n0",
+					pr: index,
+					ct: 1,
+					...(index % 1000 === 0
+						?
+							{
+								metadata:
+								{
+									layoutMode: "board",
+								},
+							}
+						: {}),
+				},
+			);
+		let pulls = 0;
+		const body = new ReadableStream<Uint8Array>(
+			{
+				pull(controller)
+				{
+					if (pulls === CHUNKS)
+					{
+						controller.enqueue(
+							encoder.encode(
+								'],"most_recent_operation_transaction_id":"42","server_expanded_projects_list":["k1"]}',
+							),
+						);
+						controller.close();
+						return;
+					}
+					const items = Array.from(
+						{
+							length: PER_CHUNK,
+						},
+						(_, offset) => item(pulls * PER_CHUNK + offset),
+					).join(",");
+					const text =
+						pulls === 0 ? `{"shared_projects":{"s":[1,{"x":"}]"}]},"items":[${items}` : `,${items}`;
+					const bytes = encoder.encode(text);
+					// Two reads per chunk, split two thirds in: an item, and sometimes a character, spans them.
+					const split = Math.floor((bytes.length * 2) / 3);
+					controller.enqueue(bytes.slice(0, split));
+					controller.enqueue(bytes.slice(split));
+					pulls++;
+				},
+			},
+			{
+				highWaterMark: 0,
+			},
+		);
+		const api = createFakeInternalApi();
+		api.respond("/get_tree_data/", () => new StreamOnlyResponse(body));
+		const client = new WorkflowyInternalClient(
+			{
+				credentials:
+				{
+					username: "alice@example.com",
+					password: "hunter2",
+				},
+				fetch: api.fetch,
+				baseUrl: "https://workflowy.test",
+				transientId: "6f1c1d1e-0000-4000-8000-000000000001",
+			},
+		);
+		await client.login();
+		let count = 0;
+		let boards = 0;
+		/** How many chunks past the one holding the item the body had been read when the item arrived. */
+		let readAhead = 0;
+		let last: unknown;
+
+		const tail = await client.streamTreeData((streamed) =>
+		{
+			readAhead = Math.max(readAhead, pulls - (Math.floor(count / PER_CHUNK) + 1));
+			count++;
+			boards += streamed.metadata === undefined ? 0 : 1;
+			last = streamed;
+		});
+
+		expect(
+			{
+				tail,
+				count,
+				boards,
+				readAhead,
+				last,
+			},
+		).toStrictEqual(
+			{
+				tail:
+				{
+					txId: "42",
+					expandedKeys: ["k1"],
+				},
+				count: ITEMS,
+				boards: ITEMS / 1000,
+				readAhead: 0,
+				last:
+				{
+					id: `n${String(ITEMS - 1)}`,
+					nm: `Café ✓ {${String(ITEMS - 1)}}`,
+					no: 'a "quoted" ] note }',
+					prnt: "n0",
+					pr: ITEMS - 1,
+					ct: 1,
+				},
+			},
+		);
+	});
 });
+
+/** A `/get_tree_data/` reply that fails the test if anything reads its whole body at once. */
+class StreamOnlyResponse extends Response
+{
+	override async text(): Promise<string>
+	{
+		return Promise.reject(new Error("read the whole tree as text"));
+	}
+
+	override async json(): Promise<never>
+	{
+		return Promise.reject(new Error("read the whole tree as JSON"));
+	}
+
+	override async arrayBuffer(): Promise<ArrayBuffer>
+	{
+		return Promise.reject(new Error("read the whole tree into a buffer"));
+	}
+
+	override async blob(): Promise<Blob>
+	{
+		return Promise.reject(new Error("read the whole tree into a blob"));
+	}
+
+	override async bytes(): Promise<Uint8Array<ArrayBuffer>>
+	{
+		return Promise.reject(new Error("read the whole tree into bytes"));
+	}
+}
 
 describe("keptInternalMetadata table", () =>
 {

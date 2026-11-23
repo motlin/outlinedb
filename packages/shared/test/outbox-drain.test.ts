@@ -951,6 +951,48 @@ describe("drainOutbox", () =>
 		);
 	});
 
+	it("closes every row the push carried without reading workflowy.com back when the pusher cannot, leaving the catch-up to bring in what it holds", async () =>
+	{
+		const {writer, outboxRows, pushes, pusher, drain} = setup();
+		setClock(at(0));
+		writer.createAt(
+			{
+				parentId: "p",
+				index: 0,
+				id: "n",
+				name: "n",
+			},
+		);
+		setClock(at(1));
+		writer.updateNode(
+			"a",
+			{
+				name: "A",
+			},
+		);
+		const {upstreamNode: _upstreamNode, ...blind} = pusher(() => []);
+
+		const result = await drain(blind);
+
+		expect(
+			{
+				result,
+				pushed: pushes.map((ops) => ops.map(({type}) => type)),
+				outbox: outboxRows(),
+			},
+		).toStrictEqual(
+			{
+				result:
+				{
+					ops: 2,
+					closed: 3,
+				},
+				pushed: [["bulk_create", "edit"]],
+				outbox: [row("a", "name", at(1)), row("n", "create", at(0)), row("n", "placement", at(0))],
+			},
+		);
+	});
+
 	it("keeps every row pending, naming the ops, when a left-out op's effect is not on workflowy.com", async () =>
 	{
 		const {writer, outboxRows, upstreamReads, pusher, drain} = setup();

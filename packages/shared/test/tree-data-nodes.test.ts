@@ -1,42 +1,39 @@
 import {describe, expect, it} from "vite-plus/test";
-import {treeDataNodes} from "../src/cache/tree-data-nodes.js";
+import {treeDataNode} from "../src/cache/tree-data-nodes.js";
 
-describe("treeDataNodes", () =>
+describe("treeDataNode", () =>
 {
 	it("turns /get_tree_data/ items into export nodes, moving epoch-relative seconds onto Unix seconds", () =>
 	{
 		expect(
-			treeDataNodes(
-				[
+			[
+				{
+					id: "a",
+					nm: "Alpha",
+					no: "a note",
+					prnt: null,
+					pr: 3,
+					ct: 10,
+					cp: 20,
+					lm: 30,
+					metadata:
 					{
-						id: "a",
-						nm: "Alpha",
-						no: "a note",
-						prnt: null,
-						pr: 3,
-						ct: 10,
-						cp: 20,
-						lm: 30,
-						metadata:
+						layoutMode: "board",
+						mirror:
 						{
-							layoutMode: "board",
-							mirror:
+							mirrorRootIds:
 							{
-								mirrorRootIds:
-								{
-									b: true,
-								},
+								b: true,
 							},
 						},
 					},
-					{
-						id: "b",
-						prnt: "a",
-						no: "",
-					},
-				],
-				1_500_000_000,
-			),
+				},
+				{
+					id: "b",
+					prnt: "a",
+					no: "",
+				},
+			].map((item) => treeDataNode(item, 1_500_000_000)),
 		).toStrictEqual([
 			{
 				id: "a",

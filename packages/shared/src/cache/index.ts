@@ -99,7 +99,7 @@ export
 	type UpstreamS3File,
 	writeInternalMetadata,
 } from "./internal-metadata.js";
-export {treeDataNodes} from "./tree-data-nodes.js";
+export {treeDataNode} from "./tree-data-nodes.js";
 export
 {
 	type BacklinkItem,

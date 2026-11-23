@@ -529,22 +529,28 @@ export class WorkflowyInternalAdapter
 	 */
 	async drainOutbox(options: Omit<OutboxDrainOptions, "now"> = {}): Promise<OutboxDrainResult>
 	{
-		// Read only when a server run leaves ops out, and at most once per pass, over the same session as the push.
-		let upstreamParents: Promise<Map<string, string | null>> | undefined;
+		const {writeThrough} = this;
 		const pusher: OutboxPusher =
 		{
 			session: async () => this.session(),
-			upstreamNode: async (id) =>
-			{
-				upstreamParents ??= this.upstreamParents();
-				const parents = await upstreamParents;
-				return parents.has(id)
-					?
+			// Read back over the public API, node by node, only when a server run leaves ops out. Without an API key (a
+			// per-account connection) nothing reads workflowy.com back: its only read is the whole tree, too big for a
+			// Durable Object, so the transaction-log catch-up brings in what workflowy.com holds instead.
+			...(writeThrough === undefined
+				? {}
+				:
+					{
+						upstreamNode: async (id: string) =>
 						{
-							parentId: parents.get(id) ?? null,
-						}
-					: null;
-			},
+							const node = await writeThrough.findNode(id);
+							return node === null
+								? null
+								:
+									{
+										parentId: node.parent_id ?? null,
+									};
+						},
+					}),
 			push: async (ops, accept) =>
 			{
 				const input: PushInput =
@@ -1517,20 +1523,6 @@ export class WorkflowyInternalAdapter
 	private writeNodesMetadata(metadataById: ReadonlyMap<string, Metadata | undefined>): void
 	{
 		storeInternalMetadata(this.db, metadataById);
-	}
-
-	/**
-	 * Every node workflowy.com holds now, by id, with its parent (null at the top): one whole-tree read over the
-	 * session, since the internal API has no single-node read and a per-account connection holds no REST API key.
-	 */
-	private async upstreamParents(): Promise<Map<string, string | null>>
-	{
-		const {items} = await this.client.getTreeSnapshot(
-			{
-				nodeFields: true,
-			},
-		);
-		return new Map(items.map((item) => [item.id, item.prnt ?? null]));
 	}
 
 	private tree(): WorkflowyWriteThroughClient

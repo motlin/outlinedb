@@ -221,11 +221,16 @@ export class ProbeStore extends UserStore
 			return Response.json(
 				{
 					due:
-						job === "outbox" || job === "sync" || job === "embeddings"
+						job === "outbox" || job === "sync" || job === "import" || job === "embeddings"
 							? new AlarmSchedule(this.ctx.storage).due(job)
 							: null,
 				},
 			);
+		}
+		if (url.pathname === "/__abort")
+		{
+			// The object dies mid-whatever, as when it runs out of memory; the next request or alarm gets a new instance.
+			this.ctx.abort("simulated out of memory");
 		}
 		if (url.pathname === "/__provisions")
 		{

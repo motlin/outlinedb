@@ -77,8 +77,12 @@ export interface UpstreamNode
 export interface OutboxPusher
 {
 	session(): Promise<OutboxSession>;
-	/** What workflowy.com holds for `id` now, or `null` when it lacks the node: how a drain checks left-out ops. */
-	upstreamNode(id: string): Promise<UpstreamNode | null>;
+	/**
+	 * What workflowy.com holds for `id` now, or `null` when it lacks the node: how a drain checks left-out ops. Absent
+	 * when workflowy.com cannot be read back node by node (a per-account connection holds no REST API key): an accepted
+	 * push then closes its rows, and the transaction-log catch-up brings in whatever workflowy.com holds.
+	 */
+	upstreamNode?: (id: string) => Promise<UpstreamNode | null>;
 	/**
 	 * Push `ops` in one `push_and_poll`. `accept` runs inside the unit of work that applies the push's transactions,
 	 * after them and before the push resolves.
@@ -1235,7 +1239,10 @@ function upstreamChecks(op: InternalOp): UpstreamCheck[] | undefined
 }
 
 /** The left-out ops whose effect workflowy.com does not hold, as `<type> <subject>`, reading each node they name. */
-async function effectsNotUpstream(pusher: OutboxPusher, unechoed: readonly InternalOp[]): Promise<string[]>
+async function effectsNotUpstream(
+	upstreamNode: (id: string) => Promise<UpstreamNode | null>,
+	unechoed: readonly InternalOp[],
+): Promise<string[]>
 {
 	const missing: string[] = [];
 	for (const op of unechoed)
@@ -1245,7 +1252,7 @@ async function effectsNotUpstream(pusher: OutboxPusher, unechoed: readonly Inter
 		for (const [id, check] of checks)
 		{
 			// oxlint-disable-next-line no-await-in-loop -- a few reads, only when a server run leaves ops out
-			holds = check(await pusher.upstreamNode(id)) && holds;
+			holds = check(await upstreamNode(id)) && holds;
 		}
 		if (!holds)
 		{
@@ -1292,7 +1299,7 @@ export function previewOutboxOps(tx: TemporalTransaction, session: OutboxSession
  * One drain pass over the oldest pending outbox rows: one push, or none when nothing needs sending. When the server run
  * echoes every op, the carried rows close in the unit of work that applies the push's transactions. When it leaves
  * ops out, the drain reads the nodes they name from workflowy.com and closes the rows only if every left-out op's
- * effect is already there. A failed or unacknowledged push records its error as `last_error` on every row it carried,
+ * effect is already there; a pusher that cannot read workflowy.com back closes them on the push's acceptance. A failed or unacknowledged push records its error as `last_error` on every row it carried,
  * which stay pending, and throws; a failed session fetch records its error on every row the pass read.
  */
 export async function drainOutbox(
@@ -1371,7 +1378,8 @@ export async function drainOutbox(
 		});
 		if (unechoed.length > 0)
 		{
-			const missing = await effectsNotUpstream(pusher, unechoed);
+			const missing =
+				pusher.upstreamNode === undefined ? [] : await effectsNotUpstream(pusher.upstreamNode, unechoed);
 			if (missing.length > 0)
 			{
 				throw new OutboxNotAcknowledged(plan.ops.length, plan.ops.length - unechoed.length, missing);
