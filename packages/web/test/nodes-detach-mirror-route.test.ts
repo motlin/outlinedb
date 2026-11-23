@@ -316,6 +316,72 @@ describe("POST /api/v1/nodes/:id/detach-mirror", () =>
 		);
 	});
 
+	it("counts a descendant mirror or original-with-mirrors as the one node it copies to, however large its subtree", async () =>
+	{
+		const {cacheService, post, outline} = setup();
+		for (const parent of ["X", "D"])
+		{
+			cacheService.storeApiResponse(
+				Array.from(
+					{
+						length: 2000,
+					},
+					(_, i) => apiNode(`${parent}bulk${i}`, parent, i + 1),
+				),
+				parent,
+			);
+		}
+
+		const res = await post("/M/detach-mirror");
+
+		expect(
+			{
+				status: res.status,
+				outline: outline("P"),
+			},
+		).toStrictEqual(
+			{
+				status: 201,
+				outline: [
+					"A a",
+					["copy1 o", [["copy2 c", ["copy3 g"]], "copy4 mirror of D", "copy5 mirror of X"]],
+					"B b",
+				],
+			},
+		);
+	});
+
+	it("refuses a subtree deeper than 50 levels without writing, rather than cutting it off", async () =>
+	{
+		const {cacheService, post, pending} = setup();
+		let parent = "G";
+		for (let level = 0; level < 49; level++)
+		{
+			const id = `deep${level}`;
+			cacheService.insertNode(apiNode(id, parent, 0), parent);
+			parent = id;
+		}
+
+		const res = await post("/M/detach-mirror");
+
+		expect(
+			{
+				status: res.status,
+				body: await res.json(),
+				pending: pending(),
+			},
+		).toStrictEqual(
+			{
+				status: 400,
+				body:
+				{
+					error: "Detaching mirror subtrees more than 50 levels deep is not supported.",
+				},
+				pending: [],
+			},
+		);
+	});
+
 	it("refuses a plain node", async () =>
 	{
 		const {post, pending} = setup();

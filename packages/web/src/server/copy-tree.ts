@@ -5,8 +5,8 @@ import type {NewTree} from "@outlinedb/shared/internal";
 /** The largest subtree a detach copies (upstream's `Detaching mirror subtrees containing more than 2000 items` guard). */
 export const MAX_COPY_ITEMS = 2000;
 
-/** The deepest subtree a copy reads; deeper levels (or a cycle) are cut off. */
-const COPY_DEPTH = 50;
+/** The deepest level below the copied node that a copy makes; a deeper subtree is refused, never cut off. */
+export const MAX_COPY_DEPTH = 50;
 
 export interface CopyTreeOptions
 {
@@ -29,22 +29,66 @@ export type CopiedTree =
 	|
 	  {
 			ok: false;
+			reason: "tooMany";
 			count: number;
+	  }
+	|
+	  {
+			ok: false;
+			reason: "tooDeep";
 	  };
 
-function countNodes(node: NodeTree): number
+/** The ids of the nodes below `node` that the copy reaches, not descending into mirrors (their children are their original's). */
+function collectDescendantIds(node: NodeTree, into: string[]): string[]
 {
-	return 1 + (node.children ?? []).reduce((sum, child) => sum + countNodes(child), 0);
-}
-
-function collectIds(node: NodeTree, into: string[]): string[]
-{
-	into.push(node.id);
 	for (const child of node.children ?? [])
 	{
-		collectIds(child, into);
+		into.push(child.id);
+		if (child.mirror.originalNodeId === null)
+		{
+			collectDescendantIds(child, into);
+		}
 	}
 	return into;
+}
+
+/**
+ * How many nodes the copy makes, and whether any lands deeper than {@link MAX_COPY_DEPTH}. A node that the copy
+ * turns into a bare mirror counts once, without the subtree the reader resolved under it.
+ */
+function measure(
+	root: NodeTree,
+	isBareMirror: (node: NodeTree) => boolean,
+):
+{
+	count: number;
+	tooDeep: boolean;
+}
+{
+	let count = 0;
+	let tooDeep = false;
+	const visit = (node: NodeTree, level: number): void =>
+	{
+		count += 1;
+		if (level > MAX_COPY_DEPTH)
+		{
+			tooDeep = true;
+			return;
+		}
+		if (level > 0 && isBareMirror(node))
+		{
+			return;
+		}
+		for (const child of node.children ?? [])
+		{
+			visit(child, level + 1);
+		}
+	};
+	visit(root, 0);
+	return {
+		count,
+		tooDeep,
+	};
 }
 
 /**
@@ -59,28 +103,37 @@ export async function copySubtree(
 	options: CopyTreeOptions,
 ): Promise<CopiedTree | undefined>
 {
+	// One level past the limit, so a subtree that goes deeper shows up instead of being silently cut off.
 	const [root] = await new NodeTreeReader(cache).readNodes(
 		[sourceId],
 		{
-			depth: COPY_DEPTH,
+			depth: MAX_COPY_DEPTH + 1,
 		},
 	);
 	if (root === undefined)
 	{
 		return undefined;
 	}
-	const count = countNodes(root);
+	const mirrored = options.mirrorOriginals
+		? options.originalsWithMirrors(collectDescendantIds(root, []))
+		: new Set<string>();
+	const {count, tooDeep} = measure(root, (node) => node.mirror.originalNodeId !== null || mirrored.has(node.id));
 	if (count > MAX_COPY_ITEMS)
 	{
 		return {
 			ok: false,
+			reason: "tooMany",
 			count,
 		};
 	}
+	if (tooDeep)
+	{
+		return {
+			ok: false,
+			reason: "tooDeep",
+		};
+	}
 	const newId = options.newId ?? (() => crypto.randomUUID());
-	const mirrored = options.mirrorOriginals
-		? options.originalsWithMirrors(collectIds(root, []).slice(1))
-		: new Set<string>();
 	const sourceToNew = new Map<string, string>();
 	const mirrorOf = (originalId: string): NewTree => (
 	{

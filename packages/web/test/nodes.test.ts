@@ -941,6 +941,16 @@ describe("nodes duplicate route", () =>
 		it("deep-copies each item to consecutive slots locally in mirror mode, records the creates, and keeps child mirrors as mirrors", async () =>
 		{
 			const {post, cacheService, pending} = setup();
+			// E copies as one bare mirror, so X's large subtree does not count toward the copy limit.
+			cacheService.storeApiResponse(
+				Array.from(
+					{
+						length: 2000,
+					},
+					(_, i) => apiNode(`bulk${i}`, "X", i + 1),
+				),
+				"X",
+			);
 			const shape = (parentId: string | null): unknown[] =>
 				cacheService.getChildren(parentId).map((node) => (
 				{

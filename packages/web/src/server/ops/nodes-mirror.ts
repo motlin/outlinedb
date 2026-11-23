@@ -3,7 +3,7 @@ import {ancestorChain} from "@outlinedb/shared/cache";
 import {HOME_TARGET} from "@outlinedb/shared/types";
 import {upstreamExpansionKey} from "@outlinedb/shared/workflowy";
 import {planSwapOrigin} from "../../swap-origin.js";
-import {MAX_COPY_ITEMS, copySubtree} from "../copy-tree.js";
+import {MAX_COPY_DEPTH, MAX_COPY_ITEMS, copySubtree} from "../copy-tree.js";
 import {INTERNAL_API_NOT_CONFIGURED} from "../internal-api.js";
 import type {ServerContext} from "../context.js";
 import {defineOp, fail, ok, toJson} from "./define.js";
@@ -27,6 +27,7 @@ import
 } from "./nodes-shared.js";
 
 const DETACH_TOO_BIG = `Detaching mirror subtrees containing more than ${MAX_COPY_ITEMS} items is not supported.`;
+const DETACH_TOO_DEEP = `Detaching mirror subtrees more than ${MAX_COPY_DEPTH} levels deep is not supported.`;
 
 // POST /api/v1/nodes/mirror - Mirror items under a parent, in order at consecutive indexes
 export const nodesMirror = defineOp(
@@ -231,7 +232,7 @@ export const nodesDetachMirror = defineOp(
 				return fail(
 					400,
 					{
-						error: DETACH_TOO_BIG,
+						error: copied.reason === "tooMany" ? DETACH_TOO_BIG : DETACH_TOO_DEEP,
 					},
 				);
 			}

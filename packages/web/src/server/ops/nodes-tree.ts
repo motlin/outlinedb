@@ -2,7 +2,7 @@ import {z} from "zod";
 import type {NodeWriter} from "./nodes-shared.js";
 import {MoveIntoOwnSubtreeError} from "@outlinedb/shared/cache";
 import type {NewTree} from "@outlinedb/shared/internal";
-import {MAX_COPY_ITEMS, copySubtree} from "../copy-tree.js";
+import {MAX_COPY_DEPTH, MAX_COPY_ITEMS, copySubtree} from "../copy-tree.js";
 import type {ServerContext} from "../context.js";
 import {defineOp, fail, ok, toJson} from "./define.js";
 import {CreatedIdsSchema, NodeListSchema} from "./schemas.js";
@@ -265,7 +265,10 @@ export const nodesDuplicate = defineOp(
 					return fail(
 						400,
 						{
-							error: `Too many nodes: ${copied.count} (max ${MAX_COPY_ITEMS})`,
+							error:
+								copied.reason === "tooMany"
+									? `Too many nodes: ${copied.count} (max ${MAX_COPY_ITEMS})`
+									: `Too deep: more than ${MAX_COPY_DEPTH} levels`,
 						},
 					);
 				}
