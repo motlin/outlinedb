@@ -134,7 +134,9 @@ describe("buildShortlistRequests", () =>
 			["tags.1", 255],
 			["tags.2", 47],
 		]);
-		expect(requests).toHaveLength(1);
+		expect(requests.map((request) => Object.keys(request.questions))).toStrictEqual([
+			["people.1", "people.2", "people.3", "tags.1", "tags.2"],
+		]);
 	});
 
 	it("splits shards over more requests when one request would pass the 20,000-token estimate", () =>
@@ -165,7 +167,7 @@ describe("buildShortlistRequests", () =>
 			kind: "person",
 			description: "",
 		};
-		expect(() => buildShortlistRequests(state, [bad])).toThrow("Invalid Clef id: p.@Bad Id");
+		expect(() => buildShortlistRequests(state, [bad])).toThrow(new Error("Invalid Clef id: p.@Bad Id"));
 	});
 });
 

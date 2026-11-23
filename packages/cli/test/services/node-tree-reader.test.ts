@@ -372,14 +372,19 @@ describe("NodeTreeReader", () =>
 		);
 		assert(mirror);
 
-		expect(mirror.mirror.isMirror).toBe(true);
 		expect(
 			{
+				mirror: mirror.mirror,
 				name: mirror.name,
 				note: mirror.note,
 			},
 		).toStrictEqual(
 			{
+				mirror:
+				{
+					isMirror: true,
+					originalNodeId: "orig",
+				},
 				name: "Original Name",
 				note: "Original Note",
 			},

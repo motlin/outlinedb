@@ -886,7 +886,6 @@ describe("node get command", () =>
 
 		it("has examples", () =>
 		{
-			expect(Array.isArray(Get.examples)).toBe(true);
 			expect(Get.examples).toStrictEqual([
 				"# Read node by ID",
 				"<%= config.bin %> <%= command.id %> --id abc123",

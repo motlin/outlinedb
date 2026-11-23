@@ -28,6 +28,7 @@ import
 } from "@outlinedb/shared/cache";
 import {FAR_FUTURE_DATE, formatTemporalTimestamp, systemTimeAt} from "@outlinedb/shared/temporal";
 import type {WorkflowyNode} from "@outlinedb/shared/types";
+import {SqliteError} from "better-sqlite3";
 import {eq, and} from "drizzle-orm";
 import fs from "node:fs";
 import os from "node:os";
@@ -3000,7 +3001,7 @@ describe("cache import", () =>
 						false,
 						T1,
 					),
-				).rejects.toThrow("mirror failed");
+				).rejects.toThrow(new SqliteError("mirror failed", "SQLITE_CONSTRAINT_TRIGGER"));
 
 				// The rename and the deletion of "gone" rolled back with the mirror.
 				expect(currentContent()).toStrictEqual([
@@ -6228,8 +6229,14 @@ describe("cache service", () =>
 
 				const result = cacheService.getChildrenForMultipleParents(["parent-1", "parent-2"]);
 
-				expect(result.get("parent-1")!).toHaveLength(2);
-				expect(result.get("parent-2")!).toHaveLength(1);
+				expect(
+					new Map([...result].map(([parentId, children]) => [parentId, children.map((child) => child.id)])),
+				).toStrictEqual(
+					new Map([
+						["parent-1", ["child-1a", "child-1b"]],
+						["parent-2", ["child-2a"]],
+					]),
+				);
 			});
 
 			it("returns empty arrays for parents with no children", () =>

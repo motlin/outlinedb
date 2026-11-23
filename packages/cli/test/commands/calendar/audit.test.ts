@@ -219,7 +219,18 @@ describe("calendar audit command", () =>
 			await CalendarAudit.run(["--json", "--root-id", "cal"]);
 		});
 
-		expect(JSON.parse(stdout)).toHaveLength(2);
+		expect(JSON.parse(stdout)).toStrictEqual([
+			{
+				kind: "untagged-day",
+				id: "outer",
+				dateId: 20_260_115,
+			},
+			{
+				kind: "nested-day",
+				id: "inner",
+				dateId: 20_260_115,
+			},
+		]);
 	});
 
 	it("prints [] for a clean calendar", async () =>

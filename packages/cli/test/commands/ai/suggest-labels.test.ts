@@ -599,7 +599,9 @@ describe("ai suggest-labels command", () =>
 	{
 		const {error} = await suggest("--parent-id", "cal", "--since", "2026-1");
 
-		expect(error?.message).toContain('--since must be YYYY-MM, got "2026-1"');
+		expect(error?.message).toBe(
+			'Parsing --since \n\t--since must be YYYY-MM, got "2026-1"\nSee more help with --help',
+		);
 	});
 
 	it("rescores fresh entries with --force", async () =>

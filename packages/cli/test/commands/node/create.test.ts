@@ -1,4 +1,5 @@
 import {it, vi, afterEach, expect, describe, beforeEach} from "vite-plus/test";
+import {CLIError} from "@oclif/core/errors";
 import {captureOutput} from "@oclif/test";
 import {calendarNodeId, WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import fs from "node:fs";
@@ -190,7 +191,14 @@ describe("node create command", () =>
 
 		it("requires parent specifier", async () =>
 		{
-			await expect(Create.run(["--name", "Test Node"])).rejects.toThrow("Parent node is required");
+			await expect(Create.run(["--name", "Test Node"])).rejects.toThrow(
+				new CLIError(
+					"Parent node is required. Use --parent-id or --parent-path to specify a parent.",
+					{
+						exit: 2,
+					},
+				),
+			);
 		});
 	});
 
@@ -1205,7 +1213,23 @@ describe("node create command", () =>
 
 			await expect(
 				Create.run(["--parent-id", "parent-id", "--json", '{"invalid": "structure"}']),
-			).rejects.toThrow("Invalid JSON structure");
+			).rejects.toThrow(
+				new CLIError(
+					"Invalid JSON structure: [\n" +
+						"  {\n" +
+						'    "expected": "string",\n' +
+						'    "code": "invalid_type",\n' +
+						'    "path": [\n' +
+						'      "name"\n' +
+						"    ],\n" +
+						'    "message": "Invalid input: expected string, received undefined"\n' +
+						"  }\n" +
+						"]",
+					{
+						exit: 2,
+					},
+				),
+			);
 		});
 	});
 
@@ -1280,7 +1304,14 @@ describe("node create command", () =>
 
 			await expect(
 				Create.run(["--parent-id", "parent-id", "--json-file", "/nonexistent/file.json"]),
-			).rejects.toThrow("File not found");
+			).rejects.toThrow(
+				new CLIError(
+					"File not found: /nonexistent/file.json",
+					{
+						exit: 2,
+					},
+				),
+			);
 		});
 	});
 

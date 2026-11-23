@@ -1,4 +1,5 @@
 import {it, vi, afterEach, expect, describe, beforeEach} from "vite-plus/test";
+import {CLIError} from "@oclif/core/errors";
 import {captureOutput} from "@oclif/test";
 import {nodeContent} from "@outlinedb/shared/db";
 import {FAR_FUTURE_DATE, systemTimeAt} from "@outlinedb/shared/temporal";
@@ -531,7 +532,16 @@ describe("node update command", () =>
 
 			await expect(
 				Update.run(["--id", "target-id", "--name", "Short stub", "--expect-name", "Stale original text"]),
-			).rejects.toThrow(/does not match --expect-name/u);
+			).rejects.toThrow(
+				new CLIError(
+					"Refusing to update target-id: current name does not match --expect-name (the node likely changed since it was read).\n" +
+						'  expected: "Stale original text"\n' +
+						'  actual:   "Long current text the user expanded later"',
+					{
+						exit: 2,
+					},
+				),
+			);
 
 			expect(fetchStub.mock.calls).toStrictEqual([]);
 		});
@@ -578,7 +588,16 @@ describe("node update command", () =>
 
 			await expect(
 				Update.run(["--id", "missing-id", "--name", "New Name", "--expect-name", "Anything"]),
-			).rejects.toThrow(/does not match --expect-name/u);
+			).rejects.toThrow(
+				new CLIError(
+					"Refusing to update missing-id: current name does not match --expect-name (the node likely changed since it was read).\n" +
+						'  expected: "Anything"\n' +
+						"  actual:   null",
+					{
+						exit: 2,
+					},
+				),
+			);
 
 			expect(fetchStub.mock.calls).toStrictEqual([]);
 		});

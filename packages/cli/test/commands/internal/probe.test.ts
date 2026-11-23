@@ -563,7 +563,24 @@ describe("internal probe error-shape", () =>
 			),
 		);
 		await Probe.run(["error-shape", "--yes-live", "--out", outPath]);
-		expect(fs.readFileSync(outPath, "utf8")).toContain("- First op (`edit`) applied: no (name unchanged)\n");
+		expect(fs.readFileSync(outPath, "utf8")).toBe(
+			[
+				"",
+				"## error-shape (2026-10-18T12:00:00.000Z)",
+				"",
+				"- Fixture: fresh child created under the sandbox via the public API; ancestors verified",
+				"- Batch: `edit` (rename the child) then `move` (into a nonexistent parent), one `/push_and_poll`",
+				"- HTTP status: 200",
+				"- `results[0]` keys: `error`",
+				"- `results[0].error`: `error_encountered_running_operations`",
+				"- `server_run_operation_transaction_json`: absent",
+				"- Tx id advanced: unknown",
+				"- First op (`edit`) applied: no (name unchanged)",
+				"- Child parent after push: sandbox",
+				"- Cleanup: child deleted via the public API",
+				"",
+			].join("\n"),
+		);
 	});
 
 	it("refuses to push when the created child is not under the sandbox, and writes nothing else", async () =>
@@ -1145,26 +1162,41 @@ describe("internal probe root-meta", () =>
 		await Probe.run(["root-meta-set", "--yes-live", "--yes-account-global", "--out", outPath]);
 		expect(pushedOperations(recorded)).toStrictEqual([
 			[
-				expect.objectContaining(
+				{
+					type: "edit",
+					client_timestamp: 492_324_800,
+					data:
 					{
-						type: "edit",
-						data: expect.objectContaining(
+						projectid: "None",
+						metadataPatches: [
 							{
-								projectid: "None",
-								metadataPatches: [
-									{
-										op: "add",
-										path: ["probe"],
-										value:
-										{
-											x: "1",
-										},
-									},
-								],
+								op: "add",
+								path: ["probe"],
+								value:
+								{
+									x: "1",
+								},
 							},
-						),
+						],
+						metadataInversePatches: [
+							{
+								op: "remove",
+								path: ["probe"],
+							},
+						],
 					},
-				),
+					undo_data:
+					{
+						metadataPatches: [
+							{
+								op: "remove",
+								path: ["probe"],
+							},
+						],
+						previous_last_modified: null,
+						previous_last_modified_by: null,
+					},
+				},
 			],
 		]);
 		expect(fs.readFileSync(outPath, "utf8")).toBe(
@@ -1222,22 +1254,45 @@ describe("internal probe root-meta", () =>
 		await Probe.run(["root-meta-unset", "--yes-live", "--yes-account-global", "--out", outPath]);
 		expect(pushedOperations(recorded)).toStrictEqual([
 			[
-				expect.objectContaining(
+				{
+					type: "edit",
+					client_timestamp: 492_324_800,
+					data:
 					{
-						type: "edit",
-						data: expect.objectContaining(
+						projectid: "None",
+						metadataPatches: [
 							{
-								projectid: "None",
-								metadataPatches: [
-									{
-										op: "remove",
-										path: ["probe"],
-									},
-								],
+								op: "remove",
+								path: ["probe"],
 							},
-						),
+						],
+						metadataInversePatches: [
+							{
+								op: "add",
+								path: ["probe"],
+								value:
+								{
+									x: "1",
+								},
+							},
+						],
 					},
-				),
+					undo_data:
+					{
+						metadataPatches: [
+							{
+								op: "add",
+								path: ["probe"],
+								value:
+								{
+									x: "1",
+								},
+							},
+						],
+						previous_last_modified: null,
+						previous_last_modified_by: null,
+					},
+				},
 			],
 		]);
 		expect(fs.readFileSync(outPath, "utf8")).toBe(
