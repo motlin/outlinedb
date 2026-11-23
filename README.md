@@ -11,6 +11,7 @@ Why this project merges several upstream data sources: see [docs/workflowy-data-
 - [OutlineDB](#outlinedb)
 - [Usage](#usage)
 - [Web server environment](#web-server-environment)
+- [Development](#development)
 - [Commands](#commands)
 
 <!-- tocstop -->
@@ -51,6 +52,32 @@ The web server's Node host (`just web`, `just dev-node`) and the stdio MCP serve
 | `OUTLINEDB_EMBEDDINGS`        | `true`                      | `false` turns off related notes (the sqlite-vec index).                                                                                                                   |
 
 The server fails at startup when `OUTLINEDB_MODE` is unset or unknown, or is `mirror` without `WORKFLOWY_API_KEY`. The Cloudflare Worker reads its own bindings (`packages/cloudflare/src/worker-config.ts`): it holds no Workflowy credentials, every account starts standalone and becomes `mirror` only through its own Settings > Workflowy connection with keep-syncing on, and `TREE_SNAPSHOT` is off unless `true`.
+
+# Development
+
+Run `just` to list every recipe. The ones you reach for:
+
+| Recipe                                                                              | What it does                                                                                                                                      |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `just install`                                                                      | `pnpm install`, then `just ensure-sqlite-native` rebuilds better-sqlite3 when it does not match the active Node.                                  |
+| `just verify` (`--quick` skips tests)                                               | Every pre-commit check in parallel branches; `just precommit` is its alias, which git-test calls.                                                 |
+| `just check`, `just lint`, `just format`, `just typecheck`                          | Lint plus type-check, lint alone, oxfmt-next-line formatting, type-check alone.                                                                   |
+| `just test`, `just coverage`, `just test-plugins`                                   | Vitest over every project, Vitest with V8 coverage into `coverage/lcov.info`, and the `node --test` plugin script tests.                          |
+| `just pre-commit`                                                                   | `pre-commit run --all-files`, the same hooks CI's pre-commit job runs.                                                                            |
+| `just fallow`, `just fallow-check`                                                  | Apply safe Fallow dead-code fixes then fail on the rest; `fallow-check` only fails (CI).                                                          |
+| `just build`, `just build-shared`, `just clean`, `just manifest`                    | Build every package, build `@outlinedb/shared` alone, delete dist dirs and tsbuildinfo, write the oclif manifest.                                 |
+| `just readme`, `just readme-check`                                                  | Regenerate this README's oclif sections from the built CLI, or fail when they are stale.                                                          |
+| `just dev`, `just web`, `just dev-node`                                             | The SPA plus Worker in local workerd (after `just cf-d1-migrate-local` applies the AUTH_DB migrations), or the Node host over `outlinedb.sqlite`. |
+| `just cf-build`, `just cf-test`, `just cf-smoke`                                    | Build the Worker, run the Worker tests, run the browser smoke test against a fresh `just dev`.                                                    |
+| `just cf-deploy`, `just cf-seed-account <url>`                                      | Deploy by hand (CI deploys every push to main; needs `CONFIRM_DEPLOY=1`), then seed account state into the deployed Worker.                       |
+| `just daily`, `just backup-db`, `just download-backups`                             | The daily import (backups, API, embeddings, vacuum), copy `outlinedb.sqlite` to `.bak`, sync Dropbox backups into `backups/`.                     |
+| `op run -- just build-fresh-database`                                               | Rebuild the database from every backup into a new file, then swap it in.                                                                          |
+| `just db-browser`, `just db-cli`, `just db-web`                                     | Open `outlinedb.sqlite` in DB Browser for SQLite, `sqlite3`, or Datasette.                                                                        |
+| `just demo`                                                                         | Walk through the CLI commands.                                                                                                                    |
+| `just eval-structural`, `just eval-deterministic`                                   | Structural and deterministic plugin evals (no LLM calls).                                                                                         |
+| `just eval-leaf`, `just eval-orchestrator`, `just eval-e2e`, `just eval-behavioral` | LLM evals by tier, or all behavioral evals; they need `ANTHROPIC_API_KEY` and are not part of `verify`.                                           |
+
+The `package.json` scripts back these recipes: `vp run typecheck`, `vp run fallow`, `vp run fallow:ci`, and the `vp run eval:structural`, `eval:deterministic`, `eval:leaf`, `eval:orchestrator`, `eval:e2e` and `eval:behavioral` scripts. Run `vp run gen:migrations` after changing a Drizzle migration to regenerate the Durable Object migrations bundle.
 
 # Commands
 
