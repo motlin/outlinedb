@@ -910,6 +910,7 @@ export class LocalTreeWriter
 	 * Replace a mirror (or an original that has mirrors) with `copy` at its slot, in one unit of work: the copy goes in,
 	 * then `plan` removes the row (an original is kept by its promotion into a mirror's slot). Returns the copy's id.
 	 */
+	// fallow-ignore-next-line unused-class-member -- packages/web calls it on writer.local, whose type fallow does not resolve
 	detachMirror(id: string, copy: NewTree, plan: LocalDeletePlan): string
 	{
 		return this.write((pending, unitOfWork) =>

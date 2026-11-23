@@ -23,6 +23,7 @@ export class WorkflowyWriteThroughClient
 	}
 
 	/** A node as workflowy.com holds it now, or `null` when it is deleted or never existed; the cache is untouched. */
+	// fallow-ignore-next-line unused-class-member -- the internal adapter calls it on its optional writeThrough option, whose type fallow does not resolve
 	async findNode(nodeId: string): Promise<WorkflowyNode | null>
 	{
 		return this.apiClient.findNode(nodeId);

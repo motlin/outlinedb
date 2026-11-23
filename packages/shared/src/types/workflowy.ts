@@ -55,15 +55,6 @@ export const CreateNodeResponseSchema = z
 	)
 	.strict();
 
-export const CreateMirrorResponseSchema = z
-	.object(
-		{
-			item_id: z.string(),
-			origin_id: z.string(),
-		},
-	)
-	.strict();
-
 export const GetNodeResponseSchema = z
 	.object(
 		{

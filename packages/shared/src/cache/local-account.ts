@@ -154,6 +154,7 @@ export class LocalAccount
 	}
 
 	/** Set (or, with `undefined`, remove) one root metadata value. */
+	// fallow-ignore-next-line unused-class-member -- packages/web calls it on the withAccountState callback's state, whose type fallow does not resolve
 	async setRootMeta(path: string[], value: unknown): Promise<void>
 	{
 		await this.setRootMetaValues([
@@ -174,12 +175,6 @@ export class LocalAccount
 	async getSetting(name: string): Promise<unknown>
 	{
 		return Promise.resolve(this.snapshot().settings[name]);
-	}
-
-	async setSetting(name: string, value: string | boolean): Promise<void>
-	{
-		this.change([], [[name, value]]);
-		return Promise.resolve();
 	}
 
 	/**
@@ -261,6 +256,7 @@ export class LocalAccount
 	}
 
 	/** The enabled feature codenames, each mapped to true. */
+	// fallow-ignore-next-line unused-class-member -- packages/web calls it on the withAccountState callback's state, whose type fallow does not resolve
 	enabledFeatures(): Record<string, true>
 	{
 		return Object.fromEntries(

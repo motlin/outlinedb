@@ -432,6 +432,7 @@ export class WorkflowyInternalAdapter
 	}
 
 	/** The session's `wfclientid`, which names this client's `/ws/signal/<client_id>/` channel. */
+	// fallow-ignore-next-line unused-class-member -- packages/web calls it on the server's internal adapter, whose type fallow does not resolve
 	async clientId(): Promise<string>
 	{
 		return (await this.session()).clientId;
@@ -1673,12 +1674,14 @@ export class WorkflowyInternalAdapter
 	}
 
 	/** The id upstream's `/file-proxy/` paths carry as the file owner. */
+	// fallow-ignore-next-line unused-class-member -- packages/web calls it on ctx.internalAdapter(), whose type fallow does not resolve
 	async fileOwnerId(): Promise<number>
 	{
 		return (await this.session()).ownerId;
 	}
 
 	/** The signed S3 URL a `/file-proxy/signed-preview|signed-original/...` path resolves to. */
+	// fallow-ignore-next-line unused-class-member -- packages/web calls it on ctx.internalAdapter(), whose type fallow does not resolve
 	async signedFileUrl(path: string): Promise<string>
 	{
 		return this.client.signedFileUrl(path);

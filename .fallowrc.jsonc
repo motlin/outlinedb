@@ -29,7 +29,6 @@
 	{
 		"patterns": ["packages/*"],
 	},
-	"publicPackages": ["@outlinedb/shared"],
 	"ignorePatterns": [
 		".storybook/**",
 		"**/dist/**",

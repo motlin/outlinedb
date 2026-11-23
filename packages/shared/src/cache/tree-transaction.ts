@@ -11,7 +11,7 @@ import type {TemporalTransaction} from "./temporal-merge.js";
  * current to: the edge tables match upstream as of this transaction, and every
  * `/push_and_poll` starts from it.
  */
-export const MAIN_TREE_ID = "main";
+const MAIN_TREE_ID = "main";
 
 /** The stored tree transaction id, or undefined before the first whole-tree import. */
 export function readTreeTxId(tx: TemporalTransaction): string | undefined

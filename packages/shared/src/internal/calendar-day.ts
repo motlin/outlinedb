@@ -70,7 +70,7 @@ export function parseDateId(dateId: number): CalendarDate | undefined
  * The first day of the week holding `date` (upstream `DC1`'s timestamp):
  * Monday when `weekStartDay` is 1, else Sunday, as upstream only knows those two.
  */
-export function calendarWeekStart(date: CalendarDate, weekStartDay = 0): CalendarDate
+function calendarWeekStart(date: CalendarDate, weekStartDay = 0): CalendarDate
 {
 	const local = new Date(date.year, date.month - 1, date.day);
 	const offset = (local.getDay() - (weekStartDay === 1 ? 1 : 0) + 7) % 7;
@@ -183,7 +183,7 @@ function zoneOffset(timestamp: number, timeZone: string): number
  * Midnight starting `date` in `timeZone` (the account's zone, as upstream's browser writes it), or in the host's zone
  * without one.
  */
-export function calendarMidnight(date: CalendarDate, timeZone?: string): number
+function calendarMidnight(date: CalendarDate, timeZone?: string): number
 {
 	if (timeZone === undefined)
 	{

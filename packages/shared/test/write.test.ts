@@ -14,7 +14,6 @@ import {z} from "zod";
 import type {WorkflowyNode} from "../src/types/workflowy.js";
 import {buildTestDb} from "./helpers/round-trip-helpers.js";
 import type {DeletePlan} from "../src/cache/delete-plan.js";
-import type {UpdateNodeRequest} from "../src/api/workflowy-client.js";
 import {migratedMemoryDatabase} from "./helpers/migrated-memory-database.js";
 
 /** The fractional-indexing integer key of `n`, so seeded keys sort like the seeded priorities. */
@@ -1378,16 +1377,10 @@ describe("write through mirror update", () =>
 	const MIRROR_ID = "mirror-node";
 	const PLAIN_ID = "plain-node";
 
-	/** An API that records which node id each update targets, over an empty cache that knows one mirror. */
+	/** An API over an empty cache that knows one mirror. */
 	function fakes()
 	{
-		const updates: [string, UpdateNodeRequest][] = [];
 		const apiClient = new WorkflowyApiClient("test-key");
-		vi.spyOn(apiClient, "updateNode").mockImplementation(async (id, request) =>
-		{
-			updates.push([id, request]);
-			return Promise.resolve();
-		});
 		vi.spyOn(apiClient, "getNode").mockImplementation(async (id) =>
 			Promise.resolve(
 				{
@@ -1403,7 +1396,6 @@ describe("write through mirror update", () =>
 		vi.spyOn(cacheService, "getMirrorOriginal").mockImplementation((id) => (id === MIRROR_ID ? ORIGINAL_ID : null));
 		return {
 			client: new WorkflowyWriteThroughClient(apiClient, cacheService),
-			updates,
 		};
 	}
 
@@ -1430,7 +1422,6 @@ describe("write through uncached parent", () =>
 	function fakes()
 	{
 		const apiClient = new WorkflowyApiClient("test-key");
-		vi.spyOn(apiClient, "updateNode").mockResolvedValue();
 		vi.spyOn(apiClient, "completeNode").mockResolvedValue();
 		vi.spyOn(apiClient, "getNode").mockImplementation(async (id) =>
 			Promise.resolve(

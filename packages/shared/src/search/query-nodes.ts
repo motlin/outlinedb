@@ -142,7 +142,7 @@ export function mergeRanges(ranges: Range[]): Range[]
 }
 
 /** Matches text against a regexp with the match itself in capture group 2 (group 1 is the leading boundary). */
-export abstract class TextNode implements QueryNode
+abstract class TextNode implements QueryNode
 {
 	protected abstract readonly regexp: RegExp;
 

@@ -96,7 +96,7 @@ const SEGMENT_OPTIONS: Record<string, (string | null)[]> =
  * Port of upstream's strict `date:` value parse: every Y/YY/YYYY x M/MM x D/DD variant of the account format,
  * each with and without `@HH:mm`. Returns null when no variant parses.
  */
-export function parseStrictDate(value: string, dateFormat: string): number | null
+function parseStrictDate(value: string, dateFormat: string): number | null
 {
 	const format = normalizeFormat(dateFormat);
 	const separator = [".", "/", "-"].find((sep) => format.includes(sep));

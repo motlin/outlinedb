@@ -144,7 +144,7 @@ function hrefs(item: SearchItem): string[]
 	return [item.nameHtml, item.noteHtml].flatMap((html) => [...html.matchAll(HREF)].map((match) => match[1] ?? ""));
 }
 
-export const COLORS = ["red", "orange", "yellow", "green", "blue", "purple", "pink", "sky", "teal", "gray"];
+const COLORS = new Set(["red", "orange", "yellow", "green", "blue", "purple", "pink", "sky", "teal", "gray"]);
 
 const completed: Predicate = (item) => item.completedAt !== null;
 const notUnderCompleted: Predicate = (item) => !item.ancestorCompleted;
@@ -215,7 +215,7 @@ export const textHighlighted = exact(
 export const textColor: SearchOperator =
 {
 	name: "text:<color>",
-	matchesToken: (token) => token.startsWith("text:") && COLORS.includes(token.slice("text:".length)),
+	matchesToken: (token) => token.startsWith("text:") && COLORS.has(token.slice("text:".length)),
 	create: (token) =>
 	{
 		const cls = `c-${token.slice("text:".length)}`;
@@ -223,7 +223,7 @@ export const textColor: SearchOperator =
 	},
 };
 export const highlightColor = prefixed("highlight:", (value) =>
-	COLORS.includes(value) ? new MetaNode(coloredSpan((c) => c === `bc-${value}`)) : MATCH_NOTHING,
+	COLORS.has(value) ? new MetaNode(coloredSpan((c) => c === `bc-${value}`)) : MATCH_NOTHING,
 );
 export const isCodeBlock = exact(["is:code-block"], layout("code-block"));
 export const isQuote = exact(["is:quote"], layout("quote-block"));

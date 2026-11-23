@@ -2,7 +2,6 @@ import
 {
 	ApiResponseSchema,
 	CompletionStatusResponseSchema,
-	CreateMirrorResponseSchema,
 	CreateNodeResponseSchema,
 	GetNodeResponseSchema,
 } from "../types/workflowy.js";
@@ -110,26 +109,6 @@ export interface CreateNodeRequest
 	note?: string;
 	layoutMode?: string;
 	position?: "top" | "bottom";
-}
-
-/**
- * Request object for updating an existing node.
- */
-export interface UpdateNodeRequest
-{
-	name?: string;
-	note?: string;
-	layoutMode?: string;
-}
-
-/**
- * Result of creating a mirror. `originId` is the true origin, which differs
- * from the requested node when that node was itself a mirror.
- */
-export interface CreateMirrorResult
-{
-	mirrorId: string;
-	originId: string;
 }
 
 /**
@@ -428,48 +407,6 @@ export class WorkflowyApiClient
 	}
 
 	/**
-	 * Update an existing node.
-	 *
-	 * @param id - The node ID to update
-	 * @param request - The fields to update (name, note, layoutMode)
-	 */
-	async updateNode(id: string, request: UpdateNodeRequest): Promise<void>
-	{
-		const url = `${this.baseUrl}/api/v1/nodes/${id}`;
-		const startTime = performance.now();
-		this.logger?.logRequest(url, "POST", request);
-
-		try
-		{
-			const response = await this.send(
-				url,
-				{
-					method: "POST",
-					headers: this.getHeaders(),
-					body: JSON.stringify(request),
-				},
-			);
-
-			if (!response.ok)
-			{
-				throw await this.describeFailure("Failed to update node", response);
-			}
-
-			const data: unknown = await response.json();
-			const duration = performance.now() - startTime;
-			this.logger?.logResponse(url, "POST", response.status, response.statusText, data, duration);
-
-			CompletionStatusResponseSchema.parse(data);
-		}
-		catch (error)
-		{
-			const duration = performance.now() - startTime;
-			this.logger?.logError(url, "POST", error, duration);
-			throw error;
-		}
-	}
-
-	/**
 	 * Delete a node.
 	 *
 	 * @param id - The node ID to delete
@@ -547,46 +484,6 @@ export class WorkflowyApiClient
 	}
 
 	/**
-	 * Mark a node as not completed.
-	 *
-	 * @param id - The node ID to uncomplete
-	 */
-	async uncompleteNode(id: string): Promise<void>
-	{
-		const url = `${this.baseUrl}/api/v1/nodes/${id}/uncomplete`;
-		const startTime = performance.now();
-		this.logger?.logRequest(url, "POST");
-
-		try
-		{
-			const response = await this.send(
-				url,
-				{
-					method: "POST",
-					headers: this.getHeaders(),
-				},
-			);
-
-			if (!response.ok)
-			{
-				throw await this.describeFailure("Failed to uncomplete node", response);
-			}
-
-			const data: unknown = await response.json();
-			const duration = performance.now() - startTime;
-			this.logger?.logResponse(url, "POST", response.status, response.statusText, data, duration);
-
-			CompletionStatusResponseSchema.parse(data);
-		}
-		catch (error)
-		{
-			const duration = performance.now() - startTime;
-			this.logger?.logError(url, "POST", error, duration);
-			throw error;
-		}
-	}
-
-	/**
 	 * Move a node to a new parent.
 	 *
 	 * @param id - The node ID to move
@@ -634,59 +531,6 @@ export class WorkflowyApiClient
 			const data = await response.text();
 			const duration = performance.now() - startTime;
 			this.logger?.logResponse(url, "POST", response.status, response.statusText, data, duration);
-		}
-		catch (error)
-		{
-			const duration = performance.now() - startTime;
-			this.logger?.logError(url, "POST", error, duration);
-			throw error;
-		}
-	}
-
-	/**
-	 * Create a live mirror of a node under a new parent.
-	 *
-	 * @param originId - The node to mirror (a mirror resolves to its true origin)
-	 * @param parentId - The parent to place the mirror under. The endpoint requires one,
-	 *   so a mirror cannot be placed at Home (the top level)
-	 * @param position - Where among the parent's children to place the mirror
-	 */
-	async createMirror(originId: string, parentId: string, position: "top" | "bottom"): Promise<CreateMirrorResult>
-	{
-		const url = `${this.baseUrl}/api/v1/nodes/${originId}/mirror`;
-		const body =
-		{
-			parent_id: parentId,
-			position,
-		};
-		const startTime = performance.now();
-		this.logger?.logRequest(url, "POST", body);
-
-		try
-		{
-			const response = await this.fetchOnce(
-				url,
-				{
-					method: "POST",
-					headers: this.getHeaders(),
-					body: JSON.stringify(body),
-				},
-			);
-
-			if (!response.ok)
-			{
-				throw await this.describeFailure("Failed to create mirror", response);
-			}
-
-			const data: unknown = await response.json();
-			const duration = performance.now() - startTime;
-			this.logger?.logResponse(url, "POST", response.status, response.statusText, data, duration);
-
-			const parsed = CreateMirrorResponseSchema.parse(data);
-			return {
-				mirrorId: parsed.item_id,
-				originId: parsed.origin_id,
-			};
 		}
 		catch (error)
 		{

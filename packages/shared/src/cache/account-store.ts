@@ -82,7 +82,7 @@ interface ScalarField
 }
 
 /** `root_preferences` columns by root-metadata path. */
-export const ROOT_PREFERENCE_FIELDS: readonly ScalarField[] = [
+const ROOT_PREFERENCE_FIELDS: readonly ScalarField[] = [
 	{
 		property: "dateFormat",
 		path: ["dateFormat"],
@@ -191,7 +191,7 @@ export const ROOT_PREFERENCE_FIELDS: readonly ScalarField[] = [
 ];
 
 /** `account_settings` columns by settings path. */
-export const ACCOUNT_SETTING_FIELDS: readonly ScalarField[] = [
+const ACCOUNT_SETTING_FIELDS: readonly ScalarField[] = [
 	{
 		property: "theme",
 		path: ["theme"],
