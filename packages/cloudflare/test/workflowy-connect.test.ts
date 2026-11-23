@@ -51,6 +51,25 @@ function codeInputs(label = '<label for="id_code">Code from your email</label>')
 	return `<input type="hidden" name="login_step" value="code"><input type="hidden" name="password" value="${PASSWORD}">${label}<input type="text" name="code" id="id_code" autocomplete="one-time-code">`;
 }
 
+/** The page workflowy.com serves at /login-mfa/ after a password: its own form, with no email and no login hidden values. */
+function mfaPage(errors: string[] = [], headers: Record<string, string> = {}): Response
+{
+	const list = errors.length === 0 ? "" : `<ul class="errorlist nonfield"><li>${errors.join("</li><li>")}</li></ul>`;
+	return new Response(
+		`<!doctype html><html><body><form method="POST" action="">${list}
+<input type="hidden" name="csrfmiddlewaretoken" value="mfa-csrf">
+<label for="id_code">Code from your authenticator app</label><input type="text" name="code" id="id_code" autocomplete="one-time-code">
+<button type="submit">Verify</button></form></body></html>`,
+		{
+			headers:
+			{
+				"content-type": "text/html; charset=utf-8",
+				...headers,
+			},
+		},
+	);
+}
+
 const PASSWORD_INPUT =
 	'<div id="password"><label for="id_password">Password</label><input type="password" name="password" id="id_password"></div>';
 
@@ -142,6 +161,59 @@ describe("connecting an account to workflowy.com", () =>
 									},
 								);
 					}
+					// The authenticator-app step: its form posts back to /login-mfa/ with only its own fields.
+					if (url.pathname === "/login-mfa/")
+					{
+						if (request.method === "GET")
+						{
+							return cookie.includes("sessionid=mfa-pending-1")
+								? mfaPage(
+										[],
+										{
+											"set-cookie": "sessionid=mfa-pending-2; Path=/; HttpOnly",
+										},
+									)
+								: new Response(
+										null,
+										{
+											status: 302,
+											headers:
+											{
+												location: "/login/",
+											},
+										},
+									);
+						}
+						if (
+							!cookie.includes("sessionid=mfa-pending-2") ||
+							Object.keys(form).join(",") !== "csrfmiddlewaretoken,code" ||
+							form.csrfmiddlewaretoken !== "mfa-csrf"
+						)
+						{
+							return new Response(
+								"CSRF verification failed",
+								{
+									status: 403,
+								},
+							);
+						}
+						if (form.code !== CODE)
+						{
+							return mfaPage(["That code is not right."]);
+						}
+						sessions++;
+						return new Response(
+							null,
+							{
+								status: 302,
+								headers:
+								{
+									location: "/",
+									"set-cookie": `sessionid=upstream-session-${String(sessions)}; Path=/; HttpOnly`,
+								},
+							},
+						);
+					}
 					if (url.pathname !== "/login/")
 					{
 						return new Response(
@@ -181,7 +253,8 @@ describe("connecting an account to workflowy.com", () =>
 					if (form.code !== undefined)
 					{
 						// The code only counts with the password the code step echoed back.
-						if (form.code === EXPIRED_CODE || form.password !== PASSWORD)
+						// A code meant for /login-mfa/ that arrives at /login/ instead is always expired.
+						if (form.code === EXPIRED_CODE || form.password !== PASSWORD || email === "mfa@example.com")
 						{
 							return loginPage(email, codeInputs(), ["Your verification code has expired."]);
 						}
@@ -235,6 +308,21 @@ describe("connecting an account to workflowy.com", () =>
 								headers:
 								{
 									location: "/login/complete/?token=hop-token",
+								},
+							},
+						);
+					}
+					// An authenticator-app login: the password step redirects to /login-mfa/, which serves its own form.
+					if (email === "mfa@example.com")
+					{
+						return new Response(
+							null,
+							{
+								status: 302,
+								headers:
+								{
+									location: "/login-mfa/",
+									"set-cookie": "sessionid=mfa-pending-1; Path=/; HttpOnly",
 								},
 							},
 						);
@@ -348,7 +436,8 @@ describe("connecting an account to workflowy.com", () =>
 			method: "POST",
 			path: "/login/",
 			cookie,
-			referer: "http://upstream.test",
+			// The page the form was served from.
+			referer: "http://upstream.test/login/",
 			origin: "http://upstream.test",
 			form,
 		};
@@ -839,6 +928,9 @@ describe("connecting an account to workflowy.com", () =>
 							hidden: HIDDEN,
 							fields: ["password"],
 							resend: {},
+							sendsEmail: true,
+							page: "/login/",
+							target: "/login/",
 							trace: ["GET /login/ -> 200 set [_bess]", EMAIL_POSTED],
 						},
 					},
@@ -967,6 +1059,9 @@ describe("connecting an account to workflowy.com", () =>
 							hidden: HIDDEN,
 							fields: ["password"],
 							resend: {},
+							sendsEmail: true,
+							page: "/login/",
+							target: "/login/",
 							// Each request's status, path, form names and cookie names, for every step's detail.
 							trace: ["GET /login/ -> 200 set [_bess]", EMAIL_POSTED],
 						},
@@ -1034,6 +1129,9 @@ describe("connecting an account to workflowy.com", () =>
 							{
 								password: "password",
 							},
+							sendsEmail: true,
+							page: "/login/",
+							target: "/login/",
 							trace: ["GET /login/ -> 200 set [_bess]", EMAIL_POSTED, PASSWORD_POSTED, PASSWORD_POSTED],
 						},
 					},
@@ -1278,6 +1376,180 @@ describe("connecting an account to workflowy.com", () =>
 				stored:
 				{
 					cookie: "_bess=b1; wfauth=auth-value-1; csrftoken=csrf-1",
+					blobs: 2,
+					attempt: null,
+					secretsStored: false,
+					cookieInPlaintext: false,
+				},
+			},
+		);
+	});
+
+	it("posts an authenticator code to the /login-mfa/ form it was redirected to, sending only that form's fields", async () =>
+	{
+		const started = await send(
+			"POST",
+			{
+				email: "mfa@example.com",
+			},
+		);
+		const id = attemptId(started.body);
+		const mfa = await send(
+			"POST",
+			{
+				attemptId: id,
+				values:
+				{
+					password: PASSWORD,
+				},
+			},
+		);
+		const afterMfa = await stored();
+		const wrongCode = await send(
+			"POST",
+			{
+				attemptId: id,
+				values:
+				{
+					code: "WF-0000",
+				},
+			},
+		);
+		const connected = await send(
+			"POST",
+			{
+				attemptId: id,
+				values:
+				{
+					code: CODE,
+				},
+			},
+		);
+		const mfaPost = (cookie: string, code: string): Upstream => (
+		{
+			method: "POST",
+			path: "/login-mfa/",
+			cookie,
+			referer: "http://upstream.test/login-mfa/",
+			origin: "http://upstream.test",
+			form:
+			{
+				csrfmiddlewaretoken: "mfa-csrf",
+				code,
+			},
+		});
+		const mfaTrace = `GET /login/ -> 200 set [_bess]; POST /login/ form [${HIDDEN_NAMES}, email] -> 200; POST /login/ form [${HIDDEN_NAMES}, email, password] -> 302 /login-mfa/ set [sessionid]; GET /login-mfa/ -> 200 set [sessionid]`;
+		const mfaField =
+		{
+			name: "code",
+			type: "text",
+			label: "Code from your authenticator app",
+		};
+		expect(
+			{
+				mfa,
+				afterMfa,
+				wrongCode,
+				connected,
+				upstream: upstream.splice(0),
+				stored: await stored(),
+			},
+		).toStrictEqual(
+			{
+				mfa:
+				{
+					status: 200,
+					body:
+					{
+						attemptId: id,
+						fields: [mfaField],
+						errors: [],
+						resend: [],
+						detail: `${mfaTrace}; jar [_bess, sessionid]`,
+					},
+				},
+				// The attempt now answers the /login-mfa/ form: its hidden value, no email, posted back to that page. The
+				// earlier connection stays until this one verifies.
+				afterMfa:
+				{
+					cookie: "_bess=b1; wfauth=auth-value-1; csrftoken=csrf-1",
+					blobs: 2,
+					attempt:
+					{
+						attemptId: id,
+						email: "mfa@example.com",
+						state:
+						{
+							jar:
+							{
+								_bess: "b1",
+								sessionid: "mfa-pending-2",
+							},
+							hidden:
+							{
+								csrfmiddlewaretoken: "mfa-csrf",
+							},
+							fields: ["code"],
+							resend: {},
+							sendsEmail: false,
+							page: "/login-mfa/",
+							target: "/login-mfa/",
+							trace: mfaTrace.split("; "),
+						},
+					},
+					secretsStored: false,
+					cookieInPlaintext: false,
+				},
+				wrongCode:
+				{
+					status: 200,
+					body:
+					{
+						attemptId: id,
+						fields: [mfaField],
+						errors: ["That code is not right."],
+						resend: [],
+						detail: `${mfaTrace}; POST /login-mfa/ form [csrfmiddlewaretoken, code] -> 200; jar [_bess, sessionid]`,
+					},
+				},
+				connected:
+				{
+					status: 200,
+					body:
+					{
+						connected: true,
+						status: "connected",
+						email: "mfa@example.com",
+						mirror: true,
+						lastSyncAt: null,
+					},
+				},
+				upstream: [
+					GET_LOGIN,
+					post(
+						"_bess=b1",
+						{
+							...HIDDEN,
+							email: "mfa@example.com",
+						},
+					),
+					post(
+						"_bess=b1",
+						{
+							...HIDDEN,
+							email: "mfa@example.com",
+							password: PASSWORD,
+						},
+					),
+					get("/login-mfa/", "_bess=b1; sessionid=mfa-pending-1"),
+					mfaPost("_bess=b1; sessionid=mfa-pending-2", "WF-0000"),
+					mfaPost("_bess=b1; sessionid=mfa-pending-2", CODE),
+					get("/", "_bess=b1; sessionid=upstream-session-3"),
+					get(INIT_PATH, "_bess=b1; sessionid=upstream-session-3; csrftoken=csrf-1"),
+				],
+				stored:
+				{
+					cookie: "_bess=b1; sessionid=upstream-session-3; csrftoken=csrf-1",
 					blobs: 2,
 					attempt: null,
 					secretsStored: false,

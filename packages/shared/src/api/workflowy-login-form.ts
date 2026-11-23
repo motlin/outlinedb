@@ -1,13 +1,15 @@
 /**
  * A relay of workflowy.com's server-rendered login form (`/login/`), one step at a time, so a person can answer
- * whatever it asks for next: the email first, then a password, then perhaps a one-time code. Each step POSTs the
- * form's hidden values, the email and the person's answers with the attempt's cookie jar, follows every same-origin
- * redirect by hand (keeping the cookies each hop sets), and reads the reply: a form asking for more fields (with its
- * error list), a captcha, or the end of the form. A login only counts once the jar it produced reads
- * `/get_initialization_data`, the request every import starts with. Nothing here keeps an answer: the state a step
- * returns holds only the cookies, the form's hidden values and a trace of each request (status, redirect path, the
- * form's names, cookie names), never a cookie value, a query value or an answer. A hidden input that echoes an answer
- * back (a password carried to the code step) is kept by name only; the person's browser sends that answer again.
+ * whatever it asks for next: the email first, then a password, then perhaps a one-time code, on whichever page the
+ * login redirects to (such as `/login-mfa/`). Each step POSTs exactly what the served form holds (its hidden values,
+ * the email only when it has an email input, and the person's answers) to that form's own action, with the attempt's
+ * cookie jar, follows every same-origin redirect by hand (keeping the cookies each hop sets), and reads the reply: a
+ * form asking for more fields (with its error list), a captcha, or the end of the form. A login only counts once the
+ * jar it produced reads `/get_initialization_data`, the request every import starts with. Nothing here keeps an
+ * answer: the state a step returns holds only the cookies, the form's hidden values, the page that served it and where
+ * it posts, and a trace of each request (status, redirect path, the form's names, cookie names) without a cookie value
+ * or a query value. A hidden input that echoes an answer back (a password carried to the code step) is kept by name
+ * only; the person's browser sends that answer again.
  */
 
 import {z} from "zod";
@@ -30,6 +32,10 @@ export interface LoginFormField
 /** What a login page's POST form holds. */
 export interface LoginFormPage
 {
+	/** The form's `action` attribute, empty when it has none: the page it posts to, relative to the page serving it. */
+	action: string;
+	/** The form has an email input, visible or hidden, which carries the person's email. */
+	email: boolean;
 	/** Every value the form sends unasked: its hidden inputs, checked boxes and radios, and its default submit button. */
 	hidden: Record<string, string>;
 	/** Every visible input but the email, in page order. */
@@ -52,6 +58,12 @@ export interface LoginAttemptState
 	 * step sends that answer again under the hidden name, so the answer itself is never kept here.
 	 */
 	resend: Record<string, string>;
+	/** The form has an email input, so the step sends the attempt's email. */
+	sendsEmail: boolean;
+	/** The same-origin path and query of the page that served the form, sent as the step's Referer. */
+	page: string;
+	/** The same-origin path and query the form posts to: its action resolved against {@link page}. */
+	target: string;
 	/** One line per request the attempt sent so far, as {@link traceLine} writes it. */
 	trace: string[];
 }
@@ -62,11 +74,17 @@ const LoginAttemptStateSchema = z.object(
 		hidden: z.record(z.string(), z.string()),
 		fields: z.array(z.string()),
 		resend: z.record(z.string(), z.string()),
+		sendsEmail: z.boolean(),
+		page: z.string(),
+		target: z.string(),
 		trace: z.array(z.string()),
 	},
 );
 
-/** A {@link LoginAttemptState} kept as JSON, or undefined when the text is not one. */
+/**
+ * A {@link LoginAttemptState} kept as JSON, or undefined when the text is not one: an attempt sealed before states
+ * carried their form's target is not one, so it reads as expired and the person starts over.
+ */
 export function parseLoginAttemptState(json: string): LoginAttemptState | undefined
 {
 	try
@@ -147,13 +165,14 @@ function text(html: string): string
 /** The page's `method="POST"` form, or undefined when it has none. */
 export function parseLoginForm(html: string): LoginFormPage | undefined
 {
-	const form = [...html.matchAll(/<form\b([^>]*)>([\s\S]*?)<\/form>/giu)].find(
+	const match = [...html.matchAll(/<form\b([^>]*)>([\s\S]*?)<\/form>/giu)].find(
 		([, attrs = ""]) => attributes(attrs).method?.toLowerCase() === "post",
-	)?.[2];
-	if (form === undefined)
+	);
+	if (match === undefined)
 	{
 		return undefined;
 	}
+	const [, formAttrs = "", form = ""] = match;
 	const labels = new Map(
 		[...form.matchAll(/<label\b([^>]*)>([\s\S]*?)<\/label>/giu)]
 			.map(([, attrs = "", inner = ""]) => [attributes(attrs).for ?? "", text(inner)] as const)
@@ -163,6 +182,7 @@ export function parseLoginForm(html: string): LoginFormPage | undefined
 	const fields: LoginFormField[] = [];
 	// Enter submits with the form's first submit button, which sends its name and value when it has a name.
 	let submitted = false;
+	let email = false;
 	for (const [, tag = "", attrs = ""] of form.matchAll(/<(input|button)\b([^>]*)>/giu))
 	{
 		const input = attributes(attrs);
@@ -178,7 +198,12 @@ export function parseLoginForm(html: string): LoginFormPage | undefined
 			submitted = true;
 			continue;
 		}
-		if (name === "" || name === "email" || button)
+		if (name === "email")
+		{
+			email = true;
+			continue;
+		}
+		if (name === "" || button)
 		{
 			continue;
 		}
@@ -202,6 +227,8 @@ export function parseLoginForm(html: string): LoginFormPage | undefined
 		}
 	}
 	return {
+		action: (attributes(formAttrs).action ?? "").trim(),
+		email,
 		hidden,
 		fields,
 		errors: [...form.matchAll(/<ul\b[^>]*class="errorlist[^"]*"[^>]*>([\s\S]*?)<\/ul>/giu)].flatMap(
@@ -209,6 +236,16 @@ export function parseLoginForm(html: string): LoginFormPage | undefined
 		),
 		captcha: html.includes("g-recaptcha"),
 	};
+}
+
+/**
+ * Where a form with `action` posts when `page` served it, as the path and query on `origin`, as a browser resolves it: an
+ * empty action posts back to the page itself. Undefined when it posts to another site, where no cookie may go.
+ */
+export function formTarget(action: string, page: URL, origin: string): string | undefined
+{
+	const target = new URL(action, page);
+	return target.origin === origin ? `${target.pathname}${target.search}` : undefined;
 }
 
 /** `jar` with every `Set-Cookie` of `headers` applied: a new value replaces, an expired or emptied cookie goes. */
@@ -315,6 +352,8 @@ interface StepRequest
 interface Exchange
 {
 	response: Response;
+	/** The URL that answered with {@link response}, after every redirect followed. */
+	url: URL;
 	jar: CookieJar;
 	trace: string[];
 }
@@ -365,6 +404,7 @@ async function exchange(
 		{
 			return {
 				response,
+				url: target,
 				jar: current,
 				trace,
 			};
@@ -444,6 +484,15 @@ async function outcome(
 	}
 	if (page !== undefined && page.fields.length > 0)
 	{
+		const target = formTarget(page.action, step.url, new URL(baseOf(options)).origin);
+		if (target === undefined)
+		{
+			return {
+				kind: "refused",
+				message: "Login failed: workflowy.com's form posts to another site",
+				detail: [...trace, jarLine, `form action ${new URL(page.action, step.url).origin}`].join("; "),
+			};
+		}
 		const hidden: Record<string, string> = {};
 		const resend: Record<string, string> = {};
 		for (const [name, value] of Object.entries(page.hidden))
@@ -466,6 +515,9 @@ async function outcome(
 				hidden,
 				fields: page.fields.map((field) => field.name),
 				resend,
+				sendsEmail: page.email,
+				page: `${step.url.pathname}${step.url.search}`,
+				target,
 				trace,
 			},
 			fields: page.fields,
@@ -508,9 +560,10 @@ function fetcher(options: LoginRelayOptions): typeof fetch
 }
 
 /**
- * Submit the form once more: its hidden values, the email, each echoed answer the form carried (under its hidden name)
- * and the person's answers to the fields it asked for (`values`, such as a password or a code; any other key is left
- * out), with the attempt's cookies. The answers live only in this request.
+ * Submit the form to its own target, as the page that served it: its hidden values, the email when it has an email
+ * input, each echoed answer the form carried (under its hidden name) and the person's answers to the fields it asked
+ * for (`values`, such as a password or a code; any other key is left out), with the attempt's cookies. The answers
+ * live only in this request.
  */
 export async function continueWorkflowyLogin(
 	email: string,
@@ -530,20 +583,23 @@ export async function continueWorkflowyLogin(
 	const form = new URLSearchParams(
 		{
 			...state.hidden,
-			email,
+			...(state.sendsEmail &&
+			{
+				email,
+			}),
 			...echoes,
 			...answers,
 		},
 	);
 	const secrets = [email, ...Object.values(typed)];
 	const step = await exchange(
-		`${base}/login/`,
+		`${base}${state.target}`,
 		{
 			method: "POST",
 			headers:
 			{
 				"Content-Type": "application/x-www-form-urlencoded",
-				Referer: base,
+				Referer: `${base}${state.page}`,
 				Origin: base,
 			},
 			body: form.toString(),
@@ -568,7 +624,8 @@ export async function startWorkflowyLogin(email: string, options: LoginRelayOpti
 			kind: "captcha",
 		};
 	}
-	if (!response.ok || page === undefined)
+	const target = page === undefined ? undefined : formTarget(page.action, step.url, new URL(baseOf(options)).origin);
+	if (!response.ok || page === undefined || target === undefined)
 	{
 		return {
 			kind: "refused",
@@ -587,6 +644,9 @@ export async function startWorkflowyLogin(email: string, options: LoginRelayOpti
 			hidden: page.hidden,
 			fields: [],
 			resend: {},
+			sendsEmail: page.email,
+			page: `${step.url.pathname}${step.url.search}`,
+			target,
 			trace: step.trace,
 		},
 		{},

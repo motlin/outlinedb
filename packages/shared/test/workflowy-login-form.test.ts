@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vite-plus/test";
-import {cookieHeader, mergeSetCookies, parseLoginForm} from "../src/api/workflowy-login-form.js";
+import {cookieHeader, formTarget, mergeSetCookies, parseLoginForm} from "../src/api/workflowy-login-form.js";
 
 const EMAIL_STEP = `<!doctype html><html><head><script>if ($("#code").length) { focus(); }</script></head><body>
 <form class="search" method="GET"><input type="text" name="q"></form>
@@ -36,11 +36,16 @@ describe("workflowy.com's login form", () =>
 					'<form method="POST"><input name="email"><div class="g-recaptcha" data-sitekey="k"></div><ul class="errorlist"><li>Just making sure you&#x27;re human...</li></ul></form>',
 				),
 				noForm: parseLoginForm("<html><body>Welcome back</body></html>"),
+				mfa: parseLoginForm(
+					'<form method="post" action="/login-mfa/"><input type="hidden" name="csrfmiddlewaretoken" value="t"><input name="code"></form>',
+				),
 			},
 		).toStrictEqual(
 			{
 				full:
 				{
+					action: "",
+					email: true,
 					hidden:
 					{
 						next: "/home?x=1&y=2",
@@ -65,6 +70,8 @@ describe("workflowy.com's login form", () =>
 				// A hidden email is still the email, never a field to ask for; an unlabelled input falls back to its name.
 				code:
 				{
+					action: "",
+					email: true,
 					hidden: {},
 					fields: [
 						{
@@ -78,12 +85,59 @@ describe("workflowy.com's login form", () =>
 				},
 				captcha:
 				{
+					action: "",
+					email: true,
 					hidden: {},
 					fields: [],
 					errors: ["Just making sure you're human..."],
 					captcha: true,
 				},
 				noForm: undefined,
+				// A form without an email input never gets one.
+				mfa:
+				{
+					action: "/login-mfa/",
+					email: false,
+					hidden:
+					{
+						csrfmiddlewaretoken: "t",
+					},
+					fields: [
+						{
+							name: "code",
+							type: "text",
+							label: "code",
+						},
+					],
+					errors: [],
+					captcha: false,
+				},
+			},
+		);
+	});
+
+	it("posts each form to its own action, resolved against the page that served it, and never to another site", () =>
+	{
+		const origin = "https://workflowy.com";
+		const page = new URL("https://workflowy.com/login-mfa/?next=%2F");
+		expect(
+			{
+				empty: formTarget("", page, origin),
+				relative: formTarget("verify/", page, origin),
+				rooted: formTarget("/login/", page, origin),
+				absolute: formTarget("https://workflowy.com/login-mfa/confirm/", page, origin),
+				foreign: formTarget("https://evil.test/login/", page, origin),
+				schemeRelative: formTarget("//evil.test/login/", page, origin),
+			},
+		).toStrictEqual(
+			{
+				// An empty or missing action posts back to the page itself, query and all.
+				empty: "/login-mfa/?next=%2F",
+				relative: "/login-mfa/verify/",
+				rooted: "/login/",
+				absolute: "/login-mfa/confirm/",
+				foreign: undefined,
+				schemeRelative: undefined,
 			},
 		);
 	});
