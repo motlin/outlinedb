@@ -39,6 +39,16 @@ describe("migration-helper", () =>
 		);
 	});
 
+	// Every migration's presence is proven by the __drizzle_migrations count below; these sentinels prove the copied
+	// or loaded schema carries tables from across the migration history without making each new migration edit this list.
+	// node_embeddings is a vec0 virtual table, so it also proves the sqlite-vec schema survived the reuse.
+	const sentinelTables = ["mirrors", "node_content", "node_embeddings", "node_metadata", "s3_files"];
+
+	function sentinelTableNames(database: ReturnType<typeof createTestDatabase>): string[]
+	{
+		return tableNames(database).filter((name) => sentinelTables.includes(name));
+	}
+
 	function tableNames(database: ReturnType<typeof createTestDatabase>): string[]
 	{
 		return database.sqlite
@@ -58,14 +68,7 @@ describe("migration-helper", () =>
 
 		try
 		{
-			const names = tableNames(database);
-			expect(names).toContain("node_content");
-			expect(names).toContain("node_metadata");
-			expect(names).toContain("s3_files");
-			expect(names).toContain("mirrors");
-			// A vec0 virtual table: proves the sqlite-vec extension loaded against
-			// the reused schema, not just that the tables were copied.
-			expect(names).toContain("node_embeddings");
+			expect(sentinelTableNames(database)).toStrictEqual(sentinelTables);
 			expect(database.db.select().from(nodeContent).all()).toStrictEqual([]);
 		}
 		finally
@@ -137,7 +140,7 @@ describe("migration-helper", () =>
 
 		try
 		{
-			expect(tableNames(database)).toContain("node_content");
+			expect(sentinelTableNames(database)).toStrictEqual(sentinelTables);
 			expect(database.db.select().from(nodeContent).all()).toStrictEqual([]);
 		}
 		finally
