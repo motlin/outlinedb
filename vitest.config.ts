@@ -84,6 +84,14 @@ export default defineConfig(
 				],
 			],
 			allowOnly: !process.env.CI,
+			// Off unless --coverage (`just coverage`) turns it on; lcov feeds coverage tooling such as burn's coverage track.
+			coverage:
+			{
+				provider: "v8",
+				include: ["packages/*/src/**"],
+				reporter: ["text-summary", "lcov"],
+				reportsDirectory: "coverage",
+			},
 			sequence:
 			{
 				sequencer: IsolatedFirstSequencer,

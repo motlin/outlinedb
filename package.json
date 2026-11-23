@@ -59,6 +59,7 @@
 	{
 		"@types/better-sqlite3": "^9.6.0",
 		"@types/node": "^26.6.6",
+		"@vitest/coverage-v8": "catalog:",
 		"drizzle-kit": "^0.31.11",
 		"eslint-plugin-storybook": "^10.6.7",
 		"fallow": "^3.43.2",

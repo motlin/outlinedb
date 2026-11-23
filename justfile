@@ -57,6 +57,11 @@ check *args: build-shared
 test *args: build-shared
     CHAI_TRUNCATE_THRESHOLD=0 vp run --cache test:run {{ args }}
 
+# Run tests with V8 coverage over packages/*/src, writing coverage/lcov.info
+[group('test')]
+coverage *args: build-shared
+    CHAI_TRUNCATE_THRESHOLD=0 node node_modules/vitest/dist/cli.js run --coverage {{ args }}
+
 # Run the Worker tests (also part of `test`)
 [group('test')]
 cf-test: build-shared
