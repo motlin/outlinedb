@@ -1,5 +1,5 @@
 import {describe, expect, test} from "vite-plus/test";
-import {findOverruns, summarizeUsage} from "./cloudflare-usage-alert.mjs";
+import {findOverruns, summarizeUsage, treeDownloadCount} from "./cloudflare-usage-alert.mjs";
 
 /** @type {import("./cloudflare-usage-alert.mjs").Budgets} */
 const budgets =
@@ -12,6 +12,7 @@ const budgets =
 	workerRequests: 50,
 	workerErrors: 1,
 	workerCpuMs: 10,
+	treeDownloads: 2,
 };
 
 describe("cloudflare usage alert", () =>
@@ -119,6 +120,7 @@ describe("cloudflare usage alert", () =>
 				],
 			},
 			"outlinedb",
+			3,
 		);
 		// ns2 has storage rows but no outlinedb invocation, and ns3 belongs to another script, so neither counts.
 		expect(summary).toStrictEqual(
@@ -133,6 +135,7 @@ describe("cloudflare usage alert", () =>
 					workerRequests: 62,
 					workerErrors: 2,
 					workerCpuMs: 12,
+					treeDownloads: 3,
 				},
 				objects: [
 					{
@@ -170,6 +173,11 @@ describe("cloudflare usage alert", () =>
 				value: 12,
 				budget: 10,
 			},
+			{
+				metric: "treeDownloads",
+				value: 3,
+				budget: 2,
+			},
 		]);
 		expect(
 			findOverruns(
@@ -179,9 +187,40 @@ describe("cloudflare usage alert", () =>
 					workerRequests: 50,
 					workerErrors: 1,
 					workerCpuMs: 10,
+					treeDownloads: 2,
 				},
 				budgets,
 			),
 		).toStrictEqual([]);
+	});
+
+	test("treeDownloadCount reads the day's sampled sum, and zero before the dataset's first write", () =>
+	{
+		expect([
+			treeDownloadCount(
+				true,
+				{
+					data: [
+						{
+							downloads: "4",
+						},
+					],
+				},
+			),
+			treeDownloadCount(
+				true,
+				{
+					data: [
+						{
+							downloads: null,
+						},
+					],
+				},
+			),
+			treeDownloadCount(false, "Table outlinedb_tree_downloads does not exist"),
+		]).toStrictEqual([4, 0, 0]);
+		expect(() => treeDownloadCount(false, "Authentication error")).toThrow(
+			"Analytics Engine query failed: Authentication error",
+		);
 	});
 });

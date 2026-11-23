@@ -7,9 +7,8 @@ import type {OpInput, OpName, OpOutput, OpResult} from "@outlinedb/web/server-ap
 import {AlarmSchedule} from "../src/alarm-schedule";
 import {deriveCredentialsKey, openSecret} from "../src/credentials-crypto";
 import type {RowCounts} from "../src/row-meter";
-import type {SyncStatus} from "../src/sync";
 import {UserStore} from "../src/user-store";
-import type {AccountSync, AdminStatus, ProvisionInput, ProvisionResult} from "../src/user-store";
+import type {AccountSync, AdminStatus, AdminSyncStatus, ProvisionInput, ProvisionResult} from "../src/user-store";
 import worker from "../src/worker";
 import type {WorkflowyImportView} from "../src/workflowy-import";
 
@@ -55,7 +54,7 @@ export class ProbeStore extends UserStore
 		);
 	}
 
-	override async syncStatus(): Promise<SyncStatus>
+	override async syncStatus(): Promise<AdminSyncStatus>
 	{
 		return metering.run("unmetered", async () => super.syncStatus());
 	}

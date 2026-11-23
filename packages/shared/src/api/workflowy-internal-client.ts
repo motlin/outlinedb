@@ -618,9 +618,13 @@ export class WorkflowyInternalClient
 	/**
 	 * The whole main tree from one `/get_tree_data/`, read as it arrives (logging in per {@link withSession}): each
 	 * item, with its node fields and metadata, goes to `onItem`, which is awaited before the next is read, so the body
-	 * is never held whole. Resolves with the read's transaction id and expanded keys once the body ends.
+	 * is never held whole. Resolves with the read's transaction id and expanded keys once the body ends. `onBytes` hears
+	 * each network chunk's size as it arrives, so a download that fails part way still reports what it read.
 	 */
-	async streamTreeData(onItem: (item: TreeDataItem) => void | Promise<void>): Promise<TreeDataTail>
+	async streamTreeData(
+		onItem: (item: TreeDataItem) => void | Promise<void>,
+		onBytes?: (byteLength: number) => void,
+	): Promise<TreeDataTail>
 	{
 		return this.withSession(async () =>
 		{
@@ -629,7 +633,21 @@ export class WorkflowyInternalClient
 			{
 				throw new InternalApiError("get_tree_data answered with no body");
 			}
-			const rest = await readTreeDataBody(response.body, async (raw) =>
+			const body =
+				onBytes === undefined
+					? response.body
+					: response.body.pipeThrough(
+							new TransformStream<Uint8Array, Uint8Array>(
+								{
+									transform(chunk, controller)
+									{
+										onBytes(chunk.byteLength);
+										controller.enqueue(chunk);
+									},
+								},
+							),
+						);
+			const rest = await readTreeDataBody(body, async (raw) =>
 			{
 				const item = TreeItemSchema.parse(raw);
 				const kept = treeDataFields(item);

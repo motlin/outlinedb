@@ -193,6 +193,8 @@ describe("importing an account from workflowy.com over its stored session", () =
 	 */
 	let treeStalls = false;
 	let stalledTree: ReadableStreamDefaultController<Uint8Array> | undefined;
+	/** The size of the last `/get_tree_data/` body the fake workflowy.com sent. */
+	let treeBytesSent = 0;
 	/** The nodes pushes with {@link serverRunDropped} created, as `/get_tree_data/` items. */
 	const unechoedItems:
 	{
@@ -443,6 +445,7 @@ describe("importing an account from workflowy.com over its stored session", () =
 									},
 								);
 						const encoded = new TextEncoder().encode(text);
+						treeBytesSent = encoded.length;
 						// Sent in small pieces that split items, strings and characters, as a 55 MB body arrives.
 						return new Response(
 							new ReadableStream<Uint8Array>(
@@ -633,6 +636,16 @@ describe("importing an account from workflowy.com over its stored session", () =
 		const stub = await store();
 		const state = await stub.getAccountState();
 		const photo = await harness.mf.dispatchFetch(`http://localhost/api/v1/files/${PHOTO}/original`);
+		const adminSync = (await readJson(await harness.mf.dispatchFetch("http://localhost/api/admin/sync"))) as
+		{
+			treeDownloads:
+			{
+				last:
+				{
+					durationMs: unknown;
+				} | null;
+			};
+		};
 		expect(
 			{
 				started:
@@ -679,6 +692,18 @@ describe("importing an account from workflowy.com over its stored session", () =
 					status: photo.status,
 					type: photo.headers.get("content-type"),
 					body: await photo.text(),
+				},
+				treeDownloads:
+				{
+					...adminSync.treeDownloads,
+					last:
+						adminSync.treeDownloads.last === null
+							? null
+							:
+								{
+									...adminSync.treeDownloads.last,
+									durationMs: typeof adminSync.treeDownloads.last.durationMs,
+								},
 				},
 			},
 		).toStrictEqual(
@@ -740,9 +765,10 @@ describe("importing an account from workflowy.com over its stored session", () =
 						],
 					},
 					// Every row the run read and wrote, index rows included, from the start request to the finish; the
-					// fetching marker written before the download is two reads and three writes of it.
+					// fetching marker written before the download is two reads and three writes of it, and recording the
+					// download is three more writes (its row and two index rows).
 					rowsRead: 3882,
-					rowsWritten: 554,
+					rowsWritten: 557,
 				},
 				// One account read and one tree read over the stored session, then a signed URL and a download per live
 				// attachment; no login, so the password is never needed.
@@ -898,6 +924,20 @@ describe("importing an account from workflowy.com over its stored session", () =
 					status: 200,
 					type: "image/jpeg",
 					body: PHOTO_BYTES,
+				},
+				// The one whole-tree download, its cause and size recorded, as GET /api/admin/sync counts it.
+				treeDownloads:
+				{
+					total: 1,
+					last24Hours: 1,
+					bytesLast24Hours: treeBytesSent,
+					last:
+					{
+						cause: "import",
+						outcome: "ok",
+						bytes: treeBytesSent,
+						durationMs: "number",
+					},
 				},
 			},
 		);

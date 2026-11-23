@@ -1,6 +1,6 @@
 // Daily Cloudflare cost and health check, run by .github/workflows/usage-alert.yml.
-// Queries the GraphQL Analytics API for one UTC day of the outlinedb Worker's and its Durable Objects' usage, prints the
-// totals and the busiest Durable Objects, and exits 1 when a total passes its budget, so the failed scheduled run notifies by GitHub's email.
+// Queries the GraphQL Analytics API for one UTC day of the outlinedb Worker's and its Durable Objects' usage, and the
+// Analytics Engine SQL API for that day's whole-tree workflowy.com downloads (about 54 MB each), prints the totals and the busiest Durable Objects, and exits 1 when a total passes its budget, so the failed scheduled run notifies by GitHub's email.
 // Usage: CLOUDFLARE_ANALYTICS_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=... node scripts/cloudflare-usage-alert.mjs [YYYY-MM-DD]
 import {appendFileSync} from "node:fs";
 
@@ -14,6 +14,7 @@ import {appendFileSync} from "node:fs";
  * 	workerRequests: number,
  * 	workerErrors: number,
  * 	workerCpuMs: number,
+ * 	treeDownloads: number,
  * }} Totals
  * @typedef {Totals} Budgets
  * @typedef {{
@@ -53,6 +54,9 @@ const budgets =
 	workerRequests: dailyQuarter(10_000_000),
 	workerErrors: 10,
 	workerCpuMs: dailyQuarter(30_000_000),
+	// Health and memory, not billing: each import downloads the whole tree into a Durable Object once, so a day with more
+	// than this many means something downloads it repeatedly.
+	treeDownloads: 5,
 };
 
 /** @type {(keyof Totals)[]} */
@@ -65,7 +69,11 @@ const metrics = [
 	"workerRequests",
 	"workerErrors",
 	"workerCpuMs",
+	"treeDownloads",
 ];
+
+/** The Worker's Analytics Engine dataset with one data point per whole-tree download (see wrangler.jsonc). */
+const treeDownloadsDataset = "outlinedb_tree_downloads";
 
 const query = `query($account: String!, $date: Date!, $script: String!) { viewer { accounts(filter: {accountTag: $account}) {
 	periodic: durableObjectsPeriodicGroups(limit: 10000, filter: {date: $date}) {
@@ -86,9 +94,10 @@ const query = `query($account: String!, $date: Date!, $script: String!) { viewer
  * Storage rows carry no script name, so a Durable Object counts only when its namespace has an invocation by `scriptName`.
  * @param {UsageResponse} usage
  * @param {string} scriptName
+ * @param {number} treeDownloads the day's whole-tree downloads, from {@link treeDownloadCount}
  * @returns {{totals: Totals, objects: ObjectUsage[]}}
  */
-export function summarizeUsage(usage, scriptName)
+export function summarizeUsage(usage, scriptName, treeDownloads)
 {
 	/** @type {Map<string, ObjectUsage>} */
 	const objects = new Map();
@@ -151,9 +160,38 @@ export function summarizeUsage(usage, scriptName)
 			workerRequests: workers.reduce((acc, {sum}) => acc + sum.requests, 0),
 			workerErrors: workers.reduce((acc, {sum}) => acc + sum.errors, 0),
 			workerCpuMs: workers.reduce((acc, {sum}) => acc + sum.cpuTimeUs, 0) / 1000,
+			treeDownloads,
 		},
 		objects: all,
 	};
+}
+
+/**
+ * The day's whole-tree downloads from an Analytics Engine SQL answer. The dataset exists only after the Worker's first
+ * write to it, so an error naming it as missing counts as none; any other error throws.
+ * @param {boolean} ok whether the query answered with a 2xx
+ * @param {unknown} body the parsed JSON answer, or the error text
+ * @returns {number}
+ */
+export function treeDownloadCount(ok, body)
+{
+	if (!ok)
+	{
+		const text = typeof body === "string" ? body : JSON.stringify(body);
+		if (text.includes(treeDownloadsDataset) && /does not exist|not found|unknown/iu.test(text))
+		{
+			return 0;
+		}
+		throw new Error(`Analytics Engine query failed: ${text}`);
+	}
+	/** @type {unknown} */
+	const data = typeof body === "object" && body !== null ? Reflect.get(body, "data") : undefined;
+	/** @type {unknown} */
+	const row = Array.isArray(data) ? data[0] : undefined;
+	/** @type {unknown} */
+	const downloads = typeof row === "object" && row !== null ? Reflect.get(row, "downloads") : undefined;
+	// Analytics Engine answers 64-bit sums as strings, and a sum over no rows as null.
+	return downloads === null || downloads === undefined ? 0 : Number(downloads);
 }
 
 /**
@@ -233,9 +271,42 @@ function requireEnv(name)
 	return value;
 }
 
+/**
+ * One UTC day's whole-tree downloads across every account, each data point weighted by its sample interval.
+ * @param {string} accountId
+ * @param {string} token
+ * @param {string} date YYYY-MM-DD
+ */
+async function fetchTreeDownloads(accountId, token, date)
+{
+	if (!/^\d{4}-\d{2}-\d{2}$/u.test(date))
+	{
+		throw new Error(`Expected a YYYY-MM-DD date, got ${date}`);
+	}
+	const next = new Date(Date.parse(`${date}T00:00:00Z`) + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+	const response = await fetch(
+		`https://api.cloudflare.com/client/v4/accounts/${accountId}/analytics_engine/sql`,
+		{
+			method: "POST",
+			headers:
+			{
+				Authorization: `Bearer ${token}`,
+			},
+			body: `SELECT SUM(_sample_interval) AS downloads FROM ${treeDownloadsDataset} WHERE timestamp >= toDateTime('${date} 00:00:00') AND timestamp < toDateTime('${next} 00:00:00') FORMAT JSON`,
+		},
+	);
+	const text = await response.text();
+	return treeDownloadCount(response.ok, response.ok ? JSON.parse(text) : text);
+}
+
 async function main()
 {
 	const date = process.argv[2] ?? yesterday();
+	const treeDownloads = await fetchTreeDownloads(
+		requireEnv("CLOUDFLARE_ACCOUNT_ID"),
+		requireEnv("CLOUDFLARE_ANALYTICS_API_TOKEN"),
+		date,
+	);
 	const response = await fetch(
 		"https://api.cloudflare.com/client/v4/graphql",
 		{
@@ -269,7 +340,7 @@ async function main()
 			`GraphQL Analytics query failed (HTTP ${response.status}): ${JSON.stringify(body.errors ?? body)}`,
 		);
 	}
-	const summary = summarizeUsage(usage, script);
+	const summary = summarizeUsage(usage, script, treeDownloads);
 	const overruns = findOverruns(summary.totals, budgets);
 	const report = formatReport(date, summary, overruns);
 	console.log(report);

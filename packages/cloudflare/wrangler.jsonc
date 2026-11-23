@@ -47,6 +47,9 @@
 	// Related notes: Workers AI embeds with @cf/qwen/qwen3-embedding-0.6b (1024 dims), Vectorize stores and ranks the
 	// vectors. Vectorize has no local simulator, so `wrangler dev` runs without it unless the binding gets "remote": true.
 	"ai": {"binding": "AI"},
+	// One data point per whole-tree workflowy.com download (blobs: cause, outcome; doubles: bytes, duration ms), which
+	// scripts/cloudflare-usage-alert.mjs counts each day. The dataset is created on the first write.
+	"analytics_engine_datasets": [{"binding": "TREE_DOWNLOADS", "dataset": "outlinedb_tree_downloads"}],
 	"vectorize": [{"binding": "RELATED_INDEX", "index_name": "outlinedb-related"}],
 	// Cloudflare Email Service sends Better Auth mail from EMAIL_FROM; no destination restriction so any user can be mailed
 	// (Workers Paid). Deploys without the domain onboarded; only send() fails, with E_SENDER_DOMAIN_NOT_AVAILABLE.

@@ -86,6 +86,13 @@ export async function startHarness(
 			kvPersist: join(persistDir, "kv"),
 			d1Databases: ["AUTH_DB"],
 			d1Persist: join(persistDir, "d1"),
+			analyticsEngineDatasets:
+			{
+				TREE_DOWNLOADS:
+				{
+					dataset: "outlinedb_tree_downloads",
+				},
+			},
 			assets:
 			{
 				directory: clientDir,

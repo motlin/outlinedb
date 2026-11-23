@@ -118,6 +118,11 @@ describe("user store Durable Object behind the Worker", () =>
 					temporal: true,
 					indexes: ["workflowy_imports_closed_at_idx", "workflowy_imports_system_to_idx"],
 				},
+				tree_downloads:
+				{
+					temporal: true,
+					indexes: ["tree_downloads_closed_at_idx", "tree_downloads_system_to_idx"],
+				},
 			},
 		);
 	});
@@ -547,6 +552,7 @@ function isDurableObjectOnly(name: string): boolean
 		name.startsWith("sync_") ||
 		name.startsWith("workflowy_connection") ||
 		name.startsWith("workflowy_login_attempt") ||
-		name.startsWith("workflowy_imports")
+		name.startsWith("workflowy_imports") ||
+		name.startsWith("tree_downloads")
 	);
 }

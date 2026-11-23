@@ -63,6 +63,8 @@ import {WorkflowyConnection} from "./workflowy-connection";
 import type {WorkflowyConnectionStatus} from "./workflowy-connection";
 import {WorkflowyLoginAttempt} from "./workflowy-login-attempt";
 import {WorkflowyImportJob} from "./workflowy-import";
+import {TreeDownloadLog} from "./tree-downloads";
+import type {TreeDownloadCounts} from "./tree-downloads";
 import type {WorkflowyImportEnv, WorkflowyImportView} from "./workflowy-import";
 
 /**
@@ -101,6 +103,12 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 	protected readonly workflowyLoginAttempt = new WorkflowyLoginAttempt(this.ctx.storage.sql);
 	/** This account's one-time import from workflowy.com over its own stored session; runs in the shared alarm. */
 	private workflowyImport!: WorkflowyImportJob;
+	/** Every whole-tree download this object made, counted in GET /api/admin/sync and the daily usage alert. */
+	private readonly treeDownloads = new TreeDownloadLog(
+		this.ctx.storage.sql,
+		this.ctx.id.toString(),
+		this.env.TREE_DOWNLOADS,
+	);
 	/** The import runs whose tree download this instance has under way; a restarted instance starts with none. */
 	private readonly importDownloads = new Set<string>();
 	/** Delivers mirror-mode writes' outbox rows to workflowy.com; undefined without the internal API. */
@@ -219,6 +227,10 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 				},
 				alarm: this.alarms.for("import"),
 				rows: () => this.rowMeter.rows(),
+				recordDownload: (download) =>
+				{
+					this.treeDownloads.record(download);
+				},
 				env,
 			},
 		);
@@ -812,9 +824,12 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 	}
 
 	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
-	async syncStatus(): Promise<SyncStatus>
+	async syncStatus(): Promise<AdminSyncStatus>
 	{
-		return this.sync.status();
+		return {
+			...(await this.sync.status()),
+			treeDownloads: this.treeDownloads.counts(),
+		};
 	}
 
 	/**
@@ -1156,6 +1171,12 @@ export type SetWorkflowyMirrorResult =
 			status: 409;
 			error: "workflowy-not-connected";
 	  };
+
+/** GET /api/admin/sync: the sync job's status and the object's whole-tree downloads. */
+export interface AdminSyncStatus extends SyncStatus
+{
+	treeDownloads: TreeDownloadCounts;
+}
 
 export interface AdminStatus
 {

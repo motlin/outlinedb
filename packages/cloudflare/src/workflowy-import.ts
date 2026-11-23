@@ -33,6 +33,7 @@ import type {BlobStore} from "@outlinedb/web/server-app";
 import {and, asc, eq, gt, isNull, or} from "drizzle-orm";
 import type {ScheduledJobAlarm} from "./alarm-schedule";
 import type {RowCounts} from "./row-meter";
+import type {TreeDownload} from "./tree-downloads";
 
 const BATCH_SIZE = 2000;
 /** An alarm run stops applying batches, and leaves the rest to a fresh run, once this much time is spent. */
@@ -221,6 +222,8 @@ export interface WorkflowyImportDeps
 	alarm: ScheduledJobAlarm;
 	/** Rows the object's SQLite has read and written so far, index rows included. */
 	rows?: () => RowCounts;
+	/** Records each whole-tree download, whether it finished or failed part way. */
+	recordDownload: (download: TreeDownload) => void;
 	env: WorkflowyImportEnv;
 	now?: () => number;
 }
@@ -657,27 +660,54 @@ export class WorkflowyImportJob
 				items: [],
 			};
 		};
-		const tail = await client.streamTreeData(async (item) =>
+		const startedAt = this.now();
+		let bytes = 0;
+		const record = (outcome: TreeDownload["outcome"]) =>
 		{
-			countItem(counts, item);
-			chunk.nodes.push(treeDataNode(item, dateJoinedSec));
-			chunk.items.push(
-				item.metadata === undefined
-					?
-						{
-							id: item.id,
-						}
-					:
-						{
-							id: item.id,
-							metadata: item.metadata,
-						},
+			this.deps.recordDownload(
+				{
+					cause: "import",
+					outcome,
+					startedAt,
+					durationMs: this.now() - startedAt,
+					bytes,
+				},
 			);
-			if (chunk.nodes.length === chunkSize)
+		};
+		const tail = await client
+			.streamTreeData(
+				async (item) =>
+				{
+					countItem(counts, item);
+					chunk.nodes.push(treeDataNode(item, dateJoinedSec));
+					chunk.items.push(
+						item.metadata === undefined
+							?
+								{
+									id: item.id,
+								}
+							:
+								{
+									id: item.id,
+									metadata: item.metadata,
+								},
+					);
+					if (chunk.nodes.length === chunkSize)
+					{
+						await flush();
+					}
+				},
+				(byteLength) =>
+				{
+					bytes += byteLength;
+				},
+			)
+			.catch((error: unknown) =>
 			{
-				await flush();
-			}
-		});
+				record("error");
+				throw error;
+			});
+		record("ok");
 		if (chunk.nodes.length > 0)
 		{
 			await flush();
