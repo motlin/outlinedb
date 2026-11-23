@@ -186,7 +186,8 @@ app.get("/api/v1/sync-status", async (c) => c.json(await c.var.stub.accountSync(
 // The signed-in user's own workflowy.com connection: GET reads it, PATCH {mirror} turns keep-syncing on or off, DELETE
 // disconnects and wipes the cookie. POST relays workflowy.com's login form a step at a time: {email} starts an attempt,
 // {attemptId, values} answers the fields its last reply asked for (a password, a code). A step that wants more answers
-// {attemptId, fields, errors}; the one that signs in answers the connection, keeping only the sealed session cookie.
+// {attemptId, fields, errors, resend, detail}; the one that signs in answers the connection, keeping only the sealed
+// session cookie. DELETE of /attempt is Start over: it ends the attempt in progress and answers the connection.
 const WORKFLOWY_CONNECTION = "/api/v1/workflowy-connection";
 app.get(WORKFLOWY_CONNECTION, async (c) => c.json(await c.var.stub.getWorkflowyConnection()));
 app.post(WORKFLOWY_CONNECTION, async (c) =>
@@ -235,6 +236,7 @@ app.patch(WORKFLOWY_CONNECTION, async (c) =>
 	return result.ok ? c.json(result.connection) : c.json(result, result.status);
 });
 app.delete(WORKFLOWY_CONNECTION, async (c) => c.json(await c.var.stub.disconnectWorkflowy()));
+app.delete(`${WORKFLOWY_CONNECTION}/attempt`, async (c) => c.json(await c.var.stub.cancelWorkflowyLogin()));
 
 // The signed-in user's import from their connected workflowy.com account: POST starts it (or keeps the one in progress),
 // GET reads the newest run's phase, per-kind counts and failures.

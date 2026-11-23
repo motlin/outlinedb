@@ -5,8 +5,9 @@
  * redirect by hand (keeping the cookies each hop sets), and reads the reply: a form asking for more fields (with its
  * error list), a captcha, or the end of the form. A login only counts once the jar it produced reads
  * `/get_initialization_data`, the request every import starts with. Nothing here keeps an answer: the state a step
- * returns holds only the cookies, the form's hidden values and a trace of each request (status, redirect path, cookie
- * names), never a cookie value, a query value or an answer.
+ * returns holds only the cookies, the form's hidden values and a trace of each request (status, redirect path, the
+ * form's names, cookie names), never a cookie value, a query value or an answer. A hidden input that echoes an answer
+ * back (a password carried to the code step) is kept by name only; the person's browser sends that answer again.
  */
 
 import {z} from "zod";
@@ -29,6 +30,7 @@ export interface LoginFormField
 /** What a login page's POST form holds. */
 export interface LoginFormPage
 {
+	/** Every value the form sends unasked: its hidden inputs, checked boxes and radios, and its default submit button. */
 	hidden: Record<string, string>;
 	/** Every visible input but the email, in page order. */
 	fields: LoginFormField[];
@@ -45,6 +47,11 @@ export interface LoginAttemptState
 	hidden: Record<string, string>;
 	/** The names of the fields the form asked for; a step sends answers for these and nothing else. */
 	fields: string[];
+	/**
+	 * Hidden input name to the field whose answer it echoed back, such as a password the code step carries: the next
+	 * step sends that answer again under the hidden name, so the answer itself is never kept here.
+	 */
+	resend: Record<string, string>;
 	/** One line per request the attempt sent so far, as {@link traceLine} writes it. */
 	trace: string[];
 }
@@ -54,6 +61,7 @@ const LoginAttemptStateSchema = z.object(
 		jar: z.record(z.string(), z.string()),
 		hidden: z.record(z.string(), z.string()),
 		fields: z.array(z.string()),
+		resend: z.record(z.string(), z.string()),
 		trace: z.array(z.string()),
 	},
 );
@@ -90,6 +98,10 @@ export type LoginStepOutcome =
 			state: LoginAttemptState;
 			fields: LoginFormField[];
 			errors: string[];
+			/** The fields whose answers the next step must send again ({@link LoginAttemptState.resend}'s values). */
+			resend: string[];
+			/** Each request's trace line and the jar's cookie names; no values. */
+			detail: string;
 	  }
 	|
 	  {
@@ -99,7 +111,7 @@ export type LoginStepOutcome =
 	  {
 			kind: "refused";
 			message: string;
-			/** workflowy.com's reply, status and text, with the email and every answer redacted. */
+			/** Each request's trace line, the jar's names, then workflowy.com's reply with every secret redacted. */
 			detail: string;
 	  };
 
@@ -112,6 +124,7 @@ export interface LoginRelayOptions
 }
 
 const NOT_ASKED = new Set(["hidden", "submit", "button", "image", "reset", "checkbox", "radio"]);
+const SUBMITS = new Set(["submit", "image"]);
 
 function attributes(tag: string): Record<string, string>
 {
@@ -148,18 +161,34 @@ export function parseLoginForm(html: string): LoginFormPage | undefined
 	);
 	const hidden: Record<string, string> = {};
 	const fields: LoginFormField[] = [];
-	for (const [, attrs = ""] of form.matchAll(/<input\b([^>]*)>/giu))
+	// Enter submits with the form's first submit button, which sends its name and value when it has a name.
+	let submitted = false;
+	for (const [, tag = "", attrs = ""] of form.matchAll(/<(input|button)\b([^>]*)>/giu))
 	{
 		const input = attributes(attrs);
 		const name = input.name ?? "";
-		const type = (input.type ?? "text").toLowerCase();
-		if (name === "" || name === "email")
+		const button = tag.toLowerCase() === "button";
+		const type = (input.type ?? (button ? "submit" : "text")).toLowerCase();
+		if (SUBMITS.has(type))
+		{
+			if (!submitted && name !== "")
+			{
+				hidden[name] = input.value ?? "";
+			}
+			submitted = true;
+			continue;
+		}
+		if (name === "" || name === "email" || button)
 		{
 			continue;
 		}
 		if (type === "hidden")
 		{
 			hidden[name] = input.value ?? "";
+		}
+		else if ((type === "checkbox" || type === "radio") && "checked" in input)
+		{
+			hidden[name] = input.value ?? "on";
 		}
 		else if (!NOT_ASKED.has(type))
 		{
@@ -255,12 +284,18 @@ function redact(line: string, secrets: readonly string[]): string
 		.reduce((shown, secret) => shown.replaceAll(secret, "[redacted]"), line);
 }
 
-/** `POST /login/ -> 302 /?next= set [sessionid]`: one request's method, path, status, redirect and cookie names. */
-function traceLine(method: string, url: URL, response: Response, next: URL | undefined, origin: string): string
+/**
+ * `POST /login/ form [next, email] -> 302 /?next= set [sessionid]`: one request's method, path, the names its form sent,
+ * status, redirect and cookie names.
+ */
+function traceLine(request: StepRequest, url: URL, response: Response, next: URL | undefined, origin: string): string
 {
 	const names = setCookieNames(response.headers);
+	const sent = request.body === undefined ? [] : [...new Set(new URLSearchParams(request.body).keys())];
 	return [
-		`${method} ${tracePath(url, origin)} -> ${String(response.status)}`,
+		`${request.method ?? "GET"} ${tracePath(url, origin)}`,
+		...(sent.length === 0 ? [] : [`form [${sent.join(", ")}]`]),
+		`-> ${String(response.status)}`,
 		...(next === undefined ? [] : [tracePath(next, origin)]),
 		...(names.length === 0 ? [] : [`set [${names.join(", ")}]`]),
 	].join(" ");
@@ -325,7 +360,7 @@ async function exchange(
 			response.status >= 300 && response.status < 400 && location !== null
 				? new URL(location, target)
 				: undefined;
-		trace.push(redact(traceLine(request.method ?? "GET", target, response, next, origin), secrets));
+		trace.push(redact(traceLine(request, target, response, next, origin), secrets));
 		if (next?.origin !== origin || hop >= MAX_REDIRECTS)
 		{
 			return {
@@ -383,16 +418,22 @@ async function verifySession(jar: CookieJar, options: LoginRelayOptions): Promis
 	].join(" ");
 }
 
-/** Reads a step's reply into what the person sees next, checking a finished login against init data. */
+/**
+ * Reads a step's reply into what the person sees next, checking a finished login against init data. `typed` is each
+ * field's answer this step sent; a hidden input echoing one back is kept by name only, for the next step to resend.
+ */
 async function outcome(
 	step: Exchange,
 	prior: readonly string[],
-	secrets: readonly string[],
+	email: string,
+	typed: Record<string, string>,
 	options: LoginRelayOptions,
 ): Promise<LoginStepOutcome>
 {
 	const {response, jar} = step;
 	const trace = [...prior, ...step.trace];
+	const secrets = [email, ...Object.values(typed)];
+	const jarLine = `jar [${Object.keys(jar).join(", ")}]`;
 	const body = await response.text();
 	const page = parseLoginForm(body);
 	if (page?.captcha === true || body.includes("g-recaptcha"))
@@ -403,18 +444,34 @@ async function outcome(
 	}
 	if (page !== undefined && page.fields.length > 0)
 	{
-		const kept = Object.entries(page.hidden).filter(([, value]) => !secrets.includes(value) || value === "");
+		const hidden: Record<string, string> = {};
+		const resend: Record<string, string> = {};
+		for (const [name, value] of Object.entries(page.hidden))
+		{
+			const echoed = value === "" ? undefined : Object.keys(typed).find((field) => typed[field] === value);
+			if (echoed === undefined)
+			{
+				hidden[name] = value;
+			}
+			else
+			{
+				resend[name] = echoed;
+			}
+		}
 		return {
 			kind: "fields",
 			state:
 			{
 				jar,
-				hidden: Object.fromEntries(kept),
+				hidden,
 				fields: page.fields.map((field) => field.name),
+				resend,
 				trace,
 			},
 			fields: page.fields,
 			errors: page.errors,
+			resend: [...new Set(Object.values(resend))],
+			detail: [...trace, jarLine].join("; "),
 		};
 	}
 	if (response.status < 400 && Object.keys(jar).length > 0)
@@ -429,14 +486,14 @@ async function outcome(
 			:
 				{
 					kind: "unverified",
-					detail: [...trace, `jar [${Object.keys(jar).join(", ")}]`, refusal].join("; "),
+					detail: [...trace, jarLine, refusal].join("; "),
 				};
 	}
 	const errors = page?.errors ?? [];
 	return {
 		kind: "refused",
 		message: `Login failed: ${errors.length > 0 ? errors.join(", ") : "workflowy.com answered unexpectedly"}`,
-		detail: replyDetail(response.status, body, secrets),
+		detail: [...trace, jarLine, replyDetail(response.status, body, secrets)].join("; "),
 	};
 }
 
@@ -451,9 +508,9 @@ function fetcher(options: LoginRelayOptions): typeof fetch
 }
 
 /**
- * Submit the form once more: its hidden values, the email and the person's answers to the fields it asked for
- * (`values`, such as a password or a code; any other key is left out), with the attempt's cookies. The answers live
- * only in this request.
+ * Submit the form once more: its hidden values, the email, each echoed answer the form carried (under its hidden name)
+ * and the person's answers to the fields it asked for (`values`, such as a password or a code; any other key is left
+ * out), with the attempt's cookies. The answers live only in this request.
  */
 export async function continueWorkflowyLogin(
 	email: string,
@@ -463,15 +520,22 @@ export async function continueWorkflowyLogin(
 ): Promise<LoginStepOutcome>
 {
 	const base = baseOf(options);
-	const answers = Object.fromEntries(state.fields.map((name) => [name, values[name] ?? ""]));
+	const typed = Object.fromEntries(
+		[...Object.values(state.resend), ...state.fields].map((name) => [name, values[name] ?? ""]),
+	);
+	const echoes = Object.fromEntries(
+		Object.entries(state.resend).map(([hidden, field]) => [hidden, typed[field] ?? ""]),
+	);
+	const answers = Object.fromEntries(state.fields.map((name) => [name, typed[name] ?? ""]));
 	const form = new URLSearchParams(
 		{
 			...state.hidden,
 			email,
+			...echoes,
 			...answers,
 		},
 	);
-	const secrets = [email, ...Object.values(answers)];
+	const secrets = [email, ...Object.values(typed)];
 	const step = await exchange(
 		`${base}/login/`,
 		{
@@ -488,7 +552,7 @@ export async function continueWorkflowyLogin(
 		secrets,
 		options,
 	);
-	return outcome(step, state.trace, secrets, options);
+	return outcome(step, state.trace, email, typed, options);
 }
 
 /** Open the login page for its cookies and hidden values, then submit the email: the first step of an attempt. */
@@ -509,7 +573,11 @@ export async function startWorkflowyLogin(email: string, options: LoginRelayOpti
 		return {
 			kind: "refused",
 			message: "Login failed: workflowy.com's login page answered unexpectedly",
-			detail: replyDetail(response.status, body, [email]),
+			detail: [
+				...step.trace,
+				`jar [${Object.keys(step.jar).join(", ")}]`,
+				replyDetail(response.status, body, [email]),
+			].join("; "),
 		};
 	}
 	return continueWorkflowyLogin(
@@ -518,6 +586,7 @@ export async function startWorkflowyLogin(email: string, options: LoginRelayOpti
 			jar: step.jar,
 			hidden: page.hidden,
 			fields: [],
+			resend: {},
 			trace: step.trace,
 		},
 		{},

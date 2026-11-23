@@ -140,6 +140,11 @@ export function useWorkflowyConnection()
 			setConnection(reply);
 			return null;
 		},
+		/** Start over: end the sign-in attempt in progress, if any. */
+		cancelSignIn: async () =>
+		{
+			setConnection(await send<WorkflowyConnection>("/api/v1/workflowy-connection/attempt", "DELETE"));
+		},
 		setMirror: async (mirror: boolean) =>
 		{
 			setConnection(

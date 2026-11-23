@@ -5,6 +5,8 @@ import type {ProbeStore} from "./probe-entry";
 
 const PASSWORD = "correct-horse-battery";
 const CODE = "WF-4242";
+/** A code workflowy.com answers with "Your verification code has expired." */
+const EXPIRED_CODE = "WF-1111";
 
 /** One request the fake workflowy.com received: what the relay sent upstream, cookies and form fields included. */
 interface Upstream
@@ -41,6 +43,12 @@ function loginPage(
 			},
 		},
 	);
+}
+
+/** The code step: its step marker, a hidden echo of the password (which the relay must never keep), the code input. */
+function codeInputs(label = '<label for="id_code">Code from your email</label>'): string
+{
+	return `<input type="hidden" name="login_step" value="code"><input type="hidden" name="password" value="${PASSWORD}">${label}<input type="text" name="code" id="id_code" autocomplete="one-time-code">`;
 }
 
 const PASSWORD_INPUT =
@@ -172,13 +180,14 @@ describe("connecting an account to workflowy.com", () =>
 					}
 					if (form.code !== undefined)
 					{
+						// The code only counts with the password the code step echoed back.
+						if (form.code === EXPIRED_CODE || form.password !== PASSWORD)
+						{
+							return loginPage(email, codeInputs(), ["Your verification code has expired."]);
+						}
 						if (form.code !== CODE)
 						{
-							return loginPage(
-								email,
-								'<input type="hidden" name="login_step" value="code"><input type="text" name="code" id="id_code" autocomplete="one-time-code">',
-								["That code is not right."],
-							);
+							return loginPage(email, codeInputs(""), ["That code is not right."]);
 						}
 						sessions++;
 						return new Response(
@@ -230,11 +239,7 @@ describe("connecting an account to workflowy.com", () =>
 							},
 						);
 					}
-					// The code step echoes the password back as a hidden input, which the relay must never keep.
-					return loginPage(
-						email,
-						`<input type="hidden" name="login_step" value="code"><input type="hidden" name="password" value="${PASSWORD}"><label for="id_code">Code from your email</label><input type="text" name="code" id="id_code" autocomplete="one-time-code">`,
-					);
+					return loginPage(email, codeInputs());
 				},
 			},
 		);
@@ -256,6 +261,7 @@ describe("connecting an account to workflowy.com", () =>
 	async function send(
 		method: string,
 		body?: unknown,
+		path = "/api/v1/workflowy-connection",
 	): Promise<
 	{
 		status: number;
@@ -263,7 +269,7 @@ describe("connecting an account to workflowy.com", () =>
 	}>
 	{
 		const response = await harness.mf.dispatchFetch(
-			"http://localhost/api/v1/workflowy-connection",
+			`http://localhost${path}`,
 			{
 				method,
 				headers:
@@ -305,7 +311,9 @@ describe("connecting an account to workflowy.com", () =>
 					.join("\n")
 					.split("blob:").length - 1,
 			attempt: attempt === null ? null : JSON.parse(attempt),
-			secretsStored: [PASSWORD, "wrong-password", CODE, "WF-0000"].some((secret) => everything.includes(secret)),
+			secretsStored: [PASSWORD, "wrong-password", CODE, "WF-0000", EXPIRED_CODE].some((secret) =>
+				everything.includes(secret),
+			),
 			cookieInPlaintext: ["upstream-session", "auth-value", "anonymous-1", "csrf-1"].some((value) =>
 				dump.includes(value),
 			),
@@ -355,6 +363,12 @@ describe("connecting an account to workflowy.com", () =>
 		form: {},
 	};
 	const INIT_PATH = "/get_initialization_data";
+	/** The hidden values' names, as each POST's trace line lists the form's names. */
+	const HIDDEN_NAMES = "next, utm_source, utm_campaign, utm_medium";
+	const EMAIL_POSTED = `POST /login/ form [${HIDDEN_NAMES}, email] -> 200`;
+	const PASSWORD_POSTED = `POST /login/ form [${HIDDEN_NAMES}, email, password] -> 200`;
+	const EMAIL_DETAIL = `GET /login/ -> 200 set [_bess]; ${EMAIL_POSTED}; jar [_bess]`;
+	const CODE_POSTED = `POST /login/ form [${HIDDEN_NAMES}, login_step, email, password, code] -> 200`;
 
 	/** A redirect hop the relay follows, or the init data read that verifies the login, with the jar it sent. */
 	function get(path: string, cookie: string): Upstream
@@ -372,7 +386,7 @@ describe("connecting an account to workflowy.com", () =>
 		return typeof id === "string" ? id : "";
 	}
 
-	it("starts disconnected, and ends an attempt on a captcha, an unexpected reply, an unknown or expired attempt, keeping nothing", async () =>
+	it("starts disconnected, and ends an attempt on a captcha, an unexpected reply, an unknown or expired attempt, Start over, or an expired code, keeping nothing", async () =>
 	{
 		const before = await send("GET");
 		const anonStarted = await send(
@@ -437,6 +451,68 @@ describe("connecting an account to workflowy.com", () =>
 			},
 		);
 		const after = await send("GET");
+		const restarted = await send(
+			"POST",
+			{
+				email: "alice@example.com",
+			},
+		);
+		const startedOver = await send("DELETE", undefined, "/api/v1/workflowy-connection/attempt");
+		const afterStartOver = await send(
+			"POST",
+			{
+				attemptId: attemptId(restarted.body),
+				values:
+				{
+					password: PASSWORD,
+				},
+			},
+		);
+		const codeStarted = await send(
+			"POST",
+			{
+				email: "alice@example.com",
+			},
+		);
+		const codeAsked = await send(
+			"POST",
+			{
+				attemptId: attemptId(codeStarted.body),
+				values:
+				{
+					password: PASSWORD,
+				},
+			},
+		);
+		const codeExpired = await send(
+			"POST",
+			{
+				attemptId: attemptId(codeStarted.body),
+				values:
+				{
+					code: EXPIRED_CODE,
+					password: PASSWORD,
+				},
+			},
+		);
+		const afterCodeExpired = await send("GET");
+		const codeReplay = await send(
+			"POST",
+			{
+				attemptId: attemptId(codeStarted.body),
+				values:
+				{
+					code: CODE,
+					password: PASSWORD,
+				},
+			},
+		);
+		const fresh = await send(
+			"POST",
+			{
+				email: "alice@example.com",
+			},
+		);
 		expect(
 			{
 				before,
@@ -448,6 +524,15 @@ describe("connecting an account to workflowy.com", () =>
 				started,
 				expired,
 				after,
+				restarted,
+				startedOver,
+				afterStartOver,
+				codeStarted,
+				codeAsked,
+				codeExpired,
+				afterCodeExpired,
+				codeReplay,
+				fresh,
 				upstream: upstream.splice(0),
 				stored: await stored(),
 			},
@@ -472,7 +557,7 @@ describe("connecting an account to workflowy.com", () =>
 						status: 422,
 						error: "workflowy-login-unverified",
 						message: "workflowy.com finished the sign-in, but did not accept the session it set.",
-						detail: "GET /login/ -> 200 set [_bess]; POST /login/ -> 200; POST /login/ -> 302 /?next=&email= set [sessionid]; GET /?next=&email= -> 200 set [csrftoken]; jar [_bess, sessionid, csrftoken]; verify GET /get_initialization_data -> 404 text/html",
+						detail: `GET /login/ -> 200 set [_bess]; ${EMAIL_POSTED}; POST /login/ form [${HIDDEN_NAMES}, email, password] -> 302 /?next=&email= set [sessionid]; GET /?next=&email= -> 200 set [csrftoken]; jar [_bess, sessionid, csrftoken]; verify GET /get_initialization_data -> 404 text/html`,
 					},
 				},
 				mirror:
@@ -496,7 +581,7 @@ describe("connecting an account to workflowy.com", () =>
 						message: "workflowy.com asked for a captcha. Try again later.",
 					},
 				},
-				// The page's text, without its markup or style, with the email redacted.
+				// Each request so far, then the page's text, without its markup or style, with the email redacted.
 				odd:
 				{
 					status: 422,
@@ -506,7 +591,7 @@ describe("connecting an account to workflowy.com", () =>
 						status: 422,
 						error: "workflowy-login-failed",
 						message: "Login failed: workflowy.com answered unexpectedly",
-						detail: "HTTP 500: Server error No login for [redacted]",
+						detail: `GET /login/ -> 200 set [_bess]; POST /login/ form [${HIDDEN_NAMES}, email] -> 500; jar [_bess]; HTTP 500: Server error No login for [redacted]`,
 					},
 				},
 				unknown:
@@ -527,6 +612,8 @@ describe("connecting an account to workflowy.com", () =>
 						attemptId: attemptId(started.body),
 						fields: [PASSWORD_FIELD],
 						errors: [],
+						resend: [],
+						detail: EMAIL_DETAIL,
 					},
 				},
 				// Ten minutes on, the attempt is gone and its password never left OutlineDB.
@@ -546,6 +633,105 @@ describe("connecting an account to workflowy.com", () =>
 					body:
 					{
 						connected: false,
+					},
+				},
+				restarted:
+				{
+					status: 200,
+					body:
+					{
+						attemptId: attemptId(restarted.body),
+						fields: [PASSWORD_FIELD],
+						errors: [],
+						resend: [],
+						detail: EMAIL_DETAIL,
+					},
+				},
+				// Start over ends the attempt without asking workflowy.com anything, so its next step is refused.
+				startedOver:
+				{
+					status: 200,
+					body:
+					{
+						connected: false,
+					},
+				},
+				afterStartOver:
+				{
+					status: 409,
+					body:
+					{
+						ok: false,
+						status: 409,
+						error: "workflowy-login-expired",
+					},
+				},
+				codeStarted:
+				{
+					status: 200,
+					body:
+					{
+						attemptId: attemptId(codeStarted.body),
+						fields: [PASSWORD_FIELD],
+						errors: [],
+						resend: [],
+						detail: EMAIL_DETAIL,
+					},
+				},
+				// The code step echoed the password, so the browser sends it again with the code.
+				codeAsked:
+				{
+					status: 200,
+					body:
+					{
+						attemptId: attemptId(codeStarted.body),
+						fields: [CODE_FIELD],
+						errors: [],
+						resend: ["password"],
+						detail: `GET /login/ -> 200 set [_bess]; ${EMAIL_POSTED}; ${PASSWORD_POSTED}; jar [_bess]`,
+					},
+				},
+				// An expired code ends the attempt: no other code can work, so the person starts again at the email.
+				codeExpired:
+				{
+					status: 409,
+					body:
+					{
+						ok: false,
+						status: 409,
+						error: "workflowy-login-code-expired",
+						message: "Your verification code has expired.",
+						detail: `GET /login/ -> 200 set [_bess]; ${EMAIL_POSTED}; ${PASSWORD_POSTED}; ${CODE_POSTED}; jar [_bess]`,
+					},
+				},
+				afterCodeExpired:
+				{
+					status: 200,
+					body:
+					{
+						connected: false,
+					},
+				},
+				codeReplay:
+				{
+					status: 409,
+					body:
+					{
+						ok: false,
+						status: 409,
+						error: "workflowy-login-expired",
+					},
+				},
+				fresh:
+				{
+					status: 200,
+					body:
+					{
+						attemptId: attemptId(fresh.body),
+						fields: [PASSWORD_FIELD],
+						errors: [],
+						resend: [],
+						detail: EMAIL_DETAIL,
 					},
 				},
 				upstream: [
@@ -591,12 +777,71 @@ describe("connecting an account to workflowy.com", () =>
 							email: "alice@example.com",
 						},
 					),
+					GET_LOGIN,
+					post(
+						"_bess=b1",
+						{
+							...HIDDEN,
+							email: "alice@example.com",
+						},
+					),
+					GET_LOGIN,
+					post(
+						"_bess=b1",
+						{
+							...HIDDEN,
+							email: "alice@example.com",
+						},
+					),
+					post(
+						"_bess=b1",
+						{
+							...HIDDEN,
+							email: "alice@example.com",
+							password: PASSWORD,
+						},
+					),
+					post(
+						"_bess=b1",
+						{
+							...HIDDEN,
+							login_step: "code",
+							email: "alice@example.com",
+							password: PASSWORD,
+							code: EXPIRED_CODE,
+						},
+					),
+					// The fresh start opens the login page again for new cookies.
+					GET_LOGIN,
+					post(
+						"_bess=b1",
+						{
+							...HIDDEN,
+							email: "alice@example.com",
+						},
+					),
 				],
+				// The fresh attempt holds only cookies and hidden values.
 				stored:
 				{
 					cookie: null,
 					blobs: 0,
-					attempt: null,
+					attempt:
+					{
+						attemptId: attemptId(fresh.body),
+						email: "alice@example.com",
+						state:
+						{
+							jar:
+							{
+								_bess: "b1",
+							},
+							hidden: HIDDEN,
+							fields: ["password"],
+							resend: {},
+							trace: ["GET /login/ -> 200 set [_bess]", EMAIL_POSTED],
+						},
+					},
 					secretsStored: false,
 					cookieInPlaintext: false,
 				},
@@ -650,6 +895,7 @@ describe("connecting an account to workflowy.com", () =>
 				values:
 				{
 					code: "WF-0000",
+					password: PASSWORD,
 				},
 			},
 		);
@@ -660,6 +906,7 @@ describe("connecting an account to workflowy.com", () =>
 				values:
 				{
 					code: CODE,
+					password: PASSWORD,
 				},
 			},
 		);
@@ -670,6 +917,7 @@ describe("connecting an account to workflowy.com", () =>
 				values:
 				{
 					code: CODE,
+					password: PASSWORD,
 				},
 			},
 		);
@@ -697,6 +945,8 @@ describe("connecting an account to workflowy.com", () =>
 						attemptId: id,
 						fields: [PASSWORD_FIELD],
 						errors: [],
+						resend: [],
+						detail: EMAIL_DETAIL,
 					},
 				},
 				// Between steps the object keeps only workflowy.com's cookies and the form's hidden values, sealed.
@@ -716,8 +966,9 @@ describe("connecting an account to workflowy.com", () =>
 							},
 							hidden: HIDDEN,
 							fields: ["password"],
-							// Each request's status, path and cookie names, for a login that fails to verify.
-							trace: ["GET /login/ -> 200 set [_bess]", "POST /login/ -> 200"],
+							resend: {},
+							// Each request's status, path, form names and cookie names, for every step's detail.
+							trace: ["GET /login/ -> 200 set [_bess]", EMAIL_POSTED],
 						},
 					},
 					secretsStored: false,
@@ -731,6 +982,8 @@ describe("connecting an account to workflowy.com", () =>
 						attemptId: id,
 						fields: [PASSWORD_FIELD],
 						errors: ["Please enter a correct email and password."],
+						resend: [],
+						detail: `GET /login/ -> 200 set [_bess]; ${EMAIL_POSTED}; ${PASSWORD_POSTED}; jar [_bess]`,
 					},
 				},
 				missing:
@@ -752,9 +1005,11 @@ describe("connecting an account to workflowy.com", () =>
 						attemptId: id,
 						fields: [CODE_FIELD],
 						errors: [],
+						resend: ["password"],
+						detail: `GET /login/ -> 200 set [_bess]; ${EMAIL_POSTED}; ${PASSWORD_POSTED}; ${PASSWORD_POSTED}; jar [_bess]`,
 					},
 				},
-				// The code step's hidden echo of the password is dropped, not kept.
+				// The code step's hidden echo of the password is not kept: only its name, for the browser to send again.
 				afterPassword:
 				{
 					cookie: null,
@@ -775,12 +1030,11 @@ describe("connecting an account to workflowy.com", () =>
 								login_step: "code",
 							},
 							fields: ["code"],
-							trace: [
-								"GET /login/ -> 200 set [_bess]",
-								"POST /login/ -> 200",
-								"POST /login/ -> 200",
-								"POST /login/ -> 200",
-							],
+							resend:
+							{
+								password: "password",
+							},
+							trace: ["GET /login/ -> 200 set [_bess]", EMAIL_POSTED, PASSWORD_POSTED, PASSWORD_POSTED],
 						},
 					},
 					secretsStored: false,
@@ -799,6 +1053,8 @@ describe("connecting an account to workflowy.com", () =>
 							},
 						],
 						errors: ["That code is not right."],
+						resend: ["password"],
+						detail: `GET /login/ -> 200 set [_bess]; ${EMAIL_POSTED}; ${PASSWORD_POSTED}; ${PASSWORD_POSTED}; ${CODE_POSTED}; jar [_bess]`,
 					},
 				},
 				connected:
@@ -856,6 +1112,7 @@ describe("connecting an account to workflowy.com", () =>
 							...HIDDEN,
 							login_step: "code",
 							email: "alice@example.com",
+							password: PASSWORD,
 							code: "WF-0000",
 						},
 					),
@@ -865,6 +1122,7 @@ describe("connecting an account to workflowy.com", () =>
 							...HIDDEN,
 							login_step: "code",
 							email: "alice@example.com",
+							password: PASSWORD,
 							code: CODE,
 						},
 					),
@@ -915,6 +1173,7 @@ describe("connecting an account to workflowy.com", () =>
 				values:
 				{
 					code: CODE,
+					password: PASSWORD,
 				},
 			},
 		);

@@ -39,6 +39,21 @@ const PASSWORD_FIELD =
 	type: "password",
 	label: "Password",
 };
+const TRACE = "GET /login/ -> 200 set [_bess]; POST /login/ form [next, email] -> 200; jar [_bess]";
+
+/** A login step asking for the password, as the Worker answers it. */
+function passwordStep(attemptId: string, errors: string[] = []): Response
+{
+	return Response.json(
+		{
+			attemptId,
+			fields: [PASSWORD_FIELD],
+			errors,
+			resend: [],
+			detail: TRACE,
+		},
+	);
+}
 
 function connected(
 	overrides: Partial<
@@ -292,20 +307,9 @@ describe("Settings > Workflowy", () =>
 					status: 422,
 				},
 			),
-			Response.json(
-				{
-					attemptId: "attempt-1",
-					fields: [PASSWORD_FIELD],
-					errors: [],
-				},
-			),
-			Response.json(
-				{
-					attemptId: "attempt-1",
-					fields: [PASSWORD_FIELD],
-					errors: ["Please enter a correct email and password."],
-				},
-			),
+			passwordStep("attempt-1"),
+			passwordStep("attempt-1", ["Please enter a correct email and password."]),
+			// The code step echoed the password back, so the browser sends it again with the code.
 			Response.json(
 				{
 					attemptId: "attempt-1",
@@ -317,6 +321,8 @@ describe("Settings > Workflowy", () =>
 						},
 					],
 					errors: [],
+					resend: ["password"],
+					detail: "GET /login/ -> 200; POST /login/ form [email, password] -> 200; jar [_bess]",
 				},
 			),
 		];
@@ -343,6 +349,8 @@ describe("Settings > Workflowy", () =>
 			labels: text("label > span"),
 			type: input("workflowy-login-password").type,
 			emailLocked: input("workflowy-email").disabled,
+			trace: text("[data-workflowy-login-trace]"),
+			startOver: button("Start over")?.type,
 		};
 		await type("workflowy-login-password", "wrong");
 		await click(button("Connect"));
@@ -361,6 +369,7 @@ describe("Settings > Workflowy", () =>
 			inputMode: code.inputMode,
 			type: code.type,
 			alerts: text("[role=alert]"),
+			trace: text("[data-workflowy-login-trace]"),
 		};
 		await type("workflowy-login-code", "123456");
 		await click(button("Connect"));
@@ -413,11 +422,14 @@ describe("Settings > Workflowy", () =>
 			{
 				emailOnly: ["workflowy.com email"],
 				refused: ["workflowy.com didn't accept that sign-in.", "workflowy.com said: HTTP 500: Server error"],
+				// The email stays editable, which starts over; each step shows the requests so far in gray.
 				askedPassword:
 				{
 					labels: ["workflowy.com email", "Password"],
 					type: "password",
-					emailLocked: true,
+					emailLocked: false,
+					trace: [`Sign-in steps: ${TRACE}`],
+					startOver: "button",
 				},
 				// The form's own errors show, and the password is cleared for another try.
 				wrong:
@@ -432,6 +444,9 @@ describe("Settings > Workflowy", () =>
 					inputMode: "numeric",
 					type: "text",
 					alerts: [],
+					trace: [
+						"Sign-in steps: GET /login/ -> 200; POST /login/ form [email, password] -> 200; jar [_bess]",
+					],
 				},
 				connectedStatus: ["Connected as alice@example.com", "Not synced yet"],
 				calls: [
@@ -484,6 +499,7 @@ describe("Settings > Workflowy", () =>
 							values:
 							{
 								code: "123456",
+								password: "right",
 							},
 						},
 					},
@@ -509,16 +525,25 @@ describe("Settings > Workflowy", () =>
 		);
 	});
 
-	it("says when workflowy.com asked for a captcha or the sign-in timed out, and starts over at the email", async () =>
+	it("starts over on request, on an edited email, an expired code, a captcha or a timed-out sign-in, back at the email", async () =>
 	{
 		const steps: Response[] = [
+			passwordStep("attempt-1"),
+			passwordStep("attempt-2"),
 			Response.json(
 				{
-					attemptId: "attempt-1",
-					fields: [PASSWORD_FIELD],
-					errors: [],
+					ok: false,
+					status: 409,
+					error: "workflowy-login-code-expired",
+					message: "Your verification code has expired.",
+					detail: TRACE,
+				},
+				{
+					status: 409,
 				},
 			),
+			passwordStep("attempt-3"),
+			passwordStep("attempt-4"),
 			Response.json(
 				{
 					ok: false,
@@ -543,7 +568,36 @@ describe("Settings > Workflowy", () =>
 		];
 		writes["POST /api/v1/workflowy-connection"] = () => steps.shift() ?? Response.json(connection);
 		await open();
+		const before = button("Start over");
 		await type("workflowy-email", "alice@example.com");
+		await click(button("Connect"));
+		await click(button("Start over"));
+		const startedOver =
+		{
+			labels: text("label > span"),
+			email: input("workflowy-email").value,
+			startOver: button("Start over"),
+		};
+
+		await click(button("Connect"));
+		await type("workflowy-login-password", "pw");
+		await click(button("Connect"));
+		const codeExpired =
+		{
+			alerts: text("[role=alert] > div"),
+			labels: text("label > span"),
+		};
+		await click(button("Start over"));
+		const cleared = text("[role=alert]");
+
+		await click(button("Connect"));
+		await type("workflowy-email", "bob@example.com");
+		const edited =
+		{
+			labels: text("label > span"),
+			email: input("workflowy-email").value,
+		};
+
 		await click(button("Connect"));
 		await type("workflowy-login-password", "slow");
 		await click(button("Connect"));
@@ -555,19 +609,53 @@ describe("Settings > Workflowy", () =>
 		await click(button("Connect"));
 		expect(
 			{
+				before,
+				startedOver,
+				codeExpired,
+				cleared,
+				edited,
 				expired,
 				captcha: text("[role=alert] > div"),
-				emailLocked: input("workflowy-email").disabled,
+				calls: calls.map((call) => `${call.method} ${call.path} ${JSON.stringify(call.body)}`),
 			},
 		).toStrictEqual(
 			{
+				before: undefined,
+				startedOver:
+				{
+					labels: ["workflowy.com email"],
+					email: "alice@example.com",
+					startOver: undefined,
+				},
+				codeExpired:
+				{
+					alerts: ["That code expired. Start again to get a new one.", `workflowy.com said: ${TRACE}`],
+					labels: ["workflowy.com email"],
+				},
+				cleared: [],
+				edited:
+				{
+					labels: ["workflowy.com email"],
+					email: "bob@example.com",
+				},
 				expired:
 				{
 					alerts: ["That sign-in took too long. Start again."],
 					labels: ["workflowy.com email"],
 				},
 				captcha: ["workflowy.com wants to check you're human. Try again later."],
-				emailLocked: false,
+				// Start over and the edited email end the attempt on the server; the expired code already ended it.
+				calls: [
+					'POST /api/v1/workflowy-connection {"email":"alice@example.com"}',
+					"DELETE /api/v1/workflowy-connection/attempt null",
+					'POST /api/v1/workflowy-connection {"email":"alice@example.com"}',
+					'POST /api/v1/workflowy-connection {"attemptId":"attempt-2","values":{"password":"pw"}}',
+					'POST /api/v1/workflowy-connection {"email":"alice@example.com"}',
+					"DELETE /api/v1/workflowy-connection/attempt null",
+					'POST /api/v1/workflowy-connection {"email":"bob@example.com"}',
+					'POST /api/v1/workflowy-connection {"attemptId":"attempt-4","values":{"password":"slow"}}',
+					'POST /api/v1/workflowy-connection {"email":"bob@example.com"}',
+				],
 			},
 		);
 	});
@@ -703,13 +791,7 @@ describe("Settings > Workflowy", () =>
 		{
 			if (Reflect.has(body as object, "email"))
 			{
-				return Response.json(
-					{
-						attemptId: "attempt-2",
-						fields: [PASSWORD_FIELD],
-						errors: [],
-					},
-				);
+				return passwordStep("attempt-2");
 			}
 			connection = connected(
 				{
@@ -719,6 +801,13 @@ describe("Settings > Workflowy", () =>
 			return Response.json(connection);
 		};
 		await click(button("Sign in again"));
+		// While signing in, the old session's expiry and its failed import give way to the sign-in; Disconnect stays.
+		const signingIn =
+		{
+			alerts: text("[role=alert]"),
+			report: text("[data-workflowy-import]"),
+			disconnect: button("Disconnect")?.textContent,
+		};
 		await type("workflowy-login-password", "again");
 		await click(button("Sign in again"));
 
@@ -727,6 +816,7 @@ describe("Settings > Workflowy", () =>
 				prompt,
 				report,
 				email,
+				signingIn,
 				calls,
 				status: text("[data-workflowy-connection=status] > *"),
 			},
@@ -739,6 +829,12 @@ describe("Settings > Workflowy", () =>
 				// No "Found 0 items" from a run that never read the outline.
 				report: ["workflowy.com refused the session, so the import stopped. Sign in again, then import."],
 				email: "alice@example.com",
+				signingIn:
+				{
+					alerts: [],
+					report: [],
+					disconnect: "Disconnect",
+				},
 				calls: [
 					{
 						method: "POST",

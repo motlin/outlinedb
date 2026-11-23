@@ -205,6 +205,10 @@ export interface WorkflowyLoginStep
 	fields: WorkflowyLoginField[];
 	/** The form's own errors, such as a wrong password. */
 	errors: string[];
+	/** Fields answered earlier that the next step sends again, because workflowy.com's form echoed them back. */
+	resend: string[];
+	/** Each request so far (method, path, the form's names, status, redirect, cookie names); never a value. */
+	detail: string;
 }
 
 export interface WorkflowyImportFound

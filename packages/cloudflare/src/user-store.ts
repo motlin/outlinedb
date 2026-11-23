@@ -519,7 +519,9 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 				error: "workflowy-login-expired",
 			};
 		}
-		const missing = state.fields.filter((name) => (values[name] ?? "") === "");
+		const missing = [...new Set([...state.fields, ...Object.values(state.resend)])].filter(
+			(name) => (values[name] ?? "") === "",
+		);
 		if (missing.length > 0)
 		{
 			return {
@@ -532,6 +534,14 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 		return this.afterLoginStep(key, attemptId, live.email, async () =>
 			continueWorkflowyLogin(live.email, state, values, this.loginRelayOptions()),
 		);
+	}
+
+	/** Start over: end the attempt in progress, if any, without asking workflowy.com anything. */
+	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
+	async cancelWorkflowyLogin(): Promise<WorkflowyConnectionStatus>
+	{
+		this.workflowyLoginAttempt.end();
+		return this.workflowyConnectionStatus();
 	}
 
 	private async credentialsKey(): Promise<CryptoKey | undefined>
@@ -575,6 +585,18 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 				detail: "",
 			};
 		}
+		// An expired code cannot be answered again: every later code fails the same way, so the attempt ends.
+		if (outcome.kind === "fields" && outcome.errors.some((error) => /expired/iu.test(error)))
+		{
+			this.workflowyLoginAttempt.end();
+			return {
+				ok: false,
+				status: 409,
+				error: "workflowy-login-code-expired",
+				message: outcome.errors.join(" "),
+				detail: outcome.detail,
+			};
+		}
 		if (outcome.kind === "fields")
 		{
 			this.workflowyLoginAttempt.save(
@@ -591,6 +613,8 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 					attemptId,
 					fields: outcome.fields,
 					errors: outcome.errors,
+					resend: outcome.resend,
+					detail: outcome.detail,
 				},
 			};
 		}
@@ -1032,6 +1056,10 @@ export interface WorkflowyLoginAttemptView
 	fields: LoginFormField[];
 	/** The form's error list, such as a wrong password; the person answers again. */
 	errors: string[];
+	/** Fields answered earlier whose answers the next step sends again, because the form echoed them back. */
+	resend: string[];
+	/** Each request so far (method, path, the form's names, status, redirect, cookie names) and the jar's names. */
+	detail: string;
 }
 
 export type WorkflowyLoginResult =
@@ -1058,6 +1086,15 @@ export type WorkflowyLoginResult =
 			ok: false;
 			status: 409;
 			error: "workflowy-login-expired";
+	  }
+	|
+	  {
+			ok: false;
+			status: 409;
+			error: "workflowy-login-code-expired";
+			/** workflowy.com's error list. */
+			message: string;
+			detail: string;
 	  }
 	|
 	  {

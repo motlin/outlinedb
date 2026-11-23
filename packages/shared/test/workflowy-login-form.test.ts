@@ -13,8 +13,13 @@ const EMAIL_STEP = `<!doctype html><html><head><script>if ($("#code").length) { 
 	<div id="password"><label for="id_password">Password</label><input type="password" name="password" id="id_password"></div>
 	<ul class="errorlist nonfield"><li>Wrong password. <b>Try again</b>&#33;</li></ul>
 	<ul class="errorlist"><li>That&#39;s not right</li></ul>
-	<input type="submit" value="Log in">
-	<button type="submit">Go</button>
+	<label><input type="checkbox" name="remember" checked> Remember me</label>
+	<input type="checkbox" name="newsletter" value="yes">
+	<input type="radio" name="method" value="app" checked><input type="radio" name="method" value="sms">
+	<button type="button" name="toggle" value="t">Show</button>
+	<button name="login_step" value="password">Go</button>
+	<button type="submit" name="other" value="x">Other</button>
+	<input type="submit" name="also" value="Log in">
 </form></body></html>`;
 
 describe("workflowy.com's login form", () =>
@@ -42,6 +47,10 @@ describe("workflowy.com's login form", () =>
 						utm_source: "",
 						utm_campaign: "",
 						utm_medium: "",
+						// A checked box or radio goes as a browser sends it, and so does the default (first) submit button, as Enter sends it.
+						remember: "on",
+						method: "app",
+						login_step: "password",
 					},
 					fields: [
 						{

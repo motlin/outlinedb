@@ -1,4 +1,4 @@
-import {useState} from "react";
+import {useEffect, useState} from "react";
 import type {ReactNode, SubmitEvent} from "react";
 import {WorkflowyRequestError, useWorkflowyConnection} from "../hooks/use-workflowy-connection.js";
 import type
@@ -34,6 +34,10 @@ function requestErrorMessage(error: unknown): string
 		if (error.code === "workflowy-login-expired")
 		{
 			return "That sign-in took too long. Start again.";
+		}
+		if (error.code === "workflowy-login-code-expired")
+		{
+			return "That code expired. Start again to get a new one.";
 		}
 		if (error.code === "credentials-key-not-configured")
 		{
@@ -154,6 +158,10 @@ interface SignInFormProps
 	submitLabel: string;
 	/** Sends one step; resolves with the next one, or null once connected. */
 	onSubmit: (step: SignInStep) => Promise<WorkflowyLoginStep | null>;
+	/** Start over: ends the attempt in progress on the server. */
+	onCancel: () => Promise<void>;
+	/** Told whether an attempt is past its email step, so the section can set the old connection's state aside. */
+	onActiveChange?: (active: boolean) => void;
 }
 
 /** An emailed or authenticator code, which the browser may fill from a message. */
@@ -197,9 +205,11 @@ function LoginFieldInput({
 
 /**
  * Signs in to workflowy.com a step at a time: the email first, then whatever its login form asks for next (a password,
- * a code), with the form's errors. Only the session the login yields is kept, never a password or a code.
+ * a code), with the form's errors and the requests so far. Start over, or a changed email, ends the attempt and goes
+ * back to the email. Only the session the login yields is kept, never a password or a code; an answer the form echoed
+ * back stays in this browser's memory just long enough to send it again with the next step.
  */
-function SignInForm({email: initialEmail, submitLabel, onSubmit}: SignInFormProps)
+function SignInForm({email: initialEmail, submitLabel, onSubmit, onCancel, onActiveChange}: SignInFormProps)
 {
 	const [email, setEmail] = useState(initialEmail);
 	const [step, setStep] = useState<WorkflowyLoginStep | null>(null);
@@ -209,6 +219,29 @@ function SignInForm({email: initialEmail, submitLabel, onSubmit}: SignInFormProp
 	{
 		caught: unknown;
 	} | null>(null);
+	const active = step !== null;
+	useEffect(() =>
+	{
+		onActiveChange?.(active);
+	}, [active, onActiveChange]);
+	const startOver = () =>
+	{
+		const live = step !== null;
+		setStep(null);
+		setValues({});
+		setError(null);
+		if (live)
+		{
+			onCancel().catch((caught: unknown) =>
+			{
+				setError(
+					{
+						caught,
+					},
+				);
+			});
+		}
+	};
 	const submit = (event: SubmitEvent) =>
 	{
 		event.preventDefault();
@@ -227,13 +260,24 @@ function SignInForm({email: initialEmail, submitLabel, onSubmit}: SignInFormProp
 				:
 					{
 						attemptId: step.attemptId,
-						values: Object.fromEntries(step.fields.map((field) => [field.name, values[field.name] ?? ""])),
+						values: Object.fromEntries(
+							[...step.resend, ...step.fields.map((field) => field.name)].map((name) => [
+								name,
+								values[name] ?? "",
+							]),
+						),
 					};
 		const send = async () =>
 		{
+			let kept: Record<string, string> = {};
 			try
 			{
-				setStep(await onSubmit(sent));
+				const next = await onSubmit(sent);
+				setStep(next);
+				if (next !== null && "values" in sent)
+				{
+					kept = Object.fromEntries(next.resend.map((name) => [name, sent.values[name] ?? ""]));
+				}
 			}
 			catch (caught)
 			{
@@ -249,7 +293,7 @@ function SignInForm({email: initialEmail, submitLabel, onSubmit}: SignInFormProp
 				);
 			}
 			setBusy(false);
-			setValues({});
+			setValues(kept);
 		};
 		void send();
 	};
@@ -260,10 +304,13 @@ function SignInForm({email: initialEmail, submitLabel, onSubmit}: SignInFormProp
 				<input
 					autoComplete="username"
 					className="settings-input"
-					disabled={step !== null}
 					name="workflowy-email"
 					onChange={(event) =>
 					{
+						if (step !== null)
+						{
+							startOver();
+						}
 						setEmail(event.target.value);
 					}}
 					required
@@ -295,11 +342,19 @@ function SignInForm({email: initialEmail, submitLabel, onSubmit}: SignInFormProp
 					</ul>
 				</Alert>
 			)}
+			{step !== null && (
+				<div className="settings-reply-detail text-s leading-xs text-tertiary" data-workflowy-login-trace>
+					Sign-in steps: {step.detail}
+				</div>
+			)}
 			{error !== null && <RequestErrorAlert error={error.caught} />}
-			<div>
+			<div className="flex gap-s">
 				<button className=" hover:no-underline button" disabled={busy} type="submit">
 					<span className="">{submitLabel}</span>
 				</button>
+				{!busy && (step !== null || error !== null) && (
+					<SettingsButton onClick={startOver}>Start over</SettingsButton>
+				)}
 			</div>
 		</form>
 	);
@@ -365,8 +420,10 @@ function RunReport({run}: {run: WorkflowyImportRun})
  */
 export function WorkflowySection()
 {
-	const {connection, connectionError, run, signIn, setMirror, startImport, disconnect} = useWorkflowyConnection();
+	const {connection, connectionError, run, signIn, cancelSignIn, setMirror, startImport, disconnect} =
+		useWorkflowyConnection();
 	const [keepSyncing, setKeepSyncing] = useState(false);
+	const [signingIn, setSigningIn] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const attempt = (action: () => Promise<void>) =>
 	{
@@ -390,20 +447,29 @@ export function WorkflowySection()
 					Bring your workflowy.com outline into OutlineDB. OutlineDB signs in once and keeps only the session,
 					never your password or sign-in code.
 				</Hint>
-				<SignInForm email="" onSubmit={signIn} submitLabel="Connect" />
+				<SignInForm email="" onCancel={cancelSignIn} onSubmit={signIn} submitLabel="Connect" />
 			</>
 		);
 	}
 	else if (connection.status === "expired")
 	{
+		// While a new sign-in is under way, the old session's expiry and its failed import are not what to look at.
 		body = (
 			<>
-				<Alert>
-					Your workflowy.com session expired, so syncing is paused. Sign in again to resume; your changes wait
-					until then.
-				</Alert>
-				<SignInForm email={connection.email} onSubmit={signIn} submitLabel="Sign in again" />
-				{run !== null && <RunReport run={run} />}
+				{!signingIn && (
+					<Alert>
+						Your workflowy.com session expired, so syncing is paused. Sign in again to resume; your changes
+						wait until then.
+					</Alert>
+				)}
+				<SignInForm
+					email={connection.email}
+					onActiveChange={setSigningIn}
+					onCancel={cancelSignIn}
+					onSubmit={signIn}
+					submitLabel="Sign in again"
+				/>
+				{run !== null && !signingIn && <RunReport run={run} />}
 				<DisconnectBlock
 					onDisconnect={() =>
 					{
