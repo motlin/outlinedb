@@ -142,6 +142,13 @@ describe("label eval", () =>
 			},
 		] as const;
 		const stratum = (item: (typeof items)[number]) => item.kind;
+		// The seeded samples are deterministic, but these tests check stratification properties rather than pinning the PRNG's exact picks.
+		const composition = (ids: string[]) => (
+		{
+			distinct: new Set(ids).size,
+			people: ids.filter((id) => id.startsWith("p")).length,
+			tags: ids.filter((id) => id.startsWith("t")).length,
+		});
 
 		it("is deterministic for a seed and splits the sample evenly between people and tags", () =>
 		{
@@ -163,8 +170,13 @@ describe("label eval", () =>
 			).map(({id}) => id);
 
 			expect(second).toStrictEqual(first);
-			expect(first.filter((id) => id.startsWith("p"))).toHaveLength(2);
-			expect(first.filter((id) => id.startsWith("t"))).toHaveLength(2);
+			expect(composition(first)).toStrictEqual(
+				{
+					distinct: 4,
+					people: 2,
+					tags: 2,
+				},
+			);
 		});
 
 		it("draws a different sample for a different seed", () =>
@@ -199,8 +211,13 @@ describe("label eval", () =>
 					stratum,
 				},
 			).map(({id}) => id);
-			expect(sample.filter((id) => id.startsWith("p"))).toHaveLength(3);
-			expect(sample.filter((id) => id.startsWith("t"))).toStrictEqual(["t1"]);
+			expect(composition(sample)).toStrictEqual(
+				{
+					distinct: 4,
+					people: 3,
+					tags: 1,
+				},
+			);
 
 			expect(
 				sampleStratified(
