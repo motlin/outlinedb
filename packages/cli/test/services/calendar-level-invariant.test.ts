@@ -313,13 +313,47 @@ describe("calendar level/levels invariant", () =>
 
 		const nodeIdsWithLevels = new Set(levelsRows.map((row) => row.nodeId));
 
-		for (const row of metadataRows)
+		const levelSource = (row: (typeof metadataRows)[number]): string =>
 		{
 			const hasLevel = row.level !== null;
 			const hasLevelsRow = nodeIdsWithLevels.has(row.nodeId);
-			expect(hasLevel && hasLevelsRow).toBe(false);
-			expect(hasLevel || hasLevelsRow).toBe(true);
-		}
+			if (hasLevel && hasLevelsRow)
+			{
+				return "both";
+			}
+			if (hasLevel)
+			{
+				return "level";
+			}
+			return hasLevelsRow ? "levels-table" : "none";
+		};
+
+		expect(
+			metadataRows
+				.map((row) => (
+				{
+					nodeId: row.nodeId,
+					source: levelSource(row),
+				}))
+				.toSorted((a, b) => a.nodeId.localeCompare(b.nodeId)),
+		).toStrictEqual([
+			{
+				nodeId: "calendar-root",
+				source: "levels-table",
+			},
+			{
+				nodeId: "day-11",
+				source: "level",
+			},
+			{
+				nodeId: "month-feb",
+				source: "level",
+			},
+			{
+				nodeId: "year-2025",
+				source: "level",
+			},
+		]);
 
 		expect(
 			metadataRows
