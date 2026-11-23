@@ -329,6 +329,26 @@ describe("POST /api/v1/files then GET /api/v1/files/:nodeId", () =>
 		const read = await app.fetch(new Request(`http://x/api/v1/files/${id}/original`));
 		const preview = await app.fetch(new Request(`http://x/api/v1/files/${id}/preview?w=200`));
 		const sha = createHash("sha256").update(PNG).digest("hex");
+		// An uploaded page is served on the app's origin, so it must not run as the app.
+		const page = (await (
+			await app.fetch(
+				new Request(
+					"http://x/api/v1/files?parentId=home&name=page.html",
+					{
+						method: "POST",
+						headers:
+						{
+							"content-type": "text/html",
+						},
+						body: "<script>fetch('/api/v1/nodes')</script>",
+					},
+				),
+			)
+		).json()) as
+		{
+			id: string;
+		};
+		const pageRead = await app.fetch(new Request(`http://x/api/v1/files/${page.id}/original`));
 
 		expect(
 			{
@@ -337,7 +357,15 @@ describe("POST /api/v1/files then GET /api/v1/files/:nodeId", () =>
 				{
 					status: read.status,
 					type: read.headers.get("content-type"),
+					nosniff: read.headers.get("x-content-type-options"),
+					csp: read.headers.get("content-security-policy"),
 					bytes: [...new Uint8Array(await read.arrayBuffer())],
+				},
+				page:
+				{
+					type: pageRead.headers.get("content-type"),
+					nosniff: pageRead.headers.get("x-content-type-options"),
+					csp: pageRead.headers.get("content-security-policy"),
 				},
 				preview:
 				{
@@ -366,7 +394,15 @@ describe("POST /api/v1/files then GET /api/v1/files/:nodeId", () =>
 				{
 					status: 200,
 					type: "image/png",
+					nosniff: "nosniff",
+					csp: null,
 					bytes: [...PNG],
+				},
+				page:
+				{
+					type: "text/html",
+					nosniff: "nosniff",
+					csp: "sandbox",
 				},
 				preview:
 				{

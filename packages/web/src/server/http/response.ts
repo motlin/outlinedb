@@ -4,6 +4,9 @@ import {Ops} from "../ops/index.js";
 import type {OpInput, OpName} from "../ops/index.js";
 import type {StoreClient} from "../store.js";
 
+/** Attachment types a browser only displays, never runs: raster images, audio, video and PDF (SVG can hold script). */
+const PASSIVE_MEDIA_TYPE = /^(?:image\/(?!svg)|audio\/|video\/|application\/pdf\b)/iu;
+
 export type ResolveStore = (request: Request) => StoreClient | Promise<StoreClient>;
 
 /** Builds the Response for an op result: 204 for null, stored file bytes, 304, 302, ETag and Server-Timing, or the error body. */
@@ -31,6 +34,13 @@ export function toResponse(result: OpResult<unknown>): Response
 	if (meta?.file !== undefined)
 	{
 		headers.set("Content-Type", meta.file.contentType);
+		// The uploader picked the type, and these bytes share the app's origin: never sniff, and run anything that is
+		// not passive media (an HTML page, an SVG) in an opaque origin so it cannot call the API as the viewer.
+		headers.set("X-Content-Type-Options", "nosniff");
+		if (!PASSIVE_MEDIA_TYPE.test(meta.file.contentType))
+		{
+			headers.set("Content-Security-Policy", "sandbox");
+		}
 		// Content-addressed bytes never change under a node, but another account's must never come from a shared cache.
 		headers.set("Cache-Control", "private, max-age=86400");
 		return new Response(
