@@ -4,10 +4,10 @@ import
 {
 	isAuthPath,
 	loginUrl,
-	openSettingsFromUrl,
+	openImportFromUrl,
 	redirectToLogin,
 	safeNext,
-	withSettingsOpen,
+	withImportOpen,
 } from "../src/client/auth/login-redirect.js";
 import {readJson} from "../src/client/read-json.js";
 import {RequestStatusError, toRequestStatusError} from "../src/client/request-error.js";
@@ -52,11 +52,11 @@ describe("loginUrl", () =>
 	});
 });
 
-describe("opening Settings from the URL", () =>
+describe("opening the import dialog from the URL", () =>
 {
-	it("adds the section to a next path, then opens it once and drops the parameter, keeping the zoom", () =>
+	it("adds the parameter to a next path, then opens the dialog once and drops the parameter, keeping the zoom", () =>
 	{
-		const opened: string[] = [];
+		let opened = 0;
 		const replaced: string[] = [];
 		const history =
 		{
@@ -66,33 +66,27 @@ describe("opening Settings from the URL", () =>
 				replaced.push(String(url));
 			},
 		};
-		const link = withSettingsOpen("/?q=x#/abc", "Workflowy");
-		openSettingsFromUrl(
+		const open = () =>
+		{
+			opened++;
+		};
+		const link = withImportOpen("/?q=x#/abc");
+		openImportFromUrl(
 			{
 				href: `http://origin${link}`,
 			},
 			history,
-			(section) =>
-			{
-				opened.push(section);
-			},
+			open,
 		);
-		openSettingsFromUrl(
+		openImportFromUrl(
 			{
 				href: "http://origin/#/abc",
 			},
 			history,
-			(section) =>
-			{
-				opened.push(section);
-			},
+			open,
 		);
 
-		expect([link, opened, replaced]).toStrictEqual([
-			"/?q=x&settings=Workflowy#/abc",
-			["Workflowy"],
-			["/?q=x#/abc"],
-		]);
+		expect([link, opened, replaced]).toStrictEqual(["/?q=x&import=open#/abc", 1, ["/?q=x#/abc"]]);
 	});
 });
 

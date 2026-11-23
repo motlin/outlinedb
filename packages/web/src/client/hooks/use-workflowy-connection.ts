@@ -31,6 +31,43 @@ export class WorkflowyRequestError extends Error
 	}
 }
 
+/** A refused request in the user's words, by the Worker's error code. */
+export function requestErrorMessage(error: unknown): string
+{
+	if (error instanceof WorkflowyRequestError)
+	{
+		if (error.code === "workflowy-login-failed")
+		{
+			return "workflowy.com didn't accept that sign-in.";
+		}
+		if (error.code === "workflowy-login-unverified")
+		{
+			return "workflowy.com finished the sign-in but didn't accept the session. Try again.";
+		}
+		if (error.code === "workflowy-captcha")
+		{
+			return "workflowy.com wants to check you're human. Try again later.";
+		}
+		if (error.code === "workflowy-login-expired")
+		{
+			return "That sign-in took too long. Start again.";
+		}
+		if (error.code === "workflowy-login-code-expired")
+		{
+			return "That code expired. Start again to get a new one.";
+		}
+		if (error.code === "credentials-key-not-configured")
+		{
+			return "Connecting to workflowy.com isn't available yet.";
+		}
+		if (error.code === "workflowy-session-expired")
+		{
+			return "Your workflowy.com session expired. Sign in again first.";
+		}
+	}
+	return "Something went wrong. Try again.";
+}
+
 const connectionKeys =
 {
 	connection: ["workflowy-connection"] as const,
@@ -124,15 +161,14 @@ function queuedRun(startedAt: number): WorkflowyImportRun
 	};
 }
 
-export function useWorkflowyConnection()
+/**
+ * The account's newest import run, or null: polled while it runs, wherever it was started, so every view of it (the
+ * outline's banner, the import dialog, Settings) reads the same live run. A run that stops running changed the outline
+ * and the connection (its last sync, or an expired session), so its end refetches every other query.
+ */
+export function useWorkflowyImportRun(): WorkflowyImportRun | null
 {
 	const queryClient = useQueryClient();
-	const connection = useQuery(
-		{
-			queryKey: connectionKeys.connection,
-			queryFn: async () => getJson<WorkflowyConnection>("/api/v1/workflowy-connection"),
-		},
-	);
 	const imported = useQuery(
 		{
 			queryKey: connectionKeys.import,
@@ -140,8 +176,6 @@ export function useWorkflowyConnection()
 			refetchInterval: (query) => (query.state.data?.run?.status === "running" ? POLL_MS : false),
 		},
 	);
-
-	// A run that stops running changed the outline and the connection (its last sync, or an expired session).
 	const status = imported.data?.run?.status;
 	const previous = useRef(status);
 	useEffect(() =>
@@ -157,6 +191,19 @@ export function useWorkflowyConnection()
 			);
 		}
 	}, [queryClient, status]);
+	return imported.data?.run ?? null;
+}
+
+export function useWorkflowyConnection()
+{
+	const queryClient = useQueryClient();
+	const connection = useQuery(
+		{
+			queryKey: connectionKeys.connection,
+			queryFn: async () => getJson<WorkflowyConnection>("/api/v1/workflowy-connection"),
+		},
+	);
+	const run = useWorkflowyImportRun();
 
 	const setConnection = (next: WorkflowyConnection) =>
 	{
@@ -165,7 +212,7 @@ export function useWorkflowyConnection()
 	return {
 		connection: connection.data,
 		connectionError: connection.isError,
-		run: imported.data?.run ?? null,
+		run,
 		/**
 		 * One step of signing in to workflowy.com: `{email}` starts, `{attemptId, values}` answers the fields the last
 		 * step asked for. Resolves with the next step, or with null once the account is connected.

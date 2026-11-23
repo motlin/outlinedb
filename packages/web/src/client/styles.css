@@ -3276,6 +3276,256 @@ body.moving .itemMenu
 	opacity: 0.5;
 }
 
+/* ================================
+   Import from workflowy.com: the outline's banner and the import dialog
+   ================================ */
+
+.import-notice
+{
+	display: flex;
+	flex-direction: column;
+	gap: var(--wf-space-m);
+	border: 1px solid var(--wf-border-primary);
+	background: var(--wf-background-secondary);
+}
+
+.import-notice-row
+{
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: var(--wf-space-xs) var(--wf-space-l);
+}
+
+.import-notice-text
+{
+	flex: 1 1 240px;
+	min-width: 0;
+	margin: 0;
+}
+
+.import-notice-action
+{
+	flex: none;
+	border: 0;
+	padding: 0;
+	background: transparent;
+	color: var(--wf-text-primary);
+	font: inherit;
+	font-weight: 600;
+	text-decoration: underline;
+	cursor: pointer;
+}
+
+/* A native <progress>, restyled: a slim pill in the app's tint. */
+.import-progress
+{
+	display: block;
+	-webkit-appearance: none;
+	appearance: none;
+	overflow: hidden;
+	width: 100%;
+	height: 6px;
+	border: 0;
+	border-radius: var(--wf-radius-pill);
+	background: var(--wf-background-tertiary);
+}
+
+.import-progress::-webkit-progress-bar
+{
+	background: transparent;
+}
+
+.import-progress::-webkit-progress-value
+{
+	border-radius: var(--wf-radius-pill);
+	background: var(--wf-background-tint);
+	transition: width 0.4s ease-out;
+}
+
+.import-progress::-moz-progress-bar
+{
+	border-radius: var(--wf-radius-pill);
+	background: var(--wf-background-tint);
+}
+
+/* A phase with nothing to count: a stripe that travels, so the bar still reads as working. */
+.import-progress:indeterminate
+{
+	background: linear-gradient(
+			90deg,
+			var(--wf-background-tertiary) 0 45%,
+			var(--wf-background-tint) 45% 55%,
+			var(--wf-background-tertiary) 55%
+		)
+		0 0 / 300% 100%;
+	animation: import-progress-travel 1.6s linear infinite;
+}
+
+.import-progress:indeterminate::-moz-progress-bar
+{
+	background: transparent;
+}
+
+@keyframes import-progress-travel
+{
+	from
+	{
+		background-position: 100% 0;
+	}
+
+	to
+	{
+		background-position: 0 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce)
+{
+	.import-progress::-webkit-progress-value
+	{
+		transition: none;
+	}
+
+	.import-progress:indeterminate
+	{
+		background-position: 50% 0;
+		animation: none;
+	}
+}
+
+.import-steps
+{
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--wf-space-m) var(--wf-space-l);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.import-step
+{
+	display: flex;
+	align-items: center;
+	gap: var(--wf-space-m);
+	color: var(--wf-text-tertiary);
+	font-size: var(--wf-font-size-s);
+}
+
+.import-step[data-state="current"]
+{
+	color: var(--wf-text-primary);
+	font-weight: 600;
+}
+
+.import-step-dot
+{
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	width: 22px;
+	height: 22px;
+	border: 1px solid var(--wf-border-primary);
+	border-radius: 50%;
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.import-step[data-state="current"] .import-step-dot,
+.import-step[data-state="done"] .import-step-dot
+{
+	border-color: var(--wf-background-tint);
+	background: var(--wf-background-tint);
+	color: var(--wf-text-on-color);
+}
+
+.import-stages
+{
+	display: flex;
+	flex-direction: column;
+	gap: var(--wf-space-s);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	color: var(--wf-text-tertiary);
+}
+
+.import-stages li::before
+{
+	content: "\25CB";
+	display: inline-block;
+	width: 1.5em;
+}
+
+.import-stages li[data-state="done"]::before
+{
+	content: "\2713";
+}
+
+.import-stages li[data-state="current"]
+{
+	color: var(--wf-text-primary);
+	font-weight: 600;
+}
+
+.import-stages li[data-state="current"]::before
+{
+	content: "\25CF";
+	color: var(--wf-background-tint);
+}
+
+.import-stats
+{
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+	gap: var(--wf-space-m);
+	margin: 0;
+}
+
+.import-stat
+{
+	display: flex;
+	flex-direction: column-reverse;
+	gap: var(--wf-space-xs);
+	border-radius: var(--wf-radius-m);
+	padding: var(--wf-space-m) 12px;
+	background: var(--wf-background-secondary);
+}
+
+.import-stat dd
+{
+	margin: 0;
+	font-variant-numeric: tabular-nums;
+}
+
+.import-details summary
+{
+	color: var(--wf-text-tertiary);
+	cursor: pointer;
+}
+
+.import-details dl
+{
+	margin: var(--wf-space-m) 0 0;
+}
+
+.import-details dl > div
+{
+	display: flex;
+	justify-content: space-between;
+	gap: var(--wf-space-l);
+	border-top: 1px solid var(--wf-border-primary);
+	padding: var(--wf-space-s) 0;
+}
+
+.import-details dd
+{
+	margin: 0;
+	font-variant-numeric: tabular-nums;
+}
+
 /* workflowy.com's raw login reply is one long JSON token; let it wrap anywhere. */
 .settings-reply-detail
 {

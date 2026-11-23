@@ -13,6 +13,9 @@ declare global
 const {act, createElement} = await import("react");
 const {createRoot} = await import("react-dom/client");
 const {WorkflowySection} = await import("../src/client/components/workflowy-connection-settings.js");
+const {WorkflowyImportDialogHost} = await import("../src/client/components/workflowy-import-dialog.js");
+const {WorkflowyImportNotice} = await import("../src/client/components/workflowy-import-notice.js");
+const {useOutlineStore} = await import("../src/client/stores/outline.js");
 
 interface Call
 {
@@ -22,6 +25,7 @@ interface Call
 }
 
 let root: Root | undefined;
+let client: QueryClient | undefined;
 let host: HTMLElement | undefined;
 const calls: Call[] = [];
 /** What the fake Worker answers: the GETs read these, and each write's handler may change them. */
@@ -161,6 +165,12 @@ beforeEach(() =>
 	};
 	run = null;
 	writes = {};
+	useOutlineStore.setState(
+		{
+			importDialogOpen: false,
+			settingsOpen: false,
+		},
+	);
 	vi.stubGlobal(
 		"fetch",
 		vi.fn(async (request: string | URL, init?: RequestInit) =>
@@ -168,6 +178,21 @@ beforeEach(() =>
 			const url = new URL(request, globalThis.location.origin);
 			const method = init?.method ?? "GET";
 			const raw = await new Response(init?.body ?? null).text();
+			if (url.pathname === "/api/auth-config")
+			{
+				return Response.json(
+					{
+						hosted: true,
+						turnstileSiteKey: null,
+						providers:
+						{
+							google: false,
+							magicLink: false,
+						},
+						signupMode: "open",
+					},
+				);
+			}
 			if (method === "GET")
 			{
 				return Response.json(
@@ -203,35 +228,78 @@ afterEach(async () =>
 	vi.unstubAllGlobals();
 });
 
+/**
+ * The page as the app lays it out: the outline's import banner always, and Settings > Workflowy until the import dialog
+ * opens in its place.
+ */
+function Page()
+{
+	const importing = useOutlineStore((state) => state.importDialogOpen);
+	return createElement(
+		"div",
+		null,
+		createElement(WorkflowyImportNotice),
+		importing ? null : createElement(WorkflowySection),
+		createElement(WorkflowyImportDialogHost),
+	);
+}
+
 async function open(): Promise<void>
 {
 	host = document.createElement("div");
 	document.body.append(host);
 	root = createRoot(host);
+	const created = new QueryClient(
+		{
+			defaultOptions:
+			{
+				queries:
+				{
+					retry: false,
+				},
+			},
+		},
+	);
+	client = created;
 	await act(async () =>
 	{
 		root?.render(
 			createElement(
 				QueryClientProvider,
 				{
-					client: new QueryClient(
-						{
-							defaultOptions:
-							{
-								queries:
-								{
-									retry: false,
-								},
-							},
-						},
-					),
+					client: created,
 				},
-				createElement(WorkflowySection),
+				createElement(Page),
 			),
 		);
 		await Promise.resolve();
 	});
 	await settle();
+}
+
+/** What a poll does: read the run again. */
+async function poll(): Promise<void>
+{
+	await act(async () =>
+	{
+		await client?.invalidateQueries(
+			{
+				queryKey: ["workflowy-import"],
+			},
+		);
+	});
+	await settle();
+}
+
+/** The progress bars on the page, as a screen reader hears them. */
+function bars(): (string | null)[][]
+{
+	return [...document.querySelectorAll("progress")].map((bar) => [
+		bar.getAttribute("aria-label"),
+		bar.getAttribute("value"),
+		bar.getAttribute("max"),
+		bar.getAttribute("aria-valuetext"),
+	]);
 }
 
 function input(name: string): HTMLInputElement
@@ -290,7 +358,13 @@ function text(selector: string): string[]
 	);
 }
 
-describe("Settings > Workflowy", () =>
+/** The import dialog's current step. */
+function step(): string[]
+{
+	return text("[aria-current=step] > span:last-child");
+}
+
+describe("importing from workflowy.com", () =>
 {
 	it("connects by answering each field workflowy.com's form asks for, shows its errors, then imports with keep-syncing on", async () =>
 	{
@@ -337,6 +411,10 @@ describe("Settings > Workflowy", () =>
 			return Response.json(connection);
 		};
 		await open();
+		// Settings only points at the import dialog, which opens in its place at the Connect step.
+		const settingsBefore = [...document.querySelectorAll("button")].map((candidate) => candidate.textContent);
+		await click(button("Import from workflowy.com"));
+		const connectStep = step();
 		const emailOnly = text("label > span");
 
 		await type("workflowy-email", " alice@example.com ");
@@ -373,7 +451,12 @@ describe("Settings > Workflowy", () =>
 		};
 		await type("workflowy-login-code", "123456");
 		await click(button("Connect"));
-		const connectedStatus = text("[data-workflowy-connection=status] > *");
+		const confirm =
+		{
+			step: step(),
+			status: text("[data-workflowy-connection=status]"),
+			says: text("[data-workflowy-import-confirm] li"),
+		};
 
 		writes["PATCH /api/v1/workflowy-connection"] = (body) =>
 		{
@@ -404,22 +487,47 @@ describe("Settings > Workflowy", () =>
 		};
 		await click(input("workflowy-connection-mirror"));
 		await click(button("Import"));
+		const importing =
+		{
+			step: step(),
+			progress: text("[data-workflowy-import] output"),
+			stages: [...document.querySelectorAll(".import-stages li")].map((stage) =>
+				stage.getAttribute("data-state"),
+			),
+			notice: text("[data-workflowy-import-notice] p"),
+			bars: bars(),
+		};
+		// Closing the dialog leaves the banner; Settings says an import is under way, not when the outline last synced.
+		await click(button("Close and keep working"));
+		await click(document.querySelector<HTMLElement>("[data-workflowy-import-notice] button"));
+		const reopened = step();
+		await click(button("Close and keep working"));
 
 		expect(
 			{
+				settingsBefore,
+				connectStep,
 				emailOnly,
 				refused,
 				askedPassword,
 				wrong,
 				askedCode,
-				connectedStatus,
+				confirm,
+				importing,
+				reopened,
 				calls,
-				progress: text("[data-workflowy-import] output"),
-				keepSyncing: document.querySelector(".workflowy-connection-mirror")?.classList.contains("on"),
-				reimport: button("Re-import"),
+				notice: text("[data-workflowy-import-notice] p"),
+				settings:
+				{
+					status: text("[data-workflowy-connection=status] > *"),
+					keepSyncing: document.querySelector(".workflowy-connection-mirror")?.classList.contains("on"),
+					buttons: [...document.querySelectorAll("button")].map((candidate) => candidate.textContent),
+				},
 			},
 		).toStrictEqual(
 			{
+				settingsBefore: ["Import from workflowy.com"],
+				connectStep: ["Connect"],
 				emailOnly: ["workflowy.com email"],
 				refused: ["workflowy.com didn't accept that sign-in.", "workflowy.com said: HTTP 500: Server error"],
 				// The email stays editable, which starts over; each step shows the requests so far in gray.
@@ -448,7 +556,29 @@ describe("Settings > Workflowy", () =>
 						"Sign-in steps: GET /login/ -> 200; POST /login/ form [email, password] -> 200; jar [_bess]",
 					],
 				},
-				connectedStatus: ["Connected as alice@example.com", "Not synced yet"],
+				confirm:
+				{
+					step: ["Confirm"],
+					status: ["Connected as alice@example.com"],
+					says: [
+						"Everything in your workflowy.com account comes over: items, completed items, mirrors, attachments, stars, tag colors and saved views.",
+						"It replaces your current outline here, including the tutorial.",
+						"The import only reads from workflowy.com. It changes nothing there.",
+					],
+				},
+				importing:
+				{
+					step: ["Import"],
+					progress: ["Downloading your outline from workflowy.com"],
+					stages: ["current", "upcoming", "upcoming"],
+					notice: ["Importing from workflowy.com. Downloading your outline from workflowy.com"],
+					// Nothing to count yet, so neither bar claims a value.
+					bars: [
+						["Downloading your outline from workflowy.com", null, null, null],
+						["Downloading your outline from workflowy.com", null, null, null],
+					],
+				},
+				reopened: ["Import"],
 				calls: [
 					{
 						method: "POST",
@@ -517,10 +647,17 @@ describe("Settings > Workflowy", () =>
 						body: null,
 					},
 				],
-				progress: ["Downloading your outline from workflowy.com"],
-				keepSyncing: true,
-				// No re-import while a run is under way.
-				reimport: undefined,
+				notice: ["Importing from workflowy.com. Downloading your outline from workflowy.com"],
+				// No re-import while a run is under way, and no "Not synced yet" beside it.
+				settings:
+				{
+					status: [
+						"Connected as alice@example.com",
+						"Import in progress: Downloading your outline from workflowy.com",
+					],
+					keepSyncing: true,
+					buttons: ["View progress", "View progress", "Disconnect"],
+				},
 			},
 		);
 	});
@@ -568,6 +705,7 @@ describe("Settings > Workflowy", () =>
 		];
 		writes["POST /api/v1/workflowy-connection"] = () => steps.shift() ?? Response.json(connection);
 		await open();
+		await click(button("Import from workflowy.com"));
 		const before = button("Start over");
 		await type("workflowy-email", "alice@example.com");
 		await click(button("Connect"));
@@ -660,9 +798,56 @@ describe("Settings > Workflowy", () =>
 		);
 	});
 
-	it("shows live progress with the found counts while the import copies attachments", async () =>
+	it("shows a running import in the banner and the dialog as counted progress and headline numbers, then how it ended until dismissed", async () =>
 	{
 		connection = connected();
+		// The shape the Worker reports mid-run. Its named attachment failure is the last run's until this one retries it.
+		run = importRun(
+			{
+				phase: "importing",
+				status: "running",
+				finishedAt: null,
+				applied: 60,
+				files:
+				{
+					found: 0,
+					copied: 0,
+					alreadyCopied: 0,
+					failed: 0,
+					bytes: 0,
+					failures: [
+						{
+							nodeId: "n0",
+							fileName: "old.jpg",
+							error: "HTTP 500",
+						},
+					],
+				},
+			},
+		);
+		await open();
+		const banner =
+		{
+			text: text("[data-workflowy-import-notice] p"),
+			live: document.querySelector("[data-workflowy-import-notice] p")?.getAttribute("aria-live"),
+			bars: bars(),
+			status: text("[data-workflowy-connection=status] > *"),
+		};
+		await click(button("View progress"));
+		const items =
+		{
+			step: step(),
+			progress: text("[data-workflowy-import] output"),
+			count: text("[data-workflowy-import-count]"),
+			stages: [...document.querySelectorAll(".import-stages li")].map((stage) =>
+				stage.getAttribute("data-state"),
+			),
+			found: text("[data-workflowy-import-found] .import-stat"),
+			details: text("[data-workflowy-import-found] details div"),
+			problems: text("[data-workflowy-import-problems]"),
+			failures: text("[data-workflowy-import-failures]"),
+		};
+
 		run = importRun(
 			{
 				phase: "files",
@@ -670,14 +855,74 @@ describe("Settings > Workflowy", () =>
 				finishedAt: null,
 			},
 		);
-		await open();
+		await poll();
+		const attachments =
+		{
+			banner: text("[data-workflowy-import-notice] p"),
+			bars: bars(),
+			found: text("[data-workflowy-import-found] .import-stat"),
+			problems: text("[data-workflowy-import-problems]"),
+		};
 
-		expect(text("[data-workflowy-import] > *")).toStrictEqual([
-			"Copying attachments: 2 of 2",
-			"Found 120 items, 3 completed items, 1 mirror, 2 attachments, 2 stars, 1 setting, 4 expanded items.",
-			// Failures show as they happen, not only once the run ends.
-			"2 items could not be read and were left outphoto.jpg: HTTP 403",
-		]);
+		await click(button("Close and keep working"));
+		run = importRun();
+		await poll();
+		const finished =
+		{
+			banner: text("[data-workflowy-import-notice] p"),
+			buttons: text("[data-workflowy-import-notice] button"),
+			bars: bars(),
+		};
+		await click(button("Dismiss"));
+
+		expect(
+			{
+				banner,
+				items,
+				attachments,
+				finished,
+				dismissed: text("[data-workflowy-import-notice]"),
+			},
+		).toStrictEqual(
+			{
+				banner:
+				{
+					text: ["Importing from workflowy.com. Importing items 60 of 120 items"],
+					live: "polite",
+					bars: [["Importing items", "60", "120", "60 of 120 items"]],
+					status: ["Connected as alice@example.com", "Import in progress: Importing items, 60 of 120 items"],
+				},
+				items:
+				{
+					step: ["Import"],
+					progress: ["Importing items"],
+					count: ["60 of 120 items"],
+					stages: ["done", "current", "upcoming"],
+					found: ["Items120", "Completed3", "Mirrors1"],
+					details: ["Stars2", "Settings1", "Expanded items4"],
+					// This run's own count, and never the last run's named failures.
+					problems: ["2 problems so far. The details show when the import ends."],
+					failures: [],
+				},
+				attachments:
+				{
+					banner: ["Importing from workflowy.com. Copying attachments 2 of 2 attachments"],
+					bars: [
+						["Copying attachments", "2", "2", "2 of 2 attachments"],
+						["Copying attachments", "2", "2", "2 of 2 attachments"],
+					],
+					found: ["Items120", "Completed3", "Mirrors1", "Attachments2"],
+					problems: ["3 problems so far. The details show when the import ends."],
+				},
+				finished:
+				{
+					banner: ["Import finished. 120 items from workflowy.com, with 3 problems to look at."],
+					buttons: ["View summary", "Dismiss"],
+					bars: [],
+				},
+				dismissed: [],
+			},
+		);
 	});
 
 	it("reports a finished import's results and failures, and turns keep-syncing on, re-imports and disconnects", async () =>
@@ -689,11 +934,21 @@ describe("Settings > Workflowy", () =>
 		);
 		run = importRun();
 		await open();
-		const report =
+		const settings =
 		{
 			status: text("[data-workflowy-connection=status] > *"),
+			buttons: [...document.querySelectorAll("button")].map((candidate) => candidate.textContent),
+			// A run that ended before this page loaded is not news.
+			notice: text("[data-workflowy-import-notice]"),
+		};
+		await click(button("View last import"));
+		const report =
+		{
+			step: step(),
+			brought: text("[data-workflowy-import-found] .import-stat"),
 			results: text("[data-workflowy-import-results] li"),
-			failures: text("[data-workflowy-import-failures] li"),
+			failures: text("[data-workflowy-import-failures] > *"),
+			keepSyncing: text(".text-tertiary").filter((hint) => hint.startsWith("Off")),
 		};
 
 		await click(document.querySelector<HTMLElement>(".workflowy-connection-mirror"));
@@ -709,8 +964,10 @@ describe("Settings > Workflowy", () =>
 		await click(button("Re-import"));
 		const whileStarting =
 		{
+			step: step(),
 			progress: text("[data-workflowy-import] output"),
 			results: text("[data-workflowy-import-results] li"),
+			notice: text("[data-workflowy-import-notice] p"),
 		};
 		run = importRun(
 			{
@@ -733,7 +990,14 @@ describe("Settings > Workflowy", () =>
 			await Promise.resolve();
 		});
 		await settle();
-		const afterFailure = text("[data-workflowy-import] [role=alert]");
+		const afterFailure =
+		{
+			step: step(),
+			alerts: text("[data-workflowy-import] [role=alert]"),
+			tryAgain: button("Try again")?.type,
+		};
+		await click(button("Close"));
+		const failedStatus = text("[data-workflowy-connection=status] > *");
 		writes["DELETE /api/v1/workflowy-connection"] = () =>
 			Response.json(
 				{
@@ -744,33 +1008,60 @@ describe("Settings > Workflowy", () =>
 
 		expect(
 			{
+				settings,
 				report,
 				whileStarting,
 				afterFailure,
+				failedStatus,
 				calls: calls.map(({method, path, body}) => [method, path, body]),
-				afterDisconnect: button("Connect")?.type,
+				afterDisconnect: button("Import from workflowy.com")?.type,
 			},
 		).toStrictEqual(
 			{
-				// The new run shows as soon as Re-import is clicked, not the previous run's report.
-				whileStarting:
+				settings:
 				{
-					progress: ["Waiting to start the import"],
-					results: [],
+					status: [
+						"Connected as alice@example.com",
+						`Imported 120 items, 3 problems. Last sync: ${new Date(FINISHED).toLocaleString()}`,
+					],
+					buttons: ["Re-import", "View last import", "Disconnect"],
+					notice: [],
 				},
-				// The failed request reads the run back: its failure, not the previous run's report.
-				afterFailure: [
-					"The import failed: the tree download ran out of memory or was interrupted; not retried",
-				],
 				report:
 				{
-					status: ["Connected as alice@example.com", `Last sync: ${new Date(FINISHED).toLocaleString()}`],
+					step: ["Done"],
+					brought: ["Items118", "Completed3", "Mirrors1", "Attachments of 21"],
 					results: [
 						"Items: 118 added, 0 updated, 0 unchanged, 7 removed",
 						"Attachments: 1 copied (2.0 KB), 0 already copied, 1 failed",
 					],
-					failures: ["2 items could not be read and were left out", "photo.jpg: HTTP 403"],
+					// Each failure, then what to do about them.
+					failures: [
+						"Needs attention",
+						"2 items could not be read and were left outphoto.jpg: HTTP 403",
+						"Re-import to try the failed attachments again; the ones already copied are skipped. Items that were left out are still on workflowy.com.",
+					],
+					keepSyncing: ["Off: this was a one-time import. Nothing here is sent to workflowy.com."],
 				},
+				// The new run shows as soon as Re-import is clicked, not the previous run's report.
+				whileStarting:
+				{
+					step: ["Import"],
+					progress: ["Waiting to start"],
+					results: [],
+					notice: ["Importing from workflowy.com. Waiting to start"],
+				},
+				// The failed request reads the run back: its failure, not the previous run's report.
+				afterFailure:
+				{
+					step: ["Import"],
+					alerts: ["The import failed: the tree download ran out of memory or was interrupted; not retried"],
+					tryAgain: "button",
+				},
+				failedStatus: [
+					"Connected as alice@example.com",
+					`The last import failed. Last sync: ${new Date(FINISHED).toLocaleString()}`,
+				],
 				calls: [
 					[
 						"PATCH",
@@ -782,12 +1073,12 @@ describe("Settings > Workflowy", () =>
 					["POST", "/api/v1/workflowy-import", null],
 					["DELETE", "/api/v1/workflowy-connection", null],
 				],
-				afterDisconnect: "submit",
+				afterDisconnect: "button",
 			},
 		);
 	});
 
-	it("asks to sign in again once workflowy.com refused the session, with the email filled in", async () =>
+	it("asks to sign in again once workflowy.com refused the session, with the email filled in, then is back at Confirm", async () =>
 	{
 		connection = connected(
 			{
@@ -801,39 +1092,23 @@ describe("Settings > Workflowy", () =>
 				status: "expired",
 				message: "workflowy-session-expired",
 				applied: 0,
-				found:
-				{
-					nodes: 0,
-					completed: 0,
-					mirrors: 0,
-					backlinks: 0,
-					expandedKeys: 0,
-					stars: 0,
-					starOrder: 0,
-					tagColors: 0,
-					savedViews: 0,
-					settings: 0,
-				},
-				failures:
-				{
-					invalidNodes: 0,
-					metadataSkipped: 0,
-				},
-				files:
-				{
-					found: 0,
-					copied: 0,
-					alreadyCopied: 0,
-					failed: 0,
-					bytes: 0,
-					failures: [],
-				},
 			},
 		);
 		await open();
-		const prompt = text("[role=alert]");
-		const report = text("[data-workflowy-import] > *");
-		const email = input("workflowy-email").value;
+		const settings =
+		{
+			alerts: text("[role=alert]"),
+			buttons: [...document.querySelectorAll("button")].map((candidate) => candidate.textContent),
+		};
+		await click(button("Sign in again"));
+		const prompt =
+		{
+			step: step(),
+			alerts: text("[role=alert] > div"),
+			// No "Found 0 items" from a run that never read the outline.
+			found: text("[data-workflowy-import-found]"),
+			email: input("workflowy-email").value,
+		};
 
 		writes["POST /api/v1/workflowy-connection"] = (body) =>
 		{
@@ -849,40 +1124,41 @@ describe("Settings > Workflowy", () =>
 			return Response.json(connection);
 		};
 		await click(button("Sign in again"));
-		// While signing in, the old session's expiry and its failed import give way to the sign-in; Disconnect stays.
-		const signingIn =
-		{
-			alerts: text("[role=alert]"),
-			report: text("[data-workflowy-import]"),
-			disconnect: button("Disconnect")?.textContent,
-		};
+		// While signing in, the old session's expiry and its stopped import give way to the sign-in.
+		const signingIn = text("[role=alert]");
 		await type("workflowy-login-password", "again");
 		await click(button("Sign in again"));
 
 		expect(
 			{
+				settings,
 				prompt,
-				report,
-				email,
 				signingIn,
 				calls,
-				status: text("[data-workflowy-connection=status] > *"),
+				step: step(),
+				status: text("[data-workflowy-connection=status]"),
+				keepSyncing: input("workflowy-connection-mirror").checked,
 			},
 		).toStrictEqual(
 			{
-				prompt: [
-					"Your workflowy.com session expired, so syncing is paused. Sign in again to resume; your changes wait until then.",
-					"workflowy.com refused the session, so the import stopped. Sign in again, then import.",
-				],
-				// No "Found 0 items" from a run that never read the outline.
-				report: ["workflowy.com refused the session, so the import stopped. Sign in again, then import."],
-				email: "alice@example.com",
-				signingIn:
+				settings:
 				{
-					alerts: [],
-					report: [],
-					disconnect: "Disconnect",
+					alerts: [
+						"Your workflowy.com session expired, so syncing is paused. Sign in again to resume; your changes wait until then.",
+					],
+					buttons: ["Sign in again", "Disconnect"],
 				},
+				prompt:
+				{
+					step: ["Connect"],
+					alerts: [
+						"Your workflowy.com session expired, so syncing is paused. Sign in again to resume; your changes wait until then.",
+						"The import stopped when the session was refused. Start it again once signed in.",
+					],
+					found: [],
+					email: "alice@example.com",
+				},
+				signingIn: [],
 				calls: [
 					{
 						method: "POST",
@@ -905,7 +1181,10 @@ describe("Settings > Workflowy", () =>
 						},
 					},
 				],
-				status: ["Connected as alice@example.com", "Not synced yet"],
+				// The refused run imported nothing, so the flow is back at Confirm, with keep-syncing as it was.
+				step: ["Confirm"],
+				status: ["Connected as alice@example.com"],
+				keepSyncing: true,
 			},
 		);
 	});

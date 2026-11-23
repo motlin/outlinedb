@@ -345,7 +345,7 @@ describe("signup", () =>
 
 describe("welcome", () =>
 {
-	it("offers the workflowy.com import after verifying: yes opens Settings > Workflowy, skip goes on to the tutorial", async () =>
+	it("offers the workflowy.com import after verifying: yes opens the import dialog, skip goes on to the tutorial", async () =>
 	{
 		const click = async (label: string) =>
 		{
@@ -361,10 +361,7 @@ describe("welcome", () =>
 		await click("Yes, connect workflowy.com");
 		await click("Skip, show me the tutorial");
 
-		expect([title, assigned]).toStrictEqual([
-			"Bring your Workflowy outline?",
-			["/?settings=Workflowy#/abc", "/#/abc"],
-		]);
+		expect([title, assigned]).toStrictEqual(["Bring your Workflowy outline?", ["/?import=open#/abc", "/#/abc"]]);
 	});
 });
 

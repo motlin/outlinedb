@@ -568,6 +568,8 @@ interface OutlineState
 	settingsOpen: boolean;
 	/** The Settings section to scroll to when the modal opens. */
 	settingsSection: SettingsSection | null;
+	/** The import-from-workflowy.com dialog is open. */
+	importDialogOpen: boolean;
 	theme: Theme;
 	/** Consecutive failed local writes (see `syncHealth`). */
 	syncFailures: number;
@@ -782,6 +784,9 @@ interface OutlineActions
 	goToSlide: (index: number) => void;
 	openSettings: (section?: SettingsSection) => void;
 	closeSettings: () => void;
+	/** Opens the import dialog in place of Settings, which is where its links live. */
+	openImportDialog: () => void;
+	closeImportDialog: () => void;
 	setTheme: (theme: Theme) => void;
 	recordSyncEvent: (event: SyncEvent) => void;
 	addErrorNotification: (message: string, type?: "error" | "warning" | "info", retryAction?: () => void) => string;
@@ -1022,7 +1027,8 @@ export function isModalOpen(): boolean
 		state.exportDialogOpen ||
 		state.mirrorsDialogNodeId !== null ||
 		state.changelogOpen ||
-		state.settingsOpen
+		state.settingsOpen ||
+		state.importDialogOpen
 	);
 }
 
@@ -1403,6 +1409,7 @@ export const useOutlineStore = create<OutlineStore>((set, get) => (
 	presentationContext: null,
 	settingsOpen: false,
 	settingsSection: null,
+	importDialogOpen: false,
 	theme: getInitialTheme(),
 	syncFailures: 0,
 	errorNotifications: [],
@@ -2898,6 +2905,26 @@ export const useOutlineStore = create<OutlineStore>((set, get) => (
 			{
 				settingsOpen: false,
 				settingsSection: null,
+			},
+		);
+	},
+
+	openImportDialog: () =>
+	{
+		set(
+			{
+				importDialogOpen: true,
+				settingsOpen: false,
+				settingsSection: null,
+			},
+		);
+	},
+
+	closeImportDialog: () =>
+	{
+		set(
+			{
+				importDialogOpen: false,
 			},
 		);
 	},

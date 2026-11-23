@@ -145,6 +145,13 @@ const responses: Partial<Record<string, () => Response>> =
 				sections: {},
 			},
 		),
+	// The outline's import banner asks whether this is the hosted app.
+	"/api/auth-config": () =>
+		Response.json(
+			{
+				hosted: false,
+			},
+		),
 	"/api/v1/sync-status": () =>
 		Response.json(
 			{

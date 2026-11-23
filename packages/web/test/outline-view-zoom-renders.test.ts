@@ -292,6 +292,8 @@ describe("55-row OutlineView renders", () =>
 				...TREE_FRAME,
 				// Once to mount and once when the sync status answers.
 				SyncStoppedNotice: 2,
+				WorkflowyImportNotice: 1,
+				WorkflowyImportDialogHost: 1,
 				OutlineRow: ROWS,
 				NodeName: ROWS,
 				RestingText: ROWS,

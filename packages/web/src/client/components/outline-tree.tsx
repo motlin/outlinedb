@@ -7,6 +7,7 @@ import type {BacklinkItem, FoundDateItem, FoundDatesResponse, NodeResponse} from
 import {hideLoadingScreenOnce} from "../loading-screen.js";
 import {RootEmptyOutline} from "./empty-outline.js";
 import {SyncStoppedNotice} from "./sync-stopped-notice.js";
+import {WorkflowyImportNotice} from "./workflowy-import-notice.js";
 import {useContext, useEffect, useLayoutEffect, useMemo, useRef, useState} from "react";
 import {useQueryClient} from "@tanstack/react-query";
 import {backlinksLabel, isBacklinksSectionVisible} from "../backlinks.js";
@@ -1256,6 +1257,7 @@ export function OutlineTree({parentId: requestedId, shell = "pane"}: OutlineTree
 		return (
 			<>
 				<SyncStoppedNotice />
+				<WorkflowyImportNotice />
 				{rows}
 				{sentinel}
 				{/* oxlint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- a mouse shortcut to the last row; keyboard users move the caret with the arrow keys */}

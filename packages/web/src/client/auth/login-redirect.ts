@@ -15,36 +15,35 @@ export function loginUrl(location: Pick<Location, "pathname" | "search" | "hash"
 	return `/login?next=${encodeURIComponent(`${location.pathname}${location.search}${location.hash}`)}`;
 }
 
-/** The query parameter that opens Settings at a section once the outline loads, as `/?settings=Workflowy`. */
-const SETTINGS_PARAM = "settings";
+/** The query parameter that opens the import dialog once the outline loads, as `/?import=open`. */
+const IMPORT_PARAM = "import";
 
-/** `path` (a safe next) with Settings opened at `section`, keeping its hash, which holds the outline's zoom. */
-export function withSettingsOpen(path: string, section: string): string
+/** `path` (a safe next) with the import dialog opened, keeping its hash, which holds the outline's zoom. */
+export function withImportOpen(path: string): string
 {
 	const url = new URL(path, "http://origin");
-	url.searchParams.set(SETTINGS_PARAM, section);
+	url.searchParams.set(IMPORT_PARAM, "open");
 	return `${url.pathname}${url.search}${url.hash}`;
 }
 
 /**
- * Open Settings at the section the URL names, then drop the parameter so a reload or a shared link does not reopen
- * it.
+ * Open the import dialog when the URL asks for it, then drop the parameter so a reload or a shared link does not
+ * reopen it.
  */
-export function openSettingsFromUrl(
+export function openImportFromUrl(
 	location: Pick<Location, "href">,
 	history: Pick<History, "state" | "replaceState">,
-	openSettings: (section: string) => void,
+	openImportDialog: () => void,
 ): void
 {
 	const url = new URL(location.href);
-	const section = url.searchParams.get(SETTINGS_PARAM);
-	if (section === null)
+	if (!url.searchParams.has(IMPORT_PARAM))
 	{
 		return;
 	}
-	url.searchParams.delete(SETTINGS_PARAM);
+	url.searchParams.delete(IMPORT_PARAM);
 	history.replaceState(history.state, "", `${url.pathname}${url.search}${url.hash}`);
-	openSettings(section);
+	openImportDialog();
 }
 
 /** `next` when it is a path on this origin that is not an auth screen, else `/`: a login link must never send the user off-site. */

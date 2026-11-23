@@ -3,11 +3,10 @@ import {useEffect, useState} from "react";
 import type {ReactNode, SubmitEvent} from "react";
 import {BrowserRouter, Link, Route, Routes, useNavigate, useSearchParams} from "react-router-dom";
 import {Turnstile} from "../components/turnstile.js";
-import {WORKFLOWY_SECTION} from "../components/workflowy-connection-settings.js";
 import {hideLoadingScreenOnce} from "../loading-screen.js";
 import {authClient, captchaHeaders} from "./auth-client.js";
 import {useAuthConfig} from "./auth-config.js";
-import {safeNext, withSettingsOpen} from "./login-redirect.js";
+import {safeNext, withImportOpen} from "./login-redirect.js";
 import "./auth.css";
 
 /** A Better Auth client error: its JSON body (`code` and `message`, or our Worker's `{error}`) plus the status. */
@@ -334,7 +333,7 @@ function VerifyEmailPage()
 
 /**
  * The signup wizard step after the email is verified: signup always seeds the tutorial, and this offers to replace it
- * with the user's workflowy.com outline. Skip goes on to the tutorial; yes opens Settings > Workflowy to connect.
+ * with the user's workflowy.com outline. Skip goes on to the tutorial; yes opens the import dialog at its Connect step.
  */
 function WelcomePage()
 {
@@ -351,7 +350,7 @@ function WelcomePage()
 					className="auth-submit"
 					onClick={() =>
 					{
-						globalThis.location.assign(withSettingsOpen(next, WORKFLOWY_SECTION));
+						globalThis.location.assign(withImportOpen(next));
 					}}
 					type="button"
 				>

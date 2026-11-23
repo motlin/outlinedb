@@ -31,6 +31,7 @@ import {LinkPopupHost} from "./components/link-popup-host.js";
 import {LocationPickerHost} from "./components/location-picker-host.js";
 import {SelectionMenu} from "./components/selection-menu.js";
 import {OfflineNotice} from "./components/offline-notice.js";
+import {WorkflowyImportDialogHost} from "./components/workflowy-import-dialog.js";
 import {watchMutations} from "./sync-health.js";
 import {OutlineTree} from "./components/outline-tree.js";
 import {PresentationMode} from "./components/presentation-mode.js";
@@ -90,7 +91,7 @@ import {useRowHoverController} from "./hooks/use-row-hover.js";
 import {installSaveTracking} from "./hooks/use-saving.js";
 import {queryClientDefaults, redirectOnAuthError} from "./query-retry.js";
 import {AuthApp} from "./auth/auth-pages.js";
-import {isAuthPath, openSettingsFromUrl} from "./auth/login-redirect.js";
+import {isAuthPath, openImportFromUrl} from "./auth/login-redirect.js";
 import "./reset.css";
 import "./wf-tailwind.css";
 import "./styles.css";
@@ -397,6 +398,7 @@ export const OutlineView = memo(function OutlineView()
 			<MirrorsDialogHost />
 			<ChangelogHost />
 			<Settings />
+			<WorkflowyImportDialogHost />
 			<PresentationMode />
 			<ErrorNotifications />
 			<AppMessages />
@@ -489,14 +491,14 @@ function OutlineLiveSync()
 	return null;
 }
 
-/** Opens Settings at the section a `?settings=` link names, as the signup wizard's "connect workflowy.com" does. */
-function SettingsFromUrl()
+/** Opens the import dialog a `?import` link asks for, as the signup wizard's "connect workflowy.com" does. */
+function ImportFromUrl()
 {
-	const openSettings = useOutlineStore((state) => state.openSettings);
+	const openImportDialog = useOutlineStore((state) => state.openImportDialog);
 	useEffect(() =>
 	{
-		openSettingsFromUrl(globalThis.location, globalThis.history, openSettings);
-	}, [openSettings]);
+		openImportFromUrl(globalThis.location, globalThis.history, openImportDialog);
+	}, [openImportDialog]);
 	return null;
 }
 
@@ -526,7 +528,7 @@ export function App()
 				<TagColorStyles />
 				<LinkColorStyles />
 				<WindowBlurredClass />
-				<SettingsFromUrl />
+				<ImportFromUrl />
 				<ShowCompletedSync />
 				<LatestColorSync />
 				<SearchForChangesAfterSync />
