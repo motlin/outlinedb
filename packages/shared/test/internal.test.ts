@@ -6546,9 +6546,24 @@ describe("internal client bootstrap", () =>
 			]);
 		});
 
-		it("gives up after one re-login when the session keeps being rejected", async () =>
+		it("gives up after one re-login when the session keeps being rejected, a 404 page counting as a refusal", async () =>
 		{
 			const {api, client} = clientWith();
+			// workflowy.com answers a request without a valid session with its HTML 404 page.
+			api.respondOnce(
+				"/get_initialization_data",
+				() =>
+					new Response(
+						"<!doctype html><html><body>Not found</body></html>",
+						{
+							status: 404,
+							headers:
+							{
+								"content-type": "text/html; charset=utf-8",
+							},
+						},
+					),
+			);
 			api.respond("/get_initialization_data", () =>
 				json(
 					{

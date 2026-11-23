@@ -79,6 +79,61 @@ describe("connecting an account to workflowy.com", () =>
 							form,
 						},
 					);
+					const cookie = request.headers.get("cookie") ?? "";
+					if (url.pathname === "/")
+					{
+						return new Response(
+							"<!doctype html><html><body>Workflowy</body></html>",
+							{
+								headers:
+								{
+									"content-type": "text/html; charset=utf-8",
+									"set-cookie": "csrftoken=csrf-1; Path=/",
+								},
+							},
+						);
+					}
+					// The auth cookie's second hop: no cookie on the first redirect, `wfauth` on this one.
+					if (url.pathname === "/login/complete/")
+					{
+						return new Response(
+							null,
+							{
+								status: 302,
+								headers:
+								{
+									location: "http://upstream.test/",
+									"set-cookie": "wfauth=auth-value-1; Path=/; HttpOnly",
+								},
+							},
+						);
+					}
+					// An authenticated session reads init data; anything else gets workflowy.com's 404 page.
+					if (url.pathname === "/get_initialization_data")
+					{
+						return /sessionid=upstream-session-|wfauth=auth-value-/u.test(cookie)
+							? Response.json(
+									{
+										projectTreeData:
+										{
+											mainProjectTreeInfo:
+											{
+												initialMostRecentOperationTransactionId: "1",
+											},
+										},
+									},
+								)
+							: new Response(
+									`<!doctype html><html><body>${"Not found ".repeat(1000)}</body></html>`,
+									{
+										status: 404,
+										headers:
+										{
+											"content-type": "text/html; charset=utf-8",
+										},
+									},
+								);
+					}
 					if (url.pathname !== "/login/")
 					{
 						return new Response(
@@ -145,6 +200,35 @@ describe("connecting an account to workflowy.com", () =>
 					if (form.password !== PASSWORD)
 					{
 						return loginPage(email, PASSWORD_INPUT, ["Please enter a correct email and password."]);
+					}
+					// A login that ends with only an anonymous session, which init data refuses.
+					if (email === "anon@example.com")
+					{
+						return new Response(
+							null,
+							{
+								status: 302,
+								headers:
+								{
+									location: `/?next=%2Fhome&email=${encodeURIComponent(email)}`,
+									"set-cookie": "sessionid=anonymous-1; Path=/; HttpOnly",
+								},
+							},
+						);
+					}
+					// A login whose auth cookie arrives on a later redirect hop, under another name.
+					if (email === "hop@example.com")
+					{
+						return new Response(
+							null,
+							{
+								status: 302,
+								headers:
+								{
+									location: "/login/complete/?token=hop-token",
+								},
+							},
+						);
 					}
 					// The code step echoes the password back as a hidden input, which the relay must never keep.
 					return loginPage(
@@ -222,7 +306,9 @@ describe("connecting an account to workflowy.com", () =>
 					.split("blob:").length - 1,
 			attempt: attempt === null ? null : JSON.parse(attempt),
 			secretsStored: [PASSWORD, "wrong-password", CODE, "WF-0000"].some((secret) => everything.includes(secret)),
-			cookieInPlaintext: dump.includes("upstream-session"),
+			cookieInPlaintext: ["upstream-session", "auth-value", "anonymous-1", "csrf-1"].some((value) =>
+				dump.includes(value),
+			),
 		};
 	}
 
@@ -268,6 +354,17 @@ describe("connecting an account to workflowy.com", () =>
 		origin: null,
 		form: {},
 	};
+	const INIT_PATH = "/get_initialization_data";
+
+	/** A redirect hop the relay follows, or the init data read that verifies the login, with the jar it sent. */
+	function get(path: string, cookie: string): Upstream
+	{
+		return {
+			...GET_LOGIN,
+			path,
+			cookie,
+		};
+	}
 
 	function attemptId(body: unknown): string
 	{
@@ -278,6 +375,22 @@ describe("connecting an account to workflowy.com", () =>
 	it("starts disconnected, and ends an attempt on a captcha, an unexpected reply, an unknown or expired attempt, keeping nothing", async () =>
 	{
 		const before = await send("GET");
+		const anonStarted = await send(
+			"POST",
+			{
+				email: "anon@example.com",
+			},
+		);
+		const anon = await send(
+			"POST",
+			{
+				attemptId: attemptId(anonStarted.body),
+				values:
+				{
+					password: PASSWORD,
+				},
+			},
+		);
 		const mirror = await send(
 			"PATCH",
 			{
@@ -327,6 +440,7 @@ describe("connecting an account to workflowy.com", () =>
 		expect(
 			{
 				before,
+				anon,
 				mirror,
 				captcha,
 				odd,
@@ -345,6 +459,20 @@ describe("connecting an account to workflowy.com", () =>
 					body:
 					{
 						connected: false,
+					},
+				},
+				// Every hop is followed, but init data refuses the jar: the account stays disconnected, and the detail
+				// shows each request's status, redirect path and cookie names, never a value, query value or secret.
+				anon:
+				{
+					status: 422,
+					body:
+					{
+						ok: false,
+						status: 422,
+						error: "workflowy-login-unverified",
+						message: "workflowy.com finished the sign-in, but did not accept the session it set.",
+						detail: "GET /login/ -> 200 set [_bess]; POST /login/ -> 200; POST /login/ -> 302 /?next=&email= set [sessionid]; GET /?next=&email= -> 200 set [csrftoken]; jar [_bess, sessionid, csrftoken]; verify GET /get_initialization_data -> 404 text/html",
 					},
 				},
 				mirror:
@@ -421,6 +549,24 @@ describe("connecting an account to workflowy.com", () =>
 					},
 				},
 				upstream: [
+					GET_LOGIN,
+					post(
+						"_bess=b1",
+						{
+							...HIDDEN,
+							email: "anon@example.com",
+						},
+					),
+					post(
+						"_bess=b1",
+						{
+							...HIDDEN,
+							email: "anon@example.com",
+							password: PASSWORD,
+						},
+					),
+					get("/", "_bess=b1; sessionid=anonymous-1"),
+					get(INIT_PATH, "_bess=b1; sessionid=anonymous-1; csrftoken=csrf-1"),
 					GET_LOGIN,
 					post(
 						"_bess=b1",
@@ -570,6 +716,8 @@ describe("connecting an account to workflowy.com", () =>
 							},
 							hidden: HIDDEN,
 							fields: ["password"],
+							// Each request's status, path and cookie names, for a login that fails to verify.
+							trace: ["GET /login/ -> 200 set [_bess]", "POST /login/ -> 200"],
 						},
 					},
 					secretsStored: false,
@@ -627,6 +775,12 @@ describe("connecting an account to workflowy.com", () =>
 								login_step: "code",
 							},
 							fields: ["code"],
+							trace: [
+								"GET /login/ -> 200 set [_bess]",
+								"POST /login/ -> 200",
+								"POST /login/ -> 200",
+								"POST /login/ -> 200",
+							],
 						},
 					},
 					secretsStored: false,
@@ -714,10 +868,13 @@ describe("connecting an account to workflowy.com", () =>
 							code: CODE,
 						},
 					),
+					get("/", "_bess=b1; sessionid=upstream-session-1"),
+					get(INIT_PATH, "_bess=b1; sessionid=upstream-session-1; csrftoken=csrf-1"),
 				],
+				// The whole jar init data accepted is kept, sealed.
 				stored:
 				{
-					cookie: "sessionid=upstream-session-1",
+					cookie: "_bess=b1; sessionid=upstream-session-1; csrftoken=csrf-1",
 					blobs: 2,
 					attempt: null,
 					secretsStored: false,
@@ -797,7 +954,71 @@ describe("connecting an account to workflowy.com", () =>
 				// Only the live version holds a sealed cookie (its nonce and ciphertext); closed versions were stripped.
 				afterReconnect:
 				{
-					cookie: "sessionid=upstream-session-2",
+					cookie: "_bess=b1; sessionid=upstream-session-2; csrftoken=csrf-1",
+					blobs: 2,
+					attempt: null,
+					secretsStored: false,
+					cookieInPlaintext: false,
+				},
+			},
+		);
+	});
+
+	it("follows every redirect hop, keeping cookies set on any of them, and stores the jar init data accepted", async () =>
+	{
+		const started = await send(
+			"POST",
+			{
+				email: "hop@example.com",
+			},
+		);
+		upstream.length = 0;
+		const connected = await send(
+			"POST",
+			{
+				attemptId: attemptId(started.body),
+				values:
+				{
+					password: PASSWORD,
+				},
+			},
+		);
+		expect(
+			{
+				connected,
+				upstream: upstream.splice(0),
+				stored: await stored(),
+			},
+		).toStrictEqual(
+			{
+				connected:
+				{
+					status: 200,
+					body:
+					{
+						connected: true,
+						status: "connected",
+						email: "hop@example.com",
+						mirror: true,
+						lastSyncAt: null,
+					},
+				},
+				upstream: [
+					post(
+						"_bess=b1",
+						{
+							...HIDDEN,
+							email: "hop@example.com",
+							password: PASSWORD,
+						},
+					),
+					get("/login/complete/", "_bess=b1"),
+					get("/", "_bess=b1; wfauth=auth-value-1"),
+					get(INIT_PATH, "_bess=b1; wfauth=auth-value-1; csrftoken=csrf-1"),
+				],
+				stored:
+				{
+					cookie: "_bess=b1; wfauth=auth-value-1; csrftoken=csrf-1",
 					blobs: 2,
 					attempt: null,
 					secretsStored: false,

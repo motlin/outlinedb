@@ -23,6 +23,10 @@ function requestErrorMessage(error: unknown): string
 		{
 			return "workflowy.com didn't accept that sign-in.";
 		}
+		if (error.code === "workflowy-login-unverified")
+		{
+			return "workflowy.com finished the sign-in but didn't accept the session. Try again.";
+		}
 		if (error.code === "workflowy-captcha")
 		{
 			return "workflowy.com wants to check you're human. Try again later.";
@@ -304,7 +308,9 @@ function SignInForm({email: initialEmail, submitLabel, onSubmit}: SignInFormProp
 /** What the newest run did: its progress while it runs, then its per-kind results and failures. */
 function RunReport({run}: {run: WorkflowyImportRun})
 {
-	const found = run.phase === "fetching" ? null : foundSummary(run.found, run.files.found);
+	// A refused session stops a run before it reads the outline, so it found nothing worth saying.
+	const found =
+		run.phase === "fetching" || run.status === "expired" ? null : foundSummary(run.found, run.files.found);
 	const {nodes, failures, files} = run;
 	return (
 		<div className="flex flex-col gap-s" data-workflowy-import={run.status}>
@@ -313,7 +319,9 @@ function RunReport({run}: {run: WorkflowyImportRun})
 			)}
 			{found !== null && <Hint>Found {found}.</Hint>}
 			{run.status === "error" && <Alert>The import failed: {run.message ?? "unknown error"}</Alert>}
-			{run.status === "expired" && <Alert>workflowy.com refused the session, so the import stopped.</Alert>}
+			{run.status === "expired" && (
+				<Alert>workflowy.com refused the session, so the import stopped. Sign in again, then import.</Alert>
+			)}
 			{run.status === "ok" && (
 				<ul className="text-s leading-xs text-primary list-disc pl-l" data-workflowy-import-results>
 					<li>

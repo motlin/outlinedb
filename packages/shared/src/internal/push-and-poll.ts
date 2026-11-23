@@ -1,4 +1,5 @@
 import {z} from "zod";
+import {isNotFoundPage} from "../api/workflowy-internal-client.js";
 import type {InternalSession, WorkflowyInternalClient} from "../api/workflowy-internal-client.js";
 import
 {
@@ -380,6 +381,10 @@ export class PushAndPoll
 		if (response.status >= 300 && response.status < 400)
 		{
 			throw new LoggedOut(`redirect to ${response.headers.get("location") ?? "unknown"}`);
+		}
+		if (isNotFoundPage(response))
+		{
+			throw new LoggedOut("404 page");
 		}
 		if (!response.ok)
 		{

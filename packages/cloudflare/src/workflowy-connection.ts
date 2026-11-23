@@ -6,7 +6,8 @@ import type {SealedSecret} from "./credentials-crypto";
  * This account's link to workflowy.com, temporal like every other table: one live version while connected, none once
  * disconnected. Only the live version ever holds the sealed session cookie; every write strips it from the versions it
  * closes, so history keeps when the account was connected and as whom, never an old cookie. The password is never a
- * column: connect logs in once and keeps only the cookie.
+ * column: connect logs in once and keeps only the cookie jar that login produced, which every internal API request
+ * sends as its `Cookie` header.
  */
 const CONNECTION_TABLE = `
 CREATE TABLE IF NOT EXISTS workflowy_connection (
@@ -94,7 +95,7 @@ export class WorkflowyConnection
 				};
 	}
 
-	/** The live sealed session cookie, if connected with one. */
+	/** The live sealed session cookie jar (a `Cookie` header), if connected with one. */
 	session(): SealedSecret | undefined
 	{
 		return this.live()?.session;

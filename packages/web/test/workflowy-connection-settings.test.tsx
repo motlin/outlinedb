@@ -659,8 +659,44 @@ describe("Settings > Workflowy", () =>
 				mirror: true,
 			},
 		);
+		// The import that found the session refused stopped before it found anything.
+		run = importRun(
+			{
+				status: "expired",
+				message: "workflowy-session-expired",
+				applied: 0,
+				found:
+				{
+					nodes: 0,
+					completed: 0,
+					mirrors: 0,
+					backlinks: 0,
+					expandedKeys: 0,
+					stars: 0,
+					starOrder: 0,
+					tagColors: 0,
+					savedViews: 0,
+					settings: 0,
+				},
+				failures:
+				{
+					invalidNodes: 0,
+					metadataSkipped: 0,
+				},
+				files:
+				{
+					found: 0,
+					copied: 0,
+					alreadyCopied: 0,
+					failed: 0,
+					bytes: 0,
+					failures: [],
+				},
+			},
+		);
 		await open();
 		const prompt = text("[role=alert]");
+		const report = text("[data-workflowy-import] > *");
 		const email = input("workflowy-email").value;
 
 		writes["POST /api/v1/workflowy-connection"] = (body) =>
@@ -689,6 +725,7 @@ describe("Settings > Workflowy", () =>
 		expect(
 			{
 				prompt,
+				report,
 				email,
 				calls,
 				status: text("[data-workflowy-connection=status] > *"),
@@ -697,7 +734,10 @@ describe("Settings > Workflowy", () =>
 			{
 				prompt: [
 					"Your workflowy.com session expired, so syncing is paused. Sign in again to resume; your changes wait until then.",
+					"workflowy.com refused the session, so the import stopped. Sign in again, then import.",
 				],
+				// No "Found 0 items" from a run that never read the outline.
+				report: ["workflowy.com refused the session, so the import stopped. Sign in again, then import."],
 				email: "alice@example.com",
 				calls: [
 					{

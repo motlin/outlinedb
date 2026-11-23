@@ -498,8 +498,8 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 
 	/**
 	 * Answer the fields the attempt's form asked for (a password, a code). The answers go to workflowy.com in this one
-	 * request and are never stored; once workflowy.com sets its session, only that cookie is kept, sealed with this
-	 * object's key, exactly as a reconnect replaces it.
+	 * request and are never stored; once the form ends and its cookie jar reads init data, only that jar is kept, sealed
+	 * with this object's key, exactly as a reconnect replaces it.
 	 */
 	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
 	async continueWorkflowyLogin(attemptId: string, values: Record<string, string>): Promise<WorkflowyLoginResult>
@@ -552,7 +552,7 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 
 	/**
 	 * Run one step of the login form and act on its reply: keep the attempt's sealed state while the form asks for more,
-	 * connect once workflowy.com set its session, and end the attempt on anything else.
+	 * connect once the session it set reads init data, and end the attempt on anything else.
 	 */
 	private async afterLoginStep(
 		key: CryptoKey,
@@ -602,6 +602,16 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 				status: 422,
 				error: "workflowy-captcha",
 				message: "workflowy.com asked for a captcha. Try again later.",
+			};
+		}
+		if (outcome.kind === "unverified")
+		{
+			return {
+				ok: false,
+				status: 422,
+				error: "workflowy-login-unverified",
+				message: "workflowy.com finished the sign-in, but did not accept the session it set.",
+				detail: outcome.detail,
 			};
 		}
 		if (outcome.kind === "refused")
@@ -1064,6 +1074,15 @@ export type WorkflowyLoginResult =
 			message: string;
 			/** workflowy.com's own reply (status and redacted text), when it answered unexpectedly. */
 			detail?: string;
+	  }
+	|
+	  {
+			ok: false;
+			status: 422;
+			error: "workflowy-login-unverified";
+			message: string;
+			/** Each login request's status, redirect path and cookie names, the jar's names and init data's answer. */
+			detail: string;
 	  };
 
 export type StartWorkflowyImportResult =

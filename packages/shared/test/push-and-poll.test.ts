@@ -800,9 +800,24 @@ describe("PushAndPoll", () =>
 		]);
 	});
 
-	it("throws LoggedOut when the session is rejected again after re-login", async () =>
+	it("throws LoggedOut when the session is rejected again after re-login, a 404 page counting as a refusal", async () =>
 	{
 		const {api, pusher} = await bootstrapped();
+		// workflowy.com answers a request without a valid session with its HTML 404 page.
+		api.respondOnce(
+			"/push_and_poll",
+			() =>
+				new Response(
+					"<!doctype html><html><body>Not found</body></html>",
+					{
+						status: 404,
+						headers:
+						{
+							"content-type": "text/html; charset=utf-8",
+						},
+					},
+				),
+		);
 		api.respond(
 			"/push_and_poll",
 			() =>

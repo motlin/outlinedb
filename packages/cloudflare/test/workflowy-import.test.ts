@@ -167,7 +167,7 @@ describe("importing an account from workflowy.com over its stored session", () =
 {
 	let harness: Harness;
 	let logins = 0;
-	/** Set to refuse every stored session, as workflowy.com does once one expires. */
+	/** Set to refuse every stored session with workflowy.com's 404 page, as it does once one expires. */
 	let sessionsExpired = false;
 	/** Cleared to make S3 refuse the scan's bytes, as it does for a file it no longer holds. */
 	let scanAvailable = false;
@@ -322,18 +322,25 @@ describe("importing an account from workflowy.com over its stored session", () =
 							},
 						);
 					}
+					// The page a login redirects to.
+					if (url.pathname === "/")
+					{
+						return new Response("<!doctype html><html><body>Workflowy</body></html>");
+					}
+					// workflowy.com answers a request without a valid session with its 404 page, not a login redirect.
 					if (
 						sessionsExpired ||
 						request.headers.get("cookie") !== `sessionid=upstream-session-${String(logins)}`
 					)
 					{
 						return new Response(
-							null,
+							"<!doctype html><html><body><h1>Not found</h1></body></html>",
 							{
-								status: 302,
+								status: 404,
+								statusText: "Not Found",
 								headers:
 								{
-									location: "/login/",
+									"content-type": "text/html; charset=utf-8",
 								},
 							},
 						);

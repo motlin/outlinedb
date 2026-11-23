@@ -1,14 +1,17 @@
 /**
  * A relay of workflowy.com's server-rendered login form (`/login/`), one step at a time, so a person can answer
  * whatever it asks for next: the email first, then a password, then perhaps a one-time code. Each step POSTs the
- * form's hidden values, the email and the person's answers with the attempt's cookie jar, and reads the reply: a form
- * asking for more fields (with its error list), a captcha, or a jar holding the `sessionid` a login sets. Nothing here
- * keeps an answer: the state a step returns holds only the cookies and the form's hidden values.
+ * form's hidden values, the email and the person's answers with the attempt's cookie jar, follows every same-origin
+ * redirect by hand (keeping the cookies each hop sets), and reads the reply: a form asking for more fields (with its
+ * error list), a captcha, or the end of the form. A login only counts once the jar it produced reads
+ * `/get_initialization_data`, the request every import starts with. Nothing here keeps an answer: the state a step
+ * returns holds only the cookies, the form's hidden values and a trace of each request (status, redirect path, cookie
+ * names), never a cookie value, a query value or an answer.
  */
 
 import {z} from "zod";
 import {decodeHtmlEntities} from "../search/switcher-rank.js";
-import {loginReplyDetail, WORKFLOWY_URL} from "./workflowy-internal-client.js";
+import {initializationPath, isLoggedOutReply, loginReplyDetail, WORKFLOWY_URL} from "./workflowy-internal-client.js";
 
 /** Cookie name to value, in the order the server set them. */
 export type CookieJar = Record<string, string>;
@@ -42,6 +45,8 @@ export interface LoginAttemptState
 	hidden: Record<string, string>;
 	/** The names of the fields the form asked for; a step sends answers for these and nothing else. */
 	fields: string[];
+	/** One line per request the attempt sent so far, as {@link traceLine} writes it. */
+	trace: string[];
 }
 
 const LoginAttemptStateSchema = z.object(
@@ -49,6 +54,7 @@ const LoginAttemptStateSchema = z.object(
 		jar: z.record(z.string(), z.string()),
 		hidden: z.record(z.string(), z.string()),
 		fields: z.array(z.string()),
+		trace: z.array(z.string()),
 	},
 );
 
@@ -69,8 +75,14 @@ export type LoginStepOutcome =
 	|
 	  {
 			kind: "session";
-			/** `sessionid=...`, the cookie the rest of the internal client sends. */
+			/** The whole jar init data accepted, as the `Cookie` header the rest of the internal client sends. */
 			cookie: string;
+	  }
+	|
+	  {
+			kind: "unverified";
+			/** Each request's trace line, the final jar's cookie names and the init data read's status; no values. */
+			detail: string;
 	  }
 	|
 	  {
@@ -219,9 +231,168 @@ function replyDetail(status: number, body: string, secrets: readonly string[]): 
 	return loginReplyDetail(status, shown, undefined, secrets);
 }
 
-/** Reads a step's reply into what the person sees next. */
-async function outcome(response: Response, jar: CookieJar, secrets: readonly string[]): Promise<LoginStepOutcome>
+/** A URL as a trace shows it: its path, its query's keys with every value dropped, and its origin only when foreign. */
+function tracePath(url: URL, origin: string): string
 {
+	const keys = [...new Set(url.searchParams.keys())];
+	const query = keys.length === 0 ? "" : `?${keys.map((key) => `${key}=`).join("&")}`;
+	return `${url.origin === origin ? "" : url.origin}${url.pathname}${query}`;
+}
+
+/** The names, never the values, of the cookies a reply sets. */
+function setCookieNames(headers: Headers): string[]
+{
+	return headers
+		.getSetCookie()
+		.map((header) => header.slice(0, Math.max(0, header.indexOf("="))).trim())
+		.filter((name) => name !== "");
+}
+
+function redact(line: string, secrets: readonly string[]): string
+{
+	return secrets
+		.filter((secret) => secret !== "")
+		.reduce((shown, secret) => shown.replaceAll(secret, "[redacted]"), line);
+}
+
+/** `POST /login/ -> 302 /?next= set [sessionid]`: one request's method, path, status, redirect and cookie names. */
+function traceLine(method: string, url: URL, response: Response, next: URL | undefined, origin: string): string
+{
+	const names = setCookieNames(response.headers);
+	return [
+		`${method} ${tracePath(url, origin)} -> ${String(response.status)}`,
+		...(next === undefined ? [] : [tracePath(next, origin)]),
+		...(names.length === 0 ? [] : [`set [${names.join(", ")}]`]),
+	].join(" ");
+}
+
+/** How many redirects one step follows before it reads the reply as it stands. */
+const MAX_REDIRECTS = 10;
+
+/** One request of a step; a redirect hop is a plain GET. */
+interface StepRequest
+{
+	method?: string;
+	headers?: Record<string, string>;
+	body?: string;
+}
+
+interface Exchange
+{
+	response: Response;
+	jar: CookieJar;
+	trace: string[];
+}
+
+/**
+ * Send one request with the jar, then follow each same-origin redirect with a GET, keeping every hop's cookies: a login
+ * may set its session on a redirect hop, under any name. A foreign redirect is not followed, so no cookie leaves.
+ */
+async function exchange(
+	url: string,
+	init: StepRequest,
+	jar: CookieJar,
+	secrets: readonly string[],
+	options: LoginRelayOptions,
+): Promise<Exchange>
+{
+	const origin = new URL(baseOf(options)).origin;
+	const trace: string[] = [];
+	let current = jar;
+	let target = new URL(url);
+	let request = init;
+	for (let hop = 0; ; hop++)
+	{
+		const cookies = cookieHeader(current);
+		const response = await fetcher(options)(
+			target.href,
+			{
+				...request,
+				headers:
+				{
+					...request.headers,
+					...(cookies !== "" &&
+					{
+						Cookie: cookies,
+					}),
+				},
+				redirect: "manual",
+			},
+		);
+		current = mergeSetCookies(current, response.headers);
+		const location = response.headers.get("location");
+		const next =
+			response.status >= 300 && response.status < 400 && location !== null
+				? new URL(location, target)
+				: undefined;
+		trace.push(redact(traceLine(request.method ?? "GET", target, response, next, origin), secrets));
+		if (next?.origin !== origin || hop >= MAX_REDIRECTS)
+		{
+			return {
+				response,
+				jar: current,
+				trace,
+			};
+		}
+		await response.body?.cancel();
+		target = next;
+		request = {};
+	}
+}
+
+/**
+ * Read `/get_initialization_data` with the jar, as the import will: undefined when it answers 200 with JSON other than
+ * `logged_out`, else a line saying what it answered instead.
+ */
+async function verifySession(jar: CookieJar, options: LoginRelayOptions): Promise<string | undefined>
+{
+	const path = initializationPath();
+	const response = await fetcher(options)(
+		`${baseOf(options)}${path}`,
+		{
+			headers:
+			{
+				Cookie: cookieHeader(jar),
+				Accept: "application/json",
+				"X-Requested-With": "XMLHttpRequest",
+			},
+			redirect: "manual",
+		},
+	);
+	let reply: unknown;
+	try
+	{
+		reply = JSON.parse(await response.text());
+	}
+	catch
+	{
+		reply = undefined;
+	}
+	if (response.status === 200 && reply !== undefined && !isLoggedOutReply(reply))
+	{
+		return undefined;
+	}
+	const type = (response.headers.get("content-type") ?? "").split(";")[0]?.trim() ?? "";
+	const location = response.headers.get("location");
+	const origin = new URL(baseOf(options)).origin;
+	return [
+		`verify GET ${path.split("?")[0] ?? path} -> ${String(response.status)}`,
+		...(location === null ? [] : [tracePath(new URL(location, origin), origin)]),
+		...(type === "" ? [] : [type]),
+		...(response.status === 200 ? [reply === undefined ? "not JSON" : "logged_out"] : []),
+	].join(" ");
+}
+
+/** Reads a step's reply into what the person sees next, checking a finished login against init data. */
+async function outcome(
+	step: Exchange,
+	prior: readonly string[],
+	secrets: readonly string[],
+	options: LoginRelayOptions,
+): Promise<LoginStepOutcome>
+{
+	const {response, jar} = step;
+	const trace = [...prior, ...step.trace];
 	const body = await response.text();
 	const page = parseLoginForm(body);
 	if (page?.captcha === true || body.includes("g-recaptcha"))
@@ -240,18 +411,26 @@ async function outcome(response: Response, jar: CookieJar, secrets: readonly str
 				jar,
 				hidden: Object.fromEntries(kept),
 				fields: page.fields.map((field) => field.name),
+				trace,
 			},
 			fields: page.fields,
 			errors: page.errors,
 		};
 	}
-	const session = jar.sessionid;
-	if (session !== undefined && response.status < 400)
+	if (response.status < 400 && Object.keys(jar).length > 0)
 	{
-		return {
-			kind: "session",
-			cookie: `sessionid=${session}`,
-		};
+		const refusal = await verifySession(jar, options);
+		return refusal === undefined
+			?
+				{
+					kind: "session",
+					cookie: cookieHeader(jar),
+				}
+			:
+				{
+					kind: "unverified",
+					detail: [...trace, `jar [${Object.keys(jar).join(", ")}]`, refusal].join("; "),
+				};
 	}
 	const errors = page?.errors ?? [];
 	return {
@@ -292,8 +471,8 @@ export async function continueWorkflowyLogin(
 			...answers,
 		},
 	);
-	const cookies = cookieHeader(state.jar);
-	const response = await fetcher(options)(
+	const secrets = [email, ...Object.values(answers)];
+	const step = await exchange(
 		`${base}/login/`,
 		{
 			method: "POST",
@@ -302,27 +481,21 @@ export async function continueWorkflowyLogin(
 				"Content-Type": "application/x-www-form-urlencoded",
 				Referer: base,
 				Origin: base,
-				...(cookies !== "" &&
-				{
-					Cookie: cookies,
-				}),
 			},
 			body: form.toString(),
-			redirect: "manual",
 		},
+		state.jar,
+		secrets,
+		options,
 	);
-	return outcome(response, mergeSetCookies(state.jar, response.headers), [email, ...Object.values(answers)]);
+	return outcome(step, state.trace, secrets, options);
 }
 
 /** Open the login page for its cookies and hidden values, then submit the email: the first step of an attempt. */
 export async function startWorkflowyLogin(email: string, options: LoginRelayOptions = {}): Promise<LoginStepOutcome>
 {
-	const response = await fetcher(options)(
-		`${baseOf(options)}/login/`,
-		{
-			redirect: "manual",
-		},
-	);
+	const step = await exchange(`${baseOf(options)}/login/`, {}, {}, [email], options);
+	const {response} = step;
 	const body = await response.text();
 	const page = parseLoginForm(body);
 	if (page?.captcha === true)
@@ -342,9 +515,10 @@ export async function startWorkflowyLogin(email: string, options: LoginRelayOpti
 	return continueWorkflowyLogin(
 		email,
 		{
-			jar: mergeSetCookies({}, response.headers),
+			jar: step.jar,
 			hidden: page.hidden,
 			fields: [],
+			trace: step.trace,
 		},
 		{},
 		options,

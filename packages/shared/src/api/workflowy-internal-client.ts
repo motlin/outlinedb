@@ -283,7 +283,8 @@ function parseJsonOrUndefined(text: string): unknown
 	}
 }
 
-function initializationPath(clientVersion: string): string
+/** The init data read every import and bootstrap starts with, which Connect also sends to check a fresh login. */
+export function initializationPath(clientVersion = DEFAULT_CLIENT_VERSION): string
 {
 	const query = new URLSearchParams(
 		{
@@ -353,7 +354,22 @@ export function loginReplyDetail(status: number, body: string, reply: unknown, s
 	return detail.length > LOGIN_DETAIL_MAX ? `${detail.slice(0, LOGIN_DETAIL_MAX - 3)}...` : detail;
 }
 
-/** The server refused the session cookie (a redirect to the login page, or a `logged_out` body). */
+/**
+ * Whether a reply is workflowy.com's HTML 404 page, which is how it answers an internal API request without a valid
+ * session (not with a login redirect or `logged_out`).
+ */
+export function isNotFoundPage(response: Response): boolean
+{
+	return response.status === 404 && (response.headers.get("content-type") ?? "").includes("text/html");
+}
+
+/** Whether a parsed JSON reply is workflowy.com's `{"logged_out": true}`. */
+export function isLoggedOutReply(body: unknown): boolean
+{
+	return LoggedOutSchema.safeParse(body).success;
+}
+
+/** The server refused the session cookie (a redirect to the login page, its 404 page, or a `logged_out` body). */
 export class SessionRejectedError extends Error
 {
 	constructor(readonly reason: string)
@@ -607,12 +623,19 @@ export class WorkflowyInternalClient
 	 */
 	async signedFileUrl(path: string): Promise<string>
 	{
-		const {body} = await this.withSession(async () => this.getJson(path));
+		// A 404 here can mean a file workflowy.com no longer holds, so it is not read as a refused session.
+		const {body} = await this.withSession(async () => this.getJson(path, false));
 		return SignedFileSchema.parse(body).url;
 	}
 
-	/** An authenticated GET; throws `SessionRejectedError` on a login redirect or `logged_out` body. */
-	private async getJson(pathAndQuery: string): Promise<
+	/**
+	 * An authenticated GET; throws `SessionRejectedError` on a login redirect, a `logged_out` body or, unless
+	 * `notFoundRefuses` is false, workflowy.com's HTML 404 page.
+	 */
+	private async getJson(
+		pathAndQuery: string,
+		notFoundRefuses = true,
+	): Promise<
 	{
 		response: Response;
 		body: unknown;
@@ -639,12 +662,16 @@ export class WorkflowyInternalClient
 		{
 			throw new SessionRejectedError(`redirect to ${response.headers.get("location") ?? "unknown"}`);
 		}
+		if (notFoundRefuses && isNotFoundPage(response))
+		{
+			throw new SessionRejectedError("404 page");
+		}
 		if (!response.ok)
 		{
 			throw new Error(`Failed to GET ${pathAndQuery}: ${response.status} ${response.statusText}`);
 		}
 		const body: unknown = await response.json();
-		if (LoggedOutSchema.safeParse(body).success)
+		if (isLoggedOutReply(body))
 		{
 			throw new SessionRejectedError("logged_out");
 		}
