@@ -471,6 +471,7 @@ describe("drainAccountOutbox", () =>
 				status:
 				{
 					pending: 1,
+					flagged: 0,
 					oldestEnqueuedAt: systemTimeAt("2026-03-01 00:00:01.000"),
 					lastError: "workflowy.com is unreachable",
 				},

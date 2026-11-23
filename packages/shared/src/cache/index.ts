@@ -60,6 +60,7 @@ export
 {
 	closeOutboxRows,
 	failOutboxRows,
+	flaggedOutboxCount,
 	listPendingOutbox,
 	OUTBOX_ASPECTS,
 	type OutboxAspect,

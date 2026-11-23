@@ -137,7 +137,7 @@ export interface OpErrorBody
  * whether the signed-in account's sync is fetching, importing, failed before any import or stopped until an admin seed,
  * and how many items the run has applied.
  */
-export type AccountSync =
+export type AccountSync = (
 	|
 	  {
 			/** `waiting`: a mirror account whose first sync from workflowy.com has not finished, with no run in progress. */
@@ -159,7 +159,15 @@ export type AccountSync =
 			phase: "needs_seed";
 			applied: number;
 			error: string;
-	  };
+	  }
+) &
+{
+	/**
+	 * Local writes pushed to workflowy.com whose reply left their ops out: no longer sent, kept open until a sync shows
+	 * them. Absent when there are none.
+	 */
+	unconfirmedWrites?: number;
+};
 
 /** One tree of a `POST /api/v1/nodes/trees` body. */
 export interface BulkTree

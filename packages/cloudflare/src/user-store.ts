@@ -4,6 +4,7 @@ import
 	accountRowTotal,
 	accountVersion,
 	ensureNodeTags,
+	flaggedOutboxCount,
 	provisionLocalAccount,
 	readAccountRows,
 	readAccountState,
@@ -840,17 +841,27 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 	async accountSync(): Promise<AccountSync>
 	{
 		const lastResult = this.connectionMirror ? (await this.sync.status()).lastResult : null;
+		const unconfirmed = flaggedOutboxCount(this.db);
+		const unconfirmedWrites =
+			unconfirmed > 0
+				?
+					{
+						unconfirmedWrites: unconfirmed,
+					}
+				: {};
 		return lastResult?.status === "needs_seed"
 			?
 				{
 					phase: "needs_seed",
 					applied: 0,
 					error: lastResult.message,
+					...unconfirmedWrites,
 				}
 			:
 				{
 					phase: "idle",
 					applied: 0,
+					...unconfirmedWrites,
 				};
 	}
 
@@ -997,7 +1008,7 @@ const EVENT_SOCKET_TAGS: Partial<Record<string, string>> =
 export type StoreMode = "mirror" | "standalone";
 
 /** What `GET /api/v1/sync-status` tells the signed-in user about their account's sync. */
-export type AccountSync =
+export type AccountSync = (
 	|
 	  {
 			phase: "idle";
@@ -1009,7 +1020,15 @@ export type AccountSync =
 			phase: "needs_seed";
 			applied: number;
 			error: string;
-	  };
+	  }
+) &
+{
+	/**
+	 * Local writes pushed to workflowy.com whose reply left their ops out: no longer sent, kept open until a catch-up
+	 * shows them. Absent when there are none.
+	 */
+	unconfirmedWrites?: number;
+};
 
 /** The user an object was provisioned for. */
 export interface Profile

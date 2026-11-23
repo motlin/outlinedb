@@ -12,6 +12,9 @@ const closedRows = sql.raw(`system_to < ${String(FAR_FUTURE_DATE)}`);
  */
 const currentRows = sql.raw(`system_to = ${String(FAR_FUTURE_DATE)}`);
 
+/** The predicate of the partial index of current outbox rows a push reply left out (see `outbox.left_out_op`). */
+const leftOutRows = sql.raw(`system_to = ${String(FAR_FUTURE_DATE)} AND left_out_op IS NOT NULL`);
+
 /**
  * node_content: Fields that affect embeddings (name, note, parentId)
  */
@@ -342,7 +345,9 @@ export const referencesRoots = sqliteTable(
 /**
  * outbox: which aspect of which node is ahead of workflowy.com in mirror mode. A current row is pending; the drain
  * closes it once upstream acknowledged the op. The change itself is the node's current local state. `node_id` is a
- * reference, not an owner: a pending delete must outlive its node.
+ * reference, not an owner: a pending delete must outlive its node. A current row with `left_out_op` is flagged: the
+ * push reply left its op out, so the drain no longer sends it, and it stays open until a catch-up shows that op or a
+ * new local write to the aspect sends it again.
  */
 export const outbox = sqliteTable(
 	"outbox",
@@ -354,6 +359,11 @@ export const outbox = sqliteTable(
 		enqueuedAt: integer("enqueued_at").notNull(),
 		/** Null until a drain fails on this row. */
 		lastError: text("last_error"),
+		/**
+		 * The type of the op a push reply left out (`move`, `edit`, ...) on a flagged row, whose effect workflowy.com
+		 * was never seen to hold; null on a row the drain sends.
+		 */
+		leftOutOp: text("left_out_op"),
 
 		systemFrom: integer("system_from").notNull(),
 		systemTo: integer("system_to").notNull(),
@@ -368,6 +378,8 @@ export const outbox = sqliteTable(
 		index("outbox_closed_at_idx").on(table.systemTo).where(closedRows),
 		// The pending rows in drain order, so reading them never scans the closed versions every drain leaves behind.
 		index("outbox_pending_idx").on(table.enqueuedAt, table.nodeId, table.aspect).where(currentRows),
+		// The flagged rows alone, so every catch-up checks for them without walking the pending rows.
+		index("outbox_left_out_idx").on(table.nodeId, table.aspect).where(leftOutRows),
 	],
 );
 

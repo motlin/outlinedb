@@ -1083,10 +1083,10 @@ describe("OutlineTree empty account", () =>
 		);
 	}
 
-	/** The sync-stopped banner's text, one entry per block, or null when none renders. */
-	function syncStoppedText(html: string): string[] | null
+	/** A page banner's text, one entry per block, or null when none renders. */
+	function bannerText(html: string, className: string): string[] | null
 	{
-		const start = html.indexOf('<section class="sync-stopped-notice');
+		const start = html.indexOf(`<section class="${className}`);
 		if (start === -1)
 		{
 			return null;
@@ -1212,17 +1212,22 @@ describe("OutlineTree empty account", () =>
 		]);
 	});
 
-	it("shows a sync stopped until an admin seed in the main page's banner, not the empty panel or a side pane, whatever the outline holds", () =>
+	it("shows a sync stopped until an admin seed and the writes workflowy.com left unconfirmed in the main page's banners, not the empty panel or a side pane, whatever the outline holds", () =>
 	{
 		accountSync =
 		{
 			phase: "needs_seed",
 			applied: 0,
 			error: "A catch-up needs internal auth (WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD)",
+			unconfirmedWrites: 2,
 		};
 		const banner = [
 			"Sync stopped. A catch-up needs internal auth (WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD)",
 			"Nothing retries it on a schedule; an admin seed restarts the sync.",
+		];
+		const unconfirmed = [
+			"2 changes not confirmed by workflowy.com. Its reply to the push left them out.",
+			"Not sent again; the next sync that shows them on workflowy.com clears this.",
 		];
 		const empty = renderPage();
 		childrenByParent.set(null, [
@@ -1243,24 +1248,29 @@ describe("OutlineTree empty account", () =>
 			[empty, nonEmpty, sidePane, renderPage()].map((html) => (
 			{
 				panel: emptyOutlineText(html),
-				banner: syncStoppedText(html),
+				banner: bannerText(html, "sync-stopped-notice"),
+				unconfirmed: bannerText(html, "unconfirmed-writes-notice"),
 			})),
 		).toStrictEqual([
 			{
 				panel: null,
 				banner,
+				unconfirmed,
 			},
 			{
 				panel: null,
 				banner,
+				unconfirmed,
 			},
 			{
 				panel: null,
 				banner: null,
+				unconfirmed: null,
 			},
 			{
 				panel: null,
 				banner: null,
+				unconfirmed: null,
 			},
 		]);
 	});

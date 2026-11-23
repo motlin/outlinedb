@@ -34,8 +34,8 @@ import type {UpstreamRelationshipMetadata} from "../cache/item-relationships.js"
 import {runUnitOfWork} from "../cache/node-composite.js";
 import type {UnitOfWork} from "../cache/node-composite.js";
 import {compareSiblingOrder} from "../cache/order-key.js";
-import {closeOutboxRows, failOutboxRows, readPendingOutbox} from "../cache/outbox.js";
-import type {OutboxAspect, OutboxEntry, PendingOutboxRow} from "../cache/outbox.js";
+import {closeOutboxRows, failOutboxRows, flagOutboxRows, readLeftOutRows, readPendingOutbox} from "../cache/outbox.js";
+import type {LeftOutEntry, OutboxAspect, OutboxEntry, PendingOutboxRow} from "../cache/outbox.js";
 import type {TemporalTransaction} from "../cache/temporal-merge.js";
 import {mirrors, nodeContent, nodeMetadata, referencesRoots} from "../db/schema.js";
 import {FAR_FUTURE_DATE, temporalTimestampJustBefore} from "../temporal/constants.js";
@@ -80,7 +80,7 @@ export interface OutboxPusher
 	/**
 	 * What workflowy.com holds for `id` now, or `null` when it lacks the node: how a drain checks left-out ops. Absent
 	 * when workflowy.com cannot be read back node by node (a per-account connection holds no REST API key): an accepted
-	 * push then closes its rows, and the transaction-log catch-up brings in whatever workflowy.com holds.
+	 * push then flags the rows of the ops it left out (see {@link flagOutboxRows}) instead of checking them.
 	 */
 	upstreamNode?: (id: string) => Promise<UpstreamNode | null>;
 	/**
@@ -103,6 +103,8 @@ export interface OutboxDrainResult
 	ops: number;
 	/** Rows closed: delivered, moot, or created and deleted before any drain. */
 	closed: number;
+	/** Rows flagged because the push reply left their ops out and nothing could check their effect. */
+	flagged: number;
 }
 
 /** A live node's current local state, as the drain sends it. */
@@ -1262,15 +1264,109 @@ async function effectsNotUpstream(
 	return missing;
 }
 
+/** The nodes an op names: a `bulk_create`'s every created id, otherwise its `projectid`. */
+function namedIds(op: InternalOp): string[]
+{
+	return op.type === "bulk_create" ? createdIds(op) : [String(op.data.projectid)];
+}
+
+/** The aspects each op type sends; a type missing here may carry any aspect of the nodes it names. */
+const OP_ASPECTS: Readonly<Partial<Record<string, readonly OutboxAspect[]>>> =
+{
+	move: ["placement"],
+	edit: ["name", "note", "metadata", "mirror"],
+	complete: ["completion"],
+	uncomplete: ["completion"],
+};
+
+/** Whether `ops` hold an op of `type` naming `nodeId`. */
+function shows(ops: readonly InternalOp[], type: string, nodeId: string): boolean
+{
+	return ops.some((op) => op.type === type && namedIds(op).includes(nodeId));
+}
+
+/**
+ * The carried rows of the nodes `leftOut` names, each with the left-out op that sends its aspect (or, failing that, the
+ * first naming its node), so a catch-up showing that op settles the row.
+ */
+function leftOutEntries(rows: readonly PendingOutboxRow[], leftOut: readonly InternalOp[]): LeftOutEntry[]
+{
+	return rows.flatMap((row) =>
+	{
+		const naming = leftOut.filter((op) => namedIds(op).includes(row.nodeId));
+		const op = naming.find((candidate) => OP_ASPECTS[candidate.type]?.includes(row.aspect) ?? true) ?? naming[0];
+		return op === undefined
+			? []
+			: [
+					{
+						nodeId: row.nodeId,
+						aspect: row.aspect,
+						leftOutOp: op.type,
+						message: `Workflowy's server run left out ${op.type} ${String(opSubject(op))}; not sent again until a catch-up shows it or the node changes`,
+					},
+				];
+	});
+}
+
+/**
+ * Settle flagged rows (see {@link flagOutboxRows}) against the ops a catch-up or push brings in: a row closes once
+ * `ops` hold an op of its left-out type naming its node. Reads nothing more than one index probe when nothing is flagged.
+ */
+export function settleLeftOutRows(unitOfWork: UnitOfWork, ops: readonly InternalOp[]): void
+{
+	if (ops.length === 0)
+	{
+		return;
+	}
+	const settled = readLeftOutRows(unitOfWork.tx).filter((row) => shows(ops, row.leftOutOp, row.nodeId));
+	closeOutboxRows(unitOfWork, settled);
+}
+
+/** The carried rows whose value is still the one the push sent. */
+function unchanged(tx: TemporalTransaction, plan: DrainPlan): PendingOutboxRow[]
+{
+	const states = readStates(tx, [...new Set(plan.carried.map(({nodeId}) => nodeId))]);
+	return plan.carried.filter(
+		(row) => plan.sent.get(entryKey(row)) === aspectValue(row.aspect, states.get(row.nodeId)),
+	);
+}
+
 /** Close the carried rows whose value is still the one the push sent, in the acknowledging unit of work. */
 function closeDelivered(unitOfWork: UnitOfWork, plan: DrainPlan): number
 {
-	const states = readStates(unitOfWork.tx, [...new Set(plan.carried.map(({nodeId}) => nodeId))]);
-	const delivered = plan.carried.filter(
-		(row) => plan.sent.get(entryKey(row)) === aspectValue(row.aspect, states.get(row.nodeId)),
-	);
+	const delivered = unchanged(unitOfWork.tx, plan);
 	closeOutboxRows(unitOfWork, delivered);
 	return delivered.length;
+}
+
+/**
+ * Acknowledge a push whose reply left `unechoed` out and whose effect nothing can read back: a left-out op that the
+ * reply's remote transactions show counts as delivered; the unchanged rows of the nodes the others name are flagged,
+ * and the rest close. Returns the counts.
+ */
+function flagLeftOut(
+	unitOfWork: UnitOfWork,
+	plan: DrainPlan,
+	unechoed: readonly InternalOp[],
+	result: PushResult,
+):
+{
+	closed: number;
+	flagged: number;
+}
+{
+	const remote = result.remote.flatMap(({ops}) => ops);
+	const leftOut = unechoed.filter((op) => !namedIds(op).every((id) => shows(remote, op.type, id)));
+	const rows = unchanged(unitOfWork.tx, plan);
+	const flagged = leftOutEntries(rows, leftOut);
+	const flaggedKeys = new Set(flagged.map(entryKey));
+	const delivered = rows.filter((row) => !flaggedKeys.has(entryKey(row)));
+	closeOutboxRows(unitOfWork, delivered);
+	flagOutboxRows(unitOfWork, flagged);
+	return {
+		closed: delivered.length,
+		flagged: flagged.length,
+	};
 }
 
 function errorMessage(error: unknown): string
@@ -1299,8 +1395,10 @@ export function previewOutboxOps(tx: TemporalTransaction, session: OutboxSession
  * One drain pass over the oldest pending outbox rows: one push, or none when nothing needs sending. When the server run
  * echoes every op, the carried rows close in the unit of work that applies the push's transactions. When it leaves
  * ops out, the drain reads the nodes they name from workflowy.com and closes the rows only if every left-out op's
- * effect is already there; a pusher that cannot read workflowy.com back closes them on the push's acceptance. A failed or unacknowledged push records its error as `last_error` on every row it carried,
- * which stay pending, and throws; a failed session fetch records its error on every row the pass read.
+ * effect is already there. A pusher that cannot read workflowy.com back instead flags the rows of the left-out ops
+ * (unless the reply's remote transactions show them), which stop being sent until a catch-up shows the op or the node
+ * changes again, and closes the rest. A failed or unacknowledged push records its error as `last_error` on every row
+ * it carried, which stay pending, and throws; a failed session fetch records its error on every row the pass read.
  */
 export async function drainOutbox(
 	database: TemporalTransaction,
@@ -1315,6 +1413,7 @@ export async function drainOutbox(
 		return {
 			ops: 0,
 			closed: 0,
+			flagged: 0,
 		};
 	}
 	let session: OutboxSession;
@@ -1362,10 +1461,13 @@ export async function drainOutbox(
 		return {
 			ops: 0,
 			closed: plan.dropped.length + plan.carried.length,
+			flagged: 0,
 		};
 	}
 	let closed = 0;
+	let flagged = 0;
 	let unechoed: InternalOp[] = [];
+	const {upstreamNode} = pusher;
 	try
 	{
 		await pusher.push(plan.ops, (unitOfWork, result) =>
@@ -1375,11 +1477,14 @@ export async function drainOutbox(
 			{
 				closed = closeDelivered(unitOfWork, plan);
 			}
+			else if (upstreamNode === undefined)
+			{
+				({closed, flagged} = flagLeftOut(unitOfWork, plan, unechoed, result));
+			}
 		});
-		if (unechoed.length > 0)
+		if (unechoed.length > 0 && upstreamNode !== undefined)
 		{
-			const missing =
-				pusher.upstreamNode === undefined ? [] : await effectsNotUpstream(pusher.upstreamNode, unechoed);
+			const missing = await effectsNotUpstream(upstreamNode, unechoed);
 			if (missing.length > 0)
 			{
 				throw new OutboxNotAcknowledged(plan.ops.length, plan.ops.length - unechoed.length, missing);
@@ -1398,5 +1503,6 @@ export async function drainOutbox(
 	return {
 		ops: plan.ops.length,
 		closed: closed + plan.dropped.length,
+		flagged,
 	};
 }

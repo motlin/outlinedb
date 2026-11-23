@@ -136,11 +136,11 @@ export async function drainAccountOutbox(
 	{
 		now?: () => number;
 	} = {},
-): Promise<OutboxDrainResult>
+): Promise<Omit<OutboxDrainResult, "flagged">>
 {
 	const now = options.now ?? Date.now;
 	const pending = readPendingAccountOutbox(database);
-	const result: OutboxDrainResult =
+	const result: Omit<OutboxDrainResult, "flagged"> =
 	{
 		ops: 0,
 		closed: 0,

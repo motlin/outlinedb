@@ -5,13 +5,20 @@ import {LocalCalendar} from "../src/cache/local-calendar.js";
 import {LocalTreeWriter} from "../src/cache/local-tree-writer.js";
 import {runUnitOfWork} from "../src/cache/node-composite.js";
 import {readPendingAccountOutbox} from "../src/cache/account-outbox.js";
-import {listPendingOutbox, OutboxRecorder, outboxStatus, readPendingOutbox} from "../src/cache/outbox.js";
+import
+{
+	listPendingOutbox,
+	OutboxRecorder,
+	outboxStatus,
+	readLeftOutRows,
+	readPendingOutbox,
+} from "../src/cache/outbox.js";
 import type {OutboxAspect} from "../src/cache/outbox.js";
 import * as schema from "../src/db/schema.js";
 import {mirrors, nodeContent, nodeMetadata, outbox} from "../src/db/schema.js";
 import {OutboxNotAcknowledged} from "../src/internal/errors.js";
 import {calendarNodeId, calendarRootId} from "../src/internal/calendar-ids.js";
-import {drainOutbox} from "../src/internal/outbox-drain.js";
+import {drainOutbox, settleLeftOutRows} from "../src/internal/outbox-drain.js";
 import type {OutboxPusher, UpstreamNode} from "../src/internal/outbox-drain.js";
 import type {InternalOp} from "../src/internal/push-and-poll.js";
 import {FAR_FUTURE_DATE, parseTemporalTimestamp, systemTimeAt} from "../src/temporal/constants.js";
@@ -121,7 +128,7 @@ function setup()
 	/**
 	 * A pusher whose server run is `respond`'s ops (by default every op pushed), or which fails with its error.
 	 * `beforeAccept` runs between the push and its acknowledgement. `upstream` is what workflowy.com holds for the ids
-	 * the drain reads back (null: absent); reading any other id fails.
+	 * the drain reads back (null: absent); reading any other id fails. `remote` is the reply's one remote transaction.
 	 */
 	const pusher = (
 		respond: (ops: InternalOp[]) => InternalOp[] | Error = (ops) => ops,
@@ -129,6 +136,7 @@ function setup()
 		{
 		},
 		upstream: Record<string, UpstreamNode | null> = {},
+		remote: (ops: InternalOp[]) => InternalOp[] = () => [],
 	): OutboxPusher => (
 	{
 		upstreamNode: async (id) =>
@@ -162,7 +170,12 @@ function setup()
 					{
 						txId: "2",
 						serverRun,
-						remote: [],
+						remote: [
+							{
+								id: "1",
+								ops: remote(ops),
+							},
+						],
 						needsRefresh: false,
 					},
 				);
@@ -171,9 +184,9 @@ function setup()
 		},
 	});
 
-	const drain = async (target = pusher()) =>
+	const drain = async (target = pusher(), time = DRAIN) =>
 	{
-		setClock(DRAIN);
+		setClock(time);
 		return drainOutbox(database, target);
 	};
 
@@ -198,11 +211,13 @@ function row(
 		systemFrom = enqueuedAt,
 		systemTo = DRAIN,
 		lastError = null,
+		leftOutOp = null,
 	}:
 	{
 		systemFrom?: number;
 		systemTo?: number;
 		lastError?: string | null;
+		leftOutOp?: string | null;
 	} = {},
 )
 {
@@ -211,6 +226,7 @@ function row(
 		aspect,
 		enqueuedAt,
 		lastError,
+		leftOutOp,
 		systemFrom,
 		systemTo,
 	};
@@ -375,6 +391,7 @@ describe("drainOutbox", () =>
 				{
 					ops: 4,
 					closed: 8,
+					flagged: 0,
 				},
 				pushes: [
 					[
@@ -441,6 +458,7 @@ describe("drainOutbox", () =>
 				{
 					ops: 4,
 					closed: 5,
+					flagged: 0,
 				},
 				pushes: [
 					[
@@ -582,6 +600,7 @@ describe("drainOutbox", () =>
 				{
 					ops: 1,
 					closed: 2,
+					flagged: 0,
 				},
 				pushes: [
 					[
@@ -654,6 +673,7 @@ describe("drainOutbox", () =>
 				{
 					ops: 2,
 					closed: 6,
+					flagged: 0,
 				},
 				pushes: [
 					[
@@ -729,6 +749,7 @@ describe("drainOutbox", () =>
 				{
 					ops: 0,
 					closed: 3,
+					flagged: 0,
 				},
 				pushes: [],
 				outbox: [row("n", "create", at(0)), row("n", "delete", at(1)), row("n", "placement", at(0))],
@@ -782,6 +803,7 @@ describe("drainOutbox", () =>
 				status:
 				{
 					pending: 1,
+					flagged: 0,
 					oldestEnqueuedAt: at(0),
 					lastError: "offline",
 				},
@@ -834,6 +856,7 @@ describe("drainOutbox", () =>
 				status:
 				{
 					pending: 1,
+					flagged: 0,
 					oldestEnqueuedAt: at(0),
 					lastError: "workflowy.com is down",
 				},
@@ -918,6 +941,7 @@ describe("drainOutbox", () =>
 				{
 					ops: 3,
 					closed: 4,
+					flagged: 0,
 				},
 				pushes: [
 					[
@@ -951,9 +975,9 @@ describe("drainOutbox", () =>
 		);
 	});
 
-	it("closes every row the push carried without reading workflowy.com back when the pusher cannot, leaving the catch-up to bring in what it holds", async () =>
+	it("flags the rows of left-out ops it cannot read back instead of closing them, closes the rest and those the reply's remote transactions show, stops sending them, and sends a new write again", async () =>
 	{
-		const {writer, outboxRows, pushes, pusher, drain} = setup();
+		const {database, writer, outboxRows, pushes, pusher, drain} = setup();
 		setClock(at(0));
 		writer.createAt(
 			{
@@ -970,25 +994,154 @@ describe("drainOutbox", () =>
 				name: "A",
 			},
 		);
-		const {upstreamNode: _upstreamNode, ...blind} = pusher(() => []);
+		setClock(at(2));
+		writer.completeNode("c");
+		const {upstreamNode: _upstreamNode, ...blind} = pusher(
+			(ops) => ops.filter(({type}) => type === "bulk_create"),
+			undefined,
+			undefined,
+			(ops) => ops.filter(({type}) => type === "complete"),
+		);
 
-		const result = await drain(blind);
+		const first = await drain(blind);
+		const flaggedStatus = outboxStatus(database);
+		const second = await drain(blind);
+		const REWRITE = systemTimeAt("2026-03-02 00:00:01.000");
+		setClock(REWRITE);
+		writer.updateNode(
+			"a",
+			{
+				name: "A2",
+			},
+		);
+		const REDRAIN = systemTimeAt("2026-03-02 00:00:02.000");
+		const third = await drain(pusher(), REDRAIN);
+
+		const leftOut =
+			"Workflowy's server run left out edit a; not sent again until a catch-up shows it or the node changes";
+		expect(
+			{
+				results: [first, second, third],
+				flaggedStatus,
+				pushed: pushes.map((ops) => ops.map(({type}) => type)),
+				third: pushes[1],
+				outbox: outboxRows(),
+				status: outboxStatus(database),
+			},
+		).toStrictEqual(
+			{
+				results: [
+					{
+						ops: 3,
+						closed: 3,
+						flagged: 1,
+					},
+					{
+						ops: 0,
+						closed: 0,
+						flagged: 0,
+					},
+					{
+						ops: 1,
+						closed: 1,
+						flagged: 0,
+					},
+				],
+				flaggedStatus:
+				{
+					pending: 0,
+					flagged: 1,
+					oldestEnqueuedAt: null,
+					lastError: null,
+				},
+				pushed: [["bulk_create", "edit", "complete"], ["edit"]],
+				// The rewrite goes out against what upstream held before the left-out edit.
+				third: [rename("a", "A2", "a", CT + 2)],
+				outbox: [
+					row("a", "name", at(1)),
+					row(
+						"a",
+						"name",
+						at(1),
+						{
+							systemFrom: DRAIN,
+							systemTo: REWRITE,
+							lastError: leftOut,
+							leftOutOp: "edit",
+						},
+					),
+					row(
+						"a",
+						"name",
+						at(1),
+						{
+							systemFrom: REWRITE,
+							systemTo: REDRAIN,
+						},
+					),
+					row("c", "completion", at(2)),
+					row("n", "create", at(0)),
+					row("n", "placement", at(0)),
+				],
+				status:
+				{
+					pending: 0,
+					flagged: 0,
+					oldestEnqueuedAt: null,
+					lastError: null,
+				},
+			},
+		);
+	});
+
+	it("settles a flagged row once a catch-up shows an op of its left-out type naming its node, and only then", async () =>
+	{
+		const {database, writer, outboxRows, pusher, drain} = setup();
+		setClock(at(0));
+		writer.updateNode(
+			"a",
+			{
+				name: "A",
+			},
+		);
+		const {upstreamNode: _upstreamNode, ...blind} = pusher(() => []);
+		await drain(blind);
+		const SETTLED = systemTimeAt("2026-03-02 00:00:01.000");
+		setClock(SETTLED);
+
+		runUnitOfWork(database, (unitOfWork) =>
+		{
+			settleLeftOutRows(unitOfWork, [rename("b", "B", "b"), metadataEdit("b", [], [])]);
+		});
+		const unsettled = outboxStatus(database).flagged;
+		runUnitOfWork(database, (unitOfWork) =>
+		{
+			settleLeftOutRows(unitOfWork, [rename("a", "A", "a")]);
+		});
 
 		expect(
 			{
-				result,
-				pushed: pushes.map((ops) => ops.map(({type}) => type)),
+				unsettled,
 				outbox: outboxRows(),
 			},
 		).toStrictEqual(
 			{
-				result:
-				{
-					ops: 2,
-					closed: 3,
-				},
-				pushed: [["bulk_create", "edit"]],
-				outbox: [row("a", "name", at(1)), row("n", "create", at(0)), row("n", "placement", at(0))],
+				unsettled: 1,
+				outbox: [
+					row("a", "name", at(0)),
+					row(
+						"a",
+						"name",
+						at(0),
+						{
+							systemFrom: DRAIN,
+							systemTo: SETTLED,
+							lastError:
+								"Workflowy's server run left out edit a; not sent again until a catch-up shows it or the node changes",
+							leftOutOp: "edit",
+						},
+					),
+				],
 			},
 		);
 	});
@@ -1104,6 +1257,7 @@ describe("drainOutbox", () =>
 				{
 					ops: 2,
 					closed: 1,
+					flagged: 0,
 				},
 				outbox: [
 					row(
@@ -1152,6 +1306,7 @@ describe("drainOutbox", () =>
 				{
 					ops: 5,
 					closed: 9,
+					flagged: 0,
 				},
 				pushes: [
 					[
@@ -1279,6 +1434,7 @@ describe("drainOutbox", () =>
 				aspect,
 				enqueuedAt: at(0),
 				lastError: null,
+				leftOutOp: null,
 			})),
 		);
 	});
@@ -1329,6 +1485,7 @@ describe("drainOutbox", () =>
 				{
 					ops: 1,
 					closed: 1,
+					flagged: 0,
 				},
 				pushes: [[rename("b", "B", "b")]],
 				outbox: [
@@ -1416,11 +1573,13 @@ describe("drainOutbox", () =>
 				{
 					ops: 4,
 					closed: 6,
+					flagged: 0,
 				},
 				unlinked:
 				{
 					ops: 3,
 					closed: 3,
+					flagged: 0,
 				},
 				pushes: [
 					[
@@ -1577,6 +1736,7 @@ describe("drainOutbox", () =>
 				{
 					ops: 1,
 					closed: 1,
+					flagged: 0,
 				},
 				pushes: [
 					[
@@ -1668,6 +1828,7 @@ describe("drainOutbox", () =>
 				{
 					ops: 4,
 					closed: 6,
+					flagged: 0,
 				},
 				pushes: [
 					[
@@ -1786,6 +1947,7 @@ describe("drainOutbox", () =>
 				{
 					ops: 1,
 					closed: 3,
+					flagged: 0,
 				},
 				pushes: [
 					[
@@ -1845,6 +2007,7 @@ describe("drainOutbox", () =>
 				{
 					ops: 1,
 					closed: 7,
+					flagged: 0,
 				},
 				pushes: [[rename("c", "C", "c")]],
 				outbox: [
@@ -1889,6 +2052,7 @@ describe("drainOutbox", () =>
 				{
 					ops: 1,
 					closed: 2,
+					flagged: 0,
 				},
 				undelete: [
 					{
@@ -1908,7 +2072,7 @@ describe("drainOutbox", () =>
 		);
 	});
 
-	it("reads the pending rows and the status through the pending-row indexes, never scanning closed versions", () =>
+	it("reads the pending rows, the flagged rows and the status through their partial indexes, never scanning closed versions", () =>
 	{
 		const queries:
 		{
@@ -1937,6 +2101,7 @@ describe("drainOutbox", () =>
 		readPendingOutbox(database, 50);
 		readPendingAccountOutbox(database);
 		outboxStatus(database);
+		readLeftOutRows(database);
 		const plans = queries.map(({sql, params}) =>
 			(
 				sqlite.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...params) as
@@ -1947,14 +2112,17 @@ describe("drainOutbox", () =>
 		);
 		sqlite.close();
 		// Each walks only the pending rows of a partial index, never the closed versions that pile up behind them.
+		// The flagged count and the catch-up's flagged read walk only the flagged rows, never the pending ones.
 		expect(plans).toStrictEqual([
-			["SCAN outbox USING COVERING INDEX outbox_pending_idx"],
+			["SCAN outbox USING INDEX outbox_pending_idx"],
 			["SCAN outbox USING INDEX outbox_pending_idx"],
 			["SCAN account_outbox USING INDEX account_outbox_pending_idx"],
-			["SCAN outbox USING COVERING INDEX outbox_pending_idx"],
+			["SCAN outbox USING INDEX outbox_pending_idx"],
 			["SCAN outbox USING INDEX outbox_pending_idx", "USE TEMP B-TREE FOR ORDER BY"],
 			["SCAN account_outbox USING COVERING INDEX account_outbox_pending_idx"],
 			["SCAN account_outbox USING INDEX account_outbox_pending_idx", "USE TEMP B-TREE FOR ORDER BY"],
+			["SCAN outbox USING INDEX outbox_left_out_idx"],
+			["SCAN outbox USING INDEX outbox_left_out_idx"],
 		]);
 	});
 });

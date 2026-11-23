@@ -51,7 +51,7 @@ import type {NewTree} from "./ops.js";
 import {PushAndPoll} from "./push-and-poll.js";
 import type {InternalOp, PushAndPollOptions, PushInput, PushResult} from "./push-and-poll.js";
 import {drainAccountOutbox} from "./account-outbox-drain.js";
-import {drainOutbox} from "./outbox-drain.js";
+import {drainOutbox, settleLeftOutRows} from "./outbox-drain.js";
 import type {OutboxDrainOptions, OutboxDrainResult, OutboxPusher} from "./outbox-drain.js";
 import type {UnitOfWork} from "../cache/node-composite.js";
 
@@ -513,6 +513,8 @@ export class WorkflowyInternalAdapter
 		}
 		runUnitOfWork(this.db, (unitOfWork) =>
 		{
+			// Before the replay: a flagged row whose left-out op workflowy.com now shows no longer keeps its local value.
+			settleLeftOutRows(unitOfWork, ops);
 			// Edges first: their delete replay reads the subtree's node rows before the node replay ends them.
 			applyRelationshipOps(unitOfWork, ops);
 			applyFileOps(unitOfWork, ops);
@@ -535,7 +537,7 @@ export class WorkflowyInternalAdapter
 			session: async () => this.session(),
 			// Read back over the public API, node by node, only when a server run leaves ops out. Without an API key (a
 			// per-account connection) nothing reads workflowy.com back: its only read is the whole tree, too big for a
-			// Durable Object, so the transaction-log catch-up brings in what workflowy.com holds instead.
+			// Durable Object, so the drain flags the left-out ops' rows and a catch-up that shows those ops settles them.
 			...(writeThrough === undefined
 				? {}
 				:
@@ -621,6 +623,7 @@ export class WorkflowyInternalAdapter
 		return {
 			ops: nodes.ops + account.ops,
 			closed: nodes.closed + account.closed,
+			flagged: nodes.flagged,
 		};
 	}
 

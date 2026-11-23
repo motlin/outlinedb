@@ -53,6 +53,12 @@ export default class Status extends Command
 		}));
 		const oldestEnqueuedAt = status.oldestEnqueuedAt === null ? null : systemTimeToIso(status.oldestEnqueuedAt);
 		this.log(`Pending: ${status.pending}`);
+		if (status.flagged > 0)
+		{
+			this.log(
+				`Flagged (a push reply left their ops out; not sent until a catch-up shows them): ${status.flagged}`,
+			);
+		}
 		if (oldestEnqueuedAt !== null)
 		{
 			this.log(`Oldest: ${oldestEnqueuedAt}`);
@@ -63,7 +69,11 @@ export default class Status extends Command
 		}
 		for (const row of rows)
 		{
-			this.log(`${row.nodeId}  ${row.aspect}  ${row.enqueuedAt}  ${row.name ?? "(no current name)"}`);
+			this.log(
+				`${row.nodeId}  ${row.aspect}  ${row.enqueuedAt}  ${row.name ?? "(no current name)"}${
+					row.leftOutOp === null ? "" : `  flagged: ${row.leftOutOp} left out`
+				}`,
+			);
 			if (row.lastError !== null)
 			{
 				this.log(`  last error: ${row.lastError}`);

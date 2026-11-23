@@ -7,6 +7,7 @@ import type {BacklinkItem, FoundDateItem, FoundDatesResponse, NodeResponse} from
 import {hideLoadingScreenOnce} from "../loading-screen.js";
 import {RootEmptyOutline} from "./empty-outline.js";
 import {SyncStoppedNotice} from "./sync-stopped-notice.js";
+import {UnconfirmedWritesNotice} from "./unconfirmed-writes-notice.js";
 import {WorkflowyImportNotice} from "./workflowy-import-notice.js";
 import {useContext, useEffect, useLayoutEffect, useMemo, useRef, useState} from "react";
 import {useQueryClient} from "@tanstack/react-query";
@@ -1257,6 +1258,7 @@ export function OutlineTree({parentId: requestedId, shell = "pane"}: OutlineTree
 		return (
 			<>
 				<SyncStoppedNotice />
+				<UnconfirmedWritesNotice />
 				<WorkflowyImportNotice />
 				{rows}
 				{sentinel}

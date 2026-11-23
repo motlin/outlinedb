@@ -4746,6 +4746,108 @@ describe("internal adapter transaction log", () =>
 				},
 			);
 		});
+		it("flags a drain's left-out create without an API key to read it back, sends it no more, and closes it once a catch-up shows the create", async () =>
+		{
+			const {db, api, adapter} = tracked();
+			storeTreeTxId(db, "100");
+			new LocalTreeWriter(
+				db,
+				{
+					outbox: new OutboxRecorder(),
+				},
+			).createAt(
+				{
+					parentId: null,
+					index: 0,
+					id: "n",
+					name: "n",
+				},
+			);
+			const create =
+			{
+				type: "bulk_create",
+				data:
+				{
+					parentid: "None",
+					starting_priority: 0,
+					project_trees: JSON.stringify([
+						{
+							id: "n",
+							nm: "n",
+						},
+					]),
+				},
+			};
+			const outboxRows = () =>
+				db
+					.select(
+						{
+							nodeId: schema.outbox.nodeId,
+							aspect: schema.outbox.aspect,
+							leftOutOp: schema.outbox.leftOutOp,
+						},
+					)
+					.from(schema.outbox)
+					.where(eq(schema.outbox.systemTo, FAR_FUTURE_DATE))
+					.orderBy(schema.outbox.aspect)
+					.all();
+			api.respondOnce(
+				"/push_and_poll",
+				poll(
+					"150",
+					[],
+					{
+						server_run_operation_transaction_json: transaction(150, []),
+					},
+				),
+			);
+			api.respondOnce("/push_and_poll", poll("160", [transaction(155, [create])]));
+
+			const drained = await adapter.drainOutbox();
+			const flagged = outboxRows();
+			const redrained = await adapter.drainOutbox();
+			await adapter.catchUp();
+
+			expect(
+				{
+					drained,
+					flagged,
+					redrained,
+					pushes: startIds(api.requests),
+					settled: outboxRows(),
+				},
+			).toStrictEqual(
+				{
+					drained:
+					{
+						ops: 1,
+						closed: 0,
+						flagged: 2,
+					},
+					flagged: [
+						{
+							nodeId: "n",
+							aspect: "create",
+							leftOutOp: "bulk_create",
+						},
+						{
+							nodeId: "n",
+							aspect: "placement",
+							leftOutOp: "bulk_create",
+						},
+					],
+					redrained:
+					{
+						ops: 0,
+						closed: 0,
+						flagged: 0,
+					},
+					pushes: ["100", "150"],
+					settled: [],
+				},
+			);
+		});
+
 		it.each([
 			{
 				name: "an edit whose metadata patches do not parse",

@@ -198,6 +198,7 @@ function pending(nodeId: string, aspect: OutboxAspect, at = NOW)
 		aspect,
 		enqueuedAt: at,
 		lastError: null,
+		leftOutOp: null,
 		systemFrom: at,
 		systemTo: FAR_FUTURE_DATE,
 	};

@@ -124,6 +124,7 @@ describe("outbox commands", () =>
 				failed:
 				{
 					pending: 1,
+					flagged: 0,
 					oldestEnqueuedAt: true,
 					lastError: "Workflowy rejected the operations: upstream_rejected",
 					rows: [
@@ -133,6 +134,7 @@ describe("outbox commands", () =>
 							aspect: "name",
 							enqueuedAt: true,
 							lastError: "Workflowy rejected the operations: upstream_rejected",
+							leftOutOp: null,
 						},
 					],
 				},

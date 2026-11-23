@@ -1010,12 +1010,14 @@ describe("importing an account from workflowy.com over its stored session", () =
 	async function outbox(): Promise<
 	{
 		pending: number;
+		flagged: number;
 		lastError: string | null;
 	}>
 	{
-		const {pending, lastError} = (await (await store()).syncStatus()).outbox;
+		const {pending, flagged, lastError} = (await (await store()).syncStatus()).outbox;
 		return {
 			pending,
+			flagged,
 			lastError,
 		};
 	}
@@ -1088,6 +1090,7 @@ describe("importing an account from workflowy.com over its stored session", () =
 				outbox:
 				{
 					pending: 0,
+					flagged: 0,
 					lastError: null,
 				},
 				txId: "703",
@@ -1097,8 +1100,8 @@ describe("importing an account from workflowy.com over its stored session", () =
 		);
 
 		// A push whose reply leaves the create out of its server run: with no API key to read the node back, and the whole
-		// tree too big to read in the object, the drain closes the row on the push's acceptance; the catch-up brings in
-		// whatever workflowy.com holds.
+		// tree too big to read in the object, the drain flags the create's rows instead of closing them, so they are not
+		// sent again and stay open until a catch-up shows the create.
 		upstreamCalls.length = 0;
 		serverRunDropped = true;
 		const unechoed = await send(
@@ -1110,7 +1113,7 @@ describe("importing an account from workflowy.com over its stored session", () =
 			},
 		);
 		await until(
-			async () => pushes.length > 2 && ((await outbox()).pending === 0 || (await outbox()).lastError !== null),
+			async () => pushes.length > 2 && ((await outbox()).flagged > 0 || (await outbox()).lastError !== null),
 		);
 		serverRunDropped = false;
 		expect(
@@ -1128,6 +1131,7 @@ describe("importing an account from workflowy.com over its stored session", () =
 				outbox:
 				{
 					pending: 0,
+					flagged: 2,
 					lastError: null,
 				},
 				unechoedItems: [["Pushed but left out of the server run", null]],
@@ -1175,6 +1179,7 @@ describe("importing an account from workflowy.com over its stored session", () =
 			},
 		).toStrictEqual(
 			{
+				// The earlier test's left-out create is still flagged, and the user sees how many writes it holds.
 				before:
 				{
 					status: 200,
@@ -1182,6 +1187,7 @@ describe("importing an account from workflowy.com over its stored session", () =
 					{
 						phase: "idle",
 						applied: 0,
+						unconfirmedWrites: 2,
 					},
 				},
 				due: 204,
@@ -1195,6 +1201,7 @@ describe("importing an account from workflowy.com over its stored session", () =
 							phase: "needs_seed",
 							applied: 0,
 							error: "Workflowy answered need_refreshed_project_tree: the cache's transaction id 704 is no longer in the tree's log; run './bin/run.js cache import-api' to reseed it. Import again from Settings > Workflowy to resume syncing.",
+							unconfirmedWrites: 2,
 						},
 					},
 					syncDue: null,
@@ -1277,9 +1284,11 @@ describe("importing an account from workflowy.com over its stored session", () =
 					},
 					// One refused catch-up, and no password to log in again with.
 					upstreamCalls: ["/push_and_poll"],
+					// The earlier left-out create stays flagged: no catch-up has shown it.
 					outbox:
 					{
 						pending: 2,
+						flagged: 2,
 						lastError: null,
 					},
 					syncDue: null,
@@ -1309,6 +1318,7 @@ describe("importing an account from workflowy.com over its stored session", () =
 					outbox:
 					{
 						pending: 0,
+						flagged: 2,
 						lastError: null,
 					},
 					syncScheduled: "number",
