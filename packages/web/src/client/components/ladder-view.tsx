@@ -57,9 +57,6 @@ function previewList(items: LadderItem[]): React.ReactNode
 				<li key={child.id}>
 					<span className="ladder-preview-name">{child.name}</span>
 					{child.children.length > 0 ? previewList(child.children) : null}
-					{child.children.length === 0 && child.hasChildren ? (
-						<span className="ladder-child-more">…</span>
-					) : null}
 				</li>
 			))}
 		</ul>

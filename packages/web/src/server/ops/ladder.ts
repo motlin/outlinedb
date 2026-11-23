@@ -25,6 +25,13 @@ const BUCKET_PATHS: Record<string, string[]> =
 	personal: ["Personal", "☑️ Next (Personal)", "✅ Tasks", "📌 Tasks (asap) (personal)"],
 };
 
+/**
+ * How many levels below a bucket to read (bucket > tier > item > its subtree). Each row carries its whole open subtree
+ * so its count and nested preview see every level; the bound only stops a mirror of its own ancestor from expanding
+ * forever.
+ */
+const LADDER_READ_DEPTH = 50;
+
 /** The part of {@link LadderService} the ops call. */
 export type LadderOperations = Pick<LadderService, "read" | "move" | "complete">;
 
@@ -229,7 +236,7 @@ function defaultService(ctx: ServerContext): LadderService
 					const [tree] = await reader.readNodes(
 						[bucket.id],
 						{
-							depth: 3,
+							depth: LADDER_READ_DEPTH,
 						},
 					);
 					if (tree === undefined)

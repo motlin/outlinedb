@@ -22,6 +22,7 @@ export interface LadderItem
 	name: string;
 	/** Incomplete children, recursively, as read from the cache. */
 	children: LadderItem[];
+	/** Whether the node has any children, completed ones included, since the tree panel shows those too. */
 	hasChildren?: boolean;
 	/** How many incomplete nodes sit under this one, at any depth. */
 	descendantCount: number;
@@ -122,7 +123,7 @@ export function toLadder(root: string, bucket: RawNode): Ladder
 	};
 }
 
-/** A row with its loaded open descendants; the tree panel fetches deeper branches on demand. */
+/** A row with its open descendants at every depth; the tree panel fetches the completed ones on demand. */
 function toItem(node: RawNode): LadderItem
 {
 	const children = (node.children ?? []).filter((child) => !child.completedAt).map(toItem);

@@ -453,6 +453,9 @@ describe("ladder route events", () =>
 				{
 					row = seed(db, "Write report", first);
 					secondTier = second;
+					const outline = seed(db, "Outline", row);
+					seed(db, "Draft intro", outline);
+					seed(db, "Draft body", outline);
 				}
 			}
 			const events = new LadderEventBus();
@@ -506,6 +509,36 @@ describe("ladder route events", () =>
 					pending: [[row, "placement"]],
 				},
 			);
+			const read = (await (await app.fetch(new Request("http://x/api/v1/ladder"))).json()) as
+			{
+				ladders: Record<string, Ladder>;
+			};
+			const leaf = (id: string, name: string) => (
+			{
+				id,
+				name,
+				children: [],
+				hasChildren: false,
+				descendantCount: 0,
+			});
+			// The rows below a ladder item's child are read too, so the count and markers see every open level.
+			expect(read.ladders.work.tiers[1].items).toStrictEqual([
+				{
+					id: row,
+					name: "Write report",
+					children: [
+						{
+							id: expect.any(String),
+							name: "Outline",
+							children: [leaf(expect.any(String), "Draft intro"), leaf(expect.any(String), "Draft body")],
+							hasChildren: true,
+							descendantCount: 2,
+						},
+					],
+					hasChildren: true,
+					descendantCount: 3,
+				},
+			]);
 			expect(received).toStrictEqual([
 				expect.objectContaining(
 					{
