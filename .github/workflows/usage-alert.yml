@@ -1,0 +1,35 @@
+# Daily Cloudflare cost and health check for the outlinedb Worker and its Durable Objects. The job fails when a day's
+# total passes its budget in scripts/cloudflare-usage-alert.mjs, and GitHub emails a failed scheduled run to whoever
+# last changed its cron. The report is in the run's summary.
+
+on:
+  schedule:
+    # 06:00 UTC, once the previous UTC day's analytics have settled.
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      date:
+        description: UTC day to check (YYYY-MM-DD); defaults to yesterday
+        required: false
+
+permissions: {}
+
+jobs:
+  usage-alert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/cloudflare-usage-alert.mjs
+          sparse-checkout-cone-mode: false
+      # The runner's preinstalled Node is enough: the script has no dependencies.
+      - run: node scripts/cloudflare-usage-alert.mjs $DATE
+        env:
+          DATE: ${{ inputs.date }}
+          # An API token with Account Analytics: Read, set by Craig.
+          CLOUDFLARE_ANALYTICS_API_TOKEN: ${{ secrets.CLOUDFLARE_ANALYTICS_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
