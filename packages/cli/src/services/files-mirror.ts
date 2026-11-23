@@ -6,14 +6,13 @@
  * `s3_files` rows, downloads each original into `<storeDir>/blobs/<ab>/<sha256>`, and
  * records the result as a new `file_blobs` version. A live "ok" version whose file is
  * still on disk at the recorded size is skipped, so re-running resumes where the last
- * run stopped; failures are recorded as "error" versions and retried next time.
+ * run stopped; failures are recorded as "error" versions and fetched again on the next run.
  */
 
 import {createHash} from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import {pipeline} from "node:stream/promises";
-import {setTimeout as sleep} from "node:timers/promises";
 import {closeCurrentVersions, runUnitOfWork, startUnitOfWork} from "@outlinedb/shared/cache";
 import {fileBlobs, s3Files} from "@outlinedb/shared/db";
 import type * as schema from "@outlinedb/shared/db";
@@ -22,8 +21,6 @@ import {and, eq, isNull, or} from "drizzle-orm";
 import type {BetterSQLite3Database} from "drizzle-orm/better-sqlite3";
 
 const DEFAULT_CONCURRENCY = 3;
-const DEFAULT_MAX_ATTEMPTS = 3;
-const DEFAULT_RETRY_DELAY_MS = 1000;
 
 /** Mints a fresh signed URL for one attachment's original bytes. */
 export interface FileUrlSigner
@@ -45,10 +42,6 @@ export interface MirrorFilesOptions
 	dryRun?: boolean;
 	/** Downloads in flight at once. */
 	concurrency?: number;
-	/** Tries per attachment, each with a freshly signed URL. */
-	maxAttempts?: number;
-	/** Pause before a retry, multiplied by the attempt number. */
-	retryDelayMs?: number;
 	/** The clock each recorded version's system time is read from. */
 	now?: () => Date;
 	/** Called once per finished attachment with a one-line progress message. */
@@ -144,7 +137,7 @@ function mirroredNodeIds(database: MirrorFilesOptions["database"], storeDir: str
 }
 
 /** Stream one signed URL into the store, hashing as it goes; the blob lands under its hash only when complete. */
-async function downloadOnce(
+async function downloadFile(
 	options: MirrorFilesOptions,
 	file: LiveFile,
 	tmpDir: string,
@@ -230,38 +223,6 @@ async function downloadOnce(
 	}
 }
 
-async function downloadWithRetry(
-	options: MirrorFilesOptions,
-	file: LiveFile,
-	tmpDir: string,
-): Promise<
-	Download &
-	{
-		contentType: string;
-	}
->
-{
-	const maxAttempts = Math.max(1, options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS);
-	const retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
-	let lastError: unknown;
-	for (let attempt = 1; attempt <= maxAttempts; attempt++)
-	{
-		try
-		{
-			return await downloadOnce(options, file, tmpDir);
-		}
-		catch (error)
-		{
-			lastError = error;
-			if (attempt < maxAttempts && retryDelayMs > 0)
-			{
-				await sleep(retryDelayMs * attempt);
-			}
-		}
-	}
-	throw lastError;
-}
-
 type BlobVersion = Omit<typeof fileBlobs.$inferInsert, "systemFrom" | "systemTo">;
 
 /** Phase out the attachment's live version, if any, and insert `row` as the new one, in one unit of work. */
@@ -333,7 +294,7 @@ export async function mirrorFiles(options: MirrorFilesOptions): Promise<MirrorFi
 			}
 			try
 			{
-				const download = await downloadWithRetry(options, file, tmpDir);
+				const download = await downloadFile(options, file, tmpDir);
 				record(
 					database,
 					{

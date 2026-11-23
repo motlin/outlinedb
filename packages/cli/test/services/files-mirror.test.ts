@@ -55,7 +55,7 @@ function fakeServer(
 	options:
 	{
 		bytes?: Record<string, string>;
-		fail?: (nodeId: string, attempt: number) => Response | null;
+		fail?: (nodeId: string) => Response | null;
 		contentLength?: (nodeId: string, body: string) => string;
 	} = {},
 ): FakeServer
@@ -70,12 +70,11 @@ function fakeServer(
 		const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
 		const nodeId = url.pathname.slice(1);
 		fetched.push(nodeId);
-		const attempt = fetched.filter((id) => id === nodeId).length;
 		inFlight++;
 		maxInFlight = Math.max(maxInFlight, inFlight);
 		await sleep(5);
 		inFlight--;
-		const failure = options.fail?.(nodeId, attempt);
+		const failure = options.fail?.(nodeId);
 		if (failure !== null && failure !== undefined)
 		{
 			return failure;
@@ -193,7 +192,6 @@ describe("mirrorFiles", () =>
 				fetch: server.fetch,
 				storeDir,
 				now: () => FETCHED_AT,
-				retryDelayMs: 0,
 				...overrides,
 			},
 		);
@@ -378,13 +376,13 @@ describe("mirrorFiles", () =>
 		);
 	});
 
-	it("re-signs and retries when the signed URL is refused, then records a lasting failure as an error row", async () =>
+	it("records each failed download as an error row without retrying, and the next run fetches it again", async () =>
 	{
 		const server = fakeServer(
 			{
-				fail: (nodeId, attempt) =>
+				fail: (nodeId) =>
 				{
-					if (nodeId === "node-a" && attempt === 1)
+					if (nodeId === "node-a")
 					{
 						return new Response(
 							"expired",
@@ -408,12 +406,19 @@ describe("mirrorFiles", () =>
 				},
 			},
 		);
-		const report = await run(
-			server,
-			{
-				maxAttempts: 2,
-			},
-		);
+		const report = await run(server);
+		const errorRowA =
+		{
+			nodeId: "node-a",
+			status: "error",
+			sha256: null,
+			size: null,
+			contentType: null,
+			localPath: null,
+			error: "HTTP 403 Forbidden",
+			systemFrom: FETCHED_AT_SYSTEM_TIME,
+			systemTo: FAR_FUTURE_DATE,
+		};
 		const errorRowC =
 		{
 			nodeId: "node-c",
@@ -432,22 +437,29 @@ describe("mirrorFiles", () =>
 				downloaded: report.downloaded,
 				failed: report.failed,
 				failures: report.failures,
-				signedA: server.signed.filter((id) => id === "node-a").length,
-				rowC: rows().find((row) => row.nodeId === "node-c"),
+				signed: server.signed.toSorted(),
+				fetched: server.fetched.toSorted(),
+				errorRows: rows().filter((row) => row.status === "error"),
 			},
 		).toStrictEqual(
 			{
-				downloaded: 2,
-				failed: 1,
+				downloaded: 1,
+				failed: 2,
 				failures: [
+					{
+						nodeId: "node-a",
+						fileName: "IMG_0001.jpeg",
+						error: "HTTP 403 Forbidden",
+					},
 					{
 						nodeId: "node-c",
 						fileName: "document.pdf",
 						error: "HTTP 500 Internal Server Error",
 					},
 				],
-				signedA: 2,
-				rowC: errorRowC,
+				signed: ["node-a", "node-b", "node-c"],
+				fetched: ["node-a", "node-b", "node-c"],
+				errorRows: [errorRowA, errorRowC],
 			},
 		);
 
@@ -472,7 +484,7 @@ describe("mirrorFiles", () =>
 		).toStrictEqual(
 			{
 				failed: 0,
-				fetched: ["node-c"],
+				fetched: ["node-a", "node-c"],
 				historyC: [
 					{
 						...errorRowC,
@@ -492,12 +504,7 @@ describe("mirrorFiles", () =>
 					nodeId === "node-b" ? String(Buffer.byteLength(body) + 10) : String(Buffer.byteLength(body)),
 			},
 		);
-		const report = await run(
-			server,
-			{
-				maxAttempts: 1,
-			},
-		);
+		const report = await run(server);
 
 		expect(report.failures).toStrictEqual([
 			{
