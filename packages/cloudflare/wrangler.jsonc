@@ -8,6 +8,15 @@
 	"routes": [{"pattern": "app.outlinedb.com", "custom_domain": true}],
 	"workers_dev": false,
 	"preview_urls": false,
+	// Workers Logs, unsampled, so every exception, Durable Object reset and out-of-memory crash is kept (head sampling
+	// drops whole invocations, errors included). Week of 2026-11-16: ~1.3k Worker requests + ~16k Durable Object
+	// invocations, about 75k log events a month, under 0.5% of the 20M Workers Paid includes ($0.60 per million after).
+	// Lower head_sampling_rate only if that nears 20M. Traces stay off: each span is a billed event too.
+	"observability":
+	{
+		"logs": {"enabled": true, "head_sampling_rate": 1, "invocation_logs": true},
+		"traces": {"enabled": false},
+	},
 	"assets":
 	{
 		"directory": "../web/dist/client",

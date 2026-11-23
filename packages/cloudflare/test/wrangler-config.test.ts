@@ -72,6 +72,24 @@ describe("wrangler.jsonc", () =>
 		);
 	});
 
+	it("keeps every invocation's Workers Logs, exceptions included, with traces off so spans don't multiply the log bill", () =>
+	{
+		expect(readWranglerConfig().observability).toStrictEqual(
+			{
+				logs:
+				{
+					enabled: true,
+					head_sampling_rate: 1,
+					invocation_logs: true,
+				},
+				traces:
+				{
+					enabled: false,
+				},
+			},
+		);
+	});
+
 	it("keeps the Access config out of vars so dashboard secrets are not reset on deploy", () =>
 	{
 		expect(readWranglerConfig().vars).toStrictEqual(
