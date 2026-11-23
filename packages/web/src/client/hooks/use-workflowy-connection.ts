@@ -52,6 +52,10 @@ export function requestErrorMessage(error: unknown): string
 		{
 			return "That sign-in took too long. Start again.";
 		}
+		if (error.code === "workflowy-login-incomplete")
+		{
+			return "Fill in every field workflowy.com asked for.";
+		}
 		if (error.code === "workflowy-login-code-expired")
 		{
 			return "That code expired. Start again to get a new one.";

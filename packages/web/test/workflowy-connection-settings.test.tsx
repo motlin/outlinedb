@@ -226,6 +226,7 @@ afterEach(async () =>
 	});
 	host?.remove();
 	vi.unstubAllGlobals();
+	vi.restoreAllMocks();
 });
 
 /**
@@ -662,9 +663,15 @@ describe("importing from workflowy.com", () =>
 		);
 	});
 
-	it("starts over on request, on an edited email, an expired code, a captcha or a timed-out sign-in, back at the email", async () =>
+	it("starts over on request, on an edited email, an expired code, a captcha or a timed-out sign-in, back at the email, but keeps the attempt through a dropped request or a missing answer", async () =>
 	{
-		const steps: Response[] = [
+		const answerDropped: ((response: Response) => void)[] = [];
+		const dropped = new Promise<Response>((resolve) =>
+		{
+			answerDropped.push(resolve);
+		});
+		const consoleError = vi.spyOn(console, "error");
+		const steps: (Response | Promise<Response>)[] = [
 			passwordStep("attempt-1"),
 			passwordStep("attempt-2"),
 			Response.json(
@@ -680,7 +687,19 @@ describe("importing from workflowy.com", () =>
 				},
 			),
 			passwordStep("attempt-3"),
-			passwordStep("attempt-4"),
+			passwordStep("attempt-4", ["Incorrect password", "Incorrect password"]),
+			dropped,
+			Response.json(
+				{
+					ok: false,
+					status: 400,
+					error: "workflowy-login-incomplete",
+					message: "Fill in password",
+				},
+				{
+					status: 400,
+				},
+			),
 			Response.json(
 				{
 					ok: false,
@@ -703,7 +722,7 @@ describe("importing from workflowy.com", () =>
 				},
 			),
 		];
-		writes["POST /api/v1/workflowy-connection"] = () => steps.shift() ?? Response.json(connection);
+		writes["POST /api/v1/workflowy-connection"] = async () => steps.shift() ?? Response.json(connection);
 		await open();
 		await click(button("Import from workflowy.com"));
 		const before = button("Start over");
@@ -737,6 +756,43 @@ describe("importing from workflowy.com", () =>
 		};
 
 		await click(button("Connect"));
+		const duplicateErrors = text("[role=alert] li");
+		await type("workflowy-login-password", "pw1");
+		await click(button("Connect"));
+		const inFlight =
+		{
+			email: input("workflowy-email").disabled,
+			password: input("workflowy-login-password").disabled,
+			startOver: button("Start over"),
+		};
+		await act(async () =>
+		{
+			answerDropped[0]?.(
+				new Response(
+					"Bad gateway",
+					{
+						status: 502,
+					},
+				),
+			);
+			await Promise.resolve();
+		});
+		await settle();
+		const afterDrop =
+		{
+			alerts: text("[role=alert] > div"),
+			labels: text("label > span"),
+			password: input("workflowy-login-password").value,
+			email: input("workflowy-email").disabled,
+		};
+		await type("workflowy-login-password", "   ");
+		await click(button("Connect"));
+		const incomplete =
+		{
+			alerts: text("[role=alert] > div"),
+			labels: text("label > span"),
+			password: input("workflowy-login-password").value,
+		};
 		await type("workflowy-login-password", "slow");
 		await click(button("Connect"));
 		const expired =
@@ -752,8 +808,13 @@ describe("importing from workflowy.com", () =>
 				codeExpired,
 				cleared,
 				edited,
+				duplicateErrors,
+				inFlight,
+				afterDrop,
+				incomplete,
 				expired,
 				captcha: text("[role=alert] > div"),
+				keyWarnings: consoleError.mock.calls.filter((args) => String(args[0]).includes("same key")).length,
 				calls: calls.map((call) => `${call.method} ${call.path} ${JSON.stringify(call.body)}`),
 			},
 		).toStrictEqual(
@@ -776,12 +837,35 @@ describe("importing from workflowy.com", () =>
 					labels: ["workflowy.com email"],
 					email: "bob@example.com",
 				},
+				duplicateErrors: ["Incorrect password", "Incorrect password"],
+				// Nothing can be typed while a step is in flight, so nothing typed meanwhile is lost.
+				inFlight:
+				{
+					email: true,
+					password: true,
+					startOver: undefined,
+				},
+				// A request that never reached the attempt keeps it, and what was typed.
+				afterDrop:
+				{
+					alerts: ["Something went wrong. Try again."],
+					labels: ["workflowy.com email", "Password"],
+					password: "pw1",
+					email: false,
+				},
+				incomplete:
+				{
+					alerts: ["Fill in every field workflowy.com asked for."],
+					labels: ["workflowy.com email", "Password"],
+					password: "   ",
+				},
 				expired:
 				{
 					alerts: ["That sign-in took too long. Start again."],
 					labels: ["workflowy.com email"],
 				},
 				captcha: ["workflowy.com wants to check you're human. Try again later."],
+				keyWarnings: 0,
 				// Start over and the edited email end the attempt on the server; the expired code already ended it.
 				calls: [
 					'POST /api/v1/workflowy-connection {"email":"alice@example.com"}',
@@ -791,6 +875,8 @@ describe("importing from workflowy.com", () =>
 					'POST /api/v1/workflowy-connection {"email":"alice@example.com"}',
 					"DELETE /api/v1/workflowy-connection/attempt null",
 					'POST /api/v1/workflowy-connection {"email":"bob@example.com"}',
+					'POST /api/v1/workflowy-connection {"attemptId":"attempt-4","values":{"password":"pw1"}}',
+					'POST /api/v1/workflowy-connection {"attemptId":"attempt-4","values":{"password":"   "}}',
 					'POST /api/v1/workflowy-connection {"attemptId":"attempt-4","values":{"password":"slow"}}',
 					'POST /api/v1/workflowy-connection {"email":"bob@example.com"}',
 				],

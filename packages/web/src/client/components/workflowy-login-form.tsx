@@ -48,6 +48,15 @@ type SignInStep =
 			values: Record<string, string>;
 	  };
 
+/** The refusals after which the attempt is gone on the server, so the next try starts again at the email. */
+const ATTEMPT_ENDED = new Set([
+	"workflowy-login-failed",
+	"workflowy-login-unverified",
+	"workflowy-captcha",
+	"workflowy-login-expired",
+	"workflowy-login-code-expired",
+]);
+
 interface SignInFormProps
 {
 	email: string;
@@ -70,10 +79,12 @@ function isCode(field: WorkflowyLoginField): boolean
 function LoginFieldInput({
 	field,
 	value,
+	disabled,
 	onChange,
 }: {
 	field: WorkflowyLoginField;
 	value: string;
+	disabled: boolean;
 	onChange: (value: string) => void;
 })
 {
@@ -85,6 +96,7 @@ function LoginFieldInput({
 			<input
 				autoComplete={password ? "current-password" : code ? "one-time-code" : "off"}
 				className="settings-input"
+				disabled={disabled}
 				inputMode={code ? "numeric" : undefined}
 				name={`workflowy-login-${field.name}`}
 				onChange={(event) =>
@@ -102,7 +114,8 @@ function LoginFieldInput({
 /**
  * Signs in to workflowy.com a step at a time: the email first, then whatever its login form asks for next (a password,
  * a code), with the form's errors and the requests so far. Start over, or a changed email, ends the attempt and goes
- * back to the email. Only the session the login yields is kept, never a password or a code; an answer the form echoed
+ * back to the email, as does a refusal that ended the attempt; a dropped request or a missing answer keeps it and what
+ * was typed. Only the session the login yields is kept, never a password or a code; an answer the form echoed
  * back stays in this browser's memory just long enough to send it again with the next step.
  */
 export function SignInForm({email: initialEmail, submitLabel, onSubmit, onCancel, onActiveChange}: SignInFormProps)
@@ -165,22 +178,22 @@ export function SignInForm({email: initialEmail, submitLabel, onSubmit, onCancel
 					};
 		const send = async () =>
 		{
-			let kept: Record<string, string> = {};
 			try
 			{
 				const next = await onSubmit(sent);
 				setStep(next);
-				if (next !== null && "values" in sent)
-				{
-					kept = Object.fromEntries(next.resend.map((name) => [name, sent.values[name] ?? ""]));
-				}
+				setValues(
+					next !== null && "values" in sent
+						? Object.fromEntries(next.resend.map((name) => [name, sent.values[name] ?? ""]))
+						: {},
+				);
 			}
 			catch (caught)
 			{
-				// Every refusal but a missing answer ended the attempt upstream, so the next try starts at the email.
-				if (!(caught instanceof WorkflowyRequestError && caught.code === "workflowy-login-incomplete"))
+				if (caught instanceof WorkflowyRequestError && ATTEMPT_ENDED.has(caught.code))
 				{
 					setStep(null);
+					setValues({});
 				}
 				setError(
 					{
@@ -189,7 +202,6 @@ export function SignInForm({email: initialEmail, submitLabel, onSubmit, onCancel
 				);
 			}
 			setBusy(false);
-			setValues(kept);
 		};
 		void send();
 	};
@@ -200,6 +212,7 @@ export function SignInForm({email: initialEmail, submitLabel, onSubmit, onCancel
 				<input
 					autoComplete="username"
 					className="settings-input"
+					disabled={busy}
 					name="workflowy-email"
 					onChange={(event) =>
 					{
@@ -216,6 +229,7 @@ export function SignInForm({email: initialEmail, submitLabel, onSubmit, onCancel
 			</label>
 			{step?.fields.map((field) => (
 				<LoginFieldInput
+					disabled={busy}
 					field={field}
 					key={field.name}
 					onChange={(value) =>
@@ -232,8 +246,10 @@ export function SignInForm({email: initialEmail, submitLabel, onSubmit, onCancel
 			{step !== null && step.errors.length > 0 && (
 				<Alert>
 					<ul className="list-disc pl-l">
-						{step.errors.map((message) => (
-							<li key={message}>{message}</li>
+						{step.errors.map((message, index) => (
+							// The form's own list for this step: a message may repeat, the order never changes.
+							// oxlint-disable-next-line react/no-array-index-key
+							<li key={index}>{message}</li>
 						))}
 					</ul>
 				</Alert>
