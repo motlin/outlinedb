@@ -32,8 +32,9 @@ import type
 	OpResult,
 	StoreClient,
 } from "@outlinedb/web/server-app";
-import {WorkflowyInternalClient} from "@outlinedb/shared/api";
-import type {SessionCookieStore} from "@outlinedb/shared/api";
+import {MissingCredentialsError, SessionRejectedError, WorkflowyInternalClient} from "@outlinedb/shared/api";
+import type {InternalAuth, SessionCookieStore} from "@outlinedb/shared/api";
+import {LoggedOut} from "@outlinedb/shared/internal";
 import {drizzle} from "drizzle-orm/durable-sqlite";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {AlarmSchedule} from "./alarm-schedule";
@@ -74,6 +75,16 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 	 * stops syncing.
 	 */
 	private isOwner = false;
+	/**
+	 * Whether this account mirrors workflowy.com through its own connection: keep-syncing is on and an import has
+	 * landed the tree and transaction id to sync from. Writes then record outbox rows, as the owner's do; while the
+	 * session is expired they keep queueing until the user signs in again.
+	 */
+	private connectionMirror = false;
+	/** The connection's opened session cookie, held only in memory while the account keeps syncing. */
+	private mirrorCookie: string | undefined;
+	/** Set when workflowy.com refused the stored session during this alarm; the alarm pauses sync as it ends. */
+	private sessionRefused = false;
 	/** Persists the Workflowy session cookie in this object's storage; only the owner is seeded from the binding. */
 	protected sessionStore!: SessionCookieStore;
 	/** Announces ladder writes; every accepted ladder socket receives each event. */
@@ -171,11 +182,12 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 					},
 				},
 			);
+			this.mirrorCookie = await this.openMirrorSession();
 			this.configure();
-			if (!this.isOwner)
+			if (!this.syncs())
 			{
-				// An object that stopped being an owner (an old email-named one once the owners list names the user id)
-				// drops the sync and drain it had scheduled, instead of waking for them.
+				// An object that stopped syncing (an old email-named one once the owners list names the user id, or an
+				// account whose session expired) drops the sync and drain it had scheduled, instead of waking for them.
 				await this.alarms.cancel(["sync", "outbox"]);
 			}
 		});
@@ -201,12 +213,57 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 						seed: false,
 					},
 				);
-		const config = readWorkerConfig(env, this.isOwner);
-		this.treeSnapshotEnabled = config.features.treeSnapshot;
-		const embedding = config.features.embeddings ? this.embeddingBindings() : undefined;
-		const internalAuth = readWorkerInternalAuth(env, this.sessionStore, this.isOwner);
 		// Namespaced by object id like the related-notes index, so one user can never read another's bytes.
 		const blobs = r2BlobStore(env.FILES, ctx.id.toString());
+		this.workflowyImport = new WorkflowyImportJob(
+			{
+				storage: ctx.storage,
+				db,
+				bucket: env.SNAPSHOTS,
+				blobs,
+				keyPrefix: ctx.id.toString(),
+				openClient: async () => this.storedSessionClient(),
+				expireSession: () =>
+				{
+					this.workflowyConnection.expire();
+				},
+				alarm: this.alarms.for("import"),
+				rows: () => this.rowMeter.rows(),
+				env,
+			},
+		);
+		const connection = this.workflowyConnection.view();
+		const mirrorEmail = connection.connected && connection.mirror ? connection.email : undefined;
+		this.connectionMirror = !this.isOwner && mirrorEmail !== undefined && this.workflowyImport.hasImported();
+		const ownerConfig = readWorkerConfig(env, this.isOwner);
+		const config: typeof ownerConfig = this.connectionMirror
+			?
+				{
+					...ownerConfig,
+					mode: "mirror",
+					accountEmail: mirrorEmail ?? "",
+				}
+			: ownerConfig;
+		this.treeSnapshotEnabled = config.features.treeSnapshot;
+		const embedding = config.features.embeddings ? this.embeddingBindings() : undefined;
+		const internalAuth: InternalAuth | undefined = this.connectionMirror
+			?
+				{
+					// No password to log in with: a refused session surfaces, and the alarm pauses sync on it.
+					sessionStore:
+					{
+						read: () => this.mirrorCookie,
+						write()
+						{
+							// Without a password nothing logs in, so no new cookie ever arrives.
+						},
+						clear()
+						{
+							// The connection, not the client, decides when the stored cookie goes.
+						},
+					},
+				}
+			: readWorkerInternalAuth(env, this.sessionStore, this.isOwner);
 		const serverContext = buildServerContext(
 			{
 				db,
@@ -217,7 +274,9 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 				blobs,
 			},
 		);
-		this.drainOutbox = internalAuth && (async () => serverContext.internalAdapter?.()?.drainOutbox());
+		this.drainOutbox =
+			internalAuth &&
+			(async () => this.watchSession(async () => serverContext.internalAdapter?.()?.drainOutbox()));
 		// A mirror-mode write arms the outbox job for now; the request never waits for the drain.
 		serverContext.outboxWritten = () =>
 		{
@@ -279,28 +338,86 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 							dateJoinedSec: session.dateJoinedSec,
 						};
 					}),
-				catchUp: internalAuth && (async () => serverContext.internalAdapter?.()?.catchUp()),
+				catchUp:
+					internalAuth &&
+					(async () => this.watchSession(async () => serverContext.internalAdapter?.()?.catchUp())),
 				alarm: this.alarms.for("sync"),
 				rows: () => this.rowMeter.rows(),
 			},
 		);
-		this.workflowyImport = new WorkflowyImportJob(
-			{
-				storage: ctx.storage,
-				db,
-				bucket: env.SNAPSHOTS,
-				blobs,
-				keyPrefix: ctx.id.toString(),
-				openClient: async () => this.storedSessionClient(),
-				expireSession: () =>
-				{
-					this.workflowyConnection.expire();
-				},
-				alarm: this.alarms.for("import"),
-				rows: () => this.rowMeter.rows(),
-				env,
-			},
+	}
+
+	/**
+	 * Whether the outbox drain and the transaction-log catch-up run: always for the owner, and for a connection mirror
+	 * while its session is usable and no import is rewriting the tree under them.
+	 */
+	private syncs(): boolean
+	{
+		return (
+			this.isOwner ||
+			(this.connectionMirror && this.mirrorCookie !== undefined && !this.workflowyImport.running())
 		);
+	}
+
+	/** Run a drain or catch-up over the stored session, marking the connection expired when workflowy.com refuses it. */
+	private async watchSession<T>(run: () => Promise<T>): Promise<T>
+	{
+		try
+		{
+			return await run();
+		}
+		catch (error)
+		{
+			if (this.connectionMirror && isSessionRefused(error))
+			{
+				this.workflowyConnection.expire();
+				this.sessionRefused = true;
+			}
+			throw error;
+		}
+	}
+
+	/**
+	 * Rebuild after the connection or an import changed whether this account mirrors workflowy.com: start the sync at
+	 * once when it now runs, else drop its scheduled drain and catch-up. The owner's env-secret mirror never changes here.
+	 */
+	private async reconfigureSync(): Promise<void>
+	{
+		if (this.isOwner)
+		{
+			return;
+		}
+		this.mirrorCookie = await this.openMirrorSession();
+		this.configure();
+		if (!this.syncs())
+		{
+			await this.alarms.cancel(["sync", "outbox"]);
+		}
+		else if (this.alarms.due("sync") === null)
+		{
+			await this.alarms.set("sync", Date.now());
+		}
+	}
+
+	/** The stored session cookie, opened, when the account keeps syncing and its session has not expired. */
+	private async openMirrorSession(): Promise<string | undefined>
+	{
+		const connection = this.workflowyConnection.view();
+		return connection.connected && connection.mirror && connection.status === "connected"
+			? this.openStoredSession()
+			: undefined;
+	}
+
+	/** The live stored session cookie, opened with this object's key; undefined when none is stored. */
+	private async openStoredSession(): Promise<string | undefined>
+	{
+		const sealed = this.workflowyConnection.session();
+		const secret = this.env.OUTLINEDB_CREDENTIALS_KEY;
+		if (sealed === undefined || !secret)
+		{
+			return undefined;
+		}
+		return openSecret(await deriveCredentialsKey(secret, this.ctx.id.toString()), sealed);
 	}
 
 	/**
@@ -309,13 +426,11 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 	 */
 	private async storedSessionClient(): Promise<WorkflowyInternalClient | undefined>
 	{
-		const sealed = this.workflowyConnection.session();
-		const secret = this.env.OUTLINEDB_CREDENTIALS_KEY;
-		if (sealed === undefined || !secret)
+		const cookie = await this.openStoredSession();
+		if (cookie === undefined)
 		{
 			return undefined;
 		}
-		const cookie = await openSecret(await deriveCredentialsKey(secret, this.ctx.id.toString()), sealed);
 		const apiUrl = this.env.WORKFLOWY_API_URL;
 		return new WorkflowyInternalClient(
 			{
@@ -435,28 +550,33 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 		}
 		const key = await deriveCredentialsKey(secret, this.ctx.id.toString());
 		this.workflowyConnection.connect(input.email, await sealSecret(key, cookie));
+		await this.reconfigureSync();
 		return {
 			ok: true,
 			connection: this.workflowyConnection.view(),
 		};
 	}
 
-	/** Turn the account's keep-syncing (two-way mirror) flag on or off; 409 when not connected. */
+	/**
+	 * Turn the account's keep-syncing (two-way mirror) flag on or off; 409 when not connected. On, once an import has
+	 * landed, the drain and catch-up start at once over the stored session; off, they stop.
+	 */
 	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
-	setWorkflowyMirror(mirror: boolean): SetWorkflowyMirrorResult
+	async setWorkflowyMirror(mirror: boolean): Promise<SetWorkflowyMirrorResult>
 	{
-		return this.workflowyConnection.setMirror(mirror)
-			?
-				{
-					ok: true,
-					connection: this.workflowyConnection.view(),
-				}
-			:
-				{
-					ok: false,
-					status: 409,
-					error: "workflowy-not-connected",
-				};
+		if (!this.workflowyConnection.setMirror(mirror))
+		{
+			return {
+				ok: false,
+				status: 409,
+				error: "workflowy-not-connected",
+			};
+		}
+		await this.reconfigureSync();
+		return {
+			ok: true,
+			connection: this.workflowyConnection.view(),
+		};
 	}
 
 	/**
@@ -507,9 +627,10 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 
 	/** Phase the connection out and wipe every stored copy of the session cookie. */
 	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
-	disconnectWorkflowy(): WorkflowyConnectionView
+	async disconnectWorkflowy(): Promise<WorkflowyConnectionView>
 	{
 		this.workflowyConnection.disconnect();
+		await this.reconfigureSync();
 		return this.workflowyConnection.view();
 	}
 
@@ -652,7 +773,7 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 			.one().n;
 		return {
 			storeName: this.ctx.id.name ?? null,
-			mode: this.isOwner ? "mirror" : "standalone",
+			mode: this.isOwner || this.connectionMirror ? "mirror" : "standalone",
 			profile: readProfile(this.ctx.storage.kv),
 			databaseSize: this.ctx.storage.sql.databaseSize,
 			nodeCount: Number(count),
@@ -697,13 +818,16 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 		try
 		{
 			// Outbox before sync, so a catch-up starts from a drained outbox; a scheduled sync tick is also a drain trigger
-			// (approved 2026-11-15), and a drain with nothing pending sends nothing. A non-owner's outbox and sync slots are
-			// cleared without a run: it never enqueues, and has nothing to sync from.
+			// (approved 2026-11-15), and a drain with nothing pending sends nothing. An object that does not sync clears its
+			// outbox and sync slots without a run: a standalone never enqueues, and a paused mirror's rows wait for sign-in.
 			const due = this.alarms.takeDue(Date.now());
+			const syncs = this.syncs();
+			// Read only when the import ticks, so an alarm without one spends no rows on it.
+			const importing = due.includes("import") && this.workflowyImport.running();
 			// A sync that needs a seed cannot drain either, so the outbox waits for the seed instead of failing each write.
 			if (
 				(due.includes("outbox") || due.includes("sync")) &&
-				this.isOwner &&
+				syncs &&
 				this.drainOutbox !== undefined &&
 				!this.sync.needsSeed()
 			)
@@ -718,13 +842,19 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv>
 					console.error("outbox drain failed", error);
 				}
 			}
-			if (due.includes("sync") && this.isOwner)
+			if (due.includes("sync") && syncs && !this.sessionRefused)
 			{
 				await this.sync.tick();
 			}
 			if (due.includes("import"))
 			{
 				await this.workflowyImport.tick();
+			}
+			// A refused session pauses sync until the user signs in again; a finished import may start the mirror.
+			if (this.sessionRefused || (importing && !this.workflowyImport.running()))
+			{
+				this.sessionRefused = false;
+				await this.reconfigureSync();
 			}
 			await this.noticeEmbeddings();
 			if (
@@ -1009,6 +1139,26 @@ async function loginForCookie(login: ConnectWorkflowyInput, apiUrl: string | und
 		throw new Error("Login failed: No session cookie received");
 	}
 	return cookie;
+}
+
+/**
+ * Whether workflowy.com refused the stored session, anywhere in the error's cause chain: a redirect or `logged_out`
+ * answer, and with no password, the re-login that cannot happen.
+ */
+function isSessionRefused(error: unknown): boolean
+{
+	for (let current = error; current instanceof Error; current = current.cause)
+	{
+		if (
+			current instanceof MissingCredentialsError ||
+			current instanceof SessionRejectedError ||
+			current instanceof LoggedOut
+		)
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 /** A fetch whose every request aborts with `signal`. */

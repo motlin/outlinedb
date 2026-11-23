@@ -400,13 +400,12 @@ export async function localDeletePlan(ctx: ServerContext, id: string): Promise<L
 }
 
 /**
- * The internal-API adapter for exact-index tree writes, or undefined when the
- * internal API (or the public API key its write-through refresh needs) is not
- * configured.
+ * The internal-API adapter a mirror drains its outbox and reads account state through, or undefined when the internal
+ * API is not configured. An account mirroring through its own stored session has no public API key, so none is needed.
  */
 export function getAdapter(ctx: ServerContext): WorkflowyInternalAdapter | undefined
 {
-	return ctx.apiKey ? ctx.internalAdapter?.() : undefined;
+	return ctx.internalAdapter?.();
 }
 
 /** Which of `ids` are originals with at least one live mirror: one query for the whole list. */

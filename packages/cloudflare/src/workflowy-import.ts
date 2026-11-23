@@ -341,6 +341,18 @@ export class WorkflowyImportJob
 		return job?.status === "running" ? job : null;
 	}
 
+	/** Whether a run is in progress. */
+	running(): boolean
+	{
+		return this.runningJob() !== null;
+	}
+
+	/** Whether any run has ever finished ok, so this object holds the account's tree and transaction id. */
+	hasImported(): boolean
+	{
+		return this.sql.exec("SELECT 1 FROM workflowy_imports WHERE status = 'ok' LIMIT 1").toArray().length > 0;
+	}
+
 	view(): WorkflowyImportView
 	{
 		const job = this.newestJob();

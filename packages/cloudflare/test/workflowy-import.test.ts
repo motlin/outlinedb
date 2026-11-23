@@ -2,7 +2,7 @@ import {afterAll, beforeAll, describe, expect, it} from "vite-plus/test";
 import {readJson, startHarness} from "./harness";
 import type {Harness} from "./harness";
 import type {ProbeStore} from "./probe-entry";
-import {POLL_MS, sleep, uuid} from "./sync-upstream";
+import {POLL_MS, pollResult, sleep, uuid} from "./sync-upstream";
 
 const PASSWORD = "correct-horse-battery";
 /** The account's join date: every `/get_tree_data/` timestamp counts seconds from it. */
@@ -172,6 +172,50 @@ describe("importing an account from workflowy.com over its stored session", () =
 	/** Cleared to make S3 refuse the scan's bytes, as it does for a file it no longer holds. */
 	let scanAvailable = false;
 	const upstreamCalls: string[] = [];
+	/** Each `/push_and_poll` the account sent: the transaction id it started from and the op types it pushed. */
+	const pushes:
+	{
+		from: string;
+		ops: string[];
+	}[] = [];
+	/** The tree's newest transaction id on the fake workflowy.com; each push and poll moves it on by one. */
+	let upstreamTxId = 701;
+
+	/** Answer one `/push_and_poll` form as workflowy.com does, echoing pushed ops back as the server's run of them. */
+	function pushAndPoll(body: string): Response
+	{
+		const data: unknown = JSON.parse(new URLSearchParams(body).get("push_poll_data") ?? "[]");
+		const tree: unknown = Array.isArray(data) ? data[0] : undefined;
+		const from =
+			typeof tree === "object" && tree !== null ? Reflect.get(tree, "most_recent_operation_transaction_id") : "";
+		const operations: unknown =
+			typeof tree === "object" && tree !== null ? Reflect.get(tree, "operations") : undefined;
+		const ops = Array.isArray(operations) ? operations : [];
+		pushes.push(
+			{
+				from: String(from),
+				ops: ops.map((op: unknown) =>
+					String(typeof op === "object" && op !== null ? Reflect.get(op, "type") : ""),
+				),
+			},
+		);
+		upstreamTxId++;
+		const txId = String(upstreamTxId);
+		return pollResult(
+			txId,
+			ops.length === 0
+				? {}
+				:
+					{
+						server_run_operation_transaction_json: JSON.stringify(
+							{
+								id: txId,
+								ops,
+							},
+						),
+					},
+		);
+	}
 
 	beforeAll(async () =>
 	{
@@ -190,7 +234,7 @@ describe("importing an account from workflowy.com over its stored session", () =
 				IMPORT_FILES_PER_TICK: "1",
 			},
 			{
-				outboundService: (request: Request): Response =>
+				outboundService: async (request: Request): Promise<Response> =>
 				{
 					const url = new URL(request.url);
 					upstreamCalls.push(url.host === "s3.test" ? `s3:${url.pathname}` : url.pathname);
@@ -291,6 +335,10 @@ describe("importing an account from workflowy.com over its stored session", () =
 								features: [],
 							},
 						);
+					}
+					if (url.pathname === "/push_and_poll")
+					{
+						return pushAndPoll(await request.text());
 					}
 					const signed = /^\/file-proxy\/signed-original\/123\/([^/]+)\/$/u.exec(url.pathname);
 					if (signed !== null)
@@ -763,6 +811,244 @@ describe("importing an account from workflowy.com over its stored session", () =
 				{
 					status: 200,
 					body: SCAN_BYTES,
+				},
+			},
+		);
+	}, 60_000);
+
+	/** Poll until `done` holds. */
+	async function until(done: () => boolean | Promise<boolean>): Promise<void>
+	{
+		for (let i = 0; i < 30_000 / POLL_MS; i++)
+		{
+			if (await done())
+			{
+				return;
+			}
+			await sleep(POLL_MS);
+		}
+		throw new Error("timed out waiting");
+	}
+
+	async function alarmDue(job: "outbox" | "sync"): Promise<unknown>
+	{
+		return Reflect.get((await probe(`/__alarm-due?job=${job}`)) as object, "due");
+	}
+
+	async function outbox(): Promise<
+	{
+		pending: number;
+		lastError: string | null;
+	}>
+	{
+		const {pending, lastError} = (await (await store()).syncStatus()).outbox;
+		return {
+			pending,
+			lastError,
+		};
+	}
+
+	async function connectionStatus(): Promise<unknown>
+	{
+		return Reflect.get((await send("workflowy-connection", "GET")).body as object, "status");
+	}
+
+	it("keeps syncing once turned on: catches up from the imported transaction id and delivers writes over the stored session", async () =>
+	{
+		pushes.length = 0;
+		upstreamCalls.length = 0;
+		const turnedOn = await send(
+			"workflowy-connection",
+			"PATCH",
+			{
+				mirror: true,
+			},
+		);
+		await until(() => pushes.length > 0);
+		const created = await send(
+			"nodes",
+			"POST",
+			{
+				parent_id: "None",
+				name: "Written while mirroring",
+			},
+		);
+		await until(async () => pushes.length > 1 && (await outbox()).pending === 0);
+		expect(
+			{
+				turnedOn,
+				created: created.status,
+				pushes,
+				upstreamCalls,
+				outbox: await outbox(),
+				txId: Reflect.get((await probe("/__tree-log")) as object, "txId"),
+				// Every request rode the cookie the connect stored; nothing logged in again.
+				logins,
+				syncScheduled: typeof (await alarmDue("sync")),
+			},
+		).toStrictEqual(
+			{
+				turnedOn:
+				{
+					status: 200,
+					body:
+					{
+						connected: true,
+						status: "connected",
+						email: "alice@example.com",
+						mirror: true,
+					},
+				},
+				created: 201,
+				// The catch-up polls from the transaction id the import seeded, and the write's push follows it.
+				pushes: [
+					{
+						from: "701",
+						ops: [],
+					},
+					{
+						from: "702",
+						ops: ["bulk_create"],
+					},
+				],
+				upstreamCalls: ["/get_initialization_data", "/push_and_poll", "/push_and_poll"],
+				outbox:
+				{
+					pending: 0,
+					lastError: null,
+				},
+				txId: "703",
+				logins: 1,
+				syncScheduled: "number",
+			},
+		);
+	}, 60_000);
+
+	it("pauses syncing when workflowy.com refuses the session, keeps writes queued, and resumes once signed in again", async () =>
+	{
+		sessionsExpired = true;
+		pushes.length = 0;
+		upstreamCalls.length = 0;
+		const due = await (await store()).fetch("http://localhost/__sync-due-now");
+		await until(async () => (await connectionStatus()) === "expired");
+		const queued = await send(
+			"nodes",
+			"POST",
+			{
+				parent_id: "None",
+				name: "Written while paused",
+			},
+		);
+		// The write arms the outbox job; its alarm clears it without a drain, since sync is paused.
+		await until(async () => (await alarmDue("outbox")) === null);
+		const paused =
+		{
+			due: due.status,
+			queued: queued.status,
+			connection: (await send("workflowy-connection", "GET")).body,
+			upstreamCalls: [...upstreamCalls],
+			outbox: await outbox(),
+			syncDue: await alarmDue("sync"),
+			logins,
+		};
+		sessionsExpired = false;
+		pushes.length = 0;
+		upstreamCalls.length = 0;
+		const signedIn = await send(
+			"workflowy-connection",
+			"POST",
+			{
+				email: "alice@example.com",
+				password: PASSWORD,
+			},
+		);
+		await until(async () => pushes.length > 1 && (await outbox()).pending === 0);
+		const resumed =
+		{
+			signedIn: signedIn.body,
+			pushes: [...pushes],
+			outbox: await outbox(),
+			syncScheduled: typeof (await alarmDue("sync")),
+		};
+		const turnedOff = await send(
+			"workflowy-connection",
+			"PATCH",
+			{
+				mirror: false,
+			},
+		);
+		expect(
+			{
+				paused,
+				resumed,
+				off:
+				{
+					connection: turnedOff.body,
+					syncDue: await alarmDue("sync"),
+					outboxDue: await alarmDue("outbox"),
+				},
+			},
+		).toStrictEqual(
+			{
+				paused:
+				{
+					due: 204,
+					queued: 201,
+					connection:
+					{
+						connected: true,
+						status: "expired",
+						email: "alice@example.com",
+						mirror: true,
+					},
+					// One refused catch-up, and no password to log in again with.
+					upstreamCalls: ["/push_and_poll"],
+					outbox:
+					{
+						pending: 2,
+						lastError: null,
+					},
+					syncDue: null,
+					logins: 1,
+				},
+				resumed:
+				{
+					signedIn:
+					{
+						connected: true,
+						status: "connected",
+						email: "alice@example.com",
+						mirror: true,
+					},
+					// The queued write drains first, then the catch-up polls on from its transaction.
+					pushes: [
+						{
+							from: "703",
+							ops: ["bulk_create"],
+						},
+						{
+							from: "704",
+							ops: [],
+						},
+					],
+					outbox:
+					{
+						pending: 0,
+						lastError: null,
+					},
+					syncScheduled: "number",
+				},
+				off:
+				{
+					connection:
+					{
+						connected: true,
+						status: "connected",
+						email: "alice@example.com",
+						mirror: false,
+					},
+					syncDue: null,
+					outboxDue: null,
 				},
 			},
 		);
