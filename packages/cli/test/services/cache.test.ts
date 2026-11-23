@@ -4807,51 +4807,6 @@ describe("cache service", () =>
 			});
 		});
 
-		describe("getNodeWithMergedData", () =>
-		{
-			it("returns node with cache source", () =>
-			{
-				seedTestData(
-					testDatabase,
-					nodeFixtures([
-						createTestNode(
-							{
-								id: "node-1",
-								name: "Test",
-							},
-						),
-					]),
-				);
-
-				const result = cacheService.getNodeWithMergedData("node-1");
-
-				expect(
-					{
-						nodeName: result.node?.name,
-						source: result.source,
-					},
-				).toStrictEqual(
-					{
-						nodeName: "Test",
-						source: "cache",
-					},
-				);
-				expect(result.fetchedAt).toBeInstanceOf(Date);
-			});
-
-			it("returns none source for missing node", () =>
-			{
-				const result = cacheService.getNodeWithMergedData("missing");
-
-				expect(result).toStrictEqual(
-					{
-						node: undefined,
-						source: "none",
-					},
-				);
-			});
-		});
-
 		describe("findNodeByPath", () =>
 		{
 			it("finds node at simple path", () =>

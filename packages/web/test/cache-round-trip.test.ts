@@ -28,6 +28,7 @@ import {undoHistory} from "../src/client/undo-history.js";
 import {fakeAdapter, resetFakeWorkflowy} from "./helpers/fake-workflowy.js";
 import {httpAppFor} from "./http-app-for.js";
 import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
+import {recordMirror} from "../../shared/test/helpers/record-relationships.js";
 
 const outlineState =
 {
@@ -166,7 +167,7 @@ function server(): Hono<AppEnv>
 			null,
 		);
 	}
-	cacheService.insertMirror("charlie", "echo");
+	recordMirror(db, "charlie", "echo");
 	cacheService.insertNode(apiNode("alpha1", "alpha", 0), "alpha");
 	cacheService.insertNode(apiNode("alpha2", "alpha", 1), "alpha");
 	cacheService.insertNode(apiNode("bravo1", "bravo", 0), "bravo");

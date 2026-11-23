@@ -42,6 +42,7 @@ import {CalendarStripView} from "../src/client/components/calendar-strip-view.js
 import type {CalendarStripViewProps} from "../src/client/components/calendar-strip-view.js";
 import {integerOrderKey} from "./helpers/integer-order-key.js";
 import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
+import {recordMirror} from "../../shared/test/helpers/record-relationships.js";
 
 describe("calendar day", () =>
 {
@@ -1090,7 +1091,7 @@ describe("calendar found", () =>
 				.prepare("UPDATE node_metadata SET order_key = ? WHERE node_id = ?")
 				.run(integerOrderKey(priority), id);
 		}
-		cacheService.insertMirror("due", "mirror");
+		recordMirror(db, "due", "mirror");
 		if (rootMetadata !== undefined)
 		{
 			storeInternalMetadata(

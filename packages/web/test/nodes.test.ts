@@ -33,6 +33,7 @@ import type {StoreClient} from "../src/server/store.js";
 import {upstreamExpansionKey} from "@outlinedb/shared/workflowy";
 import {integerOrderKey} from "./helpers/integer-order-key.js";
 import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
+import {recordMirror} from "../../shared/test/helpers/record-relationships.js";
 
 describe("nodes changes route", () =>
 {
@@ -4554,7 +4555,7 @@ describe("nodes virtual id route", () =>
 			cacheService.insertNode(node(MIDDLE, ORIGINAL), ORIGINAL);
 			cacheService.insertNode(node(CHILD, MIDDLE), MIDDLE);
 			cacheService.insertNode(node(MIRROR, PARENT), PARENT);
-			cacheService.insertMirror(ORIGINAL, MIRROR);
+			recordMirror(db, ORIGINAL, MIRROR);
 			const ctx =
 			{
 				db,

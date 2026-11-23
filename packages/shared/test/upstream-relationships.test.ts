@@ -6,6 +6,7 @@ import {collectItemRelationships, emptyItemRelationships} from "../src/cache/ite
 import * as schema from "../src/db/schema.js";
 import {FAR_FUTURE_DATE, systemTimeAt} from "../src/temporal/index.js";
 import {migratedMemoryDatabase} from "./helpers/migrated-memory-database.js";
+import {recordRelationships} from "./helpers/record-relationships.js";
 
 const ORIGINAL = "original";
 const MIRROR = "mirror1";
@@ -133,10 +134,11 @@ describe("CacheService upstream relationship view", () =>
 		{
 			collectItemRelationships(relationships, item.id, item.metadata);
 		}
-		cacheService.recordRelationships(relationships);
+		recordRelationships(db, relationships);
 		const count = (table: string) =>
 			sqlite.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE system_to = ${FAR_FUTURE_DATE}`).get();
 		return {
+			db,
 			cacheService,
 			relationships,
 			count,
@@ -154,9 +156,9 @@ describe("CacheService upstream relationship view", () =>
 
 	it("records each relationship once, however often it is recorded or named from both sides", () =>
 	{
-		const {cacheService, relationships, count} = seeded();
+		const {db, relationships, count} = seeded();
 
-		cacheService.recordRelationships(relationships);
+		recordRelationships(db, relationships);
 
 		expect(
 			{

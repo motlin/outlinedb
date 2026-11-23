@@ -82,6 +82,7 @@ import
 	undeleteOp,
 } from "../src/internal/ops.js";
 import {migratedMemoryDatabase} from "./helpers/migrated-memory-database.js";
+import {recordMirror, recordRelationships} from "./helpers/record-relationships.js";
 
 describe("internal adapter account", () =>
 {
@@ -1241,7 +1242,7 @@ describe("internal adapter backlinks", () =>
 		{
 			collectItemRelationships(imported, id, value.metadata);
 		}
-		cacheService.recordRelationships(imported);
+		recordRelationships(db, imported);
 		forbidTreeData(api);
 		const rows = (sql: string) => sqlite.prepare(sql).all();
 		return {
@@ -3668,7 +3669,7 @@ describe("internal adapter expansion", () =>
 			const {api, adapter, seed} = tracked();
 			seed(["1a2b3c4d", "5e6f7a8b", "ffffffff"]);
 
-			expect(adapter.getExpandedIds()).toStrictEqual([ALPHA, ALPHA_TWIN, BRAVO]);
+			expect(adapter.getExpansionChanges(undefined).expandedIds).toStrictEqual([ALPHA, ALPHA_TWIN, BRAVO]);
 			expect(api.requests).toStrictEqual([]);
 		});
 
@@ -3694,15 +3695,8 @@ describe("internal adapter expansion", () =>
 
 		it("reads a mirror instance's v_ key back as the virtual ids it expands, directed by the key's path", () =>
 		{
-			const {adapter, sqlite, seed} = tracked();
-			const cache = new CacheService(
-				drizzle(
-					sqlite,
-					{
-						schema,
-					},
-				),
-			);
+			const {adapter, db, seed} = tracked();
+			const cache = new CacheService(db);
 			const ORIGINAL = "0a0a0a0a-0000-4000-8000-000000000010";
 			const CHILD = "c0c0c0c0-0000-4000-8000-000000000011";
 			const GRANDCHILD = "d1d1d1d1-0000-4000-8000-000000000012";
@@ -3723,10 +3717,10 @@ describe("internal adapter expansion", () =>
 				CHILD,
 			);
 			cache.insertNode(cachedNode(MIRROR), null);
-			cache.insertMirror(ORIGINAL, MIRROR);
+			recordMirror(db, ORIGINAL, MIRROR);
 			seed(["v_c0c0bbbbbbbb", "v_d1d1bbbbbbbbc0c0", "v_d1d1bbbbbbbb", "5e6f7a8b"]);
 
-			expect(adapter.getExpandedIds()).toStrictEqual([
+			expect(adapter.getExpansionChanges(undefined).expandedIds).toStrictEqual([
 				BRAVO,
 				`virtual_${CHILD}_${MIRROR}_bbbb`,
 				`virtual_${GRANDCHILD}_${MIRROR}_bbbbc0c0`,
@@ -3739,14 +3733,12 @@ describe("internal adapter expansion", () =>
 			seed(["1a2b3c4d"]);
 			clock.ms += 24 * 60 * 60 * 1000;
 
-			const ids = adapter.getExpandedIds();
 			const changes = adapter.getExpansionChanges(undefined);
 			const isExpanded = adapter.expansionTest();
 			const leftBar = adapter.getLeftBarExpansionKeys();
 
 			expect(
 				{
-					ids,
 					changes,
 					alpha: isExpanded(ALPHA),
 					leftBar,
@@ -3755,7 +3747,6 @@ describe("internal adapter expansion", () =>
 				},
 			).toStrictEqual(
 				{
-					ids: [ALPHA, ALPHA_TWIN],
 					changes:
 					{
 						version: expansionVersion(new Set(["1a2b3c4d"])),
@@ -3797,7 +3788,7 @@ describe("internal adapter expansion", () =>
 				START_MS,
 			);
 
-			expect(adapter.getExpandedIds()).toStrictEqual([BRAVO]);
+			expect(adapter.getExpansionChanges(undefined).expandedIds).toStrictEqual([BRAVO]);
 			expect(api.requests).toStrictEqual([]);
 		});
 
@@ -3807,7 +3798,6 @@ describe("internal adapter expansion", () =>
 			const logged = vi.spyOn(console, "error").mockImplementation(() => {});
 
 			const reads: (() => unknown)[] = [
-				() => adapter.getExpandedIds(),
 				() => adapter.getExpansionChanges(undefined),
 				() => adapter.expansionTest(),
 				() => adapter.getLeftBarExpansionKeys(),
@@ -3840,7 +3830,7 @@ describe("internal adapter expansion", () =>
 				{
 					failures: Array.from(
 						{
-							length: 4,
+							length: 3,
 						},
 						() => [
 							true,
@@ -3848,7 +3838,7 @@ describe("internal adapter expansion", () =>
 							"The local cache has no expanded keys; run './bin/run.js cache import-api' to seed them",
 						],
 					),
-					logged: 4,
+					logged: 3,
 					requests: [],
 				},
 			);
@@ -3904,7 +3894,6 @@ describe("internal adapter transaction log", () =>
 				},
 			},
 		);
-		const cache = new CacheService(db);
 		const edges = () => (
 		{
 			mirrors: db
@@ -3933,7 +3922,6 @@ describe("internal adapter transaction log", () =>
 			db,
 			api,
 			adapter,
-			cache,
 			edges,
 		};
 	}
@@ -4308,9 +4296,10 @@ describe("internal adapter transaction log", () =>
 
 		it("merges a whole-map REST add instead of replacing it, then applies the leaf remove", async () =>
 		{
-			const {db, api, adapter, cache, edges} = tracked();
+			const {db, api, adapter, edges} = tracked();
 			storeTreeTxId(db, "100");
-			cache.recordRelationships(
+			recordRelationships(
+				db,
 				{
 					mirrors: [
 						{
@@ -4381,9 +4370,10 @@ describe("internal adapter transaction log", () =>
 
 		it("ends every mirror row of a node on remove [mirror] and a references-root row on its remove, keeping a backlink item's mirror on remove [backlink]", async () =>
 		{
-			const {db, api, adapter, cache, edges} = tracked();
+			const {db, api, adapter, edges} = tracked();
 			storeTreeTxId(db, "100");
-			cache.recordRelationships(
+			recordRelationships(
+				db,
 				{
 					mirrors: [
 						{
@@ -4467,7 +4457,7 @@ describe("internal adapter transaction log", () =>
 
 		it("ends the mirror and references-root rows a deleted node and its subtree own, including nodes created earlier in the batch", async () =>
 		{
-			const {db, api, adapter, cache, edges} = tracked();
+			const {db, api, adapter, edges} = tracked();
 			storeTreeTxId(db, "100");
 			for (const [id, parentId] of [
 				["p", null],
@@ -4489,7 +4479,8 @@ describe("internal adapter transaction log", () =>
 					)
 					.run();
 			}
-			cache.recordRelationships(
+			recordRelationships(
+				db,
 				{
 					mirrors: [
 						{

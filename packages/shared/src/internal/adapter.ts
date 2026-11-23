@@ -1579,23 +1579,13 @@ export class WorkflowyInternalAdapter
 	}
 
 	/**
-	 * Every cached node the account records as expanded. Upstream keys
-	 * expansion by the first 8 chars of the id, so a key resolves to every
-	 * cached id it prefixes (twins expand together, as upstream) and keys with
-	 * no cached node are dropped.
+	 * The expansion change feed: the stored keys' content version, plus every cached node the account records as
+	 * expanded when it differs from the caller's `version`, or always when no `version` is given. Upstream keys
+	 * expansion by the first 8 chars of the id, so a key resolves to every cached id it prefixes (twins expand
+	 * together, as upstream) and keys with no cached node are dropped.
 	 *
-	 * The keys come from our own store (see `cache/expansion-store.ts`), which
-	 * a whole-tree import seeds and every local change updates; no read goes
-	 * to workflowy.com. Without a seed this fails loudly ({@link ExpansionNotSeeded}).
-	 */
-	getExpandedIds(): string[]
-	{
-		return resolveExpandedIds(this.db, this.storedExpansion().keys);
-	}
-
-	/**
-	 * The expansion change feed: the stored keys' content version, plus the expanded ids (as {@link getExpandedIds})
-	 * when it differs from the caller's `version`, or always when no `version` is given.
+	 * The keys come from our own store (see `cache/expansion-store.ts`), which a whole-tree import seeds and every
+	 * local change updates; no read goes to workflowy.com. Without a seed this fails loudly ({@link ExpansionNotSeeded}).
 	 */
 	getExpansionChanges(version: string | undefined): ExpansionChanges
 	{
@@ -1624,7 +1614,7 @@ export class WorkflowyInternalAdapter
 	}
 
 	/**
-	 * Whether an id is expanded, per the same cached keys {@link getExpandedIds} reads, without listing every cached
+	 * Whether an id is expanded, per the same cached keys {@link getExpansionChanges} reads, without listing every cached
 	 * node: an outline view tests only the rows it reaches.
 	 */
 	expansionTest(): (id: string) => boolean

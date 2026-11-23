@@ -2,7 +2,7 @@ import type * as schema from "../db/schema.js";
 import type {AppDatabase} from "../db/types.js";
 import {mirrors, nodeContent, nodeMetadata} from "../db/schema.js";
 import {stripHtmlTags} from "../html/strip-tags.js";
-import {FAR_FUTURE_DATE, parseTemporalTimestamp} from "../temporal/constants.js";
+import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 import type {Node} from "../types/node.js";
 import {isSystemTarget} from "../types/targets.js";
 import type {WorkflowyNode} from "../types/workflowy.js";
@@ -18,13 +18,12 @@ import
 	normalizeLayoutMode,
 } from "./cache-temporal.js";
 import {notBacklinkItem, recordItemRelationships, upstreamRelationshipMetadata} from "./item-relationships.js";
-import type {BacklinkItem, ItemRelationships, UpstreamRelationshipMetadata} from "./item-relationships.js";
+import type {BacklinkItem, UpstreamRelationshipMetadata} from "./item-relationships.js";
 import {inIds} from "./in-ids.js";
 import {loadMirrorOriginals, notAMirror} from "./mirror-text.js";
 import {endNodeComposites, runUnitOfWork} from "./node-composite.js";
 import {currentSiblingIndexes, NodeReader} from "./node-reader.js";
 import {compareBinary, compareSiblingOrder, DEFAULT_ORDER_KEY, orderKeysFor} from "./order-key.js";
-import {newSystemTimestamp} from "./system-time.js";
 import {closeCurrentVersions} from "./temporal-merge.js";
 import type {TemporalTransaction} from "./temporal-merge.js";
 
@@ -544,32 +543,6 @@ export class CacheService
 		// "Personal"). Callers pass plain-text path segments, so fall back to a
 		// tag-stripped comparison when the raw name does not match exactly.
 		return children.find((child) => child.name === name || stripHtmlTags(child.name) === name) ?? null;
-	}
-
-	/**
-	 * Get node with cache timestamp
-	 */
-	getNodeWithMergedData(nodeId: string):
-	{
-		node: Node | undefined;
-		source: "cache" | "none";
-		fetchedAt?: Date;
-	}
-	{
-		const node = this.getNode(nodeId);
-		if (!node)
-		{
-			return {
-				node: undefined,
-				source: "none",
-			};
-		}
-
-		return {
-			node,
-			source: "cache",
-			fetchedAt: parseTemporalTimestamp(node.systemFrom),
-		};
 	}
 
 	/**
@@ -1098,43 +1071,10 @@ export class CacheService
 		return map;
 	}
 
-	/**
-	 * Record the mirror, backlink and references-root rows an accepted push
-	 * created, as one unit of work at one system time. Rows already current
-	 * are left alone.
-	 */
-	recordRelationships(relationships: ItemRelationships): void
-	{
-		runUnitOfWork(this.database, (unitOfWork) =>
-		{
-			recordItemRelationships(unitOfWork, relationships);
-		});
-	}
-
 	/** Each node's upstream `mirror`/`backlink`/`isReferencesRoot` view, rebuilt from the edge tables. */
 	relationshipMetadata(nodeIds: readonly string[]): Map<string, UpstreamRelationshipMetadata>
 	{
 		return upstreamRelationshipMetadata(this.database, nodeIds);
-	}
-
-	/**
-	 * Record that mirrorId is a live mirror of originalId. Mirrors are otherwise
-	 * sourced only from backup imports; this is the write-through path for a
-	 * mirror the CLI just created.
-	 */
-	insertMirror(originalId: string, mirrorId: string): void
-	{
-		this.database
-			.insert(mirrors)
-			.values(
-				{
-					originalId,
-					mirrorId,
-					systemFrom: newSystemTimestamp(),
-					systemTo: FAR_FUTURE_DATE,
-				},
-			)
-			.run();
 	}
 
 	/**

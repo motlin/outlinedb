@@ -8,6 +8,7 @@ import type {AppEnv, ServerContext} from "../src/server/context.js";
 import {mirrorAccountContext} from "./helpers/mirror-account.js";
 import {httpAppFor} from "./http-app-for.js";
 import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-database.js";
+import {recordRelationships} from "../../shared/test/helpers/record-relationships.js";
 
 const
 {
@@ -230,6 +231,7 @@ function setup(
 		adapter,
 		request,
 		writeMetadata,
+		db,
 		cacheService,
 		pending,
 	};
@@ -273,7 +275,7 @@ describe("DELETE /api/v1/nodes/:id backlinks in mirror mode", () =>
 {
 	it("deletes the subtree and the backlink items of its sources locally, and records each delete for the drain", async () =>
 	{
-		const {adapter, request, cacheService, pending} = setup(
+		const {adapter, request, cacheService, db, pending} = setup(
 			true,
 			undefined,
 			"mirror",
@@ -330,7 +332,7 @@ describe("DELETE /api/v1/nodes/:id backlinks in mirror mode", () =>
 				},
 			},
 		);
-		cacheService.recordRelationships(relationships);
+		recordRelationships(db, relationships);
 
 		const {status} = await request("DELETE", "/nodes/n1");
 
