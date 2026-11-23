@@ -624,8 +624,6 @@ export function countChildren(ctx: ServerContext, parentId: string | null): numb
 	return ctx.cacheService.getChildren(parentId).length;
 }
 
-/** A client-generated node id: a lowercase UUID, as upstream's own clients mint. */
-
 /** Open each copy whose source row is expanded (upstream `syncWith`); `rootSource` overrides the top copy's source row. */
 export function openCopies(
 	ctx: ServerContext,
