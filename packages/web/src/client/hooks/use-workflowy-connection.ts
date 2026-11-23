@@ -9,13 +9,14 @@ import {useEffect, useRef} from "react";
 import type {WorkflowyConnection, WorkflowyImport, WorkflowyRefusal} from "../../node-types.js";
 import {readJson} from "../read-json.js";
 
-/** A refused connection request: the Worker's `{error, message?}` body and its status. */
+/** A refused connection request: the Worker's `{error, message?, detail?}` body and its status. */
 export class WorkflowyRequestError extends Error
 {
 	constructor(
 		readonly status: number,
 		readonly code: string,
 		message: string,
+		readonly detail?: string,
 	)
 	{
 		super(message);
@@ -62,6 +63,7 @@ async function send<T>(path: string, method: string, body?: unknown): Promise<T>
 			response.status,
 			refused?.error ?? "",
 			refused?.message ?? `${path} answered ${response.status}`,
+			refused?.detail,
 		);
 	}
 	return readJson<T>(response);

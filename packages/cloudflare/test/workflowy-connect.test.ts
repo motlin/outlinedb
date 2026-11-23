@@ -53,6 +53,9 @@ describe("connecting an account to workflowy.com", () =>
 									{
 										__all__: ["Wrong email or password"],
 									},
+									unknown_challenge: "code-required",
+									email: form.get("username"),
+									echo: `no account for ${form.get("username") ?? ""} with ${form.get("password") ?? ""}`,
 								},
 							);
 				},
@@ -145,6 +148,7 @@ describe("connecting an account to workflowy.com", () =>
 				before,
 				mirror,
 				wrong,
+				wrongLeaked: /alice@example\.com|wrong-password/u.test(JSON.stringify(wrong.body)),
 				after,
 				logins,
 				stored: await stored(),
@@ -178,8 +182,10 @@ describe("connecting an account to workflowy.com", () =>
 						status: 422,
 						error: "workflowy-login-failed",
 						message: "Login failed: Wrong email or password",
+						detail: 'HTTP 200: {"success":false,"errors":{"__all__":["Wrong email or password"]},"unknown_challenge":"code-required","email":"[redacted]","echo":"no account for [redacted] with [redacted]"}',
 					},
 				},
+				wrongLeaked: false,
 				after:
 				{
 					status: 200,

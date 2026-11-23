@@ -280,6 +280,7 @@ describe("Settings > Workflowy", () =>
 					status: 422,
 					error: "workflowy-login-failed",
 					message: "Login failed: Wrong email or password",
+					detail: 'HTTP 200: {"errors":{"__all__":["Wrong email or password"]},"unknown_challenge":"code-required"}',
 				},
 				{
 					status: 422,
@@ -291,7 +292,7 @@ describe("Settings > Workflowy", () =>
 		await type("workflowy-email", " alice@example.com ");
 		await type("workflowy-connection-password", "wrong");
 		await click(button("Connect"));
-		const refused = text("[role=alert]");
+		const refused = text("[role=alert] > div");
 
 		writes["POST /api/v1/workflowy-connection"] = () =>
 		{
@@ -345,7 +346,10 @@ describe("Settings > Workflowy", () =>
 		).toStrictEqual(
 			{
 				disconnectedLabels: ["workflowy.com email", "workflowy.com password"],
-				refused: ["workflowy.com didn't accept that email and password."],
+				refused: [
+					"workflowy.com didn't accept that email and password.",
+					'workflowy.com said: HTTP 200: {"errors":{"__all__":["Wrong email or password"]},"unknown_challenge":"code-required"}',
+				],
 				connectedStatus: ["Connected as alice@example.com", "Not synced yet"],
 				calls: [
 					{

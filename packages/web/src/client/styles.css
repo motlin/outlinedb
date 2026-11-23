@@ -3276,6 +3276,12 @@ body.moving .itemMenu
 	opacity: 0.5;
 }
 
+/* workflowy.com's raw login reply is one long JSON token; let it wrap anywhere. */
+.settings-reply-detail
+{
+	overflow-wrap: anywhere;
+}
+
 .settings-custom-format
 {
 	display: flex;

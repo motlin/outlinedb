@@ -295,6 +295,61 @@ function initializationPath(clientVersion: string): string
 	return `/get_initialization_data?${query.toString()}`;
 }
 
+/**
+ * workflowy.com refused a password login. `detail` is its reply for a person to read: the HTTP status and the body
+ * (every JSON key kept, so an unexpected field such as a second-factor prompt shows), with secret-looking keys, the
+ * email and the password redacted, truncated to {@link LOGIN_DETAIL_MAX} characters. Cookies are never part of it.
+ */
+export class LoginRefusedError extends Error
+{
+	constructor(
+		message: string,
+		readonly detail: string,
+	)
+	{
+		super(message);
+		this.name = "LoginRefusedError";
+	}
+}
+
+const LOGIN_DETAIL_MAX = 500;
+const REDACTED = "[redacted]";
+const SECRET_KEY = /cookie|passw|email|username|session|token|secret|csrf/iu;
+
+/** The login reply as {@link LoginRefusedError.detail} shows it. */
+function loginReplyDetail(status: number, body: string, reply: unknown, credentials: WorkflowyCredentials): string
+{
+	const secrets = [credentials.username, credentials.password]
+		.filter((secret) => secret !== "")
+		.map((secret) => new RegExp(secret.replaceAll(/[.*+?^${}()|[\]\\]/gu, String.raw`\$&`), "giu"));
+	const redact = (text: string): string =>
+		secrets.reduce((redacted, secret) => redacted.replace(secret, REDACTED), text);
+	const scrub = (value: unknown): unknown =>
+	{
+		if (typeof value === "string")
+		{
+			return redact(value);
+		}
+		if (Array.isArray(value))
+		{
+			return value.map(scrub);
+		}
+		if (typeof value === "object" && value !== null)
+		{
+			return Object.fromEntries(
+				Object.entries(value).map(([key, inner]) => [
+					redact(key),
+					SECRET_KEY.test(key) ? REDACTED : scrub(inner),
+				]),
+			);
+		}
+		return value;
+	};
+	const shown = reply === undefined ? redact(body.replaceAll(/\s+/gu, " ").trim()) : JSON.stringify(scrub(reply));
+	const detail = `HTTP ${String(status)}: ${shown === "" ? "(empty body)" : shown}`;
+	return detail.length > LOGIN_DETAIL_MAX ? `${detail.slice(0, LOGIN_DETAIL_MAX - 3)}...` : detail;
+}
+
 /** The server refused the session cookie (a redirect to the login page, or a `logged_out` body). */
 export class SessionRejectedError extends Error
 {
@@ -376,19 +431,26 @@ export class WorkflowyInternalClient
 		}
 
 		// Check response for errors
+		const body = await response.text();
+		const reply = parseJsonOrUndefined(body);
+		const credentials = this.credentials;
+		const refused = (message: string): LoginRefusedError =>
+		{
+			this.sessionCookie = null;
+			return new LoginRefusedError(message, loginReplyDetail(response.status, body, reply, credentials));
+		};
 		if (response.ok || response.status === 302)
 		{
-			const errors = LoginResponseSchema.safeParse(parseJsonOrUndefined(await response.text())).data?.errors;
+			const errors = LoginResponseSchema.safeParse(reply).data?.errors;
 			if (errors)
 			{
-				this.sessionCookie = null;
-				throw new Error(`Login failed: ${Object.values(errors).flat().join(", ")}`);
+				throw refused(`Login failed: ${Object.values(errors).flat().join(", ")}`);
 			}
 		}
 
 		if (!this.sessionCookie)
 		{
-			throw new Error("Login failed: No session cookie received");
+			throw refused("Login failed: No session cookie received");
 		}
 		this.sessionStore?.write(this.sessionCookie);
 	}

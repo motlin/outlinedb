@@ -32,7 +32,13 @@ import type
 	OpResult,
 	StoreClient,
 } from "@outlinedb/web/server-app";
-import {MissingCredentialsError, SessionRejectedError, WorkflowyInternalClient} from "@outlinedb/shared/api";
+import
+{
+	LoginRefusedError,
+	MissingCredentialsError,
+	SessionRejectedError,
+	WorkflowyInternalClient,
+} from "@outlinedb/shared/api";
 import type {InternalAuth} from "@outlinedb/shared/api";
 import {LoggedOut} from "@outlinedb/shared/internal";
 import {drizzle} from "drizzle-orm/durable-sqlite";
@@ -496,6 +502,10 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 				status: 422,
 				error: "workflowy-login-failed",
 				message: error instanceof Error ? error.message : String(error),
+				...(error instanceof LoginRefusedError &&
+				{
+					detail: error.detail,
+				}),
 			};
 		}
 		const key = await deriveCredentialsKey(secret, this.ctx.id.toString());
@@ -914,6 +924,8 @@ export type ConnectWorkflowyResult =
 			status: 422;
 			error: "workflowy-login-failed";
 			message: string;
+			/** workflowy.com's own reply (status and redacted body), when it answered the login with a refusal. */
+			detail?: string;
 	  };
 
 export type StartWorkflowyImportResult =

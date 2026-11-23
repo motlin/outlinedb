@@ -105,6 +105,20 @@ function Alert({children}: {children: ReactNode})
 	);
 }
 
+/** A refused request's message, and under it what workflowy.com itself answered, when the Worker passed that on. */
+function RequestErrorAlert({error}: {error: unknown})
+{
+	const detail = error instanceof WorkflowyRequestError ? error.detail : undefined;
+	return (
+		<Alert>
+			<div>{requestErrorMessage(error)}</div>
+			{detail !== undefined && (
+				<div className="settings-reply-detail text-tertiary">workflowy.com said: {detail}</div>
+			)}
+		</Alert>
+	);
+}
+
 interface SignInFormProps
 {
 	email: string;
@@ -118,7 +132,10 @@ function SignInForm({email: initialEmail, submitLabel, onSubmit}: SignInFormProp
 	const [email, setEmail] = useState(initialEmail);
 	const [password, setPassword] = useState("");
 	const [busy, setBusy] = useState(false);
-	const [error, setError] = useState<string | null>(null);
+	const [error, setError] = useState<
+	{
+		caught: unknown;
+	} | null>(null);
 	const submit = (event: SubmitEvent) =>
 	{
 		event.preventDefault();
@@ -131,7 +148,11 @@ function SignInForm({email: initialEmail, submitLabel, onSubmit}: SignInFormProp
 		onSubmit(email.trim(), password)
 			.catch((caught: unknown) =>
 			{
-				setError(requestErrorMessage(caught));
+				setError(
+					{
+						caught,
+					},
+				);
 			})
 			.finally(() =>
 			{
@@ -171,7 +192,7 @@ function SignInForm({email: initialEmail, submitLabel, onSubmit}: SignInFormProp
 					value={password}
 				/>
 			</label>
-			{error !== null && <Alert>{error}</Alert>}
+			{error !== null && <RequestErrorAlert error={error.caught} />}
 			<div>
 				<button className=" hover:no-underline button" disabled={busy} type="submit">
 					<span className="">{submitLabel}</span>

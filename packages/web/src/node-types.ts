@@ -252,4 +252,6 @@ export interface WorkflowyRefusal
 {
 	error?: string;
 	message?: string;
+	/** workflowy.com's own reply to a refused login (status and redacted body). */
+	detail?: string;
 }

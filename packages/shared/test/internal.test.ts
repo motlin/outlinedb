@@ -6,6 +6,7 @@ import
 {
 	MissingCredentialsError,
 	WorkflowyInternalClient,
+	LoginRefusedError,
 	SessionRejectedError,
 } from "../src/api/workflowy-internal-client.js";
 import {storeTreeTxId, readTreeTxId} from "../src/cache/tree-transaction.js";
@@ -6565,10 +6566,21 @@ describe("internal client bootstrap", () =>
 			]);
 		});
 
-		it("rejects a login whose body lists errors, even when the response sets a session cookie", async () =>
+		it("rejects a login whose body lists errors, even when it sets a session cookie, and keeps the redacted reply as detail", async () =>
 		{
 			const {api, client} = clientWith();
-			api.respond("/ajax_login", () =>
+			async function refusal(): Promise<unknown>
+			{
+				const error: unknown = await client.login().catch((caught: unknown) => caught);
+				return error instanceof LoginRefusedError
+					?
+						{
+							message: error.message,
+							detail: error.detail,
+						}
+					: error;
+			}
+			api.respondOnce("/ajax_login", () =>
 				Response.json(
 					{
 						success: false,
@@ -6576,6 +6588,9 @@ describe("internal client bootstrap", () =>
 						{
 							__all__: ["Wrong email or password"],
 						},
+						unknown_challenge: "code-required",
+						Username: "Alice@Example.com",
+						hint: "hunter2 is not alice@example.com's password",
 					},
 					{
 						headers:
@@ -6585,8 +6600,56 @@ describe("internal client bootstrap", () =>
 					},
 				),
 			);
+			const withErrors = await refusal();
+			api.respondOnce("/ajax_login", () =>
+				Response.json(
+					{
+						success: false,
+						unknown_challenge: true,
+					},
+				),
+			);
+			const noCookie = await refusal();
+			api.respondOnce(
+				"/ajax_login",
+				() =>
+					new Response(
+						`<html>\n  Forbidden for alice@example.com ${"x".repeat(600)}</html>`,
+						{
+							status: 403,
+						},
+					),
+			);
+			const notJson = await refusal();
 
-			await expect(client.login()).rejects.toThrow(new Error("Login failed: Wrong email or password"));
+			expect(
+				{
+					withErrors,
+					noCookie,
+					notJson,
+				},
+			).toStrictEqual(
+				{
+					withErrors:
+					{
+						message: "Login failed: Wrong email or password",
+						detail: 'HTTP 200: {"success":false,"errors":{"__all__":["Wrong email or password"]},"unknown_challenge":"code-required","Username":"[redacted]","hint":"[redacted] is not [redacted]\'s password"}',
+					},
+					noCookie:
+					{
+						message: "Login failed: No session cookie received",
+						detail: 'HTTP 200: {"success":false,"unknown_challenge":true}',
+					},
+					notJson:
+					{
+						message: "Login failed: No session cookie received",
+						detail: `HTTP 403: <html> Forbidden for [redacted] ${"x".repeat(455)}...`,
+					},
+				},
+			);
+			expect(JSON.stringify([withErrors, noCookie, notJson]).toLowerCase()).not.toMatch(
+				/hunter2|alice@example\.com/u,
+			);
 		});
 	});
 });
