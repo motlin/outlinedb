@@ -82,12 +82,13 @@ function changedIn(table: string, column: string, since: number): SQL
 export function changedNodeIds(database: Database, since: number, limit: number): Set<string> | undefined
 {
 	const ids = new Set<string>();
+	// Each leg repeats a node per version it opened or closed, so the limit counts distinct ids.
 	const collect = (query: SQL): boolean =>
 	{
 		const rows = database.all<
 		{
 			id: string;
-		}>(sql`${query} LIMIT ${limit + 1}`);
+		}>(sql`SELECT DISTINCT id FROM (${query}) LIMIT ${limit + 1}`);
 		for (const {id} of rows)
 		{
 			ids.add(id);

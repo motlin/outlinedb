@@ -26,6 +26,7 @@ import {WorkflowyApiClient} from "@outlinedb/shared/api";
 import type {WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import {readNodeConfig} from "../src/server/config.js";
 import {buildServerContext} from "../src/server/context.js";
+import {changesAfter} from "../src/server/system-changes.js";
 import {LadderEventBus} from "../src/server/ladder-events.js";
 import {inProcessStore} from "../src/server/store.js";
 import type {StoreClient} from "../src/server/store.js";
@@ -396,6 +397,28 @@ describe("nodes changes route", () =>
 			const {body} = await changes(null);
 
 			expect(body.latest).toBe(stamp(60_000 + BULK_IMPORT_TIMEOUT_MS + 1000));
+		});
+
+		it("counts the limit in changed nodes, not in the version rows each one opens and closes", async () =>
+		{
+			const {db, cacheService, changes} = setup(2);
+			const seeded = await changes(null);
+			// Each move opens one node_content version and closes another: six rows for three nodes.
+			cacheService.insertNode(apiNode("P0c0", "P1", 5), "P1");
+			cacheService.insertNode(apiNode("P0c1", "P1", 6), "P1");
+			cacheService.insertNode(apiNode("P1c0", "P0", 5), "P0");
+
+			expect(
+				{
+					atLimit: changesAfter(db, seeded.body.latest, 3)?.ids,
+					overLimit: changesAfter(db, seeded.body.latest, 2),
+				},
+			).toStrictEqual(
+				{
+					atLimit: new Set(["P0c0", "P0c1", "P1c0"]),
+					overLimit: undefined,
+				},
+			);
 		});
 
 		it("answers reset for a cursor it never issued", async () =>
