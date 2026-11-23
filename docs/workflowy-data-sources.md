@@ -76,7 +76,8 @@ Code: `packages/shared/src/api/workflowy-internal-client.ts` (reads, login) and 
 
 Endpoints:
 
-- `POST /ajax_login`: username and password in, `sessionid` cookie out. The cookie persists through a `SessionCookieStore` so later runs skip the login. The client re-logs in when the server rejects the cookie (`SessionRejectedError`).
+- `POST /ajax_login`: username and password in, `sessionid` cookie out. The cookie persists through a `SessionCookieStore` so later runs skip the login. The client re-logs in when the server rejects the cookie (`SessionRejectedError`). As of 2026-11-22 workflowy.com answers 404 here; the CLI's `internal login` and the client's re-login still use it.
+- `GET`/`POST /login/`: the server-rendered login form that replaced `/ajax_login`. The GET sets cookies; each POST (the form's hidden values, `email`, and the fields the last reply asked for, with those cookies) answers the same form with the next input to fill (`password`, then perhaps a `code`) and any `errorlist`, a reCAPTCHA, or the `sessionid` cookie. `packages/shared/src/api/workflowy-login-form.ts` relays it a step at a time; the Worker's per-account Connect (`POST /api/v1/workflowy-connection`) uses it and keeps the attempt's cookie jar sealed in the account's Durable Object for ten minutes, never a password or code.
 - `GET /get_initialization_data?...`: user id, `dateJoinedTimestampInSeconds`, `initialMostRecentOperationTransactionId`, a `wfclientid` header, the visible feature list. The live server sends only tree info here, so `fetchSession` also reads `GET /get_user_data/` for the user record, settings, globals, root metadata and `entropyKey`.
 - `GET /get_tree_data/`: the flat item list of the main tree with each item's `metadata`, plus `server_expanded_projects_list` and the tree's transaction id. It is the only complete source of expansion state.
 - `GET /get_settings/`, `POST /change_settings`, `/get_enabled_features/`

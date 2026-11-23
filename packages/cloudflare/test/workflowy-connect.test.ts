@@ -4,11 +4,53 @@ import type {Harness} from "./harness";
 import type {ProbeStore} from "./probe-entry";
 
 const PASSWORD = "correct-horse-battery";
+const CODE = "WF-4242";
+
+/** One request the fake workflowy.com received: what the relay sent upstream, cookies and form fields included. */
+interface Upstream
+{
+	method: string;
+	path: string;
+	cookie: string | null;
+	referer: string | null;
+	origin: string | null;
+	form: Record<string, string>;
+}
+
+/** workflowy.com's login page as its server renders it: hidden values, the email, the inputs asked for, any errors. */
+function loginPage(
+	email: string,
+	inputs: string,
+	errors: string[] = [],
+	headers: Record<string, string> = {},
+): Response
+{
+	const list = errors.length === 0 ? "" : `<ul class="errorlist nonfield"><li>${errors.join("</li><li>")}</li></ul>`;
+	return new Response(
+		`<!doctype html><html><head><script>if (document.querySelector("#code")) {}</script></head><body>
+<form method="POST">${list}
+<input type="hidden" name="next" value="/"><input type="hidden" name="utm_source" value="">
+<input type="hidden" name="utm_campaign" value=""><input type="hidden" name="utm_medium" value="">
+<input type="email" name="email" id="id_email" value="${email}">${inputs}
+<button type="submit">Log in</button></form></body></html>`,
+		{
+			headers:
+			{
+				"content-type": "text/html; charset=utf-8",
+				...headers,
+			},
+		},
+	);
+}
+
+const PASSWORD_INPUT =
+	'<div id="password"><label for="id_password">Password</label><input type="password" name="password" id="id_password"></div>';
 
 describe("connecting an account to workflowy.com", () =>
 {
 	let harness: Harness;
-	const logins: string[] = [];
+	const upstream: Upstream[] = [];
+	let sessions = 0;
 
 	beforeAll(async () =>
 	{
@@ -22,10 +64,22 @@ describe("connecting an account to workflowy.com", () =>
 				WORKFLOWY_API_URL: "http://upstream.test",
 			},
 			{
+				// workflowy.com's /login/ form: email, then password, then an emailed code, then the session.
 				outboundService: async (request: Request): Promise<Response> =>
 				{
 					const url = new URL(request.url);
-					if (url.pathname !== "/ajax_login")
+					const form = Object.fromEntries(new URLSearchParams(await request.text()));
+					upstream.push(
+						{
+							method: request.method,
+							path: url.pathname,
+							cookie: request.headers.get("cookie"),
+							referer: request.headers.get("referer"),
+							origin: request.headers.get("origin"),
+							form,
+						},
+					);
+					if (url.pathname !== "/login/")
 					{
 						return new Response(
 							"unexpected",
@@ -34,30 +88,69 @@ describe("connecting an account to workflowy.com", () =>
 							},
 						);
 					}
-					const form = new URLSearchParams(await request.text());
-					logins.push(form.get("username") ?? "");
-					return form.get("password") === PASSWORD
-						? new Response(
-								"",
-								{
-									headers:
-									{
-										"set-cookie": `sessionid=upstream-session-${String(logins.length)}; Path=/; HttpOnly`,
-									},
-								},
-							)
-						: Response.json(
-								{
-									success: false,
-									errors:
-									{
-										__all__: ["Wrong email or password"],
-									},
-									unknown_challenge: "code-required",
-									email: form.get("username"),
-									echo: `no account for ${form.get("username") ?? ""} with ${form.get("password") ?? ""}`,
-								},
+					if (request.method === "GET")
+					{
+						return loginPage(
+							"",
+							"",
+							[],
+							{
+								"set-cookie": "_bess=b1; Path=/; HttpOnly",
+							},
+						);
+					}
+					const email = form.email ?? "";
+					if (email === "bot@example.com")
+					{
+						return loginPage(email, '<div class="g-recaptcha" data-sitekey="site"></div>', [
+							"Just making sure you&#x27;re human...",
+						]);
+					}
+					if (email === "odd@example.com")
+					{
+						return new Response(
+							`<html><head><style>body{}</style></head><body><h1>Server error</h1><p>No login for ${email}</p></body></html>`,
+							{
+								status: 500,
+							},
+						);
+					}
+					if (form.code !== undefined)
+					{
+						if (form.code !== CODE)
+						{
+							return loginPage(
+								email,
+								'<input type="hidden" name="login_step" value="code"><input type="text" name="code" id="id_code" autocomplete="one-time-code">',
+								["That code is not right."],
 							);
+						}
+						sessions++;
+						return new Response(
+							null,
+							{
+								status: 302,
+								headers:
+								{
+									location: "/",
+									"set-cookie": `sessionid=upstream-session-${String(sessions)}; Path=/; HttpOnly`,
+								},
+							},
+						);
+					}
+					if (form.password === undefined)
+					{
+						return loginPage(email, PASSWORD_INPUT);
+					}
+					if (form.password !== PASSWORD)
+					{
+						return loginPage(email, PASSWORD_INPUT, ["Please enter a correct email and password."]);
+					}
+					// The code step echoes the password back as a hidden input, which the relay must never keep.
+					return loginPage(
+						email,
+						`<input type="hidden" name="login_step" value="code"><input type="hidden" name="password" value="${PASSWORD}"><label for="id_code">Code from your email</label><input type="text" name="code" id="id_code" autocomplete="one-time-code">`,
+					);
 				},
 			},
 		);
@@ -102,17 +195,23 @@ describe("connecting an account to workflowy.com", () =>
 		};
 	}
 
-	/** The stored session's opened cookie, how many sealed BLOBs the connection's versions hold, and what leaked anywhere. */
+	/**
+	 * The stored session's opened cookie, how many sealed BLOBs the connection's versions hold, the live login attempt
+	 * opened with this object's key, and whether a secret shows anywhere in the database.
+	 */
 	async function stored(): Promise<
 	{
 		cookie: string | null;
 		blobs: number;
-		passwordStored: boolean;
+		attempt: unknown;
+		secretsStored: boolean;
 		cookieInPlaintext: boolean;
 	}>
 	{
 		const stub = await store();
 		const dump = await stub.storageDump();
+		const attempt = await stub.openedWorkflowyLoginAttempt();
+		const everything = `${dump}\n${attempt ?? ""}`;
 		return {
 			cookie: await stub.openedWorkflowySession(),
 			blobs:
@@ -121,12 +220,62 @@ describe("connecting an account to workflowy.com", () =>
 					.filter((line) => line.startsWith("workflowy_connection|"))
 					.join("\n")
 					.split("blob:").length - 1,
-			passwordStored: dump.includes(PASSWORD),
+			attempt: attempt === null ? null : JSON.parse(attempt),
+			secretsStored: [PASSWORD, "wrong-password", CODE, "WF-0000"].some((secret) => everything.includes(secret)),
 			cookieInPlaintext: dump.includes("upstream-session"),
 		};
 	}
 
-	it("starts disconnected, refuses keep-syncing before a connection, and keeps nothing from a failed login", async () =>
+	/** The fields a login step asks for: the relay's generic description of each visible input. */
+	const PASSWORD_FIELD =
+	{
+		name: "password",
+		type: "password",
+		label: "Password",
+	};
+	const CODE_FIELD =
+	{
+		name: "code",
+		type: "text",
+		label: "Code from your email",
+	};
+	const HIDDEN =
+	{
+		next: "/",
+		utm_source: "",
+		utm_campaign: "",
+		utm_medium: "",
+	};
+
+	/** What the relay sends upstream for each step, as the fake recorded it. */
+	function post(cookie: string, form: Record<string, string>): Upstream
+	{
+		return {
+			method: "POST",
+			path: "/login/",
+			cookie,
+			referer: "http://upstream.test",
+			origin: "http://upstream.test",
+			form,
+		};
+	}
+	const GET_LOGIN: Upstream =
+	{
+		method: "GET",
+		path: "/login/",
+		cookie: null,
+		referer: null,
+		origin: null,
+		form: {},
+	};
+
+	function attemptId(body: unknown): string
+	{
+		const id: unknown = typeof body === "object" && body !== null ? Reflect.get(body, "attemptId") : undefined;
+		return typeof id === "string" ? id : "";
+	}
+
+	it("starts disconnected, and ends an attempt on a captcha, an unexpected reply, an unknown or expired attempt, keeping nothing", async () =>
 	{
 		const before = await send("GET");
 		const mirror = await send(
@@ -135,11 +284,43 @@ describe("connecting an account to workflowy.com", () =>
 				mirror: true,
 			},
 		);
-		const wrong = await send(
+		const captcha = await send(
+			"POST",
+			{
+				email: "bot@example.com",
+			},
+		);
+		const odd = await send(
+			"POST",
+			{
+				email: "odd@example.com",
+			},
+		);
+		const unknown = await send(
+			"POST",
+			{
+				attemptId: "no-such-attempt",
+				values:
+				{
+					password: PASSWORD,
+				},
+			},
+		);
+		const started = await send(
 			"POST",
 			{
 				email: "alice@example.com",
-				password: "wrong-password",
+			},
+		);
+		await (await store()).ageWorkflowyLoginAttempt(10 * 60 * 1000);
+		const expired = await send(
+			"POST",
+			{
+				attemptId: attemptId(started.body),
+				values:
+				{
+					password: PASSWORD,
+				},
 			},
 		);
 		const after = await send("GET");
@@ -147,10 +328,13 @@ describe("connecting an account to workflowy.com", () =>
 			{
 				before,
 				mirror,
-				wrong,
-				wrongLeaked: /alice@example\.com|wrong-password/u.test(JSON.stringify(wrong.body)),
+				captcha,
+				odd,
+				unknown,
+				started,
+				expired,
 				after,
-				logins,
+				upstream: upstream.splice(0),
 				stored: await stored(),
 			},
 		).toStrictEqual(
@@ -173,7 +357,19 @@ describe("connecting an account to workflowy.com", () =>
 						error: "workflowy-not-connected",
 					},
 				},
-				wrong:
+				captcha:
+				{
+					status: 422,
+					body:
+					{
+						ok: false,
+						status: 422,
+						error: "workflowy-captcha",
+						message: "workflowy.com asked for a captcha. Try again later.",
+					},
+				},
+				// The page's text, without its markup or style, with the email redacted.
+				odd:
 				{
 					status: 422,
 					body:
@@ -181,11 +377,41 @@ describe("connecting an account to workflowy.com", () =>
 						ok: false,
 						status: 422,
 						error: "workflowy-login-failed",
-						message: "Login failed: Wrong email or password",
-						detail: 'HTTP 200: {"success":false,"errors":{"__all__":["Wrong email or password"]},"unknown_challenge":"code-required","email":"[redacted]","echo":"no account for [redacted] with [redacted]"}',
+						message: "Login failed: workflowy.com answered unexpectedly",
+						detail: "HTTP 500: Server error No login for [redacted]",
 					},
 				},
-				wrongLeaked: false,
+				unknown:
+				{
+					status: 409,
+					body:
+					{
+						ok: false,
+						status: 409,
+						error: "workflowy-login-expired",
+					},
+				},
+				started:
+				{
+					status: 200,
+					body:
+					{
+						attemptId: attemptId(started.body),
+						fields: [PASSWORD_FIELD],
+						errors: [],
+					},
+				},
+				// Ten minutes on, the attempt is gone and its password never left OutlineDB.
+				expired:
+				{
+					status: 409,
+					body:
+					{
+						ok: false,
+						status: 409,
+						error: "workflowy-login-expired",
+					},
+				},
 				after:
 				{
 					status: 200,
@@ -194,51 +420,233 @@ describe("connecting an account to workflowy.com", () =>
 						connected: false,
 					},
 				},
-				logins: ["alice@example.com"],
+				upstream: [
+					GET_LOGIN,
+					post(
+						"_bess=b1",
+						{
+							...HIDDEN,
+							email: "bot@example.com",
+						},
+					),
+					GET_LOGIN,
+					post(
+						"_bess=b1",
+						{
+							...HIDDEN,
+							email: "odd@example.com",
+						},
+					),
+					GET_LOGIN,
+					post(
+						"_bess=b1",
+						{
+							...HIDDEN,
+							email: "alice@example.com",
+						},
+					),
+				],
 				stored:
 				{
 					cookie: null,
 					blobs: 0,
-					passwordStored: false,
+					attempt: null,
+					secretsStored: false,
 					cookieInPlaintext: false,
 				},
 			},
 		);
 	});
 
-	it("logs in once, keeps only the sealed cookie, defaults keep-syncing off, and keeps one sealed copy across versions", async () =>
+	it("relays email, password and code, re-asks after a wrong answer, and keeps only the sealed session, never a password or code", async () =>
 	{
-		const connected = await send(
+		const started = await send(
 			"POST",
 			{
 				email: " alice@example.com ",
-				password: PASSWORD,
 			},
 		);
-		const afterConnect = await stored();
-		const mirrored = await send(
-			"PATCH",
-			{
-				mirror: true,
-			},
-		);
-		const reconnected = await send(
+		const id = attemptId(started.body);
+		const afterEmail = await stored();
+		const wrong = await send(
 			"POST",
 			{
-				email: "alice@example.com",
-				password: PASSWORD,
+				attemptId: id,
+				values:
+				{
+					password: "wrong-password",
+				},
+			},
+		);
+		const missing = await send(
+			"POST",
+			{
+				attemptId: id,
+				values: {},
+			},
+		);
+		const password = await send(
+			"POST",
+			{
+				attemptId: id,
+				values:
+				{
+					password: PASSWORD,
+					next: "https://evil.test/",
+				},
+			},
+		);
+		const afterPassword = await stored();
+		const wrongCode = await send(
+			"POST",
+			{
+				attemptId: id,
+				values:
+				{
+					code: "WF-0000",
+				},
+			},
+		);
+		const connected = await send(
+			"POST",
+			{
+				attemptId: id,
+				values:
+				{
+					code: CODE,
+				},
+			},
+		);
+		const replay = await send(
+			"POST",
+			{
+				attemptId: id,
+				values:
+				{
+					code: CODE,
+				},
 			},
 		);
 		expect(
 			{
+				started,
+				afterEmail,
+				wrong,
+				missing,
+				password,
+				afterPassword,
+				wrongCode,
 				connected,
-				afterConnect,
-				mirrored,
-				reconnected,
-				afterReconnect: await stored(),
+				replay,
+				upstream: upstream.splice(0),
+				stored: await stored(),
 			},
 		).toStrictEqual(
 			{
+				started:
+				{
+					status: 200,
+					body:
+					{
+						attemptId: id,
+						fields: [PASSWORD_FIELD],
+						errors: [],
+					},
+				},
+				// Between steps the object keeps only workflowy.com's cookies and the form's hidden values, sealed.
+				afterEmail:
+				{
+					cookie: null,
+					blobs: 0,
+					attempt:
+					{
+						attemptId: id,
+						email: "alice@example.com",
+						state:
+						{
+							jar:
+							{
+								_bess: "b1",
+							},
+							hidden: HIDDEN,
+							fields: ["password"],
+						},
+					},
+					secretsStored: false,
+					cookieInPlaintext: false,
+				},
+				wrong:
+				{
+					status: 200,
+					body:
+					{
+						attemptId: id,
+						fields: [PASSWORD_FIELD],
+						errors: ["Please enter a correct email and password."],
+					},
+				},
+				missing:
+				{
+					status: 400,
+					body:
+					{
+						ok: false,
+						status: 400,
+						error: "workflowy-login-incomplete",
+						message: "Fill in password",
+					},
+				},
+				password:
+				{
+					status: 200,
+					body:
+					{
+						attemptId: id,
+						fields: [CODE_FIELD],
+						errors: [],
+					},
+				},
+				// The code step's hidden echo of the password is dropped, not kept.
+				afterPassword:
+				{
+					cookie: null,
+					blobs: 0,
+					attempt:
+					{
+						attemptId: id,
+						email: "alice@example.com",
+						state:
+						{
+							jar:
+							{
+								_bess: "b1",
+							},
+							hidden:
+							{
+								...HIDDEN,
+								login_step: "code",
+							},
+							fields: ["code"],
+						},
+					},
+					secretsStored: false,
+					cookieInPlaintext: false,
+				},
+				wrongCode:
+				{
+					status: 200,
+					body:
+					{
+						attemptId: id,
+						fields: [
+							{
+								...CODE_FIELD,
+								label: "code",
+							},
+						],
+						errors: ["That code is not right."],
+					},
+				},
 				connected:
 				{
 					status: 200,
@@ -251,13 +659,117 @@ describe("connecting an account to workflowy.com", () =>
 						lastSyncAt: null,
 					},
 				},
-				afterConnect:
+				// A finished attempt is gone.
+				replay:
 				{
-					cookie: "sessionid=upstream-session-2",
+					status: 409,
+					body:
+					{
+						ok: false,
+						status: 409,
+						error: "workflowy-login-expired",
+					},
+				},
+				// Only the fields the form asked for go upstream; `next` from the client never does.
+				upstream: [
+					GET_LOGIN,
+					post(
+						"_bess=b1",
+						{
+							...HIDDEN,
+							email: "alice@example.com",
+						},
+					),
+					post(
+						"_bess=b1",
+						{
+							...HIDDEN,
+							email: "alice@example.com",
+							password: "wrong-password",
+						},
+					),
+					post(
+						"_bess=b1",
+						{
+							...HIDDEN,
+							email: "alice@example.com",
+							password: PASSWORD,
+						},
+					),
+					post(
+						"_bess=b1",
+						{
+							...HIDDEN,
+							login_step: "code",
+							email: "alice@example.com",
+							code: "WF-0000",
+						},
+					),
+					post(
+						"_bess=b1",
+						{
+							...HIDDEN,
+							login_step: "code",
+							email: "alice@example.com",
+							code: CODE,
+						},
+					),
+				],
+				stored:
+				{
+					cookie: "sessionid=upstream-session-1",
 					blobs: 2,
-					passwordStored: false,
+					attempt: null,
+					secretsStored: false,
 					cookieInPlaintext: false,
 				},
+			},
+		);
+	});
+
+	it("keeps keep-syncing across a reconnect, with one sealed cookie across versions", async () =>
+	{
+		const mirrored = await send(
+			"PATCH",
+			{
+				mirror: true,
+			},
+		);
+		const started = await send(
+			"POST",
+			{
+				email: "alice@example.com",
+			},
+		);
+		await send(
+			"POST",
+			{
+				attemptId: attemptId(started.body),
+				values:
+				{
+					password: PASSWORD,
+				},
+			},
+		);
+		const reconnected = await send(
+			"POST",
+			{
+				attemptId: attemptId(started.body),
+				values:
+				{
+					code: CODE,
+				},
+			},
+		);
+		upstream.length = 0;
+		expect(
+			{
+				mirrored,
+				reconnected,
+				afterReconnect: await stored(),
+			},
+		).toStrictEqual(
+			{
 				mirrored:
 				{
 					status: 200,
@@ -270,7 +782,6 @@ describe("connecting an account to workflowy.com", () =>
 						lastSyncAt: null,
 					},
 				},
-				// A reconnect replaces the cookie but keeps the keep-syncing choice.
 				reconnected:
 				{
 					status: 200,
@@ -286,9 +797,10 @@ describe("connecting an account to workflowy.com", () =>
 				// Only the live version holds a sealed cookie (its nonce and ciphertext); closed versions were stripped.
 				afterReconnect:
 				{
-					cookie: "sessionid=upstream-session-3",
+					cookie: "sessionid=upstream-session-2",
 					blobs: 2,
-					passwordStored: false,
+					attempt: null,
+					secretsStored: false,
 					cookieInPlaintext: false,
 				},
 			},
@@ -326,7 +838,8 @@ describe("connecting an account to workflowy.com", () =>
 				{
 					cookie: null,
 					blobs: 0,
-					passwordStored: false,
+					attempt: null,
+					secretsStored: false,
 					cookieInPlaintext: false,
 				},
 			},

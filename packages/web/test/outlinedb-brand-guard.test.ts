@@ -14,7 +14,7 @@ const UPSTREAM_REFERENCES = [
 	/\b[a-z]\w*Workflowy\w*/gu,
 	/\bWorkflowy[A-Z]\w*/gu,
 	// An account's connection to and import from upstream workflowy.com: its routes, modules, fields and errors.
-	/\bworkflowy[_-](?:connection|email|login-failed|session-expired|imports?)(?:[_-]\w+)*\b/gu,
+	/\bworkflowy[_-](?:connection|email|login|captcha|session-expired|imports?)(?:[_-]\w+)*\b/gu,
 ];
 
 /** Remaining mentions that name upstream, as "file: trimmed line": upstream menu keys, the workflowy.com link icon and system mention. */

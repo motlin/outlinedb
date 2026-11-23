@@ -33,6 +33,12 @@ let run: WorkflowyImportRun | null = null;
 let writes: Partial<Record<string, (body: unknown) => Response>> = {};
 
 const FINISHED = Date.UTC(2026, 10, 22, 12, 0);
+const PASSWORD_FIELD =
+{
+	name: "password",
+	type: "password",
+	label: "Password",
+};
 
 function connected(
 	overrides: Partial<
@@ -271,35 +277,92 @@ function text(selector: string): string[]
 
 describe("Settings > Workflowy", () =>
 {
-	it("connects with the workflowy.com email and password, says why a login failed, then imports with keep-syncing on", async () =>
+	it("connects by answering each field workflowy.com's form asks for, shows its errors, then imports with keep-syncing on", async () =>
 	{
-		writes["POST /api/v1/workflowy-connection"] = () =>
+		const steps: Response[] = [
 			Response.json(
 				{
 					ok: false,
 					status: 422,
 					error: "workflowy-login-failed",
-					message: "Login failed: Wrong email or password",
-					detail: 'HTTP 200: {"errors":{"__all__":["Wrong email or password"]},"unknown_challenge":"code-required"}',
+					message: "Login failed: workflowy.com answered unexpectedly",
+					detail: "HTTP 500: Server error",
 				},
 				{
 					status: 422,
 				},
-			);
-		await open();
-		const disconnectedLabels = text("label > span");
-
-		await type("workflowy-email", " alice@example.com ");
-		await type("workflowy-connection-password", "wrong");
-		await click(button("Connect"));
-		const refused = text("[role=alert] > div");
-
+			),
+			Response.json(
+				{
+					attemptId: "attempt-1",
+					fields: [PASSWORD_FIELD],
+					errors: [],
+				},
+			),
+			Response.json(
+				{
+					attemptId: "attempt-1",
+					fields: [PASSWORD_FIELD],
+					errors: ["Please enter a correct email and password."],
+				},
+			),
+			Response.json(
+				{
+					attemptId: "attempt-1",
+					fields: [
+						{
+							name: "code",
+							type: "text",
+							label: "Code from your email",
+						},
+					],
+					errors: [],
+				},
+			),
+		];
 		writes["POST /api/v1/workflowy-connection"] = () =>
 		{
+			const next = steps.shift();
+			if (next !== undefined)
+			{
+				return next;
+			}
 			connection = connected();
 			return Response.json(connection);
 		};
-		await type("workflowy-connection-password", "right");
+		await open();
+		const emailOnly = text("label > span");
+
+		await type("workflowy-email", " alice@example.com ");
+		await click(button("Connect"));
+		const refused = text("[role=alert] > div");
+
+		await click(button("Connect"));
+		const askedPassword =
+		{
+			labels: text("label > span"),
+			type: input("workflowy-login-password").type,
+			emailLocked: input("workflowy-email").disabled,
+		};
+		await type("workflowy-login-password", "wrong");
+		await click(button("Connect"));
+		const wrong =
+		{
+			alerts: text("[role=alert] li"),
+			password: input("workflowy-login-password").value,
+		};
+		await type("workflowy-login-password", "right");
+		await click(button("Connect"));
+		const code = input("workflowy-login-code");
+		const askedCode =
+		{
+			labels: text("label > span"),
+			autocomplete: code.autocomplete,
+			inputMode: code.inputMode,
+			type: code.type,
+			alerts: text("[role=alert]"),
+		};
+		await type("workflowy-login-code", "123456");
 		await click(button("Connect"));
 		const connectedStatus = text("[data-workflowy-connection=status] > *");
 
@@ -335,8 +398,11 @@ describe("Settings > Workflowy", () =>
 
 		expect(
 			{
-				disconnectedLabels,
+				emailOnly,
 				refused,
+				askedPassword,
+				wrong,
+				askedCode,
 				connectedStatus,
 				calls,
 				progress: text("[data-workflowy-import] output"),
@@ -345,11 +411,28 @@ describe("Settings > Workflowy", () =>
 			},
 		).toStrictEqual(
 			{
-				disconnectedLabels: ["workflowy.com email", "workflowy.com password"],
-				refused: [
-					"workflowy.com didn't accept that email and password.",
-					'workflowy.com said: HTTP 200: {"errors":{"__all__":["Wrong email or password"]},"unknown_challenge":"code-required"}',
-				],
+				emailOnly: ["workflowy.com email"],
+				refused: ["workflowy.com didn't accept that sign-in.", "workflowy.com said: HTTP 500: Server error"],
+				askedPassword:
+				{
+					labels: ["workflowy.com email", "Password"],
+					type: "password",
+					emailLocked: true,
+				},
+				// The form's own errors show, and the password is cleared for another try.
+				wrong:
+				{
+					alerts: ["Please enter a correct email and password."],
+					password: "",
+				},
+				askedCode:
+				{
+					labels: ["workflowy.com email", "Code from your email"],
+					autocomplete: "one-time-code",
+					inputMode: "numeric",
+					type: "text",
+					alerts: [],
+				},
 				connectedStatus: ["Connected as alice@example.com", "Not synced yet"],
 				calls: [
 					{
@@ -358,7 +441,6 @@ describe("Settings > Workflowy", () =>
 						body:
 						{
 							email: "alice@example.com",
-							password: "wrong",
 						},
 					},
 					{
@@ -367,7 +449,42 @@ describe("Settings > Workflowy", () =>
 						body:
 						{
 							email: "alice@example.com",
-							password: "right",
+						},
+					},
+					{
+						method: "POST",
+						path: "/api/v1/workflowy-connection",
+						body:
+						{
+							attemptId: "attempt-1",
+							values:
+							{
+								password: "wrong",
+							},
+						},
+					},
+					{
+						method: "POST",
+						path: "/api/v1/workflowy-connection",
+						body:
+						{
+							attemptId: "attempt-1",
+							values:
+							{
+								password: "right",
+							},
+						},
+					},
+					{
+						method: "POST",
+						path: "/api/v1/workflowy-connection",
+						body:
+						{
+							attemptId: "attempt-1",
+							values:
+							{
+								code: "123456",
+							},
 						},
 					},
 					{
@@ -388,6 +505,69 @@ describe("Settings > Workflowy", () =>
 				keepSyncing: true,
 				// No re-import while a run is under way.
 				reimport: undefined,
+			},
+		);
+	});
+
+	it("says when workflowy.com asked for a captcha or the sign-in timed out, and starts over at the email", async () =>
+	{
+		const steps: Response[] = [
+			Response.json(
+				{
+					attemptId: "attempt-1",
+					fields: [PASSWORD_FIELD],
+					errors: [],
+				},
+			),
+			Response.json(
+				{
+					ok: false,
+					status: 409,
+					error: "workflowy-login-expired",
+				},
+				{
+					status: 409,
+				},
+			),
+			Response.json(
+				{
+					ok: false,
+					status: 422,
+					error: "workflowy-captcha",
+					message: "workflowy.com asked for a captcha. Try again later.",
+				},
+				{
+					status: 422,
+				},
+			),
+		];
+		writes["POST /api/v1/workflowy-connection"] = () => steps.shift() ?? Response.json(connection);
+		await open();
+		await type("workflowy-email", "alice@example.com");
+		await click(button("Connect"));
+		await type("workflowy-login-password", "slow");
+		await click(button("Connect"));
+		const expired =
+		{
+			alerts: text("[role=alert] > div"),
+			labels: text("label > span"),
+		};
+		await click(button("Connect"));
+		expect(
+			{
+				expired,
+				captcha: text("[role=alert] > div"),
+				emailLocked: input("workflowy-email").disabled,
+			},
+		).toStrictEqual(
+			{
+				expired:
+				{
+					alerts: ["That sign-in took too long. Start again."],
+					labels: ["workflowy.com email"],
+				},
+				captcha: ["workflowy.com wants to check you're human. Try again later."],
+				emailLocked: false,
 			},
 		);
 	});
@@ -483,8 +663,18 @@ describe("Settings > Workflowy", () =>
 		const prompt = text("[role=alert]");
 		const email = input("workflowy-email").value;
 
-		writes["POST /api/v1/workflowy-connection"] = () =>
+		writes["POST /api/v1/workflowy-connection"] = (body) =>
 		{
+			if (Reflect.has(body as object, "email"))
+			{
+				return Response.json(
+					{
+						attemptId: "attempt-2",
+						fields: [PASSWORD_FIELD],
+						errors: [],
+					},
+				);
+			}
 			connection = connected(
 				{
 					mirror: true,
@@ -492,7 +682,8 @@ describe("Settings > Workflowy", () =>
 			);
 			return Response.json(connection);
 		};
-		await type("workflowy-connection-password", "again");
+		await click(button("Sign in again"));
+		await type("workflowy-login-password", "again");
 		await click(button("Sign in again"));
 
 		expect(
@@ -515,7 +706,18 @@ describe("Settings > Workflowy", () =>
 						body:
 						{
 							email: "alice@example.com",
-							password: "again",
+						},
+					},
+					{
+						method: "POST",
+						path: "/api/v1/workflowy-connection",
+						body:
+						{
+							attemptId: "attempt-2",
+							values:
+							{
+								password: "again",
+							},
 						},
 					},
 				],

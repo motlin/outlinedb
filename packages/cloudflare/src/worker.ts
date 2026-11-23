@@ -183,31 +183,41 @@ for (const path of ["/api/v1/ladder/events", "/api/v1/nodes/events"])
 // Any signed-in user's own import progress, which the empty outline shows while the first sync runs.
 app.get("/api/v1/sync-status", async (c) => c.json(await c.var.stub.accountSync()));
 
-// The signed-in user's own workflowy.com connection: GET reads it, POST {email, password} logs in once and keeps only
-// the sealed session cookie, PATCH {mirror} turns keep-syncing on or off, DELETE disconnects and wipes the cookie.
+// The signed-in user's own workflowy.com connection: GET reads it, PATCH {mirror} turns keep-syncing on or off, DELETE
+// disconnects and wipes the cookie. POST relays workflowy.com's login form a step at a time: {email} starts an attempt,
+// {attemptId, values} answers the fields its last reply asked for (a password, a code). A step that wants more answers
+// {attemptId, fields, errors}; the one that signs in answers the connection, keeping only the sealed session cookie.
 const WORKFLOWY_CONNECTION = "/api/v1/workflowy-connection";
 app.get(WORKFLOWY_CONNECTION, async (c) => c.json(await c.var.stub.getWorkflowyConnection()));
 app.post(WORKFLOWY_CONNECTION, async (c) =>
 {
 	const body: unknown = await c.req.json().catch(() => null);
 	const email = field(body, "email");
-	const password = field(body, "password");
-	if (typeof email !== "string" || email.trim() === "" || typeof password !== "string" || password === "")
+	const attemptId = field(body, "attemptId");
+	const values = stringRecord(field(body, "values"));
+	let result;
+	if (typeof email === "string" && email.trim() !== "")
+	{
+		result = await c.var.stub.startWorkflowyLogin(email.trim());
+	}
+	else if (typeof attemptId === "string" && attemptId !== "" && values !== undefined)
+	{
+		result = await c.var.stub.continueWorkflowyLogin(attemptId, values);
+	}
+	else
 	{
 		return c.json(
 			{
-				error: "Expected a JSON {email, password} body",
+				error: "Expected a JSON {email} or {attemptId, values} body",
 			},
 			400,
 		);
 	}
-	const result = await c.var.stub.connectWorkflowy(
-		{
-			email: email.trim(),
-			password,
-		},
-	);
-	return result.ok ? c.json(result.connection) : c.json(result, result.status);
+	if (!result.ok)
+	{
+		return c.json(result, result.status);
+	}
+	return c.json("connection" in result ? result.connection : result.attempt);
 });
 app.patch(WORKFLOWY_CONNECTION, async (c) =>
 {
@@ -312,6 +322,19 @@ export default
 } satisfies ExportedHandler<WorkerEnv>;
 
 /** `body[name]` when `body` is an object, else undefined. */
+/** An object whose every value is a string, or undefined when `value` is anything else. */
+function stringRecord(value: unknown): Record<string, string> | undefined
+{
+	if (typeof value !== "object" || value === null || Array.isArray(value))
+	{
+		return undefined;
+	}
+	const entries = Object.entries(value);
+	return entries.every(([, inner]) => typeof inner === "string")
+		? Object.fromEntries(entries.map(([name, inner]) => [name, String(inner)]))
+		: undefined;
+}
+
 function field(body: unknown, name: string): unknown
 {
 	const value: unknown = typeof body === "object" && body !== null ? Reflect.get(body, name) : undefined;

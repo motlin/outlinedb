@@ -34,12 +34,14 @@ import type
 } from "@outlinedb/web/server-app";
 import
 {
-	LoginRefusedError,
+	continueWorkflowyLogin,
 	MissingCredentialsError,
+	parseLoginAttemptState,
 	SessionRejectedError,
+	startWorkflowyLogin,
 	WorkflowyInternalClient,
 } from "@outlinedb/shared/api";
-import type {InternalAuth} from "@outlinedb/shared/api";
+import type {InternalAuth, LoginFormField, LoginStepOutcome} from "@outlinedb/shared/api";
 import {LoggedOut} from "@outlinedb/shared/internal";
 import {drizzle} from "drizzle-orm/durable-sqlite";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
@@ -59,6 +61,7 @@ import {readWorkerConfig} from "./worker-config";
 import type {WorkerSecrets} from "./worker-config";
 import {WorkflowyConnection} from "./workflowy-connection";
 import type {WorkflowyConnectionStatus} from "./workflowy-connection";
+import {WorkflowyLoginAttempt} from "./workflowy-login-attempt";
 import {WorkflowyImportJob} from "./workflowy-import";
 import type {WorkflowyImportEnv, WorkflowyImportView} from "./workflowy-import";
 
@@ -94,6 +97,8 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 	private readonly alarms = new AlarmSchedule(this.ctx.storage);
 	/** This account's own workflowy.com connection, set by the connect flow. */
 	protected readonly workflowyConnection = new WorkflowyConnection(this.ctx.storage.sql);
+	/** The sign-in to workflowy.com in progress between its form's steps; never holds a password or a code. */
+	protected readonly workflowyLoginAttempt = new WorkflowyLoginAttempt(this.ctx.storage.sql);
 	/** This account's one-time import from workflowy.com over its own stored session; runs in the shared alarm. */
 	private workflowyImport!: WorkflowyImportJob;
 	/** Delivers mirror-mode writes' outbox rows to workflowy.com; undefined without the internal API. */
@@ -474,42 +479,146 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 	}
 
 	/**
-	 * Log in to workflowy.com once with the account's email and password, and keep only the session cookie, sealed
-	 * with this object's key; the password is dropped when the login returns. A reconnect replaces the stored cookie.
+	 * Start signing in to workflowy.com: open its login form and submit the email, then answer with the fields the form
+	 * asks for next. Any attempt already in progress ends.
 	 */
 	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
-	async connectWorkflowy(input: ConnectWorkflowyInput): Promise<ConnectWorkflowyResult>
+	async startWorkflowyLogin(email: string): Promise<WorkflowyLoginResult>
 	{
-		const secret = this.env.OUTLINEDB_CREDENTIALS_KEY;
-		if (!secret)
+		const key = await this.credentialsKey();
+		if (key === undefined)
+		{
+			return CREDENTIALS_KEY_NOT_CONFIGURED;
+		}
+		this.workflowyLoginAttempt.end();
+		return this.afterLoginStep(key, crypto.randomUUID(), email, async () =>
+			startWorkflowyLogin(email, this.loginRelayOptions()),
+		);
+	}
+
+	/**
+	 * Answer the fields the attempt's form asked for (a password, a code). The answers go to workflowy.com in this one
+	 * request and are never stored; once workflowy.com sets its session, only that cookie is kept, sealed with this
+	 * object's key, exactly as a reconnect replaces it.
+	 */
+	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
+	async continueWorkflowyLogin(attemptId: string, values: Record<string, string>): Promise<WorkflowyLoginResult>
+	{
+		const key = await this.credentialsKey();
+		if (key === undefined)
+		{
+			return CREDENTIALS_KEY_NOT_CONFIGURED;
+		}
+		const live = this.workflowyLoginAttempt.live(attemptId);
+		const state = live === undefined ? undefined : parseLoginAttemptState(await openSecret(key, live.state));
+		if (live === undefined || state === undefined)
 		{
 			return {
 				ok: false,
-				status: 503,
-				error: "credentials-key-not-configured",
+				status: 409,
+				error: "workflowy-login-expired",
 			};
 		}
-		let cookie: string;
+		const missing = state.fields.filter((name) => (values[name] ?? "") === "");
+		if (missing.length > 0)
+		{
+			return {
+				ok: false,
+				status: 400,
+				error: "workflowy-login-incomplete",
+				message: `Fill in ${missing.join(", ")}`,
+			};
+		}
+		return this.afterLoginStep(key, attemptId, live.email, async () =>
+			continueWorkflowyLogin(live.email, state, values, this.loginRelayOptions()),
+		);
+	}
+
+	private async credentialsKey(): Promise<CryptoKey | undefined>
+	{
+		const secret = this.env.OUTLINEDB_CREDENTIALS_KEY;
+		return secret ? deriveCredentialsKey(secret, this.ctx.id.toString()) : undefined;
+	}
+
+	private loginRelayOptions():
+	{
+		baseUrl: string | undefined;
+	}
+	{
+		return {
+			baseUrl: this.env.WORKFLOWY_API_URL,
+		};
+	}
+
+	/**
+	 * Run one step of the login form and act on its reply: keep the attempt's sealed state while the form asks for more,
+	 * connect once workflowy.com set its session, and end the attempt on anything else.
+	 */
+	private async afterLoginStep(
+		key: CryptoKey,
+		attemptId: string,
+		email: string,
+		step: () => Promise<LoginStepOutcome>,
+	): Promise<WorkflowyLoginResult>
+	{
+		let outcome: LoginStepOutcome;
 		try
 		{
-			cookie = await loginForCookie(input, this.env.WORKFLOWY_API_URL);
+			outcome = await step();
 		}
 		catch (error)
+		{
+			outcome =
+			{
+				kind: "refused",
+				message: error instanceof Error ? error.message : String(error),
+				detail: "",
+			};
+		}
+		if (outcome.kind === "fields")
+		{
+			this.workflowyLoginAttempt.save(
+				{
+					attemptId,
+					email,
+					state: await sealSecret(key, JSON.stringify(outcome.state)),
+				},
+			);
+			return {
+				ok: true,
+				attempt:
+				{
+					attemptId,
+					fields: outcome.fields,
+					errors: outcome.errors,
+				},
+			};
+		}
+		this.workflowyLoginAttempt.end();
+		if (outcome.kind === "captcha")
+		{
+			return {
+				ok: false,
+				status: 422,
+				error: "workflowy-captcha",
+				message: "workflowy.com asked for a captcha. Try again later.",
+			};
+		}
+		if (outcome.kind === "refused")
 		{
 			// 422, never 401: the page treats a 401 as signed out of OutlineDB and goes to its login.
 			return {
 				ok: false,
 				status: 422,
 				error: "workflowy-login-failed",
-				message: error instanceof Error ? error.message : String(error),
-				...(error instanceof LoginRefusedError &&
+				message: outcome.message,
+				...(outcome.detail !== "" &&
 				{
-					detail: error.detail,
+					detail: outcome.detail,
 				}),
 			};
 		}
-		const key = await deriveCredentialsKey(secret, this.ctx.id.toString());
-		this.workflowyConnection.connect(input.email, await sealSecret(key, cookie));
+		this.workflowyConnection.connect(email, await sealSecret(key, outcome.cookie));
 		await this.reconfigureSync();
 		return {
 			ok: true,
@@ -899,14 +1008,23 @@ function readProfile(kv: KvLike): Profile | null
 	};
 }
 
-/** The workflowy.com login a connect uses once; only the session cookie it yields is kept. */
-export interface ConnectWorkflowyInput
+const CREDENTIALS_KEY_NOT_CONFIGURED =
 {
-	email: string;
-	password: string;
+	ok: false,
+	status: 503,
+	error: "credentials-key-not-configured",
+} as const;
+
+/** A login form step that wants more: the attempt to answer and the fields its form asks for, with its errors. */
+export interface WorkflowyLoginAttemptView
+{
+	attemptId: string;
+	fields: LoginFormField[];
+	/** The form's error list, such as a wrong password; the person answers again. */
+	errors: string[];
 }
 
-export type ConnectWorkflowyResult =
+export type WorkflowyLoginResult =
 	|
 	  {
 			ok: true;
@@ -914,9 +1032,29 @@ export type ConnectWorkflowyResult =
 	  }
 	|
 	  {
+			ok: true;
+			attempt: WorkflowyLoginAttemptView;
+	  }
+	| typeof CREDENTIALS_KEY_NOT_CONFIGURED
+	|
+	  {
 			ok: false;
-			status: 503;
-			error: "credentials-key-not-configured";
+			status: 400;
+			error: "workflowy-login-incomplete";
+			message: string;
+	  }
+	|
+	  {
+			ok: false;
+			status: 409;
+			error: "workflowy-login-expired";
+	  }
+	|
+	  {
+			ok: false;
+			status: 422;
+			error: "workflowy-captcha";
+			message: string;
 	  }
 	|
 	  {
@@ -924,7 +1062,7 @@ export type ConnectWorkflowyResult =
 			status: 422;
 			error: "workflowy-login-failed";
 			message: string;
-			/** workflowy.com's own reply (status and redacted body), when it answered the login with a refusal. */
+			/** workflowy.com's own reply (status and redacted text), when it answered unexpectedly. */
 			detail?: string;
 	  };
 
@@ -990,43 +1128,6 @@ function countApplied(ctx: DurableObjectState): number
 		return 0;
 	}
 	return Number(ctx.storage.sql.exec("SELECT count(*) AS n FROM __drizzle_migrations").one().n);
-}
-
-/**
- * Log in to workflowy.com once and return the session cookie the login set; nothing is persisted, so the password
- * lives only for this call.
- */
-async function loginForCookie(login: ConnectWorkflowyInput, apiUrl: string | undefined): Promise<string>
-{
-	const cookies: string[] = [];
-	await new WorkflowyInternalClient(
-		{
-			credentials:
-			{
-				username: login.email,
-				password: login.password,
-			},
-			sessionStore:
-			{
-				read: () => cookies.at(-1),
-				write(cookie)
-				{
-					cookies.push(cookie);
-				},
-				clear()
-				{
-					cookies.length = 0;
-				},
-			},
-			baseUrl: apiUrl === "" ? undefined : apiUrl,
-		},
-	).login();
-	const cookie = cookies.at(-1);
-	if (cookie === undefined)
-	{
-		throw new Error("Login failed: No session cookie received");
-	}
-	return cookie;
 }
 
 /**

@@ -299,14 +299,24 @@ describe("importing an account from workflowy.com over its stored session", () =
 									},
 								);
 					}
-					if (url.pathname === "/ajax_login")
+					// workflowy.com's login form: the email asks for the password, which signs in.
+					if (url.pathname === "/login/")
 					{
+						const password = new URLSearchParams(await request.text()).get("password");
+						if (password === null)
+						{
+							return new Response(
+								`<form method="POST"><input type="email" name="email">${request.method === "POST" ? '<input type="password" name="password">' : ""}</form>`,
+							);
+						}
 						logins++;
 						return new Response(
-							"",
+							null,
 							{
+								status: 302,
 								headers:
 								{
+									location: "/",
 									"set-cookie": `sessionid=upstream-session-${String(logins)}; Path=/; HttpOnly`,
 								},
 							},
@@ -472,6 +482,33 @@ describe("importing an account from workflowy.com over its stored session", () =
 		};
 	}
 
+	/** Sign in through workflowy.com's login form: the email, then the password it asks for. */
+	async function connect(): Promise<
+	{
+		status: number;
+		body: unknown;
+	}>
+	{
+		const started = await send(
+			"workflowy-connection",
+			"POST",
+			{
+				email: "alice@example.com",
+			},
+		);
+		return send(
+			"workflowy-connection",
+			"POST",
+			{
+				attemptId: Reflect.get(started.body as object, "attemptId"),
+				values:
+				{
+					password: PASSWORD,
+				},
+			},
+		);
+	}
+
 	async function probe(path: string): Promise<unknown>
 	{
 		const response = await (await store()).fetch(`http://localhost${path}`);
@@ -542,14 +579,7 @@ describe("importing an account from workflowy.com over its stored session", () =
 
 	it("imports the whole tree, its relationships, completion, metadata and the account state, replacing the tutorial", async () =>
 	{
-		await send(
-			"workflowy-connection",
-			"POST",
-			{
-				email: "alice@example.com",
-				password: PASSWORD,
-			},
-		);
+		await connect();
 		const tutorialNodes = ((await probe("/__nodes")) as unknown[]).length;
 		upstreamCalls.length = 0;
 		const started = await send("workflowy-import", "POST");
@@ -1115,14 +1145,7 @@ describe("importing an account from workflowy.com over its stored session", () =
 		sessionsExpired = false;
 		pushes.length = 0;
 		upstreamCalls.length = 0;
-		const signedIn = await send(
-			"workflowy-connection",
-			"POST",
-			{
-				email: "alice@example.com",
-				password: PASSWORD,
-			},
-		);
+		const signedIn = await connect();
 		await until(async () => pushes.length > 1 && (await outbox()).pending === 0);
 		const resumed =
 		{

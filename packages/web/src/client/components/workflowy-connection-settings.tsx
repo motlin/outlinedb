@@ -1,7 +1,13 @@
 import {useState} from "react";
 import type {ReactNode, SubmitEvent} from "react";
 import {WorkflowyRequestError, useWorkflowyConnection} from "../hooks/use-workflowy-connection.js";
-import type {WorkflowyImportFound, WorkflowyImportRun} from "../../node-types.js";
+import type
+{
+	WorkflowyImportFound,
+	WorkflowyImportRun,
+	WorkflowyLoginField,
+	WorkflowyLoginStep,
+} from "../../node-types.js";
 import {ActionBlock, ControlRow, SectionBody, SettingsButton} from "./settings-rows.js";
 import {SettingsSection} from "./settings-section.js";
 import {Toggle} from "./toggle.js";
@@ -15,7 +21,15 @@ function requestErrorMessage(error: unknown): string
 	{
 		if (error.code === "workflowy-login-failed")
 		{
-			return "workflowy.com didn't accept that email and password.";
+			return "workflowy.com didn't accept that sign-in.";
+		}
+		if (error.code === "workflowy-captcha")
+		{
+			return "workflowy.com wants to check you're human. Try again later.";
+		}
+		if (error.code === "workflowy-login-expired")
+		{
+			return "That sign-in took too long. Start again.";
 		}
 		if (error.code === "credentials-key-not-configured")
 		{
@@ -119,18 +133,73 @@ function RequestErrorAlert({error}: {error: unknown})
 	);
 }
 
+type SignInStep =
+	|
+	  {
+			email: string;
+	  }
+	|
+	  {
+			attemptId: string;
+			values: Record<string, string>;
+	  };
+
 interface SignInFormProps
 {
 	email: string;
 	submitLabel: string;
-	onSubmit: (email: string, password: string) => Promise<void>;
+	/** Sends one step; resolves with the next one, or null once connected. */
+	onSubmit: (step: SignInStep) => Promise<WorkflowyLoginStep | null>;
 }
 
-/** workflowy.com email and password; only the session the login yields is kept, never the password. */
+/** An emailed or authenticator code, which the browser may fill from a message. */
+function isCode(field: WorkflowyLoginField): boolean
+{
+	return /code|otp|token/iu.test(field.name);
+}
+
+/** One input the form asked for: a password masked, a code as a one-time code, anything else as text. */
+function LoginFieldInput({
+	field,
+	value,
+	onChange,
+}: {
+	field: WorkflowyLoginField;
+	value: string;
+	onChange: (value: string) => void;
+})
+{
+	const password = field.type === "password";
+	const code = !password && isCode(field);
+	return (
+		<label className="flex flex-col gap-xs">
+			<span className="text-base leading-s text-primary">{field.label}</span>
+			<input
+				autoComplete={password ? "current-password" : code ? "one-time-code" : "off"}
+				className="settings-input"
+				inputMode={code ? "numeric" : undefined}
+				name={`workflowy-login-${field.name}`}
+				onChange={(event) =>
+				{
+					onChange(event.target.value);
+				}}
+				required
+				type={password ? "password" : "text"}
+				value={value}
+			/>
+		</label>
+	);
+}
+
+/**
+ * Signs in to workflowy.com a step at a time: the email first, then whatever its login form asks for next (a password,
+ * a code), with the form's errors. Only the session the login yields is kept, never a password or a code.
+ */
 function SignInForm({email: initialEmail, submitLabel, onSubmit}: SignInFormProps)
 {
 	const [email, setEmail] = useState(initialEmail);
-	const [password, setPassword] = useState("");
+	const [step, setStep] = useState<WorkflowyLoginStep | null>(null);
+	const [values, setValues] = useState<Record<string, string>>({});
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<
 	{
@@ -145,20 +214,40 @@ function SignInForm({email: initialEmail, submitLabel, onSubmit}: SignInFormProp
 		}
 		setBusy(true);
 		setError(null);
-		onSubmit(email.trim(), password)
-			.catch((caught: unknown) =>
+		const sent: SignInStep =
+			step === null
+				?
+					{
+						email: email.trim(),
+					}
+				:
+					{
+						attemptId: step.attemptId,
+						values: Object.fromEntries(step.fields.map((field) => [field.name, values[field.name] ?? ""])),
+					};
+		const send = async () =>
+		{
+			try
 			{
+				setStep(await onSubmit(sent));
+			}
+			catch (caught)
+			{
+				// Every refusal but a missing answer ended the attempt upstream, so the next try starts at the email.
+				if (!(caught instanceof WorkflowyRequestError && caught.code === "workflowy-login-incomplete"))
+				{
+					setStep(null);
+				}
 				setError(
 					{
 						caught,
 					},
 				);
-			})
-			.finally(() =>
-			{
-				setBusy(false);
-				setPassword("");
-			});
+			}
+			setBusy(false);
+			setValues({});
+		};
+		void send();
 	};
 	return (
 		<form className="flex flex-col gap-m" onSubmit={submit}>
@@ -167,6 +256,7 @@ function SignInForm({email: initialEmail, submitLabel, onSubmit}: SignInFormProp
 				<input
 					autoComplete="username"
 					className="settings-input"
+					disabled={step !== null}
 					name="workflowy-email"
 					onChange={(event) =>
 					{
@@ -177,21 +267,30 @@ function SignInForm({email: initialEmail, submitLabel, onSubmit}: SignInFormProp
 					value={email}
 				/>
 			</label>
-			<label className="flex flex-col gap-xs">
-				<span className="text-base leading-s text-primary">workflowy.com password</span>
-				<input
-					autoComplete="current-password"
-					className="settings-input"
-					name="workflowy-connection-password"
-					onChange={(event) =>
+			{step?.fields.map((field) => (
+				<LoginFieldInput
+					field={field}
+					key={field.name}
+					onChange={(value) =>
 					{
-						setPassword(event.target.value);
+						setValues((current) => (
+						{
+							...current,
+							[field.name]: value,
+						}));
 					}}
-					required
-					type="password"
-					value={password}
+					value={values[field.name] ?? ""}
 				/>
-			</label>
+			))}
+			{step !== null && step.errors.length > 0 && (
+				<Alert>
+					<ul className="list-disc pl-l">
+						{step.errors.map((message) => (
+							<li key={message}>{message}</li>
+						))}
+					</ul>
+				</Alert>
+			)}
 			{error !== null && <RequestErrorAlert error={error.caught} />}
 			<div>
 				<button className=" hover:no-underline button" disabled={busy} type="submit">
@@ -258,7 +357,7 @@ function RunReport({run}: {run: WorkflowyImportRun})
  */
 export function WorkflowySection()
 {
-	const {connection, connectionError, run, connect, setMirror, startImport, disconnect} = useWorkflowyConnection();
+	const {connection, connectionError, run, signIn, setMirror, startImport, disconnect} = useWorkflowyConnection();
 	const [keepSyncing, setKeepSyncing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const attempt = (action: () => Promise<void>) =>
@@ -281,9 +380,9 @@ export function WorkflowySection()
 			<>
 				<Hint>
 					Bring your workflowy.com outline into OutlineDB. OutlineDB signs in once and keeps only the session,
-					never your password.
+					never your password or sign-in code.
 				</Hint>
-				<SignInForm email="" onSubmit={connect} submitLabel="Connect" />
+				<SignInForm email="" onSubmit={signIn} submitLabel="Connect" />
 			</>
 		);
 	}
@@ -295,7 +394,7 @@ export function WorkflowySection()
 					Your workflowy.com session expired, so syncing is paused. Sign in again to resume; your changes wait
 					until then.
 				</Alert>
-				<SignInForm email={connection.email} onSubmit={connect} submitLabel="Sign in again" />
+				<SignInForm email={connection.email} onSubmit={signIn} submitLabel="Sign in again" />
 				{run !== null && <RunReport run={run} />}
 				<DisconnectBlock
 					onDisconnect={() =>

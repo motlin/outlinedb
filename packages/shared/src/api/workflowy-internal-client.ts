@@ -15,7 +15,7 @@ import {InternalApiError} from "../internal/errors.js";
  *   username/password once and save the new cookie back to the store
  */
 
-const WORKFLOWY_URL = "https://workflowy.com";
+export const WORKFLOWY_URL = "https://workflowy.com";
 
 /**
  * The subset of `/get_initialization_data` this client reads. Every other field
@@ -316,14 +316,17 @@ const LOGIN_DETAIL_MAX = 500;
 const REDACTED = "[redacted]";
 const SECRET_KEY = /cookie|passw|email|username|session|token|secret|csrf/iu;
 
-/** The login reply as {@link LoginRefusedError.detail} shows it. */
-function loginReplyDetail(status: number, body: string, reply: unknown, credentials: WorkflowyCredentials): string
+/**
+ * A login reply as {@link LoginRefusedError.detail} shows it, with every one of `secrets` (the email, the password, a
+ * code) redacted wherever it appears.
+ */
+export function loginReplyDetail(status: number, body: string, reply: unknown, secrets: readonly string[]): string
 {
-	const secrets = [credentials.username, credentials.password]
+	const patterns = secrets
 		.filter((secret) => secret !== "")
 		.map((secret) => new RegExp(secret.replaceAll(/[.*+?^${}()|[\]\\]/gu, String.raw`\$&`), "giu"));
 	const redact = (text: string): string =>
-		secrets.reduce((redacted, secret) => redacted.replace(secret, REDACTED), text);
+		patterns.reduce((redacted, secret) => redacted.replace(secret, REDACTED), text);
 	const scrub = (value: unknown): unknown =>
 	{
 		if (typeof value === "string")
@@ -437,7 +440,10 @@ export class WorkflowyInternalClient
 		const refused = (message: string): LoginRefusedError =>
 		{
 			this.sessionCookie = null;
-			return new LoginRefusedError(message, loginReplyDetail(response.status, body, reply, credentials));
+			return new LoginRefusedError(
+				message,
+				loginReplyDetail(response.status, body, reply, [credentials.username, credentials.password]),
+			);
 		};
 		if (response.ok || response.status === 302)
 		{

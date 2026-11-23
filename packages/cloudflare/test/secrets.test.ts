@@ -47,7 +47,6 @@ describe("a Durable Object with no secrets", () =>
 				body: JSON.stringify(
 					{
 						email: "alice@example.com",
-						password: "hunter2",
 					},
 				),
 			},

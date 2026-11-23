@@ -117,6 +117,56 @@ export class ProbeStore extends UserStore
 		return openSecret(await deriveCredentialsKey(secret, this.ctx.id.toString()), sealed);
 	}
 
+	/**
+	 * The live workflowy.com login attempt with its sealed state opened, expired or not, as JSON (an RPC object would
+	 * arrive with another realm's prototype); null when none is live.
+	 */
+	// fallow-ignore-next-line unused-class-member -- tests invoke it over RPC
+	async openedWorkflowyLoginAttempt(): Promise<string | null>
+	{
+		const row = this.ctx.storage.sql
+			.exec(
+				"SELECT attempt_id, workflowy_email, state_iv, state_ciphertext FROM workflowy_login_attempt WHERE system_to = ?",
+				FAR_FUTURE_DATE,
+			)
+			.toArray()[0];
+		const secret = this.env.OUTLINEDB_CREDENTIALS_KEY;
+		if (
+			row === undefined ||
+			secret === undefined ||
+			!(row.state_iv instanceof ArrayBuffer) ||
+			!(row.state_ciphertext instanceof ArrayBuffer)
+		)
+		{
+			return null;
+		}
+		const opened = await openSecret(
+			await deriveCredentialsKey(secret, this.ctx.id.toString()),
+			{
+				iv: new Uint8Array(row.state_iv),
+				ciphertext: new Uint8Array(row.state_ciphertext),
+			},
+		);
+		return JSON.stringify(
+			{
+				attemptId: row.attempt_id,
+				email: row.workflowy_email,
+				state: JSON.parse(opened) as unknown,
+			},
+		);
+	}
+
+	/** Move the live login attempt's expiry `ms` earlier, as if that much time had passed. */
+	// fallow-ignore-next-line unused-class-member -- tests invoke it over RPC
+	ageWorkflowyLoginAttempt(ms: number): void
+	{
+		this.ctx.storage.sql.exec(
+			"UPDATE workflowy_login_attempt SET expires_at = expires_at - ? WHERE system_to = ?",
+			ms,
+			FAR_FUTURE_DATE,
+		);
+	}
+
 	/** Every row of every table, prefixed with its table's name (each BLOB as `blob:<hex>`) and every key-value entry: all an attacker holding the database sees. */
 	// fallow-ignore-next-line unused-class-member -- tests invoke it over RPC
 	storageDump(): string

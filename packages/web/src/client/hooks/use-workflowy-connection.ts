@@ -6,7 +6,7 @@
 
 import {useQuery, useQueryClient} from "@tanstack/react-query";
 import {useEffect, useRef} from "react";
-import type {WorkflowyConnection, WorkflowyImport, WorkflowyRefusal} from "../../node-types.js";
+import type {WorkflowyConnection, WorkflowyImport, WorkflowyLoginStep, WorkflowyRefusal} from "../../node-types.js";
 import {readJson} from "../read-json.js";
 
 /** A refused connection request: the Worker's `{error, message?, detail?}` body and its status. */
@@ -111,18 +111,34 @@ export function useWorkflowyConnection()
 		connection: connection.data,
 		connectionError: connection.isError,
 		run: imported.data?.run ?? null,
-		connect: async (email: string, password: string) =>
+		/**
+		 * One step of signing in to workflowy.com: `{email}` starts, `{attemptId, values}` answers the fields the last
+		 * step asked for. Resolves with the next step, or with null once the account is connected.
+		 */
+		signIn: async (
+			step:
+				|
+				  {
+						email: string;
+				  }
+				|
+				  {
+						attemptId: string;
+						values: Record<string, string>;
+				  },
+		): Promise<WorkflowyLoginStep | null> =>
 		{
-			setConnection(
-				await send<WorkflowyConnection>(
-					"/api/v1/workflowy-connection",
-					"POST",
-					{
-						email,
-						password,
-					},
-				),
+			const reply = await send<WorkflowyConnection | WorkflowyLoginStep>(
+				"/api/v1/workflowy-connection",
+				"POST",
+				step,
 			);
+			if ("attemptId" in reply)
+			{
+				return reply;
+			}
+			setConnection(reply);
+			return null;
 		},
 		setMirror: async (mirror: boolean) =>
 		{

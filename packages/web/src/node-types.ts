@@ -189,6 +189,24 @@ export type WorkflowyConnection =
 			lastSyncAt: number | null;
 	  };
 
+/** One input workflowy.com's login form asks for next, such as a password or an emailed code. */
+export interface WorkflowyLoginField
+{
+	name: string;
+	/** The input's HTML `type`. */
+	type: string;
+	label: string;
+}
+
+/** A `/api/v1/workflowy-connection` POST that needs more: the attempt to answer and what its form asks for. */
+export interface WorkflowyLoginStep
+{
+	attemptId: string;
+	fields: WorkflowyLoginField[];
+	/** The form's own errors, such as a wrong password. */
+	errors: string[];
+}
+
 export interface WorkflowyImportFound
 {
 	nodes: number;
@@ -252,6 +270,6 @@ export interface WorkflowyRefusal
 {
 	error?: string;
 	message?: string;
-	/** workflowy.com's own reply to a refused login (status and redacted body). */
+	/** workflowy.com's own reply to a login it answered unexpectedly (status and redacted text). */
 	detail?: string;
 }
