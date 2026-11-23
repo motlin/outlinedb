@@ -36,7 +36,7 @@ Write `.llm/gtd/review/proposals/email-calendar.json` using `${CLAUDE_PLUGIN_ROO
 
 ## Ledger identity fields
 
-The stable identity is staged as `key` and the alternates as `altKeys` — the exact field names the decisions ledger and `email-calendar-apply` read. Apply copies `.key` and `.altKeys` straight from the proposal into `.llm/gtd/review/email-calendar-decisions.json`, so any other name (an earlier run staged `sourceKey`) produces a `"key": null` ledger row that suppresses nothing, and the same email is re-proposed every review with no visible error.
+The stable identity is staged as `key` and the alternates as `altKeys` — the exact field names the decisions ledger and `email-calendar-apply` read. Apply copies `.key` and `.altKeys` straight from the proposal into `.llm/gtd/review/email-calendar-decisions.json`, so any other name (such as `sourceKey`) produces a `"key": null` ledger row that suppresses nothing, and the same email is re-proposed every review with no visible error.
 
 ```json
 {

@@ -15,8 +15,8 @@ Uses the Otter API directly via `${CLAUDE_PLUGIN_ROOT}/scripts/otter-api.sh`. In
 
 This agent runs in one of two modes; the invoking command sets it, and the default is `create`.
 
-- **`create` (default)** — manual `/gtd:journal` runs and the daily-review `/gtd:otter-journal-auto` (`🤖 Auto`) task. Scan, create entries under `📆 Calendar` inline, and advance the live scanner state after each page (see **Save State**). This is the legacy behavior described throughout the rest of this doc.
-- **`stage`** — _(currently unused)_ a read-only staging mode: compute exactly what `create` mode would create, but make **zero** Workflowy writes — stage the entries as proposal `applyOps` and emit the next scanner state as a top-level `scannerState` block, then stop. It backed the former staged prep/apply split, which was replaced by the `🤖 Auto` `/gtd:otter-journal-auto` task (create mode). Retained for any future confirm-before-create flow. See **Staging Mode** below.
+- **`create` (default)** — manual `/gtd:journal` runs and the daily-review `/gtd:otter-journal-auto` (`🤖 Auto`) task. Scan, create entries under `📆 Calendar` inline, and advance the live scanner state after each page (see **Save State**). The rest of this doc describes this mode unless a step names `stage`.
+- **`stage`** — _(currently unused)_ a read-only staging mode: compute exactly what `create` mode would create, but make **zero** Workflowy writes — stage the entries as proposal `applyOps` and emit the next scanner state as a top-level `scannerState` block, then stop. It exists for a future confirm-before-create flow. See **Staging Mode** below.
 
 **Load State** through **Process Meetings** run identically in both modes (load state read-only, refresh the dedup cache, scan, dedup). The modes diverge only at the **Create node** and **Save State** steps.
 
@@ -272,7 +272,7 @@ After processing each page that passed title preflight, update state. A page hel
 
 After an incremental `sync-since` run, set `last_synced_otid` to the newest returned otid (`speeches[0].otid`) and keep the existing `cursor` and `session_start`. When it returned no meetings, leave state untouched.
 
-**In `stage` mode, skip the live state write entirely.** Make no `node update` / `node create` on the state node. Compute the same state object and emit it as the top-level `scannerState` field of the staged proposal (see **Staging Mode**); the former apply step persisted it only after the entries were created.
+**In `stage` mode, skip the live state write entirely.** Make no `node update` / `node create` on the state node. Compute the same state object and emit it as the top-level `scannerState` field of the staged proposal (see **Staging Mode**), so whatever applies the proposal persists it only after the entries are created.
 
 **Important: the state JSON must be single-line**, because Workflowy interprets newlines as separate child nodes.
 
