@@ -41,7 +41,7 @@ export async function startHarness(
 	existingPersistDir?: string,
 	bindings: Record<string, string> =
 	{
-		ACCESS_DEV_IDENTITY: "dev",
+		DEV_IDENTITY: "dev",
 	},
 	extra:
 	{

@@ -95,7 +95,6 @@ The `package.json` scripts back these recipes: `vp run typecheck`, `vp run fallo
 - [`outlinedb cache import-backup`](#outlinedb-cache-import-backup)
 - [`outlinedb cache import-backups`](#outlinedb-cache-import-backups)
 - [`outlinedb cache import-local-state`](#outlinedb-cache-import-local-state)
-- [`outlinedb cache seed-account-state`](#outlinedb-cache-seed-account-state)
 - [`outlinedb cache status`](#outlinedb-cache-status)
 - [`outlinedb cache sync-node`](#outlinedb-cache-sync-node)
 - [`outlinedb cache temporal-rollback`](#outlinedb-cache-temporal-rollback)
@@ -500,33 +499,6 @@ DESCRIPTION
 
 EXAMPLES
   $ outlinedb cache:import-local-state --from outlinedb.pre-rebuild.sqlite
-```
-
-## `outlinedb cache seed-account-state`
-
-Read the account state (every account table's live rows plus the expanded keys) from the local cache and PUT it to /api/admin/account-state under the given Worker URL, seeding a Cloudflare deployment
-
-```text
-USAGE
-  $ outlinedb cache seed-account-state --url <value> [--json] [--access-client-id <value>] [--access-client-secret
-  <value>]
-
-FLAGS
-  --access-client-id=<value>      [env: CF_ACCESS_CLIENT_ID] Cloudflare Access service token client id (sent as
-                                  CF-Access-Client-Id)
-  --access-client-secret=<value>  [env: CF_ACCESS_CLIENT_SECRET] Cloudflare Access service token client secret (sent as
-                                  CF-Access-Client-Secret)
-  --url=<value>                   (required) Worker base URL to seed
-
-GLOBAL FLAGS
-  --json  Format output as json.
-
-DESCRIPTION
-  Read the account state (every account table's live rows plus the expanded keys) from the local cache and PUT it to
-  /api/admin/account-state under the given Worker URL, seeding a Cloudflare deployment
-
-EXAMPLES
-  $ outlinedb cache:seed-account-state --url http://localhost:8787
 ```
 
 ## `outlinedb cache status`

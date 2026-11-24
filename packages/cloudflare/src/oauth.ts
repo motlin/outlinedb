@@ -1,10 +1,9 @@
 import {AuthorizationError, CimdFetchError, OAuthProvider, insufficientScope} from "@cloudflare/workers-oauth-provider";
 import type {ConsentDescription, OAuthHelpers, OAuthResourceContext} from "@cloudflare/workers-oauth-provider";
-import type {AccessEnv} from "./access";
 import type {ProvisionEnv} from "./auth/provision";
 import {mcpHandler} from "./mcp";
 import {resolvePrincipal} from "./principal";
-import type {SessionReader} from "./principal";
+import type {DevEnv, SessionReader} from "./principal";
 
 const READ_SCOPE = "mcp:read";
 const WRITE_SCOPE = "mcp:write";
@@ -16,7 +15,7 @@ interface McpProps
 	userId: string;
 }
 
-type OAuthEnv = Env & AccessEnv & ProvisionEnv;
+type OAuthEnv = Env & DevEnv & ProvisionEnv;
 
 const escapeHtml = (value: string): string => value.replaceAll(/[&<>"']/gu, (char) => `&#${char.codePointAt(0)};`);
 
@@ -255,8 +254,7 @@ function loginRedirect(request: Request): Response
 }
 
 /**
- * The consent page at `/authorize`, for the signed-in OutlineDB user: a Better Auth session, or an Access identity
- * whose email has a verified user. With no sign-in it sends the browser to `/login` and back; the grant acts as that
+ * The consent page at `/authorize`, for the signed-in OutlineDB user's Better Auth session. With no sign-in it sends the browser to `/login` and back; the grant acts as that
  * user. An approval is remembered for 30 days, so reconnecting the same client with no more scopes skips the page.
  */
 export async function authorize(
@@ -273,17 +271,16 @@ export async function authorize(
 		request,
 		{
 			...env,
-			ACCESS_DEV_IDENTITY: undefined,
+			DEV_IDENTITY: undefined,
 		},
 		auth,
 	);
-	if ("status" in principal)
+	// The dev identity is turned off above, so a principal here is a session user.
+	if ("status" in principal || principal.kind === "dev")
 	{
-		return principal.status === 401 ? loginRedirect(request) : textResponse("Forbidden", 403);
-	}
-	if (principal.userId === null)
-	{
-		return textResponse(`Sign up for OutlineDB as ${principal.email} before connecting an app.`, 403);
+		return "status" in principal && principal.status === 403
+			? textResponse("Forbidden", 403)
+			: loginRedirect(request);
 	}
 	try
 	{

@@ -86,7 +86,7 @@ describe("connecting an account to workflowy.com", () =>
 			"ProbeStore",
 			undefined,
 			{
-				ACCESS_DEV_IDENTITY: "dev",
+				DEV_IDENTITY: "dev",
 				OUTLINEDB_CREDENTIALS_KEY: "test-credentials-key",
 				WORKFLOWY_API_URL: "http://upstream.test",
 			},

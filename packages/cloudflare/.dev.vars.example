@@ -1,6 +1,6 @@
 # Names only. Copy to .dev.vars and fill in locally; never commit values.
 # WORKFLOWY_API_URL=
-# ACCESS_DEV_IDENTITY=dev
+# DEV_IDENTITY=dev
 # Seals each account's workflowy.com session cookie (AES-GCM, keyed per Durable Object); connecting a Workflowy
 # account answers 503 until it is set (openssl rand -base64 32).
 OUTLINEDB_CREDENTIALS_KEY=

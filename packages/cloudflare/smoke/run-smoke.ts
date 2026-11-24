@@ -148,7 +148,7 @@ const wrangler = spawn(
 		{
 			...process.env,
 			WORKER_PERSIST_DIR: persist,
-			ACCESS_DEV_IDENTITY: "dev",
+			DEV_IDENTITY: "dev",
 			...authVars,
 		},
 		stdio: ["ignore", "pipe", "inherit"],

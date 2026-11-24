@@ -4,11 +4,11 @@ import {defineConfig, mergeConfig} from "vite-plus";
 import baseConfig from "./vite.config.js";
 
 // Worker dev and build: the SPA, the Worker, the Durable Object and R2 run in local workerd on one port.
-// Local-only vars come from the environment (ACCESS_DEV_IDENTITY, WORKFLOWY_API_URL, and the auth names cf-smoke sets),
+// Local-only vars come from the environment (DEV_IDENTITY, WORKFLOWY_API_URL, and the auth names cf-smoke sets),
 // or from packages/cloudflare/.dev.vars, which the plugin also reads. Nothing here deploys.
 const devVars = Object.fromEntries(
 	[
-		"ACCESS_DEV_IDENTITY",
+		"DEV_IDENTITY",
 		"WORKFLOWY_API_URL",
 		"APP_ORIGIN",
 		"BETTER_AUTH_SECRET",

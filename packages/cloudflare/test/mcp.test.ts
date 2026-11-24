@@ -42,7 +42,7 @@ const ALL_TOOLS = [
 	"outlinedb_search",
 ];
 
-/** Better Auth on, with invite-only signup for `invites`, and no ACCESS_DEV_IDENTITY, so a request has a session or nothing. */
+/** Better Auth on, with invite-only signup for `invites`, and no DEV_IDENTITY, so a request has a session or nothing. */
 async function startSessionHarness(invites: string, persistDir?: string): Promise<AuthHarness>
 {
 	return startAuthHarness(

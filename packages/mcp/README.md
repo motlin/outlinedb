@@ -16,7 +16,7 @@ Node tools accept a full or short id, or a comma path. Read results use the same
 
 ## Connect to the deployed Worker
 
-`/mcp` takes OAuth bearer tokens only. The Worker is its own authorization server (`@cloudflare/workers-oauth-provider`). Login is your OutlineDB account: the `/authorize` consent page needs a signed-in session, and without one it sends the browser to `/login` and back. The token acts as that OutlineDB user and reads and writes that user's outline. A Cloudflare Access identity also works when its email has a verified OutlineDB account. Service-token headers do not work on `/mcp`.
+`/mcp` takes OAuth bearer tokens only. The Worker is its own authorization server (`@cloudflare/workers-oauth-provider`). Login is your OutlineDB account: the `/authorize` consent page needs a signed-in session, and without one it sends the browser to `/login` and back. The token acts as that OutlineDB user and reads and writes that user's outline.
 
 The consent page offers two levels:
 

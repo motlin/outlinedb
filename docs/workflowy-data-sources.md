@@ -294,7 +294,7 @@ The drain runs after each CLI write (`drainAfterWrite` in `packages/cli/src/serv
 | Feature flags | `POST /features/enable/<codename>` or `/features/disable/<codename>` | The only route for feature flags |
 | Expansion | `project_expansions_delta` field of `/push_and_poll` | Expansion has no operation type, it is a side-channel of the push |
 
-Node rows drain before account rows, since a star or setting may name a node whose create was pending (`WorkflowyInternalAdapter.drainOutbox` in `packages/shared/src/internal/adapter.ts`). The public REST client (`packages/shared/src/cache/workflowy-write-through-client.ts`) remains for reads and refreshes, not for delivering writes. Account-level writes land in the account tables as new versions, so those tables (with their history) are the seed of the standalone copy; `cache seed-account-state` sends them to a Cloudflare deployment.
+Node rows drain before account rows, since a star or setting may name a node whose create was pending (`WorkflowyInternalAdapter.drainOutbox` in `packages/shared/src/internal/adapter.ts`). The public REST client (`packages/shared/src/cache/workflowy-write-through-client.ts`) remains for reads and refreshes, not for delivering writes. Account-level writes land in the account tables as new versions, so those tables (with their history) are the seed of the standalone copy.
 
 ## Standalone copy
 

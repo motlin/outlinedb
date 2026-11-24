@@ -296,7 +296,7 @@ describe("importing an account from workflowy.com over its stored session", () =
 			"ProbeStore",
 			undefined,
 			{
-				ACCESS_DEV_IDENTITY: "dev",
+				DEV_IDENTITY: "dev",
 				OUTLINEDB_CREDENTIALS_KEY: "test-credentials-key",
 				WORKFLOWY_API_URL: "http://upstream.test",
 				// Batches of two, one per alarm run, so the seven-node tree spans several alarm runs and each resumes.

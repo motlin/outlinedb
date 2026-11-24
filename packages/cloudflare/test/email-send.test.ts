@@ -160,7 +160,7 @@ describe("senderFor", () =>
 					EMAIL: binding,
 				},
 			),
-		).toThrow("EMAIL_PROVIDER=log is only allowed in local dev (ACCESS_DEV_IDENTITY) or tests");
+		).toThrow("EMAIL_PROVIDER=log is only allowed in local dev (DEV_IDENTITY) or tests");
 	});
 
 	it("allows log in local dev", async () =>
@@ -169,7 +169,7 @@ describe("senderFor", () =>
 		await senderFor(
 			{
 				EMAIL_PROVIDER: "log",
-				ACCESS_DEV_IDENTITY: "dev",
+				DEV_IDENTITY: "dev",
 			},
 			{
 				sink: (sent) =>

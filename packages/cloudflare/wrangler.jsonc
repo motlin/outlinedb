@@ -4,7 +4,7 @@
 	"compatibility_date": "2026-08-01",
 	"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
 	"limits": {"cpu_ms": 300000},
-	// Served only on the custom domain behind Access; workers.dev and preview URLs are off so Access can't be bypassed.
+	// Served only on the custom domain; workers.dev and preview URLs are off.
 	"routes": [{"pattern": "app.outlinedb.com", "custom_domain": true}],
 	"workers_dev": false,
 	"preview_urls": false,
@@ -55,7 +55,7 @@
 	// (Workers Paid). Deploys without the domain onboarded; only send() fails, with E_SENDER_DOMAIN_NOT_AVAILABLE.
 	"send_email": [{"name": "EMAIL"}],
 	"migrations": [{"tag": "v1", "new_sqlite_classes": ["UserStore"]}],
-	// Access config (ACCESS_TEAM_DOMAIN, ACCESS_AUD, ALLOWED_EMAILS, ALLOWED_SERVICE_TOKENS) and OUTLINEDB_CREDENTIALS_KEY (seals each account's workflowy.com session) must not be vars: deploy would reset them. Set them as secrets; use .dev.vars locally (also ACCESS_DEV_IDENTITY).
+	// OUTLINEDB_CREDENTIALS_KEY (seals each account's workflowy.com session) must not be a var: deploy would reset it. Set it as a secret; use .dev.vars locally (also DEV_IDENTITY).
 	"vars":
 	{
 		"SYNC_INTERVAL_MINUTES": "1",

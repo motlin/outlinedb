@@ -126,7 +126,7 @@ describe("auth captcha", () =>
 			]);
 		});
 
-		it("serves /api/auth-config without an Access identity", async () =>
+		it("serves /api/auth-config to a signed-out request", async () =>
 		{
 			await expect(authConfig(h)).resolves.toStrictEqual(
 				{

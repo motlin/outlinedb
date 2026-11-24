@@ -14,7 +14,6 @@ export interface WorkerSecrets
 	AI?: unknown;
 	/** The Vectorize index holding node vectors; with AI it turns related notes on. */
 	RELATED_INDEX?: unknown;
-	ALLOWED_EMAILS?: string;
 	/**
 	 * Secret; with each Durable Object's id it derives the AES-GCM key that seals that object's workflowy.com session.
 	 * Unset, connecting a Workflowy account answers 503.

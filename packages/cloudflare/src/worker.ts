@@ -4,13 +4,12 @@ import {createHttpApp} from "@outlinedb/web/server-app";
 import type {StoreClient} from "@outlinedb/web/server-app";
 import {Hono} from "hono";
 import {createMiddleware} from "hono/factory";
-import type {AccessEnv} from "./access";
 import {authConfig, captchaMissing, createAuth} from "./auth/auth";
 import type {AuthEnv} from "./auth/auth";
 import {provisionUser} from "./auth/provision";
 import {authorize, oauthProviderFor} from "./oauth";
 import {resolvePrincipal} from "./principal";
-import type {Principal} from "./principal";
+import type {DevEnv, Principal} from "./principal";
 import {storeClient} from "./store-client";
 import type {UserStore} from "./user-store";
 
@@ -38,7 +37,7 @@ function passEncodedBody(response: Response): Response
 }
 
 type WorkerEnv = Env &
-	AccessEnv &
+	DevEnv &
 	AuthEnv &
 	{
 		OAUTH_PROVIDER: OAuthHelpers;
@@ -95,8 +94,7 @@ function authFor(env: WorkerEnv): ReturnType<typeof createAuth> | undefined
 	return auth;
 }
 
-// Better Auth answers its own routes ahead of the Access identity, and stays off (503) until its secret is set,
-// so the Access path never depends on it.
+// Better Auth answers its own routes ahead of the principal check, and stays off (503) until its secret is set.
 app.on(["GET", "POST"], "/api/auth/*", async (c) =>
 {
 	if (!c.env.BETTER_AUTH_SECRET)
@@ -123,7 +121,7 @@ app.on(["GET", "POST"], "/api/auth/*", async (c) =>
 // Public: the sign-in page reads it before anyone is signed in. Shadows the Node host's `{hosted: false}`.
 app.get("/api/auth-config", (c) => c.json(authConfig(c.env)));
 
-// Access or a verified Better Auth session gates everything dynamic; the principal names the user's Durable Object.
+// A verified Better Auth session (or the local dev identity) gates everything dynamic; the principal names the user's Durable Object.
 const principal = createMiddleware<WorkerApp>(async (c, next) =>
 {
 	const result = await resolvePrincipal(c.req.raw, c.env, () => authFor(c.env));
@@ -145,18 +143,6 @@ const principal = createMiddleware<WorkerApp>(async (c, next) =>
 
 app.use("/health", principal);
 app.use("/api/*", principal);
-
-// The admin routes act on a whole store (seed, sync, account state), so only Access identities reach them.
-app.use("/api/admin/*", async (c, next) =>
-	c.var.principal.kind === "access"
-		? next()
-		: c.json(
-				{
-					error: "access-required",
-				},
-				403,
-			),
-);
 
 // The OAuth consent page; it resolves its own principal, sending a signed-out browser to /login and back.
 app.on(["GET", "POST"], "/authorize", async (c) => authorize(c.req.raw, c.env, () => authFor(c.env)));

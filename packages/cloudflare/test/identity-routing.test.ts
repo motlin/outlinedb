@@ -1,96 +1,18 @@
 import {afterAll, beforeAll, describe, expect, it} from "vite-plus/test";
-import {SignJWT, exportJWK, generateKeyPair} from "jose";
 import {createHttpApp} from "@outlinedb/web/server-app";
 import {origin, signUp, startAuthHarness, turnstile} from "./auth-harness";
-import {applyD1Migrations, authDb, countStoreCalls, readJson, startHarness} from "./harness";
+import {authDb, countStoreCalls, readJson, startHarness} from "./harness";
 import type {Harness} from "./harness";
 import {storeClient} from "../src/store-client";
 import type {UserStore} from "../src/user-store";
 
-const teamDomain = "team.example.com";
-const audience = "aud-routing";
-const url = "http://localhost/api/admin/account-state";
-
-const TABLES = [
-	"account",
-	"rootPreferences",
-	"accountSettings",
-	"tagColors",
-	"stars",
-	"starOrder",
-	"locationRenames",
-	"enabledFeatures",
-	"visibleFeatures",
-	"changelogReads",
-	"surveys",
-	"savedViews",
-	"aiAssistants",
-	"aiPromptButtons",
-];
-
-/** An account state holding only `tagColors`. */
-function stateWith(tagColors: unknown[])
-{
-	return {
-		rows:
-		{
-			...Object.fromEntries(TABLES.map((name) => [name, []])),
-			tagColors,
-		},
-		expandedKeys: null,
-	};
-}
-
-describe("worker routes each Access email to its own Durable Object", () =>
+describe("worker serves the migrated routes over RPC to the principal's Durable Object", () =>
 {
 	let h: Harness;
-	let privateKey: CryptoKey;
 
 	beforeAll(async () =>
 	{
-		const pair = await generateKeyPair("RS256");
-		privateKey = pair.privateKey;
-		const jwks = JSON.stringify(
-			{
-				keys: [
-					{
-						...(await exportJWK(pair.publicKey)),
-						alg: "RS256",
-						use: "sig",
-					},
-				],
-			},
-		);
-		h = await startHarness(
-			"./probe-entry.ts",
-			"ProbeStore",
-			undefined,
-			{
-				ACCESS_TEAM_DOMAIN: teamDomain,
-				ACCESS_AUD: audience,
-				ALLOWED_EMAILS: "Alice@example.com, bob@example.com",
-			},
-			{
-				outboundService: (request: Request): Response =>
-					new URL(request.url).pathname === "/cdn-cgi/access/certs"
-						? new Response(
-								jwks,
-								{
-									headers:
-									{
-										"content-type": "application/json",
-									},
-								},
-							)
-						: new Response(
-								"unexpected",
-								{
-									status: 500,
-								},
-							),
-			},
-		);
-		await applyD1Migrations(h.mf);
+		h = await startHarness("./probe-entry.ts", "ProbeStore");
 	}, 120_000);
 
 	afterAll(async () =>
@@ -98,105 +20,12 @@ describe("worker routes each Access email to its own Durable Object", () =>
 		await h.dispose();
 	});
 
-	async function as(
-		email: string,
-		init:
-		{
-			method?: string;
-			body?: string;
-		} = {},
-	): Promise<unknown>
+	it("reaches a migrated op over RPC under the dev identity, and the DO answers the op itself", async () =>
 	{
-		const jwt = await new SignJWT(
-			{
-				email,
-			},
-		)
-			.setProtectedHeader(
-				{
-					alg: "RS256",
-				},
-			)
-			.setAudience(audience)
-			.setIssuer(`https://${teamDomain}`)
-			.setIssuedAt()
-			.setExpirationTime("1h")
-			.sign(privateKey);
-		const response = await h.mf.dispatchFetch(
-			url,
-			{
-				...init,
-				headers:
-				{
-					"Cf-Access-Jwt-Assertion": jwt,
-					"content-type": "application/json",
-				},
-			},
-		);
-		return response.json();
-	}
-
-	async function named(name: string): Promise<unknown>
-	{
+		const viaWorker = await h.mf.dispatchFetch("http://localhost/api/v1/account", {});
 		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
 		const ns = (await h.mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace<UserStore>;
-		return ns.get(ns.idFromName(name)).getAccountState();
-	}
-
-	it("stores a valid token's writes in the DO named by the lowercased email, not dev, and keeps emails separate", async () =>
-	{
-		const alice = stateWith([
-			{
-				tag: "#a",
-				colorIndex: 1,
-			},
-		]);
-		await as(
-			"ALICE@example.com",
-			{
-				method: "PUT",
-				body: JSON.stringify(alice),
-			},
-		);
-
-		// The RPC result is built in another realm, so compare it as JSON.
-		await expect(named("alice@example.com").then((state) => JSON.stringify(state))).resolves.toBe(
-			JSON.stringify(alice),
-		);
-		await expect(named("dev").then((state) => JSON.stringify(state))).resolves.toBe(JSON.stringify(stateWith([])));
-		await expect(as("bob@example.com")).resolves.toStrictEqual(stateWith([]));
-		await expect(as("alice@example.com")).resolves.toStrictEqual(alice);
-	});
-
-	it("reaches a migrated op over RPC under the Access identity, and the DO answers the op itself", async () =>
-	{
-		const jwt = await new SignJWT(
-			{
-				email: "alice@example.com",
-			},
-		)
-			.setProtectedHeader(
-				{
-					alg: "RS256",
-				},
-			)
-			.setAudience(audience)
-			.setIssuer(`https://${teamDomain}`)
-			.setIssuedAt()
-			.setExpirationTime("1h")
-			.sign(privateKey);
-		const viaWorker = await h.mf.dispatchFetch(
-			"http://localhost/api/v1/account",
-			{
-				headers:
-				{
-					"Cf-Access-Jwt-Assertion": jwt,
-				},
-			},
-		);
-		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
-		const ns = (await h.mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace<UserStore>;
-		const viaRpc = await storeClient(ns.get(ns.idFromName("alice@example.com"))).call("account.get", {});
+		const viaRpc = await storeClient(ns.get(ns.idFromName("dev"))).call("account.get", {});
 
 		const body: unknown = await viaWorker.json();
 		expect(viaWorker.status).toBe(503);
@@ -217,7 +46,7 @@ describe("worker routes each Access email to its own Durable Object", () =>
 	{
 		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
 		const ns = (await h.mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace;
-		const stub = ns.get(ns.idFromName("alice@example.com"));
+		const stub = ns.get(ns.idFromName("dev"));
 		const viaDo = await Promise.all(
 			["status", "sync", "account-state"].map(
 				async (name) => (await stub.fetch(`http://localhost/api/admin/${name}`)).status,
@@ -228,24 +57,9 @@ describe("worker routes each Access email to its own Durable Object", () =>
 
 	it("serves the migrated routers from the Worker only: the Durable Object's own app answers 404", async () =>
 	{
-		const jwt = await new SignJWT(
-			{
-				email: "alice@example.com",
-			},
-		)
-			.setProtectedHeader(
-				{
-					alg: "RS256",
-				},
-			)
-			.setAudience(audience)
-			.setIssuer(`https://${teamDomain}`)
-			.setIssuedAt()
-			.setExpirationTime("1h")
-			.sign(privateKey);
 		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
 		const ns = (await h.mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace;
-		const stub = ns.get(ns.idFromName("alice@example.com"));
+		const stub = ns.get(ns.idFromName("dev"));
 		const paths = [
 			"/api/v1/account",
 			"/api/v1/features",
@@ -265,15 +79,7 @@ describe("worker routes each Access email to its own Durable Object", () =>
 		const viaWorker = await Promise.all(
 			paths.slice(1).map(async (path) =>
 			{
-				const response = await h.mf.dispatchFetch(
-					`http://localhost${path}`,
-					{
-						headers:
-						{
-							"Cf-Access-Jwt-Assertion": jwt,
-						},
-					},
-				);
+				const response = await h.mf.dispatchFetch(`http://localhost${path}`, {});
 				return {
 					status: response.status,
 					body: await response.json(),
@@ -282,7 +88,7 @@ describe("worker routes each Access email to its own Durable Object", () =>
 		);
 
 		expect(viaDo).toStrictEqual([404, 404, 404, 404, 404, 404, 404, 404, 404, 404]);
-		// Alice's object is standalone but never provisioned, so it has no account row: tags, stars and preferences
+		// The dev object is standalone but never provisioned, so it has no account row: tags, stars and preferences
 		// answer 503 while expansion reads its local table. Files has the R2 blob store, so an attachment the object does
 		// not have is a 404.
 		expect(viaWorker.map(({status}) => status)).toStrictEqual([200, 200, 200, 200, 503, 503, 503, 200, 404]);
@@ -349,7 +155,6 @@ describe("worker routes each Access email to its own Durable Object", () =>
 				method: "POST",
 				headers:
 				{
-					"Cf-Access-Jwt-Assertion": jwt,
 					"content-type": "application/json",
 				},
 				body: "{}",
@@ -364,15 +169,7 @@ describe("worker routes each Access email to its own Durable Object", () =>
 		);
 
 		const calendarViaDo = await stub.fetch("http://localhost/api/v1/calendar/dots?from=bad&to=bad");
-		const calendarViaWorker = await h.mf.dispatchFetch(
-			"http://localhost/api/v1/calendar/dots?from=bad&to=bad",
-			{
-				headers:
-				{
-					"Cf-Access-Jwt-Assertion": jwt,
-				},
-			},
-		);
+		const calendarViaWorker = await h.mf.dispatchFetch("http://localhost/api/v1/calendar/dots?from=bad&to=bad", {});
 		expect(calendarViaDo.status).toBe(404);
 		expect(calendarViaWorker.status).toBe(400);
 		await expect(calendarViaWorker.json()).resolves.toStrictEqual(
@@ -382,15 +179,7 @@ describe("worker routes each Access email to its own Durable Object", () =>
 		);
 
 		const searchViaDo = await stub.fetch("http://localhost/api/search/helpers?rootId=");
-		const searchViaWorker = await h.mf.dispatchFetch(
-			"http://localhost/api/search/helpers?rootId=",
-			{
-				headers:
-				{
-					"Cf-Access-Jwt-Assertion": jwt,
-				},
-			},
-		);
+		const searchViaWorker = await h.mf.dispatchFetch("http://localhost/api/search/helpers?rootId=", {});
 		expect(searchViaDo.status).toBe(404);
 		expect(searchViaWorker.status).toBe(200);
 		await expect(searchViaWorker.json()).resolves.toStrictEqual(
@@ -421,7 +210,6 @@ describe("worker routes each Access email to its own Durable Object", () =>
 				headers:
 				{
 					...relatedRequest.headers,
-					"Cf-Access-Jwt-Assertion": jwt,
 				},
 			},
 		);
@@ -434,15 +222,7 @@ describe("worker routes each Access email to its own Durable Object", () =>
 		);
 
 		const nodesViaDo = await stub.fetch("http://localhost/api/v1/nodes");
-		const nodesViaWorker = await h.mf.dispatchFetch(
-			"http://localhost/api/v1/nodes",
-			{
-				headers:
-				{
-					"Cf-Access-Jwt-Assertion": jwt,
-				},
-			},
-		);
+		const nodesViaWorker = await h.mf.dispatchFetch("http://localhost/api/v1/nodes", {});
 		expect(nodesViaDo.status).toBe(404);
 		expect(nodesViaWorker.status).toBe(200);
 		await expect(nodesViaWorker.json()).resolves.toStrictEqual(
@@ -457,7 +237,6 @@ describe("worker routes each Access email to its own Durable Object", () =>
 				headers:
 				{
 					"content-type": "application/json",
-					"Cf-Access-Jwt-Assertion": jwt,
 				},
 				body: JSON.stringify(
 					{
@@ -489,7 +268,6 @@ describe("worker routes each Access email to its own Durable Object", () =>
 				headers:
 				{
 					"content-type": "application/json",
-					"Cf-Access-Jwt-Assertion": jwt,
 				},
 				body: "{}",
 			},
@@ -515,7 +293,6 @@ describe("worker routes each Access email to its own Durable Object", () =>
 				headers:
 				{
 					"content-type": "application/json",
-					"Cf-Access-Jwt-Assertion": jwt,
 				},
 				body: "{}",
 			},
@@ -541,7 +318,6 @@ describe("worker routes each Access email to its own Durable Object", () =>
 				headers:
 				{
 					"content-type": "application/json",
-					"Cf-Access-Jwt-Assertion": jwt,
 				},
 				body: JSON.stringify(
 					{
@@ -551,27 +327,12 @@ describe("worker routes each Access email to its own Durable Object", () =>
 				),
 			},
 		);
-		// Alice's object is standalone, so the create writes locally.
+		// The dev object is standalone, so the create writes locally.
 		expect(createViaWorker.status).toBe(201);
 	});
 
 	it("makes exactly one store call per HTTP request on every migrated route", async () =>
 	{
-		const jwt = await new SignJWT(
-			{
-				email: "alice@example.com",
-			},
-		)
-			.setProtectedHeader(
-				{
-					alg: "RS256",
-				},
-			)
-			.setAudience(audience)
-			.setIssuer(`https://${teamDomain}`)
-			.setIssuedAt()
-			.setExpirationTime("1h")
-			.sign(privateKey);
 		const json =
 		{
 			"content-type": "application/json",
@@ -648,7 +409,7 @@ describe("worker routes each Access email to its own Durable Object", () =>
 		for (const {method, path, body} of routes)
 		{
 			counts.push(
-				await countStoreCalls(h.mf, "alice@example.com", async () =>
+				await countStoreCalls(h.mf, "dev", async () =>
 					h.mf.dispatchFetch(
 						`http://localhost${path}`,
 						{
@@ -657,7 +418,6 @@ describe("worker routes each Access email to its own Durable Object", () =>
 							headers:
 							{
 								...json,
-								"Cf-Access-Jwt-Assertion": jwt,
 							},
 						},
 					),
@@ -718,31 +478,14 @@ async function nodeNames(
 	};
 }
 
-describe("worker resolves a principal from Access or a Better Auth session", () =>
+describe("worker resolves a principal from a Better Auth session", () =>
 {
 	let h: Harness;
-	let privateKey: CryptoKey;
 
 	beforeAll(async () =>
 	{
-		const pair = await generateKeyPair("RS256");
-		privateKey = pair.privateKey;
-		const jwks = JSON.stringify(
-			{
-				keys: [
-					{
-						...(await exportJWK(pair.publicKey)),
-						alg: "RS256",
-						use: "sig",
-					},
-				],
-			},
-		);
 		h = await startAuthHarness(
 			{
-				ACCESS_TEAM_DOMAIN: teamDomain,
-				ACCESS_AUD: audience,
-				ALLOWED_EMAILS: "alice@example.com, bob@example.com",
 				BETTER_AUTH_SECRET: secret,
 				SIGNUP_MODE: "invite",
 				SIGNUP_INVITES:
@@ -752,23 +495,6 @@ describe("worker resolves a principal from Access or a Better Auth session", () 
 			},
 			{
 				className: "ProbeStore",
-				otherwise: (request) =>
-					new URL(request.url).pathname === "/cdn-cgi/access/certs"
-						? new Response(
-								jwks,
-								{
-									headers:
-									{
-										"content-type": "application/json",
-									},
-								},
-							)
-						: new Response(
-								"unexpected",
-								{
-									status: 500,
-								},
-							),
 			},
 		);
 	}, 120_000);
@@ -777,25 +503,6 @@ describe("worker resolves a principal from Access or a Better Auth session", () 
 	{
 		await h.dispose();
 	});
-
-	async function accessJwt(email: string): Promise<string>
-	{
-		return new SignJWT(
-			{
-				email,
-			},
-		)
-			.setProtectedHeader(
-				{
-					alg: "RS256",
-				},
-			)
-			.setAudience(audience)
-			.setIssuer(`https://${teamDomain}`)
-			.setIssuedAt()
-			.setExpirationTime("1h")
-			.sign(privateKey);
-	}
 
 	it("routes a verified session user to the Durable Object named by its user id, keeps two users apart, and serves a standalone store's account state locally", async () =>
 	{
@@ -1002,106 +709,40 @@ describe("worker resolves a principal from Access or a Better Auth session", () 
 		);
 	});
 
-	it("routes an Access email to its email-named Durable Object, or to its user's once it has a verified D1 user", async () =>
+	it("serves a session the admin routes of its own Durable Object", async () =>
 	{
-		const tags = [
-			{
-				tag: "#b",
-				colorIndex: 2,
-			},
-		];
-		const put = async (email: string, tagColors: unknown[]) =>
-			h.mf.dispatchFetch(
-				`${origin}/api/admin/account-state`,
-				{
-					method: "PUT",
-					headers:
-					{
-						"Cf-Access-Jwt-Assertion": await accessJwt(email),
-						"content-type": "application/json",
-					},
-					body: JSON.stringify(stateWith(tagColors)),
-				},
-			);
-
-		expect((await put("bob@example.com", tags)).status).toBe(200);
-		const alice = await signUp(h, "alice@example.com");
-		expect(
-			(
-				await put("alice@example.com", [
-					{
-						tag: "#a",
-						colorIndex: 1,
-					},
-				])
-			).status,
-		).toBe(200);
-
-		const states = await Promise.all(
-			["bob@example.com", alice.userId, "alice@example.com"].map(async (name) =>
-			{
-				const state = await (await stubNamed(h, name)).getAccountState();
-				// Signup expands the tutorial's welcome node, whose id is random, so only the count is compared.
-				return JSON.stringify(
-					{
-						...state,
-						expandedKeys: state.expandedKeys?.length ?? null,
-					},
-				);
-			}),
-		);
-		expect(states).toStrictEqual([
-			JSON.stringify(stateWith(tags)),
-			JSON.stringify(
-				{
-					...stateWith([
-						{
-							tag: "#a",
-							colorIndex: 1,
-						},
-					]),
-					expandedKeys: 1,
-				},
-			),
-			JSON.stringify(stateWith([])),
-		]);
-	});
-
-	it("refuses a session on /api/admin/* with 403, so only Access reaches the admin routes", async () =>
-	{
-		const {cookie} = await signUp(h, "gina@example.com");
+		const gina = await signUp(h, "gina@example.com");
 		const responses = await Promise.all(
-			["/api/admin/status", "/api/admin/account-state"].map(async (path) =>
+			["/api/admin/status", "/api/admin/sync", "/api/admin/account-state"].map(async (path) =>
 			{
 				const response = await h.mf.dispatchFetch(
 					`${origin}${path}`,
 					{
 						headers:
 						{
-							cookie,
+							cookie: gina.cookie,
 						},
 					},
 				);
+				const body = (await response.json()) as Record<string, unknown>;
 				return {
 					status: response.status,
-					body: await response.json(),
+					storeName: body.storeName,
 				};
 			}),
 		);
 		expect(responses).toStrictEqual([
 			{
-				status: 403,
-				body:
-				{
-					error: "access-required",
-				},
+				status: 200,
+				storeName: gina.userId,
 			},
 			{
-				status: 403,
-				body:
-				{
-					error: "access-required",
-				},
+				status: 200,
+				storeName: undefined,
+			},
+			{
+				status: 200,
+				storeName: undefined,
 			},
 		]);
 	});
@@ -1200,7 +841,7 @@ describe("worker resolves a principal from Access or a Better Auth session", () 
 	});
 });
 
-describe("worker uses ACCESS_DEV_IDENTITY only when no session cookie is present", () =>
+describe("worker uses DEV_IDENTITY only when no session cookie is present", () =>
 {
 	let h: Harness;
 
@@ -1208,7 +849,7 @@ describe("worker uses ACCESS_DEV_IDENTITY only when no session cookie is present
 	{
 		h = await startAuthHarness(
 			{
-				ACCESS_DEV_IDENTITY: "dev",
+				DEV_IDENTITY: "dev",
 				BETTER_AUTH_SECRET: secret,
 				SIGNUP_MODE: "invite",
 				SIGNUP_INVITES: "frank@example.com",

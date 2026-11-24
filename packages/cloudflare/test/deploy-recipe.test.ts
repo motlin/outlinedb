@@ -108,7 +108,7 @@ describe("Worker dev through the Cloudflare Vite plugin", () =>
 
 describe("built wrangler.json", () =>
 {
-	it("declares none of the Access settings in vars, so secrets can hold them", () =>
+	it("declares no secret in vars, so deploy never resets one", () =>
 	{
 		const build = spawnSync(
 			"just",
@@ -124,17 +124,7 @@ describe("built wrangler.json", () =>
 			vars?: Record<string, string>;
 		} = JSON.parse(readFileSync(`${root}packages/web/dist/outlinedb/worker/wrangler.json`, "utf8"));
 		const names = Object.keys(built.vars ?? {});
-		expect(
-			names.filter((name) =>
-				[
-					"ACCESS_TEAM_DOMAIN",
-					"ACCESS_AUD",
-					"ALLOWED_EMAILS",
-					"ALLOWED_SERVICE_TOKENS",
-					"OUTLINEDB_CREDENTIALS_KEY",
-				].includes(name),
-			),
-		).toStrictEqual([]);
+		expect(names.filter((name) => ["OUTLINEDB_CREDENTIALS_KEY"].includes(name))).toStrictEqual([]);
 	}, 240_000);
 });
 

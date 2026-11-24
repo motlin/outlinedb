@@ -36,7 +36,7 @@ export interface EmailEnv
 	EMAIL_FROM?: string;
 	/** The `send_email` binding. */
 	EMAIL?: EmailBinding;
-	ACCESS_DEV_IDENTITY?: string;
+	DEV_IDENTITY?: string;
 }
 
 /** Sends through the Email Service binding, which throws an Error carrying a `code` on failure. */
@@ -106,9 +106,9 @@ export function senderFor(
 		}
 		case "log":
 		{
-			if (!env.ACCESS_DEV_IDENTITY && !options.test)
+			if (!env.DEV_IDENTITY && !options.test)
 			{
-				throw new Error("EMAIL_PROVIDER=log is only allowed in local dev (ACCESS_DEV_IDENTITY) or tests");
+				throw new Error("EMAIL_PROVIDER=log is only allowed in local dev (DEV_IDENTITY) or tests");
 			}
 			return logSender(
 				options.sink ??

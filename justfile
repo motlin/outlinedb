@@ -70,7 +70,7 @@ cf-test: build-shared
 # Run the SPA and the Worker together in local workerd (Cloudflare Vite plugin; R2 and Durable Objects simulated, no Cloudflare account needed) with a fixed dev identity; state persists in packages/cloudflare/.wrangler/state. `dev-node` keeps the two-process Node host over outlinedb.sqlite
 [group('web')]
 dev *args: build-shared cf-d1-migrate-local
-    cd packages/web && ACCESS_DEV_IDENTITY="${ACCESS_DEV_IDENTITY:-dev}" vp dev -c vite.worker.config.ts {{ args }}
+    cd packages/web && DEV_IDENTITY="${DEV_IDENTITY:-dev}" vp dev -c vite.worker.config.ts {{ args }}
 
 # Apply the AUTH_DB D1 migrations to the local state `just dev` uses (WORKER_PERSIST_DIR overrides it, as in vite.worker.config.ts)
 [group('web')]
@@ -86,11 +86,6 @@ cf-build: build-shared
 [group('test')]
 cf-smoke: build-shared
     node packages/cloudflare/smoke/run-smoke.ts
-
-# Seed the account state (account tables and expanded keys) into a Worker's Durable Object (post-deploy step; pass the Worker URL)
-[group('web')]
-cf-seed-account url:
-    ./bin/run.js cache seed-account-state --url {{ url }}
 
 # Deploy the Worker by hand; CI deploys on every push to main (push.yml), so prefer pushing. Refuses unless CONFIRM_DEPLOY=1; never part of verify
 [group('web')]

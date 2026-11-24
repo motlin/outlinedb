@@ -119,7 +119,7 @@ describe("related notes on the Worker", () =>
 			"EmbeddingProbeStore",
 			undefined,
 			{
-				ACCESS_DEV_IDENTITY: "dev",
+				DEV_IDENTITY: "dev",
 				AI: "bound",
 				RELATED_INDEX: "bound",
 			},

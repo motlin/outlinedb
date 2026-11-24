@@ -58,7 +58,7 @@ describe("GET /api/admin/status", () =>
 			"ProbeStore",
 			undefined,
 			{
-				ACCESS_DEV_IDENTITY: "dev",
+				DEV_IDENTITY: "dev",
 				TREE_SNAPSHOT: "true",
 			},
 		);
