@@ -50,6 +50,7 @@ describe("server-app exports", () =>
 			"inProcessStore",
 			"peekTreeSnapshotRows",
 			"sha256Hex",
+			"withTreeChangePublish",
 		]);
 	});
 });

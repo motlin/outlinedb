@@ -9,6 +9,8 @@
  * `{"type":"account.changed","version"}` frames after a sync, import or seed rewrote the account tables, which re-read
  * the feature flags and preferences so a tab opened before the first sync picks them up without a reload. A socket that
  * closes without ever opening may have been refused with a 401, which the page cannot see, so it checks the sign-in.
+ * The tab sends `{"type":"visibility","visible"}` on open and on every visibility change: while any tab shows the
+ * outline, the Durable Object polls workflowy.com every few seconds instead of every minute.
  */
 
 import {useQueryClient} from "@tanstack/react-query";
@@ -137,6 +139,21 @@ function startOutlineLiveSync(
 		}
 	};
 
+	const sendVisibility = () =>
+	{
+		if (state.socket?.readyState === OPEN)
+		{
+			state.socket.send(
+				JSON.stringify(
+					{
+						type: "visibility",
+						visible: document.visibilityState === "visible",
+					},
+				),
+			);
+		}
+	};
+
 	const connect = () =>
 	{
 		const protocol = globalThis.location.protocol === "https:" ? "wss" : "ws";
@@ -147,6 +164,7 @@ function startOutlineLiveSync(
 		{
 			socketOpened = true;
 			state.failures = 0;
+			sendVisibility();
 			if (state.opened)
 			{
 				// Anything written while the socket was down sent no frame.
@@ -187,6 +205,7 @@ function startOutlineLiveSync(
 
 	const onVisibilityChange = () =>
 	{
+		sendVisibility();
 		if (document.visibilityState === "visible" && state.socket?.readyState !== OPEN)
 		{
 			requestSync();

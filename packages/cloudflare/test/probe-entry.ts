@@ -103,6 +103,19 @@ export class ProbeStore extends UserStore
 		};
 	}
 
+	/** Run one sync alarm now, counting only the rows it read and wrote. */
+	// fallow-ignore-next-line unused-class-member -- tests invoke it over RPC
+	async measuredSyncAlarm(): Promise<RowCounts>
+	{
+		const cursors: Cursor[] = [];
+		this.ctx.storage.kv.put("alarm:sync", Date.now());
+		await metering.run(cursors, async () => this.alarm());
+		return {
+			rowsRead: cursors.reduce((sum, cursor) => sum + cursor.rowsRead, 0),
+			rowsWritten: cursors.reduce((sum, cursor) => sum + cursor.rowsWritten, 0),
+		};
+	}
+
 	/** The live stored Workflowy session cookie, opened with this object's key; null when none is stored. */
 	// fallow-ignore-next-line unused-class-member -- tests invoke it over RPC
 	async openedWorkflowySession(): Promise<string | null>

@@ -22,6 +22,7 @@ import
 	buildServerContext,
 	inProcessStore,
 	peekTreeSnapshotRows,
+	withTreeChangePublish,
 } from "@outlinedb/web/server-app";
 import type
 {
@@ -55,7 +56,7 @@ import type {EmbeddingStatus} from "./embedding-job";
 import {vectorizeIndex, workersAiEmbedder} from "./embeddings";
 import type {Embedder} from "./embeddings";
 import {meterRows} from "./row-meter";
-import {SyncJob} from "./sync";
+import {SyncJob, visibleIntervalMs} from "./sync";
 import {seedWelcomeContent} from "./welcome-content";
 import type {SyncEnv, SyncStatus} from "./sync";
 import {readWorkerConfig} from "./worker-config";
@@ -90,7 +91,10 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 	private sessionRefused = false;
 	/** Announces ladder writes; every accepted ladder socket receives each event. */
 	protected readonly ladderEvents = new LadderEventBus();
-	/** Announces `account.changed` to every accepted nodes events socket after a sync or seed rewrote the account tables. */
+	/**
+	 * Announces to every accepted nodes events socket: `tree.changed` after an op, drain or catch-up wrote the tree, and
+	 * `account.changed` after a sync or seed rewrote the account tables.
+	 */
 	protected readonly nodeEvents = new TreeEventBus();
 	/** Publishes `account.changed` when the account tables' version moved since the last check. */
 	private checkAccount: () => void = () =>
@@ -277,9 +281,11 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 				blobs,
 			},
 		);
+		// A drain or catch-up that wrote (a push's server run, an edit made on workflowy.com) tells open tabs to read it.
+		const announced = async <T>(run: () => Promise<T>): Promise<T> =>
+			withTreeChangePublish(db, this.nodeEvents, async () => this.watchSession(run));
 		this.drainOutbox =
-			internalAuth &&
-			(async () => this.watchSession(async () => serverContext.internalAdapter?.()?.drainOutbox()));
+			internalAuth && (async () => announced(async () => serverContext.internalAdapter?.()?.drainOutbox()));
 		// A mirror-mode write arms the outbox job for now; the request never waits for the drain.
 		serverContext.outboxWritten = () =>
 		{
@@ -306,6 +312,7 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 			{
 				keepSnapshotWarm: this.treeSnapshotEnabled,
 				keepSwitcherSkeletonWarm: !this.treeSnapshotEnabled,
+				treeEvents: this.nodeEvents,
 			},
 		);
 		this.sync = new SyncJob(
@@ -314,8 +321,8 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 				db,
 				env,
 				catchUp:
-					internalAuth &&
-					(async () => this.watchSession(async () => serverContext.internalAdapter?.()?.catchUp())),
+					internalAuth && (async () => announced(async () => serverContext.internalAdapter?.()?.catchUp())),
+				visible: () => this.outlineVisible(),
 				alarm: this.alarms.for("sync"),
 			},
 		);
@@ -753,6 +760,39 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 		return this.workflowyConnectionStatus();
 	}
 
+	/**
+	 * A nodes socket's `{"type":"visibility","visible"}` frame, sent on open and on every visibility change, kept as the
+	 * socket's attachment so it survives hibernation. A tab becoming visible pulls a catch-up due later than the visible
+	 * interval to now, so a returning reader sees workflowy.com's edits at once.
+	 */
+	override async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void>
+	{
+		const visible = visibilityFrame(message);
+		if (visible === undefined)
+		{
+			return;
+		}
+		socket.serializeAttachment(
+			{
+				visible,
+			},
+		);
+		const due = this.alarms.due("sync");
+		const now = Date.now();
+		if (visible && this.syncs() && due !== null && due > now + visibleIntervalMs(this.env))
+		{
+			await this.alarms.set("sync", now);
+		}
+	}
+
+	/** Whether any open nodes socket's tab shows the outline now. */
+	private outlineVisible(): boolean
+	{
+		return this.ctx
+			.getWebSockets("nodes")
+			.some((socket) => Reflect.get(Object(socket.deserializeAttachment()), "visible") === true);
+	}
+
 	override webSocketClose(socket: WebSocket, code: number): void
 	{
 		// 1005 and 1006 are reserved and cannot be echoed back in a close frame.
@@ -995,6 +1035,27 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 				status: 404,
 			},
 		);
+	}
+}
+
+/** A `{"type":"visibility","visible":boolean}` frame's flag, or undefined for any other message. */
+function visibilityFrame(message: string | ArrayBuffer): boolean | undefined
+{
+	if (typeof message !== "string")
+	{
+		return undefined;
+	}
+	try
+	{
+		const frame: unknown = JSON.parse(message);
+		const visible: unknown = Reflect.get(Object(frame), "visible");
+		return Reflect.get(Object(frame), "type") === "visibility" && typeof visible === "boolean"
+			? visible
+			: undefined;
+	}
+	catch
+	{
+		return undefined;
 	}
 }
 

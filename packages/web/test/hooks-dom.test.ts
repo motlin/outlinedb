@@ -200,6 +200,7 @@ describe("use outline live sync", () =>
 		static readonly instances: FakeSocket[] = [];
 		readyState = 0;
 		readonly url: string;
+		readonly sent: unknown[] = [];
 		readonly #listeners = new Map<string, ((event: {data?: string}) => void)[]>();
 
 		constructor(url: string)
@@ -216,6 +217,11 @@ describe("use outline live sync", () =>
 		close(): void
 		{
 			this.readyState = 3;
+		}
+
+		send(data: string): void
+		{
+			this.sent.push(JSON.parse(data));
 		}
 
 		emit(name: "open" | "close" | "message", data?: string): void
@@ -546,6 +552,41 @@ describe("use outline live sync", () =>
 			socket().emit("open");
 			await settle();
 			expect(changesSince).toHaveLength(1);
+		});
+
+		it("tells the server whether the tab shows the outline on open and on each change, so it polls upstream faster", async () =>
+		{
+			const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+			socket().emit("open");
+			visibility.mockReturnValue("hidden");
+			document.dispatchEvent(new Event("visibilitychange"));
+			visibility.mockReturnValue("visible");
+			document.dispatchEvent(new Event("visibilitychange"));
+			await settle();
+			expect(
+				{
+					sent: socket().sent,
+					reads: changesSince.length,
+				},
+			).toStrictEqual(
+				{
+					sent: [
+						{
+							type: "visibility",
+							visible: true,
+						},
+						{
+							type: "visibility",
+							visible: false,
+						},
+						{
+							type: "visibility",
+							visible: true,
+						},
+					],
+					reads: 0,
+				},
+			);
 		});
 
 		it("catches up when the tab becomes visible while the socket is down", async () =>

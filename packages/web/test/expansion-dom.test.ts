@@ -101,6 +101,11 @@ describe("expansion socket frame", () =>
 			this.readyState = 3;
 		}
 
+		send(): void
+		{
+			// The tab's visibility frames; these tests only read what the server sends.
+		}
+
 		emit(name: "open" | "message", data?: string): void
 		{
 			this.readyState = name === "open" ? 1 : this.readyState;

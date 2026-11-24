@@ -195,6 +195,8 @@ describe("importing an account from workflowy.com over its stored session", () =
 	let stalledTree: ReadableStreamDefaultController<Uint8Array> | undefined;
 	/** The size of the last `/get_tree_data/` body the fake workflowy.com sent. */
 	let treeBytesSent = 0;
+	/** Ops made on workflowy.com by another client, sent as one concurrent remote transaction by the next poll. */
+	let remoteOps: unknown[] = [];
 	/** The nodes pushes with {@link serverRunDropped} created, as `/get_tree_data/` items. */
 	const unechoedItems:
 	{
@@ -223,6 +225,22 @@ describe("importing an account from workflowy.com over its stored session", () =
 		);
 		upstreamTxId++;
 		const txId = String(upstreamTxId);
+		const remote =
+			remoteOps.length === 0
+				? {}
+				:
+					{
+						concurrent_remote_operation_transactions: [
+							JSON.stringify(
+								{
+									id: txId,
+									client_timestamp: 100,
+									ops: remoteOps,
+								},
+							),
+						],
+					};
+		remoteOps = [];
 		if (serverRunDropped)
 		{
 			for (const op of ops)
@@ -257,9 +275,10 @@ describe("importing an account from workflowy.com over its stored session", () =
 		return pollResult(
 			txId,
 			ops.length === 0
-				? {}
+				? remote
 				:
 					{
+						...remote,
 						server_run_operation_transaction_json: JSON.stringify(
 							{
 								id: txId,
@@ -1140,6 +1159,124 @@ describe("importing an account from workflowy.com over its stored session", () =
 		);
 	}, 60_000);
 
+	it("catches up within seconds while a tab is visible and tells it about the edit it pulled", async () =>
+	{
+		const response = await harness.mf.dispatchFetch(
+			"http://localhost/api/v1/nodes/events",
+			{
+				headers:
+				{
+					Upgrade: "websocket",
+				},
+			},
+		);
+		const ws = response.webSocket;
+		if (!ws)
+		{
+			throw new Error("no websocket on the response");
+		}
+		ws.accept();
+		const frames: unknown[] = [];
+		ws.addEventListener("message", (event) =>
+		{
+			frames.push(
+				typeof event.data === "string" ? Reflect.get(JSON.parse(event.data) as object, "type") : event.data,
+			);
+		});
+		const slowDue = Number(await alarmDue("sync"));
+		pushes.length = 0;
+		remoteOps = [
+			{
+				type: "edit",
+				data:
+				{
+					projectid: PROJECTS,
+					name: "Projects, renamed on workflowy.com",
+				},
+			},
+		];
+		// Becoming visible pulls the minute-away catch-up to now, and it carries the edit made on workflowy.com.
+		ws.send(
+			JSON.stringify(
+				{
+					type: "visibility",
+					visible: true,
+				},
+			),
+		);
+		await until(() => frames.includes("tree.changed"));
+		const visibleAt = Date.now();
+		const visible =
+		{
+			pushes: pushes.length,
+			frames: [...frames],
+			name: (
+				(await probe("/__nodes")) as
+				{
+					id: string;
+					name: string;
+				}[]
+			).find((node) => node.id === PROJECTS)?.name,
+			nextWithinSeconds: Number(await alarmDue("sync")) - visibleAt <= 5000,
+		};
+		// Hidden, the next catch-up goes back to the minute schedule; its poll moves the transaction id, which is a write.
+		ws.send(
+			JSON.stringify(
+				{
+					type: "visibility",
+					visible: false,
+				},
+			),
+		);
+		await sleep(100);
+		pushes.length = 0;
+		// The rows one catch-up costs: the price of each extra poll while a tab is visible.
+		const {rowsRead, rowsWritten} = await (await store()).measuredSyncAlarm();
+		const hiddenNextAfterSeconds = Number(await alarmDue("sync")) - Date.now() > 5000;
+		await sleep(200);
+		ws.close();
+		expect(
+			{
+				slowDueAMinuteOut: slowDue - visibleAt > 5000,
+				catchUpRows:
+				{
+					rowsRead,
+					rowsWritten,
+				},
+				visible,
+				hidden:
+				{
+					pushes: pushes.length,
+					frames,
+					nextAfterSeconds: hiddenNextAfterSeconds,
+				},
+			},
+		).toStrictEqual(
+			{
+				slowDueAMinuteOut: true,
+				// The fake moves the transaction id on every poll, so this one writes it; a quiet poll writes nothing.
+				catchUpRows:
+				{
+					rowsRead: 46,
+					rowsWritten: 6,
+				},
+				visible:
+				{
+					pushes: 1,
+					frames: ["tree.changed"],
+					name: "Projects, renamed on workflowy.com",
+					nextWithinSeconds: true,
+				},
+				hidden:
+				{
+					pushes: 1,
+					frames: ["tree.changed", "tree.changed"],
+					nextAfterSeconds: true,
+				},
+			},
+		);
+	}, 60_000);
+
 	it("stops syncing and tells the user to import again once the transaction log no longer holds the stored id", async () =>
 	{
 		const before = await send("sync-status", "GET");
@@ -1200,7 +1337,7 @@ describe("importing an account from workflowy.com over its stored session", () =
 						{
 							phase: "needs_seed",
 							applied: 0,
-							error: "Workflowy answered need_refreshed_project_tree: the cache's transaction id 704 is no longer in the tree's log; run './bin/run.js cache import-api' to reseed it. Import again from Settings > Workflowy to resume syncing.",
+							error: "Workflowy answered need_refreshed_project_tree: the cache's transaction id 706 is no longer in the tree's log; run './bin/run.js cache import-api' to reseed it. Import again from Settings > Workflowy to resume syncing.",
 							unconfirmedWrites: 2,
 						},
 					},
@@ -1307,11 +1444,11 @@ describe("importing an account from workflowy.com over its stored session", () =
 					// The queued write drains first, then the catch-up polls on from its transaction.
 					pushes: [
 						{
-							from: "705",
+							from: "707",
 							ops: ["bulk_create"],
 						},
 						{
-							from: "706",
+							from: "708",
 							ops: [],
 						},
 					],
