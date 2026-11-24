@@ -43,7 +43,11 @@ const ALL_TOOLS = [
 ];
 
 /** Better Auth on, with invite-only signup for `invites`, and no DEV_IDENTITY, so a request has a session or nothing. */
-async function startSessionHarness(invites: string, persistDir?: string): Promise<AuthHarness>
+async function startSessionHarness(
+	invites: string,
+	persistDir?: string,
+	otherwise?: (request: Request) => Response,
+): Promise<AuthHarness>
 {
 	return startAuthHarness(
 		{
@@ -56,8 +60,31 @@ async function startSessionHarness(invites: string, persistDir?: string): Promis
 		{
 			className: "ProbeStore",
 			persistDir,
+			otherwise,
 		},
 	);
+}
+
+/** A Client ID Metadata Document client, whose verified domain is its URL's host. */
+const metadataClientId = "https://app.example.com/oauth/client.json";
+
+function serveClientMetadata(request: Request): Response
+{
+	return request.url === metadataClientId
+		? Response.json(
+				{
+					client_id: metadataClientId,
+					client_name: "Example App",
+					redirect_uris: [callback],
+					token_endpoint_auth_method: "none",
+				},
+			)
+		: new Response(
+				"unexpected outbound fetch",
+				{
+					status: 500,
+				},
+			);
 }
 
 async function seedStore(h: Harness, name: string, nodeName: string): Promise<void>
@@ -181,7 +208,7 @@ describe("OAuth consent", () =>
 
 	beforeAll(async () =>
 	{
-		h = await startSessionHarness("alice@example.com");
+		h = await startSessionHarness("alice@example.com", undefined, serveClientMetadata);
 		alice = await signUp(h, "alice@example.com");
 	}, 120_000);
 
@@ -212,6 +239,14 @@ describe("OAuth consent", () =>
 		const page = await openConsent(h.mf, alice.cookie, "mcp:read");
 		expect(page.html).toContain('<button class="allow" name="access" value="read">Allow</button>');
 		expect(page.html).toContain('<button class="link" name="access" value="write">Read and write</button>');
+	});
+
+	it("names a metadata-document client and the domain that verifies it", async () =>
+	{
+		const page = await openConsent(h.mf, alice.cookie, "mcp:read", metadataClientId);
+		expect(page.status).toBe(200);
+		expect(page.html).toContain("<p>Example App is published by <strong>app.example.com</strong>.</p>");
+		expect(page.html).not.toContain("This app registered itself");
 	});
 
 	it("shows the client's https logo and links its name to its https homepage", async () =>

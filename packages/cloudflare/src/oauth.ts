@@ -52,7 +52,7 @@ function consentPage(details: ConsentDescription, handle: string, email: string)
 	const logo = httpsUrl(details.logoUri);
 	const clientLogo = logo ? `<img class="client-logo" src="${escapeHtml(logo)}" alt="">` : "";
 	const origin = details.clientDomain
-		? `<p>Published by <strong>${escapeHtml(details.clientDomain)}</strong>.</p>`
+		? `<p>${name} is published by <strong>${escapeHtml(details.clientDomain)}</strong>.</p>`
 		: '<p class="warn">This app registered itself; its name is not verified.</p>';
 	const loopback = details.redirectIsLoopback
 		? '<p class="warn"><strong>This sends access to an app on your computer.</strong> Continue only if you just started signing in from it.</p>'
