@@ -37,7 +37,10 @@ import {appendFileSync} from "node:fs";
 // Workers Paid includes per month: 10M Worker requests, 30M CPU ms, 1M Durable Object requests, 25B SQLite rows read
 // and 50M rows written. Each cost budget is a quarter of one day's share (monthly / 30 / 4), so a day trips it long
 // before the month's allowance is at risk. Included amounts are account-wide, but the budgets count only the outlinedb
-// script, so another project's traffic on the account never trips them.
+// script, so another project's traffic on the account never trips them. A syncing account's Durable Object costs about
+// 24 requests a day (the hourly catch-up) plus one per edit made on workflowy.com while a tab is visible; Durable
+// Object duration (400k GB-s a month included) is not budgeted here, though a visible tab keeps its object awake
+// holding workflowy.com's signal socket: 8 visible hours a day is about 108k GB-s a month at 128 MB.
 const script = "outlinedb";
 /** @param {number} monthly */
 const dailyQuarter = (monthly) => Math.round(monthly / 30 / 4);

@@ -56,7 +56,7 @@ import type {EmbeddingStatus} from "./embedding-job";
 import {vectorizeIndex, workersAiEmbedder} from "./embeddings";
 import type {Embedder} from "./embeddings";
 import {meterRows} from "./row-meter";
-import {SyncJob, visibleIntervalMs} from "./sync";
+import {SyncJob} from "./sync";
 import {seedWelcomeContent} from "./welcome-content";
 import type {SyncEnv, SyncStatus} from "./sync";
 import {readWorkerConfig} from "./worker-config";
@@ -66,6 +66,8 @@ import type {WorkflowyConnectionStatus} from "./workflowy-connection";
 import {WorkflowyLoginAttempt} from "./workflowy-login-attempt";
 import {WorkflowyImportJob} from "./workflowy-import";
 import {TreeDownloadLog} from "./tree-downloads";
+import {UpstreamSignal, connectSignal} from "./upstream-signal";
+import type {SignalConnect} from "./upstream-signal";
 import type {TreeDownloadCounts} from "./tree-downloads";
 import type {WorkflowyImportEnv, WorkflowyImportView} from "./workflowy-import";
 
@@ -116,6 +118,34 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 	);
 	/** The import runs whose tree download this instance has under way; a restarted instance starts with none. */
 	private readonly importDownloads = new Set<string>();
+	/** The session's `wfclientid`, which names its signal channel; undefined unless the account mirrors workflowy.com. */
+	private signalClientId: (() => Promise<string | undefined>) | undefined;
+	/**
+	 * workflowy.com's signal socket, held while a tab shows the outline of an account that syncs: each nudge pulls the
+	 * sync alarm to now, so nudges arriving before it runs share one catch-up. Holding an outbound socket keeps the
+	 * object awake (billed by wall clock) for as long as a tab stays visible.
+	 */
+	private readonly signal = new UpstreamSignal(
+		{
+			connect: async () => this.connectSignal(),
+			nudge: () =>
+			{
+				this.alarms.set("sync", Date.now()).catch((error: unknown) =>
+				{
+					console.error("arming the catch-up for a workflowy.com nudge failed", error);
+				});
+			},
+			refused: async () =>
+			{
+				this.workflowyConnection.expire();
+				await this.reconfigureSync();
+			},
+			log: (message) =>
+			{
+				console.warn(message);
+			},
+		},
+	);
 	/** Delivers mirror-mode writes' outbox rows to workflowy.com; undefined without the internal API. */
 	protected drainOutbox: (() => Promise<unknown>) | undefined;
 	private sync!: SyncJob;
@@ -286,6 +316,7 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 			withTreeChangePublish(db, this.nodeEvents, async () => this.watchSession(run));
 		this.drainOutbox =
 			internalAuth && (async () => announced(async () => serverContext.internalAdapter?.()?.drainOutbox()));
+		this.signalClientId = internalAuth && (async () => serverContext.internalAdapter?.()?.clientId());
 		// A mirror-mode write arms the outbox job for now; the request never waits for the drain.
 		serverContext.outboxWritten = () =>
 		{
@@ -322,7 +353,6 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 				env,
 				catchUp:
 					internalAuth && (async () => announced(async () => serverContext.internalAdapter?.()?.catchUp())),
-				visible: () => this.outlineVisible(),
 				alarm: this.alarms.for("sync"),
 			},
 		);
@@ -357,7 +387,7 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 
 	/**
 	 * Rebuild after the connection or an import changed whether this account mirrors workflowy.com: start the sync at
-	 * once when it now runs, else drop its scheduled drain and catch-up.
+	 * once when it now runs, else drop its scheduled drain and catch-up and let go of the signal socket.
 	 */
 	private async reconfigureSync(): Promise<void>
 	{
@@ -371,6 +401,77 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 		{
 			await this.alarms.set("sync", Date.now());
 		}
+		await this.holdSignal();
+	}
+
+	/**
+	 * Hold workflowy.com's signal socket while a tab other than `closing` shows the outline of an account whose catch-up
+	 * runs, and let go of it otherwise. Opening it catches up at once (unless `catchUp` is false, as when the alarm just
+	 * did), for the edits made while no socket listened.
+	 */
+	private async holdSignal({
+		closing,
+		catchUp = true,
+	}:
+	{
+		closing?: WebSocket;
+		catchUp?: boolean;
+	} = {}): Promise<void>
+	{
+		// Cheapest first: the visibility check reads no rows, while the other two read SQLite.
+		if (!(this.outlineVisible(closing) && this.syncs() && !this.sync.needsSeed()))
+		{
+			this.signal.release();
+			return;
+		}
+		if ((await this.signal.hold()) && catchUp)
+		{
+			await this.alarms.set("sync", Date.now());
+		}
+	}
+
+	/** Open the signal socket on the stored session's `wfclientid` channel. */
+	private async connectSignal(): Promise<SignalConnect>
+	{
+		const cookie = this.mirrorCookie;
+		const apiUrl = this.env.WORKFLOWY_API_URL;
+		let clientId: string | undefined;
+		try
+		{
+			clientId = await this.signalClientId?.();
+		}
+		catch (error)
+		{
+			return isSessionRefused(error)
+				?
+					{
+						kind: "refused",
+					}
+				:
+					{
+						kind: "failed",
+						message: error instanceof Error ? error.message : String(error),
+					};
+		}
+		if (cookie === undefined || clientId === undefined)
+		{
+			return {
+				kind: "failed",
+				message: "the account does not sync",
+			};
+		}
+		return connectSignal(
+			async (url, init) => this.signalFetch(url, init),
+			apiUrl === undefined || apiUrl === "" ? "https://workflowy.com" : apiUrl,
+			clientId,
+			cookie,
+		);
+	}
+
+	/** The upgrade request to workflowy.com's signal endpoint; the tests answer it with a socket pair of their own. */
+	protected async signalFetch(url: string, init: RequestInit): Promise<Response>
+	{
+		return fetch(url, init);
 	}
 
 	/** The stored session cookie, opened, when the account keeps syncing and its session has not expired. */
@@ -762,8 +863,8 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 
 	/**
 	 * A nodes socket's `{"type":"visibility","visible"}` frame, sent on open and on every visibility change, kept as the
-	 * socket's attachment so it survives hibernation. A tab becoming visible pulls a catch-up due later than the visible
-	 * interval to now, so a returning reader sees workflowy.com's edits at once.
+	 * socket's attachment so it survives hibernation. The first visible tab opens workflowy.com's signal socket, and
+	 * the last one to hide closes it.
 	 */
 	override async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void>
 	{
@@ -777,26 +878,29 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 				visible,
 			},
 		);
-		const due = this.alarms.due("sync");
-		const now = Date.now();
-		if (visible && this.syncs() && due !== null && due > now + visibleIntervalMs(this.env))
-		{
-			await this.alarms.set("sync", now);
-		}
+		await this.holdSignal();
 	}
 
-	/** Whether any open nodes socket's tab shows the outline now. */
-	private outlineVisible(): boolean
+	/** Whether any open nodes socket but `closing` has a tab showing the outline now. */
+	private outlineVisible(closing?: WebSocket): boolean
 	{
 		return this.ctx
 			.getWebSockets("nodes")
-			.some((socket) => Reflect.get(Object(socket.deserializeAttachment()), "visible") === true);
+			.some(
+				(socket) =>
+					socket !== closing && Reflect.get(Object(socket.deserializeAttachment()), "visible") === true,
+			);
 	}
 
-	override webSocketClose(socket: WebSocket, code: number): void
+	override async webSocketClose(socket: WebSocket, code: number): Promise<void>
 	{
 		// 1005 and 1006 are reserved and cannot be echoed back in a close frame.
 		socket.close(code === 1005 || code === 1006 ? 1000 : code);
+		await this.holdSignal(
+			{
+				closing: socket,
+			},
+		);
 	}
 
 	/**
@@ -996,6 +1100,15 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 			{
 				this.sessionRefused = false;
 				await this.reconfigureSync();
+			}
+			// The hourly catch-up reopens a signal socket that dropped while a tab stayed visible, without catching up again.
+			if (due.includes("sync"))
+			{
+				await this.holdSignal(
+					{
+						catchUp: false,
+					},
+				);
 			}
 			await this.noticeEmbeddings();
 			if (

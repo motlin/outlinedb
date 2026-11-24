@@ -16,3 +16,4 @@ export type {BlobStore} from "./blob-store.js";
 export {MemoryEmbeddingIndex} from "./embedding-index.js";
 export type {Awaitable, EmbeddingIndex, EmbeddingNeighbour, EmbeddingRow} from "./embedding-index.js";
 export {changeWatermark} from "./system-changes.js";
+export {SIGNAL_SUBSCRIBE_FRAME, isOwnerDocumentUpdate} from "./upstream-signal.js";

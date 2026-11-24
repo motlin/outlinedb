@@ -116,6 +116,79 @@ export class ProbeStore extends UserStore
 		};
 	}
 
+	/**
+	 * Stands in for workflowy.com's `/ws/signal/` endpoint: each upgrade is answered with one end of a fresh socket pair,
+	 * and the other end, which records what the object sends and whether it closed, plays workflowy.com.
+	 */
+	protected override async signalFetch(url: string, init: RequestInit): Promise<Response>
+	{
+		const [client, server] = Object.values(new WebSocketPair());
+		if (client === undefined || server === undefined)
+		{
+			throw new Error("no socket pair");
+		}
+		server.accept();
+		const connection =
+		{
+			url,
+			cookie: new Headers(init.headers).get("cookie"),
+			frames: [] as string[],
+			closed: false,
+		};
+		server.addEventListener("message", (event) =>
+		{
+			connection.frames.push(String(event.data));
+		});
+		server.addEventListener("close", () =>
+		{
+			connection.closed = true;
+		});
+		this.signalConnections.push(connection);
+		this.signalServer = server;
+		return Promise.resolve(
+			new Response(
+				null,
+				{
+					status: 101,
+					webSocket: client,
+				},
+			),
+		);
+	}
+
+	private readonly signalConnections:
+	{
+		url: string;
+		cookie: string | null;
+		frames: string[];
+		closed: boolean;
+	}[] = [];
+	private signalServer: WebSocket | undefined;
+
+	/** Every signal socket the object opened, as JSON: where it went, with which cookie, what it sent, whether it closed. */
+	// fallow-ignore-next-line unused-class-member -- tests invoke it over RPC
+	signalLog(): string
+	{
+		return JSON.stringify(this.signalConnections);
+	}
+
+	/** Send workflowy.com's nudge down the newest signal socket, as when another client edits the account's tree. */
+	// fallow-ignore-next-line unused-class-member -- tests invoke it over RPC
+	signalNudge(): void
+	{
+		this.signalServer?.send(
+			JSON.stringify(
+				{
+					type: "signal.entity.updated",
+					channel:
+					{
+						type: "OWNER_DOCUMENT_UPDATE",
+					},
+				},
+			),
+		);
+	}
+
 	/** The live stored Workflowy session cookie, opened with this object's key; null when none is stored. */
 	// fallow-ignore-next-line unused-class-member -- tests invoke it over RPC
 	async openedWorkflowySession(): Promise<string | null>

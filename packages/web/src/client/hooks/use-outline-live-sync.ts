@@ -10,7 +10,7 @@
  * the feature flags and preferences so a tab opened before the first sync picks them up without a reload. A socket that
  * closes without ever opening may have been refused with a 401, which the page cannot see, so it checks the sign-in.
  * The tab sends `{"type":"visibility","visible"}` on open and on every visibility change: while any tab shows the
- * outline, the Durable Object polls workflowy.com every few seconds instead of every minute.
+ * outline, the Durable Object holds workflowy.com's signal socket and catches up on each nudge instead of hourly.
  */
 
 import {useQueryClient} from "@tanstack/react-query";

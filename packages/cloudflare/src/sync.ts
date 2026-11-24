@@ -6,14 +6,11 @@ import type {AppDatabase} from "@outlinedb/shared/db";
 import type {JobAlarm} from "./alarm-schedule";
 import {createWithMicrosecondSystemTimes} from "./text-system-times";
 
-/** Minutes between scheduled runs; each is one small /push_and_poll from the stored transaction id. */
-const DEFAULT_INTERVAL_MINUTES = 1;
 /**
- * Seconds between runs while a tab shows the outline, so an edit made on workflowy.com reaches it within seconds. Each
- * extra run is one alarm and one /push_and_poll, about 46 rows read, and no SQL rows written unless the poll moved the
- * transaction id: 660 runs per visible hour.
+ * Minutes between scheduled runs, each one small /push_and_poll from the stored transaction id. Hourly, as workflowy.com's
+ * own web app polls: while a tab shows the outline, workflowy.com's signal socket nudges a run as soon as anything changes.
  */
-const DEFAULT_VISIBLE_INTERVAL_SECONDS = 5;
+const DEFAULT_INTERVAL_MINUTES = 60;
 /** The run id every catch-up run's versions share, so they phase each other out instead of piling up live rows. */
 const CATCH_UP_RUN_ID = "catch-up";
 const REIMPORT_HINT = "Import again from Settings > Workflowy to resume syncing.";
@@ -62,20 +59,6 @@ export interface SyncEnv
 {
 	/** Minutes between scheduled catch-up runs (default {@link DEFAULT_INTERVAL_MINUTES}). */
 	SYNC_INTERVAL_MINUTES?: string;
-	/** Seconds between catch-up runs while a tab shows the outline (default {@link DEFAULT_VISIBLE_INTERVAL_SECONDS}). */
-	SYNC_VISIBLE_INTERVAL_SECONDS?: string;
-}
-
-/** How long after a run the next one is due while a tab shows the outline. */
-export function visibleIntervalMs(env: SyncEnv): number
-{
-	return positiveOr(env.SYNC_VISIBLE_INTERVAL_SECONDS, DEFAULT_VISIBLE_INTERVAL_SECONDS) * 1000;
-}
-
-function positiveOr(value: string | undefined, fallback: number): number
-{
-	const parsed = Number(value);
-	return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 export interface SyncDeps
@@ -88,8 +71,6 @@ export interface SyncDeps
 	 * when the account keeps syncing; undefined when it does not.
 	 */
 	catchUp?: () => Promise<void> | undefined;
-	/** Whether a tab shows the outline now, which shortens the wait for the next run to {@link visibleIntervalMs}. */
-	visible?: () => boolean;
 	/** Where the next run is scheduled; the object's own alarm unless the alarm is shared with other jobs. */
 	alarm?: JobAlarm;
 	now?: () => number;
@@ -223,7 +204,7 @@ export class SyncJob
 	/**
 	 * One alarm: one /push_and_poll from the stored transaction id. A failure is reported as the run's
 	 * internalSyncError and retried on schedule; a failure no retry can fix stops the schedule as `needs_seed`. A version
-	 * is written only when the outcome differs from the last result, so a quiet minute-by-minute catch-up leaves no rows
+	 * is written only when the outcome differs from the last result, so a quiet hourly catch-up leaves no rows
 	 * behind.
 	 */
 	async tick(): Promise<void>
@@ -252,7 +233,7 @@ export class SyncJob
 					},
 				);
 			}
-			// Not rescheduled: retrying every minute only repeats the failure.
+			// Not rescheduled: another run only repeats the failure.
 			return;
 		}
 		const internalSyncError = failure?.message;
@@ -278,11 +259,8 @@ export class SyncJob
 
 	private async scheduleNextRun(): Promise<void>
 	{
-		const {env} = this.deps;
-		const interval =
-			this.deps.visible?.() === true
-				? visibleIntervalMs(env)
-				: positiveOr(env.SYNC_INTERVAL_MINUTES, DEFAULT_INTERVAL_MINUTES) * 60_000;
+		const minutes = Number(this.deps.env.SYNC_INTERVAL_MINUTES);
+		const interval = (Number.isFinite(minutes) && minutes > 0 ? minutes : DEFAULT_INTERVAL_MINUTES) * 60_000;
 		await this.alarm.setAlarm(this.now() + interval);
 	}
 

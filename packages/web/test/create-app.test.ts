@@ -40,6 +40,7 @@ describe("server-app exports", () =>
 		expect(Object.keys(serverApp).sort()).toStrictEqual([
 			"LadderEventBus",
 			"MemoryEmbeddingIndex",
+			"SIGNAL_SUBSCRIBE_FRAME",
 			"TreeEventBus",
 			"accountChangePublisher",
 			"bindTreeHost",
@@ -48,6 +49,7 @@ describe("server-app exports", () =>
 			"changeWatermark",
 			"createHttpApp",
 			"inProcessStore",
+			"isOwnerDocumentUpdate",
 			"peekTreeSnapshotRows",
 			"sha256Hex",
 			"withTreeChangePublish",

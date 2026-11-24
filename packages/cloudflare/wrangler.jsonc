@@ -58,7 +58,7 @@
 	// OUTLINEDB_CREDENTIALS_KEY (seals each account's workflowy.com session) must not be a var: deploy would reset it. Set it as a secret; use .dev.vars locally (also DEV_IDENTITY).
 	"vars":
 	{
-		"SYNC_INTERVAL_MINUTES": "1",
+		"SYNC_INTERVAL_MINUTES": "60",
 		"EMAIL_PROVIDER": "cloudflare",
 		"EMAIL_FROM": "no-reply@outlinedb.com",
 		// Better Auth's link origin and only trusted origin. /api/auth/* answers 503 until the BETTER_AUTH_SECRET secret is set.

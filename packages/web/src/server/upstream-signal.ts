@@ -21,7 +21,8 @@ const SIGNAL_MAX_RECONNECT_DELAY_MS = 180_000;
 export const SIGNAL_SAFETY_CATCH_UP_MS = 10 * 60_000;
 
 const SIGNAL_ORIGIN = "wss://workflowy.com";
-const SUBSCRIBE_FRAME = JSON.stringify(
+/** The frame a signal socket sends on open: subscribe to the owner's document updates. */
+export const SIGNAL_SUBSCRIBE_FRAME = JSON.stringify(
 	{
 		type: "do.subscribe",
 		channels: [
@@ -79,7 +80,8 @@ export function nodeSignalSocket(url: string, headers: Record<string, string>): 
 	);
 }
 
-function isOwnerDocumentUpdate(data: unknown): boolean
+/** Whether a signal socket frame is the nudge that the owner's document changed. */
+export function isOwnerDocumentUpdate(data: unknown): boolean
 {
 	if (typeof data !== "string")
 	{
@@ -341,7 +343,7 @@ export function startUpstreamSignal(options: UpstreamSignalOptions): UpstreamSig
 					failures = 0;
 				}
 			});
-			current.send(SUBSCRIBE_FRAME);
+			current.send(SIGNAL_SUBSCRIBE_FRAME);
 			clearInterval(safetyInterval);
 			safetyInterval = setInterval(requestCatchUp, SIGNAL_SAFETY_CATCH_UP_MS);
 			requestCatchUp();

@@ -5,6 +5,8 @@ import type {ProbeStore} from "./probe-entry";
 import {POLL_MS, pollResult, sleep, uuid} from "./sync-upstream";
 
 const PASSWORD = "correct-horse-battery";
+/** The `wfclientid` workflowy.com hands the session at init, which names its signal channel. */
+const CLIENT_ID = "2026-10-18 12:00:00.123456";
 /** The account's join date: every `/get_tree_data/` timestamp counts seconds from it. */
 const JOINED = 1_500_000_000;
 
@@ -422,6 +424,12 @@ describe("importing an account from workflowy.com over its stored session", () =
 									]),
 								},
 								features: [],
+							},
+							{
+								headers:
+								{
+									wfclientid: CLIENT_ID,
+								},
 							},
 						);
 					}
@@ -1159,7 +1167,13 @@ describe("importing an account from workflowy.com over its stored session", () =
 		);
 	}, 60_000);
 
-	it("catches up within seconds while a tab is visible and tells it about the edit it pulled", async () =>
+	/** Open the outline's events socket, as a tab does, collecting the type of each frame the object sends it. */
+	async function openTab(): Promise<
+	{
+		ws: WebSocket;
+		frames: unknown[];
+		visible: (visible: boolean) => void;
+	}>
 	{
 		const response = await harness.mf.dispatchFetch(
 			"http://localhost/api/v1/nodes/events",
@@ -1183,8 +1197,83 @@ describe("importing an account from workflowy.com over its stored session", () =
 				typeof event.data === "string" ? Reflect.get(JSON.parse(event.data) as object, "type") : event.data,
 			);
 		});
-		const slowDue = Number(await alarmDue("sync"));
+		return {
+			// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its socket with undici's class
+			ws: ws as unknown as WebSocket,
+			frames,
+			visible: (visible) =>
+			{
+				ws.send(
+					JSON.stringify(
+						{
+							type: "visibility",
+							visible,
+						},
+					),
+				);
+			},
+		};
+	}
+
+	/** Every signal socket the object opened: where to, with which cookie, what it sent and whether it closed. */
+	async function signalLog(): Promise<
+		{
+			url: string;
+			cookie: string | null;
+			frames: string[];
+			closed: boolean;
+		}[]
+	>
+	{
+		return JSON.parse(await (await store()).signalLog()) as
+		{
+			url: string;
+			cookie: string | null;
+			frames: string[];
+			closed: boolean;
+		}[];
+	}
+
+	async function projectsName(): Promise<string | undefined>
+	{
+		return (
+			(await probe("/__nodes")) as
+			{
+				id: string;
+				name: string;
+			}[]
+		).find((node) => node.id === PROJECTS)?.name;
+	}
+
+	it("holds workflowy.com's signal socket while a tab is visible, and catches up once per nudge", async () =>
+	{
+		const tab = await openTab();
 		pushes.length = 0;
+		// Made on workflowy.com while no signal socket was open, so no nudge announced it.
+		remoteOps = [
+			{
+				type: "edit",
+				data:
+				{
+					projectid: PROJECTS,
+					name: "Projects, renamed while no tab was open",
+				},
+			},
+		];
+		// Becoming visible opens the signal socket, and opening it catches up once for the edits it could not hear about.
+		tab.visible(true);
+		await until(() => tab.frames.includes("tree.changed"));
+		const visibleAt = Date.now();
+		const opened =
+		{
+			signals: await signalLog(),
+			pushes: pushes.length,
+			name: await projectsName(),
+			nextCatchUpAnHourOut: Number(await alarmDue("sync")) - visibleAt > 59 * 60_000,
+		};
+		// Another client edits the tree, and workflowy.com nudges the open socket: one catch-up pulls the edit in.
+		pushes.length = 0;
+		tab.frames.length = 0;
 		remoteOps = [
 			{
 				type: "edit",
@@ -1195,83 +1284,71 @@ describe("importing an account from workflowy.com over its stored session", () =
 				},
 			},
 		];
-		// Becoming visible pulls the minute-away catch-up to now, and it carries the edit made on workflowy.com.
-		ws.send(
-			JSON.stringify(
-				{
-					type: "visibility",
-					visible: true,
-				},
-			),
-		);
-		await until(() => frames.includes("tree.changed"));
-		const visibleAt = Date.now();
-		const visible =
+		await (await store()).signalNudge();
+		await until(() => tab.frames.includes("tree.changed"));
+		const nudged =
 		{
 			pushes: pushes.length,
-			frames: [...frames],
-			name: (
-				(await probe("/__nodes")) as
-				{
-					id: string;
-					name: string;
-				}[]
-			).find((node) => node.id === PROJECTS)?.name,
-			nextWithinSeconds: Number(await alarmDue("sync")) - visibleAt <= 5000,
+			frames: [...tab.frames],
+			name: await projectsName(),
 		};
-		// Hidden, the next catch-up goes back to the minute schedule; its poll moves the transaction id, which is a write.
-		ws.send(
-			JSON.stringify(
-				{
-					type: "visibility",
-					visible: false,
-				},
-			),
-		);
-		await sleep(100);
+		// Hidden, the object lets go of the socket; the hourly catch-up does not open it again.
+		tab.visible(false);
+		await until(async () => (await signalLog())[0]?.closed === true);
 		pushes.length = 0;
-		// The rows one catch-up costs: the price of each extra poll while a tab is visible.
+		// The rows one catch-up costs: the price of each nudge, and of the hourly poll.
 		const {rowsRead, rowsWritten} = await (await store()).measuredSyncAlarm();
-		const hiddenNextAfterSeconds = Number(await alarmDue("sync")) - Date.now() > 5000;
-		await sleep(200);
-		ws.close();
+		const hidden =
+		{
+			pushes: pushes.length,
+			signals: (await signalLog()).length,
+			nextCatchUpAnHourOut: Number(await alarmDue("sync")) - Date.now() > 59 * 60_000,
+		};
+		tab.ws.close();
 		expect(
 			{
-				slowDueAMinuteOut: slowDue - visibleAt > 5000,
+				opened,
+				nudged,
+				hidden,
 				catchUpRows:
 				{
 					rowsRead,
 					rowsWritten,
 				},
-				visible,
-				hidden:
-				{
-					pushes: pushes.length,
-					frames,
-					nextAfterSeconds: hiddenNextAfterSeconds,
-				},
 			},
 		).toStrictEqual(
 			{
-				slowDueAMinuteOut: true,
+				opened:
+				{
+					signals: [
+						{
+							url: `http://upstream.test/ws/signal/${CLIENT_ID.replace(" ", "%20")}/`,
+							cookie: "sessionid=upstream-session-1",
+							frames: ['{"type":"do.subscribe","channels":[{"type":"OWNER_DOCUMENT_UPDATE"}]}'],
+							closed: false,
+						},
+					],
+					pushes: 1,
+					name: "Projects, renamed while no tab was open",
+					nextCatchUpAnHourOut: true,
+				},
+				nudged:
+				{
+					pushes: 1,
+					frames: ["tree.changed"],
+					name: "Projects, renamed on workflowy.com",
+				},
+				hidden:
+				{
+					pushes: 1,
+					signals: 1,
+					nextCatchUpAnHourOut: true,
+				},
 				// The fake moves the transaction id on every poll, so this one writes it; a quiet poll writes nothing.
 				catchUpRows:
 				{
 					rowsRead: 46,
 					rowsWritten: 6,
-				},
-				visible:
-				{
-					pushes: 1,
-					frames: ["tree.changed"],
-					name: "Projects, renamed on workflowy.com",
-					nextWithinSeconds: true,
-				},
-				hidden:
-				{
-					pushes: 1,
-					frames: ["tree.changed", "tree.changed"],
-					nextAfterSeconds: true,
 				},
 			},
 		);
@@ -1337,7 +1414,7 @@ describe("importing an account from workflowy.com over its stored session", () =
 						{
 							phase: "needs_seed",
 							applied: 0,
-							error: "Workflowy answered need_refreshed_project_tree: the cache's transaction id 706 is no longer in the tree's log; run './bin/run.js cache import-api' to reseed it. Import again from Settings > Workflowy to resume syncing.",
+							error: "Workflowy answered need_refreshed_project_tree: the cache's transaction id 707 is no longer in the tree's log; run './bin/run.js cache import-api' to reseed it. Import again from Settings > Workflowy to resume syncing.",
 							unconfirmedWrites: 2,
 						},
 					},
@@ -1350,6 +1427,11 @@ describe("importing an account from workflowy.com over its stored session", () =
 
 	it("pauses syncing when workflowy.com refuses the session, keeps writes queued, and resumes once signed in again", async () =>
 	{
+		// A visible tab holds the signal socket, which a refused session closes.
+		const tab = await openTab();
+		const signalsBefore = (await signalLog()).length;
+		tab.visible(true);
+		await until(async () => (await signalLog()).length > signalsBefore && tab.frames.includes("tree.changed"));
 		sessionsExpired = true;
 		pushes.length = 0;
 		upstreamCalls.length = 0;
@@ -1374,7 +1456,9 @@ describe("importing an account from workflowy.com over its stored session", () =
 			outbox: await outbox(),
 			syncDue: await alarmDue("sync"),
 			logins,
+			signalClosed: (await signalLog()).at(-1)?.closed,
 		};
+		tab.ws.close();
 		sessionsExpired = false;
 		pushes.length = 0;
 		upstreamCalls.length = 0;
@@ -1430,6 +1514,7 @@ describe("importing an account from workflowy.com over its stored session", () =
 					},
 					syncDue: null,
 					logins: 1,
+					signalClosed: true,
 				},
 				resumed:
 				{
@@ -1444,11 +1529,11 @@ describe("importing an account from workflowy.com over its stored session", () =
 					// The queued write drains first, then the catch-up polls on from its transaction.
 					pushes: [
 						{
-							from: "707",
+							from: "709",
 							ops: ["bulk_create"],
 						},
 						{
-							from: "708",
+							from: "710",
 							ops: [],
 						},
 					],
