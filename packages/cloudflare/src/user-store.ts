@@ -1,15 +1,12 @@
 import {DurableObject} from "cloudflare:workers";
 import
 {
-	accountRowTotal,
 	accountVersion,
 	ensureNodeTags,
 	flaggedOutboxCount,
 	provisionLocalAccount,
 	readAccountRows,
 	readAccountState,
-	runUnitOfWork,
-	writeAccountState,
 } from "@outlinedb/shared/cache";
 import type {AccountState} from "@outlinedb/shared/cache";
 import * as schema from "@outlinedb/shared/db";
@@ -110,7 +107,7 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 	protected readonly workflowyLoginAttempt = new WorkflowyLoginAttempt(this.ctx.storage.sql);
 	/** This account's one-time import from workflowy.com over its own stored session; runs in the shared alarm. */
 	private workflowyImport!: WorkflowyImportJob;
-	/** Every whole-tree download this object made, counted in GET /api/admin/sync and the daily usage alert. */
+	/** Every whole-tree download this object made, counted by syncStatus and the daily usage alert. */
 	private readonly treeDownloads = new TreeDownloadLog(
 		this.ctx.storage.sql,
 		this.ctx.id.toString(),
@@ -968,7 +965,7 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 		}
 	}
 
-	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
+	// fallow-ignore-next-line unused-class-member -- tests invoke it over RPC
 	async syncStatus(): Promise<AdminSyncStatus>
 	{
 		return {
@@ -1010,7 +1007,7 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 	}
 
 	/** Database size, live node count, the last sync result and whether the in-memory tree snapshot is held. */
-	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
+	// fallow-ignore-next-line unused-class-member -- tests invoke it over RPC
 	async adminStatus(): Promise<AdminStatus>
 	{
 		const count = this.ctx.storage.sql
@@ -1033,29 +1030,10 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 	}
 
 	/** The account tables' live rows and the expanded keys. */
-	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
+	// fallow-ignore-next-line unused-class-member -- tests invoke it over RPC
 	getAccountState(): AccountState
 	{
 		return readAccountState(this.db);
-	}
-
-	/** Merge a seed into the account tables in one unit of work; rows already equal keep their versions. */
-	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
-	putAccountState(state: AccountState):
-	{
-		rows: number;
-		expandedKeys: number | null;
-	}
-	{
-		runUnitOfWork(this.db, (unitOfWork) =>
-		{
-			writeAccountState(unitOfWork, state, Date.now());
-		});
-		this.checkAccount();
-		return {
-			rows: accountRowTotal(state.rows),
-			expandedKeys: state.expandedKeys?.length ?? null,
-		};
 	}
 
 	override async alarm(): Promise<void>
@@ -1365,7 +1343,7 @@ export type SetWorkflowyMirrorResult =
 			error: "workflowy-not-connected";
 	  };
 
-/** GET /api/admin/sync: the sync job's status and the object's whole-tree downloads. */
+/** The sync job's status and the object's whole-tree downloads, as tests read it over RPC. */
 export interface AdminSyncStatus extends SyncStatus
 {
 	treeDownloads: TreeDownloadCounts;

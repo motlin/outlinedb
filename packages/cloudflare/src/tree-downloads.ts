@@ -37,7 +37,7 @@ export interface TreeDownload
 	bytes: number;
 }
 
-/** What GET /api/admin/sync reports of the downloads. */
+/** What syncStatus reports of the downloads. */
 export interface TreeDownloadCounts
 {
 	total: number;

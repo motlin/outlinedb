@@ -1,5 +1,4 @@
 import type {OAuthHelpers} from "@cloudflare/workers-oauth-provider";
-import {parseAccountState} from "@outlinedb/shared/cache";
 import {createHttpApp} from "@outlinedb/web/server-app";
 import type {StoreClient} from "@outlinedb/web/server-app";
 import {Hono} from "hono";
@@ -251,38 +250,6 @@ app.route(
 		},
 	),
 );
-
-const methodNotAllowed = () =>
-	new Response(
-		"Method not allowed",
-		{
-			status: 405,
-		},
-	);
-
-app.get("/api/admin/status", async (c) => c.json(await c.var.stub.adminStatus()));
-app.all("/api/admin/status", methodNotAllowed);
-
-app.get("/api/admin/sync", async (c) => c.json(await c.var.stub.syncStatus()));
-app.all("/api/admin/sync", methodNotAllowed);
-
-app.get("/api/admin/account-state", async (c) => c.json(await c.var.stub.getAccountState()));
-// PUT merges a JSON `{rows, expandedKeys}` account state (see `parseAccountState`) into the account tables.
-app.put("/api/admin/account-state", async (c) =>
-{
-	const state = parseAccountState(await c.req.json().catch(() => {}));
-	if (!state)
-	{
-		return new Response(
-			"Expected a JSON {rows, expandedKeys} account state",
-			{
-				status: 400,
-			},
-		);
-	}
-	return c.json(await c.var.stub.putAccountState(state));
-});
-app.all("/api/admin/account-state", methodNotAllowed);
 
 app.all(
 	"/api/*",

@@ -42,19 +42,6 @@ describe("worker serves the migrated routes over RPC to the principal's Durable 
 		expect(JSON.stringify(body)).toContain("internal API is not configured");
 	});
 
-	it("serves the admin routes from the Worker only: the Durable Object's own fetch answers 404", async () =>
-	{
-		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
-		const ns = (await h.mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace;
-		const stub = ns.get(ns.idFromName("dev"));
-		const viaDo = await Promise.all(
-			["status", "sync", "account-state"].map(
-				async (name) => (await stub.fetch(`http://localhost/api/admin/${name}`)).status,
-			),
-		);
-		expect(viaDo).toStrictEqual([404, 404, 404]);
-	});
-
 	it("serves the migrated routers from the Worker only: the Durable Object's own app answers 404", async () =>
 	{
 		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
@@ -709,10 +696,10 @@ describe("worker resolves a principal from a Better Auth session", () =>
 		);
 	});
 
-	it("serves a session the admin routes of its own Durable Object", async () =>
+	it("answers 404 to a session for the removed admin routes", async () =>
 	{
 		const gina = await signUp(h, "gina@example.com");
-		const responses = await Promise.all(
+		const statuses = await Promise.all(
 			["/api/admin/status", "/api/admin/sync", "/api/admin/account-state"].map(async (path) =>
 			{
 				const response = await h.mf.dispatchFetch(
@@ -724,27 +711,11 @@ describe("worker resolves a principal from a Better Auth session", () =>
 						},
 					},
 				);
-				const body = (await response.json()) as Record<string, unknown>;
-				return {
-					status: response.status,
-					storeName: body.storeName,
-				};
+				await response.arrayBuffer();
+				return response.status;
 			}),
 		);
-		expect(responses).toStrictEqual([
-			{
-				status: 200,
-				storeName: gina.userId,
-			},
-			{
-				status: 200,
-				storeName: undefined,
-			},
-			{
-				status: 200,
-				storeName: undefined,
-			},
-		]);
+		expect(statuses).toStrictEqual([404, 404, 404]);
 	});
 
 	it("refuses a session whose email is unverified with 403 email-unverified", async () =>

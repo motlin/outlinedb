@@ -1,28 +1,16 @@
 import {afterAll, beforeAll, describe, expect, it} from "vite-plus/test";
 import {probeStore, readJson, startHarness} from "./harness";
+import type {AdminStatus} from "../src/user-store";
 import type {Harness} from "./harness";
-
-interface AdminStatus
-{
-	storeName: string | null;
-	mode: string;
-	databaseSize: number;
-	nodeCount: number;
-	lastSync: unknown;
-	snapshot:
-	{
-		enabled: boolean;
-		warm: boolean;
-	};
-	embeddings: unknown;
-}
+import type {ProbeStore} from "./probe-entry";
 
 async function adminStatus(h: Harness): Promise<AdminStatus>
 {
-	const response = await h.mf.dispatchFetch("http://localhost/api/admin/status");
-	expect(response.status).toBe(200);
-	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- test reads its own endpoint
-	return (await response.json()) as AdminStatus;
+	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
+	const ns = (await h.mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace<ProbeStore>;
+	// The RPC result is built in another realm, so compare it as JSON; structuredClone keeps that realm's prototypes.
+	// oxlint-disable-next-line typescript/no-unsafe-type-assertion, unicorn/prefer-structured-clone -- a JSON copy of the RPC result
+	return JSON.parse(JSON.stringify(await ns.getByName("dev").adminStatus())) as AdminStatus;
 }
 
 async function searchSwitcher(h: Harness): Promise<unknown>
@@ -46,7 +34,7 @@ async function searchSwitcher(h: Harness): Promise<unknown>
 	return readJson(response);
 }
 
-describe("GET /api/admin/status", () =>
+describe("the Durable Object's adminStatus", () =>
 {
 	let warm: Harness;
 	let cold: Harness;

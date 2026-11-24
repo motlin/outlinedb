@@ -906,12 +906,6 @@ function mergeTable({tx, systemTime}: UnitOfWork, {table, key}: AccountTable, in
 	);
 }
 
-/** The rows in `rows`, summed over the account tables. */
-export function accountRowTotal(rows: AccountRows): number
-{
-	return ROW_NAMES.reduce((sum, name) => sum + rows[name].length, 0);
-}
-
 /** Each account table's row count in `rows`, by table name. */
 export function accountRowCounts(rows: AccountRows): Record<string, number>
 {
@@ -1087,59 +1081,9 @@ export function readImportTime(tx: TemporalTransaction, name: string): number | 
 	return row?.timestamp?.getTime();
 }
 
-/** The account tables' live rows plus the expanded keys (null while unseeded): the seed body of a new deployment. */
+/** The account tables' live rows plus the expanded keys (null while unseeded). */
 export interface AccountState
 {
 	rows: AccountRows;
 	expandedKeys: string[] | null;
-}
-
-function isRow(table: SQLiteTable, value: unknown): boolean
-{
-	if (!isRecord(value))
-	{
-		return false;
-	}
-	const columns = getTableColumns(table);
-	const known = Object.entries(columns).filter(([property]) => property !== "systemFrom" && property !== "systemTo");
-	const types = Object.entries(value).every(([property, field]) =>
-	{
-		const column = columns[property];
-		if (column === undefined || property === "systemFrom" || property === "systemTo")
-		{
-			return false;
-		}
-		if (field === null)
-		{
-			return !column.notNull;
-		}
-		return column.dataType === "number"
-			? typeof field === "number" && Number.isInteger(field)
-			: typeof field === "string";
-	});
-	return types && known.every(([property, column]) => !column.notNull || Object.hasOwn(value, property));
-}
-
-/**
- * Validate an {@link AccountState} received as JSON: every table's rows must carry exactly the table's own columns
- * (no temporal ones), each typed as the column is. Undefined when anything does not match.
- */
-export function parseAccountState(value: unknown): AccountState | undefined
-{
-	if (!isRecord(value) || !isRecord(value.rows))
-	{
-		return undefined;
-	}
-	const {rows, expandedKeys} = value;
-	const tablesValid =
-		Object.keys(rows).every((name) => Object.hasOwn(TABLES, name)) &&
-		ROW_NAMES.every((name) =>
-		{
-			const tableRows = rows[name];
-			return Array.isArray(tableRows) && tableRows.every((row) => isRow(TABLES[name].table, row));
-		});
-	const keysValid =
-		expandedKeys === null || (Array.isArray(expandedKeys) && expandedKeys.every((key) => typeof key === "string"));
-	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- validated column by column above
-	return tablesValid && keysValid ? (value as unknown as AccountState) : undefined;
 }

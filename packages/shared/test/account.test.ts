@@ -3,10 +3,8 @@ import
 {
 	accountRows,
 	snapshotFromRows,
-	parseAccountState,
 	readAccountRows,
 	readAccountSnapshot,
-	readImportTime,
 	readWorkflowyEpoch,
 	seedAccount,
 	writeAccountSnapshot,
@@ -14,8 +12,7 @@ import
 import type {AccountSnapshot, AccountRows} from "../src/cache/account-store.js";
 import type DatabaseConstructor from "better-sqlite3";
 import {drizzle} from "drizzle-orm/better-sqlite3";
-import {readAccountState, writeAccountState, accountVersion} from "../src/cache/account-seed.js";
-import {replaceExpansion} from "../src/cache/expansion-store.js";
+import {accountVersion} from "../src/cache/account-seed.js";
 import {runUnitOfWork} from "../src/cache/node-composite.js";
 import * as schema from "../src/db/schema.js";
 import {FAR_FUTURE_DATE} from "../src/temporal/constants.js";
@@ -407,133 +404,6 @@ describe("account store", () =>
 					},
 				},
 			);
-		});
-
-		it("seeds another database from the account state sent as JSON, expansion included", () =>
-		{
-			const source = database();
-			write(
-				source,
-				snapshot(
-					{
-						starring:
-						{
-							locations:
-							{
-								n1: "None",
-							},
-							order: "None/n1/",
-						},
-						dateFormat: "YYYY",
-					},
-					{
-						theme: "dark",
-					},
-				),
-			);
-			runUnitOfWork(source, (unitOfWork) =>
-			{
-				replaceExpansion(unitOfWork, ["bbbbbbbb", "aaaaaaaa"], 1000);
-			});
-			const target = database();
-
-			const wire = JSON.stringify(readAccountState(source));
-			const state = parseAccountState(JSON.parse(wire));
-			if (state === undefined)
-			{
-				throw new Error("the state did not parse");
-			}
-			runUnitOfWork(target, (unitOfWork) =>
-			{
-				writeAccountState(unitOfWork, state, 5_000_000);
-			});
-
-			expect(
-				{
-					snapshot: readAccountSnapshot(target),
-					state: readAccountState(target),
-					fetchedAt: readImportTime(target, "account"),
-				},
-			).toStrictEqual(
-				{
-					snapshot: readAccountSnapshot(source),
-					state: readAccountState(source),
-					fetchedAt: 5_000_000,
-				},
-			);
-		});
-
-		it("rejects an account state with an unknown table, an unknown or temporal column, or a mistyped value", () =>
-		{
-			const db = database();
-			write(db, snapshot({}));
-			const wire = JSON.stringify(readAccountState(db));
-			const valid = JSON.parse(wire) as
-			{
-				rows: Record<string, unknown[]>;
-			};
-			const withRows = (name: string, rows: unknown[]) => (
-			{
-				...valid,
-				rows:
-				{
-					...valid.rows,
-					[name]: rows,
-				},
-			});
-
-			expect([
-				parseAccountState(valid) !== undefined,
-				parseAccountState(
-					{
-						...valid,
-						rows:
-						{
-							...valid.rows,
-							bogus: [],
-						},
-					},
-				),
-				parseAccountState(
-					withRows("tagColors", [
-						{
-							tag: "#a",
-							colorIndex: 1,
-							extra: 1,
-						},
-					]),
-				),
-				parseAccountState(
-					withRows("tagColors", [
-						{
-							tag: "#a",
-							colorIndex: 1,
-							systemFrom: "x",
-						},
-					]),
-				),
-				parseAccountState(
-					withRows("tagColors", [
-						{
-							tag: "#a",
-							colorIndex: "1",
-						},
-					]),
-				),
-				parseAccountState(
-					withRows("tagColors", [
-						{
-							tag: "#a",
-						},
-					]),
-				),
-				parseAccountState(
-					{
-						...valid,
-						expandedKeys: [1],
-					},
-				),
-			]).toStrictEqual([true, undefined, undefined, undefined, undefined, undefined, undefined]);
 		});
 	});
 });

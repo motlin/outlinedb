@@ -663,16 +663,7 @@ describe("importing an account from workflowy.com over its stored session", () =
 		const stub = await store();
 		const state = await stub.getAccountState();
 		const photo = await harness.mf.dispatchFetch(`http://localhost/api/v1/files/${PHOTO}/original`);
-		const adminSync = (await readJson(await harness.mf.dispatchFetch("http://localhost/api/admin/sync"))) as
-		{
-			treeDownloads:
-			{
-				last:
-				{
-					durationMs: unknown;
-				} | null;
-			};
-		};
+		const {treeDownloads} = await stub.syncStatus();
 		expect(
 			{
 				started:
@@ -722,14 +713,14 @@ describe("importing an account from workflowy.com over its stored session", () =
 				},
 				treeDownloads:
 				{
-					...adminSync.treeDownloads,
+					...treeDownloads,
 					last:
-						adminSync.treeDownloads.last === null
+						treeDownloads.last === null
 							? null
 							:
 								{
-									...adminSync.treeDownloads.last,
-									durationMs: typeof adminSync.treeDownloads.last.durationMs,
+									...treeDownloads.last,
+									durationMs: typeof treeDownloads.last.durationMs,
 								},
 				},
 			},
@@ -952,7 +943,7 @@ describe("importing an account from workflowy.com over its stored session", () =
 					type: "image/jpeg",
 					body: PHOTO_BYTES,
 				},
-				// The one whole-tree download, its cause and size recorded, as GET /api/admin/sync counts it.
+				// The one whole-tree download, its cause and size recorded, as syncStatus counts it.
 				treeDownloads:
 				{
 					total: 1,

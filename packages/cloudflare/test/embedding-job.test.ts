@@ -1,5 +1,6 @@
 import {afterAll, beforeAll, describe, expect, it} from "vite-plus/test";
 import {readJson, startHarness} from "./harness";
+import type {UserStore} from "../src/user-store";
 import type {Harness} from "./harness";
 
 const sleep = async (ms: number): Promise<void> =>
@@ -56,8 +57,11 @@ async function embeddingState(h: Harness): Promise<EmbeddingState>
 
 async function adminStatus(h: Harness): Promise<AdminStatus>
 {
-	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- test reads its own endpoint
-	return (await readJson(await h.mf.dispatchFetch("http://localhost/api/admin/status"))) as AdminStatus;
+	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
+	const ns = (await h.mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace<UserStore>;
+	// The RPC result is built in another realm, so compare it as JSON; structuredClone keeps that realm's prototypes.
+	// oxlint-disable-next-line typescript/no-unsafe-type-assertion, unicorn/prefer-structured-clone -- a JSON copy of the RPC result
+	return JSON.parse(JSON.stringify(await ns.getByName("dev").adminStatus())) as AdminStatus;
 }
 
 async function related(
