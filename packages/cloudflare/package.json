@@ -19,7 +19,7 @@
 		"@outlinedb/web": "workspace:*",
 		"better-auth": "1.7.25",
 		"drizzle-orm": "^0.45.3",
-		"hono": "^4.13.18"
+		"hono": "^4.13.19"
 	},
 	"devDependencies":
 	{
