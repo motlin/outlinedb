@@ -72,9 +72,7 @@ export default class FilesMirror extends Command
 			const auth = readInternalAuth();
 			if (!auth)
 			{
-				this.error(
-					"No internal session: run 'internal login' or set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD.",
-				);
+				this.error("No internal session: run './bin/run.js internal login'");
 			}
 			signer = sessionSigner(new WorkflowyInternalClient(auth));
 		}

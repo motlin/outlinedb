@@ -9,7 +9,7 @@ import {readImportTime} from "../src/cache/account-store.js";
 import {readExpansion} from "../src/cache/expansion-store.js";
 import * as schema from "../src/db/schema.js";
 import {FAR_FUTURE_DATE, systemTimeAt} from "../src/temporal/index.js";
-import {createFakeInternalApi, json} from "./helpers/fake-internal-api.js";
+import {createFakeInternalApi, fakeSessionStore, json} from "./helpers/fake-internal-api.js";
 import {migratedMemoryDatabase} from "./helpers/migrated-memory-database.js";
 
 const FETCHED_AT = 1_800_000_000_000;
@@ -765,18 +765,12 @@ describe("WorkflowyInternalClient.getTreeSnapshot", () =>
 		);
 		const client = new WorkflowyInternalClient(
 			{
-				credentials:
-				{
-					username: "alice@example.com",
-					password: "hunter2",
-				},
+				sessionStore: fakeSessionStore(),
 				fetch: api.fetch,
 				baseUrl: "https://workflowy.test",
 				transientId: "6f1c1d1e-0000-4000-8000-000000000001",
 			},
 		);
-		await client.login();
-
 		const result = await client.getTreeSnapshot();
 
 		expect(
@@ -874,17 +868,12 @@ describe("WorkflowyInternalClient.getTreeSnapshot", () =>
 		api.respond("/get_tree_data/", () => new StreamOnlyResponse(body));
 		const client = new WorkflowyInternalClient(
 			{
-				credentials:
-				{
-					username: "alice@example.com",
-					password: "hunter2",
-				},
+				sessionStore: fakeSessionStore(),
 				fetch: api.fetch,
 				baseUrl: "https://workflowy.test",
 				transientId: "6f1c1d1e-0000-4000-8000-000000000001",
 			},
 		);
-		await client.login();
 		let count = 0;
 		let boards = 0;
 		/** How many chunks past the one holding the item the body had been read when the item arrived. */

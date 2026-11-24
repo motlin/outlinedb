@@ -33,7 +33,7 @@ Every 📆 Calendar year, month and day needs `metadata.calendar` for workflowy.
 ./bin/run.js calendar day --date <eventDate> --ensure --no-child -j
 ```
 
-The JSON result is `{id, created, firstChildId}`. Create the entries under `id`. Without internal API auth (`WORKFLOWY_USERNAME`/`WORKFLOWY_PASSWORD`), `--ensure` errors: report that and stop instead of falling back to name-only nodes.
+The JSON result is `{id, created, firstChildId}`. Create the entries under `id`. Without an internal API session, `--ensure` errors: report that and stop instead of falling back to name-only nodes.
 
 ## Creating Entries
 

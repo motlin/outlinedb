@@ -20,8 +20,7 @@ const
 	storeInternalMetadata,
 } = await import("@outlinedb/shared/cache");
 
-const NOT_CONFIGURED =
-	"Workflowy internal API is not configured (set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD, or run './bin/run.js internal login')";
+const NOT_CONFIGURED = "Workflowy internal API is not configured (run './bin/run.js internal login')";
 const WRITE_CLIENT_REQUIRED = "WORKFLOWY_API_KEY environment variable is required";
 /** When a test's request writes: after the seed, so no write replaces a version from its own millisecond. */
 const WRITE_MS = 1_700_000_000_000;

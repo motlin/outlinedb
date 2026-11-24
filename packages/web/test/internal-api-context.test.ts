@@ -30,11 +30,9 @@ afterEach(() =>
 const NO_SESSION_FILE = path.join(os.tmpdir(), "wf-no-session-file-for-tests");
 const tempDirs: string[] = [];
 
-function stubAuthEnv(username: string, password: string, sessionCookie?: string)
+function stubAuthEnv(sessionCookie?: string)
 {
 	vi.stubEnv("WORKFLOWY_API_KEY", "fake-api-key");
-	vi.stubEnv("WORKFLOWY_USERNAME", username);
-	vi.stubEnv("WORKFLOWY_PASSWORD", password);
 	if (sessionCookie === undefined)
 	{
 		vi.stubEnv("OUTLINEDB_SESSION_FILE", NO_SESSION_FILE);
@@ -63,40 +61,21 @@ afterEach(() =>
 
 describe("createServerContext internalAuth", () =>
 {
-	it("reads WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD", () =>
+	it("is configured by a saved session cookie", () =>
 	{
-		stubAuthEnv("alice@example.com", "pw");
-		expect(createServerContext().internalAuth?.credentials).toStrictEqual(
-			{
-				username: "alice@example.com",
-				password: "pw",
-			},
-		);
+		stubAuthEnv("sessionid=saved");
+		expect(createServerContext().internalAuth?.sessionStore.read()).toBe("sessionid=saved");
 	});
 
-	it("is configured by a saved session cookie without credentials", () =>
+	it("is undefined when no cookie is saved", () =>
 	{
-		stubAuthEnv("", "", "sessionid=saved");
-		const auth = createServerContext().internalAuth;
-		expect(auth?.credentials).toBeUndefined();
-		expect(auth?.sessionStore.read()).toBe("sessionid=saved");
-	});
-
-	it("is undefined when the password is missing and no cookie is saved", () =>
-	{
-		stubAuthEnv("alice@example.com", "");
+		stubAuthEnv();
 		expect(createServerContext().internalAuth).toBeUndefined();
 	});
 
-	it("is undefined when the username is missing and no cookie is saved", () =>
+	it("is undefined in a standalone host, so it never syncs or pushes to workflowy.com even with a saved cookie", () =>
 	{
-		stubAuthEnv("", "pw");
-		expect(createServerContext().internalAuth).toBeUndefined();
-	});
-
-	it("is undefined in a standalone host, so it never syncs or pushes to workflowy.com even with credentials and a saved cookie", () =>
-	{
-		stubAuthEnv("alice@example.com", "pw", "sessionid=saved");
+		stubAuthEnv("sessionid=saved");
 		vi.stubEnv("OUTLINEDB_MODE", "standalone");
 		const ctx = createServerContext();
 		expect([ctx.mode, ctx.internalAuth, ctx.internalAdapter?.()]).toStrictEqual([
@@ -109,9 +88,9 @@ describe("createServerContext internalAuth", () =>
 
 describe("createServerContext internalAdapter", () =>
 {
-	it("builds one adapter lazily and reuses it when credentials are configured", () =>
+	it("builds one adapter lazily from a saved session cookie and reuses it", () =>
 	{
-		stubAuthEnv("alice@example.com", "pw");
+		stubAuthEnv("sessionid=saved");
 		const ctx = createServerContext();
 
 		const adapter = ctx.internalAdapter?.();
@@ -120,15 +99,9 @@ describe("createServerContext internalAdapter", () =>
 		expect(ctx.internalAdapter?.()).toBe(adapter);
 	});
 
-	it("builds an adapter from a saved session cookie alone", () =>
+	it("is undefined when no cookie is saved", () =>
 	{
-		stubAuthEnv("", "", "sessionid=saved");
-		expect(createServerContext().internalAdapter?.()).toBeInstanceOf(WorkflowyInternalAdapter);
-	});
-
-	it("is undefined when neither credentials nor a cookie are configured", () =>
-	{
-		stubAuthEnv("", "");
+		stubAuthEnv();
 		expect(createServerContext().internalAdapter?.()).toBeUndefined();
 	});
 });
@@ -159,13 +132,13 @@ function makeApp(internalAuth: ServerContext["internalAuth"])
 
 describe("internalApiRequired", () =>
 {
-	it("answers 503 when neither internal credentials nor a session cookie are configured", async () =>
+	it("answers 503 when no session cookie is saved", async () =>
 	{
 		const res = await makeApp(undefined).fetch(new Request("http://x/dummy"));
 		expect(res.status).toBe(503);
 		await expect(res.json()).resolves.toStrictEqual(
 			{
-				error: "Workflowy internal API is not configured (set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD, or run './bin/run.js internal login')",
+				error: "Workflowy internal API is not configured (run './bin/run.js internal login')",
 			},
 		);
 	});

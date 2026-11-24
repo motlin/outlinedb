@@ -47,19 +47,6 @@ interface Recorded
 
 function respond(pathname: string, pollStatus: number): Response
 {
-	if (pathname === "/ajax_login")
-	{
-		return new Response(
-			"",
-			{
-				status: 200,
-				headers:
-				{
-					"set-cookie": "sessionid=abc123; Path=/",
-				},
-			},
-		);
-	}
 	if (pathname === "/get_initialization_data")
 	{
 		return Response.json(
@@ -126,10 +113,9 @@ describe("internal probe command", () =>
 		vi.setSystemTime(new Date("2026-10-18T12:00:00.000Z"));
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-probe-"));
 		outPath = path.join(tempDir, "probes.md");
-		process.env.WORKFLOWY_USERNAME = "alice@example.com";
-		process.env.WORKFLOWY_PASSWORD = "hunter2";
 		sessionFile = path.join(tempDir, "workflowy-session");
 		process.env.OUTLINEDB_SESSION_FILE = sessionFile;
+		fs.writeFileSync(sessionFile, "sessionid=abc123\n");
 	});
 
 	afterEach(() =>
@@ -167,30 +153,12 @@ describe("internal probe command", () =>
 		);
 	});
 
-	it("refuses to run without credentials or a saved session cookie", async () =>
+	it("refuses to run without a saved session cookie", async () =>
 	{
-		delete process.env.WORKFLOWY_PASSWORD;
+		fs.rmSync(sessionFile);
 		await expect(Probe.run(["bootstrap", "--yes-live", "--out", outPath])).rejects.toThrow(
-			"Set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD in the environment (e.g. from .envrc), or run './bin/run.js internal login' with them set",
+			"No internal session: run './bin/run.js internal login'",
 		);
-	});
-
-	it("bootstrap reuses a saved session cookie without credentials or a login", async () =>
-	{
-		delete process.env.WORKFLOWY_USERNAME;
-		delete process.env.WORKFLOWY_PASSWORD;
-		fs.writeFileSync(sessionFile, "sessionid=saved\n");
-		const recorded: Recorded[] = [];
-		vi.stubGlobal("fetch", fakeFetch(recorded));
-		await Probe.run(["bootstrap", "--yes-live", "--out", outPath]);
-		expect(recorded.map((request) => request.path)).toStrictEqual(["/get_initialization_data"]);
-	});
-
-	it("bootstrap saves the fresh login cookie to the session file", async () =>
-	{
-		vi.stubGlobal("fetch", fakeFetch([]));
-		await Probe.run(["bootstrap", "--yes-live", "--out", outPath]);
-		expect(fs.readFileSync(sessionFile, "utf8")).toBe("sessionid=abc123\n");
 	});
 
 	it("bootstrap records client id shape, CLIENT_VERSION and tx id source", async () =>
@@ -198,7 +166,7 @@ describe("internal probe command", () =>
 		const recorded: Recorded[] = [];
 		vi.stubGlobal("fetch", fakeFetch(recorded));
 		await Probe.run(["bootstrap", "--yes-live", "--out", outPath]);
-		expect(recorded.map((request) => request.path)).toStrictEqual(["/ajax_login", "/get_initialization_data"]);
+		expect(recorded.map((request) => request.path)).toStrictEqual(["/get_initialization_data"]);
 		expect(fs.readFileSync(outPath, "utf8")).toBe(
 			[
 				"",
@@ -209,8 +177,7 @@ describe("internal probe command", () =>
 				"- `initialMostRecentOperationTransactionId` with `no_root_children=1`: present, shape `9999999`",
 				"- `get_tree_data` fallback needed: no",
 				"- `get_user_data` needed for user/settings/root metadata: no",
-				"- Requests: `POST /ajax_login` 200; `GET /get_initialization_data` 200 (" +
-					`${JSON.stringify(INIT_BODY).length} bytes)`,
+				`- Requests: \`GET /get_initialization_data\` 200 (${JSON.stringify(INIT_BODY).length} bytes)`,
 				"",
 			].join("\n"),
 		);
@@ -465,9 +432,8 @@ describe("internal probe error-shape", () =>
 		vi.setSystemTime(new Date("2026-10-18T12:00:00.000Z"));
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-probe-"));
 		outPath = path.join(tempDir, "probes.md");
-		process.env.WORKFLOWY_USERNAME = "alice@example.com";
-		process.env.WORKFLOWY_PASSWORD = "hunter2";
 		process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "workflowy-session");
+		fs.writeFileSync(process.env.OUTLINEDB_SESSION_FILE, "sessionid=abc123\n");
 		process.env.WORKFLOWY_API_KEY = "test-key";
 		delete process.env.WORKFLOWY_API_URL;
 	});
@@ -508,7 +474,6 @@ describe("internal probe error-shape", () =>
 			"POST /api/v1/nodes/",
 			`GET /api/v1/nodes/${CHILD_ID}`,
 			"GET /api/v1/nodes",
-			"POST /ajax_login",
 			"GET /get_initialization_data",
 			"POST /push_and_poll",
 			`GET /api/v1/nodes/${CHILD_ID}`,
@@ -629,9 +594,8 @@ describe("internal probe index", () =>
 	{
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-probe-"));
 		outPath = path.join(tempDir, "probes.md");
-		process.env.WORKFLOWY_USERNAME = "alice@example.com";
-		process.env.WORKFLOWY_PASSWORD = "hunter2";
 		process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "workflowy-session");
+		fs.writeFileSync(process.env.OUTLINEDB_SESSION_FILE, "sessionid=abc123\n");
 		process.env.WORKFLOWY_API_KEY = "test-key";
 		process.env.OUTLINEDB_DB_PATH = path.join(tempDir, "cache.sqlite");
 		delete process.env.WORKFLOWY_API_URL;
@@ -699,9 +663,8 @@ describe("internal probe restore", () =>
 	{
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-probe-"));
 		outPath = path.join(tempDir, "probes.md");
-		process.env.WORKFLOWY_USERNAME = "alice@example.com";
-		process.env.WORKFLOWY_PASSWORD = "hunter2";
 		process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "workflowy-session");
+		fs.writeFileSync(process.env.OUTLINEDB_SESSION_FILE, "sessionid=abc123\n");
 		process.env.WORKFLOWY_API_KEY = "test-key";
 		process.env.OUTLINEDB_DB_PATH = path.join(tempDir, "cache.sqlite");
 		delete process.env.WORKFLOWY_API_URL;
@@ -769,9 +732,8 @@ describe("internal probe meta", () =>
 	{
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-probe-"));
 		outPath = path.join(tempDir, "probes.md");
-		process.env.WORKFLOWY_USERNAME = "alice@example.com";
-		process.env.WORKFLOWY_PASSWORD = "hunter2";
 		process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "workflowy-session");
+		fs.writeFileSync(process.env.OUTLINEDB_SESSION_FILE, "sessionid=abc123\n");
 		process.env.WORKFLOWY_API_KEY = "test-key";
 		process.env.OUTLINEDB_DB_PATH = path.join(tempDir, "cache.sqlite");
 		delete process.env.WORKFLOWY_API_URL;
@@ -839,9 +801,8 @@ describe("internal probe expansion", () =>
 	{
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-probe-"));
 		outPath = path.join(tempDir, "probes.md");
-		process.env.WORKFLOWY_USERNAME = "alice@example.com";
-		process.env.WORKFLOWY_PASSWORD = "hunter2";
 		process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "workflowy-session");
+		fs.writeFileSync(process.env.OUTLINEDB_SESSION_FILE, "sessionid=abc123\n");
 		process.env.WORKFLOWY_API_KEY = "test-key";
 		process.env.OUTLINEDB_DB_PATH = path.join(tempDir, "cache.sqlite");
 		delete process.env.WORKFLOWY_API_URL;
@@ -1069,9 +1030,8 @@ describe("internal probe root-meta", () =>
 		vi.setSystemTime(new Date("2026-10-18T12:00:00.000Z"));
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-probe-"));
 		outPath = path.join(tempDir, "probes.md");
-		process.env.WORKFLOWY_USERNAME = "alice@example.com";
-		process.env.WORKFLOWY_PASSWORD = "hunter2";
 		process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "workflowy-session");
+		fs.writeFileSync(process.env.OUTLINEDB_SESSION_FILE, "sessionid=abc123\n");
 	});
 
 	afterEach(() =>
@@ -1122,7 +1082,7 @@ describe("internal probe root-meta", () =>
 		const recorded: Recorded[] = [];
 		vi.stubGlobal("fetch", rootMetaFetch(recorded, ACCOUNT_META));
 		await Probe.run(["root-meta", "--yes-live", "--out", outPath]);
-		expect(recorded.map((request) => request.path)).toStrictEqual(["/ajax_login", "/get_initialization_data"]);
+		expect(recorded.map((request) => request.path)).toStrictEqual(["/get_initialization_data"]);
 		expect(fs.readFileSync(outPath, "utf8")).toBe(
 			[
 				"",
@@ -1399,9 +1359,8 @@ describe("internal probe settings", () =>
 		vi.setSystemTime(new Date("2026-10-18T12:00:00.000Z"));
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-probe-"));
 		outPath = path.join(tempDir, "probes.md");
-		process.env.WORKFLOWY_USERNAME = "alice@example.com";
-		process.env.WORKFLOWY_PASSWORD = "hunter2";
 		process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "workflowy-session");
+		fs.writeFileSync(process.env.OUTLINEDB_SESSION_FILE, "sessionid=abc123\n");
 	});
 
 	afterEach(() =>
@@ -1527,9 +1486,8 @@ describe("internal probe calendar-ids", () =>
 		vi.setSystemTime(new Date("2026-10-18T12:00:00.000Z"));
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "outlinedb-probe-"));
 		outPath = path.join(tempDir, "probes.md");
-		process.env.WORKFLOWY_USERNAME = "alice@example.com";
-		process.env.WORKFLOWY_PASSWORD = "hunter2";
 		process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "workflowy-session");
+		fs.writeFileSync(process.env.OUTLINEDB_SESSION_FILE, "sessionid=abc123\n");
 		process.env.OUTLINEDB_DB_PATH = path.join(tempDir, "cache.sqlite");
 	});
 
@@ -1648,11 +1606,7 @@ describe("internal probe calendar-ids", () =>
 			),
 		);
 		await Probe.run(["calendar-ids", "--yes-live", "--out", outPath]);
-		expect(recorded.map((request) => request.path)).toStrictEqual([
-			"/ajax_login",
-			"/get_initialization_data",
-			"/get_user_data/",
-		]);
+		expect(recorded.map((request) => request.path)).toStrictEqual(["/get_initialization_data", "/get_user_data/"]);
 		expect(fs.readFileSync(outPath, "utf8")).toBe(
 			[
 				"",

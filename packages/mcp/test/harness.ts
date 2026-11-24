@@ -56,14 +56,9 @@ export function openHarness(prefix: string): Harness
 			OUTLINEDB_SESSION_FILE: path.join(tempDir, "workflowy-session"),
 		},
 	);
-	delete process.env.WORKFLOWY_USERNAME;
-	delete process.env.WORKFLOWY_PASSWORD;
 	const ctx = createServerContext();
-	process.env.WORKFLOWY_USERNAME = "alice@example.com";
-	process.env.WORKFLOWY_PASSWORD = "hunter2";
+	fs.writeFileSync(path.join(tempDir, "workflowy-session"), "sessionid=abc\n");
 	const authCtx = createServerContext();
-	delete process.env.WORKFLOWY_USERNAME;
-	delete process.env.WORKFLOWY_PASSWORD;
 	return {
 		tempDir,
 		store: inProcessStore(ctx),

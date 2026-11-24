@@ -28,9 +28,7 @@ describe("calendar day command", () =>
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
 		process.env.OUTLINEDB_DB_PATH = testDbPath;
-		delete process.env.WORKFLOWY_USERNAME;
-		delete process.env.WORKFLOWY_PASSWORD;
-		delete process.env.OUTLINEDB_SESSION_FILE;
+		process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "session");
 		process.env.WORKFLOWY_API_KEY = "test-api-key";
 		seedTaggedCalendar(testDatabase);
 	});
@@ -108,8 +106,7 @@ describe("calendar day command", () =>
 	it("never calls ensure for a day that already exists", async () =>
 	{
 		const ensure = vi.spyOn(WorkflowyInternalAdapter.prototype, "ensureCalendarDay");
-		process.env.WORKFLOWY_USERNAME = "alice@example.com";
-		process.env.WORKFLOWY_PASSWORD = "secret";
+		fs.writeFileSync(path.join(tempDir, "session"), "sessionid=abc\n");
 
 		await captureOutput(async () =>
 		{
@@ -193,8 +190,7 @@ describe("calendar day command", () =>
 			},
 		).toStrictEqual(
 			{
-				message:
-					"--ensure needs the internal API: set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD in the environment (e.g. from .envrc)",
+				message: "--ensure needs the internal API: run './bin/run.js internal login'",
 				calls: [],
 			},
 		);

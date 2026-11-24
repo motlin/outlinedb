@@ -1,4 +1,5 @@
 import {WorkflowyInternalClient} from "@outlinedb/shared/api";
+import {readInternalAuth} from "@outlinedb/shared/node";
 import {backupImports, nodeContent, nodeMetadata} from "@outlinedb/shared/db";
 import type {NodeContentType, NodeMetadataType, AppDatabase} from "@outlinedb/shared/db";
 import
@@ -61,7 +62,7 @@ function getWorkflowyEpoch(tx: TemporalTransaction): number | undefined
 /**
  * Get the Workflowy epoch, or, without one, fetch the account from the internal API and seed its row.
  *
- * @throws Error if no epoch is known and no credentials are set
+ * @throws Error if no epoch is known and no session cookie is saved
  */
 async function getOrFetchWorkflowyEpoch(tx: TemporalTransaction): Promise<number>
 {
@@ -71,21 +72,11 @@ async function getOrFetchWorkflowyEpoch(tx: TemporalTransaction): Promise<number
 		return existingEpoch;
 	}
 
-	const username = process.env.WORKFLOWY_USERNAME;
-	const password = process.env.WORKFLOWY_PASSWORD;
-
-	if (username && password)
+	const auth = readInternalAuth();
+	if (auth)
 	{
 		logger.debug("Fetching the Workflowy account (its join date is the epoch) from the internal API...");
-		const session = await new WorkflowyInternalClient(
-			{
-				credentials:
-				{
-					username,
-					password,
-				},
-			},
-		).bootstrap();
+		const session = await new WorkflowyInternalClient(auth).bootstrap();
 		runUnitOfWork(tx, (unitOfWork) =>
 		{
 			seedAccount(
@@ -114,7 +105,7 @@ async function getOrFetchWorkflowyEpoch(tx: TemporalTransaction): Promise<number
 
 	throw new Error(
 		"Workflowy epoch not configured. Set WORKFLOWY_EPOCH env var, run cache:import-account, " +
-			"or provide WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD to fetch automatically.",
+			"or run './bin/run.js internal login' to fetch automatically.",
 	);
 }
 

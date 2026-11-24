@@ -8,8 +8,8 @@ import {INTERNAL_API_NOT_CONFIGURED} from "./internal-api-error.js";
 export {INTERNAL_API_NOT_CONFIGURED};
 
 /**
- * Gate a route on Workflowy internal-API auth: answers 503 when neither
- * `WORKFLOWY_USERNAME`/`WORKFLOWY_PASSWORD` nor a saved session cookie exist.
+ * Gate a route on Workflowy internal-API auth: answers 503 when no session
+ * cookie is saved.
  */
 export const internalApiRequired = createMiddleware<AppEnv>(async (c, next) =>
 {

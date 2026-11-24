@@ -14,7 +14,6 @@ export interface RecordedRequest
 }
 
 export type FakeRoute =
-	| "/ajax_login"
 	| "/get_initialization_data"
 	| "/get_tree_data/"
 	| "/get_user_data/"
@@ -26,6 +25,28 @@ type Responder = (request: RecordedRequest) => Response | Promise<Response>;
 
 export const FAKE_SESSION_ID = "fake-session-1";
 export const FAKE_CLIENT_ID = "2026-10-17 12:00:00.000000_fakeclient";
+
+/** A session store holding the fake's session cookie, as `internal login` leaves it. */
+export function fakeSessionStore(cookie = `sessionid=${FAKE_SESSION_ID}`):
+{
+	read(): string | undefined;
+	write(cookie: string): void;
+	clear(): void;
+}
+{
+	let held: string | undefined = cookie;
+	return {
+		read: () => held,
+		write: (next) =>
+		{
+			held = next;
+		},
+		clear: () =>
+		{
+			held = undefined;
+		},
+	};
+}
 
 export function initializationData(mainProjectTreeInfo: Record<string, unknown> = {}): Record<string, unknown>
 {
@@ -94,17 +115,6 @@ function isFakeRoute(path: string): path is FakeRoute
 function defaultResponders(): Record<string, Responder>
 {
 	return {
-		"/ajax_login": () =>
-			new Response(
-				"",
-				{
-					status: 200,
-					headers:
-					{
-						"set-cookie": `sessionid=${FAKE_SESSION_ID}; Path=/; HttpOnly`,
-					},
-				},
-			),
 		"/get_initialization_data": () =>
 			json(
 				initializationData(),

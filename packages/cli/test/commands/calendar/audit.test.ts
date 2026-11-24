@@ -36,9 +36,8 @@ describe("calendar audit command", () =>
 		testDatabase = createTestDatabase(testDbPath);
 		process.env.OUTLINEDB_DB_PATH = testDbPath;
 		process.env.WORKFLOWY_API_KEY = "test-api-key";
-		process.env.WORKFLOWY_USERNAME = "alice@example.com";
-		process.env.WORKFLOWY_PASSWORD = "secret";
 		process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "session");
+		fs.writeFileSync(process.env.OUTLINEDB_SESSION_FILE, "sessionid=abc\n");
 	});
 
 	afterEach(() =>

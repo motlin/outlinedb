@@ -6,7 +6,7 @@ import
 {
 	MissingCredentialsError,
 	WorkflowyInternalClient,
-	LoginRefusedError,
+	loginReplyDetail,
 	SessionRejectedError,
 } from "../src/api/workflowy-internal-client.js";
 import {storeTreeTxId, readTreeTxId} from "../src/cache/tree-transaction.js";
@@ -37,6 +37,7 @@ import
 	forbidTreeData,
 	treeDataReads,
 	FAKE_SESSION_ID,
+	fakeSessionStore,
 } from "./helpers/fake-internal-api.js";
 import type {RecordedRequest} from "./helpers/fake-internal-api.js";
 import {z} from "zod";
@@ -132,11 +133,7 @@ describe("internal adapter account", () =>
 		const api = createFakeInternalApi();
 		const client = new WorkflowyInternalClient(
 			{
-				credentials:
-				{
-					username: "alice@example.com",
-					password: "hunter2",
-				},
+				sessionStore: fakeSessionStore(),
 				fetch: api.fetch,
 				baseUrl: "https://workflowy.test",
 				transientId: "6f1c1d1e-0000-4000-8000-000000000001",
@@ -254,11 +251,10 @@ describe("internal adapter account", () =>
 			await adapter.setRootMeta(["color", "tags", "alice"], 3);
 
 			expect(network(api.requests)).toStrictEqual([
-				["POST", "/ajax_login"],
 				["GET", "/get_initialization_data"],
 				["POST", "/push_and_poll"],
 			]);
-			expect(pushedTrees(api.requests[2])).toStrictEqual([
+			expect(pushedTrees(api.requests[1])).toStrictEqual([
 				{
 					most_recent_operation_transaction_id: "4567",
 					operations: [
@@ -463,11 +459,7 @@ describe("internal adapter account", () =>
 				{
 					client: new WorkflowyInternalClient(
 						{
-							credentials:
-							{
-								username: "a",
-								password: "b",
-							},
+							sessionStore: fakeSessionStore(),
 							fetch: api.fetch,
 							baseUrl: "https://workflowy.test",
 						},
@@ -722,11 +714,7 @@ describe("internal adapter account", () =>
 				{
 					client: new WorkflowyInternalClient(
 						{
-							credentials:
-							{
-								username: "alice@example.com",
-								password: "hunter2",
-							},
+							sessionStore: fakeSessionStore(),
 							fetch: api.fetch,
 							baseUrl: "https://workflowy.test",
 						},
@@ -1207,11 +1195,7 @@ describe("internal adapter backlinks", () =>
 		});
 		const client = new WorkflowyInternalClient(
 			{
-				credentials:
-				{
-					username: "alice@example.com",
-					password: "hunter2",
-				},
+				sessionStore: fakeSessionStore(),
 				fetch: api.fetch,
 				baseUrl: "https://workflowy.test",
 				transientId: "6f1c1d1e-0000-4000-8000-000000000001",
@@ -3605,11 +3589,7 @@ describe("internal adapter expansion", () =>
 				{
 					client: new WorkflowyInternalClient(
 						{
-							credentials:
-							{
-								username: "alice@example.com",
-								password: "hunter2",
-							},
+							sessionStore: fakeSessionStore(),
 							fetch: api.fetch,
 							baseUrl: "https://workflowy.test",
 							transientId: "6f1c1d1e-0000-4000-8000-000000000001",
@@ -3875,11 +3855,7 @@ describe("internal adapter transaction log", () =>
 			{
 				client: new WorkflowyInternalClient(
 					{
-						credentials:
-						{
-							username: "alice@example.com",
-							password: "hunter2",
-						},
+						sessionStore: fakeSessionStore(),
 						fetch: api.fetch,
 						baseUrl: "https://workflowy.test",
 						transientId: "6f1c1d1e-0000-4000-8000-000000000001",
@@ -5341,11 +5317,7 @@ describe("internal adapter tree", () =>
 		};
 		const client = new WorkflowyInternalClient(
 			{
-				credentials:
-				{
-					username: "alice@example.com",
-					password: "hunter2",
-				},
+				sessionStore: fakeSessionStore(),
 				fetch: internalFetch,
 				baseUrl: "https://workflowy.test",
 				transientId: "6f1c1d1e-0000-4000-8000-000000000001",
@@ -6148,11 +6120,7 @@ describe("internal client bootstrap", () =>
 	{
 		const client = new WorkflowyInternalClient(
 			{
-				credentials:
-				{
-					username: "alice@example.com",
-					password: "hunter2",
-				},
+				sessionStore: fakeSessionStore(),
 				fetch: api.fetch,
 				baseUrl: BASE_URL,
 				transientId: TRANSIENT_ID,
@@ -6201,18 +6169,15 @@ describe("internal client bootstrap", () =>
 
 	describe("WorkflowyInternalClient.bootstrap", () =>
 	{
-		it("logs in, then fetches initialization data once and parses the session", async () =>
+		it("fetches initialization data once with the saved cookie and parses the session", async () =>
 		{
 			const {api, client} = clientWith();
 
 			const session = await client.bootstrap();
 
 			expect(session).toStrictEqual(EXPECTED_SESSION);
-			expect(api.requests.map((r) => [r.method, r.path])).toStrictEqual([
-				["POST", "/ajax_login"],
-				["GET", "/get_initialization_data"],
-			]);
-			const init = api.requests[1];
+			expect(api.requests.map((r) => [r.method, r.path])).toStrictEqual([["GET", "/get_initialization_data"]]);
+			const init = api.requests[0];
 			expect(init?.url).toBe(
 				`${BASE_URL}/get_initialization_data?client_version=21&client_version_v2=28&no_root_children=1`,
 			);
@@ -6251,10 +6216,7 @@ describe("internal client bootstrap", () =>
 				),
 			);
 			expect(error).toBeInstanceOf(InternalApiError);
-			expect(api.requests.map((r) => [r.method, r.path])).toStrictEqual([
-				["POST", "/ajax_login"],
-				["GET", "/get_initialization_data"],
-			]);
+			expect(api.requests.map((r) => [r.method, r.path])).toStrictEqual([["GET", "/get_initialization_data"]]);
 		});
 
 		it("reads user, settings, root metadata and globals from /get_user_data/ when init omits them (live shape)", async () =>
@@ -6321,11 +6283,10 @@ describe("internal client bootstrap", () =>
 				},
 			);
 			expect(api.requests.map((r) => [r.method, r.path])).toStrictEqual([
-				["POST", "/ajax_login"],
 				["GET", "/get_initialization_data"],
 				["GET", "/get_user_data/"],
 			]);
-			expect(api.requests[2]?.headers).toStrictEqual(INIT_HEADERS);
+			expect(api.requests[1]?.headers).toStrictEqual(INIT_HEADERS);
 		});
 
 		it("parses the visible feature list from the init data, keeping only codename, name, label and description", async () =>
@@ -6578,17 +6539,16 @@ describe("internal client bootstrap", () =>
 
 			expect(second).toStrictEqual(EXPECTED_SESSION);
 			expect(api.requests.map((r) => [r.method, r.path])).toStrictEqual([
-				["POST", "/ajax_login"],
 				["GET", "/get_initialization_data"],
 				["GET", "/get_initialization_data"],
 			]);
-			expect(api.requests[2]?.url).toBe(
+			expect(api.requests[1]?.url).toBe(
 				`${BASE_URL}/get_initialization_data?client_version=25&client_version_v2=28&no_root_children=1`,
 			);
 			expect(client.session).toStrictEqual(EXPECTED_SESSION);
 		});
 
-		it("re-logs in exactly once when init redirects to the login page", async () =>
+		it("never logs in again when workflowy.com refuses the session: a redirect, its 404 page or logged_out each fail the call", async () =>
 		{
 			const {api, client} = clientWith();
 			api.respondOnce(
@@ -6605,43 +6565,6 @@ describe("internal client bootstrap", () =>
 						},
 					),
 			);
-
-			const session = await client.bootstrap();
-
-			expect(session).toStrictEqual(EXPECTED_SESSION);
-			expect(api.requests.map((r) => [r.method, r.path])).toStrictEqual([
-				["POST", "/ajax_login"],
-				["GET", "/get_initialization_data"],
-				["POST", "/ajax_login"],
-				["GET", "/get_initialization_data"],
-			]);
-		});
-
-		it("re-logs in exactly once when init reports logged_out", async () =>
-		{
-			const {api, client} = clientWith();
-			api.respondOnce("/get_initialization_data", () =>
-				json(
-					{
-						logged_out: true,
-					},
-				),
-			);
-
-			const session = await client.bootstrap();
-
-			expect(session).toStrictEqual(EXPECTED_SESSION);
-			expect(api.requests.map((r) => [r.method, r.path])).toStrictEqual([
-				["POST", "/ajax_login"],
-				["GET", "/get_initialization_data"],
-				["POST", "/ajax_login"],
-				["GET", "/get_initialization_data"],
-			]);
-		});
-
-		it("gives up after one re-login when the session keeps being rejected, a 404 page counting as a refusal", async () =>
-		{
-			const {api, client} = clientWith();
 			// workflowy.com answers a request without a valid session with its HTML 404 page.
 			api.respondOnce(
 				"/get_initialization_data",
@@ -6657,106 +6580,67 @@ describe("internal client bootstrap", () =>
 						},
 					),
 			);
-			api.respond("/get_initialization_data", () =>
+			api.respondOnce("/get_initialization_data", () =>
 				json(
 					{
 						logged_out: true,
 					},
 				),
 			);
-
-			await expect(client.bootstrap()).rejects.toThrow(new SessionRejectedError("logged_out"));
-			expect(api.requests.map((r) => [r.method, r.path])).toStrictEqual([
-				["POST", "/ajax_login"],
-				["GET", "/get_initialization_data"],
-				["POST", "/ajax_login"],
-				["GET", "/get_initialization_data"],
-			]);
-		});
-
-		it("rejects a login whose body lists errors, even when it sets a session cookie, and keeps the redacted reply as detail", async () =>
-		{
-			const {api, client} = clientWith();
-			async function refusal(): Promise<unknown>
-			{
-				const error: unknown = await client.login().catch((caught: unknown) => caught);
-				return error instanceof LoginRefusedError
-					?
-						{
-							message: error.message,
-							detail: error.detail,
-						}
-					: error;
-			}
-			api.respondOnce("/ajax_login", () =>
-				Response.json(
-					{
-						success: false,
-						errors:
-						{
-							__all__: ["Wrong email or password"],
-						},
-						unknown_challenge: "code-required",
-						Username: "Alice@Example.com",
-						hint: "hunter2 is not alice@example.com's password",
-					},
-					{
-						headers:
-						{
-							"set-cookie": "sessionid=anonymous; Path=/; HttpOnly",
-						},
-					},
-				),
-			);
-			const withErrors = await refusal();
-			api.respondOnce("/ajax_login", () =>
-				Response.json(
-					{
-						success: false,
-						unknown_challenge: true,
-					},
-				),
-			);
-			const noCookie = await refusal();
-			api.respondOnce(
-				"/ajax_login",
-				() =>
-					new Response(
-						`<html>\n  Forbidden for alice@example.com ${"x".repeat(600)}</html>`,
-						{
-							status: 403,
-						},
-					),
-			);
-			const notJson = await refusal();
+			const refusal = async (): Promise<unknown> => client.bootstrap().catch((thrown: unknown) => thrown);
 
 			expect(
 				{
-					withErrors,
-					noCookie,
-					notJson,
+					errors: [await refusal(), await refusal(), await refusal()],
+					requests: api.requests.map((r) => [r.method, r.path]),
 				},
 			).toStrictEqual(
 				{
-					withErrors:
-					{
-						message: "Login failed: Wrong email or password",
-						detail: 'HTTP 200: {"success":false,"errors":{"__all__":["Wrong email or password"]},"unknown_challenge":"code-required","Username":"[redacted]","hint":"[redacted] is not [redacted]\'s password"}',
-					},
-					noCookie:
-					{
-						message: "Login failed: No session cookie received",
-						detail: 'HTTP 200: {"success":false,"unknown_challenge":true}',
-					},
-					notJson:
-					{
-						message: "Login failed: No session cookie received",
-						detail: `HTTP 403: <html> Forbidden for [redacted] ${"x".repeat(455)}...`,
-					},
+					errors: [
+						new SessionRejectedError("redirect to /login/"),
+						new SessionRejectedError("404 page"),
+						new SessionRejectedError("logged_out"),
+					],
+					requests: [
+						["GET", "/get_initialization_data"],
+						["GET", "/get_initialization_data"],
+						["GET", "/get_initialization_data"],
+					],
 				},
 			);
-			expect(JSON.stringify([withErrors, noCookie, notJson]).toLowerCase()).not.toMatch(
-				/hunter2|alice@example\.com/u,
+			expect(new SessionRejectedError("logged_out").message).toBe(
+				"Workflowy session rejected (logged_out); run './bin/run.js internal login'",
+			);
+		});
+
+		it("shows a login reply with its secrets redacted, every unexpected key kept, and long bodies truncated", () =>
+		{
+			const secrets = ["alice@example.com", "hunter2"];
+			const reply =
+			{
+				success: false,
+				errors:
+				{
+					__all__: ["Wrong email or password"],
+				},
+				unknown_challenge: "code-required",
+				Username: "Alice@Example.com",
+				hint: "hunter2 is not alice@example.com's password",
+			};
+			const html = `<html>\n  Forbidden for alice@example.com ${"x".repeat(600)}</html>`;
+
+			expect(
+				{
+					json: loginReplyDetail(200, JSON.stringify(reply), reply, secrets),
+					html: loginReplyDetail(403, html, undefined, secrets),
+					empty: loginReplyDetail(500, "", undefined, secrets),
+				},
+			).toStrictEqual(
+				{
+					json: 'HTTP 200: {"success":false,"errors":{"__all__":["Wrong email or password"]},"unknown_challenge":"code-required","Username":"[redacted]","hint":"[redacted] is not [redacted]\'s password"}',
+					html: `HTTP 403: <html> Forbidden for [redacted] ${"x".repeat(455)}...`,
+					empty: "HTTP 500: (empty body)",
+				},
 			);
 		});
 	});
@@ -6765,11 +6649,6 @@ describe("internal client bootstrap", () =>
 describe("internal client session store", () =>
 {
 	const BASE_URL = "https://workflowy.test";
-	const CREDENTIALS =
-	{
-		username: "alice@example.com",
-		password: "hunter2",
-	};
 	const SAVED_COOKIE = "sessionid=saved-session-0";
 
 	function memoryStore(initial?: string): SessionCookieStore &
@@ -6838,44 +6717,7 @@ describe("internal client session store", () =>
 			expect(store.writes).toStrictEqual([]);
 		});
 
-		it("logs in once with the password on an expired cookie and rewrites the store", async () =>
-		{
-			const api = createFakeInternalApi();
-			api.respondOnce(
-				"/get_initialization_data",
-				() =>
-					new Response(
-						"",
-						{
-							status: 302,
-							headers:
-							{
-								location: "/login/",
-							},
-						},
-					),
-			);
-			const store = memoryStore(SAVED_COOKIE);
-			const client = new WorkflowyInternalClient(
-				{
-					credentials: CREDENTIALS,
-					sessionStore: store,
-					fetch: api.fetch,
-					baseUrl: BASE_URL,
-				},
-			);
-
-			await client.bootstrap();
-
-			expect(api.requests.map((r) => [r.method, r.path, r.headers.cookie])).toStrictEqual([
-				["GET", "/get_initialization_data", SAVED_COOKIE],
-				["POST", "/ajax_login", undefined],
-				["GET", "/get_initialization_data", `sessionid=${FAKE_SESSION_ID}`],
-			]);
-			expect(store.writes).toStrictEqual([`sessionid=${FAKE_SESSION_ID}`]);
-		});
-
-		it("re-logs in for getTreeSnapshot too when the stored cookie is logged out", async () =>
+		it("fails a tree read that reports logged_out without logging in or touching the store", async () =>
 		{
 			const api = createFakeInternalApi();
 			api.respondOnce("/get_tree_data/", () =>
@@ -6888,28 +6730,27 @@ describe("internal client session store", () =>
 			const store = memoryStore(SAVED_COOKIE);
 			const client = new WorkflowyInternalClient(
 				{
-					credentials: CREDENTIALS,
 					sessionStore: store,
 					fetch: api.fetch,
 					baseUrl: BASE_URL,
 				},
 			);
 
-			const result = await client.getTreeSnapshot();
+			const error = await client.getTreeSnapshot().catch((thrown: unknown) => thrown);
 
-			expect(result).toStrictEqual(
+			expect(
 				{
-					items: [],
-					txId: "9999",
-					expandedKeys: [],
+					error,
+					requests: api.requests.map((r) => [r.method, r.path]),
+					writes: store.writes,
+				},
+			).toStrictEqual(
+				{
+					error: new SessionRejectedError("logged_out"),
+					requests: [["GET", "/get_tree_data/"]],
+					writes: [],
 				},
 			);
-			expect(api.requests.map((r) => [r.method, r.path])).toStrictEqual([
-				["GET", "/get_tree_data/"],
-				["POST", "/ajax_login"],
-				["GET", "/get_tree_data/"],
-			]);
-			expect(store.writes).toStrictEqual([`sessionid=${FAKE_SESSION_ID}`]);
 		});
 
 		it("keeps each item's node fields for an import when asked, dropping malformed ones", async () =>
@@ -6987,36 +6828,7 @@ describe("internal client session store", () =>
 			);
 		});
 
-		it("fails clearly when the cookie expired and no credentials are available", async () =>
-		{
-			const api = createFakeInternalApi();
-			api.respond("/get_initialization_data", () =>
-				json(
-					{
-						logged_out: true,
-					},
-				),
-			);
-			const client = new WorkflowyInternalClient(
-				{
-					sessionStore: memoryStore(SAVED_COOKIE),
-					fetch: api.fetch,
-					baseUrl: BASE_URL,
-				},
-			);
-
-			const failure = client.bootstrap();
-			await expect(failure).rejects.toThrow(
-				new Error(
-					"Workflowy session cookie is missing or expired and WORKFLOWY_USERNAME/WORKFLOWY_PASSWORD are not set; set them in the environment (e.g. from .envrc), or run './bin/run.js internal login' with them set",
-				),
-			);
-			// Typed, so a host holding only a stored session can tell an expired one from any other failure.
-			await expect(failure).rejects.toBeInstanceOf(MissingCredentialsError);
-			expect(api.requests.map((r) => [r.method, r.path])).toStrictEqual([["GET", "/get_initialization_data"]]);
-		});
-
-		it("fails clearly with neither a cookie nor credentials", async () =>
+		it("fails clearly, typed, without a saved cookie", async () =>
 		{
 			const api = createFakeInternalApi();
 			const client = new WorkflowyInternalClient(
@@ -7027,11 +6839,12 @@ describe("internal client session store", () =>
 				},
 			);
 
-			await expect(client.bootstrap()).rejects.toThrow(
-				new Error(
-					"Workflowy session cookie is missing or expired and WORKFLOWY_USERNAME/WORKFLOWY_PASSWORD are not set; set them in the environment (e.g. from .envrc), or run './bin/run.js internal login' with them set",
-				),
+			const failure = client.bootstrap();
+			await expect(failure).rejects.toThrow(
+				new Error("No Workflowy session cookie is saved; run './bin/run.js internal login'"),
 			);
+			// Typed, so a host holding only a stored session can tell a missing one from any other failure.
+			await expect(failure).rejects.toBeInstanceOf(MissingCredentialsError);
 			expect(api.requests).toStrictEqual([]);
 		});
 	});
@@ -7079,7 +6892,7 @@ describe("internal client session store", () =>
 			expect(DEFAULT_SESSION_FILE).toBe(path.resolve(import.meta.dirname, "../../../.llm/workflowy-session"));
 		});
 
-		it("is undefined with neither credentials nor a session file", () =>
+		it("is undefined without a session file", () =>
 		{
 			expect(
 				readInternalAuth(
@@ -7090,7 +6903,7 @@ describe("internal client session store", () =>
 			).toBeUndefined();
 		});
 
-		it("is configured by a session file alone", () =>
+		it("is configured by a session file", () =>
 		{
 			const file = tempFile();
 			fs.writeFileSync(file, SAVED_COOKIE);
@@ -7101,22 +6914,7 @@ describe("internal client session store", () =>
 				},
 			);
 
-			expect(auth?.credentials).toBeUndefined();
 			expect(auth?.sessionStore.read()).toBe(SAVED_COOKIE);
-		});
-
-		it("is configured by credentials alone", () =>
-		{
-			const auth = readInternalAuth(
-				{
-					OUTLINEDB_SESSION_FILE: tempFile(),
-					WORKFLOWY_USERNAME: CREDENTIALS.username,
-					WORKFLOWY_PASSWORD: CREDENTIALS.password,
-				},
-			);
-
-			expect(auth?.credentials).toStrictEqual(CREDENTIALS);
-			expect(auth?.sessionStore.read()).toBeUndefined();
 		});
 	});
 });

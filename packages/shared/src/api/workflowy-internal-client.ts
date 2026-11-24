@@ -1,5 +1,5 @@
 import {z} from "zod";
-import {InternalApiError} from "../internal/errors.js";
+import {InternalApiError, LOGIN_HINT} from "../internal/errors.js";
 import {readTreeDataBody} from "./tree-data-stream.js";
 
 /**
@@ -10,10 +10,9 @@ import {readTreeDataBody} from "./tree-data-stream.js";
  * `dateJoinedTimestampInSeconds` (for converting backup file timestamps to Unix
  * timestamps) and the session bootstrap a `/push_and_poll` write path needs.
  *
- * Authentication flow:
- * - Reuse the session cookie from the session store when one is saved
- * - Otherwise (or when the server rejects it) POST to /ajax_login with
- *   username/password once and save the new cookie back to the store
+ * Authentication: the session cookie the session store holds, which `./bin/run.js internal login` (or the Worker's
+ * Connect) saves after a person logs in through workflowy.com's `/login/` form. Nothing here logs in: a missing or
+ * refused cookie fails and the person logs in again.
  */
 
 export const WORKFLOWY_URL = "https://workflowy.com";
@@ -168,36 +167,6 @@ const LoggedOutSchema = z
 	)
 	.loose();
 
-/**
- * Schema for the login response.
- */
-const LoginResponseSchema = z.object(
-	{
-		success: z.boolean().optional(),
-		errors: z.record(z.string(), z.array(z.string())).optional(),
-	},
-);
-
-export interface WorkflowyCredentials
-{
-	username: string;
-	password: string;
-}
-
-/** Both `WORKFLOWY_USERNAME` and `WORKFLOWY_PASSWORD` from the environment, or undefined if either is unset. */
-export function readWorkflowyCredentials(env: NodeJS.ProcessEnv = process.env): WorkflowyCredentials | undefined
-{
-	const username = env.WORKFLOWY_USERNAME;
-	const password = env.WORKFLOWY_PASSWORD;
-	return username && password
-		?
-			{
-				username,
-				password,
-			}
-		: undefined;
-}
-
 /** Where a Workflowy `sessionid=...` cookie persists between processes. */
 export interface SessionCookieStore
 {
@@ -206,14 +175,13 @@ export interface SessionCookieStore
 	clear(): void;
 }
 
-/** How the internal client authenticates: a saved cookie, a password login, or both. */
+/** How the internal client authenticates: the saved session cookie. */
 export interface InternalAuth
 {
-	credentials?: WorkflowyCredentials;
 	sessionStore: SessionCookieStore;
 }
 
-/** No usable session cookie and no password to log in with: a host holding only a stored session must sign in again. */
+/** No session cookie is saved: the person must log in again. */
 export class MissingCredentialsError extends Error
 {
 	constructor()
@@ -222,14 +190,11 @@ export class MissingCredentialsError extends Error
 	}
 }
 
-export const MISSING_AUTH_MESSAGE =
-	"Workflowy session cookie is missing or expired and WORKFLOWY_USERNAME/WORKFLOWY_PASSWORD are not set; set them in the environment (e.g. from .envrc), or run './bin/run.js internal login' with them set";
+export const MISSING_AUTH_MESSAGE = `No Workflowy session cookie is saved; ${LOGIN_HINT}`;
 
 export interface WorkflowyInternalClientOptions
 {
-	/** Password login; optional when `sessionStore` holds a valid cookie. */
-	credentials?: WorkflowyCredentials;
-	/** Reads the cookie to start from and saves each fresh login's cookie. */
+	/** Holds the session cookie every request sends. */
 	sessionStore?: SessionCookieStore;
 	/** Defaults to the global `fetch`. */
 	fetch?: typeof fetch;
@@ -268,19 +233,6 @@ export interface InternalSession
 const DEFAULT_CLIENT_VERSION = "21";
 const CLIENT_VERSION_V2 = "28";
 
-/** A body parsed as JSON, or undefined when it is not JSON (a success redirect's body need not be). */
-function parseJsonOrUndefined(text: string): unknown
-{
-	try
-	{
-		return JSON.parse(text);
-	}
-	catch
-	{
-		return undefined;
-	}
-}
-
 /** The init data read every import and bootstrap starts with, which Connect also sends to check a fresh login. */
 export function initializationPath(clientVersion = DEFAULT_CLIENT_VERSION): string
 {
@@ -294,30 +246,14 @@ export function initializationPath(clientVersion = DEFAULT_CLIENT_VERSION): stri
 	return `/get_initialization_data?${query.toString()}`;
 }
 
-/**
- * workflowy.com refused a password login. `detail` is its reply for a person to read: the HTTP status and the body
- * (every JSON key kept, so an unexpected field such as a second-factor prompt shows), with secret-looking keys, the
- * email and the password redacted, truncated to {@link LOGIN_DETAIL_MAX} characters. Cookies are never part of it.
- */
-export class LoginRefusedError extends Error
-{
-	constructor(
-		message: string,
-		readonly detail: string,
-	)
-	{
-		super(message);
-		this.name = "LoginRefusedError";
-	}
-}
-
 const LOGIN_DETAIL_MAX = 500;
 const REDACTED = "[redacted]";
 const SECRET_KEY = /cookie|passw|email|username|session|token|secret|csrf/iu;
 
 /**
- * A login reply as {@link LoginRefusedError.detail} shows it, with every one of `secrets` (the email, the password, a
- * code) redacted wherever it appears.
+ * A login reply for a person to read: the HTTP status and the body (every JSON key kept, so an unexpected field shows),
+ * with secret-looking keys and every one of `secrets` (the email, the password, a code) redacted wherever it appears,
+ * truncated to {@link LOGIN_DETAIL_MAX} characters. Cookies are never part of it.
  */
 export function loginReplyDetail(status: number, body: string, reply: unknown, secrets: readonly string[]): string
 {
@@ -372,7 +308,7 @@ export class SessionRejectedError extends Error
 {
 	constructor(readonly reason: string)
 	{
-		super(`Workflowy session rejected (${reason})`);
+		super(`Workflowy session rejected (${reason}); ${LOGIN_HINT}`);
 	}
 }
 
@@ -381,9 +317,7 @@ export class SessionRejectedError extends Error
  */
 export class WorkflowyInternalClient
 {
-	private sessionCookie: string | null;
-	private readonly credentials: WorkflowyCredentials | undefined;
-	private readonly sessionStore: SessionCookieStore | undefined;
+	private readonly sessionCookie: string | null;
 	private readonly fetchImpl: typeof fetch;
 	private readonly baseUrl: string;
 	private readonly transientId: string;
@@ -391,8 +325,6 @@ export class WorkflowyInternalClient
 
 	constructor(options: WorkflowyInternalClientOptions)
 	{
-		this.credentials = options.credentials;
-		this.sessionStore = options.sessionStore;
 		this.sessionCookie = options.sessionStore?.read() ?? null;
 		this.fetchImpl = options.fetch ?? (async (input, init) => fetch(input, init));
 		this.baseUrl = options.baseUrl ?? WORKFLOWY_URL;
@@ -406,103 +338,20 @@ export class WorkflowyInternalClient
 	}
 
 	/**
-	 * Authenticate with Workflowy using username/password.
-	 * Stores the session cookie for subsequent requests and in the session store.
-	 */
-	async login(): Promise<void>
-	{
-		if (!this.credentials)
-		{
-			throw new MissingCredentialsError();
-		}
-		const url = `${this.baseUrl}/ajax_login`;
-
-		const formData = new URLSearchParams();
-		formData.append("username", this.credentials.username);
-		formData.append("password", this.credentials.password);
-
-		this.sessionCookie = null;
-		const response = await this.fetchImpl(
-			url,
-			{
-				method: "POST",
-				headers:
-				{
-					"Content-Type": "application/x-www-form-urlencoded",
-				},
-				body: formData.toString(),
-				redirect: "manual",
-			},
-		);
-
-		// Extract session cookie from Set-Cookie header
-		const setCookie = response.headers.get("set-cookie");
-		if (setCookie)
-		{
-			// Parse the session cookie (sessionid=...)
-			const sessionMatch = setCookie.match(/sessionid=([^;]+)/u);
-			if (sessionMatch)
-			{
-				this.sessionCookie = `sessionid=${sessionMatch[1]}`;
-			}
-		}
-
-		// Check response for errors
-		const body = await response.text();
-		const reply = parseJsonOrUndefined(body);
-		const credentials = this.credentials;
-		const refused = (message: string): LoginRefusedError =>
-		{
-			this.sessionCookie = null;
-			return new LoginRefusedError(
-				message,
-				loginReplyDetail(response.status, body, reply, [credentials.username, credentials.password]),
-			);
-		};
-		if (response.ok || response.status === 302)
-		{
-			const errors = LoginResponseSchema.safeParse(reply).data?.errors;
-			if (errors)
-			{
-				throw refused(`Login failed: ${Object.values(errors).flat().join(", ")}`);
-			}
-		}
-
-		if (!this.sessionCookie)
-		{
-			throw refused("Login failed: No session cookie received");
-		}
-		this.sessionStore?.write(this.sessionCookie);
-	}
-
-	/**
-	 * Run `request` with a session: log in first only when no cookie is held,
-	 * and on a rejected session (302 to login, or `logged_out`) log in exactly
-	 * once and retry. A second rejection right after a fresh login propagates.
+	 * Run `request` with the saved session; throws {@link MissingCredentialsError} when none is saved. A refused
+	 * session throws `SessionRejectedError`: nothing logs in again, since a login may ask a person for a code.
 	 */
 	private async withSession<T>(request: () => Promise<T>): Promise<T>
 	{
 		if (!this.sessionCookie)
 		{
-			await this.login();
+			throw new MissingCredentialsError();
 		}
-		try
-		{
-			return await request();
-		}
-		catch (error)
-		{
-			if (!(error instanceof SessionRejectedError))
-			{
-				throw error;
-			}
-			await this.login();
-			return request();
-		}
+		return request();
 	}
 
 	/**
-	 * Fetch initialization data (logging in per {@link withSession}). Throws
+	 * Fetch initialization data (with the session per {@link withSession}). Throws
 	 * `InternalApiError` when init omits the transaction id; it never falls back
 	 * to a whole-tree `/get_tree_data/` download.
 	 */
@@ -616,7 +465,7 @@ export class WorkflowyInternalClient
 	}
 
 	/**
-	 * The whole main tree from one `/get_tree_data/`, read as it arrives (logging in per {@link withSession}): each
+	 * The whole main tree from one `/get_tree_data/`, read as it arrives (with the session per {@link withSession}): each
 	 * item, with its node fields and metadata, goes to `onItem`, which is awaited before the next is read, so the body
 	 * is never held whole. Resolves with the read's transaction id and expanded keys once the body ends. `onBytes` hears
 	 * each network chunk's size as it arrives, so a download that fails part way still reports what it read.
@@ -670,7 +519,7 @@ export class WorkflowyInternalClient
 
 	/**
 	 * The short-lived signed S3 URL behind one of workflowy.com's `/file-proxy/signed-preview|signed-original/...` paths
-	 * (logging in per {@link withSession}).
+	 * (with the session per {@link withSession}).
 	 */
 	async signedFileUrl(path: string): Promise<string>
 	{
@@ -687,7 +536,7 @@ export class WorkflowyInternalClient
 	{
 		if (!this.sessionCookie)
 		{
-			throw new Error("Not authenticated. Call login() first.");
+			throw new MissingCredentialsError();
 		}
 		const response = await this.fetchImpl(
 			`${this.baseUrl}${pathAndQuery}`,
@@ -748,7 +597,7 @@ export class WorkflowyInternalClient
 	{
 		if (!this.sessionCookie)
 		{
-			throw new Error("Not authenticated. Call login() first.");
+			throw new MissingCredentialsError();
 		}
 		const body = new URLSearchParams(form);
 		if (this.currentSession)

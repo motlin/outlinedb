@@ -14,10 +14,7 @@ export {RequestStatusError};
 const INVALIDATING_FAILURES = new Map<number, string>([
 	[404, "Couldn't undo: the item no longer exists"],
 	[409, "Couldn't undo: the item was already restored"],
-	[
-		503,
-		"Couldn't undo: undo of delete needs the workflowy.com internal API (set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD)",
-	],
+	[503, "Couldn't undo: undo of delete needs the workflowy.com internal API (run './bin/run.js internal login')"],
 ]);
 
 /** The server calls that replay an inverted batch; injected so tests can record them. */

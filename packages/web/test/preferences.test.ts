@@ -22,8 +22,7 @@ import {migratedMemoryDatabase} from "../../shared/test/helpers/migrated-memory-
 
 describe("preferences route", () =>
 {
-	const NOT_CONFIGURED =
-		"Workflowy internal API is not configured (set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD, or run './bin/run.js internal login')";
+	const NOT_CONFIGURED = "Workflowy internal API is not configured (run './bin/run.js internal login')";
 	type MetadataChange = Parameters<WorkflowyInternalAdapter["setRootMetaValues"]>[0][number];
 
 	const NOTES = "1a2b3c4d-0000-4000-8000-000000000001";

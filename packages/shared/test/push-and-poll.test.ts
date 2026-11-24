@@ -11,7 +11,14 @@ import
 } from "../src/internal/errors.js";
 import {PushAndPoll} from "../src/internal/push-and-poll.js";
 import type {InternalOp, PushResult} from "../src/internal/push-and-poll.js";
-import {createFakeInternalApi, FAKE_CLIENT_ID, FAKE_SESSION_ID, json} from "./helpers/fake-internal-api.js";
+import
+{
+	createFakeInternalApi,
+	FAKE_CLIENT_ID,
+	FAKE_SESSION_ID,
+	fakeSessionStore,
+	json,
+} from "./helpers/fake-internal-api.js";
 import type {RecordedRequest} from "./helpers/fake-internal-api.js";
 
 const TRANSIENT_ID = "6f1c1d1e-0000-4000-8000-000000000001";
@@ -81,11 +88,7 @@ function setup({fetch: wrapFetch}: Setup = {})
 	const api = createFakeInternalApi();
 	const client = new WorkflowyInternalClient(
 		{
-			credentials:
-			{
-				username: "alice@example.com",
-				password: "hunter2",
-			},
+			sessionStore: fakeSessionStore(),
 			fetch: wrapFetch ?? api.fetch,
 			baseUrl: BASE_URL,
 			transientId: TRANSIENT_ID,
@@ -131,11 +134,7 @@ async function bootstrapped(api = createFakeInternalApi())
 {
 	const client = new WorkflowyInternalClient(
 		{
-			credentials:
-			{
-				username: "alice@example.com",
-				password: "hunter2",
-			},
+			sessionStore: fakeSessionStore(),
 			fetch: api.fetch,
 			baseUrl: BASE_URL,
 			transientId: TRANSIENT_ID,
@@ -390,11 +389,7 @@ describe("PushAndPoll", () =>
 		const api = createFakeInternalApi();
 		const client = new WorkflowyInternalClient(
 			{
-				credentials:
-				{
-					username: "alice@example.com",
-					password: "hunter2",
-				},
+				sessionStore: fakeSessionStore(),
 				fetch: api.fetch,
 				baseUrl: BASE_URL,
 				transientId: TRANSIENT_ID,
@@ -766,7 +761,7 @@ describe("PushAndPoll", () =>
 		expect(pushes(api.requests)).toHaveLength(1);
 	});
 
-	it("re-logs in once on logged_out and redoes the same push", async () =>
+	it("throws LoggedOut after one push, without logging in again, on logged_out, a 404 page or a login redirect", async () =>
 	{
 		const {api, pusher} = await bootstrapped();
 		api.respondOnce("/push_and_poll", () =>
@@ -776,33 +771,6 @@ describe("PushAndPoll", () =>
 				},
 			),
 		);
-		api.respondOnce("/push_and_poll", pushOk("4568"));
-
-		expect(
-			(
-				await pusher.pushAndPoll(
-					{
-						ops: [EDIT_OP],
-					},
-				)
-			).txId,
-		).toBe("4568");
-		expect(api.requests.map((r) => r.path)).toStrictEqual([
-			"/ajax_login",
-			"/get_initialization_data",
-			"/push_and_poll",
-			"/ajax_login",
-			"/push_and_poll",
-		]);
-		expect(pushes(api.requests).map((r) => [form(r).push_poll_id, form(r).is_redo])).toStrictEqual([
-			["pollid01", undefined],
-			["pollid01", "true"],
-		]);
-	});
-
-	it("throws LoggedOut when the session is rejected again after re-login, a 404 page counting as a refusal", async () =>
-	{
-		const {api, pusher} = await bootstrapped();
 		// workflowy.com answers a request without a valid session with its HTML 404 page.
 		api.respondOnce(
 			"/push_and_poll",
@@ -818,7 +786,7 @@ describe("PushAndPoll", () =>
 					},
 				),
 		);
-		api.respond(
+		api.respondOnce(
 			"/push_and_poll",
 			() =>
 				new Response(
@@ -832,21 +800,26 @@ describe("PushAndPoll", () =>
 					},
 				),
 		);
+		const refusal = async (): Promise<unknown> =>
+			pusher
+				.pushAndPoll(
+					{
+						ops: [EDIT_OP],
+					},
+				)
+				.catch((thrown: unknown) => thrown);
 
-		await expect(
-			pusher.pushAndPoll(
-				{
-					ops: [EDIT_OP],
-				},
-			),
-		).rejects.toThrow(LoggedOut);
-		expect(api.requests.map((r) => r.path)).toStrictEqual([
-			"/ajax_login",
-			"/get_initialization_data",
-			"/push_and_poll",
-			"/ajax_login",
-			"/push_and_poll",
-		]);
+		expect(
+			{
+				errors: [await refusal(), await refusal(), await refusal()],
+				paths: api.requests.map((r) => r.path),
+			},
+		).toStrictEqual(
+			{
+				errors: [new LoggedOut("logged_out"), new LoggedOut("404 page"), new LoggedOut("redirect to /login/")],
+				paths: ["/get_initialization_data", "/push_and_poll", "/push_and_poll", "/push_and_poll"],
+			},
+		);
 	});
 
 	it("refuses to push before the client has bootstrapped", async () =>

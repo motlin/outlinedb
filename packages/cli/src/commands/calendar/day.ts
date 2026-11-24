@@ -119,9 +119,7 @@ export default class CalendarDay extends Command
 			}
 			catch
 			{
-				this.error(
-					"--ensure needs the internal API: set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD in the environment (e.g. from .envrc)",
-				);
+				this.error("--ensure needs the internal API: run './bin/run.js internal login'");
 			}
 			const ensured = await localCalendar(writes).ensureCalendarDay(
 				dateId,

@@ -29,7 +29,7 @@ import {CacheService} from "./cache.js";
 type Database = ReturnType<typeof createDatabase>;
 
 const INTERNAL_AUTH_REQUIRED =
-	"Writing needs the internal API to deliver the write to workflowy.com: set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD (e.g. from .envrc), or run 'internal login'.";
+	"Writing needs the internal API to deliver the write to workflowy.com: run './bin/run.js internal login'";
 
 /**
  * A CLI write in mirror mode: the local writer records outbox rows in each unit of work, and the internal adapter

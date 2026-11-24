@@ -1160,14 +1160,15 @@ _See code: [@oclif/plugin-help](https://github.com/oclif/plugin-help/blob/7.0.6/
 
 ## `outlinedb internal login`
 
-Log in to Workflowy's internal API once and save the session cookie (mode 0600) so later live work needs no password
+Log in to workflowy.com through its login form, answering each step it asks for (password, then an authenticator code), and save the session cookie (mode 0600); the email comes from WORKFLOWY_USERNAME
 
 ```text
 USAGE
   $ outlinedb internal login
 
 DESCRIPTION
-  Log in to Workflowy's internal API once and save the session cookie (mode 0600) so later live work needs no password
+  Log in to workflowy.com through its login form, answering each step it asks for (password, then an authenticator
+  code), and save the session cookie (mode 0600); the email comes from WORKFLOWY_USERNAME
 
 EXAMPLES
   $ outlinedb internal login

@@ -27,7 +27,7 @@ export const starKeys =
 	all: ["stars"] as const,
 };
 
-export const STARS_UNAVAILABLE_TOOLTIP = "Stars need a workflowy.com login (WORKFLOWY_USERNAME/PASSWORD)";
+export const STARS_UNAVAILABLE_TOOLTIP = "Stars need a workflowy.com login (./bin/run.js internal login)";
 
 export const LAST_VIEWED_STORAGE_KEY = "outlinedb-star-last-viewed";
 

@@ -25,9 +25,7 @@ export default class ImportAccount extends Command
 		const auth = readInternalAuth();
 		if (!auth)
 		{
-			this.error(
-				"Importing account state needs the internal API: set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD (e.g. via op run)",
-			);
+			this.error("Importing account state needs the internal API: run './bin/run.js internal login'");
 		}
 		const adapter = new WorkflowyInternalAdapter(
 			{

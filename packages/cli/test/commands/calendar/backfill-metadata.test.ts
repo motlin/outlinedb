@@ -25,9 +25,7 @@ describe("calendar backfill-metadata command", () =>
 		const testDbPath = path.join(tempDir, "test.sqlite");
 		testDatabase = createTestDatabase(testDbPath);
 		process.env.OUTLINEDB_DB_PATH = testDbPath;
-		delete process.env.WORKFLOWY_USERNAME;
-		delete process.env.WORKFLOWY_PASSWORD;
-		delete process.env.OUTLINEDB_SESSION_FILE;
+		process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "session");
 		process.env.WORKFLOWY_API_KEY = "test-api-key";
 	});
 
@@ -111,7 +109,7 @@ describe("calendar backfill-metadata command", () =>
 		).toStrictEqual(
 			{
 				message:
-					"Writing needs the internal API to deliver the write to workflowy.com: set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD (e.g. from .envrc), or run 'internal login'.",
+					"Writing needs the internal API to deliver the write to workflowy.com: run './bin/run.js internal login'",
 				pending: [],
 			},
 		);

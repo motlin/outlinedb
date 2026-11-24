@@ -217,7 +217,7 @@ describe("outlinedb_calendar_day", () =>
 					content: [
 						{
 							type: "text",
-							text: "Workflowy internal API is not configured (set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD, or run './bin/run.js internal login')",
+							text: "Workflowy internal API is not configured (run './bin/run.js internal login')",
 						},
 					],
 				},

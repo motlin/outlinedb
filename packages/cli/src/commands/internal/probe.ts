@@ -440,9 +440,7 @@ export default class Probe extends Command
 		const auth = readInternalAuth();
 		if (!auth)
 		{
-			this.error(
-				"Set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD in the environment (e.g. from .envrc), or run './bin/run.js internal login' with them set",
-			);
+			this.error("No internal session: run './bin/run.js internal login'");
 		}
 		const recorded: RecordedRequest[] = [];
 		const client = new WorkflowyInternalClient(
@@ -1315,11 +1313,7 @@ export default class Probe extends Command
 			`- \`get_tree_data\` fallback needed: ${usedTreeData ? "yes" : "no"}`,
 			`- \`get_user_data\` needed for user/settings/root metadata: ${usedUserData ? "yes" : "no"}`,
 			`- Requests: ${recorded
-				.map((request) =>
-					request.path === "/ajax_login"
-						? `\`${request.method} ${request.path}\` ${request.status}`
-						: `\`${request.method} ${request.path}\` ${request.status} (${request.bytes} bytes)`,
-				)
+				.map((request) => `\`${request.method} ${request.path}\` ${request.status} (${request.bytes} bytes)`)
 				.join("; ")}`,
 		];
 	}

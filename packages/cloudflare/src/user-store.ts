@@ -1292,7 +1292,7 @@ function countApplied(ctx: DurableObjectState): number
 
 /**
  * Whether workflowy.com refused the stored session, anywhere in the error's cause chain: a redirect or `logged_out`
- * answer, and with no password, the re-login that cannot happen.
+ * answer, or no session saved at all.
  */
 function isSessionRefused(error: unknown): boolean
 {

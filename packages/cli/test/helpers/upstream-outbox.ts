@@ -1,4 +1,5 @@
 /** Workflowy's internal API as a CLI write's outbox drain meets it, and the outbox rows the write left. */
+import fs from "node:fs";
 import path from "node:path";
 import {readPendingOutbox, storeTreeTxId} from "@outlinedb/shared/cache";
 import type {OutboxAspect} from "@outlinedb/shared/cache";
@@ -21,16 +22,14 @@ export interface UpstreamFake
 	pushes: PushedOp[][];
 }
 
-/** No internal-API credentials: neither the shell's login nor a saved session reaches a test. */
+/** No internal-API session: the shell's saved session never reaches a test. */
 export function isolateInternalAuth(tempDir: string): void
 {
-	delete process.env.WORKFLOWY_USERNAME;
-	delete process.env.WORKFLOWY_PASSWORD;
 	process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "workflowy-session");
 }
 
 /**
- * Configure internal-API credentials and answer `fetch` as workflowy.com does: login, init, and a `/push_and_poll`
+ * Save an internal-API session cookie and answer `fetch` as workflowy.com does: init, and a `/push_and_poll`
  * that echoes the pushed ops as the server run, so the drain closes the rows it carried. With `failPush`, every push
  * is rejected instead. Any other request fails the test.
  */
@@ -44,9 +43,8 @@ export function fakeUpstream(
 	} = {},
 ): UpstreamFake
 {
-	process.env.WORKFLOWY_USERNAME = "alice@example.com";
-	process.env.WORKFLOWY_PASSWORD = "hunter2";
 	process.env.OUTLINEDB_SESSION_FILE = path.join(tempDir, "workflowy-session");
+	fs.writeFileSync(process.env.OUTLINEDB_SESSION_FILE, "sessionid=abc\n");
 	storeTreeTxId(testDatabase.db, "1234567");
 	const fake: UpstreamFake =
 	{
@@ -57,21 +55,6 @@ export function fakeUpstream(
 	{
 		const url = new URL(input instanceof Request ? input.url : String(input));
 		fake.paths.push(`${init?.method ?? "GET"} ${url.pathname}`);
-		if (url.pathname === "/ajax_login")
-		{
-			return Promise.resolve(
-				new Response(
-					"",
-					{
-						status: 200,
-						headers:
-						{
-							"set-cookie": "sessionid=abc; Path=/",
-						},
-					},
-				),
-			);
-		}
 		if (url.pathname === "/push_and_poll")
 		{
 			return Promise.resolve(pushResponse(fake, init, options.failPush === true));

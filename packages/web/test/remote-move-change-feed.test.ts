@@ -16,7 +16,7 @@ import * as schema from "@outlinedb/shared/db";
 import {PendingEditsDeletedUpstream, WorkflowyInternalAdapter} from "@outlinedb/shared/internal";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import type {WorkflowyNode} from "@outlinedb/shared/types";
-import {createFakeInternalApi, json} from "../../shared/test/helpers/fake-internal-api.js";
+import {createFakeInternalApi, fakeSessionStore, json} from "../../shared/test/helpers/fake-internal-api.js";
 import type {AppEnv, ServerContext} from "../src/server/context.js";
 import type {NodeChangesResponse} from "../src/node-types.js";
 import {httpAppFor} from "./http-app-for.js";
@@ -89,11 +89,7 @@ function setup()
 		{
 			client: new WorkflowyInternalClient(
 				{
-					credentials:
-					{
-						username: "alice@example.com",
-						password: "hunter2",
-					},
+					sessionStore: fakeSessionStore(),
 					fetch: api.fetch,
 					baseUrl: "https://workflowy.test",
 					transientId: "6f1c1d1e-0000-4000-8000-000000000001",

@@ -188,8 +188,8 @@ export default class ImportApi extends Command
 	}
 
 	/**
-	 * Read `/get_tree_data/` from the internal API, when WORKFLOWY_USERNAME and
-	 * WORKFLOWY_PASSWORD are set or a session cookie is saved. Its item metadata
+	 * Read `/get_tree_data/` from the internal API, when a session cookie is
+	 * saved. Its item metadata
 	 * carries what the public API omits: mirrors (backlink items included),
 	 * references roots, numbered_start, calendar and priority.defaultToBottom.
 	 * Its transaction id seeds the cache's transaction-log position.

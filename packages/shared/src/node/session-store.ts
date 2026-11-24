@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import {readWorkflowyCredentials} from "../api/workflowy-internal-client.js";
 import type {InternalAuth, SessionCookieStore} from "../api/workflowy-internal-client.js";
 
 /** `.llm/workflowy-session` at the repository root (gitignored), from `src/node` or `dist/node` alike. */
@@ -50,21 +49,10 @@ export function sessionFilePath(env: NodeJS.ProcessEnv = process.env): string
 	return (env.OUTLINEDB_SESSION_FILE ?? "") || DEFAULT_SESSION_FILE;
 }
 
-/**
- * The internal-API auth configured in the environment: credentials, a saved
- * session cookie, or both. Undefined when neither is available.
- */
+/** The internal-API auth configured in the environment: the saved session cookie, or undefined when none is saved. */
 export function readInternalAuth(env: NodeJS.ProcessEnv = process.env): InternalAuth | undefined
 {
-	const credentials = readWorkflowyCredentials(env);
 	const sessionStore = fileSessionStore(sessionFilePath(env));
-	if (credentials)
-	{
-		return {
-			credentials,
-			sessionStore,
-		};
-	}
 	return sessionStore.read() === undefined
 		? undefined
 		:

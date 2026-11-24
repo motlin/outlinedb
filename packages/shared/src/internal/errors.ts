@@ -1,9 +1,12 @@
 /**
  * Failures of Workflowy's internal `/push_and_poll` write path. `PushAndPoll`
- * throws each after one attempt (only `LoggedOut` gets a re-login and one
- * redo); callers outside `internal/` should only ever need
- * `instanceof InternalApiError` plus `message`.
+ * throws each after one attempt; callers outside `internal/` should only ever
+ * need `instanceof InternalApiError` plus `message`.
  */
+
+/** What a person does when workflowy.com has no session for us: log in through the form relay. */
+export const LOGIN_HINT = "run './bin/run.js internal login'";
+
 export class InternalApiError extends Error
 {
 	constructor(message: string, options?: ErrorOptions)
@@ -27,7 +30,7 @@ export class LoggedOut extends InternalApiError
 {
 	constructor(reason: string)
 	{
-		super(`Workflowy session rejected (${reason})`);
+		super(`Workflowy session rejected (${reason}); ${LOGIN_HINT}`);
 	}
 }
 

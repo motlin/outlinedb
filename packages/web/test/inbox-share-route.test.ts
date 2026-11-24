@@ -6,8 +6,7 @@ import type {ServerContext} from "../src/server/context.js";
 import {httpAppFor} from "./http-app-for.js";
 import {mirrorContext, mirrorWithoutInternalApi, standaloneContext} from "./helpers/local-context.js";
 
-const NOT_CONFIGURED =
-	"Workflowy internal API is not configured (set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD, or run './bin/run.js internal login')";
+const NOT_CONFIGURED = "Workflowy internal API is not configured (run './bin/run.js internal login')";
 const INBOX = "00000000-0000-4000-8000-0123456789ab";
 
 /** Seed Home > Inbox > one existing item. */

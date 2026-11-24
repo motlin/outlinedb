@@ -42,7 +42,7 @@ export interface PushResult
 	txId: string;
 	/** The transaction id of {@link serverRun}, when the server sent one. */
 	serverRunId?: string;
-	/** The ops the server ran for this push (empty for a pure poll or a redo the server already ran). */
+	/** The ops the server ran for this push (empty for a pure poll). */
 	serverRun: InternalOp[];
 	/** Transactions since the push's starting transaction id (other clients', and possibly our own). */
 	remote: Transaction[];
@@ -180,18 +180,11 @@ function flattenTransaction(json: string): Transaction
 			};
 }
 
-interface Attempt
-{
-	pushPollId: string;
-	isRedo: boolean;
-}
-
 /**
  * The single-flight `/push_and_poll` transport. One push is in flight at a
- * time. A session rejection logs in again and redoes the same batch once
- * (`push_poll_id` reused, `is_redo=true`); every other failure (transport,
- * busy, push lock, captcha, rejected op) throws after one attempt, and the
- * caller's outbox re-delivers on its next trigger.
+ * time. Every failure (a refused session, transport, busy, push lock,
+ * captcha, rejected op) throws after one attempt, and the caller's outbox
+ * re-delivers on its next trigger.
  */
 export class PushAndPoll
 {
@@ -233,43 +226,10 @@ export class PushAndPoll
 		{
 			throw new Error("PushAndPoll needs a bootstrapped session; call client.bootstrap() first");
 		}
-		const pushPollId = this.randomId();
-		try
-		{
-			return await this.send(
-				session,
-				input,
-				{
-					pushPollId,
-					isRedo: false,
-				},
-			);
-		}
-		catch (error)
-		{
-			if (!(error instanceof LoggedOut))
-			{
-				throw error;
-			}
-			await this.client.login();
-			// Without ops in flight there is nothing to make idempotent, so the redo is just a new poll.
-			const redo: Attempt =
-				(input.ops?.length ?? 0) > 0
-					?
-						{
-							pushPollId,
-							isRedo: true,
-						}
-					:
-						{
-							pushPollId: this.randomId(),
-							isRedo: false,
-						};
-			return this.send(session, input, redo);
-		}
+		return this.send(session, input, this.randomId());
 	}
 
-	private async send(session: InternalSession, input: PushInput, {pushPollId, isRedo}: Attempt): Promise<PushResult>
+	private async send(session: InternalSession, input: PushInput, pushPollId: string): Promise<PushResult>
 	{
 		const ops = input.ops ?? [];
 		const startTxId = this.transactionLog === undefined ? this.txId : this.transactionLog.start();
@@ -294,10 +254,6 @@ export class PushAndPoll
 		if (this.timezone !== undefined)
 		{
 			form.append("timezone", this.timezone);
-		}
-		if (isRedo)
-		{
-			form.append("is_redo", "true");
 		}
 
 		const body = await this.post(`/push_and_poll?uti=${session.userId}-${this.now()}-${pushPollId}`, form);
@@ -336,7 +292,7 @@ export class PushAndPoll
 		}
 		const result = parsed.data;
 		const serverRunJson = result.server_run_operation_transaction_json ?? undefined;
-		if (ops.length > 0 && !isRedo && serverRunJson === undefined)
+		if (ops.length > 0 && serverRunJson === undefined)
 		{
 			throw new OperationRejected("missing server_run");
 		}

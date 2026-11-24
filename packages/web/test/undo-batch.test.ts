@@ -876,7 +876,7 @@ describe("applyOps", () =>
 		await applyOps(batch.ops, adapter);
 		expect(notifications).toStrictEqual([
 			[
-				"Couldn't undo: undo of delete needs the workflowy.com internal API (set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD)",
+				"Couldn't undo: undo of delete needs the workflowy.com internal API (run './bin/run.js internal login')",
 				"error",
 			],
 		]);

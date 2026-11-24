@@ -16,7 +16,7 @@ import ImportLocalState from "../../../src/commands/cache/import-local-state.js"
 
 describe("import account", () =>
 {
-	const ENV_KEYS = ["OUTLINEDB_DB_PATH", "WORKFLOWY_USERNAME", "WORKFLOWY_PASSWORD", "OUTLINEDB_SESSION_FILE"];
+	const ENV_KEYS = ["OUTLINEDB_DB_PATH", "OUTLINEDB_SESSION_FILE"];
 
 	describe("cache:import-account command", () =>
 	{
@@ -61,7 +61,7 @@ describe("import account", () =>
 			);
 		});
 
-		it("fails without touching the account tables when no internal-API credentials or session are configured", async () =>
+		it("fails without touching the account tables when no internal-API session is saved", async () =>
 		{
 			const {error} = await captureOutput(async () => ImportAccount.run([]));
 
@@ -72,8 +72,7 @@ describe("import account", () =>
 				},
 			).toStrictEqual(
 				{
-					message:
-						"Importing account state needs the internal API: set WORKFLOWY_USERNAME and WORKFLOWY_PASSWORD (e.g. via op run)",
+					message: "Importing account state needs the internal API: run './bin/run.js internal login'",
 					rows: [],
 				},
 			);
