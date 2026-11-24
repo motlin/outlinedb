@@ -210,4 +210,12 @@ describe("related notes on the Worker", () =>
 			},
 		);
 	});
+
+	it("drops every vector of the account when the account is deleted", async () =>
+	{
+		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
+		const ns = (await h.mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace<UserStore>;
+		await ns.getByName("dev").deleteAccount();
+		await expect(probe(h, "/__vectors")).resolves.toStrictEqual([]);
+	});
 });

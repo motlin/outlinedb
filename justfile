@@ -87,6 +87,11 @@ cf-build: build-shared
 cf-smoke: build-shared
     node packages/cloudflare/smoke/run-smoke.ts
 
+# Brand-new-user run against app.outlinedb.com (OUTLINEDB_URL overrides): signup, verify, starter outline, workflowy.com import, then delete the account. Needs OUTLINEDB_TEST_EMAIL; Craig types every password and code
+[group('test')]
+cf-new-user-walkthrough:
+    node packages/cloudflare/smoke/new-user-walkthrough.ts
+
 # Deploy the Worker by hand; CI deploys on every push to main (push.yml), so prefer pushing. Refuses unless CONFIRM_DEPLOY=1; never part of verify
 [group('web')]
 cf-deploy:

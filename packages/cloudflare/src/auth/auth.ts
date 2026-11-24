@@ -2,8 +2,8 @@ import {betterAuth} from "better-auth";
 import {captcha} from "better-auth/plugins/captcha";
 import {senderFor} from "../email/send";
 import type {EmailEnv, EmailSender} from "../email/send";
-import {signupGate} from "./signup-gate";
-import type {SignupEnv} from "./signup-gate";
+import {requestGate} from "./request-gate";
+import type {SignupEnv} from "./request-gate";
 
 /** Bindings Better Auth needs; `BETTER_AUTH_SECRET` is a secret, and without it `/api/auth/*` stays off. */
 export interface AuthEnv extends EmailEnv, SignupEnv
@@ -55,19 +55,26 @@ function linkEmail(to: string, subject: string, intro: string, url: string)
 	};
 }
 
-/** Gives a newly verified user their Durable Object; see `provisionUser`. */
-export type Provision = (user: {id: string; email: string}) => Promise<void>;
+/** What an account's life does outside D1: see `provisionUser` and `deprovisionUser`. */
+export interface AccountHooks
+{
+	/** Gives a newly verified user their Durable Object. */
+	provision: (user: {id: string; email: string}) => Promise<void>;
+	/** Erases a user's data outside D1 before Better Auth deletes their D1 rows, so a failure leaves them able to retry. */
+	deprovision: (user: {id: string}) => Promise<void>;
+}
 
 /**
  * Better Auth over AUTH_DB: email and password with required verification; signup gated by `SIGNUP_MODE`. A user is
- * provisioned once their email is verified, never before.
+ * provisioned once their email is verified, never before. A signed-in user deletes their own account with their password
+ * (`POST /api/auth/delete-user`), which frees their email to sign up again.
  */
 export function createAuth(
 	env: AuthEnv &
 	{
 		BETTER_AUTH_SECRET: string;
 	},
-	provision: Provision,
+	{provision, deprovision}: AccountHooks,
 	sender: EmailSender = senderFor(env),
 )
 {
@@ -98,6 +105,14 @@ export function createAuth(
 			},
 			user:
 			{
+				deleteUser:
+				{
+					enabled: true,
+					async beforeDelete(user)
+					{
+						await deprovision(user);
+					},
+				},
 				additionalFields:
 				{
 					// Set by `provisionUser`, never by a client; the session carries it, so a provisioned user's request needs no D1 read.
@@ -162,7 +177,7 @@ export function createAuth(
 			},
 			hooks:
 			{
-				before: signupGate(env),
+				before: requestGate(env),
 			},
 			// The Worker answers 503 on these endpoints before Better Auth when a Turnstile key is unset.
 			plugins: [

@@ -19,6 +19,8 @@
 		"packages/web/vite.worker.config.ts",
 		// Run by `just cf-smoke`, outside verify.
 		"packages/cloudflare/smoke/run-smoke.ts",
+		// Run by `just cf-new-user-walkthrough`, by hand against the hosted app.
+		"packages/cloudflare/smoke/new-user-walkthrough.ts",
 		"bin/**/*.js",
 		"plugins/gtd/scripts/**/*.mts",
 		"test/evals/**/*.eval.ts",

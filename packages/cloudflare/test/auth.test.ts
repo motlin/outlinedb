@@ -2,7 +2,7 @@ import {afterAll, beforeAll, describe, expect, it} from "vite-plus/test";
 import {drainEmails, origin, post, startAuthHarness, turnstile, cookiesFrom, linkIn} from "./auth-harness";
 import type {AuthHarness} from "./auth-harness";
 import type {Harness} from "./harness";
-import {signupAllowed} from "../src/auth/signup-gate";
+import {signupAllowed} from "../src/auth/request-gate";
 
 describe("auth captcha", () =>
 {

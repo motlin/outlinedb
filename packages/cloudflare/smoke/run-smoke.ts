@@ -2,10 +2,11 @@
 // and reaches Cloudflare's Turnstile with its published always-pass test keys.
 import {spawn, spawnSync} from "node:child_process";
 import {randomBytes} from "node:crypto";
-import {existsSync, mkdtempSync, readdirSync, rmSync} from "node:fs";
-import {homedir, tmpdir} from "node:os";
+import {mkdtempSync, rmSync} from "node:fs";
+import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {chromium} from "playwright-core";
+import {chromiumPath} from "./chromium-path.ts";
 import type {Browser, BrowserContext, Page} from "playwright-core";
 
 const webDir = new URL("../../web", import.meta.url).pathname;
@@ -13,36 +14,6 @@ const port = process.env.SMOKE_PORT ?? "8798";
 const base = `http://localhost:${port}`;
 const editedName = "Smoke home edited";
 const cloudflareDir = new URL("..", import.meta.url).pathname;
-
-function chromiumPath(): string | undefined
-{
-	const override = process.env.CHROMIUM_PATH;
-	if (override !== undefined)
-	{
-		return override;
-	}
-	const cache = join(homedir(), "Library/Caches/ms-playwright");
-	const dirs = existsSync(cache)
-		? readdirSync(cache)
-				.filter((d) => /^chromium-\d+$/u.test(d))
-				.toSorted()
-				.toReversed()
-		: [];
-	for (const dir of dirs)
-	{
-		for (const rel of [
-			"chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
-			"chrome-mac/Chromium.app/Contents/MacOS/Chromium",
-		])
-		{
-			if (existsSync(join(cache, dir, rel)))
-			{
-				return join(cache, dir, rel);
-			}
-		}
-	}
-	return undefined;
-}
 
 async function waitFor(check: () => Promise<boolean> | boolean, what: string, timeoutMs = 60_000): Promise<void>
 {

@@ -105,10 +105,12 @@ export function ActionBlock({label, hint, danger = false, children}: ActionBlock
 export function SettingsButton({
 	children,
 	danger = false,
+	disabled = false,
 	onClick,
 }: {
 	children?: ReactNode;
 	danger?: boolean;
+	disabled?: boolean;
 	onClick?: () => void;
 })
 {
@@ -116,6 +118,7 @@ export function SettingsButton({
 		<button
 			tabIndex={0}
 			className={danger ? " hover:no-underline button danger" : " hover:no-underline button"}
+			disabled={disabled}
 			onClick={onClick}
 			type="button"
 		>

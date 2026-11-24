@@ -32,6 +32,7 @@ import {blobKey, sha256Hex} from "@outlinedb/web/server-app";
 import type {BlobStore} from "@outlinedb/web/server-app";
 import {and, asc, eq, gt, isNull, or} from "drizzle-orm";
 import type {ScheduledJobAlarm} from "./alarm-schedule";
+import {deleteR2Prefix} from "./blob-store-r2";
 import type {RowCounts} from "./row-meter";
 import type {TreeDownload} from "./tree-downloads";
 
@@ -368,10 +369,22 @@ export class WorkflowyImportJob
 		return this.deps.rows?.() ?? NO_ROWS;
 	}
 
+	/** Where this account's runs park what they fetched, each under its own run id. */
+	private get parkedRoot(): string
+	{
+		return `imports/${this.deps.keyPrefix}/`;
+	}
+
 	/** Where the run parks what it fetched: every key under it is the run's, and the finish drops them all. */
 	private prefix(runId: string): string
 	{
-		return `imports/${this.deps.keyPrefix}/${runId}/`;
+		return `${this.parkedRoot}${runId}/`;
+	}
+
+	/** Delete what every run of this account ever parked in R2, as deleting the account does. */
+	async dropAllParked(): Promise<void>
+	{
+		await deleteR2Prefix(this.deps.bucket, this.parkedRoot);
 	}
 
 	private key(job: Job, name: "tree" | "account"): string
@@ -1107,30 +1120,7 @@ export class WorkflowyImportJob
 	/** Delete every object the run parked in R2, however far its download got. */
 	private async dropParked(runId: string): Promise<void>
 	{
-		const {bucket} = this.deps;
-		let cursor: string | undefined;
-		do
-		{
-			// oxlint-disable-next-line no-await-in-loop -- one listing page at a time
-			const listed = await bucket.list(
-				{
-					prefix: this.prefix(runId),
-					...(cursor === undefined
-						? {}
-						:
-							{
-								cursor,
-							}),
-				},
-			);
-			if (listed.objects.length > 0)
-			{
-				// oxlint-disable-next-line no-await-in-loop -- one listing page at a time
-				await bucket.delete(listed.objects.map((object) => object.key));
-			}
-			cursor = listed.truncated ? listed.cursor : undefined;
-		}
-		while (cursor !== undefined);
+		await deleteR2Prefix(this.deps.bucket, this.prefix(runId));
 	}
 
 	/**

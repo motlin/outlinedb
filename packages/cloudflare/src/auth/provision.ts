@@ -7,6 +7,26 @@ export interface ProvisionEnv
 	USER_STORE: DurableObjectNamespace<UserStore>;
 }
 
+/** The one OAuth provider call deprovisioning needs, to list and revoke the user's MCP grants. */
+interface GrantStore
+{
+	listUserGrants(
+		userId: string,
+		options?:
+		{
+			cursor?: string;
+		},
+	): Promise<
+	{
+		items:
+		{
+			id: string;
+		}[];
+		cursor?: string;
+	}>;
+	revokeGrant(grantId: string, userId: string): Promise<void>;
+}
+
 /**
  * Give a verified user their Durable Object (named by their id) unless D1 says it already has one: store its profile,
  * which seeds the standalone account and the tutorial, then set `user.provisioned_at`. Every account starts the same
@@ -42,4 +62,31 @@ export async function provisionUser(
 	await env.AUTH_DB.prepare('UPDATE "user" SET provisioned_at = ? WHERE id = ? AND provisioned_at IS NULL')
 		.bind(new Date().toISOString(), user.id)
 		.run();
+}
+
+/**
+ * Erase everything a user has outside D1: their Durable Object's storage with its R2 objects and vectors, and every
+ * OAuth grant (with its tokens) an MCP client holds for them. Safe to repeat.
+ */
+export async function deprovisionUser(env: ProvisionEnv, grants: GrantStore, userId: string): Promise<void>
+{
+	await env.USER_STORE.getByName(userId).deleteAccount();
+	let cursor: string | undefined;
+	do
+	{
+		// oxlint-disable-next-line no-await-in-loop -- one listing page at a time
+		const page = await grants.listUserGrants(
+			userId,
+			cursor === undefined
+				? {}
+				:
+					{
+						cursor,
+					},
+		);
+		// oxlint-disable-next-line no-await-in-loop -- one listing page at a time
+		await Promise.all(page.items.map(async (grant) => grants.revokeGrant(grant.id, userId)));
+		cursor = page.cursor;
+	}
+	while (cursor !== undefined);
 }

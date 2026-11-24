@@ -146,6 +146,34 @@ async function open(preferences: Partial<Preferences> = {}, opened: string | nul
 				),
 			);
 		}
+		if (path === "/api/auth/delete-user")
+		{
+			const
+			{
+				password,
+			}:
+			{
+				password?: string;
+			} = JSON.parse(typeof init?.body === "string" ? init.body : "{}");
+			return Promise.resolve(
+				password === "correct horse"
+					? Response.json(
+							{
+								success: true,
+								message: "User deleted",
+							},
+						)
+					: Response.json(
+							{
+								code: "INVALID_PASSWORD",
+								message: "Invalid password",
+							},
+							{
+								status: 400,
+							},
+						),
+			);
+		}
 		if (path === "/api/auth/sign-out")
 		{
 			return Promise.resolve(
@@ -474,6 +502,102 @@ describe("Settings dialog", () =>
 		);
 	});
 
+	it("deletes the account under Account on the hosted app only with the right password, then goes to login", async () =>
+	{
+		authConfigBody =
+		{
+			hosted: true,
+			turnstileSiteKey: null,
+			providers:
+			{
+				google: false,
+				magicLink: false,
+			},
+			signupMode: "closed",
+		};
+		const assigned: string[] = [];
+		vi.spyOn(globalThis.location, "assign").mockImplementation((url: string | URL) =>
+		{
+			assigned.push(String(url));
+		});
+		await open();
+		await settleFetches();
+		const account = section("Account");
+		const password = account.querySelector<HTMLInputElement>('input[name="delete-account-password"]');
+		const button = () => [...account.querySelectorAll("button")].find((b) => b.textContent === "Delete account");
+		const type = async (value: string) =>
+		{
+			// oxlint-disable-next-line typescript/unbound-method -- called with the input as `this` below
+			const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+			await run(() =>
+			{
+				setter?.call(password, value);
+				password?.dispatchEvent(
+					new Event(
+						"input",
+						{
+							bubbles: true,
+						},
+					),
+				);
+			});
+		};
+		const disabledEmpty = button()?.disabled;
+		await type("wrong");
+		await run(() =>
+		{
+			button()?.click();
+		});
+		await settleFetches();
+		const error = account.querySelector('[role="alert"]')?.textContent;
+		const assignedAfterWrong = [...assigned];
+		await type("correct horse");
+		await run(() =>
+		{
+			button()?.click();
+		});
+		await settleFetches();
+
+		expect(
+			{
+				disabledEmpty,
+				error,
+				assignedAfterWrong,
+				deletes: fetchStub.mock.calls
+					.filter(
+						([input]) =>
+							new URL(urlOf(input), globalThis.location.origin).pathname === "/api/auth/delete-user",
+					)
+					.map(([, init]) => [
+						init?.method,
+						JSON.parse(typeof init?.body === "string" ? init.body : "null") as unknown,
+					]),
+				assigned,
+			},
+		).toStrictEqual(
+			{
+				disabledEmpty: true,
+				error: "Invalid password",
+				assignedAfterWrong: [],
+				deletes: [
+					[
+						"POST",
+						{
+							password: "wrong",
+						},
+					],
+					[
+						"POST",
+						{
+							password: "correct horse",
+						},
+					],
+				],
+				assigned: ["/login"],
+			},
+		);
+	});
+
 	it("has no Log out on the Node host", async () =>
 	{
 		await open(
@@ -487,7 +611,17 @@ describe("Settings dialog", () =>
 		);
 		await settleFetches();
 
-		expect(section("Account").textContent.includes("Log out")).toBe(false);
+		expect(
+			{
+				logOut: section("Account").textContent.includes("Log out"),
+				deleteAccount: section("Account").textContent.includes("Delete account"),
+			},
+		).toStrictEqual(
+			{
+				logOut: false,
+				deleteAccount: false,
+			},
+		);
 	});
 
 	it("offers Jump to for every registered section and labels it with the opened section", async () =>

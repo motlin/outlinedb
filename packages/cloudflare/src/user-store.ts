@@ -46,7 +46,7 @@ import {drizzle} from "drizzle-orm/durable-sqlite";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {AlarmSchedule} from "./alarm-schedule";
 import {deriveCredentialsKey, openSecret, sealSecret} from "./credentials-crypto";
-import {r2BlobStore} from "./blob-store-r2";
+import {deleteR2Prefix, r2BlobStore} from "./blob-store-r2";
 import {migrateDurableObject} from "./do-migrations";
 import {EmbeddingJob} from "./embedding-job";
 import type {EmbeddingStatus} from "./embedding-job";
@@ -570,6 +570,26 @@ export class UserStore extends DurableObject<Env & WorkerSecrets & SyncEnv & Wor
 			created: true,
 			profile,
 		};
+	}
+
+	/**
+	 * Erase this account ahead of its user's deletion: close its tabs' sockets and workflowy.com's signal socket, delete
+	 * its attachments and parked imports in R2 and its related-notes vectors, then its alarms and all of its storage.
+	 * Safe to repeat, so a deletion that failed partway can run again.
+	 */
+	// fallow-ignore-next-line unused-class-member -- the Worker invokes it over RPC
+	async deleteAccount(): Promise<void>
+	{
+		for (const socket of this.ctx.getWebSockets())
+		{
+			socket.close(1000, "account deleted");
+		}
+		this.signal.release();
+		await deleteR2Prefix(this.env.FILES, `${this.ctx.id.toString()}/`);
+		await this.workflowyImport.dropAllParked();
+		await this.embeddings?.dropAll();
+		await this.ctx.storage.deleteAlarm();
+		await this.ctx.storage.deleteAll();
 	}
 
 	/** This account's workflowy.com connection, without the session cookie. */

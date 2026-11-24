@@ -107,6 +107,11 @@ export class EmbeddingProbeStore extends UserStore
 				},
 			);
 		}
+		if (url.pathname === "/__vectors")
+		{
+			// Reads no SQL, so it answers after the account's storage is gone.
+			return Response.json([...this.memoryIndex.vectors.keys()].toSorted());
+		}
 		if (url.pathname === "/__embeddings")
 		{
 			return Response.json(

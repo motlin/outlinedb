@@ -149,6 +149,16 @@ export class EmbeddingJob
 		);
 	}
 
+	/** Drop the vector of every node this account ever held, as deleting the account does. */
+	async dropAll(): Promise<void>
+	{
+		const ids = this.sql
+			.exec("SELECT DISTINCT id FROM node_content")
+			.toArray()
+			.flatMap((row) => (typeof row.id === "string" ? [row.id] : []));
+		await this.deps.index.delete(ids);
+	}
+
 	status(): EmbeddingStatus
 	{
 		return {

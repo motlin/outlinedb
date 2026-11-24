@@ -325,6 +325,21 @@ export class ProbeStore extends UserStore
 				},
 			);
 		}
+		if (url.pathname === "/__tables")
+		{
+			// Without __drizzle_migrations, unlike /__probe, so it answers for a wiped object too.
+			const tables = this.ctx.storage.sql
+				.exec(
+					"SELECT name FROM sqlite_master WHERE type = 'table' AND substr(name, 1, 4) != '_cf_' ORDER BY name",
+				)
+				.toArray()
+				.flatMap((row) => (typeof row.name === "string" ? [row.name] : []));
+			return Response.json(
+				{
+					tables,
+				},
+			);
+		}
 		if (url.pathname === "/__probe")
 		{
 			const names = this.ctx.storage.sql

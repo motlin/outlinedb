@@ -15,3 +15,31 @@ export function r2BlobStore(bucket: R2Bucket, prefix: string): BlobStore
 		},
 	};
 }
+
+/** Delete every object in `bucket` whose key starts with `prefix`, a listing page at a time. */
+export async function deleteR2Prefix(bucket: R2Bucket, prefix: string): Promise<void>
+{
+	let cursor: string | undefined;
+	do
+	{
+		// oxlint-disable-next-line no-await-in-loop -- one listing page at a time
+		const listed = await bucket.list(
+			{
+				prefix,
+				...(cursor === undefined
+					? {}
+					:
+						{
+							cursor,
+						}),
+			},
+		);
+		if (listed.objects.length > 0)
+		{
+			// oxlint-disable-next-line no-await-in-loop -- one listing page at a time
+			await bucket.delete(listed.objects.map((object) => object.key));
+		}
+		cursor = listed.truncated ? listed.cursor : undefined;
+	}
+	while (cursor !== undefined);
+}

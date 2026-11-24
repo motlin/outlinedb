@@ -5,7 +5,7 @@ import {Hono} from "hono";
 import {createMiddleware} from "hono/factory";
 import {authConfig, captchaMissing, createAuth} from "./auth/auth";
 import type {AuthEnv} from "./auth/auth";
-import {provisionUser} from "./auth/provision";
+import {deprovisionUser, provisionUser} from "./auth/provision";
 import {authorize, oauthProviderFor} from "./oauth";
 import {resolvePrincipal} from "./principal";
 import type {DevEnv, Principal} from "./principal";
@@ -86,7 +86,10 @@ function authFor(env: WorkerEnv): ReturnType<typeof createAuth> | undefined
 				...env,
 				BETTER_AUTH_SECRET: secret,
 			},
-			async (user) => provisionUser(env, user),
+			{
+				provision: async (user) => provisionUser(env, user),
+				deprovision: async (user) => deprovisionUser(env, env.OAUTH_PROVIDER, user.id),
+			},
 		);
 		auths.set(env.AUTH_DB, auth);
 	}

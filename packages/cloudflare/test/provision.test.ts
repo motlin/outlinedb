@@ -2,6 +2,7 @@ import {afterAll, beforeAll, describe, expect, it} from "vite-plus/test";
 import {cookiesFrom, drainEmails, linkIn, origin, post, signUp, startAuthHarness, turnstile} from "./auth-harness";
 import type {AuthHarness} from "./auth-harness";
 import {authDb, countStoreCalls} from "./harness";
+import {accessToken} from "./oauth-flow";
 import {storeClient} from "../src/store-client";
 import type {UserStore} from "../src/user-store";
 
@@ -10,7 +11,7 @@ const bindings =
 	BETTER_AUTH_SECRET: "test-secret-0123456789abcdef0123456789abcdef",
 	SIGNUP_MODE: "invite",
 	SIGNUP_INVITES:
-		"owner@example.com, sam@example.com, uma@example.com, rita@example.com, lou@example.com, tia@example.com",
+		"owner@example.com, sam@example.com, uma@example.com, rita@example.com, lou@example.com, tia@example.com, dee@example.com, samuel@example.com",
 	TURNSTILE_SECRET_KEY: turnstile.passSecret,
 	TURNSTILE_SITE_KEY: turnstile.siteKey,
 };
@@ -699,6 +700,253 @@ describe("UserStore.provision", () =>
 					},
 				],
 				expanded: ["Welcome to OutlineDB"],
+			},
+		);
+	});
+});
+
+describe("a signed-in user deletes their own account", () =>
+{
+	let h: AuthHarness;
+
+	beforeAll(async () =>
+	{
+		h = await startAuthHarness(
+			bindings,
+			{
+				className: "ProbeStore",
+			},
+		);
+	}, 120_000);
+
+	afterAll(async () =>
+	{
+		await h.dispose();
+	});
+
+	/** The Durable Object id hex the user's R2 keys are prefixed with. */
+	async function objectId(userId: string): Promise<string>
+	{
+		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
+		const ns = (await h.mf.getDurableObjectNamespace("USER_STORE")) as unknown as DurableObjectNamespace<UserStore>;
+		return ns.idFromName(userId).toString();
+	}
+
+	async function bucket(name: "FILES" | "SNAPSHOTS"): Promise<R2Bucket>
+	{
+		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its bucket with undici classes
+		return (await h.mf.getR2Bucket(name)) as unknown as R2Bucket;
+	}
+
+	async function keys(name: "FILES" | "SNAPSHOTS"): Promise<string[]>
+	{
+		return (await (await bucket(name)).list()).objects.map((object) => object.key).toSorted();
+	}
+
+	async function rowCounts(userId: string): Promise<Record<string, number>>
+	{
+		const db = await authDb(h.mf);
+		const count = async (sql: string) =>
+			(
+				await db.prepare(sql).bind(userId).first<
+				{
+					n: number;
+				}>()
+			)?.n ?? -1;
+		return {
+			user: await count('SELECT count(*) AS n FROM "user" WHERE id = ?'),
+			session: await count('SELECT count(*) AS n FROM "session" WHERE "userId" = ?'),
+			account: await count('SELECT count(*) AS n FROM "account" WHERE "userId" = ?'),
+		};
+	}
+
+	async function grantKeys(userId: string): Promise<string[]>
+	{
+		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Miniflare types its namespace with undici classes
+		const kv = (await h.mf.getKVNamespace("OAUTH_KV")) as unknown as KVNamespace;
+		return (await kv.list()).keys.map((key) => key.name).filter((name) => name.includes(userId));
+	}
+
+	async function tables(userId: string): Promise<string[]>
+	{
+		const response = await (await stubNamed(h, userId)).fetch("http://localhost/__tables");
+		const body:
+		{
+			tables: string[];
+		} = await response.json();
+		return body.tables;
+	}
+
+	async function topNames(cookie: string): Promise<string[]>
+	{
+		const response = await h.mf.dispatchFetch(
+			`${origin}/api/v1/nodes`,
+			{
+				headers:
+				{
+					cookie,
+				},
+			},
+		);
+		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- GET /nodes answers {nodes: NodeResponse[]}
+		const body = (await response.json()) as
+		{
+			nodes:
+			{
+				name: string;
+			}[];
+		};
+		return body.nodes.map((node) => node.name);
+	}
+
+	const sessionToken = (cookie: string) =>
+		cookie
+			.split("; ")
+			.filter((pair) => pair.startsWith("better-auth.session_token="))
+			.join("; ");
+
+	it("needs their password, then wipes their D1 rows, Durable Object, R2 objects and OAuth grants, and frees the email", async () =>
+	{
+		const dee = await signUp(h, "dee@example.com");
+		const samuel = await signUp(h, "samuel@example.com");
+		await accessToken(h.mf, dee.cookie, "read");
+		const [deeObject, samuelObject] = await Promise.all([objectId(dee.userId), objectId(samuel.userId)]);
+		const files = await bucket("FILES");
+		const snapshots = await bucket("SNAPSHOTS");
+		await files.put(`${deeObject}/attachment.png`, "dee");
+		await files.put(`${samuelObject}/attachment.png`, "samuel");
+		await snapshots.put(`imports/${deeObject}/run-1/tree`, "dee");
+		await snapshots.put(`imports/${samuelObject}/run-1/tree`, "samuel");
+		await expect(grantKeys(dee.userId)).resolves.not.toStrictEqual([]);
+
+		const attempts = [
+			await post(
+				h,
+				"/delete-user",
+				{},
+				{
+					cookie: dee.cookie,
+				},
+			),
+			await post(
+				h,
+				"/delete-user",
+				{
+					password: "not my password",
+				},
+				{
+					cookie: dee.cookie,
+				},
+			),
+		];
+		expect(
+			{
+				attempts: await Promise.all(
+					attempts.map(async (r) => (
+					{
+						status: r.status,
+						body: await r.json(),
+					})),
+				),
+				rows: await rowCounts(dee.userId),
+			},
+		).toStrictEqual(
+			{
+				attempts: [
+					{
+						status: 400,
+						body:
+						{
+							error: "password-required",
+						},
+					},
+					{
+						status: 400,
+						body:
+						{
+							code: "INVALID_PASSWORD",
+							message: "Invalid password",
+						},
+					},
+				],
+				rows:
+				{
+					user: 1,
+					session: 1,
+					account: 1,
+				},
+			},
+		);
+
+		const deleted = await post(
+			h,
+			"/delete-user",
+			{
+				password,
+			},
+			{
+				cookie: dee.cookie,
+			},
+		);
+		const session = await h.mf.dispatchFetch(
+			`${origin}/api/auth/get-session`,
+			{
+				headers:
+				{
+					cookie: sessionToken(dee.cookie),
+				},
+			},
+		);
+		expect(
+			{
+				status: deleted.status,
+				body: await deleted.json(),
+				session: await session.json(),
+				rows: await rowCounts(dee.userId),
+				samuelRows: await rowCounts(samuel.userId),
+				files: await keys("FILES"),
+				snapshots: await keys("SNAPSHOTS"),
+				grants: await grantKeys(dee.userId),
+				tables: await tables(dee.userId),
+			},
+		).toStrictEqual(
+			{
+				status: 200,
+				body:
+				{
+					success: true,
+					message: "User deleted",
+				},
+				session: null,
+				rows:
+				{
+					user: 0,
+					session: 0,
+					account: 0,
+				},
+				samuelRows:
+				{
+					user: 1,
+					session: 1,
+					account: 1,
+				},
+				files: [`${samuelObject}/attachment.png`],
+				snapshots: [`imports/${samuelObject}/run-1/tree`],
+				grants: [],
+				tables: [],
+			},
+		);
+
+		const again = await signUp(h, "dee@example.com");
+		expect(
+			{
+				newUser: again.userId !== dee.userId,
+				top: await topNames(again.cookie),
+			},
+		).toStrictEqual(
+			{
+				newUser: true,
+				top: ["Inbox", "Welcome to OutlineDB"],
 			},
 		);
 	});

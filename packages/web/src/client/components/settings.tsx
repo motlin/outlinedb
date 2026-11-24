@@ -310,6 +310,73 @@ function LogOutBlock()
 	);
 }
 
+/**
+ * Deletes the OutlineDB account for good, outline and attachments included, once the user types their password; the
+ * email can then sign up again. Only the hosted app has accounts.
+ */
+function DeleteAccountBlock()
+{
+	const [password, setPassword] = useState("");
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const remove = async () =>
+	{
+		setBusy(true);
+		setError(null);
+		const result = await authClient.deleteUser(
+			{
+				password,
+			},
+		);
+		if (result.error)
+		{
+			setBusy(false);
+			setError(result.error.message ?? "Could not delete the account");
+			return;
+		}
+		globalThis.location.assign("/login");
+	};
+	return (
+		<ActionBlock
+			label="Delete account"
+			hint="Permanently delete your OutlineDB account, outline and attachments. Your workflowy.com account is not touched."
+			danger
+		>
+			<div className="flex flex-col items-start gap-xs">
+				<input
+					aria-label="Password"
+					autoComplete="current-password"
+					className="settings-input"
+					disabled={busy}
+					name="delete-account-password"
+					onChange={(event) =>
+					{
+						setPassword(event.target.value);
+					}}
+					placeholder="Password"
+					type="password"
+					value={password}
+				/>
+				{error === null ? null : (
+					<div className="text-s leading-xs text-danger" role="alert">
+						{error}
+					</div>
+				)}
+				<SettingsButton
+					danger
+					disabled={busy || password === ""}
+					onClick={() =>
+					{
+						void remove();
+					}}
+				>
+					Delete account
+				</SettingsButton>
+			</div>
+		</ActionBlock>
+	);
+}
+
 function AccountSection({preferences}: SectionProps)
 {
 	const {account} = preferences;
@@ -328,7 +395,12 @@ function AccountSection({preferences}: SectionProps)
 						<MfaBlock mfa={preferences.mfa} />
 					</>
 				)}
-				{hosted && <LogOutBlock />}
+				{hosted && (
+					<>
+						<LogOutBlock />
+						<DeleteAccountBlock />
+					</>
+				)}
 			</SectionBody>
 		</SettingsSection>
 	);
