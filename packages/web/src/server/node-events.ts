@@ -105,6 +105,7 @@ export class TreeEventBus
 
 function totalChanges(database: AppDatabase): number
 {
+	// Raw SQL: Drizzle cannot select without a FROM table.
 	return database.get<
 	{
 		changes: number;

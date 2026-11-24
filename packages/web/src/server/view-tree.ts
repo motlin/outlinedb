@@ -109,6 +109,7 @@ function listParents({rootId, expansion, limit, showCompleted}: ViewTreeQuery): 
 		rootId === null
 			? sql`NULL`
 			: sql`coalesce((SELECT mi.original_id FROM mirrors mi JOIN node_content rc ON rc.id = mi.mirror_id AND rc.system_to = ${LIVE} WHERE mi.mirror_id = ${rootId} AND mi.system_to = ${LIVE} LIMIT 1), ${rootId})`;
+	// Raw SQL: Drizzle has no recursive CTE.
 	return sql`WITH RECURSIVE
 		walk(kids_parent, kids_root, kids_path, sortkey, expanded) AS (
 			SELECT ${rootParent}, NULL, NULL, '', 1

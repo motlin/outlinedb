@@ -33,8 +33,10 @@ export
 export {type CreatedNodeTree, type NodeTreeSpec, NodeTreeSpecSchema} from "./create-node-tree.js";
 export
 {
+	closedVersionLiteral,
 	contentMatches,
 	currentVersion,
+	currentVersionLiteral,
 	metadataComparisonStats,
 	metadataMatches,
 	normalizeLayoutMode,

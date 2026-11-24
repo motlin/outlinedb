@@ -1,6 +1,9 @@
-import {sql} from "drizzle-orm";
+import {and, count, eq, notExists, or, sql} from "drizzle-orm";
+import type {SQL} from "drizzle-orm";
+import {alias} from "drizzle-orm/sqlite-core";
+import type {SQLiteColumn} from "drizzle-orm/sqlite-core";
 import {mirrors, nodeContent, referencesRoots} from "../db/schema.js";
-import {FAR_FUTURE_DATE} from "../temporal/constants.js";
+import {currentVersion} from "./cache-temporal.js";
 import {withdrawNodeComposites} from "./node-composite.js";
 import type {UnitOfWork} from "./node-composite.js";
 import type {TemporalTransaction} from "./temporal-merge.js";
@@ -20,54 +23,86 @@ export interface StrandedRowCounts
 	referencesRoots: number;
 }
 
-const notCurrentNode = (column: unknown) =>
-	sql`NOT EXISTS (SELECT 1 FROM ${nodeContent} n WHERE n.id = ${column} AND n.system_to = ${FAR_FUTURE_DATE})`;
+const n = alias(nodeContent, "n");
+const c = alias(nodeContent, "c");
+const r = alias(referencesRoots, "r");
+const root = alias(nodeContent, "root");
+const m = alias(mirrors, "m");
+const o = alias(nodeContent, "o");
+
+function notCurrentNode(tx: TemporalTransaction, column: SQLiteColumn): SQL
+{
+	return notExists(
+		tx
+			.select(
+				{
+					one: sql`1`,
+				},
+			)
+			.from(n)
+			.where(and(eq(n.id, column), currentVersion(n))),
+	);
+}
 
 /** The current backlink items with no current original, sorted by id. */
 function strandedBacklinkItemIds(tx: TemporalTransaction): string[]
 {
 	return tx
-		.all<
-		{
-			id: string;
-		}>(
-			sql`SELECT c.id AS id FROM ${nodeContent} c
-				JOIN ${referencesRoots} r ON r.node_id = c.parent_id AND r.system_to = ${FAR_FUTURE_DATE}
-				JOIN ${nodeContent} root ON root.id = r.node_id AND root.system_to = ${FAR_FUTURE_DATE}
-				WHERE c.system_to = ${FAR_FUTURE_DATE}
-				AND NOT EXISTS (
-					SELECT 1 FROM ${mirrors} m
-					JOIN ${nodeContent} o ON o.id = m.original_id AND o.system_to = ${FAR_FUTURE_DATE}
-					WHERE m.mirror_id = c.id AND m.system_to = ${FAR_FUTURE_DATE}
-				)
-				ORDER BY c.id`,
+		.select(
+			{
+				id: c.id,
+			},
 		)
+		.from(c)
+		.innerJoin(r, and(eq(r.nodeId, c.parentId), currentVersion(r)))
+		.innerJoin(root, and(eq(root.id, r.nodeId), currentVersion(root)))
+		.where(
+			and(
+				currentVersion(c),
+				notExists(
+					tx
+						.select(
+							{
+								one: sql`1`,
+							},
+						)
+						.from(m)
+						.innerJoin(o, and(eq(o.id, m.originalId), currentVersion(o)))
+						.where(and(eq(m.mirrorId, c.id), currentVersion(m))),
+				),
+			),
+		)
+		.orderBy(c.id)
+		.all()
 		.map((row) => row.id);
 }
 
 /** Count the stranded relationship rows; read-only. */
 export function countStrandedRows(tx: TemporalTransaction): StrandedRowCounts
 {
-	const strandedMirrors = tx.get<
-		|
-		  {
-				count: number;
-		  }
-		| undefined
-	>(
-		sql`SELECT COUNT(*) AS count FROM ${mirrors} WHERE ${mirrors.systemTo} = ${FAR_FUTURE_DATE}
-			AND (${notCurrentNode(mirrors.mirrorId)} OR ${notCurrentNode(mirrors.originalId)})`,
-	);
-	const strandedRoots = tx.get<
-		|
-		  {
-				count: number;
-		  }
-		| undefined
-	>(
-		sql`SELECT COUNT(*) AS count FROM ${referencesRoots} WHERE ${referencesRoots.systemTo} = ${FAR_FUTURE_DATE}
-			AND ${notCurrentNode(referencesRoots.nodeId)}`,
-	);
+	const strandedMirrors = tx
+		.select(
+			{
+				count: count(),
+			},
+		)
+		.from(mirrors)
+		.where(
+			and(
+				currentVersion(mirrors),
+				or(notCurrentNode(tx, mirrors.mirrorId), notCurrentNode(tx, mirrors.originalId)),
+			),
+		)
+		.get();
+	const strandedRoots = tx
+		.select(
+			{
+				count: count(),
+			},
+		)
+		.from(referencesRoots)
+		.where(and(currentVersion(referencesRoots), notCurrentNode(tx, referencesRoots.nodeId)))
+		.get();
 	return {
 		backlinkItems: strandedBacklinkItemIds(tx).length,
 		mirrors: strandedMirrors?.count ?? 0,

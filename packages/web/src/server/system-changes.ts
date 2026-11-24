@@ -5,42 +5,69 @@
  * exactly those with `system_from` or a closing `system_to` after the cache's last system time.
  */
 
-import {bulkImportLeaseStart, newSystemTimestamp, TRANSACTION_TIMEOUT_MS} from "@outlinedb/shared/cache";
-import {FAR_FUTURE_DATE, temporalTimestampJustBefore} from "@outlinedb/shared/temporal";
-import {sql} from "drizzle-orm";
-import type {SQL} from "drizzle-orm";
+import
+{
+	bulkImportLeaseStart,
+	closedVersionLiteral,
+	currentVersion,
+	inIds,
+	newSystemTimestamp,
+	TRANSACTION_TIMEOUT_MS,
+} from "@outlinedb/shared/cache";
+import {aiMetadata, mirrors, nodeContent, nodeMetadata, referencesRoots} from "@outlinedb/shared/db";
+import {temporalTimestampJustBefore} from "@outlinedb/shared/temporal";
+import {and, gt, inArray, max} from "drizzle-orm";
+import type {AnySQLiteColumn, SQLiteTable} from "drizzle-orm/sqlite-core";
 import type {AppDatabase} from "@outlinedb/shared/db";
 
 type Database = AppDatabase;
 
-/**
- * Closed rows, as a literal so the partial `*_closed_at_idx` indexes (whose WHERE is this same term) apply;
- * SQLite matches a partial index's WHERE only against literal terms, never bound parameters.
- */
-const CLOSED = sql.raw(`system_to < ${String(FAR_FUTURE_DATE)}`);
+/** A system-versioned table: every row is open from `system_from` until `system_to`. */
+type VersionedTable = SQLiteTable &
+{
+	systemFrom: AnySQLiteColumn;
+	systemTo: AnySQLiteColumn;
+};
+
+/** The tables whose changes reach a node's search row, each with the column naming its node. */
+const SEARCH_ROW_TABLES: readonly [VersionedTable, AnySQLiteColumn][] = [
+	[nodeContent, nodeContent.id],
+	[nodeMetadata, nodeMetadata.nodeId],
+	[mirrors, mirrors.mirrorId],
+	[referencesRoots, referencesRoots.nodeId],
+	[aiMetadata, aiMetadata.nodeId],
+];
 
 /**
  * The newest system time any node, metadata, mirror, references-root or AI-metadata row was opened or closed at.
- * One query per table and column: a Durable Object's SQLite rejects compound selects with more than a few terms.
+ * Separate queries per table and column, each an index lookup: a Durable Object's SQLite rejects compound selects
+ * with more than a few terms.
  */
 export function latestSystemTime(database: Database): number
 {
 	let latest = 0;
-	for (const table of ["node_content", "node_metadata", "mirrors", "references_roots", "ai_metadata"])
+	for (const [table] of SEARCH_ROW_TABLES)
 	{
-		const name = sql.identifier(table);
-		const {opened, closed} = database.get<
-		{
-			opened: number | null;
-			closed: number | null;
-		}>(sql`
-			SELECT
-				(SELECT max(system_from) FROM ${name}) AS opened,
-				(SELECT max(system_to) FROM ${name} WHERE ${CLOSED}) AS closed
-		`);
+		const opened = database
+			.select(
+				{
+					at: max(table.systemFrom),
+				},
+			)
+			.from(table)
+			.get()?.at;
+		const closed = database
+			.select(
+				{
+					at: max(table.systemTo),
+				},
+			)
+			.from(table)
+			.where(closedVersionLiteral(table))
+			.get()?.at;
 		for (const at of [opened, closed])
 		{
-			if (at !== null && at > latest)
+			if (typeof at === "number" && at > latest)
 			{
 				latest = at;
 			}
@@ -63,14 +90,55 @@ export function changesSince(latest: number): number
  * The ids of `table` rows opened or closed after `since`, possibly repeated. UNION ALL keeps each leg a range
  * seek on its system-time index; a deduplicating UNION lets newer SQLite plan a merge over a full key scan.
  */
-function changedIn(table: string, column: string, since: number): SQL
+function changedIn(database: Database, table: VersionedTable, id: AnySQLiteColumn, since: number)
 {
-	const name = sql.identifier(table);
-	const id = sql.identifier(column);
-	return sql`
-		SELECT ${id} AS id FROM ${name} WHERE system_from > ${since}
-		UNION ALL SELECT ${id} FROM ${name} WHERE ${CLOSED} AND system_to > ${since}
-	`;
+	return database
+		.select(
+			{
+				id,
+			},
+		)
+		.from(table)
+		.where(gt(table.systemFrom, since))
+		.unionAll(
+			database
+				.select(
+					{
+						id,
+					},
+				)
+				.from(table)
+				.where(and(closedVersionLiteral(table), gt(table.systemTo, since))),
+		);
+}
+
+/** The live mirrors of the nodes `content` names, whose search rows show their original's text. */
+function mirrorsOf(database: Database, content: ReturnType<typeof changedIn>)
+{
+	const changed = database.$with("content").as(content);
+	return database
+		.with(changed)
+		.select(
+			{
+				id: mirrors.mirrorId,
+			},
+		)
+		.from(mirrors)
+		.where(
+			and(
+				currentVersion(mirrors),
+				inArray(
+					mirrors.originalId,
+					database
+						.select(
+							{
+								id: changed.id,
+							},
+						)
+						.from(changed),
+				),
+			),
+		);
 }
 
 /**
@@ -83,29 +151,27 @@ export function changedNodeIds(database: Database, since: number, limit: number)
 {
 	const ids = new Set<string>();
 	// Each leg repeats a node per version it opened or closed, so the limit counts distinct ids.
-	const collect = (query: SQL): boolean =>
+	const collect = (query: ReturnType<typeof changedIn> | ReturnType<typeof mirrorsOf>): boolean =>
 	{
-		const rows = database.all<
-		{
-			id: string;
-		}>(sql`SELECT DISTINCT id FROM (${query}) LIMIT ${limit + 1}`);
+		const changed = query.as("changed");
+		const rows = database
+			.selectDistinct(
+				{
+					id: changed.id,
+				},
+			)
+			.from(changed)
+			.limit(limit + 1)
+			.all();
 		for (const {id} of rows)
 		{
-			ids.add(id);
+			ids.add(String(id));
 		}
 		return rows.length <= limit && ids.size <= limit;
 	};
-	const content = changedIn("node_content", "id", since);
-	return collect(content) &&
-		collect(sql`
-			WITH content(id) AS (${content})
-			SELECT mirror_id AS id FROM mirrors
-			WHERE system_to = ${FAR_FUTURE_DATE} AND original_id IN (SELECT id FROM content)
-		`) &&
-		collect(changedIn("node_metadata", "node_id", since)) &&
-		collect(changedIn("mirrors", "mirror_id", since)) &&
-		collect(changedIn("references_roots", "node_id", since)) &&
-		collect(changedIn("ai_metadata", "node_id", since))
+	const content = changedIn(database, nodeContent, nodeContent.id, since);
+	const others = SEARCH_ROW_TABLES.slice(1).map(([table, id]) => changedIn(database, table, id, since));
+	return collect(content) && collect(mirrorsOf(database, content)) && others.every((query) => collect(query))
 		? ids
 		: undefined;
 }
@@ -165,29 +231,33 @@ export function changesAfter(database: Database, mark: string, limit: number): C
 	{
 		return undefined;
 	}
-	const former = database.all<
-	{
-		parent_id: string | null;
-	}>(sql`
-		SELECT DISTINCT parent_id FROM node_content
-		WHERE ${CLOSED} AND system_to > ${after} AND id IN (SELECT value FROM json_each(${JSON.stringify([...ids])}))
-	`);
+	const former = database
+		.selectDistinct(
+			{
+				parentId: nodeContent.parentId,
+			},
+		)
+		.from(nodeContent)
+		.where(and(closedVersionLiteral(nodeContent), gt(nodeContent.systemTo, after), inIds(nodeContent.id, [...ids])))
+		.all();
 	return {
 		ids,
-		formerParents: new Set(former.map((row) => row.parent_id)),
+		formerParents: new Set(former.map((row) => row.parentId)),
 	};
 }
 
 /** Each live node of `ids` with its current parent (null: Home), in one query: the id set is one JSON parameter. */
 export function liveParents(database: Database, ids: readonly string[]): Map<string, string | null>
 {
-	const live = database.all<
-	{
-		id: string;
-		parent_id: string | null;
-	}>(sql`
-		SELECT id, parent_id FROM node_content
-		WHERE system_to = ${FAR_FUTURE_DATE} AND id IN (SELECT value FROM json_each(${JSON.stringify(ids)}))
-	`);
-	return new Map(live.map((row) => [row.id, row.parent_id]));
+	const live = database
+		.select(
+			{
+				id: nodeContent.id,
+				parentId: nodeContent.parentId,
+			},
+		)
+		.from(nodeContent)
+		.where(and(currentVersion(nodeContent), inIds(nodeContent.id, ids)))
+		.all();
+	return new Map(live.map((row) => [row.id, row.parentId]));
 }

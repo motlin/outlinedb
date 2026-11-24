@@ -1,4 +1,4 @@
-import {and, eq, gte, lte, ne, sql} from "drizzle-orm";
+import {and, desc, eq, gte, lte, ne, sql} from "drizzle-orm";
 import type {SQL} from "drizzle-orm";
 import {inIds} from "../cache/in-ids.js";
 import {mirrors, nodeContent, nodeMetadata} from "../db/schema.js";
@@ -185,121 +185,182 @@ export class ChangeDetector
 	 * (begun since). A node that was a mirror at any point since the cutoff has
 	 * no text of its own, so stale text stored on it never counts as an edit.
 	 */
-	private classified(cutoff: number): SQL
+	private classified(cutoff: number)
 	{
-		const far = FAR_FUTURE_DATE;
-		return sql`
-			WITH
-				old_content AS (
-					SELECT id, parent_id, name, note, system_to AS at FROM node_content
-					WHERE system_from <= ${cutoff} AND system_to >= ${cutoff} AND system_to <> ${far}
-				),
-				new_content AS (
-					SELECT id, parent_id, name, note, system_from AS at FROM node_content
-					WHERE system_from >= ${cutoff} AND system_to = ${far}
-				),
-				old_meta AS (
-					SELECT node_id AS id, completed_at, system_to AS at FROM node_metadata
-					WHERE system_from <= ${cutoff} AND system_to >= ${cutoff} AND system_to <> ${far}
-				),
-				new_meta AS (
-					SELECT node_id AS id, completed_at, system_from AS at FROM node_metadata
-					WHERE system_from >= ${cutoff} AND system_to = ${far}
-				),
-				mirror_ids AS (
-					SELECT DISTINCT mirror_id AS id FROM mirrors WHERE system_to >= ${cutoff}
-				),
-				ids AS (
-					SELECT id FROM old_content UNION SELECT id FROM new_content
-					UNION SELECT id FROM old_meta UNION SELECT id FROM new_meta
-				),
-				compared AS (
-					SELECT
-						ids.id AS id,
-						old_content.id IS NULL AND old_meta.id IS NULL AS is_new,
-						new_content.id IS NULL AND new_meta.id IS NULL AS is_deleted,
-						old_content.id IS NOT NULL AS has_old_content,
-						old_content.id IS NOT NULL AND new_content.id IS NOT NULL AND mirror_ids.id IS NULL
-							AND old_content.name IS NOT new_content.name AS name_changed,
-						old_content.id IS NOT NULL AND new_content.id IS NOT NULL AND mirror_ids.id IS NULL
-							AND old_content.note IS NOT new_content.note AS note_changed,
-						old_content.id IS NOT NULL AND new_content.id IS NOT NULL
-							AND old_content.parent_id IS NOT new_content.parent_id AS parent_changed,
-						old_meta.id IS NOT NULL AND new_meta.id IS NOT NULL
-							AND (old_meta.completed_at IS NULL) <> (new_meta.completed_at IS NULL) AS completion_changed,
-						new_meta.completed_at IS NOT NULL AS now_completed,
-						old_content.parent_id AS old_parent_id,
-						max(
-							coalesce(old_content.at, 0), coalesce(new_content.at, 0),
-							coalesce(old_meta.at, 0), coalesce(new_meta.at, 0)
-						) AS at
-					FROM ids
-					LEFT JOIN old_content ON old_content.id = ids.id
-					LEFT JOIN new_content ON new_content.id = ids.id
-					LEFT JOIN old_meta ON old_meta.id = ids.id
-					LEFT JOIN new_meta ON new_meta.id = ids.id
-					LEFT JOIN mirror_ids ON mirror_ids.id = ids.id
+		const db = this.db;
+		// Plain columns only: Drizzle names a CTE's aliased field without its CTE, which is ambiguous across the joins.
+		const content = () =>
+			db
+				.select(
+					{
+						id: nodeContent.id,
+						parentId: nodeContent.parentId,
+						name: nodeContent.name,
+						note: nodeContent.note,
+						systemFrom: nodeContent.systemFrom,
+						systemTo: nodeContent.systemTo,
+					},
 				)
-			SELECT * FROM compared
-			WHERE is_new OR is_deleted OR name_changed OR note_changed OR parent_changed OR completion_changed
-		`;
+				.from(nodeContent);
+		const meta = () =>
+			db
+				.select(
+					{
+						nodeId: nodeMetadata.nodeId,
+						completedAt: nodeMetadata.completedAt,
+						systemFrom: nodeMetadata.systemFrom,
+						systemTo: nodeMetadata.systemTo,
+					},
+				)
+				.from(nodeMetadata);
+		const oldContent = db.$with("old_content").as(content().where(this.closedAtCutoff(nodeContent, cutoff)));
+		const newContent = db.$with("new_content").as(content().where(this.liveSinceCutoff(nodeContent, cutoff)));
+		const oldMeta = db.$with("old_meta").as(meta().where(this.closedAtCutoff(nodeMetadata, cutoff)));
+		const newMeta = db.$with("new_meta").as(meta().where(this.liveSinceCutoff(nodeMetadata, cutoff)));
+		const mirrorIds = db.$with("mirror_ids").as(
+			db
+				.selectDistinct(
+					{
+						mirrorId: mirrors.mirrorId,
+					},
+				)
+				.from(mirrors)
+				.where(gte(mirrors.systemTo, cutoff)),
+		);
+		const ids = db.$with("ids").as(
+			db
+				.select(
+					{
+						id: oldContent.id,
+					},
+				)
+				.from(oldContent)
+				.union(
+					db
+						.select(
+							{
+								id: newContent.id,
+							},
+						)
+						.from(newContent),
+				)
+				.union(
+					db
+						.select(
+							{
+								id: oldMeta.nodeId,
+							},
+						)
+						.from(oldMeta),
+				)
+				.union(
+					db
+						.select(
+							{
+								id: newMeta.nodeId,
+							},
+						)
+						.from(newMeta),
+				),
+		);
+		const bothContent = sql`${oldContent.id} IS NOT NULL AND ${newContent.id} IS NOT NULL`;
+		const compared = db.$with("compared").as(
+			db
+				.select(
+					{
+						id: ids.id,
+						isNew: sql<number>`${oldContent.id} IS NULL AND ${oldMeta.nodeId} IS NULL`.as("is_new"),
+						isDeleted: sql<number>`${newContent.id} IS NULL AND ${newMeta.nodeId} IS NULL`.as("is_deleted"),
+						hasOldContent: sql<number>`${oldContent.id} IS NOT NULL`.as("has_old_content"),
+						nameChanged: sql<number>`${bothContent} AND ${mirrorIds.mirrorId} IS NULL
+							AND ${oldContent.name} IS NOT ${newContent.name}`.as("name_changed"),
+						noteChanged: sql<number>`${bothContent} AND ${mirrorIds.mirrorId} IS NULL
+							AND ${oldContent.note} IS NOT ${newContent.note}`.as("note_changed"),
+						parentChanged: sql<number>`${bothContent}
+							AND ${oldContent.parentId} IS NOT ${newContent.parentId}`.as("parent_changed"),
+						completionChanged: sql<number>`${oldMeta.nodeId} IS NOT NULL AND ${newMeta.nodeId} IS NOT NULL
+							AND (${oldMeta.completedAt} IS NULL) <> (${newMeta.completedAt} IS NULL)`.as(
+							"completion_changed",
+						),
+						nowCompleted: sql<number>`${newMeta.completedAt} IS NOT NULL`.as("now_completed"),
+						oldParentId: sql<string | null>`${oldContent.parentId}`.as("old_parent_id"),
+						at: sql<number>`max(
+							coalesce(${oldContent.systemTo}, 0), coalesce(${newContent.systemFrom}, 0),
+							coalesce(${oldMeta.systemTo}, 0), coalesce(${newMeta.systemFrom}, 0)
+						)`.as("at"),
+					},
+				)
+				.from(ids)
+				.leftJoin(oldContent, eq(oldContent.id, ids.id))
+				.leftJoin(newContent, eq(newContent.id, ids.id))
+				.leftJoin(oldMeta, eq(oldMeta.nodeId, ids.id))
+				.leftJoin(newMeta, eq(newMeta.nodeId, ids.id))
+				.leftJoin(mirrorIds, eq(mirrorIds.mirrorId, ids.id)),
+		);
+		return db
+			.with(oldContent, newContent, oldMeta, newMeta, mirrorIds, ids, compared)
+			.select()
+			.from(compared)
+			.where(
+				sql`${compared.isNew} OR ${compared.isDeleted} OR ${compared.nameChanged} OR ${compared.noteChanged}
+					OR ${compared.parentChanged} OR ${compared.completionChanged}`,
+			)
+			.as("classified");
 	}
 
-	private summarize(classified: SQL): ChangeSummary &
+	private summarize(classified: ReturnType<ChangeDetector["classified"]>): ChangeSummary &
 	{
 		total: number;
 	}
 	{
-		const row = this.db.get<Record<string, number | null>>(
-			sql`
-				SELECT
-					count(*) AS total,
-					sum(is_new) AS added,
-					sum(is_deleted) AS deleted,
-					sum(NOT is_new AND NOT is_deleted AND (name_changed OR note_changed)) AS changed,
-					sum(NOT is_new AND NOT is_deleted AND parent_changed) AS moved,
-					sum(NOT is_new AND NOT is_deleted AND completion_changed AND now_completed) AS completed,
-					sum(NOT is_new AND NOT is_deleted AND completion_changed AND NOT now_completed) AS uncompleted
-				FROM (${classified})
-			`,
-		);
+		const notNewOrDeleted = sql`NOT ${classified.isNew} AND NOT ${classified.isDeleted}`;
+		const row = this.db
+			.select(
+				{
+					total: sql<number>`count(*)`,
+					added: sql<number | null>`sum(${classified.isNew})`,
+					deleted: sql<number | null>`sum(${classified.isDeleted})`,
+					changed: sql<
+						number | null
+					>`sum(${notNewOrDeleted} AND (${classified.nameChanged} OR ${classified.noteChanged}))`,
+					moved: sql<number | null>`sum(${notNewOrDeleted} AND ${classified.parentChanged})`,
+					completed: sql<
+						number | null
+					>`sum(${notNewOrDeleted} AND ${classified.completionChanged} AND ${classified.nowCompleted})`,
+					uncompleted: sql<
+						number | null
+					>`sum(${notNewOrDeleted} AND ${classified.completionChanged} AND NOT ${classified.nowCompleted})`,
+				},
+			)
+			.from(classified)
+			.get();
 		return {
-			added: row.added ?? 0,
-			deleted: row.deleted ?? 0,
-			changed: row.changed ?? 0,
-			moved: row.moved ?? 0,
-			completed: row.completed ?? 0,
-			uncompleted: row.uncompleted ?? 0,
-			total: row.total ?? 0,
+			added: row?.added ?? 0,
+			deleted: row?.deleted ?? 0,
+			changed: row?.changed ?? 0,
+			moved: row?.moved ?? 0,
+			completed: row?.completed ?? 0,
+			uncompleted: row?.uncompleted ?? 0,
+			total: row?.total ?? 0,
 		};
 	}
 
 	/** The newest `limit` changes (all of them without one), ties by id. */
-	private list(classified: SQL, limit: number | undefined): Classified[]
+	private list(classified: ReturnType<ChangeDetector["classified"]>, limit: number | undefined): Classified[]
 	{
-		const rows = this.db.all<
-		{
-			id: string;
-			is_new: number;
-			is_deleted: number;
-			has_old_content: number;
-			name_changed: number;
-			note_changed: number;
-			parent_changed: number;
-			completion_changed: number;
-			old_parent_id: string | null;
-		}>(sql`SELECT * FROM (${classified}) ORDER BY at DESC, id LIMIT ${limit ?? -1}`);
+		const newestFirst = this.db.select().from(classified).orderBy(desc(classified.at), classified.id);
+		const rows = (limit === undefined ? newestFirst : newestFirst.limit(limit)).all();
 		return rows.map((row) => (
 		{
 			id: row.id,
-			isNew: row.is_new === 1,
-			isDeleted: row.is_deleted === 1,
-			hasOldContent: row.has_old_content === 1,
-			nameChanged: row.name_changed === 1,
-			noteChanged: row.note_changed === 1,
-			parentChanged: row.parent_changed === 1,
-			completionChanged: row.completion_changed === 1,
-			oldParentId: row.old_parent_id,
+			isNew: row.isNew === 1,
+			isDeleted: row.isDeleted === 1,
+			hasOldContent: row.hasOldContent === 1,
+			nameChanged: row.nameChanged === 1,
+			noteChanged: row.noteChanged === 1,
+			parentChanged: row.parentChanged === 1,
+			completionChanged: row.completionChanged === 1,
+			oldParentId: row.oldParentId,
 		}));
 	}
 

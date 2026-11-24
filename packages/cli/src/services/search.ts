@@ -122,6 +122,7 @@ export class SearchService
 
 	private searchKeyword(query: string, limit: number): SearchResult[]
 	{
+		// Raw SQL: the FTS5 virtual table node_fts and its MATCH and rank are not in the Drizzle schema.
 		const ftsResults = this.database.all<
 		{
 			node_id: string;

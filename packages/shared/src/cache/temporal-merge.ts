@@ -1,4 +1,4 @@
-import {getTableName, sql} from "drizzle-orm";
+import {and, eq, getTableColumns, getTableName, sql} from "drizzle-orm";
 import type {SQL} from "drizzle-orm";
 import {getTableConfig} from "drizzle-orm/sqlite-core";
 import type {BaseSQLiteDatabase, SQLiteColumn, SQLiteTable} from "drizzle-orm/sqlite-core";
@@ -142,12 +142,33 @@ export class SameMicrosecondOverwriteError extends Error
 	}
 }
 
-/** The names of the non-temporal primary-key columns of `table`, which name one row's history. */
-function historyKeyColumnNames(table: SQLiteTable): string[]
+/** The non-temporal primary-key columns of `table`, which name one row's history. */
+function historyKeyColumns(table: SQLiteTable)
 {
 	const tableConfig = getTableConfig(table);
 	const columns = tableConfig.primaryKeys[0]?.columns ?? tableConfig.columns.filter((column) => column.primary);
-	return columns.map((column): string => column.name).filter((name) => name !== "system_from");
+	return columns.filter((column) => column.name !== "system_from");
+}
+
+/** The property of `table`'s column named `name`, which every system-versioned table has for its system times. */
+function temporalColumn(
+	table: SQLiteTable,
+	name: "system_from" | "system_to",
+):
+{
+	key: string;
+	column: SQLiteColumn;
+}
+{
+	const found = Object.entries(getTableColumns(table)).find(([, column]) => column.name === name);
+	if (found === undefined)
+	{
+		throw new Error(`${getTableName(table)} has no ${name} column`);
+	}
+	return {
+		key: found[0],
+		column: found[1],
+	};
 }
 
 /**
@@ -167,24 +188,30 @@ export function closeCurrentVersions(
 	where: SQL | undefined,
 ): void
 {
-	const systemFrom = sql.identifier("system_from");
-	const systemTo = sql.identifier("system_to");
-	const matching = where ?? sql`1`;
-	const keyColumnNames = historyKeyColumnNames(table);
-	const collision = tx.get<Record<string, unknown> | undefined>(
-		sql`SELECT ${sql.join(
-			keyColumnNames.map((name) => sql.identifier(name)),
-			sql`, `,
-		)} FROM ${table} WHERE ${systemTo} = ${FAR_FUTURE_DATE} AND ${systemFrom} = ${systemTime} AND (${matching}) LIMIT 1`,
-	);
+	// Parenthesized: Drizzle's and() joins its terms bare, and `where` may be an OR.
+	const matching = where === undefined ? undefined : sql`(${where})`;
+	const systemFrom = temporalColumn(table, "system_from").column;
+	const systemTo = temporalColumn(table, "system_to");
+	const keyColumns = historyKeyColumns(table);
+	const collision = tx
+		.select(Object.fromEntries(keyColumns.map((column) => [column.name, sql`${column}`])))
+		.from(table)
+		.where(and(eq(systemTo.column, FAR_FUTURE_DATE), eq(systemFrom, systemTime), matching))
+		.limit(1)
+		.get();
 	if (collision !== undefined)
 	{
-		const key = keyColumnNames.map((name) => `${name}=${String(collision[name])}`).join(", ");
+		const key = keyColumns.map(({name}) => `${name}=${String(collision[name])}`).join(", ");
 		throw new SameMicrosecondOverwriteError(getTableName(table), key, systemTime);
 	}
-	tx.run(
-		sql`UPDATE ${table} SET ${systemTo} = ${systemTime} WHERE ${systemTo} = ${FAR_FUTURE_DATE} AND (${matching})`,
-	);
+	tx.update(table)
+		.set(
+			{
+				[systemTo.key]: systemTime,
+			},
+		)
+		.where(and(eq(systemTo.column, FAR_FUTURE_DATE), matching))
+		.run();
 }
 
 /**

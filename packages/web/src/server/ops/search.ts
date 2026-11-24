@@ -221,6 +221,7 @@ export const LocationResponseSchema = z.strictObject(
 // Get all descendant node IDs using a recursive CTE
 function getDescendantIds(database: AppDatabase, parentId: string): string[]
 {
+	// Raw SQL: Drizzle has no recursive CTE.
 	const result = database.all<
 	{
 		id: string;

@@ -248,7 +248,7 @@ function endRows(unitOfWork: UnitOfWork, part: CompositePart, where: SQL): void
 	const {tx, systemTime} = unitOfWork;
 	if (part.hardDelete)
 	{
-		tx.run(sql`DELETE FROM ${part.table} WHERE ${where}`);
+		tx.delete(part.table).where(where).run();
 		return;
 	}
 	closeCurrentVersions(tx, part.table, systemTime, where);
@@ -303,9 +303,11 @@ export function withdrawNodeComposites(unitOfWork: UnitOfWork, nodeIds: readonly
 			[part.owner, ...(part.endsWithReferences ?? [])].map((column) => inIds(column, nodeIds)),
 			sql` OR `,
 		);
-		tx.run(
-			sql`DELETE FROM ${part.table} WHERE system_from = ${systemTime} AND system_to = ${FAR_FUTURE_DATE} AND (${owned})`,
-		);
+		tx.delete(part.table)
+			.where(
+				sql`${sql.identifier("system_from")} = ${systemTime} AND ${sql.identifier("system_to")} = ${FAR_FUTURE_DATE} AND (${owned})`,
+			)
+			.run();
 	}
 	endNodeComposites(unitOfWork, nodeIds);
 }

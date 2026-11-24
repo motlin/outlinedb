@@ -1,8 +1,9 @@
 import {WorkflowyApiClient} from "@outlinedb/shared/api";
-import {WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
-import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {currentVersion, WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
+import {nodeContent, nodeMetadata} from "@outlinedb/shared/db";
 import {Command, Flags} from "@oclif/core";
-import {sql} from "drizzle-orm";
+import {and, eq, isNotNull, notLike, sql} from "drizzle-orm";
+import {alias} from "drizzle-orm/sqlite-core";
 import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";
 import {drainAfterWrite, openLocalWrites} from "../../services/local-writes.js";
@@ -200,19 +201,17 @@ export default class MigrateDates extends Command
 		const yearFilter = flags.year === undefined || flags.year === 0 ? null : String(flags.year);
 
 		// Find archive root node by short ID
-		const archiveQuery = sql`
-			SELECT nc.id
-			FROM node_content nc
-			JOIN node_metadata nm ON nc.id = nm.node_id
-				AND nm.system_to = ${FAR_FUTURE_DATE}
-			WHERE nm.short_id = ${archiveShortId}
-				AND nc.system_to = ${FAR_FUTURE_DATE}
-			LIMIT 1
-		`;
-		const archiveResult = database.all<
-		{
-			id: string;
-		}>(archiveQuery);
+		const archiveResult = database
+			.select(
+				{
+					id: nodeContent.id,
+				},
+			)
+			.from(nodeContent)
+			.innerJoin(nodeMetadata, and(eq(nodeContent.id, nodeMetadata.nodeId), currentVersion(nodeMetadata)))
+			.where(and(eq(nodeMetadata.shortId, archiveShortId), currentVersion(nodeContent)))
+			.limit(1)
+			.all();
 		const [archiveRow] = archiveResult;
 		if (!archiveRow)
 		{
@@ -224,31 +223,32 @@ export default class MigrateDates extends Command
 		// Query candidate day nodes:
 		// archive -> year -> month -> day
 		// Filter out nodes that already have <time (native dates)
-		const candidatesQuery = sql`
-			SELECT
-				day.id,
-				day.name,
-				month.name AS month_name,
-				year.name AS year_name
-			FROM node_content day
-			JOIN node_content month ON day.parent_id = month.id
-				AND month.system_to = ${FAR_FUTURE_DATE}
-			JOIN node_content year ON month.parent_id = year.id
-				AND year.system_to = ${FAR_FUTURE_DATE}
-			WHERE year.parent_id = ${archiveId}
-				AND day.system_to = ${FAR_FUTURE_DATE}
-				AND day.name NOT LIKE '%<time%'
-				AND day.name IS NOT NULL
-				${yearFilter ? sql`AND year.name = ${yearFilter}` : sql``}
-			ORDER BY year.name, month.name, day.name
-		`;
-		const candidates = database.all<
-		{
-			id: string;
-			name: string;
-			month_name: string;
-			year_name: string;
-		}>(candidatesQuery);
+		const day = alias(nodeContent, "day");
+		const month = alias(nodeContent, "month");
+		const year = alias(nodeContent, "year");
+		const candidates = database
+			.select(
+				{
+					id: day.id,
+					name: sql<string>`${day.name}`,
+					monthName: sql<string>`${month.name}`,
+					yearName: sql<string>`${year.name}`,
+				},
+			)
+			.from(day)
+			.innerJoin(month, and(eq(day.parentId, month.id), currentVersion(month)))
+			.innerJoin(year, and(eq(month.parentId, year.id), currentVersion(year)))
+			.where(
+				and(
+					eq(year.parentId, archiveId),
+					currentVersion(day),
+					notLike(day.name, "%<time%"),
+					isNotNull(day.name),
+					yearFilter ? eq(year.name, yearFilter) : undefined,
+				),
+			)
+			.orderBy(year.name, month.name, day.name)
+			.all();
 
 		this.log(`Found ${candidates.length} candidate nodes`);
 
@@ -271,8 +271,8 @@ export default class MigrateDates extends Command
 			{
 				id: row.id,
 				name: row.name,
-				monthName: row.month_name,
-				yearName: row.year_name,
+				monthName: row.monthName,
+				yearName: row.yearName,
 			};
 
 			const date = parseTextDate(node.name);

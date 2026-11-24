@@ -298,6 +298,7 @@ export class EmbeddingGeneratorService
 	{
 		const nodeIds = nonLeafNodes.map((n) => n.id);
 
+		// Raw SQL below: sqlite_master and the FTS5 virtual table node_fts are not in the Drizzle schema
 		// Check if FTS5 table exists
 		const tableExists = this.database.all(
 			sql`SELECT name FROM sqlite_master WHERE type='table' AND name='node_fts'`,

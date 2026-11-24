@@ -16,14 +16,15 @@ import {readInternalAuth} from "@outlinedb/shared/node";
 import {isDeepStrictEqual} from "node:util";
 import
 {
+	currentVersion,
 	WorkflowyWriteThroughClient,
 	keptInternalMetadata,
 	readNodeInternalMetadata,
 	normalizeLayoutMode,
 	storeTreeTxId,
 } from "@outlinedb/shared/cache";
-import {sql} from "drizzle-orm";
-import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
+import {and, countDistinct, desc, eq, gt, isNotNull, sql} from "drizzle-orm";
+import {calendarMetadata, nodeContent} from "@outlinedb/shared/db";
 import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";
 
@@ -973,13 +974,20 @@ export default class Probe extends Command
 			},
 		);
 		const key = fixtureId.slice(0, 8);
-		const groups = createDatabase().all<
-		{
-			key: string;
-			ids: number;
-		}>(
-			sql`SELECT substr(id, 1, 8) AS key, COUNT(DISTINCT id) AS ids FROM node_content WHERE system_to = ${FAR_FUTURE_DATE} GROUP BY key HAVING ids > 1`,
-		);
+		const prefix = sql<string>`substr(${nodeContent.id}, 1, 8)`;
+		const distinctIds = countDistinct(nodeContent.id);
+		const groups = createDatabase()
+			.select(
+				{
+					key: prefix,
+					ids: distinctIds,
+				},
+			)
+			.from(nodeContent)
+			.where(currentVersion(nodeContent))
+			.groupBy(prefix)
+			.having(gt(distinctIds, 1))
+			.all();
 		const collidingIds = groups.reduce((total, group) => total + group.ids, 0);
 		const lines = [
 			"- Fixture: fresh sandbox child with one child `inner` (public API); ancestors verified",
@@ -1087,14 +1095,18 @@ export default class Probe extends Command
 				`- \`entropyKey\`: ABSENT from ${sourceName}; upstream then falls back to random ids (TD9 must name-match)`,
 			];
 		}
-		const cached = createDatabase().all<
-		{
-			nodeId: string;
-			level: string;
-			dateId: number;
-		}>(
-			sql`SELECT node_id AS nodeId, level, date_id AS dateId FROM calendar_metadata WHERE system_to = ${FAR_FUTURE_DATE} AND date_id IS NOT NULL ORDER BY date_id DESC`,
-		);
+		const cached = createDatabase()
+			.select(
+				{
+					nodeId: calendarMetadata.nodeId,
+					level: calendarMetadata.level,
+					dateId: calendarMetadata.dateId,
+				},
+			)
+			.from(calendarMetadata)
+			.where(and(currentVersion(calendarMetadata), isNotNull(calendarMetadata.dateId)))
+			.orderBy(desc(calendarMetadata.dateId))
+			.all();
 		const rows = cached.filter(
 			(
 				row,
@@ -1103,7 +1115,7 @@ export default class Probe extends Command
 				nodeId: string;
 				level: CalendarIdLevel;
 				dateId: number;
-			} => CALENDAR_LEVELS.some((level) => level === row.level),
+			} => row.dateId !== null && CALENDAR_LEVELS.some((level) => level === row.level),
 		);
 		const matches = (row: {nodeId: string; level: CalendarIdLevel; dateId: number}) =>
 			calendarNodeId(entropyKey, row.level, row.dateId) === row.nodeId;
@@ -1143,10 +1155,15 @@ export default class Probe extends Command
 			},
 		);
 		const ensured = await adapter.ensureCalendarDay(ADOPT_DATE_ID);
-		const [root] = db.all<
-		{
-			nodeId: string;
-		}>(sql`SELECT node_id AS nodeId FROM calendar_metadata WHERE root = 1 AND system_to = ${FAR_FUTURE_DATE}`);
+		const [root] = db
+			.select(
+				{
+					nodeId: calendarMetadata.nodeId,
+				},
+			)
+			.from(calendarMetadata)
+			.where(and(eq(calendarMetadata.root, 1), currentVersion(calendarMetadata)))
+			.all();
 		if (root === undefined)
 		{
 			this.error("No cached calendar root after ensure");

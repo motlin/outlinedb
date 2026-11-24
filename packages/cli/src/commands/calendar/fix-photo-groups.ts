@@ -1,9 +1,10 @@
 import {WorkflowyApiClient} from "@outlinedb/shared/api";
-import {DEFAULT_ORDER_KEY, WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
+import {currentVersion, DEFAULT_ORDER_KEY, WorkflowyWriteThroughClient} from "@outlinedb/shared/cache";
+import {nodeContent, s3Files} from "@outlinedb/shared/db";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import {resolveIdOrShortId} from "@outlinedb/shared/utils";
 import {Command, Flags} from "@oclif/core";
-import {sql} from "drizzle-orm";
+import {and, inArray, max, sql} from "drizzle-orm";
 import {createDatabase} from "../../db/index.js";
 import {CacheService} from "../../services/cache.js";
 import {drainAfterWrite, localDeletePlan, openLocalWrites} from "../../services/local-writes.js";
@@ -39,6 +40,7 @@ interface CandidateRow
  */
 function loadCandidateRows(database: ReturnType<typeof createDatabase>): CachedNodeRow[]
 {
+	// Raw SQL: Drizzle names a CTE's computed column (priority, n, rn) without its CTE, ambiguous across these joins.
 	const query = sql`
 		WITH cur AS (
 			SELECT
@@ -127,18 +129,17 @@ function loadEntryTitles(database: ReturnType<typeof createDatabase>, entryIds: 
 		return new Map();
 	}
 
-	const query = sql`
-		SELECT id, name FROM node_content
-		WHERE system_to = ${FAR_FUTURE_DATE} AND id IN ${entryIds}
-	`;
-
 	return new Map(
 		database
-			.all<
-			{
-				id: string;
-				name: string | null;
-			}>(query)
+			.select(
+				{
+					id: nodeContent.id,
+					name: nodeContent.name,
+				},
+			)
+			.from(nodeContent)
+			.where(and(currentVersion(nodeContent), inArray(nodeContent.id, entryIds)))
+			.all()
 			.map((row) => [row.id, (row.name ?? "").replaceAll(/<[^>]*>/gu, "").trim()]),
 	);
 }
@@ -150,10 +151,14 @@ function loadEntryTitles(database: ReturnType<typeof createDatabase>, entryIds: 
  */
 function findStaleAttachmentData(database: ReturnType<typeof createDatabase>): string | null
 {
-	const row = database.all<
-	{
-		newest: number | null;
-	}>(sql`SELECT MAX(system_from) AS newest FROM s3_files`)[0];
+	const row = database
+		.select(
+			{
+				newest: max(s3Files.systemFrom),
+			},
+		)
+		.from(s3Files)
+		.get();
 
 	let newestBackup: Date | null = null;
 	try

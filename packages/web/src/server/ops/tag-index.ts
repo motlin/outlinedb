@@ -57,6 +57,7 @@ function prefixRange(prefix: string): SQL
  */
 function countTags(ctx: ServerContext, withClause: SQL, tagged: SQL, prefix: string): TagCounts
 {
+	// Raw SQL: the subtree count joins subtreeTagCounts' recursive CTE, which Drizzle cannot express.
 	const rows = ctx.db.all<
 	{
 		key: string;
@@ -88,6 +89,7 @@ function wholeTreeTagCounts(ctx: ServerContext, prefix: string): TagCounts
 
 function subtreeTagCounts(ctx: ServerContext, rootId: string, prefix: string): TagCounts
 {
+	// Raw SQL: Drizzle has no recursive CTE.
 	const withClause = sql`
 		WITH RECURSIVE subtree(id) AS (
 			SELECT id FROM node_content WHERE id = ${rootId} AND system_to = ${FAR_FUTURE_DATE}
@@ -103,6 +105,7 @@ function subtreeTagCounts(ctx: ServerContext, rootId: string, prefix: string): T
 /** Whether `itemId` is `rootId` or one of its live descendants, walking up from the item. */
 function inSubtree(ctx: ServerContext, rootId: string, itemId: string): boolean
 {
+	// Raw SQL: Drizzle has no recursive CTE.
 	const found = ctx.db.all(sql`
 		WITH RECURSIVE up(id, parent) AS (
 			SELECT id, parent_id FROM node_content WHERE id = ${itemId} AND system_to = ${FAR_FUTURE_DATE}

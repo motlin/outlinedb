@@ -1,12 +1,11 @@
 import type * as schema from "../db/schema.js";
 import type {AppDatabase} from "../db/types.js";
-import {mirrors, nodeContent} from "../db/schema.js";
+import {mirrors, nodeContent, nodeMetadata} from "../db/schema.js";
 import type {Node} from "../types/node.js";
-import {and, eq, isNull, sql} from "drizzle-orm";
+import {and, eq, isNull, or, sql} from "drizzle-orm";
 import {currentVersion} from "./cache-temporal.js";
 import {inIds} from "./in-ids.js";
 import {compareSiblingOrder, DEFAULT_ORDER_KEY} from "./order-key.js";
-import {FAR_FUTURE_DATE} from "../temporal/constants.js";
 import {mirrorOriginalText, relationalRowId} from "./mirror-text.js";
 
 /**
@@ -85,26 +84,43 @@ export function currentSiblingIndexes(
 	}
 	const parentIds = [...new Set(nodes.flatMap(({parentId}) => (parentId === null ? [] : [parentId])))];
 	const rootLevel = nodes.some(({parentId}) => parentId === null);
-	const rows = database.all<
-	{
-		id: string;
-		siblingIndex: number;
-	}>(sql`
-		SELECT id, siblingIndex FROM (
-			SELECT
-				c.id AS id,
-				ROW_NUMBER() OVER (
-					PARTITION BY c.parent_id
-					ORDER BY coalesce(m.order_key, ${DEFAULT_ORDER_KEY}), coalesce(m.created_at, 0), c.id
-				) - 1 AS siblingIndex
-			FROM node_content c
-			LEFT JOIN node_metadata m ON m.node_id = c.id AND m.system_to = ${FAR_FUTURE_DATE}
-			WHERE c.system_to = ${FAR_FUTURE_DATE}
-				AND (c.parent_id IN (SELECT value FROM json_each(${JSON.stringify(parentIds)}))
-					OR (${rootLevel ? 1 : 0} = 1 AND c.parent_id IS NULL))
+	const ranked = database
+		.select(
+			{
+				id: nodeContent.id,
+				siblingIndex: sql<number>`ROW_NUMBER() OVER (
+					PARTITION BY ${nodeContent.parentId}
+					ORDER BY coalesce(${nodeMetadata.orderKey}, ${DEFAULT_ORDER_KEY}), coalesce(${nodeMetadata.createdAt}, 0), ${nodeContent.id}
+				) - 1`.as("siblingIndex"),
+			},
 		)
-		WHERE id IN (SELECT value FROM json_each(${JSON.stringify(nodes.map(({id}) => id))}))
-	`);
+		.from(nodeContent)
+		.leftJoin(nodeMetadata, and(eq(nodeMetadata.nodeId, nodeContent.id), currentVersion(nodeMetadata)))
+		.where(
+			and(
+				currentVersion(nodeContent),
+				or(
+					inIds(nodeContent.parentId, parentIds),
+					and(sql`${rootLevel ? 1 : 0} = 1`, isNull(nodeContent.parentId)),
+				),
+			),
+		)
+		.as("ranked");
+	const rows = database
+		.select(
+			{
+				id: ranked.id,
+				siblingIndex: ranked.siblingIndex,
+			},
+		)
+		.from(ranked)
+		.where(
+			inIds(
+				ranked.id,
+				nodes.map(({id}) => id),
+			),
+		)
+		.all();
 	return new Map(rows.map(({id, siblingIndex}) => [id, siblingIndex]));
 }
 

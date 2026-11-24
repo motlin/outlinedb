@@ -23,6 +23,15 @@ export function currentVersionLiteral(table: {systemTo: AnySQLiteColumn}): SQL
 }
 
 /**
+ * The closed (ended) versions of a table, `system_to < FAR_FUTURE_DATE`, with the sentinel written as a literal so the
+ * partial `*_closed_at_idx` indexes (whose WHERE is this same term) apply.
+ */
+export function closedVersionLiteral(table: {systemTo: AnySQLiteColumn}): SQL
+{
+	return sql`${table.systemTo} < ${sql.raw(String(FAR_FUTURE_DATE))}`;
+}
+
+/**
  * Normalize layoutMode values for consistent storage and comparison.
  * 'bullets' is the default, stored as null to save space.
  */

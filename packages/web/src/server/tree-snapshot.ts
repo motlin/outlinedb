@@ -1,6 +1,8 @@
-import {aiMetadata, referencesRoots} from "@outlinedb/shared/db";
+import {currentVersion, inIds} from "@outlinedb/shared/cache";
+import {aiMetadata, mirrors, nodeContent, nodeMetadata, referencesRoots} from "@outlinedb/shared/db";
 import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
-import {sql} from "drizzle-orm";
+import {and, eq, inArray, isNull, like, or, sql} from "drizzle-orm";
+import {alias, QueryBuilder} from "drizzle-orm/sqlite-core";
 import type {SQL} from "drizzle-orm";
 import type {AppDatabase} from "@outlinedb/shared/db";
 import {compactSwitcherSkeleton, warmSwitcher} from "./switcher-search.js";
@@ -105,8 +107,32 @@ function isSearchable(row: TreeSqlRow): boolean
 	return row.isReferencesRoot === 0 && row.underReferencesRoot === 0 && row.isInChat === 0;
 }
 
-const LIVE_REFERENCES_ROOTS = sql`(SELECT node_id FROM ${referencesRoots} WHERE system_to = ${FAR_FUTURE_DATE})`;
-const LIVE_IN_CHAT = sql`(SELECT node_id FROM ${aiMetadata} WHERE in_chat = 1 AND system_to = ${FAR_FUTURE_DATE})`;
+/** The aliases the tree queries read through: a node, its metadata, its mirror row, and its original's content and metadata. */
+const c = alias(nodeContent, "c");
+const m = alias(nodeMetadata, "m");
+const mi = alias(mirrors, "mi");
+const o = alias(nodeContent, "o");
+const om = alias(nodeMetadata, "om");
+
+/** Builds the queries embedded in other statements, which need no database to render. */
+const qb = new QueryBuilder();
+
+const LIVE_REFERENCES_ROOTS = qb
+	.select(
+		{
+			id: referencesRoots.nodeId,
+		},
+	)
+	.from(referencesRoots)
+	.where(currentVersion(referencesRoots));
+const LIVE_IN_CHAT = qb
+	.select(
+		{
+			id: aiMetadata.nodeId,
+		},
+	)
+	.from(aiMetadata)
+	.where(and(eq(aiMetadata.inChat, 1), currentVersion(aiMetadata)));
 
 /**
  * The live rows `seeds` (an `(id, depth)` select) names, and with `recursive` every live row below them,
@@ -116,6 +142,7 @@ const LIVE_IN_CHAT = sql`(SELECT node_id FROM ${aiMetadata} WHERE in_chat = 1 AN
  */
 function selectTreeRows(database: Database, seeds: SQL, recursive: boolean, withText = true): TreeSqlRow[]
 {
+	// Raw SQL: Drizzle has no recursive CTE.
 	const subtree = recursive
 		? sql`WITH RECURSIVE subtree(id, depth) AS (
 			${seeds}
@@ -153,11 +180,27 @@ function selectTreeRows(database: Database, seeds: SQL, recursive: boolean, with
 	`);
 }
 
-const TOP_LEVEL_SEEDS = sql`SELECT id, 0 FROM node_content WHERE parent_id IS NULL AND system_to = ${FAR_FUTURE_DATE}`;
+/** The `(id, depth)` seeds of `where`'s live rows at depth 0, unparenthesized to lead a compound select. */
+function seedsWhere(where: SQL): SQL
+{
+	return qb
+		.select(
+			{
+				id: nodeContent.id,
+				depth: sql`0`,
+			},
+		)
+		.from(nodeContent)
+		.where(and(where, currentVersion(nodeContent)))
+		.getSQL();
+}
+
+const TOP_LEVEL_SEEDS = seedsWhere(isNull(nodeContent.parentId));
 
 /** `(id, depth)` seeds from a list of pairs. */
 function seedsOf(pairs: [id: string, depth: number][]): SQL
 {
+	// Raw SQL: Drizzle cannot select from a table-valued function.
 	return sql`SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(${JSON.stringify(pairs)})`;
 }
 
@@ -168,10 +211,7 @@ function seedsOf(pairs: [id: string, depth: number][]): SQL
  */
 export function loadTreeSearchRows(database: AppDatabase, rootId: string | null): TreeSearchRow[]
 {
-	const seeds =
-		rootId === null
-			? TOP_LEVEL_SEEDS
-			: sql`SELECT id, 0 FROM node_content WHERE id = ${rootId} AND system_to = ${FAR_FUTURE_DATE}`;
+	const seeds = rootId === null ? TOP_LEVEL_SEEDS : seedsWhere(eq(nodeContent.id, rootId));
 	return selectTreeRows(database, seeds, true).filter(isSearchable).map(toSearchRow);
 }
 
@@ -197,21 +237,19 @@ export function loadTreeRowText(
 	}
 >
 {
-	const rows = database.all<
-	{
-		id: string;
-		name: string | null;
-		note: string | null;
-	}>(sql`
-		SELECT
-			c.id AS id,
-			CASE WHEN o.id IS NULL THEN c.name ELSE o.name END AS name,
-			CASE WHEN o.id IS NULL THEN c.note ELSE o.note END AS note
-		FROM json_each(${JSON.stringify(ids)}) j
-		INNER JOIN node_content c ON c.id = j.value AND c.system_to = ${FAR_FUTURE_DATE}
-		LEFT JOIN mirrors mi ON mi.mirror_id = c.id AND mi.system_to = ${FAR_FUTURE_DATE}
-		LEFT JOIN node_content o ON o.id = mi.original_id AND o.system_to = ${FAR_FUTURE_DATE}
-	`);
+	const rows = database
+		.select(
+			{
+				id: c.id,
+				name: sql<string | null>`CASE WHEN ${o.id} IS NULL THEN ${c.name} ELSE ${o.name} END`,
+				note: sql<string | null>`CASE WHEN ${o.id} IS NULL THEN ${c.note} ELSE ${o.note} END`,
+			},
+		)
+		.from(c)
+		.leftJoin(mi, and(eq(mi.mirrorId, c.id), currentVersion(mi)))
+		.leftJoin(o, and(eq(o.id, mi.originalId), currentVersion(o)))
+		.where(and(inIds(c.id, ids), currentVersion(c)))
+		.all();
 	return new Map(
 		rows.map(({id, name, note}) => [
 			id,
@@ -248,32 +286,39 @@ interface FlatSkeletonSqlRow
  */
 export function buildSwitcherSkeleton(database: Database): SwitcherSkeleton
 {
-	const flat = database.all<FlatSkeletonSqlRow>(sql`
-		SELECT
-			c.id AS id,
-			c.parent_id AS parentId,
-			m.order_key AS orderKey,
-			m.created_at AS createdAt,
-			m.modified_at AS modifiedAt,
-			CASE WHEN mi.mirror_id IS NULL THEN m.completed_at ELSE om.completed_at END AS completedAt,
-			m.layout_mode AS layoutMode,
-			mi.mirror_id IS NOT NULL AS isMirror,
-			c.id IN ${LIVE_REFERENCES_ROOTS} AS isReferencesRoot,
-			c.id IN ${LIVE_IN_CHAT} AS isInChat,
-			length(c.name) AS nameLength,
-			length(c.name) = octet_length(c.name) AND instr(c.name, '<') = 0 AND instr(c.name, '&') = 0 AS simpleName,
-			instr(c.name, '#') > 0 OR instr(c.name, '@') > 0 AS taggedName,
-			coalesce(
-				instr(c.name, '<') > 0 OR instr(c.note, '<') > 0
-				OR length(c.name) <> octet_length(c.name) OR length(c.note) <> octet_length(c.note),
-				0
-			) AS folds
-		FROM node_content c
-		LEFT JOIN node_metadata m ON m.node_id = c.id AND m.system_to = ${FAR_FUTURE_DATE}
-		LEFT JOIN mirrors mi ON mi.mirror_id = c.id AND mi.system_to = ${FAR_FUTURE_DATE}
-		LEFT JOIN node_metadata om ON om.node_id = mi.original_id AND om.system_to = ${FAR_FUTURE_DATE}
-		WHERE c.system_to = ${FAR_FUTURE_DATE}
-	`);
+	const flat: FlatSkeletonSqlRow[] = database
+		.select(
+			{
+				id: c.id,
+				parentId: c.parentId,
+				orderKey: m.orderKey,
+				createdAt: sql<number | null>`${m.createdAt}`,
+				modifiedAt: sql<number | null>`${m.modifiedAt}`,
+				completedAt: sql<
+					number | null
+				>`CASE WHEN ${mi.mirrorId} IS NULL THEN ${m.completedAt} ELSE ${om.completedAt} END`,
+				layoutMode: m.layoutMode,
+				isMirror: sql<number>`${mi.mirrorId} IS NOT NULL`,
+				isReferencesRoot: sql<number>`${c.id} IN ${LIVE_REFERENCES_ROOTS}`,
+				isInChat: sql<number>`${c.id} IN ${LIVE_IN_CHAT}`,
+				nameLength: sql<number | null>`length(${c.name})`,
+				simpleName: sql<
+					number | null
+				>`length(${c.name}) = octet_length(${c.name}) AND instr(${c.name}, '<') = 0 AND instr(${c.name}, '&') = 0`,
+				taggedName: sql<number | null>`instr(${c.name}, '#') > 0 OR instr(${c.name}, '@') > 0`,
+				folds: sql<number>`coalesce(
+					instr(${c.name}, '<') > 0 OR instr(${c.note}, '<') > 0
+					OR length(${c.name}) <> octet_length(${c.name}) OR length(${c.note}) <> octet_length(${c.note}),
+					0
+				)`,
+			},
+		)
+		.from(c)
+		.leftJoin(m, and(eq(m.nodeId, c.id), currentVersion(m)))
+		.leftJoin(mi, and(eq(mi.mirrorId, c.id), currentVersion(mi)))
+		.leftJoin(om, and(eq(om.nodeId, mi.originalId), currentVersion(om)))
+		.where(currentVersion(c))
+		.all();
 	const children = new Map<string, FlatSkeletonSqlRow[]>();
 	const referencesRootIds = new Set<string>();
 	let level: FlatSkeletonSqlRow[] = [];
@@ -434,28 +479,29 @@ export function switcherTextScan(database: Database, pageSize: number): Switcher
 		{
 			const pattern = `%${fragment}%`;
 			return database
-				.all<
-				{
-					id: string;
-				}>(sql`
-					SELECT c.id AS id
-					FROM node_content c
-					WHERE c.system_to = ${FAR_FUTURE_DATE} AND (c.name LIKE ${pattern} OR c.note LIKE ${pattern})
-				`)
+				.select(
+					{
+						id: c.id,
+					},
+				)
+				.from(c)
+				.where(and(currentVersion(c), or(like(c.name, pattern), like(c.note, pattern))))
+				.all()
 				.map(({id}) => id);
 		},
 		read(ids)
 		{
-			return database.all<
-			{
-				id: string;
-				name: string | null;
-				note: string | null;
-			}>(sql`
-				SELECT c.id AS id, c.name AS name, c.note AS note
-				FROM json_each(${JSON.stringify(ids)}) j
-				INNER JOIN node_content c ON c.id = j.value AND c.system_to = ${FAR_FUTURE_DATE}
-			`);
+			return database
+				.select(
+					{
+						id: c.id,
+						name: c.name,
+						note: c.note,
+					},
+				)
+				.from(c)
+				.where(and(inIds(c.id, ids), currentVersion(c)))
+				.all();
 		},
 	};
 }
@@ -504,6 +550,7 @@ interface ChangeState
 function changeState(database: Database): ChangeState
 {
 	const dataVersion = hostOf(database).changeSource.dataVersion();
+	// Raw SQL: Drizzle cannot select without a FROM table.
 	const {changes} = database.get<
 	{
 		changes: number;
@@ -956,7 +1003,9 @@ export function queryNeedsBacklinks(query: string): boolean
 	return /is:backlink|in:backlink/iu.test(query);
 }
 
-const REFERENCES_SEEDS = sql`SELECT id, 0 FROM node_content WHERE system_to = ${FAR_FUTURE_DATE} AND (id IN ${LIVE_REFERENCES_ROOTS} OR parent_id IN ${LIVE_REFERENCES_ROOTS})`;
+const REFERENCES_SEEDS = seedsWhere(
+	or(inArray(nodeContent.id, LIVE_REFERENCES_ROOTS), inArray(nodeContent.parentId, LIVE_REFERENCES_ROOTS)) ?? sql`0`,
+);
 
 /**
  * {@link loadTreeRows} plus the references roots and backlink items under the loaded rows, for a query that

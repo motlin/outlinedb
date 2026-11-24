@@ -1029,7 +1029,7 @@ describe("cache import api", () =>
 						false,
 						T1,
 					),
-				).toThrow('Failed to run the query \'UPDATE "references_roots"');
+				).toThrow("part failed");
 
 				expect(ownedRows()).toStrictEqual(before);
 			});

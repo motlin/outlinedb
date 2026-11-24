@@ -118,7 +118,7 @@ export default class TemporalRollback extends Command
 
 		const db = createDatabase();
 
-		// Discover which tables actually exist in the database
+		// Discover which tables actually exist in the database (raw SQL: sqlite_master is not in the Drizzle schema)
 		const existingTables = new Set(
 			db
 				.all<
