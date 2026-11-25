@@ -1,5 +1,6 @@
-// A brand-new-user run against the hosted app (app.outlinedb.com unless OUTLINEDB_URL says otherwise), in a fresh
-// headed Chromium: sign up the test email, verify it, check the starter outline, connect and import workflowy.com, then
+// A brand-new-user run against the hosted app (app.outlinedb.com unless OUTLINEDB_URL says otherwise), in Craig's real
+// Google Chrome, in the walkthrough's own Chrome profile signed in to Google as the test email (so Gmail and 1Password
+// are there; see chrome-profile.ts): sign up the test email, verify it, check the starter outline, connect and import workflowy.com, then
 // delete the account so the same email is fresh next time. Craig types every password, Turnstile and 2FA code; the
 // script never stores one. The test email comes from OUTLINEDB_TEST_EMAIL (set it in the gitignored .envrc), never a
 // tracked file, and must be allowed to sign up (SIGNUP_MODE open, or listed in SIGNUP_INVITES). It deletes only the account this run created.
@@ -7,8 +8,8 @@ import {stdin, stdout} from "node:process";
 import {createInterface} from "node:readline/promises";
 import {chromium} from "playwright-core";
 import type {Page} from "playwright-core";
-import {chromiumPath} from "./chromium-path.ts";
-import {deletionRefusal} from "./test-account-guard.ts";
+import {walkthroughProfileFor} from "./chrome-profile.ts";
+import {deletionRefusal, existingSessionRefusal} from "./test-account-guard.ts";
 import type {WalkthroughSession} from "./test-account-guard.ts";
 
 const base = (process.env.OUTLINEDB_URL ?? "https://app.outlinedb.com").replace(/\/+$/u, "");
@@ -179,16 +180,33 @@ async function main(): Promise<void>
 			"Set OUTLINEDB_TEST_EMAIL to the spare test address (in the gitignored .envrc), then run again.",
 		);
 	}
-	const browser = await chromium.launch(
+	const profile = walkthroughProfileFor(testEmail);
+	const context = await chromium.launchPersistentContext(
+		profile.userDataDir,
 		{
+			channel: "chrome",
 			headless: false,
-			executablePath: chromiumPath(),
+			viewport: null,
+			args: [`--profile-directory=${profile.directory}`],
+			// Playwright's defaults would hide the profile's extensions (1Password) and swap in a mock keychain that cannot
+			// decrypt the cookies plain Chrome saved (the Google session). Sync stays off.
+			ignoreDefaultArgs: ["--disable-extensions", "--use-mock-keychain", "--enable-automation"],
 		},
 	);
 	try
 	{
-		// A fresh context: no cookie from an earlier run or from Craig's own account.
-		const page = await (await browser.newContext()).newPage();
+		const page = await context.newPage();
+		await page.goto(base);
+		const before = existingSessionRefusal(
+			{
+				cookieNames: (await context.cookies(base)).map(({name}) => name),
+				session: await session(page),
+			},
+		);
+		if (before !== null)
+		{
+			throw new Error(`Stopping before signup: ${before}. The run must start as a brand-new user.`);
+		}
 
 		step("Sign up");
 		await page.goto(`${base}/signup`);
@@ -198,7 +216,9 @@ async function main(): Promise<void>
 		);
 
 		step("Verify the email");
-		const link = await ask(`Paste the verification link from the email to ${testEmail}: `);
+		const link = await ask(
+			`Open Gmail in a new tab of that Chrome and paste the verification link sent to ${testEmail}: `,
+		);
 		if (new URL(link).origin !== new URL(base).origin)
 		{
 			throw new Error(`That link is not on ${base}`);
@@ -296,7 +316,7 @@ async function main(): Promise<void>
 	}
 	finally
 	{
-		await browser.close();
+		await context.close();
 	}
 }
 

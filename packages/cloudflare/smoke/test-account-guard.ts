@@ -50,3 +50,28 @@ export function deletionRefusal({
 	}
 	return null;
 }
+
+/**
+ * Why the walkthrough must not start in this Chrome profile, or null when it may. The run must begin as a brand-new
+ * user, so the profile must hold no Better Auth session cookie for the app (plain, or with the `__Secure-` prefix it
+ * gets over https) and `GET /api/auth/get-session` must answer null.
+ */
+export function existingSessionRefusal({
+	cookieNames,
+	session,
+}: {
+	cookieNames: readonly string[];
+	session: WalkthroughSession | null;
+}): string | null
+{
+	const cookie = cookieNames.find((name) => name.endsWith("better-auth.session_token"));
+	if (cookie !== undefined)
+	{
+		return `the profile already has an OutlineDB session cookie (${cookie})`;
+	}
+	if (session !== null)
+	{
+		return `the profile is already signed in to OutlineDB as ${session.user.email}`;
+	}
+	return null;
+}

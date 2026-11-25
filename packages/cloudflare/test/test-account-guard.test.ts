@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vite-plus/test";
-import {deletionRefusal} from "../smoke/test-account-guard";
+import {deletionRefusal, existingSessionRefusal} from "../smoke/test-account-guard";
 
 describe("deletionRefusal", () =>
 {
@@ -73,6 +73,53 @@ describe("deletionRefusal", () =>
 			"the signed-in account is not the test email",
 			"the signed-in account is not the one this run signed up",
 			"the account existed before this run started",
+		]);
+	});
+});
+
+describe("existingSessionRefusal", () =>
+{
+	it("lets the run start only when the profile has no OutlineDB session cookie and no one is signed in", () =>
+	{
+		const signedIn =
+		{
+			user:
+			{
+				id: "user-1",
+				email: "test@example.com",
+				createdAt: "2026-11-01T00:00:00.000Z",
+			},
+		};
+		expect([
+			existingSessionRefusal(
+				{
+					cookieNames: ["theme", "__cf_bm"],
+					session: null,
+				},
+			),
+			existingSessionRefusal(
+				{
+					cookieNames: ["theme", "__Secure-better-auth.session_token"],
+					session: null,
+				},
+			),
+			existingSessionRefusal(
+				{
+					cookieNames: ["better-auth.session_token"],
+					session: null,
+				},
+			),
+			existingSessionRefusal(
+				{
+					cookieNames: [],
+					session: signedIn,
+				},
+			),
+		]).toStrictEqual([
+			null,
+			"the profile already has an OutlineDB session cookie (__Secure-better-auth.session_token)",
+			"the profile already has an OutlineDB session cookie (better-auth.session_token)",
+			"the profile is already signed in to OutlineDB as test@example.com",
 		]);
 	});
 });
