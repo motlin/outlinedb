@@ -64,7 +64,7 @@
 		// Better Auth's link origin and only trusted origin. /api/auth/* answers 503 until the BETTER_AUTH_SECRET secret is set.
 		"APP_ORIGIN": "https://app.outlinedb.com",
 		// closed, invite (emails in the SIGNUP_INVITES secret) or open.
-		"SIGNUP_MODE": "invite",
+		"SIGNUP_MODE": "open",
 		// Public key of the OutlineDB Turnstile widget (app.outlinedb.com, managed); its secret is the TURNSTILE_SECRET_KEY secret.
 		"TURNSTILE_SITE_KEY": "0x4AAAAAAF9lnLIbCzEVI1SE",
 	},

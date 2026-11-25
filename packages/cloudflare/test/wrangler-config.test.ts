@@ -98,7 +98,7 @@ describe("wrangler.jsonc", () =>
 				EMAIL_PROVIDER: "cloudflare",
 				EMAIL_FROM: "no-reply@outlinedb.com",
 				APP_ORIGIN: "https://app.outlinedb.com",
-				SIGNUP_MODE: "invite",
+				SIGNUP_MODE: "open",
 				TURNSTILE_SITE_KEY: "0x4AAAAAAF9lnLIbCzEVI1SE",
 			},
 		);

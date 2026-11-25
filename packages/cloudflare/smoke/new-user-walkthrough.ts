@@ -2,7 +2,7 @@
 // headed Chromium: sign up the test email, verify it, check the starter outline, connect and import workflowy.com, then
 // delete the account so the same email is fresh next time. Craig types every password, Turnstile and 2FA code; the
 // script never stores one. The test email comes from OUTLINEDB_TEST_EMAIL (set it in the gitignored .envrc), never a
-// tracked file, and must be in the deployed SIGNUP_INVITES secret. It deletes only the account this run created.
+// tracked file, and must be allowed to sign up (SIGNUP_MODE open, or listed in SIGNUP_INVITES). It deletes only the account this run created.
 import {stdin, stdout} from "node:process";
 import {createInterface} from "node:readline/promises";
 import {chromium} from "playwright-core";
