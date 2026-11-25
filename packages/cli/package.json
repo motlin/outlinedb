@@ -42,7 +42,7 @@
 		"dropbox": "^10.66.0",
 		"node-html-parser": "^9.0.7",
 		"pino": "^10.4.0",
-		"sql-formatter": "^15.9.0",
+		"sql-formatter": "^15.9.1",
 		"sql-highlight": "^6.1.0",
 		"sqlite-vec": "^0.1.9",
 		"zod": "^4.6.7"
