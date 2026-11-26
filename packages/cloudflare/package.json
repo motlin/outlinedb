@@ -27,6 +27,6 @@
 		"miniflare": "4.20260730.0",
 		"playwright-core": "^1.65.1",
 		"typescript": "^7.0.2",
-		"wrangler": "4.164.0"
+		"wrangler": "4.165.0"
 	}
 }
