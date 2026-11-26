@@ -91,35 +91,26 @@ async function call(
 	body: unknown;
 }>
 {
-	return page.evaluate(
-		async ({path: target, method, body}) =>
+	// The browser context's request client shares the page's cookies but not its JavaScript context, so a page that is
+	// still navigating (the app redirecting on first load) cannot destroy the call.
+	const response = await page.context().request.fetch(
+		`${base}${path}`,
 		{
-			const response = await fetch(
-				target,
-				{
-					method: method ?? "GET",
-					headers:
-						body === undefined
-							? {}
-							:
-								{
-									"content-type": "application/json",
-								},
-					body: body === undefined ? undefined : JSON.stringify(body),
-				},
-			);
-			const text = await response.text();
-			return {
-				status: response.status,
-				body: text === "" ? null : (JSON.parse(text) as unknown),
-			};
-		},
-		{
-			path,
-			method: init.method,
-			body: init.body,
+			method: init.method ?? "GET",
+			// Better Auth refuses a cookie-authenticated POST without a trusted Origin.
+			headers:
+			{
+				origin: base,
+			},
+			data: init.body,
+			failOnStatusCode: false,
 		},
 	);
+	const text = await response.text();
+	return {
+		status: response.status(),
+		body: text === "" ? null : (JSON.parse(text) as unknown),
+	};
 }
 
 async function session(page: Page): Promise<WalkthroughSession | null>
