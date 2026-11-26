@@ -87,7 +87,7 @@ cf-build: build-shared
 cf-smoke: build-shared
     node packages/cloudflare/smoke/run-smoke.ts
 
-# Brand-new-user run against app.outlinedb.com (OUTLINEDB_URL overrides): signup, verify, starter outline, workflowy.com import, then delete the account. Needs OUTLINEDB_TEST_EMAIL; drives real Chrome in its own profile signed in to Google as that email (the first run opens it for sign-in). Craig types every password and code
+# Guided brand-new-user checklist against app.outlinedb.com (OUTLINEDB_URL overrides): Craig signs up OUTLINEDB_TEST_EMAIL, verifies, checks the starter outline, imports workflowy.com and deletes the account in his own Chrome; each step checks production D1 read-only. Automates no browser
 [group('test')]
 cf-new-user-walkthrough:
     node packages/cloudflare/smoke/new-user-walkthrough.ts

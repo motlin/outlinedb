@@ -1,77 +1,109 @@
-/** The session `GET /api/auth/get-session` answers, as far as the guard reads it. */
-export interface WalkthroughSession
+/** The test email's row in the production AUTH_DB `user` table, as the walkthrough reads it. */
+export interface TestUserRow
 {
-	user:
+	id: string;
+	createdAt: string;
+	emailVerified: boolean;
+	provisionedAt: string | null;
+}
+
+/** Where the new-user walkthrough is: each stage expects D1 to hold the test email's row in a particular state. */
+export type WalkthroughStage = "before signup" | "signed up" | "verified" | "provisioned" | "deleted";
+
+/**
+ * The read-only SELECT for the test email's user row. `wrangler d1 execute --command` takes no bind parameters, so the
+ * email is inlined as an SQL string literal with its quotes doubled.
+ */
+export function testUserQuery(email: string): string
+{
+	const literal = `'${email.replaceAll("'", "''")}'`;
+	return `SELECT id, "createdAt", "emailVerified", provisioned_at FROM "user" WHERE lower(email) = lower(${literal})`;
+}
+
+function rowFrom(value: unknown): TestUserRow
+{
+	const field = (name: string): unknown =>
+		typeof value === "object" && value !== null ? Reflect.get(value, name) : undefined;
+	const id = field("id");
+	const createdAt = field("createdAt");
+	const emailVerified = field("emailVerified");
+	const provisionedAt = field("provisioned_at");
+	if (
+		typeof id !== "string" ||
+		typeof createdAt !== "string" ||
+		(emailVerified !== 0 && emailVerified !== 1) ||
+		(provisionedAt !== null && typeof provisionedAt !== "string")
+	)
 	{
-		id: string;
-		email: string;
-		createdAt: string;
+		throw new TypeError(`unexpected user row: ${JSON.stringify(value)}`);
+	}
+	return {
+		id,
+		createdAt,
+		emailVerified: emailVerified === 1,
+		provisionedAt,
 	};
 }
 
-/**
- * Why the new-user walkthrough must not delete the signed-in account, or null when it may. It deletes only the test
- * account it created itself during this run: the email must be the configured test email, the user the one this run's
- * verification signed in, and the user created after the run started. So an account that already existed (Craig's own,
- * or one holding real data) is never deleted, whatever the email.
- */
-export function deletionRefusal({
-	testEmail,
-	session,
-	createdUserId,
-	runStartedAt,
-}: {
-	testEmail: string | undefined;
-	session: WalkthroughSession | null;
-	createdUserId: string | undefined;
-	runStartedAt: Date;
-}): string | null
+/** The rows of `wrangler d1 execute --json` output for one statement; throws on anything else. */
+export function parseTestUserRows(output: string): TestUserRow[]
 {
-	if (testEmail === undefined || testEmail.trim() === "")
+	const parsed: unknown = JSON.parse(output);
+	const statement: unknown = Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : undefined;
+	const results: unknown =
+		typeof statement === "object" && statement !== null && Reflect.get(statement, "success") === true
+			? Reflect.get(statement, "results")
+			: undefined;
+	if (!Array.isArray(results))
 	{
-		return "OUTLINEDB_TEST_EMAIL is not set";
+		throw new TypeError(`wrangler d1 execute did not succeed: ${output.trim()}`);
 	}
-	if (session === null)
-	{
-		return "no one is signed in";
-	}
-	if (session.user.email.trim().toLowerCase() !== testEmail.trim().toLowerCase())
-	{
-		return "the signed-in account is not the test email";
-	}
-	if (createdUserId === undefined || session.user.id !== createdUserId)
-	{
-		return "the signed-in account is not the one this run signed up";
-	}
-	const createdAt = Date.parse(session.user.createdAt);
-	if (Number.isNaN(createdAt) || createdAt < runStartedAt.getTime())
-	{
-		return "the account existed before this run started";
-	}
-	return null;
+	return results.map((value: unknown) => rowFrom(value));
 }
 
 /**
- * Why the walkthrough must not start in this Chrome profile, or null when it may. The run must begin as a brand-new
- * user, so the profile must hold no Better Auth session cookie for the app (plain, or with the `__Secure-` prefix it
- * gets over https) and `GET /api/auth/get-session` must answer null.
+ * Why D1 does not match the walkthrough's stage, or null when it does. Before signup the test email must have no user
+ * (the run starts brand new); from signup on it must have exactly one, created after the run started, then verified,
+ * then provisioned; after Craig deletes the account it must have none again.
  */
-export function existingSessionRefusal({
-	cookieNames,
-	session,
-}: {
-	cookieNames: readonly string[];
-	session: WalkthroughSession | null;
-}): string | null
+export function walkthroughRefusal(
+	stage: WalkthroughStage,
+	rows: readonly TestUserRow[],
+	runStartedAt: Date,
+): string | null
 {
-	const cookie = cookieNames.find((name) => name.endsWith("better-auth.session_token"));
-	if (cookie !== undefined)
+	if (stage === "before signup" || stage === "deleted")
 	{
-		return `the profile already has an OutlineDB session cookie (${cookie})`;
+		const [existing] = rows;
+		if (existing === undefined)
+		{
+			return null;
+		}
+		return stage === "before signup"
+			? `a user with the test email already exists (created ${existing.createdAt}); the run must start with a brand-new email`
+			: `the user still exists (created ${existing.createdAt})`;
 	}
-	if (session !== null)
+	const [user] = rows;
+	if (user === undefined)
 	{
-		return `the profile is already signed in to OutlineDB as ${session.user.email}`;
+		return "no user with the test email exists yet";
+	}
+	if (rows.length > 1)
+	{
+		return `${rows.length} users have the test email`;
+	}
+	const createdAt = Date.parse(user.createdAt);
+	if (Number.isNaN(createdAt) || createdAt < runStartedAt.getTime())
+	{
+		return `the user was created at ${user.createdAt}, before this run started at ${runStartedAt.toISOString()}`;
+	}
+	if (stage !== "signed up" && !user.emailVerified)
+	{
+		return "the email is not verified yet";
+	}
+	if (stage === "provisioned" && user.provisionedAt === null)
+	{
+		return "the account is not provisioned yet (provisioned_at is null)";
 	}
 	return null;
 }

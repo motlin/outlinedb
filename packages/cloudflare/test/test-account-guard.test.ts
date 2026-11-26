@@ -1,125 +1,210 @@
 import {describe, expect, it} from "vite-plus/test";
-import {deletionRefusal, existingSessionRefusal} from "../smoke/test-account-guard";
+import {parseTestUserRows, testUserQuery, walkthroughRefusal} from "../smoke/test-account-guard";
 
-describe("deletionRefusal", () =>
+describe("testUserQuery", () =>
 {
-	const runStartedAt = new Date("2026-11-24T12:00:00.000Z");
-	const session = (email: string, id: string, createdAt: string) => (
+	it("selects the user row by case-insensitive email, quoting the email as an SQL string", () =>
 	{
-		user:
-		{
-			id,
-			email,
-			createdAt,
-		},
-	});
-	const fresh = session("Test@Example.com", "user-1", "2026-11-24T12:01:00.000Z");
-
-	it("allows only the test account this run created, and names why it refuses any other", () =>
-	{
-		expect([
-			deletionRefusal(
-				{
-					testEmail: "test@example.com",
-					session: fresh,
-					createdUserId: "user-1",
-					runStartedAt,
-				},
-			),
-			deletionRefusal(
-				{
-					testEmail: undefined,
-					session: fresh,
-					createdUserId: "user-1",
-					runStartedAt,
-				},
-			),
-			deletionRefusal(
-				{
-					testEmail: "test@example.com",
-					session: null,
-					createdUserId: "user-1",
-					runStartedAt,
-				},
-			),
-			deletionRefusal(
-				{
-					testEmail: "test@example.com",
-					session: session("owner@example.com", "user-1", "2026-11-24T12:01:00.000Z"),
-					createdUserId: "user-1",
-					runStartedAt,
-				},
-			),
-			deletionRefusal(
-				{
-					testEmail: "test@example.com",
-					session: fresh,
-					createdUserId: "user-2",
-					runStartedAt,
-				},
-			),
-			deletionRefusal(
-				{
-					testEmail: "test@example.com",
-					session: session("test@example.com", "user-1", "2026-11-01T00:00:00.000Z"),
-					createdUserId: "user-1",
-					runStartedAt,
-				},
-			),
-		]).toStrictEqual([
-			null,
-			"OUTLINEDB_TEST_EMAIL is not set",
-			"no one is signed in",
-			"the signed-in account is not the test email",
-			"the signed-in account is not the one this run signed up",
-			"the account existed before this run started",
+		expect([testUserQuery("Test@Example.com"), testUserQuery("o'brien@example.com")]).toStrictEqual([
+			'SELECT id, "createdAt", "emailVerified", provisioned_at FROM "user" WHERE lower(email) = lower(\'Test@Example.com\')',
+			'SELECT id, "createdAt", "emailVerified", provisioned_at FROM "user" WHERE lower(email) = lower(\'o\'\'brien@example.com\')',
 		]);
 	});
 });
 
-describe("existingSessionRefusal", () =>
+describe("parseTestUserRows", () =>
 {
-	it("lets the run start only when the profile has no OutlineDB session cookie and no one is signed in", () =>
+	it("reads the rows of `wrangler d1 execute --json` output", () =>
 	{
-		const signedIn =
-		{
-			user:
+		const output = JSON.stringify([
 			{
-				id: "user-1",
-				email: "test@example.com",
-				createdAt: "2026-11-01T00:00:00.000Z",
+				results: [
+					{
+						id: "user-1",
+						createdAt: "2026-11-24T12:01:00.000Z",
+						emailVerified: 1,
+						provisioned_at: "2026-11-24T12:02:00.000Z",
+					},
+					{
+						id: "user-2",
+						createdAt: "2026-11-24T12:03:00.000Z",
+						emailVerified: 0,
+						provisioned_at: null,
+					},
+				],
+				success: true,
+				meta:
+				{
+					changes: 0,
+				},
 			},
-		};
+		]);
 		expect([
-			existingSessionRefusal(
-				{
-					cookieNames: ["theme", "__cf_bm"],
-					session: null,
-				},
-			),
-			existingSessionRefusal(
-				{
-					cookieNames: ["theme", "__Secure-better-auth.session_token"],
-					session: null,
-				},
-			),
-			existingSessionRefusal(
-				{
-					cookieNames: ["better-auth.session_token"],
-					session: null,
-				},
-			),
-			existingSessionRefusal(
-				{
-					cookieNames: [],
-					session: signedIn,
-				},
+			parseTestUserRows(output),
+			parseTestUserRows(
+				JSON.stringify([
+					{
+						results: [],
+						success: true,
+					},
+				]),
 			),
 		]).toStrictEqual([
-			null,
-			"the profile already has an OutlineDB session cookie (__Secure-better-auth.session_token)",
-			"the profile already has an OutlineDB session cookie (better-auth.session_token)",
-			"the profile is already signed in to OutlineDB as test@example.com",
+			[
+				{
+					id: "user-1",
+					createdAt: "2026-11-24T12:01:00.000Z",
+					emailVerified: true,
+					provisionedAt: "2026-11-24T12:02:00.000Z",
+				},
+				{
+					id: "user-2",
+					createdAt: "2026-11-24T12:03:00.000Z",
+					emailVerified: false,
+					provisionedAt: null,
+				},
+			],
+			[],
+		]);
+	});
+
+	it("throws on output that is not a successful single-statement result", () =>
+	{
+		expect(() => parseTestUserRows("not json")).toThrow("is not valid JSON");
+		expect(() =>
+			parseTestUserRows(
+				JSON.stringify([
+					{
+						results: [],
+						success: false,
+					},
+				]),
+			),
+		).toThrow('wrangler d1 execute did not succeed: [{"results":[],"success":false}]');
+		expect(() =>
+			parseTestUserRows(
+				JSON.stringify([
+					{
+						results: [
+							{
+								id: "user-1",
+								createdAt: 5,
+								emailVerified: 1,
+								provisioned_at: null,
+							},
+						],
+						success: true,
+					},
+				]),
+			),
+		).toThrow('unexpected user row: {"id":"user-1","createdAt":5,"emailVerified":1,"provisioned_at":null}');
+	});
+});
+
+describe("walkthroughRefusal", () =>
+{
+	const runStartedAt = new Date("2026-11-24T12:00:00.000Z");
+	const row = (
+		overrides: Partial<
+		{
+			id: string;
+			createdAt: string;
+			emailVerified: boolean;
+			provisionedAt: string | null;
+		}> = {},
+	) => (
+	{
+		id: "user-1",
+		createdAt: "2026-11-24T12:01:00.000Z",
+		emailVerified: false,
+		provisionedAt: null,
+		...overrides,
+	});
+	const verified = row(
+		{
+			emailVerified: true,
+		},
+	);
+	const provisioned = row(
+		{
+			emailVerified: true,
+			provisionedAt: "2026-11-24T12:02:00.000Z",
+		},
+	);
+
+	it("passes each stage only when D1 holds the brand-new account this run made, in the state that stage expects", () =>
+	{
+		expect([
+			walkthroughRefusal("before signup", [], runStartedAt),
+			walkthroughRefusal("signed up", [row()], runStartedAt),
+			walkthroughRefusal("verified", [verified], runStartedAt),
+			walkthroughRefusal("provisioned", [provisioned], runStartedAt),
+			walkthroughRefusal("deleted", [], runStartedAt),
+		]).toStrictEqual([null, null, null, null, null]);
+	});
+
+	it("names why it refuses", () =>
+	{
+		expect([
+			walkthroughRefusal("before signup", [row()], runStartedAt),
+			walkthroughRefusal("signed up", [], runStartedAt),
+			walkthroughRefusal(
+				"signed up",
+				[
+					row(),
+					row(
+						{
+							id: "user-2",
+						},
+					),
+				],
+				runStartedAt,
+			),
+			walkthroughRefusal(
+				"signed up",
+				[
+					row(
+						{
+							createdAt: "2026-11-01T00:00:00.000Z",
+						},
+					),
+				],
+				runStartedAt,
+			),
+			walkthroughRefusal(
+				"signed up",
+				[
+					row(
+						{
+							createdAt: "yesterday",
+						},
+					),
+				],
+				runStartedAt,
+			),
+			walkthroughRefusal("verified", [row()], runStartedAt),
+			walkthroughRefusal("provisioned", [verified], runStartedAt),
+			walkthroughRefusal(
+				"provisioned",
+				[
+					{
+						...provisioned,
+						emailVerified: false,
+					},
+				],
+				runStartedAt,
+			),
+			walkthroughRefusal("deleted", [provisioned], runStartedAt),
+		]).toStrictEqual([
+			"a user with the test email already exists (created 2026-11-24T12:01:00.000Z); the run must start with a brand-new email",
+			"no user with the test email exists yet",
+			"2 users have the test email",
+			"the user was created at 2026-11-01T00:00:00.000Z, before this run started at 2026-11-24T12:00:00.000Z",
+			"the user was created at yesterday, before this run started at 2026-11-24T12:00:00.000Z",
+			"the email is not verified yet",
+			"the account is not provisioned yet (provisioned_at is null)",
+			"the email is not verified yet",
+			"the user still exists (created 2026-11-24T12:01:00.000Z)",
 		]);
 	});
 });
