@@ -17,7 +17,7 @@
 		"@outlinedb/mcp": "workspace:*",
 		"@outlinedb/shared": "workspace:*",
 		"@outlinedb/web": "workspace:*",
-		"better-auth": "1.7.26",
+		"better-auth": "1.7.27",
 		"drizzle-orm": "^0.45.3",
 		"hono": "^4.13.19"
 	},
