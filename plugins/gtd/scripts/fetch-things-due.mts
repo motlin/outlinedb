@@ -80,9 +80,17 @@ export function script(listName: string): string
 	// re-evaluates), so the list can shrink under the iteration and the next dereference dies with
 	// `Can't get item 17 of every to do of list "Today". Invalid index. (-1719)`. An id is a
 	// stable handle; `to do id X` never depends on position.
+	//
+	// A cold Things 3 answers Apple Events before its lists exist, so the first query of a run that
+	// launched it dies with `Can't get list "Today". (-1728)`. Wait (up to 30s) for the list to
+	// resolve before taking the snapshot; a list still missing after that fails loudly below.
 	return `set fs to (ASCII character 31)
 set rs to (ASCII character 30)
 tell application "Things3"
+	repeat 60 times
+		if exists list "${listName}" then exit repeat
+		delay 0.5
+	end repeat
 	set theIDs to id of every to do of list "${listName}"
 	set out to ""
 	set skipped to 0

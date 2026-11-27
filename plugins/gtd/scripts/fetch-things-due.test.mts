@@ -210,6 +210,12 @@ test("the AppleScript resolves each to-do by id, never by list index", () =>
 	);
 	assert.match(src, /id of every to do of list "Today"/u, "must snapshot the ids up front");
 	assert.match(src, /to do id /u, "must resolve each to-do by its stable id");
+	// A cold Things 3 accepts Apple Events before its lists exist: the first query of a run that
+	// launched it died with `Can't get list "Today". (-1728)` on 2026-11-27. The script must wait
+	// until the list resolves before snapshotting its ids.
+	const ready = src.indexOf(`exists list "Today"`);
+	assert.ok(ready !== -1, "must wait for the list to exist on a cold launch");
+	assert.ok(ready < src.indexOf("id of every to do"), "must wait before the id snapshot");
 });
 
 test("the AppleScript tolerates a to-do that disappears between the snapshot and the lookup", () =>
