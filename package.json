@@ -54,7 +54,7 @@
 		"@types/node": "^26.6.6",
 		"@vitest/coverage-v8": "catalog:",
 		"drizzle-kit": "^0.31.11",
-		"eslint-plugin-storybook": "^10.6.7",
+		"eslint-plugin-storybook": "^10.6.8",
 		"fallow": "^3.44.0",
 		"markdownlint-cli2": "^0.24.1",
 		"oclif": "^6",
