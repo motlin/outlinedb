@@ -117,10 +117,22 @@ const GcalIntegrationSchema = z
 	)
 	.strict();
 
+// Accepted-but-ignored: a node created from an email carries its sender, but no
+// consumer reads it. Keep declared so IntegrationsSchema.strict() doesn't reject
+// backups that contain one.
+const EmailIntegrationSchema = z
+	.object(
+		{
+			sender: z.string().optional(),
+		},
+	)
+	.strict();
+
 const IntegrationsSchema = z
 	.object(
 		{
 			gcal: GcalIntegrationSchema.optional(),
+			email: EmailIntegrationSchema.optional(),
 			provider: z.string().optional(),
 			external_id: z.string().optional(),
 		},

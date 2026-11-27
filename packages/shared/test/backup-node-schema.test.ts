@@ -171,3 +171,38 @@ describe("MetadataSchema video field", () =>
 		expect(node.metadata.video?.duration).toBe(12.542);
 	});
 });
+
+/**
+ * Regression test for nodes created from an email (Workflowy's email
+ * integration). Such a node carries `metadata.integrations = {provider,
+ * email: {sender}}`. `IntegrationsSchema` is `.strict()`, so the 2026-11-25
+ * backup aborted the whole import with an `unrecognized_keys` ZodError.
+ * Accepted-but-ignored: no consumer reads the sender.
+ */
+describe("IntegrationsSchema email field", () =>
+{
+	it("accepts the email key on integrations", () =>
+	{
+		const result = MetadataSchema.parse(
+			{
+				integrations:
+				{
+					provider: "email",
+					email:
+					{
+						sender: "alice@example.com",
+					},
+				},
+			},
+		);
+		expect(result.integrations).toStrictEqual(
+			{
+				provider: "email",
+				email:
+				{
+					sender: "alice@example.com",
+				},
+			},
+		);
+	});
+});
