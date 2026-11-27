@@ -371,6 +371,94 @@ describe("tools", () =>
 			);
 		});
 
+		it("creates and moves nodes to an exact index among siblings", async () =>
+		{
+			const created = await callTool(
+				harness.authStore,
+				"outlinedb_node_create",
+				{
+					parentId: "projects",
+					name: "Gamma project",
+					index: 1,
+				},
+			);
+			const gamma = (
+				JSON.parse(text(created)) as
+				{
+					id: string;
+				}
+			).id;
+			const afterCreate = harness.cache.getChildren("projects").map(({id}) => id);
+			const outside = await callTool(
+				harness.authStore,
+				"outlinedb_node_create",
+				{
+					parentId: "work",
+					name: "Delta project",
+				},
+			);
+			const delta = (
+				JSON.parse(text(outside)) as
+				{
+					id: string;
+				}
+			).id;
+			const moved = await callTool(
+				harness.authStore,
+				"outlinedb_node_move",
+				{
+					nodeId: delta,
+					parentId: "projects",
+					index: 1,
+				},
+			);
+			const afterMove = harness.cache.getChildren("projects").map(({id}) => id);
+			const both = await callTool(
+				harness.authStore,
+				"outlinedb_node_move",
+				{
+					nodeId: delta,
+					parentId: "projects",
+					position: "top",
+					index: 1,
+				},
+			);
+
+			expect(
+				{
+					afterCreate,
+					moved,
+					afterMove,
+					both,
+				},
+			).toStrictEqual(
+				{
+					afterCreate: ["alpha", gamma, "beta"],
+					moved:
+					{
+						isError: undefined,
+						content: [
+							{
+								type: "text",
+								text: `Successfully moved node: Delta project (${delta})`,
+							},
+						],
+					},
+					afterMove: ["alpha", delta, gamma, "beta"],
+					both:
+					{
+						isError: true,
+						content: [
+							{
+								type: "text",
+								text: "Pass position or index, not both",
+							},
+						],
+					},
+				},
+			);
+		});
+
 		it("deletes a node", async () =>
 		{
 			const result = await callTool(

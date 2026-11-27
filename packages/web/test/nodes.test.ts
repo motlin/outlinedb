@@ -1299,7 +1299,7 @@ describe("nodes lookup op", () =>
 			);
 		});
 
-		it("needs the API key", async () =>
+		it("resolves from the local tables alone without an API key, as a standalone account does", async () =>
 		{
 			const keyless = inProcessStore(
 				{
@@ -1309,22 +1309,37 @@ describe("nodes lookup op", () =>
 			);
 
 			await expect(
-				keyless.call(
-					"nodes.resolve",
+				Promise.all([
+					keyless.call(
+						"nodes.resolve",
+						{
+							path: "Work",
+						},
+					),
+					keyless.call(
+						"nodes.resolve",
+						{
+							path: "Work,Nowhere",
+						},
+					),
+				]),
+			).resolves.toStrictEqual([
+				{
+					ok: true,
+					value:
 					{
 						id: "work",
 					},
-				),
-			).resolves.toStrictEqual(
+				},
 				{
 					ok: false,
-					status: 500,
+					status: 404,
 					body:
 					{
-						error: "WORKFLOWY_API_KEY environment variable is required",
+						error: "Node not found at path: Work > Nowhere",
 					},
 				},
-			);
+			]);
 		});
 	});
 

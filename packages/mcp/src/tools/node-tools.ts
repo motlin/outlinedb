@@ -213,6 +213,31 @@ export function registerNodeTools(server: McpServer, store: StoreClient): void
 	);
 }
 
+const BOTH_POSITION_AND_INDEX = "Pass position or index, not both";
+
+/** The op's `index` for a tool's `position` or exact `index`: top is 0, and bottom (or neither) leaves it out. */
+function slot(
+	position: "top" | "bottom" | undefined,
+	index?: number,
+):
+{
+	index?: number;
+}
+{
+	if (index !== undefined)
+	{
+		return {
+			index,
+		};
+	}
+	return position === "top"
+		?
+			{
+				index: 0,
+			}
+		: {};
+}
+
 /** The tools that change the outline; a read-only connection does not get them. */
 export function registerNodeWriteTools(server: McpServer, store: StoreClient): void
 {
@@ -227,6 +252,12 @@ export function registerNodeWriteTools(server: McpServer, store: StoreClient): v
 				name: z.string().describe("Name of the new node"),
 				note: z.string().optional().describe("Note/description for the node"),
 				position: z.enum(["top", "bottom"]).optional().describe("Position among siblings"),
+				index: z
+					.number()
+					.int()
+					.nonnegative()
+					.optional()
+					.describe("Exact zero-based index among siblings; mutually exclusive with position"),
 				createPath: z
 					.boolean()
 					.optional()
@@ -240,8 +271,12 @@ export function registerNodeWriteTools(server: McpServer, store: StoreClient): v
 					),
 			},
 		},
-		async ({parentId, parentPath, name, note, position, createPath, children}) =>
+		async ({parentId, parentPath, name, note, position, index, createPath, children}) =>
 		{
+			if (position !== undefined && index !== undefined)
+			{
+				return errorResult(BOTH_POSITION_AND_INDEX);
+			}
 			if (!parentId && !parentPath)
 			{
 				return errorResult("Either parentId or parentPath is required");
@@ -270,12 +305,7 @@ export function registerNodeWriteTools(server: McpServer, store: StoreClient): v
 							{
 								note,
 							}),
-					...(position === "top"
-						?
-							{
-								index: 0,
-							}
-						: {}),
+					...slot(position, index),
 				},
 			);
 			if (!created.ok)
@@ -480,10 +510,20 @@ export function registerNodeWriteTools(server: McpServer, store: StoreClient): v
 				parentId: z.string().optional().describe("Destination parent ID or system target"),
 				parentPath: z.string().optional().describe("Comma-separated path to destination parent"),
 				position: z.enum(["top", "bottom"]).optional().describe("Position within destination"),
+				index: z
+					.number()
+					.int()
+					.nonnegative()
+					.optional()
+					.describe("Exact zero-based index among siblings; mutually exclusive with position"),
 			},
 		},
-		async ({nodeId, nodePath, parentId, parentPath, position}) =>
+		async ({nodeId, nodePath, parentId, parentPath, position, index}) =>
 		{
+			if (position !== undefined && index !== undefined)
+			{
+				return errorResult(BOTH_POSITION_AND_INDEX);
+			}
 			if (!nodeId && !nodePath)
 			{
 				return errorResult("Either nodeId or nodePath is required");
@@ -521,12 +561,7 @@ export function registerNodeWriteTools(server: McpServer, store: StoreClient): v
 				{
 					id,
 					parent_id: parent.id,
-					...(position === "top"
-						?
-							{
-								index: 0,
-							}
-						: {}),
+					...slot(position, index),
 				},
 			);
 			if (!moved.ok)
@@ -591,12 +626,7 @@ export function registerNodeWriteTools(server: McpServer, store: StoreClient): v
 				{
 					item_ids: [id],
 					parent_id: parent.id,
-					...(position === "top"
-						?
-							{
-								index: 0,
-							}
-						: {}),
+					...slot(position),
 				},
 			);
 			if (!mirrored.ok)

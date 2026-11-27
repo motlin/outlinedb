@@ -577,6 +577,101 @@ describe("/mcp with a bearer token", () =>
 		);
 	});
 
+	it("creates and moves nodes to an exact index through the remote tools", async () =>
+	{
+		const {access_token: token} = await accessToken(h.mf, alice.cookie, "write");
+		let id = 0;
+		async function call(name: string, args: Record<string, unknown>): Promise<string>
+		{
+			id += 1;
+			const response = await mcpRpc(
+				h.mf,
+				token,
+				id,
+				"tools/call",
+				{
+					name,
+					arguments: args,
+				},
+			);
+			const parsed:
+			{
+				result:
+				{
+					content:
+					{
+						text: string;
+					}[];
+				};
+			} = JSON.parse(response.body);
+			return parsed.result.content[0]?.text ?? "";
+		}
+
+		for (const name of ["First", "Last"])
+		{
+			await call(
+				"outlinedb_node_create",
+				{
+					parentId: "seed-node",
+					name,
+					position: "bottom",
+				},
+			);
+		}
+		await call(
+			"outlinedb_node_create",
+			{
+				parentId: "seed-node",
+				name: "Created second",
+				index: 1,
+			},
+		);
+		const outside:
+		{
+			id: string;
+		} = JSON.parse(
+			await call(
+				"outlinedb_node_create",
+				{
+					parentId: "seed-node",
+					name: "Moved second",
+					position: "bottom",
+				},
+			),
+		);
+		const moved = await call(
+			"outlinedb_node_move",
+			{
+				nodeId: outside.id,
+				parentId: "seed-node",
+				index: 1,
+			},
+		);
+		const children:
+		{
+			name: string;
+		}[] = JSON.parse(
+			await call(
+				"outlinedb_node_list",
+				{
+					parentId: "seed-node",
+				},
+			),
+		);
+
+		expect(
+			{
+				moved,
+				names: children.map(({name}) => name),
+			},
+		).toStrictEqual(
+			{
+				moved: `Successfully moved node: Moved second (${outside.id})`,
+				names: ["First", "Moved second", "Created second", "Last"],
+			},
+		);
+	});
+
 	it("reaches each user's own Durable Object", async () =>
 	{
 		const tokens = await Promise.all([alice, bob].map(async ({cookie}) => accessToken(h.mf, cookie, "read")));

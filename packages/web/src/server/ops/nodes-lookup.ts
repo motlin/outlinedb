@@ -68,16 +68,8 @@ export const nodesResolve = defineOp(
 							},
 						);
 			}
+			// Mirror mode falls back to workflowy.com on a local miss; standalone answers from the local tables alone.
 			const apiClient = getApiClient(ctx);
-			if (!apiClient)
-			{
-				return fail(
-					500,
-					{
-						error: API_KEY_REQUIRED,
-					},
-				);
-			}
 			try
 			{
 				const resolved = await (parent === true

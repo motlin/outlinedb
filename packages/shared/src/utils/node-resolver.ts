@@ -35,7 +35,7 @@ export function resolveIdOrShortId(id: string, cacheService: CacheService): stri
  * @param flags.id - Direct node ID to use
  * @param flags.path - Comma-separated path to resolve
  * @param cacheService - The cache service for local lookup
- * @param apiClient - The API client for remote lookup
+ * @param apiClient - The API client for remote lookup; without one (standalone), only the local tables answer
  * @returns The resolved node ID
  * @throws Error if the node cannot be found
  */
@@ -46,7 +46,7 @@ export async function resolveNodeId(
 		path?: string;
 	},
 	cacheService: CacheService,
-	apiClient: WorkflowyApiClient,
+	apiClient?: WorkflowyApiClient,
 ): Promise<string>
 {
 	if (flags.id)
@@ -65,7 +65,7 @@ export async function resolveNodeId(
 		return cachedNode.id;
 	}
 
-	const apiNode = await apiClient.findNodeByPath(nodePath);
+	const apiNode = await apiClient?.findNodeByPath(nodePath);
 	if (!apiNode)
 	{
 		throw new Error(`Node not found at path: ${nodePath.join(" > ")}`);
@@ -81,7 +81,7 @@ export async function resolveNodeId(
  * @param flags.id - Direct node ID to use
  * @param flags.path - Comma-separated path to resolve
  * @param cacheService - The cache service for local lookup
- * @param apiClient - The API client for remote lookup
+ * @param apiClient - The API client for remote lookup; without one (standalone), only the local tables answer
  * @returns The resolved parent ID or undefined
  * @throws Error if a path is provided but the node cannot be found
  */
@@ -92,7 +92,7 @@ export async function resolveOptionalNodeId(
 		path?: string;
 	},
 	cacheService: CacheService,
-	apiClient: WorkflowyApiClient,
+	apiClient?: WorkflowyApiClient,
 ): Promise<string | undefined>
 {
 	if (!flags.id && !flags.path)
@@ -124,7 +124,7 @@ export interface ResolveParentFlags
  *
  * @param flags - Object containing exactly one of: id or path
  * @param cacheService - The cache service for local lookup
- * @param apiClient - The API client for remote lookup
+ * @param apiClient - The API client for remote lookup; without one (standalone), only the local tables answer
  * @returns The resolved parent ID or system target key, or `null` for Home
  * @throws Error if the flag combination is invalid or the node cannot be found
  *
@@ -142,7 +142,7 @@ export interface ResolveParentFlags
 export async function resolveParent(
 	flags: ResolveParentFlags,
 	cacheService: CacheService,
-	apiClient: WorkflowyApiClient,
+	apiClient?: WorkflowyApiClient,
 ): Promise<string | null>
 {
 	const providedCount = [flags.id, flags.path].filter(Boolean).length;
@@ -181,7 +181,7 @@ export async function resolveParent(
 		return cachedNode.id;
 	}
 
-	const apiNode = await apiClient.findNodeByPath(nodePath);
+	const apiNode = await apiClient?.findNodeByPath(nodePath);
 	if (!apiNode)
 	{
 		throw new Error(`Node not found at path: ${nodePath.join(" > ")}`);
@@ -195,14 +195,14 @@ export async function resolveParent(
  *
  * @param flags - Object containing optional id or path
  * @param cacheService - The cache service for local lookup
- * @param apiClient - The API client for remote lookup
+ * @param apiClient - The API client for remote lookup; without one (standalone), only the local tables answer
  * @returns The resolved parent ID, system target key, `null` for Home, or undefined
  * @throws Error if the node cannot be found
  */
 export async function resolveOptionalParent(
 	flags: ResolveParentFlags,
 	cacheService: CacheService,
-	apiClient: WorkflowyApiClient,
+	apiClient?: WorkflowyApiClient,
 ): Promise<string | null | undefined>
 {
 	if (!flags.id && !flags.path)

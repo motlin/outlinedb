@@ -123,6 +123,12 @@ exports[`tools > MCP tools over a store > advertises every tool with its name, d
           "description": "Create missing parent path segments (like mkdir -p)",
           "type": "boolean",
         },
+        "index": {
+          "description": "Exact zero-based index among siblings; mutually exclusive with position",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer",
+        },
         "name": {
           "description": "Name of the new node",
           "type": "string",
@@ -275,6 +281,12 @@ exports[`tools > MCP tools over a store > advertises every tool with its name, d
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "properties": {
+        "index": {
+          "description": "Exact zero-based index among siblings; mutually exclusive with position",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer",
+        },
         "nodeId": {
           "description": "ID of node to move",
           "type": "string",
