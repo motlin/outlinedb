@@ -490,7 +490,7 @@ exports[`tools > MCP tools over a store > gets a node by path in the NodeTreeRea
 }
 `;
 
-exports[`tools > MCP tools over a store > lists a parent's children to the requested depth 1`] = `
+exports[`tools > MCP tools over a store > lists a parent's children to the requested depth, with each child's completion 1`] = `
 {
   "isError": undefined,
   "nodes": [
@@ -519,7 +519,7 @@ exports[`tools > MCP tools over a store > lists a parent's children to the reque
         },
         {
           "collapsed": false,
-          "completedAt": null,
+          "completedAt": "2023-11-14T22:13:20.000Z",
           "createdAt": "2020-09-13T12:26:40.000Z",
           "hasReferencesRoot": false,
           "id": "beta",

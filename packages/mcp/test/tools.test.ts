@@ -179,9 +179,17 @@ describe("tools", () =>
 			);
 		});
 
-		it("lists a parent's children to the requested depth", async () =>
+		it("lists a parent's children to the requested depth, with each child's completion", async () =>
 		{
 			stubPublicApi(OUTLINE);
+			// beforeEach re-inserts Beta open, so completing it here stays local to this test.
+			harness.cache.insertNode(
+				{
+					...fakeNode("beta", "Beta project", "projects", 1),
+					completedAt: 1_700_000_000,
+				},
+				"projects",
+			);
 
 			const result = await callTool(
 				harness.store,
