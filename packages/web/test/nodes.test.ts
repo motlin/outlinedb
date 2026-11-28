@@ -3303,6 +3303,21 @@ describe("nodes tree read statement count", () =>
 	{
 		const sqlite = migratedMemoryDatabase();
 		let statements = 0;
+		/** Rows the queries hand back to JS, a stand-in for the rows a Durable Object bills and spends CPU on. */
+		let rows = 0;
+		const prepare = sqlite.prepare.bind(sqlite);
+		sqlite.prepare = ((source: string) =>
+		{
+			const statement = prepare(source);
+			const all = statement.all.bind(statement);
+			statement.all = (...params: unknown[]) =>
+			{
+				const result = all(...params);
+				rows += result.length;
+				return result;
+			};
+			return statement;
+		}) as typeof sqlite.prepare;
 		const db = drizzle(
 			sqlite,
 			{
@@ -3375,8 +3390,19 @@ describe("nodes tree read statement count", () =>
 				statements: statements - before,
 			};
 		};
+		const get = async (path: string) =>
+		{
+			const before = rows;
+			const res = await app.fetch(new Request(`http://x/api/v1/nodes${path}`));
+			await res.json();
+			return {
+				status: res.status,
+				rows: rows - before,
+			};
+		};
 		return {
 			post,
+			get,
 		};
 	}
 
@@ -3447,6 +3473,25 @@ describe("nodes tree read statement count", () =>
 			);
 			expect(many.statements).toBeLessThanOrEqual(40);
 		});
+	});
+
+	it("GET /:id/subtree-ids reads the subtree's rows, not the whole tree's", async () =>
+	{
+		const few = await setup(2).get("/P0/subtree-ids");
+		const many = await setup(200).get("/P0/subtree-ids");
+
+		expect(
+			{
+				few,
+				many,
+			},
+		).toStrictEqual(
+			{
+				few,
+				many: few,
+			},
+		);
+		expect(few.status).toBe(200);
 	});
 });
 

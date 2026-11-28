@@ -6,6 +6,7 @@ import
 	NodeTreeReader,
 	ancestorChain,
 	effectiveCompletedAt,
+	inIds,
 	readExpansion,
 	readPaneExpansion,
 	readHomeLayoutMode,
@@ -15,7 +16,7 @@ import {FAR_FUTURE_DATE} from "@outlinedb/shared/temporal";
 import type {Node} from "@outlinedb/shared/types";
 import {HOME_TARGET} from "@outlinedb/shared/types";
 import {parseVirtualShortId, upstreamExpansionKey} from "@outlinedb/shared/workflowy";
-import {and, eq, sql} from "drizzle-orm";
+import {and, eq, isNull, or, sql} from "drizzle-orm";
 import type
 {
 	BacklinkItem,
@@ -607,15 +608,31 @@ interface SubtreeItem
 	hasChildren: boolean;
 }
 
-/** Every current node's parent and completion in sibling order, plus each mirror's original, in two queries. */
-function readTreeShape(ctx: ServerContext)
+/** A listed child: its completion and, for a mirror, the original whose children it shows. */
+interface ShapeChild
 {
+	id: string;
+	completed: boolean;
+	original: string | null;
+}
+
+/** The current children of the given parents (Home's top level for `null`) in sibling order, in one query. */
+function readChildShapes(ctx: ServerContext, parentIds: readonly (string | null)[]): Map<string | null, ShapeChild[]>
+{
+	const ids = parentIds.filter((id): id is string => id !== null);
+	const parentFilter =
+		ids.length < parentIds.length
+			? ids.length === 0
+				? isNull(nodeContent.parentId)
+				: or(isNull(nodeContent.parentId), inIds(nodeContent.parentId, ids))
+			: inIds(nodeContent.parentId, ids);
 	const rows = ctx.db
 		.select(
 			{
 				id: nodeContent.id,
 				parentId: nodeContent.parentId,
 				completedAt: effectiveCompletedAt(nodeContent.id, nodeMetadata.completedAt),
+				original: mirrorsTable.originalId,
 			},
 		)
 		.from(nodeContent)
@@ -623,20 +640,18 @@ function readTreeShape(ctx: ServerContext)
 			nodeMetadata,
 			and(eq(nodeMetadata.nodeId, nodeContent.id), eq(nodeMetadata.systemTo, FAR_FUTURE_DATE)),
 		)
-		.where(and(eq(nodeContent.systemTo, FAR_FUTURE_DATE), notReferencesRoot()))
+		.leftJoin(
+			mirrorsTable,
+			and(eq(mirrorsTable.mirrorId, nodeContent.id), eq(mirrorsTable.systemTo, FAR_FUTURE_DATE)),
+		)
+		.where(and(eq(nodeContent.systemTo, FAR_FUTURE_DATE), parentFilter, notReferencesRoot()))
 		.orderBy(
 			sql`coalesce(${nodeMetadata.orderKey}, ${DEFAULT_ORDER_KEY})`,
 			sql`coalesce(${nodeMetadata.createdAt}, 0)`,
 			nodeContent.id,
 		)
 		.all();
-	const children = new Map<
-		string | null,
-		{
-			id: string;
-			completed: boolean;
-		}[]
-	>();
+	const children = new Map<string | null, ShapeChild[]>();
 	for (const row of rows)
 	{
 		const siblings = children.get(row.parentId) ?? [];
@@ -644,40 +659,60 @@ function readTreeShape(ctx: ServerContext)
 			{
 				id: row.id,
 				completed: row.completedAt !== null,
+				original: row.original,
 			},
 		);
 		children.set(row.parentId, siblings);
 	}
-	const originals = new Map(
-		ctx.db
-			.select(
+	return children;
+}
+
+/**
+ * The children lists below `rootOriginal` (Home for null): one query per tree level, each reading only the lists the
+ * level above reached (a mirror's through its original), so the cost follows the subtree, not the whole outline.
+ */
+function readSubtreeShape(ctx: ServerContext, rootOriginal: string | null): Map<string | null, ShapeChild[]>
+{
+	const children = new Map<string | null, ShapeChild[]>();
+	const read = new Set<string | null>();
+	let frontier: (string | null)[] = [rootOriginal];
+	while (frontier.length > 0)
+	{
+		for (const id of frontier)
+		{
+			read.add(id);
+		}
+		const level = readChildShapes(ctx, frontier);
+		const next = new Set<string>();
+		for (const [parentId, siblings] of level)
+		{
+			children.set(parentId, siblings);
+			for (const child of siblings)
+			{
+				const original = child.original ?? child.id;
+				if (!read.has(original))
 				{
-					mirrorId: mirrorsTable.mirrorId,
-					originalId: mirrorsTable.originalId,
-				},
-			)
-			.from(mirrorsTable)
-			.where(eq(mirrorsTable.systemTo, FAR_FUTURE_DATE))
-			.all()
-			.map((row) => [row.mirrorId, row.originalId]),
-	);
-	return {
-		children,
-		originals,
-	};
+					next.add(original);
+				}
+			}
+		}
+		frontier = [...next];
+	}
+	return children;
 }
 
 /** Every cached descendant of `rootId` (Home's tree for null) in depth-first outline order. */
 function readSubtreeItems(ctx: ServerContext, rootId: string | null): SubtreeItem[]
 {
-	const {children, originals} = readTreeShape(ctx);
+	const rootOriginal = rootId === null ? null : (ctx.cacheService.getMirrorOriginal(rootId) ?? rootId);
+	const children = readSubtreeShape(ctx, rootOriginal);
 	const items: SubtreeItem[] = [];
 	// `path` holds the originals on the way down, so a mirror inside its own original's subtree stops there.
 	const walk = (parentId: string | null, childrenOf: string | null, path: ReadonlySet<string>) =>
 	{
 		for (const child of children.get(childrenOf) ?? [])
 		{
-			const original = originals.get(child.id) ?? child.id;
+			const original = child.original ?? child.id;
 			const hasChildren = children.has(original);
 			items.push(
 				{
@@ -693,7 +728,6 @@ function readSubtreeItems(ctx: ServerContext, rootId: string | null): SubtreeIte
 			}
 		}
 	};
-	const rootOriginal = rootId === null ? null : (originals.get(rootId) ?? rootId);
 	walk(rootId, rootOriginal, new Set(rootOriginal === null ? [] : [rootOriginal]));
 	return items;
 }
